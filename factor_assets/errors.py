@@ -171,6 +171,20 @@ class ContractChangeRequired(GovernanceError):
     pass
 
 
+class ProductionClusterViolation(GovernanceError):
+    """Production clustering was attempted without a certified graph.
+
+    Raised by :func:`factor_assets.clustering.certification.
+    enforce_certified_graph` when a clustering entry point is invoked in
+    ``PRODUCTION`` mode with a graph that is not bound to a valid, frozen,
+    content-hash-verified :class:`~factor_assets.clustering.certification.
+    CertifiedGraphArtifact`, or with an algorithm that is not on the
+    certification's allowed list.  Research mode is unaffected.
+    """
+
+    pass
+
+
 __all__ = [
     # Base
     "FactorAssetsError",
@@ -204,4 +218,5 @@ __all__ = [
     "DuplicateIdentityError",
     "CollisionError",
     "ContractChangeRequired",
+    "ProductionClusterViolation",
 ]

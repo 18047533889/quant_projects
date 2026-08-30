@@ -337,13 +337,14 @@ def _ver_evidence_current(runner: GateRunner) -> tuple[str, dict, str]:
 
 def _verifier_source_authority(runner: GateRunner) -> tuple[str, dict, str]:
     # Honest best-available check: (a) canonical source tree present,
-    # (b) no importable duplicate of the canonical package is referenced by
-    # non-archived code.  Duplicates are expected ONLY under *_archived*/.
-    canonical = REPO_ROOT / "cleaned_operators"
+    # (b) no live code imports the OLD bare `cleaned_operators` duplicate.
+    # P0-03 single-identity: canonical is factor_engine.cleaned_operators.
+    canonical = REPO_ROOT / "factor_engine" / "cleaned_operators"
     if not canonical.is_dir():
         return Status.FAIL, {}, f"BLOCKED: canonical source {canonical} missing"
     n_canon = sum(1 for _ in canonical.rglob("*.py"))
-    # any import of the duplicate name from live (non-archived) code fails the gate
+    # any live (non-archived) import of the BARE `cleaned_operators` package
+    # (the pre-merge name) fails the gate — it would be a second package copy.
     dup_imports: list[str] = []
     for base in (
         "factor_engine", "factor_preprocess", "factor_optimizer",
@@ -353,22 +354,42 @@ def _verifier_source_authority(runner: GateRunner) -> tuple[str, dict, str]:
         if not p.is_dir():
             continue
         for f in p.rglob("*.py"):
+            # Skip tests/ (they intentionally exercise the legacy import to
+            # PROVE it is blocked — P0-03 negative tests), scripts/ (codegen
+            # emits legacy-format templates), and the archived copy.
             if "archived" in str(f) or "cleaned_operators" in str(f):
+                continue
+            rel = str(f.relative_to(REPO_ROOT))
+            if "/tests/" in rel or rel.startswith("tests/") or "/scripts/" in rel or rel.startswith("scripts/"):
                 continue
             try:
                 text = f.read_text(encoding="utf-8", errors="replace")
             except Exception:
                 continue
-            if re.search(r"import\s+factor_engine\.cleaned_operators\b", text) or \
-               re.search(r"from\s+factor_engine\.cleaned_operators\b", text):
-                dup_imports.append(str(f))
+            # Only REAL import statements (not docstrings / string literals):
+            # strip string/comment content before matching.
+            import ast
+            try:
+                tree = ast.parse(text)
+            except SyntaxError:
+                continue
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Import):
+                    names = [a.name for a in node.names]
+                elif isinstance(node, ast.ImportFrom) and node.module:
+                    names = [node.module]
+                else:
+                    continue
+                if any(n == "cleaned_operators" or n.startswith("cleaned_operators.") for n in names):
+                    dup_imports.append(str(f))
+                    break
     if dup_imports:
         return Status.FAIL, {}, (
             "diverged duplicate imported by live code: " + ", ".join(dup_imports[:3])
         )
     return Status.PASS, {}, (
         f"canonical cleaned_operators present ({n_canon} .py); "
-        "no live-code import of the archived factor_engine.cleaned_operators duplicate"
+        "no live-code import of the bare cleaned_operators duplicate"
     )
 
 

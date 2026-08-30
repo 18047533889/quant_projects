@@ -51,6 +51,46 @@ from factor_engine.cleaned_operators.base import MISSING  # noqa: E402
 _BOOTSTRAP_TOKEN = object()
 
 
+def _deepfreeze_catalog(catalog: Mapping) -> MappingProxyType:
+    """Recursively freeze a catalog dict into immutable MappingProxyType leaves.
+
+    Freeze-time only (R40 #208 / P0-14).  ``OperatorRegistry.freeze()`` turns
+    the live ``_catalog`` into a MappingProxyType whose VALUES are still plain
+    dicts; this helper deep-freezes every nested mapping (the per-canonical
+    entry, ``backend_meta``, ``backend_signatures``, and any other dict leaf)
+    so a post-freeze writer holding a reference from ``_catalog.get(canon)``
+    can no longer mutate live registry state.  Values are shared with the
+    original (freeze never duplicates data); the frozen snapshot's own
+    deepcopy passes plain dicts straight through, so the snapshot stays
+    consistent and cheap.
+    """
+    out: dict[Any, Any] = {}
+    for key, value in catalog.items():
+        if isinstance(value, dict):
+            value = _deepfreeze_catalog(value)
+        elif isinstance(value, MappingProxyType):
+            value = _deepfreeze_catalog(dict(value))
+        out[key] = value
+    return MappingProxyType(out)
+
+
+def _defrost_catalog(catalog: Mapping) -> dict:
+    """Recursively restore a frozen catalog (MappingProxyType leaves) to mutable
+    dicts so bootstrap mutation can resume (mirror of :func:`_deepfreeze_catalog`).
+
+    Called from :meth:`OperatorRegistry.thaw_for_bootstrap`.  Deep-copies every
+    leaf so the frozen snapshot stays detached and immutable.
+    """
+    out: dict[Any, Any] = {}
+    for key, value in catalog.items():
+        if isinstance(value, MappingProxyType):
+            value = _defrost_catalog(value)
+        elif isinstance(value, dict):
+            value = _defrost_catalog(value)
+        out[key] = value
+    return out
+
+
 class RegistryInitializationError(RuntimeError):
     """Registry bootstrap was attempted from an impossible lifecycle state."""
 
@@ -1347,14 +1387,25 @@ class OperatorRegistry:
                     for _c, _impls in cls._operators.items()
                 }),
                 "aliases": MappingProxyType(dict(cls._aliases)),
-                "catalog": MappingProxyType(copy.deepcopy(cls._catalog)),
+                "catalog": MappingProxyType(_deepfreeze_catalog(cls._catalog)),
             }
+            # R40 #208 + P0-14: the LIVE dicts become fully immutable —
+            # including every nested catalog entry (previously only the outer
+            # mapping was a MappingProxyType, so a module holding a reference
+            # from ``_catalog.get(canon)`` could still mutate the live catalog
+            # through the frozen registry, and the ``_frozen`` snapshot's
+            # deepcopy silently lost the "frozen" marker on nested
+            # MappingProxyType values).  Nested entries are now frozen
+            # MappingProxyType instances; public reads (``catalog()`` /
+            # ``snapshot()`` / ``_read_state``) return plain deepcopies, so a
+            # post-freeze mutation attempt either raises TypeError or lands in
+            # a throwaway copy — never in live registry state.
             cls._operators = MappingProxyType({
                 _c: MappingProxyType(dict(_impls))
                 for _c, _impls in cls._operators.items()
             })
             cls._aliases = MappingProxyType(dict(cls._aliases))
-            cls._catalog = MappingProxyType(copy.deepcopy(cls._catalog))
+            cls._catalog = MappingProxyType(_deepfreeze_catalog(cls._catalog))
             cls._lifecycle = cls.Lifecycle.FROZEN
             cls._mutation_token = None
             cls._version += 1
@@ -1372,7 +1423,9 @@ class OperatorRegistry:
             cls._lifecycle = cls.Lifecycle.BUILDING
             cls._operators = {k: dict(v) for k, v in cls._operators.items()}
             cls._aliases = dict(cls._aliases)
-            cls._catalog = copy.deepcopy(dict(cls._catalog))
+            # P0-14: restore live catalog from the immutable frozen leaves back
+            # to plain mutable dicts (the mirror of ``_deepfreeze_catalog``).
+            cls._catalog = _defrost_catalog(cls._catalog)
             cls._mutation_token = _BOOTSTRAP_TOKEN
             cls._version += 1
 
@@ -2286,9 +2339,15 @@ class OperatorRegistry:
 
     @classmethod
     def catalog(cls) -> Dict[str, dict]:
-        """导出完整 catalog 深拷贝，防止调用者修改 registry 内部状态。"""
+        """导出完整 catalog 深拷贝，防止调用者修改 registry 内部状态。
+
+        The frozen live catalog holds immutable MappingProxyType leaves; the
+        deep copy is taken from plain-mutable dicts restored by
+        ``_defrost_catalog`` so every exported value is a detached dict the
+        caller may freely mutate without touching live registry state.
+        """
         _operators, _aliases, catalog = cls._read_state()
-        return copy.deepcopy(dict(catalog))
+        return copy.deepcopy(_defrost_catalog(catalog))
 
     @classmethod
     def snapshot(cls):
@@ -2298,7 +2357,7 @@ class OperatorRegistry:
         operators, aliases, catalog = cls._read_state()
         return MappingProxyType({
             "version": cls._version,
-            "operators": MappingProxyType(copy.deepcopy(dict(operators))),
+            "operators": MappingProxyType(copy.deepcopy(_defrost_catalog(dict(operators)))),
             "aliases": MappingProxyType(copy.deepcopy(dict(aliases))),
-            "catalog": MappingProxyType(copy.deepcopy(dict(catalog))),
+            "catalog": MappingProxyType(copy.deepcopy(_defrost_catalog(catalog))),
         })

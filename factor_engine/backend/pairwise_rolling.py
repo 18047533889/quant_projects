@@ -92,12 +92,20 @@ def sql_pairwise_beta_expr(
     dialect_is_duckdb: bool = True,
     min_periods: int = 2,
 ) -> str:
-    """DuckDB/CH pairwise ts_beta SQL 核心表达式。"""
+    """DuckDB/CH pairwise ts_beta SQL 核心表达式。
+
+    PARITY-SWEEP-R56: pandas ``rolling(…).cov/var`` treats ±Inf as fully missing
+    (a pair with an Inf term is excluded from BOTH the aggregate and the
+    min_periods count) and DuckDB covar_samp/var_samp over Inf raises
+    OutOfRangeException.  The pair mask therefore requires both terms finite.
+    """
     if dialect_is_duckdb:
         cov_fn, var_fn = "covar_samp", "var_samp"
     else:
         cov_fn, var_fn = "covarSamp", "varSamp"
-    pair_mask = f"{left_col} IS NOT NULL AND {right_col} IS NOT NULL"
+    finite_l = f"{left_col} IS NOT NULL AND NOT isnan({left_col}) AND NOT isinf({left_col})"
+    finite_r = f"{right_col} IS NOT NULL AND NOT isnan({right_col}) AND NOT isinf({right_col})"
+    pair_mask = f"{finite_l} AND {finite_r}"
     pair_l = f"CASE WHEN {pair_mask} THEN {left_col} END"
     pair_r = f"CASE WHEN {pair_mask} THEN {right_col} END"
     cnt = f"COUNT(CASE WHEN {pair_mask} THEN 1 END) OVER ({over})"

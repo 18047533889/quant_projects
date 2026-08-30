@@ -51,8 +51,7 @@ def _protocol(plan):
         lambda trial, fid: {
             "score": 0.5,
             "cost": 1.0,
-            "evidence_ref": "ev-1",
-        },
+            "evidence_ref": "ev-1", "treatment_integrity_evidence": _integrity_evidence(trial.trial_id)},
     )
 
 
@@ -120,7 +119,7 @@ def test_runner_without_protocol_has_no_capabilities():
             budget=_budget(), require_evaluation_protocol=False
         ),
         proposal_fn=lambda: _trial(),
-        evaluation_fn=lambda trial, fid: {"score": 0.5, "cost": 1.0, "evidence_ref": "e"},
+        evaluation_fn=lambda trial, fid: {"score": 0.5, "cost": 1.0, "evidence_ref": "e", "treatment_integrity_evidence": _integrity_evidence(trial.trial_id)},
     )
     assert runner._data_capabilities is None
     assert not hasattr(runner.config, "_search_split_plan")

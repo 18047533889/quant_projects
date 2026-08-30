@@ -1,0 +1,36 @@
+agent: walkforward_wiring
+task: P0-B walk-forward factor selection wiring
+started: 2026-08-28
+status: COMPLETE
+steps:
+  find_feature_build_scripts: DONE
+  design: DONE (see decisions)
+  wire_per_fold_selection: DONE (8 scripts)
+  smoke_real_data: DONE (REAL-DATA WIRING SMOKE PASS)
+  verify_leak_tests: DONE (4+6 passed)
+  smoke_per_fold_vs_fullsample: DONE (WIRING SMOKE PASS)
+  write_evidence_yaml: DONE -> evidence/r2/P0B_WALKFORWARD_WIRING.yaml
+decisions:
+  - "Manifest: data/build/walkforward_selection.json {purge_trading_days, embargo_trading_days, label_basis, rank_ic_threshold, cuts:{cut:{sel_start,sel_end,n_sel_dates,factors}}} — the single per-fold handoff to feature builders + trainers. Written by factor_selection.py on every walk-forward run."
+  - "Trainers (train_final.py, train_opt_adj.py) resolve FEATURES per fold from SELECTION_MANIFEST (env-overridable); hard error if a cut is missing or its list is empty. No full-sample fallback. load_selection_manifest() also validates purge==10 and label_basis==vwap_to_vwap_fwd10."
+  - "Feature builders (merge_all_factors.py, build_features_all.py, build_features.py, build_full_features.py) build the matrix from the UNION of per-fold lists; full-sample rankic/selected csv stays as a labelled diagnostic only; missing manifest -> SystemExit(2), never a full-sample matrix."
+  - "rebuild_selection_adj.py (adj track) keeps its full-sample list as diagnostic and points the trainer at the manifest."
+  - "train_opt_adj.py gets the missing 10-day purge (it had none -> label leakage across cuts) plus per-fold lists."
+  - "selection_dates_for_cut now takes purge/embargo args (defaults unchanged: 10/0)."
+files_changed:
+  - lightgbm_qs/scripts/factor_selection.py        # manifest write/load + embargo param + WF_SELECTION_JSON
+  - lightgbm_qs/scripts/train_final.py             # per-fold FEATURES_FOLD from manifest, hard error on missing cut
+  - lightgbm_qs/scripts/train_opt_adj.py           # per-fold FEAT_FOLD + 10-day purge (was absent)
+  - lightgbm_qs/scripts/merge_all_factors.py       # matrix columns = union of per-fold lists; full-sample csv diagnostic
+  - lightgbm_qs/scripts/build_features_all.py      # same
+  - lightgbm_qs/scripts/build_features.py          # same (was reading selected_factors.csv)
+  - lightgbm_qs/scripts/build_full_features.py     # same (candidates restricted to WF union)
+  - lightgbm_qs/scripts/rebuild_selection_adj.py   # labels full-sample list diagnostic; points trainer at manifest
+verification:
+  - "PYTHONPATH=factor_engine .venv/bin/python -m pytest lightgbm_qs/tests/test_walkforward_leak.py lightgbm_qs/tests/test_purge.py -q -> 10 passed, 8 warnings in 0.53s"
+  - "synthetic wiring smoke /tmp/p0b_wiring_smoke.py -> WIRING SMOKE PASS; fold1=[early,honest] fold2=[honest,late] full_sample=[future_only,honest,late]"
+  - "real-data wiring smoke (fm247+fmqa, 33 factors, real fwd_ret10 Vwap label) -> fold1 n=12, fold2 n=10, full-sample n=14; fold1-only=[fmqa:131e5281fdc7692f, fmqa:287712d7d7a5bc94]; fold1 sel window 2016-01-04..2019-03-15 (cut 2019-04-01, purge 10d)"
+residuals:
+  - "Full-repo manifest regeneration (factor_selection.py --folds-from-train over all 2449 candidates) is a multi-hour CPU job — NOT launched here; trainers will hard-fail until it is run."
+  - "features_all.parquet (377 cols) predates this change; rebuilding it from the WF union requires the manifest first."
+  - "train_opt_adj.py purge changes its OOS row counts vs previous runs (front 10 OOS days dropped)."

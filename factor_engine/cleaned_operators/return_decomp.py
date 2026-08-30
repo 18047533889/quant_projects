@@ -225,6 +225,19 @@ class OvernightReturn(SeriesOperator):
         _assert_shared_price_basis(open_px, pre_close, price_basis=price_basis)
         return _safe_ratio(open_px, pre_close) - 1.0
 
+    def __call__(self, *args, **kwargs):
+        # R55 platform-audit P0: the platform formula pack writes
+        # ``overnight_return`` / ``overnight_return()`` (zero-arg).  Resolve the
+        # implicit ``(open, pre_close)`` from the engine's daily columns so the
+        # bare name is a first-class callable on the compat surface.
+        if len(args) == 0 and not kwargs:
+            from factor_engine.api.columns import col
+
+            return self._calculate_series(col("open"), col("pre_close"))
+        if len(args) == 2:
+            return self._calculate_series(args[0], args[1], **kwargs)
+        return self._calculate_series(*args, **kwargs)
+
 
 @register_operator(
     name="open_close_return",

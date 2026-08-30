@@ -17,7 +17,6 @@ DELETE_CANONICALS = frozenset({
     "ttm",
     "quarter",
     "yoy",
-    "avg2",
 })
 
 # Straightforward DAGs belong in FactorRecipeRegistry, not the primitive registry.

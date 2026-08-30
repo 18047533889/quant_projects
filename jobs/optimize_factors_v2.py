@@ -45,7 +45,7 @@ FV_DIR = PROJECT / "weekly_backtest_output" / "factor_matrices_all"
 OUT_DIR = PROJECT / "weekly_backtest_output" / "optimized_factors"
 META_PATH = PROJECT / "weekly_backtest_output" / "optimized_meta.json"
 LQTP_ALL = json.load(open("/home/sunhaiwei/factor_delivery_converted/formula_lqtp_all.json"))
-DAILY = Path.home() / "cos_data" / "StockDailyBar"
+DAILY_ADJ = Path.home() / "cos_data" / "StockDailyBarAdj"
 INDUSTRY = Path.home() / "cos_data" / "StockIndustry"
 VALUATION = Path.home() / "cos_data" / "StockValuationDaily"
 START, END = "2019-01-02", "2026-08-24"
@@ -76,12 +76,13 @@ _GV = {"FWD": None, "row_index": None, "n_days": 0, "universe": None,
 # ---------------------------------------------------------------------------
 
 def load_vwap_matrix():
-    """全周期 VWAP 矩阵 + 前向收益 FWD（vwap-to-vwap）。返回 (vwap, FWD)。"""
-    files = sorted(DAILY.glob("*.parquet"))
+    """全周期 后复权 AdjVwap 矩阵 + 前向收益 FWD（vwap-to-vwap 后复权硬性）。
+    数据源：StockDailyBarAdj.AdjVwap（后复权），禁止未复权 StockDailyBar.Vwap。"""
+    files = sorted(DAILY_ADJ.glob("*.parquet"))
     fs = "[" + ",".join(f"'{f}'" for f in files) + "]"
     con = duckdb.connect()
     df = con.execute(f"""
-        SELECT TradeDate as date, Symbol as symbol, Vwap as vwap
+        SELECT TradeDate as date, Symbol as symbol, AdjVwap as vwap
         FROM read_parquet({fs})
         WHERE TradeDate >= DATE '{START}' AND TradeDate <= DATE '{END}'
     """).df()

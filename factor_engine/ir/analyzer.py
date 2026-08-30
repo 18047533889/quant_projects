@@ -1216,6 +1216,14 @@ class Analyzer:
                         flow_semantics=semantic.get("flow_semantics"),
                         frequency=schema.frequency,
                         domain=schema.domain,
+                        # 2026-08-29 LQTP compat: a logical DataTable field whose
+                        # FieldSpec declares role='group_key' (e.g.
+                        # IndustryDaily.IndustryCode -> industry_code) must resolve
+                        # to GroupKey BEFORE the coarse frequency fallback
+                        # (frequency=daily would otherwise mis-tag the group key
+                        # as a DailySeries and the typed-input gate rejects it as
+                        # group_mean(group=...) input).
+                        role=getattr(spec, "role", None) if spec is not None else None,
                     )
                     kind = typed.value if typed is not None else None
                 if kind is not None:

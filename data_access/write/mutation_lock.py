@@ -111,6 +111,9 @@ def mutation_lock(
                 "starttime_ticks": starttime_ticks,
                 "transaction_id": txid,
                 "acquired_at": now,
+                # R55（P0-08/09/10）：lease 显式记进 ls-listed 文件头部，运维/人工
+                # 排查一眼可见「锁是否仍活跃」，不再靠 stats 猜。
+                "lease_seconds": lease_seconds,
                 "lease_until": now + lease_seconds,
             }
             os.write(fd, (json.dumps(payload, sort_keys=True) + "\n").encode())
@@ -272,7 +275,17 @@ def _read_payload_fd(fd: int) -> dict | None:
 
 
 def _can_break_lock(path: Path, *, stale_after: float, hard_break: float) -> bool:
-    """#44 判断 stale 锁是否可以自动打破。"""
+    """#44 判断 stale 锁是否可以自动打破。
+
+    R55（P0-08/09/10）修复「陈旧 lease 无 owner 判定时永久阻塞」：
+       - lease 已过期（``lease_until < now``）即视为 stale 可打破——即使 owner
+         进程无法本地判定（跨 host / PID reuse）也不再等 hard_break 的 2×lease
+         兜底窗口；
+       - 未过期 lease 但 owner 已死（PID reuse / kill 探测）→ 立即可打破（跨
+         host 无法判定 → 只能靠 lease 过期回收）；
+       - 老格式锁（无 lease 字段）保留纯年龄回退：``mtime 年龄 > stale_after``
+         且 owner 已死。
+    """
     payload = _read_payload(path)
     if payload is None:
         return False
@@ -281,14 +294,13 @@ def _can_break_lock(path: Path, *, stale_after: float, hard_break: float) -> boo
     # 没有 unlink 路径，绝无「删掉新锁」的可能；清理交给下次 acquisition。
     if payload.get("released") is True:
         return True
-    # 1) owner 已死（含 PID reuse）→ 直接打破
-    if _owner_is_dead(payload):
-        return True
-    # 2) lease 过期且超过 hard_break（owner 卡死但仍活着）→ 打破
+    # 1) lease 已过期 → stale，直接打破（owner 死活都无所谓——lease 语义过期即失权）。
     lease_until = payload.get("lease_until")
     if isinstance(lease_until, (int, float)) and lease_until > 0:
-        if time.time() - lease_until > hard_break:
-            return True
+        return time.time() > lease_until
+    # 2) owner 已死（含 PID reuse）→ 直接打破
+    if _owner_is_dead(payload):
+        return True
     # 3) 纯年龄阈值（老格式锁无 lease）
     age = _lock_age(path)
     return age > stale_after and _owner_is_dead(payload)

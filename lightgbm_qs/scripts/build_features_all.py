@@ -71,17 +71,42 @@ for pool, fmt in POOLS:
 
 res = pd.DataFrame(results)
 print("\n== total factors evaluated ==", len(res))
+# P0-B (2026-08-28): this full-sample list is a DIAGNOSTIC ONLY — its rank_IC was
+# computed over ALL dates, i.e. with future OOS labels (selection leakage). It must
+# never be the feature set for walk-forward training. The feature matrix below is
+# built from the UNION of the per-fold walk-forward lists in
+# data/build/walkforward_selection.json (factor_selection.py --folds-from-train);
+# the trainer then picks each fold's own subset.
 sel = res[res["rank_ic"] > 0.015].sort_values("rank_ic", ascending=False)
-print("selected (rank_ic>0.015):", len(sel))
+print("selected (rank_ic>0.015, FULL-SAMPLE DIAGNOSTIC — never feed to training):", len(sel))
 sel.to_csv(f"{ROOT}/data/build/selected_factors_all.csv", index=False)
 
-selected_names = sel["name"].tolist()
-print("building feature matrix for", len(selected_names), "factors")
+WF_SELECTION_JSON = f"{ROOT}/data/build/walkforward_selection.json"
+if not os.path.exists(WF_SELECTION_JSON):
+    print("!! data/build/walkforward_selection.json not found — run "
+          "`python factor_selection.py --folds-from-train` first. Refusing to build the "
+          "feature matrix from the full-sample list (P0-B selection leakage).")
+    raise SystemExit(2)
+import sys as _sys
+_sys.path.insert(0, f"{ROOT}/scripts")
+from factor_selection import load_selection_manifest  # noqa: E402
+folds, meta = load_selection_manifest(path=WF_SELECTION_JSON)
+selected_names = sorted({f for lst in folds.values() for f in lst})
+absent = [n for n in selected_names if n not in feature_frames]
+print(f"per-fold walk-forward lists: {len(folds)} cuts, union={len(selected_names)} factors "
+      f"(purge={meta.get('purge_trading_days')}, label_basis={meta.get('label_basis')})")
+if absent:
+    print(f"  {len(absent)} union factors are not in this script's pools (skipped here): "
+          f"{absent[:5]}{' ...' if len(absent) > 5 else ''}")
+print("building feature matrix for the walk-forward UNION:", len(selected_names), "factors")
 # base index = all tradable assets x all dates (fwd long defines the panel)
 base = fwd_long[["date", "asset"]].set_index(["date", "asset"]).sort_index()
 w = base.copy()
 w = w.rename(columns={"fwd": "_fwd"})
 for name in selected_names:
+    if name not in feature_frames:
+        print(f"  skip {name}: not in evaluated pools (walk-forward union member)")
+        continue
     df = feature_frames[name].set_index(["date", "asset"])["fv"]
     w[name] = df
     print(f"  added {name} -> {w.shape}")

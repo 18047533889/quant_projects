@@ -317,7 +317,24 @@ def _build_duckdb_store_kwargs(
     cols.add(pctx.time_column)
     cols.add(pctx.instrument_column)
     fields = getattr(data_source, "fields", None) or {}
-    physical = sorted({fields.get(c, c) for c in cols})
+    # PARITY-SWEEP-R56: prefer the data source's field-plan resolution (which
+    # maps a logical column to the dataset's real physical column, e.g. the
+    # probe fixture's ``close`` -> ``Close``) instead of only the raw fields
+    # dict.  When the source exposes ``_resolve_columns`` use it so the SQL
+    # view_columns match the parquet schema (a plain fields.get(c, c) fallback
+    # emitted the raw logical name ``close`` against a parquet column ``Close``
+    # and DuckDB raised Binder/Arrow missing-column errors).
+    physical_set: set[str] = set()
+    resolver = getattr(data_source, "_resolve_columns", None)
+    if callable(resolver):
+        try:
+            phys, _ = resolver(sorted(cols))
+            physical_set.update(phys)
+        except Exception:
+            physical_set = set()
+    if not physical_set:
+        physical_set = {fields.get(c, c) for c in cols}
+    physical = sorted(physical_set)
     view_columns = {name: physical for name in compiled.read_datasets}
 
     read_params: dict[str, dict[str, Any]] = {}

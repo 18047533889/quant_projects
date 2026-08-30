@@ -1,0 +1,84 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "_meta": {
+    "title": "quant_projects branch protection — required status checks (as code)",
+    "version": "1.0.0",
+    "updated": "2026-08-28",
+    "task": "R55 #99",
+    "why_this_file_exists": [
+      "CI cannot set branch protection itself; it is a GitHub repo setting.",
+      "This file is the CODED SPEC of the protection that must be applied, so",
+      "it survives audits, agent handoffs, and repo moves. Apply it with the",
+      "gh/api command in docs (see apply_command) when the repo plan permits."
+    ],
+    "apply_blocker": [
+      "The GitHub REST branch-protection endpoints (GET/PUT /branches/{branch}/protection,",
+      "/rulesets) return 403 'Upgrade to GitHub Pro or make this repository public' on this",
+      "repo: private repo + GitHub Free plan (verified 2026-08-28 with a repo-scope admin",
+      "token; /user plan.name = 'free'). gh CLI is not installed in this environment.",
+      "Apply via docs below once the repo is public, on GitHub Pro/Team, or via an org.",
+      "Free-plan workaround that works TODAY: rulesets on private repos are also plan-gated,",
+      "so the practical alternative is a required-check reporter job (docs/optional_free_plan_workaround)."
+    ],
+    "apply_command": [
+      "gh api -X PUT repos/18047533889/quant_projects/branches/main/protection \\",
+      "  --input .github/branch-protection.json"
+    ]
+  },
+
+  "required_status_checks": {
+    "strict": true,
+    "contexts": [
+      "CI_BOOTSTRAP",
+      "SUPPLY_CHAIN",
+      "PACKAGE_BUILD",
+      "WHEEL_MATRIX_factor-engine",
+      "WHEEL_MATRIX_data-access",
+      "WHEEL_MATRIX_quant_evaluator",
+      "WHEEL_MATRIX_factor-preprocess",
+      "WHEEL_MATRIX_factor-optimizer",
+      "WHEEL_MATRIX_factor_assets",
+      "WHEEL_MATRIX_quant-platform",
+      "WHEEL_MATRIX_quant-modeling",
+      "IMPORT",
+      "UNIT",
+      "DETERMINISM",
+      "SEMANTIC",
+      "PIT_LEAKAGE",
+      "BACKEND_PARITY",
+      "POSTGRES_LIVE",
+      "PATH_GATE"
+    ],
+    "_notes": {
+      "WHEEL_MATRIX_*": "Required per matrix leg (8 legs). A matrix job's required check context is the job `name:` with the matrix value substituted — WHEEL_MATRIX_${{ matrix.dist }} — so each leg is individually required. NOTE: while the quant-modeling leg reports NOT_BUILT (task #97 has not landed modeling/pyproject.toml), remove 'WHEEL_MATRIX_quant-modeling' from this list, then re-add it the moment #97 lands; the other 7 legs must always stay.",
+      "POSTGRES_LIVE": "Required even while the live tests honestly SKIP (driver not a project-pinned dependency): the job must RUN and report its verdict in the summary. Making it required is what guarantees the postgres:16 service keeps being provisioned and the skip stays loud instead of disappearing.",
+      "scale": "1K_SCALE / 10K_SCALE may be added as required once stable; 100K_SCALE must NOT be required (manual/scheduled, reports NOT_RUN honestly)."
+    }
+  },
+
+  "enforce_admins": true,
+
+  "required_pull_request_reviews": {
+    "required_approving_review_count": 1,
+    "dismiss_stale_reviews": true,
+    "require_code_owner_reviews": false,
+    "require_last_push_approval": false
+  },
+
+  "restrictions": null,
+
+  "allow_force_pushes": false,
+  "allow_deletions": false,
+  "allow_skipping_required_checks_via_merge_commit": false,
+  "lock_branch": false,
+  "required_conversation_resolution": true,
+  "required_linear_history": false,
+
+  "_optional_free_plan_workaround": {
+    "summary": "GitHub Free cannot enforce required checks on a private repo. If strict enforcement is needed before the plan changes, run this reporter job on a schedule; it fails (and can open an issue) when any required check is missing on the latest main run.",
+    "verify_command": [
+      "gh run list --repo 18047533889/quant_projects --branch main --limit 20 \\",
+      "  --json name,conclusion,headSha --jq '.[] | select(.conclusion != \"success\" and .conclusion != \"SKIPPED\") | .name'"
+    ]
+  }
+}

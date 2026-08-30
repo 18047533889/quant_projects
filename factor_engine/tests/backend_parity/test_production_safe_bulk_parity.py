@@ -32,6 +32,7 @@ def _build_source():
     volume = pd.Series(rng.integers(50, 300, n).astype(float), index=idx)
     volume.iloc[3] = 0.0
     ret = close.pct_change(fill_method=None).fillna(0.0)
+    pre_close = close.shift(1)
     grp = pd.Series([1, 1, 2, 2] * len(dates), index=idx, dtype=float)
     flag = pd.Series((close > 0).astype(float), index=idx)
     return InMemorySeriesSource(
@@ -40,6 +41,7 @@ def _build_source():
             "open": open_,
             "volume": volume,
             "ret": ret,
+            "pre_close": pre_close,
             "group_id": grp,
             "flag": flag,
         }
@@ -70,6 +72,7 @@ test_daily:
     Open: double
     Volume: double
     Ret: double
+    PreClose: double
     group_id: int64
     Flag: double
 """
@@ -85,6 +88,7 @@ def _seed_duckdb(root: Path, mem: InMemorySeriesSource) -> None:
         "open": "Open",
         "volume": "Volume",
         "ret": "Ret",
+        "pre_close": "PreClose",
         "group_id": "group_id",
         "flag": "Flag",
     }
@@ -179,6 +183,18 @@ POLARS_BULK_CASES = [
     ("fillna_const", lambda: F("fillna_const")(col("close"), 0.0)),
     ("fillna", lambda: F("fillna")(col("close"), 0.0)),
     ("nan_to_num", lambda: F("nan_to_num")(col("close"))),
+    # R55 platform-audit P0: newly promoted daily LQTP helpers — avg2(a,b) /
+    # ts_positive_streak(x) / ts_sma_cn(x,n,m) / overnight_return(open,pre_close).
+    # Adding them here puts them on the parity certification path (polars bulk
+    # cases cover the polars side; the duckdb side relies on the SQL-emitter +
+    # daily-surface parity probe and is certified by the release-time
+    # certify_primitive_evidence regen).  Only polars-side cases are included
+    # here — duckdb real-SQL certification for the new emitters happens when the
+    # next certifier regen runs over test_production_core_triple_parity.
+    ("avg2", lambda: F("avg2")(col("close"), col("open"))),
+    ("ts_positive_streak", lambda: F("ts_positive_streak")(col("close"))),
+    ("ts_sma_cn", lambda: F("ts_sma_cn")(col("close"), 3, 1)),
+    ("overnight_return", lambda: F("overnight_return")(col("open"), col("pre_close"))),
     ("ffill", lambda: F("ffill")(col("close"))),
     ("is_finite", lambda: F("is_finite")(col("close"))),
     ("is_null", lambda: F("is_null")(col("close"))),
@@ -265,6 +281,10 @@ DUCKDB_BULK_CASES = [
     ("fillna_const", lambda: F("fillna_const")(_col("close"), 0.0)),
     ("fillna", lambda: F("fillna")(_col("close"), 0.0)),
     ("nan_to_num", lambda: F("nan_to_num")(_col("close"))),
+    # R55 platform-audit P0: the new helpers go through the SQL emitter only on
+    # the parity-certified duckdb path when the certifier regen covers them; the
+    # bulk duckdb cases here stay polars-only to avoid requiring a duckdb
+    # real-SQL pushdown that the release-time regen will certify.
     ("ffill", lambda: F("ffill")(_col("close"))),
     ("is_finite", lambda: F("is_finite")(_col("close"))),
     ("is_null", lambda: F("is_null")(_col("close"))),

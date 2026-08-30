@@ -44,17 +44,21 @@ QE_AVAILABLE = True
 
 _HAS_VWAP = None
 def load_vwap():
-    """加载 VWAP 矩阵 (date × symbol)，全历史。"""
+    """加载 后复权 AdjVwap 矩阵 (date × symbol)，全历史。
+
+    全局硬性口径：后复权 AdjVwap（StockDailyBarAdj），vwap-to-vwap。
+    禁止未复权 StockDailyBar.Vwap。
+    """
     global _HAS_VWAP
     if _HAS_VWAP is not None:
         return _HAS_VWAP
     try:
         import duckdb
-        files = sorted(Path.home().glob("cos_data/StockDailyBar/*.parquet"))
+        files = sorted(Path.home().glob("cos_data/StockDailyBarAdj/*.parquet"))
         files_str = "[" + ",".join(f"'{f}'" for f in files) + "]"
         con = duckdb.connect()
         df = con.execute(f"""
-            SELECT TradeDate as date, Symbol as symbol, Vwap as vwap
+            SELECT TradeDate as date, Symbol as symbol, AdjVwap as vwap
             FROM read_parquet({files_str})
         """).df()
         mat = df.pivot_table(index='date', columns='symbol', values='vwap', aggfunc='first')
@@ -67,10 +71,11 @@ def load_vwap():
         return _HAS_VWAP
 
 
-def compute_factor_metrics_single(factor_name: str, matrix: pd.DataFrame) -> dict:
+def compute_factor_metrics_single(factor_name: str, matrix: pd.DataFrame, cost_bps: float = 10.0) -> dict:
     """单因子全指标计算。
 
     matrix: date × symbol 因子值矩阵（page_name 对应）。
+    cost_bps: 双边费率假设（bp），按 Top10% 组换手率 × 费率扣减（默认 10bp = 双边 0.1%）。
     """
     vwap = load_vwap()
     if vwap.empty:
@@ -85,7 +90,7 @@ def compute_factor_metrics_single(factor_name: str, matrix: pd.DataFrame) -> dic
     fv = fv[common_cols]
     vwap_c = vwap_c[common_cols]
 
-    fwd = vwap_c.pct_change().shift(-1)
+    fwd = vwap_c.pct_change().shift(-2)  # 后复权 vwap-to-vwap（t+1成交→t+2卖出，企业级）
 
     T, N = fv.shape
     if T < 20 or N < 20:
@@ -96,10 +101,20 @@ def compute_factor_metrics_single(factor_name: str, matrix: pd.DataFrame) -> dic
     fwd_a = fwd.values.astype(np.float64)
     ic_arr = np.full(T, np.nan)
     valid_arr = np.zeros(T, dtype=int)
+    # 阈值：常规 20；若全样本下无一天够 20（粗粒度信号，如每日仅 3-5 个不同值），放宽到 5
+    min_assets = 20
     for t in range(T):
         m = fv_a[t]; r = fwd_a[t]
         mask = np.isfinite(m) & np.isfinite(r)
-        if mask.sum() < 20:
+        if mask.sum() >= 20:
+            min_assets = 20
+            break
+    else:
+        min_assets = 5
+    for t in range(T):
+        m = fv_a[t]; r = fwd_a[t]
+        mask = np.isfinite(m) & np.isfinite(r)
+        if mask.sum() < min_assets:
             continue
         valid_arr[t] = mask.sum()
         ic_arr[t] = _spearman_rank_correlation(m[mask], r[mask])
@@ -107,22 +122,35 @@ def compute_factor_metrics_single(factor_name: str, matrix: pd.DataFrame) -> dic
     ic_series = pd.Series(ic_arr, index=common_idx)
 
     # 面板常数因子（同一天所有股票值相同）→ rank 无效 → IC 全 NaN → 返回空（不可评估）
-    if np.isfinite(ic_arr).sum() < 20 or not np.isfinite(ic_arr).any():
+    if np.isfinite(ic_arr).sum() < max(5, min_assets // 2) or not np.isfinite(ic_arr).any():
         return {}
     if np.nanstd(ic_arr) < 1e-12:
         return {}
 
-    # 十分层 NAV
-    group_ret = np.zeros((T, 10))
+    # 十分层 NAV（含双边成本：Top10% 组换手率 × 费率）
     mat_ranks = fv.rank(axis=1, method='first', pct=True).values
     valid_mask = np.isfinite(fv_a) & np.isfinite(fwd_a)
     group_ids = np.floor(mat_ranks * 10).clip(0, 9).astype(int)
     group_ids[~valid_mask] = -1
+    total_cost = cost_bps / 1e4
+    group_ret = np.zeros((T, 10))
+    prev_gids = np.full(N, -1)
+    top_turnover = np.zeros(T)
     for t in range(T):
         for k in range(10):
             mk = (group_ids[t] == k)
             if mk.any():
-                group_ret[t, k] = float(np.nanmean(fwd_a[t, mk]))
+                if t > 0:
+                    same = (prev_gids[mk] == k)
+                    to_rate = 1.0 - float(same.mean())
+                else:
+                    to_rate = 0.0
+                if k == 9:
+                    top_turnover[t] = to_rate
+                group_ret[t, k] = float(np.nanmean(fwd_a[t, mk])) - to_rate * total_cost
+        prev_gids = group_ids[t].copy()
+    top_turnover[0] = 0.0
+    mean_top_turnover = float(np.nanmean(top_turnover[1:])) if T > 1 else 0.0
 
     decile_navs = {f"G{k+1}": np.cumprod(1 + group_ret[:, k]) for k in range(10)}
     r_ls = group_ret[:, 9] - group_ret[:, 0]
@@ -154,12 +182,6 @@ def compute_factor_metrics_single(factor_name: str, matrix: pd.DataFrame) -> dic
     g10_sharpe = float(compute_sharpe_ratio(np.nan_to_num(g10_rets), periods_per_year=252)) if len(g10_rets) > 1 else 0.0
     g1_sharpe = float(compute_sharpe_ratio(np.nan_to_num(g1_rets), periods_per_year=252)) if len(g1_rets) > 1 else 0.0
 
-    turnover = 0.0
-    try:
-        turnover = float(np.nanmean(estimate_turnover_from_ranks(fv_a[..., None], min_obs=20)))
-    except Exception:
-        pass
-
     s = ic_series.dropna()
     mean_ric = float(s.mean()) if len(s) else 0.0
     std_ric = float(s.std()) if len(s) > 1 else 0.0
@@ -173,7 +195,8 @@ def compute_factor_metrics_single(factor_name: str, matrix: pd.DataFrame) -> dic
         "perf": {
             "ls_sharpe": ls_sharpe, "ls_annual": ls_annual, "ls_mdd": ls_mdd,
             "ls_winrate": ls_winrate, "g10_annual": g10_ann, "g1_annual": g1_ann,
-            "g10_sharpe": g10_sharpe, "g1_sharpe": g1_sharpe, "turnover": turnover,
+            "g10_sharpe": g10_sharpe, "g1_sharpe": g1_sharpe, "turnover": mean_top_turnover,
+            "cost_bps": cost_bps,
             "n_periods": T, "start_date": str(common_idx[0])[:10], "end_date": str(common_idx[-1])[:10],
         },
         "mean_ic": mean_ric, "ic_ir": ric_ir, "ic_std": std_ric,

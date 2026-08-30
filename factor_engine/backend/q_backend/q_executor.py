@@ -31,6 +31,7 @@ from factor_engine.backend.q_backend.q_errors import (
     QDataUnavailableError,
     QExecutionError,
     QProcessUnavailableError,
+    QUnavailableError,
 )
 from factor_engine.backend.q_backend.q_process_manager import (
     QAvailabilityStatus,
@@ -177,9 +178,14 @@ class QExecutor:
                 f"q readiness check failed for region {plan.region_id}: {exc}"
             ) from exc
         if not ready:
-            raise QProcessUnavailableError(
-                f"q execution failed: {message}. "
-                "Runtime fallback is disabled; select another backend during planning."
+            # Backlog #60 truthful gate: with no real q runtime the dispatch
+            # fails closed with the typed QUnavailableError — the same typed
+            # error a live-process get_connection would raise.  No silent
+            # fallback, no phantom parity.
+            raise QUnavailableError(
+                f"q dispatch failed for region {plan.region_id}: {message}. "
+                "q is NOT provisioned in this environment; fail-closed, no "
+                "silent fallback (Backlog #60)."
             )
 
         missing_tables = [

@@ -739,10 +739,11 @@ _DEFAULT_INPUT_RECIPE: dict[str, dict[str, str]] = {
     "ts_log_return": {"x": "continuous_close"},
     "parkinson_vol": {"high": "continuous_high", "low": "continuous_low"},
     "amihud_illiquidity": {"ret": "return_decimal", "amount": "amount_local"},
-    # R25-029/030/173: volume is a share COUNT — bind to raw_volume_shares, NOT
-    # continuous_volume (raw volume must not be adjusted by the price factor).
-    "ts_average_volume": {"volume": "raw_volume_shares"},
-    "dollar_volume": {"close": "continuous_close", "volume": "raw_volume_shares"},
+    # ADJ_FIELD_MIGRATION: A-share volume binds to the ADJUSTED share count
+    # (Volume/Factor, StockDailyBarAdj authority); US continuous_volume_shares
+    # resolves to raw Volume (identity). raw_volume_shares is disabled for A-share.
+    "ts_average_volume": {"volume": "continuous_volume_shares"},
+    "dollar_volume": {"close": "continuous_close", "volume": "continuous_volume_shares"},
     "true_range": {"high": "continuous_high", "low": "continuous_low", "close": "continuous_close"},
     "ATR_WILDER": {"high": "continuous_high", "low": "continuous_low", "close": "continuous_close"},
     "NATR": {"high": "continuous_high", "low": "continuous_low", "close": "continuous_close"},
@@ -1529,8 +1530,10 @@ _INPUT_CONCEPT_FALLBACK: dict[str, str] = {
     "x": "continuous_close", "close": "continuous_close",
     "high": "continuous_high", "low": "continuous_low",
     "open": "continuous_open", "vwap": "continuous_vwap",
-    # R25-030/173: volume is a share COUNT — never adjusted by the price factor.
-    "volume": "raw_volume_shares", "amount": "amount_local",
+    # ADJ_FIELD_MIGRATION: volume binds to the adjusted share count
+    # (continuous_volume_shares = Volume/Factor on StockDailyBarAdj authority;
+    # US resolves to raw Volume identity).  raw_volume_shares is disabled for A-share.
+    "volume": "continuous_volume_shares", "amount": "amount_local",
     "ret": "return_decimal", "returns": "return_decimal",
     "return": "return_decimal", "y": "return_decimal",
     "benchmark_ret": "benchmark_return", "benchmark": "benchmark_return",
@@ -1539,13 +1542,13 @@ _INPUT_CONCEPT_FALLBACK: dict[str, str] = {
     # the per-canonical contract (NonNegativeWeight / SignedWeight) or fail
     # recipe resolution, never silently fabricated as close.
     "values": "continuous_close", "value": "continuous_close",
-    "f1": "return_decimal", "f2": "raw_volume_shares", "f3": "turnover",
+    "f1": "return_decimal", "f2": "continuous_volume_shares", "f3": "turnover",
     "a": "continuous_close", "b": "continuous_close", "c": "continuous_close",
     "price": "continuous_close", "source": "continuous_close",
     "target": "return_decimal", "factor": "continuous_close",
     "open_p": "continuous_open", "high_p": "continuous_high",
     "low_p": "continuous_low", "close_p": "continuous_close",
-    "volume_p": "raw_volume_shares", "amount_p": "amount_local",
+    "volume_p": "continuous_volume_shares", "amount_p": "amount_local",
     # fundamental period / income / balance concepts (R17 resolver names).
     "period_id": "period_id",
     "turnover": "turnover",
@@ -1582,7 +1585,7 @@ _INPUT_CONCEPT_FALLBACK: dict[str, str] = {
     # anonymous slots must be decided by the per-canonical contract.  Removing
     # these generic bindings makes such operators fail recipe resolution
     # honestly instead of silently binding every slot to the anchor close price.
-    "f1": "return_decimal", "f2": "raw_volume_shares", "f3": "turnover",
+    "f1": "return_decimal", "f2": "continuous_volume_shares", "f3": "turnover",
 }
 
 

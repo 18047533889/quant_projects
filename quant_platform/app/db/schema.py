@@ -193,15 +193,28 @@ CREATE TABLE IF NOT EXISTS outbox_events (
     payload_json        TEXT,
     occurred_at         TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     status              TEXT NOT NULL DEFAULT 'pending',
-    attempts            INTEGER NOT NULL DEFAULT 0
+    attempts            INTEGER NOT NULL DEFAULT 0,
+    worker_id           TEXT,
+    claim_token         TEXT,
+    claimed_at          TIMESTAMP,
+    retry_count         INTEGER NOT NULL DEFAULT 0,
+    next_attempt_at     TIMESTAMP,
+    last_error          TEXT,
+    dead_letter_reason  TEXT
 )
 """
 
 INBOX_EVENTS = """
 CREATE TABLE IF NOT EXISTS inbox_events (
-    event_id        TEXT PRIMARY KEY,
-    idempotency_key TEXT NOT NULL UNIQUE,
-    processed_at    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    event_id            TEXT PRIMARY KEY,
+    idempotency_key     TEXT NOT NULL UNIQUE,
+    status              TEXT NOT NULL DEFAULT 'RECEIVED',
+    retry_count         INTEGER NOT NULL DEFAULT 0,
+    next_attempt_at     TIMESTAMP,
+    last_error          TEXT,
+    dead_letter         BOOLEAN NOT NULL DEFAULT FALSE,
+    dead_letter_reason  TEXT,
+    processed_at        TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 )
 """
 

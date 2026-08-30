@@ -8,13 +8,16 @@ def test_field_keeps_catalog_identity_without_explicit_table():
     from factor_engine.expr.field import FieldRef
     from factor_engine.ir.analyzer import Analyzer
 
+    # ADJ_FIELD_MIGRATION: bare field('close') resolves to the adj authority
+    # table StockDailyBarAdj (AdjClose).
     ref = field("close")
     assert isinstance(ref, FieldRef)
-    assert ref.field_id == "StockDailyBar.close"
-    assert ref.source_name == "Close"
+    assert ref.field_id == "StockDailyBarAdj.close"
+    assert ref.source_name == "AdjClose"
+    assert ref.table == "StockDailyBarAdj"
 
     analysis = Analyzer().lower(ref)
-    assert analysis.ir.attrs["field_id"] == "StockDailyBar.close"
+    assert analysis.ir.attrs["field_id"] == "StockDailyBarAdj.close"
     assert analysis.ir.attrs["field_registry_hash"]
 
 
@@ -54,7 +57,7 @@ def test_string_dsl_field_preserves_catalog_identity():
 def test_production_rejects_bare_secondary_catalog_field():
     from factor_engine.api.mining_integration import validate_production_dsl
 
-    ok, msg = validate_production_dsl("rank(col('pe_ratio'))")
+    ok, msg = validate_production_dsl("rank(col('pe_ratio'))", market="ashare")
     assert ok is False
     assert "requires field(...)" in msg
 

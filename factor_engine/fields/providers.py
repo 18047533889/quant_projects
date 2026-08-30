@@ -38,6 +38,20 @@ def _identity(x: Any) -> Any:
     return x
 
 
+def _identity_fields(fields: dict[str, Any]) -> Any:
+    """Identity for a single-physical-field provider (fields dict contract).
+
+    ADJ_FIELD_MIGRATION: A-share continuous_* bindings read the precomputed Adj*
+    columns on StockDailyBarAdj via a single physical field; ``apply_binding_transform``
+    routes single-field bindings to ``transform(value)`` — but a provider whose
+    contract is expressed as ``fields={physical: value}`` must resolve the sole
+    physical field to stay deterministic (no silent ``None``).
+    """
+    if not fields:
+        raise KeyError("identity-fields provider needs at least one physical field")
+    return next(iter(fields.values()))
+
+
 def _times(multiplier: float) -> Transform:
     def _apply(x: Any) -> Any:
         return x * multiplier
@@ -733,12 +747,14 @@ def _b(
 # --- return_decimal --------------------------------------------------------
 _b(
     "return_decimal", "ashare", "ashare_return_bp",
-    dataset="ashare_stock_daily", physical=("StockDailyBar.Return",),
+    dataset="ashare_stock_daily_adj", physical=("StockDailyBarAdj.Return",),
     quality=_NATIVE, coverage=_FULL,
     source_unit=UnitSpec.ratio(scale=0.0001), canonical_unit=RATIO,
     transform=_times(0.0001), transform_description="x * 0.0001 (bp -> decimal)",
     temporal_model="exact_daily", available_at="local_close",
-    source_certified=True, notes="Return = (Close/PreClose - 1) * 10000, verified error=0",
+    source_certified=True,
+    notes="Return = (Close/PreClose - 1) * 10000, verified error=0; "
+          "ADJ_FIELD_MIGRATION: reads StockDailyBarAdj.Return (authority)",
 )
 _b(
     "return_decimal", "us", "us_ret_decimal",
@@ -751,17 +767,17 @@ _b(
 )
 
 # --- raw prices ------------------------------------------------------------
-for _raw, _phys in (
-    ("raw_open", "Open"), ("raw_high", "High"), ("raw_low", "Low"),
-    ("raw_close", "Close"), ("raw_vwap", "Vwap"),
-):
+# ADJ_FIELD_MIGRATION（2026-08-28）：A 股行情权威口径 = 后复权表，未复权
+# StockDailyBar 的 raw OHLCV **禁止**因子读取。A-share raw_* 概念显式
+# DISABLED（UNSUPPORTED_MARKET_MECHANISM）；US 保留（美股 raw 即其市价）。
+for _raw in ("raw_open", "raw_high", "raw_low", "raw_close", "raw_vwap"):
     _b(
-        _raw, "ashare", f"ashare_raw_{_phys.lower()}",
-        dataset="ashare_stock_daily", physical=(f"StockDailyBar.{_phys}",),
-        quality=_NATIVE, coverage=_FULL,
+        _raw, "ashare", f"ashare_{_raw}_unavailable",
+        physical=(), quality=_UNAVAILABLE, coverage=CoverageClass.UNKNOWN,
         source_unit=CNY_PER_SHARE, canonical_unit=CNY_PER_SHARE,
-        transform=_identity, temporal_model="exact_daily", available_at="local_close",
-        source_certified=True,
+        transform=_identity, temporal_model="unavailable",
+        notes="ADJ_FIELD_MIGRATION: raw unadjusted OHLC/VWAP is forbidden for A-share factors; "
+              "use the continuous_* (backward-adjusted) concepts (StockDailyBarAdj authority)",
     )
 for _raw, _phys in (
     ("raw_open", "Open"), ("raw_high", "High"), ("raw_low", "Low"),
@@ -782,34 +798,37 @@ for _raw, _phys in (
 # ``PreClose`` column binds to THIS concept, and ``raw_pre_close`` above no longer
 # reads the PreClose column (it is a pure lag-derived concept when registered by a
 # derived provider / operator, never the official reference).
-for _market, _ds, _phys in (
-    ("ashare", "ashare_stock_daily", "PreClose"),
-    ("us", "us_stock_daily", "PreClose"),
+# ADJ_FIELD_MIGRATION: A-share reads StockDailyBarAdj.AdjPreClose (adjusted reference).
+for _market, _ds, _table, _phys, _unit in (
+    ("ashare", "ashare_stock_daily_adj", "StockDailyBarAdj", "AdjPreClose", CNY_PER_SHARE),
+    ("us", "us_stock_daily", "StockDailyBar", "PreClose", USD_PER_SHARE),
 ):
     _b(
         "reference_pre_close", _market, f"{_market}_reference_pre_close",
-        dataset=_ds, physical=(f"StockDailyBar.{_phys}",),
+        dataset=_ds, physical=(f"{_table}.{_phys}",),
         quality=_NATIVE, coverage=_FULL,
-        source_unit=(CNY_PER_SHARE if _market == "ashare" else USD_PER_SHARE),
-        canonical_unit=(CNY_PER_SHARE if _market == "ashare" else USD_PER_SHARE),
+        source_unit=_unit, canonical_unit=_unit,
         transform=_identity, temporal_model="exact_daily", available_at="local_open",
         source_certified=True,
         transform_description="identity (official reference pre-close; company-action adjusted)",
-        notes="OFFICIAL_REFERENCE_PRE_CLOSE basis (R17-011); not lag(raw_close,1)",
+        notes="OFFICIAL_REFERENCE_PRE_CLOSE basis (R17-011); not lag(raw_close,1). "
+              "A-share: AdjPreClose (StockDailyBarAdj authority, ADJ_FIELD_MIGRATION)",
     )
 
 # --- continuous (backward-adjusted) prices --------------------------------
+# ADJ_FIELD_MIGRATION: A-share continuous_* read the precomputed Adj* columns on
+# StockDailyBarAdj (identity transform — the table is already adjusted).  US
+# keeps the Close*AdjFactor derived multiplication.
 _b(
     "continuous_close", "ashare", "ashare_continuous_close",
-    dataset="ashare_stock_daily", physical=("StockDailyBar.Close", "StockDailyBar.Factor"),
-    quality=_DERIVED, coverage=_FULL,
+    dataset="ashare_stock_daily_adj", physical=("StockDailyBarAdj.AdjClose",),
+    quality=_NATIVE, coverage=_FULL,
     source_unit=CNY_PER_SHARE, canonical_unit=CNY_PER_SHARE,
-    transform=_mul_two("StockDailyBar.Close", "StockDailyBar.Factor"),
-    transform_description="Close * Factor (backward multiplier, verified)",
+    transform=_identity_fields, transform_description="AdjClose (already backward-adjusted; StockDailyBarAdj authority)",
     temporal_model="exact_daily", available_at="local_close",
     source_certified=True,
-    derived_expression="StockDailyBar.Close * StockDailyBar.Factor",
-    notes="Factor is a backward cumulative multiplier; adjusted = raw * Factor",
+    notes="ADJ_FIELD_MIGRATION: StockDailyBarAdj.AdjClose = Close * Factor (precomputed); "
+          "continuous_close reads it directly, no runtime multiplication",
 )
 _b(
     "continuous_close", "us", "us_continuous_close",
@@ -838,24 +857,24 @@ _b(
 # these bindings, cross-day open/high/low/vwap trend operators could only pull
 # raw (unadjusted) OHLC, so long-window price path factors were split/distortion
 # contaminated.
-for _canon, _bar in (
-    ("continuous_open", "Open"),
-    ("continuous_high", "High"),
-    ("continuous_low", "Low"),
-    ("continuous_vwap", "Vwap"),
+for _canon, _bar, _adj in (
+    ("continuous_open", "Open", "AdjOpen"),
+    ("continuous_high", "High", "AdjHigh"),
+    ("continuous_low", "Low", "AdjLow"),
+    ("continuous_vwap", "Vwap", "AdjVwap"),
 ):
     _b(
         _canon, "ashare", f"ashare_{_canon}",
-        dataset="ashare_stock_daily",
-        physical=(f"StockDailyBar.{_bar}", "StockDailyBar.Factor"),
-        quality=_DERIVED, coverage=_FULL,
+        dataset="ashare_stock_daily_adj",
+        physical=(f"StockDailyBarAdj.{_adj}",),
+        quality=_NATIVE, coverage=_FULL,
         source_unit=CNY_PER_SHARE, canonical_unit=CNY_PER_SHARE,
-        transform=_mul_two(f"StockDailyBar.{_bar}", "StockDailyBar.Factor"),
-        transform_description=f"{_bar} * Factor (backward multiplier)",
+        transform=_identity_fields,
+        transform_description=f"{_adj} (already backward-adjusted; StockDailyBarAdj authority)",
         temporal_model="exact_daily", available_at="local_close",
         source_certified=True,
-        derived_expression=f"StockDailyBar.{_bar} * StockDailyBar.Factor",
-        notes="same backward Factor as continuous_close",
+        notes="ADJ_FIELD_MIGRATION: StockDailyBarAdj.AdjX = raw * Factor (precomputed); "
+              f"continuous_{_canon} reads {_adj} directly, no runtime multiplication",
     )
 for _canon, _bar in (
     ("continuous_open", "Open"),
@@ -884,47 +903,61 @@ for _canon, _bar in (
         level_sensitive=True,
         notes="same backward AdjFactor as continuous_close; level-sensitive (R17-033/085)",
     )
-for _raw, _phys in (("raw_volume_shares", "Volume"),):
-    _b(
-        _raw, "ashare", "ashare_raw_volume",
-        dataset="ashare_stock_daily", physical=(f"StockDailyBar.{_phys}",),
-        quality=_NATIVE, coverage=_FULL,
-        source_unit=SHARES, canonical_unit=SHARES,
-        transform=_identity, transform_description="identity (raw shares; no adjustment applied)",
-        temporal_model="exact_daily", available_at="local_close",
-        source_certified=True, notes="generic volume is raw shares; NEVER divided by any adjustment factor (split-adjusted volume is a separate concept)",
-    )
-    _b(
-        _raw, "us", "us_raw_volume",
-        dataset="us_stock_daily", physical=(f"StockDailyBar.{_phys}",),
-        quality=_NATIVE, coverage=_FULL,
-        source_unit=SHARES, canonical_unit=SHARES,
-        transform=_identity, temporal_model="exact_daily", available_at="local_close",
-        source_certified=True,
-    )
+# ADJ_FIELD_MIGRATION: A-share raw vendor Volume is NOT a mineable factor input
+# (raw price-volume forbidden); the adjusted share count is continuous_volume_shares
+# (Volume / Factor on StockDailyBarAdj).  US raw Volume stays (US share count).
+_b(
+    "raw_volume_shares", "ashare", "ashare_raw_volume_unavailable",
+    physical=(), quality=_UNAVAILABLE, coverage=CoverageClass.UNKNOWN,
+    source_unit=SHARES, canonical_unit=SHARES,
+    transform=_identity, temporal_model="unavailable",
+    notes="ADF_FIELD_MIGRATION: raw vendor Volume is forbidden for A-share factors; "
+          "use continuous_volume_shares = Volume / Factor (StockDailyBarAdj authority)",
+)
+_b(
+    "raw_volume_shares", "us", "us_raw_volume",
+    dataset="us_stock_daily", physical=("StockDailyBar.Volume",),
+    quality=_NATIVE, coverage=_FULL,
+    source_unit=SHARES, canonical_unit=SHARES,
+    transform=_identity, temporal_model="exact_daily", available_at="local_close",
+    source_certified=True,
+)
 
 # --- continuous (backward-adjusted) volume: Volume / Factor (LQTP functions.yaml) ---
 _b(
     "continuous_volume_shares", "ashare", "ashare_lqtp_volume",
-    dataset="ashare_stock_daily",
-    physical=("StockDailyBar.Volume", "StockDailyBar.Factor"),
+    dataset="ashare_stock_daily_adj",
+    physical=("StockDailyBarAdj.Volume", "StockDailyBarAdj.Factor"),
     quality=_DERIVED, coverage=_FULL,
     source_unit=SHARES, canonical_unit=SHARES,
-    transform=_div_two("StockDailyBar.Volume", "StockDailyBar.Factor"),
-    transform_description="Volume / Factor (LQTP functions.yaml adjusted volume)",
+    transform=_div_two("StockDailyBarAdj.Volume", "StockDailyBarAdj.Factor"),
+    transform_description="Volume / Factor (LQTP functions.yaml adjusted volume; StockDailyBarAdj authority)",
     temporal_model="exact_daily", available_at="local_close",
     source_certified=True,
-    derived_expression="StockDailyBar.Volume / StockDailyBar.Factor",
-    notes="LQTP platform functions.yaml defines volume = Volume / Factor; this is the LQTP adjusted volume.",
+    derived_expression="StockDailyBarAdj.Volume / StockDailyBarAdj.Factor",
+    notes="ADJ_FIELD_MIGRATION: reads StockDailyBarAdj.Volume / StockDailyBarAdj.Factor. "
+          "LQTP platform functions.yaml defines volume = Volume / Factor.",
+)
+_b(
+    "continuous_volume_shares", "us", "us_continuous_volume",
+    dataset="us_stock_daily", physical=("StockDailyBar.Volume",),
+    quality=_NATIVE, coverage=_FULL,
+    source_unit=SHARES, canonical_unit=SHARES,
+    transform=_identity, transform_description="identity (US raw Volume is the share count)",
+    temporal_model="exact_daily", available_at="local_close",
+    source_certified=True,
+    notes="US has no price-factor-adjusted volume; continuous_volume_shares == raw Volume (identity).",
 )
 
 # --- amount_local -----------------------------------------------------------
 _b(
     "amount_local", "ashare", "ashare_amount",
-    dataset="ashare_stock_daily", physical=("StockDailyBar.Amount",),
+    dataset="ashare_stock_daily_adj", physical=("StockDailyBarAdj.AdjAmount",),
     quality=_NATIVE, coverage=_FULL, source_unit=CNY, canonical_unit=CNY,
     transform=_identity, temporal_model="exact_daily", available_at="local_close",
-    source_certified=True, notes="Amount ~= Vwap * Volume (rel err ~2e-5)",
+    source_certified=True,
+    notes="Amount ~= Vwap * Volume (rel err ~2e-5); ADJ_FIELD_MIGRATION: reads "
+          "StockDailyBarAdj.AdjAmount (authority)",
 )
 _b(
     "amount_local", "us", "us_amount",
@@ -986,17 +1019,22 @@ _b(
 )
 
 # --- price limits (A-share official mechanism) ------------------------------
-for _concept, _phys, _prov in (
-    ("upper_price_limit", "HighLimit", "ashare_high_limit"),
-    ("lower_price_limit", "LowLimit", "ashare_low_limit"),
+# ADJ_FIELD_MIGRATION: A-share limits read the ADJUSTED limit prices on
+# StockDailyBarAdj (AdjHighLimit / AdjLowLimit — the adjusted table's limit
+# columns are precomputed HighLimit*Factor).
+for _concept, _adj, _prov in (
+    ("upper_price_limit", "AdjHighLimit", "ashare_high_limit"),
+    ("lower_price_limit", "AdjLowLimit", "ashare_low_limit"),
 ):
     _b(
         _concept, "ashare", _prov,
-        dataset="ashare_stock_daily", physical=(f"StockDailyBar.{_phys}",),
+        dataset="ashare_stock_daily_adj", physical=(f"StockDailyBarAdj.{_adj}",),
         quality=_NATIVE, coverage=_FULL,
         source_unit=CNY_PER_SHARE, canonical_unit=CNY_PER_SHARE,
         transform=_identity, temporal_model="exact_daily", available_at="local_open",
-        source_certified=True, notes="RAW official limit price; never adjusted",
+        source_certified=True,
+        notes="Official limit price; ADJ_FIELD_MIGRATION: reads StockDailyBarAdj.{_adj} "
+              "(adjusted limit; raw unadjusted limits forbidden for factors)",
     )
 _b(
     "upper_price_limit", "us", "us_no_price_limit",
@@ -1067,13 +1105,16 @@ _b(
 )
 _b(
     "tradability_state", "ashare", "ashare_tradability",
-    dataset="ashare_stock_daily", physical=("StockDailyBar.IsSuspend",),
+    dataset="ashare_stock_daily_adj", physical=("StockDailyBarAdj.IsSuspend",),
     quality=_NATIVE, coverage=_FULL, source_unit=UnitSpec(dimension="boolean"),
     canonical_unit=UnitSpec(dimension="boolean"),
     transform=_not_bool,
     transform_description="NOT IsSuspend (not_suspended_state; known-suspended->0, known-not-suspended->1, NaN->NaN; does NOT claim listing membership)",
     temporal_model="exact_daily", available_at="local_open",
-    source_certified=True, notes="IsSuspend lives in StockDailyBar; transform negates it preserving NaN (unknown suspension stays unknown); no listing/public-status mask is included",
+    source_certified=True,
+    notes="ADJ_FIELD_MIGRATION: reads StockDailyBarAdj.IsSuspend (authority); "
+          "transform negates it preserving NaN (unknown suspension stays unknown); "
+          "no listing/public-status mask is included",
 )
 _b(
     "tradability_state", "us", "us_tradability_universe",
@@ -1714,6 +1755,12 @@ def apply_binding_transform(binding: MarketFieldBinding, value: Any, *, fields: 
                 f"{binding.concept_id}@{binding.market} is a derived provider "
                 f"({binding.derived_expression!r}); pass fields={{physical: value}}"
             )
+        return binding.transform(fields)
+    if fields is not None and len(binding.physical_fields) == 1:
+        # ADJ_FIELD_MIGRATION: single-physical-field providers (e.g. A-share
+        # continuous_close -> AdjClose) accept the fields-dict contract and resolve
+        # their sole physical column (identity), so ``apply_binding_transform(b, None,
+        # fields={...})`` stays deterministic instead of returning None.
         return binding.transform(fields)
     return binding.transform(value)
 

@@ -1,0 +1,3 @@
+strategy: total_return=2469.83% annual=66.54% sharpe=2.263 mdd=-25.52%
+benchmark: total_return=127.88% annual=13.82% sharpe=0.784 mdd=-31.90%
+excess: total_return=1027.69% annual=46.32% sharpe=3.087 mdd=-16.90%

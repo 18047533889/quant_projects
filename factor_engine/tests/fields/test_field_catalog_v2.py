@@ -10,10 +10,12 @@ from factor_engine.fields import FIELD_REGISTRY, FieldRegistry, FieldSpec, Table
 def test_catalog_v2_is_deterministic_and_semantic() -> None:
     exported = FIELD_REGISTRY.export_catalog()
     assert exported["schema_version"] == "factor_engine.fields.v2"
-    assert len(exported["tables"]) == 20
+    assert len(exported["tables"]) == 22  # ADJ_FIELD_MIGRATION added StockDailyBarAdj + StockMinuteBarAdj
     assert FIELD_REGISTRY.catalog_hash() == FIELD_REGISTRY.catalog_hash()
 
-    ret = FIELD_REGISTRY.require("ret")
+    # ADJ_FIELD_MIGRATION: bare ``ret`` is ambiguous across StockDailyBar /
+    # StockDailyBarAdj — resolve against the adj authority table explicitly.
+    ret = FIELD_REGISTRY.require("ret", table="StockDailyBarAdj")
     assert ret.source_name == "Return"
     assert ret.source_unit == "basis_point"
     assert ret.canonical_unit == "ratio"
@@ -75,7 +77,7 @@ def test_one_to_many_fields_cannot_be_mined_directly() -> None:
     table = TableSpec("Relation", "relation", cardinality="one_to_many")
     with pytest.raises(ValueError, match="aggregated before mining"):
         FieldRegistry(
-            [FieldSpec("weight", "Relation", "Weight", cardinality="one_to_many")],
+            [FieldSpec("weight", "Relation", "Weight", cardinality="one_to_many", mining_allowed=True)],
             [table],
         )
 
@@ -83,24 +85,31 @@ def test_one_to_many_fields_cannot_be_mined_directly() -> None:
 def test_data_access_normalizes_registered_units_without_filling_nan(monkeypatch) -> None:
     from factor_engine.storage.sources.data_access_source import DataAccessSource
 
-    source = DataAccessSource(dataset="ashare_stock_daily")
+    # ADJ_FIELD_MIGRATION: the catalog 'ret' field lives on ashare_stock_daily_adj
+    # (authority).  DataAccess reads with normalize_units=True already apply the
+    # catalog scale; FE's _normalize_contract_columns must NOT double-scale.
+    source = DataAccessSource(dataset="ashare_stock_daily_adj")
     values = pd.Series([10_000.0, np.nan], dtype=float)
     fetched = {"ret": values.copy()}
     source._normalize_contract_columns(fetched, ["ret"])
-    assert fetched["ret"].iloc[0] == pytest.approx(1.0)
+    # catalog-covered field -> already normalized at the DA output layer, pass through.
+    assert fetched["ret"].iloc[0] == pytest.approx(10_000.0)
     assert np.isnan(fetched["ret"].iloc[1])
 
     valuation = DataAccessSource(dataset="ashare_stock_valuation_daily")
     fetched = {"turnover_ratio": pd.Series([12.5, np.nan])}
     valuation._normalize_contract_columns(fetched, ["turnover_ratio"])
-    assert fetched["turnover_ratio"].iloc[0] == pytest.approx(0.125)
+    # catalog-covered field -> DA output layer applies the 0.01 scale; FE pass-through.
+    assert fetched["turnover_ratio"].iloc[0] == pytest.approx(12.5)
     assert np.isnan(fetched["turnover_ratio"].iloc[1])
 
 
 def test_data_access_resolves_catalog_physical_columns() -> None:
     from factor_engine.storage.sources.data_access_source import DataAccessSource
 
-    daily = DataAccessSource(dataset="ashare_stock_daily")
+    # ADJ_FIELD_MIGRATION: on the adj authority dataset, bare ret/close resolve to
+    # Return / AdjClose.
+    daily = DataAccessSource(dataset="ashare_stock_daily_adj")
     physical, output = daily._resolve_columns(["ret", "close"])
-    assert physical == ["Return", "Close"]
-    assert output == {"Return": "ret", "Close": "close"}
+    assert physical == ["Return", "AdjClose"]
+    assert output == {"Return": "ret", "AdjClose": "close"}

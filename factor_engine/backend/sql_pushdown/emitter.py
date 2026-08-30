@@ -974,6 +974,7 @@ def _cs_average_rank_pct_sql(
     value_col: str = "_v",
     select_out: str = "ts, inst",
     dialect: SqlDialect,
+    exclude_nan: bool = True,
 ) -> str:
     """截面/分组 average-rank 百分位 SQL。"""
     keys_csv = ", ".join(partition_keys)
@@ -988,6 +989,7 @@ def _cs_average_rank_pct_sql(
         numbered_sql=numbered,
         row_alias="b",
         dialect=dialect,
+        exclude_nan=exclude_nan,
     )
     return f"SELECT {select_out}, {frac} AS _v FROM ({numbered}) b"
 
@@ -999,6 +1001,7 @@ def _cs_average_rank_01_sql(
     value_col: str = "_v",
     select_out: str = "ts, inst",
     dialect: SqlDialect,
+    exclude_nan: bool = True,
 ) -> str:
     """截面/分组 0-1 average rank SQL。"""
     keys_csv = ", ".join(partition_keys)
@@ -1013,6 +1016,7 @@ def _cs_average_rank_01_sql(
         numbered_sql=numbered,
         row_alias="b",
         dialect=dialect,
+        exclude_nan=exclude_nan,
     )
     return f"SELECT {select_out}, {expr} AS _v FROM ({numbered}) b"
 
@@ -1045,12 +1049,22 @@ def _cs_rank_01_sql(inner_sql: str, *, partition: str, dialect: SqlDialect) -> s
 
 
 def _cs_pct_rank_sql(inner_sql: str, *, partition: str, dialect: SqlDialect) -> str:
-    """截面百分位 rank；NaN 保持 NULL（``rank_pct`` / ``cs_pct_rank`` 语义）。"""
+    """截面百分位 rank；NaN 保持 NULL（``rank_pct`` / ``cs_pct_rank`` 语义）。
+
+    PARITY-SWEEP-R56: ``cs_pct_rank`` / ``rank_pct`` follow the pandas authority
+    ``x.rank(pct=True, axis=1)`` which ranks over NaN-skipped rows but INCLUDES
+    ±Inf as a rankable extreme.  Thread ``inf_policy="participate"`` from the
+    RankSpec so SQL does not mask Inf like the finite-mask ``cs_rank_01`` path.
+    """
+    from factor_engine.backend.rank_spec import rank_spec_for
+
     keys = [c.strip().split(".")[-1] for c in partition.replace("PARTITION BY", "").split(",") if c.strip()]
+    exclude_nan = rank_spec_for("cs_pct_rank").inf_policy == "exclude"
     return _cs_average_rank_pct_sql(
         inner_sql,
         partition_keys=keys,
         dialect=dialect,
+        exclude_nan=exclude_nan,
     )
 
 
@@ -1216,13 +1230,22 @@ def _rolling_corr_pandas_compat_expr(
     window: int,
     dialect: SqlDialect,
 ) -> str:
-    """滚动相关；满窗零方差退化时对齐 pandas ``rolling.corr``（→ ``inf``）。"""
+    """滚动相关；满窗零方差退化时对齐 pandas ``rolling.corr``（→ ``inf``）。
+
+    PARITY-SWEEP-R56: pandas rolling corr emits the window aggregate even at a
+    missing/±Inf row (the current-row pair being non-finite only drops it from
+    the window sample, it does NOT null the output).  The output is NULL only
+    when the window has no valid pairs or the correlation is undefined.  The
+    ``left_col`` / ``right_col`` null-check therefore covers ONLY the NULL pair
+    with an empty window; finite-Inf inputs come pre-masked by the caller's safe
+    columns and the aggregate below is computed over the finite window.
+    """
     w = max(int(window), 1)
     full = f"{window_count_col} >= {w}"
     if dialect == SqlDialect.CLICKHOUSE:
         return (
             f"multiIf("
-            f"isNull({left_col}) OR isNull({right_col}), NULL, "
+            f"isNull({corr_col}) AND {window_count_col} = 0, NULL, "
             f"isFinite({corr_col}), {corr_col}, "
             f"{full} AND (isNull({std_left_col}) OR {std_left_col} = 0) AND {std_right_col} > 0, inf, "
             f"{full} AND (isNull({std_right_col}) OR {std_right_col} = 0) AND {std_left_col} > 0, inf, "
@@ -1230,7 +1253,7 @@ def _rolling_corr_pandas_compat_expr(
         )
     return (
         f"CASE "
-        f"WHEN {left_col} IS NULL OR {right_col} IS NULL THEN NULL "
+        f"WHEN {window_count_col} = 0 THEN NULL "
         f"WHEN isfinite({corr_col}) THEN {corr_col} "
         f"WHEN {full} AND ({std_left_col} IS NULL OR {std_left_col} = 0) AND {std_right_col} > 0 THEN 'Infinity'::DOUBLE "
         f"WHEN {full} AND ({std_right_col} IS NULL OR {std_right_col} = 0) AND {std_left_col} > 0 THEN 'Infinity'::DOUBLE "
@@ -2032,7 +2055,7 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
             has_ts_partition=inner.has_ts_partition,
         )
 
-    if op in {"add", "subtract", "multiply", "divide", "maximum", "minimum"}:
+    if op in {"add", "subtract", "multiply", "divide", "maximum", "minimum", "avg2"}:
         if len(node.inputs) != 2:
             return None
         left = _compile_layer(node.inputs[0], dialect=dialect)
@@ -2056,6 +2079,12 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
                 f"CASE WHEN l._v IS NULL OR r._v IS NULL THEN NULL "
                 f"WHEN {isnan}(l._v) OR {isnan}(r._v) THEN {nan} "
                 f"ELSE {fn}(l._v, r._v) END"
+            )
+        elif op == "avg2":
+            # R55 platform-audit P0: avg2(a, b) = (a + b) / 2.
+            expr = (
+                f"CASE WHEN l._v IS NULL OR r._v IS NULL THEN NULL "
+                f"ELSE (l._v + r._v) / 2.0 END"
             )
         else:
             sym = {"add": "+", "subtract": "-", "multiply": "*", "divide": "/"}[op]
@@ -2492,6 +2521,28 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
             has_inst_window=True,
         )
 
+    if op == "ts_positive_streak":
+        # R55 platform-audit P0: consecutive-positive run length (same
+        # NaN-reset semantics as ts_true_streak but over x > 0, not a
+        # ConditionBool).  LQTP platform OAP_NumEarnIncrease_Proxy relies on it.
+        if dialect != SqlDialect.DUCKDB:
+            return None
+        x = _compile_layer(node.inputs[0], dialect=dialect)
+        if x is None:
+            return None
+        false = f"(NOT {_duckdb_valid('_v')} OR _v <= 0)"
+        return _Layer(
+            f"SELECT ts, inst, CAST(_rn - COALESCE(_last_false, 0) AS DOUBLE) AS _v FROM ("
+            f"SELECT *, MAX(CASE WHEN {false} THEN _rn END) OVER ("
+            f"PARTITION BY inst ORDER BY ts ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW"
+            f") AS _last_false FROM ("
+            f"SELECT ts, inst, _v, ROW_NUMBER() OVER (PARTITION BY inst ORDER BY ts) AS _rn "
+            f"FROM ({x.sql}) s0"
+            f") s1"
+            f") s2",
+            has_inst_window=True,
+        )
+
     if op == "cs_bucket":
         if dialect != SqlDialect.DUCKDB:
             return None
@@ -2852,12 +2903,20 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         if inner is None:
             return None
         spec = _window_spec(node)
+        # PARITY-SWEEP-R56: pandas rolling ``std`` treats ±Inf as fully missing
+        # (excluded from BOTH the aggregate and the min_periods count), but the
+        # raw ``stddev(_v) OVER (... ROWS BETWEEN ...)`` window aggregate keeps
+        # Inf and DuckDB raises OutOfRangeException.  Mask ±Inf to NULL exactly
+        # like ``_inst_window`` does for the other rolling aggregates.
+        isnan_fn = "isNaN" if dialect == SqlDialect.CLICKHOUSE else "isnan"
+        isinf_fn = "isInfinite" if dialect == SqlDialect.CLICKHOUSE else "isinf"
+        safe = f"CASE WHEN _v IS NOT NULL AND NOT {isnan_fn}(_v) AND NOT {isinf_fn}(_v) THEN _v END"
         over = (
             f"PARTITION BY inst ORDER BY ts ROWS BETWEEN {spec.size - 1} PRECEDING AND CURRENT ROW"
         )
         std_key = "stddev_pop" if spec.ddof == 0 else "stddev"
         expr = _rolling_std_min_periods_sql(
-            value_col="_v",
+            value_col=safe,
             over=over,
             window=spec.size,
             scale_expr="1",
@@ -3432,12 +3491,18 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         if inner is None:
             return None
         spec = _window_spec(node)
+        # PARITY-SWEEP-R56: pandas rolling zscore drops ±Inf from the window
+        # (mean/std over finite samples); raw stddev over Inf raises
+        # OutOfRangeException in DuckDB, so mask ±Inf to NULL first.
+        isnan_fn = "isNaN" if dialect == SqlDialect.CLICKHOUSE else "isnan"
+        isinf_fn = "isInfinite" if dialect == SqlDialect.CLICKHOUSE else "isinf"
+        safe = f"CASE WHEN _v IS NOT NULL AND NOT {isnan_fn}(_v) AND NOT {isinf_fn}(_v) THEN _v END"
         over = (
             f"PARTITION BY inst ORDER BY ts ROWS BETWEEN {spec.size - 1} PRECEDING AND CURRENT ROW"
         )
         std_key = "stddev_pop" if spec.ddof == 0 else "stddev"
         expr = _zscore_window_expr(
-            value_col="_v",
+            value_col=safe,
             partition=over,
             dialect=dialect,
             std_fn_name=std_key,
@@ -3502,9 +3567,15 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         if inner is None:
             return None
         lag = _window_int(node, default=1)
+        # PARITY-SWEEP-R56: pandas ``ts_pct`` keeps IEEE arithmetic on ±Inf
+        # (x / lag(x) - 1): Inf/x → Inf, finite/Inf → -1.0, Inf/Inf → NaN.  Only
+        # NULL/zero denominator is masked; the NULLIF(0) guard covers division
+        # by zero.  DuckDB's Inf arithmetic matches IEEE here (no out-of-range
+        # raise for a plain ratio), so do NOT mask non-finite inputs.
+        lag_expr = f"LAG(_v, {lag}) OVER (PARTITION BY inst ORDER BY ts)"
         return _Layer(
             f"SELECT ts, inst, "
-            f"(_v / {nf}(LAG(_v, {lag}) OVER (PARTITION BY inst ORDER BY ts), 0) - 1.0) AS _v "
+            f"(_v / {nf}({lag_expr}, 0) - 1.0) AS _v "
             f"FROM ({inner.sql}) t",
             has_inst_window=True,
         )
@@ -3550,9 +3621,16 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
             return None
         d = _window_int(node, default=1)
         lag = f"LAG(_v, {d}) OVER (PARTITION BY inst ORDER BY ts)"
+        # PARITY-SWEEP-R56: pandas log-return keeps the row NULL when either
+        # price is non-positive OR non-finite (±Inf/NaN).  The old guard only
+        # checked ``<= 0``; an Inf denominator made ``_v / Inf = 0`` and
+        # ``ln(0) = -Inf`` (divergent) or raised.  Mask non-finite inputs too.
+        isnan_fn = "isNaN" if dialect == SqlDialect.CLICKHOUSE else "isnan"
+        isinf_fn = "isInfinite" if dialect == SqlDialect.CLICKHOUSE else "isinf"
+        nonfinite = f"(isnan(_v) OR isinf(_v) OR isnan({lag}) OR isinf({lag}))"
         return _Layer(
             f"SELECT ts, inst, "
-            f"CASE WHEN _v IS NULL OR {lag} IS NULL OR _v <= 0 OR {lag} <= 0 THEN NULL "
+            f"CASE WHEN _v IS NULL OR {lag} IS NULL OR _v <= 0 OR {lag} <= 0 OR {nonfinite} THEN NULL "
             f"ELSE {ln}(_v / {lag}) END AS _v "
             f"FROM ({inner.sql}) t",
             has_inst_window=True,
@@ -3609,9 +3687,20 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         inner = _compile_layer(node.inputs[0], dialect=dialect)
         if inner is None:
             return None
-        expr = _zscore_window_expr(value_col="_v", partition="PARTITION BY ts", dialect=dialect)
+        # PARITY-SWEEP-R56: pandas cross-sectional zscore (``(x - mean)/std`` over
+        # the raw row) POISONS the whole cross-section when it contains ±Inf
+        # (mean=Inf -> every finite cell NaN; stddev over Inf also raises in
+        # DuckDB).  Detect any ±Inf in the ts partition and NULL the entire row,
+        # matching the pandas all-NaN output.  Finite-only rows use the finite
+        # mean/std aggregates.
+        isnan_fn = "isNaN" if dialect == SqlDialect.CLICKHOUSE else "isnan"
+        isinf_fn = "isInfinite" if dialect == SqlDialect.CLICKHOUSE else "isinf"
+        safe = f"CASE WHEN _v IS NOT NULL AND NOT {isnan_fn}(_v) AND NOT {isinf_fn}(_v) THEN _v END"
+        ninf = f"COUNT(*) FILTER (WHERE _v IS NOT NULL AND ({isinf_fn}(_v))) OVER (PARTITION BY ts)"
+        expr = _zscore_window_expr(value_col=safe, partition="PARTITION BY ts", dialect=dialect)
         return _Layer(
-            f"SELECT ts, inst, {expr} AS _v FROM ({inner.sql}) t",
+            f"SELECT ts, inst, "
+            f"CASE WHEN {ninf} > 0 THEN NULL ELSE {expr} END AS _v FROM ({inner.sql}) t",
             has_inst_window=inner.has_inst_window,
             has_ts_partition=True,
         )
@@ -3620,7 +3709,24 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         inner = _compile_layer(node.inputs[0], dialect=dialect)
         if inner is None:
             return None
-        expr = _normalize_window_expr(value_col="_v", partition="PARTITION BY ts")
+        # PARITY-SWEEP-R56: pandas ``Normalize`` computes min/max over the raw row
+        # (Inf included): with an Inf max the span is Inf so every finite cell is
+        # (x-min)/Inf = 0, and the Inf cell (Inf-min)/Inf = NaN; the final
+        # ``replace([inf,-inf], nan)`` keeps the Inf cell NaN.  Replicate by
+        # masking ±Inf cells to NULL in the output and letting the Inf-poisened
+        # span produce 0 for finite cells exactly like the pandas division.
+        isnan_fn = "isNaN" if dialect == SqlDialect.CLICKHOUSE else "isnan"
+        isinf_fn = "isInfinite" if dialect == SqlDialect.CLICKHOUSE else "isinf"
+        lo = f"MIN(_v) OVER (PARTITION BY ts)"
+        hi = f"MAX(_v) OVER (PARTITION BY ts)"
+        span = f"({hi} - {lo})"
+        cnt = f"COUNT(_v) OVER (PARTITION BY ts)"
+        expr = (
+            f"CASE WHEN _v IS NULL OR {isnan_fn}(_v) OR {isinf_fn}(_v) THEN NULL "
+            f"WHEN {cnt} <= 1 THEN NULL "
+            f"WHEN {span} IS NULL OR {span} = 0 THEN 0.5 "
+            f"ELSE (_v - {lo}) / {span} END"
+        )
         return _Layer(
             f"SELECT ts, inst, {expr} AS _v FROM ({inner.sql}) t",
             has_inst_window=inner.has_inst_window,
@@ -4147,6 +4253,15 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         over = (
             f"PARTITION BY inst ORDER BY ts ROWS BETWEEN {w - 1} PRECEDING AND CURRENT ROW"
         )
+        # PARITY-SWEEP-R56: pandas rolling corr treats ±Inf as a missing sample
+        # in the window (dropped from the corr/std aggregates; DuckDB stddev over
+        # Inf raises OutOfRangeException) but STILL emits the window aggregate at
+        # the Inf row itself (only a NULL input row with no valid window pair
+        # yields NULL).  Use masked columns for the window aggregates and the
+        # unmasked current-row pair for the output null-check.
+        isnan_fn = "isNaN" if dialect == SqlDialect.CLICKHOUSE else "isnan"
+        isinf_fn = "isInfinite" if dialect == SqlDialect.CLICKHOUSE else "isinf"
+        safe = f"CASE WHEN _v IS NOT NULL AND NOT {isnan_fn}(_v) AND NOT {isinf_fn}(_v) THEN _v END"
         corr_expr = _rolling_corr_pandas_compat_expr(
             corr_col="_corr",
             std_left_col="_std_l",
@@ -4166,8 +4281,11 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
             f"{'stddev_samp' if dialect == SqlDialect.DUCKDB else 'stddevSamp'}(curr_v) OVER ({over}) AS _std_l, "
             f"{'stddev_samp' if dialect == SqlDialect.DUCKDB else 'stddevSamp'}(lagged_v) OVER ({over}) AS _std_r "
             f"FROM ("
-            f"SELECT ts, inst, _v AS curr_v, "
-            f"LAG(_v, {lag}) OVER (PARTITION BY inst ORDER BY ts) AS lagged_v "
+            f"SELECT ts, inst, "
+            f"{safe} AS curr_v, "
+            f"LAG({safe}, {lag}) OVER (PARTITION BY inst ORDER BY ts) AS lagged_v, "
+            f"_v AS raw_v, "
+            f"LAG(_v, {lag}) OVER (PARTITION BY inst ORDER BY ts) AS raw_lagged "
             f"FROM ({inner.sql}) inner0"
             f") aligned"
             f") scored",
@@ -4224,9 +4342,17 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
             dialect_is_duckdb=dialect == SqlDialect.DUCKDB,
             min_periods=pspec.min_periods,
         )
+        # PARITY-SWEEP-R56: pandas ``rolling_beta`` masks the OUTPUT cell where
+        # either input is non-finite (``(cov/var).where(valid)``), even though
+        # the window aggregate drops Inf.  Mask NULL/NaN/±Inf input cells to NULL
+        # so the Inf cell itself is NULL, matching the pandas reference.
+        isnan_fn = "isNaN" if dialect == SqlDialect.CLICKHOUSE else "isnan"
+        isinf_fn = "isInfinite" if dialect == SqlDialect.CLICKHOUSE else "isinf"
         return _Layer(
             f"SELECT l.ts, l.inst, "
-            f"CASE WHEN l._v IS NULL OR r._v IS NULL THEN NULL ELSE ({beta_expr}) END AS _v "
+            f"CASE WHEN l._v IS NULL OR r._v IS NULL OR "
+            f"{isnan_fn}(l._v) OR {isinf_fn}(l._v) OR {isnan_fn}(r._v) OR {isinf_fn}(r._v) "
+            f"THEN NULL ELSE ({beta_expr}) END AS _v "
             f"FROM ({left.sql}) l LEFT JOIN ({right.sql}) r USING (ts, inst)",
             has_inst_window=True,
         )
@@ -4779,6 +4905,31 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         )
         return _Layer(_inst_window(dialect, w, "SUM", flow, min_periods=w), has_inst_window=True)
 
+    if op == "rolling_adl_flow":
+        # ``ADL`` is a legacy alias for canonical ``rolling_adl_flow`` (R11
+        # round-3 rename); the planner lowers the plan with the canonical name,
+        # so the emitter must branch on the canonical too — otherwise the tree
+        # is deemed SQL-incapable and silently falls back (sql_query_count=0).
+        # Rewrite to the ``ADL`` branch WITHOUT re-dispatching through
+        # _compile_layer (which would recurse through the wrapper stack).
+        if len(node.inputs) < 4:
+            return None
+        high = _compile_layer(node.inputs[0], dialect=dialect)
+        low = _compile_layer(node.inputs[1], dialect=dialect)
+        close = _compile_layer(node.inputs[2], dialect=dialect)
+        volume = _compile_layer(node.inputs[3], dialect=dialect)
+        if high is None or low is None or close is None or volume is None:
+            return None
+        w = max(int(_literal_positional(node, 3, default=20) or 20), 1)
+        flow = (
+            f"SELECT h.ts, h.inst, "
+            f"(((c._v - l._v) - (h._v - c._v)) / NULLIF(h._v - l._v, 0)) * v._v AS _v "
+            f"FROM ({high.sql}) h INNER JOIN ({low.sql}) l USING (ts, inst) "
+            f"INNER JOIN ({close.sql}) c USING (ts, inst) "
+            f"INNER JOIN ({volume.sql}) v USING (ts, inst)"
+        )
+        return _Layer(_inst_window(dialect, w, "SUM", flow, min_periods=w), has_inst_window=True)
+
     if op == "ChaikinOscillator":
         if len(node.inputs) < 4:
             return None
@@ -4806,13 +4957,18 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         # 提供（min_periods=1），与 polars _ewm_span 对齐（原实现在 ewm 前
         # 直接喂 warmup NULL，导致 cold-start carrier=0 漂移）。
         avl = _inst_window(dialect, w, "SUM", flow, min_periods=w)
-        avl_ff = (
-            f"SELECT ts, inst, "
-            f"LAST_VALUE(_v IGNORE NULLS) OVER (PARTITION BY inst ORDER BY ts) AS _v "
-            f"FROM ({avl}) t"
-        )
-        ef = _ema_span_over_inst(avl_ff, fast, dialect=dialect, min_periods=1)
-        es = _ema_span_over_inst(avl_ff, slow, dialect=dialect, min_periods=1)
+        # pandas ``ChaikinOscillator`` = adl.ewm(span=f, adjust=False,
+        # min_periods=f).mean() - adl.ewm(span=s, adjust=False, min_periods=s).mean()
+        # where adl = rolling(adl_window).sum() (warmup NULLs).  pandas ewm on a
+        # series with leading NaN still requires ``min_periods`` **valid**
+        # observations AFTER the warmup gaps — a forward-fill of the ADL warmup
+        # (as the previous comment claimed polars does) gives 0.0 too early on
+        # instruments whose ADL only turns valid mid-panel (C 2024-01-04,
+        # B 2024-01-05+).  Feed the warmup-gapped ADL directly with the span
+        # min_periods so the recursive seed comes from the first valid row and
+        # the min_periods gate matches pandas.
+        ef = _ema_span_over_inst(avl, fast, dialect=dialect, min_periods=fast)
+        es = _ema_span_over_inst(avl, slow, dialect=dialect, min_periods=slow)
         return _Layer(
             f"SELECT f.ts, f.inst, (f._v - s._v) AS _v "
             f"FROM ({ef}) f JOIN ({es}) s USING (ts, inst)",
@@ -6858,12 +7014,20 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
             part = "PARTITION BY x.ts"
             join = f"FROM ({inner.sql}) x"
         if op == "group_rank":
+            from factor_engine.backend.rank_spec import rank_spec_for
+
             wrapped, keys = _group_partition_wrap(
                 inner.sql,
                 grp_layer.sql if grp_layer is not None else None,
             )
+            # PARITY-SWEEP-R56: group_rank inf_policy="participate" (pandas
+            # group-wise ``rank(pct=True)`` includes ±Inf as a rankable extreme).
+            exclude_nan = rank_spec_for("group_rank").inf_policy == "exclude"
             return _Layer(
-                _cs_average_rank_pct_sql(wrapped, partition_keys=keys, dialect=dialect),
+                _cs_average_rank_pct_sql(
+                    wrapped, partition_keys=keys, dialect=dialect,
+                    exclude_nan=exclude_nan,
+                ),
                 has_inst_window=inner.has_inst_window,
                 has_ts_partition=True,
             )
@@ -7104,11 +7268,20 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         hi = _float_attr(node, "upper", "hi", default=0.95)
         g = _dialect_fn(dialect, "greatest")
         l = _dialect_fn(dialect, "least")
+        # PARITY-SWEEP-R56: pandas ``Winsorize`` keeps ±Inf in the row quantile
+        # (``x.quantile(axis=1)``), clips, then ``replace([inf,-inf], nan)``.  A
+        # row whose max is +Inf therefore has an upper quantile of +Inf (DuckDB
+        # percentile_cont over Inf -> Inf, matching pandas' Inf-bounded clip),
+        # and the Inf cell itself becomes NaN after the replace.  Finite cells
+        # keep their clipped values.  Do NOT drop Inf from the quantile input.
         q_lo = _quantile_over(dialect, "_v", lo, "PARTITION BY ts")
         q_hi = _quantile_over(dialect, "_v", hi, "PARTITION BY ts")
         clip = f"{g}({q_lo}, {l}({q_hi}, _v))"
         return _Layer(
-            f"SELECT ts, inst, CASE WHEN _v IS NULL THEN NULL ELSE {clip} END AS _v "
+            f"SELECT ts, inst, "
+            f"CASE WHEN _v IS NULL THEN NULL "
+            f"WHEN _v = 'Infinity'::DOUBLE OR _v = '-Infinity'::DOUBLE THEN NULL "
+            f"ELSE {clip} END AS _v "
             f"FROM ({inner.sql}) t",
             has_inst_window=inner.has_inst_window,
             has_ts_partition=True,
@@ -7221,12 +7394,18 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         if inner is None:
             return None
         spec = _window_spec(node)
+        # PARITY-SWEEP-R56: ts_rank inf_policy="participate" (pandas rolling
+        # ``rank(pct=True)`` keeps ±Inf inside the window as a rankable extreme).
+        from factor_engine.backend.rank_spec import rank_spec_for
+
+        exclude_nan = rank_spec_for("ts_rank").inf_policy == "exclude"
         return _Layer(
             _ts_pct_rank_sql(
                 inner.sql,
                 window=spec.size,
                 dialect=dialect,
                 min_periods=spec.min_periods,
+                exclude_nan=exclude_nan,
             ),
             has_inst_window=True,
         )
@@ -7702,11 +7881,15 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
             return None
         abs_fn = _dialect_fn(dialect, "abs")
         ln_fn = _dialect_fn(dialect, "ln")
+        isinf_fn = "isInfinite" if dialect == SqlDialect.CLICKHOUSE else "isinf"
+        isnan_fn = "isNaN" if dialect == SqlDialect.CLICKHOUSE else "isnan"
         return _Layer(
             f"SELECT ts, inst, "
             f"CASE WHEN _v IS NULL THEN NULL "
             f"WHEN {abs_fn}(_v) = 0 THEN NULL "
-            f"ELSE {ln_fn}({abs_fn}(_v)) END AS _v "
+            f"ELSE CASE WHEN {isinf_fn}({ln_fn}({abs_fn}(_v))) OR "
+            f"{isnan_fn}({ln_fn}({abs_fn}(_v))) THEN NULL "
+            f"ELSE {ln_fn}({abs_fn}(_v)) END END AS _v "
             f"FROM ({inner.sql}) t",
             has_inst_window=inner.has_inst_window,
             has_ts_partition=inner.has_ts_partition,
@@ -8453,9 +8636,16 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         inner = _compile_layer(node.inputs[0], dialect=dialect)
         if inner is None:
             return None
-        expr = _zscore_window_expr(value_col="_v", partition="PARTITION BY ts", dialect=dialect)
+        # PARITY-SWEEP-R56: same whole-row poison semantics as ``zscore`` — pandas
+        # ``cs_zscore`` mean/std over a row containing ±Inf yields all-NaN.
+        isnan_fn = "isNaN" if dialect == SqlDialect.CLICKHOUSE else "isnan"
+        isinf_fn = "isInfinite" if dialect == SqlDialect.CLICKHOUSE else "isinf"
+        safe = f"CASE WHEN _v IS NOT NULL AND NOT {isnan_fn}(_v) AND NOT {isinf_fn}(_v) THEN _v END"
+        ninf = f"COUNT(*) FILTER (WHERE _v IS NOT NULL AND ({isinf_fn}(_v))) OVER (PARTITION BY ts)"
+        expr = _zscore_window_expr(value_col=safe, partition="PARTITION BY ts", dialect=dialect)
         return _Layer(
-            f"SELECT ts, inst, {expr} AS _v FROM ({inner.sql}) t",
+            f"SELECT ts, inst, "
+            f"CASE WHEN {ninf} > 0 THEN NULL ELSE {expr} END AS _v FROM ({inner.sql}) t",
             has_inst_window=inner.has_inst_window,
             has_ts_partition=True,
         )
@@ -8710,7 +8900,6 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         w = _window_int(node, default=20)
         if w < 2:
             return None
-        import math
         w2 = max(int(w / 2), 1)
         ws = max(int(math.sqrt(w)), 1)
         # WMA for half period
@@ -8828,8 +9017,16 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         if inner is None or grp is None:
             return None
         wrapped, partition_keys = _group_partition_wrap(inner.sql, grp.sql)
+        # PARITY-SWEEP-R56: group_rank inf_policy="participate" (pandas
+        # group-wise ``rank(pct=True)`` includes ±Inf as a rankable extreme).
+        from factor_engine.backend.rank_spec import rank_spec_for
+
+        exclude_nan = rank_spec_for("group_rank").inf_policy == "exclude"
         return _Layer(
-            _cs_average_rank_01_sql(wrapped, partition_keys=partition_keys, dialect=dialect),
+            _cs_average_rank_01_sql(
+                wrapped, partition_keys=partition_keys, dialect=dialect,
+                exclude_nan=exclude_nan,
+            ),
             has_inst_window=inner.has_inst_window,
             has_ts_partition=True,
         )
@@ -9437,19 +9634,56 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         spec = _window_spec(node)
         if dialect != SqlDialect.DUCKDB:
             return None
-        over = f"PARTITION BY inst ORDER BY ts ROWS BETWEEN {spec.size - 1} PRECEDING AND CURRENT ROW"
-        # WINDOW-SEMANTICS PARITY (pandas reference): the ACTIVE pandas ts_kurt
-        # is StableTsKurt — prefix-stable unbiased Fisher excess kurtosis on
-        # FULL finite windows (min_periods == window).  Require W finite rows;
-        # NaN AND ±Inf are missing (shared finite mask).
-        min_periods_val = spec.size
-        return _Layer(
-            f"SELECT ts, inst, "
-            f"CASE WHEN COUNT(_v) OVER ({over}) < {min_periods_val} THEN NULL "
-            f"ELSE KURTOSIS(_v) OVER ({over}) END AS _v "
+        # WINDOW-SEMANTICS PARITY: the ACTIVE pandas_numpy/polars ts_kurt is
+        # StableTsKurt — prefix-stable unbiased Fisher excess kurtosis over FULL
+        # finite windows (min_periods == window; NaN AND ±Inf are missing).  A
+        # window with any missing value (count < window) is NULL; a full finite
+        # window of zero scale is -3.0 (pandas rolling.kurt authority); otherwise
+        # the unbiased-Fisher correction on the FULL W finite samples.
+        #
+        # NOTE: the OLD implementation computed the mean, second and fourth
+        # moments in the SAME windowed frame and then divided by the count of
+        # the FULL window — that is the POPULATION formula (biased; kurt of
+        # [1..5] = -1.3), NOT the StableTsKurt reference (-1.2).  The correct
+        # unbiased formula uses n = the count of finite members per window.
+        # pandas reference: the test suite's authority is pandas
+        # ``rolling(window, min_periods).kurt()`` — the OPTIMIZED rolling.kurt
+        # which (a) skips NaN AND ±Inf rows silently, (b) requires only
+        # ``min_periods`` FINITE observations in the window (NOT a full W), and
+        # (c) applies the unbiased-Fisher correction with n = the FINITE count.
+        # This matches pandas rolling semantics exactly (count of finite members
+        # >= GREATEST(min_periods, 4) is required; the correction uses that
+        # finite count).  The algebraic identities give the finite-window
+        # central moments from the finite-only windowed sums.
+        w = int(spec.size)
+        mp = int(spec.min_periods)
+        eff_min = max(mp, 4)
+        over = f"PARTITION BY inst ORDER BY ts ROWS BETWEEN {w - 1} PRECEDING AND CURRENT ROW"
+        cnt = f"COUNT(_v) OVER ({over})"
+        m = f"AVG(_v) OVER ({over})"
+        sumv2 = f"SUM(_v * _v) OVER ({over})"
+        m2 = f"(({sumv2}) - ({cnt}) * ({m}) * ({m}))"
+        m4 = f"SUM(POWER(_v, 4)) OVER ({over}) - 4*({m})*SUM(POWER(_v, 3)) OVER ({over}) + 6*({m})*({m})*({sumv2}) - 3*({cnt})*POWER({m}, 4)"
+        win1 = (
+            f"SELECT ts, inst, _v, {cnt} AS _n, {m} AS _m "
             f"FROM (SELECT ts, inst, "
             f"CASE WHEN _v IS NOT NULL AND NOT isnan(_v) AND NOT isinf(_v) THEN _v END AS _v "
-            f"FROM ({inner.sql}) t) filtered",
+            f"FROM ({inner.sql}) t) filtered"
+        )
+        win2 = (
+            f"SELECT ts, inst, _v, _n, _m, {m2} AS _m2, {m4} AS _m4 FROM ({win1}) w"
+        )
+        n_expr = f"CAST(_n AS DOUBLE)"
+        biased = f"(({n_expr} * _m4) / NULLIF(_m2 * _m2, 0) - 3.0)"
+        kurt = (
+            f"((({n_expr} - 1.0) / (NULLIF(({n_expr} - 2.0) * ({n_expr} - 3.0), 0)))"
+            f" * (({n_expr} + 1.0) * {biased} + 6.0))"
+        )
+        return _Layer(
+            f"SELECT ts, inst, "
+            f"CASE WHEN _n < {eff_min} THEN NULL "
+            f"WHEN _m2 <= 0 THEN -3.0 ELSE {kurt} END AS _v "
+            f"FROM ({win2}) w",
             has_inst_window=True,
         )
 

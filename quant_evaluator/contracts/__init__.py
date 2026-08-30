@@ -32,7 +32,13 @@ from quant_evaluator.contracts.errors import (
 )
 from quant_evaluator.contracts.sealed_split import SealedSplitRef, check_sealed_split_overlap
 from quant_evaluator.contracts.evaluation_refs import FactorValueRef, LabelBundleRef
-from quant_evaluator.contracts.evaluation_artifact import EvaluationArtifact
+from quant_evaluator.contracts.domain_refs import ArtifactDomain, DomainArtifactRef
+from quant_evaluator.contracts.evaluation_artifact import (
+    ArtifactEnvelopeIdentity,
+    EvaluationArtifact,
+    EvaluationResultContentHash,
+    EvaluationSpecIdentity,
+)
 
 __all__ = [
     "FactorBatch",
@@ -64,5 +70,10 @@ __all__ = [
     "check_sealed_split_overlap",
     "FactorValueRef",
     "LabelBundleRef",
+    "ArtifactDomain",
+    "DomainArtifactRef",
     "EvaluationArtifact",
+    "EvaluationSpecIdentity",
+    "EvaluationResultContentHash",
+    "ArtifactEnvelopeIdentity",
 ]

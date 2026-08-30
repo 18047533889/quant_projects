@@ -160,12 +160,17 @@ def test_p0_09_memory_lease_released_on_writer_failure(tmp_path):
         broker=broker,
         publisher=_FailingPublisher(store),
         research_only=True,
+        # 强制单列即 flush —— 否则缓冲列租约会一直持有到 finish/abort（本次
+        # 失败路径已把 in-flight 租约归还，缓冲列租约由 flush_partition finally
+        # 归还；这里直接显式 flush 上传失败验证 in-flight 释放）。
     )
     before = broker._lease_sum_bytes()
     with pytest.raises(DataError):
         w.submit("f_a", np.arange(5, dtype=np.float32))
-    # 上传抛错 → submit 的 finally 释放该次 in-flight lease。(缓冲列 lease 已
-    # 由 flush_partition 失败路径释放；此处校验 broker 无滞留占用。)
+        # 单列缓冲不自动触发 flush（块最小 64 列）→ 显式 flush 走到上传失败路径。
+        w.flush()
+    # 上传抛错 → submit/flush 的 finally 释放该次 in-flight lease 与缓冲列 lease。
+    # (缓冲列 lease 由 flush_partition 失败路径释放；此处校验 broker 无滞留占用。)
     assert broker._lease_sum_bytes() <= before
 
 

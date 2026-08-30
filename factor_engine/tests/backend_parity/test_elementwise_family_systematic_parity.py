@@ -107,8 +107,14 @@ def _seed_duckdb(root: Path, source: InMemorySeriesSource) -> None:
             {
                 "TradeDate": timestamp.date(),
                 "Symbol": instrument,
-                "X": float(x_val) if pd.notna(x_val) and np.isfinite(x_val) else None,
-                "Y": float(y_val) if pd.notna(y_val) and np.isfinite(y_val) else None,
+                # PARITY-SWEEP-R56: keep the exact IEEE value so the DuckDB
+                # backend exercises the same NaN/±Inf inputs the pandas/Polars
+                # backends see.  The old ``np.isfinite`` gate silently turned
+                # +Inf into NULL, making elementwise ops (add/abs/sign/clip/
+                # minimum/maximum/normalize/zscore/winsorize) diverge on the
+                # Inf cell (pandas propagated Inf, SQL saw NULL).
+                "X": float(x_val) if pd.notna(x_val) else None,
+                "Y": float(y_val) if pd.notna(y_val) else None,
                 "Flag": float(source.data["flag"].loc[(timestamp, instrument)]),
                 "Constant": float(source.data["constant"].loc[(timestamp, instrument)]),
             }

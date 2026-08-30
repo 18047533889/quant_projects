@@ -97,10 +97,11 @@ volume:
   # LQTP 平台 functions.yaml：volume = Volume / Factor（后复权量）。生成的
   # StockDailyBarAdj 表保持 Volume 原始值，Factor 列同表存在；derived_expression
   # 使 bare ``volume`` 解析为 Volume / Factor（业界 LQTP/adjusted-volume 口径）。
+  # derived_from 指向复权表同表 Volume/Factor（ADJ_FIELD_MIGRATION：不再引用 raw 表）。
   derived_expression: Volume / Factor
   derived_from:
-    - ashare_stock_daily.Volume
-    - ashare_stock_daily.Factor
+    - ashare_stock_daily_adj.Volume
+    - ashare_stock_daily_adj.Factor
 
 amount:
   dataset: ashare_stock_daily_adj
@@ -579,55 +580,13 @@ stock_industry:
 # 单位均为 PERCENT（如股东占比 15 表示 15%）→ canonical ratio 乘子 0.01。
 # 知识时点为公告日 PubDate（可见性），下一交易日可用，knowledge_date_pit 保真。
 # 单个股东占比 / 前十大集中度 / 质押比例都属股东披露，同一条 PIT 契约。
-
-shareholder_ratio:
-  market: ashare
-  dataset: ashare_stock_shareholder
-  physical_name: ShareRatio
-  dtype: double
-  frequency: quarterly
-  grain: instrument
-  <<: *ratio_field
-  scale: 0.01
-  cross_market_comparable: false
-  time_role: knowledge_time
-  temporal_model: financial_event
-  knowledge_time: PubDate
-  time_representation: date_label
-  time_precision: date
-  pit_fidelity: knowledge_date_pit
-  effective_time: ReportPeriodEndDate
-  period_time: ReportPeriodEndDate
-  revision_order: [UpdateTime]
-  availability: next_trading_day
-  join_policy: pit_asof_backward
-  period_selection: latest_period
-  mining_allowed: true
-
-top10_concentration:
-  market: ashare
-  dataset: ashare_stock_shareholder
-  physical_name: TopTenConcentration
-  dtype: double
-  frequency: quarterly
-  grain: instrument
-  <<: *ratio_field
-  scale: 0.01
-  cross_market_comparable: false
-  time_role: knowledge_time
-  temporal_model: financial_event
-  knowledge_time: PubDate
-  time_representation: date_label
-  time_precision: date
-  pit_fidelity: knowledge_date_pit
-  effective_time: ReportPeriodEndDate
-  period_time: ReportPeriodEndDate
-  revision_order: [UpdateTime]
-  availability: next_trading_day
-  join_policy: pit_asof_backward
-  period_selection: latest_period
-  mining_allowed: true
-
+#
+# ADJ_FIELD_MIGRATION（2026-08-28）：shareholder_ratio / top10_concentration 原
+# 指向未登记的 ``ashare_stock_shareholder`` 数据集（datasets.yaml 只有
+# ashare_stock_topten_shareholder / _float_shareholder）。前十大集中度必须从
+# one_to_many 的 ShareRatio 行聚合（rank/aggregate 降维）才能标量化，不存在
+# 单列物理来源 —— 删除这两个错登记。FE catalog 的 share_ratio 等 topten 字段
+# 已保守登记为 mining_allowed=False + cardinality=one_to_many。
 pledged_share_ratio:
   market: ashare
   dataset: ashare_stock_pledge

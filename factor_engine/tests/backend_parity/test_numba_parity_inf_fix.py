@@ -27,11 +27,18 @@ os.environ.setdefault("FACTOR_ENGINE_NUMBA_THREADS", "1")
 from factor_engine.backend.numba_kernel_registry import (  # noqa: E402
     NUMBA_AVAILABLE,
     DuplicateKernelRegistrationError,
+    DuplicateSpecMismatchError,
     NumbaKernel,
     NumbaKernelRegistry,
     NumbaKernelSpec,
+    _compute_numba_kernel_implementation_id,
     parity_check,
 )
+
+
+def _compute_impl_id_for_test() -> str:
+    """Return the implementation_id the registry WILL compute for (_trivial_ref,_trivial_numba)."""
+    return _compute_numba_kernel_implementation_id(_trivial_ref, _trivial_numba)
 
 
 # ---------------------------------------------------------------------------
@@ -302,7 +309,7 @@ class TestRegistryDedup:
 
         NumbaKernelRegistry._kernels["_dedup_test_kernel"] = kernel_a
         try:
-            with pytest.raises(DuplicateKernelRegistrationError, match="_dedup_test_kernel"):
+            with pytest.raises(DuplicateSpecMismatchError, match="_dedup_test_kernel"):
                 NumbaKernelRegistry.register(
                     "kalman", "_dedup_test_kernel", _trivial_ref, _trivial_numba,
                     semantic_version="2.0",
@@ -317,9 +324,15 @@ class TestRegistryDedup:
             kernel_name="_dedup_idempotent",
             semantic_version="1.0",
         )
-        kernel_a = NumbaKernel(spec=k, reference_fn=_trivial_ref)
+        kernel_a = NumbaKernel(
+            spec=k,
+            reference_fn=_trivial_ref,
+            implementation_id=_compute_impl_id_for_test(),
+        )
         NumbaKernelRegistry._kernels["_dedup_idempotent"] = kernel_a
         try:
+            # Same spec AND same reference_fn/numba_fn → same implementation_id
+            # → idempotent allow (registry's stated dedup policy).
             NumbaKernelRegistry.register(
                 "kalman", "_dedup_idempotent", _trivial_ref, _trivial_numba,
                 semantic_version="1.0",

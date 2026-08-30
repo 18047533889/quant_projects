@@ -41,7 +41,7 @@ def test_validate_manifest_legacy_lqtp_dsl_type():
 
 
 def test_export_dsl_allowlist_contains_rank():
-    payload = export_dsl_allowlist_json()
+    payload = export_dsl_allowlist_json(market="us")
     assert payload["operator_policy"] == "afv_us_pv_daily"
     assert payload["market"] == "us"
     assert "rank" in payload["operators"]
@@ -59,7 +59,9 @@ def test_default_ashare_pv_data_source_uses_data_access_without_max_files():
 
     cfg = default_ashare_pv_data_source_config()
     assert cfg["type"] == "data_access"
-    assert cfg["dataset"] == "ashare_stock_daily"
+    assert cfg["dataset"] == "ashare_stock_daily_adj"
+    assert cfg["fields"]["close"] == "AdjClose"
+    assert cfg["fields"]["vwap"] == "AdjVwap"
 
 
 def test_default_us_pv_valuation_composite():
@@ -119,11 +121,15 @@ def test_default_ashare_pv_data_source():
         start_date="2019-01-01",
         end_date="2019-12-31",
     )
-    assert "a_share/lqtp_data" in cfg["root"]
-    assert cfg["instrument_col"] == "Symbol"
-    assert cfg["fields"]["vwap"] == "Vwap"
+    # ADJ_FIELD_MIGRATION: max_files no longer switches to a direct parquet read —
+    # the config stays data_access / ashare_stock_daily_adj (no non-data_access IO).
+    assert cfg["type"] == "data_access"
+    assert cfg["dataset"] == "ashare_stock_daily_adj"
+    assert cfg["fields"]["vwap"] == "AdjVwap"
+    assert cfg["fields"]["close"] == "AdjClose"
     assert cfg["max_files"] == 5
     assert cfg["start_date"] == "2019-01-01"
+    assert cfg["end_date"] == "2019-12-31"
 
 
 def test_default_ashare_pv_universe_composite():

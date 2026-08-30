@@ -36,6 +36,7 @@ from types import MappingProxyType
 from typing import Mapping, Optional
 
 from factor_assets.contracts._canonical import canonical_digest
+from factor_assets.contracts.similarity import is_unknown_identity
 
 __all__ = [
     "GraphCompletenessClass",
@@ -144,6 +145,17 @@ class SimilarityGraphArtifact:
             raise ValueError("node_universe_ref is required")
         if not self.fingerprint_spec_ref:
             raise ValueError("fingerprint_spec_ref is required")
+        # P0-12 (R55 audit): an UNKNOWN placeholder graph/fingerprint identity
+        # is not an identity — two graphs measured under different specs would
+        # both read UNKNOWN and cluster versioning would silently merge them.
+        for _field_name in ("graph_identity", "node_universe_ref", "fingerprint_spec_ref"):
+            _value = getattr(self, _field_name)
+            if isinstance(_value, str) and is_unknown_identity(_value):
+                raise ValueError(
+                    f"{_field_name} is UNKNOWN ({_value!r}); a "
+                    "SimilarityGraphArtifact may not carry an unknown identity "
+                    "— resolve the concrete spec value first (fail closed)."
+                )
         if not isinstance(self.ann_policy, Mapping):
             raise TypeError("ann_policy must be a mapping")
         if not isinstance(self.ann_k, int) or isinstance(self.ann_k, bool) or self.ann_k < 1:
@@ -236,6 +248,17 @@ class ClusterSetVersionArtifact:
             raise ValueError("member_universe_ref is required")
         if not self.similarity_graph_version_ref:
             raise ValueError("similarity_graph_version_ref is required")
+        # P0-12 (R55 audit): an UNKNOWN version ref is not a version — two
+        # cluster-set versions computed under different graphs would both read
+        # UNKNOWN and version matching would silently merge them.
+        for _field_name in ("cluster_set_version_id", "similarity_graph_version_ref"):
+            _value = getattr(self, _field_name)
+            if isinstance(_value, str) and is_unknown_identity(_value):
+                raise ValueError(
+                    f"{_field_name} is UNKNOWN ({_value!r}); a "
+                    "ClusterSetVersionArtifact may not carry an unknown "
+                    "version identity (fail closed)."
+                )
         if not self.algorithm:
             raise ValueError("algorithm is required")
         if not self.backend:

@@ -75,7 +75,7 @@ def load_GV():
     assert idx[0] == pd.Timestamp("2016-01-04") and idx[-1] == pd.Timestamp("2026-08-24"), idx[[0, -1]]
     vwap = vwap.astype("float32")
     rv = vwap / vwap.shift(1).replace(0, np.nan) - 1.0
-    ret = rv.shift(-1)                                  # vwap-to-vwap, 后复权
+    ret = rv.shift(-2)                                  # vwap-to-vwap 后复权（t+1成交→t+2卖出，企业级，对齐TargetVwapReturnH01）
     m_full = (idx >= FULL_START) & (idx <= Y26_END)     # ret 首日 2019-01-01 nan(边界) => 1853 天
     m26 = (idx >= Y26_START) & (idx <= Y26_END)
     m26_key = (idx >= Y26_KEY_START) & (idx <= Y26_KEY_END)
@@ -321,20 +321,29 @@ def parse_cumrets_for_top(rob, n=20):
     top.sort(key=lambda r: r["ls2026"]["cumret"], reverse=True)
     return top[:n]
 
+def _select_top(ranked_st, n=20):
+    """挑选参与图1的因子: 优先 2026 多空净值累计收益前 n (须有 r26 数据);
+    不足 n 个时用稳定因子补齐; 无任何可用数据时返回空列表."""
+    with_cache = [r for r in ranked_st if _load_r26_cache(r["page"]) is not None]
+    if len(with_cache) >= n:
+        return with_cache[:n]
+    # 用稳定的非 top20 补齐(同用缓存优先)
+    rest = [r for r in ranked_st if r not in with_cache and _load_r26_cache(r["page"]) is not None]
+    return (with_cache + rest)[:n]
+
 def figure1_top20_nav(ranked_st, rob):
     plt = _plt_init()
     fig, ax = plt.subplots(figsize=(11, 6.5))
     d26 = _GV["idx"][( _GV["idx"] >= "2026-01-01") & (_GV["idx"] <= "2026-08-24")]
     ret26 = _GV["ret"].to_numpy()[(_GV["idx"] >= "2026-01-01") & (_GV["idx"] <= "2026-08-24")]
-    _labelled = 0
-    for r in ranked_st:
+    ranked_st = sorted(ranked_st, key=lambda r: (r.get("ls2026") or {}).get("cumret", -1e9), reverse=True)
+    picks = _select_top(ranked_st, 20)
+    plotted = 0
+    for r in picks:
         page = r["page"]
         r26 = _load_r26_cache(page)
         if r26 is None:
-            if "r26" in r:
-                r26 = r["r26"]
-            else:
-                continue  # report-only 无缓存/无内嵌, 跳过
+            continue
         top, bot = _window_quantiles(r26, DECILE_WINDOW, 0.10, 0.90)
         ls = np.zeros(top.shape[0])
         for d in range(top.shape[0]):
@@ -342,12 +351,15 @@ def figure1_top20_nav(ranked_st, rob):
             if len(tt) and len(bb):
                 ls[d] = np.nanmean(tt) - np.nanmean(bb)
         ax.plot(d26, (1 + ls).cumprod(), lw=1.2, label=page[:26])
-        _labelled += 1
-        if _labelled >= 20:
-            break
+        plotted += 1
     ax.axhline(1, color="#94a3b8", lw=0.8, ls="--")
     ax.set_title("2026 稳定 Top20 多空净值 (G10-G1, vwap 后复权收益)")
-    ax.set_ylabel("累计净值"); ax.legend(fontsize=7, ncol=2, loc="upper left")
+    ax.set_ylabel("累计净值")
+    if plotted == 0:
+        ax.text(0.5, 0.5, "无可用 2026 净值数据", ha="center", va="center",
+                transform=ax.transAxes, color="#64748b")
+    else:
+        ax.legend(fontsize=7, ncol=2, loc="upper left")
     fig.tight_layout()
     import io, base64
     buf = io.BytesIO(); fig.savefig(buf, format="png"); buf.seek(0)
@@ -443,6 +455,7 @@ def build_pages(rob, op_counts, op_stable_ratio, logic_stats, figures):
     n_dec = sum(1 for r in rob if r.get("status") == "decay")
     n_fa = sum(1 for r in rob if r.get("status") == "failed")
     plog(f"[page] 稳定={n_st} 衰减={n_dec} 失效={n_fa}")
+    n_row = 0
 
     # 汇总表
     for r in rob:
@@ -453,6 +466,9 @@ def build_pages(rob, op_counts, op_stable_ratio, logic_stats, figures):
         _ic26 = ics.get("ic") if isinstance(ics.get("ic"), float) else None
         _ir26 = ics.get("icir") if isinstance(ics.get("icir"), float) else None
         _icq2 = q2.get("ic") if isinstance(q2.get("ic"), float) else None
+        _st = r.get("status", "?")
+        _st_cls = {"stable": "bs", "decay": "bd", "failed": "bf"}.get(_st, "")
+        _st_lbl = {"stable": "🟢 稳定", "decay": "🟡 轻度衰减", "failed": "🔴 失效"}.get(_st, _st)
         row.append(
             f"<tr><td><a href='../factors/factor_{p}.html'><code>{p}</code></a></td>"
             f"<td>{'' if _ic26 is None else f'{_ic26:.4f}'}</td>"
@@ -461,7 +477,10 @@ def build_pages(rob, op_counts, op_stable_ratio, logic_stats, figures):
             f"<td>{ls.get('cumret', '—'):.1%}</td>"
             f"<td>{ls.get('maxdd', '—'):.1%}</td>"
             f"<td>{ls.get('maxdd_dur_days', '—') or 0}</td>"
-            f"<td>{_status_label(r.get('status','?'))}</td></tr>")
+            f"<td><span class='bstate {_st_cls}'>{_st_lbl}</span></td></tr>")
+        n_row += 1
+
+    row = "\n".join(row)
 
     cards = "".join(
         f"<div class='metric'><b>{x}</b><span>{y}</span></div>"
@@ -518,6 +537,19 @@ td{{padding:5px 8px;border-bottom:1px solid var(--line)}}
 tr:hover td{{background:#f8fafc}}
 code{{background:#f1f5f9;padding:1px 5px;border-radius:4px;font-size:.75rem}}
 h2{{font-size:1.02rem;color:var(--primary);margin:26px 0 8px;border-bottom:1px solid var(--line);padding-bottom:6px}}
+.attr{{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px 20px;margin:10px 0 22px;box-shadow:0 2px 14px rgba(15,23,42,.05)}}
+.attr p{{font-size:.86rem;line-height:1.7;color:#334155;margin:6px 0}}
+.attr .lead{{font-weight:700;color:var(--primary);font-size:.92rem}}
+.badge3{{display:inline-block;border-radius:10px;padding:1px 8px;font-size:.72rem;font-weight:700}}
+.bg{{background:#dcfce7;color:#166534}}.by{{background:#fef3c7;color:#b45309}}.br{{background:#fee2e2;color:#991b1b}}
+.bstate{{display:inline-block;border-radius:10px;padding:1px 9px;font-size:.74rem;font-weight:700}}
+.bs{{background:#dcfce7;color:#166534}}.bd{{background:#fef3c7;color:#b45309}}.bf{{background:#fee2e2;color:#991b1b}}
+.colls{{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin:10px 0 20px}}
+.coll{{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 18px}}
+.coll h3{{font-size:.9rem;color:var(--primary);margin:2px 0 8px}}
+.coll ul{{margin:6px 0 4px;padding-left:18px}}
+.coll li{{font-size:.8rem;margin:3px 0;color:#334155}}
+.coll .num{{color:#7c3aed;font-weight:700}}
 </style></head>
 <body>
 <header><a href="../index.html">&#8592; 返回汇总</a>
@@ -533,6 +565,23 @@ h2{{font-size:1.02rem;color:var(--primary);margin:26px 0 8px;border-bottom:1px s
 </div>
 <img src="{figures[3]}" alt="logic_stacked" style="height:340px;object-fit:contain"/>
 
+<h2>🔬 2026 失效归因（为什么 267 个因子失效）</h2>
+<div class="attr">
+<p class="lead">① 逻辑维度：动量/相关性类全线崩塌</p>
+<p>按逻辑标签统计（每因子可多标签），<b>动量类</b>（momentum，450 因子）失效率 <b class="num">58.0%</b>、<b>流动性类</b>（liquidity，448）失效率 <b class="num">57.8%</b>、<b>价格位置类</b>（price_position，447）<b class="num">57.3%</b>、<b>成交量类</b>（volume，451）<b class="num">57.4%</b>——这些占池子主体的趋势/量价类因子在 2026 呈现系统性失效，说明 2026 行情以<b>风格快速切换 + 高波动结构</b>为主，基于历史统计关系的趋势跟随信号失去稳定性。</p>
+<p>② 算子维度：相关性（correlation）类最差——<b>单算子失效率 61.5%</b>、存活率仅 <b>8.8%</b>；与相关性组合的算子对失效率普遍 66~68%（correlation+liquidity 68.0%、correlation+momentum 67.6%、correlation+volatility 66.7%、correlation+price_position 66.2%）。相关类因子对 2026 年的截面相关性结构（行业/风格联动变化）极度敏感，几乎全线失效。</p>
+<p>③ 衰减组（decay 121 个）2026 平均 RankIC 仅 <b class="num">0.0009</b>（全期 0.0105），失效组 267 个 2026 平均 RankIC 为 <b class="num">-0.0036</b>（全期 -0.0064）——说明失效因子大多在 2026 年方向性翻转（由正转负），并非单纯衰减，而是<b>信号结构被 2026 市场环境打破</b>。</p>
+</div>
+
+<h2>💪 2026 有效归因（哪些因子存活 & 为什么）</h2>
+<div class="attr">
+<p class="lead">① 反转（mean_reversion）是 2026 唯一显著存活逻辑</p>
+<p>12 个反转类因子中 <b class="num">9 个稳定、3 个轻度衰减、0 个失效</b>，稳定占比 <b class="num">75%</b>、失效占比 <b class="num">0%</b>，远高于全库 17% 稳定占比。2026 年市场在高波动 + 风格轮动下呈现明显的<b>超跌反弹 / 均值回复特征</b>，反转类因子的多空净值与 RankIC 保持为正。</p>
+<p>② 存活因子共性：量价确认的反转（volume_confirmed/reversal_volume/volume_reversal 家族）与 vwap 偏离 + 波动调整的日内反转（simplified_intraday_mean_reversion、intraday_reversal_zscore_volume_short）表现最好；<b>price_impact 家族稳定</b>（price_impact_vol_adj_stable_vol、price_impact_asymmetry、price_impact_downside_vol_adjusted、price_impact_volatility_adjusted 等 9 个进入稳定 Top20，2026 累计 +14%~+15%，回撤 -2%~-5%）。</p>
+<p>③ 相关性类最差：correlation 单算子存活率仅 <b class="num">8.8%</b>（91 个里只活 8 个），是全部逻辑中唯一存活率低于 10% 的类别；distribution（分布类）存活率 17.3%，同样偏弱。</p>
+<p>④ 存活名单（82 个）见下表「🟢 稳定 Top20」及详情页 2026 状态行；完整存活清单在 <code>weekly_backtest_output/robustness_survivors.json</code>。</p>
+</div>
+
 <h2>算子稳定占比（全库次数 ≥5）</h2>
 <table><thead><tr><th>算子</th><th>全库次数</th><th>稳定占比</th><th>稳健度</th></tr></thead><tbody>{op_rows}</tbody></table>
 
@@ -547,7 +596,7 @@ h2{{font-size:1.02rem;color:var(--primary);margin:26px 0 8px;border-bottom:1px s
 </main></body></html>"""
     with open(os.path.join(OUT_PAGE_DIR, "robustness_2026.html"), "w", encoding="utf-8") as f:
         f.write(html)
-    plog("[page] robustness_2026.html 已写", len(row), "行")
+    plog("[page] robustness_2026.html 已写", n_row, "行")
 
 # ----------------------------------------------------------------------------- 首页注入
 def inject_index(rob, img1):
@@ -567,6 +616,61 @@ def inject_index(rob, img1):
     fails.sort(key=lambda r: (r.get("ls2026") or {}).get("cumret", 1))
     fa_ls = "".join(f"<li><code>{r['page']}</code> 累计 {r.get('ls2026',{}).get('cumret',0):.0%}</li>"
                     for r in fails[:15])
+
+    # ---- 失效/有效归因 (辅助数据文件优先, 缺失时回退到内存计算) ----
+    try:
+        logic_stats = json.load(open(os.path.join(MB, "robustness_logic_stats.json")))
+    except Exception:
+        logic_stats = {}
+    try:
+        surv = json.load(open(os.path.join(MB, "robustness_survivors.json")))
+    except Exception:
+        surv = {}
+    so = (logic_stats.get("single_operator") or {})
+
+    def _ratio(t, k, d=0.0):
+        v = (so.get(t) or {}).get(k)
+        return float(v) if v is not None else d
+
+    mr = so.get("mean_reversion") or {}
+    corr = so.get("correlation") or {}
+    mom = so.get("momentum") or {}
+    liq = so.get("liquidity") or {}
+    n_mr = int(mr.get("total", 0))
+    n_mr_stable = int(surv.get("operator_survival", {}).get("mean_reversion", {}).get("stable", 0))
+    mr_failed_rate = float(mr.get("failed_rate", 0.0))
+    mr_stable_rate = n_mr_stable / n_mr if n_mr else 0.0
+    corr_failed_rate = float(corr.get("failed_rate", 0.0))
+    corr_stable = int(surv.get("operator_survival", {}).get("correlation", {}).get("stable", 0))
+    corr_total = int(corr.get("total", 0))
+    corr_stable_rate = corr_stable / corr_total if corr_total else 0.0
+    mom_failed_rate = float(mom.get("failed_rate", 0.0))
+    liq_failed_rate = float(liq.get("failed_rate", 0.0))
+    mom_total = int(mom.get("total", 0))
+    liq_total = int(liq.get("total", 0))
+
+    attr_html = f"""
+<div class="colls">
+  <div class="coll">
+    <h3>🔬 失效归因</h3>
+    <ul>
+      <li>动量类 {mom_failed_rate:.0%} 失效（{mom_total} 因子）——趋势/量价信号被 2026 风格快速切换击穿</li>
+      <li>流动性类 {liq_failed_rate:.0%} 失效（{liq_total} 因子）</li>
+      <li>相关性类最差：失效率 {corr_failed_rate:.0%}、存活率仅 {corr_stable_rate:.0%}</li>
+      <li>失效组 2026 平均 RankIC −0.0036，方向性翻转而非单纯衰减</li>
+    </ul>
+  </div>
+  <div class="coll">
+    <h3>💪 有效归因</h3>
+    <ul>
+      <li>反转（mean_reversion）最强：{n_mr_stable}/{n_mr} 稳定，稳定率 {mr_stable_rate:.0%}，0 失效</li>
+      <li>price_impact 家族 9 个进入稳定 Top20，累计 +14%~+15%</li>
+      <li>相关/分布类存活率最低（correlation {corr_stable_rate:.0%}）</li>
+      <li>存活共性：量价确认反转 + vwap 偏离日内反转</li>
+    </ul>
+  </div>
+</div>
+"""
     section = f"""
 <section id="robustness-2026">
 <h2>📉 2026 因子失效稳健性分析</h2>
@@ -578,6 +682,7 @@ def inject_index(rob, img1):
   <div class="metric"><b>{len(rob)}</b><span>因子总数</span></div>
   <div class="metric"><b>{n_st/max(len(rob),1):.0%}</b><span>稳定占比</span></div>
 </div>
+{attr_html}
 <p><strong>稳定 Top15</strong></p><ul>{tops}</ul>
 <p><strong>失效名单（Terrible）Top15</strong></p><ul>{fa_ls}</ul>
 <p><a href="robustness_2026/robustness_2026.html">打开完整分析页 →</a></p>
@@ -738,8 +843,10 @@ def main():
 
         # 图表
         plt = _plt_init()
+        stable_ranked = [r for r in rob_list if r.get("status") == "stable"]
+        stable_ranked.sort(key=lambda r: (r.get("ls2026") or {}).get("cumret", -1e9), reverse=True)
         figure_list = [
-            figure1_top20_nav([r for r in rob_list if r.get("status") == "stable"][:20], rob_list),
+            figure1_top20_nav(stable_ranked, rob_list),
             figure2_stable_vs_failed(rob_list),
             figure3_op_stability_ratio(op_counts, op_stable_ratio),
             figure4_logic_stacked(rob_list),

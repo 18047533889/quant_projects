@@ -1,6 +1,6 @@
 [build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
 
 [project]
 name = "factor-optimizer"
@@ -17,11 +17,21 @@ factor_engine = ["factor-engine>=0.3.0"]
 quant_evaluator = ["quant-evaluator>=0.0.1a1,<0.2"]
 dev = ["pytest>=8.0"]
 
-[tool.hatch.build.targets.wheel]
-packages = ["factor_optimizer"]
-# 见 `因子建库口径`：FO/FP 为「嵌套因子包」布局，wheel 必须携带
-# 顶层 `factor_optimizer.contracts.library_snapshot_ref`，否则契约 import 断裂。
-force-include = { "factor_optimizer" = "factor_optimizer/factor_optimizer" }
+[tool.setuptools.packages.find]
+# R55 #99 wheel-matrix: FO is a NESTED package (the real code lives at
+# factor_optimizer/factor_optimizer/). packages.find with where="." + include
+# factor_optimizer* discovers the nested tree; the previous hatchling
+# force-include/packages mix shipped the payload TWICE (106 wheel .py vs 53 in
+# source). Same layout as factor_preprocess, which works.
+where = ["."]
+include = ["factor_optimizer*"]
+
+[tool.setuptools.exclude-package-data]
+"*" = [
+    "tests", "tests.*",
+    "*.pyc", "__pycache__",
+    "test_*.py", "*_test.py",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

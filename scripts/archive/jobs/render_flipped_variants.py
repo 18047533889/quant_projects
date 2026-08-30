@@ -57,6 +57,7 @@ def _write_placeholder(name, fi, reason):
 def render_flipped(name):
     try:
         fi = R.extract_formula_info(name)
+        is_flipped = fi["is_flipped"] or R._is_flipped_by_meta(name)
         mat_path = FV61_DIR / f"{name}.parquet"
         if not mat_path.exists():
             _write_placeholder(name, fi, "无因子值文件")
@@ -72,12 +73,16 @@ def render_flipped(name):
 
         ic_series = fm.get("ic_series", pd.Series(dtype=float))
         ic_stats = R.compute_ic_stats(ic_series)
-        if fi["is_flipped"] and ic_series.mean() < 0:
+        if is_flipped and ic_series.mean() < 0:
             ic_series = -ic_series
             ic_stats = R.compute_ic_stats(ic_series)
             fm = dict(fm); fm["perf"] = dict(fm["perf"])
-            for k in ["ls_sharpe","ls_annual","ls_winrate","g10_annual","g1_annual","g10_sharpe","g1_sharpe"]:
+            for k in ["ls_sharpe","ls_annual","g10_annual","g1_annual","g10_sharpe","g1_sharpe"]:
                 fm["perf"][k] = -fm["perf"].get(k, 0)
+            if "ls_winrate" in fm["perf"]:
+                fm["perf"]["ls_winrate"] = 1.0 - fm["perf"].get("ls_winrate", 0)
+            if "win_rate" in fm:
+                fm["win_rate"] = 1.0 - fm.get("win_rate", 0)
             fm["perf"]["ls_mdd"] = abs(fm["perf"].get("ls_mdd", 0))
             fm["mean_ic"] = -fm.get("mean_ic", 0)
             fm["ic_ir"] = -fm.get("ic_ir", 0)
@@ -89,23 +94,23 @@ def render_flipped(name):
             decile_data[k] = v
         perf = fm.get("perf", {})
 
-        monthly_chart = R.plot_ic_monthly_heatmap(ic_stats.get("monthly_ic", pd.Series(dtype=float)), name) if ic_stats else ""
-        decile_chart = R.plot_decile_nav(decile_data, name) if decile_data else ""
-        ls_chart = R.plot_long_short_nav(decile_data, name) if decile_data else ""
+        monthly_chart = R.plot_ic_monthly_heatmap(ic_stats.get("monthly_ic", pd.Series(dtype=float)), name, is_flipped) if ic_stats else ""
+        decile_chart = R.plot_decile_nav(decile_data, name, is_flipped) if decile_data else ""
+        ls_chart = R.plot_long_short_nav(decile_data, name, is_flipped) if decile_data else ""
         dist_chart = ""
         if len(ic_series) > 0 and np.isfinite(ic_series.dropna()).any():
             try:
-                dist_chart = R.plot_ic_distribution(ic_series, name)
+                dist_chart = R.plot_ic_distribution(ic_series, name, is_flipped)
             except Exception:
                 dist_chart = ""
-        svg_ts = R.plot_ic_timeseries(ic_series, name) if len(ic_series) > 0 else ""
+        svg_ts = R.plot_ic_timeseries(ic_series, name, is_flipped) if len(ic_series) > 0 else ""
 
         html = R.build_detail_html(
             factor_name=name, formula=fi["formula"], code=fi["code"],
             ic_stats=ic_stats, decile_data=decile_data, svg_timeseries=svg_ts,
             monthly_chart=monthly_chart, decile_chart=decile_chart,
             ls_chart=ls_chart, dist_chart=dist_chart,
-            is_flipped=fi["is_flipped"], perf=perf,
+            is_flipped=is_flipped, perf=perf,
             dsl=fi.get("dsl",""), rationale=fi.get("rationale",""),
             required_columns=fi.get("required_columns",""),
             dsl_status=fi.get("dsl_status","ok"), dsl_note=fi.get("dsl_note",""),

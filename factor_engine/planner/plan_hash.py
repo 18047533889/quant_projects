@@ -59,12 +59,20 @@ def _jsonable(v: Any) -> Any:
     Round-8 audit #324：float literal 必须先通过 ``math.isfinite`` 门——NaN 与
     +/-Inf 不是可复现的标量字面量，跨进程/跨 JSON 运行时会得到不同表示，从而
     污染 CSE 与持久化缓存键。int 也做防御性溢出检查（保持 64 位有符号范围内）。
+
+    R2-2026-08-29：``where(cond, x, nan)`` 的平台语义需要一个 NaN 分支字面量。
+    这类字面量进入 CSE/plan 键时必须稳定：NaN 的稳定表示就是保留 ``math.nan``
+    本身（IEEE 754 的 NaN 规范位型 ``0x7ff8...`` 不跨 JSON，但按值比较的
+    ``math.nan != math.nan`` 让 dict 键不可靠）。这里把 NaN 字面量规范化为
+    **稳定的规范标记** ``"__nan__"``（字符串），CSE/持久化键按字符串参与排序
+    ——不同来源的 NaN 字面量在计划键中坍缩为同一标记，语义上它们都是「缺失
+    分支」，不会互相污染（NaN 字面量从不携带额外参数）。执行侧仍取原始 NaN。
     """
     if isinstance(v, float):
         if not math.isfinite(v):
-            raise NonFiniteLiteralError(
-                f"plan literal {v!r} is not a finite float; NaN/Inf are forbidden in plan keys"
-            )
+            if math.isnan(v):
+                return "__nan__"
+            return f"__inf__" if v > 0 else "__ninf__"
     if isinstance(v, int) and not isinstance(v, bool):
         if not (-(2**63) <= v < 2**63):
             raise ValueError(

@@ -57,7 +57,12 @@ def main(argv: list[str] | None = None) -> int:
         metadata = wheel_zip.read(metadata_path).decode("utf-8")
         assert "Name: factor-engine" in metadata
         assert "Version: 0.3.1" in metadata
-        assert any(name.startswith("modeling/") for name in names)
+        # R55 #97: modeling is now an INDEPENDENT distribution (quant-modeling,
+        # own wheel under modeling/pyproject.toml).  The factor-engine wheel must
+        # NOT bundle modeling (nor its legacy adapters) — the umbrella wheel at
+        # the monorepo root carries modeling; the factor-engine wheel is its own
+        # package.  The old assertion required modeling/ inside this wheel.
+        assert not any(name.startswith("modeling/") for name in names)
         assert not any(name.startswith("modeling_adapters/") for name in names)
     print(f"      wheel: {wheel.name} (payload checked)")
 
@@ -85,9 +90,10 @@ assert not any('factor_engine' in p and 'site-packages' not in p for p in sys.pa
 
 from factor_engine.api.dsl_parser import parse_expr, parse_factor
 from factor_engine.runtime.engine import FactorEngine
-from modeling import __doc__ as modeling_doc
+# R55 #97: modeling is an INDEPENDENT distribution (quant-modeling) with its
+# own wheel — it is NOT part of the factor-engine wheel, so the smoke here
+# validates factor_engine's own surface only.
 import pandas as pd
-assert modeling_doc and 'SINGLE SOURCE OF TRUTH' in modeling_doc
 
 # parser/compiler smoke
 f = parse_factor('ts_mean(close, 3)', name='smoke')
@@ -112,7 +118,9 @@ print('SMOKE_OK engine construct')
         [
             str(py),
             "-c",
-            "from service.app import _resolve_version; v=_resolve_version(); print('version', v); assert v and v != '0.0.0'",
+            # R55 #97 single-identity (P0-03): the wheel ships factor_engine.service,
+            # not a top-level `service` package.
+            "from factor_engine.service.app import _resolve_version; v=_resolve_version(); print('version', v); assert v and v != '0.0.0'",
         ],
         cwd=smoke_dir,
     )

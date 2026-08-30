@@ -1014,7 +1014,12 @@ def _verify_staged_generation(staging: Path) -> None:
 def _write_generation_pointer(
     mirror_root: Path, generation_id: str, source_generation: str | None
 ) -> None:
-    """原子写 current pointer（generation/current.json），reader 只 resolve 它。"""
+    """原子写 current pointer（generation/current.json），reader 只 resolve 它。
+
+    R55（P0-08/09/10）加固：写前先 ``fsync`` 目录（POSIX crash-safe rename
+    语义——进程死在 tmp 与 replace 之间时，directory entry 不保证落盘，旧
+    CURRENT 必须仍完整可用）。tmp 文件名带随机后缀避免并发 publisher 撞名。
+    """
     import time as _time
 
     gen_dir = mirror_root / "generation"
@@ -1024,19 +1029,142 @@ def _write_generation_pointer(
         "source_generation": source_generation,
         "published_at": _time.strftime("%Y-%m-%dT%H:%M:%SZ", _time.gmtime()),
     }
-    tmp = gen_dir / "current.json.tmp"
-    tmp.write_text(json.dumps(payload, sort_keys=True), encoding="utf-8")
-    os.replace(str(tmp), str(gen_dir / "current.json"))
+    tmp = gen_dir / f".current.json.{_rand_suffix()}.tmp"
+    try:
+        tmp.write_text(json.dumps(payload, sort_keys=True), encoding="utf-8")
+        try:
+            fd = tmp.open("rb")
+            try:
+                os.fsync(fd.fileno())
+            finally:
+                fd.close()
+        except OSError:
+            pass
+        os.replace(str(tmp), str(gen_dir / "current.json"))
+        try:
+            dir_fd = os.open(str(gen_dir), os.O_RDONLY)
+            try:
+                os.fsync(dir_fd)
+            finally:
+                os.close(dir_fd)
+        except OSError:
+            pass
+    finally:
+        try:
+            tmp.unlink()
+        except OSError:
+            pass
 
 
 def resolve_current_mirror_generation(mirror_root: Path) -> str | None:
-    """reader：读取当前 mirror generation pointer（R25 P0-014）。"""
+    """reader：读取当前 mirror generation pointer（R25 P0-014）。
+
+    R55（P0-08/09/10）加固：pointer 指向的代次目录必须真实存在才算 current——
+    否则返回 None。防「pointer 已写、代次目录被外部清理/恢复遗漏」产生的
+    phantom CURRENT（读者 resolve 到一个不存在的代次 = torn/inconsistent）。
+    """
     pointer = mirror_root / "generation" / "current.json"
     try:
         payload = json.loads(pointer.read_text(encoding="utf-8"))
-        return payload.get("current_generation")
+        gid = payload.get("current_generation")
     except (OSError, json.JSONDecodeError):
         return None
+    if not gid:
+        return None
+    if not (mirror_root / "generation" / str(gid)).is_dir():
+        return None
+    return str(gid)
+
+
+def gc_mirror_generations(
+    mirror_root: Path,
+    *,
+    keep_younger_seconds: float = 3600.0,
+    dry_run: bool = False,
+) -> dict[str, Any]:
+    """R55（P0-08/09/10）：回收崩溃残留的 mirror generation 残留物。
+
+    ``publish_mirror_generation`` 的「旧 generation 延迟 GC（reader 只 resolve
+    pointer）」在此落地。三种待回收对象：
+
+      1. 孤儿代次目录 ``generation/<gid>`` —— staging→final 已 rename，但
+         current.json 尚未翻到它（进程死在 rename 与 pointer 之间）；
+      2. 崩溃残留 staging ``generation/<gid>.tmp`` —— process 死在 staging
+         sync 中途；
+      3. 被显式弃用的历史代次（CURRENT 已指向更新者）。
+
+    安全边界（fail-safe，绝不误删 live artifact，P0-09 硬性）：
+      - **绝不删除** current.json 解析出的 CURRENT 代次目录及其 ``.tmp``
+        staging 同名目标（reader 只 resolve pointer → 删它 = phantom CURRENT）；
+      - **lease-horizon 年龄护栏**：目录 mtime 距今不足 ``keep_younger_seconds``
+        → 视为可能「发布中」（upload < rename < pointer 三阶段任意一点），
+        跳过不删——**并发 publish 与 GC 无竞态窗口**（P0-10）；
+      - 只操作 ``generation/`` 的直接子目录，路径经过 resolve/relative_to
+        双重归属校验，绝不越出 mirror_root/generation。
+
+    ``dry_run=True`` 只统计不删除。返回
+    ``{scanned, reclaimed, skipped_young, skipped_current, current_generation}``。
+    """
+    import shutil as _shutil
+    import time as _time
+
+    gen_root = Path(mirror_root).expanduser().resolve() / "generation"
+    zeros: dict[str, Any] = {
+        "scanned": 0,
+        "reclaimed": 0,
+        "skipped_young": 0,
+        "skipped_current": 0,
+        "current_generation": None,
+    }
+    if not gen_root.is_dir():
+        return zeros
+    current = resolve_current_mirror_generation(mirror_root)
+    now = _time.time()
+    horizon = max(0.0, float(keep_younger_seconds or 0.0))
+    reclaimed: list[str] = []
+    scanned = 0
+    skipped_young = 0
+    skipped_current = 0
+    for child in sorted(gen_root.iterdir()):
+        if not child.is_dir():
+            continue
+        scanned += 1
+        name = child.name
+        gid = name[:-4] if name.endswith(".tmp") else name
+        # CURRENT 代次及其 staging 目标永不回收。
+        if gid == current:
+            skipped_current += 1
+            continue
+        try:
+            st = child.stat()
+        except OSError:
+            continue
+        age = max(0.0, now - st.st_mtime)
+        if age < horizon:
+            # 年龄护栏：可能正在发布中（并发 writer），P0-10 竞态窗口保护。
+            skipped_young += 1
+            continue
+        # 归属校验：只允许删除 generation/ 直接子目录。
+        resolved = child.resolve()
+        try:
+            resolved.relative_to(gen_root)
+        except ValueError:
+            continue
+        if dry_run:
+            reclaimed.append(name)
+            continue
+        try:
+            _shutil.rmtree(str(resolved))
+            reclaimed.append(name)
+        except OSError as _exc:  # pragma: no cover - 并发删除等 best-effort
+            logger.warning("cos_mirror: GC 回收 %s 失败: %s", resolved, _exc)
+    return {
+        "scanned": scanned,
+        "reclaimed": len(reclaimed),
+        "skipped_young": skipped_young,
+        "skipped_current": skipped_current,
+        "current_generation": current,
+    }
 
 
 def _dir_object_count(root: Path) -> int:

@@ -50,6 +50,20 @@ from factor_optimizer.errors import (
     DuplicateIdentityError,
     CollisionError,
     ContractChangeRequired,
+    TreatmentIntegrityError,
+)
+
+# R55 P0-9: real treatment-integrity evidence (fail-closed gates).
+from factor_optimizer.contracts.treatment_integrity import (
+    EVIDENCE_SCHEMA_VERSION,
+    RAW_TREATMENT_KIND,
+    IntegrityCheckResult,
+    TreatmentIntegrityEvidence,
+    TreatmentIntegrityStatus,
+    build_integrity_evidence,
+    describe_integrity_problem,
+    digest_value,
+    require_integrity_evidence,
 )
 
 
@@ -108,4 +122,15 @@ __all__ = [
     "DuplicateIdentityError",
     "CollisionError",
     "ContractChangeRequired",
+    "TreatmentIntegrityError",
+    # Treatment integrity evidence (R55 P0-9)
+    "EVIDENCE_SCHEMA_VERSION",
+    "RAW_TREATMENT_KIND",
+    "IntegrityCheckResult",
+    "TreatmentIntegrityEvidence",
+    "TreatmentIntegrityStatus",
+    "build_integrity_evidence",
+    "describe_integrity_problem",
+    "digest_value",
+    "require_integrity_evidence",
 ]

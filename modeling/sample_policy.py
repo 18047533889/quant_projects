@@ -18,14 +18,23 @@ from __future__ import annotations
 import datetime as _dt
 from dataclasses import asdict, dataclass
 from enum import Enum
-from typing import Any
+from typing import Any, TYPE_CHECKING
 
 import numpy as np
 import pandas as pd
 
 from modeling.contracts import LabelContract, SampleAdequacyContract, sample_adequacy_met
 from modeling.dataset import PanelDataset
-from factor_engine.market.exchange_session_calendar import ExchangeSessionCalendar
+
+# R55 #97: ``factor_engine`` is an OPTIONAL runtime dependency (a thin adapter
+# boundary, not a vendored copy).  The calendar is duck-typed here — only
+# ``expected_sessions`` / ``shift_session`` are called — so the type import is
+# deferred to call time and `import modeling.sample_policy` works in a wheel
+# without factor_engine installed.  Never reimplement calendar math here: the
+# FE exchange-session calendar is the sole authority.
+ExchangeSessionCalendar = None
+if TYPE_CHECKING:  # pragma: no cover - typing only
+    from factor_engine.market.exchange_session_calendar import ExchangeSessionCalendar
 
 __all__ = [
     "SampleWeightPolicy",

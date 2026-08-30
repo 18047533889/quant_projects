@@ -86,19 +86,22 @@ ASHARE_PV_CANONICAL_RAW: dict[str, dict[str, str]] = {
 }
 
 # LQTP 别名（来自 field_aliases.py 摘要）
+# ADJ_FIELD_MIGRATION（2026-08-28）：A 股行情权威口径 = 后复权表。LQTP 平台
+# functions.yaml 的 bare 价量别名统一落到 StockDailyBarAdj 的 Adj* 字段
+# （AdjX 已是复权价，无需再乘 Factor）；volume = Volume / Factor 同表完成。
 LQTP_ALIASES: dict[str, str] = {
-    "open": "StockDailyBar.Open * StockDailyBar.Factor",
-    "high": "StockDailyBar.High * StockDailyBar.Factor",
-    "low": "StockDailyBar.Low * StockDailyBar.Factor",
-    "close": "StockDailyBar.Close * StockDailyBar.Factor",
-    "pre_close": "StockDailyBar.PreClose * StockDailyBar.Factor",
-    "volume": "StockDailyBar.Volume / StockDailyBar.Factor",
-    "amount": "StockDailyBar.Amount",
-    "ret": "StockDailyBar.Return",
-    "vwap": "StockDailyBar.Vwap * StockDailyBar.Factor",
-    "is_suspend": "StockDailyBar.IsSuspend",
-    "high_limit": "StockDailyBar.HighLimit * StockDailyBar.Factor",
-    "low_limit": "StockDailyBar.LowLimit * StockDailyBar.Factor",
+    "open": "StockDailyBarAdj.AdjOpen",
+    "high": "StockDailyBarAdj.AdjHigh",
+    "low": "StockDailyBarAdj.AdjLow",
+    "close": "StockDailyBarAdj.AdjClose",
+    "pre_close": "StockDailyBarAdj.AdjPreClose",
+    "volume": "StockDailyBarAdj.Volume / StockDailyBarAdj.Factor",
+    "amount": "StockDailyBarAdj.AdjAmount",
+    "ret": "StockDailyBarAdj.Return",
+    "vwap": "StockDailyBarAdj.AdjVwap",
+    "is_suspend": "StockDailyBarAdj.IsSuspend",
+    "high_limit": "StockDailyBarAdj.AdjHighLimit",
+    "low_limit": "StockDailyBarAdj.AdjLowLimit",
 }
 
 TABLE_META: dict[str, dict[str, Any]] = {

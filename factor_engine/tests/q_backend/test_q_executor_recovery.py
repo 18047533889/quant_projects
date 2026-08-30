@@ -16,6 +16,7 @@ from factor_engine.backend.q_backend.q_errors import (
     QDataUnavailableError,
     QExecutionError,
     QProcessUnavailableError,
+    QUnavailableError,
 )
 from factor_engine.backend.q_backend.q_executor import (
     QExecutionFallbackPolicy,
@@ -83,7 +84,11 @@ def test_unavailable_runtime_raises_typed_error_even_with_fallback_named():
         fail_on_unavailable=True,
     )
 
-    with pytest.raises(QProcessUnavailableError, match="Runtime fallback is disabled"):
+    # Backlog #60: an absent q runtime fails closed with the typed
+    # QUnavailableError (a QProcessUnavailableError subclass), even when a
+    # fallback backend is NAMED in the policy — a named alternative is not a
+    # silent runtime substitution.
+    with pytest.raises(QUnavailableError, match="fail-closed, no silent fallback"):
         executor.execute_region(
             _plan("r1", ("base",), "out"),
             {"base": pd.DataFrame({"x": [1.0]})},

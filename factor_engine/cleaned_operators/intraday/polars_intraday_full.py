@@ -1532,9 +1532,20 @@ def _return_activity_corr(close: pl.DataFrame, activity: pl.DataFrame, absolute_
     long = long.filter(pl.col("r").is_finite() & pl.col("activity").is_finite()).with_columns(rr.alias("rr"))
     g = long.group_by(["date", "instrument"]).agg(
         pl.len().alias("n"),
+        pl.col("rr").std().alias("rs"),
+        pl.col("activity").std().alias("as"),
         pl.corr(pl.col("rr"), pl.col("activity")).alias("c"),
     )
-    out = g.with_columns(pl.when(pl.col("n") >= 2).then(pl.col("c")).otherwise(None).alias("v"))
+    # PARITY-B: pandas ``_return_activity_corr`` returns NaN when fewer than 2
+    # paired bars OR when either series has zero std (constant returns or
+    # constant activity).  The ``n >= 2`` gate alone let constant-series days
+    # through with ``corr=NaN`` while the pandas reference emits NaN.
+    out = g.with_columns(
+        pl.when((pl.col("n") >= 2) & (pl.col("rs") > _EPS) & (pl.col("as") > _EPS))
+        .then(pl.col("c"))
+        .otherwise(None)
+        .alias("v")
+    )
     return _pivot(out, "v")
 
 

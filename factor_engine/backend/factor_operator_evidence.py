@@ -182,16 +182,16 @@ def load_factor_operator_evidence() -> dict[str, Any]:
 
 
 def _production_sets() -> tuple[set[str], set[str]]:
-    import factor_engine.cleaned_operators
+    import factor_engine.cleaned_operators as _cleaned_operators
     from factor_engine.cleaned_operators.operator_surface import DAILY_CANONICALS
     from factor_engine.cleaned_operators.production_hardening import factor_production_targets
     from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     if (
         OperatorRegistry.lifecycle() == "building"
-        and not getattr(cleaned_operators, "_LOADED", False)
+        and not getattr(_cleaned_operators, "_LOADED", False)
     ):
-        cleaned_operators.load_all()
+        _cleaned_operators.load_all()
     all_targets = set(factor_production_targets())
     return all_targets, all_targets.difference(DAILY_CANONICALS)
 

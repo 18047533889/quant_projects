@@ -32,6 +32,10 @@ os.environ.setdefault("ASHARE_PARQUET_ROOT", "/home/sunhaiwei/cos_data")
 os.environ["DATA_ACCESS_SKIP_COS_MIRROR"] = "1"
 os.environ["DATA_ACCESS_RUN_MODE"] = "interactive_research"
 os.environ.setdefault("POLARS_MAX_THREADS", "16")
+# data_access 进程级 DuckDB 单例带每进程 reads/PRAGMA/cache warmup 开销；
+# 让每个 worker 的 DuckDB 连接用满该进程可用核数（否则 32 核只跑 8 线程
+# vs `os.cpu_count()=32` 时 PCA 大矩阵/ts 回归 ops 都会拖慢）。
+os.environ.setdefault("DUCKDB_MAX_THREADS", "32")
 
 ROOT = "/home/sunhaiwei/quant_projects/lightgbm_qs"
 sys.path.insert(0, "/home/sunhaiwei/quant_projects")
@@ -63,13 +67,30 @@ def build_engine(start_date, end_date, assets=None):
     from factor_engine.storage.factory import build_data_source, DataSourceBuildContext
     ds_cfg = {
         "type": "data_access",
-        "dataset": "ashare_stock_daily",
-        "fields": {"open": "Open", "high": "High", "low": "Low", "close": "Close",
-                   "volume": "Volume", "vwap": "Vwap", "amount": "Amount",
-                   "ret": "Return", "preclose": "PreClose", "raw_pre_close": "PreClose"},
+        # 2026-08-28 用户口径锁定：全部因子统一用后复权表 StockDailyBarAdj 落值。
+        # close=AdjClose(×Factor 已乘好)、vwap=AdjVwap、amount=AdjAmount（不复权列在
+        # adj 表内同为 ×Factor 产物，与平台 amount=Amount 口径等价——amount 本身
+        # 不随复权变化，AdjAmount=Amount*Factor 是成交额在复权股价下的等价刻度）。
+        # volume 保持物理列 Volume（股数），平台口径 volume=Volume/Factor 由
+        # data_access semantic_fields.yaml 的 derived_expression 处理。
+        "dataset": "ashare_stock_daily_adj",
+        "fields": {"open": "AdjOpen", "high": "AdjHigh", "low": "AdjLow",
+                   "close": "AdjClose", "volume": "Volume", "vwap": "AdjVwap",
+                   "amount": "AdjAmount", "ret": "Return",
+                   "preclose": "AdjPreClose", "raw_pre_close": "AdjPreClose"},
         "read_auto": True,
         "start_date": start_date,
         "end_date": end_date,
+        # 全历史重放声明（warmup_service.resolve_full_history_start 从
+        # source.params 读取 full_history_start/history_origin）：EMA/EWM/
+        # 递归类算子（span 语义）需要从数据源头起算，否则触发
+        # "requires full-history replay but the data source does not declare
+        # full_history_start" 回退失败。2016-01-04 是本地 adj 镜像的首个交易日。
+        "params": {"full_history_start": "2016-01-04"},
+        # industry_neutralize/industry 类算子需要行业表 filter（StockIndustry
+        # 是 (TradeDate, Symbol, IndustrySource) 主键，不 filter 行倍增）。
+        # 本地 StockIndustry 有 sw_l1/sw_l2/sw_l3/zjw，平台 LQTP 默认 sw_l1。
+        "semantic_filters": {"IndustrySource": "sw_l1"},
     }
     if assets:
         ds_cfg["instrument_filter"] = list(assets)
@@ -97,6 +118,9 @@ def main():
     ap.add_argument("--validate", action="store_true",
                     help="after the rebuild, probe ts_std(volume,10) @ 000001.SZ 2024-01-10 (~3.45e5) "
                          "and report per-factor final column width")
+    ap.add_argument("--norm-force", action="store_true",
+                    help="treat every existing pool parquet as stale REGARDLESS of width/mtime "
+                         "(forces a full recompute even for fresh wide files; final sweep)")
     args = ap.parse_args()
 
     formula_map = json.load(open(FORMULA_MAP))
@@ -115,26 +139,34 @@ def main():
     if args.procs > 1:
         _run_partitioned(args, names, procs=args.procs)
         return
+    if args.norm_force:
+        # 最终清场：所有已有池文件（不管宽窄）都当过期；全量重算。
+        pass
 
     eng, ds = build_engine(args.start, args.end, assets=None)
     try:
-        full = sorted(ds.assets())
-    except Exception:
+        full = _data_access_asset_universe(args.start, args.end)
+    except Exception as exc:
         full = None
+        plog(f"[rebuild] asset-universe probe unavailable ({type(exc).__name__}: {str(exc)[:80]}) — "
+             "column-width idempotence will rely on mtime + 5460 constant")
     if args.assets:
         assets = (full or [])[: args.assets]
         if not assets:
-            plog("[rebuild] --assets requested but data source assets() unavailable; using full market")
+            plog("[rebuild] --assets requested but asset list unavailable; using full market")
             assets = None
     else:
         # 全市场：不传 instrument_filter，data_access 自动读 5460 只
         assets = None
     if full is None:
-        expected_cols = None
+        # 资产枚举失败：以绝对常量判幂等（期望全市场列数），并警告。
+        # 列数语义是 (5460 asset + 1 index) → pq schema 5461 / df 5460。
+        expected_cols = 5460
+        plog("[rebuild] asset-universe unavailable -> expected_cols fallback 5460")
     else:
         expected_cols = len(full) if assets is None else len(assets)
-    plog(f"[rebuild] assets={'full-market %d' % (len(full) if full else 0)} "
-         f"dates={args.start}..{args.end} names={len(names)}")
+    plog(f"[rebuild] assets={'full-market %d' % (len(full) or 0)} "
+         f"dates={args.start}..{args.end} names={len(names)} expected_cols={expected_cols}")
 
     ok = []
     failed = {}
@@ -142,7 +174,7 @@ def main():
     # mtime 幂等：> 2026-08-28 00:00 的池文件视为过期重跑（297 宽旧的），
     # 只有已含全市场 5460 列的 wide 文件才算 up-to-date。
     for i, name in enumerate(names, 1):
-        if not args.force:
+        if not (args.force or args.norm_force):
             p = os.path.join(POOL, f"{name}.parquet")
             if _pool_is_fresh_wide(p, expected_cols):
                 ok.append(name)
@@ -157,13 +189,16 @@ def main():
                 fml = fml.replace("pre_close", "raw_pre_close")
             if "daily_return" in fml:
                 fml = fml.replace("daily_return", "ret")
-            if " and " in fml or " or " in fml:
-                fml = fml.replace(" and ", " & ").replace(" or ", " | ")
+            # 2026-08-29: LQTP formulas use the Python keywords ``and`` / ``or``;
+            # the parser's BoolOp path maps them to the elementwise and_/or_ ops.
+            # The legacy ``" and " -> " & "`` replace produced ``a<=b & c>d`` —
+            # a chained comparison (Python binds & tighter than <=) that the
+            # parser rejects.  Let the parser handle the keywords natively.
             factor = parse_factor(
                 fml, name=name, surface="lqtp", dialect="lqtp",
                 budget=ComplexityBudget(max_ast_nodes=2048, max_depth=128, max_call_arity=64),
             )
-            r = eng.run(factor)
+            r = eng.run(factor, auto_warmup=True)
             res = r["result"]
             if not isinstance(res, pd.Series):
                 raise TypeError(f"result {type(res).__name__}")
@@ -198,6 +233,29 @@ def main():
         _report_widths(t0)
 
 
+def _data_access_asset_universe(start_date, end_date):
+    """全市场资产列表（data_access 口径）：读 Symbol 列 distinct。
+
+    直接走 data_access.get_store().read —— 不造 pandas/numpy 落值核心，只用于
+    列宽幂等校验（expected_cols）。每段 [start,end] 已由调度器切成连续区间，
+    末段覆盖到最后有数据日，故枚举即是全 5460 只。
+    """
+    from data_access import get_store
+
+    st = get_store()
+    h = st.read(
+        "ashare_stock_daily",
+        columns=["TradeDate", "Symbol"],
+        time_range=(start_date, end_date),
+        result="pandas",
+        batch_size=2_000_000,
+    )
+    df = h.to_pandas()
+    syms = sorted(df["Symbol"].unique().tolist())
+    del df
+    return syms
+
+
 def _pool_is_fresh_wide(path, expected_cols):
     """True when the pool file is already the full-market wide panel (5460 cols).
 
@@ -212,19 +270,15 @@ def _pool_is_fresh_wide(path, expected_cols):
             return False
         if os.path.getmtime(path) < REFRESH_CUTOFF:
             return False
-        if expected_cols is not None:
-            # 逐文件列数核验：只读 footer/元数据（第一组 row_group 后即可确认列），
-            # 避免全量读大文件。
-            try:
-                import pyarrow.parquet as pq
+        # 全市场宽判定：>5000 列即视为已完成的全市场面板。
+        # 不要求精确等于 universe 数——adj 全历史资产集（5461）与 raw（5460）
+        # 有漂移，且列名里含当日暂停/退市股票的动态子集；阈值化既保证
+        # 「全市场算过」又可幂等跳过，避免每次重启全量重算。
+        import pyarrow.parquet as pq
 
-                ncols = pq.ParquetFile(path).num_columns
-            except Exception:
-                ncols = len(pd.read_parquet(path, columns=[]).columns) if False else None
-            if ncols is None:
-                return False
-            if ncols != expected_cols:
-                return False
+        ncols = len(pq.ParquetFile(path).schema.names)
+        if ncols < 5000:
+            return False
         return True
     except Exception:
         return False
@@ -242,15 +296,16 @@ def _report_widths(t0):
         try:
             import pyarrow.parquet as pq
 
-            ncols = pq.ParquetFile(f).num_columns
+            ncols = len(pq.ParquetFile(f).schema.names)
         except Exception:
             try:
                 ncols = len(pd.read_parquet(f).columns)
             except Exception:
                 continue
-        if ncols == 5460:
+        # pandas 落盘 schema 列 = asset 数 + 1（date index）
+        if ncols == 5461:
             n_5460 += 1
-        elif ncols == 297:
+        elif ncols in (298, 297 + 1):
             n_297 += 1
             bad.append(os.path.basename(f))
         else:

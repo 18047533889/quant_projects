@@ -3,6 +3,10 @@
 Covers:
 - :class:`EvaluationArtifact` deep immutability (mutating the original dict
   does not change the artifact) and derived-only ``content_hash`` fail-closed.
+- The R55 audit three-part identity: spec identity / result content hash /
+  envelope identity, plus the legacy ``artifact_hash`` property.
+- Typed :class:`DomainArtifactRef` cross-references (R55 audit #24): a bare
+  string / dict reference is rejected at construction.
 - :class:`EvaluationRequest` ``to_dict`` / ``from_dict`` strict round-trip on
   reference fields (``factor_value_ref`` / ``label_bundle_ref`` / ``split_ref``).
 - :class:`EvidenceStatus` label-not-mature yields no IC (never a zero-fill).
@@ -15,7 +19,13 @@ import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from quant_evaluator.contracts.evaluation_artifact import EvaluationArtifact
+from quant_evaluator.contracts.evaluation_artifact import (
+    ArtifactEnvelopeIdentity,
+    EvaluationArtifact,
+    EvaluationResultContentHash,
+    EvaluationSpecIdentity,
+)
+from quant_evaluator.contracts.domain_refs import ArtifactDomain, DomainArtifactRef
 from quant_evaluator.contracts.evaluation_refs import FactorValueRef, LabelBundleRef
 from quant_evaluator.contracts.evidence_status import (
     EvidenceStatus,
@@ -27,19 +37,26 @@ from quant_evaluator.api.requests import EvaluationRequest
 from quant_evaluator.contracts.sealed_split import SealedSplitRef
 
 
+def _ref(domain, identity, content_hash=""):
+    return DomainArtifactRef.of(domain, identity, content_hash=content_hash)
+
+
 def _make_artifact(**overrides):
     base = {
         "evaluation_id": "ev_1",
         "evaluation_identity": "run-1",
-        "factor_value_ref": {"factor_value_id": "fv_1", "factor_ids": ["f1"]},
-        "label_definition_ref": {"label_bundle_id": "lb_1", "target_id": "ret_10d"},
-        "evaluation_policy_ref": {"policy_id": "pol_1"},
-        "evaluation_profile_ref": {"profile_id": "prof_1"},
-        "split_ref": {"split_id": "split_1", "start_time": 9, "end_time": 12},
-        "snapshot_ref": {"snapshot_id": "snap_1"},
-        "universe_ref": {"universe_id": "uni_1"},
-        "metric_evidence_refs": ["ev_ref_1", "ev_ref_2"],
-        "diagnostic_refs": ["diag_1"],
+        "factor_value_ref": _ref(ArtifactDomain.FACTOR_VALUE, "fv_1"),
+        "label_definition_ref": _ref(ArtifactDomain.LABEL_DEFINITION, "lb_1"),
+        "evaluation_policy_ref": _ref(ArtifactDomain.EVALUATION_POLICY, "pol_1"),
+        "evaluation_profile_ref": _ref(ArtifactDomain.EVALUATION_PROFILE, "prof_1"),
+        "split_ref": _ref(ArtifactDomain.SPLIT, "split_1"),
+        "snapshot_ref": _ref(ArtifactDomain.SNAPSHOT, "snap_1"),
+        "universe_ref": _ref(ArtifactDomain.UNIVERSE, "uni_1"),
+        "metric_evidence_refs": [
+            _ref(ArtifactDomain.METRIC_EVIDENCE, "ev_ref_1"),
+            _ref(ArtifactDomain.METRIC_EVIDENCE, "ev_ref_2"),
+        ],
+        "diagnostic_refs": [_ref(ArtifactDomain.DIAGNOSTIC, "diag_1")],
         "timing": {"decision_time": "2026-01-01", "label_end_time": "2026-01-11"},
         "producer_version": "0.1",
         "schema_version": "0.1",
@@ -55,17 +72,18 @@ def _make_artifact(**overrides):
 
 
 def test_artifact_deep_immutability_original_dict_mutation():
-    """Mutating the caller's original dict must not change the artifact."""
-    fv = {"factor_value_id": "fv_1", "factor_ids": ["f1"]}
+    """Mutating the caller's original structures must not change the artifact."""
     timing = {"decision_time": "2026-01-01", "label_end_time": "2026-01-11"}
-    art = _make_artifact(factor_value_ref=fv, timing=timing)
+    refs = [
+        DomainArtifactRef.of(ArtifactDomain.METRIC_EVIDENCE, "ev_ref_1"),
+        DomainArtifactRef.of(ArtifactDomain.METRIC_EVIDENCE, "ev_ref_2"),
+    ]
+    art = _make_artifact(metric_evidence_refs=refs, timing=timing)
     # Mutate the original structures after construction.
-    fv["factor_value_id"] = "MUTATED"
-    fv["factor_ids"].append("f2")
     timing["decision_time"] = "MUTATED"
-    assert art.factor_value_ref["factor_value_id"] == "fv_1"
-    assert art.factor_value_ref["factor_ids"] == ("f1",)
+    refs.append(DomainArtifactRef.of(ArtifactDomain.METRIC_EVIDENCE, "ev_ref_3"))
     assert art.timing["decision_time"] == "2026-01-01"
+    assert len(art.metric_evidence_refs) == 2
 
 
 def test_artifact_nested_mutation_raises():
@@ -73,8 +91,8 @@ def test_artifact_nested_mutation_raises():
     art = _make_artifact()
     with pytest.raises(TypeError):
         art.timing["decision_time"] = "MUTATED"
-    with pytest.raises(TypeError):
-        art.factor_value_ref["factor_ids"] = ("x",)
+    with pytest.raises((TypeError, AttributeError)):
+        art.result_content.metric_values["rank_ic"] = 0.99
 
 
 def test_artifact_content_hash_derived_only_fail_closed():

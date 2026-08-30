@@ -53,7 +53,7 @@ E.minute_tools.get_up_space = staticmethod(_patch_get_up_space)
 LQTP = json.load(open("/home/sunhaiwei/factor_delivery_converted/formula_lqtp_all.json"))
 LQTP_PAGES = {r.get("page_name"): r for r in LQTP if r.get("page_name")}
 FV_DIR = PROJECT / "weekly_backtest_output" / "factor_matrices_all"
-DAILY = Path.home() / "cos_data" / "StockDailyBar"
+DAILY = Path.home() / "cos_data" / "StockDailyBarAdj"  # 后复权表（2026-08-28 硬性）
 MINUTE_DIR = Path.home() / "cos_data" / "StockMinuteBar"
 VALUATION = Path.home() / "cos_data" / "StockValuationDaily"
 FULL_START, FULL_END = "2019-01-02", "2026-08-24"
@@ -211,10 +211,12 @@ def run_daily_exec_pages(pages, symbols, start, end, dump_base=None):
 
     dump_base 可选：某因子全空时把占位空矩阵写到 <dump_base>/<page>.parquet，便于排查。
     """
-    # 加载行情 wide
+    # 加载行情 wide（后复权 Adj 列，2026-08-28 硬性）
     mkt = {}
+    _adj_map = {"open": "AdjOpen", "high": "AdjHigh", "low": "AdjLow", "close": "AdjClose",
+                "volume": "Volume", "amount": "AdjAmount"}
     for c in ["open", "high", "low", "close", "volume", "amount"]:
-        mkt[c] = load_wide(symbols, start, end, {c.title() if c != "volume" else "Volume": c})[c]
+        mkt[c] = load_wide(symbols, start, end, {_adj_map[c]: c})[c]
     dates = mkt["close"].index
     symbols = list(mkt["close"].columns)
     print(f"  [日线] 加载行情 {len(dates)} 天 x {len(symbols)} 股")
@@ -282,8 +284,8 @@ def run_daily_exec_pages(pages, symbols, start, end, dump_base=None):
 def run_dsl_pages(pages, symbols, start, end, smoke=False):
     """按 DSL 语义手写实现 daily_* 聚合。返回 {page: mat}。"""
     bars = load_wide(symbols, start, end, {
-        "Open": "open", "High": "high", "Low": "low", "Close": "close",
-        "Volume": "volume", "Amount": "amount", "Vwap": "vwap",
+        "AdjOpen": "open", "AdjHigh": "high", "AdjLow": "low", "AdjClose": "close",
+        "Volume": "volume", "AdjAmount": "amount", "AdjVwap": "vwap",
     })
     close = bars["close"]; high = bars["high"]; low = bars["low"]
     vol = bars["volume"]; amt = bars["amount"]; vwap = bars["vwap"]
@@ -371,16 +373,21 @@ def main():
     print(f"[backfill] {'SMOKE' if smoke else 'FULL'} 股票数: {len(symbols)} (分钟样本 {len(minute_symbols)}), 时间: {start} ~ {end}")
 
     # 分类：HASCODE 日线（走 _execute_factor_code）
+    # 2026-08-28：TARGET 由运行时的 85 个空因子决定（不再读旧 /tmp/opt1_missing.json）
+    empty_now = [p.stem for p in Path("/home/sunhaiwei/quant_projects/weekly_backtest_output/factor_matrices_all").glob("*.parquet")
+                 if not pd.read_parquet(p).shape[1]]
     daily_exec_pages = []
     dsl_pages = []
-    for page in set(LQTP_PAGES) & set(Path("/tmp/opt1_missing.json").read_text().split()):
+    for page in set(LQTP_PAGES) & set(empty_now):
         r = LQTP_PAGES.get(page, {})
         code = r.get("code") or ""
         if page in MINUTE_PAGES:
             continue
         if code and "NotImplementedError" not in code:
             daily_exec_pages.append(page)
-    dsl_pages = sorted(DSL_ONLY_PAGES & TARGET)
+        else:
+            dsl_pages.append(page)
+    dsl_pages = sorted(set(dsl_pages) | (DSL_ONLY_PAGES & set(empty_now)))
     print(f"[backfill] 分钟类 {len(MINUTE_PAGES)}, 日线HASCODE {len(daily_exec_pages)}, DSL-only {len(dsl_pages)}")
 
     all_res = {}

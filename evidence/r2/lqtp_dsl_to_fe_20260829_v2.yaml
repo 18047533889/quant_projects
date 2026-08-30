@@ -1,0 +1,24 @@
+r2_evidence:
+  id: lqtp-dsl-to-fe-converter-v2
+  date: '2026-08-29'
+  type: converter-landing
+  summary: LQTP DSL -> FE 可执行表达式转换器增强版，107/470 可转
+  composition:
+    base_parseable: 89
+    hand_translated_16: 16
+    enhanced_pipeline: 2
+  files_changed:
+  - jobs/lqtp_dsl_to_fe.py
+  - factor_engine/api/lqtp_functions_loader.py
+  - factor_engine/api/lqtp_compat.py
+  - factor_engine/cleaned_operators/intraday/__init__.py
+  - factor_engine/cleaned_operators/common/data_cleaning.py
+  - factor_engine/cleaned_operators/operator_surface.py
+  - factor_engine/backend/production_signature.py
+  validation:
+    parse_all_can_true: 107/107 解析通过
+    base_col_subset: 5/15 |rho|>=0.95, 7/15 >=0.90 vs factor_matrices_all (adj basis)
+    price_basis_note: 参考矩阵用未复权 close；FE 用 AdjClose，长期窗口 EMA 因子 rank 错位
+  next_steps:
+  - code 侧翻译器处理 ~300 条 code 字段
+  - mathjax x_t / branch if-else / 自然语言 需更多手翻

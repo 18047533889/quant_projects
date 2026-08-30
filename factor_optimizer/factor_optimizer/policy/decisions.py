@@ -5,6 +5,12 @@ from datetime import datetime
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
+from factor_optimizer.contracts.treatment_integrity import (
+    TreatmentIntegrityEvidence,
+    describe_integrity_problem,
+)
+from factor_optimizer.errors import MissingInputError
+
 
 class AdmissionVerdict(Enum):
     """Admission decision outcome."""
@@ -27,6 +33,30 @@ class RejectionReason(Enum):
     COMPLEXITY_LIMIT = "complexity_limit"  # Too complex
     PARENT_QUALITY = "parent_quality"  # Parent factor quality insufficient
     POLICY_VIOLATION = "policy_violation"  # Violates organizational policy
+    # R55 P0-9: the treatment-integrity gate is fail-closed — missing, stale,
+    # tampered or failing evidence rejects the candidate.
+    INTEGRITY_EVIDENCE_MISSING = "integrity_evidence_missing"
+    INTEGRITY_EVIDENCE_FAILED = "integrity_evidence_failed"
+    INTEGRITY_EVIDENCE_STALE = "integrity_evidence_stale"
+
+
+def _INTEGRITY_REJECTION_REASON(problem: str) -> "RejectionReason":
+    """Map an integrity problem string onto its typed rejection reason.
+
+    The problem strings come from
+    :func:`factor_optimizer.contracts.treatment_integrity.
+    describe_integrity_problem`, so the classification is by their stable
+    prefixes (missing / tampered / mis-bound / NOT_RUN / failed checks).
+    """
+    if "missing TreatmentIntegrityEvidence" in problem:
+        return RejectionReason.INTEGRITY_EVIDENCE_MISSING
+    if "tampered" in problem:
+        return RejectionReason.INTEGRITY_EVIDENCE_STALE
+    if "bound to treatment" in problem:
+        return RejectionReason.INTEGRITY_EVIDENCE_STALE
+    if "recorded no checks" in problem:
+        return RejectionReason.INTEGRITY_EVIDENCE_FAILED
+    return RejectionReason.INTEGRITY_EVIDENCE_FAILED
 
 
 @dataclass
@@ -200,6 +230,7 @@ class AdmissionPolicy:
         sources: Optional[List[str]] = None,
         lookback_periods: Optional[int] = None,
         metadata: Optional[Dict[str, Any]] = None,
+        integrity_evidence: Optional[TreatmentIntegrityEvidence] = None,
     ) -> AdmissionDecision:
         """
         Make admission decision for a mutation proposal.
@@ -214,6 +245,15 @@ class AdmissionPolicy:
             sources: Data sources required
             lookback_periods: Lookback window length
             metadata: Additional decision context
+            integrity_evidence: REQUIRED (R55 P0-9) measured
+                :class:`TreatmentIntegrityEvidence` for the treatment that
+                produced this candidate.  The gate is fail-closed: evidence
+                that is absent, bound to another trial, tampered, NOT_RUN, or
+                carrying a failed check rejects the candidate with a typed
+                rejection reason.  Only when ``criteria.require_parent_evidence``
+                is False (explicit research opt-out) is a missing evidence
+                tolerated — and it is then recorded as a POLICY_VIOLATION
+                observation, never silently.
 
         Returns:
             AdmissionDecision
@@ -228,6 +268,27 @@ class AdmissionPolicy:
                 seq += 1
             decision_id = f"decision_{trial_id}_{seq}"
         rejection_reasons = []
+
+        # R55 P0-9: the treatment-integrity gate is REAL and fail-closed.
+        # ``require_parent_evidence`` historically existed on the criteria
+        # without ever being read — a dead criterion that let every proposal
+        # through.  Integrity evidence is now REQUIRED whenever that flag is
+        # set (the default), and its verdict is a hard gate.
+        evidence_metadata: Dict[str, Any] = {}
+        require_integrity = bool(self.criteria.require_parent_evidence)
+        problem = describe_integrity_problem(trial_id, integrity_evidence)
+        if problem is not None:
+            if require_integrity:
+                rejection_reasons.append(_INTEGRITY_REJECTION_REASON(problem))
+            evidence_metadata["integrity_problem"] = problem
+        elif integrity_evidence is not None:
+            evidence_metadata["integrity_content_hash"] = (
+                integrity_evidence.content_hash
+            )
+            evidence_metadata["integrity_status"] = (
+                integrity_evidence.overall_status.value
+            )
+        evidence_metadata["integrity_evidence_required"] = require_integrity
 
         # Check complexity
         if complexity_cost > self.criteria.max_complexity_cost:
@@ -261,6 +322,13 @@ class AdmissionPolicy:
         else:
             verdict = AdmissionVerdict.ADMITTED
 
+        if metadata:
+            decision_metadata = dict(metadata)
+        else:
+            decision_metadata = {}
+        if evidence_metadata:
+            decision_metadata.setdefault("integrity", {}).update(evidence_metadata)
+
         decision = AdmissionDecision(
             decision_id=decision_id,
             mutation_id=mutation_id,
@@ -270,7 +338,7 @@ class AdmissionPolicy:
             rejection_reasons=rejection_reasons,
             expected_value=expected_value,
             complexity_cost=complexity_cost,
-            decision_metadata=metadata or {},
+            decision_metadata=decision_metadata,
         )
 
         self._decision_history[decision_id] = decision

@@ -35,6 +35,7 @@ from factor_optimizer.data_capabilities import (
     build_search_capabilities,
 )
 from factor_optimizer.errors import CapabilityForgeryError
+import numpy as np
 from factor_optimizer.search.runner import (
    
         SearchConfig,
@@ -69,8 +70,7 @@ def _protocol(plan):
         lambda trial, fid: {
             "score": 0.5,
             "cost": 1.0,
-            "evidence_ref": "ev-1",
-        },
+            "evidence_ref": "ev-1", "treatment_integrity_evidence": _integrity_evidence(trial.trial_id)},
     )
 
 
@@ -364,7 +364,9 @@ def test_closure_capturing_test_y_is_blocked():
     test_y = [1, 2, 3]
 
     def leaky_eval(trial, fid):
-        return {"score": test_y[0], "cost": 1.0, "evidence_ref": "e"}
+        return {"score": test_y[0], "cost": 1.0, "evidence_ref": "e",
+        "treatment_integrity_evidence": _integrity_evidence(trial.trial_id),
+            }
 
     plan = _plan()
     runner = SearchRunner(
@@ -436,7 +438,9 @@ def _module_trial():
 
 
 def _module_eval(trial, fid):
-    return {"score": 0.5, "cost": 1.0, "evidence_ref": "ev-1"}
+    return {"score": 0.5, "cost": 1.0, "evidence_ref": "ev-1",
+    "treatment_integrity_evidence": _integrity_evidence(trial.trial_id),
+            }
 
 
 def test_checkpoint_does_not_embed_test_data():
@@ -620,3 +624,25 @@ def test_sealed_test_executor_requires_authority_for_any_evaluation():
     executor = runner.create_sealed_test_executor()
     with pytest.raises(ValueError, match="no test authority broker"):
         executor.evaluate_sealed_test(None, None, _plan())
+
+
+def _integrity_evidence(trial_id="t1", kind=None):
+    """Passing TreatmentIntegrityEvidence measured from arrays (R55 P0-9)."""
+    from factor_optimizer.contracts.treatment_integrity import (
+        build_integrity_evidence,
+    )
+
+    rng = np.random.default_rng(abs(hash(trial_id)) % (2 ** 32))
+    before = rng.normal(size=32)
+    treated_kind = kind if kind else f"treatment::{trial_id}"
+    if treated_kind == "raw":
+        after = before
+    else:
+        after = before * 0.5 + 0.01
+    return build_integrity_evidence(
+        trial_id,
+        treated_kind,
+        {} if treated_kind == "raw" else {"window": 3},
+        before,
+        after,
+    )

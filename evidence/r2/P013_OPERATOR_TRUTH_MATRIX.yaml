@@ -1,0 +1,130 @@
+generated_at: "2026-08-29T05:57:06"
+registry_source: OperatorRegistry after load_all() (finalized/frozen)
+total_canonicals: 1737
+per_backend_capability_counts:
+  clickhouse_sql:implemented: 418
+  clickhouse_sql:unsupported: 1319
+  duckdb_sql:implemented: 339
+  duckdb_sql:parity_verified: 79
+  duckdb_sql:unsupported: 1319
+  pandas_numpy:implemented: 1656
+  pandas_numpy:production_safe: 79
+  pandas_numpy:unsupported: 2
+  polars:implemented: 6
+  polars:production_safe: 4
+  polars:unsupported: 1727
+  q_kdb:implemented: 26
+  q_kdb:unsupported: 1711
+per_surface_canonical_counts:
+  daily: 1238
+  extended: 480
+  research: 8
+  unsafe: 7
+  internal: 3
+  legacy: 1
+per_surface_backend_coverage:
+  daily:
+    pandas_numpy:
+      implemented: 1157
+      production_safe: 79
+      unsupported: 2
+    polars:
+      unsupported: 1228
+      implemented: 6
+      production_safe: 4
+    duckdb_sql:
+      unsupported: 839
+      parity_verified: 79
+      implemented: 320
+    clickhouse_sql:
+      unsupported: 839
+      implemented: 399
+    q_kdb:
+      unsupported: 1212
+      implemented: 26
+  extended:
+    pandas_numpy:
+      implemented: 480
+    polars:
+      unsupported: 480
+    duckdb_sql:
+      unsupported: 470
+      implemented: 10
+    clickhouse_sql:
+      unsupported: 470
+      implemented: 10
+    q_kdb:
+      unsupported: 480
+  unsafe:
+    pandas_numpy:
+      implemented: 7
+    polars:
+      unsupported: 7
+    duckdb_sql:
+      unsupported: 1
+      implemented: 6
+    clickhouse_sql:
+      unsupported: 1
+      implemented: 6
+    q_kdb:
+      unsupported: 7
+  research:
+    pandas_numpy:
+      implemented: 8
+    polars:
+      unsupported: 8
+    duckdb_sql:
+      unsupported: 8
+    clickhouse_sql:
+      unsupported: 8
+    q_kdb:
+      unsupported: 8
+  internal:
+    pandas_numpy:
+      implemented: 3
+    polars:
+      unsupported: 3
+    duckdb_sql:
+      unsupported: 1
+      implemented: 2
+    clickhouse_sql:
+      unsupported: 1
+      implemented: 2
+    q_kdb:
+      unsupported: 3
+  legacy:
+    pandas_numpy:
+      implemented: 1
+    polars:
+      unsupported: 1
+    duckdb_sql:
+      implemented: 1
+    clickhouse_sql:
+      implemented: 1
+    q_kdb:
+      unsupported: 1
+spec_status_counts:
+  experimental: 1593
+  production: 137
+  research: 6
+  deprecated: 1
+production_policy_counts:
+  denied: 1611
+  allowed: 72
+  pending: 53
+  permanently_forbidden: 1
+production_vs_research_split:
+  research_only: 1665
+  production: 72
+catalog_gates:
+  production_certified: 86
+  pit_safe: 102
+evidence_eligible_backend_counts:
+  pandas_numpy: 79
+  polars: 4
+production_admitted_canonical_count: 79
+verification_command: PYTHONPATH=factor_engine .venv/bin/python evidence/r2/p013_build_matrix.py 2>/dev/null
+verification_output_tail: |
+  LOAD_ALL_DONE
+  TOTAL_CANONICALS 1737
+  PROBED 1737

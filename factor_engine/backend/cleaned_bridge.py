@@ -954,6 +954,20 @@ def list_cleaned_ops_for_backend(skip: set[str]) -> list[str]:
     for alias, canon in OperatorRegistry._aliases.items():
         if alias not in skip and OperatorRegistry.get(canon) is not None:
             names.add(alias)
+    # Compiler-internal lowering nodes (protected_div et al.) carry an
+    # ``internal`` surface so production ``OperatorRegistry.get`` returns None,
+    # but they ARE registered backend implementations and must receive a kernel
+    # for the pandas backend — otherwise ``_eval`` hits ``KeyError`` at runtime
+    # on a legitimate plan node (e.g. alias ``protected_div`` reachable from the
+    # DSL).  ``_read_state`` gives us the raw operators dict; include every
+    # registered name, then drop the production-surface gate here too.
+    _operators = OperatorRegistry._operators
+    for canon in OperatorRegistry.list_canonical():
+        if canon not in names and canon in _operators and _operators[canon]:
+            names.add(canon)
+    for alias, canon in OperatorRegistry._aliases.items():
+        if alias not in names and canon in _operators and _operators.get(canon):
+            names.add(alias)
     return sorted(names)
 
 

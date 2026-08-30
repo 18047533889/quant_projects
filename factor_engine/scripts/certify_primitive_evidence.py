@@ -154,8 +154,20 @@ def _extract_canonical(tc_name: str, candidates: frozenset[str]) -> str | None:
 
 
 def _classname_to_file(classname: str) -> str:
-    """``tests.backend_parity.test_foo`` -> ``tests/backend_parity/test_foo.py``."""
-    return classname.replace(".", "/") + ".py"
+    """``tests.backend_parity.test_foo`` -> ``tests/backend_parity/test_foo.py``.
+
+    When pytest runs with ``cwd=factor_engine`` the module root is the repo
+    itself, so JUnit classnames carry a ``factor_engine.`` prefix
+    (``factor_engine.tests.backend_parity.test_foo``).  Strip that leading
+    package root so the classname still maps onto the stage's ``tests/...``
+    file list.  R56: without this the executed+passed JUnit cases were never
+    attributed (file_rel not in files) and the six-way intersection came out
+    empty.
+    """
+    rel = classname
+    if rel.startswith("factor_engine."):
+        rel = rel[len("factor_engine."):]
+    return rel.replace(".", "/") + ".py"
 
 
 def _backend_for_stage(stage_name: str) -> str:

@@ -12,14 +12,21 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Iterable
+from typing import Any, Iterable, TYPE_CHECKING
 
 import numpy as np
 import pandas as pd
 
 from modeling.contracts import LabelContract
 from modeling.dataset import PanelDataset
-from factor_engine.market.exchange_session_calendar import ExchangeSessionCalendar
+
+# R55 #97: ``factor_engine`` is an OPTIONAL runtime dependency (thin adapter
+# boundary, not a vendored copy).  The calendar is duck-typed — only
+# ``shift_session`` is called — so the type import is deferred and
+# `import modeling.walk_forward` works in a wheel without factor_engine
+# installed.  Never reimplement calendar math here.
+if TYPE_CHECKING:  # pragma: no cover - typing only
+    from factor_engine.market.exchange_session_calendar import ExchangeSessionCalendar
 
 _log = logging.getLogger(__name__)
 

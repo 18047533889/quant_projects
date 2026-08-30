@@ -18,6 +18,7 @@ from factor_optimizer.contracts.splits import (
 )
 from factor_optimizer.contracts.trial import Trial, TrialStatus
 from factor_optimizer.search.plateau import PlateauConfig, PlateauDetector
+import numpy as np
 from factor_optimizer.search.runner import (
     SearchConfig,
     SearchRunner,
@@ -306,7 +307,8 @@ def test_minimize_runner_selects_lowest_score_trial():
             "evaluation_id": f"eval-{trial.trial_id}",
             "score": scores[trial.trial_id],
             "cost": 1.0,
-        }
+            "treatment_integrity_evidence": _integrity_evidence(trial.trial_id),
+            }
 
     session = SearchRunner(config, proposal_fn, _protocol(evaluation_fn)).run("min-run")
     assert session.best_trial_id == "t2"
@@ -319,7 +321,7 @@ def test_minimize_runner_selects_lowest_score_trial():
 
 def test_default_plateau_path_delegates_to_package_detector():
     config = _config(plateau_window=5, plateau_threshold=0.001, enable_multifidelity=False)
-    runner = SearchRunner(config, _trial, _protocol(lambda t, f: {"score": 1.0, "cost": 1.0}))
+    runner = SearchRunner(config, _trial, _protocol(lambda t, f: {"score": 1.0, "cost": 1.0, "treatment_integrity_evidence": _integrity_evidence(t.trial_id)}))
 
     # Fewer scores than the window: not a plateau, and no detector built.
     short_scores = [1.0, 0.5, 1.0]
@@ -349,7 +351,7 @@ def test_default_plateau_matches_package_detector_on_split_half_semantics():
     # old rule at threshold 0.001) but the split-half rule sees the second
     # half fail to beat the first half's best — a plateau.
     config = _config(plateau_window=3, plateau_threshold=0.001, enable_multifidelity=False)
-    runner = SearchRunner(config, _trial, _protocol(lambda t, f: {"score": 1.0, "cost": 1.0}))
+    runner = SearchRunner(config, _trial, _protocol(lambda t, f: {"score": 1.0, "cost": 1.0, "treatment_integrity_evidence": _integrity_evidence(t.trial_id)}))
 
     scores = [1.0, 0.5, 1.0]
     reference = PlateauDetector(
@@ -366,7 +368,7 @@ def test_injected_plateau_detector_still_takes_precedence():
         calls.append(list(scores))
         return True
 
-    runner = SearchRunner(config, _trial, _protocol(lambda t, f: {"score": 1.0, "cost": 1.0}), injected)
+    runner = SearchRunner(config, _trial, _protocol(lambda t, f: {"score": 1.0, "cost": 1.0, "treatment_integrity_evidence": _integrity_evidence(t.trial_id)}), injected)
     assert runner._check_plateau([1.0, 1.0, 1.0]) is True
     assert calls == [[1.0, 1.0, 1.0]]
     assert runner._default_plateau_detector is None
@@ -386,10 +388,33 @@ def test_runner_stops_on_package_plateau_semantics():
             "evaluation_id": f"eval-{trial.trial_id}",
             "score": score,
             "cost": 1.0,
-        }
+            "treatment_integrity_evidence": _integrity_evidence(trial.trial_id),
+            }
 
     config = _config(plateau_window=6, plateau_threshold=0.01, enable_multifidelity=False)
     session = SearchRunner(config, proposal_fn, _protocol(evaluation_fn)).run("plateau-run")
 
     assert session.is_finished()
     assert session.stop_reason == "plateau_detected"
+
+
+def _integrity_evidence(trial_id="t1", kind=None):
+    """Passing TreatmentIntegrityEvidence measured from arrays (R55 P0-9)."""
+    from factor_optimizer.contracts.treatment_integrity import (
+        build_integrity_evidence,
+    )
+
+    rng = np.random.default_rng(abs(hash(trial_id)) % (2 ** 32))
+    before = rng.normal(size=32)
+    treated_kind = kind if kind else f"treatment::{trial_id}"
+    if treated_kind == "raw":
+        after = before
+    else:
+        after = before * 0.5 + 0.01
+    return build_integrity_evidence(
+        trial_id,
+        treated_kind,
+        {} if treated_kind == "raw" else {"window": 3},
+        before,
+        after,
+    )

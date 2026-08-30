@@ -115,9 +115,9 @@ def _san(x):
 
 def build_formulas():
     o = _ops()
-    C = col("Close"); V = col("Volume"); A = col("Amount"); H = col("High")
+    C = col("AdjClose"); V = col("Volume"); A = col("AdjAmount"); H = col("AdjHigh")
     ret = col("Return")     # raw physical Return column (bp); ranking-invariant scale
-    vwap = col("Vwap")      # raw physical Vwap column
+    vwap = col("AdjVwap")   # 后复权 AdjVwap（StockDailyBarAdj），复权前数据禁用
     ratio1 = (C / (o["delay"](C, 1) + 1e-6) - 1)
     ratio_clip = o["clip"]((C - o["delay"](C, 1)) / (o["delay"](C, 1) + 1e-6), 0, 2)
     logV = o["log"](V)
@@ -181,7 +181,7 @@ def load_vwap_ret():
     idx = v.index
     assert idx[0] == pd.Timestamp("2016-01-04") and idx[-1] == pd.Timestamp("2026-08-24")
     rv = v / v.shift(1).replace(0, np.nan) - 1.0
-    ret = rv.shift(-1)                    # vwap-to-vwap, adjusted
+    ret = rv.shift(-2)                    # vwap-to-vwap 后复权（t+1成交→t+2卖出，企业级，对齐TargetVwapReturnH01）
     return v.astype("float32"), ret
 
 
@@ -313,7 +313,7 @@ def main():
         try:
             ds = build_data_source({
                 "type": "data_access",
-                "dataset": "ashare_stock_daily",
+                "dataset": "ashare_stock_daily_adj",  # 后复权表（2026-08-28 硬性）；col(Close/Vwap) → AdjClose/AdjVwap
                 "start_date": FULL_START,
                 "end_date": FULL_END,
                 # leave instrument_filter=None -> whole universe (mirror is complete).

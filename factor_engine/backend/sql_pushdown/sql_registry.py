@@ -111,6 +111,24 @@ def register_sql_backends() -> None:
     global _SQL_MARKERS_REGISTERED, _SQL_MARKERS_INCOMPLETE
     if _SQL_MARKERS_REGISTERED and not _SQL_MARKERS_INCOMPLETE:
         return
+    from factor_engine.cleaned_operators.registry import OperatorRegistry as _Reg
+    from factor_engine.cleaned_operators.registry import _BOOTSTRAP_TOKEN as _REG_BOOT_TOKEN
+
+    # P0-14 guard: the marker pass only needs to (re)run when the registry is
+    # still building or when it changed since the last pass.  A complete pass on
+    # a FROZEN registry must NOT re-thaw/re-seal on every capability probe —
+    # `is_sql_capable`/`sql_backends_for`/`plan_is_sql_capable` are called
+    # repeatedly at planning time, and each thaw bumps the registry version and
+    # trips the lifecycle-not-thawed governance (R40 #208 / P0-14).
+    _lifecycle = _Reg.lifecycle()
+    _was_frozen = _lifecycle == "frozen"
+    if _was_frozen and not _SQL_MARKERS_INCOMPLETE:
+        # Registry already frozen AND a complete marker pass has run before →
+        # nothing to do; never thaw a frozen production registry just to
+        # re-apply idempotent markers (P0-14 lifecycle-not-thawed guard).
+        return
+    if _was_frozen:
+        _Reg.thaw_for_bootstrap(_REG_BOOT_TOKEN)
     incomplete = False
     # R63-P0.2: during the SQL marker pass the operator policy inference needs
     # the ``DAILY_CANONICALS`` / ``EXTENDED_ONLY_CANONICALS`` surfaces.  These
@@ -172,6 +190,9 @@ def register_sql_backends() -> None:
         entry["backend_meta"] = backend_meta
     _SQL_MARKERS_REGISTERED = True
     _SQL_MARKERS_INCOMPLETE = incomplete
+    if _was_frozen:
+        _Reg.finalize()
+        _Reg.freeze()
 
 
 def resolve_canonical(op: str) -> str:
@@ -247,8 +268,7 @@ def _resolve_capability_path(plan: PlanNode, *, dialect: str) -> bool:
 
 
 def is_sql_capable(plan: PlanNode) -> bool:
-    """递归判断计划树是否全部由 SQL backend 支持的算子构成。"""
-    register_sql_backends()
+    """递归判断计划树是否全部由 SQL backend 支持的算��构成。"""
     canon = resolve_canonical(plan.op)
     if canon not in SQL_CAPABLE_CANONICALS:
         return False
@@ -274,5 +294,4 @@ def is_sql_production_safe(plan: PlanNode) -> bool:
 
 def sql_backends_for(name: str) -> list[str]:
     """返回算子名在 OperatorRegistry 中登记的后端列表（含 ``sql``）。"""
-    register_sql_backends()
     return OperatorRegistry.backends_for(name)

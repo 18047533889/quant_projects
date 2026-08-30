@@ -1,0 +1,5 @@
+# 782-factor chain, benchmark=中证500 (000905.SH) 含除权
+# period 2020-01-23..2026-08-24, vectorbt accurate, topk=30 maxw=0.05 turnover=0.30 tc=5bp
+strategy_nav: total=571.89% annual=35.22% sharpe=1.354 mdd=-26.62%
+benchmark_nav: total=44.73% annual=6.03% sharpe=0.373 mdd=-41.81%
+excess_nav: total=364.22% annual=27.53% sharpe=1.906 mdd=-17.75%

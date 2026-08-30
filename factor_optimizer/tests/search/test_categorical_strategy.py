@@ -11,6 +11,7 @@ from factor_optimizer.search.categorical_strategy import (
     CategoricalSearchStrategy,
 )
 from factor_optimizer.search.runner import SearchConfig, SearchRunner
+import numpy as np
 
 
 def _recipes():
@@ -91,7 +92,7 @@ def test_runner_accepts_categorical_strategy():
     def evaluation_fn(trial, fidelity):
         recipe = trial.metadata["params"].get("recipe", "unknown")
         score = 0.9 if recipe == "winsorize" else 0.3
-        return {"evaluation_id": f"e-{trial.trial_id}", "score": score, "cost": 1.0}
+        return {"evaluation_id": f"e-{trial.trial_id}", "score": score, "cost": 1.0, "treatment_integrity_evidence": _integrity_evidence(trial.trial_id)}
 
     runner = SearchRunner(
         config,
@@ -116,3 +117,26 @@ def test_strategy_checkpoint_resume():
     assert restored.direction == strat.direction
     assert restored.n_initial == strat.n_initial
     assert restored.propose_recipe() is not None
+
+
+def _integrity_evidence(trial_id="t1", kind=None):
+    """Passing TreatmentIntegrityEvidence measured from arrays (R55 P0-9)."""
+    from factor_optimizer.contracts.treatment_integrity import (
+        build_integrity_evidence,
+    )
+
+    rng = np.random.default_rng(abs(hash(trial_id)) % (2 ** 32))
+    before = rng.normal(size=32)
+    treated_kind = kind if kind else f"treatment::{trial_id}"
+    if treated_kind == "raw":
+        after = before
+    else:
+        after = before * 0.5 + 0.01
+    return build_integrity_evidence(
+        trial_id,
+        treated_kind,
+        {} if treated_kind == "raw" else {"window": 3},
+        before,
+        after,
+    )
+

@@ -170,6 +170,19 @@ class ContractChangeRequired(GovernanceError):
     pass
 
 
+class TreatmentIntegrityError(GovernanceError):
+    """Treatment integrity evidence is missing, stale, tampered, or failing.
+
+    R55 P0-9: the integrity gates of the treatment pipeline are fail-closed —
+    a treatment candidate may be scored / admitted only against a complete,
+    self-consistent, passing
+    :class:`factor_optimizer.contracts.treatment_integrity.TreatmentIntegrityEvidence`.
+    Anything else (no evidence at all, evidence bound to another treatment,
+    a tampered payload, NOT_RUN, or a failed check) rejects the candidate.
+    """
+    pass
+
+
 __all__ = [
     # Base
     "FactorOptimizerError",
@@ -203,4 +216,5 @@ __all__ = [
     "DuplicateIdentityError",
     "CollisionError",
     "ContractChangeRequired",
+    "TreatmentIntegrityError",
 ]

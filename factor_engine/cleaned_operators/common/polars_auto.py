@@ -20,6 +20,7 @@ def _pl():
 
 from factor_engine.cleaned_operators.base_polars import OperatorMetadata, SeriesOperator, register_operator
 from factor_engine.cleaned_operators.registry import OperatorRegistry
+from factor_engine.cleaned_operators.base import Any, ParamSpec, ParamRole
 
 _SKIP = frozenset({"date", "stock_code"})
 
@@ -393,7 +394,10 @@ if not _has_polars("fillna"):
         """NaN 填充"""
         metadata = OperatorMetadata(
             name="fillna", category="data_handling", description="NaN 填充",
-            param_names=["x", "method"], return_type="series", tags=["data_handling", "polars"],
+            param_names=["x", "method"], return_type="series",
+            param_specs={"x": ParamSpec(dtype=Any, param_role=ParamRole.ECONOMIC),
+                         "method": ParamSpec(dtype=Any, param_role=ParamRole.THRESHOLD)},
+            tags=["data_handling", "polars"],
         )
 
         def _calculate_series(self, x: pl.DataFrame, value: float = 0.0, **kwargs) -> pl.DataFrame:

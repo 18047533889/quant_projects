@@ -40,9 +40,30 @@ def _load():
 def _payload(registry, infer_policy, classify_canonical, surface_summary) -> dict:
     rows: list[dict] = []
     for canonical in registry.list_canonical():
-        operator = registry.get(canonical)
-        if operator is None:
-            continue
+        operator = registry.get(canonical, mode="any")
+        meta = dict(registry.catalog().get(canonical) or {})
+        from factor_engine.cleaned_operators.operator_spec import build_operator_spec
+        spec = build_operator_spec(canonical)
+        if operator is not None:
+            policy = infer_policy(operator, canonical=canonical)
+        elif spec is not None:
+            policy = None
+        else:
+            policy = None
+        rows.append(
+            {
+                "canonical": canonical,
+                "surface": classify_canonical(canonical),
+                "aliases": sorted(meta.get("aliases") or []),
+                "backends": sorted(meta.get("backends") or []),
+                "pit_safe": bool(getattr(spec, "pit_safe", None)) if operator is None and spec is not None else (bool(policy.pit_safe) if policy else None),
+                "scope": str(policy.scope) if policy else (str(getattr(spec, "scope", "")) if spec is not None else None),
+                "lookback": policy.lookback_window if policy else None,
+                "min_periods": policy.min_periods if policy else None,
+                "lag": policy.lag if policy else None,
+            }
+        )
+        continue
         meta = dict(registry.catalog().get(canonical) or {})
         policy = infer_policy(operator, canonical=canonical)
         rows.append(

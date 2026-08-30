@@ -12,10 +12,15 @@ from factor_assets.contracts.admission import (
     FactorAdmissionArtifact,
 )
 from factor_assets.contracts.similarity import (
+    CORRELATION_METRIC_VIEWS,
     DEFAULT_SIMILARITY_VIEW,
     SIMILARITY_VIEW_KEYS,
     SimilarityArtifact,
+    SimilarityMetricSpecError,
     SimilarityView,
+    is_unknown_identity,
+    metric_for_view,
+    resolve_metric_view,
 )
 from factor_assets.similarity import SimilarityMethod, SimilarityResult
 from factor_assets.selection import SelectionDecision, SelectionReason
@@ -199,12 +204,13 @@ class TestSimilarityArtifactHash:
         )
         assert artifact.similarity_spec_hash == recomputed
 
-    def test_for_spec_requires_hash(self):
-        # An empty hash falls back to auto-computation (still valid).
-        artifact = SimilarityArtifact.for_spec(
-            "F001", "F002", "", views={"rank_corr": 0.8}
-        )
-        assert len(artifact.similarity_spec_hash) == 64
+    def test_for_spec_rejects_empty_hash(self):
+        # P0-12: ``for_spec`` exists to PIN a spec identity.  The empty string
+        # is an unknown-identity token, so it must not silently fall back to
+        # auto-computation — a caller who cannot supply the hash must call the
+        # plain constructor (which derives it) instead of pinning nothing.
+        with pytest.raises(Exception, match="UNKNOWN|similarity_spec_hash"):
+            SimilarityArtifact.for_spec("F001", "F002", "", views={"rank_corr": 0.8})
 
     def test_primary_value_and_view_accessor(self):
         from factor_assets.contracts._frozen import FrozenMapping
@@ -228,6 +234,7 @@ class TestSimilarityArtifactHash:
             snapshot_ref=data["snapshot_ref"],
             window_ref=data["window_ref"],
             universe_ref=data["universe_ref"],
+            metric=data["metric"],
             similarity_spec_hash=data["similarity_spec_hash"],
             primary_view=data["primary_view"],
             created_at=artifact.created_at,
@@ -250,11 +257,43 @@ class TestSimilarityArtifactHash:
         artifact = SimilarityArtifact.from_similarity_result(
             result, snapshot_ref="snapshot:2024-08"
         )
-        assert artifact.views["rank_corr"] == 0.85
+        # P0-12: the declared metric drives which view the score is stored
+        # under — PEARSON maps to the ``pearson_corr`` view, not the Spearman
+        # ``rank_corr`` view the legacy adapter silently used.
+        assert artifact.metric == "pearson"
+        assert artifact.views["pearson_corr"] == 0.85
+        assert artifact.views.get("rank_corr") is None
+        assert artifact.primary_value == 0.85
         assert artifact.universe_ref == "US_500"
         assert artifact.window_ref == "2024-01-01/2024-12-31"
         assert artifact.snapshot_ref == "snapshot:2024-08"
         assert artifact.producer == "legacy:SimilarityResult"
+
+    def test_from_similarity_result_spearman_maps_to_rank_corr(self):
+        result = SimilarityResult(
+            factor_id_a="F001",
+            factor_id_b="F002",
+            similarity_score=0.8,
+            method=SimilarityMethod.SPEARMAN,
+            timestamp="2024-01-01T00:00:00Z",
+            sample_size=1000,
+        )
+        artifact = SimilarityArtifact.from_similarity_result(result)
+        assert artifact.metric == "spearman"
+        assert artifact.views["rank_corr"] == 0.8
+
+    def test_from_similarity_result_kendall_maps_to_kendall_tau(self):
+        result = SimilarityResult(
+            factor_id_a="F001",
+            factor_id_b="F002",
+            similarity_score=0.6,
+            method=SimilarityMethod.KENDALL,
+            timestamp="2024-01-01T00:00:00Z",
+            sample_size=1000,
+        )
+        artifact = SimilarityArtifact.from_similarity_result(result)
+        assert artifact.metric == "kendall"
+        assert artifact.views["kendall_tau"] == 0.6
 
     def test_with_provenance_recomputes_hash(self):
         artifact = _artifact()
@@ -328,6 +367,158 @@ class TestSimilarityView:
     def test_similarity_view_rejects_non_finite(self):
         with pytest.raises(ValueError, match="finite"):
             SimilarityView(key="rank_corr", value=float("nan"))
+
+
+class TestSimilarityMetricMappingP0_12:
+    """R55 audit P0-12: authoritative metric mapping + UNKNOWN identity fail-closed."""
+
+    # --- (c) the mapping round-trips for pearson / spearman / kendall -------
+
+    def test_metric_mapping_table(self):
+        # The single authoritative mapping: metric -> view key.
+        assert dict(CORRELATION_METRIC_VIEWS) == {
+            "pearson": "pearson_corr",
+            "spearman": "rank_corr",
+            "kendall": "kendall_tau",
+        }
+
+    @pytest.mark.parametrize("metric,view", sorted(CORRELATION_METRIC_VIEWS.items()))
+    def test_metric_mapping_round_trip(self, metric, view):
+        # metric -> view and back must be an involution.
+        assert resolve_metric_view(metric) == view
+        assert metric_for_view(view) == metric
+
+    def test_metric_mapping_view_aliases_are_accepted(self):
+        # A caller that names the *view* where a metric is declared still
+        # canonicalizes to the metric (no silent mislabel, no silent default).
+        artifact = SimilarityArtifact(
+            factor_a="A", factor_b="B",
+            views={"pearson_corr": 0.4}, metric="pearson_corr",
+            primary_view="pearson_corr",
+        )
+        assert artifact.metric == "pearson"
+
+    # --- (e) an unknown metric name raises ----------------------------------
+
+    def test_unknown_metric_name_raises(self):
+        with pytest.raises(ValueError, match="unknown similarity metric"):
+            resolve_metric_view("spearman2")
+        with pytest.raises(ValueError, match="unknown similarity metric"):
+            SimilarityArtifact(
+                factor_a="A", factor_b="B",
+                views={"rank_corr": 0.5}, metric="pearsonr",
+            )
+
+    def test_metric_none_is_not_silently_mapped(self):
+        # metric=None stays legal (legacy artifacts) but declares nothing.
+        artifact = SimilarityArtifact(factor_a="A", factor_b="B", views={"rank_corr": 0.5})
+        assert artifact.metric is None
+
+    # --- (d) declared != computed raises ------------------------------------
+
+    def test_declared_metric_mismatching_view_raises(self):
+        # "pearson" declared but the score lives in the Spearman view — the
+        # artifact would record a metric the computation did not use.
+        with pytest.raises(SimilarityMetricSpecError, match="FAIL CLOSED"):
+            SimilarityArtifact(
+                factor_a="A", factor_b="B",
+                views={"rank_corr": 0.9}, metric="pearson",
+            )
+        # Symmetric: "spearman" declared but only the Pearson view is present.
+        with pytest.raises(SimilarityMetricSpecError, match="FAIL CLOSED"):
+            SimilarityArtifact(
+                factor_a="A", factor_b="B",
+                views={"pearson_corr": 0.9}, metric="spearman",
+            )
+
+    def test_declared_metric_matching_view_constructs(self):
+        artifact = SimilarityArtifact(
+            factor_a="A", factor_b="B",
+            views={"pearson_corr": 0.9, "rank_corr": None}, metric="pearson",
+            primary_view="pearson_corr",
+        )
+        assert artifact.metric == "pearson"
+        # The spec hash is metric-sensitive: a Pearson measurement and a
+        # Spearman measurement of the same pair are NOT the same spec.
+        spearman = SimilarityArtifact(
+            factor_a="A", factor_b="B",
+            views={"rank_corr": 0.9, "pearson_corr": None}, metric="spearman",
+        )
+        assert spearman.similarity_spec_hash != artifact.similarity_spec_hash
+
+    def test_declared_metric_with_unmeasured_view_raises(self):
+        # The mapped view is present but None (never measured): the declared
+        # metric would point at a value that does not exist.
+        with pytest.raises(SimilarityMetricSpecError, match="absent or unmeasured"):
+            SimilarityArtifact(
+                factor_a="A", factor_b="B",
+                views={"pearson_corr": None, "rank_corr": 0.9}, metric="pearson",
+            )
+
+    # --- (a) UNKNOWN for_spec is not constructible --------------------------
+
+    @pytest.mark.parametrize("unknown", ["UNKNOWN", "unknown", " Unknown ", ""])
+    def test_for_spec_unknown_hash_raises(self, unknown):
+        with pytest.raises(SimilarityMetricSpecError, match="UNKNOWN"):
+            SimilarityArtifact.for_spec(
+                "F001", "F002", unknown, views={"rank_corr": 0.8}
+            )
+
+    @pytest.mark.parametrize(
+        "field", ["snapshot_ref", "window_ref", "universe_ref"]
+    )
+    def test_unknown_provenance_identity_raises(self, field):
+        with pytest.raises(SimilarityMetricSpecError, match="UNKNOWN"):
+            SimilarityArtifact(
+                factor_a="A", factor_b="B",
+                views={"rank_corr": 0.5}, **{field: "UNKNOWN"},
+            )
+
+    def test_unknown_declared_metric_raises(self):
+        with pytest.raises(SimilarityMetricSpecError, match="metric is UNKNOWN"):
+            SimilarityArtifact(
+                factor_a="A", factor_b="B",
+                views={"rank_corr": 0.5}, metric="UNKNOWN",
+            )
+
+    def test_none_provenance_is_absent_not_unknown(self):
+        # ``None`` means "this provenance dimension is absent" (encoded as an
+        # empty field in the spec digest) — it is NOT the UNKNOWN token, so it
+        # stays constructible for legacy/research artifacts.
+        artifact = SimilarityArtifact(factor_a="A", factor_b="B", views={"rank_corr": 0.5})
+        assert artifact.snapshot_ref is None
+
+    # --- (b) a resolvable spec resolves to the concrete identity ------------
+
+    def test_for_spec_resolved_identity_round_trips(self):
+        recomputed = SimilarityArtifact(
+            factor_a="F001", factor_b="F002", views={"rank_corr": 0.8}
+        ).similarity_spec_hash
+        artifact = SimilarityArtifact.for_spec(
+            "F001", "F002", recomputed, views={"rank_corr": 0.8}
+        )
+        assert artifact.similarity_spec_hash == recomputed
+        assert artifact.similarity_spec_key == recomputed[:16]
+        assert not is_unknown_identity(artifact.similarity_spec_hash)
+
+    def test_unknown_identity_helper(self):
+        for token in ("UNKNOWN", "UNKNOWN_SPEC_HASH", "TBD", "PLACEHOLDER", "n/a", ""):
+            assert is_unknown_identity(token) is True
+        assert is_unknown_identity(None) is True
+        for concrete in ("sha256:abcd", "snapshot:2024-08", "universe:ashare"):
+            assert is_unknown_identity(concrete) is False
+        assert is_unknown_identity(12345) is False
+
+    def test_from_similarity_result_requires_a_metric(self):
+        # A legacy result with no method cannot honestly declare any metric —
+        # fail closed instead of defaulting to rank_corr/Spearman.
+        class _Bare:
+            factor_id_a = "F001"
+            factor_id_b = "F002"
+            similarity_score = 0.5
+
+        with pytest.raises(SimilarityMetricSpecError, match="method"):
+            SimilarityArtifact.from_similarity_result(_Bare())
 
 
 class TestFactorAdmissionArtifact:

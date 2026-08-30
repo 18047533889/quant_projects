@@ -7,6 +7,7 @@ from factor_optimizer.search.runner import SearchRunner, SearchConfig, SearchSes
 from factor_optimizer.contracts.search_budget import BudgetTracker, SearchBudget
 from factor_optimizer.contracts.splits import EvaluationProtocol, SplitPlan
 from factor_optimizer.contracts.trial import Trial, TrialStatus
+import numpy as np
 
 
 def _protocol(fn):
@@ -135,7 +136,7 @@ def test_search_runner_rejects_duplicate_trial_ids_before_evaluation():
 
     def evaluate(trial, fidelity):
         evaluated.append(trial.trial_id)
-        return {"evaluation_id": "eval-same", "score": 1.0, "cost": 1.0}
+        return {"evaluation_id": "eval-same", "score": 1.0, "cost": 1.0, "treatment_integrity_evidence": _integrity_evidence(trial.trial_id)}
 
     session = SearchRunner(config, lambda: next(proposals), _protocol(evaluate)).run("duplicates")
 
@@ -154,7 +155,7 @@ def test_search_runner_does_not_mutate_aliased_duplicate_trial():
 
     def evaluate(candidate, fidelity):
         evaluated.append(candidate.trial_id)
-        return {"evaluation_id": "eval-same", "score": 1.0, "cost": 1.0}
+        return {"evaluation_id": "eval-same", "score": 1.0, "cost": 1.0, "treatment_integrity_evidence": _integrity_evidence(trial.trial_id)}
 
     session = SearchRunner(config, lambda: trial, _protocol(evaluate)).run("aliased-duplicate")
 
@@ -187,7 +188,8 @@ def test_search_runner_basic():
             "evaluation_id": f"eval-{trial.trial_id}",
             "score": 0.5 + trial_counter[0] * 0.05,
             "cost": 10.0,
-        }
+            "treatment_integrity_evidence": _integrity_evidence(trial.trial_id),
+            }
 
     runner = SearchRunner(config, proposal_fn, _protocol(evaluation_fn))
     session = runner.run("test-session")
@@ -228,7 +230,8 @@ def test_search_runner_plateau_detection():
             "evaluation_id": f"eval-{trial.trial_id}",
             "score": score,
             "cost": 5.0,
-        }
+            "treatment_integrity_evidence": _integrity_evidence(trial.trial_id),
+            }
 
     runner = SearchRunner(config, proposal_fn, _protocol(evaluation_fn))
     session = runner.run("plateau-test")
@@ -257,7 +260,8 @@ def test_search_runner_custom_plateau_detector():
             "evaluation_id": f"eval-{trial.trial_id}",
             "score": 0.8,
             "cost": 5.0,
-        }
+            "treatment_integrity_evidence": _integrity_evidence(trial.trial_id),
+            }
 
     # Custom detector that triggers after 10 scores
     def custom_plateau(scores):
@@ -292,7 +296,8 @@ def test_search_runner_evaluation_failure():
             "evaluation_id": f"eval-{trial.trial_id}",
             "score": 0.5,
             "cost": 10.0,
-        }
+            "treatment_integrity_evidence": _integrity_evidence(trial.trial_id),
+            }
 
     runner = SearchRunner(config, proposal_fn, _protocol(evaluation_fn))
     session = runner.run("failure-test")
@@ -321,7 +326,8 @@ def test_search_runner_successful_trials():
             "evaluation_id": f"eval-{trial.trial_id}",
             "score": 0.5 + trial_counter[0] * 0.1,
             "cost": 10.0,
-        }
+            "treatment_integrity_evidence": _integrity_evidence(trial.trial_id),
+            }
 
     runner = SearchRunner(config, proposal_fn, _protocol(evaluation_fn))
     session = runner.run("success-test")
@@ -341,7 +347,7 @@ def test_search_runner_cost_greater_than_remaining_does_not_execute():
 
     def evaluation_fn(trial, fidelity):
         calls.append(trial.trial_id)
-        return {"evaluation_id": trial.trial_id, "score": 1.0, "cost": 6.0}
+        return {"evaluation_id": trial.trial_id, "score": 1.0, "cost": 6.0, "treatment_integrity_evidence": _integrity_evidence(trial.trial_id)}
 
     runner = SearchRunner(config, proposal_fn, _protocol(evaluation_fn))
     session = runner.run("cost-boundary")
@@ -369,7 +375,7 @@ def test_search_runner_evaluation_failure_refunds_reservation():
         calls += 1
         if calls == 1:
             raise RuntimeError("failed")
-        return {"evaluation_id": trial.trial_id, "score": 1.0, "cost": 10.0}
+        return {"evaluation_id": trial.trial_id, "score": 1.0, "cost": 10.0, "treatment_integrity_evidence": _integrity_evidence(trial.trial_id)}
 
     session = SearchRunner(config, proposal_fn, _protocol(evaluation_fn)).run("refund")
     assert calls == 2
@@ -508,6 +514,7 @@ def test_search_runner_resume_continues_from_checkpoint():
             "evaluation_id": trial.trial_id,
             "score": 0.5,
             "cost": 10.0,
+            "treatment_integrity_evidence": _integrity_evidence(trial.trial_id),
         }),
     )
     session = SearchSession(
@@ -589,3 +596,26 @@ def test_search_runner_resume_rejects_finished_or_mismatched_session(search_conf
     )
     with pytest.raises(ValueError, match="does not match"):
         runner.resume(open_session)
+
+
+def _integrity_evidence(trial_id="t1", kind=None):
+    """Passing TreatmentIntegrityEvidence measured from arrays (R55 P0-9)."""
+    from factor_optimizer.contracts.treatment_integrity import (
+        build_integrity_evidence,
+    )
+
+    rng = np.random.default_rng(abs(hash(trial_id)) % (2 ** 32))
+    before = rng.normal(size=32)
+    treated_kind = kind if kind else f"treatment::{trial_id}"
+    if treated_kind == "raw":
+        after = before
+    else:
+        after = before * 0.5 + 0.01
+    return build_integrity_evidence(
+        trial_id,
+        treated_kind,
+        {} if treated_kind == "raw" else {"window": 3},
+        before,
+        after,
+    )
+

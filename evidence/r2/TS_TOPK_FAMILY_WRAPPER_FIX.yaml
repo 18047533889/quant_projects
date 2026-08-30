@@ -1,0 +1,36 @@
+ts_topk_family_overhaul_wrapper_fix:
+  date: 2026-08-28
+  symptom: >
+    ts_topk_sum/ts_topk_mean/ts_topk_std/ts_bottomk_* raised
+    TypeError: _spec.<locals>.<lambda>() missing 1 required positional
+    argument: 'window' on BOTH pandas_numpy and polars backends when called
+    through the overhaul Spec wrapper with the canonical DSL binding
+    (d=, k= kwargs).
+  root_cause: >
+    factor_engine/cleaned_operators/layer_topk_compat.py::_spec built the
+    wrapper kernels as lambdas with a REQUIRED positional ``window``.  The
+    canonical call validator (bind_operator_call/_normalise_call) passes the
+    canonical key ``d`` as a kwarg for ts_topk_sum (R19-050 alias contract:
+    canonical params ["x","d","k"], window/n are declared aliases), so the
+    lambda never received ``window``.  overhaul/daily.py::_top_spec had
+    already been fixed the same way; layer_topk_compat (loaded AFTER the
+    overhaul via layer_composite_fixes -> layer_topk_compat) was the surviving
+    divergent copy that final-won registration.
+  fix: >
+    Rewrote layer_topk_compat.py::_spec from two lambdas to named kernels
+    _pand/_pola accepting (window=None, d=None, n=None) and resolving
+    w = window or d, kk = k or n — matching the overhaul/daily.py::_top_spec
+    contract exactly.  Legacy ``window=``/``n=`` spellings still work.
+  files_changed:
+    - factor_engine/cleaned_operators/layer_topk_compat.py
+  verification:
+    dual_backend_smoke: |
+      ts_topk_sum PANDA_MATCH [nan 6 7] / [nan 6 7]
+      ts_topk_mean PANDA_MATCH [nan 3 3.5] / [nan 3 3.5]
+      ts_topk_std  PANDA_MATCH [nan 2.828 2.121] / [nan 2.828 2.121]
+      ts_bottomk_sum PANDA_MATCH [nan 6 3] / [nan 6 3]
+      ts_bottomk_mean PANDA_MATCH [nan 3 1.5] / [nan 3 1.5]
+      ts_bottomk_std PANDA_MATCH [nan 2.828 0.707] / [nan 2.828 0.707]
+      PASS 6/6; legacy window kw call also OK
+    backend_parity_pytest: backend_parity/ suite re-run post-fix (see session log)
+  residual: P0-23 divergence count stays 0 after load_all (verified pre-fix; fix touches kernels only, not param declarations)

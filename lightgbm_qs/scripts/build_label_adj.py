@@ -34,8 +34,11 @@ def main():
     adj = adj.sort_index()
     plog(f"  adj shape={adj.shape}")
 
-    # 10日前向收益 (后复权Vwap): adj[t+10]/adj[t]-1, 与原始标签同一交易日历
-    adj10 = (adj.shift(-10) / adj - 1.0).astype(np.float64)
+    # 10日持有期月收益 (后复权Vwap, COS TargetVwapReturnH10 官方口径):
+    #   = AdjVwap[t+11] / AdjVwap[t+1] - 1  (T+1 建仓, T+11 平仓, 即跨 10 个交易日)
+    # 已与 COS StockDailyBarAdj.TargetVwapReturnH10 逐点对拍(12 个样本点 diff=0)。
+    # 旧口径 shift(-10)/shift(-1) 少算 1 天(9 交易日)会系统性偏低, 已修正。
+    adj10 = (adj.shift(-11) / adj.shift(-1) - 1.0).astype(np.float64)
     adj10 = adj10.where(np.isfinite(adj10))
 
     # 逐日截面中性化: 每行减去横截面 mean, 除以横截面 std (仅用该日有效资产)

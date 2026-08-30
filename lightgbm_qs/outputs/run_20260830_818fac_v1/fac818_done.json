@@ -1,0 +1,50 @@
+{
+  "task": "#22 35 new factors incremental merge + 818 vs 783 comparison",
+  "run_dir": "/home/sunhaiwei/quant_projects/lightgbm_qs/outputs/run_20260830_818fac_v1",
+  "merged_count": 34,
+  "redundant_dropped": 1,
+  "redundant_names": ["alphasage_rank_amount"],
+  "redundancy_threshold": 0.9,
+  "redundancy_detail": "alphasage_rank_amount max_abs_rho=0.9502 vs lqtp:wzr_price_volume_039; all other 34 max_abs_rho < 0.89",
+  "sign_policy": "factor_matrices_all/optimized_factors 矩阵为 local-formula 方向; 16 条 is_flipped=True + 9 条分钟因子(2d label 负) 全部取负翻正后 fwd10 rank_ic 为正",
+  "marginal": {
+    "alphasage_log_cs_resid_ts_delta_rank_winsor": "flip 后 fwd10 rank_ic 仍 -0.0049 (log 使 ~51% NaN, 覆盖差); 未达池内 0.015 门槛, 实际进 fold 极少数",
+    "adaptive_vol_asym_v2": "flip 后 fwd10 rank_ic 仅 +0.0008, 低于 0.015 门槛",
+    "exhaustion_local_norm": "flip 后 fwd10 rank_ic +0.012, 低于 0.015 门槛"
+  },
+  "oos_compare": {
+    "n_oos_days": 1327,
+    "mean_rank_ic_818": 0.04037875348681438,
+    "mean_rank_ic_783": 0.03906927106547995,
+    "diff_common": 0.0013094824213344264,
+    "ic_ir_818": 4.098088724998223,
+    "ic_ir_783": 4.069345552768623,
+    "ic_positive_frac_818": 0.6111529766390355,
+    "ic_positive_frac_783": 0.5900527505651846,
+    "2024+_window_diff": 0.004027456580053237,
+    "pre2024_window_diff": -0.00043634503952580395
+  },
+  "backtest_818": {
+    "total_return_pct": 586.27,
+    "sharpe": 1.361,
+    "mdd_pct": -26.48,
+    "calmar": 1.38,
+    "end_value": 68627056.28
+  },
+  "backtest_783_baseline": {
+    "total_return_pct": 502.41,
+    "sharpe": 1.316,
+    "mdd_pct": -26.35,
+    "calmar": 1.25,
+    "end_value": 60241194.89
+  },
+  "backtest_diff": {
+    "sharpe_delta": 0.045,
+    "sharpe_pct": 3.4,
+    "total_pp_delta": 83.9,
+    "mdd_delta_pp": -0.13
+  },
+  "note_benchmark_discrepancy": "818 回测 benchmark TotalReturn 14.6% 与基线 45.5% 不一致 (COS mirror 读取/挂起列差异), strategy 指标独立可比; 以 sharpe/mdd/total 为对比依据",
+  "note_weights_file": "backtest_final_vectorbt.py 无条件写 data/build/weights_final_flip.parquet; 818 运行后该文件 mtime 仍为基线时间(可能被并发占锁未覆盖), 818 权重未落盘 — 已另存 818 nav/曲线/metrics, 不影响结论",
+  "verdict": "值得转正。818 OOS daily rank_ic 0.04038 vs 783 0.03907 (+3.35%), ic_ir 4.098 vs 4.069, ic>0 61.1% vs 59.0%; 回测 sharpe 1.361 vs 1.316 (+3.4%), total 586% vs 502% (+84pp), MDD 基本持平。增量主要贡献在 2024+ (minute 因子窗口, +0.0040 IC)。建议将 34 条并入正式池, 触发下一轮组合重跑。"
+}

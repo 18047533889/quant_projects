@@ -83,6 +83,69 @@ def _normalise_date(value: Any) -> str | None:
     return pd.Timestamp(text).strftime("%Y-%m-%d")
 
 
+def _auto_warmup_run_window(
+    *,
+    requested_start: str | None,
+    requested_end: str | None,
+    lookback_bars: int,
+    trim_output: bool,
+    calendar: Any | None,
+) -> tuple[str | None, RunWindow]:
+    """Build the auto-warmup load window, anchoring on a real trading day.
+
+    The data source's ``requested_start`` is a user-supplied calendar date that
+    may fall on a non-trading day (e.g. 2016-01-01).  The real ``TradingCalendar``
+    uses ``anchor_policy="exact_trade_day"`` and fails closed on such bases, so a
+    weekend/holiday start would otherwise abort every factor that needs warmup.
+    When the calendar is available, the warmup anchor is snapped forward to the
+    next trading day (same as the ``next_trade_day`` anchor) before the lookback
+    offset — the load window simply starts from that snapped day and the output
+    is still trimmed back to the user-requested ``requested_start``.
+    """
+    from factor_engine.runtime.run_window import _to_date_str
+
+    requested_start = _to_date_str(requested_start)
+    requested_end = _to_date_str(requested_end)
+    lookback = max(0, int(lookback_bars))
+    if lookback <= 0 or requested_start is None:
+        return requested_start, RunWindow(
+            requested_start=requested_start,
+            requested_end=requested_end,
+            actual_load_start=requested_start,
+            actual_load_end=requested_end,
+            warmup_bars=0,
+            trim_output=trim_output,
+        )
+    from factor_engine.runtime.run_window import _to_date_str as _rw_to_date_str
+
+    anchor = pd.Timestamp(requested_start)
+    load_start_ts: pd.Timestamp | None = None
+    if calendar is not None:
+        try:
+            days = getattr(calendar, "days", None)
+            if days:
+                # anchor forward to the next trading day >= requested_start
+                future = [d for d in days if pd.Timestamp(d).normalize() >= anchor]
+                if future:
+                    snapped = pd.Timestamp(future[0]).normalize()
+                    load_start_ts = calendar.offset(snapped, -lookback)
+        except Exception:
+            load_start_ts = None
+    if load_start_ts is None:
+        # calendar unavailable: fall back to weekday arithmetic
+        from factor_engine.storage.time_window import business_day_offset
+
+        load_start_ts = business_day_offset(requested_start, -lookback, calendar=None)
+    return requested_start, RunWindow(
+        requested_start=requested_start,
+        requested_end=requested_end,
+        actual_load_start=_rw_to_date_str(load_start_ts),
+        actual_load_end=requested_end,
+        warmup_bars=lookback,
+        trim_output=trim_output,
+    )
+
+
 def _direct_full_history_start(data_source: Any) -> str | None:
     direct = getattr(data_source, "full_history_start", None)
     if direct is not None:
@@ -268,11 +331,14 @@ def prepare_run_warmup(
             logger.warning(message)
         else:
             try:
+                from factor_engine.storage.trading_calendar import get_trading_calendar as _get_trading_calendar
+
                 run_window = build_full_history_run_window(
                     requested_start=requested_start,
                     requested_end=requested_end,
                     full_history_start=full_history_start,
                     trim_output=trim_warmup,
+                    calendar=_get_trading_calendar(resolved_market),
                 )
             except ValueError as error:
                 if is_production_mode(engine.run_mode):
@@ -304,7 +370,7 @@ def prepare_run_warmup(
             )
         else:
             calendar = get_trading_calendar(resolved_market)
-            run_window = build_full_run_window(
+            requested_start, run_window = _auto_warmup_run_window(
                 requested_start=requested_start,
                 requested_end=requested_end,
                 lookback_bars=warmup_calendar_bars,

@@ -1,0 +1,52 @@
+r2_evidence:
+  id: lqtp-511-fix-and-2000fac-chain
+  date: '2026-08-30'
+  type: operator-repair + pool-landing + full-chain-rerun
+  summary: 511 个未落盘 LQTP 因子类全部修复，pool 落值 2146 宽表；2000+ 因子 NO_DEDUP 全链重跑并存档
+  mandate: 双语义 DSL 别名（LQTP 名 -> FE 既有 strict 基元，后端同一实现，零新语义，零 Python fallback）
+  parse_layer:
+    fixed: 369 unique missing-function names (ttm 172 / yoy 32 / quarter 16 / nan_to_num 10 / ts_ewm_cov 11 / avg2 4 / ts_sumac / ts_regression_slope_sequence)
+    mapping:
+      - ttm -> fin_ttm（滚动12月，报告期口径）
+      - quarter -> quarter_from_cumulative（累计转单季）
+      - yoy -> fin_yoy（报告期同比，非 250 日近似）
+      - avg2(x) -> (x + financial_lag(x,1))/2（单参，PIT 上一报告期均值）
+      - ts_ewm_cov(x,y,alpha) -> ewm_cov(span=round(1/alpha))
+      - ts_sumac -> ts_sum; ts_regression_slope_sequence -> ts_time_slope
+    files_changed: [factor_engine/api/lqtp_compat.py, factor_engine/fields/catalog.py, factor_engine/ir/analyzer.py, lightgbm_qs/scripts/rebuild_all_factors_from_new_cos.py]
+    result: 2262/2262 parse+analyze OK
+  runtime_layer:
+    scope: 229 factors
+    landed: 216
+    blocked_minute: 12 (Tak_Min_001/002/003/004/006/007/011/012/013, cxy_factor_9, overnight_intraday_decomp, Tak_FTB_D1_006 — 本地无分钟数据)
+    blocked_other: 1 (OAP_EntMult_Proxy — 需平台 DerivedFieldRegistry，禁止猜财务公式)
+    missing: 0
+    key_fixes:
+      - warmup_service/run_window 日历锚点非交易日顺延（另一 AI 的改动，验证保留）
+      - lqtp_compat 裸名 nan/null/quality_tradable_mask/daily_return/momentum(field=)/benchmark_index 位置参数
+      - plan_hash NaN 字面量稳定 __nan__ 标记
+      - pit_contract merge_asof 键统一 datetime64[ns,UTC]
+      - layer_cos_fundamental safe_div(0,0) 标量 NaN 分支
+      - data_access_source IndustrySource 过滤仅对行业表生效
+      - data_cleaning/time_series/polars_ts_stats ewm_std/var alpha 语义映射；ts_zscore 全契约声明
+      - pd_argext 空命中守卫 / polyfit LinAlgError 守卫 / 全标量 where / power 标量标量
+    audit_of_other_ai: ttm/quarter 恒等展开、yoy 250 日近似、avg2 TwoVarOperator 注册均判错并已纠正为 strict 基元映射
+  landing:
+    pool: data/factor_pools/lqtp = 2146 宽表（5460 列全市场）
+    pass1_candidates: 3131（9 池全扫）
+    computed_ok: 2580
+    selected_no_dedup: 783（rank_ic>0.015 翻转后全收，不去重）
+  chain:
+    features: (767745, 784)
+    train: train_opt_adj_flip.py 4 slice 并行, RE_OPT_EVERY=2（6 个月重搜，用户 2026-08-29 指示）
+    label: COS TargetVwapReturnH10 官方靶
+    backtest: vectorbt accurate, exec lag 1, topk30 maxw5% turnover30% tc5bp, benchmark 000985.CSI TR
+    stale_guard: 跑前 rm preds_adj_flip_slice_*；watcher 校验 fresh mtime（手册 #17）
+  result:
+    strategy: total 502.41% / ann 32.90% / sharpe 1.316 / mdd -26.35% / calmar 1.25 / win 54.4%
+    benchmark: total 45.50% / ann 6.12% / sharpe 0.399 / mdd -39.33%
+    excess: total 314.04% / ann 25.24% / sharpe 1.880 / mdd -16.55% / calmar 1.52 / win 53.3%
+    yearly_excess: {2020: +29.3, 2021: +56.6, 2022: +18.7, 2023: +38.7, 2024: +11.5, 2025: +16.0, 2026: -4.0}
+    oos_daily_ic: 1327 days mean 0.0391 / median 0.0319 / ICIR 0.256 / 59.0%>0; 2026 mean -0.013（正常衰减）
+    archive: outputs/run_20260830_2000fac/（CSV + 三线同框线性轴图 + metrics + oos_daily_rank_ic_2000fac.csv）
+  conclusion: 782fac(Sharpe 1.354/超额 1.967) vs 2000fac(1.316/1.880) 持平略降——783 已近该特征池信息上限，瓶颈不在因子数量

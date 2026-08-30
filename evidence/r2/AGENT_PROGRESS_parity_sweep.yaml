@@ -1,0 +1,24 @@
+# PARITY_SWEEP_R56 progress log
+agent: parity_sweep
+started: 2026-08-28
+status: IN_PROGRESS
+step: 4d - clusters A + B + C + D green
+before_counts:
+  A: "2 FAILED + 0 P0-14 ERRORs"
+  B: "4-10 FAILED (ts Inf semantics)"
+  C: "20 FAILED (elementwise/edge min_periods/Inf)"
+  D: "7 FAILED (three_backend ts_corr/group/log_abs/constant/infinity)"
+after_counts:
+  A: "0 FAILED - 10 passed (cs family)"
+  B: "0 FAILED - 31 passed (ts+group+cs families 41 passed)"
+  C: "0 FAILED - 33 elementwise + 18 edge + 34 ts kurt/cov/ewm"
+  D: "0 FAILED - 60 passed + 3 skipped (three_backend) + 109 passed r21_duckdb tier1"
+ops_fixed (cluster D):
+  - "ts_corr: polars_long centered two-pass corr diverged ~1e-10 from pandas; switch to pl.rolling_corr (matches pandas bit-for-bit)"
+  - "group_zscore: pandas whole-group 0 fill when any Inf member (mean=Inf, std=NaN -> 0); polars detects group_has_inf -> zero_fill"
+  - "group_std: same whole-group 0 fill on Inf"
+  - "group_neutralize: pandas finite-mean demean, Inf cell NaN; polars expr + CrossSectionalNeutralizePolars numpy kernel mask Inf cell"
+  - "log_abs: pandas np.log(abs()).replace(inf->nan); polars/SQL mask non-finite log output"
+  - "freq preservation: long_table_to_series rebuilt with pd.MultiIndex.from_product keeping DatetimeIndex freq (backend_parity assert_series_equal check_freq=True)"
+notes:
+  - "run remaining backend_parity: production_core, triple_probe, p0_edge_cases, polars_long_parity, technical, statistical"

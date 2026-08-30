@@ -14,6 +14,12 @@ dependencies = [
     "packaging>=23.0",
     "pyarrow>=14.0",
     "scipy>=1.10",
+    # R55 wheel-matrix smoke: polars is REQUIRED at import time — the
+    # intraday/__init__ bind_whitelist chain (perf_vec_kernels -> smart_money)
+    # imports polars unconditionally, so a wheel installed without the [polars]
+    # extra fails load_all (intraday profile ops unregistered -> static-surface
+    # gate).  It must be a hard dependency, not an optional extra.
+    "polars>=0.20",
 ]
 
 [project.optional-dependencies]
@@ -26,55 +32,86 @@ dev = ["pytest>=8.0", "pydantic>=2.0", "fastapi>=0.110", "build>=1.2"]
 
 [tool.setuptools]
 py-modules = []
-
-[tool.setuptools.packages.find]
-where = ["."]
-include = [
-    # P0-03: SINGLE module identity. `factor_engine` and `factor_engine.*` are
-    # the ONLY importable identities this distribution ships.  Unqualified
-    # top-level packages (api, backend, cache, cleaned_operators, planner,
-    # runtime, ir, expr, fields, market, mining, modeling-consolidated, ...)
-    # are deliberately NOT listed: exposing them under two sys.modules names
-    # would create two OperatorRegistry singletons and defeat the R40
-    # immutable registry contract.  Any legacy `import cleaned_operators` etc.
-    # resolves through the state-free deprecated shims under factor_engine/
-    # (see factor_engine/deprecated_shims.py), never as a second package copy.
+# R55 wheel-matrix #99 caught this: `packages.find` with `package-dir "" = "."`
+# resolves `factor_engine.<name>` to `./factor_engine/<name>/` (which does not
+# exist on disk — the source tree lives AT the repo root), so find_packages
+# returned ZERO packages and the independent factor-engine wheel was EMPTY
+# (0 .py files).  Same failure class as quant_platform #96 and modeling #97.
+# The full explicit list below is the package-dir'd expansion of what
+# find_packages('.' ) actually sees (53 packages, excluding build/audit/scripts/
+# tests/benchmarks), each prefixed with the single canonical `factor_engine.`
+# identity (P0-03 single-module-identity rule preserved: only factor_engine.*
+# is importable from this distribution; the deprecated_shims handle legacy
+# unqualified imports, never a second package copy).
+packages = [
     "factor_engine",
-    "factor_engine.api*",
-    "factor_engine.backend*",
-    "factor_engine.cache*",
-    "factor_engine.cleaned_operators*",
-    "factor_engine.docs*",
-    "factor_engine.export*",
-    "factor_engine.expr*",
-    "factor_engine.factor_recipes*",
-    "factor_engine.fields*",
-    "factor_engine.ir*",
-    "factor_engine.market*",
-    "factor_engine.mining*",
-    "factor_engine.planner*",
-    "factor_engine.planning*",
-    "factor_engine.research_operators*",
-    "factor_engine.research_tools*",
-    "factor_engine.runtime*",
-    "factor_engine.security*",
-    "factor_engine.semantic*",
-    "factor_engine.service*",
-    "factor_engine.storage*",
-    "factor_engine.util*",
-    "factor_engine.validation*",
-    "factor_engine.telemetry*",
-    "factor_engine.audit*",
-    "factor_engine.execution*",
-    "factor_engine.operator_contracts*",
+    "factor_engine.api",
+    "factor_engine.backend",
+    "factor_engine.backend.contracts",
+    "factor_engine.backend.numba_kernels",
+    "factor_engine.backend.q_backend",
+    "factor_engine.backend.sql_pushdown",
+    "factor_engine.cache",
+    "factor_engine.cleaned_operators",
+    "factor_engine.cleaned_operators.ashare",
+    "factor_engine.cleaned_operators.closure",
+    "factor_engine.cleaned_operators.common",
+    "factor_engine.cleaned_operators.cross_section",
+    "factor_engine.cleaned_operators.docs",
+    "factor_engine.cleaned_operators.fundamental",
+    "factor_engine.cleaned_operators.index_listing",
+    "factor_engine.cleaned_operators.intraday",
+    "factor_engine.cleaned_operators.microstructure",
+    "factor_engine.cleaned_operators.overhaul",
+    "factor_engine.cleaned_operators.polars_native",
+    "factor_engine.cleaned_operators.price_volume",
+    "factor_engine.cleaned_operators.relation",
+    "factor_engine.cleaned_operators.search",
+    "factor_engine.cleaned_operators.shareholder",
+    "factor_engine.cleaned_operators.stateful",
+    "factor_engine.cleaned_operators.technical",
+    "factor_engine.cleaned_operators.ts_model",
+    "factor_engine.cleaned_operators.valuation",
+    "factor_engine.docs",
+    "factor_engine.export",
+    "factor_engine.execution",
+    "factor_engine.expr",
+    "factor_engine.factor_recipes",
+    "factor_engine.fields",
+    "factor_engine.ir",
+    "factor_engine.market",
+    "factor_engine.mining",
+    "factor_engine.planner",
+    "factor_engine.planner.lowerings",
+    "factor_engine.planning",
+    "factor_engine.research_operators",
+    "factor_engine.research_tools",
+    "factor_engine.runtime",
+    "factor_engine.runtime.multibackend",
+    "factor_engine.runtime.pipeline",
+    "factor_engine.runtime.quality",
+    "factor_engine.runtime.reconcile",
+    "factor_engine.security",
+    "factor_engine.semantic",
+    "factor_engine.service",
+    "factor_engine.storage",
+    "factor_engine.storage.materialize",
+    "factor_engine.storage.sources",
+    "factor_engine.telemetry",
+    "factor_engine.tools",
+    "factor_engine.util",
+    "factor_engine.validation",
 ]
 
 [tool.setuptools.package-dir]
-"" = "."
+"factor_engine" = "."
 
 [tool.setuptools.package-data]
 "factor_engine.cleaned_operators" = ["docs/*"]
 "factor_engine.docs" = ["*.json", "*.yaml", "*.md", "*.txt"]
+# R55 wheel smoke: composite_evidence.py reads the composite verification
+# manifest at import time; ship the packaged copy inside the wheel.
+"factor_engine.backend" = ["_evidence/*.json"]
 
 [tool.setuptools.exclude-package-data]
 "*" = [
@@ -84,4 +121,6 @@ include = [
     "scripts", "scripts.*",
     "*.pyc", "__pycache__",
     "test_*.py", "*_test.py",
+    "conftest.py",
+    "stress_test*.py",
 ]

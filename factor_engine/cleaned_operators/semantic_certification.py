@@ -148,6 +148,12 @@ PROMOTED_OUT_OF_EXPERIMENTAL: frozenset[str] = frozenset({
     # the snapshot-aligned window (audit §6.8); snapshot_date fixture added.
     "holder_concentration_acceleration",
     "holder_concentration_slope",
+    # R55 platform-audit P0: ts_sma_cn (Chinese/JQ recursive SMA) is a
+    # stateful-but-causal recursive kernel (y=(m*x+(n-m)*prev)/n), production
+    # hardened (full-history replay + last_value checkpoint) and used by 12 LQTP
+    # platform formulas; promote out of experimental like the other CAPM/stateful
+    # families above.
+    "ts_sma_cn",
 })
 
 

@@ -222,11 +222,28 @@ def assign_model_lane(name: str) -> str | None:
     # and fail closed if that authority is unavailable or ambiguous.
     try:
         legacy = importlib.import_module("modeling.legacy")
-        expected = Path(__file__).resolve().parent.parent / "modeling" / "legacy.py"
+        # R55 #97: the sole authority is the repo-root ``modeling`` package,
+        # which lives BESIDE factor_engine/ — the factor_engine/modeling mirror
+        # this guard originally pointed at was deleted in R48 (R48 made root
+        # modeling/ the single authority), so the old ``parent.parent`` path
+        # stopped resolving and assign_model_lane() fail-closed to None for
+        # EVERY canonical.  Resolve the sibling authority by walking upward
+        # from factor_engine's own install root to the nearest
+        # ``modeling/legacy.py``; fail closed when none exists (standalone FE
+        # install without quant-modeling) or when the imported module is not
+        # that file (the guard's original anti-shadow purpose).
+        _authority_file: Path | None = None
+        for _ancestor in (Path(__file__).resolve().parent.parent, *Path(__file__).resolve().parent.parent.parents):
+            _candidate = _ancestor / "modeling" / "legacy.py"
+            if _candidate.is_file():
+                _authority_file = _candidate.resolve()
+                break
+        if _authority_file is None:
+            return None
         actual = Path(getattr(legacy, "__file__", "")).resolve()
         classification_of = getattr(legacy, "classification_of")
         canonical_map = getattr(legacy, "LEGACY_LOCAL_PREDICTIVE_CANONICALS")
-        if actual != expected or not callable(classification_of) or not isinstance(canonical_map, dict):
+        if actual != _authority_file or not callable(classification_of) or not isinstance(canonical_map, dict):
             return None
         if classification_of(name) is not None:
             return "LEGACY_LOCAL_PREDICTIVE"

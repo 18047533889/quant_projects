@@ -104,8 +104,13 @@ def _seed_duckdb(root: Path, source: InMemorySeriesSource) -> None:
             {
                 "TradeDate": timestamp.date(),
                 "Symbol": instrument,
-                "Close": float(close_val) if pd.notna(close_val) and np.isfinite(close_val) else None,
-                "Open": float(open_val) if pd.notna(open_val) and np.isfinite(open_val) else None,
+                # PARITY-SWEEP-R56: keep the exact IEEE value so the DuckDB
+                # backend exercises the same NaN/±Inf inputs the pandas/Polars
+                # backends see.  The old ``np.isfinite`` gate silently turned
+                # +Inf into NULL, which made SQL rolling ops (ts_pct, ts_delay,
+                # ts_delta, ts_autocorr) aggregate over fewer rows than pandas.
+                "Close": float(close_val) if pd.notna(close_val) else None,
+                "Open": float(open_val) if pd.notna(open_val) else None,
                 "Volume": float(source.data["volume"].loc[(timestamp, instrument)]),
                 "Ret": float(source.data["ret"].loc[(timestamp, instrument)]),
             }

@@ -1,0 +1,11 @@
+{
+  "n_oos_days": 1327,
+  "mean_rank_ic_818": 0.04037875348681438,
+  "ic_ir_818": 4.098088724998223,
+  "ic_positive_frac_818": 0.6111529766390355,
+  "n_common_days": 1327,
+  "mean_rank_ic_base_common": 0.03906927106547995,
+  "mean_rank_ic_818_common": 0.04037875348681438,
+  "diff_common": 0.0013094824213344264,
+  "n_folds": 27
+}

@@ -59,16 +59,17 @@ def test_derived_provider_executes_real_multiplication() -> None:
 
     from factor_engine.fields.providers import PROVIDER_REGISTRY, apply_binding_transform
 
+    # ADJ_FIELD_MIGRATION: the A-share continuous_close binding now reads the
+    # precomputed AdjClose on StockDailyBarAdj (identity) — no runtime multiply.
     b = PROVIDER_REGISTRY.require_binding("continuous_close", "ashare")
     out = apply_binding_transform(
         b,
         None,
         fields={
-            "StockDailyBar.Close": np.array([10.0, 20.0]),
-            "StockDailyBar.Factor": np.array([1.5, 2.0]),
+            "StockDailyBarAdj.AdjClose": np.array([10.0, 20.0]),
         },
     )
-    np.testing.assert_allclose(out, [15.0, 40.0])
+    np.testing.assert_allclose(out, [10.0, 20.0])
 
 
 def test_financial_bindings_point_at_statement_datasets() -> None:

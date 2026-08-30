@@ -223,23 +223,32 @@ class TSQuantilePolarsNative(SeriesOperator):
         name="ts_quantile",
         category="time_series",
         description="Rolling quantile",
-        param_names=['feature', 'window', 'quantile'],
+        param_names=['x', 'd', 'q'],
         return_type="series",
         tags=["time_series", "rolling", "pit_safe", "polars_native"],
+        # P0-23 single-logical-authority: canonical (time_series) owns the
+        # contract.  window→d / quantile→q are kernel-internal aliases only.
+        param_aliases={"window": "d", "quantile": "q"},
+        param_specs={
+            "d": ParamSpec(dtype=int, min=1, default=20, searchable=True,
+                           param_role=ParamRole.HORIZON),
+            "q": ParamSpec(dtype=float, min=0, max=1, default=0.5, searchable=True,
+                           param_role=ParamRole.STATE_THRESHOLD),
+        },
     )
-    metadata.param_specs = {
-        "window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
-        "quantile": ParamSpec(dtype=float, min=0.0, max=1.0, default=0.5, param_role=ParamRole.NUMERICAL),
-    }
 
-    def _calculate_series(self, feature, window, quantile=0.5, **kwargs):
+    def _calculate_series(self, x, d: int = 20, q: float = 0.5, **kwargs):
+        from factor_engine.cleaned_operators.common.strict_params import strict_int, strict_probability
+
+        w = strict_int(kwargs.get("window", d), "d", minimum=1)
+        quantile = strict_probability(kwargs.get("quantile", q), "q")
         return (
-            feature.to_frame()
+            x.to_frame()
             .lazy()
             .select([
-                pl.col(feature.name)
-                .rolling_quantile(quantile, window_size=window)
-                .alias(feature.name)
+                pl.col(x.name)
+                .rolling_quantile(quantile, window_size=w)
+                .alias(x.name)
             ])
             .collect()
             .to_series()
@@ -350,15 +359,16 @@ class TSCorrIfPolarsNative(SeriesOperator):
         name="ts_corr_if",
         category="time_series",
         description="Conditional rolling correlation",
-        param_names=['x', 'y', 'condition', 'window'],
+        param_names=['x', 'y', 'condition', 'window', 'min_periods'],
         return_type="series",
         tags=["time_series", "rolling", "pit_safe", "polars_native"],
     )
     metadata.param_specs = {
         "window": ParamSpec(dtype=int, min=2, param_role=ParamRole.HORIZON),
+        "min_periods": ParamSpec(dtype=int, min=1, param_role=ParamRole.SUPPORT_POLICY, searchable=False),
     }
 
-    def _calculate_series(self, x, y, condition, window, **kwargs):
+    def _calculate_series(self, x, y, condition, window, min_periods=2, **kwargs):
         df = pl.DataFrame({"x": x, "y": y, "cond": condition})
         return (
             df.lazy()
@@ -380,15 +390,16 @@ class TSCovIfPolarsNative(SeriesOperator):
         name="ts_cov_if",
         category="time_series",
         description="Conditional rolling covariance",
-        param_names=['x', 'y', 'condition', 'window'],
+        param_names=['x', 'y', 'condition', 'window', 'min_periods'],
         return_type="series",
         tags=["time_series", "rolling", "pit_safe", "polars_native"],
     )
     metadata.param_specs = {
         "window": ParamSpec(dtype=int, min=2, param_role=ParamRole.HORIZON),
+        "min_periods": ParamSpec(dtype=int, min=1, param_role=ParamRole.SUPPORT_POLICY, searchable=False),
     }
 
-    def _calculate_series(self, x, y, condition, window, **kwargs):
+    def _calculate_series(self, x, y, condition, window, min_periods=2, **kwargs):
         df = pl.DataFrame({"x": x, "y": y, "cond": condition})
         return (
             df.lazy()
@@ -821,23 +832,36 @@ class TSTopkSumPolarsNative(SeriesOperator):
         name="ts_topk_sum",
         category="time_series",
         description="Sum of top k values in rolling window",
-        param_names=['feature', 'window', 'k'],
+        param_names=['x', 'd', 'k'],
         return_type="series",
         tags=["time_series", "rolling", "pit_safe", "polars_native"],
+        # Canonical aliases: window→d, n→k (P0-23 single logical authority).
+        param_aliases={"window": "d", "n": "k"},
+        param_specs={
+            "d": ParamSpec(dtype=int, min=1, default=20, searchable=True,
+                           param_role=ParamRole.HORIZON),
+            "k": ParamSpec(dtype=int, min=1, default=None, searchable=True,
+                           param_role=ParamRole.ECONOMIC),
+        },
     )
-    metadata.param_specs = {
-        "window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
-        "k": ParamSpec(dtype=int, min=1, param_role=ParamRole.NUMERICAL),
-    }
 
-    def _calculate_series(self, feature, window, k, **kwargs):
+    def _calculate_series(self, x, d: int = 20, k: int | None = None, **kwargs):
+        from factor_engine.backend.operator_errors import OperatorParameterError
+        from factor_engine.cleaned_operators.common.strict_params import strict_int
+
+        feature = x
+        w = strict_int(kwargs.get("window", d), "d", minimum=1)
+        k_eff = k if k is not None else kwargs.get("n", d)
+        top_k = strict_int(k_eff, "k", minimum=1)
+        if top_k > w:
+            raise OperatorParameterError("k must be <= window")
         return (
             feature.to_frame()
             .lazy()
             .with_columns([
                 pl.col(feature.name)
-                .rolling_map(lambda s: s.top_k(min(k, len(s))).sum() if len(s) > 0 else None,
-                           window_size=window)
+                .rolling_map(lambda s: s.top_k(min(top_k, len(s))).sum() if len(s) > 0 else None,
+                           window_size=w)
                 .alias("result")
             ])
             .select(["result"])
@@ -1186,30 +1210,53 @@ class TSRatioPolarsNative(SeriesOperator):
 
 @register_operator(name="ts_location_shift", canonical="ts_location_shift", backend="polars")
 class TSLocationShiftPolarsNative(SeriesOperator):
-    """(current - rolling_mean) / rolling_std"""
+    """(median(recent) - median(old)) / (MAD(old) + eps)"""
     metadata = OperatorMetadata(
         name="ts_location_shift",
         category="time_series",
-        description="(current - rolling_mean) / rolling_std",
-        param_names=['feature', 'window'],
+        description="Location shift: median displacement normalized by old-window MAD",
+        param_names=['x', 'recent_window', 'old_window', 'min_periods'],
         return_type="series",
         tags=["time_series", "rolling", "pit_safe", "polars_native"],
     )
     metadata.param_specs = {
-        "window": ParamSpec(dtype=int, min=2, param_role=ParamRole.HORIZON),
+        "recent_window": ParamSpec(dtype=int, min=2, param_role=ParamRole.HORIZON),
+        "old_window": ParamSpec(dtype=int, min=2, param_role=ParamRole.HORIZON),
+        "min_periods": ParamSpec(dtype=int, min=1, param_role=ParamRole.SUPPORT_POLICY, searchable=False),
     }
 
-    def _calculate_series(self, feature, window, **kwargs):
-        return (
-            feature.to_frame()
-            .lazy()
-            .select([
-                ((pl.col(feature.name) - pl.col(feature.name).rolling_mean(window)) /
-                 pl.col(feature.name).rolling_std(window))
-                .alias("result")
-            ])
-            .collect()["result"]
-        )
+    def _calculate_series(self, x, recent_window=20, old_window=40, min_periods=5, **kwargs):
+        from factor_engine.cleaned_operators.parameter_validation import strict_integer
+
+        ws = strict_integer(recent_window, "recent_window", minimum=2)
+        wl = strict_integer(old_window, "old_window", minimum=2)
+        mp = max(3, int(min_periods))
+
+        def _shift_fn(recent: np.ndarray, old: np.ndarray) -> float:
+            ra = recent[~np.isnan(recent)]
+            oa = old[~np.isnan(old)]
+            if ra.size < mp or oa.size < mp:
+                return float("nan")
+            mad_o = float(np.median(np.abs(oa - np.median(oa))))
+            if not np.isfinite(mad_o) or mad_o < 1e-12:
+                return float("nan")
+            return (float(np.median(ra)) - float(np.median(oa))) / mad_o
+
+        def _rolling_two_window(series, ws_, wl_, fn):
+            values = series.to_numpy(dtype=float)
+            n = len(values)
+            out = np.full(n, np.nan, dtype=float)
+            for i in range(n):
+                if i < ws_ - 1:
+                    continue
+                recent = values[max(0, i - ws_ + 1): i + 1]
+                if i < wl_ - 1:
+                    continue
+                old = values[max(0, i - wl_ + 1): i + 1]
+                out[i] = fn(recent, old)
+            return pl.Series(out)
+
+        return _rolling_two_window(x, ws, wl, _shift_fn)
 
 
 @register_operator(name="ts_scale_shift", canonical="ts_scale_shift", backend="polars")
@@ -1721,63 +1768,6 @@ class TSDistanceToLowPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="ts_channel_width", canonical="ts_channel_width", backend="polars")
-class TSChannelWidthPolarsNative(SeriesOperator):
-    """rolling_max - rolling_min"""
-    metadata = OperatorMetadata(
-        name="ts_channel_width",
-        category="time_series",
-        description="rolling_max - rolling_min",
-        param_names=['feature', 'window'],
-        return_type="series",
-        tags=["time_series", "rolling", "pit_safe", "polars_native"],
-    )
-    metadata.param_specs = {
-        "window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
-    }
-
-    def _calculate_series(self, feature, window, **kwargs):
-        return (
-            feature.to_frame()
-            .lazy()
-            .select([
-                (pl.col(feature.name).rolling_max(window) -
-                 pl.col(feature.name).rolling_min(window))
-                .alias("result")
-            ])
-            .collect()["result"]
-        )
-
-
-@register_operator(name="ts_channel_width_pct", canonical="ts_channel_width_pct", backend="polars")
-class TSChannelWidthPctPolarsNative(SeriesOperator):
-    """(rolling_max - rolling_min) / rolling_mean"""
-    metadata = OperatorMetadata(
-        name="ts_channel_width_pct",
-        category="time_series",
-        description="(rolling_max - rolling_min) / rolling_mean",
-        param_names=['feature', 'window'],
-        return_type="series",
-        tags=["time_series", "rolling", "pit_safe", "polars_native"],
-    )
-    metadata.param_specs = {
-        "window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
-    }
-
-    def _calculate_series(self, feature, window, **kwargs):
-        return (
-            feature.to_frame()
-            .lazy()
-            .select([
-                ((pl.col(feature.name).rolling_max(window) -
-                  pl.col(feature.name).rolling_min(window)) /
-                 pl.col(feature.name).rolling_mean(window))
-                .alias("result")
-            ])
-            .collect()["result"]
-        )
-
-
 @register_operator(name="ts_channel_position", canonical="ts_channel_position", backend="polars")
 class TSChannelPositionPolarsNative(SeriesOperator):
     """(current - rolling_min) / (rolling_max - rolling_min)"""
@@ -2015,28 +2005,35 @@ class TSExpectedShortfallPolarsNative(SeriesOperator):
         name="ts_expected_shortfall",
         category="time_series",
         description="Mean of worst outcomes (CVaR)",
-        param_names=['feature', 'window', 'alpha'],
+        param_names=['x', 'window', 'q', 'side', 'min_tail_count'],
         return_type="series",
         tags=["time_series", "rolling", "pit_safe", "polars_native"],
     )
     metadata.param_specs = {
         "window": ParamSpec(dtype=int, min=2, param_role=ParamRole.HORIZON),
-        "alpha": ParamSpec(dtype=float, min=0.0, max=1.0, default=0.05, param_role=ParamRole.NUMERICAL),
+        "q": ParamSpec(dtype=float, min=0.0, max=0.5, default=0.05, param_role=ParamRole.NUMERICAL, searchable=False),
+        "side": ParamSpec(dtype=str, choices=("lower", "upper"), default="lower", param_role=ParamRole.POLICY, searchable=False),
+        "min_tail_count": ParamSpec(dtype=int, min=5, default=5, param_role=ParamRole.SUPPORT_POLICY, searchable=False),
     }
 
-    def _calculate_series(self, feature, window, alpha=0.05, **kwargs):
+    def _calculate_series(self, x, window, q=0.05, side="lower", min_tail_count=5, **kwargs):
         def compute_es(s):
             if len(s) == 0:
                 return None
-            cutoff = s.quantile(alpha)
-            worst = s.filter(s <= cutoff)
-            return worst.mean() if len(worst) > 0 else None
+            alpha = float(q)
+            if side == "upper":
+                cutoff = s.quantile(1.0 - alpha)
+                worst = s.filter(s >= cutoff)
+            else:
+                cutoff = s.quantile(alpha)
+                worst = s.filter(s <= cutoff)
+            return worst.mean() if len(worst) >= int(min_tail_count) else None
 
         return (
-            feature.to_frame()
+            x.to_frame()
             .lazy()
             .with_columns([
-                pl.col(feature.name)
+                pl.col(x.name)
                 .rolling_map(compute_es, window_size=window)
                 .alias("result")
             ])
@@ -2052,29 +2049,40 @@ class TSLowerPartialMomentPolarsNative(SeriesOperator):
         name="ts_lower_partial_moment",
         category="time_series",
         description="LPM(n) - mean of (threshold - x)^n for x < threshold",
-        param_names=['feature', 'window', 'threshold', 'n'],
+        param_names=['x', 'window', 'threshold', 'order', 'min_periods'],
         return_type="series",
         tags=["time_series", "rolling", "pit_safe", "polars_native"],
     )
     metadata.param_specs = {
         "window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
         "threshold": ParamSpec(dtype=float, default=0.0, param_role=ParamRole.NUMERICAL),
-        "n": ParamSpec(dtype=int, min=1, default=2, param_role=ParamRole.NUMERICAL),
+        "order": ParamSpec(dtype=float, min=1.0, default=1.0, param_role=ParamRole.NUMERICAL),
+        "min_periods": ParamSpec(dtype=int, min=1, default=2, param_role=ParamRole.SUPPORT_POLICY, searchable=False),
     }
 
-    def _calculate_series(self, feature, window, threshold=0.0, n=2, **kwargs):
+    def _calculate_series(self, x, window, threshold=0.0, order=1.0, min_periods=2, **kwargs):
+        w = max(int(window), 1)
+        thr = float(threshold)
+        ord_ = float(order)
+        mp = max(2, int(min_periods))
+
+        def _lpm_fn(s):
+            arr = s.to_numpy(dtype=float)
+            arr = arr[~np.isnan(arr)]
+            if arr.size < mp:
+                return float("nan")
+            below = np.maximum(thr - arr, 0.0)
+            return float(np.mean(np.power(below, ord_)))
+
         return (
-            feature.to_frame()
+            x.to_frame()
             .lazy()
             .with_columns([
-                pl.when(pl.col(feature.name) < threshold)
-                .then((threshold - pl.col(feature.name)).pow(n))
-                .otherwise(0.0)
-                .alias("_lpm")
+                pl.col(x.name)
+                .rolling_map(_lpm_fn, window_size=w, min_samples=mp)
+                .alias("result")
             ])
-            .select([
-                pl.col("_lpm").rolling_mean(window).alias("result")
-            ])
+            .select(["result"])
             .collect()["result"]
         )
 
@@ -2086,29 +2094,40 @@ class TSUpperPartialMomentPolarsNative(SeriesOperator):
         name="ts_upper_partial_moment",
         category="time_series",
         description="UPM(n) - mean of (x - threshold)^n for x > threshold",
-        param_names=['feature', 'window', 'threshold', 'n'],
+        param_names=['x', 'window', 'threshold', 'order', 'min_periods'],
         return_type="series",
         tags=["time_series", "rolling", "pit_safe", "polars_native"],
     )
     metadata.param_specs = {
         "window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
         "threshold": ParamSpec(dtype=float, default=0.0, param_role=ParamRole.NUMERICAL),
-        "n": ParamSpec(dtype=int, min=1, default=2, param_role=ParamRole.NUMERICAL),
+        "order": ParamSpec(dtype=float, min=1.0, default=1.0, param_role=ParamRole.NUMERICAL),
+        "min_periods": ParamSpec(dtype=int, min=1, default=2, param_role=ParamRole.SUPPORT_POLICY, searchable=False),
     }
 
-    def _calculate_series(self, feature, window, threshold=0.0, n=2, **kwargs):
+    def _calculate_series(self, x, window, threshold=0.0, order=1.0, min_periods=2, **kwargs):
+        w = max(int(window), 1)
+        thr = float(threshold)
+        ord_ = float(order)
+        mp = max(2, int(min_periods))
+
+        def _upm_fn(s):
+            arr = s.to_numpy(dtype=float)
+            arr = arr[~np.isnan(arr)]
+            if arr.size < mp:
+                return float("nan")
+            above = np.maximum(arr - thr, 0.0)
+            return float(np.mean(np.power(above, ord_)))
+
         return (
-            feature.to_frame()
+            x.to_frame()
             .lazy()
             .with_columns([
-                pl.when(pl.col(feature.name) > threshold)
-                .then((pl.col(feature.name) - threshold).pow(n))
-                .otherwise(0.0)
-                .alias("_upm")
+                pl.col(x.name)
+                .rolling_map(_upm_fn, window_size=w, min_samples=mp)
+                .alias("result")
             ])
-            .select([
-                pl.col("_upm").rolling_mean(window).alias("result")
-            ])
+            .select(["result"])
             .collect()["result"]
         )
 
@@ -2363,15 +2382,16 @@ class TSMonotonicityPolarsNative(SeriesOperator):
         name="ts_monotonicity",
         category="time_series",
         description="Measure of monotonic trend: (up_count - down_count) / window",
-        param_names=['feature', 'window'],
+        param_names=['x', 'window', 'min_periods'],
         return_type="series",
         tags=["time_series", "rolling", "pit_safe", "polars_native"],
     )
     metadata.param_specs = {
-        "window": ParamSpec(dtype=int, min=2, param_role=ParamRole.HORIZON),
+        "window": ParamSpec(dtype=int, min=2, default=20, param_role=ParamRole.HORIZON),
+        "min_periods": ParamSpec(dtype=int, min=1, default=3, param_role=ParamRole.SUPPORT_POLICY, searchable=False),
     }
 
-    def _calculate_series(self, feature, window, **kwargs):
+    def _calculate_series(self, x, window=20, min_periods=3, **kwargs):
         return (
             feature.to_frame()
             .lazy()
@@ -2561,17 +2581,23 @@ class TSKamaPolarsNative(SeriesOperator):
         name="ts_kama",
         category="time_series",
         description="Kaufman Adaptive Moving Average",
-        param_names=['feature', 'window', 'fast', 'slow'],
+        param_names=['x', 'er_window', 'fast_period', 'slow_period', 'min_periods'],
         return_type="series",
         tags=["time_series", "rolling", "pit_safe", "polars_native"],
     )
     metadata.param_specs = {
-        "window": ParamSpec(dtype=int, min=2, param_role=ParamRole.HORIZON),
-        "fast": ParamSpec(dtype=int, min=1, default=2, param_role=ParamRole.NUMERICAL),
-        "slow": ParamSpec(dtype=int, min=1, default=30, param_role=ParamRole.NUMERICAL),
+        "er_window": ParamSpec(dtype=int, min=2, param_role=ParamRole.HORIZON),
+        "fast_period": ParamSpec(dtype=int, min=1, default=2, param_role=ParamRole.NUMERICAL),
+        "slow_period": ParamSpec(dtype=int, min=1, default=30, param_role=ParamRole.NUMERICAL),
+        "min_periods": ParamSpec(dtype=int, min=1, param_role=ParamRole.SUPPORT_POLICY, searchable=False),
     }
 
-    def _calculate_series(self, feature, window, fast=2, slow=30, **kwargs):
+    def _calculate_series(self, x, er_window, fast_period=2, slow_period=30, min_periods=None, **kwargs):
+        window = max(int(er_window), 2)
+        fast = int(fast_period)
+        slow = int(slow_period)
+        mp = max(1, int(min_periods or window))
+
         def compute_kama(s):
             if len(s) < window:
                 return None
@@ -2591,20 +2617,20 @@ class TSKamaPolarsNative(SeriesOperator):
                 return s.mean() * (1 - sc) + s[-1] * sc
             return s[-1]
 
-        result = [None] * len(feature)
+        result = [None] * len(x)
         kama = None
 
-        for i in range(len(feature)):
+        for i in range(len(x)):
             if i < window - 1:
                 result[i] = None
             else:
-                window_data = feature[max(0, i - window + 1):i + 1]
+                window_data = x[max(0, i - window + 1):i + 1]
                 if kama is None:
                     kama = window_data.mean()
                 else:
                     # Compute efficiency ratio
-                    change = abs(feature[i] - feature[i - window + 1])
-                    volatility = sum(abs(feature[j] - feature[j-1])
+                    change = abs(x[i] - x[i - window + 1])
+                    volatility = sum(abs(x[j] - x[j-1])
                                    for j in range(i - window + 2, i + 1))
                     er = change / volatility if volatility != 0 else 0
 
@@ -2613,7 +2639,7 @@ class TSKamaPolarsNative(SeriesOperator):
                     slow_sc = 2.0 / (slow + 1)
                     sc = (er * (fast_sc - slow_sc) + slow_sc) ** 2
 
-                    kama = kama + sc * (feature[i] - kama)
+                    kama = kama + sc * (x[i] - kama)
 
                 result[i] = kama
 
@@ -2685,15 +2711,16 @@ class TSMeanReversionHalfLifePolarsNative(SeriesOperator):
         name="ts_mean_reversion_half_life",
         category="time_series",
         description="Half-life of mean reversion (AR(1) model)",
-        param_names=['feature', 'window'],
+        param_names=['x', 'window', 'min_periods'],
         return_type="series",
         tags=["time_series", "rolling", "pit_safe", "polars_native"],
     )
     metadata.param_specs = {
-        "window": ParamSpec(dtype=int, min=3, param_role=ParamRole.HORIZON),
+        "window": ParamSpec(dtype=int, min=3, default=120, param_role=ParamRole.HORIZON),
+        "min_periods": ParamSpec(dtype=int, min=1, default=20, param_role=ParamRole.SUPPORT_POLICY, searchable=False),
     }
 
-    def _calculate_series(self, feature, window, **kwargs):
+    def _calculate_series(self, x, window=120, min_periods=20, **kwargs):
         def compute_half_life(s):
             if len(s) < 3:
                 return None
@@ -2723,11 +2750,11 @@ class TSMeanReversionHalfLifePolarsNative(SeriesOperator):
             return half_life if half_life > 0 else None
 
         return (
-            feature.to_frame()
+            x.to_frame()
             .lazy()
             .with_columns([
-                pl.col(feature.name)
-                .rolling_map(compute_half_life, window_size=window)
+                pl.col(x.name)
+                .rolling_map(compute_half_life, window_size=window, min_samples=min_periods)
                 .alias("result")
             ])
             .select(["result"])
@@ -2797,69 +2824,6 @@ class TSPrevLowPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="ts_swing_amplitude", canonical="ts_swing_amplitude", backend="polars")
-class TSSwingAmplitudePolarsNative(SeriesOperator):
-    """Current swing range (from last pivot)"""
-    metadata = OperatorMetadata(
-        name="ts_swing_amplitude",
-        category="time_series",
-        description="Current swing range (from last pivot)",
-        param_names=['feature', 'window'],
-        return_type="series",
-        tags=["time_series", "rolling", "pit_safe", "polars_native"],
-    )
-    metadata.param_specs = {
-        "window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
-    }
-
-    def _calculate_series(self, feature, window, **kwargs):
-        return (
-            feature.to_frame()
-            .lazy()
-            .with_columns([
-                pl.col(feature.name).rolling_max(window).alias("_high"),
-                pl.col(feature.name).rolling_min(window).alias("_low")
-            ])
-            .select([
-                (pl.col("_high") - pl.col("_low")).alias("result")
-            ])
-            .collect()["result"]
-        )
-
-
-@register_operator(name="ts_swing_amplitude_pct", canonical="ts_swing_amplitude_pct", backend="polars")
-class TSSwingAmplitudePctPolarsNative(SeriesOperator):
-    """Swing amplitude as percentage of price"""
-    metadata = OperatorMetadata(
-        name="ts_swing_amplitude_pct",
-        category="time_series",
-        description="Swing amplitude as percentage of price",
-        param_names=['feature', 'window'],
-        return_type="series",
-        tags=["time_series", "rolling", "pit_safe", "polars_native"],
-    )
-    metadata.param_specs = {
-        "window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
-    }
-
-    def _calculate_series(self, feature, window, **kwargs):
-        return (
-            feature.to_frame()
-            .lazy()
-            .with_columns([
-                pl.col(feature.name).rolling_max(window).alias("_high"),
-                pl.col(feature.name).rolling_min(window).alias("_low")
-            ])
-            .select([
-                pl.when(pl.col(feature.name) != 0)
-                .then((pl.col("_high") - pl.col("_low")) / pl.col(feature.name))
-                .otherwise(None)
-                .alias("result")
-            ])
-            .collect()["result"]
-        )
-
-
 # ============================================================================
 # Path & Efficiency
 # ============================================================================
@@ -2871,15 +2835,21 @@ class TSPathEfficiencyPolarsNative(SeriesOperator):
         name="ts_path_efficiency",
         category="time_series",
         description="Straight-line distance / path distance",
-        param_names=['feature', 'window'],
+        # PARITY-SWEEP-R56: match the pandas reference contract
+        # (alpha_language_shape.TsPathEfficiency: x, window, min_periods) so the
+        # R4-100 arity gate does not flag the polars backend as accepting fewer
+        # positional params than the canonical reference.
+        param_names=['x', 'window', 'min_periods'],
         return_type="series",
         tags=["time_series", "rolling", "pit_safe", "polars_native"],
     )
     metadata.param_specs = {
         "window": ParamSpec(dtype=int, min=2, param_role=ParamRole.HORIZON),
+        "min_periods": ParamSpec(dtype=int, min=2, default=2, searchable=False,
+                                 param_role=ParamRole.SUPPORT_POLICY),
     }
 
-    def _calculate_series(self, feature, window, **kwargs):
+    def _calculate_series(self, x, window, min_periods=2, **kwargs):
         def compute_efficiency(s):
             if len(s) < 2:
                 return None
@@ -3391,15 +3361,16 @@ class TSBetaIfPolarsNative(SeriesOperator):
         name="ts_beta_if",
         category="time_series",
         description="Conditional rolling beta: cov(x,y) / var(y)",
-        param_names=['x', 'y', 'condition', 'window'],
+        param_names=['y', 'x', 'condition', 'window', 'min_periods'],
         return_type="series",
         tags=["time_series", "rolling", "pit_safe", "polars_native"],
     )
     metadata.param_specs = {
         "window": ParamSpec(dtype=int, min=2, param_role=ParamRole.HORIZON),
+        "min_periods": ParamSpec(dtype=int, min=1, param_role=ParamRole.SUPPORT_POLICY, searchable=False),
     }
 
-    def _calculate_series(self, x, y, condition, window, **kwargs):
+    def _calculate_series(self, y, x, condition, window, min_periods=2, **kwargs):
         df = pl.DataFrame({"x": x, "y": y, "cond": condition})
 
         return (
@@ -3508,19 +3479,21 @@ class TSExpectedShortfallAsymmetryPolarsNative(SeriesOperator):
         name="ts_expected_shortfall_asymmetry",
         category="time_series",
         description="Ratio of upper ES to lower ES",
-        param_names=['feature', 'window', 'alpha'],
+        param_names=['x', 'window', 'q', 'min_tail_count'],
         return_type="series",
         tags=["time_series", "rolling", "pit_safe", "polars_native"],
     )
     metadata.param_specs = {
         "window": ParamSpec(dtype=int, min=10, param_role=ParamRole.HORIZON),
-        "alpha": ParamSpec(dtype=float, min=0.0, max=1.0, default=0.05, param_role=ParamRole.NUMERICAL),
+        "q": ParamSpec(dtype=float, min=0.0, max=0.5, default=0.05, param_role=ParamRole.NUMERICAL, searchable=False),
+        "min_tail_count": ParamSpec(dtype=int, min=3, default=3, param_role=ParamRole.SUPPORT_POLICY, searchable=False),
     }
 
-    def _calculate_series(self, feature, window, alpha=0.05, **kwargs):
+    def _calculate_series(self, x, window, q=0.05, min_tail_count=3, **kwargs):
         def compute_es_asymmetry(s):
             if len(s) < 10:
                 return None
+            alpha = float(q)
             lower_cutoff = s.quantile(alpha)
             upper_cutoff = s.quantile(1 - alpha)
 
@@ -3535,10 +3508,10 @@ class TSExpectedShortfallAsymmetryPolarsNative(SeriesOperator):
             return np.where(abs(lower_es) != 0, (upper_es) / (abs(lower_es)), np.nan)
 
         return (
-            feature.to_frame()
+            x.to_frame()
             .lazy()
             .with_columns([
-                pl.col(feature.name)
+                pl.col(x.name)
                 .rolling_map(compute_es_asymmetry, window_size=window)
                 .alias("result")
             ])
@@ -3617,15 +3590,16 @@ class TSDistanceCorrPolarsNative(SeriesOperator):
         name="ts_distance_corr",
         category="time_series",
         description="Distance correlation (detects nonlinear dependencies)",
-        param_names=['x', 'y', 'window'],
+        param_names=['x', 'y', 'window', 'min_periods'],
         return_type="series",
         tags=["time_series", "rolling", "pit_safe", "polars_native"],
     )
     metadata.param_specs = {
         "window": ParamSpec(dtype=int, min=2, param_role=ParamRole.HORIZON),
+        "min_periods": ParamSpec(dtype=int, min=10, param_role=ParamRole.SUPPORT_POLICY, searchable=False),
     }
 
-    def _calculate_series(self, x, y, window, **kwargs):
+    def _calculate_series(self, x, y, window, min_periods=10, **kwargs):
         def compute_dcor(x_s, y_s):
             if len(x_s) < 2:
                 return None
@@ -3679,15 +3653,16 @@ class TSDistanceCovPolarsNative(SeriesOperator):
         name="ts_distance_cov",
         category="time_series",
         description="Distance covariance",
-        param_names=['x', 'y', 'window'],
+        param_names=['x', 'y', 'window', 'min_periods'],
         return_type="series",
         tags=["time_series", "rolling", "pit_safe", "polars_native"],
     )
     metadata.param_specs = {
-        "window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
+        "window": ParamSpec(dtype=int, min=2, param_role=ParamRole.HORIZON),
+        "min_periods": ParamSpec(dtype=int, min=10, param_role=ParamRole.SUPPORT_POLICY, searchable=False),
     }
 
-    def _calculate_series(self, x, y, window, **kwargs):
+    def _calculate_series(self, x, y, window, min_periods=10, **kwargs):
         def compute_dcov(x_s, y_s):
             if len(x_s) < 2:
                 return None
@@ -4055,16 +4030,17 @@ class TSExpectilePolarsNative(SeriesOperator):
         name="ts_expectile",
         category="time_series",
         description="Rolling expectile (asymmetric mean)",
-        param_names=['feature', 'window', 'tau'],
+        param_names=['x', 'window', 'tau', 'n_min'],
         return_type="series",
         tags=["time_series", "rolling", "pit_safe", "polars_native"],
     )
     metadata.param_specs = {
         "window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
-        "tau": ParamSpec(dtype=float, min=0.0, max=1.0, default=0.5, param_role=ParamRole.NUMERICAL),
+        "tau": ParamSpec(dtype=float, min=0.0, max=1.0, default=0.5, param_role=ParamRole.NUMERICAL, searchable=False),
+        "n_min": ParamSpec(dtype=int, min=2, default=2, param_role=ParamRole.SUPPORT_POLICY, searchable=False),
     }
 
-    def _calculate_series(self, feature, window, tau=0.5, **kwargs):
+    def _calculate_series(self, x, window, tau=0.5, n_min=2, **kwargs):
         def compute_expectile(s):
             if len(s) == 0:
                 return None
@@ -4087,10 +4063,10 @@ class TSExpectilePolarsNative(SeriesOperator):
             return mu
 
         return (
-            feature.to_frame()
+            x.to_frame()
             .lazy()
             .with_columns([
-                pl.col(feature.name)
+                pl.col(x.name)
                 .rolling_map(compute_expectile, window_size=window)
                 .alias("result")
             ])

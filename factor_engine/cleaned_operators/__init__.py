@@ -842,13 +842,13 @@ def _normalize_polars_ts_legacy_surface(
         # re-keying these here makes the whole rolling family callable by its
         # canonical ``window`` name on BOTH backends.  ``d`` stays exposed as the
         # parser-level alias (legacy factor DSL), never as a declared parameter.
-        "ts_mean": ("x", "window"),
-        "ts_std": ("x", "window"),
-        "ts_sum": ("x", "window"),
-        "ts_max": ("x", "window"),
-        "ts_min": ("x", "window"),
-        "ts_median": ("x", "window"),
-        "ts_kurt": ("x", "window"),
+        "ts_mean": ("x", "window", "min_periods"),
+        "ts_std": ("x", "window", "min_periods"),
+        "ts_sum": ("x", "window", "min_periods"),
+        "ts_max": ("x", "window", "min_periods"),
+        "ts_min": ("x", "window", "min_periods"),
+        "ts_median": ("x", "window", "min_periods"),
+        "ts_kurt": ("x", "window", "min_periods"),
         "ts_delta": ("x", "window"),
         "ts_argmax": ("x", "window"),
         "ts_argmin": ("x", "window"),

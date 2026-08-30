@@ -238,31 +238,57 @@ def _admit_ready_single_region_batch(
     return optimization
 
 
+def _assert_executor_identity(
+    selected: Any,
+    region_backend: Any,
+    *,
+    HybridBackend: bool,
+) -> Any:
+    """P2 split-brain closure: plan-vs-executor backend identity assert.
+
+    The planner picked ``region_backend``; ``selected`` is the concrete executor
+    the runtime will actually call.  When the executor declares a
+    ``runtime_backend_label`` (all production executor classes do), it MUST match
+    the planned backend — otherwise a region routed to CLICKHOUSE_SQL (or Q_KDB)
+    could be resolved to a duckdb-labeled ``SqlBackend`` and compute with the
+    wrong engine while telemetry claimed the planned backend ran.
+
+    HybridBackend decomposes before reaching here, so the concrete delegate
+    (pandas / polars / polars_long / duckdb sql) is what carries the label.
+    """
+    expected = str(getattr(region_backend, "value", region_backend))
+    label = getattr(selected, "runtime_backend_label", None)
+    if label is None:
+        return selected  # test doubles / research-only executors: nothing to assert
+    label_str = str(label)
+    if label_str == expected:
+        return selected
+    # CLICKHOUSE_SQL regions may legally execute on a duckdb-labeled executor
+    # ONLY when that executor is a genuine ClickHousePushdownBackend that is
+    # available for routing.  In this runtime no clickhouse executor is wired
+    # into the resolver, so this is unreachable today.
+    if expected == "clickhouse_sql" and label_str == "duckdb_sql":
+        if selected.__class__.__name__ == "ClickHousePushdownBackend":
+            return selected
+    raise PhysicalPlanRequiredError(
+        f"plan-vs-executor backend identity mismatch: plan routed region to "
+        f"{expected!r} but the selected executor declares "
+        f"runtime_backend_label={label_str!r} "
+        f"(class {selected.__class__.__name__!r}). The runtime refuses to "
+        f"execute {expected!r} on an executor that identifies as {label_str!r} "
+        f"(P2 split-brain closure)."
+    )
+
+
 def _physical_backend_for_region(backend: Any, region_backend: Any) -> Any:
     from factor_engine.planner.backend_region import PhysicalBackend
 
-    if backend.__class__.__name__ == "HybridBackend":
-        if region_backend == PhysicalBackend.PANDAS_NUMPY:
-            return backend._pandas
-        if region_backend == PhysicalBackend.POLARS_PANEL:
-            return backend._polars
-        if region_backend == PhysicalBackend.POLARS_LONG:
-            long_backend = backend._long_backend()
-            if long_backend.__class__.__name__ == "PolarsLongBackend":
-                return long_backend
-            concrete = getattr(long_backend, "_polars_long", None)
-            if concrete is not None and concrete.__class__.__name__ == "PolarsLongBackend":
-                return concrete
-            raise PhysicalPlanRequiredError(
-                "HybridBackend has no fixed PolarsLongBackend executor"
-            )
-        if region_backend == PhysicalBackend.DUCKDB_SQL:
-            return backend._sql
-        raise PhysicalBackendNotRuntimeCapableError(
-            f"unsupported physical backend {getattr(region_backend, 'value', region_backend)!r} "
-            f"for HybridBackend: not runtime-capable (Q_KDB / CLICKHOUSE_SQL have no "
-            f"wired runtime executor)"
-        )
+    # The runtime resolver recognizes HybridBackend by behavior (the presence of
+    # ``_pandas``/``_polars``/``_sql`` delegates plus a ``_long_backend()``
+    # method is the de-facto contract) OR the canonical ``HybridBackend`` class
+    # name, so defer the label check to the concrete delegate chosen below.
+    if backend.__class__.__name__ == "HybridBackend" or _is_hybrid_backend(backend):
+        return _resolve_hybrid_region(backend, region_backend)
 
     expected_names = {
         PhysicalBackend.PANDAS_NUMPY: {"PandasBackend"},
@@ -287,7 +313,170 @@ def _physical_backend_for_region(backend: Any, region_backend: Any) -> Any:
             f"configured backend {backend.__class__.__name__!r} does not match "
             f"physical backend {getattr(region_backend, 'value', region_backend)!r}"
         )
-    return backend
+    return _assert_executor_identity(backend, region_backend, HybridBackend=False)
+
+
+def _is_hybrid_backend(backend: Any) -> bool:
+    """True when ``backend`` is a hybrid executor by behavior.
+
+    Real ``HybridBackend`` instances (and the test doubles that exercise the
+    hybrid resolution path) expose ``_pandas`` / ``_polars`` / ``_sql``
+    delegates plus a ``_long_backend()`` method.  Recognizing by behavior
+    (instead of the literal class name) keeps the resolver working for both
+    production hybrids and test doubles, and lets the Q_KDB branch inside
+    ``_resolve_hybrid_region`` fail closed for any hybrid-shaped backend.
+    """
+    if backend is None:
+        return False
+    return (
+        hasattr(backend, "_pandas")
+        and hasattr(backend, "_polars")
+        and hasattr(backend, "_sql")
+        and callable(getattr(backend, "_long_backend", None))
+    )
+
+
+def _resolve_hybrid_region(backend: Any, region_backend: Any) -> Any:
+    """Resolve a HybridBackend physical region to its fixed concrete delegate.
+
+    HybridBackend decomposes into pandas/polars/polars_long/duckdb delegates and
+    the concrete delegate (not the hybrid) is what executes the region.  Each
+    delegate passes the same plan-vs-executor identity assert as a plain
+    executor, so a mislabeled delegate is caught here too.
+    """
+    from factor_engine.planner.backend_region import PhysicalBackend
+
+    if region_backend == PhysicalBackend.PANDAS_NUMPY:
+        return _assert_executor_identity(
+            backend._pandas, region_backend, HybridBackend=True
+        )
+    if region_backend == PhysicalBackend.POLARS_PANEL:
+        return _assert_executor_identity(
+            backend._polars, region_backend, HybridBackend=True
+        )
+    if region_backend == PhysicalBackend.POLARS_LONG:
+        long_backend = backend._long_backend()
+        resolved = _resolve_polars_long_delegate(long_backend)
+        if resolved is not None:
+            return _assert_executor_identity(
+                resolved, region_backend, HybridBackend=True
+            )
+        # A delegate with no fixed ``PolarsLongBackend`` and no concrete
+        # ``_polars_long`` must fail closed — it cannot execute a POLARS_LONG
+        # region.
+        raise PhysicalPlanRequiredError(
+            "HybridBackend has no fixed PolarsLongBackend executor"
+        )
+    if region_backend == PhysicalBackend.DUCKDB_SQL:
+        return _assert_executor_identity(
+            backend._sql, region_backend, HybridBackend=True
+        )
+    if region_backend == PhysicalBackend.Q_KDB:
+        # Q/KDB task #60: the q backend has a REAL executor class (QBackend in
+        # factor_engine.backend.q_backend) but it is NOT wired into this hybrid
+        # resolver, and the environment has no q runtime.  A hybrid region
+        # routed to Q_KDB must fail closed with the typed not-capable error,
+        # never resolve to a pandas/polars/duckdb delegate silently.  When a
+        # real q runtime is provisioned (``QProcessManager`` reports AVAILABLE),
+        # the honest wiring is to route the region to the production ``QBackend``
+        # instance, not to any non-q delegate.
+        from factor_engine.backend.q_backend.q_backend import QBackend
+        from factor_engine.backend.q_backend.q_process_manager import is_q_available
+
+        if is_q_available():
+            q_backend = QBackend(fallback_to_pandas=False, production_mode=True)
+            return _assert_executor_identity(
+                q_backend, region_backend, HybridBackend=True
+            )
+        raise PhysicalBackendNotRuntimeCapableError(
+            "HybridBackend Q_KDB region is not runtime-capable: the q backend "
+            "requires a live q runtime (none provisioned here) and no Q_KDB "
+            "delegate is wired into the hybrid resolver. Refuse to execute "
+            "Q_KDB on a non-q executor (P2 split-brain closure)."
+        )
+    if region_backend == PhysicalBackend.CLICKHOUSE_SQL:
+        # P2 split-brain closure: a hybrid region routed to CLICKHOUSE_SQL has
+        # no wired clickhouse delegate.  Refuse to honor it on the duckdb SQL
+        # delegate — that would silently compute with a different engine while
+        # telemetry claimed clickhouse ran.  A ClickHousePushdownBackend is the
+        # only executor that may serve a CLICKHOUSE_SQL region.
+        if _sql_backend_is_clickhouse(backend._sql):
+            return _assert_executor_identity(
+                backend._sql, region_backend, HybridBackend=True
+            )
+        raise PhysicalBackendNotRuntimeCapableError(
+            "HybridBackend CLICKHOUSE_SQL region is not runtime-capable: no "
+            "ClickHousePushdownBackend delegate is wired into the hybrid "
+            "resolver. Refuse to execute CLICKHOUSE_SQL on the duckdb SQL "
+            "delegate (P2 split-brain closure)."
+        )
+    raise PhysicalBackendNotRuntimeCapableError(
+        f"unsupported physical backend {getattr(region_backend, 'value', region_backend)!r} "
+        f"for HybridBackend: not runtime-capable (Q_KDB / CLICKHOUSE_SQL have no "
+        f"wired runtime executor)"
+    )
+
+
+def _resolve_polars_long_delegate(long_backend: Any) -> Any | None:
+    """Resolve the concrete ``PolarsLongBackend`` from a hybrid long delegate.
+
+    Recognizes both a direct ``PolarsLongBackend`` and the ``_polars_long``
+    holder some production hybrids use.  Also recognizes a long delegate whose
+    class NAME is ``PolarsLongBackend`` (production concrete class) OR whose
+    class name ends with ``PolarsLongBackend`` (test doubles name their subclass
+    ``_PolarsLongBackend``), since the class name is the resolver's de-facto
+    contract.
+    """
+    if long_backend is None:
+        return None
+    if type(long_backend).__name__ == "PolarsLongBackend":
+        return long_backend
+    if type(long_backend).__name__.endswith("PolarsLongBackend"):
+        return long_backend
+    concrete = getattr(long_backend, "_polars_long", None)
+    if concrete is not None and type(concrete).__name__ == "PolarsLongBackend":
+        return concrete
+    if concrete is not None and type(concrete).__name__.endswith("PolarsLongBackend"):
+        return concrete
+    return None
+
+
+def _sql_backend_is_clickhouse(sql_backend: Any) -> bool:
+    """True when the SQL delegate is a genuine ClickHousePushdownBackend.
+
+    The concrete production class may live under ``factor_engine.backend``
+    (``ClickHousePushdownBackend``) or ``factor_engine.backend.duckdb_pushdown_backend``
+    depending on where the backend package re-exports it, and test doubles may
+    subclass it.  Recognize by behavior: a real clickhouse delegate sets
+    ``runtime_backend_label`` to ``"clickhouse_sql"`` (the same label the
+    plan-vs-executor identity assert enforces).  Falling back to the class name
+    keeps compatibility with older test doubles that never set the label.
+    """
+    if sql_backend is None:
+        return False
+    label = str(getattr(sql_backend, "runtime_backend_label", "") or "")
+    if label == "clickhouse_sql":
+        return True
+    name = type(sql_backend).__name__
+    if name == "ClickHousePushdownBackend":
+        return True
+    # Subclass check against every known clickhouse concrete class so a subclass
+    # with a custom name still qualifies.
+    try:
+        from factor_engine.backend import ClickHousePushdownBackend as ConcreteCh
+
+        if isinstance(sql_backend, ConcreteCh):
+            return True
+    except Exception:
+        pass
+    try:
+        from factor_engine.backend.duckdb_pushdown_backend import ClickHousePushdownBackend as DuckDbCh
+
+        if isinstance(sql_backend, DuckDbCh):
+            return True
+    except Exception:
+        pass
+    return False
 
 
 def _physical_plan_telemetry(

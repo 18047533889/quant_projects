@@ -8020,13 +8020,13 @@ class DataAccessStore:
 
             store.compute_and_write(
                 '''
-                SELECT TradeDate AS datetime, Symbol AS asset, Close AS value
-                FROM {{ashare_stock_daily}}
+                SELECT TradeDate AS datetime, Symbol AS asset, AdjClose AS value
+                FROM {{ashare_stock_daily_adj}}
                 ''',
-                read_datasets=["ashare_stock_daily"],
-                read_time_ranges={"ashare_stock_daily": ("2024-01-01", "2024-01-31")},
+                read_datasets=["ashare_stock_daily_adj"],
+                read_time_ranges={"ashare_stock_daily_adj": ("2024-01-01", "2024-01-31")},
                 write_dataset="factor_lake_staging",
-                factor_id="close_raw_v1",
+                factor_id="close_adj_v1",
                 mode="overwrite",
                 partition_by=["year"],
                 # 可选：自定义结果落盘根（或 write_dir= 指定最终目录）

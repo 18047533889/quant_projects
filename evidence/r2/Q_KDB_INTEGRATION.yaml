@@ -1,0 +1,55 @@
+# -*- coding: utf-8 -*-
+# Q/KDB truthful fail-closed integration gate — evidence backfill
+# (backlog task #60; work already in working tree; manifest was missing)
+task_id: Q_KDB_INTEGRATION
+schema_version: 1
+generation_timestamp: 2026-08-28
+current_sha: fa9b6eb1461cd9d1f87cd8d41aa3e6b55747361f
+head_sha: working-tree (uncommitted)
+status: CLOSED_LOCAL
+production_certification: NOT_RUN
+
+owned_files:
+  - factor_engine/backend/q_backend/q_backend.py        # QBackend construction raises BackendUnavailableError when no live q runtime
+  - factor_engine/backend/q_backend/q_process_manager.py # check_availability() reports UNAVAILABLE (never fabricated AVAILABLE); is_q_available() probe
+  - factor_engine/backend/q_backend/q_errors.py          # QUnavailableError (typed, subclass of QProcessUnavailableError)
+  - factor_engine/backend/q_backend/q_executor.py         # readiness check honestly reports not-ready; raises typed QUnavailableError
+  - factor_engine/backend/q_backend/__init__.py           # public exports: is_q_available, QUnavailableError
+  - factor_engine/backend/operator_capability.py          # BackendUnavailableError (imported by the gate)
+  - factor_engine/tests/q_backend/test_q_truthful_gate.py # NEW — locks in honest fail-closed behavior
+  - factor_engine/tests/q_backend/test_q_backend.py
+  - factor_engine/tests/q_backend/test_q_backend_basic.py
+  - factor_engine/tests/q_backend/test_q_compatibility_contract.py
+  - factor_engine/tests/q_backend/test_q_executor_recovery.py
+  - evidence/r2/Q_KDB_INTEGRATION.yaml
+
+scope: |
+  The q backend must have a REAL integration path — an actual q connection OR
+  an honest "not available in this env" fail-closed gate, never a fake success.
+  This environment has no q/kdb+ binary, no pykx/qpython/pyq client, and no
+  Q_LICENSED env. The gate locks in: check_availability() reports
+  UNAVAILABLE with a clear message; QBackend() raises BackendUnavailableError;
+  executor readiness honestly reports not-ready; Q_ENABLE alone cannot
+  manufacture an available runtime.
+
+verification:
+  - command: |
+      cd /home/sunhaiwei/quant_projects && PYTHONPATH=factor_engine .venv/bin/python -m pytest \
+        factor_engine/tests/q_backend/ -q -p no:cacheprovider
+    result: "158 passed, 2 skipped in 80.29s (0:01:20)"   # REAL OUTPUT (2026-08-28)
+    notes: |
+      2 skips are honest NOT_RUN (pykx not installed; q runtime unavailable).
+      Warnings only: unknown pytest.mark.benchmark; deprecation of
+      capability_registry import path.
+  - command: functional probe (real output captured 2026-08-28)
+    result: |
+      is_q_available() -> False
+      check_availability -> QProcessInfo(status=<QAvailabilityStatus.UNAVAILABLE: 'UNAVAILABLE'>, version=None, process_id=None, pykx_version=None, error_message="PyKX not installed: No module named 'pykx'")
+      QBackend() raised BackendUnavailableError: QBackend requires a live q runtime and none is available in this environment. Status: UNAVAILABLE. Error: PyKX not insta...
+
+residual_risks:
+  - "No real q/kdb+ to exercise the available path; only the fail-closed side is verified here."
+  - "test_q_benchmark marker is an unknown pytest mark (benchmark plugin absent) — cosmetic."
+no_defect: true
+commit: NOT_CREATED
+remotes: NOT_USED

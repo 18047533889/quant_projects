@@ -67,7 +67,7 @@ OUT = os.path.join(ROOT, "outputs")
 
 PREDICTIONS = os.environ.get("PREDICTIONS", os.path.join(BUILD, "predictions.parquet"))
 VWAP_TRAD = os.environ.get("VWAP_TRAD", os.path.join(PANEL, "vwap_trad_adj.parquet"))
-FWD_RET10 = os.environ.get("FWD_RET10", os.path.join(PANEL, "fwd_ret10.parquet"))
+FWD_RET10 = os.environ.get("FWD_RET10", os.path.join(PANEL, "fwd_ret10_adj.parquet"))
 
 WEIGHTS_OUT = os.path.join(BUILD, "weights.parquet")
 METRICS_OUT = os.path.join(OUT, "metrics.txt")
@@ -194,14 +194,18 @@ def _enforce_turnover(target, prev, max_turnover):
 def run_backtest(wmat, asset_ret, tc_bps):
     """Daily strategy returns from a weights matrix + asset returns.
 
-    Previous rebalance weights are carried forward day-by-day; on day t the weights
-    used are those known at t-1 (shift(1)) -> no look-ahead.  A transaction cost
-    tc_bps * one-way-turnover is charged on every day's actual weight change.
+    Timing semantics (2026-08-28 user-mandated, aligned to COS TargetVwapReturnH10):
+      - wmat[t] = weights HELD during day t (established at the Vwap of day t, i.e. the
+        rebalance decision made on day t-1 takes effect at day t's Vwap).
+      - Day-t strategy return = sum(wmat[t] * ret[t]) with ret[t] = Vwap[t+1]/Vwap[t]-1.
+        NO shift(1): the weights matrix already encodes the day of execution. This is
+        the "today compute factor -> tomorrow order at tomorrow's Vwap" convention.
+    A transaction cost tc_bps * one-way-turnover is charged on every day's weight change.
     Returns (strat, turnover) where turnover is the daily one-way turnover series.
     """
     r = asset_ret.fillna(0.0)
     w = wmat.replace(0.0, np.nan).ffill().fillna(0.0)   # carry previous rebalance
-    strat = (w.shift(1) * r).sum(axis=1, min_count=1)
+    strat = (w * r).sum(axis=1, min_count=1)             # no shift: w[t] eats ret[t]
     prev = w.shift(1).fillna(0.0)
     to = w.sub(prev).abs().sum(axis=1) / 2.0            # one-way turnover / day
     strat = strat - tc_bps * to
@@ -237,6 +241,48 @@ def plot_charts(eq, oos_ret, wmat, rebal_dates, pm, fwd, ret, m):
     plt.tight_layout()
     fig.savefig(os.path.join(OUT, "equity_curve.png"), dpi=150)
     plt.close(fig)
+
+    # ---- 1b. excess curve (strategy NAV / benchmark NAV) ----------------------
+    # 几何超额 = 策略净值 ÷ 基准净值；>1 表示跑赢基准。
+    excess = eq["strategy"] / eq["bench"]
+    ex_sharpe = None
+    try:
+        ex_ret = eq["strategy"].pct_change() - eq["bench"].pct_change()
+        ex_sharpe = float(ex_ret.mean() / (ex_ret.std(ddof=1) + 1e-12) * np.sqrt(TRADING_DAYS))
+    except Exception:
+        pass
+    fig, ax = plt.subplots(figsize=(11, 4.6))
+    fig.patch.set_facecolor("white")
+    ax.set_facecolor(SURF)
+    ax.plot(excess.index, excess.values, lw=1.8, color=C_AQUA,
+            label="Excess NAV (strategy / benchmark)" +
+                  ("" if ex_sharpe is None else " (excess Sharpe %.2f)" % ex_sharpe))
+    ax.axhline(1.0, color=INK2, lw=0.8, ls="--", alpha=0.6, label="parity = 1.0")
+    ax.set_title("Excess Curve (geometric, vs equal-weight benchmark) - Vwap basis, OOS")
+    ax.set_xlabel("Date")
+    ax.set_ylabel("Excess NAV")
+    ax.grid(True, color=GRID, lw=0.7, alpha=0.8)
+    ax.legend(loc="best")
+    ax.xaxis.set_major_formatter(mdates.DateFormatter("%Y-%m"))
+    plt.tight_layout()
+    fig.savefig(os.path.join(OUT, "excess_curve.png"), dpi=150)
+    plt.close(fig)
+
+    # ---- 1c. 三条曲线的日度值输出 CSV（策略/基准/超额 净值 + 日收益）------------
+    try:
+        curve = pd.DataFrame({
+            "strategy_nav": eq["strategy"],
+            "benchmark_nav": eq["bench"],
+            "excess_nav": excess,
+        })
+        curve["strategy_ret"] = eq["strategy"].pct_change()
+        curve["benchmark_ret"] = eq["bench"].pct_change()
+        curve["excess_ret"] = curve["strategy_ret"] - curve["benchmark_ret"]
+        curve.index.name = "date"
+        curve.to_csv(os.path.join(OUT, "equity_curves.csv"), float_format="%.8f")
+        log("[port] wrote %s (%d rows)" % (os.path.join(OUT, "equity_curves.csv"), len(curve)))
+    except Exception as e:
+        log("[port]  WARN: equity_curves.csv failed (%s: %s)" % (type(e).__name__, e))
 
     # ---- 2. drawdown ----------------------------------------------------------
     dd = eq["strategy"] / eq["strategy"].cummax() - 1.0
@@ -399,7 +445,11 @@ def run_portfolio(top_k, max_weight, max_turnover, tc_bps, pred, vwap, fwd,
         # moments of those names. This is a top-K-selection pipeline, NOT an expected-return
         # pipeline. If it is ever meant to be an expected-return pipeline, mu must come from
         # the model predictions and this comment must be revisited.
-        rsub = ret.iloc[max(0, pos - COV_WINDOW):pos + 1][names].dropna()
+        # mu/cov from the PAST COV_WINDOW daily returns, EXCLUDING day d itself.
+        # ret[pos] = Vwap[d+1]/Vwap[d]-1 spans into tomorrow — unknowable at the
+        # day-d decision close. Legacy included it (one-day look-ahead inflating
+        # mu/cov quality, part of why old Sharpe read 2.24). Now: [pos-60, pos).
+        rsub = ret.iloc[max(0, pos - COV_WINDOW):pos][names].dropna()
         mu = rsub.mean().values
         # guard: mu is the realized-mean vector of length k (never the model prediction)
         assert np.ndim(mu) == 1 and mu.shape == (k,), \
@@ -443,7 +493,12 @@ def run_portfolio(top_k, max_weight, max_turnover, tc_bps, pred, vwap, fwd,
         else:
             target = target.clip(lower=0.0)
             target = target / target.sum()      # first rebalance: normalise to sum 1
-        wmat.loc[d] = target.values
+        # T+1 execution: the decision on day d (prediction exists) takes effect at the
+        # Vwap of the NEXT trading day d+1, matching COS TargetVwapReturnH10 semantics
+        # (build on day d, order at day d+1's Vwap, hold 10 trading days, rebalance at d+10).
+        exec_idx = pos + 1 if pos + 1 < len(idx_dates) else pos
+        exec_date = idx_dates[exec_idx]
+        wmat.loc[exec_date] = target.values
         prev_exec = target.copy()
         prev_exec = target.copy()
         w_full = target.values
@@ -495,8 +550,11 @@ def run_portfolio(top_k, max_weight, max_turnover, tc_bps, pred, vwap, fwd,
     calmar_s = ann_s / abs(mdd_s) if mdd_s < 0 else np.nan
     calmar_b = ann_b / abs(mdd_b) if mdd_b < 0 else np.nan
 
-    # one-way turnover averaged over rebalance rows (matches the backtest accounting)
-    rebal_to = turnover_series.loc[[d for d in reb_dates if d in turnover_series.index]]
+    # one-way turnover averaged over EXECUTION rows (wmat is written at d+1 since the
+    # T+1-execution fix; sampling reb_dates would read non-execution rows -> zeros)
+    exec_dates = [idx_dates[min(pos + 1, len(idx_dates) - 1)] for pos in
+                  (idx_dates.index(d) for d in reb_dates if d in idx_dates)]
+    rebal_to = turnover_series.loc[[d for d in exec_dates if d in turnover_series.index]]
     avg_rebal_turnover = float(rebal_to.mean()) if len(rebal_to) else 0.0
 
     m = {

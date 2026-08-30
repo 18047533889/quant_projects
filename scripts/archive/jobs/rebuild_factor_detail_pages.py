@@ -78,6 +78,15 @@ OUT_IMGS = REPORT_DIR  # 生成的图放这里
 sys.path.insert(0, str(PROJECT))
 sys.path.insert(0, str(PROJECT / "vectorbt_qs"))
 
+# 字段与算子释义补全字典（jobs/field_op_doc.py）——覆盖基础 OHLCV + 衍生字段 + 全部用到的算子
+try:
+    from jobs.field_op_doc import apply_field_op_docs, DSL_NOISE
+    _HAS_FIELD_DOC = True
+except Exception:
+    apply_field_op_docs = None
+    DSL_NOISE = set()
+    _HAS_FIELD_DOC = False
+
 # LQTP 转换结果（61 条：dsl / status / can_use_factor_engine / note / is_flipped）
 # FACTOR_SET=all 时加载 456 全量转换；否则 61
 _FACTOR_SET = os.environ.get("FACTOR_SET", "61").strip()
@@ -445,16 +454,91 @@ def _load_close_matrix() -> pd.DataFrame:
 # ============================================================
 _ALL_METRICS_CACHE = None  # 全 61 因子指标缓存（一次性算）
 
+# 收益口径全局常量：后复权 AdjVwap，t+1 成交 → t+2 卖出（企业级）
+_HORIZON_SHIFT = -2
+# 交易成本假设：双边 0.1%（单边 0.05%），按换手率 × 费率扣减（可配环境变量 TRADING_COST_BPS）
+_COST_BPS = float(os.environ.get("TRADING_COST_BPS", "10"))  # 双边总费率，单位 bp
+_TOTAL_COST = _COST_BPS / 1e4
+
+_OPT_META_PATH = BACKTEST_OUT / "optimized_meta.json"
+_OPT_META_CACHE = None
+
+
+def _load_optimized_meta() -> dict:
+    """进程级缓存加载 optimized_meta.json（只读；含 is_flipped 标记）"""
+    global _OPT_META_CACHE
+    if _OPT_META_CACHE is None:
+        _OPT_META_CACHE = {}
+        try:
+            if _OPT_META_PATH.exists():
+                _OPT_META_CACHE = json.loads(_OPT_META_PATH.read_text())
+        except Exception:
+            _OPT_META_CACHE = {}
+    return _OPT_META_CACHE
+
+
+def _is_flipped_by_meta(name: str) -> bool:
+    """用 optimized_meta.json 判断因子是否已翻转（is_flipped=True）。
+
+    注意：61 因子带 _flipped 后缀的变体（如 vol_volume_asym_ewma_flipped）在
+    456 全量渲染时以基础名（无后缀）重新落值并翻转，详情页也是基础名；
+    这里的 name 一律是 factor_matrices_all/ 里的 page_name（无 _flipped 后缀）。
+    """
+    meta = _load_optimized_meta()
+    base = name.replace("_flipped", "")
+    rec = meta.get(name) or meta.get(base)
+    if rec is None:
+        # 兜底：名字带 _flipped 后缀本身即翻转
+        return name.endswith("_flipped")
+    return bool(rec.get("is_flipped", False))
+
+
+def _load_vwap_adj() -> pd.DataFrame:
+    """加载 后复权 AdjVwap 矩阵 (date × symbol) — 全局收益口径硬性。
+
+    数据源 StockDailyBarAdj/（后复权），禁止未复权 StockDailyBar.Vwap。
+    进程级缓存，跨线程共享（主进程算好后 ThreadPool 直接读）。
+    """
+    global _HAS_VWAP
+    if _HAS_VWAP is not None:
+        return _HAS_VWAP
+    try:
+        if not _HAS_DUCKDB:
+            _HAS_VWAP = pd.DataFrame()
+            return _HAS_VWAP
+        ADJ_DIR = Path.home() / "cos_data" / "StockDailyBarAdj"
+        files = sorted(ADJ_DIR.glob("*.parquet"))
+        if not files:
+            _HAS_VWAP = pd.DataFrame()
+            return _HAS_VWAP
+        fs = "[" + ",".join(f"'{f}'" for f in files) + "]"
+        con = duckdb.connect()
+        df = con.execute(f"""
+            SELECT TradeDate as date, Symbol as symbol, AdjVwap as vwap
+            FROM read_parquet({fs})
+        """).df()
+        mat = df.pivot_table(index='date', columns='symbol', values='vwap', aggfunc='first')
+        mat.index = pd.to_datetime(mat.index)
+        mat = mat.sort_index()
+        _HAS_VWAP = mat
+    except Exception:
+        _HAS_VWAP = pd.DataFrame()
+    return _HAS_VWAP
+
+
+_HAS_VWAP = None
+
 def _compute_all_factors_metrics() -> dict:
-    """一次性向量化算出所有 61 个因子的所有指标。
+    """一次性向量化算出所有因子的所有指标。
 
     流程：
       1. 读 parquet 拿到全因子矩阵 (T, N_total)
-      2. 读 close 矩阵做交集
+      2. 读 后复权 AdjVwap 矩阵做交集
       3. 调用 quant_evaluator.compute_daily_ic(factor_batch=(T,N,F), label_bundle=(T,N))
          → (ic_series (T,F), valid_count (T,F))
       4. 用 compute_long_short_returns 算 long/short returns
       5. 用 compute_sharpe_ratio / compute_maximum_drawdown 算业绩指标
+      6. 扣双边交易成本（按 Top10% 组换手率 × 费率）
     返回 dict[name] -> {...}，每个 name 含 ic_series / decile_navs / perf / mean_ic ...
     """
     global _ALL_METRICS_CACHE
@@ -482,24 +566,25 @@ def _compute_all_factors_metrics() -> dict:
             m.columns = [c[1] for c in m.columns]
             mat_dict[fn] = m
 
-        # 2. close 矩阵
-        close = _load_close_matrix()
-        if close.empty:
+        # 2. 后复权 AdjVwap 矩阵（收益口径 vwap-to-vwap）
+        vwap = _load_vwap_adj()
+        if vwap.empty:
             _ALL_METRICS_CACHE = {}
             return _ALL_METRICS_CACHE
-        close.index = pd.to_datetime(close.index)
+        vwap.index = pd.to_datetime(vwap.index)
         # 用第一个因子时间轴作 common
-        common_idx = mat_dict[factor_names[0]].index.intersection(close.index)
-        close = close.loc[common_idx]
+        common_idx = mat_dict[factor_names[0]].index.intersection(vwap.index)
+        vwap = vwap.loc[common_idx]
 
-        # 对齐每个因子到 close columns
-        common_cols = close.columns
+        # 对齐每个因子到 vwap columns
+        common_cols = vwap.columns
         for fn in factor_names:
             mat_dict[fn] = mat_dict[fn].reindex(index=common_idx, columns=common_cols)
 
-        fwd = close.pct_change().shift(-1)
+        fwd = vwap.pct_change().shift(_HORIZON_SHIFT)  # 后复权 vwap-to-vwap（t+1成交→t+2卖出，企业级）
+        fwd_a = fwd.values.astype(np.float64)
 
-        T, N = close.shape
+        T, N = vwap.shape
         print(f"[batch] common shape: ({T} days x {N} stocks), {len(factor_names)} factors")
 
         # 3. 构造 (T, N, F) FactorBatch + (T, N) LabelBundle
@@ -520,7 +605,7 @@ def _compute_all_factors_metrics() -> dict:
             _T_end = _T + _pd_t.Timedelta(days=1)
             lb = LabelBundle(
                 target_id="next_ret",
-                values=fwd.values.astype(np.float64),
+                values=fwd_a,
                 horizon=1,
                 decision_time=tuple(_T),
                 label_start_time=tuple(_T),
@@ -537,7 +622,7 @@ def _compute_all_factors_metrics() -> dict:
             for fi, fn in enumerate(factor_names):
                 mn = mat_dict[fn].values
                 for t in range(T):
-                    m = mn[t]; r = fwd.values[t]
+                    m = mn[t]; r = fwd_a[t]
                     mask = np.isfinite(m) & np.isfinite(r)
                     if mask.sum() < 20:
                         continue
@@ -558,69 +643,51 @@ def _compute_all_factors_metrics() -> dict:
             std_ic = float(np.std(ic_arr[:, fi], ddof=1))
             icir = mean_ic / std_ic if std_ic > 1e-9 else 0.0
 
-            # ===== 十分层 NAV (QE compute_long_short_returns) =====
-            # factor_values: (T, N), forward_returns: (T, N)
+            # ===== 十分层 NAV（含双边交易成本，按 Top10% 组换手率 × 费率）=====
             fv = mat_dict[fn].values.astype(np.float64)
-            fr = fwd.values.astype(np.float64)
+            fr = fwd_a
             valid_mask = np.isfinite(fv) & np.isfinite(fr)
-            # 把 10 组 cutoffs 当成 long_threshold=0.9, 0.8, ..., 0.1
-            group_ret = np.zeros((T, 10))
-            if QE_AVAILABLE:
-                # 10 组等分：1st=G1(short) -> threshold=0.1, 10th=G10(long) -> threshold=0.9
-                for k in range(10):
-                    # long_threshold = 0.1 + k * 0.1, short_threshold = long_threshold - 0.1
-                    lt = 0.1 * (k + 1)  # 0.1..1.0
-                    st = 0.1 * k  # 0.0..0.9
-                    ls_rets, long_avg, short_avg = compute_long_short_returns(
-                        factor_values=fv,
-                        forward_returns=fr,
-                        long_threshold=lt,
-                        short_threshold=st if st > 0 else 0.05,  # 不能为 0
-                        validity_mask=valid_mask,
-                        missing_return_policy="zero_fill",
-                    )
-                    # ls_rets 是 (T,) 的多空 returns；G(k+1) = top group return
-                    # 但我们想要的是 G10 的收益（top 10%），即 0.9 threshold
-                    # ls_rets = long - short, 所以 long 收益就是 ls_rets + short
-                    if k == 9:
-                        # G10 是最高组
-                        group_ret[:, k] = long_avg  # top 10%
-                    else:
-                        # G(k+1) = top (k+1)/10 的收益
-                        group_ret[:, k] = long_avg
-            else:
-                # 兜底：手写
-                mat_ranks = pd.DataFrame(fv).rank(axis=1, method='first', pct=True).values
-                group_ids = np.floor(mat_ranks * 10).clip(0, 9).astype(int)
-                group_ids[~valid_mask] = -1
-                for t in range(T):
-                    for k in range(10):
-                        mk = (group_ids[t] == k)
-                        if mk.any():
-                            group_ret[t, k] = float(np.nanmean(fr[t, mk]))
 
-            # 但上面那种处理是错的——G1 是 bottom 10% (rank<10%), G10 是 top 10%
-            # 让我用更清晰的方式：
-            # 每天算每组的 mean(fwd)，k 组 = [(k/10, (k+1)/10) 区间]
-            group_ret = np.zeros((T, 10))
+            # 每日十分组（G1=bottom 10% → G10=top 10%），并记录 Top10% 组换手率
             mat_ranks = pd.DataFrame(fv).rank(axis=1, method='first', pct=True).values
             group_ids = np.floor(mat_ranks * 10).clip(0, 9).astype(int)
             group_ids[~valid_mask] = -1
+
+            # 预计算每列次日是否同组（用于组换手率）
+            prev_gids = np.full(N, -1)
+            group_ret = np.zeros((T, 10))          # 已扣费后的各组收益
+            top_turnover = np.zeros(T)             # Top10% 组每日换手率
+
             for t in range(T):
                 for k in range(10):
                     mk = (group_ids[t] == k)
-                    if mk.any():
-                        group_ret[t, k] = float(np.nanmean(fr[t, mk]))
+                    if not mk.any():
+                        continue
+                    # 组换手：与昨日同组比例（新进/退出视为换手）
+                    if t > 0:
+                        same = (prev_gids[mk] == k)
+                        to_rate = 1.0 - float(same.mean())
+                    else:
+                        to_rate = 0.0
+                    gr_ret = float(np.nanmean(fr[t, mk]))
+                    if k == 9:
+                        top_turnover[t] = to_rate
+                    group_ret[t, k] = gr_ret - to_rate * _TOTAL_COST
+                prev_gids = group_ids[t].copy()
+
+            # 第 0 天无前日，换手按 0 计（成本不扣）
+            top_turnover[0] = 0.0
+            mean_top_turnover = float(np.nanmean(top_turnover[1:])) if T > 1 else 0.0
 
             # NAV
             decile_navs = {f"G{k+1}": np.cumprod(1 + group_ret[:, k]) for k in range(10)}
-            r_ls = group_ret[:, 9] - group_ret[:, 0]
+            r_ls = group_ret[:, 9] - group_ret[:, 0]  # 多空收益（G10 已扣费，G1 已扣费）
             decile_navs["LS"] = np.cumprod(1 + r_ls)
 
             # 业绩指标
             ls_nav = decile_navs["LS"]
             ls_rets = np.diff(ls_nav) / ls_nav[:-1]
-            ls_rets_safe = np.concatenate([[0.0], ls_rets[1:]])
+            ls_rets_safe = np.concatenate([[0.0], ls_rets])
 
             if QE_AVAILABLE:
                 ls_sharpe = float(compute_sharpe_ratio(ls_rets_safe, periods_per_year=252))
@@ -644,15 +711,6 @@ def _compute_all_factors_metrics() -> dict:
                 g10_sharpe = float(np.mean(g10_rets) / np.std(g10_rets) * np.sqrt(252)) if np.std(g10_rets) > 0 else 0
                 g1_sharpe = float(np.mean(g1_rets) / np.std(g1_rets) * np.sqrt(252)) if np.std(g1_rets) > 0 else 0
 
-            # 换手率 (QE estimate_turnover_from_ranks: 期望 (T,N,F))
-            turnover = 0.0
-            if QE_AVAILABLE:
-                try:
-                    turnover = float(np.nanmean(estimate_turnover_from_ranks(
-                        fv[..., None], min_obs=20)))
-                except Exception:
-                    turnover = 0.0
-
             # 写输出
             dates_out = list(common_idx)
             decile_navs_out = {"dates": dates_out}
@@ -672,7 +730,8 @@ def _compute_all_factors_metrics() -> dict:
                     "g1_annual": g1_ann,
                     "g10_sharpe": g10_sharpe,
                     "g1_sharpe": g1_sharpe,
-                    "turnover": turnover,
+                    "turnover": mean_top_turnover,
+                    "cost_bps": _COST_BPS,
                     "n_periods": T,
                     "start_date": str(common_idx[0])[:10] if T > 0 else None,
                     "end_date": str(common_idx[-1])[:10] if T > 0 else None,
@@ -741,7 +800,7 @@ def fig_to_base64(fig) -> str:
     buf.seek(0)
     return base64.b64encode(buf.read()).decode()
 
-def plot_ic_monthly_heatmap(monthly_ic: pd.Series, factor_name: str) -> str:
+def plot_ic_monthly_heatmap(monthly_ic: pd.Series, factor_name: str, is_flipped: bool = False) -> str:
     """月度IC热力图"""
     if monthly_ic is None or len(monthly_ic) < 2:
         return ""
@@ -769,7 +828,8 @@ def plot_ic_monthly_heatmap(monthly_ic: pd.Series, factor_name: str) -> str:
     ax.set_yticks(range(len(unique_years)))
     ax.set_yticklabels(unique_years)
     ax.set_xlabel("月份")
-    ax.set_title(f"{factor_name} — 月度 RankIC 热力图", fontsize=9, color=FG)
+    flip_suffix = "（已翻正）" if is_flipped else ""
+    ax.set_title(f"{factor_name} — 月度 RankIC 热力图{flip_suffix}", fontsize=9, color=FG)
     plt.colorbar(im, ax=ax, label="RankIC", shrink=0.8)
 
     # 填数值
@@ -785,7 +845,7 @@ def plot_ic_monthly_heatmap(monthly_ic: pd.Series, factor_name: str) -> str:
     plt.close(fig)
     return b64
 
-def plot_decile_nav(decile_data: dict, factor_name: str) -> str:
+def plot_decile_nav(decile_data: dict, factor_name: str, is_flipped: bool = False) -> str:
     """十分层净值曲线 (10 条曲线 + 多空)"""
     if not decile_data or "dates" not in decile_data:
         return ""
@@ -813,7 +873,9 @@ def plot_decile_nav(decile_data: dict, factor_name: str) -> str:
                 linewidth=2.0, label="多空 (G10-G1)", linestyle="-")
 
     ax.axhline(1.0, color="gray", linewidth=0.7, linestyle="--", alpha=0.7)
-    ax.set_title(f"{factor_name} — 十分层净值曲线 (G1~G10)", fontsize=10, color=FG, fontweight='bold')
+    flip_suffix = "（已翻正）" if is_flipped else ""
+    cost_suffix = f"（扣双边成本 {_COST_BPS:.0f} bp）" if _COST_BPS else ""
+    ax.set_title(f"{factor_name} — 十分层净值曲线 (G1~G10){flip_suffix} {cost_suffix}", fontsize=10, color=FG, fontweight='bold')
     ax.set_xlabel("日期")
     ax.set_ylabel("净值")
     ax.legend(fontsize=7, loc="upper left", ncol=5)
@@ -823,7 +885,7 @@ def plot_decile_nav(decile_data: dict, factor_name: str) -> str:
     plt.close(fig)
     return b64
 
-def plot_ic_timeseries(ic_series: pd.Series, factor_name: str) -> str:
+def plot_ic_timeseries(ic_series: pd.Series, factor_name: str, is_flipped: bool = False) -> str:
     """IC时序SVG（内嵌，无需CDN）— 显示所有 IC, 包括 0"""
     if ic_series is None or len(ic_series) < 2:
         return ""
@@ -879,12 +941,13 @@ def plot_ic_timeseries(ic_series: pd.Series, factor_name: str) -> str:
         'style="width:100%;max-height:200px;font-family:Segoe UI,Microsoft YaHei,system-ui,sans-serif">\n'
         + bars + '\n'
         '<line x1="' + str(x_pad) + '" y1="' + str(round(zero_y, 1)) + '" x2="' + str(W - x_pad) + '" y2="' + str(round(zero_y, 1)) + '" stroke="#94a3b8" stroke-width="0.5" stroke-dasharray="3,3"/>\n'
+        + (f'<text x="{x_pad}" y="{y_pad - 6}" font-size="7" fill="#b45309">IC 已翻正（×(-1)）</text>\n' if is_flipped else '')
         + ''.join(x_labels) + '\n'
         '</svg>'
     )
     return svg
 
-def plot_long_short_nav(decile_data: dict, factor_name: str) -> str:
+def plot_long_short_nav(decile_data: dict, factor_name: str, is_flipped: bool = False) -> str:
     """多空净值图"""
     if not decile_data or "dates" not in decile_data:
         return ""
@@ -904,7 +967,9 @@ def plot_long_short_nav(decile_data: dict, factor_name: str) -> str:
         ax.plot(dates, g1, color="#dc2626", linewidth=1, label="G1 (空头)", alpha=0.7)
 
     ax.axhline(1.0, color="gray", linewidth=0.8, linestyle="--")
-    ax.set_title(f"{factor_name} — 多空净值曲线", fontsize=9, color=FG)
+    flip_suffix = "（已翻正）" if is_flipped else ""
+    cost_suffix = f"（扣双边成本 {_COST_BPS:.0f} bp）" if _COST_BPS else ""
+    ax.set_title(f"{factor_name} — 多空净值曲线{flip_suffix} {cost_suffix}", fontsize=9, color=FG)
     ax.set_ylabel("净值")
     ax.legend(fontsize=7)
     ax.grid(True, alpha=0.3)
@@ -913,7 +978,7 @@ def plot_long_short_nav(decile_data: dict, factor_name: str) -> str:
     plt.close(fig)
     return b64
 
-def plot_ic_distribution(ic_series: pd.Series, factor_name: str) -> str:
+def plot_ic_distribution(ic_series: pd.Series, factor_name: str, is_flipped: bool = False) -> str:
     """IC分布直方图"""
     if ic_series is None or len(ic_series) < 5:
         return ""
@@ -930,7 +995,8 @@ def plot_ic_distribution(ic_series: pd.Series, factor_name: str) -> str:
     ax.axvline(ic_med, color="orange", linewidth=1.5, linestyle="--", label=f"中位数 = {ic_med:+.4f}")
     ax.axvline(0, color="gray", linewidth=1, linestyle=":", alpha=0.6)
     ax.legend(fontsize=7, loc="upper right")
-    ax.set_title(f"{factor_name} — RankIC 分布", fontsize=8, color=FG)
+    flip_suffix = "（已翻正）" if is_flipped else ""
+    ax.set_title(f"{factor_name} — RankIC 分布{flip_suffix}", fontsize=8, color=FG)
     ax.set_xlabel("RankIC")
     ax.set_ylabel("频数")
     ax.grid(True, alpha=0.3)
@@ -968,10 +1034,14 @@ def _render_field_op_doc(required_columns: str, dsl: str, FIELD_DOC: dict, OP_DO
                  "delta_depth_10","vol_ratio_60","vol_ratio_40",
                  "amount_ma_diff","mkt_cap_float","atr_20","trading_datetime",
                  "open_price","high_price","low_price"}
+    if OP_DOC:
+        KNOWN_OPS = KNOWN_OPS | set(OP_DOC.keys())
     used_cols = set()
     if dsl:
         for m in _re.finditer(r"\b([a-zA-Z_][a-zA-Z_0-9]*)\b", dsl):
             name = m.group(1)
+            if name in DSL_NOISE:
+                continue
             if name not in KNOWN_OPS and not name.replace(".", "").replace("-", "").isdigit():
                 used_cols.add(name)
 
@@ -998,14 +1068,19 @@ def _render_field_op_doc(required_columns: str, dsl: str, FIELD_DOC: dict, OP_DO
         seen = set()
         for m in _re.finditer(r"\b([a-zA-Z_][a-zA-Z_0-9]*)\s*\(", dsl):
             op = m.group(1)
-            if op in OP_DOC and op not in seen:
+            if op not in OP_DOC:
+                # DSL 语法关键词/内置函数不做算子展示
+                if op in DSL_NOISE or op in ("if", "else", "then", "For", "I", "C", "O", "H", "L"):
+                    continue
+            if op not in seen:
                 seen.add(op)
                 used_ops.append(op)
         if used_ops:
             parts.append('<h3 style="font-size:0.95rem;margin:18px 0 8px;color:var(--primary)">算子</h3>')
             parts.append('<table class="meta-table"><thead><tr><th>算子</th><th>含义</th></tr></thead><tbody>')
             for op in used_ops:
-                parts.append(f'<tr><td><code>{op}</code></td><td style="color:var(--muted)">{OP_DOC[op]}</td></tr>')
+                doc = OP_DOC.get(op, f"{op}(...) — 自定义算子")
+                parts.append(f'<tr><td><code>{op}</code></td><td style="color:var(--muted)">{doc}</td></tr>')
             parts.append('</tbody></table>')
 
     return "\n".join(parts) if parts else "<div class='zero-notice'>无可展示的字段或算子</div>"
@@ -1032,11 +1107,14 @@ def build_detail_html(
     title: str = "",
     steps: list = None,
     manual_note: str = "",
+    cost_bps: float = None,
 ) -> str:
     steps = steps or []
     """构建单个因子详情页HTML"""
 
     perf = perf or {}
+    if cost_bps is None:
+        cost_bps = float(perf.get("cost_bps", _COST_BPS))
     mean_rankic = ic_stats.get("mean_rankic", 0)
     rankic_ir = ic_stats.get("rankic_ir", 0)
     win_rate = ic_stats.get("win_rate", 0)
@@ -1076,6 +1154,9 @@ def build_detail_html(
         if abs(v) < 1:
             return f"{v:.4f}"
         return f"{v:.3f}"
+
+    turnover_daily = float(perf.get("turnover", 0)) if perf else 0.0
+    rankic_win_rate = float(ic_stats.get("win_rate", 0)) if ic_stats else 0.0
 
     # 公式展示（自动翻转说明）
     # 公式区显示的是 extract_formula_info 已经塞好 sign 前缀 + fallback 包装的 dsl_text
@@ -1259,6 +1340,10 @@ def build_detail_html(
         "replace": "replace(to_replace, value) → 替换值",
     }
 
+    # ===== 补全字段/算子释义（jobs/field_op_doc.py）=====
+    if apply_field_op_docs is not None:
+        apply_field_op_docs(FIELD_DOC, OP_DOC)
+
     def render_steps(formula_str: str) -> str:
         """把 formula 文本分解为一步步，每步标注算子含义"""
         if not formula_str or formula_str.startswith("（"):
@@ -1429,6 +1514,7 @@ def build_detail_html(
         '.metric span { color:var(--muted); font-size:0.73rem }\n'
         '.pos { color:var(--pos) }\n'
         '.neg { color:var(--neg) }\n'
+        '.cost-note { background:#f0fdf4; border:1px solid #bbf7d0; border-left:3px solid var(--pos); padding:8px 14px; border-radius:8px; font-size:0.78rem; color:#166534; margin-bottom:12px }\n'
         '.card { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:18px 20px; box-shadow:0 4px 24px rgba(15,23,42,0.06); margin-bottom:16px }\n'
         'h2 { font-size:0.95rem; color:var(--primary); margin:0 0 12px; border-bottom:1px solid var(--line); padding-bottom:8px }\n'
         '.formula-wrap { background:#f8fafc; border:1px solid var(--line); border-radius:8px; padding:16px; font-family:"Courier New",monospace; font-size:0.85rem; word-break:break-all; line-height:1.8; white-space:pre-wrap }\n'
@@ -1475,13 +1561,14 @@ def build_detail_html(
         '<div class="metric"><b class="' + pcls(ls_annual_return * 2) + '">' + fmt(ls_annual_return * 2, pct=True) + '</b><span>LS 累计收益</span></div>\n'
         '<div class="metric"><b class="' + pcls(ls_mdd) + '">' + fmt(ls_mdd, pct=True) + '</b><span>LS 最大回撤</span></div>\n'
         '<div class="metric"><b class="' + pcls(ls_winrate) + '">' + fmt(ls_winrate, pct=True) + '</b><span>LS 日胜率</span></div>\n'
-        '<div class="metric"><b class="' + pcls(perf.get('turnover', 0) if perf else 0) + '">' + fmt(perf.get('turnover', 0) if perf else 0, pct=True) + '</b><span>Top10% 换手率</span></div>\n'
+        '<div class="metric"><b class="' + pcls(turnover_daily) + '">' + fmt(turnover_daily, pct=True) + '</b><span>Top10% 换手率 (日)</span></div>\n'
         '</div>\n'
         '<div class="grid-3">\n'
         '<div class="metric"><b class="' + pcls(g10_ann) + '">' + fmt(g10_ann, pct=True) + '</b><span>G10 (多头) 年化</span></div>\n'
         '<div class="metric"><b class="' + pcls(g1_ann) + '">' + fmt(g1_ann, pct=True) + '</b><span>G1 (空头) 年化</span></div>\n'
-        '<div class="metric"><b class="' + pcls(win_rate) + '">' + fmt(win_rate, pct=True) + '</b><span>RankIC 胜率</span></div>\n'
+        '<div class="metric"><b class="' + pcls(rankic_win_rate) + '">' + fmt(rankic_win_rate, pct=True) + '</b><span>RankIC 胜率</span></div>\n'
         '</div>\n'
+        '<div class="cost-note">净值已扣双边交易成本 ' + f"{cost_bps:.1f} bp" + '（换手率 × 费率）；多空/十分层均含停牌股剔除（收益为 NaN 不参与）。</div>\n'
         '\n<!-- 设计意图 -->\n'
         + (rationale_html if rationale else '') +
         '\n<!-- 公式 -->\n'
@@ -1546,7 +1633,7 @@ def build_detail_html(
         '<tr><td>因子名称</td><td><code>' + factor_name + '</code></td></tr>\n'
         '<tr><td>回测区间</td><td>' + (perf.get('start_date','—') if perf else '—') + ' ~ ' + (perf.get('end_date','—') if perf else '—') + '</td></tr>\n'
         '<tr><td>回测交易日</td><td>' + str(n_periods) + ' 天</td></tr>\n'
-        '<tr><td>已翻转</td><td>' + ('是 <span class="badge badge-yellow">IC&lt;0 时取负调正</span>' if is_flipped else '否') + '</td></tr>\n'
+        '<tr><td>已翻转</td><td>' + ('是 <span class="badge badge-yellow">IC&lt;0 时取负调正（已翻正）</span>' if is_flipped else '否') + '</td></tr>\n'
         '<tr><td>评估库</td><td>' + ('<code>quant_evaluator</code>' if QE_AVAILABLE else 'legacy') + '</td></tr>\n'
         '<tr><td>Mean RankIC</td><td class="' + pcls(mean_rankic) + '">' + fmt(mean_rankic) + '</td></tr>\n'
         '<tr><td>RankIC 标准差</td><td>' + fmt(ic_stats.get("std_ric", 0)) + '</td></tr>\n'
@@ -1557,7 +1644,8 @@ def build_detail_html(
         '<tr><td>LS 累计收益</td><td class="' + pcls(ls_annual_return * 2) + '">' + fmt(ls_annual_return * 2, pct=True) + '</td></tr>\n'
         '<tr><td>LS 最大回撤</td><td class="' + pcls(ls_mdd) + '">' + fmt(ls_mdd, pct=True) + '</td></tr>\n'
         '<tr><td>LS 日胜率</td><td class="' + pcls(ls_winrate) + '">' + fmt(ls_winrate, pct=True) + '</td></tr>\n'
-        '<tr><td>Top10% 换手率</td><td>' + (fmt(perf.get('turnover', 0), pct=True) if perf else '—') + '</td></tr>\n'
+        '<tr><td>Top10% 换手率 (日)</td><td>' + (fmt(perf.get('turnover', 0), pct=True) if perf else '—') + '</td></tr>\n'
+        '<tr><td>双边费率假设</td><td>' + f"{cost_bps:.1f} bp（按换手率×费率扣减）" + '</td></tr>\n'
         '<tr><td>G10 (多头) 年化</td><td class="' + pcls(g10_ann) + '">' + fmt(g10_ann, pct=True) + '</td></tr>\n'
         '<tr><td>G1 (空头) 年化</td><td class="' + pcls(g1_ann) + '">' + fmt(g1_ann, pct=True) + '</td></tr>\n'
         '</tbody></table>\n'
@@ -1580,7 +1668,7 @@ def process_factor(name: str) -> tuple[str, bool, dict]:
         fi = extract_formula_info(name)
         formula = fi["formula"]
         code = fi["code"]
-        is_flipped = fi["is_flipped"]
+        is_flipped = fi["is_flipped"] or _is_flipped_by_meta(name)
 
         # 2. 用真因子值算所有指标
         fm = _compute_factor_metrics(name)
@@ -1590,27 +1678,28 @@ def process_factor(name: str) -> tuple[str, bool, dict]:
         # decile_data: 新的 key 命名 ('G1'..'G10', 'LS', 'dates')
         decile_raw = fm.get("decile_navs", {})
         dates_out = fm.get("dates_out", [])
-        decile_data = {"dates": dates_out}
+        decile_dates = decile_raw.get("dates") or dates_out
+        decile_data = {"dates": decile_dates}
         for k, v in decile_raw.items():
             if k == "LS":
                 decile_data["LS"] = v
-            else:
+            elif k != "dates":
                 decile_data[k] = v
 
         perf = fm.get("perf", {})
 
         # 3. 生成图表
-        monthly_chart = plot_ic_monthly_heatmap(ic_stats.get("monthly_ic", pd.Series(dtype=float)), name) if ic_stats else ""
-        decile_chart = plot_decile_nav(decile_data, name) if decile_data else ""
-        ls_chart = plot_long_short_nav(decile_data, name) if decile_data else ""
-        dist_chart = plot_ic_distribution(ic_series, name) if len(ic_series) > 0 else ""
-        svg_ts = plot_ic_timeseries(ic_series, name) if len(ic_series) > 0 else ""
+        monthly_chart = plot_ic_monthly_heatmap(ic_stats.get("monthly_ic", pd.Series(dtype=float)), name, is_flipped) if ic_stats else ""
+        decile_chart = plot_decile_nav(decile_data, name, is_flipped) if decile_data else ""
+        ls_chart = plot_long_short_nav(decile_data, name, is_flipped) if decile_data else ""
+        dist_chart = plot_ic_distribution(ic_series, name, is_flipped) if len(ic_series) > 0 else ""
+        svg_ts = plot_ic_timeseries(ic_series, name, is_flipped) if len(ic_series) > 0 else ""
 
         # 4. 构建HTML (传 perf + mean_ic 等)
         html = build_detail_html(
             factor_name=name,
-            formula=formula,
-            code=code,
+            formula=fi["formula"],
+            code=fi["code"],
             ic_stats=ic_stats,
             decile_data=decile_data,
             svg_timeseries=svg_ts,
@@ -1629,8 +1718,6 @@ def process_factor(name: str) -> tuple[str, bool, dict]:
             steps=fi.get("steps", []),
             manual_note=fi.get("manual_note", ""),
         )
-
-        # 5. 写入
         out_path = FACTORS_DIR / f"factor_{name}.html"
         with open(out_path, "w", encoding="utf-8") as f:
             f.write(html)
@@ -1654,7 +1741,7 @@ def process_factor_thread(name: str, batch_metrics: dict) -> tuple:
     """线程版 process_factor - 直接用主进程已算好的 batch_metrics"""
     try:
         fi = extract_formula_info(name)
-        is_flipped = fi["is_flipped"]
+        is_flipped = fi["is_flipped"] or _is_flipped_by_meta(name)
         # batch_metrics 的 key = per-factor parquet 文件名（page_name，不带 factor_ 前缀）
         fm = batch_metrics.get(name, {})
         if not fm:
@@ -1663,6 +1750,7 @@ def process_factor_thread(name: str, batch_metrics: dict) -> tuple:
             fm = batch_metrics.get(f"factor_{name}_flipped", {})
 
         ic_series = fm.get("ic_series", pd.Series(dtype=float)).copy()
+        ic_series = ic_series.astype(float).replace([np.inf, -np.inf], np.nan)
 
         # 兜底: 部分 _flipped 因子因 parquet 无数据, 拿到非 flipped 数据是负的, 强制取反
         if is_flipped and len(ic_series) > 0:
@@ -1670,9 +1758,14 @@ def process_factor_thread(name: str, batch_metrics: dict) -> tuple:
                 ic_series = -ic_series
                 fm = dict(fm)
                 fm["perf"] = dict(fm.get("perf", {}))
-                for k in ["ls_sharpe", "ls_annual", "ls_winrate", "g10_annual", "g1_annual", "g10_sharpe", "g1_sharpe"]:
+                # 镜像翻转：LS 收益取负 → 胜率 = 1 - 原胜率（不是 -胜率）
+                for k in ["ls_sharpe", "ls_annual", "g10_annual", "g1_annual", "g10_sharpe", "g1_sharpe"]:
                     if k in fm["perf"]:
                         fm["perf"][k] = -fm["perf"][k]
+                if "ls_winrate" in fm["perf"]:
+                    fm["perf"]["ls_winrate"] = 1.0 - fm["perf"].get("ls_winrate", 0)
+                if "win_rate" in fm:
+                    fm["win_rate"] = 1.0 - fm.get("win_rate", 0)
                 fm["perf"]["ls_mdd"] = abs(fm["perf"].get("ls_mdd", 0))
                 # mirror decile NAVs (G_k ↔ G_{11-k})
                 decile_raw = dict(fm.get("decile_navs", {}))
@@ -1694,18 +1787,23 @@ def process_factor_thread(name: str, batch_metrics: dict) -> tuple:
 
         decile_raw = fm.get("decile_navs", {})
         dates_out = fm.get("dates_out", [])
-        decile_data = {"dates": dates_out}
+        # 2026-08-29 fix: mirror 翻转时 new_dec 重建了 decile_navs（含 'dates'），
+        # 而 fm['dates_out'] 可能为空 → 用 decile_raw 自带的 dates 兜底，避免多空图因 dates 为空而缺失。
+        decile_dates = decile_raw.get("dates") or dates_out
+        decile_data = {"dates": decile_dates}
         for k, v in decile_raw.items():
+            if k == "dates":
+                continue
             decile_data[k] = v
         perf = fm.get("perf", {})
 
         ic_stats = compute_ic_stats(ic_series)
 
-        monthly_chart = plot_ic_monthly_heatmap(ic_stats.get("monthly_ic", pd.Series(dtype=float)), name) if ic_stats else ""
-        decile_chart = plot_decile_nav(decile_data, name) if decile_data else ""
-        ls_chart = plot_long_short_nav(decile_data, name) if decile_data else ""
-        dist_chart = plot_ic_distribution(ic_series, name) if len(ic_series) > 0 else ""
-        svg_ts = plot_ic_timeseries(ic_series, name) if len(ic_series) > 0 else ""
+        monthly_chart = plot_ic_monthly_heatmap(ic_stats.get("monthly_ic", pd.Series(dtype=float)), name, is_flipped) if ic_stats else ""
+        decile_chart = plot_decile_nav(decile_data, name, is_flipped) if decile_data else ""
+        ls_chart = plot_long_short_nav(decile_data, name, is_flipped) if decile_data else ""
+        dist_chart = plot_ic_distribution(ic_series, name, is_flipped) if len(ic_series) > 0 else ""
+        svg_ts = plot_ic_timeseries(ic_series, name, is_flipped) if len(ic_series) > 0 else ""
 
         html = build_detail_html(
             factor_name=name,

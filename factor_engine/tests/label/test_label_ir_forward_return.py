@@ -27,12 +27,15 @@ def _prices(n=10):
 
 def test_default_config_formula_is_single_authority() -> None:
     # R24-177/178: config formula matches the runtime builder (forward, not
-    # backward ts_pct).
+    # backward ts_pct).  ADJ_FIELD_MIGRATION: the default label target is the
+    # vwap-to-vwap basis (bare ``vwap`` -> AdjVwap on StockDailyBarAdj), NOT close.
     cfg = default_mining_label_config(horizon_bars=5)
-    assert cfg["label_formula"] == "forward_return(close, 5)"
+    assert cfg["label_formula"] == "forward_return(vwap, 5)"
+    assert cfg["return_column"] == "vwap"
     ir = parse_label_expr(cfg["label_formula"])
     assert ir.horizon_bars == 5
     assert ir.op == LabelOp.FORWARD_RETURN
+    assert ir.inputs == ("vwap",)
 
 
 def test_backward_formula_rejected_as_label() -> None:

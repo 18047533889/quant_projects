@@ -137,17 +137,19 @@ class TSBetaPolars(SeriesOperator):
         name="m_beta", category="time_series", description="滚动 Beta",
         param_names=["y", "x", "window", "min_periods"], return_type="series", tags=["time_series", "polars"],
         # R19-033..035: 与 pandas ``MovingBeta`` 共享同一 authority —— min_periods
-        # 默认 5（reviewed rolling_beta default），不是 polars 的 1。
+        # default is ``None`` (kernel resolves ``min(5, window)``) so the
+        # planning-time ``min_periods <= window`` gate never merges default-5
+        # against an explicit window<5 (parity with pandas MovingBeta).
         param_aliases={"d": "window"},
         param_specs={
             "window": ParamSpec(dtype=int, min=2, default=20, searchable=True,
                                 param_role=ParamRole.HORIZON),
-            "min_periods": ParamSpec(dtype=int, min=2, default=5, searchable=False,
+            "min_periods": ParamSpec(dtype=int, min=2, default=None, searchable=False,
                                      param_role=ParamRole.SUPPORT_POLICY),
         },
     )
 
-    def _calculate_series(self, y: pl.DataFrame, x: pl.DataFrame, window: int = 20, min_periods: int = 5, **kwargs) -> pl.DataFrame:
+    def _calculate_series(self, y: pl.DataFrame, x: pl.DataFrame, window: int = 20, min_periods: int | None = None, **kwargs) -> pl.DataFrame:
         from factor_engine.cleaned_operators.common.strict_params import strict_int
         # WINDOW-SEMANTICS PARITY (pandas reference): pandas rolling_beta has
         # three intertwined semantics that polars rolling_cov/var do NOT
@@ -160,10 +162,14 @@ class TSBetaPolars(SeriesOperator):
         from factor_engine.cleaned_operators.base_polars import panel_pandas_bridge
 
         w = strict_int(kwargs.get("d", window), "window", minimum=2)
-        mp = strict_int(min_periods, "min_periods", minimum=2)
-        if mp > w:
-            from factor_engine.backend.operator_errors import OperatorParameterError
-            raise OperatorParameterError("min_periods must be <= window")
+        # Same UNTAXED-default resolution as pandas MovingBeta: min(5, w).
+        if min_periods is None:
+            mp = min(5, w)
+        else:
+            mp = strict_int(min_periods, "min_periods", minimum=2)
+            if mp > w:
+                from factor_engine.backend.operator_errors import OperatorParameterError
+                raise OperatorParameterError("min_periods must be <= window")
         cols = _align_cols(y, x)
         y_pd = y.select(cols).to_pandas()
         x_pd = x.select(cols).to_pandas()

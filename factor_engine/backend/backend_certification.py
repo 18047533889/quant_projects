@@ -45,8 +45,8 @@ def _pandas_status(canonical: str) -> BackendStatus:
 
     # Existing daily primitives have a Pandas reference by construction; their
     # production admission remains governed by operator_spec/evidence.
-    from factor_engine.cleaned_operators.operator_surface import DAILY_CANONICALS
-    if canonical in DAILY_CANONICALS:
+    from factor_engine.cleaned_operators.operator_surface import DAILY_CANONICALS, daily_factor_migrated
+    if canonical in DAILY_CANONICALS or canonical in daily_factor_migrated():
         return "production"
     return "research"
 

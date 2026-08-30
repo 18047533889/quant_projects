@@ -60,7 +60,11 @@ from factor_optimizer.contracts.treatment_result import (
 from factor_optimizer.search.pareto import ParetoPoint
 from factor_optimizer.search.winner_selector import WinnerPolicy, select_winner
 from quant_evaluator.adapters.recipe_refs import assert_computed_value
-from quant_evaluator.contracts.evaluation_artifact import EvaluationArtifact
+from quant_evaluator.contracts.evaluation_artifact import (
+    EvaluationArtifact,
+    EvaluationResultContentHash,
+)
+from quant_evaluator.contracts.domain_refs import ArtifactDomain, DomainArtifactRef
 from quant_evaluator.contracts.evaluation_refs import FactorValueRef
 
 # n_assets must exceed evaluate()'s default min_assets=10 for a finite daily IC.
@@ -221,26 +225,55 @@ def test_qrp_p5_e2e1_real_chain():
     assert rank_ic.value is not None and np.isfinite(rank_ic.value)
     mu = assert_computed_value(rank_ic, metric_id="rank_ic", factor_id="profit")
 
-    # Canonical durable QE artifact: factor_value_ref + label_definition_ref.
+    # Canonical durable QE artifact: typed DomainArtifactRef cross-references
+    # (R55 audit #24) + the three-part identity (R55 audit #23).
     artifact = EvaluationArtifact(
         evaluation_id=f"e2e/eval/{bundle.request_id}",
         evaluation_identity="qrp-p5-e2e1:profit:recipe-2step",
-        factor_value_ref=fv_ref.to_dict(),
-        label_definition_ref={
-            "target_id": "vwap_forward_return",
-            "horizon": 1,
-            "price_convention": "vwap_to_vwap",
-        },
-        evaluation_policy_ref={"policy": "core"},
-        evaluation_profile_ref={"tier": "core"},
-        split_ref={"ref": SPLIT},
-        snapshot_ref={"ref": SNAPSHOT},
-        universe_ref={"ref": UNIVERSE},
-        metric_evidence_refs=("metric/rank_ic", "metric/pearson_ic"),
-        diagnostic_refs=(bundle.request_id,),
+        factor_value_ref=DomainArtifactRef.of(
+            ArtifactDomain.FACTOR_VALUE, fv_ref.to_dict()["factor_value_id"]
+        ),
+        label_definition_ref=DomainArtifactRef.of(
+            ArtifactDomain.LABEL_DEFINITION, "vwap_forward_return"
+        ),
+        evaluation_policy_ref=DomainArtifactRef.of(
+            ArtifactDomain.EVALUATION_POLICY, "policy:core"
+        ),
+        evaluation_profile_ref=DomainArtifactRef.of(
+            ArtifactDomain.EVALUATION_PROFILE, "profile:core"
+        ),
+        split_ref=DomainArtifactRef.of(ArtifactDomain.SPLIT, SPLIT),
+        snapshot_ref=DomainArtifactRef.of(ArtifactDomain.SNAPSHOT, SNAPSHOT),
+        universe_ref=DomainArtifactRef.of(ArtifactDomain.UNIVERSE, UNIVERSE),
+        metric_evidence_refs=(
+            DomainArtifactRef.of(ArtifactDomain.METRIC_EVIDENCE, "metric/rank_ic"),
+            DomainArtifactRef.of(ArtifactDomain.METRIC_EVIDENCE, "metric/pearson_ic"),
+        ),
+        diagnostic_refs=(DomainArtifactRef.of(ArtifactDomain.DIAGNOSTIC, bundle.request_id),),
+        result_content=EvaluationResultContentHash(
+            metric_values={"rank_ic": float(mu)},
+            timing={"decision_time": "2026-08-27T00:00:00+00:00"},
+        ),
         created_at="2026-08-27T00:00:00+00:00",
     )
     assert artifact.content_hash  # derived-only content identity
+    # R55 #23: same spec re-run (different evaluation id / data) keeps the
+    # spec identity while the envelope identity moves.
+    rerun_payload = artifact.to_dict()
+    rerun_payload["evaluation_id"] = "e2e/eval/rerun"
+    rerun_payload.pop("content_hash")  # derived-only: recomputed for the rerun
+    rerun_payload["result_content"] = EvaluationResultContentHash(
+        metric_values={"rank_ic": float(mu) + 1e-6},  # a re-run's data moved
+        timing={"decision_time": "2026-08-27T00:00:00+00:00"},
+    ).to_dict()
+    rerun = EvaluationArtifact.from_dict(rerun_payload)
+    assert rerun.evaluation_spec_identity.identity_hash == (
+        artifact.evaluation_spec_identity.identity_hash
+    )
+    assert rerun.evaluation_result_content_hash != artifact.evaluation_result_content_hash
+    assert rerun.evaluation_envelope_identity.identity_hash != (
+        artifact.evaluation_envelope_identity.identity_hash
+    )
 
     # -- step 5: FO winner among 2 candidates --------------------------------
     # Candidate A = recipe rankpct (the evaluated treatment); candidate B = a

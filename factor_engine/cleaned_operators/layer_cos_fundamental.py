@@ -155,6 +155,18 @@ def pd_safe_div(x, y, epsilon=EPS, **_):
         x = pd.DataFrame(x, index=y.index, columns=y.columns, dtype=float)
     elif not isinstance(y, pd.DataFrame) and isinstance(x, pd.DataFrame):
         y = pd.DataFrame(y, index=x.index, columns=x.columns, dtype=float)
+    elif not isinstance(x, pd.DataFrame) and not isinstance(y, pd.DataFrame):
+        # 2026-08-29: scalar/scalar ``safe_div(0, 0)`` is the LQTP platform's
+        # NaN literal branch (``where(cond, x, safe_div(0,0))`` ≡ NaN when
+        # cond false).  Return the platform NaN scalar; the surrounding
+        # ``where`` scalar-broadcast turns it into a constant NaN panel.
+        epsilon = float(epsilon)
+        try:
+            if epsilon > 0 and float(y) != 0 and abs(float(y)) > epsilon:
+                return float(x) / float(y)
+        except (TypeError, ValueError):
+            pass
+        return float("nan")
     x, y = aligned_pd(x, y)
     epsilon = float(epsilon)
     if not np.isfinite(epsilon) or epsilon <= 0:

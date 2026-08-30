@@ -12,10 +12,12 @@ runnable pipeline orchestration, WITHOUT touching any domain implementation:
          through the platform's own ``contracts/jobs`` DTOs; the actual domain
          evaluation behind the injectable ``evaluate_candidate`` seam, so no
          domain import leaks in)
-      -> PromotionGate decision over a PURE-DTO dict surface (stdlib only —
-         mirrors ``factor_assets.library.promotion_gate`` semantics with NO
-         cross-package import: label maturity / vwap->vwap basis / |rank_ic|
-         floor / duplicate-similarity)
+      -> ADMISSION DELEGATED to the injected
+         :class:`~quant_platform.app.contracts.admission.AdmissionAuthority`
+         (the owning domain package — ``factor_assets`` for factors/clusters —
+         implements the Protocol; the platform only RECORDS the returned
+         :class:`~quant_platform.app.contracts.admission.AdmissionVerdict`,
+         R55 P0-6)
       -> approved candidates registered into ``ArtifactRegistry``
          (artifact_type=FACTOR_CANDIDATE)
       -> per-round ``FeatureSetVersion`` snapshot + ``FeatureSetArtifact`` and
@@ -32,8 +34,11 @@ Purity rules (mirroring ``candidate/ingest.py``):
 
 The eight-step domain chain (factor -> preprocess -> evaluate -> optimize) is
 WIRED, not owned, here: every step that touches a domain authority lives behind
-the injectable ``evaluate_candidate`` seam. The default seam fails closed —
-approving nothing without real computed evidence (never a fabricated pass).
+an injectable seam (``evaluate_candidate`` for evaluation, ``admission_authority``
+for the admit/reject decision). The default admission seam fails closed — it
+refuses everything with ``admission_authority_absent`` and approves nothing
+without a delegated verdict (never a fabricated pass, never a platform-side
+threshold call on rank_ic / label maturity / return basis / similarity).
 """
 
 from __future__ import annotations
@@ -52,13 +57,19 @@ from quant_platform.app.candidate.ingest import (
 )
 from quant_platform.app.contracts import (
     ARTIFACT_TYPE_FACTOR_CANDIDATE,
+    AdmissionAuthority,
+    AdmissionRequest,
+    AdmissionVerdict,
     ArtifactRef,
+    DECISION_APPROVED,
+    DECISION_SHADOWED,
     EventEnvelope,
     FeatureMemberRef,
     FeatureSetArtifact,
     FeatureSetVersion,
     JobResult,
     JobSpec,
+    RefuseAdmission,
     RetrainPolicy,
     retrain_required_for_diff,
 )
@@ -73,7 +84,9 @@ __all__ = [
     "PipelineStatusReason",
     "CandidateEvaluation",
     "Pipeline",
-    "pipeline_gate_decision",
+    "AdmissionAuthority",
+    "AdmissionRequest",
+    "AdmissionVerdict",
     "build_with_evidence",
 ]
 
@@ -89,23 +102,6 @@ _PRODUCER_VERSION = "1.0.0"
 _GOOD_EVIDENCE_MARKER = "evaluation:ok"
 _BAD_EVIDENCE_MARKER = "evaluation:no-evidence"
 
-#: Default minimum abs rank_ic for promotion. Matches the FA promotion-gate
-#: default (0.02) — see Memory: vwap-to-vwap 收益口径.
-DEFAULT_MIN_RANK_IC = 0.02
-VWAP_TO_VWAP_BASIS = "vwap_to_vwap"
-
-#: QE ``EvidenceStatus`` string values meaning "label not mature / evidence not
-#: computed" (reference-only; this module imports no domain package).
-_EVIDENCE_NOT_COMPUTED: tuple[str, ...] = (
-    "not_computed",
-    "label_not_mature",
-    "insufficient_data",
-    "unavailable",
-    "unsupported",
-    "invalid_evidence",
-    "failed",
-)
-
 
 # --------------------------------------------------------------------------- #
 # Status and report
@@ -113,7 +109,12 @@ _EVIDENCE_NOT_COMPUTED: tuple[str, ...] = (
 
 
 class PipelineStatusReason:
-    """Machine-parseable per-candidate status reason strings."""
+    """Machine-parseable per-candidate status reason strings.
+
+    ``QRP_GATE_*`` values are now RECORDED verdict attributions from the
+    delegated authority (R55 P0-6) — the platform maps the authority's reason
+    codes onto them but computes none of them.
+    """
 
     QRP_OK = "QRP_OK"
     QRP_DUPLICATE_SKIPPED = "QRP_DUPLICATE_SKIPPED"
@@ -123,6 +124,9 @@ class PipelineStatusReason:
     QRP_GATE_REJECTED_LABEL = "QRP_GATE_REJECTED_LABEL"
     QRP_GATE_REJECTED_BASIS = "QRP_GATE_REJECTED_BASIS"
     QRP_GATE_REVIEW_UNKNOWN = "QRP_GATE_REVIEW_UNKNOWN"
+    QRP_ADMISSION_REJECTED = "QRP_ADMISSION_REJECTED"
+    QRP_ADMISSION_SHADOWED = "QRP_ADMISSION_SHADOWED"
+    QRP_ADMISSION_AUTHORITY_ABSENT = "QRP_ADMISSION_AUTHORITY_ABSENT"
     QRP_EVALUATION_FAILED = "QRP_EVALUATION_FAILED"
     QRP_NO_EVIDENCE = "QRP_NO_EVIDENCE"
     QRP_REPLAY_DETECTED = "QRP_REPLAY_DETECTED"
@@ -149,6 +153,7 @@ class PipelineReport:
     num_replayed: int = 0
     num_approved: int = 0
     num_rejected: int = 0
+    num_shadowed: int = 0
     num_evaluation_failed: int = 0
     num_normalization_failed: int = 0
     num_registered: int = 0
@@ -282,6 +287,17 @@ class PipelineReport:
             content_hash=content_hash,
         )
 
+    def with_shadowed(
+        self, *, candidate_id: str, content_hash: str, reason: str
+    ) -> "PipelineReport":
+        """Record a delegated SHADOWED verdict (kept, never applied)."""
+        return replace(self, num_shadowed=self.num_shadowed + 1).with_item(
+            candidate_id=candidate_id,
+            status="SHADOWED",
+            reason=reason,
+            content_hash=content_hash,
+        )
+
     def with_failed(
         self, *, candidate_id: str, content_hash: str, reason: str
     ) -> "PipelineReport":
@@ -330,19 +346,20 @@ class PipelineReport:
 
 @dataclass(frozen=True)
 class CandidateEvaluation:
-    """PURE-DTO evaluation surface for the promotion decision.
+    """Carried evaluation DTO (opaque evidence the AUTHORITY will judge).
 
-    Mirrors the ``CandidateEvaluationRef`` shape of
-    ``factor_assets.library.promotion_gate`` as a plain frozen dataclass — this
-    orchestrator never imports factor_assets; the gate decision is a local pure
-    decision over exactly these fields.
+    The platform never interprets these fields: ``rank_ic`` magnitude,
+    ``label_maturity``, ``evidence_status`` and ``return_basis`` are read by the
+    injected :class:`AdmissionAuthority` (the owning domain package) — NOT by
+    this orchestrator. R55 P0-6 removed the platform-side promotion gate that
+    thresholded them.
     """
 
     candidate_ref: str
-    rank_ic: float | None
+    rank_ic: float | None = None
     label_maturity: bool = True
     evidence_status: str | None = None
-    return_basis: str = VWAP_TO_VWAP_BASIS
+    return_basis: str = "vwap_to_vwap"
     evidence_ref: str | None = None
     evaluation_ref: str | None = None
     treatment_optimization_ref: str | None = None
@@ -365,13 +382,17 @@ class CandidateEvaluation:
 
 
 def build_with_evidence(evidence: Mapping[str, Any]) -> CandidateEvaluation:
-    """Public helper: build a PURE-DTO evaluation from a computed-evidence dict.
+    """Public helper: carry a computed-evidence dict into the DTO.
 
     ``evidence`` keys: ``candidate_ref``, ``rank_ic``, ``label_maturity``
     (default True), ``evidence_status`` (default ``"computed"``),
-    ``return_basis`` (default vwap->vwap), ``evidence_ref`` / ``evaluation_ref``
-    / ``treatment_optimization_ref``. Label not mature raises — a not-computed
-    label must never be dressed up as computed evidence.
+    ``return_basis``, ``evidence_ref`` / ``evaluation_ref`` /
+    ``treatment_optimization_ref``.
+
+    This is TRANSPORT ONLY — the values are passed to the admission authority
+    untouched; the platform draws no conclusion from them (no threshold, no
+    maturity or 口径 judgment). Label not mature raises — a not-computed label
+    must never be dressed up as computed evidence by the carrier either.
     """
     candidate_ref = str(evidence.get("candidate_ref") or "")
     if not candidate_ref:
@@ -389,131 +410,12 @@ def build_with_evidence(evidence: Mapping[str, Any]) -> CandidateEvaluation:
             evidence.get("evidence_status") or "computed"
         ),
         return_basis=str(
-            evidence.get("return_basis") or VWAP_TO_VWAP_BASIS
+            evidence.get("return_basis") or "vwap_to_vwap"
         ),
         evidence_ref=evidence.get("evidence_ref"),
         evaluation_ref=evidence.get("evaluation_ref"),
         treatment_optimization_ref=evidence.get("treatment_optimization_ref"),
     )
-
-
-# --------------------------------------------------------------------------- #
-# Promotion decision (PURE-DTO, stdlib only)
-# --------------------------------------------------------------------------- #
-
-
-def pipeline_gate_decision(
-    evaluation: CandidateEvaluation,
-    library_snapshot: Mapping[str, Any],
-) -> dict[str, Any]:
-    """Pure promotion decision mirroring the FA ``PromotionGate`` semantics.
-
-    Operates on the PURE-DTO dict surface only (no cross-package import) over
-    how ``factor_assets.library.promotion_gate.PromotionGate.evaluate`` decides:
-
-    * label not mature / evidence-status in the not-computed set -> REJECT
-      ``label_not_mature`` (fail closed);
-    * return basis != ``vwap_to_vwap`` -> REJECT ``return_basis_wrong``
-      (defensive — see Memory: vwap-to-vwap 收益口径);
-    * ``rank_ic`` absent or ``|rank_ic|`` below the floor -> REJECT
-      ``rank_ic_below_threshold``;
-    * candidate similar (above threshold) to an existing library member ->
-      REJECT ``duplicate_of_existing_member`` when ``reject_duplicates=True``
-      (default), else REVIEW ``merge_suggested``;
-    * library has members but uniqueness cannot be measured (no similarity_fn
-      or a ``None`` measurement) -> forced REVIEW ``merge_suggested`` (never a
-      silent APPROVE);
-    * otherwise APPROVE ``qualifies``.
-
-    ``library_snapshot`` keys: ``library_version_ref`` (required),
-    ``min_rank_ic``, ``reject_duplicates``, ``duplicate_similarity_threshold``,
-    ``member_refs`` (existing library member refs), ``similarity_fn``.
-
-    Returns a plain ``{"decision", "reason_codes", "library_version_ref"}``.
-    """
-    library_version_ref = str(
-        library_snapshot.get("library_version_ref")
-        or library_snapshot.get("library_version_id")
-        or ""
-    )
-    if not library_version_ref:
-        raise ValueError("pipeline_gate_decision requires library_version_ref")
-    min_rank_ic = float(library_snapshot.get("min_rank_ic", DEFAULT_MIN_RANK_IC))
-    if min_rank_ic < 0:
-        raise ValueError("min_rank_ic must be non-negative")
-    reject_duplicates = bool(library_snapshot.get("reject_duplicates", True))
-    similarity_threshold = float(
-        library_snapshot.get("duplicate_similarity_threshold", 0.7)
-    )
-    if not 0.0 <= similarity_threshold <= 1.0:
-        raise ValueError("duplicate_similarity_threshold must be in [0, 1]")
-    member_refs = tuple(str(m) for m in (library_snapshot.get("member_refs") or ()))
-    similarity_fn = library_snapshot.get("similarity_fn")
-
-    reject_codes: list[str] = []
-    if not evaluation.label_maturity or (
-        evaluation.evidence_status is not None
-        and evaluation.evidence_status in _EVIDENCE_NOT_COMPUTED
-    ):
-        reject_codes.append("label_not_mature")
-    if evaluation.return_basis != VWAP_TO_VWAP_BASIS:
-        reject_codes.append("return_basis_wrong")
-    if evaluation.rank_ic is None or abs(evaluation.rank_ic) < min_rank_ic:
-        reject_codes.append("rank_ic_below_threshold")
-
-    measured: dict[str, float] = {}
-    unmeasured = False
-    no_measurement = False
-    is_duplicate = False
-    if member_refs:
-        if similarity_fn is None:
-            no_measurement = True
-        else:
-            for member_ref in member_refs:
-                value = similarity_fn(evaluation.candidate_ref, member_ref)
-                if value is None:
-                    unmeasured = True
-                    continue
-                if isinstance(value, bool) or not isinstance(value, (int, float)):
-                    raise ValueError(
-                        f"similarity_fn returned a non-number for "
-                        f"({evaluation.candidate_ref!r}, {member_ref!r}): {value!r}"
-                    )
-                number = float(value)
-                if number != number or number in (float("inf"), float("-inf")):
-                    raise ValueError(
-                        f"similarity_fn returned a non-finite value — fail closed"
-                    )
-                measured[member_ref] = number
-            if measured and any(v > similarity_threshold for v in measured.values()):
-                is_duplicate = True
-
-    if is_duplicate:
-        if not reject_duplicates:
-            return {
-                "decision": "REVIEW",
-                "reason_codes": ["merge_suggested"],
-                "library_version_ref": library_version_ref,
-            }
-        reject_codes.append("duplicate_of_existing_member")
-
-    if reject_codes:
-        return {
-            "decision": "REJECT",
-            "reason_codes": reject_codes,
-            "library_version_ref": library_version_ref,
-        }
-    if unmeasured or no_measurement:
-        return {
-            "decision": "REVIEW",
-            "reason_codes": ["merge_suggested"],
-            "library_version_ref": library_version_ref,
-        }
-    return {
-        "decision": "APPROVE",
-        "reason_codes": ["qualifies"],
-        "library_version_ref": library_version_ref,
-    }
 
 
 # --------------------------------------------------------------------------- #
@@ -523,10 +425,15 @@ def pipeline_gate_decision(
 
 @dataclass(frozen=True)
 class PipelineConfig:
-    """Immutable pipeline configuration."""
+    """Immutable pipeline configuration.
+
+    ``min_rank_ic`` is retained ONLY as a carried pass-through for the injected
+    :class:`AdmissionAuthority` — the platform itself never reads it. All
+    admission thresholds live with the owning domain package (R55 P0-6).
+    """
 
     scope: str = "pipeline:test"
-    min_rank_ic: float = DEFAULT_MIN_RANK_IC
+    min_rank_ic: float = 0.02
     retrain_policy: RetrainPolicy | None = None
     feature_set_id: str = "fs_pipeline_default"
 
@@ -534,17 +441,17 @@ class PipelineConfig:
 def _default_evaluate(candidate: Any, context: Mapping[str, Any]) -> CandidateEvaluation:
     """Fail-closed default evaluator: never fabricates computed evidence.
 
-    When no per-candidate evaluator is injected the pipeline cannot claim real
-    vwap-derived rank_ic — the default refuses to approve anything (label not
-    mature / no evidence). Silent fabrication of a pass is exactly the failure
-    mode the promotion gate is built to reject.
+    When no per-candidate evaluator is injected the pipeline cannot carry real
+    vwap-derived rank_ic — the default produces a no-evidence DTO that the
+    admission authority will see as not-computed. Silent fabrication of a pass
+    is exactly the failure mode admission delegation is built to reject.
     """
     return CandidateEvaluation(
         candidate_ref=str(getattr(candidate, "candidate_id", "")),
         rank_ic=None,
         label_maturity=False,
         evidence_status="not_computed",
-        return_basis=VWAP_TO_VWAP_BASIS,
+        return_basis="vwap_to_vwap",
     )
 
 
@@ -558,7 +465,12 @@ class Pipeline:
     outbox : ``worker.publish.InMemoryOutbox`` milestone events append to.
     runner : ``worker.jobs.JobRunner`` per-candidate handlers schedule on.
     evaluate_candidate : injectable domain seam ``(manifest, context) ->
-        CandidateEvaluation``. Default: fail-closed (nothing approved).
+        CandidateEvaluation`` — produces the evidence CARRIED to the authority.
+    admission_authority : the :class:`AdmissionAuthority` port implemented by
+        the owning domain package (e.g. a ``factor_assets`` promotion/selection
+        adapter). Every approve/reject verdict is its output; the platform only
+        records it. Default: :class:`RefuseAdmission` (fail closed — an
+        uncomposed pipeline approves nothing).
     config : sizing / policy switches.
 
     ``run`` is deterministic and idempotent in the sense that replaying the same
@@ -572,6 +484,7 @@ class Pipeline:
         outbox: InMemoryOutbox | None = None,
         runner: JobRunner | None = None,
         evaluate_candidate: Callable[[Any, Mapping[str, Any]], CandidateEvaluation] | None = None,
+        admission_authority: AdmissionAuthority | None = None,
         config: PipelineConfig | None = None,
         worker_id: str = "qrpp5-worker",
     ) -> None:
@@ -580,12 +493,16 @@ class Pipeline:
         self.runner = runner if runner is not None else JobRunner(worker_id=worker_id)
         self.config = config if config is not None else PipelineConfig()
         self.evaluate_candidate = evaluate_candidate or _default_evaluate
+        #: the delegated decision-maker (domain-owned). Never None: without a
+        #: composed authority the pipeline refuses admission (fail closed).
+        self.admission_authority = admission_authority if admission_authority is not None else RefuseAdmission()
 
         self._processed_fingerprints: set[str] = set()
         self._consumed_manifests: list[Any] = []
         self._feature_snapshots: list[FeatureSetVersion] = []
         self._run_counter = 0
         self._evaluation_by_job: dict[str, CandidateEvaluation] = {}
+        self._verdict_by_job: dict[str, AdmissionVerdict] = {}
 
     # ---- queries -------------------------------------------------------------
     @property
@@ -598,6 +515,10 @@ class Pipeline:
     def job_records(self) -> tuple[Any, ...]:
         return self.runner.records()
 
+    def verdicts(self) -> tuple[AdmissionVerdict, ...]:
+        """All delegated admission verdicts recorded this pipeline's lifetime."""
+        return tuple(self._verdict_by_job.values())
+
     # ---- run -----------------------------------------------------------------
     def run(
         self,
@@ -609,9 +530,10 @@ class Pipeline:
         """Execute one full pipeline pass and return an immutable report.
 
         Steps: normalize -> fingerprint anti-replay -> reconcile (NEW only) ->
-        JobRunner-scheduled treatment+evaluation per candidate -> promotion gate
-        decision -> register approved -> FeatureSet snapshot + diff. Milestone
-        events are appended to the outbox as candidates move between phases.
+        JobRunner-scheduled treatment+evaluation per candidate -> DELEGATED
+        admission verdict (recorded, never computed here) -> register approved
+        -> FeatureSet snapshot + diff. Milestone events are appended to the
+        outbox as candidates move between phases.
         """
         if not isinstance(library_snapshot, Mapping):
             raise TypeError("library_snapshot is required (must be a Mapping)")
@@ -668,7 +590,7 @@ class Pipeline:
         # against the known registry, so a same-raw-record-twice batch surfaces
         # DUPLICATE_EXACT on the second occurrence. Recompute the dual-key
         # classes here (content + semantic exact-match = duplicate) so only
-        # genuinely NEW candidates enter the job + gate path.
+        # genuinely NEW candidates enter the job + admission path.
         reconcile_conflict_by_hash: dict[str, str] = {}
         for conflict in reconcile.conflicts:
             reconcile_conflict_by_hash[conflict.content_hash] = conflict.reason
@@ -768,22 +690,41 @@ class Pipeline:
                 )
                 continue
 
-            # Promotion gate decision over the PURE-DTO surface.
-            decision = pipeline_gate_decision(evaluation, library_snapshot).copy()
-            approved = decision["decision"] == "APPROVE"
+            # ADMISSION IS DELEGATED (R55 P0-6): the platform asks the injected
+            # AdmissionAuthority (implemented by the owning domain package) and
+            # RECORDS the returned verdict. It never thresholds rank_ic, never
+            # judges label maturity / return basis / duplicate similarity.
+            request = AdmissionRequest(
+                candidate_ref=str(manifest.candidate_id),
+                content_hash=ch,
+                factor_definition_ref=str(getattr(manifest, "semantic_family_hint", "") or ""),
+                semantic_ref=str(getattr(manifest, "semantic_family_hint", "") or ""),
+                evaluation=evaluation,
+                library_snapshot_ref=self._library_ref(library_snapshot),
+                context={"job_key": job_key},
+            )
+            verdict = self.admission_authority.decide(request)
+            self._verdict_by_job[job_key] = verdict
+            approved = verdict.decision == DECISION_APPROVED
+            decision_payload = {
+                "decision": verdict.decision,
+                "reason_codes": list(verdict.reason_codes),
+                "library_version_ref": self._library_ref(library_snapshot),
+                "authority": verdict.authority,
+                "policy_ref": verdict.policy_ref,
+                "delegated": True,
+            }
             event_id = self._publish_event(
-                milestone="CANDIDATE_APPROVED" if approved else "CANDIDATE_REJECTED",
-                candidate=manifest,
-                reason=(
-                    PipelineStatusReason.QRP_GATE_QUALIFIES
-                    if approved
-                    else _decision_reason(decision)
+                milestone="CANDIDATE_APPROVED" if approved else (
+                    "CANDIDATE_SHADOWED" if verdict.decision == DECISION_SHADOWED else "CANDIDATE_REJECTED"
                 ),
-                status="APPROVED" if approved else "REJECTED",
+                candidate=manifest,
+                reason=_verdict_reason(verdict),
+                status="APPROVED" if approved else verdict.decision,
                 library_snapshot=library_snapshot,
                 now=now,
                 run_index=run_index,
-                decision=decision,
+                decision=decision_payload,
             )
             report = report.with_event(event_id)
 
@@ -807,12 +748,18 @@ class Pipeline:
                     artifact_id=stored.artifact_id,
                 )
                 report = report.with_event(event_id)
+            elif verdict.decision == DECISION_SHADOWED:
+                # A SHADOWED verdict is recorded, never applied to the registry.
+                report = report.with_shadowed(
+                    candidate_id=manifest.candidate_id,
+                    content_hash=ch,
+                    reason=_verdict_reason(verdict),
+                )
             else:
-                reason = _decision_reason(decision)
                 report = report.with_rejected(
                     candidate_id=manifest.candidate_id,
                     content_hash=ch,
-                    reason=reason,
+                    reason=_verdict_reason(verdict),
                 )
 
         # 5. FeatureSet snapshot for the approved group + diff vs previous round.
@@ -921,6 +868,24 @@ class Pipeline:
             return content_hash(*sorted(self._processed_fingerprints))[:16]
         return content_hash("fresh")[:16]
 
+    @staticmethod
+    def _library_ref(library_snapshot: Mapping[str, Any]) -> str:
+        """The carried library version ref (platform reads it, never mints it)."""
+        return str(
+            library_snapshot.get("library_version_ref")
+            or library_snapshot.get("library_version_id")
+            or ""
+        )
+
+    @staticmethod
+    def _library_ref(library_snapshot: Mapping[str, Any]) -> str:
+        """The carried library version ref (platform reads it, never mints it)."""
+        return str(
+            library_snapshot.get("library_version_ref")
+            or library_snapshot.get("library_version_id")
+            or ""
+        )
+
     def _build_candidate_artifact(
         self,
         candidate: Any,
@@ -1025,7 +990,11 @@ class Pipeline:
 
 
 def _reject_reason(reason_codes: Iterable[str]) -> str:
-    """Map promote-gate REJECT reason codes to a QRP pipeline reason string."""
+    """Map a delegated authority's REJECT reason codes to a QRP reason string.
+
+    Pure attribution mapping (P0-6): the codes were produced by the domain
+    authority; this only renames them into the platform status vocabulary.
+    """
     codes = [str(c) for c in reason_codes]
     if "rank_ic_below_threshold" in codes:
         return PipelineStatusReason.QRP_GATE_REJECTED_RANK_IC
@@ -1035,15 +1004,15 @@ def _reject_reason(reason_codes: Iterable[str]) -> str:
         return PipelineStatusReason.QRP_GATE_REJECTED_BASIS
     if "duplicate_of_existing_member" in codes:
         return PipelineStatusReason.QRP_DUPLICATE_SKIPPED
-    return "QRP_GATE_REJECTED"
+    if "admission_authority_absent" in codes:
+        return PipelineStatusReason.QRP_ADMISSION_AUTHORITY_ABSENT
+    return PipelineStatusReason.QRP_ADMISSION_REJECTED
 
 
-def _decision_reason(decision: Mapping[str, Any]) -> str:
-    """Map a promote-gate decision dict to a QRP pipeline reason string."""
-    decision_value = str(decision.get("decision", ""))
-    reason_codes = decision.get("reason_codes") or ()
-    if decision_value == "APPROVE":
+def _verdict_reason(verdict: AdmissionVerdict) -> str:
+    """Map a DELEGATED admission verdict to a QRP pipeline reason string."""
+    if verdict.decision == DECISION_APPROVED:
         return PipelineStatusReason.QRP_GATE_QUALIFIES
-    if decision_value == "REVIEW":
-        return PipelineStatusReason.QRP_GATE_REVIEW_UNKNOWN
-    return _reject_reason(reason_codes)
+    if verdict.decision == DECISION_SHADOWED:
+        return PipelineStatusReason.QRP_ADMISSION_SHADOWED
+    return _reject_reason(verdict.reason_codes)

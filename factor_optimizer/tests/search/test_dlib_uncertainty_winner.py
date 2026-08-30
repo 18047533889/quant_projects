@@ -16,10 +16,16 @@ Covers:
 """
 
 import math
+import random
 
+import numpy as np
 import pytest
 
 from factor_optimizer.contracts.multiplicity import MultiplicityArtifact
+from factor_optimizer.contracts.treatment_integrity import (
+    TreatmentIntegrityError,
+    build_integrity_evidence,
+)
 from factor_optimizer.contracts.treatment_result import (
     TreatmentOptimizationResultArtifact,
 )
@@ -187,6 +193,39 @@ def _smoothed_metrics(trial_id, **overrides):
     return TreatmentMetrics(**defaults)
 
 
+def _evidence_for(*metrics_list, **overrides):
+    """Real TreatmentIntegrityEvidence per candidate trial id (R55 P0-9).
+
+    The 8-step pipeline's integrity gates are fail-closed: every candidate —
+    including RAW — must carry measured before/after evidence produced by the
+    code that actually applied the treatment.  This helper builds that
+    evidence from small deterministic arrays so each candidate's "treated"
+    output genuinely differs from its input (and RAW's does not).
+    """
+    result = {}
+    for metrics in metrics_list:
+        rng = np.random.default_rng(abs(hash(metrics.trial_id)) % (2 ** 32))
+        before = rng.normal(size=64)
+        kind = (
+            "raw"
+            if metrics.trial_id == "RAW"
+            else f"treatment::{metrics.trial_id}"
+        )
+        if kind == "raw":
+            after = before
+        else:
+            after = before * 0.5 + 0.01
+        result[metrics.trial_id] = build_integrity_evidence(
+            metrics.trial_id,
+            kind,
+            {} if kind == "raw" else {"window": 5},
+            before,
+            after,
+            **overrides,
+        )
+    return result
+
+
 # ---------------------------------------------------------------------------
 # DLIB-FO-002: TreatmentDecisionPolicy 8-step
 # ---------------------------------------------------------------------------
@@ -206,7 +245,11 @@ def test_treatment_decision_8_step_does_not_pick_raw_by_single_rank_ic():
     dual = _smoothed_metrics("DUAL", rank_ic=0.0300, icir=0.55, turnover=0.22)
 
     policy = TreatmentDecisionPolicy(_anchors(), _policy())
-    result = policy.decide([raw, ewma, kama, dual], raw_trial_id="RAW")
+    result = policy.decide(
+        [raw, ewma, kama, dual],
+        raw_trial_id="RAW",
+        integrity_evidence=_evidence_for(raw, ewma, kama, dual),
+    )
 
     # RAW was a candidate (treated-got-worse discoverable).  Here RAW is
     # dominated on every dimension by the smoothed treatments, so it is
@@ -232,7 +275,11 @@ def test_treatment_decision_keeps_raw_when_treatment_worse():
         "BAD", rank_ic=0.020, icir=0.20, turnover=0.60, stability=0.30
     )
     policy = TreatmentDecisionPolicy(_anchors(), _policy())
-    result = policy.decide([raw, bad], raw_trial_id="RAW")
+    result = policy.decide(
+        [raw, bad],
+        raw_trial_id="RAW",
+        integrity_evidence=_evidence_for(raw, bad),
+    )
     assert result.winner_trial_id == "RAW"
 
 
@@ -241,7 +288,11 @@ def test_treatment_decision_integrity_gate_hard_rejects():
     raw = _raw_metrics()
     broken = _smoothed_metrics("BROKEN", coverage=0.0)
     policy = TreatmentDecisionPolicy(_anchors(), _policy())
-    result = policy.decide([raw, broken], raw_trial_id="RAW")
+    result = policy.decide(
+        [raw, broken],
+        raw_trial_id="RAW",
+        integrity_evidence=_evidence_for(raw, broken),
+    )
     # The broken candidate is hard-rejected at STEP 1 and never reaches the
     # frontier.
     assert "BROKEN" not in result.pareto_trial_ids
@@ -253,7 +304,11 @@ def test_treatment_decision_requires_raw_candidate():
     ewma = _smoothed_metrics("EWMA")
     policy = TreatmentDecisionPolicy(_anchors(), _policy())
     with pytest.raises(ValueError, match="RAW"):
-        policy.decide([ewma], raw_trial_id="RAW")
+        policy.decide(
+            [ewma],
+            raw_trial_id="RAW",
+            integrity_evidence=_evidence_for(ewma),
+        )
 
 
 def test_treatment_decision_all_hard_rejected_fails_closed():
@@ -262,7 +317,125 @@ def test_treatment_decision_all_hard_rejected_fails_closed():
     broken2 = _smoothed_metrics("B2", coverage=0.0)
     policy = TreatmentDecisionPolicy(_anchors(), _policy())
     with pytest.raises(ValueError, match="integrity"):
-        policy.decide([broken1, broken2], raw_trial_id="B1")
+        policy.decide(
+            [broken1, broken2],
+            raw_trial_id="B1",
+            integrity_evidence=_evidence_for(broken1, broken2),
+        )
+
+
+# ---------------------------------------------------------------------------
+# R55 P0-9: the integrity gates are REAL (evidence-gated, fail closed)
+# ---------------------------------------------------------------------------
+
+
+def test_treatment_decision_rejects_missing_integrity_evidence():
+    """No evidence at all -> the candidate is hard-rejected despite perfect
+    headline metrics (the historical fake gate admitted it)."""
+    raw = _raw_metrics()
+    shiny = _smoothed_metrics("SHINY", rank_ic=0.05, icir=0.9, coverage=0.99)
+    policy = TreatmentDecisionPolicy(_anchors(), _policy())
+    result = policy.decide(
+        [raw, shiny],
+        raw_trial_id="RAW",
+        integrity_evidence=_evidence_for(raw),
+    )
+    assert "SHINY" not in result.pareto_trial_ids
+    assert "SHINY" not in result.statistically_plausible
+    assert result.winner_trial_id == "RAW"
+    assert "SHINY" in result.step_trace["step1_integrity"]
+
+
+def test_treatment_decision_rejects_stale_integrity_evidence():
+    """Evidence bound to a different trial id is stale -> rejected."""
+    raw = _raw_metrics()
+    ewma = _smoothed_metrics("EWMA")
+    policy = TreatmentDecisionPolicy(_anchors(), _policy())
+    result = policy.decide(
+        [raw, ewma],
+        raw_trial_id="RAW",
+        # EWMA's evidence carries the wrong treatment id.
+        integrity_evidence=_evidence_for(raw, ewma) | {
+            "EWMA": _evidence_for(_smoothed_metrics("OTHER"))["OTHER"],
+        },
+    )
+    assert "EWMA" not in result.pareto_trial_ids
+    assert result.winner_trial_id == "RAW"
+
+
+def test_treatment_decision_rejects_failed_integrity_check():
+    """A candidate whose evidence contains a failed check is rejected even
+    when its metrics look great."""
+    raw = _raw_metrics()
+    shiny = _smoothed_metrics("SHINY", rank_ic=0.05, icir=0.9, coverage=0.99)
+    evidence = _evidence_for(raw, shiny)
+    # Tamper the *verdict* by rebuilding the evidence with a failing check.
+    from factor_optimizer.contracts.treatment_integrity import (
+        IntegrityCheckResult,
+        TreatmentIntegrityEvidence,
+    )
+
+    good = _evidence_for(shiny)["SHINY"]
+    failed = TreatmentIntegrityEvidence(
+        treatment_id=good.treatment_id,
+        treatment_kind=good.treatment_kind,
+        applied_parameters=dict(good.applied_parameters),
+        integrity_checks=tuple(good.integrity_checks)
+        + (
+            IntegrityCheckResult(
+                name="pit_no_leakage",
+                passed=False,
+                expected="treatment must not use future observations",
+                detail="lag check failed",
+            ),
+        ),
+        before_digest=good.before_digest,
+        after_digest=good.after_digest,
+    )
+    policy = TreatmentDecisionPolicy(_anchors(), _policy())
+    result = policy.decide(
+        [raw, shiny],
+        raw_trial_id="RAW",
+        integrity_evidence={**_evidence_for(raw), "SHINY": failed},
+    )
+    assert "SHINY" not in result.pareto_trial_ids
+    assert result.winner_trial_id == "RAW"
+
+
+def test_treatment_decision_all_candidates_without_evidence_raises_typed_error():
+    """Nothing may be scored when no candidate carries evidence (typed fail)."""
+    raw = _raw_metrics()
+    ewma = _smoothed_metrics("EWMA")
+    policy = TreatmentDecisionPolicy(_anchors(), _policy())
+    with pytest.raises(TreatmentIntegrityError, match="integrity"):
+        policy.decide([raw, ewma], raw_trial_id="RAW")
+
+
+def test_treatment_decision_not_run_evidence_is_rejected():
+    """Evidence with zero recorded checks is NOT_RUN -> rejected."""
+    from factor_optimizer.contracts.treatment_integrity import (
+        TreatmentIntegrityEvidence,
+    )
+
+    raw = _raw_metrics()
+    ewma = _smoothed_metrics("EWMA")
+    not_run = TreatmentIntegrityEvidence(
+        treatment_id="EWMA",
+        treatment_kind="ewma",
+        applied_parameters={"span": 5},
+        integrity_checks=(),
+        before_digest="a" * 64,
+        after_digest="b" * 64,
+    )
+    policy = TreatmentDecisionPolicy(_anchors(), _policy())
+    assert not_run.overall_status.value == "NOT_RUN"
+    result = policy.decide(
+        [raw, ewma],
+        raw_trial_id="RAW",
+        integrity_evidence={**_evidence_for(raw), "EWMA": not_run},
+    )
+    assert "EWMA" not in result.pareto_trial_ids
+    assert result.winner_trial_id == "RAW"
 
 
 # ---------------------------------------------------------------------------
@@ -272,8 +445,6 @@ def test_treatment_decision_all_hard_rejected_fails_closed():
 
 def _bootstrap_samples(center, spread, n=200):
     """Deterministic pseudo-bootstrap samples around ``center``."""
-    import random
-
     rng = random.Random(42)
     return [max(0.0, min(1.0, center + rng.uniform(-spread, spread))) for _ in range(n)]
 
@@ -319,7 +490,9 @@ def test_uncertainty_selector_prefers_lower_turnover_on_equivalence():
             minimum_meaningful_improvement=0.02,
             equivalence_region=0.5,
             confidence_level=0.95,
-            dominance_threshold=0.5,
+            # P0-10: dominance_threshold removed; banded-equivalence config.
+            decisive_probability=0.9,
+            equivalence_probability_band=0.15,
         ),
     )
     winner = selector.select([a, b], {"A": 0.5, "B": 0.6})

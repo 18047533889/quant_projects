@@ -38,13 +38,14 @@ from factor_optimizer.search.runner import SearchRunner, SearchConfig
 from factor_optimizer.contracts.search_budget import SearchBudget
 from factor_optimizer.contracts.objective import ObjectiveSpec
 from factor_optimizer.contracts.splits import SplitPlan, EvaluationProtocol
+from factor_optimizer.contracts.treatment_integrity import build_integrity_evidence
 from factor_optimizer.search.strategies import SearchSpace, ParameterSpace, GridSearch
 
 OPT_DIR = PROJECT / "weekly_backtest_output" / "optimized_factors"
 OUT_DIR = PROJECT / "weekly_backtest_output" / "optimized_top"
 META_PATH = PROJECT / "weekly_backtest_output" / "optimized_top_meta.json"
 OPT1_META = PROJECT / "weekly_backtest_output" / "optimized_meta.json"
-DAILY = Path.home() / "cos_data" / "StockDailyBar"
+DAILY_ADJ = Path.home() / "cos_data" / "StockDailyBarAdj"
 START, END = "2019-01-02", "2026-08-24"
 TOP_N = 30
 
@@ -52,7 +53,10 @@ TOP_N = 30
 # choice 参数要求 string 值（factor_optimizer ParameterSpace 契约）。
 WINSOR_OPTS = ["(0.01, 0.99)", "(0.02, 0.98)", "(0.05, 0.95)", "none"]
 ZSCORE_OPTS = ["True", "False"]
-SMOOTH_OPTS = ["1", "3", "5", "10"]
+SMOOTH_OPTS = ["1", "3", "5"]
+# 全量 Top 30 网格 30×4×2×3 = 720 格，每格一次全历史(2019-2026) RankIC 循环。
+# 4×2×4=32 格/因子实测约 258s（~8s/格），720 格预计 ~1.6h，可接受，先不改预算。
+EVAL_STRIDE = 2  # 2026-08-28：评估用半采样加速（最终 IR 走全采样回评）
 
 _reg = create_default_registry()
 cs_winsor = _reg.get_function("cs_winsor")
@@ -70,15 +74,15 @@ def parse_args(argv=None):
 
 
 def load_vwap():
-    """加载 VWAP 矩阵（vwap-to-vwap 收益口径）。"""
+    """加载 后复权 AdjVwap 矩阵（vwap-to-vwap 后复权硬性，StockDailyBarAdj）。"""
     global _HAS_VWAP
     if _HAS_VWAP is not None:
         return _HAS_VWAP
-    files = sorted(DAILY.glob("*.parquet"))
+    files = sorted(DAILY_ADJ.glob("*.parquet"))
     fs = "[" + ",".join(f"'{f}'" for f in files) + "]"
     con = duckdb.connect()
     df = con.execute(f"""
-        SELECT TradeDate as date, Symbol as symbol, Vwap as vwap
+        SELECT TradeDate as date, Symbol as symbol, AdjVwap as vwap
         FROM read_parquet({fs})
         WHERE TradeDate >= DATE '{START}' AND TradeDate <= DATE '{END}'
     """).df()
@@ -89,17 +93,17 @@ def load_vwap():
 
 
 def daily_rankic_ir(factor_mat, vwap):
-    """返回 RankIC IR（vwap-to-vwap 收益口径）。"""
+    """返回 RankIC IR（vwap-to-vwap 收益口径，shift(-2) 企业级：t+1成交→t+2卖出）。"""
     common = factor_mat.index.intersection(vwap.index)
     fv = factor_mat.reindex(index=common)
     vv = vwap.reindex(index=common)
     cols = vv.columns.intersection(fv.columns)
     fv = fv[cols]; vv = vv[cols]
-    fwd = vv.pct_change().shift(-1)  # vwap-to-vwap
+    fwd = vv.pct_change().shift(-2)  # vwap-to-vwap（对齐平台TargetVwapReturnH01）
     T = fv.shape[0]
     ic = np.full(T, np.nan)
     fv_a = fv.values; fwd_a = fwd.values
-    for t in range(T):
+    for t in range(0, T, EVAL_STRIDE):
         m = fv_a[t]; r = fwd_a[t]
         mask = np.isfinite(m) & np.isfinite(r)
         if mask.sum() < 20:
@@ -169,8 +173,20 @@ def build_eval_target(vwap):
         mean, ir = daily_rankic_ir(tmat, vwap)
         if not np.isfinite(ir):
             ir = 0.0
+        # R55 P0-9: 评分必须有真实 TreatmentIntegrityEvidence（fail closed）。
+        # 本阶段2的预处理是确定性的（winsor→zscore→smooth），故在 evaluation_fn 内
+        # 直接测量 before/after 并构建 evidence，保证 SearchRunner 的 integrity 门禁通过。
+        identical = np.array_equal(mat.values, tmat.values, equal_nan=True)
+        evidence = build_integrity_evidence(
+            treatment_id=trial.trial_id,
+            treatment_kind="raw" if identical else "winsor_zscore_smooth",
+            applied_parameters=params,
+            before=mat,
+            after=(mat if identical else tmat),
+        )
         return {"score": float(ir),
-                "evidence_ref": f"{page}:{params['winsor']}:{params['zscore']}:{params['smooth']}"}
+                "evidence_ref": f"{page}:{params['winsor']}:{params['zscore']}:{params['smooth']}",
+                "treatment_integrity_evidence": evidence}
     return evaluation_fn
 
 
@@ -321,7 +337,7 @@ def main():
         best = trials_sorted[0] if trials_sorted else None
         if best is None:
             continue
-        # 按最优格参数重新计算最终矩阵并写盘
+        # 按最优格参数重新计算最终矩阵并写盘（stride=1 全采样，输出不受加速影响）
         wl_pair = wl_from_token(best["params"]["winsor"])
         wl, wu = wl_pair
         zs = (best["params"]["zscore"] == "True")
@@ -331,9 +347,20 @@ def main():
         except Exception:
             tmat = None
         if tmat is not None:
+            # 用最优格做全采样回评（不经 EVAL_STRIDE），得到准确的最终 IR/mean。
+            _mean, _ir = daily_rankic_ir(tmat, vwap)
+            if np.isfinite(_ir):
+                meta_best_ir = round(float(_ir), 6)
+                meta_best_mean = round(float(_mean), 6)
+            else:
+                meta_best_ir = round(float(best["rankic_ir"]), 6)
+                meta_best_mean = round(float(best["mean_rankic"]), 6)
             sub = tmat.astype("float32").dropna(axis=1, how="all")
             sub.to_parquet(OUT_DIR / f"{page}.parquet")
             n_saved += 1
+        else:
+            meta_best_ir = round(float(best["rankic_ir"]), 6)
+            meta_best_mean = round(float(best["mean_rankic"]), 6)
         steps, formula = param_to_formula(wl_pair, wu, zs, sw)
         meta[page] = {
             "best_params": {
@@ -341,14 +368,14 @@ def main():
                 "zscore": zs,
                 "smooth": sw,
             },
-            "best_rankic_ir": round(float(best["rankic_ir"]), 6),
-            "best_mean_rankic": round(float(best["mean_rankic"]), 6),
+            "best_rankic_ir": meta_best_ir,
+            "best_mean_rankic": meta_best_mean,
             "steps": steps,
             "formula": formula,
             "n_variants": len(trials_sorted),
             "trials": trials_sorted,
         }
-        print(f"  {page}: ir={best['rankic_ir']:.3f} formula={formula}", flush=True)
+        print(f"  {page}: ir={meta_best_ir:.3f} formula={formula}", flush=True)
     META_PATH.write_text(json.dumps(meta, ensure_ascii=False, indent=2, default=str))
     print(f"[opt2] 完成 {len(meta)} 因子（写盘 {n_saved} 个 parquet），存 {META_PATH}")
     print(f"[opt2] 运行耗时 {elapsed:.0f}s", flush=True)

@@ -400,20 +400,51 @@ any `FEATURE_*`, `LABEL_CHANGE`, major `DATA_REVISION` → emit
 `ModelRetrainRequired` event. The model layer consumes the **event**, never a
 platform import of model-training code.
 
-### 4.9 Identity canonicalization inputs (spec §8.1–8.4) `[RECONCILE]`
+### 4.9 Identity CARRIED references (spec §8.1–8.4) — R55 P0-5 `[RECONCILE]`
 
-All identities are canonicalize-then-hash (sha256 of a sorted, length-prefixed
-tuple). Display names never enter the canonical input.
+R55 correction (task #95): the platform is NOT the domain-identity authority.
+The spec's identity axes are **owned by the domain packages**, which mint their
+own digests; `quant_platform` only CARRIES them:
 
-| identity | canonical input |
-|---|---|
-| `FactorDefinitionIdentity` | formula/AST, operator semantics version, frequency, market, input schema requirements, parameter values, calculation semantics |
-| `FactorValueIdentity` | FactorDefinitionIdentity + DataSnapshotIdentity + UniverseIdentity + CalculationSpecIdentity + TimingSemanticsIdentity |
-| `EvaluationIdentity` | FactorValueIdentity + EvaluationPolicyIdentity + LabelDefinitionIdentity + EvaluationProfileIdentity |
-| `TreatmentIdentity` | source_factor_value_id + ordered preprocessing recipe + fit boundary + fit state content hash + neutralization schema |
+| identity axis | owning domain package | platform carrier |
+|---|---|---|
+| FactorDefinition (§8.1) | `factor_assets/identity/` | `FactorDefinitionRef` |
+| FactorValue (§8.2) | `factor_assets/identity/`, `factor_engine/runtime/factor_value_identity.py` | `FactorValueRef` |
+| Evaluation (§8.3) | `quant_evaluator/`, `factor_assets/` | `EvaluationRef` |
+| Treatment (§8.4) | `factor_assets/` treatment selection | `TreatmentRef` |
 
-Helpers live in `quant_platform/app/contracts/identities.py` as pure dict-normalizing +
-hash functions and are unit-testable (`Identity.hash` round-trip).
+`contracts/identities.py` therefore contains **no hash function at all**: every
+`*Ref` accepts the domain's own digest verbatim and validates FORMAT only
+(non-empty, 64-char lowercase hex sha256 — `sha256_hex`). `ref.hash` is the
+carried digest, never a recomputation, and no factor semantics (formula/AST,
+parameter dict, calculation 口径) enter any platform-side hash input.
+
+Platform-owned hashes (unchanged): governance artifacts over *carried* refs —
+`ArtifactRef` (format-only), `FeatureSetVersion`/`FeatureSetArtifact`
+(semantic hash over member refs), report-export envelopes, and the ingest
+anti-replay `batch_fingerprint` (folds carried content hashes only).
+
+### 4.9b Admission delegation (spec §16 admission stage) — R55 P0-6
+
+Whether a factor / cluster / model is admitted to production is decided by the
+OWNING domain package (`factor_assets` for factors/clusters). The platform
+defines only the port:
+
+* `AdmissionRequest` — the carried evidence refs (candidate ref, publisher
+  content hash, domain identity digests, the domain's own evaluation DTO);
+* `AdmissionVerdict` — the domain's decision VERBATIM (`APPROVED` / `REJECTED`
+  / `SHADOWED`, reason codes, the authority's own decision content hash, policy
+  ref, authority id);
+* `AdmissionAuthority` — the `typing.Protocol` the domain adapter implements
+  (dependency inversion: platform never imports the implementation);
+* `RefuseAdmission` — fail-closed default (rejects everything with
+  `admission_authority_absent`): an uncomposed pipeline approves nothing and
+  never fabricates a pass.
+
+The platform RECORDS verdicts (report, outbox payload `decision.delegated`,
+registry) but computes none of them: no rank-IC threshold, no label-maturity
+or return-basis judgment, no duplicate-similarity measurement lives in
+`quant_platform` any more.
 
 ### 4.10 RBAC permission vocabulary (spec §24.1) + SecurityClassification (§5.8)
 

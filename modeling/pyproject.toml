@@ -1,0 +1,58 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "quant-modeling"
+version = "0.1.0"
+description = "Model layer: training, walk-forward splitting, artifact lifecycle, leakage guard-rails, prediction evaluation"
+readme = "AUTHORITY.md"
+requires-python = ">=3.10"
+authors = [
+    {name = "Quant Platform Team", email = "noreply@example.com"}
+]
+# Pure-numpy/pandas/scipy core.  factor_engine is a RUNTIME dependency of three
+# modules (model_semantic_registry / sample_policy / walk_forward) but it is
+# NOT declared here: quant-modeling is importable without it and the three
+# modules fail soft only when their FE entry points are exercised (the same
+# contract the monorepo umbrella wheel already ships under).  See AUTHORITY.md
+# — modeling never reimplements operator/registry logic, it consumes FE's.
+dependencies = [
+    "numpy>=1.24",
+    "pandas>=2.0",
+    "scipy>=1.10",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "build>=1.0.0",
+]
+
+[tool.setuptools]
+# R55 #97: the source tree lives at the repo root of this package
+# (modeling/__init__.py is this directory's __init__.py), so `packages.find`
+# cannot be used: from where="." discovery only sees `learners` (no physical
+# modeling/ dir), and include=["modeling", "modeling.*"] therefore matches
+# nothing and silently produces an EMPTY wheel — the exact R55 #96 failure
+# class quant_platform hit.  The full package list is explicit instead.
+packages = [
+    "modeling",
+    "modeling.learners",
+]
+
+[tool.setuptools.package-dir]
+"modeling" = "."
+
+[tool.setuptools.exclude-package-data]
+"*" = [
+    "tests", "tests.*",
+    "benchmarks", "benchmarks.*",
+    "*.pyc", "__pycache__",
+    "test_*.py", "*_test.py",
+    "AUTHORITY.md",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["../tests/modeling"]
+addopts = "-ra"

@@ -18,6 +18,7 @@ from factor_engine.backend.q_backend.q_process_manager import (
     check_q_availability,
     is_q_available,
 )
+from factor_engine.backend.operator_capability import BackendUnavailableError
 
 
 class TestQCapability:
@@ -277,8 +278,19 @@ class TestQBackendIntegration:
         """测试 Q backend 导入。"""
         from factor_engine.backend.q_backend import QBackend, get_q_backend
 
-        backend = get_q_backend()
+        # Q/KDB task #60: a production QBackend requires a live q runtime and
+        # must fail closed (honestly) when none is available.  The research
+        # singleton is constructible in any environment.
+        backend = get_q_backend(production_mode=False)
         assert isinstance(backend, QBackend)
+        try:
+            get_q_backend(production_mode=True)
+        except BackendUnavailableError:
+            pass  # truthful fail-closed gate with no q runtime in this env
+        else:
+            # A real q runtime is provisioned: the production singleton must
+            # still construct and remain isolated from the research one.
+            assert get_q_backend(production_mode=True) is not backend
 
     def test_q_backend_initialization(self):
         """测试 Q backend 初始化。"""
@@ -293,7 +305,9 @@ class TestQBackendIntegration:
         """测试 Q backend 统计。"""
         from factor_engine.backend.q_backend import QBackend
 
-        backend = QBackend()
+        # Research mode is constructible without a q runtime; the stats surface
+        # is identical for production mode once a q runtime exists.
+        backend = QBackend(production_mode=False)
         stats = backend.get_stats()
 
         assert "regions_compiled" in stats

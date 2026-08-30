@@ -16,13 +16,15 @@ Production integrity:
   raises (production semantics cannot change mid-run).
 """
 from copy import deepcopy
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
+import dataclasses
 from typing import Callable, Dict, List, Optional, Set, Any, Tuple
 from enum import Enum
 import hashlib
 import inspect
 
 from factor_preprocess.errors import GovernanceError
+from factor_preprocess.contracts._deep_freeze import deep_freeze, as_plain
 
 
 class TransformCategory(str, Enum):
@@ -58,7 +60,7 @@ def _hash_bytes(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
-@dataclass
+@dataclass(init=False)
 class TransformMetadata:
     """Metadata for a registered transform.
 
@@ -101,26 +103,150 @@ class TransformMetadata:
     cost_class: Optional[str] = None
     output_channels: Tuple[str, ...] = field(default_factory=tuple)
 
+    # Every registry-provided metadata snapshot is deeply immutable: plain
+    # attribute assignment (``meta.stage = 'x'``) and nested-container
+    # mutation both raise.  ``_frozen`` / ``enrich`` / ``__init__`` use
+    # ``dataclasses.replace`` and ``object.__setattr__`` to build replacement
+    # instances; ANY other assignment — including adding a field the dataclass
+    # does not declare — fails closed (R55 #94).
+    def __setattr__(self, name, value):
+        raise AttributeError(
+            f"TransformMetadata is deeply immutable; cannot set {name!r}. "
+            "Use TransformRegistry.enrich() to create a replacement metadata."
+        )
+
+    def __delattr__(self, name):
+        raise AttributeError(
+            f"TransformMetadata is deeply immutable; cannot delete {name!r}."
+        )
+
+    def __init__(
+        self,
+        name: str,
+        func: Callable,
+        category: TransformCategory,
+        version: str,
+        description: str,
+        parameters: Optional[Dict[str, Any]] = None,
+        tags: Optional[Set[str]] = None,
+        causal_safe: bool = True,
+        admission: str = "PRODUCTION",
+        signature_hash: Optional[str] = None,
+        implementation_hash: Optional[str] = None,
+        numeric_policy_hash: Optional[str] = None,
+        semantic_id: Optional[str] = None,
+        stage: Optional[str] = None,
+        family_tags: Optional[Set[str]] = None,
+        causality_class: Optional[str] = None,
+        requires_fit: bool = False,
+        requires_exposure: bool = False,
+        requires_universe: bool = False,
+        allowed_factor_families: Optional[Set[str]] = None,
+        allowed_asset_types: Optional[Set[str]] = None,
+        allowed_frequencies: Optional[Set[str]] = None,
+        parameter_domain: Optional[Dict[str, Any]] = None,
+        numeric_policy: Optional[str] = None,
+        production_admission: Optional[str] = None,
+        fe_equivalent_semantics: Optional[str] = None,
+        cost_class: Optional[str] = None,
+        output_channels: Optional[Tuple[str, ...]] = None,
+    ):
+        """Manually-defined initializer (``init=False``).
+
+        ``dataclasses.replace`` and the dataclass machinery call this with the
+        full field surface.  Fields are populated through ``object.__setattr__``
+        because the instance-level ``__setattr__`` guard is fail-closed for
+        every external caller (R55 #94).
+        """
+        object.__setattr__(self, "name", name)
+        object.__setattr__(self, "func", func)
+        object.__setattr__(self, "category", category)
+        object.__setattr__(self, "version", version)
+        object.__setattr__(self, "description", description)
+        object.__setattr__(self, "parameters", parameters if parameters is not None else {})
+        object.__setattr__(self, "tags", tags if tags is not None else set())
+        object.__setattr__(self, "causal_safe", causal_safe)
+        object.__setattr__(self, "admission", admission)
+        object.__setattr__(self, "signature_hash", signature_hash)
+        object.__setattr__(self, "implementation_hash", implementation_hash)
+        object.__setattr__(self, "numeric_policy_hash", numeric_policy_hash)
+        object.__setattr__(self, "semantic_id", semantic_id)
+        object.__setattr__(self, "stage", stage)
+        object.__setattr__(self, "family_tags", family_tags if family_tags is not None else set())
+        object.__setattr__(self, "causality_class", causality_class)
+        object.__setattr__(self, "requires_fit", requires_fit)
+        object.__setattr__(self, "requires_exposure", requires_exposure)
+        object.__setattr__(self, "requires_universe", requires_universe)
+        object.__setattr__(self, "allowed_factor_families", allowed_factor_families if allowed_factor_families is not None else set())
+        object.__setattr__(self, "allowed_asset_types", allowed_asset_types if allowed_asset_types is not None else set())
+        object.__setattr__(self, "allowed_frequencies", allowed_frequencies if allowed_frequencies is not None else set())
+        object.__setattr__(self, "parameter_domain", parameter_domain if parameter_domain is not None else {})
+        object.__setattr__(self, "numeric_policy", numeric_policy)
+        object.__setattr__(self, "production_admission", production_admission)
+        object.__setattr__(self, "fe_equivalent_semantics", fe_equivalent_semantics)
+        object.__setattr__(self, "cost_class", cost_class)
+        object.__setattr__(self, "output_channels", tuple(output_channels) if output_channels else ())
+        self.__post_init__()
+
     def __post_init__(self):
-        """Compute hashes after initialization."""
-        # Freeze mutable nested containers before hashing (DLIB-FP-026).
-        object.__setattr__(self, "parameters", dict(self.parameters))
-        object.__setattr__(self, "tags", set(self.tags))
-        object.__setattr__(self, "family_tags", set(self.family_tags))
-        object.__setattr__(self, "allowed_factor_families", set(self.allowed_factor_families))
-        object.__setattr__(self, "allowed_asset_types", set(self.allowed_asset_types))
-        object.__setattr__(self, "allowed_frequencies", set(self.allowed_frequencies))
-        object.__setattr__(self, "parameter_domain", dict(self.parameter_domain))
-        object.__setattr__(self, "output_channels", tuple(self.output_channels))
+        """Compute hashes after initialization.
+
+        ``__post_init__`` is invoked by ``dataclasses`` BEFORE the fields are
+        assigned, so the guard above would reject those assignments — this is
+        the one place we are allowed to populate the instance, via
+        ``object.__setattr__`` (still fails closed for any caller that
+        bypasses the registry).
+        """
+        # Freeze mutable nested containers before hashing (DLIB-FP-026). The
+        # registry stays hash-safe even when callers pass raw mutable surfaces:
+        # every field that participates in signing is deep-frozen here, so the
+        # identity hashes can never be made stale by an alias to shared state.
+        for _field in (
+            "parameters", "tags", "family_tags", "allowed_factor_families",
+            "allowed_asset_types", "allowed_frequencies", "parameter_domain",
+            "output_channels",
+        ):
+            _v = getattr(self, _field)
+            if not isinstance(_v, str) and isinstance(_v, (dict, list, set, frozenset, tuple)):
+                object.__setattr__(self, _field, deep_freeze(_v))
         if self.production_admission is None:
             object.__setattr__(self, "production_admission", self.admission)
 
         if self.signature_hash is None:
-            self.signature_hash = self._compute_signature_hash()
+            object.__setattr__(self, "signature_hash", self._compute_signature_hash())
         if self.implementation_hash is None:
-            self.implementation_hash = self._compute_implementation_hash()
+            object.__setattr__(self, "implementation_hash", self._compute_implementation_hash())
         if self.numeric_policy_hash is None:
-            self.numeric_policy_hash = self._compute_numeric_policy_hash()
+            object.__setattr__(self, "numeric_policy_hash", self._compute_numeric_policy_hash())
+
+    # ------------------------------------------------------------------
+    # DLIB-FP-015 / FP-026: deep-frozen alias surface. ``get`` returns an
+    # isolated deep-frozen snapshot for downstream hashing/identity, and the
+    # self-describing metadata surface mutates through replace() only —
+    # immutable objects, fail-closed.
+    # ------------------------------------------------------------------
+
+    @property
+    def _frozen(self) -> "TransformMetadata":
+        """Fully deep-frozen copy of all semantic surfaces (hash-safe).
+
+        R55 #94: ``_frozen`` is the ONLY way a caller obtains a metadata
+        snapshot from the registry, and it is deeply immutable — the container
+        fields are replaced with deep-frozen forms (FrozenDict / frozenset /
+        tuple) so neither an attribute assignment nor a nested-container
+        mutation can change a snapshot's identity surface.
+        """
+        return replace(
+            self,
+            parameters=deep_freeze(self.parameters),
+            tags=frozenset(as_plain(self.tags)),
+            family_tags=frozenset(as_plain(self.family_tags)),
+            allowed_factor_families=frozenset(as_plain(self.allowed_factor_families)),
+            allowed_asset_types=frozenset(as_plain(self.allowed_asset_types)),
+            allowed_frequencies=frozenset(as_plain(self.allowed_frequencies)),
+            parameter_domain=deep_freeze(self.parameter_domain),
+            output_channels=tuple(as_plain(self.output_channels)),
+        )
 
     def _compute_signature_hash(self) -> str:
         """Compute stable hash of function signature (name + signature)."""
@@ -141,9 +267,17 @@ class TransformMetadata:
         return _hash_bytes(f"{self.name}:{str(sig)}::body::{source}")[:16]
 
     def _compute_numeric_policy_hash(self) -> str:
-        """Hash the numeric/default parameter surface (version, admission,
-        causal_safe, default parameters, tags) that changes numerical output
-        without touching the signature (FP-P1-04)."""
+        """Hash the numeric/policy surface (version, admission, causal_safe,
+        default parameters, tags, semantic policy fields) that changes the
+        behavior of the transform without touching the signature (FP-P1-04).
+        The semantic policy surface (semantic_id, stage, family_tags,
+        causality_class, requires_fit/exposure/universe, allowed families /
+        asset types / frequencies, parameter_domain, numeric_policy,
+        production_admission, fe_equivalent_semantics, cost_class,
+        output_channels) is part of the snapshot identity and must therefore
+        also be reflected in this hash so a semantic-only drift changes the
+        registry identity (R55 #93).
+        """
         # Deterministic ordering: sort tags and parameter keys.
         def canonical_params(p):
             if isinstance(p, dict):
@@ -152,12 +286,32 @@ class TransformMetadata:
                 ) + "}"
             return repr(p)
 
+        def canonical_set(values):
+            return ",".join(sorted(str(v) for v in (values or ())))
+
         payload = "|".join([
             self.version,
             self.admission,
             str(self.causal_safe),
-            canonical_params(self.parameters),
-            ",".join(sorted(self.tags)),
+            canonical_params(as_plain(self.parameters)),
+            canonical_set(as_plain(self.tags)),
+            # ---- semantic policy surface (DLIB-FP-015, R55 #93) ----
+            str(self.semantic_id or ""),
+            str(self.stage or ""),
+            canonical_set(as_plain(self.family_tags)),
+            str(self.causality_class or ""),
+            str(self.requires_fit),
+            str(self.requires_exposure),
+            str(self.requires_universe),
+            canonical_set(as_plain(self.allowed_factor_families)),
+            canonical_set(as_plain(self.allowed_asset_types)),
+            canonical_set(as_plain(self.allowed_frequencies)),
+            canonical_params(as_plain(self.parameter_domain)),
+            str(self.numeric_policy or ""),
+            str(self.production_admission or ""),
+            str(self.fe_equivalent_semantics or ""),
+            str(self.cost_class or ""),
+            ",".join(str(c) for c in (as_plain(self.output_channels) or ())),
         ])
         return _hash_bytes(payload)[:16]
 
@@ -192,6 +346,7 @@ class TransformRegistry:
         self._by_tag: Dict[str, List[str]] = {}
         self._sealed = False
         self._snapshot_identity: Optional[str] = None
+        self._events: List[str] = []
 
     def _check_not_sealed(self):
         """Fail closed: no runtime mutation of sealed production semantics."""
@@ -319,6 +474,9 @@ class TransformRegistry:
             output_channels=tuple(output_channels) if output_channels else (),
         )
 
+        if name not in self._transforms:
+            self._events.append(f"registered:{name}")
+
         if name in self._transforms:
             existing = self._transforms[name]
             if existing.version != version:
@@ -337,6 +495,25 @@ class TransformRegistry:
                 and existing.signature_hash == metadata.signature_hash
                 and existing.implementation_hash == metadata.implementation_hash
                 and existing.numeric_policy_hash == metadata.numeric_policy_hash
+                # R55 #93: a semantic-surface change (semantic_id / stage /
+                # family_tags / ...) is a behavioral change and must fail
+                # closed on re-registration even when numeric defaults matched.
+                and existing.semantic_id == metadata.semantic_id
+                and existing.stage == metadata.stage
+                and existing.family_tags == metadata.family_tags
+                and existing.causality_class == metadata.causality_class
+                and existing.requires_fit == metadata.requires_fit
+                and existing.requires_exposure == metadata.requires_exposure
+                and existing.requires_universe == metadata.requires_universe
+                and existing.allowed_factor_families == metadata.allowed_factor_families
+                and existing.allowed_asset_types == metadata.allowed_asset_types
+                and existing.allowed_frequencies == metadata.allowed_frequencies
+                and existing.parameter_domain == metadata.parameter_domain
+                and existing.numeric_policy == metadata.numeric_policy
+                and existing.production_admission == metadata.production_admission
+                and existing.fe_equivalent_semantics == metadata.fe_equivalent_semantics
+                and existing.cost_class == metadata.cost_class
+                and existing.output_channels == metadata.output_channels
             )
             if not same_registration:
                 raise ValueError(
@@ -354,9 +531,16 @@ class TransformRegistry:
             self._by_tag[tag].append(name)
 
     def get(self, name: str) -> Optional[TransformMetadata]:
-        """Get an isolated transform metadata snapshot by name."""
+        """Get an isolated deep-frozen transform metadata snapshot by name.
+
+        The returned snapshot is deeply immutable (every nested container is
+        frozen) so downstream hashing / snapshot identity can never be made
+        stale by an in-place mutation of an aliased container (R55 #94).
+        """
         metadata = self._transforms.get(name)
-        return deepcopy(metadata) if metadata is not None else None
+        if metadata is None:
+            return None
+        return metadata._frozen
 
     def enrich(self, name: str, **fields) -> None:
         """Attach additional semantic metadata to an existing transform.
@@ -364,8 +548,20 @@ class TransformRegistry:
         DLIB-FP-015: separates the *registration* step (identity hashes are
         computed at registration) from *semantic enrichment* (semantic_id,
         stage, family_tags, causality_class, ...) so the whole catalog becomes
-        self-describing without changing signature/implementation/numeric
-        policy hashes. Fails closed on unknown names and after seal.
+        self-describing. The signature/implementation hashes are intentionally
+        untouched, but — R55 #93 — the semantic policy surface participates in
+        the registry identity, so the numeric policy hash IS re-derived after
+        enrichment. Fails closed on unknown names and after seal.
+
+        R55 #94: enrichment never mutates the stored metadata in place.
+        ``dataclasses.replace`` constructs a new replacement metadata whose
+        container fields are deep-frozen again (``__post_init__``), so the
+        stored instance — and any snapshot previously handed out by ``get`` —
+        is never contaminated by a later enrichment.  ``get``/``all_transforms``
+        etc. return deeply frozen copies, so registry consumers can never
+        mutate a live entry either.  ``replace`` internally writes through
+        ``object.__setattr__`` (the instance-level ``__setattr__`` guard is
+        bypassed only there, never for external callers).
         """
         self._check_not_sealed()
         if name not in self._transforms:
@@ -381,6 +577,7 @@ class TransformRegistry:
         unknown = set(fields) - allowed
         if unknown:
             raise ValueError(f"Unknown semantic metadata fields: {sorted(unknown)}")
+        replacements = {}
         for key, value in fields.items():
             if isinstance(
                 value,
@@ -391,13 +588,24 @@ class TransformRegistry:
                 "allowed_asset_types",
                 "allowed_frequencies",
             ):
-                setattr(meta, key, set(value))
+                replacements[key] = set(value)
             elif key == "output_channels":
-                setattr(meta, key, tuple(value))
+                replacements[key] = tuple(value)
             elif key == "parameter_domain":
-                setattr(meta, key, dict(value))
+                replacements[key] = dict(value)
             else:
-                setattr(meta, key, value)
+                replacements[key] = value
+        # R55 #94: replacement metadata, NOT in-place setattr.  __post_init__
+        # re-freezes the container fields and re-derives the hashes.
+        new_meta = replace(meta, **replacements)
+        # R55 #93: the semantic surface participates in the registry identity,
+        # so enrichment MUST re-derive the numeric policy hash (the signature
+        # / implementation hashes are intentionally untouched).
+        object.__setattr__(new_meta, "numeric_policy_hash", new_meta._compute_numeric_policy_hash())
+        self._transforms[name] = new_meta
+        self._events.append(
+            "enriched:" + name + ":" + ",".join(sorted(fields))
+        )
 
     def validate_production(self, name: str) -> TransformMetadata:
         """Resolve registry metadata and fail closed for production admission."""
@@ -408,7 +616,7 @@ class TransformRegistry:
             raise ValueError(f"Transform '{name}' is {metadata.admission}")
         if not metadata.causal_safe:
             raise ValueError(f"Transform '{name}' is not production-causal-safe")
-        return deepcopy(metadata)
+        return metadata._frozen
 
     def get_function(self, name: str) -> Optional[Callable]:
         """Get transform function by name."""
@@ -416,25 +624,25 @@ class TransformRegistry:
         return metadata.func if metadata else None
 
     def list_by_category(self, category: TransformCategory) -> List[TransformMetadata]:
-        """List isolated transform metadata snapshots in a category."""
+        """List isolated deep-frozen transform metadata snapshots in a category."""
         names = self._by_category.get(category, [])
-        return [deepcopy(self._transforms[name]) for name in names]
+        return [self._transforms[name]._frozen for name in names]
 
     def list_by_tag(self, tag: str) -> List[TransformMetadata]:
-        """List isolated transform metadata snapshots with a given tag."""
+        """List isolated deep-frozen snapshots with a given tag."""
         names = self._by_tag.get(tag, [])
-        return [deepcopy(self._transforms[name]) for name in names]
+        return [self._transforms[name]._frozen for name in names]
 
     def list_causal_safe(self) -> List[TransformMetadata]:
-        """List isolated snapshots of all causal-safe transforms."""
+        """List isolated deep-frozen snapshots of all causal-safe transforms."""
         return [
-            deepcopy(meta) for meta in self._transforms.values()
+            meta._frozen for meta in self._transforms.values()
             if meta.causal_safe
         ]
 
     def all_transforms(self) -> List[TransformMetadata]:
-        """Get isolated snapshots of all registered transforms."""
-        return [deepcopy(meta) for meta in self._transforms.values()]
+        """Get isolated deep-frozen snapshots of all registered transforms."""
+        return [meta._frozen for meta in self._transforms.values()]
 
     def get_signature_hash(self, name: str) -> Optional[str]:
         """Get signature hash for reproducibility tracking."""
@@ -445,8 +653,9 @@ class TransformRegistry:
         """Freeze the registry into an immutable snapshot identity (FP-P1-05).
 
         After sealing, ``register`` raises. The returned identity is a
-        content-derived hash over the ordered registered metadata so the
-        exact production semantics are reproducibly identifiable.
+        content-derived hash over the ordered registered metadata — including
+        implementation hashes AND the full semantic policy surface — so the
+        exact production semantics are reproducibly identifiable (R55 #93).
         """
         entries = []
         for name in sorted(self._transforms):
@@ -459,7 +668,19 @@ class TransformRegistry:
         identity = _hash_bytes("\n".join(entries))
         self._sealed = True
         self._snapshot_identity = identity
+        self._events.append(f"sealed:{identity[:16]}")
         return identity
+
+    def diagnostic_events(self) -> List[str]:
+        """Stable ordered audit trail of registry lifecycle events.
+
+        Used by governance review to confirm the predicate "registry used"
+        (as opposed to bespoke hand-rolled transform calls). Appends
+        added/{registered,enriched,sealed} events in registration order, so
+        an operator can replay exactly which semantic surfaces were compiled
+        into the sealed snapshot identity.
+        """
+        return list(self._events)
 
     @property
     def snapshot_identity(self) -> Optional[str]:

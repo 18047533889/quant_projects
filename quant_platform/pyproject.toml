@@ -18,19 +18,26 @@ dev = ["pytest>=8.0", "build>=1.2"]
 [tool.setuptools]
 py-modules = []
 # The source tree lives at the repo root of this package (quant_platform/__init__.py
-# is this directory's __init__.py). Map the installable package names onto the
-# on-disk layout explicitly.
+# is this directory's __init__.py), so ``packages.find`` cannot be used: from
+# where="." discovery only sees ``app.*`` (no physical quant_platform/ dir),
+# and include=["quant_platform", "quant_platform.*"] therefore matches nothing
+# and silently produces an EMPTY wheel (R55 #96).  The full package list is
+# explicit instead — including api / adapters / db / security, which the old
+# hand-written list dropped from the wheel.
 packages = [
     "quant_platform",
     "quant_platform.app",
-    "quant_platform.app.contracts",
+    "quant_platform.app.adapters",
+    "quant_platform.app.api",
     "quant_platform.app.candidate",
+    "quant_platform.app.contracts",
+    "quant_platform.app.db",
     "quant_platform.app.export",
     "quant_platform.app.observability",
+    "quant_platform.app.security",
     "quant_platform.app.storage",
     "quant_platform.app.worker",
 ]
-
 [tool.setuptools.package-dir]
 "quant_platform" = "."
 

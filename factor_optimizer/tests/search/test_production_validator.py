@@ -34,8 +34,7 @@ def _protocol():
         lambda trial, fid: {
             "score": 0.5,
             "cost": 1.0,
-            "evidence_ref": "ev-1",
-        },
+            "evidence_ref": "ev-1", "treatment_integrity_evidence": _integrity_evidence(trial.trial_id)},
     )
 
 

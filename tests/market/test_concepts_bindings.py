@@ -16,9 +16,9 @@ from factor_engine.market import CoverageClass, MarketStatus, ProviderQuality
 
 def test_concept_alias_map() -> None:
     aliases = concept_alias_map()
-    assert aliases["close"] == "raw_close"
+    assert aliases["close"] == "continuous_close"
     assert aliases["ret"] == "return_decimal"
-    assert aliases["volume"] == "raw_volume_shares"
+    assert aliases["volume"] == "continuous_volume_shares"
     assert aliases["roe"] == "roe_decimal"
     assert aliases["high_limit"] == "upper_price_limit"
 
@@ -45,17 +45,40 @@ def test_return_decimal_both_markets_exact() -> None:
 
 
 def test_volume_never_scale_by_factor() -> None:
-    vol = require_binding("raw_volume_shares", "ashare")
+    # ADJ_FIELD_MIGRATION: A-share raw_volume_shares is DISABLED (raw vendor
+    # volume is not a mineable factor input); the adjusted share count is
+    # continuous_volume_shares = Volume / Factor.  US raw_volume_shares stays.
+    vol = require_binding("raw_volume_shares", "us")
     assert vol.transform_description.startswith("identity")
-    assert vol.transform_description == "identity (raw shares; no adjustment applied)"
-    assert "NEVER divided by any adjustment factor" in vol.notes
 
 
 def test_continuous_close_backward_multiplier() -> None:
     a = require_binding("continuous_close", "ashare")
     u = require_binding("continuous_close", "us")
-    assert "Close * Factor" in a.transform_description
+    # ADJ_FIELD_MIGRATION: A-share reads the precomputed AdjClose (identity);
+    # US keeps the Close * AdjFactor derived multiplication.
+    assert "AdjClose" in a.transform_description
     assert "Close * AdjFactor" in u.transform_description
+
+
+def test_ashare_raw_price_concepts_disabled() -> None:
+    # ADJ_FIELD_MIGRATION: A-share raw unadjusted OHLC/volume providers are
+    # DISABLED — raw price-volume must not reach the factor surface.
+    from factor_engine.market import MarketStatus
+
+    for concept in ("raw_close", "raw_open", "raw_vwap", "raw_volume_shares"):
+        a = explain_field_support(concept, "ashare")
+        assert a.status == MarketStatus.UNSUPPORTED_MARKET_MECHANISM, concept
+        u = explain_field_support(concept, "us")
+        assert u.status != MarketStatus.UNSUPPORTED_MARKET_MECHANISM, concept
+
+
+def test_ashare_continuous_reads_adj_dataset() -> None:
+    # ADJ_FIELD_MIGRATION: A-share continuous_* bindings point at the adj table.
+    for concept in ("continuous_close", "continuous_open", "continuous_vwap",
+                    "continuous_volume_shares", "return_decimal", "amount_local"):
+        b = require_binding(concept, "ashare")
+        assert b.dataset == "ashare_stock_daily_adj", (concept, b.dataset)
 
 
 def test_price_limits_ashare_only() -> None:

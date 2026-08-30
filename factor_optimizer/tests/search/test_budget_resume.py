@@ -18,6 +18,7 @@ from factor_optimizer.contracts.search_budget import BudgetTracker, SearchBudget
 from factor_optimizer.contracts.splits import EvaluationProtocol, SplitPlan
 from factor_optimizer.contracts.trial import Trial, TrialStatus
 from factor_optimizer.search.runner import SearchConfig, SearchRunner, SearchSession
+import numpy as np
 
 
 def _protocol(fn):
@@ -43,7 +44,7 @@ def _trial(tid):
 
 
 def _eval_ok(trial, fidelity):
-    return {"evaluation_id": f"e-{trial.trial_id}", "score": 0.5, "cost": 1.0}
+    return {"evaluation_id": f"e-{trial.trial_id}", "score": 0.5, "cost": 1.0, "treatment_integrity_evidence": _integrity_evidence(trial.trial_id)}
 
 
 def _extension(
@@ -221,3 +222,26 @@ def test_resume_same_budget_and_extension_mutually_exclusive():
 
 def _pro_ok(trial, fidelity):
     return _eval_ok(trial, fidelity)
+
+
+def _integrity_evidence(trial_id="t1", kind=None):
+    """Passing TreatmentIntegrityEvidence measured from arrays (R55 P0-9)."""
+    from factor_optimizer.contracts.treatment_integrity import (
+        build_integrity_evidence,
+    )
+
+    rng = np.random.default_rng(abs(hash(trial_id)) % (2 ** 32))
+    before = rng.normal(size=32)
+    treated_kind = kind if kind else f"treatment::{trial_id}"
+    if treated_kind == "raw":
+        after = before
+    else:
+        after = before * 0.5 + 0.01
+    return build_integrity_evidence(
+        trial_id,
+        treated_kind,
+        {} if treated_kind == "raw" else {"window": 3},
+        before,
+        after,
+    )
+

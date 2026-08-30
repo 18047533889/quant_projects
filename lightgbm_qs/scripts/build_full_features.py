@@ -32,11 +32,30 @@ def plog(*a):
 t0 = time.time()
 
 # ---------- 1. 候选 ----------
+# P0-B (2026-08-28): the feature COLUMNS come from the walk-forward selection manifest
+# (union of per-fold lists). rankic_all_factors.csv is a FULL-SAMPLE diagnostic
+# (rank_IC over ALL dates = future OOS labels) — used only as a coverage/dedup-order
+# reference, never as the selection itself.
 ic = pd.read_csv(os.path.join(BUILD, "rankic_all_factors.csv"))
 valid = ic[ic["drop"] == False].reset_index(drop=True)  # noqa: E712
 rank_ic = dict(zip(valid["name"], valid["rank_ic"]))
 valid_names = valid["name"].tolist()
 plog(f"[1] 总候选 {len(ic)}，drop=False 有效候选 {len(valid_names)}")
+
+WF_SELECTION_JSON = os.path.join(BUILD, "walkforward_selection.json")
+if not os.path.exists(WF_SELECTION_JSON):
+    plog("!! data/build/walkforward_selection.json 不存在 —— 先跑 "
+         "factor_selection.py --folds-from-train。全样本 selected_factors*.csv 不是合法替代"
+         "(P0-B 选择泄漏)。")
+    raise SystemExit(2)
+import sys as _sys
+_sys.path.insert(0, os.path.join(ROOT, "scripts"))
+from factor_selection import load_selection_manifest  # noqa: E402
+_folds, _meta = load_selection_manifest(path=WF_SELECTION_JSON)
+wf_names = sorted({f for lst in _folds.values() for f in lst})
+valid_names = [n for n in valid_names if n in set(wf_names)]
+plog(f"[1] walk-forward 每折清单并集 {len(wf_names)}，与 rankic 全样本诊断交集 "
+     f"{len(valid_names)} (purge={_meta.get('purge_trading_days')}, cuts={len(_folds)})")
 
 # ---------- 2. 基准网格 ----------
 vw = pd.read_parquet(os.path.join(ROOT, "data", "panel", "vwap_trad.parquet"))

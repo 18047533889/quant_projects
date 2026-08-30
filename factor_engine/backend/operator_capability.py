@@ -21,6 +21,7 @@ import dataclasses
 import enum
 import inspect
 from dataclasses import dataclass
+from types import MappingProxyType
 from typing import Any, Callable, Literal, Mapping, Sequence
 
 # Import unified enums from contracts (FE-P0-003)
@@ -572,6 +573,14 @@ def _json_contract_value(value: Any) -> Any:
     """
     if value is None or isinstance(value, (str, int, float, bool)):
         return value
+    if isinstance(value, MappingProxyType):
+        # R40 #208 / P0-13: the frozen registry stores catalog leaves as
+        # nested MappingProxyType instances (``_deepfreeze_catalog``).  A
+        # capability contract read that reaches the frozen live ``_catalog``
+        # (e.g. ``_sql_contract``) must detach those leaves before typed
+        # serialization — a MappingProxyType is a read-only mapping, not a
+        # live object the contract forbids.
+        return _json_contract_value(dict(value))
     if isinstance(value, dict):
         return {str(k): _json_contract_value(v) for k, v in value.items()}
     if isinstance(value, (list, tuple)):
@@ -1301,6 +1310,25 @@ def get_best_backend(
             allow_unverified_backend
             or status in {"parity_verified", "production_safe"}
         )
+
+    # Compiler-internal lowering nodes (``protected_div`` / ``identity`` /
+    # ``constant``) carry an ``internal`` surface, so ``OperatorRegistry.get``
+    # in production mode returns None and their status resolves to
+    # ``implemented`` (never parity/production certified — they are not on any
+    # surface).  They ARE registered backend implementations that the pandas
+    # backend must dispatch at runtime (e.g. a plan node built from the
+    # ``protected_div`` DSL alias).  In research mode (the parity/alias test
+    # path) the raw registered backend object is the authoritative truth; the
+    # status gate only exists to keep production from selecting an
+    # uncertified physical implementation.
+    _raw = registry.get(canonical, "pandas_numpy", mode="any")
+    _internal_compiler_node = (
+        _raw is not None
+        and _pandas_status(canonical) == "implemented"
+        and not prod
+    )
+    if _internal_compiler_node:
+        return _raw, "pandas_numpy"
 
     requested = str(prefer or "auto").lower()
     if requested in {"pandas_numpy", "polars", "sql", "q_kdb"}:

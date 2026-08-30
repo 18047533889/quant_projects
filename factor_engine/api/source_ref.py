@@ -13,6 +13,12 @@ _PREFIX = "__fe_source_ref_v1__"
 _MINUTE_FIELDS = {
     "open":"Open", "high":"High", "low":"Low", "close":"Close",
     "volume":"Volume", "amount":"Amount", "vwap":"Vwap",
+    # R55 platform-audit P0: LQTP minute formula packs write
+    # ``minute_bar(minute_high, 15, 0)`` — map the ``minute_*`` spellings onto
+    # the same StockMinuteBar fields the implicit minute-bar source uses.
+    "minute_open":"Open", "minute_high":"High", "minute_low":"Low",
+    "minute_close":"Close", "minute_volume":"Volume", "minute_amount":"Amount",
+    "minute_vwap":"Vwap",
 }
 
 @dataclass(frozen=True)

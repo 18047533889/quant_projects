@@ -17,12 +17,15 @@ candidate → identity reconcile → registered assets):
 Purity rules (platform DTO discipline, extended to this logic layer):
 
 * stdlib only — no third-party runtime imports;
-* identity authority = ``quant_platform.app.contracts.identities``
-  (``canonicalize`` / ``Identity``);
-* content-hash authority = ``quant_platform.app.contracts._contenthash``
-  (``content_hash`` / ``canonical_str``). A manifest ``content_hash`` is a
-  *publisher-reported* artifact hash — this layer validates its format through
-  the canonical codec but never recomputes object bytes;
+* identity authority = the OWNING DOMAIN PACKAGE. Every identity this layer
+  carries (``factor_spec_sha256``, ``semantic_family_hint``) is **reported by
+  the producer / domain package** and validated FORMAT-ONLY here
+  (64-char lowercase hex). The platform never derives, re-negotiates or hashes
+  factor semantics — no factor parameter dicts, no formula/AST, no 口径 enter
+  any platform-side hash (R55 P0-5);
+* content-hash authority = the publisher over the spec bytes. A manifest
+  ``content_hash`` is a *publisher-reported* artifact hash — this layer
+  validates its format and never recomputes object bytes;
 * no new authority, no domain-internal imports.
 """
 
@@ -38,7 +41,6 @@ from operator import itemgetter
 from types import MappingProxyType
 from typing import Any, Iterable, Mapping
 
-from ..contracts import canonicalize
 from ..contracts._contenthash import content_hash
 from ..contracts.candidate import FactorCandidateManifest
 
@@ -52,6 +54,10 @@ __all__ = [
     "batch_fingerprint",
 ]
 
+
+def _missing_semantic_id(raw: Mapping[str, Any]) -> CandidateNormalizationError:
+    return CandidateNormalizationError("missing_semantic_id", raw_record=raw)
+
 # --------------------------------------------------------------------------- #
 # shared constants
 # --------------------------------------------------------------------------- #
@@ -61,11 +67,6 @@ _CONTENT_HASH_SOURCES = ("content_hash", "factor_spec_sha256", "sha256", "hash")
 
 #: where a publish timestamp is found in a raw discovery record
 _TS_SOURCES = ("submitted_at", "published_at", "publish_time", "created_at", "timestamp")
-
-#: the "semantic id" exists iff every one of these carrier keys is present in the
-#: raw dict. Keeps the fail-closed missing-semantic-id path a per-record
-#: decision (semantic-data carriers like ``yield_accell``), not a channel guess.
-_SEMANTIC_ID_KEYS = ("factor_name", "market", "frequency")
 
 #: accepted scalar types for parameter-domain bounds (bool excluded explicitly —
 #: it is an ``int`` subclass and must not pass as a numeric bound).
@@ -163,12 +164,13 @@ def _coerce_iso_timestamp(value: Any, raw: Mapping[str, Any]) -> str:
 
 
 def _representative_semantic_fields(raw: Mapping[str, Any]) -> Mapping[str, Any]:
-    """Discovery-side semantic fields that enter the semantic identity.
+    """Discovery-side *carrier* fields used to pick the carried semantic id.
 
-    ``canonicalize`` (identity authority) hashes these fields. Two raw records
-    from *different* producers whose recipe/spec coincide normalize onto the
-    same semantic identity — that cross-producer alignment is the whole point
-    of the intake stage.
+    R55 P0-5: these fields are NOT hashed by the platform any more. The
+    semantic identity is the domain package's own digest, carried verbatim;
+    the carrier fields only decide whether a producer-supplied semantic id is
+    present (fail-closed when it is not) and give the manifest its
+    market/frequency labels.
     """
     market = _pick_first(raw, ("market", "universe", "asset_class"))
     frequency = _pick_first(raw, ("frequency", "periodicity", "freq"))
@@ -243,7 +245,8 @@ def _semantic_hash(raw: Mapping[str, Any]) -> str:
 
     A discovery record may already carry ``semantic_hash`` / ``semantic_id``;
     when present we validate its sha256-hex *format* (same rule as content
-    hashes) so it can seed the dual-key reconciliation.
+    hashes) so it can seed the dual-key reconciliation. The digest is minted by
+    the owning domain package — the platform carries it, never recomputes it.
     """
     value = _pick_first(raw, ("semantic_hash", "semantic_id"))
     if value is None:
@@ -266,18 +269,20 @@ def normalize_candidate(raw: Mapping[str, Any]) -> FactorCandidateManifest:
     * ``content_hash`` — from ``content_hash`` / ``factor_spec_sha256`` /
       ``sha256`` / ``hash``; must be a 64-char lowercase hex sha256
       (``missing_content_hash`` / ``bad_content_hash_format``).
-    * semantic id — a ``semantic_id`` / ``semantic_hash`` alias key OR the
-      carrier triple ``factor_name`` + ``market`` + ``frequency`` all present
-      (``missing_semantic_id``).
+    * semantic id — the ``semantic_id`` / ``semantic_hash`` alias key
+      (``missing_semantic_id`` / ``bad_semantic_hash_format``). This is the
+      OWNING DOMAIN PACKAGE's semantic-identity digest: the platform validates
+      its hex format and carries it verbatim — it never hashes factor
+      semantics itself (R55 P0-5).
     * parameter domain — numeric, canonical, bounds finite and in-range with
       ``lo <= hi`` (``bad_parameter_domain``).
     * required strings + a publish timestamp (``missing_string_field`` /
       ``missing_timestamp`` / ``bad_iso_timestamp``).
 
     Returns a standard ``contracts.candidate.FactorCandidateManifest`` whose
-    ``factor_spec_sha256`` mirrors the canonical content hash and whose
-    ``semantic_family_hint`` carries the representative semantic identity — the
-    two seeds of the subsequent dual-key reconciliation.
+    ``factor_spec_sha256`` mirrors the carried content hash and whose
+    ``semantic_family_hint`` carries the domain semantic identity — the two
+    seeds of the subsequent dual-key reconciliation.
     """
     # 1. content hash — the primary identity key.
     content_hash_value = _pick_first(raw, _CONTENT_HASH_SOURCES)
@@ -289,15 +294,20 @@ def normalize_candidate(raw: Mapping[str, Any]) -> FactorCandidateManifest:
     if not isinstance(content_hash_value, str) or not _SHA256_HEX_RE.match(content_hash_value):
         raise CandidateNormalizationError("bad_content_hash_format", raw_record=raw)
 
-    # 2. semantic id — the secondary identity key.
-    has_semantic_id_alias = any(
-        raw.get(k) is not None and raw.get(k) != "" for k in ("semantic_id", "semantic_hash")
-    )
-    carrier_present = {
-        key: (raw.get(key) is not None and raw.get(key) != "") for key in _SEMANTIC_ID_KEYS
-    }
-    if not has_semantic_id_alias and not all(carrier_present.values()):
-        raise CandidateNormalizationError("missing_semantic_id", raw_record=raw)
+    # 2. semantic id — the secondary identity key, MINTED BY THE DOMAIN.
+    semantic_id = raw.get("semantic_id")
+    if semantic_id is None:
+        semantic_id = raw.get("semantic_hash")
+    if not isinstance(semantic_id, str) or not semantic_id.strip():
+        # Absent: the platform cannot derive a semantic identity from carrier
+        # fields (that would mint one) — fail closed.
+        raise _missing_semantic_id(raw)
+    if not _SHA256_HEX_RE.match(semantic_id):
+        # A non-hex alias (e.g. a discovery-side slug) is a format failure — the
+        # platform cannot judge whether it is "semantically the same factor", so
+        # it must not silently accept a hand-rolled id either.
+        raise CandidateNormalizationError("bad_semantic_hash_format", raw_record=raw)
+    semantic_id = semantic_id.strip()
 
     # 3. parameter domain — finite / canonical.
     _normalize_parameter_domain(raw)
@@ -311,16 +321,14 @@ def normalize_candidate(raw: Mapping[str, Any]) -> FactorCandidateManifest:
         raise CandidateNormalizationError("missing_timestamp", raw_record=raw)
     submitted_at = _coerce_iso_timestamp(submitted_at_raw, raw)
 
-    # 5. semantic identity — representative discovery-side fields.
+    # 5. semantic identity — CARRIED, not derived. The carrier fields only
+    #    label the manifest; they are never hashed into the semantic key.
     semantic_fields = _representative_semantic_fields(raw)
-    if not any(v is not None and v != "" for v in semantic_fields.values()):
-        raise CandidateNormalizationError("missing_semantic_id", raw_record=raw)
-    semantic_family_hint = canonicalize(semantic_fields)
-
     market = str(semantic_fields.get("market") or "")
     frequency = str(semantic_fields.get("frequency") or "")
     if not market or not frequency:
         raise CandidateNormalizationError("missing_string_field", raw_record=raw)
+    semantic_family_hint = semantic_id
 
     return FactorCandidateManifest(
         schema_version=raw.get("schema_version") or "1.0",

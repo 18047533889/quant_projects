@@ -359,7 +359,10 @@ def pd_argext(x, window, pick, min_periods=1):
             if valid.sum() < mp:
                 continue
             target = np.nanmax(values) if pick == "max" else np.nanmin(values)
-            hit = np.flatnonzero(valid & (values == target))[-1]
+            hit_idx = np.flatnonzero(valid & (values == target))
+            if hit_idx.size == 0:
+                continue
+            hit = hit_idx[-1]
             out[row, col] = values.size - 1 - hit
     return frame_pd(x, out)
 
@@ -461,10 +464,21 @@ def pl_tail_mean(x, window, q=0.1, side="lower", min_periods=None, **_):
 
 
 def _top_spec(top, stat):
-    return (
-        lambda x, window, k, min_periods=None, **kw: pd_topbottom(x, window, k, min_periods, top, stat),
-        lambda x, window, k, min_periods=None, **kw: pl_topbottom(x, window, k, min_periods, top, stat),
-    )
+    # ts_topk_sum canonical params are ``["x","d","k"]`` (R19-050 aliases);
+    # the other topk/bottomk canonicals use ``["x","window","k"]``.  The DSL
+    # binder always passes the CANONICAL key (``d`` for ts_topk_sum), so the
+    # wrapped kernels must accept that spelling.
+    def _pand(x, window=None, k=None, min_periods=None, *, d=None, n=None, **kw):
+        w = window if window is not None else d
+        kk = k if k is not None else n
+        return pd_topbottom(x, w, kk, min_periods, top, stat)
+
+    def _pola(x, window=None, k=None, min_periods=None, *, d=None, n=None, **kw):
+        w = window if window is not None else d
+        kk = k if k is not None else n
+        return pl_topbottom(x, w, kk, min_periods, top, stat)
+
+    return _pand, _pola
 
 
 def register() -> None:

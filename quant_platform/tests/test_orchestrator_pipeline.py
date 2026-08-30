@@ -38,21 +38,25 @@ if _PARENT not in sys.path:
 from quant_platform.app.candidate.ingest import batch_fingerprint, reconcile_candidates
 from quant_platform.app.contracts import (
     ARTIFACT_TYPE_FACTOR_CANDIDATE,
+    AdmissionRequest,
+    AdmissionVerdict,
+    DECISION_APPROVED,
+    DECISION_REJECTED,
+    DECISION_SHADOWED,
     EventEnvelope,
     FeatureSetArtifact,
     FeatureSetDiffCategory,
     FeatureSetVersion,
+    REASON_AUTHORITY_ABSENT,
+    RefuseAdmission,
 )
 from quant_platform.app.outbox import InMemoryPublisher
 from quant_platform.app.orchestrator import (
     CandidateEvaluation,
-    DEFAULT_MIN_RANK_IC,
     Pipeline,
     PipelineReport,
     PipelineStatusReason,
-    VWAP_TO_VWAP_BASIS,
     build_with_evidence,
-    pipeline_gate_decision,
 )
 from quant_platform.app.storage.registry import ArtifactRegistry
 from quant_platform.app.worker.jobs import JobRunner
@@ -63,6 +67,10 @@ def _h(s: str) -> str:
     return hashlib.sha256(s.encode()).hexdigest()
 
 
+#: platform carries no admission threshold — the authority owns 0.02
+AUTHORITY_MIN_RANK_IC = 0.02
+
+
 def _raw_candidate(
     *,
     seed: str,
@@ -70,11 +78,11 @@ def _raw_candidate(
     formula: str = "sma(close, 20)",
     market: str = "ashare",
     frequency: str = "1d",
-    semantic_id: str = "P5:SMOOTH",
+    semantic_id: str | None = None,
     **extra,
 ) -> dict:
     payload = {
-        "semantic_id": semantic_id,
+        "semantic_id": semantic_id if semantic_id is not None else _h(f"sem:{factor_name}:{formula}"),
         "content_hash": _h(seed),
         "generator_type": "trailing_sma",
         "generator_version": "1.0",
@@ -94,18 +102,59 @@ def _raw_candidate(
 def _library_snapshot(
     *,
     library_version_ref: str = "lib:v7",
-    min_rank_ic: float = DEFAULT_MIN_RANK_IC,
     member_refs: list[str] | None = None,
-    reject_duplicates: bool = True,
 ) -> dict:
+    # Carried refs only — thresholds (min_rank_ic / similarity) are the
+    # AUTHORITY's policy now, never the platform's (R55 P0-6).
     return {
         "library_version_ref": library_version_ref,
         "library_version_id": library_version_ref,
-        "min_rank_ic": min_rank_ic,
-        "reject_duplicates": reject_duplicates,
-        "duplicate_similarity_threshold": 0.7,
         "member_refs": member_refs or [],
     }
+
+
+class _DelegatedAuthority:
+    """Test double of the domain-owned AdmissionAuthority port.
+
+    A stub of what ``factor_assets`` would provide: it receives the carried
+    evidence and returns a verdict the platform must record verbatim.
+    """
+
+    def __init__(self, *, approve_above: float = AUTHORITY_MIN_RANK_IC) -> None:
+        self.approve_above = approve_above
+        self.requests: list[AdmissionRequest] = []
+
+    def decide(self, request: AdmissionRequest) -> AdmissionVerdict:
+        self.requests.append(request)
+        evaluation = request.evaluation
+        rank = getattr(evaluation, "rank_ic", None)
+        if rank is None:
+            return AdmissionVerdict(
+                decision=DECISION_REJECTED,
+                reason_codes=("rank_ic_below_threshold",),
+                policy_ref="policy:test",
+                authority="tests._DelegatedAuthority",
+                content_hash=request.content_hash,
+            )
+        if rank > self.approve_above:
+            return AdmissionVerdict(
+                decision=DECISION_APPROVED,
+                reason_codes=("qualifies",),
+                policy_ref="policy:test",
+                authority="tests._DelegatedAuthority",
+                content_hash=request.content_hash,
+            )
+        return AdmissionVerdict(
+            decision=DECISION_REJECTED,
+            reason_codes=("rank_ic_below_threshold",),
+            policy_ref="policy:test",
+            authority="tests._DelegatedAuthority",
+            content_hash=request.content_hash,
+        )
+
+
+class _RecordingAuthority(_DelegatedAuthority):
+    """Authority that also records that the platform did NOT pre-decide."""
 
 
 def _make_pipeline(
@@ -114,12 +163,14 @@ def _make_pipeline(
     registry: ArtifactRegistry | None = None,
     outbox: InMemoryOutbox | None = None,
     worker_id: str = "p5-worker",
+    admission_authority: object | None = None,
 ) -> Pipeline:
     return Pipeline(
         registry=registry if registry is not None else ArtifactRegistry(),
         outbox=outbox if outbox is not None else InMemoryOutbox(),
         runner=JobRunner(worker_id=worker_id),
         evaluate_candidate=evaluate_candidate,
+        admission_authority=admission_authority if admission_authority is not None else _DelegatedAuthority(),
     )
 
 
@@ -157,16 +208,14 @@ def test_pipeline_happy_path_register_one_and_publishes_four_events():
                     "candidate_ref": cid,
                     "rank_ic": 0.09,
                     "evidence_status": "computed",
-                    "return_basis": VWAP_TO_VWAP_BASIS,
                 }
             )
         if cid == bad_id:
             return build_with_evidence(
                 {
                     "candidate_ref": cid,
-                    "rank_ic": 0.008,  # below the 0.02 floor
+                    "rank_ic": 0.008,  # below the AUTHORITY's 0.02 floor
                     "evidence_status": "computed",
-                    "return_basis": VWAP_TO_VWAP_BASIS,
                 }
             )
         return _eval_from(None, candidate_ref=cid)
@@ -344,85 +393,156 @@ def test_pipeline_duplicate_content_hash_reconcile_skipped():
 # --------------------------------------------------------------------------- #
 
 
-def test_pipeline_gate_rejects_rank_ic_below_threshold():
-    result = pipeline_gate_decision(
-        _eval_from(0.005, candidate_ref="c1"),
-        _library_snapshot(),
+# --------------------------------------------------------------------------- #
+# delegated admission: the platform RECORDS, the authority DECIDES (R55 P0-6)
+# --------------------------------------------------------------------------- #
+
+
+def test_admission_is_delegated_to_the_injected_authority():
+    """The verdict comes from the authority, not from a platform threshold."""
+    authority = _DelegatedAuthority()
+    pipeline = _make_pipeline(
+        evaluate_candidate=lambda c, ctx: build_with_evidence(
+            {"candidate_ref": str(getattr(c, "candidate_id", "")), "rank_ic": 0.09}
+        ),
+        admission_authority=authority,
     )
-    assert result["decision"] == "REJECT"
-    assert "rank_ic_below_threshold" in result["reason_codes"]
-
-
-def test_pipeline_gate_rejects_label_not_mature():
-    not_mature = CandidateEvaluation(
-        candidate_ref="c2",
-        rank_ic=None,
-        label_maturity=False,
-        evidence_status="label_not_mature",
-        return_basis=VWAP_TO_VWAP_BASIS,
+    report = pipeline.run(
+        [_raw_candidate(seed="deleg")], library_snapshot=_library_snapshot()
     )
-    result = pipeline_gate_decision(not_mature, _library_snapshot())
-    assert result["decision"] == "REJECT"
-    assert "label_not_mature" in result["reason_codes"]
-    assert "rank_ic_below_threshold" in result["reason_codes"]
+    assert report.num_approved == 1
+    # The platform ASKED the authority (one request per consumed candidate)...
+    assert len(authority.requests) == 1
+    request = authority.requests[0]
+    assert request.content_hash == _h("deleg")
+    assert request.library_snapshot_ref == "lib:v7"
+    # ...and recorded the verdict VERBATIM (reason codes carried, not derived).
+    verdict = pipeline.verdicts()[0]
+    assert verdict.decision == DECISION_APPROVED
+    assert verdict.reason_codes == ("qualifies",)
+    assert verdict.policy_ref == "policy:test"
+    assert verdict.authority == "tests._DelegatedAuthority"
+    # The verdict is recorded on the milestone event payload too.
+    rows = pipeline.outbox.rows() if hasattr(pipeline.outbox, "rows") else ()
+    decision_rows = [
+        r for r in rows if r.event.payload.get("decision", {}).get("delegated") is True
+    ]
+    assert decision_rows, "delegated decision must be recorded in the outbox payload"
+    assert list(decision_rows[0].event.payload["decision"]["reason_codes"]) == ["qualifies"]
 
 
-def test_pipeline_gate_rejects_wrong_return_basis():
-    wrong = CandidateEvaluation(
-        candidate_ref="c3", rank_ic=0.08, return_basis="close_to_close"
+def test_admission_low_rank_ic_is_rejected_by_the_authority_not_the_platform():
+    pipeline = _make_pipeline(
+        evaluate_candidate=lambda c, ctx: build_with_evidence(
+            {"candidate_ref": str(getattr(c, "candidate_id", "")), "rank_ic": 0.005}
+        )
     )
-    result = pipeline_gate_decision(wrong, _library_snapshot())
-    assert result["decision"] == "REJECT"
-    assert "return_basis_wrong" in result["reason_codes"]
-
-
-def test_pipeline_gate_forces_review_when_similarity_unmeasured():
-    snapshot = _library_snapshot(member_refs=["FC_a", "FC_b"])
-    # No similarity_fn -> uniqueness cannot be proven -> forced REVIEW.
-    result = pipeline_gate_decision(_eval_from(0.1, candidate_ref="c4"), snapshot)
-    assert result["decision"] == "REVIEW"
-    assert result["reason_codes"] == ["merge_suggested"]
-
-
-def test_pipeline_gate_rejects_duplicate_member():
-    snapshot = _library_snapshot(
-        member_refs=["FC_a"], reject_duplicates=True
+    report = pipeline.run(
+        [_raw_candidate(seed="lowic")], library_snapshot=_library_snapshot()
     )
+    assert report.num_approved == 0
+    assert report.num_rejected == 1
+    rejected_states = [st for st in report.states if st["status"] == "REJECTED"]
+    assert len(rejected_states) == 1
+    # the reason code came FROM the authority, mapped onto the platform vocabulary
+    assert rejected_states[0]["reason"] == PipelineStatusReason.QRP_GATE_REJECTED_RANK_IC
+    verdict = pipeline.verdicts()[0]
+    assert verdict.decision == DECISION_REJECTED
 
-    def similarity(candidate_ref, member_ref):
-        return 0.99  # duplicate of FC_a
 
-    result = pipeline_gate_decision(
-        _eval_from(0.1, candidate_ref="c5"),
-        {**snapshot, "similarity_fn": similarity},
+def test_admission_shadowed_verdict_is_recorded_not_applied():
+    class _Shadowing:
+        def decide(self, request):
+            return AdmissionVerdict(
+                decision=DECISION_SHADOWED,
+                reason_codes=("merge_suggested",),
+                authority="tests._Shadowing",
+            )
+
+    registry = ArtifactRegistry()
+    pipeline = _make_pipeline(
+        evaluate_candidate=lambda c, ctx: build_with_evidence(
+            {"candidate_ref": str(getattr(c, "candidate_id", "")), "rank_ic": 0.3}
+        ),
+        registry=registry,
+        admission_authority=_Shadowing(),
     )
-    assert result["decision"] == "REJECT"
-    assert "duplicate_of_existing_member" in result["reason_codes"]
-
-
-def test_pipeline_gate_review_merge_suggested_when_duplicates_soft():
-    snapshot = _library_snapshot(
-        member_refs=["FC_a"], reject_duplicates=False
+    report = pipeline.run(
+        [_raw_candidate(seed="shadow")], library_snapshot=_library_snapshot()
     )
+    assert report.num_approved == 0
+    assert report.num_rejected == 0
+    assert report.num_shadowed == 1
+    assert report.num_registered == 0
+    assert registry.contains(_h("shadow")) is False
+    shadowed_states = [st for st in report.states if st["status"] == "SHADOWED"]
+    assert len(shadowed_states) == 1
+    assert shadowed_states[0]["reason"] == PipelineStatusReason.QRP_ADMISSION_SHADOWED
 
-    def similarity(candidate_ref, member_ref):
-        return 0.99
 
-    result = pipeline_gate_decision(
-        _eval_from(0.1, candidate_ref="c6"),
-        {**snapshot, "similarity_fn": similarity},
+def test_platform_without_authority_fails_closed_and_never_fabricates_approval():
+    # Default seam = RefuseAdmission: an uncomposed pipeline approves nothing
+    # and records the machine-parseable absence reason.
+    pipeline = _make_pipeline(
+        evaluate_candidate=lambda c, ctx: build_with_evidence(
+            {"candidate_ref": str(getattr(c, "candidate_id", "")), "rank_ic": 0.5}
+        ),
+        admission_authority=RefuseAdmission(),
     )
-    assert result["decision"] == "REVIEW"
-    assert result["reason_codes"] == ["merge_suggested"]
-
-
-def test_pipeline_gate_approve_qualifies():
-    result = pipeline_gate_decision(
-        _eval_from(0.15, candidate_ref="c7"),
-        _library_snapshot(),
+    report = pipeline.run(
+        [_raw_candidate(seed="noauth")], library_snapshot=_library_snapshot()
     )
-    assert result["decision"] == "APPROVE"
-    assert result["reason_codes"] == ["qualifies"]
+    assert report.num_approved == 0
+    assert report.num_rejected == 1
+    rejected_states = [st for st in report.states if st["status"] == "REJECTED"]
+    assert len(rejected_states) == 1
+    assert (
+        rejected_states[0]["reason"] == PipelineStatusReason.QRP_ADMISSION_AUTHORITY_ABSENT
+    )
+    verdict = pipeline.verdicts()[0]
+    assert verdict.decision == DECISION_REJECTED
+    assert verdict.reason_codes == (REASON_AUTHORITY_ABSENT,)
+
+
+def test_platform_carries_no_admission_thresholds():
+    # The library snapshot the platform forwards carries ONLY refs: the
+    # threshold knobs the old platform gate owned are gone from the platform
+    # surface entirely.
+    snapshot = _library_snapshot()
+    assert "min_rank_ic" not in snapshot
+    assert "duplicate_similarity_threshold" not in snapshot
+    assert "reject_duplicates" not in snapshot
+    import quant_platform.app.orchestrator as orch
+
+    assert not hasattr(orch, "DEFAULT_MIN_RANK_IC")
+    assert not hasattr(orch, "pipeline_gate_decision")
+    assert not hasattr(orch, "VWAP_TO_VWAP_BASIS")
+
+
+def test_admission_request_carries_domain_refs_only():
+    captured: list[AdmissionRequest] = []
+
+    class _Capture:
+        def decide(self, request):
+            captured.append(request)
+            return AdmissionVerdict(decision=DECISION_APPROVED, reason_codes=("qualifies",))
+
+    pipeline = _make_pipeline(
+        evaluate_candidate=lambda c, ctx: build_with_evidence(
+            {"candidate_ref": "irrelevant", "rank_ic": 0.2}
+        ),
+        admission_authority=_Capture(),
+    )
+    report = pipeline.run(
+        [_raw_candidate(seed="carry")], library_snapshot=_library_snapshot()
+    )
+    assert report.num_approved == 1
+    request = captured[0]
+    assert request.candidate_ref
+    assert len(request.content_hash) == 64
+    # the carried semantic ref is the DOMAIN's digest (hex), untouched
+    assert len(request.factor_definition_ref) == 64
+    assert request.semantic_ref == request.factor_definition_ref
 
 
 def test_pipeline_rejection_path_no_registry_and_no_approved():

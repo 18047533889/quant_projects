@@ -1,0 +1,64 @@
+task: R55 #97 quant-modeling independent packaging
+status: complete
+date: 2026-08-28
+scope: modeling/ (package quant-modeling), tests/modeling, factor_engine/cleaned_operators/model_lane.py
+
+before:
+  - modeling/pyproject.toml ABSENT — importable only via the monorepo path
+  - duplicated QE/FP code NONE found (see checks)
+  - wheel matrix leg NOT_BUILT (ci wheel-matrix.yml preflight waits on this file)
+
+changes:
+  - "modeling/pyproject.toml NEW: name quant-modeling, version 0.1.0, requires-python >=3.10; deps numpy>=1.24 pandas>=2.0 scipy>=1.10 (+ dev extra pytest/build); explicit packages list [modeling, modeling.learners] with package-dir 'modeling' = '.' — packages.find CANNOT be used because the source root IS the package root (discovery sees only 'learners', which produces an EMPTY wheel, the R55 #96 class quant_platform hit); exclude-package-data for tests/benchmarks/pycache/test_*"
+  - "modeling/model_semantic_registry.py: FE authorities resolved lazily via _fe_cleaned_operators()/_fe() instead of module-top-level imports; TimingKind now imported from modeling.contracts (documented SUPERSET of FE's cleaned_operators.model_timing.TimingKind — 6 shared values plus FORWARD_LABEL_SUPERVISED); ImportError degrades to an empty authority map"
+  - "modeling/sample_policy.py + modeling/walk_forward.py: factor_engine ExchangeSessionCalendar import moved under TYPE_CHECKING (duck-typed; only shift_session / expected_sessions are called) so `import modeling` no longer needs factor_engine at import time"
+  - "factor_engine/cleaned_operators/model_lane.py: assign_model_lane guard was pinned to the DELETED factor_engine/modeling/legacy.py mirror (R48 deleted it), so it fail-closed to None for EVERY canonical since R48 — the 6 test_model_semantic_registry failures predate this task (baseline run reproduced them before any edit). Guard now walks upward from FE's install root to the nearest sibling modeling/legacy.py authority; fail-closed when absent (standalone FE without quant-modeling) or when the imported module is not that file (anti-shadow)"
+  - "tests/modeling/test_model_lane_authority_regression.py: stale literal path (the deleted mirror) replaced with the same sibling resolution; mirrored into factor_engine/tests/modeling/ (dual-homed)"
+  - "tests/modeling/test_packaging_independence.py NEW (5 tests, mirrored into factor_engine/tests/modeling/): top-level API surface, no QE/FP module leaked into modeling namespace, no QE/FP import anywhere in modeling source, homonyms are modeling's own definitions, no module-level factor_engine import (wheel self-containment)"
+
+duplicate_check:
+  ast_body_identical_functions_or_classes: 0
+  shared_module_or_object_docstrings: 0
+  homonym_symbols:
+    - modeling: "modeling.ledger.stable_hash (sha256 of json, returns str hex)"
+      quant_evaluator: "quant_evaluator.contracts._hashutil.stable_hash (hexdigest to int)"
+      verdict: different functions, same name only
+    - modeling: "modeling.ledger.FeatureBundle (factor identity contract)"
+      factor_preprocess: "factor_preprocess.contracts.feature_bundle.FeatureBundle (transformed feature tensor)"
+      verdict: different contracts, same name only
+    - modeling: "modeling.evaluation.MetricValue (model prediction metric)"
+      quant_evaluator: "quant_evaluator.api.requests.MetricValue (factor evaluation metric)"
+      verdict: different fields, same name only
+  ic_drift_math: "modeling/evaluation.py (pooled per-date Spearman IC, portfolio spread/turnover) vs quant_evaluator/metrics/ic.py (T,N,F tensor per-day IC) — disjoint algorithms and disjoint symbol sets; no PSI / population_stability / drift-metric implementation exists in QE or FP, so modeling/monitoring.py's nine drift dimensions are unique to modeling"
+  factor_engine_modeling_mirror: "already deleted at R48; root modeling/ is the sole authority. check_no_mirrors.py reports 0 modeling hits (its 1189 'mirror' hits are ALL stale build/ artifacts of an in-flight sibling build, none under modeling/)"
+
+wheel:
+  path: /tmp/modeling_wheels/quant_modeling-0.1.0-py3-none-any.whl
+  size_bytes: 127277
+  source_py: 33
+  wheel_py: 33
+  missing: none
+  extra: none
+  tests_or_conftest_shipped: none
+  pycache_shipped: none
+  dist_info: "METADATA + WHEEL + RECORD + top_level.txt present"
+  clean_env_smoke: "pip --target install with the repo root OFF sys.path: import modeling + contracts + learners + semantic registry all OK with no factor_engine / quant_evaluator / factor_preprocess present"
+
+tests:
+  tests_modeling: "371 passed (baseline before this task: 360 passed + 6 pre-existing failures in test_model_semantic_registry.py caused by the stale model_lane guard)"
+  factor_engine_tests_modeling_packaging_independence: 5 passed
+  factor_engine_tests_modeling_lane_authority_regression: 3 passed
+
+isolation_from_other_wheels:
+  quant_evaluator: no modeling entry
+  factor_preprocess: no modeling entry
+  factor_optimizer: no modeling entry
+  factor_assets: no modeling entry
+  data_access: no modeling entry
+  quant_platform: no modeling entry
+  factor_engine: no modeling entry, and factor_engine/modeling does not exist on disk
+
+limitations:
+  - "FE-derived semantic fields (lane/timing/typed_inputs/unit) come back None / unclassified when factor_engine is not installed — honest degradation; consistency_check still fails closed on the missing lane authority"
+  - "umbrella root pyproject intentionally still ships modeling/ (single-wheel monorepo distribution); the standalone quant-modeling wheel is additive"
+  - "stale build/ + factor_engine/build/ artifacts make check_no_mirrors.py report 1189 false 'mirror' hits (all under build/, none in modeling/) — separate cleanup, not part of #97"

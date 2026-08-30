@@ -23,7 +23,7 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Iterable, Mapping, Optional
 
-from factor_assets.contracts.similarity import SimilarityArtifact
+from factor_assets.contracts.similarity import SimilarityArtifact, is_unknown_identity
 
 __all__ = [
     "AdmissionDecision",
@@ -143,6 +143,18 @@ class FactorAdmissionArtifact:
             raise ValueError("factor_id is required")
         if not isinstance(self.decision, AdmissionDecision):
             raise TypeError("decision must be an AdmissionDecision")
+        # P0-12 (R55 audit): a similarity evidence reference carrying an
+        # UNKNOWN placeholder is not a reference — library promotion would
+        # treat two different similarity specs as the same evidence and
+        # silently merge artifacts.  Fail closed; ``None`` stays legal (the
+        # reference is simply absent).
+        if isinstance(self.similarity_ref, str) and is_unknown_identity(self.similarity_ref):
+            raise ValueError(
+                f"similarity_ref is UNKNOWN ({self.similarity_ref!r}); an "
+                "admission artifact may not cite an unknown similarity "
+                "identity — resolve the concrete SimilarityArtifact spec hash "
+                "first (fail closed)."
+            )
         if self.quality is not None:
             if isinstance(self.quality, bool) or not isinstance(
                 self.quality, (int, float)

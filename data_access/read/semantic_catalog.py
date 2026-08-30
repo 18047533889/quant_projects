@@ -776,6 +776,25 @@ class SemanticFieldCatalog:
                     "请先在 config/semantic_fields.yaml 登记。"
                 )
             return None
+        # PARITY-SWEEP-R56: when an explicit ``dataset`` is passed, a catalog
+        # candidate whose ``dataset`` does NOT match the requested dataset must
+        # NOT be used — the field's physical column would not exist in the
+        # requested dataset (e.g. the ashare ``close -> AdjClose`` mapping being
+        # applied to a test dataset whose schema has a plain ``Close`` column
+        # broke the SQL pushdown with a Binder Error).  Filter to the matching
+        # dataset first; only fall back to market/any resolution when no exact
+        # dataset candidate exists.
+        if dataset:
+            ds_candidates = [f for f in candidates if f.dataset == dataset]
+            if not ds_candidates:
+                # No catalog candidate lives in the requested dataset — the
+                # field's physical column would not exist there (e.g. the ashare
+                # ``close -> AdjClose`` mapping applied to a test dataset whose
+                # schema has a plain ``Close`` column).  Return None so the
+                # caller falls back to the dataset's own registry schema (raw
+                # physical column) instead of resolving a foreign physical name.
+                return None
+            candidates = ds_candidates
         effective = market or (self._market_of(dataset) if dataset else None)
         if effective and effective != "any":
             for f in candidates:

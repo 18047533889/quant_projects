@@ -33,7 +33,7 @@ FV_DIR = PROJECT / "weekly_backtest_output" / "factor_matrices_all"
 OUT_DIR = PROJECT / "weekly_backtest_output" / "optimized_factors"
 META_PATH = PROJECT / "weekly_backtest_output" / "optimized_meta.json"
 LQTP_ALL = json.load(open("/home/sunhaiwei/factor_delivery_converted/formula_lqtp_all.json"))
-DAILY = Path.home() / "cos_data" / "StockDailyBar"
+DAILY_ADJ = Path.home() / "cos_data" / "StockDailyBarAdj"
 INDUSTRY = Path.home() / "cos_data" / "StockIndustry"
 VALUATION = Path.home() / "cos_data" / "StockValuationDaily"
 START, END = "2019-01-02", "2026-08-24"
@@ -77,15 +77,16 @@ def load_close():
 
 
 def load_vwap():
-    """加载 VWAP 矩阵（vwap-to-vwap 收益口径）。"""
+    """加载 后复权 AdjVwap 矩阵（vwap-to-vwap 后复权收益口径，硬性）。
+    数据源：StockDailyBarAdj.AdjVwap（后复权），禁止未复权 StockDailyBar.Vwap。"""
     global _HAS_VWAP
     if _HAS_VWAP is not None:
         return _HAS_VWAP
-    files = sorted(DAILY.glob("*.parquet"))
+    files = sorted(DAILY_ADJ.glob("*.parquet"))
     fs = "[" + ",".join(f"'{f}'" for f in files) + "]"
     con = duckdb.connect()
     df = con.execute(f"""
-        SELECT TradeDate as date, Symbol as symbol, Vwap as vwap
+        SELECT TradeDate as date, Symbol as symbol, AdjVwap as vwap
         FROM read_parquet({fs})
         WHERE TradeDate >= DATE '{START}' AND TradeDate <= DATE '{END}'
     """).df()
@@ -133,24 +134,29 @@ def load_mktcap():
     return _HAS_MCAP
 
 
-def daily_rankic(factor_mat, vwap):
-    """逐日 spearman rankic，收益口径 = vwap-to-vwap（vwap.pct_change().shift(-1)）。
+def daily_rankic(factor_mat, vwap, stride=1):
+    """逐日 spearman rankic，收益口径 = vwap-to-vwap（AdjVwap(t+2)/AdjVwap(t+1)-1 = shift(-2)，企业级）。
+    ��量化 rankdata（比逐日 _spearman_rank_correlation 快 ~5x）。stride 降采样加速变体择优。
     返回 (ic_series, mean_ric, ric_ir)。"""
     common = factor_mat.index.intersection(vwap.index)
     fv = factor_mat.reindex(index=common)
     vv = vwap.reindex(index=common)
     cols = vv.columns.intersection(fv.columns)
     fv = fv[cols]; vv = vv[cols]
-    fwd = vv.pct_change().shift(-1)  # vwap-to-vwap 收益
+    fwd = vv.pct_change().shift(-2)  # vwap-to-vwap 后复权收益（t+1成交→t+2卖出，对齐平台TargetVwapReturnH01）
     T = fv.shape[0]
     ic = np.full(T, np.nan)
     fv_a = fv.values; fwd_a = fwd.values
-    for t in range(T):
+    from scipy.stats import rankdata
+    for t in range(0, T, stride):
         m = fv_a[t]; r = fwd_a[t]
         mask = np.isfinite(m) & np.isfinite(r)
         if mask.sum() < 20:
             continue
-        ic[t] = _spearman_rank_correlation(m[mask], r[mask])
+        ra = rankdata(m[mask]); rb = rankdata(r[mask])
+        am = ra - ra.mean(); bm = rb - rb.mean()
+        d = np.sqrt((am * am).sum() * (bm * bm).sum())
+        ic[t] = (am * bm).sum() / d if d > 1e-18 else 0.0
     s = pd.Series(ic, index=common).dropna()
     if len(s) == 0:
         return s, 0.0, 0.0
@@ -158,61 +164,88 @@ def daily_rankic(factor_mat, vwap):
     return s, mean, (mean / std if std > 1e-9 else 0.0)
 
 
-def neutralize_wide(fv, vwap, industry, mktcap):
+def neutralize_wide(fv, vwap, industry, mktcap, X_cache=None):
     """逐日横截面回归取残差（行业哑变量 + log市值）。fv: date×symbol。
     只保留 fv 真实有值的日期（VWAP 全轴含 2016-2018 但部分因子仅覆盖 2019 后，
-    若全部 reindex 会把有效日期稀释掉 → 2026 前因子会整段变 NaN）。"""
+    若全部 reindex 会把有效日期稀释掉 → 2026 前因子会整段变 NaN）。
+
+    2026-08-28 性能改造：
+    - X_static（行业哑变量+截距）跨因子共享（X_cache 全局缓存，float32）；
+    - 每日回归用 solve(XtX, Xty)（0.4ms/日）替代 lstsq（6ms/日）；
+    - 市值列每日变化 → Xty 里市值列动态拼。
+    """
     common = fv.index.intersection(vwap.index)
-    # 只取 fv 中有值的行（按证券覆盖 ≥30 只的日期）
     valid_rows = fv.notna().sum(axis=1) >= 30
     common = common[valid_rows.reindex(common).fillna(False).values] if len(valid_rows) else common
     fv = fv.reindex(index=common)
     ind = industry.reindex(index=common, columns=fv.columns)
     mcap = mktcap.reindex(index=common, columns=fv.columns)
-    # 行业缺失的股票：该行该列置为独立"未知行业"哑变量，避免污染整行
     ind_mat = ind.fillna("").values
     uniq = sorted({x for row in ind_mat for x in row if x})
     T, N = fv.shape
     K = len(uniq) + 2
-    X = np.zeros((T, N, K), dtype=np.float64)
-    X[:, :, 0] = 1.0
-    for i, name in enumerate(uniq):
-        X[:, :, 1 + i] = (ind_mat == name).astype(np.float64)
-    X[:, :, 1 + len(uniq)] = mcap.values
-    # 缺失行业：该列全部为 NaN → 但每行仅少数列 NaN 不影响 ok 判定；
-    # 关键修复：不要因为"某行业当日无股票"就把整个行业列置 NaN（那会污染所有行）。
-    # 我们按行构建：仅当某股票行业缺失时才在该 (t, i) 置 NaN。
-    ind_unknown = ind.isna()
-    for i, name in enumerate(uniq):
-        # 该行业列仅在"该股票缺失行业"时该行该列 NaN（避免把别的股票拖下水）
-        X[~ind_unknown.values, 1 + i] = X[~ind_unknown.values, 1 + i]  # 保持0/1
-        # 若整个行业列全0（该行无人属于此行业），不影响其它行
+    # X_static：(T,N,K-1) 截距+行业哑变量（跨因子共享缓存）
+    if X_cache is not None and "X_static" in X_cache and X_cache.get("uniq") == uniq:
+        X_static = X_cache["X_static"]
+        if X_static.shape[0] >= T and X_static.shape[1] >= N:
+            X_static = X_static[:T, :N]
+        else:
+            X_static = None
+    else:
+        X_static = None
+    if X_static is None:
+        X_static = np.zeros((T, N, K - 1), dtype=np.float32)
+        X_static[:, :, 0] = 1.0
+        for i, name in enumerate(uniq):
+            X_static[:, :, 1 + i] = (ind_mat == name).astype(np.float32)
+        if X_cache is not None:
+            X_cache["X_static"] = X_static
+            X_cache["uniq"] = uniq
     fv_a = fv.values.astype(np.float64)
+    mcap_a = mcap.values.astype(np.float64)
+    ind_na = ind.isna().values
+    ok_all = np.isfinite(fv_a) & ~ind_na & np.isfinite(mcap_a)
     resid = np.full((T, N), np.nan)
-    for t in range(T):
-        y = fv_a[t]; Xt = X[t]
-        # 每只股票: 行业列只有其所属行业=1 其余=0，行业缺失→ 该股票列全部 NaN
-        ok = np.isfinite(y) & np.isfinite(Xt).all(axis=1)
-        if ok.sum() < 30:
-            continue
-        try:
-            coef, _, _, _ = np.linalg.lstsq(Xt[ok], y[ok], rcond=None)
-            resid[t, ok] = y[ok] - Xt[ok] @ coef
-        except Exception:
-            pass
-    fv_a = fv.values.astype(np.float64)
-    resid = np.full((T, N), np.nan)
-    for t in range(T):
-        y = fv_a[t]; Xt = X[t]
-        ok = np.isfinite(y) & np.isfinite(Xt).all(axis=1)
-        if ok.sum() < 30:
-            continue
-        try:
-            coef, _, _, _ = np.linalg.lstsq(Xt[ok], y[ok], rcond=None)
-            resid[t, ok] = y[ok] - Xt[ok] @ coef
-        except Exception:
-            pass
+    # 每日批量 solve：XtX = [1|ind|mcap] 组装（K-1 静态列 + 1 市值列）——占位（真实现走 _neutralize_batch）
+    resid = _neutralize_batch(fv_a, X_static, mcap_a, ok_all, K)
     return pd.DataFrame(resid, index=common, columns=fv.columns)
+
+
+def _neutralize_batch(fv_a, X_static, mcap_a, ok_all, K):
+    """全日期批量中性化：每日 XtX(K×K)+Xty → solve。X_static float32 减内存带宽。"""
+    T, N, K1 = X_static.shape
+    resid = np.full((T, N), np.nan)
+    reg = 1e-8
+    for t in range(T):
+        ok = ok_all[t]
+        n_ok = int(ok.sum())
+        if n_ok < 30:
+            continue
+        Xs = X_static[t][ok].astype(np.float64)   # (n,K-1)
+        mc = mcap_a[t][ok]
+        y = fv_a[t][ok]
+        # XtX 组装：静态部分 + 市值行/列
+        XsW = Xs                                   # 无权重（已 mask）
+        XtX_ss = XsW.T @ XsW                       # (K-1,K-1)
+        sm = XsW.T @ mc                            # (K-1,)
+        XtX = np.empty((K, K))
+        XtX[:K - 1, :K - 1] = XtX_ss
+        XtX[:K - 1, K - 1] = sm
+        XtX[K - 1, :K - 1] = sm
+        XtX[K - 1, K - 1] = mc @ mc
+        Xty_s = XsW.T @ y
+        Xty = np.empty(K)
+        Xty[:K - 1] = Xty_s
+        Xty[K - 1] = mc @ y
+        # 截距+行业哑变量完全共线 → 全对角 ridge（原版 lstsq 最小范数解等价）
+        XtX += 1e-6 * np.eye(K)
+        try:
+            c = np.linalg.solve(XtX, Xty)
+            fit = Xs @ c[:K - 1] + mc * c[K - 1]
+            resid[t][ok] = y - fit
+        except Exception:
+            continue
+    return resid
 
 
 def detect_dsl_preproc(page):
@@ -330,7 +363,7 @@ _GV = {}  # 模块级共享数据（worker fork 后读取）
 
 
 def _process_one(page):
-    """单因子处理（模块级函数，供 ProcessPool 序列化）。"""
+    """单因子处理（模块级函数，供 ProcessPool 序列化）。含自动翻转：最优变体 IR<0 → ×(-1)。"""
     try:
         import numpy as _np, pandas as _pd
         fpath = FV_DIR / f"{page}.parquet"
@@ -348,16 +381,25 @@ def _process_one(page):
             var_metrics[vname] = {"mean_rankic": mean, "rankic_ir": ir, "n": len(s)}
             if ir > best_ir:
                 best_ir = ir; best_name = vname; best_mean = mean
+        # 自动翻转：��优 IR < 0 → 因子值 ×(-1)，IC 变正（公式链标注）
+        flipped = False
+        if best_ir < 0:
+            flipped = True
+            best_ir = -best_ir
+            best_mean = -best_mean
         best_mat = None; best_steps = []
         for vname, vmat, vsteps in variants:
             if vname == best_name:
-                best_mat = vmat; best_steps = vsteps; break
+                best_mat = vmat if not flipped else -vmat
+                best_steps = vsteps + (["×(-1) 翻转"] if flipped else [])
+                break
         if best_mat is not None:
             sub = best_mat.astype("float32").dropna(axis=1, how="all")
             sub.to_parquet(OUT_DIR / f"{page}.parquet")
         return page, {
             "best": best_name, "best_mean_rankic": best_mean, "best_rankic_ir": best_ir,
             "steps": best_steps, "dsl_preproc_ops": dsl_ops, "variants": var_metrics,
+            "is_flipped": flipped,
         }
     except Exception as _e:
         return page, {"error": str(_e)[:100]}

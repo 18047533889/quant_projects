@@ -19,7 +19,9 @@ from data_access.registry import load_registry
 def test_mirror_registry_covers_markets():
     ashare = [n for n in DATASET_MIRROR_REGISTRY if n.startswith("ashare_")]
     us = [n for n in DATASET_MIRROR_REGISTRY if n.startswith("us_")]
-    assert len(ashare) == 21  # +ashare_turnover_base_daily
+    # 23 = 21 基础 + ashare_stock_daily_adj + ashare_stock_minute_adj
+    # （ADJ_FIELD_MIGRATION 2026-08-28：后复权生成表镜像）
+    assert len(ashare) == 23
     # 23 基础 +5 新增/拆分：us_stock_capital_split / us_stock_capital_shares /
     # us_security_master_daily_snap / us_ticker_shares_snapshot / us_fact_news
     # （原 us_stock_capital_daily 拆成 split+shares 两个镜像）
@@ -27,9 +29,10 @@ def test_mirror_registry_covers_markets():
 
 
 def test_ashare_table_map():
-    assert len(ASHARE_DATASET_TABLE_MAP) == 21  # +ashare_turnover_base_daily
+    assert len(ASHARE_DATASET_TABLE_MAP) == 23  # 21 基础 + 2 后复权生成表
     assert ASHARE_DATASET_TABLE_MAP["ashare_stock_daily"] == "StockDailyBar"
     assert ASHARE_DATASET_TABLE_MAP["ashare_turnover_base_daily"] == "TurnoverBaseDaily"
+    assert ASHARE_DATASET_TABLE_MAP["ashare_stock_daily_adj"] == "StockDailyBarAdj"
 
 
 def test_us_massive_tables():

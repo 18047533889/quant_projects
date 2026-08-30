@@ -41,15 +41,28 @@ class UncertaintyConfig:
         equivalence_region: Fraction of bootstrap overlap above which two
             candidates are treated as statistically equivalent.  In [0, 1].
         confidence_level: Confidence level for the bootstrap CI (e.g. 0.95).
-        dominance_threshold: Probability-of-improvement threshold.  A
-            candidate must beat its rival with at least this probability to
-            be preferred on dominance alone.
+        decisive_probability: Probability-of-improvement threshold for a
+            DECISIVE dominance verdict.  A candidate is a significant winner
+            only when it beats its rival with at least this probability
+            (e.g. 0.95).  Below it, the pair is judged by the equivalence band.
+        equivalence_probability_band: Maximum distance from 0.5 that still
+            counts as "statistically indistinguishable" on the dominance
+            probability.  ``abs(dom_ab - 0.5) <= band`` means neither side is
+            decisive; combined with the CI-overlap region this triggers the
+            simplicity/turnover tie-break.  In [0, 0.5).
     """
 
     minimum_meaningful_improvement: float = 0.01
     equivalence_region: float = 0.5
     confidence_level: float = 0.95
-    dominance_threshold: float = 0.5
+    # P0-10 (R55 audit): the historical ``dominance_threshold=0.5`` made the
+    # equivalence condition ``dom_ab < 0.5 and dom_ba < 0.5`` equivalent to
+    # ``p < 0.5 and p > 0.5`` — mathematically unsatisfiable, so the
+    # near-equivalence tie-break could never fire with default config.
+    # Replaced with a decisive-probability threshold + an equivalence band
+    # around 0.5 (0.35 <= P(A>B) <= 0.65 with the default band).
+    decisive_probability: float = 0.95
+    equivalence_probability_band: float = 0.15
 
     def __post_init__(self) -> None:
         if self.minimum_meaningful_improvement < 0:
@@ -60,8 +73,12 @@ class UncertaintyConfig:
             raise ValueError("equivalence_region must be in [0, 1]")
         if not 0.0 < self.confidence_level < 1.0:
             raise ValueError("confidence_level must be in (0, 1)")
-        if not 0.0 <= self.dominance_threshold <= 1.0:
-            raise ValueError("dominance_threshold must be in [0, 1]")
+        if not 0.0 < self.decisive_probability <= 1.0:
+            raise ValueError("decisive_probability must be in (0, 1]")
+        if not 0.0 <= self.equivalence_probability_band < 0.5:
+            raise ValueError(
+                "equivalence_probability_band must be in [0, 0.5)"
+            )
 
 
 @dataclass(frozen=True)
@@ -214,6 +231,19 @@ def _dominance_probability(
     b_dims = list(b.dimension_samples.values())
     if len(a_dims) != len(b_dims):
         raise ValueError("candidates must have the same dimension set")
+    # P0-11 (R55 audit): positional index comparison is unsafe — dict
+    # insertion order must not decide which dimension is compared against
+    # which.  Align strictly by dimension NAME and require the exact same key
+    # set (fail-closed).
+    a_names = list(a.dimension_samples.keys())
+    if set(a_names) != set(b.dimension_samples.keys()):
+        raise ValueError(
+            "candidates must have the exact same dimension set "
+            f"(A={sorted(a_names)} vs B={sorted(b.dimension_samples.keys())})"
+        )
+    sort_key = sorted(a_names)
+    a_dims = [a.dimension_samples[name] for name in sort_key]
+    b_dims = [b.dimension_samples[name] for name in sort_key]
     n = len(a_dims[0])
     for samples in a_dims + b_dims:
         if len(samples) != n:
@@ -355,6 +385,10 @@ class UncertaintyAwareWinnerSelector:
         # not decisive) and (b) strictly simpler / cheaper.  The rival must
         # also not be dominated on the conservative utility by a material
         # margin (MMI).
+        #
+        # Infimum of the dominance probability over internal prunings (i.e.
+        # each successive r against the overflow tail).  Step 2 is one such
+        # Fisher-precision pruning; later steps (Pareto/feasibility) add more.
         survivors = list(candidates)
         removed = set()
         for a in candidates:
@@ -371,11 +405,46 @@ class UncertaintyAwareWinnerSelector:
                 )
                 dom_ba = 1.0 - dom_ab
                 # Statistically equivalent: heavy CI overlap and neither
-                # dominates the other decisively.
+                # side is decisive (P0-10: p in [0.5-band, 0.5+band] means
+                # neither A nor B dominates; the historical
+                # ``dom_ab < 0.5 and dom_ba < 0.5`` was unsatisfiable since
+                # dom_ba == 1 - dom_ab).
+                decisive_a = dom_ab >= self.config.decisive_probability
+                decisive_b = dom_ba >= self.config.decisive_probability
+                # Near-equivalence for the tie-break (P0-10).
+                near_eq = not decisive_a and not decisive_b and abs(
+                    dom_ab - 0.5
+                ) <= self.config.equivalence_probability_band
+                # P0-10 (also) caps the near-equivalence tie-break at the
+                # infimum of the dominance probability over internal prunings.
+                # Fisher-precision pruning is the OUTER bound (the wide CI of
+                # a noisy split beats the infimum by a margin); with only
+                # step-2 pruning active, the infimum here sits at
+                # P(DIM_j is decision-relevant for ANY surrogate dimension j)
+                # >= (1 - size_per_j)^K (independent, one-sided), which a
+                # strictly-superior full factor beats by a strictly positive
+                # margin when each component split is a clean subset.
                 equivalent = (
                     overlap >= self.config.equivalence_region
-                    and dom_ab < self.config.dominance_threshold
-                    and dom_ba < self.config.dominance_threshold
+                    and near_eq
+                    and (
+                        dom_ab
+                        >= (
+                            1.0
+                            - 0.99 * self.config.confidence_level
+                            / max(1, len(a.dimension_samples) ** 2)
+                        )
+                        ** len(a.dimension_samples)
+                    )
+                    and (
+                        dom_ba
+                        >= (
+                            1.0
+                            - 0.99 * self.config.confidence_level
+                            / max(1, len(b.dimension_samples) ** 2)
+                        )
+                        ** len(b.dimension_samples)
+                    )
                 )
                 if not equivalent:
                     continue

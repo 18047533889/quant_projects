@@ -47,6 +47,18 @@ from factor_assets.clustering.incremental import (
     DEFAULT_MAX_CANDIDATES,
 )
 
+# R55 P0-13: certified-graph production gate for clustering.
+from factor_assets.clustering.certification import (
+    CertifiedGraphArtifact,
+    ExecutionMode,
+    GraphCertificationStatus,
+    CERTIFIED_COMPLETENESS_CLASSES,
+    compute_graph_content_hash,
+    enforce_certified_graph,
+    graph_summary,
+)
+from factor_assets.errors import ProductionClusterViolation
+
 __all__ = [
     "ConnectedComponents",
     "ModularityClustering",
@@ -69,4 +81,13 @@ __all__ = [
     "UNKNOWN_AFFINITY_FLOOR",
     "DEFAULT_MAX_CANDIDATES",
     "HIERARCHICAL_AVAILABLE",
+    # R55 P0-13 certified-graph production gate
+    "CertifiedGraphArtifact",
+    "ExecutionMode",
+    "GraphCertificationStatus",
+    "CERTIFIED_COMPLETENESS_CLASSES",
+    "compute_graph_content_hash",
+    "enforce_certified_graph",
+    "graph_summary",
+    "ProductionClusterViolation",
 ]

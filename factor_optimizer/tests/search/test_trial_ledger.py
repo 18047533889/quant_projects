@@ -7,6 +7,7 @@ roundtrip, a dropped/reordered/duplicated ledger is rejected, and the ledger is
 never sealed against legitimate mid-run writes.
 """
 
+import numpy as np
 import pytest
 
 from factor_optimizer.contracts.search_budget import SearchBudget
@@ -44,7 +45,7 @@ def _trial(tid, mid="m"):
 
 
 def _eval_ok(trial, fidelity):
-    return {"evaluation_id": f"e-{trial.trial_id}", "score": 0.5, "cost": 1.0}
+    return {"evaluation_id": f"e-{trial.trial_id}", "score": 0.5, "cost": 1.0, "treatment_integrity_evidence": _integrity_evidence(trial.trial_id)}
 
 
 # ---------------------------------------------------------------------------
@@ -209,3 +210,26 @@ def test_ledger_entry_sequence_validation():
         LedgerEntry(sequence=0, status="PROPOSED")
     with pytest.raises(ValueError, match="sequence"):
         LedgerEntry(sequence="x", status="PROPOSED")
+
+
+def _integrity_evidence(trial_id="t1", kind=None):
+    """Passing TreatmentIntegrityEvidence measured from arrays (R55 P0-9)."""
+    from factor_optimizer.contracts.treatment_integrity import (
+        build_integrity_evidence,
+    )
+
+    rng = np.random.default_rng(abs(hash(trial_id)) % (2 ** 32))
+    before = rng.normal(size=32)
+    treated_kind = kind if kind else f"treatment::{trial_id}"
+    if treated_kind == "raw":
+        after = before
+    else:
+        after = before * 0.5 + 0.01
+    return build_integrity_evidence(
+        trial_id,
+        treated_kind,
+        {} if treated_kind == "raw" else {"window": 3},
+        before,
+        after,
+    )
+

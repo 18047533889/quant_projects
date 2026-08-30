@@ -73,9 +73,10 @@ class TSARCoefficientNative(SeriesOperator):
         return_type="series",
         tags=["time_series", "polars", "native", "causal"],
         param_specs={
-            "window": ParamSpec(dtype=int, min=3, default=20, searchable=True, param_role=ParamRole.HORIZON),
-            "lag": ParamSpec(dtype=int, min=1, default=1, searchable=True, param_role=ParamRole.HORIZON),
-            "min_periods": ParamSpec(dtype=int, min=1, default=1, searchable=False, param_role=ParamRole.SUPPORT_POLICY),
+            "window": ParamSpec(dtype=int, min=2, searchable=True, param_role=ParamRole.HORIZON),
+            "lag": ParamSpec(dtype=int, min=1, searchable=True, param_role=ParamRole.ECONOMIC),
+            "min_periods": ParamSpec(dtype=int, min=1, searchable=False, param_role=ParamRole.SUPPORT_POLICY),
+            "warmup_policy": ParamSpec(dtype=str, choices=("expanding", "full"), searchable=False, param_role=ParamRole.POLICY),
         },
     )
 
@@ -135,8 +136,9 @@ class TSARFittedValueNative(SeriesOperator):
         return_type="series",
         tags=["time_series", "polars", "native", "causal"],
         param_specs={
-            "window": ParamSpec(dtype=int, min=3, default=20, searchable=True, param_role=ParamRole.HORIZON),
-            "order": ParamSpec(dtype=int, min=1, default=1, searchable=True, param_role=ParamRole.HORIZON),
+            "window": ParamSpec(dtype=int, min=2, searchable=True, param_role=ParamRole.HORIZON),
+            "order": ParamSpec(dtype=int, min=1, searchable=False, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+            "warmup_policy": ParamSpec(dtype=str, choices=("expanding", "full"), searchable=False, param_role=ParamRole.POLICY),
         },
     )
 
@@ -189,8 +191,9 @@ class TSARForecastNative(SeriesOperator):
         return_type="series",
         tags=["time_series", "polars", "native", "causal"],
         param_specs={
-            "window": ParamSpec(dtype=int, min=3, default=20, searchable=True, param_role=ParamRole.HORIZON),
-            "order": ParamSpec(dtype=int, min=1, default=1, searchable=True, param_role=ParamRole.HORIZON),
+            "window": ParamSpec(dtype=int, min=2, searchable=True, param_role=ParamRole.HORIZON),
+            "order": ParamSpec(dtype=int, min=1, searchable=False, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+            "warmup_policy": ParamSpec(dtype=str, choices=("expanding", "full"), searchable=False, param_role=ParamRole.POLICY),
         },
     )
 
@@ -244,8 +247,9 @@ class TSARInnovationNative(SeriesOperator):
         return_type="series",
         tags=["time_series", "polars", "native", "causal"],
         param_specs={
-            "window": ParamSpec(dtype=int, min=3, default=20, searchable=True, param_role=ParamRole.HORIZON),
-            "order": ParamSpec(dtype=int, min=1, default=1, searchable=True, param_role=ParamRole.HORIZON),
+            "window": ParamSpec(dtype=int, min=2, searchable=True, param_role=ParamRole.HORIZON),
+            "order": ParamSpec(dtype=int, min=1, searchable=False, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+            "warmup_policy": ParamSpec(dtype=str, choices=("expanding", "full"), searchable=False, param_role=ParamRole.POLICY),
         },
     )
 
@@ -305,8 +309,9 @@ class TSARInnovationZNative(SeriesOperator):
         return_type="series",
         tags=["time_series", "polars", "native", "causal"],
         param_specs={
-            "window": ParamSpec(dtype=int, min=3, default=20, searchable=True, param_role=ParamRole.HORIZON),
-            "order": ParamSpec(dtype=int, min=1, default=1, searchable=True, param_role=ParamRole.HORIZON),
+            "window": ParamSpec(dtype=int, min=2, searchable=True, param_role=ParamRole.HORIZON),
+            "order": ParamSpec(dtype=int, min=1, searchable=False, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+            "warmup_policy": ParamSpec(dtype=str, choices=("expanding", "full"), searchable=False, param_role=ParamRole.POLICY),
         },
     )
 
@@ -343,7 +348,7 @@ class TSARInnovationZNative(SeriesOperator):
                 x_last = past[-p:][::-1]
                 forecast = np.dot(coef, x_last)
                 innov = current - forecast
-                return np.where(std != 0, (float(innov) / (std)), np.nan)
+                return (float(innov) / (std)) if std != 0 else np.nan
             except:
                 return np.nan
 
@@ -372,8 +377,9 @@ class TSARInSampleResidNative(SeriesOperator):
         return_type="series",
         tags=["time_series", "polars", "native", "causal"],
         param_specs={
-            "window": ParamSpec(dtype=int, min=3, default=20, searchable=True, param_role=ParamRole.HORIZON),
-            "order": ParamSpec(dtype=int, min=1, default=1, searchable=True, param_role=ParamRole.HORIZON),
+            "window": ParamSpec(dtype=int, min=2, searchable=True, param_role=ParamRole.HORIZON),
+            "order": ParamSpec(dtype=int, min=1, searchable=False, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+            "warmup_policy": ParamSpec(dtype=str, choices=("expanding", "full"), searchable=False, param_role=ParamRole.POLICY),
         },
     )
 
@@ -426,8 +432,9 @@ class TSARCoeffStabilityNative(SeriesOperator):
         return_type="series",
         tags=["time_series", "polars", "native", "causal"],
         param_specs={
-            "window": ParamSpec(dtype=int, min=10, default=60, searchable=True, param_role=ParamRole.HORIZON),
-            "order": ParamSpec(dtype=int, min=1, default=1, searchable=True, param_role=ParamRole.HORIZON),
+            "window": ParamSpec(dtype=int, min=2, searchable=True, param_role=ParamRole.HORIZON),
+            "order": ParamSpec(dtype=int, min=1, searchable=False, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+            "warmup_policy": ParamSpec(dtype=str, choices=("expanding", "full"), searchable=False, param_role=ParamRole.POLICY),
         },
     )
 
@@ -508,8 +515,9 @@ class TSARPriorCoeffNative(SeriesOperator):
         return_type="series",
         tags=["time_series", "polars", "native", "causal"],
         param_specs={
-            "window": ParamSpec(dtype=int, min=3, default=20, searchable=True, param_role=ParamRole.HORIZON),
-            "order": ParamSpec(dtype=int, min=1, default=1, searchable=True, param_role=ParamRole.HORIZON),
+            "window": ParamSpec(dtype=int, min=2, searchable=True, param_role=ParamRole.HORIZON),
+            "order": ParamSpec(dtype=int, min=1, searchable=False, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+            "warmup_policy": ParamSpec(dtype=str, choices=("expanding", "full"), searchable=False, param_role=ParamRole.POLICY),
         },
     )
 
@@ -567,8 +575,9 @@ class TSARPriorForecastNative(SeriesOperator):
         return_type="series",
         tags=["time_series", "polars", "native", "causal"],
         param_specs={
-            "window": ParamSpec(dtype=int, min=3, default=20, searchable=True, param_role=ParamRole.HORIZON),
-            "order": ParamSpec(dtype=int, min=1, default=1, searchable=True, param_role=ParamRole.HORIZON),
+            "window": ParamSpec(dtype=int, min=2, searchable=True, param_role=ParamRole.HORIZON),
+            "order": ParamSpec(dtype=int, min=1, searchable=False, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+            "warmup_policy": ParamSpec(dtype=str, choices=("expanding", "full"), searchable=False, param_role=ParamRole.POLICY),
         },
     )
 
@@ -621,8 +630,9 @@ class TSARPriorInnovationNative(SeriesOperator):
         return_type="series",
         tags=["time_series", "polars", "native", "causal"],
         param_specs={
-            "window": ParamSpec(dtype=int, min=3, default=20, searchable=True, param_role=ParamRole.HORIZON),
-            "order": ParamSpec(dtype=int, min=1, default=1, searchable=True, param_role=ParamRole.HORIZON),
+            "window": ParamSpec(dtype=int, min=2, searchable=True, param_role=ParamRole.HORIZON),
+            "order": ParamSpec(dtype=int, min=1, searchable=False, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+            "warmup_policy": ParamSpec(dtype=str, choices=("expanding", "full"), searchable=False, param_role=ParamRole.POLICY),
         },
     )
 
@@ -682,8 +692,9 @@ class TSARPriorInnovationZNative(SeriesOperator):
         return_type="series",
         tags=["time_series", "polars", "native", "causal"],
         param_specs={
-            "window": ParamSpec(dtype=int, min=3, default=20, searchable=True, param_role=ParamRole.HORIZON),
-            "order": ParamSpec(dtype=int, min=1, default=1, searchable=True, param_role=ParamRole.HORIZON),
+            "window": ParamSpec(dtype=int, min=2, searchable=True, param_role=ParamRole.HORIZON),
+            "order": ParamSpec(dtype=int, min=1, searchable=False, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+            "warmup_policy": ParamSpec(dtype=str, choices=("expanding", "full"), searchable=False, param_role=ParamRole.POLICY),
         },
     )
 
@@ -719,7 +730,7 @@ class TSARPriorInnovationZNative(SeriesOperator):
                 x_last = past[-p:][::-1]
                 forecast = np.dot(coef, x_last)
                 innov = current - forecast
-                return np.where(std != 0, (float(innov) / (std)), np.nan)
+                return (float(innov) / (std)) if std != 0 else np.nan
             except:
                 return np.nan
 
@@ -749,12 +760,11 @@ class TSPoly2CoeffNative(SeriesOperator):
         name="ts_poly2_coeff",
         category="time_series",
         description="二次多项式系数",
-        param_names=["x", "window", "coef_index"],
+        param_names=["x", "d"],
         return_type="series",
         tags=["time_series", "polars", "native", "causal"],
         param_specs={
-            "window": ParamSpec(dtype=int, min=3, default=20, searchable=True, param_role=ParamRole.HORIZON),
-            "coef_index": ParamSpec(dtype=int, min=0, max=2, default=0, searchable=False, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+            "d": ParamSpec(dtype=int, min=3, default=20, searchable=True, param_role=ParamRole.HORIZON),
         },
     )
 
@@ -804,11 +814,11 @@ class TSPoly2ForecastErrorNative(SeriesOperator):
         name="ts_poly2_forecast_error",
         category="time_series",
         description="二次多项式预测误差",
-        param_names=["x", "window"],
+        param_names=["x", "d"],
         return_type="series",
         tags=["time_series", "polars", "native", "causal"],
         param_specs={
-            "window": ParamSpec(dtype=int, min=3, default=20, searchable=True, param_role=ParamRole.HORIZON),
+            "d": ParamSpec(dtype=int, min=3, default=20, searchable=True, param_role=ParamRole.HORIZON),
         },
     )
 
@@ -859,11 +869,11 @@ class TSPoly2ForecastErrorZNative(SeriesOperator):
         name="ts_poly2_forecast_error_z",
         category="time_series",
         description="二次多项式标准化预测误差",
-        param_names=["x", "window"],
+        param_names=["x", "d"],
         return_type="series",
         tags=["time_series", "polars", "native", "causal"],
         param_specs={
-            "window": ParamSpec(dtype=int, min=3, default=20, searchable=True, param_role=ParamRole.HORIZON),
+            "d": ParamSpec(dtype=int, min=3, default=20, searchable=True, param_role=ParamRole.HORIZON),
         },
     )
 
@@ -895,7 +905,7 @@ class TSPoly2ForecastErrorZNative(SeriesOperator):
                 t_next = len(y)
                 forecast = coef[0] + coef[1] * t_next + coef[2] * t_next**2
                 error = current - forecast
-                return np.where(std != 0, (float(error) / (std)), np.nan)
+                return (float(error) / (std)) if std != 0 else np.nan
             except:
                 return np.nan
 
@@ -920,12 +930,11 @@ class TSPoly2PriorCoeffNative(SeriesOperator):
         name="ts_poly2_prior_coeff",
         category="time_series",
         description="二次多项式历史系数",
-        param_names=["x", "window", "coef_index"],
+        param_names=["x", "d"],
         return_type="series",
         tags=["time_series", "polars", "native", "causal"],
         param_specs={
-            "window": ParamSpec(dtype=int, min=3, default=20, searchable=True, param_role=ParamRole.HORIZON),
-            "coef_index": ParamSpec(dtype=int, min=0, max=2, default=0, searchable=False, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+            "d": ParamSpec(dtype=int, min=3, default=20, searchable=True, param_role=ParamRole.HORIZON),
         },
     )
 
@@ -975,11 +984,11 @@ class TSPoly2ResidNative(SeriesOperator):
         name="ts_poly2_resid",
         category="time_series",
         description="二次多项式残差标准差",
-        param_names=["x", "window"],
+        param_names=["x", "d"],
         return_type="series",
         tags=["time_series", "polars", "native", "causal"],
         param_specs={
-            "window": ParamSpec(dtype=int, min=3, default=20, searchable=True, param_role=ParamRole.HORIZON),
+            "d": ParamSpec(dtype=int, min=3, default=20, searchable=True, param_role=ParamRole.HORIZON),
         },
     )
 
@@ -1029,13 +1038,15 @@ class TSRidgeRegressionCoeffNative(SeriesOperator):
         name="ts_ridge_regression_coeff",
         category="time_series",
         description="Ridge 回归系数",
-        param_names=["x", "window", "alpha", "coef_index"],
+        param_names=["y", "x1", "x2", "x3", "x4", "window", "coefficient_index", "min_periods", "add_intercept", "warmup_policy"],
         return_type="series",
         tags=["time_series", "polars", "native", "causal"],
         param_specs={
-            "window": ParamSpec(dtype=int, min=3, default=20, searchable=True, param_role=ParamRole.HORIZON),
-            "alpha": ParamSpec(dtype=float, min=0.0, default=1.0, searchable=True, param_role=ParamRole.REGULARIZATION),
-            "coef_index": ParamSpec(dtype=int, min=0, default=0, searchable=False, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+            "window": ParamSpec(dtype=int, min=2, searchable=True, param_role=ParamRole.HORIZON),
+            "coefficient_index": ParamSpec(dtype=int, min=0, searchable=False, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+            "min_periods": ParamSpec(dtype=int, min=1, searchable=False, param_role=ParamRole.SUPPORT_POLICY),
+            "add_intercept": ParamSpec(dtype=bool, searchable=False, param_role=ParamRole.POLICY),
+            "warmup_policy": ParamSpec(dtype=str, choices=("expanding", "full"), searchable=False, param_role=ParamRole.POLICY),
         },
     )
 
@@ -1085,13 +1096,15 @@ class TSRidgeRegressionCoeffPriorNative(SeriesOperator):
         name="ts_ridge_regression_coeff_prior",
         category="time_series",
         description="Ridge 回归历史系数",
-        param_names=["x", "window", "alpha", "coef_index"],
+        param_names=["y", "x1", "x2", "x3", "x4", "window", "coefficient_index", "min_periods", "add_intercept", "warmup_policy"],
         return_type="series",
         tags=["time_series", "polars", "native", "causal"],
         param_specs={
-            "window": ParamSpec(dtype=int, min=3, default=20, searchable=True, param_role=ParamRole.HORIZON),
-            "alpha": ParamSpec(dtype=float, min=0.0, default=1.0, searchable=True, param_role=ParamRole.REGULARIZATION),
-            "coef_index": ParamSpec(dtype=int, min=0, default=0, searchable=False, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+            "window": ParamSpec(dtype=int, min=2, searchable=True, param_role=ParamRole.HORIZON),
+            "coefficient_index": ParamSpec(dtype=int, min=0, searchable=False, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+            "min_periods": ParamSpec(dtype=int, min=1, searchable=False, param_role=ParamRole.SUPPORT_POLICY),
+            "add_intercept": ParamSpec(dtype=bool, searchable=False, param_role=ParamRole.POLICY),
+            "warmup_policy": ParamSpec(dtype=str, choices=("expanding", "full"), searchable=False, param_role=ParamRole.POLICY),
         },
     )
 
@@ -1141,12 +1154,15 @@ class TSRidgeRegressionForecastErrorNative(SeriesOperator):
         name="ts_ridge_regression_forecast_error",
         category="time_series",
         description="Ridge 回归预测误差",
-        param_names=["x", "window", "alpha"],
+        param_names=["y", "x1", "x2", "x3", "x4", "window", "coefficient_index", "min_periods", "add_intercept", "warmup_policy"],
         return_type="series",
         tags=["time_series", "polars", "native", "causal"],
         param_specs={
-            "window": ParamSpec(dtype=int, min=3, default=20, searchable=True, param_role=ParamRole.HORIZON),
-            "alpha": ParamSpec(dtype=float, min=0.0, default=1.0, searchable=True, param_role=ParamRole.REGULARIZATION),
+            "window": ParamSpec(dtype=int, min=2, searchable=True, param_role=ParamRole.HORIZON),
+            "coefficient_index": ParamSpec(dtype=int, min=0, searchable=False, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+            "min_periods": ParamSpec(dtype=int, min=1, searchable=False, param_role=ParamRole.SUPPORT_POLICY),
+            "add_intercept": ParamSpec(dtype=bool, searchable=False, param_role=ParamRole.POLICY),
+            "warmup_policy": ParamSpec(dtype=str, choices=("expanding", "full"), searchable=False, param_role=ParamRole.POLICY),
         },
     )
 
@@ -1200,12 +1216,15 @@ class TSRidgeRegressionForecastErrorZNative(SeriesOperator):
         name="ts_ridge_regression_forecast_error_z",
         category="time_series",
         description="Ridge 回归标准化预测误差",
-        param_names=["x", "window", "alpha"],
+        param_names=["y", "x1", "x2", "x3", "x4", "window", "coefficient_index", "min_periods", "add_intercept", "warmup_policy"],
         return_type="series",
         tags=["time_series", "polars", "native", "causal"],
         param_specs={
-            "window": ParamSpec(dtype=int, min=3, default=20, searchable=True, param_role=ParamRole.HORIZON),
-            "alpha": ParamSpec(dtype=float, min=0.0, default=1.0, searchable=True, param_role=ParamRole.REGULARIZATION),
+            "window": ParamSpec(dtype=int, min=2, searchable=True, param_role=ParamRole.HORIZON),
+            "coefficient_index": ParamSpec(dtype=int, min=0, searchable=False, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+            "min_periods": ParamSpec(dtype=int, min=1, searchable=False, param_role=ParamRole.SUPPORT_POLICY),
+            "add_intercept": ParamSpec(dtype=bool, searchable=False, param_role=ParamRole.POLICY),
+            "warmup_policy": ParamSpec(dtype=str, choices=("expanding", "full"), searchable=False, param_role=ParamRole.POLICY),
         },
     )
 
@@ -1240,7 +1259,7 @@ class TSRidgeRegressionForecastErrorZNative(SeriesOperator):
                 t_next = len(y)
                 forecast = coef[0] + coef[1] * t_next
                 error = current - forecast
-                return np.where(std != 0, (float(error) / (std)), np.nan)
+                return (float(error) / (std)) if std != 0 else np.nan
             except:
                 return np.nan
 
@@ -1265,12 +1284,13 @@ class TSRidgeRegressionInSampleResidNative(SeriesOperator):
         name="ts_ridge_regression_in_sample_resid",
         category="time_series",
         description="Ridge 回归样本内残差",
-        param_names=["x", "window", "alpha"],
+        param_names=["y", "x", "window", "alpha", "min_periods"],
         return_type="series",
         tags=["time_series", "polars", "native", "causal"],
         param_specs={
-            "window": ParamSpec(dtype=int, min=3, default=20, searchable=True, param_role=ParamRole.HORIZON),
-            "alpha": ParamSpec(dtype=float, min=0.0, default=1.0, searchable=True, param_role=ParamRole.REGULARIZATION),
+            "window": ParamSpec(dtype=int, min=2, searchable=True, param_role=ParamRole.HORIZON),
+            "alpha": ParamSpec(dtype=float, min=0.0, searchable=False, param_role=ParamRole.NUMERICAL),
+            "min_periods": ParamSpec(dtype=int, min=1, searchable=False, param_role=ParamRole.SUPPORT_POLICY),
         },
     )
 
@@ -1318,12 +1338,13 @@ class TSRidgeRegressionPredictiveResidNative(SeriesOperator):
         name="ts_ridge_regression_predictive_resid",
         category="time_series",
         description="Ridge 回归预测残差",
-        param_names=["x", "window", "alpha"],
+        param_names=["y", "x", "window", "alpha", "min_periods"],
         return_type="series",
         tags=["time_series", "polars", "native", "causal"],
         param_specs={
-            "window": ParamSpec(dtype=int, min=3, default=20, searchable=True, param_role=ParamRole.HORIZON),
-            "alpha": ParamSpec(dtype=float, min=0.0, default=1.0, searchable=True, param_role=ParamRole.REGULARIZATION),
+            "window": ParamSpec(dtype=int, min=2, searchable=True, param_role=ParamRole.HORIZON),
+            "alpha": ParamSpec(dtype=float, min=0.0, searchable=False, param_role=ParamRole.NUMERICAL),
+            "min_periods": ParamSpec(dtype=int, min=1, searchable=False, param_role=ParamRole.SUPPORT_POLICY),
         },
     )
 
@@ -1381,12 +1402,15 @@ class TSRidgeRegressionResidZNative(SeriesOperator):
         name="ts_ridge_regression_resid_z",
         category="time_series",
         description="Ridge 回归残差 Z 分数",
-        param_names=["x", "window", "alpha"],
+        param_names=["y", "x1", "x2", "x3", "x4", "window", "coefficient_index", "min_periods", "add_intercept", "warmup_policy"],
         return_type="series",
         tags=["time_series", "polars", "native", "causal"],
         param_specs={
-            "window": ParamSpec(dtype=int, min=3, default=20, searchable=True, param_role=ParamRole.HORIZON),
-            "alpha": ParamSpec(dtype=float, min=0.0, default=1.0, searchable=True, param_role=ParamRole.REGULARIZATION),
+            "window": ParamSpec(dtype=int, min=2, searchable=True, param_role=ParamRole.HORIZON),
+            "coefficient_index": ParamSpec(dtype=int, min=0, searchable=False, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+            "min_periods": ParamSpec(dtype=int, min=1, searchable=False, param_role=ParamRole.SUPPORT_POLICY),
+            "add_intercept": ParamSpec(dtype=bool, searchable=False, param_role=ParamRole.POLICY),
+            "warmup_policy": ParamSpec(dtype=str, choices=("expanding", "full"), searchable=False, param_role=ParamRole.POLICY),
         },
     )
 
@@ -1422,7 +1446,7 @@ class TSRidgeRegressionResidZNative(SeriesOperator):
                 t_next = len(y)
                 forecast = coef[0] + coef[1] * t_next
                 current_resid = current - forecast
-                return np.where(std_resid != 0, (float((current_resid - mean_resid)) / (std_resid)), np.nan)
+                return (float((current_resid - mean_resid)) / (std_resid)) if std_resid != 0 else np.nan
             except:
                 return np.nan
 
@@ -1452,13 +1476,15 @@ class TSHuberRegressionCoeffNative(SeriesOperator):
         name="ts_huber_regression_coeff",
         category="time_series",
         description="Huber 鲁棒回归系数",
-        param_names=["x", "window", "delta", "order", "warmup_policy"],
+        param_names=["y", "x1", "x2", "x3", "x4", "window", "coefficient_index", "min_periods", "add_intercept", "warmup_policy"],
         return_type="series",
         tags=["time_series", "polars", "native", "causal"],
         param_specs={
-            "window": ParamSpec(dtype=int, min=3, default=20, searchable=True, param_role=ParamRole.HORIZON),
-            "delta": ParamSpec(dtype=float, min=0.0, default=1.35, searchable=True, param_role=ParamRole.THRESHOLD),
-            "order": ParamSpec(dtype=int, min=1, default=1, searchable=True, param_role=ParamRole.HORIZON),
+            "window": ParamSpec(dtype=int, min=2, searchable=True, param_role=ParamRole.HORIZON),
+            "coefficient_index": ParamSpec(dtype=int, min=0, searchable=False, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+            "min_periods": ParamSpec(dtype=int, min=1, searchable=False, param_role=ParamRole.SUPPORT_POLICY),
+            "add_intercept": ParamSpec(dtype=bool, searchable=False, param_role=ParamRole.POLICY),
+            "warmup_policy": ParamSpec(dtype=str, choices=("expanding", "full"), searchable=False, param_role=ParamRole.POLICY),
         },
     )
 
@@ -1520,13 +1546,15 @@ class TSHuberRegressionCoeffPriorNative(SeriesOperator):
         name="ts_huber_regression_coeff_prior",
         category="time_series",
         description="Huber 鲁棒回归历史系数",
-        param_names=["x", "window", "delta", "order", "warmup_policy"],
+        param_names=["y", "x1", "x2", "x3", "x4", "window", "coefficient_index", "min_periods", "add_intercept", "warmup_policy"],
         return_type="series",
         tags=["time_series", "polars", "native", "causal"],
         param_specs={
-            "window": ParamSpec(dtype=int, min=3, default=20, searchable=True, param_role=ParamRole.HORIZON),
-            "delta": ParamSpec(dtype=float, min=0.0, default=1.35, searchable=True, param_role=ParamRole.THRESHOLD),
-            "order": ParamSpec(dtype=int, min=1, default=1, searchable=True, param_role=ParamRole.HORIZON),
+            "window": ParamSpec(dtype=int, min=2, searchable=True, param_role=ParamRole.HORIZON),
+            "coefficient_index": ParamSpec(dtype=int, min=0, searchable=False, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+            "min_periods": ParamSpec(dtype=int, min=1, searchable=False, param_role=ParamRole.SUPPORT_POLICY),
+            "add_intercept": ParamSpec(dtype=bool, searchable=False, param_role=ParamRole.POLICY),
+            "warmup_policy": ParamSpec(dtype=str, choices=("expanding", "full"), searchable=False, param_role=ParamRole.POLICY),
         },
     )
 
@@ -1591,12 +1619,15 @@ class TSHuberRegressionForecastErrorNative(SeriesOperator):
         name="ts_huber_regression_forecast_error",
         category="time_series",
         description="Huber 鲁棒回归预测误差",
-        param_names=["x", "window", "delta"],
+        param_names=["y", "x1", "x2", "x3", "x4", "window", "coefficient_index", "min_periods", "add_intercept", "warmup_policy"],
         return_type="series",
         tags=["time_series", "polars", "native", "causal"],
         param_specs={
-            "window": ParamSpec(dtype=int, min=3, default=20, searchable=True, param_role=ParamRole.HORIZON),
-            "delta": ParamSpec(dtype=float, min=0.0, default=1.35, searchable=True, param_role=ParamRole.THRESHOLD),
+            "window": ParamSpec(dtype=int, min=2, searchable=True, param_role=ParamRole.HORIZON),
+            "coefficient_index": ParamSpec(dtype=int, min=0, searchable=False, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+            "min_periods": ParamSpec(dtype=int, min=1, searchable=False, param_role=ParamRole.SUPPORT_POLICY),
+            "add_intercept": ParamSpec(dtype=bool, searchable=False, param_role=ParamRole.POLICY),
+            "warmup_policy": ParamSpec(dtype=str, choices=("expanding", "full"), searchable=False, param_role=ParamRole.POLICY),
         },
     )
 
@@ -1661,12 +1692,15 @@ class TSHuberRegressionForecastErrorZNative(SeriesOperator):
         name="ts_huber_regression_forecast_error_z",
         category="time_series",
         description="Huber 鲁棒回归标准化预测误差",
-        param_names=["x", "window", "delta"],
+        param_names=["y", "x1", "x2", "x3", "x4", "window", "coefficient_index", "min_periods", "add_intercept", "warmup_policy"],
         return_type="series",
         tags=["time_series", "polars", "native", "causal"],
         param_specs={
-            "window": ParamSpec(dtype=int, min=3, default=20, searchable=True, param_role=ParamRole.HORIZON),
-            "delta": ParamSpec(dtype=float, min=0.0, default=1.35, searchable=True, param_role=ParamRole.THRESHOLD),
+            "window": ParamSpec(dtype=int, min=2, searchable=True, param_role=ParamRole.HORIZON),
+            "coefficient_index": ParamSpec(dtype=int, min=0, searchable=False, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+            "min_periods": ParamSpec(dtype=int, min=1, searchable=False, param_role=ParamRole.SUPPORT_POLICY),
+            "add_intercept": ParamSpec(dtype=bool, searchable=False, param_role=ParamRole.POLICY),
+            "warmup_policy": ParamSpec(dtype=str, choices=("expanding", "full"), searchable=False, param_role=ParamRole.POLICY),
         },
     )
 
@@ -1712,7 +1746,7 @@ class TSHuberRegressionForecastErrorZNative(SeriesOperator):
                 t_next = len(y)
                 forecast = coef[0] + coef[1] * t_next
                 error = current - forecast
-                return np.where(std != 0, (float(error) / (std)), np.nan)
+                return (float(error) / (std)) if std != 0 else np.nan
             except:
                 return np.nan
 
@@ -1737,12 +1771,16 @@ class TSHuberRegressionInSampleResidNative(SeriesOperator):
         name="ts_huber_regression_in_sample_resid",
         category="time_series",
         description="Huber 鲁棒回归样本内残差",
-        param_names=["x", "window", "delta"],
+                param_names=["y", "x", "window", "min_periods"],
         return_type="series",
         tags=["time_series", "polars", "native", "causal"],
+        # P0-23 single-logical-authority: canonical (regression_models) owns the
+        # contract.  `delta` is a kernel-internal NUMERICAL knob aliased to the
+        # canonical warmup_policy-free surface (default mirrors _HUBER_DELTA).
+        param_aliases={"delta": "alpha"},
         param_specs={
-            "window": ParamSpec(dtype=int, min=3, default=20, searchable=True, param_role=ParamRole.HORIZON),
-            "delta": ParamSpec(dtype=float, min=0.0, default=1.35, searchable=True, param_role=ParamRole.THRESHOLD),
+            "window": ParamSpec(dtype=int, min=2, searchable=True, param_role=ParamRole.HORIZON),
+            "min_periods": ParamSpec(dtype=int, min=1, searchable=False, param_role=ParamRole.SUPPORT_POLICY),
         },
     )
 
@@ -1801,12 +1839,15 @@ class TSHuberRegressionPredictiveResidNative(SeriesOperator):
         name="ts_huber_regression_predictive_resid",
         category="time_series",
         description="Huber 鲁棒回归预测残差",
-        param_names=["x", "window", "delta"],
+                param_names=["y", "x", "window", "min_periods"],
         return_type="series",
         tags=["time_series", "polars", "native", "causal"],
+        # P0-23 single-logical-authority: canonical (regression_models) owns the
+        # contract.  `delta` is a kernel-internal NUMERICAL knob aliased to alpha.
+        param_aliases={"delta": "alpha"},
         param_specs={
-            "window": ParamSpec(dtype=int, min=3, default=20, searchable=True, param_role=ParamRole.HORIZON),
-            "delta": ParamSpec(dtype=float, min=0.0, default=1.35, searchable=True, param_role=ParamRole.THRESHOLD),
+            "window": ParamSpec(dtype=int, min=2, searchable=True, param_role=ParamRole.HORIZON),
+            "min_periods": ParamSpec(dtype=int, min=1, searchable=False, param_role=ParamRole.SUPPORT_POLICY),
         },
     )
 
@@ -1875,12 +1916,15 @@ class TSHuberRegressionResidZNative(SeriesOperator):
         name="ts_huber_regression_resid_z",
         category="time_series",
         description="Huber 鲁棒回归残差 Z 分数",
-        param_names=["x", "window", "delta"],
+        param_names=["y", "x1", "x2", "x3", "x4", "window", "coefficient_index", "min_periods", "add_intercept", "warmup_policy"],
         return_type="series",
         tags=["time_series", "polars", "native", "causal"],
         param_specs={
-            "window": ParamSpec(dtype=int, min=3, default=20, searchable=True, param_role=ParamRole.HORIZON),
-            "delta": ParamSpec(dtype=float, min=0.0, default=1.35, searchable=True, param_role=ParamRole.THRESHOLD),
+            "window": ParamSpec(dtype=int, min=2, searchable=True, param_role=ParamRole.HORIZON),
+            "coefficient_index": ParamSpec(dtype=int, min=0, searchable=False, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+            "min_periods": ParamSpec(dtype=int, min=1, searchable=False, param_role=ParamRole.SUPPORT_POLICY),
+            "add_intercept": ParamSpec(dtype=bool, searchable=False, param_role=ParamRole.POLICY),
+            "warmup_policy": ParamSpec(dtype=str, choices=("expanding", "full"), searchable=False, param_role=ParamRole.POLICY),
         },
     )
 
@@ -1927,7 +1971,7 @@ class TSHuberRegressionResidZNative(SeriesOperator):
                 t_next = len(y)
                 forecast = coef[0] + coef[1] * t_next
                 current_resid = current - forecast
-                return np.where(std_resid != 0, (float((current_resid - mean_resid)) / (std_resid)), np.nan)
+                return (float((current_resid - mean_resid)) / (std_resid)) if std_resid != 0 else np.nan
             except:
                 return np.nan
 
@@ -1957,13 +2001,13 @@ class TSQuantileRegressionCoeffNative(SeriesOperator):
         name="ts_quantile_regression_coeff",
         category="time_series",
         description="分位数回归系数",
-        param_names=["x", "window", "quantile", "coef_index"],
+        param_names=["y", "x", "window", "q", "min_periods"],
         return_type="series",
         tags=["time_series", "polars", "native", "causal"],
         param_specs={
-            "window": ParamSpec(dtype=int, min=3, default=20, searchable=True, param_role=ParamRole.HORIZON),
-            "quantile": ParamSpec(dtype=float, min=0.0, max=1.0, default=0.5, searchable=True, param_role=ParamRole.THRESHOLD),
-            "coef_index": ParamSpec(dtype=int, min=0, default=0, searchable=False, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+            "window": ParamSpec(dtype=int, min=2, searchable=True, param_role=ParamRole.HORIZON),
+            "q": ParamSpec(dtype=float, min=0.0, max=1.0, searchable=True, param_role=ParamRole.ECONOMIC),
+            "min_periods": ParamSpec(dtype=int, min=1, searchable=False, param_role=ParamRole.SUPPORT_POLICY),
         },
     )
 
@@ -2018,13 +2062,16 @@ class TSQuantileRegressionCoeffPriorNative(SeriesOperator):
         name="ts_quantile_regression_coeff_prior",
         category="time_series",
         description="分位数回归历史系数",
-        param_names=["x", "window", "quantile", "coef_index"],
+        param_names=["y", "x", "window", "q", "min_periods"],
         return_type="series",
         tags=["time_series", "polars", "native", "causal"],
+        # P0-23 single-logical-authority: canonical (dynamic_regression) owns
+        # q (ECONOMIC) — `quantile`/`coef_index` are kernel-internal aliases only.
+        param_aliases={"quantile": "q", "coef_index": "coefficient_index"},
         param_specs={
-            "window": ParamSpec(dtype=int, min=3, default=20, searchable=True, param_role=ParamRole.HORIZON),
-            "quantile": ParamSpec(dtype=float, min=0.0, max=1.0, default=0.5, searchable=True, param_role=ParamRole.THRESHOLD),
-            "coef_index": ParamSpec(dtype=int, min=0, default=0, searchable=False, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+            "window": ParamSpec(dtype=int, min=2, searchable=True, param_role=ParamRole.HORIZON),
+            "q": ParamSpec(dtype=float, min=0.0, max=1.0, searchable=True, param_role=ParamRole.ECONOMIC),
+            "min_periods": ParamSpec(dtype=int, min=1, searchable=False, param_role=ParamRole.SUPPORT_POLICY),
         },
     )
 
@@ -2194,13 +2241,19 @@ class TSMultiRegressionCoeffNative(SeriesOperator):
         name="ts_multi_regression_coeff",
         category="time_series",
         description="多变量回归系数",
-        param_names=["x", "window", "degree", "coef_index"],
+        param_names=["y", "x1", "x2", "x3", "x4", "window", "coefficient_index", "min_periods", "add_intercept", "warmup_policy"],
         return_type="series",
         tags=["time_series", "polars", "native", "causal"],
+        # P0-23 single-logical-authority: canonical (dynamic_regression) owns the
+        # contract.  `degree` is a kernel-internal poly degree — aliased away so
+        # the declared param_specs equal the canonical exactly.
+        param_aliases={"degree": "coefficient_index"},
         param_specs={
-            "window": ParamSpec(dtype=int, min=3, default=20, searchable=True, param_role=ParamRole.HORIZON),
-            "degree": ParamSpec(dtype=int, min=1, max=3, default=2, searchable=False, param_role=ParamRole.ESTIMATOR_RESOLUTION),
-            "coef_index": ParamSpec(dtype=int, min=0, default=0, searchable=False, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+            "window": ParamSpec(dtype=int, min=2, searchable=True, param_role=ParamRole.HORIZON),
+            "coefficient_index": ParamSpec(dtype=int, min=0, searchable=False, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+            "min_periods": ParamSpec(dtype=int, min=1, searchable=False, param_role=ParamRole.SUPPORT_POLICY),
+            "add_intercept": ParamSpec(dtype=bool, searchable=False, param_role=ParamRole.POLICY),
+            "warmup_policy": ParamSpec(dtype=str, choices=("expanding", "full"), searchable=False, param_role=ParamRole.POLICY),
         },
     )
 
@@ -2251,13 +2304,15 @@ class TSMultiRegressionCoeffPriorNative(SeriesOperator):
         name="ts_multi_regression_coeff_prior",
         category="time_series",
         description="多变量回归历史系数",
-        param_names=["x", "window", "degree", "coef_index"],
+        param_names=["y", "x1", "x2", "x3", "x4", "window", "coefficient_index", "min_periods", "add_intercept", "warmup_policy"],
         return_type="series",
         tags=["time_series", "polars", "native", "causal"],
         param_specs={
-            "window": ParamSpec(dtype=int, min=3, default=20, searchable=True, param_role=ParamRole.HORIZON),
-            "degree": ParamSpec(dtype=int, min=1, max=3, default=2, searchable=False, param_role=ParamRole.ESTIMATOR_RESOLUTION),
-            "coef_index": ParamSpec(dtype=int, min=0, default=0, searchable=False, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+            "window": ParamSpec(dtype=int, min=2, searchable=True, param_role=ParamRole.HORIZON),
+            "coefficient_index": ParamSpec(dtype=int, min=0, searchable=False, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+            "min_periods": ParamSpec(dtype=int, min=1, searchable=False, param_role=ParamRole.SUPPORT_POLICY),
+            "add_intercept": ParamSpec(dtype=bool, searchable=False, param_role=ParamRole.POLICY),
+            "warmup_policy": ParamSpec(dtype=str, choices=("expanding", "full"), searchable=False, param_role=ParamRole.POLICY),
         },
     )
 
@@ -2308,12 +2363,15 @@ class TSMultiRegressionR2Native(SeriesOperator):
         name="ts_multi_regression_r2",
         category="time_series",
         description="多变量回归 R²",
-        param_names=["x", "window", "degree"],
+        param_names=["y", "x1", "x2", "x3", "x4", "window", "coefficient_index", "min_periods", "add_intercept", "warmup_policy"],
         return_type="series",
         tags=["time_series", "polars", "native", "causal"],
         param_specs={
-            "window": ParamSpec(dtype=int, min=3, default=20, searchable=True, param_role=ParamRole.HORIZON),
-            "degree": ParamSpec(dtype=int, min=1, max=3, default=2, searchable=False, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+            "window": ParamSpec(dtype=int, min=2, searchable=True, param_role=ParamRole.HORIZON),
+            "coefficient_index": ParamSpec(dtype=int, min=0, searchable=False, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+            "min_periods": ParamSpec(dtype=int, min=1, searchable=False, param_role=ParamRole.SUPPORT_POLICY),
+            "add_intercept": ParamSpec(dtype=bool, searchable=False, param_role=ParamRole.POLICY),
+            "warmup_policy": ParamSpec(dtype=str, choices=("expanding", "full"), searchable=False, param_role=ParamRole.POLICY),
         },
     )
 
@@ -2340,7 +2398,7 @@ class TSMultiRegressionR2Native(SeriesOperator):
                 ss_tot = np.sum((y - np.mean(y)) ** 2)
                 if ss_tot < 1e-12:
                     return np.nan
-                return np.where(ss_tot != 0, (float(1.0 - ss_res) / (ss_tot)), np.nan)
+                return float(1.0 - ss_res) / float(ss_tot)
             except:
                 return np.nan
 
@@ -2365,12 +2423,15 @@ class TSMultiRegressionR2PriorNative(SeriesOperator):
         name="ts_multi_regression_r2_prior",
         category="time_series",
         description="多变量回归历史 R²",
-        param_names=["x", "window", "degree"],
+        param_names=["y", "x1", "x2", "x3", "x4", "window", "coefficient_index", "min_periods", "add_intercept", "warmup_policy"],
         return_type="series",
         tags=["time_series", "polars", "native", "causal"],
         param_specs={
-            "window": ParamSpec(dtype=int, min=3, default=20, searchable=True, param_role=ParamRole.HORIZON),
-            "degree": ParamSpec(dtype=int, min=1, max=3, default=2, searchable=False, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+            "window": ParamSpec(dtype=int, min=2, searchable=True, param_role=ParamRole.HORIZON),
+            "coefficient_index": ParamSpec(dtype=int, min=0, searchable=False, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+            "min_periods": ParamSpec(dtype=int, min=1, searchable=False, param_role=ParamRole.SUPPORT_POLICY),
+            "add_intercept": ParamSpec(dtype=bool, searchable=False, param_role=ParamRole.POLICY),
+            "warmup_policy": ParamSpec(dtype=str, choices=("expanding", "full"), searchable=False, param_role=ParamRole.POLICY),
         },
     )
 
@@ -2397,7 +2458,7 @@ class TSMultiRegressionR2PriorNative(SeriesOperator):
                 ss_tot = np.sum((y - np.mean(y)) ** 2)
                 if ss_tot < 1e-12:
                     return np.nan
-                return np.where(ss_tot != 0, (float(1.0 - ss_res) / (ss_tot)), np.nan)
+                return float(1.0 - ss_res) / float(ss_tot)
             except:
                 return np.nan
 
@@ -2422,12 +2483,15 @@ class TSMultiRegressionForecastErrorNative(SeriesOperator):
         name="ts_multi_regression_forecast_error",
         category="time_series",
         description="多变量回归预测误差",
-        param_names=["x", "window", "degree"],
+        param_names=["y", "x1", "x2", "x3", "x4", "window", "coefficient_index", "min_periods", "add_intercept", "warmup_policy"],
         return_type="series",
         tags=["time_series", "polars", "native", "causal"],
         param_specs={
-            "window": ParamSpec(dtype=int, min=3, default=20, searchable=True, param_role=ParamRole.HORIZON),
-            "degree": ParamSpec(dtype=int, min=1, max=3, default=2, searchable=False, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+            "window": ParamSpec(dtype=int, min=2, searchable=True, param_role=ParamRole.HORIZON),
+            "coefficient_index": ParamSpec(dtype=int, min=0, searchable=False, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+            "min_periods": ParamSpec(dtype=int, min=1, searchable=False, param_role=ParamRole.SUPPORT_POLICY),
+            "add_intercept": ParamSpec(dtype=bool, searchable=False, param_role=ParamRole.POLICY),
+            "warmup_policy": ParamSpec(dtype=str, choices=("expanding", "full"), searchable=False, param_role=ParamRole.POLICY),
         },
     )
 
@@ -2482,12 +2546,15 @@ class TSMultiRegressionForecastErrorZNative(SeriesOperator):
         name="ts_multi_regression_forecast_error_z",
         category="time_series",
         description="多变量回归标准化预测误差",
-        param_names=["x", "window", "degree"],
+        param_names=["y", "x1", "x2", "x3", "x4", "window", "coefficient_index", "min_periods", "add_intercept", "warmup_policy"],
         return_type="series",
         tags=["time_series", "polars", "native", "causal"],
         param_specs={
-            "window": ParamSpec(dtype=int, min=3, default=20, searchable=True, param_role=ParamRole.HORIZON),
-            "degree": ParamSpec(dtype=int, min=1, max=3, default=2, searchable=False, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+            "window": ParamSpec(dtype=int, min=2, searchable=True, param_role=ParamRole.HORIZON),
+            "coefficient_index": ParamSpec(dtype=int, min=0, searchable=False, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+            "min_periods": ParamSpec(dtype=int, min=1, searchable=False, param_role=ParamRole.SUPPORT_POLICY),
+            "add_intercept": ParamSpec(dtype=bool, searchable=False, param_role=ParamRole.POLICY),
+            "warmup_policy": ParamSpec(dtype=str, choices=("expanding", "full"), searchable=False, param_role=ParamRole.POLICY),
         },
     )
 
@@ -2523,7 +2590,7 @@ class TSMultiRegressionForecastErrorZNative(SeriesOperator):
                 t_next = len(y)
                 forecast = sum(coef[i] * (t_next ** i) for i in range(len(coef)))
                 error = current - forecast
-                return np.where(std != 0, (float(error) / (std)), np.nan)
+                return (float(error) / (std)) if std != 0 else np.nan
             except:
                 return np.nan
 
@@ -2548,12 +2615,15 @@ class TSMultiRegressionResidNative(SeriesOperator):
         name="ts_multi_regression_resid",
         category="time_series",
         description="多变量回归残差",
-        param_names=["x", "window", "degree"],
+        param_names=["y", "x1", "x2", "x3", "x4", "window", "coefficient_index", "min_periods", "add_intercept", "warmup_policy"],
         return_type="series",
         tags=["time_series", "polars", "native", "causal"],
         param_specs={
-            "window": ParamSpec(dtype=int, min=3, default=20, searchable=True, param_role=ParamRole.HORIZON),
-            "degree": ParamSpec(dtype=int, min=1, max=3, default=2, searchable=False, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+            "window": ParamSpec(dtype=int, min=2, searchable=True, param_role=ParamRole.HORIZON),
+            "coefficient_index": ParamSpec(dtype=int, min=0, searchable=False, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+            "min_periods": ParamSpec(dtype=int, min=1, searchable=False, param_role=ParamRole.SUPPORT_POLICY),
+            "add_intercept": ParamSpec(dtype=bool, searchable=False, param_role=ParamRole.POLICY),
+            "warmup_policy": ParamSpec(dtype=str, choices=("expanding", "full"), searchable=False, param_role=ParamRole.POLICY),
         },
     )
 
@@ -2602,12 +2672,15 @@ class TSMultiRegressionResidZNative(SeriesOperator):
         name="ts_multi_regression_resid_z",
         category="time_series",
         description="多变量回归残差 Z 分数",
-        param_names=["x", "window", "degree"],
+        param_names=["y", "x1", "x2", "x3", "x4", "window", "coefficient_index", "min_periods", "add_intercept", "warmup_policy"],
         return_type="series",
         tags=["time_series", "polars", "native", "causal"],
         param_specs={
-            "window": ParamSpec(dtype=int, min=3, default=20, searchable=True, param_role=ParamRole.HORIZON),
-            "degree": ParamSpec(dtype=int, min=1, max=3, default=2, searchable=False, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+            "window": ParamSpec(dtype=int, min=2, searchable=True, param_role=ParamRole.HORIZON),
+            "coefficient_index": ParamSpec(dtype=int, min=0, searchable=False, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+            "min_periods": ParamSpec(dtype=int, min=1, searchable=False, param_role=ParamRole.SUPPORT_POLICY),
+            "add_intercept": ParamSpec(dtype=bool, searchable=False, param_role=ParamRole.POLICY),
+            "warmup_policy": ParamSpec(dtype=str, choices=("expanding", "full"), searchable=False, param_role=ParamRole.POLICY),
         },
     )
 
@@ -2644,7 +2717,7 @@ class TSMultiRegressionResidZNative(SeriesOperator):
                 t_next = len(y)
                 forecast = sum(coef[i] * (t_next ** i) for i in range(len(coef)))
                 current_resid = current - forecast
-                return np.where(std_resid != 0, (float((current_resid - mean_resid)) / (std_resid)), np.nan)
+                return (float((current_resid - mean_resid)) / (std_resid)) if std_resid != 0 else np.nan
             except:
                 return np.nan
 
@@ -2669,13 +2742,15 @@ class TSMultiRegressionCoeffStabilityNative(SeriesOperator):
         name="ts_multi_regression_coeff_stability",
         category="time_series",
         description="多变量回归系数稳定性",
-        param_names=["x", "window", "degree", "coef_index"],
+        param_names=["y", "x1", "x2", "x3", "x4", "window", "coefficient_index", "min_periods", "add_intercept", "warmup_policy"],
         return_type="series",
         tags=["time_series", "polars", "native", "causal"],
         param_specs={
-            "window": ParamSpec(dtype=int, min=10, default=60, searchable=True, param_role=ParamRole.HORIZON),
-            "degree": ParamSpec(dtype=int, min=1, max=3, default=2, searchable=False, param_role=ParamRole.ESTIMATOR_RESOLUTION),
-            "coef_index": ParamSpec(dtype=int, min=0, default=0, searchable=False, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+            "window": ParamSpec(dtype=int, min=2, searchable=True, param_role=ParamRole.HORIZON),
+            "coefficient_index": ParamSpec(dtype=int, min=0, searchable=False, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+            "min_periods": ParamSpec(dtype=int, min=1, searchable=False, param_role=ParamRole.SUPPORT_POLICY),
+            "add_intercept": ParamSpec(dtype=bool, searchable=False, param_role=ParamRole.POLICY),
+            "warmup_policy": ParamSpec(dtype=str, choices=("expanding", "full"), searchable=False, param_role=ParamRole.POLICY),
         },
     )
 
@@ -2746,12 +2821,15 @@ class TSMultiRegressionAdjustedR2PriorNative(SeriesOperator):
         name="ts_multi_regression_adjusted_r2_prior",
         category="time_series",
         description="多变量回归调整 R²",
-        param_names=["x", "window", "degree"],
+        param_names=["y", "x1", "x2", "x3", "x4", "window", "coefficient_index", "min_periods", "add_intercept", "warmup_policy"],
         return_type="series",
         tags=["time_series", "polars", "native", "causal"],
         param_specs={
-            "window": ParamSpec(dtype=int, min=3, default=20, searchable=True, param_role=ParamRole.HORIZON),
-            "degree": ParamSpec(dtype=int, min=1, max=3, default=2, searchable=False, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+            "window": ParamSpec(dtype=int, min=2, searchable=True, param_role=ParamRole.HORIZON),
+            "coefficient_index": ParamSpec(dtype=int, min=0, searchable=False, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+            "min_periods": ParamSpec(dtype=int, min=1, searchable=False, param_role=ParamRole.SUPPORT_POLICY),
+            "add_intercept": ParamSpec(dtype=bool, searchable=False, param_role=ParamRole.POLICY),
+            "warmup_policy": ParamSpec(dtype=str, choices=("expanding", "full"), searchable=False, param_role=ParamRole.POLICY),
         },
     )
 

@@ -674,26 +674,44 @@ class PhysicalBatchGlobalOptimizer:
                 bound_parameter_identity=bound_params,
                 kernel_signature=kernel_signature,
             ))
-        # Q/KDB (Q_KDB) candidate — P2 split-brain closure: disabled until the
-        # runtime wires a Q_KDB executor in ``_physical_backend_for_region``.
-        # ``QBackend`` exists in ``factor_engine.backend.q_backend`` but is NOT
-        # wired into the runtime resolver, so a region routed here would fail at
-        # execution time.  Never emit it; ``assert_all_backends_runtime_capable``
-        # is the final fail-closed guard.
+        # Q/KDB (Q_KDB) candidate — DISABLED.  This is the truthful fail-closed
+        # gate the q backend actually has in this environment:
+        #
+        #  * ``QBackend`` is a REAL integration path (backend/q_backend/ has a
+        #    full compiler/executor/adapter/process-manager), but it requires a
+        #    live q runtime.  This environment has NO q/kdb+ binary, NO pykx /
+        #    qpython / pyq client, and NO Q_LICENSED env — so
+        #    ``QProcessManager.check_availability()`` honestly reports
+        #    UNAVAILABLE / LICENSE_MISSING and every executor path raises a
+        #    typed, fail-closed error (BackendUnavailableError /
+        #    QProcessUnavailableError / QPlanningFallbackAllowed).
+        #  * Routing a production region here would produce a plan the runtime
+        #    cannot execute (split-brain).  So we never emit the Q_KDB candidate
+        #    and ``assert_all_backends_runtime_capable`` (applied after plan
+        #    build) rejects any plan that still carries a Q_KDB region.
+        #
+        # If a real q runtime is provisioned later, ``is_q_available()`` — the
+        # SAME honest gate used everywhere else — will report AVAILABLE and this
+        # block will start proposing Q_KDB regions again automatically.
         try:
             from factor_engine.backend.q_backend.q_physical_implementation_registry import (
                 get_q_physical_implementation_registry,
             )
             registry = get_q_physical_implementation_registry()
+            from factor_engine.backend.q_backend.q_process_manager import (
+                is_q_available,
+            )
             def _q_available_for_optimizer() -> bool:
-                from factor_engine.backend.q_backend.q_process_manager import (
-                    is_q_available,
-                )
                 try:
                     return is_q_available()
                 except Exception:
                     return False
-            if registry.has_lowering(op) and _q_available_for_optimizer():
+            # Fail-closed: a Q_KDB candidate is only ever admitted when the
+            # SAME honest runtime gate the executor will use reports AVAILABLE.
+            if (
+                _q_available_for_optimizer()
+                and registry.has_lowering(op)
+            ):
                 capability = capability_for(op, "q_kdb")
                 candidates.append(NodeBackendChoice(
                     node_id=node_id,

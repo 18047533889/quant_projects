@@ -57,14 +57,15 @@ def test_no_canonical_claims_semantic_or_source_evidence_from_runtime():
             assert not overclaimed, f"regenerated evidence still over-claims: {overclaimed[:10]}"
 
 
-def test_volume_recipe_binds_raw_volume_shares():
-    # R25-029/030/173: volume must bind to raw_volume_shares (share count), NOT
-    # a price-adjusted continuous_volume concept.
+def test_volume_recipe_binds_continuous_volume_shares():
+    # ADJ_FIELD_MIGRATION: bare volume binds to the ADJUSTED share count
+    # (continuous_volume_shares = Volume / Factor on StockDailyBarAdj authority;
+    # US resolves to raw Volume identity).  raw_volume_shares is disabled for A-share.
     from factor_engine.mining.direct_use import _DEFAULT_INPUT_RECIPE, _INPUT_CONCEPT_FALLBACK
 
-    assert _DEFAULT_INPUT_RECIPE["ts_average_volume"]["volume"] == "raw_volume_shares"
-    assert _DEFAULT_INPUT_RECIPE["dollar_volume"]["volume"] == "raw_volume_shares"
-    assert _INPUT_CONCEPT_FALLBACK["volume"] == "raw_volume_shares"
+    assert _DEFAULT_INPUT_RECIPE["ts_average_volume"]["volume"] == "continuous_volume_shares"
+    assert _DEFAULT_INPUT_RECIPE["dollar_volume"]["volume"] == "continuous_volume_shares"
+    assert _INPUT_CONCEPT_FALLBACK["volume"] == "continuous_volume_shares"
 
 
 def test_generic_anonymous_slot_fallbacks_removed():

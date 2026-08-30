@@ -53,10 +53,24 @@ _BINARY = frozenset(
 
 _WINDOW = frozenset(
     """
-    ts_mean ts_std ts_var ts_sum ts_min ts_max ts_median ts_delay ts_delta ts_pct
+    ts_var ts_sum ts_min ts_max ts_median ts_delay ts_delta ts_pct
     ts_zscore ts_rank ts_autocorr ts_sharpe volatility
     """.split()
 )
+
+# ts_mean / ts_std carry optional min_periods / ddof (window + estimator-settings).
+_WINDOW_EXTRA: dict[str, tuple[ArgSpec, ...]] = {
+    "ts_mean": (
+        ArgSpec("x", TypeKind.SERIES_FLOAT),
+        ArgSpec("window", TypeKind.WINDOW),
+        ArgSpec("min_periods", TypeKind.SCALAR_INT, allow_scalar_broadcast=True),
+    ),
+    "ts_std": (
+        ArgSpec("x", TypeKind.SERIES_FLOAT),
+        ArgSpec("window", TypeKind.WINDOW),
+        ArgSpec("ddof", TypeKind.SCALAR_INT, allow_scalar_broadcast=True),
+    ),
+}
 
 _PAIR_WINDOW = frozenset({"ts_corr", "ts_cov", "ts_beta"})
 
@@ -166,6 +180,8 @@ def phase1_operator_signatures() -> dict[str, OperatorSignature]:
         out[name] = OperatorSignature(name, _B)
     for name in _WINDOW:
         out[name] = OperatorSignature(name, _W)
+    for name, args in _WINDOW_EXTRA.items():
+        out[name] = OperatorSignature(name, args)
     for name in _PAIR_WINDOW:
         out[name] = OperatorSignature(name, _W3)
     for name in _GROUP:

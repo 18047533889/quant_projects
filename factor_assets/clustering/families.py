@@ -26,8 +26,14 @@ except ImportError:
     squareform = None
     np = None
 
+from factor_assets.clustering.certification import (
+    CertifiedGraphArtifact,
+    ExecutionMode,
+    enforce_certified_graph,
+)
 from factor_assets.graph.sparse import SparseCorrelationGraph
 from factor_assets.errors import InvalidClusteringContract
+from factor_assets.contracts.similarity import is_unknown_identity
 
 
 class SimilarityObservationState(Enum):
@@ -49,6 +55,11 @@ class ClusterResult:
     Result of a clustering operation.
 
     Maps each factor to its cluster ID and provides cluster membership.
+
+    ``certification_id`` / ``graph_content_hash`` / ``execution_mode`` record
+    the certified-graph provenance of the run (R55 P0-13).  They are ``None``
+    for a research run on an uncertified graph and are populated by the
+    production gate whenever a certification authorised the clustering.
     """
 
     assignments: Dict[str, int]
@@ -56,6 +67,13 @@ class ClusterResult:
     #: Cluster IDs whose size fell below ``min_cluster_size`` under a
     #: min-cluster policy (e.g. ``MARK_UNSTABLE``).  Empty when not applied.
     unstable_clusters: Tuple[int, ...] = ()
+    #: ``CertifiedGraphArtifact.certification_id`` backing this run (None when
+    #: the run was uncertified / research).
+    certification_id: Optional[str] = None
+    #: Content hash of the certified graph the run consumed.
+    graph_content_hash: Optional[str] = None
+    #: ``"RESEARCH"`` or ``"PRODUCTION"`` — which gate authorises the run.
+    execution_mode: str = "RESEARCH"
 
     @property
     def num_clusters(self) -> int:
@@ -105,6 +123,11 @@ class ClusterArtifact:
     min_cluster_policy: str = "KEEP_SMALL"
     modularity: Optional[float] = None
     stability: Optional[float] = None
+    #: ``CertifiedGraphArtifact.certification_id`` backing a production run
+    #: (R55 P0-13); ``None`` for research / uncertified runs.
+    certification_id: Optional[str] = None
+    #: ``"RESEARCH"`` or ``"PRODUCTION"`` — which gate authorised the run.
+    execution_mode: str = "RESEARCH"
 
     def __post_init__(self) -> None:
         if not self.graph_identity:
@@ -113,6 +136,19 @@ class ClusterArtifact:
             raise ValueError("algorithm is required")
         if not self.assignments:
             raise ValueError("assignments is required")
+        # P0-12 (R55 audit): a spec-identity reference carrying an UNKNOWN
+        # placeholder is not an identity — two ClusterArtifacts computed under
+        # different similarity specs would both read UNKNOWN and cluster
+        # versioning would silently merge them.  Fail closed; ``None`` stays
+        # legal (the provenance dimension is simply absent).
+        for _field_name in ("graph_identity", "snapshot_ref", "universe_ref", "similarity_spec_ref"):
+            _value = getattr(self, _field_name)
+            if isinstance(_value, str) and is_unknown_identity(_value):
+                raise InvalidClusteringContract(
+                    f"{_field_name} is UNKNOWN ({_value!r}); a ClusterArtifact "
+                    "may not carry an unknown spec identity — resolve the "
+                    "concrete spec value first (fail closed)."
+                )
         # DLIB-FA-008: deep-immutable — snapshot the caller's assignments dict
         # into an immutable FrozenMapping so mutating the original dict after
         # construction cannot change the artifact.  FrozenMapping is hashable
@@ -188,22 +224,50 @@ class ConnectedComponents:
 
     Uses DFS to identify disconnected subgraphs. Factors in the same
     component have at least one correlation path connecting them.
+
+    R55 P0-13: this is NOT a production clustering algorithm.  In
+    ``PRODUCTION`` mode every entry point raises
+    :class:`~factor_assets.errors.ProductionClusterViolation` (an uncertified
+    algorithm may never cluster a production graph); in ``RESEARCH`` mode the
+    relaxed path is unchanged.  A supplied certification is validated by the
+    gate in both modes.
     """
 
-    def __init__(self, graph: SparseCorrelationGraph):
+    #: Not a production-capable algorithm: production runs must use Leiden.
+    PRODUCTION_ALGORITHM = None
+
+    def __init__(
+        self,
+        graph: SparseCorrelationGraph,
+        execution_mode: ExecutionMode | str = ExecutionMode.RESEARCH,
+        certification: Optional[CertifiedGraphArtifact] = None,
+    ):
         """
         Args:
             graph: Correlation graph to cluster
+            execution_mode: ``RESEARCH`` (default) or ``PRODUCTION``.  In
+                production mode this class raises — only Leiden is certified
+                for production clustering.
+            certification: certification evidence attached to ``graph``.
         """
         self.graph = graph
+        self.execution_mode = ExecutionMode.coerce(execution_mode)
+        self.certification = certification
 
-    def find_components(self) -> ClusterResult:
+    def find_components(self, *, now: Optional[object] = None) -> ClusterResult:
         """
         Find all connected components.
+
+        Args:
+            now: optional gate clock (see :func:`~factor_assets.clustering.
+                certification.enforce_certified_graph`).
 
         Returns:
             Cluster assignment where each component gets unique ID
         """
+        # R55 P0-13: the gate runs at EVERY entry point — a caller cannot
+        # reach the clustering body without passing it.
+        self._gate(algorithm="connected_components", now=now)
         visited = set()
         assignments = {}
         cluster_id = 0
@@ -228,7 +292,34 @@ class ConnectedComponents:
 
         return ClusterResult(
             assignments=assignments,
-            cluster_sizes=dict(cluster_sizes)
+            cluster_sizes=dict(cluster_sizes),
+            certification_id=(
+                self.certification.certification_id
+                if self.certification is not None
+                else None
+            ),
+            graph_content_hash=(
+                self.certification.graph_content_hash
+                if self.certification is not None
+                else None
+            ),
+            execution_mode=self.execution_mode.value,
+        )
+
+    def _gate(self, *, algorithm: str, now: Optional[object] = None):
+        """Run the certified-graph gate for this run (R55 P0-13).
+
+        In production mode an uncertified graph (or an algorithm not on the
+        certification's allow-list) raises
+        :class:`~factor_assets.errors.ProductionClusterViolation`; research
+        mode passes through unchanged.
+        """
+        return enforce_certified_graph(
+            self.execution_mode,
+            self.graph,
+            self.certification,
+            algorithm=algorithm,
+            now=now,
         )
 
     def _dfs(self, start: str, visited: Set[str]) -> Set[str]:
@@ -252,6 +343,20 @@ class ConnectedComponents:
         return component
 
 
+#: Shared certified-graph gate (R55 P0-13).  Every clustering class routes its
+#: entry points through this one function so there is a single, patchable gate
+#: and no per-class divergent implementation.  ``runner`` must expose
+#: ``execution_mode``, ``graph`` and ``certification``.
+def _certified_graph_gate(runner, *, algorithm: str, now: Optional[object] = None):
+    return enforce_certified_graph(
+        runner.execution_mode,
+        runner.graph,
+        runner.certification,
+        algorithm=algorithm,
+        now=now,
+    )
+
+
 class ModularityClustering:
     """
     RESEARCH_ONLY greedy modularity optimization for community detection.
@@ -265,6 +370,9 @@ class ModularityClustering:
 
     RESEARCH_ONLY = True
 
+    #: Not a production-capable algorithm: production runs must use Leiden.
+    PRODUCTION_ALGORITHM = None
+
     def __init__(
         self,
         graph: SparseCorrelationGraph,
@@ -272,6 +380,8 @@ class ModularityClustering:
         min_cluster_size: int = 1,
         max_cluster_size: Optional[int] = None,
         allow_toy_algorithm: bool = False,
+        execution_mode: ExecutionMode | str = ExecutionMode.RESEARCH,
+        certification: Optional[CertifiedGraphArtifact] = None,
     ):
         """
         Args:
@@ -281,15 +391,25 @@ class ModularityClustering:
             max_cluster_size: Maximum cluster size (larger clusters flagged with warning)
             allow_toy_algorithm: Must be True to bypass production backend check.
                                 Set to True ONLY for testing/debugging.
+            execution_mode: ``RESEARCH`` (default) or ``PRODUCTION``.  In
+                production mode this toy algorithm is refused outright
+                (R55 P0-13).
+            certification: certification evidence attached to ``graph``.
 
         Raises:
             RuntimeError: If allow_toy_algorithm=False and no production backend available
+            ProductionClusterViolation: If execution_mode is PRODUCTION.
         """
         self.graph = graph
         self.resolution = resolution
         self.min_cluster_size = min_cluster_size
         self.max_cluster_size = max_cluster_size
-
+        self.execution_mode = ExecutionMode.coerce(execution_mode)
+        self.certification = certification
+        # R55 P0-13: the gate runs in the constructor AND in cluster() so a
+        # caller cannot smuggle a production run through a research-constructed
+        # object.
+        self._gate(algorithm="modularity")
         # Production safety: require explicit opt-in for toy algorithm
         if not allow_toy_algorithm:
             # Check for production backends
@@ -309,16 +429,34 @@ class ModularityClustering:
                     "Install python-igraph or set allow_toy_algorithm=True for testing only."
                 )
 
-    def cluster(self, max_iterations: int = 100) -> ClusterResult:
+    def _gate(self, *, algorithm: str, now: Optional[object] = None):
+        """Run the certified-graph gate for this run (R55 P0-13).
+
+        In production mode this toy algorithm is refused outright; research
+        mode passes through unchanged.
+        """
+        return enforce_certified_graph(
+            self.execution_mode,
+            self.graph,
+            self.certification,
+            algorithm=algorithm,
+            now=now,
+        )
+
+    def cluster(self, max_iterations: int = 100, *, now: Optional[object] = None) -> ClusterResult:
         """
         Run modularity clustering.
 
         Args:
             max_iterations: Maximum optimization iterations
+            now: optional gate clock (see :func:`~factor_assets.clustering.
+                certification.enforce_certified_graph`).
 
         Returns:
             Cluster assignments
         """
+        # R55 P0-13: the gate runs at EVERY entry point.
+        self._gate(algorithm="modularity", now=now)
         # Initialize: each node in its own cluster
         assignments = {node: i for i, node in enumerate(self.graph.nodes)}
         cluster_id_counter = len(self.graph.nodes)
@@ -375,7 +513,18 @@ class ModularityClustering:
 
         return ClusterResult(
             assignments=assignments,
-            cluster_sizes=dict(cluster_sizes)
+            cluster_sizes=dict(cluster_sizes),
+            certification_id=(
+                self.certification.certification_id
+                if self.certification is not None
+                else None
+            ),
+            graph_content_hash=(
+                self.certification.graph_content_hash
+                if self.certification is not None
+                else None
+            ),
+            execution_mode=self.execution_mode.value,
         )
 
     def _total_edge_weight(self) -> float:
@@ -434,6 +583,8 @@ class LeidenClustering:
 
     RESEARCH_ONLY = False
     PRODUCTION_CAPABLE = True
+    #: The only algorithm certified for production clustering (R55 P0-13).
+    PRODUCTION_ALGORITHM = "leiden"
 
     def __init__(
         self,
@@ -442,6 +593,8 @@ class LeidenClustering:
         seed: int = 42,
         min_cluster_size: int = 1,
         min_cluster_policy: str = "KEEP_SMALL",
+        execution_mode: ExecutionMode | str = ExecutionMode.RESEARCH,
+        certification: Optional[CertifiedGraphArtifact] = None,
     ):
         """
         Args:
@@ -457,9 +610,17 @@ class LeidenClustering:
                 small cluster into its nearest neighbor by edge weight;
                 ``"MARK_UNSTABLE"`` keeps small clusters but records them as
                 unstable via ``ClusterResult.unstable_clusters``.
+            execution_mode: ``RESEARCH`` (default) or ``PRODUCTION``.  In
+                production mode the graph MUST be bound to a valid, frozen,
+                content-hash-verified :class:`CertifiedGraphArtifact` whose
+                allow-list contains ``"leiden"`` (R55 P0-13); anything else
+                raises :class:`~factor_assets.errors.ProductionClusterViolation`.
+            certification: certification evidence attached to ``graph``.
 
         Raises:
             ImportError: If neither igraph nor leidenalg is installed.
+            ProductionClusterViolation: In production mode with an uncertified,
+                stale, or algorithm-mismatched graph.
         """
         if min_cluster_size < 1:
             raise ValueError("min_cluster_size must be >= 1")
@@ -473,6 +634,12 @@ class LeidenClustering:
         self.seed = seed
         self.min_cluster_size = min_cluster_size
         self.min_cluster_policy = min_cluster_policy
+        self.execution_mode = ExecutionMode.coerce(execution_mode)
+        self.certification = certification
+        # R55 P0-13: the gate runs in the constructor AND at every clustering
+        # entry point, so a caller cannot escape it by holding a
+        # research-constructed object and calling cluster() in production.
+        self._gate(algorithm=self.PRODUCTION_ALGORITHM)
         self._backend = self._detect_backend()
 
     @property
@@ -513,15 +680,51 @@ class LeidenClustering:
             "rather than faking a clustering result."
         )
 
-    def cluster(self) -> ClusterResult:
+    def _gate(self, *, algorithm: str, now: Optional[object] = None):
+        """Run the certified-graph gate for this run (R55 P0-13).
+
+        In production mode an uncertified / stale / algorithm-mismatched graph
+        raises :class:`~factor_assets.errors.ProductionClusterViolation`;
+        research mode passes through unchanged.  Returns the certification that
+        authorised the run (or ``None`` in research without certification).
+        """
+        return enforce_certified_graph(
+            self.execution_mode,
+            self.graph,
+            self.certification,
+            algorithm=algorithm,
+            now=now,
+        )
+
+    def cluster(self, *, now: Optional[object] = None) -> ClusterResult:
         """
         Run Leiden clustering on the sparse graph.
+
+        Args:
+            now: optional gate clock (see :func:`~factor_assets.clustering.
+                certification.enforce_certified_graph`).
 
         Returns:
             ClusterResult with cluster assignments and sizes.
         """
+        # R55 P0-13: the gate runs at EVERY entry point — no bypass path.
+        self._gate(algorithm=self.PRODUCTION_ALGORITHM, now=now)
         if self.graph.node_count == 0:
-            return ClusterResult(assignments={}, cluster_sizes={})
+            return ClusterResult(
+                assignments={},
+                cluster_sizes={},
+                certification_id=(
+                    self.certification.certification_id
+                    if self.certification is not None
+                    else None
+                ),
+                graph_content_hash=(
+                    self.certification.graph_content_hash
+                    if self.certification is not None
+                    else None
+                ),
+                execution_mode=self.execution_mode.value,
+            )
 
         if self._backend == "igraph":
             return self._cluster_igraph()
@@ -533,15 +736,23 @@ class LeidenClustering:
         snapshot_ref: Optional[str] = None,
         universe_ref: Optional[str] = None,
         similarity_spec_ref: Optional[str] = None,
+        now: Optional[object] = None,
     ) -> ClusterArtifact:
         """Produce a production :class:`ClusterArtifact` with full provenance.
 
         Wraps the raw :class:`ClusterResult` with the algorithm, backend /
         backend_version / seed / resolution that produced it, the graph
         identity, snapshot / universe / similarity-spec refs, one representative
-        per cluster, and a derived ``content_hash``.
+        per cluster, and a derived ``content_hash``.  In production mode the
+        certification that authorised the run is recorded on the artifact
+        (``certification_id`` / ``execution_mode``).
         """
-        result = self.cluster()
+        # R55 P0-13: the gate runs here too (this is a clustering entry point,
+        # not just a wrapper around cluster()).
+        certified = self._gate(
+            algorithm=self.PRODUCTION_ALGORITHM, now=now
+        )
+        result = self.cluster(now=now)
         cluster_of: Dict[int, List[str]] = defaultdict(list)
         for fid, cid in result.assignments.items():
             cluster_of[cid].append(fid)
@@ -561,6 +772,10 @@ class LeidenClustering:
             min_cluster_size=self.min_cluster_size,
             min_cluster_policy=self.min_cluster_policy,
             content_hash="",  # derived in __post_init__
+            certification_id=(
+                certified.certification_id if certified is not None else None
+            ),
+            execution_mode=self.execution_mode.value,
         )
 
     @staticmethod
@@ -707,6 +922,17 @@ class LeidenClustering:
             assignments=renumbered,
             cluster_sizes=dict(sizes),
             unstable_clusters=tuple(unstable),
+            certification_id=(
+                self.certification.certification_id
+                if self.certification is not None
+                else None
+            ),
+            graph_content_hash=(
+                self.certification.graph_content_hash
+                if self.certification is not None
+                else None
+            ),
+            execution_mode=self.execution_mode.value,
         )
 
 
@@ -848,7 +1074,15 @@ class HierarchicalClustering:
 
     Builds dendrogram from correlation graph using agglomerative clustering.
     Supports multiple linkage methods and provides dendrogram cutting.
+
+    R55 P0-13: this is NOT a production clustering algorithm (it is O(N²) and
+    not sparse-graph Leiden).  In ``PRODUCTION`` mode every entry point raises
+    :class:`~factor_assets.errors.ProductionClusterViolation`; in ``RESEARCH``
+    mode the relaxed path is unchanged.
     """
+
+    #: Not a production-capable algorithm: production runs must use Leiden.
+    PRODUCTION_ALGORITHM = None
 
     def __init__(
         self,
@@ -857,6 +1091,8 @@ class HierarchicalClustering:
         metric: str = 'correlation',
         max_factors: int = 500,
         missing_distance_policy: Optional[str] = None,
+        execution_mode: ExecutionMode | str = ExecutionMode.RESEARCH,
+        certification: Optional[CertifiedGraphArtifact] = None,
     ):
         """
         Args:
@@ -869,6 +1105,10 @@ class HierarchicalClustering:
                 NOT treated as distance=1 (that would conflate "not measured"
                 with "dissimilar").  Pass ``"treat_missing_as_max"`` to opt
                 into the legacy research behaviour explicitly.
+            execution_mode: ``RESEARCH`` (default) or ``PRODUCTION``.  In
+                production mode this class raises — only Leiden is certified
+                for production clustering.
+            certification: certification evidence attached to ``graph``.
 
         Raises:
             ImportError: If scipy is not available
@@ -908,14 +1148,38 @@ class HierarchicalClustering:
         self.metric = metric
         self.max_factors = max_factors
         self.missing_distance_policy = missing_distance_policy
+        self.execution_mode = ExecutionMode.coerce(execution_mode)
+        self.certification = certification
 
-    def build_dendrogram(self) -> Dendrogram:
+    def _gate(self, *, algorithm: str, now: Optional[object] = None):
+        """Run the certified-graph gate for this run (R55 P0-13).
+
+        In production mode an uncertified graph — or any algorithm not on the
+        certification's allow-list — raises
+        :class:`~factor_assets.errors.ProductionClusterViolation`; research
+        mode passes through unchanged.
+        """
+        return enforce_certified_graph(
+            self.execution_mode,
+            self.graph,
+            self.certification,
+            algorithm=algorithm,
+            now=now,
+        )
+
+    def build_dendrogram(self, *, now: Optional[object] = None) -> Dendrogram:
         """
         Build hierarchical clustering dendrogram.
+
+        Args:
+            now: optional gate clock (see :func:`~factor_assets.clustering.
+                certification.enforce_certified_graph`).
 
         Returns:
             Dendrogram containing linkage matrix and factor IDs
         """
+        # R55 P0-13: the gate runs at EVERY entry point.
+        self._gate(algorithm="hierarchical", now=now)
         if self.graph.node_count == 0:
             raise ValueError("Cannot cluster empty graph")
 
@@ -980,7 +1244,9 @@ class HierarchicalClustering:
         self,
         num_clusters: Optional[int] = None,
         distance_threshold: Optional[float] = None,
-        auto_optimize: bool = False
+        auto_optimize: bool = False,
+        *,
+        now: Optional[object] = None,
     ) -> ClusterResult:
         """
         Perform hierarchical clustering with automatic or manual cutting.
@@ -989,11 +1255,16 @@ class HierarchicalClustering:
             num_clusters: Desired number of clusters (exclusive with distance_threshold)
             distance_threshold: Distance threshold for cutting (exclusive with num_clusters)
             auto_optimize: Automatically determine optimal number of clusters
+            now: optional gate clock (see :func:`~factor_assets.clustering.
+                certification.enforce_certified_graph`).
 
         Returns:
             ClusterResult with cluster assignments
         """
-        dendrogram = self.build_dendrogram()
+        # R55 P0-13: the gate runs here (cluster -> build_dendrogram), and
+        # build_dendrogram re-runs it, so both entry points are gated.
+        self._gate(algorithm="hierarchical", now=now)
+        dendrogram = self.build_dendrogram(now=now)
 
         if dendrogram.linkage_matrix.shape[0] == 0:
             # Single node case

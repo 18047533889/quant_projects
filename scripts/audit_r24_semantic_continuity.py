@@ -244,7 +244,7 @@ def _symbol_gates() -> dict[str, list[str]]:
         from factor_engine.api.label_pit import LabelOp, default_mining_label_config
 
         cfg = default_mining_label_config(horizon_bars=5)
-        if cfg["label_formula"] != "forward_return(close, 5)":
+        if cfg["label_formula"] != "forward_return(vwap, 5)":
             out["LABEL_CONFIG_FORWARD_SEMANTIC_MISMATCH"].append(
                 f"config formula {cfg['label_formula']!r} is not the forward authority"
             )

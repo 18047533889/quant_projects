@@ -70,7 +70,7 @@ def test_search_runner_never_holds_test_credential():
     runner = SearchRunner(
         SearchConfig(budget=_budget(), enable_multifidelity=False),
         lambda: _trial(),
-        EvaluationProtocol(_plan(), lambda t, f: {"score": 0.5, "cost": 1.0, "evidence_ref": "e"}),
+        EvaluationProtocol(_plan(), lambda t, f: {"score": 0.5, "cost": 1.0, "evidence_ref": "e", "treatment_integrity_evidence": _integrity_evidence(t.trial_id)}),
     )
     # The search runner's object graph contains no test provider, no store ref,
     # and no raw test credential.

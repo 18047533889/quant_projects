@@ -67,6 +67,15 @@ class LQTPLogicalDataSource(DataSource):
         # policy（run_mode / production / strict / mining / PIT）。旧代码不传——
         # 生产 anchor 是 production、二级 SourceRef child 却变成 research/fail-open，
         # 四层 PIT gate 在 SourceRef 路径形同虚设。
+        # 2026-08-29：child 还必须继承父级 semantic_filters——StockIndustry 等
+        # 多分类表是 (TradeDate, Symbol, IndustrySource) 主键，required_filters
+        # 在 child 的构造期 panel gate 上强制。IndustryDaily/IndustryCode 的
+        # 读取走 logical contract（required_parameter=IndustrySource，默认
+        # sw_l1），这里把父级的行级 filter 一并带给 child，否则 child 读
+        # ashare_stock_industry 时 required_filters 缺失直接 ValidationError。
+        filters = dict(getattr(self.inner, "semantic_filters", {}) or {})
+        if dataset == "ashare_stock_industry" and "IndustrySource" not in filters:
+            filters = {**filters, "IndustrySource": "sw_l1"}
         return DataAccessSource(
             dataset=dataset,
             start_date=start,
@@ -81,6 +90,7 @@ class LQTPLogicalDataSource(DataSource):
                 self.inner, "mining_coverage_threshold", None
             ),
             pit_enforce=bool(getattr(self.inner, "pit_enforce", False)),
+            semantic_filters=filters or None,
         )
 
     @staticmethod

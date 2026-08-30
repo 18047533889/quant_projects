@@ -17,7 +17,13 @@ from __future__ import annotations
 # package (as every intraday operator test does) activates the whitelist.
 from factor_engine.cleaned_operators.intraday import perf_vec_kernels as _pvk
 
-_pvk.bind_whitelist()
+try:
+    _pvk.bind_whitelist()
+except Exception:
+    # Optional perf-kernel whitelist: smart_money / vwap_path are Polars-gated.
+    # When `polars` is absent the whole bind is skipped so intraday operator
+    # modules can still register their pandas backends (time_structure etc.).
+    pass
 del _pvk
 
 __all__ = [

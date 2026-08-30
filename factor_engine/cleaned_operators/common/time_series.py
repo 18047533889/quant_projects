@@ -557,7 +557,18 @@ class EMA(SeriesOperator):
         contract = ewm_contract_for("ts_ema")
         check_ewm_contract(contract, canonical="ts_ema")
         assert contract is not None
-        return x.ewm(**contract.to_kwargs(span=float(span))).mean()
+        # LQTP 平台语义（2026-08-29）：``ts_ewm_mean(x, 0.20)`` 的第二参数是
+        # 0<alpha<=1 的衰减比率（alpha 语义），不是 span。FE 的 ts_ema 走
+        # EWMContract(decay_mapping="span")，把 <1 的正小数按 alpha 语义映射：
+        # pandas ewm(alpha=a) 与 ewm(span=1/a) 等价（com=1/a-1, span=com+1）。
+        span_f = float(span)
+        if 0.0 < span_f < 1.0:
+            # alpha 语义：ewm(alpha=a) ≡ ewm(com=1/a-1)，直接给 pandas alpha 槽，
+            # 不走 to_kwargs（span contract 会在 span=None 时 raise）。
+            return x.ewm(alpha=span_f, adjust=contract.adjust,
+                         ignore_na=contract.ignore_na,
+                         min_periods=contract.min_periods).mean()
+        return x.ewm(**contract.to_kwargs(span=span_f)).mean()
 
 
 
@@ -664,7 +675,10 @@ class MovingBeta(SeriesOperator):
         param_specs={
             "window": ParamSpec(dtype=int, min=2, default=20, searchable=True,
                                 param_role=ParamRole.HORIZON),
-            "min_periods": ParamSpec(dtype=int, min=2, default=5, searchable=False,
+            # R19-033: default is ``None`` (kernel resolves ``min(5, window)``)
+            # so the planning-time ``min_periods <= window`` relation gate
+            # never compares a merged default-5 against an explicit window<5.
+            "min_periods": ParamSpec(dtype=int, min=2, default=None, searchable=False,
                                      param_role=ParamRole.SUPPORT_POLICY),
         },
     )
@@ -674,16 +688,26 @@ class MovingBeta(SeriesOperator):
         y: pd.DataFrame,
         x: pd.DataFrame,
         window: int = 20,
-        min_periods: int = 5,
+        min_periods: int | None = None,
         **kwargs,
     ) -> pd.DataFrame:
         from factor_engine.cleaned_operators.common.strict_params import strict_int
 
         w = strict_int(window, "window", minimum=2)
-        mp = strict_int(min_periods, "min_periods", minimum=2)
-        if mp > w:
-            from factor_engine.backend.operator_errors import OperatorParameterError
-            raise OperatorParameterError("min_periods must be <= window")
+        # R19-033: the reviewed production default ``5`` (2-sample slopes are
+        # not statistically meaningful) applies at the canonical default
+        # window (20).  A smaller explicit window must not inherit a
+        # min_periods larger than itself — the planning-time relation gate
+        # (R13 NEW-P0-20: ``min_periods <= window``) would reject the call
+        # before the kernel runs.  So the UNTAXED default resolves to
+        # ``min(5, window)``; an EXPLICIT min_periods is validated unchanged.
+        if min_periods is None:
+            mp = min(5, w)
+        else:
+            mp = strict_int(min_periods, "min_periods", minimum=2)
+            if mp > w:
+                from factor_engine.backend.operator_errors import OperatorParameterError
+                raise OperatorParameterError("min_periods must be <= window")
         return rolling_beta(y, x, window=w, min_periods=mp)
 
 
@@ -1415,22 +1439,40 @@ class TSMean(SeriesOperator):
         name="ts_mean", category="time_series",
         description="滚动均值 (与m_avg相同)",
         examples=["ts_mean(close, 20)"],
-        param_names=["x", "window"], return_type="series",
-        tags=["time_series", "ts_", "mean"]
+        param_names=["x", "window", "min_periods"], return_type="series",
+        tags=["time_series", "ts_", "mean"],
+        param_specs={
+            "window": ParamSpec(dtype=int, min=1, default=20, searchable=True,
+                                param_role=ParamRole.HORIZON),
+            # PARITY-SWEEP-R56: min_periods is an economic support policy (R40
+            # #193) — the backend_parity suite calls ts_mean(x, w, min_periods=…)
+            # and R5-06 rejected it as undeclared.  Default stays 1 (the
+            # canonical SupportPolicy min_observations).
+            "min_periods": ParamSpec(dtype=int, min=1, default=1, searchable=False,
+                                     param_role=ParamRole.SUPPORT_POLICY),
+        },
     )
-    def _calculate_series(self, x: pd.DataFrame, window: int = 20, **kwargs) -> pd.DataFrame:
+    def _calculate_series(
+        self, x: pd.DataFrame, window: int = 20, min_periods: int = 1, **kwargs
+    ) -> pd.DataFrame:
         from factor_engine.backend.routing import numba_enabled_for_op
+        from factor_engine.cleaned_operators.parameter_validation import strict_integer
 
-        if numba_enabled_for_op("ts_mean", window=int(window)):
+        w = strict_integer(window, "window", minimum=1)
+        mp = strict_integer(min_periods, "min_periods", minimum=1)
+        if mp > w:
+            from factor_engine.backend.operator_errors import OperatorParameterError
+            raise OperatorParameterError("min_periods must be <= window")
+        if numba_enabled_for_op("ts_mean", window=w):
             try:
                 from factor_engine.backend.numba_kernels import rolling_mean_panel
 
-                fast = rolling_mean_panel(x.to_numpy(dtype=float), int(window), min_count=1)
+                fast = rolling_mean_panel(x.to_numpy(dtype=float), w, min_count=mp)
                 if fast is not None:
                     return pd.DataFrame(fast, index=x.index, columns=x.columns)
             except Exception:
                 pass
-        return x.rolling(window=window, min_periods=1).mean()
+        return x.rolling(window=w, min_periods=mp).mean()
 
 # aliases: Mean, TS_MEAN, m_avg, mean
 
@@ -1692,17 +1734,31 @@ class TSZScore(SeriesOperator):
         name="ts_zscore", category="time_series",
         description="滚动Z-Score (与m_zscore相同)",
         examples=["ts_zscore(close, 20)"],
-        param_names=["x", "window"], return_type="series",
+        param_names=["x", "window", "min_periods", "null_policy", "nan_policy", "includes_current_bar", "ddof", "zero_std_policy"],
+        return_type="series",
+        param_aliases={"d": "window"},
         tags=["time_series", "ts_", "zscore"]
     )
-    def _calculate_series(self, x: pd.DataFrame, window: int = 20, **kwargs) -> pd.DataFrame:
+    def _calculate_series(self, x: pd.DataFrame, window: int = 20, min_periods: int = 1,
+                          null_policy: str = "ignore", nan_policy: str = "propagate",
+                          includes_current_bar: bool = True, ddof: int = 1,
+                          zero_std_policy: str = "zero", **kwargs) -> pd.DataFrame:
         from factor_engine.backend.numeric_semantics import zscore_zero_std_fill
 
-        # Treat infinities as missing values, matching the finite-only
-        # statistical contract used by the selectable Polars authority.
-        finite_x = x.replace([np.inf, -np.inf], np.nan)
-        mean = finite_x.rolling(window=window, min_periods=1).mean()
-        std = finite_x.rolling(window=window, min_periods=1).std()
+        # 2026-08-29: LQTP 平台 ``ts_zscore(x, window, min_periods)`` 支持显式
+        # min_periods（平台默认 1）。FE 声明并透传；语义与平台一致（zscore =
+        # (x - rolling_mean) / rolling_std，滚动窗口 min_periods）。``null_policy`` /
+        # ``nan_policy`` 由 fastpath rewrite 从 (x-ts_mean)/ts_std 合成带入：
+        # null_policy=ignore → 先把 ±Inf 置 NaN（finite-only 统计契约）；否则
+        # 保持原值直接滚动。
+        from factor_engine.cleaned_operators.overhaul.base import positive_int
+
+        mp = positive_int(min_periods, "min_periods")
+        finite_x = x
+        if str(null_policy).lower() == "ignore":
+            finite_x = x.replace([np.inf, -np.inf], np.nan)
+        mean = finite_x.rolling(window=window, min_periods=mp).mean()
+        std = finite_x.rolling(window=window, min_periods=mp).std()
 
         # R40 Parity Fix: When std=0 or NULL, return zero_fill (0.0) to match Polars backend
         # and numeric_semantics policy. Must avoid division by zero entirely.
@@ -2233,8 +2289,45 @@ class TSKurtosisPolars(SeriesOperator):
         # on FULL finite windows (min_periods == window, dropna), NOT pandas
         # rolling.kurt(min_periods=1).  Delegate to the same kernel so polars
         # cannot diverge on warmup rows / partial windows / NaN / Inf.
+        #
+        # Constant full windows: the canonical pandas authority
+        # ``rolling.kurt`` defines a constant full window as -3.0 (NaN only
+        # for the warmup).  StableTsKurt keeps the second-moment guard and
+        # would emit NaN for a degenerate (zero-scale) full window, which
+        # breaks the compatibility authority — so we mask the warmup NaN and
+        # backfill the zero-scale full windows with the pandas -3.0 sentinel.
         w = int(kwargs.get("d", window))
-        return panel_pandas_bridge(x, lambda pdf: StableTsKurt()._calculate_series(pdf, w))
+        out = panel_pandas_bridge(x, lambda pdf: StableTsKurt()._calculate_series(pdf, w))
+        cols = [c for c in out.columns if c not in ("date", "stock_code", "timestamp", "trade_date", "datetime", "__fe_time__")]
+        # Constant full windows: pandas ``rolling.kurt`` authority emits -3.0
+        # (not NaN) for a full window of identical values.  StableTsKurt keeps
+        # a second-moment guard and emits NaN for that degenerate window, which
+        # breaks the compatibility authority — so we remap ONLY full windows
+        # of the ORIGINAL input whose finite values are all identical (zero
+        # scale) to -3.0.  Warmup rows and windows containing NaN/Inf keep
+        # StableTsKurt's NaN (pandas parity).
+        def _constant_full_window_mask(series: pl.Series) -> pl.Series:
+            raw = np.asarray(series.to_numpy(), dtype=float)
+            mask = np.zeros(len(raw), dtype=bool)
+            for end in range(len(raw)):
+                if end < w - 1:
+                    continue
+                start = max(0, end - w + 1)
+                win = raw[start : end + 1]
+                finite = win[np.isfinite(win)]
+                if finite.size < w:
+                    continue
+                if float(finite.max()) == float(finite.min()):
+                    mask[end] = True
+            return pl.Series(mask)
+
+        return out.with_columns([
+            pl.when(pl.col(c).is_nan() & pl.Series(_constant_full_window_mask(x[c])))
+            .then(pl.lit(-3.0))
+            .otherwise(pl.col(c))
+            .alias(c)
+            for c in cols
+        ])
 
 # aliases: TS_KURT
 
@@ -2292,16 +2385,31 @@ class TSMeanPolars(SeriesOperator):
         name="ts_mean", category="time_series",
         description="滚动均值 (与m_avg相同)",
         examples=["ts_mean(close, 20)"],
-        param_names=["x", "window"], return_type="series",
-        tags=["time_series", "ts_", "mean"]
+        param_names=["x", "window", "min_periods"], return_type="series",
+        tags=["time_series", "ts_", "mean"],
+        param_specs={
+            "window": ParamSpec(dtype=int, min=1, default=20, searchable=True,
+                                param_role=ParamRole.HORIZON),
+            "min_periods": ParamSpec(dtype=int, min=1, default=1, searchable=False,
+                                     param_role=ParamRole.SUPPORT_POLICY),
+        },
     )
-    def _calculate_series(self, x: pl.DataFrame, window: int = 20, **kwargs) -> pl.DataFrame:
+    def _calculate_series(
+        self, x: pl.DataFrame, window: int = 20, min_periods: int = 1, **kwargs
+    ) -> pl.DataFrame:
+        from factor_engine.cleaned_operators.parameter_validation import strict_integer
+
+        w = strict_integer(window, "window", minimum=1)
+        mp = strict_integer(min_periods, "min_periods", minimum=1)
+        if mp > w:
+            from factor_engine.backend.operator_errors import OperatorParameterError
+            raise OperatorParameterError("min_periods must be <= window")
         cols = [c for c in x.columns if c not in ['date', 'stock_code']]
         # WINDOW-SEMANTICS PARITY (pandas reference): pandas rolling.mean drops
         # ±Inf inside the window; explicit finite mask.
         return x.with_columns([
             pl.when(pl.col(c).is_nan() | pl.col(c).is_infinite()).then(None).otherwise(pl.col(c))
-            .rolling_mean(window_size=window, min_samples=1).alias(c) for c in cols
+            .rolling_mean(window_size=w, min_samples=mp).alias(c) for c in cols
         ])
 
 # aliases: Mean, TS_MEAN, m_avg, mean
@@ -2560,20 +2668,26 @@ class TSZScorePolars(SeriesOperator):
         name="ts_zscore", category="time_series",
         description="滚动Z-Score (与m_zscore相同)",
         examples=["ts_zscore(close, 20)"],
-        param_names=["x", "window"], return_type="series",
+        param_names=["x", "window", "min_periods", "null_policy", "nan_policy", "includes_current_bar", "ddof", "zero_std_policy"],
+        return_type="series",
+        param_aliases={"d": "window"},
         tags=["time_series", "ts_", "zscore"]
     )
-    def _calculate_series(self, x: pl.DataFrame, window: int = 20, **kwargs) -> pl.DataFrame:
+    def _calculate_series(self, x: pl.DataFrame, window: int = 20, min_periods: int = 1,
+                          null_policy: str = "ignore", nan_policy: str = "propagate",
+                          includes_current_bar: bool = True, ddof: int = 1,
+                          zero_std_policy: str = "zero", **kwargs) -> pl.DataFrame:
         from factor_engine.cleaned_operators.parameter_validation import strict_integer
 
         w = strict_integer(window, "window", minimum=1)
-        if "min_periods" in kwargs:
-            raise TypeError("ts_zscore does not expose min_periods")
+        mp = strict_integer(min_periods, "min_periods", minimum=1)
+        if mp > w:
+            mp = w
 
         def zscore_fn(values: pl.Series) -> float:
             raw = np.asarray(values.to_numpy(), dtype=float)
             finite = raw[np.isfinite(raw)]
-            if finite.size < 2:
+            if finite.size < mp:
                 return np.nan
             current = raw[-1]
             if not np.isfinite(current):

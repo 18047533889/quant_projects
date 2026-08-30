@@ -81,7 +81,7 @@ code {{ background:#f1f5f9; padding:2px 6px; border-radius:4px }}
 def render_one(name: str) -> tuple:
     try:
         fi = R.extract_formula_info(name)
-        is_flipped = fi["is_flipped"]
+        is_flipped = fi["is_flipped"] or R._is_flipped_by_meta(name)
 
         # 加载因子矩阵
         mat_path = FV_DIR / f"{name}.parquet"
@@ -101,7 +101,7 @@ def render_one(name: str) -> tuple:
         if not isinstance(matrix.index, pd.DatetimeIndex):
             matrix.index = pd.to_datetime(matrix.index)
 
-        # 单因子指标
+        # 单因子指标（用 R 的全局成本/后复权口径）
         fm = compute_factor_metrics_single(name, matrix)
         if not fm or fm.get("perf", {}).get("n_periods", 0) < 20:
             # 数据不可评估（面板常数 / 全NaN / 无有效IC）→ 写占位详情页
@@ -117,8 +117,12 @@ def render_one(name: str) -> tuple:
             ic_stats = R.compute_ic_stats(ic_series)
             fm = dict(fm)
             fm["perf"] = dict(fm["perf"])
-            for k in ["ls_sharpe", "ls_annual", "ls_winrate", "g10_annual", "g1_annual", "g10_sharpe", "g1_sharpe"]:
+            for k in ["ls_sharpe", "ls_annual", "g10_annual", "g1_annual", "g10_sharpe", "g1_sharpe"]:
                 fm["perf"][k] = -fm["perf"].get(k, 0)
+            if "ls_winrate" in fm["perf"]:
+                fm["perf"]["ls_winrate"] = 1.0 - fm["perf"].get("ls_winrate", 0)
+            if "win_rate" in fm:
+                fm["win_rate"] = 1.0 - fm.get("win_rate", 0)
             fm["perf"]["ls_mdd"] = abs(fm["perf"].get("ls_mdd", 0))
             fm["mean_ic"] = -fm.get("mean_ic", 0)
             fm["ic_ir"] = -fm.get("ic_ir", 0)
@@ -131,16 +135,16 @@ def render_one(name: str) -> tuple:
         perf = fm.get("perf", {})
 
         # 图表（ic_series 可能为空/常量 → 各绘图函数自身容错）
-        monthly_chart = R.plot_ic_monthly_heatmap(ic_stats.get("monthly_ic", pd.Series(dtype=float)), name) if ic_stats else ""
-        decile_chart = R.plot_decile_nav(decile_data, name) if decile_data else ""
-        ls_chart = R.plot_long_short_nav(decile_data, name) if decile_data else ""
+        monthly_chart = R.plot_ic_monthly_heatmap(ic_stats.get("monthly_ic", pd.Series(dtype=float)), name, is_flipped) if ic_stats else ""
+        decile_chart = R.plot_decile_nav(decile_data, name, is_flipped) if decile_data else ""
+        ls_chart = R.plot_long_short_nav(decile_data, name, is_flipped) if decile_data else ""
         dist_chart = ""
         if len(ic_series) > 0 and np.isfinite(ic_series.dropna()).any():
             try:
-                dist_chart = R.plot_ic_distribution(ic_series, name)
+                dist_chart = R.plot_ic_distribution(ic_series, name, is_flipped)
             except Exception:
                 dist_chart = ""
-        svg_ts = R.plot_ic_timeseries(ic_series, name) if len(ic_series) > 0 else ""
+        svg_ts = R.plot_ic_timeseries(ic_series, name, is_flipped) if len(ic_series) > 0 else ""
 
         html = R.build_detail_html(
             factor_name=name,

@@ -26,9 +26,10 @@ def _make_spec(
     backend: str = "duckdb_sql",
     *,
     emitter_identity: str = "emitter-id-001",
-    implementation_source_hash: str = "src-sha-256",
-    parameter_domain_hash: str = "pd-hash-001",
-    semantic_contract_hash: str = "sc-hash-001",
+    implementation_source_hash: str = "a" * 64,
+    parameter_domain_hash: str = "b" * 64,
+    semantic_contract_hash: str = "c" * 64,
+    implementation_closure_hash: str = "d" * 64,
 ) -> PhysicalImplementationSpec:
     return PhysicalImplementationSpec(
         canonical=canonical,
@@ -43,6 +44,7 @@ def _make_spec(
         kernel_identity="",
         parameter_domain_hash=parameter_domain_hash,
         semantic_contract_hash=semantic_contract_hash,
+        implementation_closure_hash=implementation_closure_hash,
     )
 
 

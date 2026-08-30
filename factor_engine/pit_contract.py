@@ -392,6 +392,15 @@ def pit_asof_join(
     right = events.copy()
     left[decision_time] = pd.to_datetime(left[decision_time], errors="raise", utc=True)
     right[columns.available_at] = pd.to_datetime(right[columns.available_at], errors="raise", utc=True)
+    # 2026-08-29: the daily anchor index carries ``datetime64[s, UTC]`` while the
+    # financial ``PubDate`` may be ``datetime64[us, UTC]``/``datetime64[ns, UTC]``.
+    # ``pd.merge_asof`` requires the asof keys to be the SAME dtype/unit — normalize
+    # both to nanoseconds so PIT joins never trip
+    # ``MergeError: incompatible merge keys ... must be the same type``.
+    if left[decision_time].dtype != right[columns.available_at].dtype:
+        common_unit = "datetime64[ns, UTC]"
+        left[decision_time] = left[decision_time].astype(common_unit)
+        right[columns.available_at] = right[columns.available_at].astype(common_unit)
     # R10 #46 + R24-046..048: same_day requires a DECLARED timestamp precision
     # (source metadata), never inferred from midnight data values.
     if available_policy == "same_day":
@@ -434,6 +443,14 @@ def pit_asof_join(
     left = left.copy()
     left["__pit_row_order__"] = range(len(left))
     left = left.sort_values([decision_time, columns.instrument]).reset_index(drop=True)
+    # 2026-08-29: after the ``next_trading_day`` shift, ``available_at`` may be
+    # rebuilt from a different source dtype — normalize BOTH asof keys to the
+    # same unit right before merge_asof (the earlier equality check ran before
+    # the shift reassigned ``right[available_at]``).
+    if left[decision_time].dtype != right[columns.available_at].dtype:
+        common_unit = "datetime64[ns, UTC]"
+        left[decision_time] = left[decision_time].astype(common_unit)
+        right[columns.available_at] = right[columns.available_at].astype(common_unit)
     # R10 #45: merge_asof returns the LAST row among exact key ties, so the
     # right frame must have a deterministic total order — newest period_end wins,
     # then newest revision_id.  Original-row order is never used to break ties.

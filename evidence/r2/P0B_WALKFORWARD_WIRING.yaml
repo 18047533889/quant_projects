@@ -1,0 +1,122 @@
+task_id: R2-P0B-WALKFORWARD-WIRING
+finding: P0-B walk-forward factor selection now wired end-to-end — feature builders and
+  trainers consume ONLY per-fold walk-forward factor lists; full-sample lists are
+  labelled diagnostics and can no longer feed training
+base_sha: UNKNOWN_WORKTREE
+current_head: UNCOMMITTED_CURRENT_TREE
+commit_sha: UNCOMMITTED_CURRENT_TREE
+status: CLOSED_LOCAL
+owned_files:
+  - lightgbm_qs/scripts/factor_selection.py
+  - lightgbm_qs/scripts/train_final.py
+  - lightgbm_qs/scripts/train_opt_adj.py
+  - lightgbm_qs/scripts/merge_all_factors.py
+  - lightgbm_qs/scripts/build_features_all.py
+  - lightgbm_qs/scripts/build_features.py
+  - lightgbm_qs/scripts/build_full_features.py
+  - lightgbm_qs/scripts/rebuild_selection_adj.py
+
+what_changed:
+  factor_selection:
+    - "selection_dates_for_cut(all_dates, cut, purge=10, embargo=0): purge/embargo explicit
+       (defaults unchanged, so existing tests keep passing)."
+    - "write_selection_manifest(): emits data/build/walkforward_selection.json on every
+       walk-forward run (--fold / --cuts / --folds-from-train). Per cut it stores
+       sel_start / sel_end / n_sel_dates and that fold's frozen factor list, plus
+       purge_trading_days / embargo_trading_days / label_basis / rank_ic_threshold."
+    - "load_selection_manifest(path, cuts): the ONLY sanctioned reader; validates
+       purge==10 and label_basis=='vwap_to_vwap_fwd10', raises KeyError for a cut not in
+       the manifest, raises ValueError for an empty fold list. No full-sample fallback."
+  trainers:
+    - "train_final.py: load_fold_selection() reads SELECTION_MANIFEST (env-overridable,
+       default data/build/walkforward_selection.json). Each fold builds Xt/Xo from
+       FEATURES_FOLD = that cut's own manifest list intersected with the matrix; a cut
+       missing from the manifest raises KeyError; 0 matching factors skips the fold.
+       Logs per-fold list size and absent-from-matrix count."
+    - "train_opt_adj.py: same manifest wiring, PLUS the previously missing 10-trading-day
+       purge/embargo (train tail + OOS front), matching train_final.py — 10d fwd Vwap
+       label windows no longer cross its cuts. Fold log line now prints feats=/purge=."
+  feature_builders:
+    - "merge_all_factors.py: feature matrix columns = UNION of per-fold walk-forward lists;
+       full-sample selected_factors_full.csv kept as a labelled DIAGNOSTIC
+       ('严禁直接喂训练'); dedup keeps using rank_ic only to order within a corr>0.98
+       cluster (never to admit). No manifest -> SystemExit(2), no matrix written."
+    - "build_features_all.py / build_features.py / build_full_features.py: same union rule;
+       build_features.py no longer reads selected_factors.csv (it now requires the
+       manifest); build_full_features.py restricts its candidate set to the WF union."
+    - "rebuild_selection_adj.py: full-sample list labelled diagnostic; logs where the
+       per-fold lists live and that the trainer refuses everything else."
+
+hard_rules_honoured:
+  label_basis: "all selection + training labels remain the Vwap-basis 10d forward return
+    (fwd_ret10 = vwap[t+10]/vwap[t]-1); no close returns introduced anywhere"
+  purge: "PURGE_TRADING_DAYS=10, EMBARGO_TRADING_DAYS=0; a fold's selection dates are
+    dates < cut minus the last 10 trading days, so no 10d label window reaches the OOS
+    block (asserted inside select_factors_walk_forward and re-asserted by tests)"
+  no_monkeypatching: "all changes are in-tree edits; no gate weakened, no test relaxed"
+  cos_access: "no COS reads needed (local parquet pools + local panel only)"
+
+focused_tests:
+  command: PYTHONPATH=factor_engine .venv/bin/python -m pytest lightgbm_qs/tests/test_walkforward_leak.py lightgbm_qs/tests/test_purge.py -q
+  result: "10 passed, 8 warnings in 0.53s"
+
+wiring_smoke_synthetic:
+  command: PYTHONPATH=factor_engine .venv/bin/python /tmp/p0b_wiring_smoke.py
+  result: |
+    == per-fold walk-forward lists (train-window-only stats) ==
+      fold cut=2024-05-21  n=2  ['early', 'honest']
+      fold cut=2024-08-27  n=2  ['honest', 'late']
+    == full-sample list (LEAKY, diagnostic only): ['future_only', 'honest', 'late']
+    [wf] SAVED selection manifest /tmp/wf_smoke_manifest.json (2 cuts)
+      purge check: fold1 last selection date 2024-05-06 = cut 2024-05-21 minus 10 trading days
+      trainer guard OK: "selection manifest is missing cuts ['2024-07-02'] — regenerate it"
+    WIRING SMOKE PASS
+      fold1=['early', 'honest']
+      fold2=['honest', 'late']
+      full_sample=['future_only', 'honest', 'late']
+  interpretation: >
+    'early' predicts only on fold1's window -> fold1 keeps it, fold2 drops it;
+    'late' predicts only inside fold2's selection window -> fold1 rejects, fold2 keeps;
+    'future_only' predicts only AFTER cut2 — the FULL-SAMPLE list admits it (that is the
+    P0-B leak) and no per-fold list contains it. Per-fold lists differ from each other
+    and from the full-sample list.
+
+wiring_smoke_real_data:
+  command: "SELECTION_SMOKE_POOLS=fm247,fmqa SELECTION_SMOKE_MAXF=25 PYTHONPATH=factor_engine .venv/bin/python /tmp/p0b_real_smoke.py"
+  result: |
+    loaded 33 factors from ['fm247', 'fmqa'] (limit 25/pool) in 14s
+    == REAL-DATA per-fold walk-forward lists ==
+      cut=2019-04-01 selected=12
+      cut=2019-10-01 selected=10
+    == full-sample list (LEAKY diagnostic): 14 factors
+    [wf] SAVED selection manifest /tmp/wf_real_manifest.json (2 cuts)
+      fold1 sel window 2016-01-04 .. 2019-03-15 (cut 2019-04-01, purge 10 trading days)
+    REAL-DATA WIRING SMOKE PASS
+      fold1 n=12  fold2 n=10  full_sample n=14
+      fold1-only: ['fmqa:131e5281fdc7692f', 'fmqa:287712d7d7a5bc94']
+      full-sample minus fold1: 2 factors
+  label: real fwd_ret10 (Vwap basis, data/panel/fwd_ret10.parquet) + real fm247/fmqa pool
+    parquet; the later fold's list is a strict subset after 6 more months of purged
+    selection data, and the full-sample list contains 2 factors no fold list contains.
+
+trainer_guard_no_manifest:
+  command: "load_selection_manifest() with no walkforward_selection.json on disk"
+  result: >
+    GUARD OK: /home/sunhaiwei/quant_projects/lightgbm_qs/data/build/walkforward_selection.json
+    not found — run `python factor_selection.py --folds-from-train` first
+  meaning: trainers refuse to start rather than silently train on the full-sample list.
+
+syntax_compile:
+  command: "py_compile over the 8 changed scripts"
+  result: PASS
+
+residuals:
+  - "Full-repo manifest regeneration (factor_selection.py --folds-from-train over all 2449
+     candidates across 9 pools) is a multi-hour CPU job and was NOT launched (CLAUDE.md forbids
+     full-dataset runs without an explicit request). Until it is run, trainers hard-fail with a
+     clear message instead of silently using the leaky full-sample list."
+  - "data/build/features_all.parquet (377 cols, 2026-08-26) predates this change; rebuilding it
+     from the WF union requires the manifest first."
+  - "train_opt_adj.py's purge changes its per-fold OOS row counts vs previous runs (the first 10
+     OOS trading days of each block are now dropped, matching train_final.py)."
+  - "data/build/walkforward_selection.json does not yet exist in build/ (see residual 1)."

@@ -357,9 +357,11 @@ def default_ashare_pv_data_source_config(
 ) -> dict[str, Any]:
     """A 股价量数据源配置（复权权威口径）。
 
-    默认走 ``data_access`` 登记数据集 ``ashare_stock_daily_adj``（Adj* 字段集）；
-    ``max_files`` 限文件时回退直连 parquet（smoke test，仍指向 StockDailyBarAdj）。
-    ADJ_FIELD_MIGRATION（2026-08-28）：A 股行情权威口径 = 后复权表。
+    始终走 ``data_access`` 登记数据集 ``ashare_stock_daily_adj``（Adj* 字段集）。
+    ADJ_FIELD_MIGRATION（2026-08-28）：A 股行情权威口径 = 后复权表。旧 ``max_files``
+    直连 parquet 分支已删除——factor_engine 不允许非 data_access 的 COS/parquet
+    直读 IO（即使 smoke test 也走 data_access 的 read）。``max_files`` 保留为
+    兼容参数（A 股场景不再改变数据源类型）。
     """
     fields = {
         "open": "AdjOpen",
@@ -372,22 +374,14 @@ def default_ashare_pv_data_source_config(
         "ret": "Return",
         "preclose": "AdjPreClose",
     }
+    cfg = {
+        "type": "data_access",
+        "dataset": "ashare_stock_daily_adj",
+        "fields": fields,
+        "read_auto": True,
+    }
     if max_files is not None:
-        cfg: dict[str, Any] = {
-            "type": "parquet",
-            "root": "~/quant_projects/data/a_share/lqtp_data/StockDailyBarAdj",
-            "timestamp_col": "TradeDate",
-            "instrument_col": "Symbol",
-            "fields": fields,
-            "max_files": max_files,
-        }
-    else:
-        cfg = {
-            "type": "data_access",
-            "dataset": "ashare_stock_daily_adj",
-            "fields": fields,
-            "read_auto": True,
-        }
+        cfg["max_files"] = max_files
     if start_date is not None:
         cfg["start_date"] = start_date
     if end_date is not None:

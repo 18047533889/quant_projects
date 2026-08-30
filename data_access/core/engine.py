@@ -808,7 +808,14 @@ class DuckDBEngine:
 
         deadline_sec = max(0.001, deadline_ms / 1000.0)
         absolute_deadline = time.monotonic() + deadline_sec
-        conn = self._deadline_pool.acquire(self._config)
+        # R28-12 全覆盖（execute_reader 流式路径 R42-029）：pool acquire 只允许
+        # 消费剩余 deadline（wait_seconds=min(5, remaining)），与 arrow 路径一致。
+        # 旧实现 ``acquire(self._config)`` 默认最多等 5s —— 50ms 的流式请求会在
+        # pool 被占满时等 5s 才 interrupt，deadline 形同虚设。
+        remaining = max(0.0, absolute_deadline - time.monotonic())
+        conn = self._deadline_pool.acquire(
+            self._config, wait_seconds=min(5.0, remaining)
+        )
         timed_out = threading.Event()
         finished = threading.Event()
 

@@ -27,6 +27,7 @@ from types import MappingProxyType
 from typing import Mapping, Optional
 
 from factor_assets.contracts._canonical import canonical_digest
+from factor_assets.contracts.similarity import is_unknown_identity
 
 __all__ = [
     "FactorLibraryStatus",
@@ -165,6 +166,16 @@ class FactorLibraryMembership:
     def __post_init__(self) -> None:
         if not self.factor_definition_ref:
             raise ValueError("factor_definition_ref is required")
+        # P0-12 (R55 audit): an UNKNOWN placeholder similarity reference is
+        # not a reference — library promotion would treat artifacts computed
+        # under different specs as the same evidence and silently merge them.
+        # Fail closed; ``None`` stays legal (the reference is absent).
+        if isinstance(self.similarity_ref, str) and is_unknown_identity(self.similarity_ref):
+            raise ValueError(
+                f"similarity_ref is UNKNOWN ({self.similarity_ref!r}); a "
+                "library membership may not cite an unknown similarity "
+                "identity — resolve the concrete spec hash first (fail closed)."
+            )
         # Canonicalize the treatment-optimization reference into its transport
         # form (bare str shorthand or full ref mapping PURE-DTO).
         object.__setattr__(

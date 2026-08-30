@@ -49,21 +49,23 @@ class TSMeanNative(SeriesOperator):
         name="ts_mean",
         category="time_series",
         description="滚动均值",
-        param_names=["x", "d"],
+        param_names=["x", "window", "min_periods"],
         return_type="series",
         tags=["time_series", "polars", "native"],
         param_specs={
-            "d": ParamSpec(dtype=int, min=1, default=20, searchable=True, param_role=ParamRole.HORIZON),
+            "window": ParamSpec(dtype=int, min=1, default=20, searchable=True, param_role=ParamRole.HORIZON),
+            "min_periods": ParamSpec(dtype=int, min=1, default=1, searchable=False, param_role=ParamRole.SUPPORT_POLICY),
         },
     )
 
-    def _calculate_series(self, x: pl.DataFrame, d: int = 20, **kwargs) -> pl.DataFrame:
+    def _calculate_series(self, x: pl.DataFrame, window: int = 20, min_periods: int = 1, **kwargs) -> pl.DataFrame:
         from factor_engine.cleaned_operators.parameter_validation import strict_integer
 
-        w = strict_integer(d, "d", minimum=1)
+        w = strict_integer(window, "window", minimum=1)
+        mp = strict_integer(min_periods, "min_periods", minimum=1) if min_periods is not None else 1
         cols = _numeric_cols(x)
-        # ROLLING-EDGE: min_samples=1 == pandas rolling(window, min_periods=1).
-        return x.lazy().with_columns([pl.col(c).rolling_mean(window_size=w, min_samples=1).alias(c) for c in cols]).collect()
+        # ROLLING-EDGE: min_samples matches pandas rolling(window, min_periods).
+        return x.lazy().with_columns([pl.col(c).rolling_mean(window_size=w, min_samples=mp).alias(c) for c in cols]).collect()
 
 
 @register_operator(
@@ -258,7 +260,7 @@ class TSQuantileNative(SeriesOperator):
         tags=["time_series", "polars", "native"],
         param_specs={
             "d": ParamSpec(dtype=int, min=1, default=20, searchable=True, param_role=ParamRole.HORIZON),
-            "q": ParamSpec(dtype=float, min=0.0, max=1.0, default=0.5, searchable=False, param_role=ParamRole.STATE_THRESHOLD),
+            "q": ParamSpec(dtype=float, min=0.0, max=1.0, default=0.5, searchable=True, param_role=ParamRole.STATE_THRESHOLD),
         },
     )
 
@@ -1412,21 +1414,24 @@ class TSTopkSumNative(SeriesOperator):
         name="ts_topk_sum",
         category="time_series",
         description="滚动topk求和",
-        param_names=["x", "window", "k"],
+        param_names=["x", "d", "k"],
         return_type="series",
         tags=["time_series", "polars", "native"],
-        param_aliases={"d": "window"},
+        # R19-050: canonical aliases window→d, n→k (P0-23 single logical
+        # authority — the pandas reference in common/time_series.py owns the
+        # contract; the legacy native surface must declare the same spelling).
+        param_aliases={"window": "d", "n": "k"},
         param_specs={
-            "window": ParamSpec(dtype=int, min=1, default=20, searchable=True, param_role=ParamRole.HORIZON),
-            "k": ParamSpec(dtype=int, min=1, default=5, searchable=False, param_role=ParamRole.SUPPORT_POLICY),
+            "d": ParamSpec(dtype=int, min=1, default=20, searchable=True, param_role=ParamRole.HORIZON),
+            "k": ParamSpec(dtype=int, min=1, default=None, searchable=True, param_role=ParamRole.ECONOMIC),
         },
     )
 
-    def _calculate_series(self, x: pl.DataFrame, window: int = 20, k: int = 5, **kwargs) -> pl.DataFrame:
+    def _calculate_series(self, x: pl.DataFrame, d: int = 20, k: int | None = None, **kwargs) -> pl.DataFrame:
         from factor_engine.cleaned_operators.parameter_validation import strict_integer
 
-        w = strict_integer(window, "window", minimum=1)
-        topk = strict_integer(k, "k", minimum=1)
+        w = strict_integer(kwargs.get("window", d), "d", minimum=1)
+        topk = strict_integer(k if k is not None else kwargs.get("n", d), "k", minimum=1)
         cols = _numeric_cols(x)
         return x.lazy().with_columns([
             pl.col(c).rolling_map(lambda s: s.top_k(topk).sum(), window_size=w).alias(c)

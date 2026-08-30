@@ -240,16 +240,19 @@ def _c(
 _c("return_decimal", "price_volume", "return", RATIO,
   price_basis=PRICE_BASIS_RETURN, cross_market_comparable=True,
   aliases=("ret", "return", "returns"),
-  description="Daily return as a decimal (0.02 == 2%). A: Return/10000; US: Ret identity.")
+  description="Daily return as a decimal (0.02 == 2%). A: Return/10000 (StockDailyBarAdj authority); US: Ret identity.")
 
+# ADJ_FIELD_MIGRATION（2026-08-28）：A 股行情权威口径 = 后复权表。bare
+# open/high/low/close/vwap/volume 一律解析到 continuous_*（复权）概念；
+# raw_* 概念保留但不挂 bare 别名——显式 raw 访问须写 raw_* 全名。
 _c("raw_open", "price_volume", "price", LOCAL_PRICE_PER_SHARE, price_basis=PRICE_BASIS_RAW,
-  aliases=("open",), cross_market_comparable=False)
+  cross_market_comparable=False)
 _c("raw_high", "price_volume", "price", LOCAL_PRICE_PER_SHARE, price_basis=PRICE_BASIS_RAW,
-  aliases=("high",), cross_market_comparable=False)
+  cross_market_comparable=False)
 _c("raw_low", "price_volume", "price", LOCAL_PRICE_PER_SHARE, price_basis=PRICE_BASIS_RAW,
-  aliases=("low",), cross_market_comparable=False)
+  cross_market_comparable=False)
 _c("raw_close", "price_volume", "price", LOCAL_PRICE_PER_SHARE, price_basis=PRICE_BASIS_RAW,
-  aliases=("close",), cross_market_comparable=False)
+  cross_market_comparable=False)
 _c("raw_pre_close", "price_volume", "price", LOCAL_PRICE_PER_SHARE, price_basis=PRICE_BASIS_RAW,
   aliases=("prev_close",), cross_market_comparable=False,
   description="physically lagged previous raw close (lag(raw_close,1)).  NOT the "
@@ -265,37 +268,40 @@ _c("reference_pre_close", "price_volume", "price", LOCAL_PRICE_PER_SHARE,
   description="official reference pre-close (company-action adjusted); distinct "
               "from lag(raw_close,1) (R17-011)")
 _c("raw_vwap", "price_volume", "price", LOCAL_PRICE_PER_SHARE, price_basis=PRICE_BASIS_RAW,
-  aliases=("vwap",), cross_market_comparable=False)
+  cross_market_comparable=False)
 
 _c("continuous_open", "price_volume", "price", LOCAL_PRICE_PER_SHARE,
-  price_basis=PRICE_BASIS_CONTINUOUS, cross_market_comparable=False,
-  description="Backward-adjusted open (Close*Factor family). A: Open*Factor; US: Open*AdjFactor.")
+  price_basis=PRICE_BASIS_CONTINUOUS, aliases=("open",), cross_market_comparable=False,
+  description="Backward-adjusted open (AdjOpen, StockDailyBarAdj authority). A: AdjOpen; US: Open*AdjFactor.")
 _c("continuous_high", "price_volume", "price", LOCAL_PRICE_PER_SHARE,
-  price_basis=PRICE_BASIS_CONTINUOUS, cross_market_comparable=False)
+  price_basis=PRICE_BASIS_CONTINUOUS, aliases=("high",), cross_market_comparable=False)
 _c("continuous_low", "price_volume", "price", LOCAL_PRICE_PER_SHARE,
-  price_basis=PRICE_BASIS_CONTINUOUS, cross_market_comparable=False)
+  price_basis=PRICE_BASIS_CONTINUOUS, aliases=("low",), cross_market_comparable=False)
 _c("continuous_close", "price_volume", "price", LOCAL_PRICE_PER_SHARE,
-  price_basis=PRICE_BASIS_CONTINUOUS, cross_market_comparable=False,
-  description="Backward-adjusted close. A: Close*Factor; US: Close*AdjFactor.")
+  price_basis=PRICE_BASIS_CONTINUOUS, aliases=("close",), cross_market_comparable=False,
+  description="Backward-adjusted close (AdjClose, StockDailyBarAdj authority). A: AdjClose; US: Close*AdjFactor.")
 _c("continuous_vwap", "price_volume", "price", LOCAL_PRICE_PER_SHARE,
-  price_basis=PRICE_BASIS_CONTINUOUS, cross_market_comparable=False)
+  price_basis=PRICE_BASIS_CONTINUOUS, aliases=("vwap",), cross_market_comparable=False)
 
 _c("raw_volume_shares", "price_volume", "volume", SHARES,
-  aliases=("volume",), cross_market_comparable=False,
-  description="Trade volume in shares. NEVER divided by any adjustment factor.")
+  cross_market_comparable=False,
+  description="Trade volume in shares. NEVER divided by any adjustment factor. "
+              "A-share: raw vendor volume is NOT a mineable factor input (ADJ_FIELD_MIGRATION).")
 
 # The platform LQTP manual (functions.yaml) defines ``volume = Volume / Factor``.
 # For FactorEngine the LQTP surface (dialect='lqtp') must therefore evaluate
-# ``volume`` on the ADJUSTED share series, not the raw vendor series.  The
-# ``raw`` alias is remapped here so the LQTP allowlist keeps ``volume`` on the
-# adjusted series while ``raw_volume_shares`` remains the explicit raw series.
+# ``volume`` on the ADJUSTED share series, not the raw vendor series.  The bare
+# ``volume`` alias binds to the adjusted series (A-share authority); ``raw_volume_shares``
+# remains the explicit raw series (A-share provider disabled).
 _c("continuous_volume_shares", "price_volume", "volume", SHARES,
-  aliases=("raw_volume_shares",), cross_market_comparable=False,
-  description="Backward-adjusted trade volume in shares = Volume / Factor (LQTP functions.yaml).")
+  aliases=("volume", "raw_volume_shares"), cross_market_comparable=False,
+  description="Backward-adjusted trade volume in shares = Volume / Factor (LQTP functions.yaml). "
+              "A: Volume/Factor; US: raw Volume (identity).")
 
 _c("amount_local", "price_volume", "amount", LOCAL_MONEY, aliases=("amount", "turnover_value"),
   market_local_only=True, cross_market_comparable=False,
-  description="Turnover amount in local currency (CNY/USD). NOT cross-market comparable as a raw number.")
+  description="Turnover amount in local currency (CNY/USD). NOT cross-market comparable as a raw number. "
+              "A-share authority: StockDailyBarAdj.AdjAmount (ADJ_FIELD_MIGRATION).")
 
 # --- capital / valuation --------------------------------------------------
 _c("market_cap_local", "valuation", "amount", LOCAL_MONEY, market_local_only=True,
@@ -315,12 +321,14 @@ _c("turnover_ratio_decimal", "valuation", "ratio", RATIO, aliases=("turnover_rat
   description="Turnover as decimal. A: TurnoverRatio/100; US: no provider (R17-065).")
 
 # --- price limits (A-share mechanism) -------------------------------------
+# ADJ_FIELD_MIGRATION：涨跌停价从 StockDailyBarAdj.AdjHighLimit/AdjLowLimit 读取
+# （已复权）；price_basis 仍为 RAW_OFFICIAL_LIMIT（涨跌停价语义是交易所官方限价）。
 _c("upper_price_limit", "price_volume", "price", LOCAL_PRICE_PER_SHARE,
   price_basis=PRICE_BASIS_RAW_OFFICIAL_LIMIT, market_local_only=True,
-  aliases=("high_limit",), description="Official daily upper limit price (raw). A-share only.")
+  aliases=("high_limit",), description="Official daily upper limit price (adjusted; StockDailyBarAdj.AdjHighLimit). A-share only.")
 _c("lower_price_limit", "price_volume", "price", LOCAL_PRICE_PER_SHARE,
   price_basis=PRICE_BASIS_RAW_OFFICIAL_LIMIT, market_local_only=True,
-  aliases=("low_limit",), description="Official daily lower limit price (raw). A-share only.")
+  aliases=("low_limit",), description="Official daily lower limit price (adjusted; StockDailyBarAdj.AdjLowLimit). A-share only.")
 
 # --- fundamental ratios ---------------------------------------------------
 # R17-066: ROE has the same DECIMAL UNIT in A/US but different accounting

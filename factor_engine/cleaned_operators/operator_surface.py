@@ -12,11 +12,12 @@ OperatorSurface=Literal["daily","extended","research","unsafe","legacy","interna
 
 DAILY_CANONICALS=frozenset({
 "abs","add","and_","ceil","clip","coalesce","cs_count","cs_demean","cs_mad","cs_mad_zscore","cs_mean","cs_pct_rank","cs_std","cs_sum","divide","eq","exp","fillna_const","floor","ge","group_count","group_max","group_mean","group_min","group_neutralize","group_normalize","group_rank","group_std","group_sum","group_winsorize","group_zscore","gt","inverse","is_finite","is_infinite","is_not_null","is_null","le","log","log_abs","lt","maximum","minimum","multiply","ne","neg","normalize","not_","or_","period_average","period_cagr","period_change","power","quarter_from_cumulative","rank","safe_div_null","sign","signed_log","signed_sqrt","sqrt","subtract","tanh","ts_autocorr","ts_beta","ts_corr","ts_cov","ts_delay","ts_delta","ts_log_return","ts_max","ts_mean","ts_median","ts_min","ts_pct","ts_rank","ts_sharpe","ts_std","ts_sum","ts_var","ts_zscore","ttm_from_cumulative","ttm_from_quarterly","where","winsorize","yoy_by_period","zscore",
+# R55 platform-audit P0: LQTP 平台财务/清洗辅助（PIT-safe，非 repair 逃生）——
+# fillna(x,v)、avg2(a,b)、ts_positive_streak(x) 提升到 daily surface；
+# open_close_return 是 intraday_return 别名（close/open-1）的 canonical 目标。
+"fillna","avg2","ts_positive_streak","open_close_return",
 })
 # 2026-08 第三轮:most promoted-research factors are now certified and live on the
-# daily surface (see _DAILY_RECERTIFIED_2026_08).  They must REMAIN in
-# EXTENDED_ONLY_CANONICALS (the union below) because layer_governance's static
-# partition check counts every registered operator against DAILY_CANONICALS ∪
 # EXTENDED ∪ RESEARCH ∪ UNSAFE ∪ LEGACY ∪ INTERNAL and DAILY_FACTOR_MIGRATED is
 # not one of those partitions.  classify_canonical checks the daily set first, so
 # daily wins regardless.

@@ -101,18 +101,15 @@ class TSMomentNativePolars(SeriesOperator):
         k = _positive(k, "k")
 
         def moment_fn(values: pl.Series) -> float:
-            # WINDOW-SEMANTICS PARITY (pandas reference): pandas ts_moment
-            # cold-start: first d-1 rows are NaN (rolling start), then any
-            # window with a finite sample computes.  values is the padded
-            # trailing window of LENGTH d (or fewer at warmup).
+            # WINDOW-SEMANTICS PARITY (pandas ts_moment reference):
+            # pandas rolling_apply propagates NaN for THE VERY WINDOW THAT
+            # CONTAINS a missing value (raw=False contract) — windows below
+            # the d-length warmup are NaN too.  We mirror that exactly.
             if len(values) < d:
                 return math.nan
             valid = np.asarray(values.to_numpy(), dtype=float)
-            valid = valid[np.isfinite(valid)]
-            if valid.size == 0:
+            if valid.size < d or not np.all(np.isfinite(valid)):
                 return math.nan
-            # Use a compensated direct-window mean so large offsets do not
-            # change the central moment through avoidable summation error.
             mean = math.fsum(float(value) for value in valid) / valid.size
             return float(math.fsum((float(value) - mean) ** k for value in valid) / valid.size)
 

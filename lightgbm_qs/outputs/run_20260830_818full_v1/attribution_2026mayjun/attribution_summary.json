@@ -1,0 +1,644 @@
+{
+ "may": {
+  "worst_stocks": [
+   {
+    "asset": "600309.SH",
+    "industry": "化工I",
+    "contrib": -0.0073
+   },
+   {
+    "asset": "000830.SZ",
+    "industry": "化工I",
+    "contrib": -0.0056
+   },
+   {
+    "asset": "600426.SH",
+    "industry": "化工I",
+    "contrib": -0.0045
+   },
+   {
+    "asset": "601233.SH",
+    "industry": "石油石化I",
+    "contrib": -0.0042
+   },
+   {
+    "asset": "000895.SZ",
+    "industry": "食品饮料I",
+    "contrib": -0.0036
+   },
+   {
+    "asset": "300118.SZ",
+    "industry": "电气设备I",
+    "contrib": -0.0036
+   },
+   {
+    "asset": "002271.SZ",
+    "industry": "建筑材料I",
+    "contrib": -0.0035
+   },
+   {
+    "asset": "601155.SH",
+    "industry": "房地产I",
+    "contrib": -0.0032
+   },
+   {
+    "asset": "300347.SZ",
+    "industry": "医药生物I",
+    "contrib": -0.0032
+   },
+   {
+    "asset": "002601.SZ",
+    "industry": "化工I",
+    "contrib": -0.0031
+   },
+   {
+    "asset": "300601.SZ",
+    "industry": "医药生物I",
+    "contrib": -0.0028
+   },
+   {
+    "asset": "300003.SZ",
+    "industry": "医药生物I",
+    "contrib": -0.0026
+   },
+   {
+    "asset": "600763.SH",
+    "industry": "医药生物I",
+    "contrib": -0.0025
+   },
+   {
+    "asset": "002001.SZ",
+    "industry": "化工I",
+    "contrib": -0.0023
+   },
+   {
+    "asset": "002714.SZ",
+    "industry": "农林牧渔I",
+    "contrib": -0.0023
+   }
+  ],
+  "best_stocks": [
+   {
+    "asset": "300037.SZ",
+    "industry": "电气设备I",
+    "contrib": 0.0002
+   },
+   {
+    "asset": "600176.SH",
+    "industry": "建筑材料I",
+    "contrib": 0.0008
+   },
+   {
+    "asset": "600745.SH",
+    "industry": "电子I",
+    "contrib": 0.0017
+   },
+   {
+    "asset": "600460.SH",
+    "industry": "电子I",
+    "contrib": 0.0019
+   },
+   {
+    "asset": "000733.SZ",
+    "industry": "国防军工I",
+    "contrib": 0.0024
+   },
+   {
+    "asset": "002409.SZ",
+    "industry": "电子I",
+    "contrib": 0.0024
+   },
+   {
+    "asset": "601699.SH",
+    "industry": "煤炭I",
+    "contrib": 0.0025
+   },
+   {
+    "asset": "002056.SZ",
+    "industry": "电气设备I",
+    "contrib": 0.0026
+   },
+   {
+    "asset": "300502.SZ",
+    "industry": "通信I",
+    "contrib": 0.003
+   },
+   {
+    "asset": "600703.SH",
+    "industry": "电子I",
+    "contrib": 0.0032
+   }
+  ],
+  "industry": {
+   "化工I": {
+    "may_avg_weight": 0.15337823576772602,
+    "may_contrib": -0.026409006388596425,
+    "jun_avg_weight": 0.15833359149604034,
+    "jun_contrib": -0.0022750931930824846
+   },
+   "医药生物I": {
+    "may_avg_weight": 0.15919481508496724,
+    "may_contrib": -0.015827641556843776,
+    "jun_avg_weight": 0.09829679113329727,
+    "jun_contrib": -0.004094355598295613
+   },
+   "电气设备I": {
+    "may_avg_weight": 0.08120241974763057,
+    "may_contrib": -0.007684734767864366,
+    "jun_avg_weight": 0.07823010682663388,
+    "jun_contrib": -0.0019623605453024198
+   },
+   "房地产I": {
+    "may_avg_weight": 0.06701246365718638,
+    "may_contrib": -0.004577870408742434,
+    "jun_avg_weight": 0.08657348030073346,
+    "jun_contrib": -0.02118414636318306
+   },
+   "食品饮料I": {
+    "may_avg_weight": 0.0509270632846894,
+    "may_contrib": -0.004443566469129238,
+    "jun_avg_weight": 0.045669738754310366,
+    "jun_contrib": -0.004543999279094844
+   },
+   "有色金属I": {
+    "may_avg_weight": 0.018801297831884205,
+    "may_contrib": -0.004251067253276866,
+    "jun_avg_weight": 0.08352440001392371,
+    "jun_contrib": -0.02589744832958919
+   },
+   "石油石化I": {
+    "may_avg_weight": 0.026814384554163264,
+    "may_contrib": -0.004218292951445353,
+    "jun_avg_weight": 0.0169006451861068,
+    "jun_contrib": 0.004105547018145202
+   },
+   "农林牧渔I": {
+    "may_avg_weight": 0.03117208680894496,
+    "may_contrib": -0.004195419757860536,
+    "jun_avg_weight": 0.01648149054167525,
+    "jun_contrib": -0.002921771151370119
+   },
+   "银行I": {
+    "may_avg_weight": 0.05177699305795914,
+    "may_contrib": -0.0034252891619084664,
+    "jun_avg_weight": 0.026622252668736208,
+    "jun_contrib": -0.000544354358087204
+   },
+   "建筑材料I": {
+    "may_avg_weight": 0.041458686939703546,
+    "may_contrib": -0.0026780015458480666,
+    "jun_avg_weight": 0.042816425586254425,
+    "jun_contrib": -0.006169306037679224
+   },
+   "计算机I": {
+    "may_avg_weight": 0.04429212301434779,
+    "may_contrib": -0.002218179564939183,
+    "jun_avg_weight": 0.08163409308743562,
+    "jun_contrib": -0.012421996320588196
+   },
+   "非银金融I": {
+    "may_avg_weight": 0.020831795889044463,
+    "may_contrib": -0.0014534310345139553,
+    "jun_avg_weight": 0.01905671454428608,
+    "jun_contrib": 0.0018030636884791825
+   },
+   "传媒I": {
+    "may_avg_weight": 0.0149505104017866,
+    "may_contrib": -0.0011484851321144508,
+    "jun_avg_weight": 0.0791464580058552,
+    "jun_contrib": -0.0006260743330741866
+   },
+   "机械设备I": {
+    "may_avg_weight": 0.016557855025671395,
+    "may_contrib": -0.0007412226699995382,
+    "jun_avg_weight": 0.01114200055544769,
+    "jun_contrib": -0.0027786650615701115
+   },
+   "钢铁I": {
+    "may_avg_weight": 0.00846426489968315,
+    "may_contrib": -0.0005009771987577701,
+    "jun_avg_weight": 0.005533335182263855,
+    "jun_contrib": -0.000290888546896061
+   },
+   "休闲服务I": {
+    "may_avg_weight": 0.005182643402949387,
+    "may_contrib": -0.00028020230130937996,
+    "jun_avg_weight": 0.001164653871879117,
+    "jun_contrib": -0.00041758746171769687
+   },
+   "家用电器I": {
+    "may_avg_weight": 0.009237938907650444,
+    "may_contrib": -0.00019919332547291358,
+    "jun_avg_weight": 0.0020759678952356614,
+    "jun_contrib": 1.4443534005792173e-05
+   },
+   "商业贸易I": {
+    "may_avg_weight": 0.0005257455633077995,
+    "may_contrib": -5.3838036374705306e-05,
+    "jun_avg_weight": 0.00011814658241414719,
+    "jun_contrib": -2.7638140343918526e-05
+   },
+   "汽车I": {
+    "may_avg_weight": 6.205827825649394e-06,
+    "may_contrib": -1.0455007767692474e-07,
+    "jun_avg_weight": 0.009774966334126342,
+    "jun_contrib": -0.0026672016839802072
+   },
+   "公用事业I": {
+    "may_avg_weight": 3.066426832436475e-07,
+    "may_contrib": -4.5096163646149344e-09,
+    "jun_avg_weight": 6.89093500278015e-08,
+    "jun_contrib": -1.402367248345417e-09
+   },
+   "建筑装饰I": {
+    "may_avg_weight": 1.4210158516968043e-07,
+    "may_contrib": -3.796717573849857e-09,
+    "jun_avg_weight": 3.19333491619054e-08,
+    "jun_contrib": -2.273955715706103e-09
+   },
+   "交通运输I": {
+    "may_avg_weight": 0.006848439367576889,
+    "may_contrib": 0.0001706205726750909,
+    "jun_avg_weight": 0.001538994834419574,
+    "jun_contrib": -7.801012492822068e-05
+   },
+   "国防军工I": {
+    "may_avg_weight": 0.019318410622365934,
+    "may_contrib": 0.001983201529895981,
+    "jun_avg_weight": 0.00547581912448941,
+    "jun_contrib": 0.00067639711234793
+   },
+   "煤炭I": {
+    "may_avg_weight": 0.012816556738075732,
+    "may_contrib": 0.0024484802086734174,
+    "jun_avg_weight": 0.013860673539799384,
+    "jun_contrib": 0.0028439429320744323
+   },
+   "通信I": {
+    "may_avg_weight": 0.012488160879581121,
+    "may_contrib": 0.003034581610893951,
+    "jun_avg_weight": 0.002806364202633817,
+    "jun_contrib": 0.0006406429713246078
+   },
+   "电子I": {
+    "may_avg_weight": 0.04892765672333613,
+    "may_contrib": 0.010034939625029552,
+    "jun_avg_weight": 0.022962404658418013,
+    "jun_contrib": -0.0007022804342282275
+   }
+  }
+ },
+ "jun": {
+  "worst_stocks": [
+   {
+    "asset": "600383.SH",
+    "industry": "房地产I",
+    "contrib": -0.0095
+   },
+   {
+    "asset": "002405.SZ",
+    "industry": "计算机I",
+    "contrib": -0.0077
+   },
+   {
+    "asset": "600489.SH",
+    "industry": "有色金属I",
+    "contrib": -0.006
+   },
+   {
+    "asset": "002271.SZ",
+    "industry": "建筑材料I",
+    "contrib": -0.0057
+   },
+   {
+    "asset": "601155.SH",
+    "industry": "房地产I",
+    "contrib": -0.0052
+   },
+   {
+    "asset": "600426.SH",
+    "industry": "化工I",
+    "contrib": -0.0052
+   },
+   {
+    "asset": "000975.SZ",
+    "industry": "有色金属I",
+    "contrib": -0.0051
+   },
+   {
+    "asset": "002155.SZ",
+    "industry": "有色金属I",
+    "contrib": -0.0046
+   },
+   {
+    "asset": "000895.SZ",
+    "industry": "食品饮料I",
+    "contrib": -0.0043
+   },
+   {
+    "asset": "001979.SZ",
+    "industry": "房地产I",
+    "contrib": -0.0037
+   },
+   {
+    "asset": "300118.SZ",
+    "industry": "电气设备I",
+    "contrib": -0.0036
+   },
+   {
+    "asset": "600988.SH",
+    "industry": "有色金属I",
+    "contrib": -0.0035
+   },
+   {
+    "asset": "000762.SZ",
+    "industry": "有色金属I",
+    "contrib": -0.0031
+   },
+   {
+    "asset": "000425.SZ",
+    "industry": "机械设备I",
+    "contrib": -0.0028
+   },
+   {
+    "asset": "000002.SZ",
+    "industry": "房地产I",
+    "contrib": -0.0028
+   }
+  ],
+  "best_stocks": [
+   {
+    "asset": "002409.SZ",
+    "industry": "电子I",
+    "contrib": 0.0008
+   },
+   {
+    "asset": "002001.SZ",
+    "industry": "化工I",
+    "contrib": 0.0012
+   },
+   {
+    "asset": "600160.SH",
+    "industry": "化工I",
+    "contrib": 0.0013
+   },
+   {
+    "asset": "600109.SH",
+    "industry": "非银金融I",
+    "contrib": 0.0018
+   },
+   {
+    "asset": "603444.SH",
+    "industry": "传媒I",
+    "contrib": 0.0021
+   },
+   {
+    "asset": "601699.SH",
+    "industry": "煤炭I",
+    "contrib": 0.0029
+   },
+   {
+    "asset": "600352.SH",
+    "industry": "化工I",
+    "contrib": 0.003
+   },
+   {
+    "asset": "002601.SZ",
+    "industry": "化工I",
+    "contrib": 0.0037
+   },
+   {
+    "asset": "601233.SH",
+    "industry": "石油石化I",
+    "contrib": 0.0041
+   },
+   {
+    "asset": "600732.SH",
+    "industry": "电气设备I",
+    "contrib": 0.0046
+   }
+  ],
+  "industry": {
+   "有色金属I": {
+    "may_avg_weight": 0.018801297831884205,
+    "may_contrib": -0.004251067253276866,
+    "jun_avg_weight": 0.08352440001392371,
+    "jun_contrib": -0.02589744832958919
+   },
+   "房地产I": {
+    "may_avg_weight": 0.06701246365718638,
+    "may_contrib": -0.004577870408742434,
+    "jun_avg_weight": 0.08657348030073346,
+    "jun_contrib": -0.02118414636318306
+   },
+   "计算机I": {
+    "may_avg_weight": 0.04429212301434779,
+    "may_contrib": -0.002218179564939183,
+    "jun_avg_weight": 0.08163409308743562,
+    "jun_contrib": -0.012421996320588196
+   },
+   "建筑材料I": {
+    "may_avg_weight": 0.041458686939703546,
+    "may_contrib": -0.0026780015458480666,
+    "jun_avg_weight": 0.042816425586254425,
+    "jun_contrib": -0.006169306037679224
+   },
+   "食品饮料I": {
+    "may_avg_weight": 0.0509270632846894,
+    "may_contrib": -0.004443566469129238,
+    "jun_avg_weight": 0.045669738754310366,
+    "jun_contrib": -0.004543999279094844
+   },
+   "医药生物I": {
+    "may_avg_weight": 0.15919481508496724,
+    "may_contrib": -0.015827641556843776,
+    "jun_avg_weight": 0.09829679113329727,
+    "jun_contrib": -0.004094355598295613
+   },
+   "农林牧渔I": {
+    "may_avg_weight": 0.03117208680894496,
+    "may_contrib": -0.004195419757860536,
+    "jun_avg_weight": 0.01648149054167525,
+    "jun_contrib": -0.002921771151370119
+   },
+   "机械设备I": {
+    "may_avg_weight": 0.016557855025671395,
+    "may_contrib": -0.0007412226699995382,
+    "jun_avg_weight": 0.01114200055544769,
+    "jun_contrib": -0.0027786650615701115
+   },
+   "汽车I": {
+    "may_avg_weight": 6.205827825649394e-06,
+    "may_contrib": -1.0455007767692474e-07,
+    "jun_avg_weight": 0.009774966334126342,
+    "jun_contrib": -0.0026672016839802072
+   },
+   "化工I": {
+    "may_avg_weight": 0.15337823576772602,
+    "may_contrib": -0.026409006388596425,
+    "jun_avg_weight": 0.15833359149604034,
+    "jun_contrib": -0.0022750931930824846
+   },
+   "电气设备I": {
+    "may_avg_weight": 0.08120241974763057,
+    "may_contrib": -0.007684734767864366,
+    "jun_avg_weight": 0.07823010682663388,
+    "jun_contrib": -0.0019623605453024198
+   },
+   "电子I": {
+    "may_avg_weight": 0.04892765672333613,
+    "may_contrib": 0.010034939625029552,
+    "jun_avg_weight": 0.022962404658418013,
+    "jun_contrib": -0.0007022804342282275
+   },
+   "传媒I": {
+    "may_avg_weight": 0.0149505104017866,
+    "may_contrib": -0.0011484851321144508,
+    "jun_avg_weight": 0.0791464580058552,
+    "jun_contrib": -0.0006260743330741866
+   },
+   "银行I": {
+    "may_avg_weight": 0.05177699305795914,
+    "may_contrib": -0.0034252891619084664,
+    "jun_avg_weight": 0.026622252668736208,
+    "jun_contrib": -0.000544354358087204
+   },
+   "休闲服务I": {
+    "may_avg_weight": 0.005182643402949387,
+    "may_contrib": -0.00028020230130937996,
+    "jun_avg_weight": 0.001164653871879117,
+    "jun_contrib": -0.00041758746171769687
+   },
+   "钢铁I": {
+    "may_avg_weight": 0.00846426489968315,
+    "may_contrib": -0.0005009771987577701,
+    "jun_avg_weight": 0.005533335182263855,
+    "jun_contrib": -0.000290888546896061
+   },
+   "交通运输I": {
+    "may_avg_weight": 0.006848439367576889,
+    "may_contrib": 0.0001706205726750909,
+    "jun_avg_weight": 0.001538994834419574,
+    "jun_contrib": -7.801012492822068e-05
+   },
+   "商业贸易I": {
+    "may_avg_weight": 0.0005257455633077995,
+    "may_contrib": -5.3838036374705306e-05,
+    "jun_avg_weight": 0.00011814658241414719,
+    "jun_contrib": -2.7638140343918526e-05
+   },
+   "建筑装饰I": {
+    "may_avg_weight": 1.4210158516968043e-07,
+    "may_contrib": -3.796717573849857e-09,
+    "jun_avg_weight": 3.19333491619054e-08,
+    "jun_contrib": -2.273955715706103e-09
+   },
+   "公用事业I": {
+    "may_avg_weight": 3.066426832436475e-07,
+    "may_contrib": -4.5096163646149344e-09,
+    "jun_avg_weight": 6.89093500278015e-08,
+    "jun_contrib": -1.402367248345417e-09
+   },
+   "家用电器I": {
+    "may_avg_weight": 0.009237938907650444,
+    "may_contrib": -0.00019919332547291358,
+    "jun_avg_weight": 0.0020759678952356614,
+    "jun_contrib": 1.4443534005792173e-05
+   },
+   "通信I": {
+    "may_avg_weight": 0.012488160879581121,
+    "may_contrib": 0.003034581610893951,
+    "jun_avg_weight": 0.002806364202633817,
+    "jun_contrib": 0.0006406429713246078
+   },
+   "国防军工I": {
+    "may_avg_weight": 0.019318410622365934,
+    "may_contrib": 0.001983201529895981,
+    "jun_avg_weight": 0.00547581912448941,
+    "jun_contrib": 0.00067639711234793
+   },
+   "非银金融I": {
+    "may_avg_weight": 0.020831795889044463,
+    "may_contrib": -0.0014534310345139553,
+    "jun_avg_weight": 0.01905671454428608,
+    "jun_contrib": 0.0018030636884791825
+   },
+   "煤炭I": {
+    "may_avg_weight": 0.012816556738075732,
+    "may_contrib": 0.0024484802086734174,
+    "jun_avg_weight": 0.013860673539799384,
+    "jun_contrib": 0.0028439429320744323
+   },
+   "石油石化I": {
+    "may_avg_weight": 0.026814384554163264,
+    "may_contrib": -0.004218292951445353,
+    "jun_avg_weight": 0.0169006451861068,
+    "jun_contrib": 0.004105547018145202
+   }
+  }
+ },
+ "model_ic_2026": {
+  "may": {
+   "mean_ic": -0.1407,
+   "n": 18,
+   "std": 0.1154
+  },
+  "jun": {
+   "mean_ic": -0.1133,
+   "n": 21,
+   "std": 0.2525
+  },
+  "jan_apr": {
+   "mean_ic": 0.0301,
+   "n": 57,
+   "std": 0.2168
+  },
+  "jul": {
+   "mean_ic": 0.072,
+   "n": 13,
+   "std": 0.158
+  },
+  "ytd": {
+   "mean_ic": -0.0207,
+   "n": 109
+  }
+ },
+ "failed_factor_ic": [
+  {
+   "factor": "alphasage_zscore_ts_cov_sqrt_vol_ret",
+   "col": "new026:vol_ret_covariance_zscore",
+   "may_ic": 0.0502,
+   "may_n": 18,
+   "jun_ic": -0.028,
+   "jun_n": 21,
+   "jan_apr_ic": 0.082,
+   "other_n": 57,
+   "all_2026_ic": 0.0465
+  }
+ ],
+ "minute_factors": {
+  "in_2026q2_cut": 9,
+  "total_factors": 814,
+  "names": [
+   "new026:vwap_squared_deviation_intensity",
+   "new026:vwap_deviation_intensity_squared_amount_weighted",
+   "new026:amount_weighted_impact",
+   "new026:high_volume_amount_weighted_impact",
+   "new026:high_volume_amount_weighted_squared_impact",
+   "new026:high_volume_squared_return_weighted_impact",
+   "new026:high_volume_volume_weighted_squared_impact",
+   "new026:skew_weighted_volume_event_intensity",
+   "new026:skew_weighted_volume_event_intensity_close"
+  ]
+ },
+ "baseline": {
+  "818full_strategy_may": -0.08493995949191491,
+  "818full_strategy_jun": -0.06458748883717047,
+  "818full_bench_may": 0.003081364120743002,
+  "818full_bench_jun": 0.027904638227594702,
+  "2000fac_strategy_may": -0.0899892915223569,
+  "2000fac_strategy_jun": -0.03442927181503852,
+  "2000fac_bench_may": -0.014965355110121314,
+  "2000fac_bench_jun": 0.033244414351276896
+ }
+}

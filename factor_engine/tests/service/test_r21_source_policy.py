@@ -10,8 +10,8 @@ from factor_engine.service.security import ApprovedSourcePolicy
 
 def _policy(**kwargs):
     base = dict(
-        approved_profiles={"prod_daily": {"dataset": "ashare_stock_daily"}},
-        approved_datasets=frozenset({"ashare_stock_daily", "us_stock_daily"}),
+        approved_profiles={"prod_daily": {"dataset": "ashare_stock_daily_adj"}},
+        approved_datasets=frozenset({"ashare_stock_daily_adj", "us_stock_daily"}),
         allowed_clickhouse_hosts=frozenset({"ch.internal.example"}),
         allowed_clickhouse_tables=frozenset({"ch.internal.example:prod:factors"}),
         approved_roots=frozenset({"/data/factors/approved"}),
@@ -23,7 +23,7 @@ def _policy(**kwargs):
 class TestApprovedSourcePolicy:
     def test_data_access_allowlist(self):
         p = _policy()
-        p.validate_source({"type": "data_access", "dataset": "ashare_stock_daily"}, production=True)
+        p.validate_source({"type": "data_access", "dataset": "ashare_stock_daily_adj"}, production=True)
         with pytest.raises(ServiceError):
             p.validate_source({"type": "data_access", "dataset": "secret_db"}, production=True)
 
@@ -64,7 +64,7 @@ class TestApprovedSourcePolicy:
         from factor_engine.service.security import resolve_source_profile
 
         src = resolve_source_profile({"approved_source_profile_id": "prod_daily"}, policy=_policy())
-        assert src == {"type": "data_access", "dataset": "ashare_stock_daily"}
+        assert src == {"type": "data_access", "dataset": "ashare_stock_daily_adj"}
 
     def test_unknown_profile_rejected(self):
         from factor_engine.service.security import resolve_source_profile

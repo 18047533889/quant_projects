@@ -41,6 +41,7 @@ __all__ = [
     "get_q_compiler",
     "check_q_availability",
     "is_q_available",
+    "QUnavailableError",
 ]
 
 from factor_engine.backend.q_backend.q_backend import QBackend, get_q_backend
@@ -53,3 +54,4 @@ from factor_engine.backend.q_backend.q_process_manager import (
 from factor_engine.backend.q_backend.q_adapter import QTypeAdapter
 from factor_engine.backend.q_backend.q_executor import QExecutor
 from factor_engine.backend.q_backend.q_compiler import QCompiler, QRegionPlan, get_q_compiler
+from factor_engine.backend.q_backend.q_errors import QUnavailableError

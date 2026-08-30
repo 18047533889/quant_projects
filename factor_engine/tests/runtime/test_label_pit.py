@@ -21,7 +21,9 @@ pd = pytest.importorskip("pandas")
 def test_default_mining_label_config_has_gap():
     cfg = default_mining_label_config(horizon_bars=5, feature_lookback_bars=20, gap_bars=1)
     assert cfg["gap_bars"] == 1
+    # ADJ_FIELD_MIGRATION: default label basis is vwap (AdjVwap authority).
     assert "forward_return" in cfg["label_formula"]
+    assert "vwap" in cfg["label_formula"]
 
 
 def test_assert_label_feature_no_overlap_raises():

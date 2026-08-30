@@ -11,10 +11,12 @@ import this layer. This layer MAY import domain contracts
 (``quant_platform.app.contracts``) but must NOT import domain internals
 (``factor_engine.*``, ``factor_assets.*`` adapters, DB/API/storage layers).
 
-Authoritative helpers are NOT re-implemented here — identity comes from
-``contracts/identities.py`` (``canonicalize`` / ``FactorValueIdentity``),
-content hashing from ``contracts/_contenthash.py`` (``content_hash`` /
-``canonical_str``).
+Authoritative helpers are NOT re-implemented here — identity is CARRIED from the
+owning domain package (R55 P0-5): ``contracts/identities.py`` exposes the
+format-validated carried-ref types (``IdentityRef`` /
+``FactorDefinitionRef``) and content-hash format checks from
+``contracts/identities.sha256_hex``; the platform-side anti-replay token comes
+from ``contracts/_contenthash.py`` (``content_hash`` / ``canonical_str``).
 
 Import-resolution note (ref: ``contracts/__init__.py`` docstring): a family of
 mutually re-importing pure-logic modules ("bundles") may freely reference each

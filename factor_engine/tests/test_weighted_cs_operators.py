@@ -14,6 +14,19 @@ try:
 except ImportError:
     HAS_POLARS = False
 
+
+def setup_module():
+    """Reset registry lifecycle to allow operator registration during test imports.
+
+    The registry gets finalized during normal operation, but test modules that
+    import operator classes trigger registration at import time. This hook ensures
+    the registry is writable before the imports happen.
+    """
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
+    if OperatorRegistry._lifecycle != OperatorRegistry.Lifecycle.BUILDING:
+        OperatorRegistry._lifecycle = OperatorRegistry.Lifecycle.BUILDING
+
+
 # Import directly from module to avoid __init__.py conflicts
 import sys
 from pathlib import Path

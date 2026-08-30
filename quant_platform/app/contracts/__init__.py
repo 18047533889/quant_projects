@@ -11,6 +11,17 @@ See ``platform/docs/PLATFORM_CONTRACTS_DRAFT.md`` for the full field tables.
 from __future__ import annotations
 
 from ._contenthash import canonical_str, content_hash
+from .admission import (
+    ADMISSION_DECISIONS,
+    DECISION_APPROVED,
+    DECISION_REJECTED,
+    DECISION_SHADOWED,
+    REASON_AUTHORITY_ABSENT,
+    AdmissionAuthority,
+    AdmissionRequest,
+    AdmissionVerdict,
+    RefuseAdmission,
+)
 from .artifact_ref import (
     ARTIFACT_TYPES,
     ARTIFACT_TYPE_BACKTEST,
@@ -88,12 +99,13 @@ from .feature_set import (
     retrain_required_for_diff,
 )
 from .identities import (
-    EvaluationIdentity,
-    FactorDefinitionIdentity,
-    FactorValueIdentity,
-    Identity,
-    TreatmentIdentity,
-    canonicalize,
+    EvaluationRef,
+    FactorDefinitionRef,
+    FactorValueRef,
+    IdentityRef,
+    TreatmentRef,
+    require_non_empty,
+    sha256_hex,
 )
 from .jobs import (
     ErrorClass,
@@ -158,6 +170,16 @@ __all__ = [
     # contenthash
     "canonical_str",
     "content_hash",
+    # admission delegation seam (R55 P0-6)
+    "AdmissionAuthority",
+    "AdmissionRequest",
+    "AdmissionVerdict",
+    "RefuseAdmission",
+    "ADMISSION_DECISIONS",
+    "DECISION_APPROVED",
+    "DECISION_REJECTED",
+    "DECISION_SHADOWED",
+    "REASON_AUTHORITY_ABSENT",
     # artifact_ref
     "ArtifactRef",
     "ARTIFACT_TYPES",
@@ -217,13 +239,14 @@ __all__ = [
     "LifecycleState",
     "HealthState",
     "QRPPipelineStage",
-    # identities
-    "Identity",
-    "FactorDefinitionIdentity",
-    "FactorValueIdentity",
-    "EvaluationIdentity",
-    "TreatmentIdentity",
-    "canonicalize",
+    # identities — CARRIED domain-identity refs (the platform never mints them)
+    "IdentityRef",
+    "FactorDefinitionRef",
+    "FactorValueRef",
+    "EvaluationRef",
+    "TreatmentRef",
+    "sha256_hex",
+    "require_non_empty",
     # cluster_library
     "ClusterConversionType",
     "ClusterVersion",

@@ -12,6 +12,17 @@ from .trial import Trial, TrialStatus
 from .splits import EvaluationProtocol, SplitPlan
 from .validator import TrialValidatorIdentity, MutationGrammarValidator
 from .library_snapshot_ref import LibrarySnapshotRef
+from .treatment_integrity import (
+    EVIDENCE_SCHEMA_VERSION,
+    RAW_TREATMENT_KIND,
+    IntegrityCheckResult,
+    TreatmentIntegrityEvidence,
+    TreatmentIntegrityStatus,
+    build_integrity_evidence,
+    describe_integrity_problem,
+    digest_value,
+    require_integrity_evidence,
+)
 
 __all__ = [
     "CandidateMutation",
@@ -28,4 +39,14 @@ __all__ = [
     "TrialValidatorIdentity",
     "MutationGrammarValidator",
     "LibrarySnapshotRef",
+    # Treatment integrity evidence (R55 P0-9)
+    "EVIDENCE_SCHEMA_VERSION",
+    "RAW_TREATMENT_KIND",
+    "IntegrityCheckResult",
+    "TreatmentIntegrityEvidence",
+    "TreatmentIntegrityStatus",
+    "build_integrity_evidence",
+    "describe_integrity_problem",
+    "digest_value",
+    "require_integrity_evidence",
 ]

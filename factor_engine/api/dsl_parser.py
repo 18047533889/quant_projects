@@ -115,6 +115,19 @@ class _ExprBuilder:
         if isinstance(node,ast.Call):return self._visit_call(node)
         if isinstance(node,ast.Compare):return self._visit_compare(node)
         if isinstance(node,ast.BinOp):return self._visit_binop(node)
+        if isinstance(node,ast.BoolOp):
+            # LQTP formulas carry ``A and B`` / ``A or B`` (the platform DSL
+            # uses the python keywords).  Map to the same elementwise
+            # and_/or_ operators the bitwise path uses.
+            from factor_engine.api.cleaned_ops import make_cleaned_call_factory
+            left=self._visit(node.values[0])
+            for value in node.values[1:]:
+                right=self._visit(value)
+                if isinstance(node.op,ast.And):
+                    left=make_cleaned_call_factory("and_")(left,right)
+                elif isinstance(node.op,ast.Or):
+                    left=make_cleaned_call_factory("or_")(left,right)
+            return left
         if isinstance(node,ast.UnaryOp) and isinstance(node.op,ast.USub):return -self._visit(node.operand)
         if isinstance(node,ast.UnaryOp) and isinstance(node.op,ast.UAdd):return self._visit(node.operand)
         if isinstance(node,ast.UnaryOp) and isinstance(node.op,ast.Invert):

@@ -258,7 +258,11 @@ def _resolve_source_dataset(data_source: Any) -> str | None:
 
 
 def _physical_dataset_for_logical_table(table: str) -> str | None:
-    """逻辑表名（``StockDailyBar``）→ 物理 DataAccess dataset（``ashare_stock_daily``）。
+    """逻辑表名（``StockDailyBarAdj``）→ 物理 DataAccess dataset（``ashare_stock_daily_adj``）。
+
+    ADJ_FIELD_MIGRATION: bare price-volume logical tables resolve to the adj
+    authority dataset. ``StockDailyBar`` still resolves to ``ashare_stock_daily``
+    for Factor/Volume-only upstream identity (raw price fields are not mineable).
 
     #收官轮 P0：edge 的物理 ``source_dataset`` 绝不能写成 FactorEngine 的 logical
     table name——``DataEvent.dataset`` 是物理 dataset，表名写错会导致

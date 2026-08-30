@@ -37,6 +37,10 @@ RANK_SPECS: dict[str, RankSpec] = {
         pct_formula="rank_minus1_over_nminus1",
         null_policy="exclude",
         singleton_value=0.5,
+        # PARITY-SWEEP-R56: finite-mask authority (cs_rank_01 / NEW-255): ±Inf is
+        # not a rankable extreme and stays NULL; the cross-section base counts
+        # only np.isfinite cells.
+        inf_policy="exclude",
     ),
     # 截面/组内百分位：rank/n；NULL 不参与分母
     "rank_pct": RankSpec(
@@ -44,18 +48,29 @@ RANK_SPECS: dict[str, RankSpec] = {
         pct_formula="rank_over_n",
         null_policy="exclude",
         singleton_value=1.0,
+        # PARITY-SWEEP-R56: pandas authority ``CrossSectionalRank._calculate_series
+        # = x.rank(pct=True, axis=1)`` ranks over NaN-skipped rows but INCLUDES
+        # ±Inf as a valid extreme (D gets rank/n=1.0).  The old default
+        # ``inf_policy="exclude"`` made polars_long / SQL drop the Inf row while
+        # the pandas backend ranked it — 10% of the cross-section diverged on the
+        # Inf day of test_cs_family_systematic_parity.
+        inf_policy="participate",
     ),
     "cs_pct_rank": RankSpec(
         method="average",
         pct_formula="rank_over_n",
         null_policy="exclude",
         singleton_value=1.0,
+        inf_policy="participate",
     ),
     "group_rank": RankSpec(
         method="average",
         pct_formula="rank_over_n",
         null_policy="exclude",
         singleton_value=1.0,
+        # PARITY-SWEEP-R56: group_rank follows the same pandas-percentile authority
+        # (rank/n over NaN-skipped rows, Inf participates as an extreme).
+        inf_policy="participate",
     ),
     # 滚动百分位：窗口内 average rank / 窗口内非 NULL 计数
     "ts_rank": RankSpec(
@@ -63,6 +78,11 @@ RANK_SPECS: dict[str, RankSpec] = {
         pct_formula="rank_over_n",
         null_policy="exclude",
         singleton_value=1.0,
+        # PARITY-SWEEP-R56: pandas ``rolling.rank(pct=True)`` treats ±Inf as a
+        # missing sample — the Inf cell outputs NaN and Inf does NOT participate
+        # in the window rank (unlike cs_pct_rank / rank_pct which rank over the
+        # full NaN-skipped row and keep Inf as an extreme).  Keep exclude.
+        inf_policy="exclude",
     ),
 }
 
@@ -71,8 +91,16 @@ def rank_spec_for(canon: str) -> RankSpec:
     """查询算子 rank 契约；未知算子回退 average + rank_over_n。"""
     from factor_engine.cleaned_operators.registry import OperatorRegistry
 
+    # PARITY-SWEEP-R56: resolve only ONE hop so an exact-duplicate alias
+    # (rank_pct -> cs_pct_rank) picks up the alias target's own RankSpec instead
+    # of falling through to a default.  ``_aliases`` may still be empty during
+    # very early imports, in which case the direct canonical name is used.
     name = OperatorRegistry._aliases.get(canon, canon)
-    return RANK_SPECS.get(name, RankSpec())
+    if name in RANK_SPECS:
+        return RANK_SPECS[name]
+    # One-hop alias resolution (e.g. rank_pct -> cs_pct_rank) before giving up.
+    resolved = OperatorRegistry.resolve_canonical_optional(name)
+    return RANK_SPECS.get(resolved, RankSpec())
 
 
 def rank_tie_method(canon: str) -> str:
@@ -96,10 +124,15 @@ def polars_cs_rank_expr(
     """截面/组内 rank expr；``partition_cols`` 如 ``(_TS,)`` 或 ``(_TS, _GRP)``。"""
     import polars as pl
 
-    from factor_engine.backend.stat_valid import polars_rank_input, polars_row_stat_invalid, rank_excludes_nan
+    from factor_engine.backend.stat_valid import polars_rank_input, polars_row_stat_invalid
 
     sp = spec or rank_spec_for(canon)
-    exclude_nan = rank_excludes_nan(canon)
+    # PARITY-SWEEP-R56: NaN exclusion follows RankSpec.null_policy; ±Inf follows
+    # RankSpec.inf_policy.  cs_pct_rank / rank_pct / group_rank / ts_rank set
+    # inf_policy="participate" (pandas ``x.rank(pct=True, axis=1)`` ranks over
+    # NaN-skipped rows but keeps ±Inf as a rankable extreme — D gets rank/n=1.0);
+    # the finite-mask ops cs_rank_01 / rank keep inf_policy="exclude" (NEW-255).
+    exclude_nan = sp.inf_policy == "exclude"
     invalid = polars_row_stat_invalid(value_col, exclude_nan=exclude_nan)
     rank_input = polars_rank_input(value_col, exclude_nan=exclude_nan)
     r = rank_input.rank(method=sp.method).over(*partition_cols, order_by=order_by)
@@ -135,7 +168,9 @@ def polars_ts_rank_expr(
     from factor_engine.backend.stat_valid import polars_rank_input, polars_row_stat_invalid, rank_excludes_nan
 
     sp = spec or rank_spec_for(canon)
-    exclude_nan = rank_excludes_nan(canon)
+    # PARITY-SWEEP-R56: same NaN/Inf split as polars_cs_rank_expr — NaN follows
+    # null_policy, ±Inf follows inf_policy (ts_rank: Inf participates).
+    exclude_nan = sp.inf_policy == "exclude"
     w = int(window)
     mp = max(int(min_periods), 1)
     rank_input = polars_rank_input(value_col, exclude_nan=exclude_nan)

@@ -51,11 +51,13 @@ class TSZScoreNative(SeriesOperator):
         name="ts_zscore",
         category="time_series",
         description="滚动Z-Score标准化",
-        param_names=["x", "window"],
+        param_names=["x", "window", "min_periods", "null_policy", "nan_policy", "includes_current_bar", "ddof", "zero_std_policy"],
         return_type="series",
         tags=["time_series", "statistics", "polars", "native"],
+        param_aliases={"d": "window"},
         param_specs={
             "window": ParamSpec(dtype=int, min=1, default=20, searchable=True, param_role=ParamRole.HORIZON),
+            "min_periods": ParamSpec(dtype=int, min=1, default=1, searchable=False, param_role=ParamRole.SUPPORT_POLICY),
         },
     )
 
@@ -63,18 +65,25 @@ class TSZScoreNative(SeriesOperator):
         self,
         x: pl.DataFrame,
         window: int = 20,
+        min_periods: int = 1,
+        null_policy: str = "ignore",
+        nan_policy: str = "propagate",
+        includes_current_bar: bool = True,
+        ddof: int = 1,
+        zero_std_policy: str = "zero",
         **kwargs,
     ) -> pl.DataFrame:
         from factor_engine.cleaned_operators.parameter_validation import strict_integer
 
         w = strict_integer(window, "window", minimum=1)
-        if "min_periods" in kwargs:
-            raise TypeError("ts_zscore does not expose min_periods")
+        mp = strict_integer(min_periods, "min_periods", minimum=1)
+        if mp > w:
+            mp = w
 
         def zscore_fn(values: pl.Series) -> float:
             raw = np.asarray(values.to_numpy(), dtype=float)
             finite = raw[np.isfinite(raw)]
-            if finite.size < 2:
+            if finite.size < mp:
                 return math.nan
             current = raw[-1]
             if not np.isfinite(current):

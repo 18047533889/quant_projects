@@ -317,7 +317,6 @@ def _load_catalog() -> dict:
     # Fallback: assemble the same ``operators`` list the R18 exporter writes,
     # straight from the live OperatorRegistry at refresh time.
     try:
-        from factor_engine.cleaned_operators import load_all
         from factor_engine.mining.direct_use import (
             direct_use_matrix_rows,
             retained_direct_rows,
@@ -328,6 +327,7 @@ def _load_catalog() -> dict:
             f"{CATALOG_PATH} and live OperatorRegistry unavailable "
             f"({type(_reg_exc).__name__}: {_reg_exc})"
         ) from _reg_exc
+    from factor_engine.cleaned_operators import load_all
     load_all()
     rows = direct_use_matrix_rows()
     direct = retained_direct_rows(rows)

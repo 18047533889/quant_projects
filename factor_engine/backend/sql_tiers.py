@@ -179,6 +179,12 @@ SQL_IMPLEMENTED_CANONICALS: frozenset[str] = frozenset(
         "ts_last_if",
         "ts_days_since",
         "ts_true_streak",
+        # R55 platform-audit P0: LQTP helpers promoted to daily — avg2(a,b) /
+        # ts_positive_streak(x) now have emitter support (avg2 → (a+b)/2;
+        # ts_positive_streak → consecutive-positive run), so mark them SQL
+        # implemented alongside ts_true_streak.
+        "avg2",
+        "ts_positive_streak",
         "cs_bucket",
         "cs_multi_resid",
         "cs_wls_resid",
@@ -243,6 +249,7 @@ SQL_IMPLEMENTED_CANONICALS: frozenset[str] = frozenset(
         "ADX",
         "UltimateOscillator",
         "ADL",
+        "rolling_adl_flow",
         "ChaikinOscillator",
         "ForceIndex",
         "EaseOfMovement",

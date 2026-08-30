@@ -220,6 +220,12 @@ ASHARE_TABLE_SPECS: tuple[TableSpec, ...] = (
     # "current industry viewed into the past" lookahead.  Single source still required.
     _table(
         "StockIndustry", "ashare_stock_industry", time="TradeDate", domain="classification",
+        # 2026-08-29 LQTP compat: the platform logical name ``IndustryDaily`` is
+        # the same (TradeDate, Symbol, IndustrySource) classification table; the
+        # field registry resolves source refs by table alias, so ``IndustryDaily``
+        # must be an alias of ``StockIndustry`` or the FieldSpec lookup fails and
+        # the industry group key loses its ``group_key`` semantic kind.
+        aliases=("IndustryDaily",),
         table_kind="relation", join_policy="exact", required_parameters=("IndustrySource",),
         strict_pit_allowed=True,
         metadata={"pit_reason": "exact_daily relation; PIT-safe; IndustrySource required",

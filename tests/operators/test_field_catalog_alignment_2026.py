@@ -114,12 +114,17 @@ def test_factor_direction_is_verified_backward_multiplier():
 
 def test_cos_unit_normalization_scales():
     checks = {
-        "ret": ("basis_point", 0.0001),          # Return bp -> decimal ratio
         "turnover_ratio": ("percent", 0.01),      # TurnoverRatio % -> ratio
         "share_ratio": ("percent", 0.01),         # ShareRatio % -> ratio
         "index_weight": ("percent", 0.01),        # Weight % -> ratio
         "roe": ("percent", 0.01),                 # StockIndicator ROE % -> ratio
     }
+    # ADJ_FIELD_MIGRATION: bare ``ret`` is ambiguous (StockDailyBar + StockDailyBarAdj);
+    # resolve the adj authority table explicitly.
+    ret = FIELD_REGISTRY.get("ret", table="StockDailyBarAdj")
+    assert ret is not None
+    assert ret.source_unit == "basis_point"
+    assert ret.scale_to_canonical == pytest.approx(0.0001)
     for logical, (src_unit, scale) in checks.items():
         spec = FIELD_REGISTRY.get(logical)
         assert spec is not None, logical
@@ -159,13 +164,13 @@ def test_strict_unknown_fields_fail_closed_in_production():
         UnknownFieldSemanticError,
     )
 
-    src = DataAccessSource(dataset="ashare_stock_daily", strict_unknown_fields=True)
+    src = DataAccessSource(dataset="ashare_stock_daily_adj", strict_unknown_fields=True)
     physical, _ = src._resolve_columns(["close"])  # registered field resolves
-    assert physical == ["Close"]
+    assert physical == ["AdjClose"]
     with pytest.raises(UnknownFieldSemanticError):
         src._resolve_columns(["no_such_column"])
     with pytest.raises(UnknownFieldSemanticError):
-        # is_suspend belongs to ashare_stock_daily (physical IsSuspend) and has
+        # is_suspend belongs to the adj daily table (physical IsSuspend) and has
         # no presence in the index daily dataset.
         DataAccessSource(dataset="ashare_index_daily", strict_unknown_fields=True)._resolve_columns(
             ["is_suspend"]

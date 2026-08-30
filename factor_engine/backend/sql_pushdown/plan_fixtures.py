@@ -329,6 +329,20 @@ def _minimal_plan_raw(op: str) -> PlanNode:
         return PlanNode(op=op, inputs=[close], attrs={})
     if op == "index_weight":
         return PlanNode(op=op, inputs=[close], attrs={"normalize": True})
+    if op == "fin_turnover":
+        # fin_turnover: flow/balance 双序列比率；minimal_plan 不能喂 1 输入
+        # 占位（emitter 分支要求 ≥2 输入，否则编译 None）。
+        return PlanNode(op=op, inputs=[close, volume], attrs={})
+    if op == "rank_corr":
+        # rank_corr: 双序列 Spearman 秩相关（window 从 attrs / 尾部 literal）。
+        return PlanNode(op=op, inputs=[close, volume, literal(20.0)], attrs={"window": 20})
+    if op == "rolling_adl_flow":
+        # canonical 名（ADL 的 R11 rename 目标）需要 4 序列 + window literal。
+        return PlanNode(
+            op=op,
+            inputs=[high, low, close, volume, literal(20.0)],
+            attrs={"window": 20},
+        )
     return PlanNode(op=op, inputs=[close], attrs={"d": 3, "window": 3, "span": 3})
 
 

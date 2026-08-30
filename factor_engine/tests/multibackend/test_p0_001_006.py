@@ -214,6 +214,7 @@ class TestMBP0004BackendRegionModel:
         """TransferEdge dataclass should be importable and usable."""
         from factor_engine.planner.backend_region import (
             TransferEdge,
+            TransferTransform,
             PhysicalBackend,
             Representation,
         )
@@ -226,6 +227,7 @@ class TestMBP0004BackendRegionModel:
             target_backend=PhysicalBackend.DUCKDB_SQL,
             source_representation=Representation.POLARS_LONG,
             target_representation=Representation.DUCKDB_RELATION,
+            transform=TransferTransform.DUCKDB_TO_ARROW,
             estimated_rows=100000,
             estimated_bytes=800000,
             estimated_transfer_ms=10.0,
@@ -248,6 +250,7 @@ class TestMBP0005PhysicalRegionPlan:
             PhysicalRegionPlan,
             BackendRegion,
             TransferEdge,
+            TransferTransform,
             PhysicalBackend,
             Representation,
             ExecutionAxis,
@@ -283,6 +286,7 @@ class TestMBP0005PhysicalRegionPlan:
             target_backend=PhysicalBackend.DUCKDB_SQL,
             source_representation=Representation.POLARS_LONG,
             target_representation=Representation.DUCKDB_RELATION,
+            transform=TransferTransform.DUCKDB_TO_ARROW,
             estimated_rows=100000,
             estimated_bytes=800000,
             estimated_transfer_ms=10.0,

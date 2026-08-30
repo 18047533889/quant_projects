@@ -324,7 +324,11 @@ class QTypeAdapter:
                     raise TypeError(f"Column {col!r} is not integer-compatible with {q_type.value}")
                 result[col] = result[col].astype(target)
             elif q_type in (QType.REAL, QType.FLOAT):
-                if not (pd.api.types.is_numeric_dtype(dtype) or pd.api.types.is_object_dtype(dtype)):
+                if not (
+                    pd.api.types.is_numeric_dtype(dtype)
+                    or pd.api.types.is_object_dtype(dtype)
+                    or pd.api.types.is_string_dtype(dtype)
+                ):
                     raise TypeError(f"Column {col!r} is not numeric-compatible with {q_type.value}")
                 result[col] = result[col].astype("float32" if q_type == QType.REAL else "float64")
             elif q_type in (QType.TIMESTAMP, QType.DATE, QType.TIMESPAN, QType.TIME):

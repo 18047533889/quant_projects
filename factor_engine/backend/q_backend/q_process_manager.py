@@ -15,7 +15,10 @@ import shutil
 import threading
 from dataclasses import dataclass
 from enum import Enum
+from importlib.util import find_spec
 from typing import Any
+
+from factor_engine.backend.q_backend.q_errors import QUnavailableError
 
 logger = logging.getLogger(__name__)
 
@@ -54,6 +57,52 @@ class QProcessManager:
         self._q_connection: Any | None = None
         self._checked = False
 
+    def _finalize_available(
+        self,
+        *,
+        version: str | None = None,
+        error_message: str | None = None,
+    ) -> QProcessInfo:
+        """Record a genuinely available q runtime.
+
+        Only reachable with real q-runtime evidence (q/kdb+ binary on PATH, or
+        a licensed pykx that connects).  The connection is fetched lazily by
+        ``get_connection`` so ``is_available`` never performs fake work.
+        """
+        try:
+            import pykx as kx
+            pykx_version = getattr(kx, "__version__", "unknown")
+        except Exception:
+            pykx_version = None
+        self._process_info = QProcessInfo(
+            status=QAvailabilityStatus.AVAILABLE,
+            version=version,
+            process_id=os.getpid(),
+            pykx_version=pykx_version,
+            error_message=error_message,
+        )
+        self._checked = True
+        return self._process_info
+
+    def _pykx_imports_and_runs(self) -> bool:
+        """True only when a real pykx is importable AND connects to a q process.
+
+        This is the honest integration probe: merely having pykx on disk is not
+        enough — the license must be valid and ``kx.q`` must actually come up.
+        """
+        try:
+            import pykx as kx
+        except ImportError:
+            return False
+        try:
+            if not self._check_license(kx):
+                return False
+            q = kx.q
+            q("1+1")
+            return True
+        except Exception:
+            return False
+
     def check_availability(self) -> QProcessInfo:
         """检查 q 运行时可用性。
 
@@ -69,6 +118,12 @@ class QProcessManager:
             # and never inferred from a stale parked process-info.  When unset,
             # ``Q_ENABLE`` mirrors availability back onto itself so the manager
             # stays honest about the q process that actually exists.
+            # Q_ENABLE is an explicit override.  Honesty requirement: it must
+            # never *invent* an available q runtime — it may only short-circuit
+            # the availability check when there is real external evidence that a
+            # q process will be reachable (a q/kdb+ binary on PATH, or a
+            # licensed PyKX env).  Without that evidence we report the real
+            # gate: LICENSE_MISSING, never a fabricated AVAILABLE.
             environmental_enabled = os.environ.get("Q_ENABLE", "")
             if environmental_enabled:
                 binary_only = (
@@ -80,16 +135,29 @@ class QProcessManager:
                     or os.environ.get("QKDBLIC", "")
                     or os.environ.get("KYBIN", "")
                 )
+                try:
+                    installed_pykx = bool(find_spec("pykx") is not None)
+                except Exception:
+                    installed_pykx = False
+                truly_available = (
+                    binary_only
+                    or (pypi_licensed and installed_pykx)
+                    or not installed_pykx and self._pykx_imports_and_runs()
+                )
+                if truly_available:
+                    return self._finalize_available(
+                        version=os.environ.get("Q_ENV_VERSION"),
+                        error_message=None,
+                    )
+                # Fail closed: Q_ENABLE with no q binary and no loadable/licensed
+                # pykx must NOT masquerade as an available q runtime.
                 self._process_info = QProcessInfo(
-                    status=(
-                        QAvailabilityStatus.AVAILABLE
-                        if binary_only or pypi_licensed
-                        else QAvailabilityStatus.LICENSE_MISSING
-                    ),
+                    status=QAvailabilityStatus.LICENSE_MISSING,
                     error_message=(
-                        None
-                        if binary_only or pypi_licensed
-                        else "Q_ENABLE set but no q binary / pykx license evidence"
+                        "Q_ENABLE set but no q binary, no pykx license evidence, "
+                        "and no loadable pykx that connects: q runtime NOT "
+                        "provisioned (fail-closed; Q_ENABLE is not a fake-success "
+                        "switch)"
                     ),
                 )
                 self._checked = True
@@ -177,12 +245,15 @@ class QProcessManager:
             q 连接对象
 
         抛出:
-            RuntimeError: q 不可用时
+            QUnavailableError: 本环境没有真实 q 运行时（fail-closed，绝不伪装
+                AVAILABLE，也绝不静默回退其他后端）。``QUnavailableError`` 是
+                ``QProcessUnavailableError`` 的 typed 子类，携带具体缺失组件原因。
         """
         info = self.check_availability()
         if info.status != QAvailabilityStatus.AVAILABLE:
-            raise RuntimeError(
-                f"q runtime unavailable: {info.status.value}. "
+            raise QUnavailableError(
+                f"q runtime unavailable in this environment "
+                f"(fail-closed; no fake success): {info.status.value}. "
                 f"Error: {info.error_message}"
             )
         return self._q_connection

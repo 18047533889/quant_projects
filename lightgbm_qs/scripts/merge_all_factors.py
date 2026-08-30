@@ -73,6 +73,7 @@ pools = [
     ("optfac",     "wide",  "data/factor_pools/optimized_factors"),   # 本地优化后因子(428)
     ("factmat",    "wide",  "data/factor_pools/factor_matrices"),     # 本地因子矩阵(61)
     ("lqtp",       "wide",  "data/factor_pools/lqtp"),                # LQTP 因子(本地+gRPC, 1272)
+    ("new026",     "wide",  "data/factor_pools/new_20260830"),        # 本周新挖+分钟(34, 翻转后)
 ]
 # delivery 是目录嵌套，单独展开（name 取父目录 hash，保证 246 个各自唯一）
 candidates = []   # (pool, name, path, fmt)
@@ -128,10 +129,41 @@ icdf.to_csv(f"{ROOT}/data/build/rankic_all_factors.csv", index=False)
 plog(f"== 完成 rank_ic 计算，共 {len(icdf)} 因子 ==")
 
 # ---------- 筛选 rank_ic>0.015 ----------
+# P0-B (2026-08-28): this full-sample list is a DIAGNOSTIC ONLY. It was computed with
+# rank_IC over ALL dates (future OOS labels included), so it must NEVER feed training.
+# The research-correct per-fold lists live in data/build/walkforward_selection.json,
+# produced by factor_selection.py --folds-from-train (purged, train-window-only stats).
+# The feature matrix below is built from the UNION of the per-fold walk-forward lists
+# so that every fold's own factor columns are physically available to the trainer,
+# which then picks each fold's subset (see train_final.py / train_opt_adj.py).
 sel = icdf[(icdf["rank_ic"] > 0.015) & (~icdf["drop"])].sort_values("rank_ic", ascending=False)
-plog(f"== 选中因子 (rank_ic>0.015): {len(sel)} ==")
+plog(f"== 选中因子 (rank_ic>0.015, 全样本诊断, 严禁直接喂训练): {len(sel)} ==")
 sel.to_csv(f"{ROOT}/data/build/selected_factors_full.csv", index=False)
-sel_names = sel["name"].tolist()
+
+WF_SELECTION_JSON = f"{ROOT}/data/build/walkforward_selection.json"
+wf_names = []
+if os.path.exists(WF_SELECTION_JSON):
+    import sys as _sys, json as _json
+    _sys.path.insert(0, f"{ROOT}/scripts")
+    from factor_selection import load_selection_manifest  # noqa: E402
+    try:
+        _folds, _meta = load_selection_manifest(path=WF_SELECTION_JSON)
+        wf_names = sorted({f for lst in _folds.values() for f in lst})
+        plog(f"== walk-forward 每折清单并集: {len(wf_names)} 个因子 (purge={_meta.get('purge_trading_days')}, "
+             f"cuts={len(_folds)}) ==")
+    except Exception as e:
+        plog(f"!! walkforward_selection.json 不可用: {e}")
+        wf_names = []
+else:
+    plog("!! 缺 data/build/walkforward_selection.json —— 运行 "
+         "factor_selection.py --folds-from-train 生成每折清单。本次仅输出诊断清单。")
+
+sel_names = list(dict.fromkeys(wf_names)) if wf_names else []
+if not sel_names:
+    plog("!! 无 walk-forward 每折清单可用 —— 不构建特征矩阵(避免全样本泄漏)。"
+         "请先跑 factor_selection.py --folds-from-train 后重跑本脚本。")
+    raise SystemExit(2)
+plog(f"== 特征矩阵列集 = 每折 walk-forward 清单并集: {len(sel_names)} ==")
 
 # ---------- 完全重复去重：按因子值高度相关(>0.98)聚类，每簇只留 rank_ic 最高者 ----------
 plog("开始按因子值相关性去重（完全重复 = corr>0.98 簇内只留 rank_ic 最高）…")
@@ -150,6 +182,12 @@ for key in sel_names:
 
 skeys = list(samples)
 to_drop = set()
+def _rank_ic_of(name):
+    """On-selection-set rank_ic if present, else the full-sample diagnostic value."""
+    row = sel.loc[sel["name"] == name, "rank_ic"]
+    if len(row):
+        return float(row.iloc[0])
+    return float(icdf.loc[icdf["name"] == name, "rank_ic"].fillna(-1.0).iloc[0])
 for i in range(len(skeys)):
     for j in range(i + 1, len(skeys)):
         a, b = skeys[i], skeys[j]
@@ -158,9 +196,9 @@ for i in range(len(skeys)):
             continue
         corr = s.iloc[:, 0].corr(s.iloc[:, 1])
         if corr >= CORR_THRESH:
-            # 保留 rank_ic 高者，丢低者
-            ic_a = sel.loc[sel["name"] == a, "rank_ic"].iloc[0]
-            ic_b = sel.loc[sel["name"] == b, "rank_ic"].iloc[0]
+            # 保留 rank_ic 高者，丢低者（诊断 rank_ic 只作簇内排序，不做入选）
+            ic_a = _rank_ic_of(a)
+            ic_b = _rank_ic_of(b)
             drop_this = a if ic_a <= ic_b else b
             to_drop.add(drop_this)
             plog(f"  去重: {drop_this} (corr={corr:.3f}, 与 {'/' .join(sorted({a,b}-{drop_this}))})")

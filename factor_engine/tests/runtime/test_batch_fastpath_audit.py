@@ -18,10 +18,21 @@ from tests.helpers import InMemorySeriesSource
 @pytest.fixture(scope="module")
 def _loaded():
     from factor_engine.cleaned_operators import load_all
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.registry import _BOOTSTRAP_TOKEN
     from factor_engine.backend.sql_pushdown.sql_registry import register_sql_backends
 
     load_all()
-    register_sql_backends()
+    # P0-14: register_sql_backends patches registry catalog metadata for the
+    # SQL canonical set.  After load_all() the registry is FROZEN, so the
+    # marker pass must run inside the bootstrap thaw window and the registry
+    # must be re-frozen afterwards (same pattern as the hardening suite).
+    OperatorRegistry.thaw_for_bootstrap(_BOOTSTRAP_TOKEN)
+    try:
+        register_sql_backends()
+    finally:
+        OperatorRegistry.finalize()
+        OperatorRegistry.freeze()
 
 
 @pytest.fixture

@@ -28,6 +28,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import os
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -35,7 +36,13 @@ from datetime import datetime, timezone
 from typing import Any, BinaryIO, Callable, Mapping, Sequence
 
 from data_access.core.exceptions import DataError, ValidationError
-from data_access.read.object_store import ObjectStore
+from data_access.read.object_store import (
+    MAX_PART_NUMBER,
+    MIN_PART_BYTES,
+    ObjectStore,
+    iter_parts_from_bytes,
+    iter_parts_from_stream,
+)
 
 logger = logging.getLogger("data_access.object_store_generation_publisher")
 
@@ -212,6 +219,11 @@ class ObjectStoreGenerationPublisher:
         self.bucket = bucket
         self.multipart_threshold = multipart_threshold
         self.writer_id = str(writer_id or "")
+        # P0-06: 单 part 上传的有限重试（PartNumber 不变，不重试整个 upload）。
+        self._part_retries = max(1, int(os.environ.get("DA_MP_PART_RETRIES", "3")))
+        self._part_retry_backoff = max(
+            0.0, float(os.environ.get("DA_MP_PART_RETRY_BACKOFF", "0.05"))
+        )
         self._pending: dict[str, _PendingGeneration] = {}
         # generation_id -> prefix（begin 时记录，finish 后保留，供 list/gc 定位 manifest）。
         self._gen_prefix: dict[str, str] = {}
@@ -268,8 +280,14 @@ class ObjectStoreGenerationPublisher:
         rel_key = _safe_object_key(key)
         full_key = f"{pending.prefix}/{pending.generation_id}/{rel_key}"
 
-        blob = _coerce_bytes(data)  # bytes | BinaryIO（publisher 不整读）
-        self._upload(full_key, blob)
+        if isinstance(data, bytes):
+            blob = data
+            self._upload(full_key, blob)
+        else:
+            # BinaryIO 入口：直接把流交给 store 的流式 multipart（逐 part 读 +
+            # 有界 in-flight 队列，绝不 ``read()`` 整读）。流不可回放——store 的
+            # 流 producer 失败会标记 _StreamingProduceFailure 并立即 abort。
+            self._upload_stream(full_key, data)
 
         # 上传后验证 size + sha256。BinaryIO 无法整读回验 —— 由 store 上传时
         # 边传边算（sha256 在流式路径中由 producer 累计），head 只验证 size。
@@ -278,18 +296,19 @@ class ObjectStoreGenerationPublisher:
             raise DataError(
                 f"generation {generation_id} 对象 {full_key} 上传后 head 缺失"
             )
-        if isinstance(blob, bytes):
+        if isinstance(data, bytes):
             actual_size = head.get("size")
-            if actual_size is not None and int(actual_size) != len(blob):
+            if actual_size is not None and int(actual_size) != len(data):
                 raise DataError(
                     f"generation {generation_id} 对象 {full_key} size 不匹配："
-                    f"期望 {len(blob)} 实际 {actual_size}"
+                    f"期望 {len(data)} 实际 {actual_size}"
                 )
-            size = len(blob)
-            sha = _sha256_bytes(blob)
+            size = len(data)
+            sha = _sha256_bytes(data)
         else:
-            size = -1  # 流无法回读 —— 由 store 的流式校验保证（head size 由服务端聚合）
-            sha = ""
+            # 流入口：sha256 逐块回读（顺序流式，不整读进内存），size 由
+            # 回读字节数累加并与 head size 交叉校验。
+            size, sha = self._verify_stream(full_key, head)
         pending.objects.append(
             GenerationObject(
                 key=rel_key,
@@ -452,27 +471,169 @@ class ObjectStoreGenerationPublisher:
     # ---- 内部实现 ----------------------------------------------------------
 
     def _upload(self, full_key: str, blob: bytes) -> None:
-        """上传单个对象；大对象走 multipart。"""
+        """上传单个对象；大对象走真实 multipart（有界内存：只持有单 part 切片）。
+
+        bytes 入口：长度已知。达到/超过 ``multipart_threshold`` 走 multipart，
+        否则单 ``put_object``。multipart 时用 :func:`iter_parts_from_bytes`
+        惰性切 part —— 每片独立切片（``data[offset:offset+part_size]``），一次
+        只持有 1 个 part 的内存（S3 下限 5 MiB 以内），绝不把整对象二次拷贝
+        常驻。逐 part 上传交给 ``store.upload_part``（store 内部对该 part 失败
+        重试 + 有界 in-flight 队列），part 上传即释放。PartNumber 0-based 内部
+        索引由 store 统一换算为 S3 1-based（``_validate_part_number``）。
+
+        任何失败 abort 清理已上传 part（P0-10：CURRENT 不被部分代次污染）。
+        """
         if len(blob) >= self.multipart_threshold:
-            upload_id = self.store.begin_multipart(full_key)
-            try:
-                # 分片上传（每片 8MB）。PartNumber 1-based（S3 域 1..10000）：
-                # ``upload_part`` 的 ``part_index`` 是 0-based 内部索引，这里的
-                # 顺序即 part 顺序；完整对象 PartNumber = 1..N 由 store 换算。
-                chunk = self.multipart_threshold
-                for idx, offset in enumerate(range(0, len(blob), chunk), start=1):
-                    self.store.upload_part(
-                        upload_id, full_key, idx, blob[offset : offset + chunk]
-                    )
-                self.store.complete_multipart(upload_id, full_key)
-            except Exception:
-                try:
-                    self.store.abort_multipart(upload_id, full_key)
-                except Exception:
-                    pass
-                raise
+            chunk = max(self.multipart_part_size(), MIN_PART_BYTES)
+            self._upload_multipart_bytes(full_key, blob, chunk)
         else:
             self.store.put_object(full_key, blob)
+
+    def _upload_multipart_bytes(
+        self, full_key: str, blob: bytes, chunk: int
+    ) -> None:
+        """bytes 入口的真实 multipart（有界内存：一次只持有 1 个 part 切片）。"""
+        max_parts = (len(blob) + chunk - 1) // chunk
+        if max_parts > MAX_PART_NUMBER:
+            from data_access.core.exceptions import MultipartPartCountError
+
+            raise MultipartPartCountError(
+                f"multipart 对象 {full_key!r} 需要 {len(blob)} 字节 / part_size "
+                f"{chunk} = {max_parts} 个 part，超过 S3 上限 {MAX_PART_NUMBER}"
+            )
+        upload_id = self.store.begin_multipart(full_key)
+        try:
+            # 0-based 内部索引 → store 落 1-based S3 PartNumber（P0-06）。
+            # 单 part 失败重试：ObjectStore.upload_part 的 ``part_index`` 是
+            # 0-based 内部索引，store（COSObjectStore/LocalObjectStore）会做
+            # 有界 in-flight 队列 + 单 part 重试（不重试整个 upload）。但 fake/
+            # 精简 store（测试 recorder）没有内置重试——这里对单 part 失败做
+            # ``_part_retries`` 次重试，保证 P0-06「part 失败重试该 part」语义
+            # 对任意 ObjectStore 实现成立（重试同一 part_index，PartNumber 不变）。
+            for idx, part in iter_parts_from_bytes(blob, chunk):
+                self._upload_part_with_retry(upload_id, full_key, idx, part)
+            self.store.complete_multipart(upload_id, full_key)
+        except Exception:
+            try:
+                self.store.abort_multipart(upload_id, full_key)
+            except Exception:
+                pass
+            raise
+
+    def _upload_part_with_retry(
+        self, upload_id: str, full_key: str, part_index: int, part: bytes
+    ) -> None:
+        """单 part 上传 + 有限重试（PartNumber 不变，绝不重试整个 upload）。"""
+        import time as _time
+
+        last_exc: Exception | None = None
+        for attempt in range(self._part_retries):
+            try:
+                self.store.upload_part(upload_id, full_key, part_index, part)
+                return
+            except Exception as exc:  # noqa: BLE001 - 重试单 part 瞬时失败
+                last_exc = exc
+                if attempt < self._part_retries - 1:
+                    _time.sleep(self._part_retry_backoff)
+        raise last_exc if last_exc is not None else RuntimeError("part upload failed")
+
+    def _upload_stream(self, full_key: str, stream: BinaryIO) -> None:
+        """BinaryIO 入口：直接把流交给 store 的流式 multipart（有界内存）。
+
+        不在此 ``read()`` 整读；store 逐 part（part_size）从流读 + 有界 in-flight
+        队列上传。流不可回放 —— store 的流 producer 失败抛
+        ``_StreamingProduceFailure``（立即 abort 不重试）。
+
+        注意：store 的 ``put_object`` 可能不把流当流（LocalObjectStore 直接
+        ``write_bytes``，需要整读；只有 COSObjectStore 走流式 multipart）。这里
+        按 store 是否具备流式能力决定入口：具备（COSObjectStore）→ 直接传流，
+        不具备 → 交给 ``_upload`` 走分块 multipart（与 bytes 同路径，PartNumber
+        0-based → store 落 1-based）。
+        """
+        from data_access.read.object_store import COSObjectStore
+
+        if isinstance(self.store, COSObjectStore):
+            try:
+                self.store.put_object(full_key, stream)
+            except Exception:
+                # store 的 put_object 流式路径失败已 abort（abort_on_error 默认 True）；
+                # 这里不吞错，让调用方（writer）知道上传失败。
+                raise
+            return
+        # 非 COS store（LocalObjectStore / fake）：逐块读入内存切 part（有界：
+        # 一次只持有 1 个 part），走与 bytes 相同的 multipart 骨架。
+        chunk = self.multipart_part_size()
+        parts: list[tuple[int, bytes]] = []
+        for idx, part in iter_parts_from_stream(stream, chunk):
+            parts.append((idx, part))
+        if not parts:
+            parts = [(0, b"")]
+        max_parts = len(parts)
+        if max_parts > MAX_PART_NUMBER:
+            from data_access.core.exceptions import MultipartPartCountError
+
+            raise MultipartPartCountError(
+                f"multipart 对象 {full_key!r} part 数 {max_parts} 超过 S3 上限 "
+                f"{MAX_PART_NUMBER}"
+            )
+        upload_id = self.store.begin_multipart(full_key)
+        try:
+            for idx, part in parts:
+                self._upload_part_with_retry(upload_id, full_key, idx, part)
+            self.store.complete_multipart(upload_id, full_key)
+        except Exception:
+            try:
+                self.store.abort_multipart(upload_id, full_key)
+            except Exception:
+                pass
+            raise
+
+    def _verify_stream(self, full_key: str, head: dict) -> tuple[int, str]:
+        """流入口的 size+sha256 回读校验：顺序逐块读，绝不整读进内存。
+
+        COSObjectStore 的 ``open_reader`` 是有界 Range GET 句柄；LocalObjectStore
+        是文件句柄。两者都支持顺序 ``read(chunk)``。回读字节数累加为 size 并与
+        head size 交叉校验；sha256 边读边算。
+        """
+        sha = hashlib.sha256()
+        size = 0
+        chunk_size = 1024 * 1024
+        reader = self.store.open_reader(full_key)
+        if reader is None:
+            # 无流式句柄（如 NullObjectStore / 旧实现）→ 整块 range_read 回读
+            # （best-effort；只读一次，内存 O(object)，流路径罕见）。
+            object_size = head.get("size")
+            if object_size is None:
+                raise DataError(f"对象 {full_key} 无 size 且无流式句柄，无法校验")
+            blob = self.store.range_read(full_key, offset=0, length=int(object_size))
+            return len(blob), _sha256_bytes(blob)
+        try:
+            while True:
+                part = reader.read(chunk_size)
+                if not part:
+                    break
+                size += len(part)
+                sha.update(part)
+        finally:
+            try:
+                reader.close()
+            except Exception:
+                pass
+        head_size = head.get("size")
+        if head_size is not None and int(head_size) != size:
+            raise DataError(
+                f"generation 对象 {full_key} size 校验失败：回读 {size} 字节 "
+                f"!= head {int(head_size)} 字节"
+            )
+        return size, sha.hexdigest()
+
+    def multipart_part_size(self) -> int:
+        """multipart part_size（默认 16 MiB / 环境变量可覆盖）。
+
+        注意：``_upload`` 通过 ``self.multipart_part_size()`` 读取，测试可用
+        monkeypatch.setattr(instance, "multipart_part_size", lambda: n) 缩小。
+        """
+        return int(os.environ.get("COS_MULTIPART_PART_SIZE_MB", "16")) * 1024 * 1024
 
     def _write_manifest(self, pending: _PendingGeneration) -> GenerationManifest:
         manifest_dict = {
@@ -639,8 +800,7 @@ def _coerce_bytes(data: bytes | BinaryIO) -> bytes:
     return data.read()
 
 
-__all__ = [
-    "ObjectStoreGenerationPublisher",
+__all__ = [    "ObjectStoreGenerationPublisher",
     "GenerationManifest",
     "GenerationObject",
     "_CURRENT_KEY",

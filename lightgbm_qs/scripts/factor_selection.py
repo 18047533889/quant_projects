@@ -23,7 +23,6 @@ Only walk-forward (--fold / --cuts / --folds-from-train) mode is the research-co
 import glob
 import os
 import argparse
-import duckdb
 import pyarrow.parquet as pq
 import pandas as pd
 import numpy as np
@@ -31,18 +30,21 @@ import numpy as np
 ROOT = "/home/sunhaiwei/quant_projects/lightgbm_qs"
 BUILD = os.path.join(ROOT, "data/build")
 
-# ---- selection gates ---------------------------------------------------------
-RANK_IC_THRESHOLD = 0.015      # rank-IC keep gate (applied per fold, train only)
-MIN_N_DATES = 1500             # legacy full-sample dense-coverage floor
-MIN_FOLD_N_DATES = 200         # per-fold minimum #selection dates for a factor
-MIN_N_DATES_FRAC = 0.5         # per-fold minimum = frac * (#selection dates)
 # 10-day forward label (fwd_ret10 = Vwap.pct_change().shift(-1).cumprod-1 style):
 # a selection/train sample at date t sees Vwap at trading index t+10. To never let a
 # label window reach into the OOS block starting at the cut, drop the last
 # PURGE_TRADING_DAYS trading days before the cut from BOTH selection and train.
 PURGE_TRADING_DAYS = 10
+EMBARGO_TRADING_DAYS = 0       # layered on top of the purge; default 0
 
-con = duckdb.connect()
+# Per-fold selection handoff: data/build/walkforward_selection.json
+WF_SELECTION_JSON = os.path.join(BUILD, "walkforward_selection.json")
+
+# ---- selection gates ---------------------------------------------------------
+RANK_IC_THRESHOLD = 0.015      # rank-IC keep gate (applied per fold, train only)
+MIN_N_DATES = 1500             # legacy full-sample dense-coverage floor
+MIN_FOLD_N_DATES = 200         # per-fold minimum #selection dates for a factor
+MIN_N_DATES_FRAC = 0.5         # per-fold minimum = frac * (#selection dates)
 
 trad = list(pd.read_parquet(f"{ROOT}/data/panel/vwap_trad.parquet").columns)
 fwd = pd.read_parquet(f"{ROOT}/data/panel/fwd_ret10.parquet")  # DatetimeIndex 'date'
@@ -74,26 +76,40 @@ def fwd_long():
 
 
 def _factor_long(df):
-    """Normalise a factor long df to DataFrame(date, asset, fv) with datetime dates."""
+    """Normalise a factor long df to DataFrame(date, asset, fv) with datetime dates.
+
+    Accepts the on-disk schema (datetime, asset, factor_value) and the
+    minimal schema (date, asset, fv) used by tests.
+    """
     d = df.copy()
-    d["datetime"] = pd.to_datetime(d["datetime"])
-    d["date"] = pd.to_datetime(d["datetime"].dt.date)
-    return d.rename(columns={"factor_value": "fv"})[["date", "asset", "fv"]]
+    if "datetime" in d.columns:
+        d["datetime"] = pd.to_datetime(d["datetime"])
+        d["date"] = pd.to_datetime(d["datetime"].dt.date)
+    else:
+        d["date"] = pd.to_datetime(d["date"])
+    if "factor_value" in d.columns:
+        d = d.rename(columns={"factor_value": "fv"})
+    return d[["date", "asset", "fv"]]
 
 
 # ------------------------------------------------------------------ selection
-def selection_dates_for_cut(all_dates, cut):
+def selection_dates_for_cut(all_dates, cut, purge=PURGE_TRADING_DAYS,
+                            embargo=EMBARGO_TRADING_DAYS):
     """Train/validation selection dates for a fold, purged of the label-window tail.
 
-    Returns the sorted set of dates < cut minus the last PURGE_TRADING_DAYS trading
+    Returns the sorted set of dates < cut minus the last (purge + embargo) trading
     days, so that no selection label (10d fwd) reaches into the OOS block (>= cut).
     Accepts a Series or a DatetimeIndex of unique sorted dates.
     """
     all_dates = pd.Series(pd.to_datetime(pd.Index(all_dates))).sort_values().reset_index(drop=True)
     sel = all_dates[all_dates < cut]
-    if len(sel) <= PURGE_TRADING_DAYS:
+    drop = purge + embargo
+    # drop exactly (purge + embargo) trading dates immediately before the cut:
+    # the label window of the last kept sample ends at position cut_pos - 1,
+    # strictly before the OOS block starting at cut_pos (label horizon == purge).
+    if len(sel) <= drop:
         return []
-    return sel.iloc[:-PURGE_TRADING_DAYS]
+    return sel.iloc[:-drop]
 
 
 def rank_ic_series(fv, fwd_dt, sel_dates):
@@ -101,9 +117,9 @@ def rank_ic_series(fv, fwd_dt, sel_dates):
 
     Returns (IC Series indexed by date, n_dates_used).
     """
-    m = fv.merge(fwd_dt, on=["date", "asset"], how="inner")
+    m = fv.merge(fwd_dt[["date", "asset", "fwd"]], on=["date", "asset"], how="inner")
     m = m[m["date"].isin(sel_dates)]          # <-- the anti-leak filter
-    if len(m) < 1000:
+    if m["date"].nunique() < 2 or len(m) < 1000:
         return pd.Series(dtype=float), 0
     ic = m.groupby("date").apply(
         lambda g: g["fv"].rank().corr(g["fwd"].rank()), include_groups=False
@@ -139,9 +155,9 @@ def select_factors_walk_forward(factors, fwd_dt, cuts,
         # ---- GUARD: selection must NEVER see OOS (>= cut) or the purge tail -------
         assert bool((sel_dates < cut).all()), \
             f"[fold {cut.date()}] selection leaks into OOS block (>= cut)"
-        # the last selection date's label ends at its index + purge, which must be < cut
+        # the last selection date's label window ends at its index + purge, which
+        # must be strictly before the cut (guard catches an over-long label)
         max_sel_idx = all_dates[all_dates.isin(sel_dates)].index.max()
-        max_sel_date = all_dates.iloc[max_sel_idx]
         assert max_sel_idx + purge < len(all_dates) and all_dates.iloc[max_sel_idx + purge] < cut, \
             f"[fold {cut.date()}] last selection label window reaches OOS (>= cut)"
 
@@ -163,6 +179,101 @@ def select_factors_walk_forward(factors, fwd_dt, cuts,
         fold_factors[cut] = chosen
     rep = pd.DataFrame(report)
     return fold_factors, rep
+
+
+# ------------------------------------------------------- per-fold selection manifest
+def write_selection_manifest(fold_factors, cuts, purge=PURGE_TRADING_DAYS,
+                             embargo=EMBARGO_TRADING_DAYS,
+                             label_basis="vwap_to_vwap_fwd10",
+                             rank_ic_thr=RANK_IC_THRESHOLD,
+                             min_fold_n_dates=MIN_FOLD_N_DATES,
+                             min_dates_frac=MIN_N_DATES_FRAC,
+                             all_dates=None, path=None):
+    """Write the per-fold selection handoff consumed by feature builders + trainers.
+
+    The manifest is the ONLY thing downstream feature-build / training scripts are
+    allowed to read for choosing features per fold — the full-sample
+    selected_factors*.csv lists are leakage-carrying diagnostics, never inputs.
+
+    Structure of the JSON:
+      { purge_trading_days, embargo_trading_days, label_basis, rank_ic_threshold,
+        cuts: { "<cut iso date>": { sel_start, sel_end, n_sel_dates, factors: [...] } } }
+
+    all_dates: optional sorted trading-date index; defaults to the fwd_ret10 calendar.
+    """
+    import json
+    cuts = [pd.Timestamp(c) for c in cuts]
+    if all_dates is None:
+        all_dates = pd.Series(pd.to_datetime(pd.Index(fwd.index))).sort_values().reset_index(drop=True)
+    else:
+        all_dates = pd.Series(pd.to_datetime(pd.Index(all_dates))).sort_values().reset_index(drop=True)
+    payload = {
+        "purge_trading_days": int(purge),
+        "embargo_trading_days": int(embargo),
+        "label_basis": label_basis,
+        "rank_ic_threshold": float(rank_ic_thr),
+        "min_fold_n_dates": int(min_fold_n_dates),
+        "min_dates_frac": float(min_dates_frac),
+        "cuts": {},
+    }
+    for cut in cuts:
+        lst = list(fold_factors.get(cut, []))
+        sel_dates = selection_dates_for_cut(all_dates, cut, purge=purge,
+                                            embargo=embargo) if lst else []
+        if len(sel_dates):
+            sel_start = str(pd.Timestamp(sel_dates.iloc[0]).date())
+            sel_end = str(pd.Timestamp(sel_dates.iloc[-1]).date())
+            n_sel = int(len(sel_dates))
+        else:
+            sel_start = sel_end = None
+            n_sel = 0
+        payload["cuts"][str(cut.date())] = {
+            "sel_start": sel_start,
+            "sel_end": sel_end,
+            "n_sel_dates": n_sel,
+            "factors": lst,
+        }
+    path = path or WF_SELECTION_JSON
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w") as f:
+        json.dump(payload, f, indent=2)
+    print(f"[wf] SAVED selection manifest {path} ({len(cuts)} cuts)")
+    return path
+
+
+def load_selection_manifest(path=None, cuts=None):
+    """Read the per-fold selection manifest written by write_selection_manifest.
+
+    Returns ({cut_iso_date: [factor, ...]}, meta dict). Raises if the file is absent,
+    if its purge/label-basis don't match the current constants, or if a requested cut
+    has an empty factor list. Downstream must never fall back to the full-sample list.
+    """
+    import json
+    path = path or WF_SELECTION_JSON
+    if not os.path.exists(path):
+        raise FileNotFoundError(
+            f"{path} not found — run `python factor_selection.py --folds-from-train` first; "
+            "the full-sample selected_factors.csv is NOT a valid substitute (selection leakage)")
+    with open(path) as f:
+        payload = json.load(f)
+    if payload.get("purge_trading_days") != PURGE_TRADING_DAYS:
+        raise ValueError(
+            f"selection manifest purge={payload.get('purge_trading_days')} != PURGE_TRADING_DAYS="
+            f"{PURGE_TRADING_DAYS} — regenerate the manifest with the current label horizon")
+    if payload.get("label_basis") != "vwap_to_vwap_fwd10":
+        raise ValueError(
+            f"selection manifest label_basis={payload.get('label_basis')!r} is not the mandated "
+            "vwap-to-vwap basis (Vwap.pct_change() 10d forward) — refusing to consume it")
+    folds = {k: list(v.get("factors", [])) for k, v in payload.get("cuts", {}).items()}
+    if cuts is not None:
+        missing = [str(pd.Timestamp(c).date()) for c in cuts if str(pd.Timestamp(c).date()) not in folds]
+        if missing:
+            raise KeyError(f"selection manifest is missing cuts {missing} — regenerate it")
+    empty = [k for k, v in folds.items() if not v]
+    if empty:
+        raise ValueError(f"selection manifest has empty factor lists for cuts {empty} — "
+                         "selection gates produced nothing; fix selection before training")
+    return folds, {k: v for k, v in payload.items() if k != "cuts"}
 
 
 def select_factors_full(factors, fwd_dt, rank_ic_thr=RANK_IC_THRESHOLD,
@@ -244,6 +355,9 @@ def main(argv=None):
             csv = os.path.join(BUILD, f"selected_factors_fold_{cut.date()}.csv")
             pd.DataFrame({"factor": lst}).to_csv(csv, index=False)
             print(f"[wf] SAVED {csv}")
+        # the manifest is the authoritative per-fold handoff for feature builders +
+        # trainers (full-sample selected_factors.csv is a leakage-carrying diagnostic)
+        write_selection_manifest(fold_factors, cuts, all_dates=fwd_dt["date"].unique())
         rep_csv = os.path.join(BUILD, "rankic_walkforward_report.csv")
         if len(rep):
             rep.to_csv(rep_csv, index=False)

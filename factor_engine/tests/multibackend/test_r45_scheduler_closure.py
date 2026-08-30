@@ -21,6 +21,7 @@ from factor_engine.runtime.multibackend.parallel_region_scheduler import (
     ExecutionRegion,
     ParallelRegionScheduler,
     PhysicalPlanCycleError,
+    ResourceAdmissionError,
 )
 from factor_engine.runtime.resource_broker import ResourceBroker
 from factor_engine.runtime.task_resource_contract import TaskResourceContract
@@ -94,6 +95,34 @@ def test_broker_denial_is_work_conserving() -> None:
         assert broker.summary()["running_tasks"] == 0
     finally:
         scheduler.shutdown()
+
+
+def test_broker_reject_all_fails_closed_with_resource_admission_error() -> None:
+    """Broker denying every ready region with nothing running raises
+    ResourceAdmissionError (R50) instead of silently returning empty results."""
+    # A memory limit so tight that a single region (peak = 1GB * 1.3 = 1.3GB)
+    # cannot be admitted, and no future is running.
+    broker = ResourceBroker(
+        hard_memory_limit=64 * 1024**2,  # 64 MiB
+        cpu_slots=8,
+        min_host_reserve_gb=0.0,
+        min_host_reserve_fraction=0.0,
+    )
+    scheduler = ParallelRegionScheduler(
+        max_parallel_regions=4, resource_broker=broker
+    )
+    try:
+        regions = [_region("r1", memory_requirement_bytes=1024**3)]
+        with pytest.raises(ResourceAdmissionError):
+            scheduler.schedule_parallel(regions, lambda r: f"ok:{r.region_id}")
+    finally:
+        scheduler.shutdown()
+
+
+def test_production_requires_broker() -> None:
+    """production=True without a resource_broker raises (R50 fail closed)."""
+    with pytest.raises(ValueError):
+        ParallelRegionScheduler(max_parallel_regions=4, production=True)
 
 
 # ---------------------------------------------------------------------------

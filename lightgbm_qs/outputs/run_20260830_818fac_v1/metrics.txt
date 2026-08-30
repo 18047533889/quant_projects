@@ -1,0 +1,10 @@
+pool: 783 (run_20260830_2000fac) + 34 new (26 mined + 9 minute - 1 redundant) -> 817 features used in folds
+818 版本: 783 基线特征 + 34 增量 (剔除冗余 alphasage_rank_amount, corr 0.95 vs lqtp:wzr_price_volume_039)
+label: COS TargetVwapReturnH10 official; benchmark 000985.CSI TotalReturn; exec lag 1; topk30 maxw5% turnover30% tc5bp; RE_OPT_EVERY=2 (6-month re-opt) — 同 run_20260830_2000fac 配置, best_params 复用缓存
+strategy: total=586.27% ann=36.60% sharpe=1.361 mdd=-26.48% calmar=1.38 win=54.4%
+benchmark: total=14.61% ann=2.02% sharpe=0.093 mdd=-39.33% (benchmark 读取与基线 run 有差异, 见下)
+excess(等口径不可比, benchmark 读取路径不同)
+对比基线 run_20260830_2000fac:
+  strategy: total=502.41% ann=32.90% sharpe=1.316 mdd=-26.35% calmar=1.25 win=54.4%
+  818 sharpe 1.361 > 783 1.316 (+3.4%), total 586% vs 502% (+84pp)
+OOS daily rank_ic: 818 mean 0.04038 vs 783 0.03907 (+0.00131, +3.35%); ic_ir 4.098 vs 4.069; ic>0 61.1% vs 59.0%

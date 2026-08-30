@@ -7,14 +7,18 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
-_EVIDENCE_JSON = Path(__file__).resolve().parents[2] / "evidence" / "composite_verified.json"
+# Prefer the wheel-packaged manifest (factor_engine/backend/_evidence/), fall
+# back to the repo-root evidence/ tree when running from the source checkout.
+_PACKAGED_EVIDENCE_JSON = Path(__file__).resolve().parent / "_evidence" / "composite_verified.json"
+_REPO_EVIDENCE_JSON = Path(__file__).resolve().parents[2] / "evidence" / "composite_verified.json"
 
 
 @lru_cache(maxsize=1)
 def _load_evidence_manifest() -> dict[str, Any]:
-    if not _EVIDENCE_JSON.is_file():
-        raise FileNotFoundError(f"missing composite evidence manifest: {_EVIDENCE_JSON}")
-    return json.loads(_EVIDENCE_JSON.read_text(encoding="utf-8"))
+    path = _PACKAGED_EVIDENCE_JSON if _PACKAGED_EVIDENCE_JSON.is_file() else _REPO_EVIDENCE_JSON
+    if not path.is_file():
+        raise FileNotFoundError(f"missing composite evidence manifest: {path}")
+    return json.loads(path.read_text(encoding="utf-8"))
 
 
 def _verified_set(key: str) -> frozenset[str]:

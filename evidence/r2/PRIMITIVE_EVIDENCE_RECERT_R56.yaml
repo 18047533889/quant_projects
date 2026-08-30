@@ -1,0 +1,74 @@
+task: R56 Primitive Evidence Re-certification (production admission gate re-open)
+generated_at: "2026-08-29T05:35:00+08:00"
+status: COMPLETE
+
+description: |
+  Re-certify primitive backend evidence to re-open the production admission gate
+  (FE-P0-005).  Root cause of the failure: R54 (4cc2b679) rewrote
+  backend/sql_pushdown/emitter.py (EWM -> WITH RECURSIVE, 156 lines) and updated
+  operator capability logic WITHOUT re-running the primitive evidence certification,
+  leaving evidence/primitive_verified.json stale (1423 hash mismatches:
+  1 emitter_hashes + 1422 per-operator impl/semantic hashes).
+
+artifact_validity:
+  before: |
+    evidence/primitive_verified.json INVALID - 1423 validation errors
+    (evidence_artifact_valid() == False); production_eligible_backends = {} for
+    all 1737 canonicals; production mode failed closed.
+  after: |
+    evidence/primitive_verified.json VALID - evidence_artifact_valid() == True;
+    certification wrote a fresh artifact with 79 six-way test-certified canonicals.
+
+hash_counts:
+  before: "1423 mismatches (1 emitter + 1422 per-operator impl/semantic/domain)."
+  after: "0 mismatches (certify_primitive_evidence.py --check -> 'evidence artifact valid (79 six-way test-certified; squash-safe hashes)')."
+  recorded_emitter_hashes:
+    implementation_hash_polars_emitter: eb3e42ac65ced548316a450fc44d0ab6db43103f81f5f490c81af433246acc78
+    implementation_hash_duckdb_emitter: 1809e0b099cc8177747ce311ac95740ed13ec1844210efe2d008668adbc0df17
+    implementation_hash_duckdb_fiscal_v2: d525fe43b8dd23d2376ecc26fffe3d0b43e4e6a0f906cc9b36bd546ccb6ae208
+  consistency: "Per-operator implementation_hash_duckdb == 1809e0b099cc8177747ce311ac95740ed13ec1844210efe2d008668adbc0df17 (current emitter sha256)."
+
+commands_run:
+  - "PYTHONPATH=factor_engine .venv/bin/python factor_engine/scripts/certify_primitive_evidence.py --check (before) -> INVALID, 1423 errors."
+  - "Root-cause fixes in working tree (all real code, no hand-edited JSON, no monkeypatch):"
+  - "  - cleaned_operators/overhaul/regression.py (uncommitted R55 fix, verified): _REG_PARAM_SPECS reduced to {window: min=2} and _REG_PARAM_SPECS_Z {window: min=3} so the pandas overhaul replacement matches the polars-native canonical contract (R13 NEW-P0-04); re-verified load_all() passes."
+  - "  - cleaned_operators/polars_native/ts_batch1.py: fixed 3 R4-100 backend-signature arity mismatches vs the pandas reference:"
+  - "    - ts_kama declared ['x','er_window','fast_period','slow_period','min_periods'] (was ['feature','window','fast','slow'])."
+  - "    - ts_mean_reversion_half_life declared ['x','window','min_periods'] with defaults 120/20 (was ['feature','window'])."
+  - "    - ts_monotonicity declared ['x','window','min_periods'] with defaults 20/3 (was ['feature','window'])."
+  - "  - cleaned_operators/common/polars_ts_basic.py: ts_mean polars shell aligned to pandas reference ['x','window','min_periods'] (was ['x','d']; body now binds window/min_periods and passes min_samples)."
+  - "  - scripts/generate_operators_catalog.py: catalog generator now (a) uses registry.get(canonical, mode='any') so catalog-only entries (e.g. ts_ewm_corr/ts_ewm_cov with no pandas impl) still appear, and (b) falls back to build_operator_spec(...).pit_safe for catalog-only entries so the three generated manifests share the final registry snapshot (R55 convergence gate)."
+  - "  - scripts/certify_primitive_evidence.py: _classname_to_file now strips a leading factor_engine. package root from JUnit classnames (previously failed file_rel filter, so NO executed+passed case was attributed and the six-way intersection came out empty)."
+  - "  - Created factor_engine/benchmarks/operator_manifest.json (refresh target) and regenerated factor_engine/docs/operator_manifest.json, factor_engine/cleaned_operators/docs/operators_catalog.json, factor_engine/docs/backend_evidence_manifest.json (convergence test reads the nested mirror paths)."
+  - "Per-stage verification (real pytest output):"
+  - "  - polars_reference_parity / duckdb_reference / duckdb_real_sql: 50 passed, 10 skipped and 139 passed, 38 skipped."
+  - "  - duckdb_edge (p0_edge_cases_triple_parity): passed."
+  - "  - duckdb_nan_edge / duckdb_inf_edge: 62 passed, 2 skipped."
+  - "  - no_fallback (polars_long_no_pandas_path): passed."
+  - "  - composite (reference + lowered + edge): 57 passed, 49 skipped."
+  - "  - polars_native_static_audit: passed."
+  - "  - parameter_signature_gate (evidence_schema + call_policy + production_checklist): passed."
+  - "  - plan_variant_parity + chunk_invariance: 8 passed."
+  - "  - strict_period / manifest_and_evidence_drift: passed (1 skip = factor-operator semantic evidence not bootstrapped yet)."
+  - "Full certification: cd factor_engine && nohup .venv/bin/python scripts/certify_primitive_evidence.py --junitxml-out /tmp/certified_records_r56.json. Final log tail: 'wrote evidence/primitive_verified.json (test-certified six-way: 79)'."
+
+production_admission_smoke:
+  evidence_artifact_valid: true
+  PRIMITIVE_BACKEND_EXECUTION_CERTIFIED_count: 79
+  operational_production_certified_set_count: 72
+  sample_backend_status: |
+    backend_status(c, 'pandas_numpy', production_mode=True) for
+    ts_mean/add/ts_std/ts_rank/rank/cs_mean -> production_safe for all six.
+  polars_production_safe: "ts_mean/ts_std/ts_corr/ts_cov (4 daily native)."
+  duckdb_sql: "parity_verified for all 79 (SQL tier parity; production_safe gated by effective_sql_production_safe)."
+  load_all: "LOAD_ALL_OK in a fresh process with evidence valid."
+
+residuals:
+  - "7 six-way-certified primitives NOT operational-production (denied/pending signature or allow_in_production): fillna_const, is_finite, is_infinite, is_not_null, is_null, safe_div_null, signed_log. Pre-existing signature gate, not a regression."
+  - "duckdb_sql production_safe count is 0 (parity_verified=79): SQL tier production_safe gate requires effective_sql_production_safe; out of scope for this re-certification."
+  - "Artifact is squash-safe (require_commit_match=False); commit_sha fa9b6eb1461cd9d1f87cd8d41aa3e6b55747361f recorded as audit metadata only."
+
+evidence_files:
+  - "/home/sunhaiwei/quant_projects/evidence/primitive_verified.json (regenerated, VALID, 79 six-way certified operators)."
+  - "/home/sunhaiwei/quant_projects/evidence/primitive_case_registry.json (unchanged, still fresh: 80 six-way case-list intersection)."
+  - "/home/sunhaiwei/quant_projects/evidence/r2/AGENT_PROGRESS_primitive_recert.yaml"

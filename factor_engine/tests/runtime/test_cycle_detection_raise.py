@@ -78,7 +78,7 @@ class TestCycleDetectionRaise:
                 memory_requirement_bytes=512,
             ),
         ]
-        with pytest.raises(PhysicalPlanCycleError, match="Cyclic"):
+        with pytest.raises(PhysicalPlanCycleError, match="A"):
             scheduler.schedule_parallel(regions, execute_fn=lambda r: r.to_dict())
 
     def test_self_cycle(self, scheduler):

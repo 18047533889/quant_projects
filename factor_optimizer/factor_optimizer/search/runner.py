@@ -1291,6 +1291,12 @@ class SearchRunner:
                         split_ref=getattr(self._search_split_plan, "split_id", None),
                         fidelity=fidelity,
                     )
+                    # R55 P0-9: the integrity gate is real and fail-closed.
+                    # A scored trial MUST carry a complete, passing
+                    # TreatmentIntegrityEvidence bound to this trial id; a
+                    # missing/stale/tampered/failed one marks the trial
+                    # FAILED instead of letting it become the incumbent.
+                    artifact.require_passing_integrity()
                     actual_cost = artifact.compute_cost
                     budget_tracker.commit_evaluation(reserved_cost, float(actual_cost))
                 except Exception as exc:

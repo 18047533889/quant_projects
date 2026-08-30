@@ -411,8 +411,13 @@ def _build_intermediates(mkt, symbols, dates):
     cols["close_ret_5d"] = close_.pct_change(5).fillna(0)
     cols["close_shifted"] = close_.shift(1)
 
-    # 真实基本面列（来自 StockValuationDaily）
-    for fc in ["pb_lf", "pe_ttm", "mkt_cap_float", "free_turn"]:
+    # 真实基本面列（来自 StockValuationDaily / StockBalance / StockIndicator，2026-08-28 扩展）
+    FUND_COLS = ["pb_lf", "pe_ttm", "mkt_cap_float", "free_turn",
+                 "debttoassets", "roe_ttm2", "roa2_ttm2", "ps_ttm", "pcf_ocf_ttm",
+                 "free_float_shares", "qfa_yoygr", "forecast_incap_chgr_mid",
+                 "style_gate_size_large", "style_gate_size_small",
+                 "style_gate_liquidity_high", "style_gate_momentum_high"]
+    for fc in FUND_COLS:
         if fc in mkt and mkt[fc] is not None:
             cols[fc] = reindex(mkt[fc])
 
@@ -462,7 +467,12 @@ def _execute_factor_code(code, mkt, symbols, dates, intermediates=None):
         if cname in used_mid:
             used_cols_set.add(cname)
     # 补上 code 里可能以变量形式访问的列（如 df_copy['ret']、df_copy['abs_ret']、df_copy['debttoassets']）
-    for cname in ["ret", "abs_ret", "style_gate_resvol_high", "free_turn", "pb_lf", "pe_ttm", "mkt_cap_float", "debttoassets"]:
+    # 2026-08-28: 扩展基本面/风格门控列也按名字直配（df_copy["x"] 双引号形式由 regex2 覆盖）
+    for cname in ["ret", "abs_ret", "style_gate_resvol_high", "free_turn", "pb_lf", "pe_ttm",
+                  "mkt_cap_float", "debttoassets", "roe_ttm2", "roa2_ttm2", "ps_ttm",
+                  "pcf_ocf_ttm", "free_float_shares", "qfa_yoygr", "forecast_incap_chgr_mid",
+                  "style_gate_size_large", "style_gate_size_small",
+                  "style_gate_liquidity_high", "style_gate_momentum_high"]:
         if cname in code and cname in (intermediates or {}):
             used_cols_set.add(cname)
     used_cols_set |= {"close", "open", "high", "low", "volume", "amount", "close_price", "TradingDay"}
@@ -706,6 +716,8 @@ def main():
     per_factor_dir = OUT_DIR / "factor_matrices_all"
     per_factor_dir.mkdir(parents=True, exist_ok=True)
     # 续跑：跳过已写盘因子（防重算 + 防丢）
+    # 2026-08-28 并发修复：整批 40 因子只提交 1 个 future 会让单 worker 顺序跑、其余闲置。
+    # 改为把批拆成 SUB 份并发提交，显著提速（12 批 × 13min → ~2-3min/批）。
     already = {p.stem for p in per_factor_dir.glob("*.parquet")} if per_factor_dir.exists() else set()
     date_idx = dates
     sym_index = {}
@@ -715,10 +727,14 @@ def main():
         results = {}
         success = 0
         print(f"[4-{bi}] 并行计算批 {bi+1}/{len(batches)} ({len(batch)} 因子) ...")
+        # 并发修复：把批拆成 SUB 份并发提交（每份约 5 因子），全部 worker 同时工作。
+        SUB = max(1, min(n_workers, len(batch) // 5 + 1))
+        sub_batches = [batch[i::SUB] for i in range(SUB)] if SUB > 1 else [batch]
         with ProcessPoolExecutor(max_workers=n_workers) as pool:
-            futures = [pool.submit(_compute_factor_chunk, batch, str(mkt_path), str(int_path), symbols, dates.tolist())]
+            futures = [pool.submit(_compute_factor_chunk, sb, str(mkt_path), str(int_path), symbols, dates.tolist())
+                       for sb in sub_batches]
             for fut in as_completed(futures):
-                cr, cok = fut.result(timeout=1200)
+                cr, cok = fut.result(timeout=3600)
                 results.update(cr)
                 success += cok
         # 写盘本批

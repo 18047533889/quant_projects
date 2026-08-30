@@ -1,0 +1,60 @@
+# -*- coding: utf-8 -*-
+# P008-P010 COS runtime audit — evidence backfill (work was already done in the
+# working tree; this manifest was missing)
+task_id: P008_P010_COS_RUNTIME_AUDIT
+schema_version: 1
+generation_timestamp: 2026-08-28
+current_sha: fa9b6eb1461cd9d1f87cd8d41aa3e6b55747361f
+head_sha: working-tree (uncommitted; no git checkout/restore performed)
+status: CLOSED_LOCAL
+production_certification: NOT_RUN
+
+owned_files:
+  - data_access/cos/mirror.py          # crash-safe CURRENT pointer write (fsync file+dir, random tmp suffix); resolve_current_mirror_generation returns None when pointer target gen dir does not exist (no phantom CURRENT)
+  - data_access/write/object_store_generation_publisher.py  # BinaryIO streaming entry to store streaming multipart; bounded per-part retry (DA_MP_PART_RETRIES/DA_MP_PART_RETRY_BACKOFF); MAX_PART_NUMBER/MIN_PART_BYTES/iter_parts_* reuse
+  - data_access/write/mutation_lock.py # lease/GC hardening (R55 audit follow-ups)
+  - data_access/core/engine.py         # execute_reader stream path honors deadline (pool acquire wait bounded by remaining deadline, R28-12/R42-029 coverage)
+  - data_access/read/data_read_identity.py  # frequency as semantic identity dimension (R50 P0-26); provenance_notes tuple folding (R50 P0-27)
+  - data_access/_build_info.py         # regenerated build info (dirty tree)
+  - data_access/tests/unit/test_wave1_p008_p010_cos_runtime_audit.py
+  - data_access/tests/unit/test_cos_mirror.py
+  - data_access/tests/unit/test_object_store_generation_publisher.py
+  - data_access/tests/unit/test_r42_029_039_2026_08.py
+  - data_access/tests/unit/r21/test_r21_da_p0_01_04_identity_fix_2026_08.py
+  - data_access/tests/unit/r21/test_r21_data_read_identity_2026_08.py
+  - data_access/tests/unit/r21/test_r50_p0_26_27_identity_frequency_tz.py
+  - evidence/r2/P008_P010_COS_RUNTIME_AUDIT.yaml
+
+scope: |
+  R55 COS/runtime audit P0-08/09/10 fixes. COS CURRENT generation pointer
+  writes are now crash-safe (fsync payload + fsync directory after atomic
+  replace, random tmp suffix to avoid concurrent-publisher collisions);
+  the reader fails-closed: a CURRENT pointer whose generation directory does
+  not exist resolves to None instead of a phantom/inconsistent current.
+  Object-store generation publisher accepts BinaryIO and hands the stream to
+  the store's streaming multipart path (bounded memory, per-part retry).
+  Data-read identity treats `frequency` as a semantic dimension (minute vs
+  daily reads of the same logical name are distinct identities) and folds
+  provenance_notes to a tuple so serialization round-trips stay equal.
+
+verification:
+  - command: |
+      cd /home/sunhaiwei/quant_projects && PYTHONPATH=factor_engine .venv/bin/python -m pytest \
+        data_access/tests/unit/test_wave1_p008_p010_cos_runtime_audit.py -q -p no:cacheprovider
+    result: "8 passed in 0.51s"     # REAL OUTPUT (2026-08-28)
+  - command: |
+      pytest data_access/tests/unit/test_cos_mirror.py data_access/tests/unit/test_object_store_generation_publisher.py -q
+    result: "22 passed in 0.34s"    # REAL OUTPUT
+  - command: pytest data_access/tests/unit/test_r42_029_039_2026_08.py -q
+    result: "9 passed in 0.35s"     # REAL OUTPUT
+  - command: pytest data_access/tests/unit/r21/ -q
+    result: "35 passed in 0.25s"    # REAL OUTPUT (identity/frequency/tz R50)
+
+residual_risks:
+  - "FakeS3 sink fakes; no real COS network round-trip exercised."
+  - "fsync directory errors swallowed (OSError pass) — best-effort crash safety, not guaranteed on all filesystems."
+  - "data_access/_build_info.py dirty build regenerated during this tree's work; not separately certified."
+  - "full data_access unit suite not re-run (per-coordinator: avoid heavy loads while other agents run)."
+no_defect: true
+commit: NOT_CREATED
+remotes: NOT_USED

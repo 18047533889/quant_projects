@@ -82,6 +82,16 @@ def _daily_signatures() -> dict[str, OperatorProductionSignature]:
         "clip": OperatorProductionSignature("clip", (
             _c("lo", "finite_scalar", 1), _c("hi", "finite_scalar", 2),
         ), default_status="production"),
+        # R55 platform-audit P0: LQTP 平台辅助提升到 daily —— fillna(x,v) /
+        # avg2(a,b) / ts_positive_streak(x) 都是 PIT-safe 元素级辅助，补上
+        # production 签名避免 daily surface 与签名表漂移。
+        "fillna": OperatorProductionSignature("fillna", (
+            _c("method", "finite_scalar_or_enum", 1,
+               choices=("mean", "median", "zero", "ffill", "pad", "forward_fill")),
+        ), default_status="production"),
+        "avg2": OperatorProductionSignature("avg2", (), default_status="production"),
+        "ts_positive_streak": OperatorProductionSignature("ts_positive_streak", (), default_status="production"),
+        "open_close_return": OperatorProductionSignature("open_close_return", (), default_status="production"),
         "fillna_const": OperatorProductionSignature("fillna_const", (
             _c("value", "finite_scalar", 1),
         ), default_status="production"),

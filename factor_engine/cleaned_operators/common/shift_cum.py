@@ -177,6 +177,35 @@ class CumPositiveStreak(SeriesOperator):
         return x.apply(_streak)
 
 
+# canonical=ts_positive_streak backend=pandas_numpy selected=ts_positive_streak
+# source=time_series/event_state (LQTP platform name)
+@register_operator(name="ts_positive_streak", category="time_series", business_category="shift_diff_cum", canonical="ts_positive_streak", source="factor_dsl_np")
+class TsPositiveStreak(SeriesOperator):
+    """LQTP 平台 ts_positive_streak：截至当前连续正值计数（NaN 重置）。
+
+    R55 platform-audit P0: OAP_NumEarnIncrease_Proxy 用
+    ``ts_positive_streak(where(quarter(NetProfit) > quarter(lag(NetProfit,4)), 1, -1))``
+    统计盈利连续改善期数 —— 与 cum_positive_streak 同语义（正值连续 run，
+    非正记 0，NaN 重置）。
+    """
+    metadata = OperatorMetadata(
+        name="ts_positive_streak", category="time_series",
+        description="截至当前连续正值计数（NaN 重置）",
+        examples=["ts_positive_streak(x)"],
+        param_names=["x"], return_type="series",
+        tags=["time_series", "cumulative", "streak", "lqtp"],
+    )
+    def _calculate_series(self, x: pd.DataFrame, **kwargs) -> pd.DataFrame:
+        def _streak(col):
+            positive = col > 0
+            groups = (~positive).cumsum()
+            streak = positive.groupby(groups).cumsum()
+            result = pd.Series(np.where(positive, streak, 0), index=col.index, dtype=float)
+            result[col.isna()] = np.nan
+            return result
+        return x.apply(_streak)
+
+
 
 # canonical=cum_prod backend=pandas_numpy selected=cum_prod source=time_series/cum_ops.py
 @register_operator(name="cum_prod", category="time_series", business_category="shift_diff_cum", canonical="cum_prod", source="factor_dsl_np")

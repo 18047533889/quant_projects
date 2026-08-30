@@ -1,32 +1,35 @@
 """QRP-P3 — candidate normalization / reconciliation / batch fingerprint.
 
-Pure stdlib logic layer. Implements the QRP-P3 task:
+Pure stdlib logic layer (the *parallel enriched-normalization* variant of
+``candidate/ingest.py``).
 
-- :func:`normalize_candidate` — heterogeneous raw records → canonical,
-  validated candidate manifests (fail-closed with reason codes);
-- :func:`reconcile_candidates` — dual-key (``content_hash`` ×
-  ``semantic_hash``) reconciliation against a known registry with three-way
-  classification and reason codes;
-- :func:`batch_fingerprint` — order-invariant batch Merkle fingerprint for
-  idempotent ingestion.
+AUTHORITY (R55 P0-5, task #95): the platform does NOT mint or judge factor
+identities. Every identity a candidate carries is produced by the owning
+DOMAIN package and validated here FORMAT-ONLY:
 
-AUTHORITY (per task hard rule "不加新权威"): identity negotiation uses
-``quant_platform.app.contracts.identities.FactorDefinitionIdentity``; content
-hashing uses ``quant_platform.app.contracts._contenthash.canonical_str`` /
-``content_hash``. No new hash algorithm is invented here.
+* ``content_hash`` — the publisher's spec-bytes sha256 (64-char lowercase hex);
+* ``semantic_hash`` — the domain's factor-definition semantic digest
+  (``factor_assets/identity``), carried verbatim, never re-derived from the
+  formula / parameter dict / 口径;
+* ``factor_definition_ref`` — the carried :class:`FactorDefinitionRef`
+  (``contracts/identities.py``), whose ``hash`` is the domain digest itself.
+
+This module contains no hash function over factor semantics and no admission /
+threshold logic: whether a candidate is admitted is delegated to the owning
+domain package through ``contracts/admission.AdmissionAuthority`` (P0-6).
 """
 
 from __future__ import annotations
 
 import hashlib
 import math
-from dataclasses import dataclass, field, fields, replace
+from dataclasses import dataclass, field, fields
 from datetime import datetime
 from typing import Any, Mapping, Sequence
 
-from ..contracts._contenthash import canonical_str, content_hash
+from ..contracts._contenthash import canonical_str
 from ..contracts.candidate import FactorCandidateManifest
-from ..contracts.identities import FactorDefinitionIdentity
+from ..contracts.identities import FactorDefinitionRef, sha256_hex
 
 __all__ = [
     "NormalizationError",
@@ -138,13 +141,16 @@ def _required_text(value: Any, field_name: str) -> str:
 
 
 def _hash_hex(value: Any, field_name: str) -> str:
+    """FORMAT-ONLY sha256 hex validation of a carried digest (never recomputed)."""
     text = _clean_text(value, field_name)
-    if len(text) != 64 or any(ch not in "0123456789abcdef" for ch in text):
+    try:
+        return sha256_hex(text, field_name)
+    except (TypeError, ValueError) as exc:
         raise NormalizationError(
             "INVALID_CONTENT_HASH",
-            f"{field_name} must be a 64-char lowercase hex sha256, got {text!r}",
-        )
-    return text
+            f"{field_name} must be a 64-char lowercase hex sha256 minted by the "
+            f"owning domain package ({exc})",
+        ) from exc
 
 
 def _finite_parameter(value: Any) -> float:
@@ -168,8 +174,9 @@ def _normalize_parameter_domain(raw: Any) -> tuple[tuple[str, str], ...]:
     - sequence of bare scalar values → param0/param1/…
       (bare values come from discovery records, e.g. recipe JSON)
 
-    Raises NON_FINITE_PARAMETER / UNSUPPORTED_PARAMETER_VALUE / MISSING on bad
-    input. Empty domain is allowed for candidates with no parameters.
+    The normalized domain is CARRIED as opaque manifest data: it is never hashed
+    into a platform-computed identity (R55 P0-5) — the domain package that owns
+    the factor definition folds its own parameters into its own digest.
     """
     if raw is None:
         return ()
@@ -209,52 +216,6 @@ def _normalize_parameter_domain(raw: Any) -> tuple[tuple[str, str], ...]:
     return tuple(out)
 
 
-def _semantic_id_fields(raw: Mapping[str, Any], market: str, frequency: str, parameters: tuple[tuple[str, str], ...]) -> dict[str, Any]:
-    """Build the semantic-identity field map per identities.py §8.1 semantics.
-
-    Uses ONLY raw-provided 'semantic_id' when present (an opaque discovery-id /
-    semantic id from the source, e.g. the recipe's semantic id). Otherwise the
-    identity is derived from available canonical fields (formula/expression,
-    operator set, generator version, market, frequency, parameters).
-    """
-    raw_semantic = raw.get("semantic_id")
-    if isinstance(raw_semantic, str) and raw_semantic.strip():
-        return {"semantic_id": raw_semantic.strip()}
-
-    expression = _clean_text(raw.get("formula_expression") or raw.get("expression") or raw.get("formula") or "", "semantic_id")
-    if not expression:
-        raise NormalizationError(
-            "MISSING_SEMANTIC_ID",
-            "no raw 'semantic_id'; and no expression to derive an identity from",
-        )
-    fields_: dict[str, Any] = {}
-    # only material; if a field is absent, it simply does not enter the hash input
-    if expression:
-        fields_["expression"] = expression
-    raw_formula_language = _clean_text(
-        raw.get("formula_language") or raw.get("language") or "", "formula_language"
-    )
-    if raw_formula_language:
-        fields_["formula_language"] = raw_formula_language
-    raw_generator = _clean_text(
-        raw.get("generator_type") or raw.get("generator") or "", "generator_type"
-    )
-    if raw_generator:
-        fields_["generator_type"] = raw_generator
-    raw_generator_version = _clean_text(
-        raw.get("generator_version") or "", "generator_version"
-    )
-    if raw_generator_version:
-        fields_["generator_version"] = raw_generator_version
-    if market:
-        fields_["market"] = market
-    if frequency:
-        fields_["frequency"] = frequency
-    if parameters:
-        fields_["parameters"] = dict(parameters)
-    return fields_
-
-
 # --------------------------------------------------------------------------- #
 # NormalizedCandidate
 # --------------------------------------------------------------------------- #
@@ -265,15 +226,23 @@ class NormalizedCandidate(FactorCandidateManifest):
     """Canonical normalized candidate.
 
     Extends :class:`FactorCandidateManifest` with the three enrichment slots
-    required by reconciliation: a stable ``content_hash`` (capitalized
-    ``factor_spec_sha256`` if the raw record carries it), a ``semantic_hash``
-    (negotiated via :class:`FactorDefinitionIdentity`), and a canonical
-    ``parameter_domain``.
+    required by reconciliation: a stable ``content_hash`` (the publisher's
+    ``factor_spec_sha256``), a ``semantic_hash`` CARRIED from the domain
+    package, and a canonical ``parameter_domain``.
+
+    R55 P0-5: ``semantic_hash`` is the OWNING DOMAIN PACKAGE's factor-definition
+    digest, validated for hex format only — this class performs NO identity
+    negotiation, no recomputation, and embeds no 口径 (the vwap->vwap basis
+    lives inside the domain's own digest, not in a platform-side hash input).
+    ``factor_definition_ref`` carries the same digest in typed-ref form for
+    consumers that want the ref object rather than the raw string.
     """
 
     content_hash: str = ""
     semantic_hash: str = ""
     parameter_domain: tuple[tuple[str, str], ...] = ()
+    formula_expression: str = ""
+    operator_semantics_version: str = ""
 
     def __post_init__(self) -> None:
         summary = super().__post_init__()
@@ -282,7 +251,7 @@ class NormalizedCandidate(FactorCandidateManifest):
         if len(self.content_hash) != 64 or any(ch not in "0123456789abcdef" for ch in self.content_hash):
             raise ValueError(f"content_hash must be a 64-char lowercase hex sha256, got {self.content_hash!r}")
         if not self.semantic_hash:
-            raise ValueError("semantic_hash is required")
+            raise ValueError("semantic_hash is required (minted by the owning domain package)")
         if len(self.semantic_hash) != 64 or any(ch not in "0123456789abcdef" for ch in self.semantic_hash):
             raise ValueError(f"semantic_hash must be a 64-char lowercase hex sha256, got {self.semantic_hash!r}")
         # factor_spec_sha256 must equal content_hash — a candidate whose spec
@@ -292,21 +261,46 @@ class NormalizedCandidate(FactorCandidateManifest):
                 "factor_spec_sha256 must equal content_hash "
                 f"(got {self.factor_spec_sha256!r} vs {self.content_hash!r})"
             )
-        # identity authority: the FactorDefinitionIdentity MUST agree with our
-        # semantic_hash — we never carry two authorities.
-        negotiated = FactorDefinitionIdentity(
-            {"semantic_id": self.semantic_hash, "candidate_id": self.candidate_id}
+        # R55 P0-5: FORMAT-only identity validation. The platform carries the
+        # domain digest; it never re-derives one. Building the ref type here is
+        # the whole validation surface (hex format + required non-empty
+        # factor_version at construction time).
+        object.__setattr__(
+            self,
+            "_definition_ref",
+            FactorDefinitionRef(
+                self.semantic_hash,
+                factor_version=self.generator_version,
+                descriptor={
+                    "formula_expression": self.consumed_formula_expression(),
+                    "parameter_domain": tuple(self.parameter_domain or ()),
+                },
+            ),
         )
-        if negotiated.hash != self.semantic_hash:
-            raise ValueError(
-                "semantic_hash does not match the FactorDefinitionIdentity negotiation: "
-                f"factor_definition identity = {negotiated.hash} != {self.semantic_hash}"
-            )
         for name, value in self.parameter_domain:
             if not name or not isinstance(name, str):
                 raise ValueError("parameter_domain names must be non-empty strings")
             if not isinstance(value, str) or not value:
                 raise ValueError("parameter_domain values must be non-empty canonical strings")
+
+    def factor_definition_ref(self) -> FactorDefinitionRef:
+        """The carried (not recomputed) domain factor-definition identity ref."""
+        return self._definition_ref
+
+    def consumed_formula_expression(self) -> str:
+        """The formula expression this candidate was submitted with.
+
+        Carried provenance ONLY — never hashed by the platform. Prefers the
+        enriched slot; falls back to ``semantic_family_hint`` (the domain's
+        semantic digest carrier) so past-round manifests stay self-consistent.
+        """
+        if self.formula_expression and self.formula_expression.strip():
+            return self.formula_expression
+        return self.semantic_family_hint or self.expression()
+
+    def semantic_id(self) -> str:
+        """The carried domain semantic identity digest (opaque)."""
+        return self.semantic_hash
 
 
 def reconcile_id(candidate: NormalizedCandidate) -> str:
@@ -434,12 +428,14 @@ def _slot(candidate: NormalizedCandidate) -> tuple[str, str]:
 def normalize_candidate(raw: Mapping[str, Any], *, parameter_defaults: Mapping[str, Any] | None = None) -> NormalizedCandidate:
     """Normalize one heterogeneous raw candidate record (fail-closed).
 
-    Accepts keys (canonical + aliases):
-      recipe_name / candidate_id, semantic_id (opaque discovery id) OR
-      formula_expression/expression/formula, submitted_at + submitted_by,
-      content_hash OR factor_spec_sha256, generator_type/generator_version,
-      market, frequency, formula_language, parameter_domain
-      ({name: value} | [(name, value)] | [bare scalar...]).
+    Every identity is CARRIED from the producing domain package and validated
+    for hex FORMAT only:
+
+      ``content_hash`` / ``factor_spec_sha256`` (publisher spec-bytes digest),
+      ``semantic_hash`` (the domain's factor-definition semantic digest —
+      mandatory, non-empty, 64-char lowercase hex; the platform never derives
+      one from the expression / parameter dict, so ``MISSING_SEMANTIC_ID`` /
+      ``INVALID_SEMANTIC_HASH`` are the fail-closed paths).
 
     Raises :class:`NormalizationError` with a reason code on any missing /
     non-finite / malformed / non-canonical input.
@@ -447,28 +443,36 @@ def normalize_candidate(raw: Mapping[str, Any], *, parameter_defaults: Mapping[s
     raw = dict(raw)
     param_defaults_mapping: Mapping[str, Any] = dict(parameter_defaults or {})
 
-    # ---- content hash (authority: _contenthash content_hash over the spec) ----
+    # ---- content hash (publisher-reported spec digest, format-checked) ----
     content_from_spec = raw.get("content_hash")
     if content_from_spec is None:
         content_from_spec = raw.get("factor_spec_sha256")
     if content_from_spec is None:
-        # fail-closed: a raw record without a content hash cannot be canonicalized
+        # fail-closed: a raw record without a content hash cannot be carried
         raise NormalizationError(
             "MISSING_CONTENT_HASH",
             "raw candidate must carry 'content_hash' or 'factor_spec_sha256' "
-            "(sha256 over the canonical spec) — none provided",
+            "(sha256 over the canonical spec, minted by the publisher) — none provided",
         )
     content_hash_value = _hash_hex(content_from_spec, "content_hash")
 
-    # ---- minimal identity: semantic id or content-derived derivate ----
+    # ---- semantic identity (domain-minted digest, carried verbatim) ----
     raw_semantic = raw.get("semantic_id")
-    if not (isinstance(raw_semantic, str) and raw_semantic.strip()):
+    if raw_semantic is None:
+        raw_semantic = raw.get("semantic_hash")
+    if not isinstance(raw_semantic, str) or not raw_semantic.strip():
         raise NormalizationError(
             "MISSING_SEMANTIC_ID",
-            "raw candidate must carry a non-empty 'semantic_id' (a discovery "
-            "or recipe semantic id) — none provided; refusing to fabricate identity",
+            "raw candidate must carry the OWNING DOMAIN PACKAGE's semantic digest "
+            "('semantic_id' / 'semantic_hash', 64-char lowercase hex) — none "
+            "provided; the platform refuses to fabricate identity",
         )
     raw_semantic = raw_semantic.strip()
+    if len(raw_semantic) != 64 or any(ch not in "0123456789abcdef" for ch in raw_semantic):
+        raise NormalizationError(
+            "INVALID_SEMANTIC_HASH",
+            f"semantic_hash must be a 64-char lowercase hex sha256, got {raw_semantic!r}",
+        )
 
     # ---- remaining manifest fields ----
     candidate_id = _required_text(
@@ -494,7 +498,7 @@ def normalize_candidate(raw: Mapping[str, Any], *, parameter_defaults: Mapping[s
     required_fields = tuple(
         str(v) for v in (raw.get("required_fields") if isinstance(raw.get("required_fields"), (tuple, list)) else ())
     )
-    semantic_family_hint = _clean_text(raw.get("semantic_family_hint") or "", "semantic_family_hint") or None
+    semantic_family_hint = _clean_text(raw.get("semantic_family_hint") or raw_semantic, "semantic_family_hint") or None
     campaign_id = _clean_text(raw.get("campaign_id") or "", "campaign_id") or None
     attempt_id = _clean_text(raw.get("attempt_id") or "", "attempt_id") or None
 
@@ -511,17 +515,7 @@ def normalize_candidate(raw: Mapping[str, Any], *, parameter_defaults: Mapping[s
             if name not in present:
                 parameters += ((name, repr(_finite_parameter(default))),)
 
-    # ---- semantic identity negotiation (authority: identities.py) ----
-    material_fields = _semantic_id_fields(raw, market, frequency, parameters)
-    if not material_fields:
-        raise NormalizationError(
-            "MISSING_SEMANTIC_ID",
-            "raw semantic_id present but cannot derive semantic identity material",
-        )
-    negotiated = FactorDefinitionIdentity(material_fields)
-    semantic_hash = negotiated.hash
-
-    # ---- build the canonical manifest ----
+    # ---- build the canonical manifest (identity CARRIED, not negotiated) ----
     base = FactorCandidateManifest(
         schema_version=_required_text(raw.get("schema_version") or "1.0.0", "schema_version"),
         candidate_id=candidate_id,
@@ -540,15 +534,17 @@ def normalize_candidate(raw: Mapping[str, Any], *, parameter_defaults: Mapping[s
         campaign_id=campaign_id,
         attempt_id=attempt_id,
     )
-    # canonical spec used for the content hash (deterministic across processes)
-    content_spec = canonical_str(base)
-    derived = content_hash("factor-candidate", canonical_str(market), canonical_str(frequency), content_spec)
-    final_content_hash = content_hash_value if content_hash_value else derived
+    final_content_hash = content_hash_value
     return NormalizedCandidate(
         **fields_dict(base),
         content_hash=final_content_hash,
-        semantic_hash=semantic_hash,
+        semantic_hash=raw_semantic,
         parameter_domain=parameters,
+        formula_expression=_clean_text(
+            raw.get("formula_expression") or raw.get("expression") or raw.get("formula") or "",
+            "formula_expression",
+        ),
+        operator_semantics_version=generator_version,
     )
 
 
@@ -644,12 +640,15 @@ def reconcile_candidates(
 
 
 def batch_fingerprint(candidates: Sequence[Any]) -> str:
-    """Order-invariant batch Merkle fingerprint over candidate content hashes.
+    """Order-invariant batch Merkle fingerprint over CARRIED content hashes.
 
-    Folds each candidate's ``content_hash`` with a per-candidate counter so a
-    formula with a *repeated* content_hash still produces a nonzero contribution;
-    sorting makes the fingerprint order-independent; the fold string itself is
-    length-prefixed and canonicalized before hashing.
+    Folds each candidate's carried ``content_hash`` with a per-candidate counter
+    so a formula with a *repeated* content_hash still produces a nonzero
+    contribution; sorting makes the fingerprint order-independent; the fold
+    string itself is length-prefixed and canonicalized before hashing.
+
+    This is a platform anti-replay TOKEN over carried digests — not a domain
+    identity: no factor semantics enter it.
     """
     folds: list[str] = []
     counts: dict[str, int] = {}

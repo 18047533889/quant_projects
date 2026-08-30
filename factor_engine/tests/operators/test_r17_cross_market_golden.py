@@ -70,13 +70,15 @@ def test_continuous_close_mul_transform():
 
     a = binding("continuous_close", "ashare")
     u = binding("continuous_close", "us")
+    # ADJ_FIELD_MIGRATION: A-share continuous_close = AdjClose identity (the adj
+    # table precomputed Close*Factor); US keeps the Close*AdjFactor multiplication.
     out_a = apply_binding_transform(
-        a, None, fields={"StockDailyBar.Close": np.array([10.0]), "StockDailyBar.Factor": np.array([1.5])}
+        a, None, fields={"StockDailyBarAdj.AdjClose": np.array([10.0])}
     )
     out_u = apply_binding_transform(
         u, None, fields={"StockDailyBar.Close": np.array([10.0]), "StockDailyBar.AdjFactor": np.array([2.0])}
     )
-    assert float(out_a[0]) == pytest.approx(15.0)
+    assert float(out_a[0]) == pytest.approx(10.0)
     assert float(out_u[0]) == pytest.approx(20.0)
     # R17-033: US continuous prices are level-sensitive with the clamp policy.
     assert u.level_sensitive is True

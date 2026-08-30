@@ -87,6 +87,35 @@ def long_table_to_series(
         [indexed.index.get_level_values(0), lvl_asset],
         names=indexed.index.names,
     )
+    # PARITY-SWEEP-R56: ``pd.MultiIndex.from_arrays`` drops the DatetimeIndex
+    # ``freq`` even when the timestamps are a regular sequence.  The pandas
+    # backend keeps the source freq, so backend_parity tests that compare
+    # ``assert_series_equal`` (check_freq=True) failed on the polars_long /
+    # SQL boundary conversions.  Re-infer the freq on the level-0 timestamps
+    # when they are a regular monotone sequence (infer_freq) or a single
+    # timestamp (leave None).
+    ts_level = indexed.index.get_level_values(0)
+    try:
+        uniq = pd.DatetimeIndex(ts_level.unique())
+        if len(uniq) >= 2:
+            inferred = pd.infer_freq(uniq)
+            if inferred is not None:
+                # ``pd.MultiIndex.from_arrays`` and ``.reindex`` both drop the
+                # DatetimeIndex freq from the level.  Only ``from_product`` keeps
+                # it, so align the existing values onto a ``from_product`` index
+                # with the freq-carrying level via ``get_indexer`` (values are
+                # already sorted in (timestamp, instrument) order).
+                inst_level = pd.Index(indexed.index.get_level_values(1).unique())
+                base = pd.DatetimeIndex(uniq, freq=inferred)
+                rebuilt = pd.MultiIndex.from_product(
+                    [base, inst_level], names=indexed.index.names
+                )
+                arr = indexed.reindex(rebuilt).to_numpy()
+                indexed = pd.Series(
+                    arr, index=rebuilt, name=indexed.name, dtype=indexed.dtype
+                )
+    except Exception:
+        pass
     return indexed.astype("float64")
 
 

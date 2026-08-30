@@ -1,8 +1,9 @@
 {
   "schema_version": 2,
   "generated_by": "refresh_gate_evidence",
-  "git_sha": "97a4659a653cfb82e7fc40b655ffb1dcae3b6d86",
-  "timestamp": "2026-08-24T08:35:38.749242+00:00",
+  "git_sha": "fa9b6eb1461cd9d1f87cd8d41aa3e6b55747361f",
+  "timestamp": "2026-08-28T21:57:32.551885+00:00",
+  "tree_identity": "",
   "gates": [
     {
       "name": "NUMERICAL_ORACLE",
@@ -23,9 +24,9 @@
           "xpassed": 0,
           "tests": 13,
           "collected_tests": null,
-          "duration_sec": 4.913,
-          "executed_at": "2026-08-24T08:30:40.473405+00:00",
-          "run_at": "2026-08-24T08:30:40.473405+00:00"
+          "duration_sec": 5.728,
+          "executed_at": "2026-08-28T21:49:53.467594+00:00",
+          "run_at": "2026-08-28T21:49:53.467594+00:00"
         }
       ]
     },
@@ -48,9 +49,9 @@
           "xpassed": 0,
           "tests": 20,
           "collected_tests": null,
-          "duration_sec": 1.232,
-          "executed_at": "2026-08-24T08:30:41.706131+00:00",
-          "run_at": "2026-08-24T08:30:41.706131+00:00"
+          "duration_sec": 1.733,
+          "executed_at": "2026-08-28T21:49:55.200786+00:00",
+          "run_at": "2026-08-28T21:49:55.200786+00:00"
         },
         {
           "test": "quant_evaluator/tests/test_consistency.py",
@@ -67,86 +68,31 @@
           "xpassed": 0,
           "tests": 11,
           "collected_tests": null,
-          "duration_sec": 1.365,
-          "executed_at": "2026-08-24T08:30:43.071228+00:00",
-          "run_at": "2026-08-24T08:30:43.071228+00:00"
+          "duration_sec": 1.586,
+          "executed_at": "2026-08-28T21:49:56.787024+00:00",
+          "run_at": "2026-08-28T21:49:56.787024+00:00"
         }
       ]
     },
     {
-      "name": "CROSS_PACKAGE",
-      "status": "PASS",
-      "evidence": [
-        {
-          "test": "integration_tests/test_cross_package_contracts.py",
-          "status": "PASS",
-          "result": "passed",
-          "command_hash": "b512eaba7f7a727fa319e03d342e887971ee6763f7984b92ac1fc0214cc407b6",
-          "command_template_hash": "b512eaba7f7a727fa319e03d342e887971ee6763f7984b92ac1fc0214cc407b6",
-          "exit_code": 0,
-          "passed": 4,
-          "failed": 0,
-          "errors": 0,
-          "skipped": 2,
-          "xfailed": 0,
-          "xpassed": 0,
-          "tests": 6,
-          "collected_tests": null,
-          "duration_sec": 1.505,
-          "executed_at": "2026-08-24T08:30:44.577140+00:00",
-          "run_at": "2026-08-24T08:30:44.577140+00:00"
-        }
-      ]
+      "name": "CROSS_PACKAGE_CORE",
+      "status": "NOT_RUN",
+      "evidence": []
+    },
+    {
+      "name": "CROSS_PACKAGE_OPTIONAL",
+      "status": "NOT_RUN",
+      "evidence": []
     },
     {
       "name": "ASHARE_SEMANTIC_CONTRACT_GOLDEN",
-      "status": "PASS",
-      "evidence": [
-        {
-          "test": "integration_tests/test_ashare_semantic_golden.py",
-          "status": "PASS",
-          "result": "passed",
-          "command_hash": "160cf0c11027eeacbe6f9b7fcc974ce30666462e1091f1a2fa8d470d3266a592",
-          "command_template_hash": "160cf0c11027eeacbe6f9b7fcc974ce30666462e1091f1a2fa8d470d3266a592",
-          "exit_code": 0,
-          "passed": 8,
-          "failed": 0,
-          "errors": 0,
-          "skipped": 0,
-          "xfailed": 0,
-          "xpassed": 0,
-          "tests": 8,
-          "collected_tests": null,
-          "duration_sec": 1.714,
-          "executed_at": "2026-08-24T08:30:46.291028+00:00",
-          "run_at": "2026-08-24T08:30:46.291028+00:00"
-        }
-      ]
+      "status": "NOT_RUN",
+      "evidence": []
     },
     {
       "name": "ASHARE_REAL_DATA_SHADOW",
-      "status": "FAIL",
-      "evidence": [
-        {
-          "test": "integration_tests/test_real_ashare_shadow.py",
-          "status": "FAIL",
-          "result": "fail",
-          "command_hash": "0f0ac799deb5e4bb0112a52d61b6cd0688e6672f872e4cc15d372388d5fc3fe3",
-          "command_template_hash": "0f0ac799deb5e4bb0112a52d61b6cd0688e6672f872e4cc15d372388d5fc3fe3",
-          "exit_code": 0,
-          "passed": 0,
-          "failed": 0,
-          "errors": 0,
-          "skipped": 4,
-          "xfailed": 0,
-          "xpassed": 0,
-          "tests": 4,
-          "collected_tests": null,
-          "duration_sec": 1.694,
-          "executed_at": "2026-08-24T08:30:47.985427+00:00",
-          "run_at": "2026-08-24T08:30:47.985427+00:00"
-        }
-      ]
+      "status": "NOT_RUN",
+      "evidence": []
     },
     {
       "name": "SERIALIZATION",
@@ -167,9 +113,9 @@
           "xpassed": 0,
           "tests": 36,
           "collected_tests": null,
-          "duration_sec": 1.031,
-          "executed_at": "2026-08-24T08:30:49.016719+00:00",
-          "run_at": "2026-08-24T08:30:49.016719+00:00"
+          "duration_sec": 1.173,
+          "executed_at": "2026-08-28T21:49:57.960994+00:00",
+          "run_at": "2026-08-28T21:49:57.960994+00:00"
         },
         {
           "test": "factor_assets/tests/registry/test_serialization_codec.py",
@@ -186,9 +132,9 @@
           "xpassed": 0,
           "tests": 17,
           "collected_tests": null,
-          "duration_sec": 0.24,
-          "executed_at": "2026-08-24T08:30:49.257297+00:00",
-          "run_at": "2026-08-24T08:30:49.257297+00:00"
+          "duration_sec": 0.373,
+          "executed_at": "2026-08-28T21:49:58.334275+00:00",
+          "run_at": "2026-08-28T21:49:58.334275+00:00"
         }
       ]
     },
@@ -211,9 +157,9 @@
           "xpassed": 0,
           "tests": 3,
           "collected_tests": null,
-          "duration_sec": 1.612,
-          "executed_at": "2026-08-24T08:30:50.869955+00:00",
-          "run_at": "2026-08-24T08:30:50.869955+00:00"
+          "duration_sec": 1.971,
+          "executed_at": "2026-08-28T21:50:00.305741+00:00",
+          "run_at": "2026-08-28T21:50:00.305741+00:00"
         }
       ]
     },
@@ -236,9 +182,9 @@
           "xpassed": 0,
           "tests": 23,
           "collected_tests": null,
-          "duration_sec": 2.213,
-          "executed_at": "2026-08-24T08:30:53.083245+00:00",
-          "run_at": "2026-08-24T08:30:53.083245+00:00"
+          "duration_sec": 2.402,
+          "executed_at": "2026-08-28T21:50:02.708107+00:00",
+          "run_at": "2026-08-28T21:50:02.708107+00:00"
         },
         {
           "test": "factor_engine/tests/test_concurrency_safety.py",
@@ -255,9 +201,9 @@
           "xpassed": 0,
           "tests": 16,
           "collected_tests": null,
-          "duration_sec": 69.118,
-          "executed_at": "2026-08-24T08:32:02.201154+00:00",
-          "run_at": "2026-08-24T08:32:02.201154+00:00"
+          "duration_sec": 65.414,
+          "executed_at": "2026-08-28T21:51:08.123028+00:00",
+          "run_at": "2026-08-28T21:51:08.123028+00:00"
         }
       ]
     },
@@ -280,9 +226,9 @@
           "xpassed": 0,
           "tests": 14,
           "collected_tests": null,
-          "duration_sec": 48.361,
-          "executed_at": "2026-08-24T08:32:50.562715+00:00",
-          "run_at": "2026-08-24T08:32:50.562715+00:00"
+          "duration_sec": 45.852,
+          "executed_at": "2026-08-28T21:51:53.975515+00:00",
+          "run_at": "2026-08-28T21:51:53.975515+00:00"
         },
         {
           "test": "factor_preprocess/tests/contracts/test_leakage_properties.py",
@@ -299,9 +245,9 @@
           "xpassed": 0,
           "tests": 4,
           "collected_tests": null,
-          "duration_sec": 0.947,
-          "executed_at": "2026-08-24T08:32:51.509631+00:00",
-          "run_at": "2026-08-24T08:32:51.509631+00:00"
+          "duration_sec": 1.239,
+          "executed_at": "2026-08-28T21:51:55.214628+00:00",
+          "run_at": "2026-08-28T21:51:55.214628+00:00"
         }
       ]
     },
@@ -324,9 +270,9 @@
           "xpassed": 0,
           "tests": 3,
           "collected_tests": null,
-          "duration_sec": 47.485,
-          "executed_at": "2026-08-24T08:33:38.995014+00:00",
-          "run_at": "2026-08-24T08:33:38.995014+00:00"
+          "duration_sec": 45.178,
+          "executed_at": "2026-08-28T21:52:40.392935+00:00",
+          "run_at": "2026-08-28T21:52:40.392935+00:00"
         },
         {
           "test": "factor_engine/tests/runtime/test_label_pit.py",
@@ -343,9 +289,9 @@
           "xpassed": 0,
           "tests": 4,
           "collected_tests": null,
-          "duration_sec": 1.511,
-          "executed_at": "2026-08-24T08:33:40.506176+00:00",
-          "run_at": "2026-08-24T08:33:40.506176+00:00"
+          "duration_sec": 2.399,
+          "executed_at": "2026-08-28T21:52:42.792863+00:00",
+          "run_at": "2026-08-28T21:52:42.792863+00:00"
         },
         {
           "test": "factor_engine/tests/runtime/test_r10_pit_tristate.py",
@@ -362,9 +308,9 @@
           "xpassed": 0,
           "tests": 5,
           "collected_tests": null,
-          "duration_sec": 1.472,
-          "executed_at": "2026-08-24T08:33:41.978249+00:00",
-          "run_at": "2026-08-24T08:33:41.978249+00:00"
+          "duration_sec": 2.197,
+          "executed_at": "2026-08-28T21:52:44.990181+00:00",
+          "run_at": "2026-08-28T21:52:44.990181+00:00"
         }
       ]
     },
@@ -387,9 +333,9 @@
           "xpassed": 0,
           "tests": 12,
           "collected_tests": null,
-          "duration_sec": 1.862,
-          "executed_at": "2026-08-24T08:33:43.840690+00:00",
-          "run_at": "2026-08-24T08:33:43.840690+00:00"
+          "duration_sec": 2.881,
+          "executed_at": "2026-08-28T21:52:47.872078+00:00",
+          "run_at": "2026-08-28T21:52:47.872078+00:00"
         },
         {
           "test": "factor_engine/tests/backend/test_r21_def5_payload_hash.py",
@@ -406,9 +352,9 @@
           "xpassed": 0,
           "tests": 7,
           "collected_tests": null,
-          "duration_sec": 1.605,
-          "executed_at": "2026-08-24T08:33:45.445510+00:00",
-          "run_at": "2026-08-24T08:33:45.445510+00:00"
+          "duration_sec": 1.974,
+          "executed_at": "2026-08-28T21:52:49.846490+00:00",
+          "run_at": "2026-08-28T21:52:49.846490+00:00"
         }
       ]
     },
@@ -431,9 +377,9 @@
           "xpassed": 0,
           "tests": 1,
           "collected_tests": null,
-          "duration_sec": 68.978,
-          "executed_at": "2026-08-24T08:34:54.423972+00:00",
-          "run_at": "2026-08-24T08:34:54.423972+00:00"
+          "duration_sec": 61.828,
+          "executed_at": "2026-08-28T21:53:51.674810+00:00",
+          "run_at": "2026-08-28T21:53:51.674810+00:00"
         }
       ]
     },
@@ -456,9 +402,9 @@
           "xpassed": 0,
           "tests": 1,
           "collected_tests": null,
-          "duration_sec": 1.05,
-          "executed_at": "2026-08-24T08:34:55.474407+00:00",
-          "run_at": "2026-08-24T08:34:55.474407+00:00"
+          "duration_sec": 1.217,
+          "executed_at": "2026-08-28T21:53:52.892384+00:00",
+          "run_at": "2026-08-28T21:53:52.892384+00:00"
         }
       ]
     },
@@ -481,9 +427,9 @@
           "xpassed": 0,
           "tests": 1,
           "collected_tests": null,
-          "duration_sec": 0.984,
-          "executed_at": "2026-08-24T08:34:56.459137+00:00",
-          "run_at": "2026-08-24T08:34:56.459137+00:00"
+          "duration_sec": 1.183,
+          "executed_at": "2026-08-28T21:53:54.075930+00:00",
+          "run_at": "2026-08-28T21:53:54.075930+00:00"
         }
       ]
     },
@@ -506,9 +452,9 @@
           "xpassed": 0,
           "tests": 3,
           "collected_tests": null,
-          "duration_sec": 1.052,
-          "executed_at": "2026-08-24T08:34:57.511800+00:00",
-          "run_at": "2026-08-24T08:34:57.511800+00:00"
+          "duration_sec": 1.229,
+          "executed_at": "2026-08-28T21:53:55.305743+00:00",
+          "run_at": "2026-08-28T21:53:55.305743+00:00"
         }
       ]
     },
@@ -531,10 +477,10 @@
           "xpassed": null,
           "tests": null,
           "collected_tests": null,
-          "duration_sec": 1.494,
-          "executed_at": "2026-08-24T08:34:59.006176+00:00",
-          "run_at": "2026-08-24T08:34:59.006176+00:00",
-          "note": "STALE/UNRESOLVED: EVIDENCE_CURRENT: STALE reason=artifact bound inputs differ from the live tree (changed=['operator-benchmark-manifest', 'operator-certification', 'operator-inventory'])"
+          "duration_sec": 211.235,
+          "executed_at": "2026-08-28T21:57:26.540842+00:00",
+          "run_at": "2026-08-28T21:57:26.540842+00:00",
+          "note": "STALE/UNRESOLVED:   return polars_backend_kind(op, source=source, production_mode=production_mode)"
         }
       ]
     },
@@ -557,10 +503,10 @@
           "xpassed": null,
           "tests": null,
           "collected_tests": null,
-          "duration_sec": 0.15,
-          "executed_at": "2026-08-24T08:34:59.156576+00:00",
-          "run_at": "2026-08-24T08:34:59.156576+00:00",
-          "note": "canonical cleaned_operators present (435 .py); no live-code import of the archived factor_engine.cleaned_operators duplicate"
+          "duration_sec": 5.985,
+          "executed_at": "2026-08-28T21:57:32.525861+00:00",
+          "run_at": "2026-08-28T21:57:32.525861+00:00",
+          "note": "canonical cleaned_operators present (447 .py); no live-code import of the bare cleaned_operators duplicate"
         }
       ]
     },
@@ -584,9 +530,9 @@
           "tests": null,
           "collected_tests": null,
           "duration_sec": 0.0,
-          "executed_at": "2026-08-24T08:34:59.156746+00:00",
-          "run_at": "2026-08-24T08:34:59.156746+00:00",
-          "note": "lock present with lock_digest; 11 pinned deps; explicit sentinels (==missing, optional providers): numba, clickhouse-connect, factor-engine, uvicorn"
+          "executed_at": "2026-08-28T21:57:32.526246+00:00",
+          "run_at": "2026-08-28T21:57:32.526246+00:00",
+          "note": "lock present with lock_digest; 55 pinned deps"
         }
       ]
     },
@@ -609,24 +555,24 @@
           "xpassed": null,
           "tests": 6,
           "collected_tests": null,
-          "duration_sec": 39.584,
-          "executed_at": "2026-08-24T08:35:38.740717+00:00",
-          "run_at": "2026-08-24T08:35:38.740717+00:00",
+          "duration_sec": 0.017,
+          "executed_at": "2026-08-28T21:57:32.543229+00:00",
+          "run_at": "2026-08-28T21:57:32.543229+00:00",
           "note": "all 6 packages PASS"
         }
       ]
     },
     {
       "name": "SUBMODULE_REACHABILITY",
-      "status": "NOT_RUN",
+      "status": "PASS",
       "evidence": [
         {
           "test": "",
-          "status": "NOT_RUN",
-          "result": "not_run",
+          "status": "PASS",
+          "result": "passed",
           "command_hash": "",
           "command_template_hash": "",
-          "exit_code": null,
+          "exit_code": 0,
           "passed": null,
           "failed": null,
           "errors": null,
@@ -636,9 +582,9 @@
           "tests": null,
           "collected_tests": null,
           "duration_sec": 0.007,
-          "executed_at": "2026-08-24T08:35:38.748229+00:00",
-          "run_at": "2026-08-24T08:35:38.748229+00:00",
-          "note": "no submodules declared; nothing pinned to prove"
+          "executed_at": "2026-08-28T21:57:32.550437+00:00",
+          "run_at": "2026-08-28T21:57:32.550437+00:00",
+          "note": "1 submodule pin(s) declared"
         }
       ]
     }

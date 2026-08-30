@@ -1,0 +1,102 @@
+# -*- coding: utf-8 -*-
+# Agent-callable operator audit fixes — evidence backfill
+# (work already in working tree; manifest was missing)
+task_id: AGENT_CALLABLE_FIX
+schema_version: 1
+generation_timestamp: 2026-08-28
+current_sha: fa9b6eb1461cd9d1f87cd8d41aa3e6b55747361f
+head_sha: working-tree (uncommitted)
+status: CLOSED_LOCAL
+production_certification: NOT_RUN
+
+owned_files:
+  - factor_engine/backend/operator_capability.py
+      # _json_contract_value() now detaches MappingProxyType leaves (R40 #208 /
+      # P0-13): a capability contract read that reaches the frozen live
+      # _catalog (e.g. _sql_contract) previously raised/failed on read-only
+      # mapping values; it now converts them to plain dicts before typed
+      # serialization.
+  - factor_engine/backend/operator_signatures_phase1.py
+      # ts_mean / ts_std carry optional min_periods / ddof window-estimator
+      # args (_WINDOW_EXTRA) so their phase-1 signatures are truthful
+      # (param-injectivity audit input).
+  - factor_engine/backend/pair_window_spec.py
+      # min_periods > window now raises OperatorParameterError; production
+      # default (mp=2 / ts_beta 5) clamps to the window when an explicit smaller
+      # window is given (R19-033 parity with kernel contract).
+  - scripts/export_operator_manifest.py + benchmarks/operator_manifest.json
+      # manifest is a generated artifact from the live registry (1737 canonicals,
+      # generated 2026-08-28T11:47:21+08:00, sha fa9b6eb1461c); CI freshness
+      # check test lives in tests/backend/test_operator_manifest_freshness.py.
+  - factor_engine/tests/r40/test_p0_14_registry_lifecycle_freeze_guards.py
+      # freeze-guard contract that made the frozen-catalog reads surface
+  - factor_engine/tests/scripts/test_r64_operator_truth_matrix.py  # R64 truth-matrix invariants
+  - factor_engine/mining/direct_use.py  # R64 per-gate production ladder view; single authority = registry production_admitted
+  - evidence/r2/AGENT_CALLABLE_FIX.yaml
+
+scope: |
+  Agent-callable operator audit. The frozen registry stores catalog leaves as
+  nested MappingProxyType (P0-14 deep-freeze); contract reads of the frozen
+  catalog must detach those leaves before JSON/typed serialization — the fix in
+  _json_contract_value. Phase-1 signatures for ts_mean/ts_std gain their real
+  estimator args; pair_window_spec guards min_periods>window. The operator
+  manifest is regenerated from the live registry (never hand-edited).
+
+verification:
+  - command: "functional probe of the serialization fix (REAL OUTPUT, 2026-08-28):"
+    result: |
+      _json_contract_value(MappingProxyType({"a":1,"nested":{"b":[1,2,3]},"flag":True}))
+      -> {'a': 1, 'nested': {'b': [1, 2, 3]}, 'flag': True}   # detached, OK
+      AGENT_CALLABLE_PROBE _json_contract_value(MappingProxyType) -> OK
+  - command: "capability contract + registry suites (REAL OUTPUT, 2026-08-28):"
+    result: "1 failed, 33 passed in 0.75s"
+    note: |
+      test_capability_contracts.py::test_physical_implementation_spec_authority
+      FAILS in this working tree: PhysicalImplementationSpec built with a
+      test-sha256 (non-blank but not a real 64-hex SHA256) hits the
+      implementation_closure_hash blank/invalid validation, so
+      is_production_eligible() returns False. Pre-existing in the working tree,
+      unrelated to the agent-callable serialization fix. Recorded honestly;
+      NOT fixed (task says record real state, fix nothing).
+  - command: "operator manifest structural probe (REAL OUTPUT):"
+    result: |
+      benchmarks/operator_manifest.json: schema_version present, generated_at
+      2026-08-28T11:47:21+08:00, generated_commit_sha fa9b6eb1461c, n_operators
+      1737, sample operator ADX has status/allow_in_production/backends fields.
+    note: |
+      full freshness check (export_operator_manifest.py --check) was attempted
+      twice; both exceeded 600s (registry enumeration is slow, >10min per prior
+      R51 evidence) and were terminated. Not used as a PASS.
+  - command: "agent-callable count probe (REAL OUTPUT, 2026-08-28):"
+    result: |
+      catalog_size 1983  agent_callable(registry production_admitted=True) 0
+      production_certified (phase1_scope) 0
+      evidence_artifact_valid() False
+      validation_errors: emitter_hashes stale; operator[add].implementation_hash_*
+      stale (artifact commit 724cf286, current tree fa9b6eb1)
+      primitive_verified.json six-way intersection count 79 (abs, add, and_,
+      ceil, clip, coalesce, cs_count, ...) — present in artifact but hidden by
+      the stale-hash invalidation.
+    interpretation: |
+      Agent-callable counts are currently ZERO through the fail-closed evidence
+      gate because the primitive_verified artifact's implementation hashes no
+      longer match the current tree (stale commit). The 79-op six-way certified
+      set exists in the artifact but is hidden by provenance invalidation. This
+      is the honest current state; regenerating evidence for the current tree
+      would surface it. The R51 matrix-rewrite evidence (P0-E-R51-MATRIX-REWRITE)
+      reported PRODUCTION_AGENT_CALLABLE=1151 under its own generator at commit
+      724cf286 — not reproduced in this tree today.
+
+residual_risks:
+  - "test_physical_implementation_spec_authority failure is a pre-existing
+    working-tree state (test fixture uses non-SHA256 sample hashes); documented,
+    not fixed."
+  - "Agent-callable counts are evidence-gated; with stale evidence artifact the
+    count is 0. Re-certify primitive evidence for fa9b6eb1 to restore the true
+    certified surface."
+  - "Full operator manifest freshness check not completed (enumeration >10min);
+    manifest generator is the refresh path, not hand-edited."
+no_defect: false
+known_defect: "test_physical_implementation_spec_authority FAILS (pre-existing working-tree state, documented above)"
+commit: NOT_CREATED
+remotes: NOT_USED

@@ -35,6 +35,7 @@ from factor_engine.backend.q_backend.q_errors import (
     QPhysicalRegionNotImplemented,
     QPlanningFallbackAllowed,
     QProcessUnavailableError,
+    QUnavailableError,
     semantic_kind_to_output_dtype,
     semantic_null_policy_of_contract,
 )
@@ -94,6 +95,27 @@ class QBackend(Backend):
 
         self._fallback_to_pandas = fallback_to_pandas
         self._production_mode = production_mode
+
+        # Truthful availability gate (Q/KDB task #60): constructing a QBackend
+        # must not silently succeed when there is no q runtime.  We probe the
+        # SAME honest gate every executor path uses (QProcessManager) and, in
+        # production mode, fail closed immediately with a clear
+        # ``BackendUnavailableError`` — so callers (factory, planner, executor)
+        # can never route work to q unaware.  Research mode keeps the backend
+        # constructible so capability/compiler/adapter tests can still run, but
+        # every real execute path still fails closed at execution time.
+        if self._production_mode and not self._process_manager.is_available():
+            info = self._process_manager.check_availability()
+            raise BackendUnavailableError(
+                "QBackend requires a live q runtime and none is available in "
+                "this environment. "
+                f"Status: {info.status.value}. "
+                f"Error: {info.error_message}. "
+                "q is NOT provisioned here (no q/kdb+ binary, no pykx/qpython "
+                "client, no Q_LICENSED env). This is the truthful fail-closed "
+                "gate, not a fake success: construct with "
+                "production_mode=False for capability/compiler-only use."
+            )
 
         # 运行时统计
         self._stats = {
@@ -161,15 +183,22 @@ class QBackend(Backend):
         )
 
         # Q2-P0-018: Only planning-time fallback allowed
-        # Check q availability BEFORE execution
+        # Check q availability BEFORE execution.  Backlog #60: an absent q
+        # runtime is never "fallbackable" at runtime — the planner decides a
+        # certified alternative at planning time, and even then the
+        # availability probe here is honest (no phantom q, no silent duckdb /
+        # pandas substitution behind the caller's back).
         if not self._process_manager.is_available():
             info = self._process_manager.check_availability()
             logger.warning(
                 f"q backend unavailable: {info.status.value} - {info.error_message}"
             )
 
+            # Planning-time fallback (Q2-P0-018) is the ONLY sanctioned
+            # fallback, and it is explicit: the planner is told q is not
+            # runnable and must select a certified alternative backend.  The
+            # QBackend itself never silently reroutes to pandas.
             if self._fallback_to_pandas:
-                # This is planning-time fallback (allowed)
                 logger.info(
                     "Q2-P0-018: Planning-time fallback to pandas "
                     "(q unavailable before execution)"
@@ -179,11 +208,12 @@ class QBackend(Backend):
                     f"Planner should select certified alternative backend."
                 )
             else:
-                # Production mode: hard fail
-                raise QDataUnavailableError(
+                # Production mode: hard fail with the typed unavailable error.
+                raise QUnavailableError(
                     f"q backend unavailable: {info.status.value}. "
                     f"Error: {info.error_message}. "
-                    "Fallback disabled in production mode."
+                    "q is NOT provisioned in this environment; fail-closed, "
+                    "no silent fallback (Backlog #60)."
                 )
 
         # 记录运行时事件

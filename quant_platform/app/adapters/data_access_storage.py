@@ -255,10 +255,12 @@ class DataAccessStorageAdapter:
             upload_id = self.store.begin_multipart(key)
             try:
                 chunk = self.multipart_threshold
-                idx = 0
-                for offset in range(0, len(data), chunk):
+                # S3/COS PartNumber 域 = 1..10000（P0-06）。store 的
+                # ``part_index`` 是 0-based 内部索引，UploadPart 前由 store 统一
+                # ``+1`` 落 1-based 并 fail-closed 越界校验——此处必须从 0 起传
+                # 0-based 索引，切勿自行 +1（会 double-shift 成 PartNumber 2..N+1）。
+                for idx, offset in enumerate(range(0, len(data), chunk)):
                     self.store.upload_part(upload_id, key, idx, data[offset : offset + chunk])
-                    idx += 1
                 self.store.complete_multipart(upload_id, key)
             except Exception:
                 try:

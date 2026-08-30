@@ -13,6 +13,8 @@ from factor_optimizer.contracts.search_budget import (
 )
 from factor_optimizer.contracts.splits import EvaluationProtocol, SplitPlan
 from factor_optimizer.contracts.trial import Trial, TrialStatus
+import numpy as np
+
 from factor_optimizer.search.runner import (
     SearchConfig,
     SearchRunner,
@@ -221,7 +223,7 @@ class TestRunnerIngestion:
                 enable_multifidelity=False,
             ),
             boom,
-            _protocol(lambda t, f: {"score": 1.0, "cost": 1.0}),
+            _protocol(lambda t, f: {"score": 1.0, "cost": 1.0, "treatment_integrity_evidence": _integrity_evidence(t.trial_id)}),
         ).run("proposal-failure")
         # FO-P0-04: a raised proposal is a PROPOSAL_FAILED ledger entry, NOT a
         # duplicate.  The burned budget is recorded in the append-only ledger.
@@ -456,3 +458,25 @@ class TestSearchSplitPlanSerialization:
         object.__setattr__(sealed, "test_mask", [1, 0])  # ints, not bools
         object.__setattr__(sealed, "metadata", {})
         assert _sealed_test_disjoint(search, sealed) is False
+
+
+def _integrity_evidence(trial_id="t1", kind=None):
+    """Passing TreatmentIntegrityEvidence measured from arrays (R55 P0-9)."""
+    from factor_optimizer.contracts.treatment_integrity import (
+        build_integrity_evidence,
+    )
+
+    rng = np.random.default_rng(abs(hash(trial_id)) % (2 ** 32))
+    before = rng.normal(size=32)
+    treated_kind = kind if kind else f"treatment::{trial_id}"
+    if treated_kind == "raw":
+        after = before
+    else:
+        after = before * 0.5 + 0.01
+    return build_integrity_evidence(
+        trial_id,
+        treated_kind,
+        {} if treated_kind == "raw" else {"window": 3},
+        before,
+        after,
+    )

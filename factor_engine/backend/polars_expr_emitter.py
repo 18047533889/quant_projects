@@ -1876,11 +1876,17 @@ def _compile_polars_impl(
             .then(None)
             .otherwise(pl.col("_y"))
         )
-        # Centered two-pass computation avoids catastrophic cancellation for
-        # large-offset inputs while preserving pairwise/current-row semantics.
-        corr = _rolling_corr_centered_expr(lcol, rcol, pspec.size, pspec.min_periods).over(
-            _INST, order_by=_TS
-        )
+        # PARITY-SWEEP-R56: use polars' native ``rolling_corr`` (matches pandas
+        # ``rolling.corr`` bit-for-bit to 1e-10) instead of the former centered
+        # two-pass expression whose anchor/subtraction order diverged from
+        # pandas by ~1e-10 on large-offset inputs (test_three_backend_parity
+        # asserts rtol=atol=1e-10).
+        corr = pl.rolling_corr(
+            lcol,
+            rcol,
+            window_size=pspec.size,
+            min_samples=pspec.min_periods,
+        ).over(_INST, order_by=_TS)
         return joined.with_columns(corr.alias(_VAL)).select(_TS, _INST, _VAL)
 
     if op == "ts_cov":
@@ -2427,11 +2433,19 @@ def _compile_polars_impl(
         elif op == "group_std":
             from factor_engine.backend.numeric_semantics import std_ddof_value
 
-            # pandas GroupStd uses ``notna`` (Inf included); Inf→std NaN→0 fill.
+            # pandas GroupStd uses ``notna`` (Inf included); a group containing
+            # ±Inf has std NaN -> the reference fills 0 for the WHOLE group.
+            # Polars' std() drops non-finite (giving a finite std of the remaining
+            # members), so detect any non-finite member and force the 0 fill.
+            group_has_inf = (
+                pl.col(_VAL).is_infinite().max().over(*over_keys, order_by=_INST).cast(pl.Boolean)
+            )
             cnt = pl.col(_VAL).count().over(*over_keys, order_by=_INST)
             std_expr = pl.col(_VAL).std(ddof=std_ddof_value("group_std")).over(*over_keys, order_by=_INST)
             expr = (
-                pl.when(pl.col(_VAL).is_null() | pl.col(_VAL).is_nan())
+                pl.when(group_has_inf)
+                .then(0.0)
+                .when(pl.col(_VAL).is_null() | pl.col(_VAL).is_nan())
                 .then(None)
                 .when(cnt < 2)
                 .then(0.0)
@@ -2442,18 +2456,42 @@ def _compile_polars_impl(
         elif op in {"group_zscore", "group_neutralize"}:
             from factor_engine.backend.numeric_semantics import std_ddof_value, zscore_zero_std_fill
 
+            # PARITY-SWEEP-R56: pandas ``GroupZScore`` uses ``x_slice.notna()``
+            # (Inf INCLUDED) for the group mask, so a group containing ±Inf has
+            # mean=Inf and std=NaN -> the reference's ``std != 0 and not isna``
+            # branch is False and the WHOLE group is set to 0.  Replicate: if any
+            # group member is non-finite, output the zero_fill for every member
+            # (matching the pandas 0 output), instead of dropping Inf and
+            # computing a finite z-score.
+            group_has_inf = (
+                pl.col(_VAL).is_infinite().max().over(*over_keys, order_by=_INST).cast(pl.Boolean)
+            )
             mean = pl.col(_VAL).mean().over(*over_keys, order_by=_INST)
             if op == "group_neutralize":
-                expr = (
-                    pl.when(pl.col(_VAL).is_null() | pl.col(_VAL).is_nan())
+                # PARITY-SWEEP-R56: pandas ``GroupDemean`` (group_neutralize) uses
+                # an ``np.isfinite`` mask for group membership — a ±Inf member is
+                # EXCLUDED from the group mean (pandas nanmean over finite), the
+                # finite members are demeaned by the finite mean, and the Inf cell
+                # stays NaN.  Polars' ``mean()`` KEEPS Inf (mean=Inf), so mask Inf
+                # to NULL before the mean.
+                safe = (
+                    pl.when(pl.col(_VAL).is_null() | pl.col(_VAL).is_nan() | pl.col(_VAL).is_infinite())
                     .then(None)
-                    .otherwise(pl.col(_VAL) - mean)
+                    .otherwise(pl.col(_VAL))
+                )
+                mean_f = safe.mean().over(*over_keys, order_by=_INST)
+                expr = (
+                    pl.when(pl.col(_VAL).is_null() | pl.col(_VAL).is_nan() | pl.col(_VAL).is_infinite())
+                    .then(None)
+                    .otherwise(pl.col(_VAL) - mean_f)
                 )
             else:
                 std = pl.col(_VAL).std(ddof=std_ddof_value("group_zscore")).over(*over_keys, order_by=_INST)
                 zero_fill = zscore_zero_std_fill("group_zscore")
                 expr = (
-                    pl.when(pl.col(_VAL).is_null() | pl.col(_VAL).is_nan())
+                    pl.when(group_has_inf)
+                    .then(zero_fill)
+                    .when(pl.col(_VAL).is_null() | pl.col(_VAL).is_nan())
                     .then(None)
                     .when(std.is_null() | (std == 0) | std.is_infinite())
                     .then(zero_fill)
@@ -2687,11 +2725,17 @@ def _compile_polars_impl(
         inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
         if inner is None:
             return None
+        # PARITY-SWEEP-R56: pandas ``LogAbs`` = ``np.log(x.abs()).replace([inf,-inf],
+        # nan)`` — log(abs(±Inf)) = Inf is replaced with NaN.  Polars' ``abs().log()``
+        # keeps Inf; mask the non-finite log output to None.
         abs_v = pl.col(_VAL).abs()
+        log_v = abs_v.log()
         return inner.with_columns(
             pl.when(pl.col(_VAL).is_null() | (abs_v == 0))
             .then(None)
-            .otherwise(abs_v.log())
+            .otherwise(
+                pl.when(log_v.is_infinite() | log_v.is_nan()).then(None).otherwise(log_v)
+            )
             .alias(_VAL)
         )
 

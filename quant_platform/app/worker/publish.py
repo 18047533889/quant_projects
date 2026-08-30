@@ -62,13 +62,16 @@ class PublishTimeoutError(OutboxWorkerError):
 
 @dataclass(frozen=True)
 class OutboxRow:
-    """One outbox row (event_id keyed). ``status`` is ``pending`` or ``sent``."""
+    """One outbox row (event_id keyed). ``status`` is ``pending``/``claimed``/
+    ``sent``/``failed``."""
 
     event: EventEnvelope
     status: str = "pending"
     attempt_count: int = 0
     created_at: float = field(default_factory=time.time)
     sent_at: float | None = None
+    claimed_by: str | None = None
+    last_error: str | None = None
 
     @property
     def event_id(self) -> str:
@@ -115,6 +118,23 @@ class InMemoryOutbox:
             self._rows[eid] for eid in self._order if self._rows[eid].status == "pending"
         )
 
+    def pending_or_claimed_by(self, event_id: str, worker_id: str) -> OutboxRow | None:
+        """A pending row, or a row claimed by ``worker_id`` (who may finish it).
+
+        ``publish_and_claim`` uses this so a worker that already holds a claim
+        (from a previous cycle, or a row it claimed mid-iteration) can still
+        settle it to ``sent``. Returns None for a row claimed by ANOTHER worker
+        (never settle someone else's claim).
+        """
+        row = self._rows.get(event_id)
+        if row is None:
+            return None
+        if row.status == "pending":
+            return row
+        if row.status == "claimed" and row.claimed_by == worker_id:
+            return row
+        return None
+
     def pending_row(self, event_id: str) -> OutboxRow | None:
         """Latest row for ``event_id`` if it is still pending, else None."""
         row = self._rows.get(event_id)
@@ -131,12 +151,92 @@ class InMemoryOutbox:
         row = self._rows.get(event_id)
         if row is None:
             raise KeyError(f"no outbox row for event_id {event_id!r}")
-        if row.status != "pending":
-            raise OutboxWorkerError(f"event {event_id!r} not pending (status={row.status!r})")
+        if row.status not in ("pending", "claimed", "failed"):
+            raise OutboxWorkerError(f"event {event_id!r} not sendable (status={row.status!r})")
         self._rows[event_id] = replace(
             row,
             status="sent",
             sent_at=at if at is not None else time.time(),
+            claimed_by=None,
+            last_error=None,
+        )
+
+    def mark_claiming(self, event_id: str, worker_id: str) -> bool:
+        """Atomically claim a pending row for ``worker_id``.
+
+        Returns True only for the single worker that flipped ``pending ->
+        claimed`` (the idempotency-key guard means a repeat claim returns the
+        existing claimed row WITHOUT re-claiming, so two workers can never both
+        become the claim holder). This mirrors the SQL claim-once semantics.
+        """
+        row = self._rows.get(event_id)
+        if row is None:
+            raise KeyError(f"no outbox row for event_id {event_id!r}")
+        if row.status == "pending":
+            self._rows[event_id] = replace(
+                row,
+                status="claimed",
+                claimed_by=worker_id,
+            )
+            return True
+        if row.status == "claimed" and row.claimed_by == worker_id:
+            return True  # repeat claim by the SAME worker is idempotent
+        return False
+
+    def mark_failed(
+        self,
+        event_id: str,
+        *,
+        last_error: str,
+        at: float | None = None,
+        decrement: bool = False,
+    ) -> None:
+        """Record a failed delivery: the row becomes ``failed`` (not pending).
+
+        A ``failed`` row is NOT re-pulled by ``pending()`` in the same loop, so
+        the same event_id is delivered at most once per append. A subsequent
+        ``publish_and_claim`` (or an explicit ``reject``) resets it to
+        ``pending`` for a retry.
+        """
+        row = self._rows.get(event_id)
+        if row is None:
+            raise KeyError(f"no outbox row for event_id {event_id!r}")
+        if row.status not in ("claimed", "failed"):
+            raise OutboxWorkerError(f"event {event_id!r} not claimable (status={row.status!r})")
+        self._rows[event_id] = replace(
+            row,
+            status="failed",
+            claimed_by=None,
+            last_error=last_error,
+            attempt_count=max(0, row.attempt_count - 1) if decrement else row.attempt_count,
+        )
+
+    def reject(self, event_id: str) -> None:
+        """Reset a failed row back to ``pending`` for a later retry."""
+        row = self._rows.get(event_id)
+        if row is None:
+            raise KeyError(f"no outbox row for event_id {event_id!r}")
+        if row.status != "failed":
+            raise OutboxWorkerError(f"event {event_id!r} not failed (status={row.status!r})")
+        self._rows[event_id] = replace(
+            row,
+            status="pending",
+            claimed_by=None,
+        )
+        return row
+
+    def replace(
+        self,
+        event_id: str,
+        *,
+        mark_failed_decremented: bool = False,
+        last_error: str | None = None,
+    ) -> None:
+        """Internal seam: settle a claimed row to ``failed`` with an error."""
+        self.mark_failed(
+            event_id,
+            last_error=last_error or "unknown error",
+            decrement=mark_failed_decremented,
         )
 
     def mark_attempt(self, event_id: str) -> int:
@@ -144,7 +244,7 @@ class InMemoryOutbox:
         row = self._rows.get(event_id)
         if row is None:
             raise KeyError(f"no outbox row for event_id {event_id!r}")
-        if row.status != "pending":
+        if row.status not in ("pending", "failed"):
             return row.attempt_count
         self._rows[event_id] = replace(row, attempt_count=row.attempt_count + 1)
         return self._rows[event_id].attempt_count
@@ -256,6 +356,82 @@ class WorkerLoop:
                 report = report + PumpReport(failed=1)
                 continue
         return report
+
+    def publish_and_claim(
+        self,
+        *,
+        worker_id: str,
+        now: float | None = None,
+        max_cycles: int = 100,
+    ) -> PumpReport:
+        """Claim-once publish loop. The worker id is recorded on the row.
+
+        A pending row is first **claimed** (``pending -> claimed``, timestamps
+        the worker); the SAME worker then publishes and marks ``sent``. Because
+        claim-once returns False for a row already claimed by another worker,
+        two workers can never both deliver the same event_id.
+
+        - success: claimed -> sent (published +1)
+        - definitive failure: claimed -> failed (recorded last_error; NOT
+          re-pulled by this loop, so the event is never double-delivered; a
+          later cycle re-claims it for retry)
+        - ``PublishTimeoutError``: like ``publish_once``, the row is leased
+          in-flight and settled once the lease expires.
+
+        Returns the accumulated ``PumpReport``.
+        """
+        total: PumpReport = PumpReport()
+        for _ in range(max_cycles):
+            progress = False
+            # Claims are scanned over pending rows; a row claimed by another
+            # worker (or by this worker on a previous cycle) is settled only by
+            # its holder, so a scan of pending rows is the safe claim surface.
+            scan: list[OutboxRow] = list(self.outbox.pending())
+            # Also re-settle a claim this worker already holds from a previous
+            # cycle (it is not pending anymore, but the holder may finish it).
+            for row in self.outbox.rows():
+                if (
+                    row.status == "claimed"
+                    and row.claimed_by == worker_id
+                    and row not in scan
+                ):
+                    scan.append(row)
+            for row in scan:
+                eid = row.event_id
+                if not self.outbox.mark_claiming(eid, worker_id):
+                    # Another worker owns the claim; never settle it.
+                    continue
+                self.outbox.mark_attempt(eid)
+                current = self.outbox.pending_or_claimed_by(eid, worker_id)
+                if current is None:
+                    continue
+                try:
+                    self.publisher.publish(current.event)
+                    self.outbox.mark_sent(eid, at=now if now is not None else self._now_fn())
+                    self._in_flight.pop(eid, None)
+                    self._delivered.append(eid)
+                    total = total + PumpReport(published=1)
+                except PublishTimeoutError:
+                    self._in_flight[eid] = (
+                        now if now is not None else self._now_fn()
+                    )
+                    total = total + PumpReport(in_flight=1)
+                    continue
+                except Exception as exc:
+                    # Record the definitive failure on the row (no redelivery),
+                    # but leave the row recoverable for a later retry cycle.
+                    self.outbox.replace(
+                        eid,
+                        mark_failed_decremented=True,
+                        last_error=str(exc)[:2000],
+                    )
+                    self._in_flight.pop(eid, None)
+                    total = total + PumpReport(failed=1)
+                    continue
+                progress = True
+            if not progress:
+                break
+        return total
 
     def run_until_quiesce(self, *, max_cycles: int = 100) -> PumpReport:
         """Keep draining until a cycle makes no progress. Returns accumulated

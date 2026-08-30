@@ -1,0 +1,65 @@
+# -*- coding: utf-8 -*-
+# P0-14 OperatorRegistry lifecycle (BUILDING → FINALIZED → FROZEN) freeze guards —
+# evidence backfill (work already in working tree; manifest was missing)
+task_id: P014_REGISTRY_LIFECYCLE
+schema_version: 1
+generation_timestamp: 2026-08-28
+current_sha: fa9b6eb1461cd9d1f87cd8d41aa3e6b55747361f
+head_sha: working-tree (uncommitted)
+status: CLOSED_LOCAL
+production_certification: NOT_RUN
+
+owned_files:
+  - factor_engine/cleaned_operators/registry.py
+      # _deepfreeze_catalog (L54) / _defrost_catalog (L77) — recursive freeze of
+      # every nested catalog mapping (per-canonical entry, backend_meta,
+      # backend_signatures) into MappingProxyType leaves; thaw mirrors it back
+      # to plain dicts. freeze() (L1349) turns live _operators/_aliases/_catalog
+      # into MappingProxyType; _frozen immutable snapshot (L1390). catalog()
+      # (L2341) / snapshot() (L2358) export detached deep copies via
+      # _defrost_catalog so caller mutation never reaches live state.
+  - factor_engine/backend/sql_pushdown/sql_registry.py
+      # register_sql_backends() no longer re-thaws a FROZEN production registry on
+      # every capability probe: complete marker pass on a frozen registry is a
+      # no-op; thaw only when registry actually changed; re-finalize/re-freeze after
+      # the pass. (Root-cause fix for parity-suite P0-14 lifecycle-not-thawed errors.)
+  - factor_engine/backend/operator_capability.py
+      # _json_contract_value() detaches MappingProxyType leaves (R40 #208 /
+      # P0-13) before typed serialization of frozen catalog reads.
+  - factor_engine/tests/r40/test_p0_14_registry_lifecycle_freeze_guards.py
+  - factor_engine/tests/multibackend/test_r45_scheduler_closure.py
+  - evidence/r2/P014_REGISTRY_LIFECYCLE.yaml
+
+scope: |
+  OperatorRegistry lifecycle guards: register/replace/alias refuse mutation after
+  freeze; direct writes into the frozen live dicts (including NESTED catalog
+  entries and backend_meta) raise TypeError (MappingProxyType); aliasing after
+  freeze fails loudly; snapshot()/catalog() return detached deep copies. The
+  SQL backend marker pass is P0-14-safe (no per-probe thaw of frozen registry).
+
+verification:
+  - command: |
+      cd /home/sunhaiwei/quant_projects && PYTHONPATH=factor_engine .venv/bin/python -m pytest \
+        factor_engine/tests/r40/test_p0_14_registry_lifecycle_freeze_guards.py -q -p no:cacheprovider
+    result: "13 passed in 0.06s"     # REAL OUTPUT (2026-08-28)
+  - command: functional probe (isolated subclass; real output captured 2026-08-28)
+    result: |
+      lifecycle after freeze: frozen
+      catalog type: dict            (public catalog() detached dict)
+      snapshot detached: True
+      live dict write after freeze raises TypeError: 'mappingproxy' object does not support item assign
+      lifecycle after thaw: building
+      catalog is dict after thaw: True
+      # deeper live-catalog probe with a registered op + backend_meta:
+      live _catalog type: mappingproxy
+      live leaf type: mappingproxy
+      live nested write raises TypeError: 'mappingproxy' object does not support item a...
+      public catalog detached mutable: OK; live leaf still: mappingproxy
+
+residual_risks:
+  - "functional probe used isolated registry subclass; live bootstrap registry stays untouched."
+  - "snapshot/catalog deep-copy cost grows with catalog size (1983 canonicals) — noted, not a correctness issue."
+  - "full multibackend/r45 suite not re-run here (coordinator: avoid heavy loads); sql_registry change verified only by its own test modules plus the 13 freeze-guard tests."
+no_defect: true
+commit: NOT_CREATED
+remotes: NOT_USED

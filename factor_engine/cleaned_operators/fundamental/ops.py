@@ -104,6 +104,28 @@ class LqtpYoyOp(SeriesOperator):
 # ``quarter`` / ``yoy`` compatibility spellings below.
 
 
+@register_operator(name="avg2", category="fundamental", business_category="fundamental", canonical="avg2", source="factor_dsl_np")
+class LqtpAvg2Op(TwoVarOperator):
+    """当期与上期均值（(x + x_prev) / 2）。LQTP 平台 avg2(a, b) 的 FE 等价。
+
+    R55 platform-audit P0: 11 个平台财务因子（OAP_Accruals 等）用
+    ``avg2(StockBalance.TotalAssets)`` 做两期平均分母；这是一个 PIT-safe
+    元素级辅助算子，不应停在 layer_governance 的 research 清理里。
+    """
+    metadata = OperatorMetadata(
+        name="avg2",
+        category="fundamental",
+        description="当期与上期均值",
+        examples=["avg2(x, y)"],
+        param_names=["x", "y"],
+        return_type="series",
+        tags=["fundamental", "pit_safe"],
+    )
+
+    def _calculate_series(self, x: pd.DataFrame, y: pd.DataFrame, **kwargs) -> pd.DataFrame:
+        return (x + y) / 2.0
+
+
 @register_operator(
     name="operating_margin",
     category="fundamental",

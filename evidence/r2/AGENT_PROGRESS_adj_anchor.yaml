@@ -1,0 +1,29 @@
+# AGENT_PROGRESS_adj_anchor.yaml
+# R56: adj-anchor authority gaps (LQTP inner / label default vwap / shareholder registry / return-bp)
+status: DONE
+completed_at: 2026-08-29
+steps:
+  - id: s1
+    name: LQTP logical source anchor inner source -> adj
+    status: DONE
+    note: "anchor inner resolves via data_access dataset; default_ashare_pv_data_source_config -> ashare_stock_daily_adj; SourceRef DailyBar.Close reads AdjClose (verified); no raw OHLC path for factor reads"
+  - id: s2
+    name: label default return column -> vwap basis
+    status: DONE
+    note: "default_mining_label_config return_column default 'vwap'; label_formula forward_return(vwap, h); audit_r24 scripts updated"
+  - id: s3
+    name: data_access shareholder mis-registration fix
+    status: DONE
+    note: "deleted shareholder_ratio/top10_concentration (dataset ashare_stock_shareholder not registered); FE topten fields already mining_allowed=False one_to_many"
+  - id: s4
+    name: Return bp consistency check
+    status: DONE
+    note: "FE ret scale 0.0001 == DA return_bp scale 0.0001; catalog-normalized fields pass through FE (no double scale); COS fallback gated by normalized set"
+  - id: s5
+    name: Run verification tests + functional probes
+    status: DONE
+    note: "functional probe all True; 99 FE catalog/label/binding tests pass; 41 DA semantic/contract tests pass; audit exit 0"
+  - id: s6
+    name: Write evidence YAML
+    status: DONE
+    note: "evidence/r2/ADJ_ANCHOR_AUTHORITY_R56.yaml"

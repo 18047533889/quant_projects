@@ -300,7 +300,7 @@ def default_mining_label_config(
     horizon_bars: int = 5,
     feature_lookback_bars: int = 20,
     gap_bars: int = 1,
-    return_column: str = "close",
+    return_column: str = "vwap",
 ) -> dict[str, Any]:
     """挖掘/回测默认标签配置（与特征窗口显式隔离）。
 
@@ -313,7 +313,9 @@ def default_mining_label_config(
     gap_bars : int
         特征结束与标签起始之间的隔离 bar 数（默认 1）。
     return_column : str
-        收益计算所用价格列（默认 ``"close"``）。
+        收益计算所用价格列（默认 ``"vwap"`` —— 全局 vwap-to-vwap 口径，
+        AdjVwap(t+2)/AdjVwap(t+1)-1 对齐 TargetVwapReturnH01；复权权威
+        StockDailyBarAdj 上 bare ``vwap`` 解析到 AdjVwap）。
 
     Returns
     -------

@@ -68,12 +68,20 @@ class ResolvedFieldIdentity:
     unit / scale / pit_fidelity / revision_policy 等全部语义维度。多字段读按
     逻辑名排序后整体 hash，混合 availability（same_day + next_trading_day +
     financial PIT）全量保留，顺序无关。
+
+    R50 P0-26：``frequency`` 是**语义分辨维度**之一——同一 logical_name 的
+    daily 读与 minute 读（``vwap`` vs ``minute_vwap``，或相同名字但 catalog
+    声明 frequency=daily vs minute）若只在频率上不同，**必须**是不同的身份
+    （否则 240 根分钟 bar 会被 cache/identity 当成日线 1 根直接复用）。因此
+    ``frequency`` 进入 ``_tuple()`` / ``content_canonical``，dataclass 的
+    frozen 字段也包含它。
     """
 
     logical_name: str
     physical_name: str | None = None
     dataset: str | None = None
     market: str | None = None
+    frequency: str | None = None
     availability: str | None = None
     temporal_model: str | None = None
     event_time: str | None = None
@@ -91,6 +99,7 @@ class ResolvedFieldIdentity:
             canonical(self.physical_name),
             canonical(self.dataset),
             canonical(self.market),
+            canonical(self.frequency),
             canonical(self.availability),
             canonical(self.temporal_model),
             canonical(self.event_time),
@@ -114,6 +123,7 @@ class ResolvedFieldIdentity:
             "physical_name": self.physical_name,
             "dataset": self.dataset,
             "market": self.market,
+            "frequency": self.frequency,
             "availability": self.availability,
             "temporal_model": self.temporal_model,
             "event_time": self.event_time,
@@ -183,6 +193,11 @@ def _field_identity(f: Any) -> ResolvedFieldIdentity:
         market=(
             str(getattr(f, "market", None))
             if getattr(f, "market", None) is not None
+            else None
+        ),
+        frequency=(
+            str(getattr(f, "frequency", None))
+            if getattr(f, "frequency", None)
             else None
         ),
         availability=(
@@ -491,6 +506,12 @@ class DataReadIdentity:
             object.__setattr__(self, "time_range", _stable_range(self.time_range))
         if isinstance(self.fields, list):
             object.__setattr__(self, "fields", tuple(self.fields))
+        # R50 P0-27：provenance_notes 也必须折叠成 tuple（frozen dataclass 的
+        # 其他序列字段一律 tuple 化）。否则 ``to_dict()``（输出 list）→
+        # ``from_dict()`` 回读（list 原样穿过）→ ``__eq__`` 在
+        # ``()`` vs ``[]`` 上失败，序列化 round-trip 后身份不再相等。
+        if isinstance(self.provenance_notes, list):
+            object.__setattr__(self, "provenance_notes", tuple(self.provenance_notes))
 
         # ---- DA-P0-02：digest 始终内部推导，忽略任何 caller 传入值。 ----
         if isinstance(self.fields, list):

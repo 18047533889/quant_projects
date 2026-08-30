@@ -99,8 +99,18 @@ class SparseCorrelationGraph:
             self._graph_identity.update(str(len(encoded)).encode("ascii"))
             self._graph_identity.update(b":")
             self._graph_identity.update(encoded)
-        for edge in self.to_edge_list():
-            encoded = f"{edge.factor_a}\x00{edge.factor_b}\x00{edge.correlation}".encode("utf-8")
+        # Edges are canonicalized (sorted endpoint pair, orientation-free) and
+        # sorted before hashing so two graphs with the same undirected content
+        # hash identically regardless of the order edges were inserted.
+        canonical_edges = sorted(
+            (
+                (tuple(sorted((edge.factor_a, edge.factor_b))), edge.correlation)
+                for edge in self.to_edge_list()
+            ),
+            key=lambda item: (item[0][0], item[0][1], item[1]),
+        )
+        for (factor_a, factor_b), correlation in canonical_edges:
+            encoded = f"{factor_a}\x00{factor_b}\x00{correlation}".encode("utf-8")
             self._graph_identity.update(str(len(encoded)).encode("ascii"))
             self._graph_identity.update(b":")
             self._graph_identity.update(encoded)

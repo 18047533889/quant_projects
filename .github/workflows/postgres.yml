@@ -1,0 +1,185 @@
+name: CI POSTGRES LIVE
+
+# =============================================================================
+# R55 #99 — real PostgreSQL exercise for quant_platform's metadata backend.
+#
+# THE GAP: quant_platform/app/db/postgres_backend.py (PostgresDb +
+# PostgresDialect) was only ever string-inspected (test_postgres_dialect.py).
+# Nothing ever executed the platform's SQL against a real PostgreSQL server, so
+# a dialect bug, a DDL incompatibility, or a transaction-semantics difference
+# would reach production unseen.
+#
+# DRIVER POLICY (checked at #99, decisive): 0 hits for psycopg / psycopg2 /
+# psycopg2-binary / asyncpg / pg8000 across EVERY pyproject.toml in the repo and
+# requirements-production.lock.  postgres_backend.py states the rule explicitly:
+# "psycopg2 is NOT installed in this repo/venv and must not be blind-installed
+# (project rule: only project-defined pinned deps; none define psycopg2)".
+#
+#   => THIS JOB DOES NOT ADD A PG DRIVER.  It installs the built
+#      quant-platform wheel, runs the new
+#      quant_platform/tests/test_postgres_live.py against the REAL
+#      postgres:16 service below, and that module SKIPS — with an explicit
+#      reason — while psycopg2 is not a declared dependency.  The skip is
+#      reported in the job summary, loudly.  Fail-closed stays honest: a
+#      driver-less environment reports "not exercised", never a fabricated
+#      pass.
+#
+#   => The moment psycopg2 (or psycopg) IS declared in a pyproject.toml or the
+#      lock (e.g. pinned in requirements-production.lock or added to
+#      quant_platform's dev extra by a future task), the SAME job runs the
+#      live tests for real: the driver-detect step below installs the pinned
+#      driver from the project's own declaration and sets LIVE=1, and the
+#      "honest skip" assertion inverts into a hard requirement that the live
+#      tests RAN and PASSED.  No workflow edit needed.
+#
+# Job summary always states one of:
+#   LIVE_RAN <n> passed   — real PG exercised end to end
+#   LIVE_SKIPPED (driver not a project dependency) — honest, visible, not a pass
+# =============================================================================
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: postgres-live-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  PYTHON_VERSION: "3.12"
+  # Matches the service credentials below; overridable for a dev-run instance.
+  QP_PG_DSN: postgresql://qrp:qrp_secret@localhost:5432/quant_platform_test
+
+jobs:
+  postgres:
+    name: POSTGRES_LIVE
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: qrp
+          POSTGRES_PASSWORD: qrp_secret
+          POSTGRES_DB: quant_platform_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U qrp -d quant_platform_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+          --health-start-period 10s
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install lock deps + pytest (same install path as ci.yml tiers)
+        run: |
+          bash scripts/ci_smoke.sh
+          python3 -m pip install -q pytest
+        shell: bash -e {0}
+
+      - name: Build quant-platform wheel from its own pyproject
+        run: |
+          set -euo pipefail
+          python3 -m pip install -q "setuptools>=68" wheel build
+          out="$RUNNER_TEMP/wheels/quant-platform"
+          mkdir -p "$out"
+          (cd quant_platform && python3 -m build --wheel --outdir "$out" .)
+          ls -la "$out"
+        shell: bash -e {0}
+
+      - name: "Detect driver policy: install a PG driver ONLY if the project itself declares one"
+        id: driver
+        run: |
+          set -euo pipefail
+          # Search the project's OWN declarations only — never the lock's
+          # transitive graph, never a blind install.
+          hits="$(grep -ilE '^[[:space:]]*"(psycopg2(-binary)?|psycopg|psycopg\[binary\]|asyncpg|pg8000)' \
+                        */pyproject.toml pyproject.toml 2>/dev/null || true)"
+          lock_hits="$(grep -iE '^(psycopg2(-binary)?|psycopg|pg8000)==' \
+                        requirements-production.lock 2>/dev/null || true)"
+          echo "pyproject hits: ${hits:-<none>}"
+          echo "lock hits:      ${lock_hits:-<none>}"
+          if [ -n "$hits" ] || [ -n "$lock_hits" ]; then
+            echo "LIVE=1" >> "$GITHUB_OUTPUT"
+            echo "::notice::project now declares a PostgreSQL driver — installing it and running the live tests FOR REAL"
+            python3 -m pip install -q "psycopg2-binary>=2.9"
+          else
+            echo "LIVE=0" >> "$GITHUB_OUTPUT"
+            echo "::notice::no PG driver declared by the project (policy: only project-pinned deps) — live tests will SKIP honestly"
+          fi
+        shell: bash -e {0}
+
+      - name: Install built wheel (--no-deps; platform is pure-DTO stdlib)
+        run: |
+          set -euo pipefail
+          python3 -m pip install -q --no-deps "$RUNNER_TEMP"/wheels/quant-platform/*.whl
+          python3 -c "import quant_platform, quant_platform.app.db as d; print('wheel import OK:', quant_platform.__name__, '| db layer:', d.__file__)"
+        shell: bash -e {0}
+
+      - name: "Run live PostgreSQL tests (test_postgres_live.py)"
+        id: live
+        run: |
+          set -uo pipefail
+          # Repo root on PYTHONPATH for the app layer, exactly like every other
+          # platform tier (memory: platform tests must run from repo root).
+          export PYTHONPATH="$GITHUB_WORKSPACE"
+          mkdir -p /tmp/pglog
+          set +e
+          python3 -m pytest quant_platform/tests/test_postgres_live.py \
+            -q -p no:cacheprovider -rA 2>&1 | tee /tmp/pglog/live.txt
+          rc=${PIPESTATUS[0]}
+          set -e
+          passed="$(grep -oE '[0-9]+ passed' /tmp/pglog/live.txt | grep -oE '[0-9]+' | tail -1 || true)"
+          passed="${passed:-0}"
+          skipped="$(grep -oE '[0-9]+ skipped' /tmp/pglog/live.txt | grep -oE '[0-9]+' | tail -1 || true)"
+          skipped="${skipped:-0}"
+          {
+            echo "passed=$passed"
+            echo "skipped=$skipped"
+            echo "rc=$rc"
+          } >> "$GITHUB_OUTPUT"
+          echo "== live result: rc=$rc passed=$passed skipped=$skipped"
+          if [ "$rc" -ne 0 ]; then
+            echo "FATAL: live PostgreSQL tests failed (rc=$rc)" >&2
+            exit 1
+          fi
+          if [ "${{ steps.driver.outputs.LIVE }}" = "1" ] && [ "$passed" -eq 0 ]; then
+            echo "FATAL: a PostgreSQL driver IS declared by the project, yet 0 live tests ran — " \
+                 "a skip is not a pass" >&2
+            exit 1
+          fi
+          exit 0
+        shell: bash -e {0}
+
+      - name: Job summary — honest live/SKIP accounting
+        if: always()
+        run: |
+          {
+            echo "### POSTGRES_LIVE"
+            echo ""
+            echo "| item | value |"
+            echo "|---|---|"
+            echo "| service | postgres:16 (localhost:5432/quant_platform_test) |"
+            echo "| backend under test | \`quant_platform.app.db.postgres_backend.PostgresDb\` + \`PostgresDialect\` |"
+            echo "| driver declared by project | ${{ steps.driver.outputs.LIVE == '1' && 'YES (installed)' || 'NO (policy: only project-pinned deps)' }} |"
+            echo "| live tests passed | ${{ steps.live.outputs.passed || 0 }} |"
+            echo "| live tests skipped | ${{ steps.live.outputs.skipped || 0 }} |"
+            if [ "${{ steps.driver.outputs.LIVE }}" = "1" ]; then
+              echo "| verdict | LIVE_RAN — real PostgreSQL exercised |"
+            else
+              echo "| verdict | LIVE_SKIPPED — psycopg2 is not a project-pinned dependency; the dialect is exercised by test_postgres_dialect.py only. A skip is NOT a pass. |"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+        shell: bash -e {0}

@@ -16,10 +16,18 @@ from __future__ import annotations
 
 from .schema import SCHEMA_DDL, TABLE_NAMES, create_schema
 from .sqlite_backend import SqliteDb
+from .postgres_backend import (
+    PostgresBackendUnavailable,
+    PostgresDb,
+    PostgresDialect,
+)
 
 __all__ = [
     "SCHEMA_DDL",
     "TABLE_NAMES",
     "create_schema",
     "SqliteDb",
+    "PostgresDb",
+    "PostgresDialect",
+    "PostgresBackendUnavailable",
 ]

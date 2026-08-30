@@ -1,0 +1,71 @@
+# -*- coding: utf-8 -*-
+# PERF-3 read/resample polars group_by_dynamic fast path — evidence backfill
+# (work already in working tree; manifest was missing)
+task_id: READ_RESAMPLE_PERF
+mission: PERF-3
+schema_version: 1
+generation_timestamp: 2026-08-28
+current_sha: fa9b6eb1461cd9d1f87cd8d41aa3e6b55747361f
+head_sha: working-tree (uncommitted)
+status: CLOSED_LOCAL
+production_certification: NOT_RUN
+
+owned_files:
+  - data_access/read/resample.py
+      # apply_frequency(): polars group_by_dynamic vectorized fast path
+      # (_apply_frequency_polars) first; on any mismatch/unavailable -> fall
+      # back to the old pandas groupby+Grouper implementation
+      # (_apply_frequency_pandas), preserved byte-identical as the semantic
+      # authority. Window labels relabeled to pandas bucket labels
+      # (_relabel_window); NaN replaced to None before mean to match pandas
+      # skipna; row order sorted by time column like pandas sort_values.
+  - data_access/scripts/audit_dataaccess_perf_paths.py  # static perf-path audit (0 violations)
+  - evidence/r2/READ_RESAMPLE_PERF.yaml
+
+scope: |
+  Standalone Arrow-table frequency resample (minute/hourly/daily/weekly/monthly/
+  quarterly) is vectorized through polars group_by_dynamic, with the old pandas
+  implementation kept as the byte-semantic fallback. Numeric columns aggregate
+  mean, other columns first, matching pandas select_dtypes(number) ordering.
+
+verification:
+  benchmark_probes: |-
+    REAL OUTPUT 2026-08-28
+    probe_1 minute freq, 1.2M rows x 20 numeric cols (1-min day grid):
+      fast_s 0.0612  pandas_s 0.3612  speedup_x 5.906  (best-of-3 trials
+      [0.1548, 0.0612, 0.0762] vs pandas 0.3612)
+    probe_2 daily freq, 9.6M rows x 2 numeric cols:
+      fast_s 0.4624  pandas_s 2.1845  speedup_x 4.724
+    probe_3 minute freq, 1.2M rows x 100 numeric cols (wide):
+      fast_s 0.7507  pandas_s 3.3304  speedup_x 4.436
+    probe_4 hourly freq, 1.2M rows x 20 cols: speedup_x 4.493
+    earlier smaller-grid runs (lower cardinality / fewer rows per group):
+      1.37x / 2.13x (12 cols) / 2.64x (30 cols) — speedup grows with
+      group cardinality, which is the production resample shape.
+  parity_probes: |-
+    REAL OUTPUT 2026-08-28
+    all-freq small frame (monthly/weekly/quarterly/daily/hourly/minute):
+      shape equal; time labels equal pandas; inst equal; close allclose
+      rtol=1e-12 atol=1e-12  (max_abs_diff 1.24e-14 on the 9.6M grid)
+    degenerate (no numeric columns, only inst+time):
+      rows_out 7595 == 7595; s1.equals(s2) True
+    weekly bucket labels identical to pandas (2026-01-11 Sun); the earlier
+    frame_eq=False discrepancy was a pandas datetime64[us] vs [ns] dtype
+    artifact — after normalizing to datetime64[ns] all keys match; numeric
+    values match within float roundoff (max_abs_diff ~1e-14).
+  static_audit: |-
+    python3 data_access/scripts/audit_dataaccess_perf_paths.py --json
+    violation_count: 0, exit code 0  (resample.py to_pandas stays allowlisted
+    for the pandas fallback path only)
+
+residual_risks:
+  - "Float aggregation order differs (polars mean vs pandas mean): bitwise
+    equality is not guaranteed, values match within ~1e-14 — documented, not a
+    contract violation."
+  - "pandas fallback path triggers FutureWarning for deprecated 'T'/'M'/'Q'
+    freq aliases (pandas >=2.x) — cosmetic."
+  - "Broad data_access read suite not re-run here (coordinator: avoid heavy
+    loads)."
+no_defect: true
+commit: NOT_CREATED
+remotes: NOT_USED

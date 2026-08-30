@@ -10,7 +10,7 @@ dataset scopes -> factor scopes`` 由部署配置文件/环境注入，不要求
       "<api_key_hash_sha256>": {
         "principal_id": "server-a",
         "server_id": "server-a",
-        "allowed_datasets": ["ashare_stock_daily", ...],
+        "allowed_datasets": ["ashare_stock_daily_adj", ...],
         "allowed_factor_namespaces": [],
         "allow_uri_read": false,
         "allow_metadata_sensitive": false

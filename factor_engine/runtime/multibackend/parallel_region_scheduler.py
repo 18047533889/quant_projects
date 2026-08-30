@@ -40,7 +40,7 @@ class PhysicalPlanCycleError(Exception):
     def __init__(self, cycle: list[str]) -> None:
         self.cycle = cycle
         super().__init__(
-            f"cyclic dependency detected in region graph: {' -> '.join(cycle)}"
+            f"Cyclic dependency detected in region graph: {' -> '.join(cycle)}"
         )
 
 
@@ -456,14 +456,17 @@ class ParallelRegionScheduler:
                     future.cancel()
                 _release_lease(rid)
                 running.pop(rid, None)
-                deadlines.pop(rid, None)
+                deadline_was = deadlines.pop(rid, None)
                 results[rid] = RegionExecutionResult(
                     region_id=rid,
                     success=False,
                     failure=TypedRegionFailure(
                         region_id=rid,
                         error_type="DeadlineExceeded",
-                        error_message=f"Region exceeded its deadline ({deadlines.get(rid, '?')}ms)",
+                        error_message=(
+                            f"Region exceeded its deadline "
+                            f"({deadline_was if deadline_was is not None else '?'}ms)"
+                        ),
                     ),
                 )
                 failed_regions.add(rid)

@@ -54,23 +54,24 @@ OPT_TOP_DIR = PROJECT / "weekly_backtest_output" / "optimized_top"
 OPT1_META = PROJECT / "weekly_backtest_output" / "optimized_meta.json"
 OPT2_META = PROJECT / "weekly_backtest_output" / "optimized_top_meta.json"
 CLUSTER = PROJECT / "weekly_backtest_output" / "factor_clusters.json"
-DAILY = Path.home() / "cos_data" / "StockDailyBar"
+DAILY_ADJ = Path.home() / "cos_data" / "StockDailyBarAdj"
 START, END = "2019-01-02", "2026-08-24"
 
 _HAS_VWAP = None
 
 
 def load_vwap():
-    """加载 VWAP 矩阵（全局收益口径：vwap-to-vwap）。"""
+    """加载 后复权 AdjVwap 矩阵（全局收益口径：vwap-to-vwap 后复权硬性）。
+    数据源：StockDailyBarAdj.AdjVwap，禁止未复权 StockDailyBar.Vwap。"""
     global _HAS_VWAP
     if _HAS_VWAP is not None:
         return _HAS_VWAP
     import duckdb
-    files = sorted(DAILY.glob("*.parquet"))
+    files = sorted(DAILY_ADJ.glob("*.parquet"))
     fs = "[" + ",".join(f"'{f}'" for f in files) + "]"
     con = duckdb.connect()
     df = con.execute(f"""
-        SELECT TradeDate as date, Symbol as symbol, Vwap as vwap
+        SELECT TradeDate as date, Symbol as symbol, AdjVwap as vwap
         FROM read_parquet({fs})
         WHERE TradeDate >= DATE '{START}' AND TradeDate <= DATE '{END}'
     """).df()
@@ -87,7 +88,7 @@ def daily_rankic_series(factor_mat, vwap):
     vv = vwap.reindex(index=common)
     cols = vv.columns.intersection(fv.columns)
     fv = fv[cols]; vv = vv[cols]
-    fwd = vv.pct_change().shift(-1)  # vwap-to-vwap
+    fwd = vv.pct_change().shift(-2)  # vwap-to-vwap（t+1成交→t+2卖出，企业级）
     T = fv.shape[0]
     ic = np.full(T, np.nan)
     fv_a = fv.values; fwd_a = fwd.values
@@ -107,7 +108,7 @@ def fig_to_b64(fig):
     return base64.b64encode(buf.read()).decode()
 
 
-def plot_ic_compare(raw_ic, opt_ic, name):
+def plot_ic_compare(raw_ic, opt_ic, name, page_flipped=False):
     """原始 vs 优化后 RankIC 时序 + IR 柱状对比。"""
     common = raw_ic.index.intersection(opt_ic.index)
     raw = raw_ic.reindex(common).rolling(20).mean()
@@ -116,7 +117,8 @@ def plot_ic_compare(raw_ic, opt_ic, name):
     ax1.plot(common, raw, color="#dc2626", lw=1.0, label="原始 (MA20)")
     ax1.plot(common, opt, color="#0d9488", lw=1.2, label="优化后 (MA20)")
     ax1.axhline(0, color="#94a3b8", lw=0.6)
-    ax1.set_title(f"{name} — RankIC 时序: 原始 vs 优化后", fontsize=9)
+    flip_note = "（原始已翻正）" if page_flipped else ""
+    ax1.set_title(f"{name} — RankIC 时序: 原始 vs 优化后{flip_note}", fontsize=9)
     ax1.legend(fontsize=7)
     ax1.grid(ls="--", alpha=0.3)
     raw_ir = raw_ic.dropna().mean() / raw_ic.dropna().std() if raw_ic.dropna().std() > 1e-9 else 0
@@ -128,73 +130,108 @@ def plot_ic_compare(raw_ic, opt_ic, name):
     return fig_to_b64(fig)
 
 
-def plot_decile_compare(raw_mat, opt_mat, vwap, name):
-    """原始 vs 优化后十分层净值并排。收益口径 vwap-to-vwap。"""
+def plot_decile_compare(raw_mat, opt_mat, vwap, name, page_flipped=False):
+    """原始 vs 优化后十分层净值并排。收益口径 vwap-to-vwap（shift(-2)）。
+    2026-08-29 企业级修复：扣双边成本 0.1%（按换手计）+ 停牌股不参与（fwd NaN 剔除）。
+    page_flipped=True 时原始矩阵 ×(-1)（与详情页主图同步翻正）。"""
+    COST = 0.001  # 双边 0.1%
     def decile_nav(mat):
         common = mat.index.intersection(vwap.index)
         fv = mat.reindex(index=common)
         vv = vwap.reindex(index=common)
         cols = vv.columns.intersection(fv.columns)
         fv = fv[cols]; vv = vv[cols]
-        fwd = vv.pct_change().shift(-1)  # vwap-to-vwap
+        fwd = vv.pct_change().shift(-2)  # vwap-to-vwap（t+1成交→t+2卖出，企业级）
+        if page_flipped:
+            fv = -fv
         ranks = fv.rank(axis=1, method='first', pct=True).values
         valid = np.isfinite(fv.values) & np.isfinite(fwd.values)
         gids = np.floor(ranks * 10).clip(0, 9).astype(int)
         gids[~valid] = -1
         T = fv.shape[0]
         gr = np.zeros((T, 10))
+        prev_gids = np.full(fv.shape[1], -1)
         for t in range(T):
+            # 换手成本：每组内与昨日组员不同的比例 × 双边成本
+            turnover = np.zeros(10)
             for k in range(10):
                 mk = (gids[t] == k)
                 if mk.any():
-                    gr[t, k] = np.nanmean(fwd.values[t, mk])
-        return np.cumprod(1 + gr, axis=0)  # 按日期轴累计，避免 np.cumprod 展平
-    raw_nav = decile_nav(raw_mat)
-    opt_nav = decile_nav(opt_mat)
-    common = raw_mat.index.intersection(vwap.index)
+                    # 组内成员相对昨日的变化比例（近似换手）
+                    if t > 0:
+                        same = prev_gids[mk] == k
+                        turnover[k] = 1.0 - same.mean()
+                    gr[t, k] = np.nanmean(fwd.values[t, mk]) - turnover[k] * COST
+            prev_gids = gids[t].copy()
+        return common, np.cumprod(1 + gr, axis=0)
+    raw_common, raw_nav = decile_nav(raw_mat)
+    opt_common, opt_nav = decile_nav(opt_mat)
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 3.4))
     for k in range(10):
-        ax1.plot(common, raw_nav[:, k], lw=0.8, alpha=0.7)
-    ax1.set_title(f"{name} — 原始十分层净值", fontsize=9)
+        ax1.plot(raw_common, raw_nav[:, k], lw=0.8, alpha=0.7)
+    # 2026 分段标注（decay 因子提示）
+    y26 = pd.Timestamp("2026-01-01")
+    for ax, common in ((ax1, raw_common), (ax2, opt_common)):
+        if common.min() < pd.Timestamp("2026-01-01") <= common.max():
+            ax.axvline(pd.Timestamp("2026-01-01"), color="#f59e0b", lw=1.0, ls="--", alpha=0.7)
+            ax.text(pd.Timestamp("2026-01-01"), ax.get_ylim()[1]*0.95, " 2026→", fontsize=7, color="#b45309")
+    flip_note = "（已翻正）" if page_flipped else ""
+    ax1.set_title(f"{name} — 原始十分层净值(扣费0.1%){flip_note}", fontsize=9)
     ax1.grid(ls="--", alpha=0.3)
     for k in range(10):
-        ax2.plot(common, opt_nav[:, k], lw=0.8, alpha=0.7)
-    ax2.set_title(f"{name} — 优化后十分层净值", fontsize=9)
+        ax2.plot(opt_common, opt_nav[:, k], lw=0.8, alpha=0.7)
+    ax2.set_title(f"{name} — 优化后十分层净值(扣费0.1%)", fontsize=9)
     ax2.grid(ls="--", alpha=0.3)
     fig.tight_layout()
     return fig_to_b64(fig)
 
 
-def plot_ls_compare(raw_mat, opt_mat, vwap, name):
-    """原始 vs 优化后多空 NAV 叠加。收益口径 vwap-to-vwap。"""
+def plot_ls_compare(raw_mat, opt_mat, vwap, name, page_flipped=False):
+    """原始 vs 优化后多空 NAV 叠加。收益口径 vwap-to-vwap（shift(-2)）。
+    2026-08-29 企业级修复：扣双边成本 0.1%（多空双边）+ 2026 分段线。
+    page_flipped=True 时原始矩阵 ×(-1)（与详情页主图同步翻正）。"""
+    COST = 0.001
     def ls_nav(mat):
         common = mat.index.intersection(vwap.index)
         fv = mat.reindex(index=common)
         vv = vwap.reindex(index=common)
         cols = vv.columns.intersection(fv.columns)
         fv = fv[cols]; vv = vv[cols]
-        fwd = vv.pct_change().shift(-1)  # vwap-to-vwap
+        fwd = vv.pct_change().shift(-2)  # vwap-to-vwap（t+1成交→t+2卖出，企业级）
+        if page_flipped:
+            fv = -fv
         ranks = fv.rank(axis=1, method='first', pct=True).values
         valid = np.isfinite(fv.values) & np.isfinite(fwd.values)
         gids = np.floor(ranks * 10).clip(0, 9).astype(int)
         gids[~valid] = -1
         T = fv.shape[0]
         gr = np.zeros((T, 10))
+        prev_gids = np.full(fv.shape[1], -1)
         for t in range(T):
             for k in range(10):
                 mk = (gids[t] == k)
                 if mk.any():
-                    gr[t, k] = np.nanmean(fwd.values[t, mk])
+                    if t > 0:
+                        same = prev_gids[mk] == k
+                        to_cost = (1.0 - same.mean()) * COST  # 单腿换手成本
+                    else:
+                        to_cost = 0.0
+                    gr[t, k] = np.nanmean(fwd.values[t, mk]) - to_cost
+            prev_gids = gids[t].copy()
         ls = gr[:, 9] - gr[:, 0]
-        return np.cumprod(1 + ls, axis=0)  # 按日期轴累计（axis=0 一维等价默认）
-    raw = ls_nav(raw_mat)
-    opt = ls_nav(opt_mat)
-    common = raw_mat.index.intersection(vwap.index)
+        return common, np.cumprod(1 + ls, axis=0)
+    raw_common, raw = ls_nav(raw_mat)
+    opt_common, opt = ls_nav(opt_mat)
     fig, ax = plt.subplots(figsize=(10, 3.2))
-    ax.plot(common, raw, color="#dc2626", lw=1.2, label="原始多空")
-    ax.plot(common, opt, color="#0d9488", lw=1.4, label="优化后多空")
+    ax.plot(raw_common, raw, color="#dc2626", lw=1.2, label="原始多空(扣费)")
+    ax.plot(opt_common, opt, color="#0d9488", lw=1.4, label="优化后多空(扣费)")
     ax.axhline(1, color="#94a3b8", lw=0.6)
-    ax.set_title(f"{name} — 多空净值: 原始 vs 优化后", fontsize=9)
+    # 2026 分段线
+    for common in (raw_common, opt_common):
+        if common.min() < pd.Timestamp("2026-01-01") <= common.max():
+            ax.axvline(pd.Timestamp("2026-01-01"), color="#f59e0b", lw=1.0, ls="--", alpha=0.7)
+    flip_note = "（原始已翻正）" if page_flipped else ""
+    ax.set_title(f"{name} — 多空净值: 原始 vs 优化后（扣双边0.1%）{flip_note}", fontsize=9)
     ax.legend(fontsize=7)
     ax.grid(ls="--", alpha=0.3)
     fig.tight_layout()
@@ -254,13 +291,20 @@ def build_opt_block(page, opt1_meta, opt2_meta, cluster_meta):
 
 
 def inject_detail_page(page, opt1_meta, opt2_meta, cluster_meta, vwap):
-    """向详情页注入优化因子区块 + 对比图（vwap-to-vwap 口径）。"""
+    """向详情页注入优化因子区块 + 对比图（vwap-to-vwap 口径）。
+
+    原始因子图的翻转与详情页主图同步：以 optimized_meta 的 is_flipped 为准。
+    若因子已翻转，原始图因子值 ×(-1)（原始 RankIC/十分层/多空方向全部翻正）。
+    """
     html_path = FACTORS_DIR / f"factor_{page}.html"
     if not html_path.exists():
         return False
     html = html_path.read_text(encoding="utf-8")
     if "🧬 优化因子" in html:
         return False  # 已注入
+
+    m1 = opt1_meta.get(page, {})
+    page_flipped = bool(m1.get("is_flipped", False))
 
     # 加载原始 + 优化后矩阵
     raw_path = RAW_DIR / f"{page}.parquet"
@@ -276,16 +320,18 @@ def inject_detail_page(page, opt1_meta, opt2_meta, cluster_meta, vwap):
     ic_chart = decile_chart = ls_chart = None
     try:
         raw_ic = daily_rankic_series(raw_mat, vwap)
+        if page_flipped:
+            raw_ic = -raw_ic  # 原始图与详情页主图同步翻正
         opt_ic = daily_rankic_series(opt_mat, vwap)
-        ic_chart = plot_ic_compare(raw_ic, opt_ic, page)
+        ic_chart = plot_ic_compare(raw_ic, opt_ic, page, page_flipped)
     except Exception as exc:
         print(f"  [ERR] {page} RankIC 对比图: {type(exc).__name__}: {str(exc)[:120]}", flush=True)
     try:
-        decile_chart = plot_decile_compare(raw_mat, opt_mat, vwap, page)
+        decile_chart = plot_decile_compare(raw_mat, opt_mat, vwap, page, page_flipped)
     except Exception as exc:
         print(f"  [ERR] {page} 十分层图: {type(exc).__name__}: {str(exc)[:120]}", flush=True)
     try:
-        ls_chart = plot_ls_compare(raw_mat, opt_mat, vwap, page)
+        ls_chart = plot_ls_compare(raw_mat, opt_mat, vwap, page, page_flipped)
     except Exception as exc:
         print(f"  [ERR] {page} 多空图: {type(exc).__name__}: {str(exc)[:120]}", flush=True)
     if ic_chart is None and decile_chart is None and ls_chart is None:

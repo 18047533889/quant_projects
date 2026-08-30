@@ -1,0 +1,30 @@
+task: SQL backend re-enable (resumed after API quota kill)
+status: in_progress
+started: 2026-08-28
+agent: sql_reenable
+
+current_progress:
+  - "full backend_sql baseline (first run): 8 failed / 579 passed / 541 errors / 23 skipped"
+  - "wilder_ewm_sql_parity: 54/54 passed after fixes"
+  - "sql_registry_emitter_consistency: 495 passed"
+  - "skew_kurt_parity: 12/12 passed after ts_kurt rewrite"
+  - "alpha_language_sql_parity: 7/7 passed"
+
+fixes applied:
+  - "sql_registry.py: P0-14 guard - register_sql_backends() no longer thaws frozen registry when marker pass already complete; is_sql_capable/sql_backends_for no longer call register_sql_backends() per probe (removed 541 P0-14 thaw teardown errors)"
+  - "emitter.py: rolling_adl_flow canonical branch (ADL rename target) added - ADL/Chaikin parity"
+  - "emitter.py: ChaikinOscillator - feed warmup-gapped ADL to ewm with span min_periods instead of forward-fill (B/C instrument warmup NaN parity)"
+  - "sql_tiers.py: added rolling_adl_flow to SQL_IMPLEMENTED_CANONICALS"
+  - "plan_fixtures.py: fin_turnover/rank_corr/rolling_adl_flow minimal plans with real arity"
+  - "emitter.py: ts_kurt rewritten - pandas rolling.kurt parity: finite-member count gate GREATEST(min_periods,4), unbiased-Fisher correction with finite n, algebraic central moments (DuckDB no nested windows), -3.0 sentinel for zero-scale"
+  - "polars_native/ts_batch1.py: R4-100 arity alignment for ts_beta_if / ts_kama / ts_location_shift / ts_lower_partial_moment / ts_upper_partial_moment / ts_mean_reversion_half_life (param_names + callables match pandas reference)"
+
+verification:
+  - "test_p0_14_registry_lifecycle_freeze_guards.py: 13 passed"
+  - "full backend_sql rerun in progress (background bvb38w3p9)"
+
+progress_log:
+  - "2026-08-28: full suite 8F/579P/541E/23S in 26m40s (baseline)"
+  - "wilder file alone: 2F/52P/27E -> after fixes 54P"
+  - "skew_kurt: 4F -> 12P"
+  - "alpha_language: collection error -> 7P"

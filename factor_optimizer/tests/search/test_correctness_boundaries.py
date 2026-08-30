@@ -32,8 +32,7 @@ def _eval_protocol(split_id, plan_masks, fn=None):
     return EvaluationProtocol(
         SplitPlan(split_id, *plan_masks, {}),
         fn or (lambda trial, fidelity: {
-            "evaluation_id": "eval-safe", "score": 1.0, "cost": 1.0
-        }),
+            "evaluation_id": "eval-safe", "score": 1.0, "cost": 1.0, "treatment_integrity_evidence": _integrity_evidence(trial.trial_id)}),
     )
 
 
@@ -97,7 +96,8 @@ def test_search_runner_persists_published_evidence_reference():
             "evidence_ref": "store://evidence-1",
             "score": 1.0,
             "cost": 1.0,
-        }
+            "treatment_integrity_evidence": _integrity_evidence(trial.trial_id),
+            }
 
     session = SearchRunner(
         SearchConfig(
@@ -121,7 +121,7 @@ def test_search_runner_rejects_evaluation_without_evidence_reference():
         ),
         _trial,
         _eval_protocol("split", ([True], [False], [False]),
-                       lambda trial, fidelity: {"score": 1.0, "cost": 1.0}),
+                       lambda trial, fidelity: {"score": 1.0, "cost": 1.0, "treatment_integrity_evidence": _integrity_evidence(trial.trial_id)}),
     ).run("missing-evidence-reference")
 
     trial = session.trials[0]
@@ -137,7 +137,7 @@ def test_multifidelity_does_not_promote_on_score_alone():
 
     def evaluate(trial, fidelity):
         fidelities.append(fidelity)
-        return {"evaluation_id": "eval", "score": 999.0, "cost": 1.0}
+        return {"evaluation_id": "eval", "score": 999.0, "cost": 1.0, "treatment_integrity_evidence": _integrity_evidence(trial.trial_id)}
 
     session = SearchRunner(
         SearchConfig(
@@ -165,7 +165,8 @@ def test_multifidelity_promotes_only_with_explicit_eligible_evidence():
             "promote": fidelity == 0,
             "rank": 0,
             "total": 2,
-        }
+            "treatment_integrity_evidence": _integrity_evidence(trial.trial_id),
+            }
 
     session = SearchRunner(
         SearchConfig(
@@ -197,8 +198,7 @@ def test_safe_search_accepts_validated_protocol():
     protocol = EvaluationProtocol(
         SplitPlan("split", [True], [False], [False], {}),
         lambda trial, fidelity: {
-            "evaluation_id": "eval-safe", "score": 1.0, "cost": 1.0
-        },
+            "evaluation_id": "eval-safe", "score": 1.0, "cost": 1.0, "treatment_integrity_evidence": _integrity_evidence(trial.trial_id)},
     )
     session = SearchRunner(
         SearchConfig(
@@ -280,4 +280,26 @@ def test_sealed_test_rejects_mismatched_plan_and_post_freeze_mutation():
                 lambda trial, fidelity: {"rank_ic": 0.1},
             ),
         )
+
+
+def _integrity_evidence(trial_id="t1", kind=None):
+    """Passing TreatmentIntegrityEvidence measured from arrays (R55 P0-9)."""
+    from factor_optimizer.contracts.treatment_integrity import (
+        build_integrity_evidence,
+    )
+
+    rng = np.random.default_rng(abs(hash(trial_id)) % (2 ** 32))
+    before = rng.normal(size=32)
+    treated_kind = kind if kind else f"treatment::{trial_id}"
+    if treated_kind == "raw":
+        after = before
+    else:
+        after = before * 0.5 + 0.01
+    return build_integrity_evidence(
+        trial_id,
+        treated_kind,
+        {} if treated_kind == "raw" else {"window": 3},
+        before,
+        after,
+    )
 

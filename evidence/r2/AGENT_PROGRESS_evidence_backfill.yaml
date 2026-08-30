@@ -1,0 +1,37 @@
+# AGENT_PROGRESS — evidence backfill (r2)
+agent: evidence-backfill
+date: 2026-08-28
+task: Backfill 7 missing evidence YAML manifests for already-completed work in working tree.
+protocol: RESILIENCE (write early, retry on transient errors, verify with real output, never fabricate)
+
+plan:
+  1. Write this progress file. [DONE]
+  2. Identify working-tree changes per item (git status/diff --stat vs HEAD).
+  3. Run verification (pytest on named test files, or functional probe) and capture real output.
+  4. Write each YAML with date/scope/files changed/verification output tail/residual risks.
+  5. Report list of YAMLs + one-line status.
+
+targets:
+  - evidence/r2/P008_P010_COS_RUNTIME_AUDIT.yaml
+  - evidence/r2/P013_OPERATOR_TRUTH_MATRIX.yaml
+  - evidence/r2/INTRADAY_AGGREGATOR_PERF.yaml
+  - evidence/r2/READ_RESAMPLE_PERF.yaml
+  - evidence/r2/Q_KDB_INTEGRATION.yaml
+  - evidence/r2/AGENT_CALLABLE_FIX.yaml
+  - evidence/r2/P014_REGISTRY_LIFECYCLE.yaml
+
+status: DONE
+steps_completed:
+  - "P008-P010 test: 8 passed in 0.51s (REAL OUTPUT)"
+  - "P0-14 test: 13 passed in 0.06s (REAL OUTPUT)"
+  - "q_backend suite: 158 passed, 2 skipped in 80.29s (REAL OUTPUT)"
+  - "P008-P010 supporting suites: test_cos_mirror+generation_publisher 22 passed; test_r42_029_039 9 passed; r21/r50 identity 35 passed"
+  - "Q gate functional probe: is_q_available()=False, QBackend() raises BackendUnavailableError 'PyKX not installed'"
+  - "P014 functional probe: isolated registry freeze->live _catalog mappingproxy, nested leaf write raises TypeError, thaw restores building/dict; catalog() returns detached dicts"
+  - "PERF-1 probe (module's own _*_long reference, 4.8M rows 3 features): fast 2.2346s vs long_ref 8.5607s = 3.83x, values equal; 9.6M rows 3.51-4.35x; 12M rows 3.51x; 14.4M 3.81x; equivalence suite 18 passed"
+  - "PERF-3 probes: minute 5.9x (0.0612s vs 0.3612s, 1.2M rows 20 cols), 9.6M grid daily 4.72x, wide100 4.44x, hourly 4.49x; all-freq time/inst labels equal pandas, numeric allclose rtol 1e-12; degenerate no-numeric path parity True; perf path static audit violations=0"
+  - "AGENT_CALLABLE probe: _json_contract_value(MappingProxyType) detaches OK; phase1_production_certified=0 and evidence artifact INVALID (emitter hashes stale) -> 79 primitive certified ops hidden (six-way intersection exists in artifact)"
+  - "identified working-tree diffs: data_access/{cos/mirror.py, write/object_store_generation_publisher.py, write/mutation_lock.py, core/engine.py, read/resample.py, read/data_read_identity.py, _build_info.py}; factor_engine/{backend/operator_capability.py, backend/q_backend/*, backend/sql_pushdown/sql_registry.py, cleaned_operators/registry.py, polars_ts_*, intraday_agg.py}; scripts/export_operator_manifest.py; benchmarks/operator_manifest.json"
+  - "WROTE 6 YAMLs (all yaml.safe_load validated): P008_P010_COS_RUNTIME_AUDIT, P014_REGISTRY_LIFECYCLE, Q_KDB_INTEGRATION, INTRADAY_AGGREGATOR_PERF, READ_RESAMPLE_PERF, AGENT_CALLABLE_FIX"
+  - "P013_OPERATOR_TRUTH_MATRIX.yaml: left to splitbrain-truth agent (coordinator instruction), NOT duplicated"
+  - "identified working-tree diffs: data_access/cos/mirror.py, write/object_store_generation_publisher.py, write/mutation_lock.py, core/engine.py, read/resample.py, read/data_read_identity.py, _build_info.py; factor_engine q_backend/*, operator_capability.py, registry.py, polars_ts_*, intraday_agg.py"

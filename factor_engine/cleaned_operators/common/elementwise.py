@@ -1612,6 +1612,15 @@ class Pow(SeriesOperator):
         #   base < 0 AND exp 非整数           -> NaN
         #   base == 0 AND exp < 0            -> NaN（0 的负次幂）
         #   otherwise                        -> base ** exp
+        # 2026-08-29: ``power((20-1), 1.5)``（纯标量底数）在 daily 面板路径会被
+        # bridge 展成 ``x=19(int)``，元素级 kernel 直接 ``x.astype`` 崩
+        # （'int' object has no attribute 'astype'）。标量-标量幂在此合法：
+        # 直接按实数域返回标量。
+        if not isinstance(x, pd.DataFrame):
+            try:
+                return float(x) ** float(y)
+            except (TypeError, ValueError, ZeroDivisionError):
+                return float("nan")
         base = x.astype(float)
         if isinstance(y, pd.DataFrame):
             exp_df = y.astype(float)

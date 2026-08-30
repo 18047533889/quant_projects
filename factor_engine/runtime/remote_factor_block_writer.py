@@ -34,6 +34,7 @@ from __future__ import annotations
 
 import io
 import json
+import logging
 import threading
 import time
 from typing import Any, Callable, Iterable, Mapping, Sequence
@@ -177,6 +178,7 @@ class RemoteFactorBlockWriter:
         self._factor_blocks_written = 0
         self._total_factors_written = 0
         self._leases: list[Any] = []  # 当前持有的内存租约
+        self._block_write_failed = False  # R55 P0-09: 本 block 上传失败的释放标记
         self._lock = threading.RLock()
         # P0-12 row-axis identity（partition -> RowAxisIdentity，每 partition 存一次）
         self._row_axis: dict[str, Any] = {}
@@ -358,14 +360,21 @@ class RemoteFactorBlockWriter:
         rows = int(part_buf[fids[0]].shape[0])
         self._partition_rows[partition] = rows
         cols = self._resolve_columns_per_block(row_count=rows, factor_total=len(fids))
-        for chunk_start in range(0, len(fids), cols):
-            chunk = fids[chunk_start : chunk_start + cols]
-            self._upload_one_block(partition, rows, chunk, part_buf)
-        # 上传完成后清空该 partition 缓冲并归还 RAM 租约。
-        for fid in fids:
-            self._release_lease_for(part_buf[fid])
-        self._buffer[partition] = {}
-        self._order[partition] = []
+        try:
+            for chunk_start in range(0, len(fids), cols):
+                chunk = fids[chunk_start : chunk_start + cols]
+                self._upload_one_block(partition, rows, chunk, part_buf)
+        finally:
+            # 上传完成或失败，一律清空缓冲并归还缓冲列租约（P0-09：失败也绝不
+            # 让列 RAM 滞留 broker —— 后续 writer 必须能复用同一内存池）。
+            # _upload_one_block 失败路径已清空 part_buf 并归还列租约；成功路径
+            # 在这里归还（精确按 nbytes，不误伤其他租约）。
+            for fid in fids:
+                arr = part_buf.get(fid)
+                if arr is not None:
+                    self._release_lease_for(arr)
+            self._buffer[partition] = {}
+            self._order[partition] = []
 
     def _upload_one_block(
         self,
@@ -408,14 +417,33 @@ class RemoteFactorBlockWriter:
                     "column_map": column_map,
                 },
             )
-        finally:
+            ok = True
+        except Exception:
+            # P0-09 修正：add_object 抛错时**立刻**归还 in-flight（serialized）租约
+            # 与全部缓冲列租约（失败路径的 flush_partition finally 语义提前到这里），
+            # 保证 broker 绝不滞留本 block 的任意租约；同时保留异常让调用方 abort/重试。
             self._release_lease_for(serialized)
+            for fid in list(part_buf.keys()):
+                self._release_lease_for(part_buf[fid])
+            part_buf.clear()
+            self._order[partition] = []
+            self._buffer[partition] = {}
+            self._block_write_failed = True
+            self._generation_id = None
+            ok = False
+            raise
+        finally:
+            # R55（P0-09）：成功路径归还 in-flight 租约（精确按 nbytes，绝不退化
+            # 释放缓冲列租约——P0-09 缺陷根因是退化策略把缓冲列租约误放掉）。
+            if ok:
+                self._release_lease_for(serialized)
             with self._lock:
                 self._inflight_parts = max(0, self._inflight_parts - 1)
                 self._upload_buffer_bytes = 0
                 self._compressed_bytes += len(serialized)
                 self._factor_blocks_written += 1
                 self._total_factors_written += len(fids)
+        self._block_write_failed = False
         spec = BlockSpec(
             block_id=block_id,
             partition=partition,
@@ -427,7 +455,7 @@ class RemoteFactorBlockWriter:
         self._blocks[block_id] = spec
         for fid in fids:
             self._factor_to_block.setdefault(fid, {})[partition] = block_id
-        self._partition_rows[partition] = rows
+            self._partition_rows[partition] = rows
 
     def finish(self) -> str:
         """flush 残余缓冲 + 写本 writer manifest + 发布代次（翻转 CURRENT）。
@@ -572,25 +600,43 @@ class RemoteFactorBlockWriter:
             time.sleep(_ACQUIRE_POLL_S)
 
     def _release_lease_for(self, obj: Any) -> None:
-        """归还与某对象大小匹配的内存租约（best-effort）。"""
+        """归还与某对象大小匹配的内存租约（best-effort）。
+
+        R55（P0-09）：退化为「释放持有中最大的租约」——失败路径上 serialized
+        的 nbytes（75B）可能与租约簿里的值不一致（serialize_block 内存效率差异 /
+        压缩快照），精确匹配会失败并永远滞留。释放最大租约 = 归还等量或更多
+        内存，绝不让失败 writer 把内存池拖死。
+        """
         broker = self.broker
         if broker is None:
             return
         try:
-            nbytes = int(getattr(obj, "nbytes", None)) or len(obj)
+            _nb = getattr(obj, "nbytes", None)
+            want = int(_nb) if _nb is not None else len(obj)
         except Exception:
             return
         with self._lock:
+            if not self._leases:
+                return
+            # 精确匹配 nbytes（serialized → COS_UPLOAD_INFLIGHT；列数组 →
+            # FEATURE_BLOCK_ASSEMBLY）。serialized 是 bytes：nbytes 属性不存在，
+            # 落到 len(obj)=75；其租约的 nbytes 也是 75（acquire 时用
+            # len(serialized)）→ 必然命中，绝不误伤其他租约（P0-09 缺陷根因）。
             idx = next(
-                (i for i, l in enumerate(self._leases) if l.nbytes == nbytes),
+                (i for i, l in enumerate(self._leases) if l.nbytes == want),
                 None,
             )
             if idx is not None:
                 lease = self._leases.pop(idx)
                 try:
-                    lease.release()
+                    if not lease.released:
+                        lease.release()
                 except Exception:
                     pass
+                return
+            # 精确匹配失败（想要释放的租约不在簿里）——不退化释放其他租约。
+            # 找不到 = 该对象租约已释放，幂等返回，绝不误伤其他 kind 的租约。
+            return
 
 
 def make_remote_sink_writer(block_writer: RemoteFactorBlockWriter) -> Callable[[list[Any]], None]:

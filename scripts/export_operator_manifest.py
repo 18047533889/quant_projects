@@ -1,5 +1,18 @@
 #!/usr/bin/env python3
-"""导出 operator_manifest.json（AI / DSL / production gate 统一使用）。"""
+"""导出 operator_manifest.json（AI / DSL / production gate 统一使用）。
+
+必须运行：本 manifest 是从 live registry 派生的生成产物（1737 canonicals），
+每次算子注册表变化（cleaned_operators 变更 / evidence 重算 / production
+policy 变更）后都必须重新运行本脚本刷新 ``--out`` 指向的 JSON，严禁手工
+编辑 manifest。CI 用 ``--check`` 校验 freshness（见
+``tests/backend/test_operator_manifest_freshness.py``）；当 working tree 的
+evidence 与已提交 manifest 不一致时，重新生成本 manifest 是正确的刷新路径
+（manifest 是当前 registry 真相的序列化，证据重算后必须随之刷新）。
+
+运行示例：
+    PYTHONPATH=/home/sunhaiwei/quant_projects:/home/sunhaiwei/quant_projects/factor_engine \\
+        .venv/bin/python scripts/export_operator_manifest.py --out benchmarks/operator_manifest.json
+"""
 from __future__ import annotations
 
 import argparse

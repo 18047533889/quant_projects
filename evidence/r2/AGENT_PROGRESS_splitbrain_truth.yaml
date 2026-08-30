@@ -1,0 +1,18 @@
+task: splitbrain_truth
+agent: splitbrain-truth-closure
+started: 2026-08-28
+completed: 2026-08-28
+steps:
+  - id: p2_splitbrain_run
+    status: done
+    note: "14 passed in 0.36s - no collection error, no fix needed. Helpers live in factor_engine/runtime/engine.py (_assert_executor_identity L241, _physical_backend_for_region L283, _resolve_hybrid_region L339, _resolve_polars_long_delegate L420). PhysicalBackendNotRuntimeCapableError raised for Q_KDB/CLICKHOUSE_SQL on both plain and hybrid paths - no silent fallback."
+    verification_tail: "..............  [100%]\n14 passed in 0.36s"
+  - id: p013_truth_matrix
+    status: done
+    note: "No pre-existing P013 file. Built via OperatorRegistry after load_all() (1737 canonicals) - lightweight probe of backend_status per canonical x backend, NOT the full build_operator_manifest (which is ~10x slower). Root cause found: evidence/primitive_verified.json INVALID (1423 hash mismatches) because R54 (4cc2b679) rewrote sql_pushdown/emitter.py without re-certification; hence production_eligible_backends=0 and every canonical is research_only under the fail-closed admission gate. Evidence written."
+    verification_tail: "LOAD_ALL_DONE\nTOTAL_CANONICALS 1737\nPROBED 1737\nWROTE evidence/r2/P013_OPERATOR_TRUTH_MATRIX.yaml\nSUMMARY total=1737 cert=86 pitsafe=102 eligible=0 valid=False errs=1423"
+files_touched:
+  - /home/sunhaiwei/quant_projects/evidence/r2/P013_OPERATOR_TRUTH_MATRIX.yaml (created)
+  - /home/sunhaiwei/quant_projects/evidence/r2/P013_OPERATOR_TRUTH_ROWS.json (created, row-level snapshot)
+  - /home/sunhaiwei/quant_projects/evidence/r2/AGENT_PROGRESS_splitbrain_truth.yaml (created)
+  - /home/sunhaiwei/quant_projects/evidence/r2/p013_build_matrix.py (created, reusable matrix builder)

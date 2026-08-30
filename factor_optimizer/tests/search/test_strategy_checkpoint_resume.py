@@ -91,6 +91,7 @@ def _drive(strategy, n_proposals, config, session_id, ckpt_path=None):
                 "evaluation_id": trial.trial_id,
                 "score": _score_fn(trial.metadata["params"]),
                 "cost": 1.0,
+                "treatment_integrity_evidence": _integrity_evidence(trial.trial_id),
             }),
             strategy=strategy,
         )
@@ -114,6 +115,7 @@ def _drive(strategy, n_proposals, config, session_id, ckpt_path=None):
                 "evaluation_id": trial.trial_id,
                 "score": _score_fn(trial.metadata["params"]),
                 "cost": 1.0,
+                "treatment_integrity_evidence": _integrity_evidence(trial.trial_id),
             }),
             strategy=restored.strategy,
         ).resume(restored)
@@ -127,6 +129,7 @@ def _drive(strategy, n_proposals, config, session_id, ckpt_path=None):
                 "evaluation_id": trial.trial_id,
                 "score": _score_fn(trial.metadata["params"]),
                 "cost": 1.0,
+                "treatment_integrity_evidence": _integrity_evidence(trial.trial_id),
             }),
             strategy=strategy,
         )
@@ -260,7 +263,7 @@ def test_session_checkpoint_payload_carries_strategy(tmp_path):
     runner = SearchRunner(
         config,
         strategy.proposal_fn,
-        _protocol(lambda trial, fidelity: {"evaluation_id": trial.trial_id, "score": 0.5, "cost": 1.0}),
+        _protocol(lambda trial, fidelity: {"evaluation_id": trial.trial_id, "score": 0.5, "cost": 1.0, "treatment_integrity_evidence": _integrity_evidence(trial.trial_id)}),
         strategy=strategy,
     )
     session = runner.run("payload")
@@ -283,8 +286,7 @@ def test_session_resume_replays_strategy_from_runner(tmp_path):
     runner = SearchRunner(
         config,
         strategy.proposal_fn,
-        _protocol(lambda trial, fidelity: {"evaluation_id": trial.trial_id, "score": 0.5, "cost": 1.0}),
-        strategy=strategy,
+        _protocol(lambda trial, fidelity: {"evaluation_id": trial.trial_id, "score": 0.5, "cost": 1.0, "treatment_integrity_evidence": _integrity_evidence(trial.trial_id)}),
     )
     session = runner.run("legacy")
     restored = SearchSession.from_dict(session.to_dict())
@@ -292,7 +294,7 @@ def test_session_resume_replays_strategy_from_runner(tmp_path):
     replayed = SearchRunner(
         config,
         strategy.proposal_fn,
-        _protocol(lambda trial, fidelity: {"evaluation_id": trial.trial_id, "score": 0.5, "cost": 1.0}),
+        _protocol(lambda trial, fidelity: {"evaluation_id": trial.trial_id, "score": 0.5, "cost": 1.0, "treatment_integrity_evidence": _integrity_evidence(trial.trial_id)}),
         strategy=strategy,
     ).resume(restored)
     assert replayed.strategy is strategy
@@ -304,7 +306,7 @@ def test_session_resume_without_strategy_keeps_working(tmp_path):
     runner = SearchRunner(
         config,
         lambda: Trial(trial_id="t", mutation_id="m", status=TrialStatus.PROPOSED),
-        _protocol(lambda trial, fidelity: {"evaluation_id": trial.trial_id, "score": 0.5, "cost": 1.0}),
+        _protocol(lambda trial, fidelity: {"evaluation_id": trial.trial_id, "score": 0.5, "cost": 1.0, "treatment_integrity_evidence": _integrity_evidence(trial.trial_id)}),
     )
     session = runner.run("no-strategy")
     restored = SearchSession.from_dict(session.to_dict())

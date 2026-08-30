@@ -1,0 +1,5 @@
+# 782-factor NO_DEDUP chain (2026-08-29, benchmark=000300.SH)
+# period 2020-01-23..2026-08-24, vectorbt accurate, topk=30 maxw=0.05 turnover=0.30 tc=5bp
+strategy_nav: total=571.89% annual=35.22% sharpe=1.354 mdd=-26.62%
+benchmark_nav: total=14.61% annual=2.18% sharpe=0.209 mdd=-45.60%
+excess_nav: total=486.27% annual=32.33% sharpe=1.940 mdd=-16.19%

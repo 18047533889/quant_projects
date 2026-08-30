@@ -33,11 +33,15 @@ def _factory(canonical: str) -> Callable[..., Any]:
 
 def _industry_source():
     from factor_engine.api.source_ref import source_col
+    # 行业表 StockIndustry 是 (TradeDate, Symbol, IndustrySource) 主键（多分类系统），
+    # 无参数 SourceRef 会让 logical gate 抛 "requires exact IndustrySource parameter"。
+    # 本地/平台默认申万一级（sw_l1），与 LQTP functions.yaml 行业中性化口径一致。
     return source_col(
         "IndustryDaily",
         "IndustryCode",
         dialect=_DIALECT,
         dialect_version=_DIALECT_VERSION,
+        industry_source="sw_l1",
     )
 
 

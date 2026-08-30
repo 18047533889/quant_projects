@@ -1,0 +1,34 @@
+# 2026-08-26 版（Sharpe 1.758 原始版本；benchmark 已换成中证全指 000985.CSI）
+# period 2020-01-09 .. 2026-08-24, 1605 交易日
+
+[strategy]
+total_return    = 1352.91%
+annual_return   = 52.26%
+sharpe          = 1.783
+sortino         = 2.836
+max_drawdown    = -26.41%
+calmar          = 1.98
+day_win_rate    = 56.1%
+yearly: 2020 +97.8% | 2021 +101.7% | 2022 +12.7% | 2023 +13.2% | 2024 +68.2% | 2025 +53.4% | 2026 +10.6%
+yearly_nav_end: 2020 2.94x | 2021 5.42x | 2022 4.06x | 2023 9.32x | 2024 41.5x | 2025 63.7x | 2026 14.5x(total)
+
+[benchmark 中证全指 000985.CSI]
+total_return    = 40.76%
+annual_return   = 5.52%
+sharpe          = 0.370
+max_drawdown    = -39.33%
+yearly: 2020 +21.2% | 2021 +6.2% | 2022 -20.3% | 2023 -7.0% | 2024 +7.4% | 2025 +24.6% | 2026 +10.3%
+
+[excess 几何超额 strategy/benchmark]
+total_return    = 932.16%
+annual_return   = 44.30%
+sharpe          = 1.747
+sortino         = 2.978
+max_drawdown    = -24.80%
+calmar          = 1.79
+day_win_rate    = 54.6%
+yearly: 2020 +63.3% | 2021 +89.9% | 2022 +41.5% | 2023 +21.8% | 2024 +56.5% | 2025 +23.1% | 2026 +0.3%
+
+[备注]
+- equity_curves.csv 三列 NAV + 三列日收益，benchmark 已按用户要求换更宽的中证全指（原等权池 +127.88% → 中证全指 +40.76%）
+- excess_nav = strategy_nav / benchmark_nav（几何超额）

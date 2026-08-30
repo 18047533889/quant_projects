@@ -49,6 +49,17 @@ ashare_stock_daily:
     Symbol: string
     Close: double
 
+ashare_stock_daily_adj:
+  <<: *ashare_defaults
+  root: {ashare_root}/StockDailyBarAdj
+  glob: "**/*.parquet"
+  time_column: TradeDate
+  instrument_column: Symbol
+  schema:
+    TradeDate: date
+    Symbol: string
+    AdjClose: double
+
 ashare_stock_valuation_daily:
   <<: *ashare_defaults
   root: {ashare_root}/StockValuationDaily
@@ -144,6 +155,17 @@ def _seed_market_data(ashare_root: Path, us_root: Path) -> None:
             "Close": [10.0, 20.0],
         }
     ).to_parquet(ash_dir / "2024-01-02.parquet")
+
+    # ADJ_FIELD_MIGRATION: the default ashare_pv config reads ashare_stock_daily_adj.
+    ash_adj_dir = ashare_root / "StockDailyBarAdj"
+    ash_adj_dir.mkdir(parents=True)
+    pd.DataFrame(
+        {
+            "TradeDate": pd.to_datetime(["2024-01-02", "2024-01-02"]).date,
+            "Symbol": ["000001.SZ", "000002.SZ"],
+            "AdjClose": [105.0, 205.0],
+        }
+    ).to_parquet(ash_adj_dir / "2024-01-02.parquet")
 
     ash_val = ashare_root / "StockValuationDaily"
     ash_val.mkdir(parents=True)

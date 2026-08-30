@@ -15,7 +15,7 @@ from factor_engine.cleaned_operators.base import OperatorMetadata, SeriesOperato
     canonical="ts_sma_cn",
     source="lqtp_compat",
     backend="pandas_numpy",
-    status="research")
+    status="implemented")
 class ChineseRecursiveSMA(SeriesOperator):
     """Chinese/JQ recursive SMA: y=(m*x+(n-m)*prev)/n."""
     metadata = OperatorMetadata(

@@ -30,7 +30,7 @@ factor:
   expr: rank(close)
 data_source:
   type: data_access
-  dataset: ashare_stock_daily
+  dataset: ashare_stock_daily_adj
   end_date: "2024-02-29"
 """.strip()
         + "\n",
@@ -57,7 +57,7 @@ factor:
   expr: rank(close)
 data_source:
   type: data_access
-  dataset: ashare_stock_daily
+  dataset: ashare_stock_daily_adj
   end_date: "2024-02-29"
 """.strip()
         + "\n",

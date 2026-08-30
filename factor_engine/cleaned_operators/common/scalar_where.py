@@ -59,7 +59,15 @@ class ScalarBroadcastWhere(Operator):
             None,
         )
         if template is None:
-            raise TypeError("where requires at least one panel input")
+            # 2026-08-29: all-scalar ``where(1, 1.0, 0.5)`` — the LQTP platform
+            # treats a constant truthy condition as a constant selector.  Return
+            # the selected scalar (condition != 0 → x else y); the surrounding
+            # arithmetic broadcasts it to a constant panel.
+            try:
+                cond_val = float(condition)
+            except (TypeError, ValueError):
+                raise TypeError("where requires at least one panel input")
+            return x if (np.isfinite(cond_val) and cond_val != 0) else y
         cond = _panel(condition, template)
         left = _panel(x, template)
         right = _panel(y, template)

@@ -30,6 +30,7 @@ from factor_optimizer.data_providers import (
 )
 from factor_optimizer.errors import CapabilityForgeryError
 from factor_optimizer.search.runner import SearchConfig, SearchRunner
+import numpy as np
 
 
 def _disjoint_plan():
@@ -162,13 +163,15 @@ def test_scoped_evaluator_never_hands_test_payload_to_train_path():
         # Even if the closure holds full_y, it can only see what the provider
         # hands it.
         seen.append(scoped["y"])
-        return {"score": 0.5, "cost": 1.0, "evidence_ref": "ev-1"}
+        return {"score": 0.5, "cost": 1.0, "evidence_ref": "ev-1",
+        "treatment_integrity_evidence": _integrity_evidence(trial.trial_id),
+            }
 
     plan = _disjoint_plan()
     runner = SearchRunner(
         SearchConfig(budget=_budget(), enable_multifidelity=False),
         lambda: _trial(),
-        EvaluationProtocol(plan, lambda t, f: {"score": 0.5, "cost": 1.0, "evidence_ref": "e"}),
+        EvaluationProtocol(plan, lambda t, f: {"score": 0.5, "cost": 1.0, "evidence_ref": "e", "treatment_integrity_evidence": _integrity_evidence(t.trial_id)}),
     )
     # The search runner's data capabilities are only train/validation.
     assert set(runner._data_capabilities) == {DataScope.TRAIN, DataScope.VALIDATION}
@@ -190,7 +193,7 @@ def test_capability_uses_real_session_provenance_not_placeholders():
     runner = SearchRunner(
         SearchConfig(budget=_budget(), enable_multifidelity=False),
         lambda: _trial(),
-        EvaluationProtocol(plan, lambda t, f: {"score": 0.5, "cost": 1.0, "evidence_ref": "e"}),
+        EvaluationProtocol(plan, lambda t, f: {"score": 0.5, "cost": 1.0, "evidence_ref": "e", "treatment_integrity_evidence": _integrity_evidence(t.trial_id)}),
     )
     # Before run: capability is bound to a pending session id, but never to the
     # placeholder strings "search"/"search_dataset"/"search_provider".
@@ -216,7 +219,7 @@ def test_capability_provenance_binds_split_and_coordinate_hash():
     runner = SearchRunner(
         SearchConfig(budget=_budget(), enable_multifidelity=False),
         lambda: _trial(),
-        EvaluationProtocol(plan, lambda t, f: {"score": 0.5, "cost": 1.0, "evidence_ref": "e"}),
+        EvaluationProtocol(plan, lambda t, f: {"score": 0.5, "cost": 1.0, "evidence_ref": "e", "treatment_integrity_evidence": _integrity_evidence(t.trial_id)}),
     )
     runner.run("sess-bind-xyz")
     train = runner._data_capabilities[DataScope.TRAIN]
@@ -226,3 +229,25 @@ def test_capability_provenance_binds_split_and_coordinate_hash():
     assert train.split_id == "p1"
     assert train.coordinate_hash
     assert train.coordinate_hash != val.coordinate_hash
+
+
+def _integrity_evidence(trial_id="t1", kind=None):
+    """Passing TreatmentIntegrityEvidence measured from arrays (R55 P0-9)."""
+    from factor_optimizer.contracts.treatment_integrity import (
+        build_integrity_evidence,
+    )
+
+    rng = np.random.default_rng(abs(hash(trial_id)) % (2 ** 32))
+    before = rng.normal(size=32)
+    treated_kind = kind if kind else f"treatment::{trial_id}"
+    if treated_kind == "raw":
+        after = before
+    else:
+        after = before * 0.5 + 0.01
+    return build_integrity_evidence(
+        trial_id,
+        treated_kind,
+        {} if treated_kind == "raw" else {"window": 3},
+        before,
+        after,
+    )

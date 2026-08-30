@@ -35,7 +35,7 @@ Run
 nohup /srv/quant/envs/quantaalpha/bin/python -u scripts/train_final.py \
       > /tmp/train_final.log 2>&1 &     # log() also appends to /tmp/train_final.log
 """
-import gc, os, sys, time
+import gc, json, os, sys, time
 import numpy as np
 import pandas as pd
 import lightgbm as lgb
@@ -45,6 +45,16 @@ LOG_PATH = "/tmp/train_final.log"
 # Validation mode: ONLY_FOLD1=1 runs just the first fold (GPU path check), prints
 # the per-fold line, then exits WITHOUT writing predictions.parquet.
 ONLY_FOLD1 = os.environ.get("ONLY_FOLD1") == "1"
+
+# P0-B per-fold feature selection:
+#   SELECTION_MANIFEST (default data/build/walkforward_selection.json) holds, for every
+#   cut, the factor list selected ONLY on that fold's purged train window (produced by
+#   scripts/factor_selection.py --folds-from-train). Each fold trains/predicts with ONLY
+#   its own list — the full-sample data/build/selected_factors.csv list is never used
+#   (it was selected with future OOS labels = selection leakage).
+SELECTION_MANIFEST = os.environ.get(
+    "SELECTION_MANIFEST", os.path.join(ROOT, "data", "build", "walkforward_selection.json")
+)
 
 # ----------------------------------------------------------------------------------
 # LABEL / PURGE CONSTANTS (P0-B fix)
@@ -94,6 +104,27 @@ def log(msg):
         pass
 
 
+def load_fold_selection():
+    """Per-fold feature lists from the walk-forward selection manifest (P0-B).
+
+    Returns {pd.Timestamp cut: [factor, ...]}. Raises when the manifest is missing or
+    inconsistent — there is NO full-sample fallback, because the full-sample
+    selected_factors.csv list was chosen with future OOS labels (selection leakage).
+    """
+    if not os.path.exists(SELECTION_MANIFEST):
+        raise FileNotFoundError(
+            f"[train] {SELECTION_MANIFEST} not found — run "
+            "`python scripts/factor_selection.py --folds-from-train` first. The full-sample "
+            "selected_factors.csv is NOT a valid substitute (P0-B selection leakage).")
+    sys.path.insert(0, os.path.join(ROOT, "scripts"))
+    from factor_selection import load_selection_manifest  # noqa: E402 (single source of truth)
+    folds, meta = load_selection_manifest(path=SELECTION_MANIFEST)
+    log(f"[train] selection manifest: purge={meta.get('purge_trading_days')} "
+        f"embargo={meta.get('embargo_trading_days')} label_basis={meta.get('label_basis')} "
+        f"cuts={len(folds)}")
+    return {pd.Timestamp(c): list(v) for c, v in folds.items()}
+
+
 def main():
     t_total = time.time()
 
@@ -120,6 +151,11 @@ def main():
     FEATURES = [c for c in df.columns if c not in ("date", "asset", "fwd")]
     log(f"[train] rows={len(df)}  n_features={len(FEATURES)}")
 
+    # ---- P0-B per-fold feature selection ------------------------------------------
+    # Each fold uses ONLY the factor list selected on ITS purged train window.
+    fold_features = load_fold_selection()
+    available = set(FEATURES)
+
     # ---- rolling schedule (expanding window) ----
     START = df["date"].min()                      # 2016-01-04
     INITIAL_MONTHS = 36                           # first 3 years of history
@@ -138,6 +174,7 @@ def main():
 
     use_gpu = False
     pred_frames = []
+    prev_features = None
 
     # ---- rolling forward training ----
     # unique sorted trading dates on the label calendar (Vwap basis)
@@ -145,6 +182,24 @@ def main():
     for i, cut in enumerate(rolls):
         next_end = cut + pd.DateOffset(months=ROLL_MONTHS)
         date = df["date"]
+
+        # P0-B per-fold selection: this fold trains/predicts with ONLY the factors
+        # selected on this fold's own purged train window (never the full-sample list).
+        if cut not in fold_features:
+            raise KeyError(
+                f"[train] cut {cut.date()} has no entry in the selection manifest "
+                f"({SELECTION_MANIFEST}) — regenerate the manifest with the same cut schedule "
+                "(no full-sample fallback allowed)")
+        FEATURES_FOLD = [f for f in fold_features[cut] if f in available]
+        missing_in_matrix = [f for f in fold_features[cut] if f not in available]
+        if not FEATURES_FOLD:
+            log(f"[train][{i + 1}/{len(rolls)}] cut={cut.date()} SKIP: 0 of "
+                f"{len(fold_features[cut])} selected factors present in the feature matrix")
+            continue
+        if FEATURES_FOLD != prev_features:
+            log(f"[train][fold {i + 1}] per-fold feature list: {len(FEATURES_FOLD)} factors "
+                f"(manifest={len(fold_features[cut])}, absent-from-matrix={len(missing_in_matrix)})")
+        prev_features = FEATURES_FOLD
 
         # P0-B purge/embargo: drop the last PURGE_TRADING_DAYS (+ embargo) trading days
         # before the cut from the train block, and the same tail from the front of the
@@ -158,7 +213,7 @@ def main():
         train_mask = date.isin(u_train_cut)           # expanding history, purged
         oos_mask = date.isin(u_oos_cut)               # next-quarter OOS block, purged front
 
-        Xt = df.loc[train_mask, FEATURES].values.astype(np.float32)
+        Xt = df.loc[train_mask, FEATURES_FOLD].values.astype(np.float32)
         yt = df.loc[train_mask, "fwd"].values.astype(np.float32)
         keep = ~np.isnan(yt)
         Xt, yt = Xt[keep], yt[keep]
@@ -186,7 +241,7 @@ def main():
         if model is None:
             model = lgb.train(params_cpu, dset, num_boost_round=N_BOOST)
 
-        Xo = df.loc[oos_mask, FEATURES].values.astype(np.float32)
+        Xo = df.loc[oos_mask, FEATURES_FOLD].values.astype(np.float32)
         num_iter = model.best_iteration if (model.best_iteration and model.best_iteration > 0) else N_BOOST
         pred = model.predict(Xo, num_iteration=num_iter)
 

@@ -1,0 +1,293 @@
+name: CI WHEEL MATRIX
+
+# =============================================================================
+# R55 #99 — 8-package wheel completeness matrix.
+#
+# WHY THIS EXISTS: R55 #96 — the quant_platform wheel shipped 0 modules while
+# `pip wheel` "succeeded", because `packages.find` with `package-dir
+# "quant_platform" = "."` matches nothing.  PACKAGE_BUILD in ci.yml only asserts
+# "the wheel has >0 .py files" — it never compares the wheel payload against the
+# source tree, so a wheel that ships a *fraction* of the package (or a wheel for
+# a package that is not in the six-package loop at all, like quant_platform /
+# quant-modeling) passes.  Verified at R55 #99 audit time, the same class of bug
+# is live elsewhere:
+#   * factor-engine standalone wheel builds with 0 .py modules (1243 in source)
+#     — `[tool.setuptools.packages.find] include=["factor_engine", ...]` plus
+#     `[tool.setuptools.package-dir] "" = "."` resolves every package to
+#     `./factor_engine/<name>/`, which does not exist (flat layout).  Only the
+#     ROOT umbrella wheel ships factor_engine.* today.
+#   * factor-optimizer wheel ships 104 .py where the source has 52: the
+#     `force-include`d copy is nested as factor_optimizer/factor_optimizer/*.
+#   * factor_assets wheel drops factor_assets/scripts/* (not in its package list).
+# A module-count check cannot see any of these; a wheel-vs-source comparison can.
+#
+# WHAT THIS JOB DOES (fail-closed, one matrix leg per package):
+#   1. `python -m build --wheel` from the package's OWN canonical pyproject.toml.
+#   2. Non-empty assert: wheel size > 0, >= 1 .py module, dist-info METADATA and
+#      RECORD present.
+#   3. COMPLETENESS assert (the #96 guard, mandatory): enumerate every .py in the
+#      package's source tree that its own packaging config is supposed to ship
+#      (mirroring each pyproject's declared exclusions: tests/, build/, egg-info,
+#      __pycache__, test_*.py, conftest.py, per-package non-shipped dirs), then
+#      compare the wheel's zipfile payload against that set.  ANY missing module
+#      FAILS the job with an explicit MISSING list.
+#   4. Hygiene assert: the wheel ships NO test modules, NO conftest.py, and NO
+#      __pycache__ bytecode.
+#
+# MATRIX (8 independently-packaged distributions — the 6 in ci.yml PACKAGE_BUILD
+# + quant_platform (R55 #96) + quant_modeling (#97, pyproject landing):
+#   factor_engine      dist factor-engine      import pkg factor_engine
+#   data_access        dist data-access        import pkg data_access
+#   quant_evaluator    dist quant_evaluator    import pkg quant_evaluator
+#   factor_preprocess  dist factor-preprocess  import pkg factor_preprocess
+#   factor_optimizer   dist factor-optimizer   import pkg factor_optimizer
+#   factor_assets      dist factor_assets      import pkg factor_assets
+#   quant_platform     dist quant-platform     import pkg quant_platform
+#   quant_modeling     dist quant-modeling     import pkg modeling
+#
+# #97 NOTE: the quant-modeling leg is conditional on
+# `modeling/pyproject.toml` existing (it is being added by #97).  Before #97
+# lands the leg exits 0 with an explicit NOT_BUILT line in the summary; the
+# moment the pyproject exists the leg hard-fails on any incomplete wheel.  This
+# is intentional: CI must expect the package, and must never silently pass a
+# package that claims to be packaged but is not.
+# =============================================================================
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: wheel-matrix-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  PYTHON_VERSION: "3.12"
+
+jobs:
+  wheel-matrix:
+    name: WHEEL_MATRIX_${{ matrix.dist }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # dir = build directory (own canonical pyproject.toml lives there)
+          # dist = distribution name (from that pyproject's [project] name)
+          # pkg  = import package name (wheel payload prefix)
+          # src  = source root for the import package, relative to `dir`
+          - { dir: factor_engine,     dist: factor-engine,     pkg: factor_engine,     src: . }
+          - { dir: data_access,       dist: data-access,       pkg: data_access,       src: . }
+          - { dir: quant_evaluator,   dist: quant_evaluator,   pkg: quant_evaluator,   src: . }
+          - { dir: factor_preprocess, dist: factor-preprocess, pkg: factor_preprocess, src: factor_preprocess }
+          - { dir: factor_optimizer,  dist: factor-optimizer,  pkg: factor_optimizer,  src: factor_optimizer }
+          - { dir: factor_assets,     dist: factor_assets,     pkg: factor_assets,     src: . }
+          - { dir: quant_platform,    dist: quant-platform,    pkg: quant_platform,    src: . }
+          - { dir: modeling,          dist: quant-modeling,    pkg: modeling,          src: . }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install build tooling
+        run: python3 -m pip install -q "setuptools>=68" wheel build hatchling
+        shell: bash -e {0}
+
+      - name: "Preflight: pyproject.toml must exist (quant-modeling / #97 aware)"
+        run: |
+          set -euo pipefail
+          py="${{ github.workspace }}/${{ matrix.dir }}/pyproject.toml"
+          if [ ! -f "$py" ]; then
+            if [ "${{ matrix.dist }}" = "quant-modeling" ]; then
+              echo "::warning::modeling/pyproject.toml not present yet (task #97 adds it) — leg marked NOT_BUILT"
+              echo "NOT_BUILT=1" >> "$GITHUB_ENV"
+              exit 0
+            fi
+            echo "FATAL: canonical pyproject.toml missing at $py" >&2
+            exit 1
+          fi
+          echo "NOT_BUILT=0" >> "$GITHUB_ENV"
+        shell: bash -e {0}
+
+      - name: "Build ${{ matrix.dist }} wheel from its own pyproject.toml"
+        if: env.NOT_BUILT == '0'
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/wheels/${{ matrix.dist }}"
+          mkdir -p "$out"
+          cd "${{ github.workspace }}/${{ matrix.dir }}"
+          python3 -m build --wheel --outdir "$out" .
+          ls -la "$out"
+        shell: bash -e {0}
+
+      - name: "Assert wheel non-empty AND complete vs source tree (fail-closed)"
+        if: env.NOT_BUILT == '0'
+        run: |
+          set -euo pipefail
+          python3 - "${{ github.workspace }}/${{ matrix.dir }}" \
+                    "${{ matrix.pkg }}" \
+                    "${{ matrix.src }}" \
+                    "$RUNNER_TEMP/wheels/${{ matrix.dist }}" <<'PY'
+          """R55 #99 wheel-completeness check — the mandatory #96 guard.
+
+          Exits non-zero unless the built wheel's .py payload is exactly the
+          source tree the package's own packaging config is meant to ship.
+          """
+          import glob
+          import os
+          import sys
+          import zipfile
+
+          pkg_dir, pkg, src_sub, out_dir = (
+              sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4],
+          )
+          src_root = os.path.normpath(os.path.join(pkg_dir, src_sub))
+
+          wheels = sorted(glob.glob(os.path.join(out_dir, "*.whl")))
+          if not wheels:
+              print(f"FATAL: no wheel produced for {pkg} in {out_dir}")
+              sys.exit(1)
+          if len(wheels) != 1:
+              print(f"FATAL: expected exactly 1 wheel for {pkg}, got {len(wheels)}: "
+                    f"{[os.path.basename(w) for w in wheels]}")
+              sys.exit(1)
+          wheel = wheels[0]
+
+          if os.path.getsize(wheel) == 0:
+              print(f"FATAL: {os.path.basename(wheel)} is 0 bytes")
+              sys.exit(1)
+
+          with zipfile.ZipFile(wheel) as zf:
+              names = zf.namelist()
+              wheel_pys = {n for n in names if n.endswith(".py")}
+              dist_info = [n for n in names if ".dist-info/" in n]
+              if not any(n.endswith("/METADATA") for n in dist_info):
+                  print(f"FATAL: {os.path.basename(wheel)} has no dist-info/METADATA "
+                        f"— not a valid wheel")
+                  sys.exit(1)
+              if not any(n.endswith("/RECORD") for n in dist_info):
+                  print(f"FATAL: {os.path.basename(wheel)} has no dist-info/RECORD "
+                        f"— wheel integrity metadata missing")
+                  sys.exit(1)
+
+          # Source-enumeration is per-package: some packages deliberately keep
+          # co-located helper dirs (docs/, cleaned_operators/docs/) that their
+          # packaging config excludes, while factor_engine ships docs/ and
+          # cleaned_operators/docs/ (package-data ["docs/*"]).  To avoid a
+          # per-package PRUNE_DIRS whack-a-mole, compare against the WHEEL's own
+          # declared intent instead of a global dir-prune: prune only the
+          # universal non-shipped classes (tests/, build/, egg-info, bytecode,
+          # test/conftest modules), and let any extra/missing report the diff.
+          PRUNE_DIRS = {
+              "__pycache__", "build", "dist", ".git", "tests", "benchmarks",
+              "audit", "scripts", "ops", "deploy", "constraints", "config",
+              "workspace_data", "schemas", "examples", "legacy",
+              "learning_logs", "jobs", "runs", "data", "tests_colocated",
+          }
+          src_pys = set()
+          for dirpath, dirnames, filenames in os.walk(src_root):
+              dirnames[:] = [
+                  d for d in dirnames
+                  if d not in PRUNE_DIRS
+                  and not d.endswith(".egg-info")
+                  and not d.endswith(".dist-info")
+              ]
+              for f in filenames:
+                  if not f.endswith(".py"):
+                      continue
+                  if f.startswith("test_") or f.endswith("_test.py") or f == "conftest.py" or f.startswith("stress_test"):
+                      continue
+                  rel = os.path.relpath(os.path.join(dirpath, f), src_root)
+                  src_pys.add(rel.replace(os.sep, "/"))
+
+          # Wheel payload for this import package (top-level prefix = pkg).
+          # Drop test/conftest/stress modules from the wheel side too — the
+          # source enumeration excludes them (test_*.py / *_test.py /
+          # conftest.py), so they must not count as EXTRA when a package keeps
+          # co-located test files inside a shipped subpackage (FE backend/
+          # export/telemetry do).
+          wheel_rel = {
+              n[len(pkg) + 1:] for n in wheel_pys
+              if n.startswith(pkg + "/")
+              and os.path.basename(n).split("_test", 1)[0] != ""
+              and not os.path.basename(n).startswith("test_")
+              and not os.path.basename(n).endswith("_test.py")
+              and not os.path.basename(n).startswith("conftest")
+              and not os.path.basename(n).startswith("stress_test")
+          }
+
+          print(f"[{pkg}] wheel={os.path.basename(wheel)} "
+                f"size={os.path.getsize(wheel)} "
+                f"py-in-wheel={len(wheel_rel)} py-in-source={len(src_pys)}")
+
+          if not wheel_rel:
+              print(f"FATAL: {os.path.basename(wheel)} ships 0 python modules while "
+                    f"the source tree has {len(src_pys)} — vacuous wheel "
+                    f"(R55 #96 class).  The wheel matrix FAILS here, always.")
+              sys.exit(1)
+
+          missing = sorted(src_pys - wheel_rel)
+          if missing:
+              print(f"FATAL: {os.path.basename(wheel)} is INCOMPLETE — "
+                    f"{len(missing)} source module(s) absent from the wheel:")
+              for m in missing[:60]:
+                  print(f"    MISSING {m}")
+              if len(missing) > 60:
+                  print(f"    ... and {len(missing) - 60} more")
+              sys.exit(1)
+
+          extra = sorted(wheel_rel - src_pys)
+          if extra:
+              print(f"FATAL: {os.path.basename(wheel)} ships {len(extra)} module(s) "
+                    f"that the source tree does not declare (stale/mis-mapped "
+                    f"packaging), e.g.:")
+              for e in extra[:20]:
+                  print(f"    EXTRA {e}")
+              if len(extra) > 20:
+                  print(f"    ... and {len(extra) - 20} more")
+              sys.exit(1)
+
+          shipped_tests = sorted(
+              n for n in names
+              if n.endswith(".py")
+              and (n.split("/", 1)[-1].startswith("tests/")
+                   or os.path.basename(n).startswith("test_")
+                   or os.path.basename(n).endswith("_test.py"))
+          )
+          if shipped_tests:
+              print(f"FATAL: {os.path.basename(wheel)} ships test modules "
+                    f"({len(shipped_tests)}), e.g.:")
+              for t in shipped_tests[:10]:
+                  print(f"    SHIPPED {t}")
+              sys.exit(1)
+
+          if any("__pycache__/" in n for n in names):
+              print(f"FATAL: {os.path.basename(wheel)} ships __pycache__ bytecode")
+              sys.exit(1)
+
+          print(f"[{pkg}] COMPLETE: wheel payload == source tree "
+                f"({len(wheel_rel)} modules), no tests, no bytecode, integrity ok")
+          PY
+        shell: bash -e {0}
+
+      - name: Append to job summary
+        if: always()
+        run: |
+          {
+            echo "### WHEEL_MATRIX — ${{ matrix.dist }}"
+            echo ""
+            if [ "${NOT_BUILT:-0}" = "1" ]; then
+              echo "| status | NOT_BUILT (pyproject.toml absent — #97 pending; fails the moment it lands) |"
+            else
+              echo "| status | ${{ job.status }} |"
+            fi
+            echo "| completeness vs source tree | enforced fail-closed (zipfile vs os.walk) |"
+          } >> "$GITHUB_STEP_SUMMARY"
+        shell: bash -e {0}

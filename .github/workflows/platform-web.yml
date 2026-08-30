@@ -1,0 +1,57 @@
+name: Platform Web Build
+
+# QRP-P9 (task #43): the frontend source scaffold. The development environment
+# has NO node/npm, so typecheck + build run HERE in CI (the repo's GitHub
+# workflow runner has node). This job is the REQUIRED check that the frontend
+# compiles; `npm ci` installs the locked dependency set and `npm run build`
+# runs `tsc --noEmit` + `vite build`.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: platform-web-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  platform-web-build:
+    name: platform-web-build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: platform_web
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: platform_web/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Test (vitest — pure helpers)
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: platform-web-dist
+          path: platform_web/dist
+          if-no-files-found: error

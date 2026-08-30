@@ -5,6 +5,7 @@ import hashlib
 import pytest
 
 import factor_engine.backend.q_backend as q_backend
+from factor_engine.backend.operator_capability import BackendUnavailableError
 from factor_engine.backend.q_backend.q_backend import get_q_backend
 from factor_engine.backend.q_backend.q_compiler import (
     QCompiler,
@@ -139,12 +140,20 @@ def test_ts_beta_is_quarantined_instead_of_returning_final_window_scalar() -> No
 
 
 def test_research_and_production_backend_singletons_are_isolated() -> None:
-    production = get_q_backend(production_mode=True, fallback_to_pandas=False)
     research = get_q_backend(production_mode=False, fallback_to_pandas=True)
-
-    assert production is get_q_backend(production_mode=True, fallback_to_pandas=False)
     assert research is get_q_backend(production_mode=False, fallback_to_pandas=True)
-    assert production is not research
+    assert research is not get_q_backend(production_mode=False, fallback_to_pandas=False)
+
+    # Q/KDB task #60 truthful gate: production mode requires a live q runtime.
+    # With no q provisioned, constructing the production singleton must fail
+    # closed with BackendUnavailableError instead of silently faking a backend.
+    try:
+        production = get_q_backend(production_mode=True, fallback_to_pandas=False)
+    except BackendUnavailableError:
+        pass  # no q runtime in this env — fail-closed is the honest answer
+    else:
+        assert production is get_q_backend(production_mode=True, fallback_to_pandas=False)
+        assert production is not research
 
 
 def test_compiler_instances_own_their_lowering_authority() -> None:

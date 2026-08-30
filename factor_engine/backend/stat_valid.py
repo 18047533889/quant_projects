@@ -20,15 +20,18 @@ def rank_excludes_nan(canon: str) -> bool:
 def polars_rank_input(value_col: str, *, exclude_nan: bool) -> "pl.Expr":
     """rank 输入列：无效值置 NULL，不参与 rank/count。
 
-    ±Inf is excluded exactly like NaN (RankSpec.inf_policy="exclude", pandas
-    reference ``cs_rank_01`` masks via ``np.isfinite`` — NEW-255).
+    ``exclude_nan=True`` masks NaN and ±Inf (RankSpec.inf_policy="exclude",
+    pandas reference ``cs_rank_01`` masks via ``np.isfinite`` — NEW-255).
+    ``exclude_nan=False`` (NaN-only skip) keeps ±Inf as a rankable extreme so a
+    cross-section with an Inf cell ranks over n values exactly like pandas
+    ``x.rank(pct=True, axis=1)`` (cs_pct_rank / rank_pct inf_policy="participate").
     """
     import polars as pl
 
     c = pl.col(value_col)
     if exclude_nan:
         return pl.when(c.is_null() | c.is_nan() | c.is_infinite()).then(None).otherwise(c)
-    return pl.when(c.is_null() | c.is_infinite()).then(None).otherwise(c)
+    return pl.when(c.is_null() | c.is_nan()).then(None).otherwise(c)
 
 
 def polars_row_stat_invalid(value_col: str, *, exclude_nan: bool) -> "pl.Expr":
@@ -38,7 +41,7 @@ def polars_row_stat_invalid(value_col: str, *, exclude_nan: bool) -> "pl.Expr":
     c = pl.col(value_col)
     if exclude_nan:
         return c.is_null() | c.is_nan() | c.is_infinite()
-    return c.is_null() | c.is_infinite()
+    return c.is_null() | c.is_nan()
 
 
 def stat_valid_sql(col: str, *, dialect: "SqlDialect", exclude_nan: bool = True) -> str:

@@ -135,7 +135,7 @@ def test_legacy_formula_gets_explicit_forbidden_error():
     from factor_engine.api.mining_integration import validate_production_dsl
 
     for formula in ("bfill(close)", "Lead(close, 1)", "rand_uniform(close)", "shuffle(close)"):
-        ok, msg = validate_production_dsl(formula)
+        ok, msg = validate_production_dsl(formula, market="ashare")
         assert ok is False, f"{formula} unexpectedly accepted"
         assert msg and "Unsupported function" in msg, f"{formula}: unexpected msg {msg!r}"
 

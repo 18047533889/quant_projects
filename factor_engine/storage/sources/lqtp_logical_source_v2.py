@@ -197,9 +197,32 @@ class LQTPLogicalDataSource(_Base):
             required_param = contract.required_parameter
             if required_param:
                 legacy = {"IndexSymbol": "index", "IndustrySource": "industry_source"}.get(required_param)
+                canonical_value = params.get(required_param)
                 legacy_value = params.get(legacy) if legacy else None
-                if params.get(required_param) is None and legacy_value is not None:
-                    params[required_param] = legacy_value
+                if canonical_value is not None and legacy_value is not None and str(canonical_value) != str(legacy_value):
+                    raise MissingDataDependencyError(
+                        f"LQTP DataTable {table!r} has conflicting {required_param} and {legacy}"
+                    )
+                if canonical_value is None:
+                    if legacy_value is None:
+                        # R55 platform-audit P0: the one-arg LQTP neutralization
+                        # surface (industry_neutralize(x) / size_neutralize(x)) is
+                        # pinned to the SAME sw_l1 default the semantic_filters
+                        # industry filter applies.  A bare IndustryDaily source
+                        # without an explicit IndustrySource parameter must not
+                        # hard-fail the batch — default it to sw_l1 (申万一级),
+                        # matching the functions.yaml LQTP default.  Explicit
+                        # parameters (whatever spelling) still win.
+                        if contract.required_parameter == "IndustrySource":
+                            params[required_param] = "sw_l1"
+                        elif contract.required_parameter == "IndexSymbol" and table in {"BenchmarkIndexDailyBar", "IndexDailyBar"}:
+                            params[required_param] = "000985.SH"
+                        else:
+                            raise MissingDataDependencyError(
+                                f"LQTP DataTable {table!r} requires exact {required_param} parameter"
+                            )
+                    else:
+                        params[required_param] = legacy_value
             filt = None
             if contract.required_parameter == "IndexSymbol" and table != "IndexConstituent":
                 filt = [str(params["IndexSymbol"])]
@@ -368,6 +391,15 @@ class LQTPLogicalDataSource(_Base):
         events = events.dropna(subset=["available_at", "period_end"]).copy()
         events["period_end"] = pd.to_datetime(events["period_end"]).dt.normalize()
         events["available_at"] = pd.to_datetime(events["available_at"])
+        # 2026-08-29: LQTP 镜像的财务表是按日快照（每个 TradeDate 全量行），同一
+        # 报表 vintage（instrument, period_end, available_at）在多个日文件中重复
+        # 出现，值完全相同（已实测：22k 重复行全部同值快照）。pit 契约的
+        # validate_fundamental_events 把同键多行判为"重复 vintage" fail-closed。
+        # 这里在事件构建处按 PIT 键去重（keep=last，同键同值无损），语义不变，
+        # 只是把快照冗余折叠成契约期望的唯一事件流。
+        events = events.drop_duplicates(
+            ["instrument", "period_end", "available_at"], keep="last"
+        )
 
         if transform == "financial_lag":
             from factor_engine.api.source_ref import _strict_int
@@ -494,7 +526,7 @@ class LQTPLogicalDataSource(_Base):
                 anchor, series.rename(field), policy, context=f"derived:{field}"
             )
 
-        if table == "Intermediate":
+        if table in {"Intermediate", "FactorIntermediateDaily"}:
             policy = str(
                 tparams.get("join_policy")
                 or spec.params_dict().get("join_policy")
@@ -545,10 +577,19 @@ class LQTPLogicalDataSource(_Base):
                 )
             if canonical_value is None:
                 if legacy_value is None:
-                    raise MissingDataDependencyError(
-                        f"LQTP DataTable {table!r} requires exact {required_param} parameter"
-                    )
-                params[required_param] = legacy_value
+                    # R55 platform-audit P0: same sw_l1 / 000985.SH defaults as the
+                    # dataset-group batch path (single-column source refs must not
+                    # hard-fail bare IndustryDaily / benchmark refs).
+                    if contract.required_parameter == "IndustrySource":
+                        params[required_param] = "sw_l1"
+                    elif contract.required_parameter == "IndexSymbol" and table in {"BenchmarkIndexDailyBar", "IndexDailyBar"}:
+                        params[required_param] = "000985.SH"
+                    else:
+                        raise MissingDataDependencyError(
+                            f"LQTP DataTable {table!r} requires exact {required_param} parameter"
+                        )
+                else:
+                    params[required_param] = legacy_value
         filt = None
         if contract.required_parameter == "IndexSymbol" and table != "IndexConstituent":
             filt = [str(params["IndexSymbol"])]

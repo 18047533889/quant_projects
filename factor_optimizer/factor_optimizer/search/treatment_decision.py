@@ -23,8 +23,17 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Sequence, Tuple
+from typing import Dict, List, Mapping, Optional, Sequence, Tuple
 
+from factor_optimizer.contracts.treatment_integrity import (
+    RAW_TREATMENT_KIND,
+    IntegrityCheckResult,
+    TreatmentIntegrityEvidence,
+    build_integrity_evidence,
+    describe_integrity_problem,
+    digest_value,
+)
+from factor_optimizer.errors import TreatmentIntegrityError
 from factor_optimizer.search.desirability import desirability_for
 from factor_optimizer.search.pareto import ParetoFrontier, ParetoPoint
 from factor_optimizer.search.uncertainty_winner import (
@@ -216,6 +225,8 @@ class TreatmentDecisionPolicy:
         anchors: DesirabilityAnchors,
         policy: WinnerPolicy,
         uncertainty_config: Optional[UncertaintyConfig] = None,
+        *,
+        require_integrity_evidence: bool = True,
     ):
         if not isinstance(anchors, DesirabilityAnchors):
             raise TypeError("anchors must be a DesirabilityAnchors")
@@ -224,17 +235,47 @@ class TreatmentDecisionPolicy:
         self.anchors = anchors
         self.policy = policy
         self.uncertainty_config = uncertainty_config or UncertaintyConfig()
+        # R55 P0-9: the integrity hard gates are real, fail-closed gates.
+        # They REQUIRE a passing TreatmentIntegrityEvidence per candidate
+        # (not a re-derivation from the metrics being scored).  The escape
+        # hatch exists only so the historical metric-derived screen can still
+        # be run explicitly; it is recorded in the step trace as such and is
+        # NOT a production integrity verdict.
+        if not isinstance(require_integrity_evidence, bool):
+            raise TypeError("require_integrity_evidence must be a bool")
+        self.require_integrity_evidence = require_integrity_evidence
 
     # -- STEP 1: integrity hard gates --------------------------------------
 
-    def _integrity_gates(self, metrics: TreatmentMetrics) -> List[IntegrityGate]:
-        """Only truly non-negotiable hard-rejects.
+    def _integrity_gates(
+        self,
+        metrics: TreatmentMetrics,
+        evidence: Optional[TreatmentIntegrityEvidence] = None,
+    ) -> List[IntegrityGate]:
+        """Real, fail-closed integrity gates (R55 P0-9).
 
-        These are research-integrity-class failures: PIT violation, future
-        leakage, invalid numeric, insufficient sample, broken coverage,
-        invalid execution semantics.  They are NOT soft quality preferences.
+        The historical implementation derived every verdict from the scalar
+        metrics the pipeline was about to score — a fake gate that could be
+        satisfied by a plausible-looking headline number without any treatment
+        ever having been applied.  The gate now REQUIRES a
+        :class:`TreatmentIntegrityEvidence` produced by the code that actually
+        applied the treatment:
+
+        - evidence present and bound to this ``trial_id`` (no stale/shuffled
+          evidence),
+        - evidence self-consistent (content hash re-verified),
+        - ``overall_status`` is PASSED and every recorded check passed
+          (NOT_RUN — no checks — is a rejection),
+        - the measured before/after digests in the evidence are the load-bearing
+          signals the pipeline no longer fabricates.
+
+        ``metric_sanity`` keeps the historical threshold screen as a SUPPLEMENT
+        (it is cheap and catches obvious garbage), but on its own it no longer
+        constitutes integrity: with ``require_integrity_evidence=True`` a
+        candidate whose evidence is missing, stale or failing is hard-rejected
+        regardless of how good its metrics look.
         """
-        gates = [
+        gates: List[IntegrityGate] = [
             IntegrityGate(
                 "pit_violation",
                 metrics.coverage > 0.0,
@@ -268,6 +309,32 @@ class TreatmentDecisionPolicy:
                 "compute_cost must be >= 0",
             ),
         ]
+        if not self.require_integrity_evidence:
+            gates.append(
+                IntegrityGate(
+                    "integrity_evidence",
+                    False,
+                    "integrity evidence was not required; the metric screen "
+                    "alone is NOT a production integrity verdict",
+                )
+            )
+            return gates
+
+        problem = describe_integrity_problem(
+            metrics.trial_id,
+            evidence,
+            treatment_kind=None,
+        )
+        gates.append(
+            IntegrityGate(
+                "integrity_evidence",
+                problem is None,
+                problem or (
+                    f"a complete, passing TreatmentIntegrityEvidence for "
+                    f"{metrics.trial_id!r} is required"
+                ),
+            )
+        )
         return gates
 
     # -- STEP 2: raw-relative deltas ----------------------------------------
@@ -477,17 +544,47 @@ class TreatmentDecisionPolicy:
         candidates: Sequence[TreatmentMetrics],
         *,
         raw_trial_id: str = "RAW",
+        integrity_evidence: Optional[
+            Mapping[str, TreatmentIntegrityEvidence]
+        ] = None,
     ) -> DecisionResult:
         """Run the full 8-step pipeline and return the winner.
 
         RAW is always injected as a candidate (if not already present) so a
         treatment that made things worse is discoverable.
+
+        R55 P0-9: ``integrity_evidence`` maps ``trial_id ->
+        TreatmentIntegrityEvidence``.  When the policy was constructed with
+        ``require_integrity_evidence=True`` (the default, fail-closed), a
+        candidate without complete, passing evidence bound to its trial id is
+        hard-rejected at STEP 1 no matter how good its metrics look.  The RAW
+        baseline is treated like any other candidate: it must carry evidence
+        of its own (an identity-check evidence whose before/after digests are
+        equal), which ``build_integrity_evidence`` produces for
+        ``treatment_kind="raw"``.
         """
         if not candidates:
             raise ValueError("candidates must be non-empty")
         for metrics in candidates:
             if not isinstance(metrics, TreatmentMetrics):
                 raise TypeError("candidates must be TreatmentMetrics instances")
+        evidence_map: Dict[str, TreatmentIntegrityEvidence] = {}
+        if integrity_evidence is not None:
+            if not isinstance(integrity_evidence, Mapping):
+                raise TypeError(
+                    "integrity_evidence must map trial_id -> "
+                    "TreatmentIntegrityEvidence"
+                )
+            for key, value in integrity_evidence.items():
+                if not isinstance(key, str) or not key.strip():
+                    raise ValueError("integrity_evidence keys must be trial ids")
+                if not isinstance(value, TreatmentIntegrityEvidence):
+                    raise TypeError(
+                        "integrity_evidence values must be "
+                        "TreatmentIntegrityEvidence instances"
+                    )
+                value.verify()
+                evidence_map[key] = value
 
         step_trace: Dict[str, str] = {}
 
@@ -502,15 +599,41 @@ class TreatmentDecisionPolicy:
 
         # STEP 1: integrity hard gates.
         hard_rejected = set()
+        rejected_without_evidence = set()
         for metrics in candidates:
-            gates = self._integrity_gates(metrics)
-            if not all(g.passed for g in gates):
+            gates = self._integrity_gates(
+                metrics, evidence_map.get(metrics.trial_id)
+            )
+            evidence_gate = next(
+                (
+                    gate
+                    for gate in gates
+                    if gate.name == "integrity_evidence"
+                ),
+                None,
+            )
+            if not all(gate.passed for gate in gates):
                 hard_rejected.add(metrics.trial_id)
+                if evidence_gate is not None and not evidence_gate.passed:
+                    rejected_without_evidence.add(metrics.trial_id)
         step_trace["step1_integrity"] = (
             f"hard-rejected: {sorted(hard_rejected) or 'none'}"
+            + (
+                f" (no/failing integrity evidence: "
+                f"{sorted(rejected_without_evidence)})"
+                if rejected_without_evidence
+                else ""
+            )
         )
         active = [m for m in candidates if m.trial_id not in hard_rejected]
         if not active:
+            if rejected_without_evidence == {m.trial_id for m in candidates}:
+                raise TreatmentIntegrityError(
+                    "all candidates failed the treatment integrity gates: "
+                    "no candidate carries a complete, passing "
+                    "TreatmentIntegrityEvidence — nothing may be scored "
+                    "(fail closed)"
+                )
             raise ValueError("all candidates failed integrity hard gates")
 
         # STEP 2: raw-relative deltas (audit only).
@@ -572,4 +695,12 @@ __all__ = [
     "TreatmentDecisionPolicy",
     "RAW_METRICS",
     "BALANCED_DIMENSIONS",
+    # R55 P0-9: real integrity evidence re-exports for pipeline callers.
+    "RAW_TREATMENT_KIND",
+    "IntegrityCheckResult",
+    "TreatmentIntegrityEvidence",
+    "TreatmentIntegrityError",
+    "build_integrity_evidence",
+    "describe_integrity_problem",
+    "digest_value",
 ]

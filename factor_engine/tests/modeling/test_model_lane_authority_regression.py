@@ -27,11 +27,19 @@ def test_missing_or_ambiguous_legacy_authority_fails_closed(monkeypatch, tmp_pat
 def test_legacy_authority_remains_the_lane_source(monkeypatch):
     canonical = "panel_rolling_pcr_forecast"
     classification = object()
-    expected_path = (
-        model_lane.Path(model_lane.__file__).resolve().parent.parent
-        / "modeling"
-        / "legacy.py"
-    )
+    # R55 #97: the authority is the repo-root ``modeling`` package — the
+    # SIBLING of factor_engine/, resolved the same upward walk
+    # ``assign_model_lane`` performs.  (The pre-R48 literal
+    # ``factor_engine/modeling/legacy.py`` is the deleted mirror; pinning it
+    # here would assert a path that no longer exists.)
+    _fe_pkg_dir = model_lane.Path(model_lane.__file__).resolve().parent.parent
+    expected_path = None
+    for ancestor in (_fe_pkg_dir, *_fe_pkg_dir.parents):
+        candidate = ancestor / "modeling" / "legacy.py"
+        if candidate.is_file():
+            expected_path = candidate
+            break
+    assert expected_path is not None, "sibling modeling/legacy.py authority missing"
     monkeypatch.setattr(
         model_lane.importlib,
         "import_module",

@@ -1,0 +1,21 @@
+r2_evidence:
+  id: lqtp-dsl-to-fe-converter
+  date: '2026-08-29'
+  type: converter-landing
+  summary: LQTP DSL -> FE 可执行表达式转换器，89/470 可转
+  files_changed:
+  - jobs/lqtp_dsl_to_fe.py
+  - factor_engine/api/lqtp_functions_loader.py
+  - factor_engine/api/lqtp_compat.py
+  - factor_engine/cleaned_operators/intraday/__init__.py
+  - factor_engine/cleaned_operators/common/data_cleaning.py
+  - factor_engine/cleaned_operators/operator_surface.py
+  - factor_engine/backend/production_signature.py
+  validation:
+    parse_all_can_true: 89/89 解析通过 (parse_expr compat_research)
+    smoke_run: FactorEngine.run 5 天 smoke 通过（base-column 因子）
+    spearman_vs_ref: 5/13 |rho|>=0.95, 7/13 >=0.90 (base-column 可落值子集)；价格基准敏感因子需 raw
+      表
+  next_steps:
+  - Python-code AST 翻译器 jobs/fe_code_translator.py 处理 code 字段
+  - LQTP functions.yaml 模板别名已接通 (atr/volume_ratio/momentum/true_range)

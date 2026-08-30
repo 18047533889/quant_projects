@@ -1,0 +1,68 @@
+date: 2026-08-29
+scope: "R56 ADJ anchor authority closure: A-share price-volume = StockDailyBarAdj (adj) only"
+author: "agent adj_anchor"
+
+changed_files:
+  factor_engine/fields/providers.py:
+    - "A-share raw_open/high/low/close/vwap + raw_volume_shares providers DISABLED (_UNAVAILABLE) — raw unadjusted price-volume forbidden for factors"
+    - "return_decimal / reference_pre_close / continuous_close / continuous_open/high/low/vwap / continuous_volume_shares / amount_local / upper/lower_price_limit / tradability_state repointed to ashare_stock_daily_adj (Adj* physical columns)"
+    - "continuous_* A-share bindings read precomputed AdjX (identity via _identity_fields) — no runtime Close*Factor multiply"
+    - "added US continuous_volume_shares identity binding (US Volume is the share count)"
+  factor_engine/fields/concepts.py:
+    - "bare open/high/low/close/vwap -> continuous_* (ADJUSTED basis); bare volume -> continuous_volume_shares"
+    - "raw_* concepts keep explicit-only aliases (no bare spelling); price-limit concepts note adj source"
+  factor_engine/api/label_pit.py:
+    - "default_mining_label_config return_column default close -> vwap (AdjVwap basis); label_formula forward_return(vwap, h)"
+  factor_engine/api/mining_integration.py:
+    - "default_ashare_pv_data_source_config: max_files branch removed — always data_access/ashare_stock_daily_adj (no non-data_access parquet direct read)"
+  factor_engine/storage/sources/data_access_source.py:
+    - "volume/Factor division + _maybe_lqtp_factor_for restricted to ashare_stock_daily_adj only"
+  factor_engine/runtime/incremental_scheduler.py:
+    - "doc note: logical StockDailyBarAdj -> ashare_stock_daily_adj; StockDailyBar remains Factor/Volume-only upstream identity"
+  factor_engine/mining/direct_use.py:
+    - "volume recipes / _INPUT_CONCEPT_FALLBACK bind volume -> continuous_volume_shares (adjusted share count)"
+  factor_engine/scripts/build_canonical_fields.py:
+    - "LQTP_ALIASES point at StockDailyBarAdj Adj* (doc-only constants)"
+  factor_engine/scripts/audit_r24_semantic_continuity.py + scripts/audit_r24_semantic_continuity.py:
+    - "label formula assertion forward_return(close,5) -> forward_return(vwap,5)"
+  data_access/config/semantic_fields.yaml:
+    - "volume.derived_from -> ashare_stock_daily_adj.Volume/Factor (derived_expression Volume/Factor unchanged)"
+    - "deleted mis-registered shareholder_ratio/top10_concentration (dataset ashare_stock_shareholder does not exist; concentration must aggregate one_to_many ShareRatio rows)"
+  data_access/security/api_principals.py:
+    - "example allowed_datasets ashare_stock_daily -> ashare_stock_daily_adj"
+  data_access/store.py:
+    - "compute_and_write doc example FROM {{ashare_stock_daily_adj}} / AdjClose"
+  tests (both factor_engine/tests and tests mirrors):
+    - "label default assertions vwap; catalog v2 table count 22 + adj-qualified ret; data_access_source physical columns AdjClose; strict unknown on adj; field_ref StockDailyBarAdj identity + validate_production_dsl market kwarg; forbidden surface market kwarg; concepts alias close/volume adjusted + raw disabled; financial_asof / r17 golden continuous_close AdjClose identity; r25 volume recipe continuous_volume_shares; mining_integration ashare_pv dataset/fields adj; lqtp v2 source dataset adj; config_profiles / real_parquet_smoke dataset adj; storage test fixture + adj dataset seeded; test_lqtp_v2_source_runtime dataset adj"
+
+verification:
+  functional_probe:
+    - "build_data_source(default_ashare_pv_data_source_config(start=2024-01-04,end=2024-01-04)) on local /home/sunhaiwei/cos_data/StockDailyBarAdj"
+    - "close == AdjClose: True"
+    - "vwap  == AdjVwap: True"
+    - "volume == Volume/Factor: True"
+    - "ret   == Return*1e-4: True"
+    - "SourceRef DailyBar.Close reads AdjClose (adj authority), NOT raw Close(9.11)"
+  label_probe:
+    - "default_mining_label_config(horizon_bars=5) -> label_formula forward_return(vwap, 5), return_column vwap"
+  audit_script:
+    - "python scripts/audit_r24_semantic_continuity.py -> exit 0, all gates OK (incl. LABEL_CONFIG_FORWARD_SEMANTIC_MISMATCH)"
+  data_access_tests:
+    - "pytest data_access/tests/unit/test_cos_mirror.py test_semantic_catalog_identity.py test_r45_cos_contract_ashare.py r21/test_r50_p0_26_27_identity_frequency_tz.py test_quality_contracts.py test_read_contract.py -> 41 passed"
+  factor_engine_tests:
+    - "pytest fields/test_field_catalog_v2.py operators/test_field_catalog_alignment_2026.py operators/test_field_ref_v2.py market/test_concepts_bindings.py market/test_financial_asof.py operators/test_r17_cross_market_golden.py label/test_label_ir_forward_return.py runtime/test_label_pit.py -> 99 passed"
+    - "pytest test_lqtp_*.py (6 files) -> 38 passed (2 pre-existing operator-status failures excluded)"
+    - "pytest storage/test_data_access_source.py -> 7 passed (composite weight double-scale failure pre-existing)"
+  root_mirror_tests:
+    - "tests/... label/catalog/field_ref/concepts/financial_asof/r17/r25/mining_integration/forbidden/r21/storage -> pass (injectivity + config_profiles pre-existing failures excluded)"
+  global_grep:
+    - "factor_engine/fields/providers.py dataset=\"ashare_stock_daily\" refs: 0 (raw price-volume provider count = 0)"
+    - "core factor_engine source paths have no raw StockDailyBar price-volume reads (only adj / US / doc comments)"
+    - "remaining non-data_access parquet reads in factor_engine are scripts (audit/evidence) + factor-lake/calibration IO — not A-share price-volume"
+
+residual_risks:
+  - "pre-existing FE+DA double-scale on composite child index_weight (Weight 60 -> 0.006): catalog index_weight scale 0.01 (DA normalize) + FE registry scale 0.01 re-applied. Unrelated to ADJ migration; fails on clean tree too."
+  - "pre-existing operator-status mismatches in test_lqtp_production_runtime (ts_quantile/ts_sma_cn experimental vs production) — fails on clean tree."
+  - "pre-existing missing factor_engine/examples/profiles/*.yaml breaks test_config_profiles (fails on clean tree)."
+  - "pre-existing audit_mining_datasets_contract violation: ashare_pv_universe maps status listed_state/public_status -> ListedState but datasets.yaml status schema has PublicStatus (no ListedState column)."
+  - "raw ashare_stock_daily dataset remains registered (datasets.yaml / COS contract / catalog table) for Factor/Volume upstream purposes; raw price fields still physically readable via explicit dataset.column/fields map on the raw dataset — the mining surface + default presets no longer expose raw price-volume."

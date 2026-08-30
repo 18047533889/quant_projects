@@ -670,7 +670,15 @@ def ts_poly2_resid_(y, x, d: int) -> np.ndarray:
         valid = np.isfinite(yw) & np.isfinite(xw)
         if int(valid.sum()) < 3:
             continue
-        coeffs = np.polyfit(xw[valid], yw[valid], 2)
+        try:
+            coeffs = np.polyfit(xw[valid], yw[valid], 2)
+        except (np.linalg.LinAlgError, ValueError, FloatingPointError):
+            # 2026-08-29: degenerate/ill-conditioned windows (all-identical x,
+            # extreme magnitude close/volume, near-singular Vandermonde) make
+            # numpy lstsq raise ``SVD did not converge`` / overflow.  A degenerate
+            # window has no well-defined quadratic fit — skip it (residual stays
+            # NaN), matching the finite-only statistical contract.
+            continue
         a, b, c = coeffs
         fitted = a + b * xw + c * xw ** 2
         result[i] = yw[-1] - fitted[-1]

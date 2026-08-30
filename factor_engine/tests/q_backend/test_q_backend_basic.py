@@ -12,7 +12,10 @@ import pandas as pd
 import numpy as np
 
 from factor_engine.backend.q_backend.q_backend import QBackend
-from factor_engine.backend.q_backend.q_process_manager import get_q_process_manager
+from factor_engine.backend.q_backend.q_process_manager import (
+    QAvailabilityStatus,
+    get_q_process_manager,
+)
 from factor_engine.backend.context import ExecutionContext
 from factor_engine.planner.logical_plan import PlanNode
 
@@ -22,7 +25,7 @@ def q_available():
     """检查 q 是否可用。"""
     manager = get_q_process_manager()
     info = manager.check_availability()
-    return info.is_available
+    return info.status == QAvailabilityStatus.AVAILABLE
 
 
 @pytest.fixture
@@ -47,11 +50,12 @@ def sample_data():
 class TestQBackendBasic:
     """基础执行测试。"""
 
-    def test_backend_initialization(self):
-        """测试后端初始化。"""
-        backend = QBackend(fallback_to_pandas=False, production_mode=True)
-        assert backend is not None
-        assert backend.runtime_backend_label == "q_kdb"
+    def test_backend_initialization_fails_closed_without_q(self):
+        """测试后端初始化。无真实 q 运行时，生产模式构造必须 fail-closed。"""
+        from factor_engine.backend.operator_capability import BackendUnavailableError
+
+        with pytest.raises(BackendUnavailableError):
+            QBackend(fallback_to_pandas=False, production_mode=True)
 
     def test_stats_tracking(self):
         """测试统计信息跟踪。"""
@@ -87,8 +91,12 @@ class TestQBackendBasic:
             result = backend.execute(plan, ctx)
             assert result is not None
         except Exception as e:
-            # Fallback 应该防止失败
-            pytest.fail(f"Execution failed even with fallback: {e}")
+            # 无 q 时 planning-time fallback（QPlanningFallbackAllowed）是显式的
+            # 规划期决策，不是运行时静默降级 —— 有真实 q 时则正常执行。
+            from factor_engine.backend.q_backend.q_errors import QPlanningFallbackAllowed
+
+            if not isinstance(e, QPlanningFallbackAllowed):
+                pytest.fail(f"Execution failed even with fallback: {e}")
 
 
 class TestQBackendCapabilities:
@@ -96,19 +104,22 @@ class TestQBackendCapabilities:
 
     def test_capability_query(self):
         """测试能力查询。"""
-        from factor_engine.backend.q_backend.q_capability import get_q_capability
+        from factor_engine.backend.q_backend.q_capability import (
+            QCapabilityLevel,
+            get_q_capability,
+        )
 
         cap = get_q_capability()
 
-        # 检查 Phase 1 算子
-        assert cap.can_execute("ts_mean")
-        assert cap.can_execute("ts_sum")
-        assert cap.can_execute("cs_rank")
-        assert cap.can_execute("fin_lag")
+        # 检查 Phase 1 算子（research 模式有 lowering）
+        assert cap.get_capability("ts_mean", mode="research") == QCapabilityLevel.NATIVE
+        assert cap.get_capability("ts_sum", mode="research") == QCapabilityLevel.NATIVE
+        assert cap.get_capability("cs_rank", mode="research") == QCapabilityLevel.NATIVE
 
-        # 检查 deferred 算子
-        assert not cap.can_execute("garch")
-        assert not cap.can_execute("kalman_filter")
+        # 检查 deferred / 无 lowering 算子（fail-closed，绝不虚报 native）
+        assert cap.get_capability("fin_lag", mode="research") == QCapabilityLevel.UNSUPPORTED
+        assert cap.get_capability("garch", mode="research") == QCapabilityLevel.UNSUPPORTED
+        assert cap.get_capability("kalman_filter", mode="research") == QCapabilityLevel.UNSUPPORTED
 
     def test_streaming_safe_detection(self):
         """测试 streaming-safe 检测。"""
@@ -117,28 +128,29 @@ class TestQBackendCapabilities:
         cap = get_q_capability()
 
         # Streaming-safe
-        ts_mean_cap = cap.get_capability("ts_mean")
-        assert ts_mean_cap.streaming_safe
+        assert cap.is_streaming_safe("ts_mean") is True
+        assert cap.is_streaming_safe("ts_sum") is True
+        assert cap.is_streaming_safe("lag") is True
+        assert cap.is_streaming_safe("add") is False
 
-        # Non-streaming (需要完整组)
-        cs_rank_cap = cap.get_capability("cs_rank")
-        assert not cs_rank_cap.streaming_safe
-        assert cs_rank_cap.requires_full_group or cs_rank_cap.requires_global_sort
+        # Non-streaming
+        assert cap.is_streaming_safe("cs_rank") is False
+        assert cap.is_streaming_safe("cs_zscore") is False
 
 
 class TestQBackendIntegration:
     """集成测试。"""
 
-    def test_factory_integration(self):
-        """测试 factory 集成。"""
+    def test_factory_integration_fails_closed_without_q(self):
+        """测试 factory 集成。无真实 q 时 build_backend("q_kdb") 必须 fail-closed，
+        绝不返回一个伪装成功的 QBackend。"""
+        from factor_engine.backend.operator_capability import BackendUnavailableError
         from factor_engine.backend.factory import build_backend
 
-        backend = build_backend("q_kdb")
-        assert isinstance(backend, QBackend)
-
-        # 别名
-        backend2 = build_backend("q")
-        assert isinstance(backend2, QBackend)
+        with pytest.raises(BackendUnavailableError):
+            build_backend("q_kdb")
+        with pytest.raises(BackendUnavailableError):
+            build_backend("q")
 
     def test_capability_registry_integration(self):
         """测试 capability registry 集成。"""

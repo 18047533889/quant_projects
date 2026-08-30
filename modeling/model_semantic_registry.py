@@ -33,17 +33,75 @@ Design constraints
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Iterable
+from typing import Any, Iterable, TYPE_CHECKING
 
-from factor_engine.cleaned_operators.model_contract import get_model_operator_contract
-from factor_engine.cleaned_operators.model_lane import MODEL_LANES, assign_model_lane
-from factor_engine.cleaned_operators.model_timing import (
-    TimingKind,
-    get_model_timing_contract,
-    timing_kind_for,
-)
-from factor_engine.cleaned_operators.operator_surface import classify_canonical
+from modeling.contracts import TimingKind
 from modeling.legacy import classification_of, classify_execution_class
+
+# R55 #97: this module AGGREGATES factor_engine's per-canonical authorities
+# (model_contract / model_lane / model_timing / operator_surface) — it must
+# never reimplement them.  factor_engine is therefore an OPTIONAL runtime
+# dependency resolved lazily at call time, so `import modeling` (the whole
+# package, including this module via `modeling/__init__.py`) works in a wheel
+# without factor_engine installed.  The single lazy resolver lives here; every
+# consumer goes through it, so there is exactly one adapter boundary.
+# modeling.contracts.TimingKind is the documented SUPERSET of FE's
+# cleaned_operators.model_timing.TimingKind (identical values for the six
+# shared members plus FORWARD_LABEL_SUPERVISED); using the modeling-side enum
+# as the runtime type keeps the package importable without FE.
+_FE_CLEANED_OPERATORS_ATTRS = (
+    "get_model_operator_contract",
+    "MODEL_LANES",
+    "assign_model_lane",
+    "get_model_timing_contract",
+    "timing_kind_for",
+    "classify_canonical",
+)
+
+
+def _fe_cleaned_operators() -> Any:
+    """Import and return FE's model-authority mapping (or ``{}`` if absent).
+
+    Returns an EMPTY dict (not an exception) when factor_engine is missing:
+    the semantic layer then degrades to legacy-only aggregation instead of
+    failing the whole package import.  Import failures other than
+    ``ImportError`` (e.g. a broken FE install raising at import time) still
+    propagate — fail loudly on real breakage, degrade only on absence.
+    """
+    global _FE_MODEL_MODULES
+    if _FE_MODEL_MODULES is None:
+        try:
+            from factor_engine.cleaned_operators import (
+                model_contract as _mc,
+                model_lane as _ml,
+                model_timing as _mt,
+                operator_surface as _os,
+            )
+        except ImportError:
+            _FE_MODEL_MODULES = {}
+        else:
+            _FE_MODEL_MODULES = {
+                "get_model_operator_contract": _mc.get_model_operator_contract,
+                "MODEL_LANES": _ml.MODEL_LANES,
+                "assign_model_lane": _ml.assign_model_lane,
+                "get_model_timing_contract": _mt.get_model_timing_contract,
+                "timing_kind_for": _mt.timing_kind_for,
+                "classify_canonical": _os.classify_canonical,
+            }
+    return _FE_MODEL_MODULES
+
+
+_FE_MODEL_MODULES: dict[str, Any] | None = None
+
+
+def _fe(name: str) -> Any:
+    """One FE authority by name, or ``None`` when factor_engine is absent."""
+    if name not in _FE_CLEANED_OPERATORS_ATTRS:
+        raise KeyError(name)
+    try:
+        return _fe_cleaned_operators().get(name)
+    except Exception:  # pragma: no cover - factor_engine broken
+        return None
 
 __all__ = [
     "ModelSemanticEntry",
@@ -208,11 +266,19 @@ class ModelSemanticRegistry:
         """Fold every authority for ``canonical`` into one entry."""
         ov = self._overrides.get(canonical, {})
         leg = classification_of(canonical)
-        mc = get_model_operator_contract(canonical)
-        kind = timing_kind_for(canonical)
-        lane = assign_model_lane(canonical)
-        surface = classify_canonical(canonical)
-        tc = get_model_timing_contract(canonical)
+        # Every FE authority is optional: when factor_engine is absent the
+        # aggregation degrades to legacy-only and the FE-derived fields come
+        # back ``None`` / ``unclassified`` instead of raising at import time.
+        mc_fn = _fe("get_model_operator_contract")
+        mc = mc_fn(canonical) if mc_fn is not None else None
+        kind_fn = _fe("timing_kind_for")
+        kind = kind_fn(canonical) if kind_fn is not None else None
+        lane_fn = _fe("assign_model_lane")
+        lane = lane_fn(canonical) if lane_fn is not None else None
+        surface_fn = _fe("classify_canonical")
+        surface = surface_fn(canonical) if surface_fn is not None else ""
+        tc_fn = _fe("get_model_timing_contract")
+        tc = tc_fn(canonical) if tc_fn is not None else None
 
         execution_class = ov.get("execution_class")
         if execution_class is None:
@@ -280,7 +346,8 @@ class ModelSemanticRegistry:
         entry = self.semantic_entry(canonical)
         errors: list[str] = []
 
-        if entry.lane not in MODEL_LANES:
+        model_lanes = _fe("MODEL_LANES")
+        if entry.lane not in model_lanes:
             errors.append(f"{canonical}: lane={entry.lane!r} not in MODEL_LANES")
 
         leg = classification_of(canonical)
@@ -309,7 +376,8 @@ class ModelSemanticRegistry:
                 )
 
         if entry.timing is not None:
-            tc = get_model_timing_contract(canonical)
+            tc_fn = _fe("get_model_timing_contract")
+            tc = tc_fn(canonical) if tc_fn is not None else None
             if tc is not None:
                 if entry.timing in (
                     TimingKind.PRIOR_FIT_PREDICTIVE,

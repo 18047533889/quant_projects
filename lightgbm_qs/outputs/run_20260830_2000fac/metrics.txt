@@ -1,0 +1,8 @@
+pool: lqtp 2042 landed + local 9 pools -> pass1 3131 candidates / 2580 computed OK
+NO_DEDUP selected=783 (rank_ic>0.015 after flip), features (767745,784)
+label: COS TargetVwapReturnH10 official; benchmark 000985.CSI TotalReturn; exec lag 1; topk30 maxw5% turnover30% tc5bp; RE_OPT_EVERY=2 (6-month re-opt)
+strategy: total=502.41% ann=32.90% sharpe=1.316 mdd=-26.35% calmar=1.25 win=54.4%
+benchmark: total=45.50% ann=6.12% sharpe=0.399 mdd=-39.33%
+excess:    total=314.04% ann=25.24% sharpe=1.880 mdd=-16.55% calmar=1.52 win=53.3%
+yearly strategy: 2020:+61.9 2021:+66.3 2022:-5.4 2023:+28.9 2024:+19.8 2025:+44.5 2026:+5.9
+yearly excess:   2020:+29.3 2021:+56.6 2022:+18.7 2023:+38.7 2024:+11.5 2025:+16.0 2026:-4.0

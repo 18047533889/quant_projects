@@ -19,6 +19,9 @@ from factor_engine.util.logging_utils import get_logger
 from factor_engine.util.workspace_paths import quant_projects_root
 
 from .datasource import DataSource
+from .data_access_source_helpers import (
+    _prune_semantic_filters_for_dataset,
+)
 from .field_plan import (
     NormalizedFieldPlan,
     _market_from_dataset,
@@ -666,6 +669,39 @@ def _strict_instrument_filter(value: Any) -> list[str] | None:
     return out
 
 
+def _dataset_schema_field_spec(
+    dataset: str, physical_col: str, schema: Mapping[str, Any]
+) -> Any:
+    """Build a minimal FieldSpec from a dataset's registry schema column.
+
+    Used by ``_field_spec``'s case-insensitive dataset-schema fallback so a
+    logical request (``close``) that is not in the FE registry/catalog still
+    resolves to the dataset's real physical column (``Close``) for SQL
+    pushdown / lazy scan.
+    """
+    from factor_engine.fields.spec import FieldSpec
+
+    return FieldSpec(
+        name=physical_col,
+        table=dataset,
+        source_name=physical_col,
+        dtype=str(getattr(schema.get(physical_col), "name", None) or "float64"),
+        unit="dimensionless",
+        frequency="daily",
+        role="feature",
+        dataset=dataset,
+        field_id=f"{dataset}.{physical_col}",
+        domain="raw",
+        value_kind="numeric",
+        temporal_model="exact",
+        grain=("instrument", "time"),
+        cardinality="many_to_one",
+        strict_pit_allowed=None,
+        null_policy="preserve",
+        mining_allowed=None,
+    )
+
+
 class DataAccessSource(DataSource):
     """FactorEngine DataAccess source with snapshot-bound caches and preflight."""
 
@@ -764,7 +800,18 @@ class DataAccessSource(DataSource):
         self.normalize_timestamp = normalize_timestamp
         self.timestamp_unit = timestamp_unit
         self.params = dict(params or {})
-        self.semantic_filters = dict(semantic_filters or {})
+        # 2026-08-29: semantic_filters 是**行级过滤**（StockIndustry 的
+        # IndustrySource 等），只在声明了该过滤列的**物理表**上才生效。把
+        # ``filters={IndustrySource:...}`` 无差别地传给没有该列的 daily/adj
+        # 面板会变成 DuckDB Binder ``Referenced column "IndustrySource" not
+        # found``。这里在构造期把「当前 dataset 物理 schema 没有该列」的过滤
+        # 项剔除——industry 等需要过滤的读取仍由 logical-source 的 child
+        # 显式构造带 filter 的 child（``_child(dataset, ...)`` 在
+        # lqtp_logical_source 里已按表名补 IndustrySource），不依赖父级全局
+        # semantic_filters 下推。
+        self.semantic_filters = _prune_semantic_filters_for_dataset(
+            dict(semantic_filters or {}), dataset,
+        )
         self.read_mode = str(read_mode or "panel").lower()
         self._validate_semantic_contract()
         # R20-107..113：构造期只写 base；per-thread lazy/read_auto override 走
@@ -1356,6 +1403,25 @@ class DataAccessSource(DataSource):
                 raise UnknownFieldSemanticError(
                     f"unknown field {name!r} in dataset {self.dataset!r}"
                 )
+            # PARITY-SWEEP-R56: fall back to the DATASET'S OWN schema (the
+            # registry) with a case-insensitive match before giving up.  The
+            # probe backend_parity fixture seeds a dataset with a ``Close``
+            # column and builds expressions with ``col("close")``; the FE
+            # registry/catalog only know the A-share ``AdjClose`` mapping and
+            # return Unknown, which made the SQL pushdown emit the raw logical
+            # name ``close`` against a parquet column ``Close``.
+            try:
+                from data_access import get_store as _get_store
+
+                ds = _get_store().get_dataset(self.dataset)
+                schema = getattr(ds, "schema", None) or {}
+                lower = {str(k).lower(): k for k in schema}
+                if str(name).lower() in lower:
+                    return _dataset_schema_field_spec(
+                        self.dataset, lower[str(name).lower()], schema
+                    )
+            except Exception:
+                pass
             return None
         if isinstance(resolved, AmbiguousField):
             if production:
@@ -2143,13 +2209,14 @@ class DataAccessSource(DataSource):
         """LQTP anchor ``volume`` requests need the Factor column in the same read.
 
         Platform functions.yaml: ``volume = Volume / Factor``.  When a bare
-        ``volume`` is requested on the StockDailyBar anchor, add the physical
+        ``volume`` is requested on the StockDailyBarAdj anchor, add the physical
         ``Factor`` column to the read so ``_normalize_contract_columns`` can
         apply the division.  Returns the physical factor column name, or None
         when not applicable (already cached / different dataset / SourceRef).
+        ADJ_FIELD_MIGRATION: only the adj authority dataset is a factor source.
         """
         if not self.dataset or str(self.dataset) not in {
-            "ashare_stock_daily", "ashare_stock_daily_adj",
+            "ashare_stock_daily_adj",
         }:
             return None
         if "volume" not in (list(names) or []):
@@ -2330,10 +2397,11 @@ class DataAccessSource(DataSource):
 
         # LQTP 平台口径（functions.yaml）：StockDailyBar 裸 ``volume`` = Volume / Factor
         # （后复权量）。Factor 物理列由 ``load_columns`` 的同批读取带进来（fetched 里
-        # 键为物理 ``Factor``）。这里只在 anchor ``ashare_stock_daily`` / 复权
-        # ``ashare_stock_daily_adj``（复权表 Volume 保持原始值，后复权量 = Volume/Factor）
-        # 且 fetched 同时含 volume + Factor 时做除法，避免污染 registry/catalog 已调整路径。
-        if self.dataset in {"ashare_stock_daily", "ashare_stock_daily_adj"} and "volume" in fetched and "Factor" in fetched:
+        # 键为物理 ``Factor``）。这里只在复权 anchor ``ashare_stock_daily_adj``
+        # （复权表 Volume 保持原始值，后复权量 = Volume/Factor）且 fetched 同时含
+        # volume + Factor 时做除法，避免污染 registry/catalog 已调整路径。
+        # ADJ_FIELD_MIGRATION：未复权 ashare_stock_daily 不再是 factor 数据源。
+        if self.dataset in {"ashare_stock_daily_adj"} and "volume" in fetched and "Factor" in fetched:
             fvol = fetched["volume"]
             ffac = fetched["Factor"]
             if isinstance(fvol, pd.Series) and isinstance(ffac, pd.Series):

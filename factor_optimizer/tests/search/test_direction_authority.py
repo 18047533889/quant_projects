@@ -147,9 +147,7 @@ def test_bayesian_minimize_and_maximize_both_run():
             _protocol(lambda trial, fidelity: {
                 "evaluation_id": trial.trial_id,
                 "score": 1.0,
-                "cost": 1.0,
-            }),
-            strategy=strat,
+                "cost": 1.0, "treatment_integrity_evidence": _integrity_evidence(trial.trial_id)}),
         )
         session = runner.run("bayes-" + direction)
         assert session.is_finished()
@@ -167,9 +165,7 @@ def test_tpe_minimize_and_maximize_both_run():
             _protocol(lambda trial, fidelity: {
                 "evaluation_id": trial.trial_id,
                 "score": 1.0,
-                "cost": 1.0,
-            }),
-            strategy=strat,
+                "cost": 1.0, "treatment_integrity_evidence": _integrity_evidence(trial.trial_id)}),
         )
         session = runner.run("tpe-" + direction)
         assert session.is_finished()

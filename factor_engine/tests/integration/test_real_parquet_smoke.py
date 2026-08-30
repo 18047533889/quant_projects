@@ -42,8 +42,8 @@ def test_real_ashare_stock_daily_loads_close():
     src = build_data_source(
         {
             "type": "data_access",
-            "dataset": "ashare_stock_daily",
-            "fields": {"close": "Close"},
+            "dataset": "ashare_stock_daily_adj",
+            "fields": {"close": "AdjClose"},
             "start_date": "2024-01-02",
             "end_date": "2024-01-05",
         }
@@ -81,8 +81,8 @@ def test_real_ashare_rank_smoke():
     src = build_data_source(
         {
             "type": "data_access",
-            "dataset": "ashare_stock_daily",
-            "fields": {"close": "Close"},
+            "dataset": "ashare_stock_daily_adj",
+            "fields": {"close": "AdjClose"},
             "start_date": "2024-01-02",
             "end_date": "2024-01-10",
         }

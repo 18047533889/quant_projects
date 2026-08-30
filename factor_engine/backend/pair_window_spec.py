@@ -30,10 +30,21 @@ class PairWindowSpec:
         attrs = node.attrs or {}
         if attrs.get("min_periods") is not None:
             mp = max(int(base.min_periods), 2)
+            if mp > base.size:
+                from factor_engine.backend.operator_errors import OperatorParameterError
+                raise OperatorParameterError(
+                    f"min_periods ({mp}) must not exceed window ({base.size})"
+                )
         else:
             # Caller omitted min_periods — use the op-specific production default
             # (ts_corr/ts_cov → 2; ts_beta → 5 / NEW-024), never silent mp=1.
-            mp = max(int(default_min_periods), 2)
+            # R19-033 parity with the kernel contract: the reviewed production
+            # default applies at the canonical window (20); an explicit smaller
+            # window clamps the UNTAXED default down to the window itself, so a
+            # legal small-window call is not rejected (polars rolling_* raises
+            # `min_periods should be <= window_size`) and the pandas/plars
+            # warmup semantics stay identical.
+            mp = min(max(int(default_min_periods), 2), base.size)
         return cls(
             size=base.size,
             min_periods=mp,

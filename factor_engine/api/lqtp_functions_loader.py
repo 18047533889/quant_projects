@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import ast
 import os
+import re
 from pathlib import Path
 from typing import Any, Callable
 
@@ -49,6 +50,30 @@ def _load_payload(path: Path) -> dict[str, Any]:
 def _factory(canonical: str):
     from factor_engine.api.cleaned_ops import make_cleaned_call_factory
     return make_cleaned_call_factory(canonical)
+
+
+def _call_order(expr: str) -> list[str]:
+    """Ordered bare-name (Call/Name) appearances in a template body.
+
+    Walks the AST in source order and collects ``ast.Name`` identifiers that
+    are called (``ts_mean(...)``) or referenced (``high``) so the inferred
+    positional parameter list matches the template body's data-input order.
+    """
+    import ast as _ast
+
+    tree = _ast.parse(str(expr), mode="eval")
+    order: list[str] = []
+
+    def walk(node: _ast.AST) -> None:
+        if isinstance(node, _ast.Name):
+            if node.id not in order:
+                order.append(node.id)
+            return
+        for child in _ast.iter_child_nodes(node):
+            walk(child)
+
+    walk(tree.body)
+    return order
 
 
 def _template_callable(
@@ -172,6 +197,12 @@ def _entries(payload: dict[str, Any]) -> tuple[dict[str, str], dict[str, dict[st
                     aliases[str(name)] = str(spec.get("alias") or spec.get("canonical"))
                 elif "expression" in spec:
                     templates[str(name)] = dict(spec)
+                elif "parameterized_source" in spec:
+                    # Platform source-entry (e.g. benchmark_index with a
+                    # parameterized_source + params) is a data-source binding,
+                    # not an FE operator alias/template — skip so an unchanged
+                    # platform functions.yaml stays loadable.
+                    continue
                 else:
                     raise LQTPFunctionsConfigError(
                         f"function {name!r} requires alias/canonical or expression"
@@ -197,17 +228,27 @@ def augment_from_functions_yaml(
 
     from factor_engine.cleaned_operators.registry import OperatorRegistry
     for external, canonical_or_alias in aliases.items():
+        # ``${...}``-parameterized template bodies (ma / std_n / delta /
+        # atr / volume_ratio / ... = ``ts_mean(${field}, ${window})``) are
+        # parameterized templates, not executable alias strings.  They are
+        # registered as templates below (reuse of the ``templates`` machinery
+        # keyed by the parameter list derived from the body).
+        if "${" in canonical_or_alias:
+            if _config_path() is None and path is None:
+                raise LQTPFunctionsConfigError(
+                    f"external alias {external!r} targets unknown canonical "
+                    f"{canonical_or_alias!r}"
+                )
+            continue
         # ``sql_expr``-style field aliases (open/high/low/close/... + Field)
         # define the platform's LQTP *adjustment basis*, which FactorEngine
         # already applies at the StockDailyBar source layer — the canonical
         # string is NOT an FE operator name and must not be registry-resolved.
-        # ``${...}``-parameterized template bodies (ma / std_n / delta / ...
-        # = ``ts_mean(${field}, ${window})``) are parameterized templates, not
-        # executable alias strings.  Both are platform-authoring conveniences,
-        # not runnable FE operator names; skip so the unchanged platform
-        # functions.yaml loads, and let a formula that actually uses the name
-        # fail at parse/allowlist as any unsupported name would.
-        if " " in canonical_or_alias or "." in canonical_or_alias or "${" in canonical_or_alias:
+        # Both are platform-authoring conveniences, not runnable FE operator
+        # names; skip so the unchanged platform functions.yaml loads, and let a
+        # formula that actually uses the name fail at parse/allowlist as any
+        # unsupported name would.
+        if " " in canonical_or_alias or "." in canonical_or_alias:
             if _config_path() is None and path is None:
                 raise LQTPFunctionsConfigError(
                     f"external alias {external!r} targets unknown canonical "
@@ -238,4 +279,83 @@ def augment_from_functions_yaml(
         if not isinstance(expression, str) or not expression.strip():
             raise LQTPFunctionsConfigError(f"template {name!r} expression must be non-empty")
         out[name] = _template_callable(name, list(params), expression, base_allow)
+
+    # Parameterized function aliases (``atr: "ts_mean(true_range, ${window})"``)
+    # reuse the template machinery: derive the parameter list from the
+    # ``${param}`` placeholders in the body so the platform functions.yaml
+    # loads unchanged and its names become runnable LQTP DSL templates.
+    for name, body in aliases.items():
+        if "${" not in body or name in out:
+            continue
+        # Substitute ${param} with param FIRST so the body is valid Python AST
+        # (e.g. ``ts_mean(true_range, ${window})`` -> ``ts_mean(true_range, window)``).
+        expr = re.sub(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}", lambda m: m.group(1), body)
+        explicit_names = [m.group(1) for m in re.finditer(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}", body)]
+        # Macro references: bare names that reference OTHER platform aliases /
+        # templates (e.g. ``true_range`` inside ``atr``).  Any name that is a
+        # platform alias whose body is a plain (non-${}) expression OR a
+        # parameterized template is a macro.  Expand them so the final
+        # template only references the caller's series + explicit scalar
+        # params.  ``true_range`` itself is a platform alias whose body is a
+        # full ``where(...)`` expression.
+        def _expand_macros(text: str, depth: int = 0) -> str:
+            if depth > 4:
+                return text
+            for n in _call_order(text):
+                if n in explicit_names:
+                    continue
+                mbody = aliases.get(n)
+                if mbody is None or "${" in mbody:
+                    continue
+                # Only expand when the alias body is itself a runnable operator
+                # expression with a Call/Compare node (e.g. ``true_range:
+                # "where(...)"``).  Data-field aliases (``high:
+                # "StockDailyBar.High * ..."``) and bare DataTable paths are the
+                # platform adjustment-basis fields, already applied at the
+                # source layer — leave the bare name as the series input so the
+                # template signature uses ``high`` directly.
+                try:
+                    _mtree = ast.parse(str(mbody), mode="eval")
+                    _has_call = any(
+                        isinstance(node, (ast.Call, ast.Compare))
+                        for node in ast.walk(_mtree)
+                    )
+                except Exception:
+                    _has_call = False
+                if not _has_call:
+                    continue
+                text = text.replace(n, f"({mbody})")
+                return _expand_macros(text, depth + 1)
+            return text
+
+        expr = _expand_macros(expr)
+        try:
+            all_names = _call_order(expr)
+        except Exception:
+            continue
+        # Bare series inputs: names that are not operator calls and not the
+        # explicit ${...} scalar params.  ``_call_order`` returns ALL bare
+        # names (including operator calls like ts_mean) — filter those against
+        # the allowlist so only data-series inputs remain.
+        try:
+            bare = [
+                n
+                for n in all_names
+                if n not in base_allow
+                and n not in explicit_names
+            ]
+        except Exception:
+            continue
+        # Explicit ${...} placeholders become trailing scalar params.
+        explicit = []
+        for m in re.finditer(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}", body):
+            if m.group(1) not in explicit:
+                explicit.append(m.group(1))
+        params = bare + explicit
+        if not params:
+            continue
+        try:
+            out[name] = _template_callable(name, params, expr, base_allow)
+        except Exception:
+            pass
     return out

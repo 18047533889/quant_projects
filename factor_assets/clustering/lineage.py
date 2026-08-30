@@ -16,6 +16,11 @@ from types import MappingProxyType
 from typing import Dict, List, Set, Optional, Tuple
 from collections import defaultdict
 
+from factor_assets.clustering.certification import (
+    CertifiedGraphArtifact,
+    ExecutionMode,
+    enforce_certified_graph,
+)
 from factor_assets.graph.sparse import SparseCorrelationGraph
 
 
@@ -134,29 +139,62 @@ class LineageDetector:
         self,
         graph: SparseCorrelationGraph,
         min_correlation: float = 0.7,
-        degree_threshold: int = 2
+        degree_threshold: int = 2,
+        execution_mode: ExecutionMode | str = ExecutionMode.RESEARCH,
+        certification: Optional[CertifiedGraphArtifact] = None,
     ):
         """
         Args:
             graph: Correlation graph
             min_correlation: Minimum correlation for parent-child relation
             degree_threshold: Minimum degree difference to consider parent
+            execution_mode: ``RESEARCH`` (default) or ``PRODUCTION``.  In
+                production mode lineage detection raises — this module is
+                RESEARCH/ANALYTIC ONLY (DLIB-FA-009) and may never consume a
+                production graph (R55 P0-13).
+            certification: certification evidence attached to ``graph``.
         """
         self.graph = graph
         self.min_correlation = min_correlation
         self.degree_threshold = degree_threshold
+        self.execution_mode = ExecutionMode.coerce(execution_mode)
+        self.certification = certification
 
-    def detect_lineage(self, family_members: Set[str], family_id: int) -> FamilyLineage:
+    def _gate(self, *, algorithm: str, now: Optional[object] = None):
+        """Run the certified-graph gate for this run (R55 P0-13).
+
+        In production mode this research-only module is refused outright; the
+        research path is unchanged.  Returns the certification (or ``None``).
+        """
+        return enforce_certified_graph(
+            self.execution_mode,
+            self.graph,
+            self.certification,
+            algorithm=algorithm,
+            now=now,
+        )
+
+    def detect_lineage(
+        self,
+        family_members: Set[str],
+        family_id: int,
+        *,
+        now: Optional[object] = None,
+    ) -> FamilyLineage:
         """
         Detect lineage structure within a family.
 
         Args:
             family_members: Set of factors in the family
             family_id: Family cluster ID
+            now: optional gate clock (see :func:`~factor_assets.clustering.
+                certification.enforce_certified_graph`).
 
         Returns:
             Family lineage with parent-child relations
         """
+        # R55 P0-13: the gate runs at EVERY entry point.
+        self._gate(algorithm="lineage", now=now)
         # Extract subgraph for this family
         subgraph = self.graph.subgraph(family_members)
 
@@ -292,17 +330,23 @@ class LineageDetector:
 
     def detect_all_lineages(
         self,
-        cluster_result: 'ClusterResult'
+        cluster_result: 'ClusterResult',
+        *,
+        now: Optional[object] = None,
     ) -> List[FamilyLineage]:
         """
         Detect lineages for all families in clustering result.
 
         Args:
             cluster_result: Result from clustering algorithm
+            now: optional gate clock (see :func:`~factor_assets.clustering.
+                certification.enforce_certified_graph`).
 
         Returns:
             List of family lineages
         """
+        # R55 P0-13: the gate runs here too (this is a clustering entry point).
+        self._gate(algorithm="lineage", now=now)
         lineages = []
         clusters = cluster_result.get_all_clusters()
 

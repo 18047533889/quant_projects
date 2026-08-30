@@ -1057,7 +1057,11 @@ def _return_activity_corr(pc: SessionPanel, pa: SessionPanel, absolute_return: b
     r = pc.log_returns()
     if absolute_return:
         r = np.abs(r)
-    valid = pc.is_valid_bar & pa.is_valid_bar & np.isfinite(pa.values)
+    # The log-return of the first official slot is NaN by construction
+    # (SessionPanel.log_returns leaves out[0] NaN); a NaN member must be
+    # excluded from the paired cohort, otherwise ``corrcoef`` returns NaN for
+    # every day (PARITY-B: polars helper already drops non-finite r).
+    valid = pc.is_valid_bar & pa.is_valid_bar & np.isfinite(pa.values) & np.isfinite(r)
     r, a = r[valid], pa.values[valid]
     if len(r) < 2 or np.std(r) <= _EPS or np.std(a) <= _EPS:
         return np.nan

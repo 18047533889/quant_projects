@@ -55,14 +55,20 @@ def _pl(x, window, k=None, min_periods=None, *, top, stat, **_):
 
 
 def _spec(top, stat):
-    return (
-        lambda x, window, k=None, min_periods=None, **kw: _pd(
-            x, window, k, min_periods, top=top, stat=stat, **kw
-        ),
-        lambda x, window, k=None, min_periods=None, **kw: _pl(
-            x, window, k, min_periods, top=top, stat=stat, **kw
-        ),
-    )
+    # ts_topk_sum canonical params are ``["x","d","k"]`` (R19-050 aliases); the
+    # DSL binder always passes the CANONICAL key (``d``), so the wrapped kernels
+    # must accept that spelling instead of requiring positional ``window``.
+    def _pand(x, window=None, k=None, min_periods=None, *, d=None, n=None, **kw):
+        w = window if window is not None else d
+        kk = k if k is not None else n
+        return _pd(x, w, kk, min_periods, top=top, stat=stat, **kw)
+
+    def _pola(x, window=None, k=None, min_periods=None, *, d=None, n=None, **kw):
+        w = window if window is not None else d
+        kk = k if k is not None else n
+        return _pl(x, w, kk, min_periods, top=top, stat=stat, **kw)
+
+    return _pand, _pola
 
 
 def register():

@@ -20,6 +20,7 @@ from __future__ import annotations
 import hashlib
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from types import MappingProxyType
 from typing import Mapping, Optional
 
 from factor_assets.contracts._frozen import FrozenMapping
@@ -32,7 +33,143 @@ __all__ = [
     "UNKNOWN_SIMILARITY",
     "SIMILARITY_VIEW_KEYS",
     "DEFAULT_SIMILARITY_VIEW",
+    # P0-12 (R55 audit): authoritative correlation-metric mapping + the
+    # UNKNOWN-identity tokens that must never survive into a spec identity.
+    "SimilarityMetricSpec",
+    "CORRELATION_METRIC_VIEWS",
+    "METRIC_VIEW_TO_METRIC",
+    "resolve_metric_view",
+    "view_for_metric",
+    "metric_for_view",
+    "SimilarityMetricSpecError",
+    "UNKNOWN_IDENTITY_TOKENS",
+    "is_unknown_identity",
 ]
+
+#: P0-12 (R55 audit) — canonical, authoritative mapping between the metric a
+#: producer *declares* (the :class:`~factor_assets.similarity.SimilarityMethod`
+#: name, e.g. ``"pearson"``) and the similarity view key its result is stored
+#: under (e.g. ``"pearson_corr"``).  This is the single source of truth; every
+#: artifact field that names a correlation metric must be resolved through
+#: :func:`resolve_metric_view` (or the reverse :func:`view_for_metric`) so a
+#: result computed with Spearman can never be labeled ``pearson`` and an
+#: unknown metric name is rejected rather than silently defaulted.
+CORRELATION_METRIC_VIEWS: Mapping[str, str] = MappingProxyType({
+    "pearson": "pearson_corr",
+    "spearman": "rank_corr",
+    "kendall": "kendall_tau",
+})
+
+#: Reverse view: view key -> declared metric name (derived, never duplicated).
+METRIC_VIEW_TO_METRIC: Mapping[str, str] = MappingProxyType(
+    {view: metric for metric, view in CORRELATION_METRIC_VIEWS.items()}
+)
+
+
+def resolve_metric_view(metric: str) -> str:
+    """Resolve a declared correlation metric to its canonical view key.
+
+    Fail-closed: a metric name outside :data:`CORRELATION_METRIC_VIEWS`
+    raises ``ValueError`` instead of silently falling back to a default view
+    (a default would mislabel the measurement, e.g. store a Spearman result
+    under the Pearson view).
+    """
+    if not isinstance(metric, str) or not metric:
+        raise TypeError("metric must be a non-empty string")
+    try:
+        return CORRELATION_METRIC_VIEWS[metric.strip().lower()]
+    except KeyError:
+        raise ValueError(
+            f"unknown similarity metric {metric!r}; must be one of "
+            f"{sorted(CORRELATION_METRIC_VIEWS)} — refusing to default the "
+            "metric mapping (a default would mislabel the measurement)"
+        ) from None
+
+
+def view_for_metric(metric: str) -> str:
+    """Alias of :func:`resolve_metric_view` (read-side naming)."""
+    return resolve_metric_view(metric)
+
+
+def metric_for_view(view: str) -> str:
+    """Inverse of :func:`resolve_metric_view`: view key -> declared metric.
+
+    A view key that is *already* a metric name (e.g. a caller passed
+    ``"pearson_corr"`` where a metric was expected) is not a metric; the
+    inverse mapping rejects it rather than guessing.
+    """
+    if not isinstance(view, str) or not view:
+        raise TypeError("view must be a non-empty string")
+    try:
+        return METRIC_VIEW_TO_METRIC[view]
+    except KeyError:
+        raise ValueError(
+            f"similarity view {view!r} is not a correlation-metric view "
+            f"(mapping covers {sorted(METRIC_VIEW_TO_METRIC)})"
+        ) from None
+
+
+def resolve_metric_name(metric: str) -> str:
+    """Canonicalize a declared metric name (accepts either naming form).
+
+    Accepts the metric name (``"pearson"``) or its view alias
+    (``"pearson_corr"``) and returns the canonical metric name.  Anything
+    else is rejected — never defaulted.
+    """
+    if not isinstance(metric, str) or not metric:
+        raise TypeError("metric must be a non-empty string")
+    normalized = metric.strip().lower()
+    if normalized in CORRELATION_METRIC_VIEWS:
+        return normalized
+    if normalized in METRIC_VIEW_TO_METRIC:
+        return METRIC_VIEW_TO_METRIC[normalized]
+    raise ValueError(
+        f"unknown similarity metric {metric!r}; must be one of "
+        f"{sorted(CORRELATION_METRIC_VIEWS)} (or their view aliases "
+        f"{sorted(METRIC_VIEW_TO_METRIC)}) — refusing to default the metric "
+        "mapping (a default would mislabel the measurement)"
+    )
+
+
+#: P0-12 (R55 audit) — spec-identity tokens that mean "unknown".  A
+#: ``for_spec`` / ``similarity_spec_*`` identity carrying any of these is not
+#: an identity at all: two artifacts computed under *different* specs would
+#: both read UNKNOWN and downstream consumers (cluster versioning, library
+#: promotion) would silently merge them.  Construction fails closed instead.
+UNKNOWN_IDENTITY_TOKENS = frozenset({
+    "UNKNOWN",
+    "UNKNOWN_SPEC",
+    "UNKNOWN_SPEC_HASH",
+    "UNSPECIFIED",
+    "NOT_SPECIFIED",
+    "NONE",
+    "N/A",
+    "NA",
+    "NULL",
+    "UNDEFINED",
+    "PLACEHOLDER",
+    "TODO",
+    "TBD",
+    "",
+})
+
+
+def is_unknown_identity(value: object) -> bool:
+    """Whether ``value`` is a spec-identity placeholder that means "unknown".
+
+    Case-insensitive on the string tokens; ``None`` is also an unknown
+    identity.  Numbers / other objects are never unknown identities.
+    """
+    if value is None:
+        return True
+    if not isinstance(value, str):
+        return False
+    return value.strip().upper() in UNKNOWN_IDENTITY_TOKENS
+
+
+class SimilarityMetricSpecError(ValueError):
+    """Raised when a similarity metric identity is missing or inconsistent."""
+
 
 #: Canonical similarity view keys understood by consumers.  ``rank_corr`` is
 #: the primary view used by MMR; the remaining keys are common residual /
@@ -118,14 +255,17 @@ def _similarity_spec_digest(
     snapshot_ref: Optional[str],
     window_ref: Optional[str],
     universe_ref: Optional[str],
+    metric: Optional[str] = None,
 ) -> str:
     """sha256 over the semantic fields that define a similarity measurement.
 
-    Covers the factor pair, every view (including its None-ness), and the
-    snapshot/window/universe provenance.  Two artifacts with the same
-    semantic content but different producer or timestamp share the same
-    ``similarity_spec_hash``; a different data snapshot or view set yields a
-    different hash.
+    Covers the factor pair, every view (including its None-ness), the
+    declared metric and the snapshot/window/universe provenance.  Two
+    artifacts with the same semantic content but different producer or
+    timestamp share the same ``similarity_spec_hash``; a different data
+    snapshot, view set or *metric* yields a different hash — a Pearson
+    measurement and a Spearman measurement of the same pair are NOT the same
+    spec.
     """
     digest = hashlib.sha256()
     _length_prefixed(digest, factor_a)
@@ -133,6 +273,7 @@ def _similarity_spec_digest(
     for key in sorted(views):
         _length_prefixed(digest, key)
         _length_prefixed(digest, views[key])
+    _length_prefixed(digest, metric or "")
     _length_prefixed(digest, snapshot_ref)
     _length_prefixed(digest, window_ref)
     _length_prefixed(digest, universe_ref)
@@ -155,9 +296,16 @@ class SimilarityArtifact:
         snapshot_ref: Data snapshot the similarity was computed on.
         window_ref: Evaluation window (e.g. ``"2024-01-01/2024-12-31"``).
         universe_ref: Universe the measurement was restricted to.
+        metric: Declared correlation metric of the measurement (a key of
+            :data:`CORRELATION_METRIC_VIEWS`, e.g. ``"pearson"`` /
+            ``"spearman"`` / ``"kendall"``).  Optional for legacy
+            constructions, but when supplied it must be a *known* metric and
+            must agree with the view the measurement was actually stored
+            under — a Pearson-declared artifact whose score lives in the
+            Spearman view is a lie and fails closed.  Never ``UNKNOWN``.
         similarity_spec_hash: sha256 over the semantic fields (factor pair,
-            views, snapshot/window/universe).  Computed automatically when
-            not supplied.
+            views, metric, snapshot/window/universe).  Computed automatically
+            when not supplied.
         producer: Identifier of the similarity producer.
         created_at: ISO 8601 creation timestamp.
         primary_view: Which view key MMR should consume as the similarity
@@ -171,6 +319,7 @@ class SimilarityArtifact:
     snapshot_ref: Optional[str] = None
     window_ref: Optional[str] = None
     universe_ref: Optional[str] = None
+    metric: Optional[str] = None
     similarity_spec_hash: str = ""
     producer: Optional[str] = None
     created_at: Optional[str] = None
@@ -183,6 +332,37 @@ class SimilarityArtifact:
             raise ValueError("factor_b is required")
         if self.factor_a == self.factor_b:
             raise ValueError("factor_a and factor_b must differ")
+
+        # P0-12: a *string* spec/provenance identity that is an UNKNOWN
+        # placeholder is not an identity.  Two artifacts computed under
+        # different specs would both read "UNKNOWN" and be silently merged by
+        # consumers (cluster versioning, library promotion).  Fail closed at
+        # construction.  ``None`` stays legal: it means "this provenance
+        # dimension is absent", which the spec digest already encodes as an
+        # empty field — it is not a conflatable UNKNOWN *token*.
+        for _field_name in ("snapshot_ref", "window_ref", "universe_ref"):
+            _value = getattr(self, _field_name)
+            if isinstance(_value, str) and is_unknown_identity(_value):
+                raise SimilarityMetricSpecError(
+                    f"{_field_name} is UNKNOWN ({_value!r}); a similarity "
+                    "artifact may not carry an unknown provenance identity — "
+                    "resolve the concrete spec value first or refuse to "
+                    "construct (fail closed)."
+                )
+
+        if self.metric is not None:
+            # P0-12: the declared metric must be a *known* metric resolved
+            # through the single authoritative mapping.  An unlisted name
+            # (e.g. a typo or a future metric) must be rejected, never
+            # defaulted to some other metric's view.
+            if is_unknown_identity(self.metric):
+                raise SimilarityMetricSpecError(
+                    f"metric is UNKNOWN ({self.metric!r}); resolve the metric "
+                    "actually used by the computation before constructing the "
+                    "artifact — an unknown declared metric would mislabel "
+                    "every downstream consumer (fail closed)."
+                )
+            object.__setattr__(self, "metric", resolve_metric_name(self.metric))
 
         if self.views is None:
             raise TypeError("views is required")
@@ -210,15 +390,31 @@ class SimilarityArtifact:
             self.snapshot_ref,
             self.window_ref,
             self.universe_ref,
+            self.metric,
         )
         if not self.similarity_spec_hash:
             object.__setattr__(self, "similarity_spec_hash", computed_hash)
         elif self.similarity_spec_hash != computed_hash:
             raise ValueError(
                 "similarity_spec_hash does not match the recomputed spec hash "
-                "(factor pair / views / snapshot / window / universe); a caller "
-                "may not self-report an arbitrary hash — FAIL CLOSED"
+                "(factor pair / views / metric / snapshot / window / universe); "
+                "a caller may not self-report an arbitrary hash — FAIL CLOSED"
             )
+
+        # P0-12: declared metric must match the view the measurement was
+        # actually stored under.  A "pearson" declaration whose score lives in
+        # the Spearman view (or vice versa) is a mislabeled measurement; the
+        # mismatch fails closed instead of silently trusting the label.
+        if self.metric is not None:
+            metric_view = resolve_metric_view(self.metric)
+            if metric_view not in self.views or self.views.get(metric_view) is None:
+                raise SimilarityMetricSpecError(
+                    f"declared metric {self.metric!r} maps to view "
+                    f"{metric_view!r}, but that view is absent or unmeasured "
+                    f"(views={dict(self.views)}); the artifact would record a "
+                    "metric the measurement did not use — FAIL CLOSED"
+                )
+
         if not self.created_at:
             object.__setattr__(
                 self, "created_at", datetime.now(timezone.utc).isoformat()
@@ -251,6 +447,7 @@ class SimilarityArtifact:
         snapshot_ref: Optional[str] = None,
         window_ref: Optional[str] = None,
         universe_ref: Optional[str] = None,
+        metric: Optional[str] = None,
         producer: Optional[str] = None,
         created_at: Optional[str] = None,
         primary_view: Optional[str] = DEFAULT_SIMILARITY_VIEW,
@@ -258,12 +455,34 @@ class SimilarityArtifact:
         """Factory for an artifact with an explicitly supplied spec hash.
 
         The spec hash identifies *which similarity definition* was measured
-        (factor pair + view semantics + snapshot/window/universe).  A caller
-        attaching a stored hash MUST supply a hash that equals the one
-        recomputed from the supplied views/provenance; otherwise the artifact
-        fails closed (``ValueError``), because a self-reported arbitrary hash
-        would let content and hash diverge.
+        (factor pair + view semantics + metric + snapshot/window/universe).
+        A caller attaching a stored hash MUST supply a hash that equals the
+        one recomputed from the supplied views/provenance; otherwise the
+        artifact fails closed (``ValueError``), because a self-reported
+        arbitrary hash would let content and hash diverge.
+
+        P0-12 (R55 audit): ``similarity_spec_hash`` is a *spec identity*, and
+        an UNKNOWN placeholder is not an identity — two artifacts computed
+        under different specs would both read UNKNOWN and be silently merged
+        by downstream consumers (cluster versioning, library promotion).
+        Passing ``"UNKNOWN"`` (or any other unknown-identity token, or the
+        empty string) therefore raises :class:`SimilarityMetricSpecError`
+        instead of constructing an artifact that lies about its spec —
+        ``for_spec`` exists precisely to pin the identity, so an unknown
+        identity here is unresolvable *by construction* and the only honest
+        outcome is to refuse.  A caller whose spec genuinely cannot be
+        determined must resolve it upstream, or construct directly (letting
+        the hash be recomputed from the concrete views/provenance).
         """
+        if is_unknown_identity(similarity_spec_hash):
+            raise SimilarityMetricSpecError(
+                f"similarity_spec_hash is UNKNOWN ({similarity_spec_hash!r}); "
+                "for_spec refuses to construct an artifact whose spec identity "
+                "is unknown — two artifacts measured under different specs "
+                "would otherwise be silently merged as the same identity "
+                "(fail closed). Resolve the concrete spec hash (recompute it "
+                "from the views/provenance) before calling for_spec."
+            )
         return cls(
             factor_a=factor_a,
             factor_b=factor_b,
@@ -273,6 +492,7 @@ class SimilarityArtifact:
             snapshot_ref=snapshot_ref,
             window_ref=window_ref,
             universe_ref=universe_ref,
+            metric=metric,
             similarity_spec_hash=similarity_spec_hash,
             producer=producer,
             created_at=created_at,
@@ -290,9 +510,12 @@ class SimilarityArtifact:
         """Adapt a legacy :class:`SimilarityResult` into a SimilarityArtifact.
 
         The legacy result carries a single method-scoped correlation score;
-        the new artifact's views carry it under the ``rank_corr`` key (the
-        canonical primary view for MMR).  ``universe_ref`` and the period
-        bounds are lifted from the result when present.
+        the new artifact's views carry it under the view key its metric maps
+        to in :data:`CORRELATION_METRIC_VIEWS` (``pearson`` -> ``pearson_corr``,
+        ``spearman`` -> ``rank_corr``, ``kendall`` -> ``kendall_tau``), which
+        is also the declared ``metric`` — so the artifact records exactly the
+        metric that was computed, not a defaulted one.  ``universe_ref`` and
+        the period bounds are lifted from the result when present.
         """
         factor_a = getattr(result, "factor_id_a", None)
         factor_b = getattr(result, "factor_id_b", None)
@@ -302,10 +525,25 @@ class SimilarityArtifact:
                 "result must expose factor_id_a/factor_id_b/similarity_score "
                 "(e.g. factor_assets.similarity.SimilarityResult)"
             )
+        method = getattr(result, "method", None)
+        # P0-12: resolve the metric through the authoritative mapping and
+        # store the score under the view that metric actually maps to.  A
+        # result without a usable method is unresolvable — fail closed rather
+        # than silently defaulting to ``rank_corr`` and labeling a Pearson
+        # computation as Spearman (the exact P0-12 lie).
+        if method is None:
+            raise SimilarityMetricSpecError(
+                "result does not expose a similarity method; the metric the "
+                "measurement used cannot be determined, so the artifact "
+                "refuses to construct (fail closed — a default would "
+                "mislabel the measurement)."
+            )
+        metric_name = getattr(method, "value", method)
+        metric_view = resolve_metric_view(metric_name)
         return cls(
             factor_a=factor_a,
             factor_b=factor_b,
-            views={"rank_corr": float(score)},
+            views={metric_view: float(score)},
             snapshot_ref=(
                 snapshot_ref
                 or getattr(result, "snapshot_ref", None)
@@ -313,8 +551,13 @@ class SimilarityArtifact:
             ),
             window_ref=_legacy_window_ref(result),
             universe_ref=getattr(result, "universe_ref", None),
+            metric=metric_name,
             producer=producer or "legacy:SimilarityResult",
             created_at=getattr(result, "timestamp", None),
+            # The only measured view IS the primary view; the default
+            # (``rank_corr``) would not exist for a pearson/kendall-only
+            # measurement.
+            primary_view=metric_view,
         )
 
     @property
@@ -345,6 +588,7 @@ class SimilarityArtifact:
             "snapshot_ref": self.snapshot_ref,
             "window_ref": self.window_ref,
             "universe_ref": self.universe_ref,
+            "metric": self.metric,
             "similarity_spec_hash": self.similarity_spec_hash,
             "primary_view": self.primary_view,
         }
@@ -372,6 +616,7 @@ class SimilarityArtifact:
             snapshot_ref=merged_snapshot,
             window_ref=merged_window,
             universe_ref=merged_universe,
+            metric=self.metric,
             producer=self.producer,
             created_at=self.created_at,
             primary_view=self.primary_view,

@@ -270,6 +270,22 @@ class QBackendNotAvailable(QProcessUnavailableError):
         self.reason = reason
 
 
+class QUnavailableError(QProcessUnavailableError):
+    """q is not runnable in this environment (Backlog #60 truthful gate).
+
+    Raised by every q read / dispatch boundary — ``QProcessManager.get_connection``
+    and ``QExecutor.execute_region`` — whenever no real q runtime is provisioned
+    (no q/kdb+ binary, no licensed pykx that connects, no qpython/pyq client).
+    Carries an explicit ``reason`` so gates and harnesses can report the exact
+    missing component.  This is the fail-closed guarantee: callers must NEVER
+    silently map q → duckdb/pandas or pretend parity against a phantom server.
+    """
+
+    def __init__(self, reason: str = "q runtime unavailable in this environment"):
+        super().__init__(reason)
+        self.reason = reason
+
+
 class QPlanningFallbackAllowed(FactorEngineError):
     """Planning-time 允许的 fallback（Q2-P0-018）。
 

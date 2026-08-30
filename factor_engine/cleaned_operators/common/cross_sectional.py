@@ -1251,7 +1251,13 @@ class CrossSectionalNeutralizePolars(SeriesOperator):
                     # NaN so np.nanmean ignores it (a lone Inf in the group would
                     # otherwise make the whole group mean Inf).
                     group_mean = np.nanmean(_finite_stats_input(row_data[mask]))
-                    result_arr[row_idx, mask] = row_data[mask] - group_mean
+                    # PARITY-SWEEP-R56: the Inf cell itself must stay NaN
+                    # (pandas GroupDemean mask = x.notna() would INCLUDE Inf and
+                    # give Inf mean; the authoritative pandas kernel
+                    # group_demean_panel_ uses np.isfinite -> Inf cell NaN).
+                    out = row_data[mask] - group_mean
+                    out[~np.isfinite(row_data[mask])] = np.nan
+                    result_arr[row_idx, mask] = out
 
         # 转换回 Polars
         result_df = pl.DataFrame(result_arr, schema=numeric_cols)
@@ -1340,8 +1346,18 @@ class RankPctPolars(SeriesOperator):
             pl.when(pl.col(c).is_nan()).then(None).otherwise(pl.col(c))
             for c in numeric_cols
         ])
-        ranks = values.list.eval(pl.element().rank(method="average"))
-        count = values.list.drop_nulls().list.len()
+        # PARITY-SWEEP-R56: match pandas authority ``x.rank(pct=True, axis=1)``.
+        # pandas skips NaN but INCLUDES ±Inf as a rankable value, so a cross-section
+        # with an Inf cell ranks over n values (Inf gets rank/n=1.0).  The old
+        # denominator ``drop_nulls().list.len()`` counted Inf as a valid sample but
+        # ``rank(method="average")`` inside list.eval treated Inf as NaN (polars
+        # rank treats non-finite as null), producing rank/(n_with_inf) for the
+        # finite cells — divergent from pandas (NEW-255 references cs_rank_01's
+        # finite mask; cs_pct_rank follows the pandas authority instead).
+        # Fix: drop NaN first, then rank, then divide by the NaN-free count.
+        clean = values.list.drop_nulls()
+        ranks = clean.list.eval(pl.element().rank(method="average"))
+        count = clean.list.len()
         return x.with_columns([
             pl.when(values.list.get(i).is_null()).then(None)
             .otherwise(ranks.list.get(i) / count)

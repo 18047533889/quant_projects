@@ -100,6 +100,7 @@ def build_full_history_run_window(
     requested_end: str | None,
     full_history_start: str,
     trim_output: bool = True,
+    calendar: TradingCalendar | None = None,
 ) -> RunWindow:
     """Build a full-replay window from an explicit immutable history origin."""
     requested_start = _to_date_str(requested_start)
@@ -107,10 +108,35 @@ def build_full_history_run_window(
     origin = _to_date_str(full_history_start)
     if origin is None:
         raise ValueError("full_history_start is required")
-    if requested_start is not None and pd.Timestamp(origin) > pd.Timestamp(requested_start):
-        raise ValueError(
-            "full_history_start must be on or before requested_start"
-        )
+    if requested_start is not None:
+        requested_ts = pd.Timestamp(requested_start)
+        origin_ts = pd.Timestamp(origin)
+        # 2026-08-29: the user-supplied ``requested_start`` may be a
+        # non-trading day (e.g. 2016-01-01) while the full-history origin
+        # is the first trading day (2016-01-04).  The real calendar uses
+        # anchor_policy=exact_trade_day, so a weekend/holiday start would
+        # abort every full-replay factor.  When a calendar is available,
+        # snap the requested_start FORWARD to the next trading day and compare
+        # against THAT — the load window starts from the snapped origin and
+        # the output is still trimmed back to the user-requested date.
+        effective_requested_ts = requested_ts
+        if calendar is not None:
+            try:
+                days = getattr(calendar, "days", None)
+                if days:
+                    future = [
+                        d for d in days
+                        if pd.Timestamp(d).normalize() >= requested_ts
+                    ]
+                    if future:
+                        snapped = pd.Timestamp(future[0]).normalize()
+                        effective_requested_ts = snapped
+            except Exception:
+                pass
+        if origin_ts > effective_requested_ts:
+            raise ValueError(
+                "full_history_start must be on or before requested_start"
+            )
     return RunWindow(
         requested_start=requested_start,
         requested_end=requested_end,

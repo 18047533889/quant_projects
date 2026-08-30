@@ -239,7 +239,14 @@ class EWMStd(SeriesOperator):
     )
 
     def _calculate_series(self, x: pd.DataFrame, span: int = 20, **kwargs) -> pd.DataFrame:
-        return x.ewm(span=span, adjust=False).std()
+        # LQTP 平台语义（2026-08-29）：``ts_ewm_std(x, 0.2)`` 的第二参数是
+        # 0<alpha<=1 的衰减比率（alpha 语义），不是 span。与 ts_ema 一致，
+        # 把 <1 的正小数按 alpha 语义映射：pandas ewm(alpha=a) ≡
+        # ewm(span=1/a)。span>=1 的正常值走原 span 槽。
+        span_f = float(span)
+        if 0.0 < span_f < 1.0:
+            return x.ewm(alpha=span_f, adjust=False).std()
+        return x.ewm(span=span_f, adjust=False).std()
 
 
 
@@ -258,7 +265,12 @@ class EWMVar(SeriesOperator):
     )
 
     def _calculate_series(self, x: pd.DataFrame, span: int = 20, **kwargs) -> pd.DataFrame:
-        return x.ewm(span=span, adjust=False).var()
+        # LQTP 平台语义（2026-08-29）：``ts_ewm_var(x, 0.2)`` 的 <1 正小数
+        # 第二参数按 alpha 语义映射（同 ts_ema / ewm_std）。
+        span_f = float(span)
+        if 0.0 < span_f < 1.0:
+            return x.ewm(alpha=span_f, adjust=False).var()
+        return x.ewm(span=span_f, adjust=False).var()
 
 
 
@@ -454,6 +466,8 @@ class FillNA(SeriesOperator):
         description="缺失值填充（method: 'mean', 'median', 'zero', 'ffill'）",
         examples=["fillna(close, 'mean')", "fillna(close, 0)"],
         param_names=["x", "method"],
+        param_specs={"x": ParamSpec(dtype=Any, param_role=ParamRole.ECONOMIC),
+                     "method": ParamSpec(dtype=Any, param_role=ParamRole.STATE_THRESHOLD)},
         return_type="series",
         tags=["data_handling", "missing", "fill"]
     )

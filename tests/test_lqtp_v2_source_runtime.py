@@ -21,7 +21,7 @@ factor:
   dialect_version: '2026-07-19'
 data_source:
   type: data_access
-  dataset: ashare_stock_daily
+  dataset: ashare_stock_daily_adj
 """,
         encoding="utf-8",
     )
