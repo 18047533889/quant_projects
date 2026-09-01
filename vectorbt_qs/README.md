@@ -1,47 +1,45 @@
-# vectorbt_qs
+# vectorbt_qs — A 股/美股组合回测系统
 
-A-share / US portfolio backtesting toolkit built on a vendored
-[vectorbt](https://github.com/polakowo/vectorbt) **1.1.0**, adding market
-constraints, corporate actions (cash dividends / stock splits), and unified
-CLI/config entry points for accurate production-grade backtests.
+基于 vendored [vectorbt](https://github.com/polakowo/vectorbt) **1.1.0** 的 A 股/美股
+组合回测系统：外层实现数据适配、市场约束、公司行动（现金分红/送转）与统一入口，
+两种执行口径（fast 因子筛选 / accurate 真实成交）。
 
-**Version:** 0.4.0 ｜ **Repo:** https://github.com/HKUST-QUANT-SOCIETY/vectorbt_qs (private)
-**Docs:** [`docs/README.md`](docs/README.md) ｜ Start here: [`docs/accurate_batch_quickstart.md`](docs/accurate_batch_quickstart.md)
+**版本:** 0.4.0 ｜ **仓库:** https://github.com/HKUST-QUANT-SOCIETY/vectorbt_qs (私有)
+**文档索引:** [`docs/README.md`](docs/README.md) ｜ 从零跑通: [`docs/accurate_batch_quickstart.md`](docs/accurate_batch_quickstart.md)
 
-## Two execution modes
+## 两种执行口径
 
 | | Fast | Accurate |
 |---|---|---|
-| Purpose | factor screening (many factors/groups) | candidate strategy validation |
-| Units | fractional shares | A-share 100-share lots |
-| Cash/positions | weight rebalance | day-by-day real cash & shares |
-| Fees/slippage | zero | directional fees, min commission, slippage |
-| Halt / price-limit | ignored or approximated | rejected per real status |
-| Corporate actions | — | cash dividends & splits booked on ex-date |
-| Return basis | VWAP signal → next-day execution | VWAP / Open execution, real shares |
+| 用途 | 因子筛选（大量因子/分组） | 候选策略复核 |
+| 成交单位 | 分数股 | A 股 100 股整手 |
+| 现金/持仓 | 按目标权重再平衡 | 逐日维护真实现金与股数 |
+| 费用/滑点 | 固定为零 | 方向性费率、最低佣金、滑点 |
+| 停牌/涨跌停 | 忽略或目标层近似 | 按真实状态拒单 |
+| 公司行动 | — | 除权除息日计入现金分红/送转 |
+| 收益口径 | VWAP 信号 → 下一交易日执行 | VWAP / Open 执行，真实股数 |
 
-Both modes: signal at close → execute next trading day; A-share long-only by
-default (sum of target weights ≤ 1).
+两者：收盘生成信号 → 下一交易日执行；A 股默认只做多（各行权重和 ≤ 1）。
 
-## Install & run
+## 安装与运行
 
 ```bash
 git clone https://github.com/HKUST-QUANT-SOCIETY/vectorbt_qs.git
 cd vectorbt_qs
 pip install -r requirements.txt && pip install -e .
-# data layer (optional but recommended): pip install -e ../data_access
+# 数据层（推荐）：pip install -e ../data_access
 ```
 
 ```bash
-python -m vectorbt_qs list                       # list built-in benchmarks
-python -m vectorbt_qs backtest -b B001 --plot    # run benchmark
-python -m vectorbt_qs run configs/config.example.yaml     # config-driven
-python -m vectorbt_qs batch configs/config.batch.example.yaml  # grid search
+python -m vectorbt_qs list                       # 列内置 benchmark
+python -m vectorbt_qs backtest -b B001 --plot    # 跑 benchmark
+python -m vectorbt_qs run configs/config.example.yaml
+python -m vectorbt_qs batch configs/config.batch.example.yaml   # 参数网格
 python -m vectorbt_qs accurate-batch --positions target_positions.parquet \
-    --barra-root /path/v2_sbi_mvl_fullA --output-root out --workers 4  # 24 fixed reports
+    --barra-root /path/v2_sbi_mvl_fullA --output-root out --workers 4  # 24 组固定报告
 ```
 
-Python API:
+Python API：
 
 ```python
 from vectorbt_qs.mvp.engine.runner import run_backtest, portfolio_report
@@ -51,50 +49,53 @@ pf = run_backtest("ashare", target_weights, config={"init_cash": 10_000_000})
 stats = portfolio_report(pf)
 ```
 
-## Input format
+## 输入格式
 
-Target-weight matrix: index = trading days, columns = symbols (`000001.SZ`),
-values = weight (0.05 = long 5%, -0.03 = short, 0 = close, NaN = hold).
-See [`docs/target_positions_format.md`](docs/target_positions_format.md).
+目标权重矩阵：index = 交易日、columns = 代码（`000001.SZ`）、values = 权重
+（0.05 = 多头 5%、-0.03 = 空头、0 = 平仓、NaN = 维持）。
+详见 [`docs/target_positions_format.md`](docs/target_positions_format.md)。
 
-## Key modules
+## 关键模块
 
 ```
-cli.py                # CLI: backtest / run / batch / list / accurate-batch
-configs/              # example YAMLs (accurate/fast/batch profiles)
-mvp/engine/           # runner, execution (numba state machine), batch, profiles
-mvp/data/             # data_access-first adapter, COS fallback
-mvp/constraints/      # A-share / US constraint rules
-mvp/analysis/         # Barra-lite B/f exposure + experimental attribution
-contracts/            # BacktestRequest/Artifact, ledger, orders, trades DTOs
-vectorbt/             # vendored vectorbt 1.1.0 (source, no upstream git)
-docs/                 # accurate quickstart, modes, batch, exposure, target format
-tests/                # regression tests
+cli.py                # CLI：backtest / run / batch / list / accurate-batch
+configs/              # 示例 YAML（accurate/fast/batch profile）
+mvp/engine/           # runner、execution（numba 状态机）、batch、profiles
+mvp/data/             # data_access 优先适配器、COS fallback
+mvp/constraints/      # A 股 / 美股约束规则
+mvp/analysis/         # Barra-lite B/f 暴露 + 实验性归因
+contracts/            # BacktestRequest/Artifact、ledger、orders、trades DTO
+vectorbt/             # vendored vectorbt 1.1.0（源码，无上游 git）
+docs/                 # accurate 快速上手、模式、batch、暴露、目标仓位格式
+tests/                # 回归测试
 ```
 
-## Data requirements (accurate)
+## 数据需求（accurate）
 
-- `lqtp_data/StockDailyBar` (raw OHLCV + adj factor + halt + price limits)
-- `lqtp_data/StockDividend` (cash dividends, splits — booked on ex-date)
-- `lqtp_data/IndexDailyBar` + `IndexConstituent` (benchmark NAV / constituents)
-- `lqtp_data/StockIndustry` (industry names)
-- Optional Barra-lite risk model (`v2_sbi_mvl_fullA`): exposure/factor_returns/
-  factor_cov/specific_risk for B/f analysis
+- `lqtp_data/StockDailyBar`（原始 OHLCV + 复权因子 + 停牌 + 涨跌停）
+- `lqtp_data/StockDividend`（现金分红、送转，除权除息日入账）
+- `lqtp_data/IndexDailyBar` + `IndexConstituent`（基准净值 / 成分）
+- `lqtp_data/StockIndustry`（行业名）
+- 可选 Barra-lite 风险模型（`v2_sbi_mvl_fullA`）：exposure/factor_returns/factor_cov/specific_risk
 
-## A-share trading rules covered
+## A 股交易规则覆盖
 
-Halt filter, price-limit (no buy at limit-up / sell at limit-down), T+1 sellable,
-stamp tax (sell only), commission + min commission, slippage, 100-share lots,
-cash dividends & splits, per-order volume cap (10% of day volume).
+停牌过滤、涨跌停（涨停不买/跌停不卖）、T+1 可卖、印花税（仅卖出）、佣金+最低佣金、
+滑点、100 股整手、现金分红与送转、单股单日成交量 10% 上限。
 
-## Performance
+## 性能
 
-- B001 topN equal-weight: 2294 days × 5122 stocks ≈ 46s
-- B006 meanvar: 1433 × 300 ≈ 20s; B007 XGB: 599 × 5086 ≈ 15s
-(Windows 11, Py 3.11, DuckDB + local parquet)
+- B001 topN 等权：2294 天 × 5122 股 ≈ 46s
+- B006 meanvar：1433 × 300 ≈ 20s；B007 XGB：599 × 5086 ≈ 15s
 
-## Related repos
+## 依赖与接口（谁 import 谁）
 
-- **data_access** — data layer (preferred read path)
-- **riskfolio_qs** — upstream portfolio optimizer that writes `target_positions.parquet`
-- **factor_engine / quant_evaluator** — factor computation & evaluation upstream
+- **依赖**：`data_access`（`mvp/data/adapter.py` 行情读取）。
+- **被谁调用**：`lightgbm_qs`（`backtest_final_vectorbt.py`：`set_data_root` /
+  `run_backtest` / `portfolio_report` / `build_nav_curves`）。
+
+## 相关仓库
+
+- **data_access** — 数据层（优先读路径）
+- **riskfolio_qs** — 上游组合优化，产出 `target_positions.parquet`
+- **factor_engine / quant_evaluator** — 上游因子计算与评估

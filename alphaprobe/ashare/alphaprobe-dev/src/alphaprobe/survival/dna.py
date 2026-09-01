@@ -392,7 +392,19 @@ def dna_from_formula(
     if "operators" in info:
         ops = list(info["operators"])
     else:
-        allow = default_operator_allowlist()
+        # allowlist 只依赖 factor_engine 注册表，进程内恒定：memoize 一次，
+        # 避免 3000 样本的 stats 每条公式都重算（34s → 毫秒）。
+        _ALLOWLIST_CACHE = getattr(dna_from_formula, "_allowlist_cache", None)
+        if _ALLOWLIST_CACHE is None:
+            from functools import lru_cache
+
+            @lru_cache(maxsize=1)
+            def _allowlist():
+                return default_operator_allowlist()
+
+            _ALLOWLIST_CACHE = _allowlist
+            dna_from_formula._allowlist_cache = _ALLOWLIST_CACHE
+        allow = _ALLOWLIST_CACHE()
         counter = extract_operator_multiset(text, allowlist=allow)
         ops = sorted(counter.elements())
 

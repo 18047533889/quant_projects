@@ -1,29 +1,21 @@
-# factor_optimizer
+# factor_optimizer — 证据引导的因子寻优
 
-Evidence-guided factor mutation and search. Defines a mutation grammar, search
-orchestration (train/validation/test sealed splits), and acceptance via
-desirability + Pareto winners — coordinating factor_engine (compute/validate)
-and quant_evaluator (evidence) through adapter protocols only.
+变异语法 + 搜索编排（train/validation/test sealed 切分）+ desirability/Pareto 验收。
+本库只通过 adapter protocol 协调 **factor_engine**（计算/校验）与 **quant_evaluator**（证据），
+自己**不执行因子、不算指标、不做最终入库决策**。
 
-**Version:** 0.1.0 ｜ **Repo:** https://github.com/HKUST-QUANT-SOCIETY/factor_optimizer (private)
+**版本:** 0.1.0 ｜ **仓库:** https://github.com/HKUST-QUANT-SOCIETY/factor_optimizer (私有)
 
-## What it does / does NOT
-
-- **Does**: search orchestration, trial ledger, mutation grammar, budget control,
-  winner selection, treatment-integrity checks, admission policies.
-- **Does NOT**: execute factors, compute metrics, or make final admission decisions —
-  it coordinates FE/QE through protocols.
-
-## Install
+## 安装
 
 ```bash
 git clone https://github.com/HKUST-QUANT-SOCIETY/factor_optimizer.git
 cd factor_optimizer
 pip install -e .                     # core
-pip install -e ".[factor_engine,quant_evaluator]"   # optional adapters
+pip install -e ".[factor_engine,quant_evaluator]"   # 可选适配器
 ```
 
-## Core API
+## 核心 API
 
 ```python
 from factor_optimizer.search.runner import SearchRunner, SearchConfig, SearchSession
@@ -32,34 +24,34 @@ from factor_optimizer.search.uncertainty_winner import UncertaintyAwareWinnerSel
 
 session = SearchSession(SearchConfig(search_budget=...))
 runner = SearchRunner(session, fe_adapter=..., qe_adapter=...)
-# runner.run(...) -> trial ledger, selection, acceptance
+# runner.run(...) -> trial ledger / selection / acceptance
 ```
 
-- `grammar/` — `mutation_spec`, `registry`, `validation` (mutation grammar).
-- `search/` — `SearchRunner`, `SearchSession`, `desirability` (`Desirability`,
-  catastrophic floor), `pareto` (`ParetoPoint`/`ParetoFrontier`/`ParetoArchive`),
-  `uncertainty_winner` (uncertainty-aware winner selector), `tiered_evaluation`,
-  `multifidelity` (fidelity tiers), `plateau` (plateau detection),
-  `treatment_decision`, `lineage`.
-- `policy/` — admission criteria/verdict, diagnosis + repair (LLM repair mapper),
-  governance.
-- `contracts/` — `Trial`, `TrialLedger`, `SearchBudget`, `TreatmentIntegrity`
-  (evidence schema version), `CandidateMutation`, `Objective`, `Splits`, `Validator`.
-- `adapters/` — `factor_engine.py` (canonical hash, validate mutation, estimate
-  complexity, operator metadata), `quant_evaluator.py` (evidence).
-- `llm/` — prompts + proposal for LLM-assisted mutation.
-- `seen/` — candidate identity; `complexity/` — complexity profile/budget.
-- `data_capabilities.py` / `data_providers.py` — train/validation/test data scoping.
+- `grammar/` — 变异语法：`mutation_spec` / `registry` / `validation`。
+- `search/` — `SearchRunner`、`SearchSession`、`desirability`（Desirability + catastrophic floor）、
+  `pareto`（ParetoPoint/Frontier/Archive）、`uncertainty_winner`（不确定性感知赢家选择）、
+  `tiered_evaluation`（分层评估）、`multifidelity`（保真度档位）、`plateau`（平台期检测）、
+  `treatment_decision`、`lineage`。
+- `policy/` — 准入标准/判定、诊断 + 修复（LLM repair mapper）、治理。
+- `contracts/` — `Trial` / `TrialLedger` / `SearchBudget` / `TreatmentIntegrity`
+  （evidence schema version）/ `CandidateMutation` / `Objective` / `Splits` / `Validator`。
+- `adapters/` — `factor_engine.py`（canonical hash、validate mutation、estimate complexity、
+  operator metadata）、`quant_evaluator.py`（证据）。
+- `llm/` — LLM 辅助变异的 prompts + proposal。
+- `seen/` — 候选身份；`complexity/` — 复杂度 profile/预算。
+- `data_capabilities.py` / `data_providers.py` — train/validation/test 数据作用域。
 
-## Sealed-test discipline
+## Sealed-test 纪律
 
-`SealedTestExecutor` enforces train/validation/test separation with purge/embargo
-isolation; search budget caps total evaluations; `TreatmentIntegrityCheck` binds
-evidence schema version to treatment results.
+`SealedTestExecutor` 强制 train/validation/test 隔离（purge/embargo）；搜索预算限制总评估次数；
+`TreatmentIntegrityCheck` 把证据 schema 版本绑定到 treatment 结果。
 
-## Related repos
+## 依赖与接口（谁 import 谁）
 
-- **factor_engine** — validate & hash mutations, estimate complexity
-- **quant_evaluator** — evidence for acceptance
-- **factor_assets** — admission library for accepted treatments
-- **quant_platform** — candidate pipeline orchestration (platform worker may drive FO)
+- **依赖（适配器）**：`factor_engine`（校验/哈希/复杂度）、`quant_evaluator`（评估证据）。
+- **被谁调用**：`quant_platform` 候选流水线（candidate → treatment → search）。
+- **输出给**：`factor_assets`（入选 treatment 提交入库）。
+
+## 相关仓库
+
+- **factor_engine / quant_evaluator / factor_assets / quant_platform** — 见上

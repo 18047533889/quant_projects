@@ -401,8 +401,15 @@ def _inherited_validation_errors(payload: dict[str, Any]) -> list[str]:
 
 def _direct_validation_errors(payload: dict[str, Any]) -> list[str]:
     errors: list[str] = []
+    # R55 #99: hash staleness is the dominant check (full TCB tree hash ~35s in a
+    # cold process).  When the recorded hash block is stale, the artifact is
+    # fail-closed regardless of the operator set — report that first and skip the
+    # expensive operator-set comparison (which would need the same hashing to
+    # build the target set).  The staleness check itself is short-circuited on
+    # the first changed key.
     if dict(payload.get("hashes") or {}) != _hashes():
         errors.append("execution-semantic source hashes are stale")
+        return errors
     try:
         _, expected = _production_sets()
     except Exception as exc:
