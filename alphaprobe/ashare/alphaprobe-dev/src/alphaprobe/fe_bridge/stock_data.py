@@ -114,20 +114,69 @@ class FactorEngineStockData:
             raise TypeError(f"factor_engine 返回类型异常: {type(result)!r}")
         return result
 
+    def _series_to_plane(self, series: pd.Series) -> np.ndarray:
+        """把 FE 返回的 MultiIndex Series 对齐到本 StockData 日历 → (T, N) 平面。"""
+        dates = series.index.get_level_values(0).unique().sort_values()
+        stock_ids = pd.Index(series.index.get_level_values(1).unique().sort_values())
+        aligned = series.reindex(
+            pd.MultiIndex.from_product([dates, stock_ids]), fill_value=np.nan
+        )
+        return aligned.unstack(level=1).values
+
+    def evaluate_many(self, exprs: List[str]) -> List[torch.Tensor]:
+        """批执行路径：一次 ``engine.run_many``（enable_cse=True）替代逐个 ``engine.run``。
+
+        结果按输入顺序写入 ``_formula_cache``（共享子树只算一次，CSE 由 FE 批调度负责）。
+        ``build_backend("pandas")`` 不变（不改 FE 语义），仅把批结果落缓存。
+        """
+        todo: list[str] = []
+        for dsl in exprs:
+            if dsl not in self._formula_cache:
+                plane = self._try_load_value_cache(dsl)
+                if plane is not None:
+                    self._formula_cache[dsl] = torch.tensor(
+                        plane, dtype=torch.float, device=self.device
+                    )
+                else:
+                    todo.append(dsl)
+
+        if todo:
+            from factor_engine.api.dsl_parser import parse_factor
+
+            engine = self._build_engine()
+            factors = [
+                parse_factor(dsl, name=f"expr_{i}", surface="compat")
+                for i, dsl in enumerate(todo)
+            ]
+            if len(factors) == 1:
+                # 单条退化为逐条 run（run_many 对单因子无 CSE 收益，且更慢）
+                for dsl in todo:
+                    series = self.run_formula(dsl)
+                    self._formula_cache[dsl] = torch.tensor(
+                        self._series_to_plane(series), dtype=torch.float, device=self.device
+                    )
+            else:
+                batch = engine.run_many(factors, enable_cse=True)
+                results = batch.get("results") or {}
+                for i, dsl in enumerate(todo):
+                    series = results.get(f"expr_{i}")
+                    if isinstance(series, pd.Series):
+                        self._formula_cache[dsl] = torch.tensor(
+                            self._series_to_plane(series), dtype=torch.float, device=self.device
+                        )
+                    else:
+                        # 批执行失败单条 → 降级逐条 run（旧路径兼容，不 Big Bang）
+                        series = self.run_formula(dsl)
+                        self._formula_cache[dsl] = torch.tensor(
+                            self._series_to_plane(series), dtype=torch.float, device=self.device
+                        )
+
+        return [self._formula_cache[dsl] for dsl in exprs]
+
     def evaluate_dsl(self, dsl: str) -> torch.Tensor:
+        """单条评估（兼容 wrapper）：内部走 ``evaluate_many`` 批量取单条。"""
         if dsl not in self._formula_cache:
-            plane = self._try_load_value_cache(dsl)
-            if plane is None:
-                series = self.run_formula(dsl)
-                dates = series.index.get_level_values(0).unique().sort_values()
-                stock_ids = pd.Index(series.index.get_level_values(1).unique().sort_values())
-                aligned = series.reindex(
-                    pd.MultiIndex.from_product([dates, stock_ids]), fill_value=np.nan
-                )
-                plane = aligned.unstack(level=1).values
-            self._formula_cache[dsl] = torch.tensor(
-                plane, dtype=torch.float, device=self.device
-            )
+            self.evaluate_many([dsl])
         return self._formula_cache[dsl]
 
     def _try_load_value_cache(self, dsl: str) -> np.ndarray | None:

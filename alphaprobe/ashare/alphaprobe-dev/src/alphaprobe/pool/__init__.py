@@ -201,16 +201,27 @@ class ActivePool:
         )
 
     def topk_neighbors(self, m: PoolMember, k: int = 5) -> list[tuple[str, int]]:
-        """§78：ANN/LSH Top-K，不做全池 N²。"""
+        """§78：ANN/LSH Top-K，不做全池 N²。
+
+        内存纪律：Active Pool 本身有界（max_size），全扫 O(max_size) 可接受；
+        heap 保 top-k 避免中间列表。
+        """
         if m.fingerprint is None:
             return []
-        scored = []
+        import heapq
+
+        heap: list[tuple[int, str]] = []
         for mem in self.members.values():
             if mem.factor_id == m.factor_id or mem.fingerprint is None:
                 continue
-            scored.append((mem.factor_id, _hamming(m.fingerprint, mem.fingerprint)))
-        scored.sort(key=lambda t: t[1])
-        return scored[:k]
+            d = _hamming(m.fingerprint, mem.fingerprint)
+            item = (-d, mem.factor_id)
+            if len(heap) < k:
+                heapq.heappush(heap, item)
+            elif d < -heap[0][0]:
+                heapq.heapreplace(heap, item)
+        out = sorted(((-d, fid) for d, fid in heap), key=lambda t: t[0])
+        return [(fid, d) for d, fid in out]
 
     def snapshot(self) -> list[dict[str, Any]]:
         return [

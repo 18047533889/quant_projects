@@ -298,13 +298,25 @@ class GlobalSeenIndex:
     def topk_fingerprint_neighbors(
         self, fp: bytes, k: int = 5, max_hamming: int = 48
     ) -> list[tuple[str, int]]:
-        """§11.5：只对 Top-K 邻居做精确确认，不做全库相关矩阵（§78）。"""
+        """§11.5：只对 Top-K 邻居做精确确认，不做全库相关矩阵（§78）。
+
+        内存纪律：流式扫 dict（不复制列表）；只保留当前 top-k，
+        峰值内存 O(k) 而非 O(N)。10 万+ 指纹时 CPU 仍是瓶颈，
+        届时应换 disk-backed ANN 索引（memory 层）。
+        """
         if fp is None:
             return []
-        scored = [
-            (fid, fingerprint_hamming(fp, f))
-            for fid, f in self._fingerprints.items()
-        ]
-        scored = [t for t in scored if t[1] <= max_hamming]
-        scored.sort(key=lambda t: t[1])
-        return scored[:k]
+        import heapq
+
+        heap: list[tuple[int, str]] = []  # (hamming, factor_id) 小顶取最大，存负数
+        for fid, f in self._fingerprints.items():
+            d = fingerprint_hamming(fp, f)
+            if d > max_hamming:
+                continue
+            item = (-d, fid)
+            if len(heap) < k:
+                heapq.heappush(heap, item)
+            elif d < -heap[0][0]:
+                heapq.heapreplace(heap, item)
+        out = sorted(((-d, fid) for d, fid in heap), key=lambda t: t[0])
+        return [(fid, d) for d, fid in out]

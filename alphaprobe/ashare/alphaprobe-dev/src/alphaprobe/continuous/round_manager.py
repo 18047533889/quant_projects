@@ -155,8 +155,8 @@ class RoundManager:
     @staticmethod
     def _default_campaign(round_no: int, calibrator: Any = None, **kwargs: Any) -> dict[str, Any]:
         """默认单轮逻辑：委托 continuous.run_mining_campaign（args 来自 kwargs）。"""
-        from alphaprobe.continuous import run_mining_campaign  # noqa: F401  # 延迟导入避免循环
-
+        # 延迟导入避免与 alphaprobe.continuous（模块）循环导入；
+        # 真实 campaign 由 runner 层注入，这里只做兜底占位。
         return {"pool_size": 0, "round_no": round_no}
 
     # -- main loop -----------------------------------------------------------

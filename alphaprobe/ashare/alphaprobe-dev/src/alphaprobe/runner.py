@@ -210,7 +210,17 @@ def _make_stock_data(
     instruments = args.instruments or experiment.data.instruments
 
     if backend == "factor_engine" and instruments != "sp500":
-        enable_factor_engine_evaluation()
+        # 新路径优先：FactorEngineAdapter 可用时不再 monkey-patch Expression.evaluate；
+        # 不可用（FE import 失败等）才 fallback 旧 enable_factor_engine_evaluation。
+        try:
+            from alphaprobe.integration.factor_engine_adapter import FactorEngineAdapter
+
+            adapter = FactorEngineAdapter()
+            ok, _ = adapter.validate("rank(close)", surface="daily")
+            if not ok:
+                enable_factor_engine_evaluation()
+        except Exception:
+            enable_factor_engine_evaluation()
         ds_cfg = experiment.factor_engine_data_source_config(
             start_date=start_time,
             end_date=end_time,

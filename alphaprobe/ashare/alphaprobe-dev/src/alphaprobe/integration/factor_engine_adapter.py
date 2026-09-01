@@ -21,7 +21,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Any
 
-from alphaprobe.contracts import ExperimentContext, FactorBatch
+from alphaprobe.contracts import ExperimentContext, FactorBatch, FactorIdentity
 from alphaprobe.dedup import (
     canonical_ast_hash as dedup_canonical_ast_hash,
     canonicalize_dsl as dedup_canonicalize_dsl,
@@ -200,14 +200,14 @@ class FactorEngineAdapter:
             try:
                 expr = fe["parse_expr"](text, surface="daily")
                 fe_canonical = fe["canonical_expression"](expr)
-                canonical_formula = dedup_canonicalize_dsl(text)
                 fe_ast = expr
             except Exception:
                 # FE 解析失败 → 退回本地化简（validate 已挡住语法错误）
-                canonical_formula = dedup_canonicalize_dsl(text)
-                fe_canonical = dedup_canonicalize_dsl(text)
-        else:
-            canonical_formula = dedup_canonicalize_dsl(text)
+                fe_canonical = ""
+                fe_ast = None
+        # 权威 canonical_formula 永远走 dedup.canonicalize_dsl（§11.1 安全化简）
+        canonical_formula = dedup_canonicalize_dsl(text)
+        if not fe_canonical:
             fe_canonical = canonical_formula
 
         return CanonicalFactor(
@@ -296,38 +296,40 @@ class FactorEngineAdapter:
         except Exception as exc:
             return self._error_batch(ctx, f"run_many failed: {exc}")
 
+        from alphaprobe.contracts import DateRange
+
+        trade_range = DateRange("1970-01-01", "2099-12-31")
+        split_spec = getattr(ctx, "split_spec", None)
+        if split_spec is not None and split_spec.train is not None:
+            trade_range = split_spec.train
+
         return FactorBatch(
             factor_ids=ids,
             values_ref=results,
-            trade_dates=DateRange_unknown(),
+            trade_dates=trade_range,
             universe_snapshot_id=ctx.universe_snapshot_id,
             data_snapshot_id=ctx.data_snapshot_id,
             coverage_summary={"n": len(ids), "ok": len(ids)},
         )
 
     def _error_batch(self, ctx: ExperimentContext, reason: str) -> FactorBatch:
+        from alphaprobe.contracts import DateRange
+
         return FactorBatch(
             factor_ids=[],
             values_ref="",
-            trade_dates=DateRange_unknown(),
+            trade_dates=DateRange("1970-01-01", "2099-12-31"),
             universe_snapshot_id=ctx.universe_snapshot_id,
             data_snapshot_id=ctx.data_snapshot_id,
             coverage_summary={"error": reason, "ok": 0},
         )
 
 
-def _DateRange_unknown_placeholder() -> Any:
-    """避免顶部 import contracts.DateRange 带来的循环依赖（惰性）。"""
-    from alphaprobe.contracts import DateRange
-
-    return DateRange("1970-01-01", "2099-12-31")
+def _hash_slug(canonical_formula: str) -> str:
+    return hashlib.sha256(canonical_formula.encode("utf-8")).hexdigest()[:12]
 
 
-def DateRange_unknown() -> Any:
-    return _DateRange_unknown_placeholder()
-
-
-def build_factor_id(canonical: CanonicalFactor) -> str:
+def build_factor_id(canonical: "CanonicalFactor") -> str:
     """§75.1 factor_id：canonical_ast_hash[:12]（稳定、可追溯）。"""
     return canonical.canonical_ast_hash[:12]
 
@@ -337,10 +339,8 @@ def identity_factory(
     orientation: int = 1,
     *,
     factor_id: str | None = None,
-) -> "FactorIdentity":
+) -> FactorIdentity:
     """从 DSL 公式构造 contracts.FactorIdentity（Phase 4 统一入口）。"""
-    from alphaprobe.contracts import FactorIdentity
-
     c = FactorEngineAdapter().canonicalize(formula)
     return FactorIdentity(
         factor_id=factor_id or build_factor_id(c),
@@ -350,10 +350,6 @@ def identity_factory(
         parameter_family_id=c.parameter_family_id,
         orientation=orientation,
     )
-
-
-def _hash_slug(canonical_formula: str) -> str:
-    return hashlib.sha256(canonical_formula.encode("utf-8")).hexdigest()[:12]
 
 
 __all__ = [
