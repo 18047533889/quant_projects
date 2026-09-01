@@ -1,0 +1,27 @@
+﻿factor_id,market,formula_v9,v9_exclusion_reason,v9_pandas_runtime,v9_pandas_warning_count,v9_pandas_constant_under_stress
+pv_v7_comp_a_00011,A,"group_neutralize(rank(ts_pct(close, 5)), industry)",field_not_in_manifest,pass,0,False
+pv_v7_comp_a_00012,A,"group_zscore(ts_mean(ret, 5), industry)",field_not_in_manifest,pass,0,False
+pv_v7_comp_a_00026,A,"group_neutralize(rank(ts_pct(close, 10)), industry)",field_not_in_manifest,pass,0,False
+pv_v7_comp_a_00027,A,"group_zscore(ts_mean(ret, 10), industry)",field_not_in_manifest,pass,0,False
+pv_v7_comp_a_00041,A,"group_neutralize(rank(ts_pct(close, 20)), industry)",field_not_in_manifest,pass,0,False
+pv_v7_comp_a_00042,A,"group_zscore(ts_mean(ret, 20), industry)",field_not_in_manifest,pass,0,False
+pv_v7_comp_a_00056,A,"group_neutralize(rank(ts_pct(close, 60)), industry)",field_not_in_manifest,pass,0,False
+pv_v7_comp_a_00057,A,"group_zscore(ts_mean(ret, 60), industry)",field_not_in_manifest,pass,0,False
+pv_v7_comp_a_00071,A,"group_neutralize(rank(ts_pct(close, 120)), industry)",field_not_in_manifest,pass,0,False
+pv_v7_comp_a_00072,A,"group_zscore(ts_mean(ret, 120), industry)",field_not_in_manifest,pass,0,False
+pv_v7_comp_a_00086,A,"group_neutralize(rank(ts_pct(close, 252)), industry)",field_not_in_manifest,pass,0,False
+pv_v7_comp_a_00087,A,"group_zscore(ts_mean(ret, 252), industry)",field_not_in_manifest,pass,0,False
+pv_v7_comp_us_00011,US,"group_neutralize(rank(ts_pct(close, 5)), industry)",field_not_in_manifest,pass,0,False
+pv_v7_comp_us_00012,US,"group_zscore(ts_mean(ret, 5), industry)",field_not_in_manifest,pass,0,False
+pv_v7_comp_us_00026,US,"group_neutralize(rank(ts_pct(close, 10)), industry)",field_not_in_manifest,pass,0,False
+pv_v7_comp_us_00027,US,"group_zscore(ts_mean(ret, 10), industry)",field_not_in_manifest,pass,0,False
+pv_v7_comp_us_00041,US,"group_neutralize(rank(ts_pct(close, 20)), industry)",field_not_in_manifest,pass,0,False
+pv_v7_comp_us_00042,US,"group_zscore(ts_mean(ret, 20), industry)",field_not_in_manifest,pass,0,False
+pv_v7_comp_us_00056,US,"group_neutralize(rank(ts_pct(close, 60)), industry)",field_not_in_manifest,pass,0,False
+pv_v7_comp_us_00057,US,"group_zscore(ts_mean(ret, 60), industry)",field_not_in_manifest,pass,0,False
+pv_v7_comp_us_00071,US,"group_neutralize(rank(ts_pct(close, 120)), industry)",field_not_in_manifest,pass,0,False
+pv_v7_comp_us_00072,US,"group_zscore(ts_mean(ret, 120), industry)",field_not_in_manifest,pass,0,False
+pv_v7_comp_us_00086,US,"group_neutralize(rank(ts_pct(close, 252)), industry)",field_not_in_manifest,pass,0,False
+pv_v7_comp_us_00087,US,"group_zscore(ts_mean(ret, 252), industry)",field_not_in_manifest,pass,0,False
+pv_v6_a_x_0225,A,"rank(where(close > ts_ema((high + low + close) / 3.0, 7) + 3.0 * ATR_WILDER(high, low, close, 7), 1.0, 0.0) - where(close < ts_ema((high + low + close) / 3.0, 7) - 3.0 * ATR_WILDER(high, low, close, 7), 1.0, 0.0))",constant_under_corrected_820d_stress;threshold_event_only,pass,0,True
+pv_v6_us_x_0225,US,"rank(where(close > ts_ema((high + low + close) / 3.0, 7) + 3.0 * ATR_WILDER(high, low, close, 7), 1.0, 0.0) - where(close < ts_ema((high + low + close) / 3.0, 7) - 3.0 * ATR_WILDER(high, low, close, 7), 1.0, 0.0))",constant_under_corrected_820d_stress;threshold_event_only,pass,0,True

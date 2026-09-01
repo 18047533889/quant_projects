@@ -216,8 +216,14 @@ def main():
 
     # wmat rows = DECISION days (signal rows). vectorbt_qs execution_lag=1 (default)
     # executes each signal at the NEXT session (d+1) — exactly our T+1 convention.
+    # 2026-08-31: 不能把 0.0 替换成 NaN —— planner 里 NaN 语义是"持有现有仓位"，
+    # 未被新一轮选中的旧持仓会永远留存，目标市值随残留仓位累加超过净值
+    # ("目标总市值超过组合净值")。保留 0.0：weight==0 → planner 平仓该标的。
     wmat = build_weights(pred, vwap, args.topk, args.maxw, args.turnover, label_by="signal")
-    wmat = wmat.replace(0.0, np.nan)
+    # 剔除从未有信号的行（全 0）——它们会把 signal_start 拉到 OOS 之前，
+    # 导致基准 benchmark 在回测首日缺数据。保留非全 0 行内的 0.0：
+    # planner 里 weight==0 → 平仓（NaN 才是"残留持仓"，那是 backtest 失败的根源）。
+    wmat = wmat[(wmat != 0).any(axis=1)]
     wmat = wmat.loc[wmat.index >= pd.Timestamp(OOS_START)]
     wmat = wmat.loc[wmat.index <= pd.Timestamp("2026-08-18")]
     wmat = wmat.dropna(how="all")

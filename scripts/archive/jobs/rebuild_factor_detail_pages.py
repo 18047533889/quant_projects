@@ -215,6 +215,10 @@ def extract_formula_info(name: str) -> dict:
             dsl_note = "已转 FactorEngine（DSL 语法近似，落值用真实 Python code）"
         else:
             dsl_note = "⚠️ 自命名 DSL，用不了 factor_engine —— " + note
+        is_flipped = is_flipped or bool(lqtp_rec.get("is_flipped", False))
+        # 报告必须展示实际用于回测的方向；不能只贴“已翻正”标签。
+        if is_flipped and dsl_text and not dsl_text.lstrip().startswith(("-", "−")):
+            dsl_text = f"-({dsl_text})"
         return {
             "formula": raw_formula or lqtp_rec.get("lqtp_formula", "") or "（未提供原 formula）",
             "code": code,
@@ -225,7 +229,7 @@ def extract_formula_info(name: str) -> dict:
             "lqtp_formula": d.get("lqtp_formula", "") or lqtp_rec.get("lqtp_formula", "") or "",
             "rationale": rationale,
             "required_columns": ", ".join(lqtp_rec.get("required_columns") or d.get("required_columns", []) or []),
-            "is_flipped": is_flipped or lqtp_rec.get("is_flipped", False),
+            "is_flipped": is_flipped,
             "title": lqtp_title,
             "steps": lqtp_steps,
             "manual_note": "",
@@ -580,6 +584,11 @@ def _compute_all_factors_metrics() -> dict:
         common_cols = vwap.columns
         for fn in factor_names:
             mat_dict[fn] = mat_dict[fn].reindex(index=common_idx, columns=common_cols)
+            # 只根据训练期元数据确定方向，并在 IC / 分组 / 净值计算之前翻转。
+            # 这样公式、G1/G10 与 LS 回测使用完全相同的因子方向。
+            lqtp_flip = bool((_LQTP_RECORDS.get(fn) or {}).get("is_flipped", False))
+            if _is_flipped_by_meta(fn) or lqtp_flip:
+                mat_dict[fn] = -mat_dict[fn]
 
         fwd = vwap.pct_change().shift(_HORIZON_SHIFT)  # 后复权 vwap-to-vwap（t+1成交→t+2卖出，企业级）
         fwd_a = fwd.values.astype(np.float64)
@@ -1464,13 +1473,13 @@ def build_detail_html(
     monthly_img = f'<img src="data:image/png;base64,{monthly_chart}" style="width:100%;border-radius:8px;"/>' if monthly_chart else '<div class="zero-notice">月度IC数据不足</div>'
 
     # 十分层图
-    decile_img = f'<img src="data:image/png;base64,{decile_chart}" style="width:100%;border-radius:8px;"/>' if decile_chart else ""
+    decile_img = f'<img src="data:image/png;base64,{decile_chart}" style="width:100%;border-radius:8px;"/>' if decile_chart else '<div class="zero-notice">十分层净值不可用：缺少通过校验的分组收益数据</div>'
 
     # 多空净值图
-    ls_img = f'<img src="data:image/png;base64,{ls_chart}" style="width:100%;border-radius:8px;"/>' if ls_chart else ""
+    ls_img = f'<img src="data:image/png;base64,{ls_chart}" style="width:100%;border-radius:8px;"/>' if ls_chart else '<div class="zero-notice">多空净值不可用：缺少通过校验的 G10/G1 收益数据</div>'
 
     # IC分布图
-    dist_img = f'<img src="data:image/png;base64,{dist_chart}" style="width:100%;border-radius:8px;"/>' if dist_chart else ""
+    dist_img = f'<img src="data:image/png;base64,{dist_chart}" style="width:100%;border-radius:8px;"/>' if dist_chart else '<div class="zero-notice">RankIC 分布不可用：有效观测不足</div>'
 
     # IC时序（SVG）
     ic_ts_section = f'''
@@ -1751,39 +1760,6 @@ def process_factor_thread(name: str, batch_metrics: dict) -> tuple:
 
         ic_series = fm.get("ic_series", pd.Series(dtype=float)).copy()
         ic_series = ic_series.astype(float).replace([np.inf, -np.inf], np.nan)
-
-        # 兜底: 部分 _flipped 因子因 parquet 无数据, 拿到非 flipped 数据是负的, 强制取反
-        if is_flipped and len(ic_series) > 0:
-            if ic_series.mean() < 0:
-                ic_series = -ic_series
-                fm = dict(fm)
-                fm["perf"] = dict(fm.get("perf", {}))
-                # 镜像翻转：LS 收益取负 → 胜率 = 1 - 原胜率（不是 -胜率）
-                for k in ["ls_sharpe", "ls_annual", "g10_annual", "g1_annual", "g10_sharpe", "g1_sharpe"]:
-                    if k in fm["perf"]:
-                        fm["perf"][k] = -fm["perf"][k]
-                if "ls_winrate" in fm["perf"]:
-                    fm["perf"]["ls_winrate"] = 1.0 - fm["perf"].get("ls_winrate", 0)
-                if "win_rate" in fm:
-                    fm["win_rate"] = 1.0 - fm.get("win_rate", 0)
-                fm["perf"]["ls_mdd"] = abs(fm["perf"].get("ls_mdd", 0))
-                # mirror decile NAVs (G_k ↔ G_{11-k})
-                decile_raw = dict(fm.get("decile_navs", {}))
-                gs = []
-                for k in range(1, 11):
-                    key = f"G{k}"
-                    if key in decile_raw and len(decile_raw[key]) > 0:
-                        gs.append((k, decile_raw[key]))
-                if len(gs) == 10:
-                    new_dec = {"dates": decile_raw.get("dates", [])}
-                    for new_k, (_, v) in zip(range(1, 11), reversed(gs)):
-                        new_dec[f"G{new_k}"] = v
-                    ls_orig = decile_raw.get("LS", [])
-                    if ls_orig and len(ls_orig) > 0:
-                        new_dec["LS"] = [1.0 / x if x not in (0, None) else 0.0 for x in ls_orig]
-                    fm["decile_navs"] = new_dec
-                fm["mean_ic"] = -fm.get("mean_ic", 0)
-                fm["ic_ir"] = -fm.get("ic_ir", 0)
 
         decile_raw = fm.get("decile_navs", {})
         dates_out = fm.get("dates_out", [])

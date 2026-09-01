@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>downside_shock_accumulation_asym</title>
+<style>
+body { font-family:"Segoe UI","Microsoft YaHei",system-ui,sans-serif; background:#eef2f7; color:#0f172a; margin:0 }
+main { max-width:900px; margin:0 auto; padding:24px }
+.card { background:#fff; border:1px solid #e2e8f0; border-radius:12px; padding:20px; margin:16px 0 }
+h1 { color:#1e4d8c } h2 { color:#1e4d8c; font-size:1rem; border-bottom:1px solid #e2e8f0; padding-bottom:6px }
+.notice { background:#fef2f2; border:1px solid #fecaca; border-left:4px solid #dc2626; padding:12px 16px; border-radius:8px; color:#991b1b }
+code { background:#f1f5f9; padding:2px 6px; border-radius:4px }
+.formula { background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:14px; font-family:monospace; word-break:break-all }
+</style></head><body><main>
+<a href="../index.html" style="color:#93c5fd">&#8592; 返回汇总</a>
+<h1>downside_shock_accumulation_asym</h1>
+<div class="card"><h2>⚠️ 数据不可评估</h2>
+<div class="notice">因子值全 NaN（无法计算指标）</div>
+<p style="color:#64748b">该因子值在回测区间内无有效截面差异（面板常数或全部缺失），无法计算 RankIC / 十分层等指标。</p></div>
+<div class="card"><h2>📐 因子表达式 DSL</h2>
+<div class="formula">ret = ts_pct(close); shock = 1[ret < -0.02]; prior = ts_sum(60, ts_delay(shock)); premium = max(down_vol - up_vol, 0); factor = prior * premium</div>
+<div style="margin-top:8px;font-size:0.8rem;color:#64748b">已转 FactorEngine（DSL 语法近似，落值用真实 Python code）</div></div>
+<div class="card"><h2>🐍 原始 Python 代码</h2>
+<pre style="background:#0f172a;color:#e2e8f0;padding:14px;border-radius:8px;overflow-x:auto;font-size:0.8rem">def factor_downside_shock_accumulation_asym(df):
+    """Idea: Repeated prior downside shocks accumulate fragility, and the current downside-volatility premium is amplified by that accumulated shock count.
+
+    Logic: A downside shock is a close-to-close return below -2%. We count such shocks over the prior 60 trading days (excluding today). The current downside volatility premium is measured as the difference between downside and upside volatility from a 20-day return decomposition. Multiplying the premium by the prior shock count makes the volatility-asymmetry response path-dependent: the same downside-volatility level carries more fragility information after repeated adverse sessions.
+
+    Sub-mechanism tags: fragility_accumulation, downside_vol_premium, shock_count, volatility_asymmetry
+
+    Formula: ret = pct_change(close); shock = 1[ret < -0.02]; prior = rolling_sum(shift(shock), 60); premium = max(down_vol - up_vol, 0); factor = prior * premium
+    """
+    df_copy = df.copy()
+    ret = df_copy["close"].pct_change()
+    upside_vol, downside_vol = alpha_tools.decompose_return_volatility_direction(ret, min_periods=10, window=20)
+    downside_premium = (downside_vol - upside_vol).clip(lower=0.0)
+    down_shock = (ret < -0.02).astype(float)
+    prior_shocks = down_shock.shift(1).rolling(60, min_periods=20).sum()
+    factor = prior_shocks * downside_premium
+    factor = factor.replace([np.inf, -np.inf], np.nan)
+    df_copy.loc[:, "factor_downside_shock_accumulation_asym"] = factor
+    return df_copy["factor_downside_shock_accumulation_asym"]</pre></div>
+
+<div class="card">
+  <h2>🧪 中性化前后 RankIC / RankICIR</h2>
+  <p style="font-size:0.82rem;color:#64748b;margin:0 0 10px">口径：每日横截面，对因子值做 行业(sw_l1)哑变量 + log(流通市值) 线性回归取残差，再算残差的 RankIC。</p>
+  
+  <table class="meta-table" style="margin-top:10px">
+    <thead><tr><th>指标</th><th>原始 Raw</th><th>中性化后</th><th>变化</th></tr></thead>
+    <tbody>
+      <tr><td>Mean RankIC</td><td>0.0000</td><td>0.0000</td><td>+0.0000</td></tr>
+      <tr><td>RankIC IR</td><td>0.000</td><td>0.000</td><td>+0.000</td></tr>
+      <tr><td>胜率</td><td>0.0%</td><td>0.0%</td><td>+0.0%</td></tr>
+      <tr><td>交易日</td><td>0</td><td>0</td><td>—</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="rationale" style="background:linear-gradient(90deg,#f0fdfa,#eff6ff);border-left-color:#b45309;margin:6px 0 10px;font-weight:600;color:var(--fg)">📉 2026 稳健性: 🟡 轻度衰减 · 2026 RankIC -0.0034 · Q2RankIC -0.0057 · 2026 多空累计 -1.9% · 最大回撤 -9.7% · 回撤116天</div>
+</main></body></html>

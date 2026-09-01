@@ -16,6 +16,7 @@ import argparse
 import json
 import re
 import sys
+from datetime import datetime
 from pathlib import Path
 
 PROJECT = Path("/home/sunhaiwei/quant_projects")
@@ -45,27 +46,26 @@ def compute_headline() -> dict:
     rob = json.loads(ROB.read_text())
     old = json.loads(OLD_META.read_text()) if OLD_META.exists() else {}
 
-    nonproxy = {k: v for k, v in eval2.items() if not v.get("proxy", False)}
-    true_alpha = [k for k in nonproxy if meta.get(k, {}).get("best_rankic_ir", 0) > 0]
-    strong = [k for k in nonproxy if meta.get(k, {}).get("best_rankic_ir", 0) > 0.5]
-    flipped = [k for k, v in meta.items() if v.get("is_flipped")]
+    # 首页的“全部因子”表、2026 稳健性表均以 robustness_2026.json 为准。
+    # optimized_meta 只覆盖其中的优化子集，不能再把它的数量写成总数。
+    rob_records = list(rob.values()) if isinstance(rob, dict) else rob
+    rob_pages = {r.get("page") for r in rob_records if r.get("page")}
     gate_pass = [k for k, v in (cluster.get("quality_gate") or {}).items()
                  if v.get("quality_gate") == "pass"]
-    stable = [r["page"] for r in rob if r.get("status") == "stable"]
     new_only = [k for k in meta if k not in old]
 
     return {
-        "n_total": len(meta),
+        "n_total": len(rob_pages),
+        "n_optimized": len(set(meta) & rob_pages),
         "n_new": len(new_only),
-        "true_alpha": sorted(true_alpha),
-        "strong": sorted(strong),
-        "flipped": sorted(flipped),
         "gate_pass": sorted(gate_pass),
-        "stable": sorted(stable),
+        "stable": sorted(r["page"] for r in rob_records if r.get("status") == "stable"),
+        "decay": sum(r.get("status") == "decay" for r in rob_records),
+        "failed": sum(r.get("status") == "failed" for r in rob_records),
         "n_clusters": len(cluster.get("cluster_members") or {}),
         "n_multi": sum(1 for v in (cluster.get("cluster_members") or {}).values() if len(v) > 1),
         "largest": cluster.get("summary", {}).get("largest_cluster", 0),
-        "gen_date": "2026-08-29",
+        "gen_date": datetime.fromtimestamp(ROB.stat().st_mtime).strftime("%Y-%m-%d"),
     }
 
 
@@ -95,34 +95,34 @@ HEADER_HTML = """<header>
       <div class="sub">factor_engine 落值 + quant_evaluator 评估 · 收益口径 Vwap 后复权 vwap-to-vwap（shift(-2) 企业级）· 生成 {gen_date}</div>
     </div>
     <div class="hd-stats">
-      <div class="hd-stat"><b>{n_total}</b><span>因子总数</span></div>
-      <div class="hd-stat hd-new"><b>+{n_new}</b><span>本周新挖</span></div>
+      <div class="hd-stat"><b>{n_total}</b><span>报告因子数</span></div>
+      <div class="hd-stat hd-new"><b>{n_optimized}</b><span>优化评估覆盖</span></div>
     </div>
   </div>
   <div class="hd-cards">
     <a class="hd-card hd-blue" href="#all-factors">
-      <b>{n_total}</b><span>因子总数（含本周新挖 {n_new}）</span>
-      <i>全部已落值并评估</i>
+      <b>{n_total}</b><span>报告因子总数</span>
+      <i>与首页表格、2026 稳健性明细同一清单</i>
     </a>
     <a class="hd-card hd-teal" href="#opt-summary">
-      <b>{true_alpha_n}</b><span>真 Alpha（非代理 + 正 IR）</span>
-      <i>排除代理类因子后仍有效的信号</i>
+      <b>{n_optimized}</b><span>优化评估覆盖</span>
+      <i>其余因子不应被误当作缺失或未纳入报告</i>
     </a>
     <a class="hd-card hd-violet" href="#opt-summary">
-      <b>{strong_n}</b><span>强候选（IR&gt;0.5 且非代理）</span>
-      <i>最值得入池的头部因子</i>
+      <b>{stable_n}</b><span>2026 稳定</span>
+      <i>基于同一份稳健性数据的状态分类</i>
     </a>
     <a class="hd-card hd-amber" href="#all-factors">
-      <b>{flipped_n}</b><span>自动翻正（负 IC→正）</span>
-      <i>原始 IC&lt;0，已整体取反调正</i>
+      <b>{decay_n}</b><span>2026 轻度衰减</span>
+      <i>应与稳定/失效并列阅读，不能只展示正向样本</i>
     </a>
     <a class="hd-card hd-green" href="#clusters">
-      <b>{gate_n}</b><span>过质量门槛（聚类 gate）</span>
-      <i>IR≥0.5 且 RankIC≥0.03</i>
+      <b>{failed_n}</b><span>2026 失效</span>
+      <i>保留失败样本，避免幸存者偏差</i>
     </a>
     <a class="hd-card hd-rose" href="#robustness-2026">
-      <b>{stable_n}</b><span>2026 稳定因子</span>
-      <i>全年未失效，存活 82/470</i>
+      <b>{gate_n}</b><span>聚类质量门槛通过</span>
+      <i>该指标仅覆盖优化子集，不等同于全报告总数</i>
     </a>
   </div>
 </header>
@@ -134,11 +134,11 @@ def build_header(h: dict) -> str:
         gen_date=h["gen_date"],
         n_total=h["n_total"],
         n_new=h["n_new"],
-        true_alpha_n=len(h["true_alpha"]),
-        strong_n=len(h["strong"]),
-        flipped_n=len(h["flipped"]),
+        n_optimized=h["n_optimized"],
         gate_n=len(h["gate_pass"]),
         stable_n=len(h["stable"]),
+        decay_n=h["decay"],
+        failed_n=h["failed"],
     )
 
 
@@ -241,7 +241,7 @@ def rebuild_index():
     html = re.sub(r"<style>.*?</style>", f"<style>{MODERN_CSS}</style>", html, count=1, flags=re.S)
 
     # ---- 2) 替换 <title> ----
-    html = re.sub(r"<title>.*?</title>", f"<title>量化因子总览 · 470 因子（2026-08-29）</title>", html, count=1, flags=re.S)
+    html = re.sub(r"<title>.*?</title>", f"<title>量化因子总览 · {h['n_total']} 因子（{h['gen_date']}）</title>", html, count=1, flags=re.S)
 
     # ---- 3) 替换 header（<header> ... </header>）----
     new_header = build_header(h)
@@ -253,9 +253,9 @@ def rebuild_index():
         html = html.replace(old_cards.group(0), '<div class="chart-grid">', 1)
 
     # ---- 5) 给「全部因子」表加锚点 id ----
-    html = html.replace(
-        '<h2>全部 456 个因子</h2>',
-        '<h2 id="all-factors">全部 470 个因子</h2>', 1
+    html = re.sub(
+        r'<h2(?: id="all-factors")?>全部\s+\d+\s+个因子</h2>',
+        f'<h2 id="all-factors">全部 {h["n_total"]} 个因子</h2>', html, count=1
     )
     html = html.replace(
         '<h2>🧬 优化因子汇总（预处理 + 择优）</h2>',

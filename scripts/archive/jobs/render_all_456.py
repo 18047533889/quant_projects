@@ -101,6 +101,12 @@ def render_one(name: str) -> tuple:
         if not isinstance(matrix.index, pd.DatetimeIndex):
             matrix.index = pd.to_datetime(matrix.index)
 
+        # 方向只能由训练期的元数据确定。必须在计算 IC、分层净值和全部
+        # 回测指标之前翻转矩阵；绝不能事后只反转几个汇总数字，否则图表、
+        # G1/G10 和 LS 指标会使用相反方向。
+        if is_flipped:
+            matrix = -matrix
+
         # 单因子指标（用 R 的全局成本/后复权口径）
         fm = compute_factor_metrics_single(name, matrix)
         if not fm or fm.get("perf", {}).get("n_periods", 0) < 20:
@@ -111,22 +117,6 @@ def render_one(name: str) -> tuple:
 
         ic_series = fm.get("ic_series", pd.Series(dtype=float))
         ic_stats = R.compute_ic_stats(ic_series)
-        # 翻转处理：_flipped 或 rankic<0
-        if is_flipped and ic_series.mean() < 0:
-            ic_series = -ic_series
-            ic_stats = R.compute_ic_stats(ic_series)
-            fm = dict(fm)
-            fm["perf"] = dict(fm["perf"])
-            for k in ["ls_sharpe", "ls_annual", "g10_annual", "g1_annual", "g10_sharpe", "g1_sharpe"]:
-                fm["perf"][k] = -fm["perf"].get(k, 0)
-            if "ls_winrate" in fm["perf"]:
-                fm["perf"]["ls_winrate"] = 1.0 - fm["perf"].get("ls_winrate", 0)
-            if "win_rate" in fm:
-                fm["win_rate"] = 1.0 - fm.get("win_rate", 0)
-            fm["perf"]["ls_mdd"] = abs(fm["perf"].get("ls_mdd", 0))
-            fm["mean_ic"] = -fm.get("mean_ic", 0)
-            fm["ic_ir"] = -fm.get("ic_ir", 0)
-
         decile_raw = fm.get("decile_navs", {})
         dates_out = fm.get("dates_out", [])
         decile_data = {"dates": dates_out}

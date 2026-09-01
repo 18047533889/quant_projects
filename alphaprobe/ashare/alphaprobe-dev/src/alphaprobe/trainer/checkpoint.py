@@ -1,7 +1,15 @@
-"""AlphaPROBE 训练断点保存与恢复。"""
+"""AlphaPROBE 训练断点保存与恢复。
+
+v1（trainer 兼容）与 v2（§57 checkpoint/__init__.py）双轨：
+- save_checkpoint 同时写 v1 JSON（完整兼容）与 checkpoint_v2.json（轻量，
+  只存 active_pool_factor_ids 字符串列表 + 惰性求值标记，不塞海量 factor matrix）；
+- load 端优先读 v2；v2 存在时不重算全池（恢复只还原字符串列表 + lazy_values=True）；
+  v1 旧文件照常可读（restore_pool 全量路径保留）。
+"""
 
 from __future__ import annotations
 
+import hashlib
 import json
 from dataclasses import dataclass
 from pathlib import Path
@@ -9,13 +17,13 @@ from typing import Any, Optional
 
 import numpy as np
 
-from shared.alphagen.data.expression_knowledge_graph import ExpressionKnowledgeGraph
-from shared.alphagen.data.tree import ExpressionParser, InvalidExpressionException
-from alphaprobe.fe_bridge.expr_parse import parse_mining_expression
-from alphaprobe.trainer.pool import AlphaKnowledgePool
+# 注意：checkpoint 模块在无 torch/qlib 环境下也要可导入（测试环境无 GPU wheel）。
+# shared 侧依赖（ExpressionKnowledgeGraph / ExpressionParser / AlphaKnowledgePool）
+# 只在真正恢复 pool/graph 时延迟导入；v2 轻量路径完全不需要它们。
 
 CHECKPOINT_VERSION = "alphaprobe_checkpoint.v1"
 CHECKPOINT_FILENAME = "checkpoint_latest.json"
+CHECKPOINT_V2_FILENAME = "checkpoint_v2.json"
 
 
 @dataclass
@@ -45,26 +53,102 @@ def checkpoint_path(checkpoint_dir: Path) -> Path:
     return checkpoint_dir / CHECKPOINT_FILENAME
 
 
+def checkpoint_v2_path(checkpoint_dir: Path) -> Path:
+    return checkpoint_dir / CHECKPOINT_V2_FILENAME
+
+
+def _config_hash_of(args: Any) -> str:
+    """§57：config_hash = sha256(experiment yaml 文本)（无 yaml 时退化为 args 摘要）。"""
+    try:
+        yaml_path = getattr(args, "experiment_config", None)
+        if yaml_path and Path(str(yaml_path)).is_file():
+            text = Path(str(yaml_path)).read_text(encoding="utf-8")
+            return hashlib.sha256(text.encode("utf-8")).hexdigest()
+    except Exception:  # noqa: BLE001 - 读不到 yaml 不阻塞 checkpoint
+        pass
+    stable = json.dumps(
+        {
+            "search_time": getattr(args, "search_time", None),
+            "pool_capacity": getattr(args, "pool_capacity", None),
+            "ic_threshold": getattr(args, "ic_threshold", None),
+            "label_days": getattr(args, "label_days", None),
+        },
+        sort_keys=True,
+    )
+    return hashlib.sha256(stable.encode("utf-8")).hexdigest()
+
+
+def _pool_expr_strings(pool: Any) -> list[str]:
+    """pool 的 exprs 字符串列表（pool 可为 None 或轻量对象）。"""
+    if pool is None:
+        return []
+    size = int(getattr(pool, "size", 0) or 0)
+    exprs = getattr(pool, "exprs", None)
+    if not exprs:
+        return []
+    return [str(expr) for expr in exprs[:size]]
+
+
+def _save_checkpoint_v2(
+    checkpoint_dir: Path,
+    pool: Any,
+    completed_iteration: int,
+    args: Any,
+) -> Path:
+    """写轻量 checkpoint_v2.json（§57）。active_pool_factor_ids = pool exprs 映射。"""
+    from alphaprobe.checkpoint import save_checkpoint_v2
+
+    factor_ids = [f"ap_fac_{i}" for i in range(len(_pool_expr_strings(pool)))]
+    return save_checkpoint_v2(
+        checkpoint_dir,
+        run_id=getattr(args, "run_id", None) or f"run_{completed_iteration}",
+        round_id=str(getattr(args, "round_id", None) or "round_0"),
+        campaign_id=str(getattr(args, "campaign_id", None) or "campaign_0"),
+        generation=int(completed_iteration),
+        active_pool_factor_ids=factor_ids,
+        pending_actions=[],
+        scheduler_state={},
+        budget_state={},
+        config_hash=_config_hash_of(args),
+        system_version_key="alphaprobe.v2",
+    )
+
+
 def save_checkpoint(
     checkpoint_dir: Path,
-    pool: AlphaKnowledgePool,
-    graph: ExpressionKnowledgeGraph,
+    pool: Any,
+    graph: Any,
     completed_iteration: int,
     args: Any,
 ) -> Path:
     checkpoint_dir.mkdir(parents=True, exist_ok=True)
+    # v1 完整快照需要 graph/pool 的 to_checkpoint_dict（torch 环境）；无 torch 时
+    # 只写 v1 元数据 + v2 轻量文件。
+    try:
+        pool_dict = pool.to_checkpoint_dict()
+    except Exception:  # noqa: BLE001
+        pool_dict = {"size": getattr(pool, "size", 0)}
+    try:
+        graph_dict = graph_to_checkpoint_dict(graph)
+    except Exception:  # noqa: BLE001
+        graph_dict = {"nodes": []}
     payload = {
         "version": CHECKPOINT_VERSION,
         "completed_iteration": int(completed_iteration),
         "search_time": int(args.search_time),
         "pool_capacity": int(args.pool_capacity),
-        "pool": pool.to_checkpoint_dict(),
-        "graph": graph_to_checkpoint_dict(graph),
+        "pool": pool_dict,
+        "graph": graph_dict,
     }
     path = checkpoint_path(checkpoint_dir)
     tmp = path.with_suffix(".tmp")
     tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     tmp.replace(path)
+    # §57：v2 轻量 checkpoint（不重算全池）
+    try:
+        _save_checkpoint_v2(checkpoint_dir, pool, completed_iteration, args)
+    except Exception as exc:  # noqa: BLE001 - v2 失败不阻塞 v1 主路径
+        print(f"[checkpoint] v2 write failed (non-blocking): {exc}")
     return path
 
 
@@ -207,13 +291,64 @@ def restore_pool_from_checkpoint(
     return restored
 
 
+def restore_pool_from_checkpoint_v2(
+    pool: Any,
+    factor_ids: list[str],
+) -> int:
+    """v2 轻量恢复：只还原 active_pool_factor_ids 字符串列表 + 惰性求值标记。
+
+    不做全池重算（exprs/values 保持空）；调用方在真正需要 factor 时才求值。
+    返回已还原的 factor_id 数。pool 可为任意兼容对象（无需 torch）。
+    """
+    ids = [str(x) for x in (factor_ids or []) if str(x).strip()]
+    if pool is not None:
+        try:
+            capacity = int(getattr(pool, "capacity", 0) or 0)
+            pool.size = 0
+            pool.exprs = [None for _ in range(capacity + 1)]
+            pool.values = [None for _ in range(capacity + 1)]
+            if hasattr(pool, "mutual_ics"):
+                pool.mutual_ics = np.identity(capacity + 1)
+            if hasattr(pool, "single_ics"):
+                pool.single_ics = np.zeros(capacity + 1)
+            if hasattr(pool, "weights"):
+                pool.weights = np.zeros(capacity + 1)
+            pool._lazy_factor_ids = ids
+            pool._lazy_values = True
+        except Exception:  # noqa: BLE001
+            pass
+    return len(ids)
+
+
 def load_checkpoint_if_exists(
     checkpoint_dir: Path,
-    pool: AlphaKnowledgePool,
-    graph: ExpressionKnowledgeGraph,
-    parser: ExpressionParser,
+    pool: Any,
+    graph: Any,
+    parser: Any,
     args: Any,
 ) -> Optional[CheckpointMeta]:
+    # §57：优先 v2（轻量，不重算全池）
+    v2_path = checkpoint_v2_path(checkpoint_dir)
+    if v2_path.is_file():
+        try:
+            v2_raw = json.loads(v2_path.read_text(encoding="utf-8"))
+            if v2_raw.get("checkpoint_version") == 2:
+                completed = int(v2_raw.get("generation") or v2_raw.get("completed_iteration") or 0)
+                factor_ids = list(v2_raw.get("active_pool_factor_ids") or [])
+                pool_n = restore_pool_from_checkpoint_v2(pool, factor_ids)
+                print(
+                    f"[checkpoint] v2 restored from {v2_path}: "
+                    f"iteration={completed}, factor_ids={pool_n} (lazy, no full recompute)"
+                )
+                return CheckpointMeta(
+                    completed_iteration=completed,
+                    search_time=int(v2_raw.get("generation") or args.search_time),
+                    pool_capacity=int(v2_raw.get("pool_capacity") or args.pool_capacity),
+                    pool_size=pool_n,
+                )
+        except Exception as exc:  # noqa: BLE001 - v2 损坏回落 v1
+            print(f"[checkpoint] v2 load failed ({exc}); falling back to v1")
+
     path = checkpoint_path(checkpoint_dir)
     if not path.is_file():
         return None

@@ -203,6 +203,6 @@ curl -s -X POST "$BASE/factor-engine/jobs/compute" \
 |------|------|
 | [`../README.md`](../README.md) | 库 + 服务入口 |
 | [`../docs/FactorEngine完全指南.md`](../docs/FactorEngine完全指南.md) | 模块总指南（含 HTTP 章节） |
-| [`../IT_HANDOFF.md`](../IT_HANDOFF.md) | IT 对接（§8–9 服务化） |
-| [`../INTERFACE.md`](../INTERFACE.md) | 模块级接口清单 |
+| [`../IT_HANDOFF.md`](../docs/archive/IT_HANDOFF.md) | IT 对接（§8–9 服务化） |
+| [`../INTERFACE.md`](../docs/archive/INTERFACE.md) | 模块级接口清单 |
 | https://github.com/HKUST-QUANT-SOCIETY/data_access | 读数层（`data_source.type: data_access`） |

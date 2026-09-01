@@ -40,7 +40,7 @@ GIT_ID=(-c user.name="Sun Haiwei" -c user.email="sunhaiwei@users.noreply.github.
 REPOS=(
     factor_engine data_access vectorbt_qs riskfolio_qs
     quant_evaluator quant_platform modeling factor_preprocess
-    factor_optimizer factor_assets alphaprobe platform_web
+    factor_optimizer factor_assets alphaprobe platform_web lightgbm_qs
 )
 
 # ---- excludes: junk & regenerable artifacts only, never source code ----
@@ -55,6 +55,9 @@ EXCLUDES=(
     --exclude='docs/reports/*/robustness_2026/r26_cache/'     # regenerable robustness npy cache
     --exclude='docs/reports/*/backup_*/'
     --exclude='*.tar.gz'
+    --exclude='data/'                                       # local data (mirror-root relative; source .gitignore ignores it too)
+    --exclude='outputs/'                                    # regenerable backtest artifacts
+    --exclude='snapshots/'                                  # regenerable training snapshots
 )
 
 sync_repo() {

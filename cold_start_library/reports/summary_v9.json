@@ -1,0 +1,22 @@
+{
+  "input_v8": 6292,
+  "accepted_v9": 6266,
+  "default_core": 6137,
+  "optional_data": 129,
+  "event_archive": 2,
+  "removed_new": 24,
+  "pandas_execution_pass": 6292,
+  "pandas_execution_fail": 0,
+  "polars_static_operator_path": 5360,
+  "sql_full_plan_compile": 5934,
+  "three_backend_static_path": 5263,
+  "contract_strict": 5662,
+  "three_backend_contract_strict": 4936,
+  "backend_limited": 1003,
+  "contract_pending": 604,
+  "keyword_migrations": 709,
+  "keyword_comparisons_completed": 709,
+  "native_polars_executed": false,
+  "native_duckdb_executed": false,
+  "native_execution_blocker": "Current container has no Polars/DuckDB/PyArrow wheels and blocks internal/public package download; GitHub Actions runner failed before steps."
+}

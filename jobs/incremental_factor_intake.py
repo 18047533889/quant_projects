@@ -29,6 +29,7 @@ os.environ.setdefault("OMP_NUM_THREADS", "31")
 ROOT = Path("/home/sunhaiwei/quant_projects")
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "jobs"))
+from factor_report_sources import FULL_WINDOW_END, FULL_WINDOW_START, resolve_raw_matrix
 
 POOL_JSON = Path("/home/sunhaiwei/factor_delivery_converted/formula_lqtp_all.json")
 CLUSTERS_JSON = ROOT / "weekly_backtest_output/factor_clusters.json"
@@ -90,13 +91,14 @@ def load_opt_meta():
     return json.loads(OPT_META_JSON.read_text())
 
 
+def matrix_source(page):
+    """Resolve a raw matrix by verified date coverage, never by folder name."""
+    return resolve_raw_matrix(page)
+
+
 def matrix_path(page):
-    """矩阵文件命名：factor_<page>.parquet 或 <page>.parquet。"""
-    p = MATRICES_DIR / f"factor_{page}.parquet"
-    if p.exists():
-        return p
-    p2 = MATRICES_DIR / f"{page}.parquet"
-    return p2 if p2.exists() else None
+    source = matrix_source(page)
+    return source.path if source.is_full_window else None
 
 
 # --------------------------------------------------------------------------
@@ -490,7 +492,10 @@ def stage_page_inject(factor, eval_result):
                 "rep_factor": rep_factor}
 
         vwap_full = R.load_vwap()
-        raw_mat = load_matrix(page, flip=False)
+        # The training-window sign is applied to the matrix before *any*
+        # calculation.  Flipping scalar RankIC after the fact leaves deciles,
+        # long-short NAV and charts in the opposite direction.
+        raw_mat = load_matrix(page, flip=is_flipped)
         if raw_mat is None:
             return {"error": "matrix missing"}
         opt_path = OPT_DIR / f"{page}.parquet"
@@ -500,16 +505,6 @@ def stage_page_inject(factor, eval_result):
             opt_mat = pd.read_parquet(opt_path)
 
         base, opt_ic = R.compute_all_metrics(raw_mat, opt_mat if opt_mat is not None else raw_mat, vwap_full)
-        # 翻转处理：页面上展示翻正后的指标
-        if is_flipped:
-            base = dict(base)
-            base["ic"] = -base["ic"]
-            ic_clean = base["ic"].dropna()
-            base["mean_rankic"] = float(ic_clean.mean()) if len(ic_clean) else 0.0
-            base["std_rankic"] = float(ic_clean.std()) if len(ic_clean) else 0.0
-            base["rankic_ir"] = base["mean_rankic"] / (base["std_rankic"] + 1e-9)
-            base["rankic_winrate"] = float((ic_clean > 0).mean()) if len(ic_clean) else 0.0
-
         charts = {
             "svg_ts": R.plot_ic_timeseries_svg(base["ic"], page),
             "monthly": R.plot_ic_monthly_heatmap(base["ic"], page),
@@ -517,7 +512,8 @@ def stage_page_inject(factor, eval_result):
             "ls": R.plot_long_short_nav(base["decile_navs"], page),
             "dist": R.plot_ic_distribution(base["ic"], page),
         }
-        opt_charts = _opt_compare_charts(page, raw_mat, opt_mat, is_flipped)
+        # ``stage_optimize_lite`` persists the selected matrix in signed form.
+        opt_charts = _opt_compare_charts(page, raw_mat, opt_mat, False)
 
         dsl_note = "factor_engine DSL（本因子由增量管线落值）"
         req_cols = _required_columns(dsl_text)
@@ -527,7 +523,8 @@ def stage_page_inject(factor, eval_result):
         # 替换回测区间为我们的评估口径说明
         html = html.replace("本周新挖", "本周新挖（增量）")
         html = html.replace("回测区间 2019-01-02 ~ 2026-08-24",
-                            f"评估区间 {EVAL_START} ~ {EVAL_END}（vwap-to-vwap shift(-2)）")
+                            f"全窗评估 {FULL_WINDOW_START.date()} ~ {FULL_WINDOW_END.date()}"
+                            "（方向仅由 2016-01-04 ~ 2018-06-30 训练窗确定；vwap-to-vwap shift(-2)）")
         out = FACTORS_DIR / f"factor_{page}.html"
         out.write_text(html, encoding="utf-8")
 

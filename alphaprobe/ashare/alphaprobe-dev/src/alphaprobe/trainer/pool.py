@@ -75,21 +75,47 @@ class AlphaKnowledgePool(AlphaPool):
 
     def get_ic(self, expr: Expression | str) -> Optional[float]:
         if isinstance(expr, str):
-            expr = eval(expr)
+            # §3.2 禁 eval：字符串一律走 FE DSL 解析（任务书 §3.2）
+            from alphaprobe.fe_bridge.expr_parse import parse_mining_expression
+            from shared.alphagen.data.tree import InvalidExpressionException
+
+            try:
+                expr = parse_mining_expression(expr, self._get_parser())
+            except (InvalidExpressionException, ValueError):
+                return None
         value = self._normalize_by_day(expr.evaluate(self.data))
         ic_ret, ic_mut = self._calc_ics(value, ic_mut_threshold=0.99, expr=expr)
         return ic_ret
-    
+
+    def _get_parser(self):
+        if not hasattr(self, "_expr_parser"):
+            from shared.alphagen.data.tree import ExpressionParser
+
+            self._expr_parser = ExpressionParser()
+        return self._expr_parser
+
     def get_ic_icir_mutics(self, expr: Expression | str) -> Optional[Tuple[float, float, List[float]]]:
         if isinstance(expr, str):
-            expr = eval(expr)
+            from alphaprobe.fe_bridge.expr_parse import parse_mining_expression
+            from shared.alphagen.data.tree import InvalidExpressionException
+
+            try:
+                expr = parse_mining_expression(expr, self._get_parser())
+            except (InvalidExpressionException, ValueError):
+                return None
         value = self._normalize_by_day(expr.evaluate(self.data))
         ic, icir, mutics = self._calc_ics_and_icir(value)
         return ic, icir, mutics
 
     def get_mutl_ic(self, expr: Expression | str) -> Optional[float]:
         if isinstance(expr, str):
-            expr = eval(expr)
+            from alphaprobe.fe_bridge.expr_parse import parse_mining_expression
+            from shared.alphagen.data.tree import InvalidExpressionException
+
+            try:
+                expr = parse_mining_expression(expr, self._get_parser())
+            except (InvalidExpressionException, ValueError):
+                return None
         assert isinstance(expr, Expression)
         value  = self._normalize_by_day(expr.evaluate(self.data))
         ic_ret, ic_mut = self._calc_ics(value, ic_mut_threshold=0.99)
@@ -351,7 +377,14 @@ class AlphaKnowledgePool(AlphaPool):
 
     def try_new_expr(self, expr: Expression | str, topic: str, description: str, expression_node: Optional[ExpressionNode] = None) -> bool:
         if isinstance(expr, str):
-            expr = eval(expr)
+            # §3.2 禁 eval：字符串一律走 FE DSL 解析
+            from alphaprobe.fe_bridge.expr_parse import parse_mining_expression
+            from shared.alphagen.data.tree import InvalidExpressionException
+
+            try:
+                expr = parse_mining_expression(expr, self._get_parser())
+            except (InvalidExpressionException, ValueError):
+                return False
         assert isinstance(expr, Expression)
         value = self._normalize_by_day(expr.evaluate(self.data))
         ic_ret, icir, ic_mut = self._calc_ics_and_icir(value, ic_mut_threshold=0.99)

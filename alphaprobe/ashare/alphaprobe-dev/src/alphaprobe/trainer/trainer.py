@@ -273,45 +273,13 @@ class AlphaKnowledgeLogger:
         self.args = args
 
     def load_test_res(self, pool: AlphaKnowledgePool, file: Any) -> None:
-        state = pool.state
-        exprs = state.get('exprs', [])
-        os.environ["CUDA_VISIBLE_DEVICES"] = str(self.args.cuda)
-        if self.args.instruments == 'sp500':
-            QLIB_PATH = 'PATH/TO/data/qlib_data/us_data_qlib'
-        else:
-            QLIB_PATH = 'PATH/TO/.qlib/qlib_data/cn_data'
-        close = exp_module.Feature(exp_module.FeatureType.CLOSE)
-        target = exp_module.Ref(close, -20) / close - 1
-        valid_start_time = f'2021-01-01'
-        valid_end_time = f'2022-06-30'
-        test_start_time = f'2022-07-01'
-        test_end_time = f'2025-06-30'
-        data_all = StockData(instrument=self.args.instruments, start_time='2010-01-01', end_time=test_end_time, qlib_path=QLIB_PATH)
-        data_valid = StockData(instrument=self.args.instruments, start_time=valid_start_time, end_time=valid_end_time, qlib_path=QLIB_PATH)
-        data_test = StockData(instrument=self.args.instruments, start_time=test_start_time, end_time=test_end_time, qlib_path=QLIB_PATH)
-
-        fct_tensor = exprs2tensor(exprs, data_all, normalize=True)
-        tgt_tensor = exprs2tensor([target], data_all, normalize=False)
-
-        ic_list, ric_list = [], []
-        print("Pre-calculating daily metrics for each factor...")
-        for i in tqdm(range(fct_tensor.shape[-1])):
-            factor_slice = fct_tensor[..., i]
-            target_slice = tgt_tensor[..., 0]
-            ic_s = batch_pearsonr(factor_slice, target_slice)
-            ric_s = chunk_batch_spearmanr(factor_slice, target_slice, chunk_size=self.args.chunk_size)
-            ic_list.append(torch.nan_to_num(ic_s, nan=0.))
-            ric_list.append(torch.nan_to_num(ric_s, nan=0.))
-
-        ic_s = torch.stack(ic_list, dim=-1)
-        ric_s = torch.stack(ric_list, dim=-1)
-        torch.cuda.empty_cache()
-
-        pred_list = []
-        shift = self.args.label_days + 1
-
-        valid_test_days = data_valid.n_days + data_test.n_days
-        start_day = len(fct_tensor) - valid_test_days
+        # §3.3 Test 封存：search loop 内不再 evaluate test 段（L5 sealed test
+        # 只在冻结后由 research_protocol SealedTestAccess 授权运行）。
+        # 保留函数签名（兼容调用点），但不再跑 qlib / 不再算 test 指标。
+        file.write(
+            "\n--- sealed: test evaluation removed from search loop (§3.3) ---\n"
+        )
+        return
 
         print("Starting adaptive combination process...")
         pbar = tqdm(range(start_day, len(fct_tensor)))
@@ -409,28 +377,16 @@ class AlphaKnowledgeLogger:
             json.dump(pool.to_dict(), f, indent=4)
         state = pool.state
         exprs = state.get('exprs', [])
-        target_test = pool._normalize_by_day(self.target.evaluate(self.test_data))
         n = len(exprs)
         print('---------------------------------------------')
+        # §3.3 Test 封存：不再 evaluate test_data、不再写 node.test_ic /
+        # node.test_icir（test 指标只在 search loop 之外由冻结的 L5 访问）。
+        # search_valid 段可算时只记录 valid 指标（train/valid 侧）。
         for i in range(n):
             expr = state['exprs'][i]
             expr_str = str(expr)
             ic_ret = state['ics_ret'][i]
-
-            value_test = pool._normalize_by_day(expr.evaluate(self.test_data))
-            pearson_corrs_test = batch_pearsonr(value_test, target_test)
-            ic_test = pearson_corrs_test.mean().item()
-            icir_test = ic_test / (pearson_corrs_test.std().item() + 1e-6)
-            ic_test_abs = float(np.abs(ic_test))
-            icir_test_abs = float(np.abs(icir_test))
-
-            if i < len(pool.expr2node):
-                node = pool.expr2node[i]
-                if node is not None:
-                    node.test_ic = ic_test_abs
-                    node.test_icir = icir_test_abs
-
-            print(f'> Alpha #{i}: ic={ic_ret:.4f}, test_ic={ic_test:.4f}, test_icir={icir_test:.4f}, expr={expr_str}')
+            print(f'> Alpha #{i}: ic={ic_ret:.4f}, expr={expr_str}')
         if pool.size > 0:
             print(f'>> Best single ic: {np.max(pool.single_ics[:pool.size]):.4f}')
         print('---------------------------------------------')
@@ -505,7 +461,7 @@ class AlphaKnowledgeTrainer:
             )
 
         os.makedirs(log_dir, exist_ok=True)
-        self.logger = AlphaKnowledgeLogger(test_data, target, log_dir, args)
+        self.logger = AlphaKnowledgeLogger(test_data or None, target, log_dir, args)
         api_key = os.getenv("OPENAI_API_KEY", "").strip()
         base_url = os.getenv("OPENAI_BASE_URL", "https://api.deepseek.com").strip() or "https://api.deepseek.com"
         if not api_key:

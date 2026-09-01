@@ -1,0 +1,12 @@
+run: allfac (IC_THRESH=0, NO_DEDUP=1, fresh walkforward manifest 08-30 22:39)
+features: (767745, 989) cols; label: COS TargetVwapReturnH10; RE_OPT_EVERY=2
+backtest: vectorbt accurate, exec lag 1, topk30 maxw5% turnover30% tc5bp, benchmark 000985.CSI TR
+fix: backtest wmat NaN->HOLD bug (0.0 kept = force-close; all-zero rows dropped) - 2026-08-31
+strategy: total=373.78% ann=27.94% sharpe=1.102 mdd=-34.47%
+benchmark: total=45.50% ann=6.12% sharpe=0.399 mdd=-39.33%
+excess:    total=225.63% ann=20.56% sharpe=1.472 mdd=-18.38%
+yearly strategy: {2020: 85.0, 2021: 36.0, 2022: -21.9, 2023: 19.1, 2024: 31.2, 2025: 50.6, 2026: 2.4}
+yearly excess:   {2020: 47.7, 2021: 28.1, 2022: -1.9, 2023: 28.2, 2024: 22.1, 2025: 20.9, 2026: -7.2}
+oos_daily_ic: n=1324 mean=0.0320 median=0.0217 icir=0.206 57.6pct>0; 2026 mean 0.0179 (114d)
+rankic_screen_after_supplement: 3001 computed OK of 3289 candidates; rank_ic>0.015 = 987 (lqtp 624 / fm247 108 / optfac 86 / new026 55 / factmat 45 / delivery 30 / cogfull 20 / cogshort 11 / fmqa 7 / cogneutral 1); 288 drop (empty-shell parquets)
+files: equity_curves_allfac_20260831.csv / combined_curve_allfac.png / oos_daily_rank_ic_allfac.csv

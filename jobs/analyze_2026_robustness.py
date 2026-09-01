@@ -401,10 +401,19 @@ def figure3_op_stability_ratio(op_counts, op_stable_ratio):
     buf = io.BytesIO(); fig.savefig(buf, format="png"); buf.seek(0)
     return "data:image/png;base64," + base64.b64encode(buf.read()).decode()
 
+def _logic_tags_list(r):
+    """归一化 logic_tags 为列表(兼容字符串主分类与旧列表多标签)."""
+    t = r.get("logic_tags")
+    if isinstance(t, str):
+        return [t]
+    if isinstance(t, list):
+        return t
+    return []
+
 def figure4_logic_stacked(rob):
     plt = _plt_init()
-    logic_order = sorted({t for r in rob for t in (r.get("logic_tags") or [])})
-    counts = {t: Counter(z.get("status") or "failed") for t in logic_order for z in rob if t in (z.get("logic_tags") or [])}
+    logic_order = sorted({t for r in rob for t in _logic_tags_list(r)})
+    counts = {t: Counter(z.get("status") or "failed") for t in logic_order for z in rob if t in _logic_tags_list(z)}
     fig, ax = plt.subplots(figsize=(7.2, 4.6))
     bots = np.zeros(len(logic_order))
     colors = {"stable": "#166534", "decay": "#b45309", "failed": "#991b1b"}
@@ -496,9 +505,9 @@ def build_pages(rob, op_counts, op_stable_ratio, logic_stats, figures):
 
     # 逻辑表
     logic_rows = ""
-    logic_order = sorted({t for r in rob for t in (r.get("logic_tags") or [])})
+    logic_order = sorted({t for r in rob for t in _logic_tags_list(r)})
     for t in logic_order:
-        cnt = Counter(r.get("status") for r in rob if t in (r.get("logic_tags") or []))
+        cnt = Counter(r.get("status") for r in rob if t in _logic_tags_list(r))
         tot = max(sum(cnt.values()), 1)
         st = cnt["stable"]; dc = cnt["decay"]; fa = cnt["failed"]
         logic_rows += (f"<tr><td>{t}</td><td>{int(tot)}</td><td>{st}</td><td>{dc}</td>"
@@ -565,21 +574,21 @@ h2{{font-size:1.02rem;color:var(--primary);margin:26px 0 8px;border-bottom:1px s
 </div>
 <img src="{figures[3]}" alt="logic_stacked" style="height:340px;object-fit:contain"/>
 
-<h2>🔬 2026 失效归因（为什么 267 个因子失效）</h2>
+<h2>🔬 2026 失效归因（为什么 {n_fa} 个因子失效）</h2>
 <div class="attr">
-<p class="lead">① 逻辑维度：动量/相关性类全线崩塌</p>
-<p>按逻辑标签统计（每因子可多标签），<b>动量类</b>（momentum，450 因子）失效率 <b class="num">58.0%</b>、<b>流动性类</b>（liquidity，448）失效率 <b class="num">57.8%</b>、<b>价格位置类</b>（price_position，447）<b class="num">57.3%</b>、<b>成交量类</b>（volume，451）<b class="num">57.4%</b>——这些占池子主体的趋势/量价类因子在 2026 呈现系统性失效，说明 2026 行情以<b>风格快速切换 + 高波动结构</b>为主，基于历史统计关系的趋势跟随信号失去稳定性。</p>
-<p>② 算子维度：相关性（correlation）类最差——<b>单算子失效率 61.5%</b>、存活率仅 <b>8.8%</b>；与相关性组合的算子对失效率普遍 66~68%（correlation+liquidity 68.0%、correlation+momentum 67.6%、correlation+volatility 66.7%、correlation+price_position 66.2%）。相关类因子对 2026 年的截面相关性结构（行业/风格联动变化）极度敏感，几乎全线失效。</p>
-<p>③ 衰减组（decay 121 个）2026 平均 RankIC 仅 <b class="num">0.0009</b>（全期 0.0105），失效组 267 个 2026 平均 RankIC 为 <b class="num">-0.0036</b>（全期 -0.0064）——说明失效因子大多在 2026 年方向性翻转（由正转负），并非单纯衰减，而是<b>信号结构被 2026 市场环境打破</b>。</p>
+<p class="lead">① 逻辑维度：动量/量能类系统性失效</p>
+<p>按互斥主分类统计（每因子唯一主标签），<b>动量类</b>（momentum，{logic_stats.get('momentum',{}).get('total',0)} 因子）失效率 <b class="num">{logic_stats.get('momentum',{}).get('failed_ratio',0):.0%}</b>、<b>量能/流动性类</b>（volume_liquidity，{logic_stats.get('volume_liquidity',{}).get('total',0)}）失效率 <b class="num">{logic_stats.get('volume_liquidity',{}).get('failed_ratio',0):.0%}</b>、<b>突破类</b>（breakout，{logic_stats.get('breakout',{}).get('total',0)}）<b class="num">{logic_stats.get('breakout',{}).get('failed_ratio',0):.0%}</b>——这些占池子主体的趋势/量价类因子在 2026 呈现系统性失效，说明 2026 行情以<b>风格快速切换 + 高波动结构</b>为主，基于历史统计关系的趋势跟随信号失去稳定性。</p>
+<p>② 算子维度：相关性（correlation）类最差——<b>失效率 {logic_stats.get('correlation',{}).get('failed_ratio',0):.0%}</b>、存活率仅 <b>{logic_stats.get('correlation',{}).get('stable_ratio',0):.0%}</b>（{logic_stats.get('correlation',{}).get('total',0)} 个里只活 {logic_stats.get('correlation',{}).get('stable',0)} 个）。相关类因子对 2026 年的截面相关性结构（行业/风格联动变化）极度敏感，几乎全线失效。</p>
+<p>③ 衰减组（decay {n_dec} 个）2026 平均 RankIC 仅 <b class="num">0.0009</b>（全期 0.0105），失效组 {n_fa} 个 2026 平均 RankIC 为 <b class="num">-0.0036</b>（全期 -0.0064）——说明失效因子大多在 2026 年方向性翻转（由正转负），并非单纯衰减，而是<b>信号结构被 2026 市场环境打破</b>。</p>
 </div>
 
 <h2>💪 2026 有效归因（哪些因子存活 & 为什么）</h2>
 <div class="attr">
 <p class="lead">① 反转（mean_reversion）是 2026 唯一显著存活逻辑</p>
-<p>12 个反转类因子中 <b class="num">9 个稳定、3 个轻度衰减、0 个失效</b>，稳定占比 <b class="num">75%</b>、失效占比 <b class="num">0%</b>，远高于全库 17% 稳定占比。2026 年市场在高波动 + 风格轮动下呈现明显的<b>超跌反弹 / 均值回复特征</b>，反转类因子的多空净值与 RankIC 保持为正。</p>
+<p>{logic_stats.get('mean_reversion',{}).get('total',0)} 个反转类因子中 <b class="num">{logic_stats.get('mean_reversion',{}).get('stable',0)} 个稳定、{logic_stats.get('mean_reversion',{}).get('total',0)-logic_stats.get('mean_reversion',{}).get('stable',0)-logic_stats.get('mean_reversion',{}).get('failed',0)} 个轻度衰减、{logic_stats.get('mean_reversion',{}).get('failed',0)} 个失效</b>，稳定占比 <b class="num">{logic_stats.get('mean_reversion',{}).get('stable_ratio',0):.0%}</b>、失效占比 <b class="num">{logic_stats.get('mean_reversion',{}).get('failed_ratio',0):.0%}</b>，远高于全库 {n_st/max(len(rob),1):.0%} 稳定占比。2026 年市场在高波动 + 风格轮动下呈现明显的<b>超跌反弹 / 均值回复特征</b>，反转类因子的多空净值与 RankIC 保持为正。</p>
 <p>② 存活因子共性：量价确认的反转（volume_confirmed/reversal_volume/volume_reversal 家族）与 vwap 偏离 + 波动调整的日内反转（simplified_intraday_mean_reversion、intraday_reversal_zscore_volume_short）表现最好；<b>price_impact 家族稳定</b>（price_impact_vol_adj_stable_vol、price_impact_asymmetry、price_impact_downside_vol_adjusted、price_impact_volatility_adjusted 等 9 个进入稳定 Top20，2026 累计 +14%~+15%，回撤 -2%~-5%）。</p>
-<p>③ 相关性类最差：correlation 单算子存活率仅 <b class="num">8.8%</b>（91 个里只活 8 个），是全部逻辑中唯一存活率低于 10% 的类别；distribution（分布类）存活率 17.3%，同样偏弱。</p>
-<p>④ 存活名单（82 个）见下表「🟢 稳定 Top20」及详情页 2026 状态行；完整存活清单在 <code>weekly_backtest_output/robustness_survivors.json</code>。</p>
+<p>③ 相关性类最差：correlation 单算子存活率仅 <b class="num">{logic_stats.get('correlation',{}).get('stable_ratio',0):.0%}</b>（{logic_stats.get('correlation',{}).get('total',0)} 个里只活 {logic_stats.get('correlation',{}).get('stable',0)} 个），是全部逻辑中存活率最低的类别之一。</p>
+<p>④ 存活名单（{n_st} 个）见下表「🟢 稳定 Top20」及详情页 2026 状态行；完整存活清单在 <code>weekly_backtest_output/robustness_survivors.json</code>。</p>
 </div>
 
 <h2>算子稳定占比（全库次数 ≥5）</h2>
@@ -635,7 +644,7 @@ def inject_index(rob, img1):
     mr = so.get("mean_reversion") or {}
     corr = so.get("correlation") or {}
     mom = so.get("momentum") or {}
-    liq = so.get("liquidity") or {}
+    liq = so.get("volume_liquidity") or so.get("liquidity") or {}
     n_mr = int(mr.get("total", 0))
     n_mr_stable = int(surv.get("operator_survival", {}).get("mean_reversion", {}).get("stable", 0))
     mr_failed_rate = float(mr.get("failed_rate", 0.0))
@@ -655,7 +664,7 @@ def inject_index(rob, img1):
     <h3>🔬 失效归因</h3>
     <ul>
       <li>动量类 {mom_failed_rate:.0%} 失效（{mom_total} 因子）——趋势/量价信号被 2026 风格快速切换击穿</li>
-      <li>流动性类 {liq_failed_rate:.0%} 失效（{liq_total} 因子）</li>
+      <li>量能/流动性类 {liq_failed_rate:.0%} 失效（{liq_total} 因子）</li>
       <li>相关性类最差：失效率 {corr_failed_rate:.0%}、存活率仅 {corr_stable_rate:.0%}</li>
       <li>失效组 2026 平均 RankIC −0.0036，方向性翻转而非单纯衰减</li>
     </ul>

@@ -149,6 +149,7 @@ class DiskV1DeliveryExporter:
         """从 AlphaKnowledgePool 导出全部合格因子。"""
         self.write_config(finalize=False)
         exported: list[str] = []
+        decisions_log: list[dict[str, Any]] = []
 
         for i in range(pool.size):
             expr = pool.exprs[i]
@@ -168,6 +169,10 @@ class DiskV1DeliveryExporter:
                 full_desc = description
 
             metrics = evaluate_all_period_metrics(expr, target, experiment, device)
+            # §58：ExportDecision 审计日志（不改变 manifest 输出结构，delivery 链兼容优先）
+            decision = self._build_export_decision_if_available(expr, metrics, i)
+            if decision is not None:
+                decisions_log.append(decision)
             path = self.export_candidate(expr, description=full_desc, metrics=metrics)
             if path is not None:
                 exported.append(str(path))
@@ -183,6 +188,7 @@ class DiskV1DeliveryExporter:
                     "completion_tokens": 0,
                     "total_tokens": 0,
                 },
+                "export_decisions": decisions_log,
             },
         )
         return {
@@ -191,3 +197,42 @@ class DiskV1DeliveryExporter:
             "exported_manifests": exported,
             "candidates_submitted": self.candidates_submitted,
         }
+
+    def _build_export_decision_if_available(
+        self,
+        expr: Any,
+        metrics: dict[str, dict[str, float]],
+        pool_index: int,
+    ) -> dict[str, Any] | None:
+        """§58：若 export/gate.py 存在则调 build_export_decision 打日志；否则 None。
+
+        不改变现有 manifest 输出结构：decision 只作为 mining_run_stats 附注。
+        """
+        try:
+            from alphaprobe.export.gate import build_export_decision
+        except Exception:  # noqa: BLE001 - gate 不可用时不阻塞 delivery 链
+            return None
+        try:
+            from alphaprobe.contracts import EvaluationRecord
+            from datetime import datetime, timezone
+
+            from alphaprobe.fe_bridge.dsl_convert import expression_to_dsl
+
+            formula = expression_to_dsl(expr)
+            record = EvaluationRecord(
+                factor_id=f"ap_pool_{pool_index}",
+                segment="train",
+                fidelity="L2_full_train",
+                metric_bundle=dict(metrics.get("train") or {}),
+                artifact_refs={},
+                evaluator_version="alphaprobe.disk.v1",
+                data_snapshot_id="auto",
+                universe_snapshot_id="auto",
+                label_spec_hash="vwap_to_vwap_h20",
+                created_at=datetime.now(timezone.utc),
+            )
+            candidate = {"factor_id": f"ap_pool_{pool_index}", "canonical_formula": formula}
+            d = build_export_decision(candidate, record, None, refinement_complete=True)
+            return d.to_dict()
+        except Exception:  # noqa: BLE001
+            return None

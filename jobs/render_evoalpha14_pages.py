@@ -34,6 +34,8 @@ import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 
 PROJECT = Path("/home/sunhaiwei/quant_projects")
+sys.path.insert(0, str(PROJECT / "jobs"))
+from factor_report_sources import FULL_WINDOW_END, FULL_WINDOW_START, load_raw_full_window, resolve_raw_matrix
 REPORT_DIR = PROJECT / "factor_engine" / "docs" / "reports" / "2026-08-23"
 FACTORS_DIR = REPORT_DIR / "factors"
 RAW_DIR = PROJECT / "weekly_backtest_output" / "factor_matrices_all"
@@ -43,7 +45,7 @@ CLUSTER = PROJECT / "weekly_backtest_output" / "factor_clusters.json"
 ROBUST = PROJECT / "weekly_backtest_output" / "robustness_2026.json"
 LQTP_ALL = json.loads(Path("/home/sunhaiwei/factor_delivery_converted/formula_lqtp_all.json").read_text())
 DAILY_ADJ = Path.home() / "cos_data" / "StockDailyBarAdj"
-START, END = "2019-01-02", "2026-08-24"
+START, END = str(FULL_WINDOW_START.date()), str(FULL_WINDOW_END.date())
 
 PAGES = [
     "Alpha158_VOLATILITY_RANK",
@@ -170,7 +172,10 @@ def _decile_ret(mat, vwap):
     valid = np.isfinite(fv.values) & np.isfinite(fwd.values)
     gids = np.floor(ranks * 10).clip(0, 9).astype(int)
     gids[~valid] = -1
-    gr = np.zeros((T, 10))
+    # Missing factor rows are not zero-return days.  Keep them as NaN so the
+    # report can reject incomplete matrices instead of drawing a false flat
+    # NAV continuation.
+    gr = np.full((T, 10), np.nan)
     for t in range(T):
         for k in range(10):
             mk = (gids[t] == k)
@@ -184,6 +189,26 @@ def fig_to_b64(fig):
     fig.savefig(buf, format="png", dpi=110, bbox_inches="tight", facecolor=PLOT_BG)
     buf.seek(0)
     return base64.b64encode(buf.read()).decode()
+
+
+def chart_img_or_notice(payload, notice: str) -> str:
+    """Render chart payloads from one canonical contract.
+
+    Generators historically mixed raw base64 strings and complete ``<img>``
+    fragments. Wrapping a fragment again produced ``src=\"<img src=...\"`` and
+    broken images. New callers must pass base64, while this compatibility
+    boundary keeps older incremental callers from emitting invalid HTML.
+    """
+    if not payload:
+        return f'<div class="zero-notice">{esc(notice)}</div>'
+    value = str(payload).strip()
+    if value.startswith("<img "):
+        return value
+    if value.startswith("data:image/"):
+        src = value
+    else:
+        src = f"data:image/png;base64,{value}"
+    return f'<img src="{src}" style="width:100%;border-radius:8px;"/>'
 
 
 # ---------------- 图表 ----------------
@@ -452,6 +477,11 @@ def compute_all_metrics(raw_mat, opt_mat, vwap):
     n_periods = len(ic_clean)
 
     _, gr = _decile_ret(raw_mat, vwap)
+    usable = np.isfinite(gr).all(axis=1)
+    if usable.sum() < 1800:
+        raise ValueError(f"insufficient usable decile history: {int(usable.sum())} days")
+    gr = gr[usable]
+    nav_dates = raw_mat.index.intersection(vwap.index)[usable]
     T = gr.shape[0]
     g_nav = np.cumprod(1 + gr, axis=0)
     r_ls = gr[:, 9] - gr[:, 0]
@@ -472,7 +502,7 @@ def compute_all_metrics(raw_mat, opt_mat, vwap):
         "ls_sharpe": ls_sharpe, "ls_annual": ls_annual, "ls_cum": ls_cum,
         "ls_mdd": ls_mdd, "ls_winrate": ls_winrate,
         "g_annual": g_annual, "g1_annual": g_annual[0], "g10_annual": g_annual[-1],
-        "decile_navs": {"dates": [str(d)[:10] for d in raw_mat.index.intersection(vwap.index)],
+        "decile_navs": {"dates": [str(d)[:10] for d in nav_dates],
                         **{f"G{k+1}": g_nav[:, k].tolist() for k in range(10)},
                         "LS": ls_nav.tolist()},
     }, opt_ic
@@ -595,14 +625,10 @@ def build_html(page, note, dsl_text, dsl_note, req_cols, base, opt_meta, gate, r
         f'<div class="card">\n<h2>RankIC 时序</h2>\n<div class="chart-wrap">{charts["svg_ts"]}</div>\n</div>'
         if charts["svg_ts"] else "")
 
-    monthly_img = (f'<img src="data:image/png;base64,{charts["monthly"]}" style="width:100%;border-radius:8px;"/>'
-                   if charts["monthly"] else '<div class="zero-notice">月度 IC 数据不足</div>')
-    decile_img = (f'<img src="data:image/png;base64,{charts["decile"]}" style="width:100%;border-radius:8px;"/>'
-                  if charts["decile"] else '<div class="zero-notice">十分层数据不足</div>')
-    ls_img = (f'<img src="data:image/png;base64,{charts["ls"]}" style="width:100%;border-radius:8px;"/>'
-              if charts["ls"] else '<div class="zero-notice">多空数据不足</div>')
-    dist_img = (f'<img src="data:image/png;base64,{charts["dist"]}" style="width:100%;border-radius:8px;"/>'
-                if charts["dist"] else '<div class="zero-notice">分布数据不足</div>')
+    monthly_img = chart_img_or_notice(charts.get("monthly"), "月度 IC 数据不足")
+    decile_img = chart_img_or_notice(charts.get("decile"), "十分层数据不足")
+    ls_img = chart_img_or_notice(charts.get("ls"), "多空数据不足")
+    dist_img = chart_img_or_notice(charts.get("dist"), "RankIC 分布数据不足")
 
     return f'''<!DOCTYPE html>
 <html lang="zh-CN">
@@ -763,12 +789,14 @@ def main():
             if html_path.exists():
                 print(f"  [skip] {page} 已存在", flush=True)
                 continue
-            raw_path = RAW_DIR / f"{page}.parquet"
             opt_path = OPT_DIR / f"{page}.parquet"
-            if not raw_path.exists() or not opt_path.exists():
-                print(f"  [ERR] {page} 缺矩阵", flush=True)
+            raw_mat, raw_source = load_raw_full_window(page)
+            if raw_mat is None:
+                print(f"  [ERR] {page} 缺全窗原始矩阵: {raw_source.reason or raw_source.path}", flush=True)
                 continue
-            raw_mat = pd.read_parquet(raw_path)
+            if not opt_path.exists():
+                print(f"  [ERR] {page} 缺优化矩阵", flush=True)
+                continue
             opt_mat = pd.read_parquet(opt_path)
 
             lqtp_rec = lqtp_by.get(page) or {}

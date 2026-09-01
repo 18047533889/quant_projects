@@ -33,6 +33,19 @@ from shared.alphagen_qlib.stock_data import FeatureType, StockData
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_EXPERIMENT = PROJECT_ROOT / "configs" / "alphaprobe" / "experiment_ashare_pv.yaml"
 
+# Phase 7：continuous 在每轮 campaign 结束后读取本进程内 pool 快照做全池
+# upsert（跨轮 lineage 持久化）。本进程单轮挖掘场景下不入 memory，仅占位。
+_LAST_POOL: list[Any] = [None]
+_LAST_POOL_ATTR = "value"
+
+
+def _last_pool_value() -> Any:
+    return _LAST_POOL[0]
+
+
+def _set_last_pool(pool: Any) -> None:
+    _LAST_POOL[0] = pool
+
 # 项目 .env 优先于 shell 里残留的旧 OPENAI_*（如先前其它网关）
 load_dotenv(PROJECT_ROOT / ".env", override=True)
 os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
@@ -262,6 +275,8 @@ def run_mining_campaign(
     )
 
     data = _make_stock_data(experiment, args, train_period[0], train_period[1])
+    # §3.3 Test 封存：data_test 构造保留（test_period 仍写入 config/投递 metadata），
+    # 但不传入 trainer 训练路径（传 None）——search loop 不触碰 test 段。
     data_test = _make_stock_data(experiment, args, test_period[0], test_period[1])
 
     # Fitness 标签：vwap→vwap 远期收益（非 close→close / open→open）
@@ -289,7 +304,7 @@ def run_mining_campaign(
     trainer = AlphaKnowledgeTrainer(
         pool=pool,
         initial_expressions=initial_exprs,
-        test_data=data_test,
+        test_data=None,  # §3.3 Test 封存：trainer 训练路径不再接收 test 段
         target=target,
         args=args,
     )
@@ -301,12 +316,80 @@ def run_mining_campaign(
         exporter = DiskV1DeliveryExporter(experiment)
         export_result = exporter.export_from_pool(pool, target, experiment, device)
         print("[delivery] candidate_pool export:", export_result)
+        _set_last_pool(pool)
+        _record_exported_to_memory(experiment, pool, export_result)
 
     return {
         "campaign_id": experiment.delivery.resolved_campaign_id(),
         "pool_size": pool.size,
         "export": export_result,
     }
+
+
+def _record_exported_to_memory(
+    experiment: ExperimentConfig,
+    pool: Any,
+    export_result: dict[str, Any],
+) -> None:
+    """把本轮 export 的候选因子 mark_exported 进 GlobalMemoryStore（最小 diff）。
+
+    只在 has_delivery_block 时调用；store 打开/落库异常不阻塞主流程。
+    仅处理真正 export 出的因子（manifest 存在的 formula），并预置 _LAST_POOL
+    供 continuous 做全池快照 upsert（§76 跨轮 lineage 持久化）。
+    """
+    manifests = export_result.get("exported_manifests") or []
+    if not manifests:
+        return
+    from alphaprobe.fe_bridge.dsl_convert import expression_to_dsl
+    from alphaprobe.memory import GlobalMemoryStore
+    from alphaprobe.dedup import canonical_ast_hash, canonicalize_dsl, signal_equivalence_id
+
+    # 收集真正 export 出的 formula（manifest.json 为准）
+    exported_formulas: set[str] = set()
+    for m in manifests:
+        try:
+            payload = json.loads(Path(str(m)).read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        f = str(payload.get("formula") or "").strip()
+        if f:
+            exported_formulas.add(f)
+
+    try:
+        store = GlobalMemoryStore()
+    except Exception as exc:
+        print(f"[memory] open GlobalMemoryStore failed, skip export registry: {exc}")
+        return
+    try:
+        campaign_id = experiment.delivery.resolved_campaign_id()
+        for i in range(pool.size):
+            expr = pool.exprs[i]
+            if expr is None:
+                continue
+            try:
+                formula = expression_to_dsl(expr)
+            except Exception:
+                continue
+            if formula not in exported_formulas:
+                continue
+            canonical = canonicalize_dsl(formula)
+            ok, existing = store.upsert_factor_node(
+                factor_id=f"ap_{campaign_id}_{i}",
+                canonical_formula=canonical,
+                canonical_ast_hash=canonical_ast_hash(formula),
+                signal_equivalence_id=signal_equivalence_id(formula),
+                parameter_family_id=None,
+                source_system="alphaprobe",
+                source_snapshot=campaign_id,
+                source_type="MINED",
+                exportable=True,
+            )
+            fid = existing if existing is not None else f"ap_{campaign_id}_{i}"
+            store.mark_exported(factor_id=fid, campaign_id=campaign_id, manifest_path="")
+    except Exception as exc:
+        print(f"[memory] record exported factors failed (non-blocking): {exc}")
+    finally:
+        store.close()
 
 
 def build_train_parser() -> argparse.ArgumentParser:
@@ -347,10 +430,10 @@ def build_train_parser() -> argparse.ArgumentParser:
             "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
         ),
     )
-    parser.add_argument("--use_res_correlation", type=bool, default=True)
-    parser.add_argument("--use_semantic_similarity", type=bool, default=True)
-    parser.add_argument("--use_edit_distance", type=bool, default=False)
-    parser.add_argument("--separate_leaf_non_leaf", type=bool, default=True)
+    parser.add_argument("--use_res_correlation", action=argparse.BooleanOptionalAction, default=True)
+    parser.add_argument("--use_semantic_similarity", action=argparse.BooleanOptionalAction, default=True)
+    parser.add_argument("--use_edit_distance", action=argparse.BooleanOptionalAction, default=False)
+    parser.add_argument("--separate_leaf_non_leaf", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument("--search_time", type=int, default=40)
     parser.add_argument(
         "--resume",
@@ -371,6 +454,6 @@ def build_train_parser() -> argparse.ArgumentParser:
     parser.add_argument("--label_days", type=int, default=20)
     parser.add_argument("--corr_threshold", type=float, default=0.95)
     parser.add_argument("--ridge_alpha", type=float, default=1e-6)
-    parser.add_argument("--use_vif", type=bool, default=False)
+    parser.add_argument("--use_vif", action=argparse.BooleanOptionalAction, default=False)
     parser.add_argument("--linear_dep_tol", type=float, default=1e-10)
     return parser

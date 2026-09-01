@@ -13,11 +13,65 @@ from pathlib import Path
 from typing import Any
 
 from alphaprobe.delivery.config import DOMAIN_ROOT_TO_SLUG, ExperimentConfig
-from alphaprobe.runner import PROJECT_ROOT, build_train_parser, run_mining_campaign
+from alphaprobe.memory import GlobalMemoryStore
+from alphaprobe.memory.seed_ingestion import ingest_cold_start_yaml
+from alphaprobe.runner import PROJECT_ROOT, _LAST_POOL, build_train_parser, run_mining_campaign
 from shared.utils.llm import LLMQuotaExhaustedError
 
 STATE_FILENAME = "active_round.json"
 STOP_QUOTA_FILENAME = "STOP_QUOTA"
+
+
+def run_continuous_v2(args: Any) -> None:
+    """§84 可选 v2 entry：用 RoundManager 跑 7×24（不动原 run_continuous）。
+
+    args 与 run_continuous 同构；campaign 回调默认委托 run_mining_campaign。
+    max_rounds/max_hours 显式给才停（§56），否则无限。
+    """
+    from alphaprobe.continuous.round_manager import RoundManager
+
+    continuous_raw: dict = {}
+    if getattr(args, "experiment_config", None):
+        try:
+            experiment = ExperimentConfig.from_yaml(args.experiment_config)
+            continuous_raw = dict(experiment.raw.get("continuous") or {})
+        except Exception:  # noqa: BLE001 - yaml 缺失时用纯 CLI 参数
+            continuous_raw = {}
+
+    max_rounds = args.max_rounds
+    if max_rounds is None and continuous_raw.get("max_rounds") is not None:
+        max_rounds = int(continuous_raw["max_rounds"])
+    max_hours = args.max_hours
+    if max_hours is None and continuous_raw.get("max_hours") is not None:
+        max_hours = float(continuous_raw["max_hours"])
+    sleep_seconds = int(
+        args.sleep_seconds
+        if args.sleep_seconds is not None
+        else continuous_raw.get("sleep_seconds", 0)
+    )
+
+    def campaign_cb(round_no: int, calibrator: Any = None, **kwargs: Any) -> dict[str, Any]:
+        experiment = ExperimentConfig.from_yaml(args.experiment_config)
+        campaign_id = str(kwargs.get("campaign_id") or f"campaign_{round_no}")
+        args.resume = False
+        return run_mining_campaign(args, campaign_id=campaign_id, experiment=experiment)
+
+    rm = RoundManager(
+        store=GlobalMemoryStore() if _memory_db_ok() else None,
+        campaign_callback=campaign_cb,
+        max_hours=max_hours,
+        max_rounds=max_rounds,
+        sleep_seconds=sleep_seconds,
+    )
+    rm.run()
+
+
+def _memory_db_ok() -> bool:
+    try:
+        GlobalMemoryStore()
+        return True
+    except Exception:  # noqa: BLE001
+        return False
 
 
 def _setup_logging(log_dir: Path) -> None:
@@ -116,6 +170,16 @@ def run_continuous(args: Any) -> None:
     log_dir = PROJECT_ROOT / "data" / "logs" / "continuous"
     _setup_logging(log_dir)
 
+    # Phase 7：全局记忆单例（跨轮持久 lineage）。db 路径来自环境变量
+    # ALPHAPROBE_MEMORY_DB，默认 ~/quant_projects/data/alphaprobe/global_memory.sqlite3。
+    # 初始化失败只打印告警，不阻塞挖掘主循环。
+    memory_store: GlobalMemoryStore | None = None
+    try:
+        memory_store = GlobalMemoryStore()
+        logging.info("global memory ready db=%s", memory_store.db_path)
+    except Exception as exc:
+        logging.warning("global memory init failed (non-blocking): %s", exc)
+
     stop_flag = log_dir / STOP_QUOTA_FILENAME
     if stop_flag.exists() and not getattr(args, "ignore_stop_quota", False):
         logging.error(
@@ -136,6 +200,7 @@ def run_continuous(args: Any) -> None:
 
     round_no = 0
     quota_fails = 0
+    memory_seed_ingested = False
 
     while True:
         if max_hours is not None and (time.monotonic() - started_mono) >= max_hours * 3600:
@@ -173,6 +238,31 @@ def run_continuous(args: Any) -> None:
             logging.info("=== round %s campaign_id=%s ===", round_no, campaign_id)
 
         args.cold_start_seed = None
+
+        # Phase 7：冷启动 seed 摄入 global memory（yaml 缺失/为空 → 0 条，不阻塞）。
+        # 每轮 seed 不同（mix 抽样），摄入天然去重（signal id 相同 → rediscovery 合并）。
+        if memory_store is not None:
+            try:
+                cs_cfg = (experiment.raw.get("mining") or {}).get("cold_start_library")
+                if cs_cfg:
+                    yaml_path = str(cs_cfg)
+                    if not Path(yaml_path).expanduser().is_absolute():
+                        yaml_path = str(PROJECT_ROOT / yaml_path)
+                    ingest_cold_start_yaml(yaml_path, memory_store)
+                elif not memory_seed_ingested:
+                    # 兜底：库默认目录存在则尝试，缺失/空 → 0（已知状态）
+                    from alphaprobe.cold_start import package_root
+
+                    pkg_data = Path(package_root()) / "data"
+                    for sub in ("ashare", "alpha101", "alpha191", "alpha158"):
+                        candidate = pkg_data / sub
+                        if candidate.is_dir():
+                            for f in sorted(candidate.glob("*.yaml")):
+                                ingest_cold_start_yaml(f, memory_store)
+                    memory_seed_ingested = True
+            except Exception as exc:
+                logging.warning("seed ingestion skipped (non-blocking): %s", exc)
+
         _save_state(
             log_dir,
             {
@@ -188,6 +278,13 @@ def run_continuous(args: Any) -> None:
             result = run_mining_campaign(args, campaign_id=campaign_id, experiment=experiment)
             quota_fails = 0
             _clear_state(log_dir)
+            # Phase 7：每轮 campaign 结束后把该轮 pool 快照 upsert 进 factor_nodes
+            # （source_system='alphaprobe'）——跨轮 lineage 持久化的核心写入点。
+            if memory_store is not None:
+                try:
+                    _upsert_pool_snapshot(memory_store, experiment, result)
+                except Exception as exc:
+                    logging.warning("pool snapshot upsert failed (non-blocking): %s", exc)
             logging.info(
                 "round %s finished pool_size=%s submitted=%s dir=%s",
                 round_no,
@@ -243,6 +340,71 @@ def run_continuous(args: Any) -> None:
         if sleep_seconds > 0:
             logging.info("sleep %ss before next round", sleep_seconds)
             time.sleep(sleep_seconds)
+
+
+def _upsert_pool_snapshot(
+    store: GlobalMemoryStore,
+    experiment: ExperimentConfig,
+    result: dict[str, Any],
+) -> None:
+    """每轮 campaign 结束后把该轮 pool 快照 upsert 进 factor_nodes。
+
+    source_system='alphaprobe'，signal id 去重（同 signal 跨轮 rediscovery
+    合并，不重复建节点）。snapshot 路径来自 export.campaign_dir，无 export
+    则跳过——pool 本体在 run_mining_campaign 内已释放。
+    """
+    export = result.get("export") or {}
+    snapshot = str(export.get("campaign_dir") or "").strip() or None
+    if not snapshot:
+        return
+    pool = _LAST_POOL[0]
+    if pool is None:
+        logging.info("no pool snapshot available (in-process) — skipped")
+        return
+    from alphaprobe.dedup import canonical_ast_hash, canonicalize_dsl, signal_equivalence_id
+    from alphaprobe.fe_bridge.dsl_convert import expression_to_dsl
+    from alphaprobe.delivery.exporter import _candidate_hash
+
+    campaign_id = str(experiment.delivery.resolved_campaign_id())
+    settings = experiment.delivery
+    created = rediscovered = 0
+    for i in range(pool.size):
+        expr = pool.exprs[i]
+        if expr is None:
+            continue
+        try:
+            formula = expression_to_dsl(expr)
+        except Exception:
+            continue
+        canonical = canonicalize_dsl(formula)
+        ok, existing = store.upsert_factor_node(
+            factor_id=f"ap_{campaign_id}_{i}",
+            canonical_formula=canonical,
+            canonical_ast_hash=canonical_ast_hash(formula),
+            signal_equivalence_id=signal_equivalence_id(formula),
+            parameter_family_id=None,
+            source_system="alphaprobe",
+            source_snapshot=campaign_id,
+            source_type="MINED",
+            exportable=True,
+            schema_json={
+                "fitness": None,
+                "candidate_hash": _candidate_hash(
+                    formula, settings.universe_id, settings.frequency_bucket
+                ),
+            },
+        )
+        if ok:
+            created += 1
+        elif existing is not None:
+            rediscovered += 1
+    logging.info(
+        "pool snapshot upsert campaign=%s created=%s rediscovered=%s snapshot=%s",
+        campaign_id,
+        created,
+        rediscovered,
+        snapshot,
+    )
 
 
 def build_continuous_parser() -> argparse.ArgumentParser:

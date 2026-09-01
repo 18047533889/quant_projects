@@ -351,8 +351,8 @@ A：测试前 `unset FACTOR_LAKE_ROOT`，避免污染 `data_access` 路径。
 | 文档 | 用途 |
 |------|------|
 | [`service/README.md`](../service/README.md) | **HTTP 服务完整使用**（HKUST 仓路径、接口、curl） |
-| [`IT_HANDOFF.md`](../IT_HANDOFF.md) | IT 对接与服务化边界 |
-| [`INTERFACE.md`](../INTERFACE.md) | 模块级接口清单 |
+| [`IT_HANDOFF.md`](archive/IT_HANDOFF.md) | IT 对接与服务化边界 |
+| [`INTERFACE.md`](archive/INTERFACE.md) | 模块级接口清单 |
 | https://github.com/HKUST-QUANT-SOCIETY/data_access | 读数层与其 HTTP `/v1/read` |
 
 ### 包内 README

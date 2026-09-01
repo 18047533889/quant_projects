@@ -1,0 +1,24 @@
+r2_evidence:
+  id: allfac-icthresh0-backtest-nan-hold-fix
+  date: '2026-08-31'
+  type: backtest-bugfix + full-chain rerun + archive
+  summary: 全量因子版 (IC_THRESH=0) 全链完成；修复 backtest_final_vectorbt wmat NaN→HOLD 致命 bug；存档 outputs/run_20260830_allfac
+  bug:
+    symptom: "2020-03-02 目标总市值超过组合净值: 12631193.00 > 10887747.20"
+    root_cause: backtest_final_vectorbt.py 把 wmat 的 0.0 replace 成 NaN。vectorbt_qs A 股 planner 里 NaN 语义 = "持有现有仓位"（execution.py ~L289 "NaN means hold the actual position"），weight==0 才是"平仓"。未被下一轮选中的旧持仓永远留存，desired_value = 残留仓 + 新目标，累加超过净值。
+    repro: NaN 版 w1 复现同数字报错；0 保留版通过 ✓（最小对拍两次）
+    secondary: 0 保留后全 0 行（无信号行）进入 wmat，signal_start 退到 2019-01-02，000985.CSI 2019 无行情 → build_nav_curves "基准指数在回测首日缺少收盘价"
+  fix: |
+    - 删除 wmat.replace(0.0, np.nan)
+    - 剔除全 0 行 wmat = wmat[(wmat != 0).any(axis=1)]
+    files_changed: [lightgbm_qs/scripts/backtest_final_vectorbt.py]
+    semantic: 0 = 平仓（自洽的定期调仓语义）；NaN 仅保留 planner 内部含义
+  rerun_results:
+    strategy: total 373.78% / ann 27.94% / sharpe 1.102 / mdd -34.47%
+    benchmark: 45.50% / 6.12% / 0.399 / -39.33%
+    excess: 225.63% / 20.56% / sharpe 1.472 / mdd -18.38%
+    oos_daily_ic: n=1324 mean 0.0320 / ICIR 0.206 / 57.6%>0; 2026 mean 0.0179 (114d)
+    yearly_excess: {2020: +47.7, 2021: +28.1, 2022: -1.9, 2023: +28.2, 2024: +22.1, 2025: +20.9, 2026: -7.2}
+  screenshot_check: 无过好迹象（Sharpe 1.10 低于 783fac 1.316，符合"全进模含噪声因子"预期，非泄露红旗）
+  archive: outputs/run_20260830_allfac/ (equity_curves_allfac_20260831.csv, combined_curve_allfac.png 三线同框线性轴, oos_daily_rank_ic_allfac.csv, metrics.txt)
+  conclusion: 2831 全量进模（IC_THRESH=0）跑通并存档。对比 783fac（1.316/1.880）: 全量版 Sharpe/超额下降，确认 rank_ic>0.015 筛选是正贡献，瓶颈不在因子数量。

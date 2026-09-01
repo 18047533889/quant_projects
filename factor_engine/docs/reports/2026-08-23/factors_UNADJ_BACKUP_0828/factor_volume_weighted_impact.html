@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>volume_weighted_impact</title>
+<style>
+body { font-family:"Segoe UI","Microsoft YaHei",system-ui,sans-serif; background:#eef2f7; color:#0f172a; margin:0 }
+main { max-width:900px; margin:0 auto; padding:24px }
+.card { background:#fff; border:1px solid #e2e8f0; border-radius:12px; padding:20px; margin:16px 0 }
+h1 { color:#1e4d8c } h2 { color:#1e4d8c; font-size:1rem; border-bottom:1px solid #e2e8f0; padding-bottom:6px }
+.notice { background:#fef2f2; border:1px solid #fecaca; border-left:4px solid #dc2626; padding:12px 16px; border-radius:8px; color:#991b1b }
+code { background:#f1f5f9; padding:2px 6px; border-radius:4px }
+.formula { background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:14px; font-family:monospace; word-break:break-all }
+</style></head><body><main>
+<a href="../index.html" style="color:#93c5fd">&#8592; 返回汇总</a>
+<h1>volume_weighted_impact</h1>
+<div class="card"><h2>⚠️ 数据不可评估</h2>
+<div class="notice">数据不足（面板常数/全NaN，无法计算 RankIC）</div>
+<p style="color:#64748b">该因子值在回测区间内无有效截面差异（面板常数或全部缺失），无法计算 RankIC / 十分层等指标。</p></div>
+<div class="card"><h2>📐 因子表达式 DSL</h2>
+<div class="formula">-(cs_weighted_mean(abs(ts_pct(close, 1)), volume))</div>
+<div style="margin-top:8px;font-size:0.8rem;color:#64748b">已转 FactorEngine（DSL 语法近似，落值用真实 Python code）</div></div>
+<div class="card"><h2>🐍 原始 Python 代码</h2>
+<pre style="background:#0f172a;color:#e2e8f0;padding:14px;border-radius:8px;overflow-x:auto;font-size:0.8rem">def factor_volume_weighted_impact(df):
+    df_copy = df.copy()
+    ret = df_copy['close_price'].pct_change().fillna(0.0)
+    abs_ret = ret.abs()
+    volume = df_copy['volume']
+    total_volume = volume.sum()
+    if total_volume > 0:
+        impact = (abs_ret * volume).sum() / total_volume
+    else:
+        impact = 0.0
+    day = pd.Timestamp(df_copy['TradingDay'].iloc[0])
+    out = pd.Series([impact], index=[day], name='factor_volume_weighted_impact')
+    return out</pre></div>
+
+<div class="card">
+  <h2>🧪 中性化前后 RankIC / RankICIR</h2>
+  <p style="font-size:0.82rem;color:#64748b;margin:0 0 10px">口径：每日横截面，对因子值做 行业(sw_l1)哑变量 + log(流通市值) 线性回归取残差，再算残差的 RankIC。</p>
+  
+  <table class="meta-table" style="margin-top:10px">
+    <thead><tr><th>指标</th><th>原始 Raw</th><th>中性化后</th><th>变化</th></tr></thead>
+    <tbody>
+      <tr><td>Mean RankIC</td><td>0.0000</td><td>0.0000</td><td>+0.0000</td></tr>
+      <tr><td>RankIC IR</td><td>0.000</td><td>0.000</td><td>+0.000</td></tr>
+      <tr><td>胜率</td><td>0.0%</td><td>0.0%</td><td>+0.0%</td></tr>
+      <tr><td>交易日</td><td>0</td><td>0</td><td>—</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="rationale" style="background:linear-gradient(90deg,#f0fdfa,#eff6ff);border-left-color:#b45309;margin:6px 0 10px;font-weight:600;color:var(--fg)">📉 2026 稳健性: 🟡 轻度衰减 · 2026 RankIC -0.0025 · Q2RankIC -0.0052 · 2026 多空累计 -4.0% · 最大回撤 -12.2% · 回撤116天</div>
+</main></body></html>
