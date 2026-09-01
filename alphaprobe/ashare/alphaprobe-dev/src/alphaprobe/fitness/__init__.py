@@ -2,6 +2,18 @@
 
 所有原始指标先 utility 化（robust z-score），不能直接 RankIC+Sharpe-MDD。
 Round Freeze：每 major round 冻结 calibrator，本轮同 raw metric → 同 utility。
+
+FactorFitness V2：六维核心（P/Q/L/S/N/R）+ 三惩罚（Cost/Complexity/Fragility）。
+- V2 实现在 ``fitness/factor_fitness.py``（总公式与配置化权重）、
+  ``fitness/components.py``（六维 components）、``fitness/penalties.py``（三惩罚）、
+  ``fitness/calibration.py``（U 与 MetricCalibrator 衔接）、``fitness/contracts.py``
+  （fitness 内部数据契约）。
+- 本文件保留 MetricCalibrator 与 ``compute_search_fitness``（legacy）公共签名，
+  保证 trainer/pool.py 等既有调用方 0 改动；``compute_search_fitness`` 内部走 V2。
+- D10 cliff 一致性：funnel 层（fitness/funnel.py）只做 gate（消费 metric
+  ``d10_cliff_penalty`` > 0 拒绝），Q 层（components.quantile_score）只做连续
+  惩罚（TopTailQuality = 1 - CollapsePenalty）。两处同源读同一 ``d10_cliff_penalty``
+  值，语义一致且不叠加。
 """
 
 from __future__ import annotations
@@ -17,12 +29,23 @@ class MetricCalibrator:
     """§13.1：U(m) = sigmoid(z_m / T_m)，z_m = (x-median)/(1.4826·MAD+ε)。
 
     越小越好项（MDD/DD Duration/TUW/Cost/Correlation/Turnover）→ U(-metric)。
+    冻结后 z-score 语义：lower_is_better 分支对标准 z 整体取负
+    （z = -( (x-median)/MAD )），保证更小 raw → 更高 utility。
+    未冻结（warmup）时走 ordinal 百分位模式（样本内 rank，0~1，
+    lower_is_better 反向），避免首轮 sigmoid(raw/T) 量纲不可比；
+    可用 seed_prior() 用历史分布预填样本后直接 freeze。
     streaming quantile sketch：不把全历史 metric 放内存。
     """
 
-    def __init__(self, temperature: float = 1.0, max_samples: int = 50_000) -> None:
+    def __init__(
+        self,
+        temperature: float = 1.0,
+        max_samples: int = 50_000,
+        min_warmup_n: int = 500,
+    ) -> None:
         self.T = temperature
         self.max_samples = max_samples
+        self.min_warmup_n = min_warmup_n
         self._samples: dict[str, list[float]] = {}
         self._frozen: dict[str, tuple[float, float]] = {}  # metric -> (median, mad)
         self.frozen_round: str | None = None
@@ -35,10 +58,18 @@ class MetricCalibrator:
         if len(buf) > self.max_samples:
             del buf[: len(buf) // 2]  # streaming 修剪，不存全历史
 
+    def seed_prior(self, stats: dict[str, list[float]]) -> None:
+        """用历史 evaluation 指标分布预填样本（如 seed library 10 万条）。"""
+        for m, values in (stats or {}).items():
+            for v in values:
+                self.observe(m, v)
+
     def freeze(self, round_id: str) -> None:
         import statistics
 
         for m, buf in self._samples.items():
+            if not buf:
+                continue
             med = statistics.median(buf)
             mad = statistics.median([abs(x - med) for x in buf])
             self._frozen[m] = (med, 1.4826 * mad)
@@ -47,13 +78,42 @@ class MetricCalibrator:
     def utility(self, metric: str, value: float | None, *, lower_is_better: bool = False) -> float:
         if value is None or not math.isfinite(value):
             return 0.0
-        v = -float(value) if lower_is_better else float(value)
-        med, mad = self._frozen.get(metric, (v, 0.0))
-        if self.frozen_round is None:
-            # 未冻结：退化为 identity 映射（首轮冷启动）
-            return self._sigmoid(v / max(self.T, EPS))
-        z = (v - med) / (mad + EPS)
-        return self._sigmoid(z / max(self.T, EPS))
+        v = float(value)
+        if self.frozen_round is not None:
+            frozen = self._frozen.get(metric)
+            if frozen is not None:
+                med, mad = frozen
+                z = (v - med) / (mad + EPS)
+                if lower_is_better:
+                    z = -z
+                return self._sigmoid(z / max(self.T, EPS))
+            # freeze 前从未观测过该 metric：退化为 ordinal（该样本仅自己）
+            return 0.5
+        # 未冻结：warmup —— 样本内 ordinal 百分位（0~1，lower_is_better 反向）
+        buf = self._samples.get(metric) or []
+        if not buf:
+            return 0.5
+        if lower_is_better:
+            return self._warmup_rank_ascending(v, buf)
+        return self._warmup_rank_descending(v, buf)
+
+    @staticmethod
+    def _warmup_rank_descending(value: float, buf: list[float]) -> float:
+        """值越大 utility 越高：u = count(x <= value)/n ∈ [1/n, 1]。"""
+        if not buf:
+            return 0.5
+        n = len(buf)
+        le = sum(1.0 for x in buf if x <= value)
+        return le / n
+
+    @staticmethod
+    def _warmup_rank_ascending(value: float, buf: list[float]) -> float:
+        """值越小 utility 越高：u = count(x >= value)/n ∈ [1/n, 1]。"""
+        if not buf:
+            return 0.5
+        n = len(buf)
+        ge = sum(1.0 for x in buf if x >= value)
+        return ge / n
 
     @staticmethod
     def _sigmoid(x: float) -> float:
@@ -64,6 +124,12 @@ class MetricCalibrator:
 
     def is_frozen(self) -> bool:
         return self.frozen_round is not None
+
+    def warmup_active(self, metric: str) -> bool:
+        """warmup 是否仍生效（未 freeze 或该 metric 样本不足 min_warmup_n）。"""
+        if self.frozen_round is not None:
+            return False
+        return len(self._samples.get(metric) or []) < self.min_warmup_n
 
 
 # ---------------------------------------------------------------------------
@@ -222,90 +288,58 @@ def compute_search_fitness(
     *,
     weights: FitnessWeights = DEFAULT_WEIGHTS,
 ) -> dict[str, float]:
-    """§13.2：F = 0.26P + 0.20Q + 0.25L + 0.11S + 0.18N - P_cost - P_cx - P_frag。"""
-    U = lambda m, v, lb=False: calibrator.utility(m, v, lower_is_better=lb)  # noqa: E731
+    """§13.2：F = 0.26P + 0.20Q + 0.25L + 0.11S + 0.18N - P_cost - P_cx - P_frag。
 
-    # P §14
-    p = weights.p_valid * U("rankic_valid", x.rankic_valid) + weights.p_subperiod * U(
-        "median_subperiod_rankic", x.median_subperiod_rankic
-    )
+    内部走 FactorFitness V2（六维 + 三惩罚），保持既有调用方签名 0 改动。
+    """
+    from alphaprobe.fitness.contracts import ComplexityInfo, EvaluationBundle
+    from alphaprobe.fitness.factor_fitness import factor_fitness_v2
 
-    # Q §15
-    m_rank = group_monotonicity(x.group_returns or [])
-    m_iso = isotonic_fit_quality(x.group_returns or [])
-    tail = None
-    if x.group_returns and len(x.group_returns) == 10:
-        cp = d10_cliff_penalty(x.group_returns)
-        if cp is not None:
-            tail = U("collapse_penalty", cp, lower_is_better=True)
-    q = (
-        weights.q_mrank * U("m_rank", m_rank)
-        + weights.q_miso * U("m_iso", m_iso)
-        + weights.q_top10 * U("top10_excess", x.top10_excess)
-        + weights.q_tail * (tail if tail is not None else 0.0)
-    )
-
-    # L §16.4
-    l = (
-        weights.l_sharpe * U("net_sharpe", x.net_sharpe)
-        + weights.l_sortino * U("sortino", x.sortino)
-        + weights.l_calmar * U("calmar", x.calmar)
-        + weights.l_mdd * U("mdd", x.mdd, lower_is_better=True)
-        + weights.l_dddur * U("max_dd_duration", x.max_dd_duration, lower_is_better=True)
-        + weights.l_tuw * U("tuw", x.tuw, lower_is_better=True)
-        + weights.l_q20sharpe * U("q20_rolling_sharpe", x.q20_rolling_sharpe)
-        + weights.l_posmonth * U("positive_month_ratio", x.positive_month_ratio)
-    )
-
-    # S §17
-    s = (
-        weights.s_icir * U("rankicir", x.rankicir)
-        + weights.s_q20ric * U("q20_rolling_rankic", x.q20_rolling_rankic)
-        + weights.s_possub * U("positive_subperiod_ratio", x.positive_subperiod_ratio)
-        + weights.s_retention * U("train_valid_retention", x.train_valid_retention)
-        + weights.s_worst * U("worst_subperiod_rankic", x.worst_subperiod_rankic)
-    )
-
-    # N §18
-    corr_novelty = None
-    if x.mean_top5_abs_corr is not None:
-        corr_novelty = U("mean_top5_abs_corr", x.mean_top5_abs_corr, lower_is_better=True)
-    n = (
-        weights.n_corr * (corr_novelty if corr_novelty is not None else 0.0)
-        + weights.n_struct * U("structural_novelty", x.structural_novelty)
-        + weights.n_residual * U("residual_rankic", x.residual_rankic)
-        + weights.n_schema * U("schema_novelty", x.schema_novelty)
-    )
-
-    # §19.2 ComplexityPenalty：0-24 免罚，25-40 小，41-64 中，>64 可 hard reject
-    cx = 0.0
-    if x.ast_nodes > 64:
-        cx = 0.03
-    elif x.ast_nodes > 40:
-        cx = 0.015
-    elif x.ast_nodes > 24:
-        cx = 0.005
-    # §19.3 FragilityPenalty cap 0.05
-    frag = min(0.05, 0.01 * len(x.fragility_flags))
-    # §19.1 CostPenalty cap 0.02（成本已在 net PnL 里，只轻罚）
-    cost_pen = min(weights.cost_max, 0.02 * U("turnover", x.turnover))
-
-    total = (
-        weights.P * p + weights.Q * q + weights.L * l + weights.S * s + weights.N * n
-        - cost_pen
-        - cx
-        - frag
+    # 构造 EvaluationBundle（显式优先；缺省字段 fallback 到 FitnessInputs 的既有语义）
+    _mb: dict[str, Any] = {}
+    _mb["rankic_valid"] = x.rankic_valid
+    _mb["median_subperiod_rankic"] = x.median_subperiod_rankic
+    if x.group_returns is not None:
+        _mb["group_returns"] = list(x.group_returns)
+    _mb["top10_excess"] = x.top10_excess
+    _mb["d10_minus_d1"] = x.d10_minus_d1
+    _mb["net_sharpe"] = x.net_sharpe
+    _mb["sortino"] = x.sortino
+    _mb["calmar"] = x.calmar
+    _mb["max_drawdown"] = x.mdd
+    _mb["max_dd_duration"] = x.max_dd_duration
+    _mb["tuw"] = x.tuw
+    _mb["q20_rolling_sharpe"] = x.q20_rolling_sharpe
+    _mb["positive_month_ratio"] = x.positive_month_ratio
+    _mb["rankicir"] = x.rankicir
+    _mb["q20_rolling_rankic"] = x.q20_rolling_rankic
+    _mb["positive_subperiod_ratio"] = x.positive_subperiod_ratio
+    _mb["train_valid_retention"] = x.train_valid_retention
+    _mb["worst_subperiod_rankic"] = x.worst_subperiod_rankic
+    _mb["rho_max"] = x.rho_max
+    _mb["mean_top5_abs_corr"] = x.mean_top5_abs_corr
+    _mb["structural_novelty"] = x.structural_novelty
+    _mb["residual_rankic"] = x.residual_rankic
+    _mb["schema_novelty"] = x.schema_novelty
+    _mb["turnover"] = x.turnover
+    # D10 同源：funnel gate 层只做 gate，Q 层只做连续惩罚（不叠加）
+    if x.group_returns is not None:
+        _mb["d10_cliff_penalty"] = d10_cliff_penalty(x.group_returns)
+    _r = factor_fitness_v2(
+        EvaluationBundle(_mb),
+        calibrator,
+        complexity=ComplexityInfo(nodes=int(x.ast_nodes or 0), depth=int(x.ast_depth or 0)),
     )
     return {
-        "P": p,
-        "Q": q,
-        "L": l,
-        "S": s,
-        "N": n,
-        "P_cost": cost_pen,
-        "P_complexity": cx,
-        "P_fragility": frag,
-        "search_fitness": total,
+        "P": _r.P,
+        "Q": _r.Q,
+        "L": _r.L,
+        "S": _r.S,
+        "N": _r.N,
+        "P_cost": _r.cost_penalty,
+        "P_complexity": _r.complexity_penalty,
+        "P_fragility": _r.fragility_penalty,
+        "search_fitness": _r.fitness,
     }
 
 

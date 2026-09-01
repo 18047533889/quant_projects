@@ -72,7 +72,7 @@ class IntegrityGate:
     """A single non-negotiable hard-reject gate (STEP 1).
 
     Attributes:
-        name: Gate name (e.g. "pit_violation", "future_leakage").
+        name: Gate name (e.g. "metric_coverage_nonzero", "integrity_evidence").
         passed: True when the treatment satisfies the gate.
         detail: Optional human-readable detail.
     """
@@ -276,37 +276,42 @@ class TreatmentDecisionPolicy:
         regardless of how good its metrics look.
         """
         gates: List[IntegrityGate] = [
+            # P0-FO-001: these scalar screens are METRIC SANITY gates only —
+            # coverage > 0 can never prove PIT, rank_ic > -1 can never prove the
+            # absence of future leakage, compute_cost >= 0 can never prove the
+            # execution was correct.  The load-bearing integrity verdicts come
+            # exclusively from the TreatmentIntegrityEvidence below.
             IntegrityGate(
-                "pit_violation",
+                "metric_coverage_nonzero",
                 metrics.coverage > 0.0,
-                "coverage must be positive (PIT integrity)",
+                "metric sanity: coverage must be positive",
             ),
             IntegrityGate(
-                "future_leakage",
-                metrics.rank_ic > -1.0,
-                "rank_ic must be > -1 (no inverted/leaked signal)",
+                "metric_coverage_floor",
+                metrics.coverage >= 0.5,
+                "metric sanity: coverage must be >= 0.5 (sufficient sample)",
             ),
             IntegrityGate(
-                "invalid_numeric",
+                "metric_coverage_bounded",
+                metrics.coverage <= 1.0,
+                "metric sanity: coverage must be <= 1.0",
+            ),
+            IntegrityGate(
+                "metric_numeric_finite",
                 math.isfinite(metrics.rank_ic)
                 and math.isfinite(metrics.icir)
                 and math.isfinite(metrics.turnover),
-                "core metrics must be finite",
+                "metric sanity: core metrics must be finite",
             ),
             IntegrityGate(
-                "insufficient_sample",
-                metrics.coverage >= 0.5,
-                "coverage must be >= 0.5 (sufficient sample)",
+                "metric_rank_ic_bounded",
+                metrics.rank_ic > -1.0,
+                "metric sanity: rank_ic must be > -1",
             ),
             IntegrityGate(
-                "broken_coverage",
-                metrics.coverage <= 1.0,
-                "coverage must be <= 1.0",
-            ),
-            IntegrityGate(
-                "invalid_execution",
+                "compute_cost_numeric_valid",
                 metrics.compute_cost >= 0.0,
-                "compute_cost must be >= 0",
+                "metric sanity: compute_cost must be >= 0",
             ),
         ]
         if not self.require_integrity_evidence:

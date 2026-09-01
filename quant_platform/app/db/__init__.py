@@ -20,7 +20,9 @@ from .postgres_backend import (
     PostgresBackendUnavailable,
     PostgresDb,
     PostgresDialect,
+    PostgresTransaction,
 )
+from .durable_store import RunStateStore, SqliteRunStateStore, PostgresRunStateStore
 
 __all__ = [
     "SCHEMA_DDL",
@@ -29,5 +31,9 @@ __all__ = [
     "SqliteDb",
     "PostgresDb",
     "PostgresDialect",
+    "PostgresTransaction",
     "PostgresBackendUnavailable",
+    "RunStateStore",
+    "SqliteRunStateStore",
+    "PostgresRunStateStore",
 ]

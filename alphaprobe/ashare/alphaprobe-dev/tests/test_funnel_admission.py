@@ -9,9 +9,15 @@ from pathlib import Path
 import pytest
 
 from alphaprobe.contracts import (
+    DateRange,
     EvaluationRecord,
+    ExperimentContext,
+    FactorCandidate,
+    FactorIdentity,
     FidelityLevel,
+    LabelSpec,
     RejectionReason,
+    ResearchSplitSpec,
 )
 from alphaprobe.dedup import GlobalSeenIndex
 from alphaprobe.fitness.funnel import FidelityFunnel, L0StaticCheck
@@ -23,6 +29,7 @@ from alphaprobe.pool.admission import (
     legacy_try_new_expr,
 )
 from alphaprobe.export.gate import build_export_decision
+from alphaprobe.research_protocol import SealedTestViolation
 
 
 def make_record(
@@ -42,6 +49,125 @@ def make_record(
         label_spec_hash="vwap_to_vwap_h20",
         created_at=datetime.now(timezone.utc),
     )
+
+
+# ---------------------------------------------------------------------------
+# LegacyCompatEvaluator：分段正确性 + LeakageGuard 不自杀
+# ---------------------------------------------------------------------------
+
+
+def _ctx_with_split() -> ExperimentContext:
+    return ExperimentContext(
+        run_id="r1",
+        round_id="rd1",
+        campaign_id="c1",
+        data_snapshot_id="snap",
+        universe_snapshot_id="uni",
+        split_spec=ResearchSplitSpec(
+            train=DateRange("2016-01-01", "2021-12-31"),
+            search_valid=DateRange("2022-01-01", "2023-12-31"),
+            audit_valid=DateRange("2024-01-01", "2024-06-30"),
+            sealed_test=DateRange("2025-01-01", "2026-07-31"),
+        ),
+    )
+
+
+def _cand(fid: str) -> FactorCandidate:
+    return FactorCandidate(
+        identity=FactorIdentity(
+            factor_id=fid,
+            canonical_formula=f"rank(ts_mean(close, 20))",
+            canonical_ast_hash=f"h_{fid}",
+            signal_equivalence_id=f"sig_{fid}",
+        ),
+        source="mined",
+    )
+
+
+def _make_evaluator(ctx):
+    from alphaprobe.integration.evaluator_client import LegacyCompatEvaluator
+
+    def eval_fn(formulas, *, fidelity, context):
+        return [{"rankic": 0.03, "mdd": 0.2}] * len(formulas)
+
+    return LegacyCompatEvaluator(eval_fn, context=ctx)
+
+
+def test_evaluator_segments_distinct_per_fidelity():
+    """L2/L3/L4 record.segment 各不相同且非 sealed 段（L1/L2 共用 train）。
+
+    原 bug：L2-L4 全部写死 "train"；修复后 L3=search_valid、L4=audit_valid，
+    L5=sealed。L1 scout 与 L2 都消费 train 段（低成本小窗先行）。
+    """
+    ctx = _ctx_with_split()
+    ev = _make_evaluator(ctx)
+    segments = {}
+    for f in (
+        FidelityLevel.L1_SCOUT,
+        FidelityLevel.L2_FULL_TRAIN,
+        FidelityLevel.L3_SEARCH_VALID,
+        FidelityLevel.L4_POOL_AUDIT,
+        FidelityLevel.L5_SEALED_TEST,
+    ):
+        recs = ev.evaluate([_cand(f"f_{f.value}")], fidelity=f)
+        segments[f.value] = recs[0].segment
+    sealed_start = ctx.split_spec.sealed_test.start
+    # L2/L3/L4 段两两不同，且都不是 sealed 段
+    train_s, sv_s, audit_s = (
+        segments[FidelityLevel.L2_FULL_TRAIN.value],
+        segments[FidelityLevel.L3_SEARCH_VALID.value],
+        segments[FidelityLevel.L4_POOL_AUDIT.value],
+    )
+    assert train_s != sv_s != audit_s != train_s
+    assert sealed_start not in (train_s, sv_s, audit_s)
+    assert segments[FidelityLevel.L5_SEALED_TEST.value] == sealed_start
+    # 段内容核对：L1/L2=train、L3=search_valid、L4=audit_valid
+    assert segments[FidelityLevel.L1_SCOUT.value] == "2016-01-01"
+    assert train_s == "2016-01-01"
+    assert sv_s == "2022-01-01"
+    assert audit_s == "2024-01-01"
+
+
+def test_evaluator_l5_sealed_segment_at_guard_level():
+    """L5 请求在 split_spec 存在时放行 guard 并打 sealed 段标签。
+
+    guard 语义（test_L5_may_read_after_freeze + 注释）：L5 允许读 sealed test；
+    sealed 门控在 SealedTestAccess(frozen=True) / funnel L5 gate，不在 evaluator。
+    """
+    ctx = _ctx_with_split()
+    ev = _make_evaluator(ctx)
+    recs = ev.evaluate([_cand("f_l5")], fidelity=FidelityLevel.L5_SEALED_TEST)
+    assert recs[0].segment == ctx.split_spec.sealed_test.start
+
+
+def test_evaluator_l5_blocked_only_via_frozen_gate():
+    """sealed 门控在 SealedTestAccess：frozen=False 必须抛。"""
+    from alphaprobe.research_protocol import SealedTestAccess
+
+    ctx = _ctx_with_split()
+    with pytest.raises(SealedTestViolation):
+        SealedTestAccess(ctx.split_spec, frozen=False)
+
+
+def test_evaluator_split_none_not_blocked():
+    """split_spec=None：不拦（保持现行为）。"""
+    from alphaprobe.integration.evaluator_client import LegacyCompatEvaluator
+
+    ctx = ExperimentContext(
+        run_id="r1", round_id="rd1", campaign_id="c1",
+        split_spec=None,
+    )
+    ev = _make_evaluator(ctx)
+    recs = ev.evaluate([_cand("f_no_split")], fidelity=FidelityLevel.L2_FULL_TRAIN)
+    assert recs[0].segment == "all"
+
+
+def test_evaluator_l0_no_segment():
+    """L0 静态检查不消费市场段 → record.segment='all'，不被拦。"""
+    ctx = _ctx_with_split()
+    ev = _make_evaluator(ctx)
+    recs = ev.evaluate([_cand("f_l0")], fidelity=FidelityLevel.L0_STATIC)
+    assert recs[0].segment == "all"
 
 
 # ---------------------------------------------------------------------------

@@ -1093,6 +1093,9 @@ def create_default_registry() -> TransformRegistry:
     # depend on later lagged observations: it is NOT prefix-invariant and is
     # therefore NOT production-causal. hp_filter / hp_decompose are research /
     # offline use only.
+    # The wavelet transforms are optional (they require PyWavelets, which is
+    # not installed in every deployment); when the module is unavailable the
+    # names are bound to None and skipped here so the registry still builds.
     for name, func in [
         ("bandpass_filter", bandpass_filter),
         ("extract_cycle", extract_cycle),
@@ -1103,6 +1106,8 @@ def create_default_registry() -> TransformRegistry:
         ("hp_filter", hp_filter),
         ("hp_decompose", hp_decompose),
     ]:
+        if func is None:
+            continue
         registry.register(
             name, func, TransformCategory.TEMPORAL,
             version="1.0.0",

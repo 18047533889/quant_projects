@@ -52,7 +52,7 @@ import hashlib
 import json
 import math
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from types import MappingProxyType
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
@@ -306,7 +306,7 @@ class TreatmentIntegrityEvidence:
     after_digest: str
     data_digest_algorithm: str = "sha256"
     produced_by: str = "factor_optimizer"
-    created_at: datetime = field(default_factory=datetime.now)
+    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
     def __post_init__(self) -> None:
         if not isinstance(self.treatment_id, str) or not self.treatment_id.strip():
@@ -606,7 +606,7 @@ def build_integrity_evidence(
         before_digest=before_digest,
         after_digest=after_digest,
         produced_by=produced_by,
-        created_at=created_at or datetime.now(),
+        created_at=created_at or datetime.now(timezone.utc),
     )
 
 

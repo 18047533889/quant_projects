@@ -14,6 +14,7 @@ from alphaprobe.research_protocol import (
     assert_sealed_test_zero_reads,
     reset_sealed_test_counters,
     sealed_test_read_count,
+    segment_for_fidelity,
 )
 
 SRC_ROOT = Path(__file__).resolve().parents[1] / "src" / "alphaprobe"
@@ -89,6 +90,86 @@ def test_sealed_access_requires_frozen():
         SealedTestAccess(spec, frozen=False)
     acc = SealedTestAccess(spec, frozen=True)
     assert acc.split_spec is spec
+
+
+# §3.3 assert_stage_permits 方向（stage 未达到 needed 级别即抛）
+def test_stage_permits_l2_cannot_consume_l4_metric():
+    spec = ResearchSplitSpec(
+        train=DateRange("2016-01-01", "2021-12-31"),
+        search_valid=DateRange("2022-01-01", "2023-12-31"),
+        audit_valid=None,
+        sealed_test=DateRange("2024-01-01", "2026-07-31"),
+    )
+    guard = LeakageGuard(spec)
+    with pytest.raises(SealedTestViolation):
+        guard.assert_stage_permits(
+            FidelityLevel.L2_FULL_TRAIN, FidelityLevel.L4_POOL_AUDIT
+        )
+    with pytest.raises(SealedTestViolation):
+        guard.assert_stage_permits(
+            FidelityLevel.L1_SCOUT, FidelityLevel.L2_FULL_TRAIN
+        )
+
+
+def test_stage_permits_l4_may_consume_l2_metric():
+    spec = ResearchSplitSpec(
+        train=DateRange("2016-01-01", "2021-12-31"),
+        search_valid=DateRange("2022-01-01", "2023-12-31"),
+        audit_valid=None,
+        sealed_test=DateRange("2024-01-01", "2026-07-31"),
+    )
+    guard = LeakageGuard(spec)
+    guard.assert_stage_permits(FidelityLevel.L4_POOL_AUDIT, FidelityLevel.L2_FULL_TRAIN)
+    guard.assert_stage_permits(FidelityLevel.L2_FULL_TRAIN, FidelityLevel.L2_FULL_TRAIN)
+
+
+# §3.3 segment_for_fidelity：L0-L4 各自合法段，sealed 仅 L5
+def test_segment_for_fidelity_mapping():
+    spec = ResearchSplitSpec(
+        train=DateRange("2016-01-01", "2021-12-31"),
+        search_valid=DateRange("2022-01-01", "2023-12-31"),
+        audit_valid=DateRange("2024-01-01", "2024-06-30"),
+        sealed_test=DateRange("2025-01-01", "2026-07-31"),
+    )
+    assert segment_for_fidelity(FidelityLevel.L0_STATIC, spec) is None
+    assert segment_for_fidelity(FidelityLevel.L1_SCOUT, spec) == spec.train
+    assert segment_for_fidelity(FidelityLevel.L2_FULL_TRAIN, spec) == spec.train
+    assert segment_for_fidelity(FidelityLevel.L3_SEARCH_VALID, spec) == spec.search_valid
+    assert segment_for_fidelity(FidelityLevel.L4_POOL_AUDIT, spec) == spec.audit_valid
+    assert segment_for_fidelity(FidelityLevel.L5_SEALED_TEST, spec) == spec.sealed_test
+    # split_spec=None → 不拦（放行）
+    assert segment_for_fidelity(FidelityLevel.L5_SEALED_TEST, None) is None
+
+
+def test_segment_for_fidelity_audit_valid_none_falls_back_to_search_valid():
+    spec = ResearchSplitSpec(
+        train=DateRange("2016-01-01", "2021-12-31"),
+        search_valid=DateRange("2022-01-01", "2023-12-31"),
+        audit_valid=None,
+        sealed_test=DateRange("2024-01-01", "2026-07-31"),
+    )
+    assert segment_for_fidelity(FidelityLevel.L4_POOL_AUDIT, spec) == spec.search_valid
+
+
+def test_guard_allows_legitimate_segments():
+    """L2 train / L3 search_valid / L4 audit_valid 请求自身合法段不得被拦。"""
+    spec = ResearchSplitSpec(
+        train=DateRange("2016-01-01", "2021-12-31"),
+        search_valid=DateRange("2022-01-01", "2023-12-31"),
+        audit_valid=DateRange("2024-01-01", "2024-06-30"),
+        sealed_test=DateRange("2025-01-01", "2026-07-31"),
+    )
+    guard = LeakageGuard(spec)
+    guard.assert_access_allowed(
+        stage=FidelityLevel.L2_FULL_TRAIN, segment=spec.train, caller="train"
+    )
+    guard.assert_access_allowed(
+        stage=FidelityLevel.L3_SEARCH_VALID, segment=spec.search_valid, caller="sv"
+    )
+    guard.assert_access_allowed(
+        stage=FidelityLevel.L4_POOL_AUDIT, segment=spec.audit_valid, caller="audit"
+    )
+    assert_sealed_test_zero_reads()
 
 
 # §3.2 静态 grep gate：新主链禁止 eval(/exec(

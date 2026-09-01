@@ -32,6 +32,59 @@ from __future__ import annotations
 import re as _re
 from typing import Any, Mapping
 
+#: Sentinel used to detect "attribute never assigned" so that a value genuinely
+#: set to ``None`` is still frozen as ``None`` (not treated as unset).
+_UNSET = object()
+
+
+def _deep_freeze(value: Any, *, _depth: int = 0) -> Any:
+    """Recursively copy a caller-owned structure into an immutable form.
+
+    P0-PLAT-003: the carried descriptor must never alias a mutable structure the
+    caller can keep mutating.  Every mapping / list / tuple is copied recursively
+    (frozen mapping -> ``MappingProxyType``, lists/tuples -> tuples, sets ->
+    ``frozenset``).  Scalars are returned as-is.  Cycles raise (a cyclic
+    descriptor is not a value object).
+    """
+    if _depth > 64:
+        raise ValueError("identity descriptor nesting too deep (>64); cycles?")
+    if isinstance(value, Mapping):
+        return _MappingProxy({k: _deep_freeze(v, _depth=_depth + 1) for k, v in value.items()})
+    if isinstance(value, (list, tuple)):
+        return tuple(_deep_freeze(v, _depth=_depth + 1) for v in value)
+    if isinstance(value, set):
+        return frozenset(_deep_freeze(v, _depth=_depth + 1) for v in value)
+    return value
+
+
+class _MappingProxy(Mapping[Any, Any]):
+    """Read-only recursive mapping (no ``copy`` escape, unlike MappingProxyType)."""
+
+    __slots__ = ("_data",)
+
+    def __init__(self, data: Mapping[Any, Any]) -> None:
+        self._data = dict(data)
+
+    def __getitem__(self, key: Any) -> Any:
+        return self._data[key]
+
+    def __iter__(self):
+        return iter(self._data)
+
+    def __len__(self) -> int:
+        return len(self._data)
+
+    def __repr__(self) -> str:  # pragma: no cover - trivial
+        return f"{type(self).__name__}({self._data!r})"
+
+    # A non-dict ``__copy__`` ensures ``copy.copy`` / ``copy.deepcopy`` return an
+    # immutable mapping again (never a caller-owned dict).
+    def __copy__(self):
+        return _MappingProxy(self._data)
+
+    def __deepcopy__(self, memo):
+        return _MappingProxy(self._data)
+
 __all__ = [
     "sha256_hex",
     "IdentityRef",
@@ -40,7 +93,11 @@ __all__ = [
     "EvaluationRef",
     "TreatmentRef",
     "require_non_empty",
+    "deep_freeze",
 ]
+
+# Alias for callers that want the recursive freezer directly.
+deep_freeze = _deep_freeze
 
 # 64-char lowercase hex sha256 — the *format* any domain digest must have to be
 # carried in a platform DTO. Validating the format is transport duty; the digest
@@ -81,15 +138,29 @@ class IdentityRef:
     A ref holds the domain package's own digest **verbatim**. ``hash`` returns
     that carried digest — there is no hashing anywhere in this
     module, so a platform process can never mint a domain identity of its own.
+
+    **Immutable value object** (P0-PLAT-003): after construction every attribute
+    is frozen.  ``_hash`` / ``_descriptor`` / subclass slots reject assignment
+    via :meth:`__setattr__` (the ``__slots__`` assignments during ``__init__``
+    go through ``object.__setattr__``).  The descriptor is recursively deep
+    frozen so a caller's mutable dict/list can never leak into (or out of) the
+    ref.
     """
 
     __slots__ = ("_hash", "_descriptor")
 
     _hash: str
+    _descriptor: _MappingProxy
 
     def __init__(self, digest: str, *, label: str = "digest") -> None:
         object.__setattr__(self, "_hash", sha256_hex(digest, label))
-        object.__setattr__(self, "_descriptor", {})
+        object.__setattr__(self, "_descriptor", _MappingProxy({}))
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        raise AttributeError(
+            f"{type(self).__name__} is a frozen value object; cannot assign "
+            f"{name!r} after construction"
+        )
 
     @property
     def hash(self) -> str:
@@ -98,8 +169,13 @@ class IdentityRef:
 
     @property
     def descriptor(self) -> Mapping[str, Any]:
-        """Opaque domain-provided descriptor (carried, never judged)."""
-        return dict(self._descriptor)
+        """Opaque domain-provided descriptor (carried, never judged).
+
+        Returns the frozen recursive mapping itself (never a mutable copy), so a
+        caller can neither mutate the ref through it nor grow a new mutable
+        alias.  Reads only.
+        """
+        return self._descriptor
 
     def __str__(self) -> str:  # pragma: no cover - trivial
         return self._hash
@@ -135,7 +211,7 @@ class FactorDefinitionRef(IdentityRef):
         object.__setattr__(
             self, "factor_version", require_non_empty(factor_version, "factor_version")
         )
-        object.__setattr__(self, "_descriptor", dict(descriptor or {}))
+        object.__setattr__(self, "_descriptor", _deep_freeze(descriptor or {}))
 
 
 class FactorValueRef(IdentityRef):

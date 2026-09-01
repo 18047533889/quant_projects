@@ -1,7 +1,7 @@
 """Admission decision records for mutation proposals."""
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
@@ -143,7 +143,7 @@ class AdmissionDecision:
     mutation_id: str
     trial_id: str
     verdict: AdmissionVerdict
-    decided_at: datetime = field(default_factory=datetime.now)
+    decided_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     criteria_used: Optional[AdmissionCriteria] = None
     rejection_reasons: List[RejectionReason] = field(default_factory=list)
     conditions: List[str] = field(default_factory=list)

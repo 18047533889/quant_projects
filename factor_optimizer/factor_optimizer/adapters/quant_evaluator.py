@@ -267,7 +267,7 @@ def create_mock_qe_adapter(*, execution_mode: ExecutionMode = ExecutionMode.RESE
     if execution_mode is not ExecutionMode.RESEARCH_ONLY:
         raise ValueError("mock QE adapters are research_only and cannot run in production")
     import uuid
-    from datetime import datetime
+    from datetime import datetime, timezone
 
     class MockQEAdapter:
         """Mock QE adapter for testing."""
@@ -309,7 +309,7 @@ def create_mock_qe_adapter(*, execution_mode: ExecutionMode = ExecutionMode.RESE
                 "diagnostics": {
                     "coverage": random.uniform(0.85, 0.98),
                     "warnings": [],
-                    "evaluated_at": datetime.now().isoformat(),
+                    "evaluated_at": datetime.now(timezone.utc).isoformat(),
                 },
                 "evidence_ref": eval_id,
             }

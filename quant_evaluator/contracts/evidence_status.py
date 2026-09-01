@@ -87,6 +87,18 @@ class EvidenceReasonCode(str, Enum):
     NUMERICAL_FAILURE = "numerical_failure"
     SERIALIZATION_FAILURE = "serialization_failure"
     NOT_IMPLEMENTED = "not_implemented"
+    # P0-QE-002: production-completeness reason codes (consumed verbatim by
+    # FA / FO / Platform — nobody re-invents "bad_pit" / "label_bad" strings).
+    TIMING_CONTRACT_VIOLATION = "timing_contract_violation"
+    SNAPSHOT_MISMATCH = "snapshot_mismatch"
+    UNIVERSE_MISMATCH = "universe_mismatch"
+    SPLIT_CONTAMINATION = "split_contamination"
+    PIT_INVALID = "pit_invalid"
+    CAUSALITY_INVALID = "causality_invalid"
+    SOURCE_ARTIFACT_HASH_MISMATCH = "source_artifact_hash_mismatch"
+    LABEL_DEFINITION_MISMATCH = "label_definition_mismatch"
+    LABEL_WINDOW_MISMATCH = "label_window_mismatch"
+    RETURN_BASIS_MISMATCH = "return_basis_mismatch"
 
     @classmethod
     def from_value(cls, value: object) -> "EvidenceReasonCode":
@@ -104,6 +116,92 @@ class EvidenceReasonCode(str, Enum):
         raise TypeError(
             f"EvidenceReasonCode.from_value expects str or EvidenceReasonCode, got "
             f"{type(value).__name__}"
+        )
+
+
+# P0-QE-001: status -> allowed reason families.  ``None`` means "any reason
+# code" (the status does not constrain the reason).  Enforced in
+# ``MetricEvidence.__post_init__`` so illegal combinations (COMPUTED +
+# artifact=None, FAILED + reason=OK, LABEL_NOT_MATURE + artifact, ...) fail
+# closed instead of silently passing.
+_STATUS_REASON_ALLOWED: dict[EvidenceStatus, frozenset[EvidenceReasonCode] | None] = {
+    EvidenceStatus.COMPUTED: frozenset({EvidenceReasonCode.OK}),
+    EvidenceStatus.NOT_COMPUTED: None,  # any reason (absent evidence)
+    EvidenceStatus.UNAVAILABLE: None,
+    EvidenceStatus.UNSUPPORTED: frozenset(
+        {
+            EvidenceReasonCode.UNSUPPORTED_METRIC,
+            EvidenceReasonCode.UNSUPPORTED_AXIS,
+            EvidenceReasonCode.UNSUPPORTED_OUTPUT_TYPE,
+            EvidenceReasonCode.NOT_IMPLEMENTED,
+        }
+    ),
+    EvidenceStatus.INSUFFICIENT_DATA: frozenset(
+        {
+            EvidenceReasonCode.MIN_PERIODS_NOT_MET,
+            EvidenceReasonCode.OBSERVATIONS_TOO_FEW,
+            EvidenceReasonCode.EMPTY_INPUT,
+        }
+    ),
+    EvidenceStatus.LABEL_NOT_MATURE: frozenset(
+        {EvidenceReasonCode.LABEL_NOT_YET_MATURE}
+    ),
+    EvidenceStatus.INVALID_EVIDENCE: frozenset(
+        {
+            EvidenceReasonCode.INVALID_EVIDENCE,
+            EvidenceReasonCode.TIMING_CONTRACT_VIOLATION,
+            EvidenceReasonCode.SNAPSHOT_MISMATCH,
+            EvidenceReasonCode.UNIVERSE_MISMATCH,
+            EvidenceReasonCode.SPLIT_CONTAMINATION,
+            EvidenceReasonCode.PIT_INVALID,
+            EvidenceReasonCode.CAUSALITY_INVALID,
+            EvidenceReasonCode.SOURCE_ARTIFACT_HASH_MISMATCH,
+            EvidenceReasonCode.LABEL_DEFINITION_MISMATCH,
+            EvidenceReasonCode.LABEL_WINDOW_MISMATCH,
+            EvidenceReasonCode.RETURN_BASIS_MISMATCH,
+            EvidenceReasonCode.SERIALIZATION_FAILURE,
+        }
+    ),
+    EvidenceStatus.FAILED: frozenset(
+        {
+            EvidenceReasonCode.KERNEL_FAILURE,
+            EvidenceReasonCode.NUMERICAL_FAILURE,
+            EvidenceReasonCode.SERIALIZATION_FAILURE,
+            EvidenceReasonCode.NOT_IMPLEMENTED,
+            EvidenceReasonCode.SOURCE_ARTIFACT_MISSING,
+        }
+    ),
+}
+
+#: Statuses whose artifact must be non-None when the status is set (COMPUTED
+#: always requires its canonical artifact — a computed status with no payload is
+#: a lie).
+_ARTIFACT_REQUIRED = frozenset({EvidenceStatus.COMPUTED})
+
+
+#: Public name for the compatibility matrix.  The ``__all__`` advertises
+#: ``STATUS_REASON_ALLOWED``; bind it here so
+#: ``from quant_evaluator.contracts.evidence_status import STATUS_REASON_ALLOWED``
+#: actually resolves (H task flagged the export gap).
+STATUS_REASON_ALLOWED: dict[EvidenceStatus, frozenset[EvidenceReasonCode] | None] = (
+    _STATUS_REASON_ALLOWED
+)
+
+
+class _STATUS_REASON_COMPATIBILITY:  # compatibility alias (P0-QE-001)
+    ALLOWED = _STATUS_REASON_ALLOWED
+
+
+def _validate_status_reason(status: EvidenceStatus, reason: EvidenceReasonCode) -> None:
+    """Fail closed when a status/reason combination is semantically illegal."""
+    allowed = _STATUS_REASON_ALLOWED.get(status)
+    if allowed is None:
+        return
+    if reason not in allowed:
+        raise ValueError(
+            f"illegal MetricEvidence combination: status={status.value!r} with "
+            f"reason_code={reason.value!r}; allowed for this status: "
+            f"{[r.value for r in sorted(allowed, key=lambda r: r.value)]}"
         )
 
 
@@ -152,6 +250,20 @@ class MetricEvidence:
             raise TypeError(
                 f"MetricEvidence.artifact must be a MetricArtifact or None, got "
                 f"{type(self.artifact).__name__}"
+            )
+        # P0-QE-001: status/reason compatibility + COMPUTED artifact requirement.
+        _validate_status_reason(self.status, self.reason_code)
+        if self.status in _ARTIFACT_REQUIRED and self.artifact is None:
+            raise ValueError(
+                "MetricEvidence status=COMPUTED requires a canonical artifact; "
+                "a computed status with artifact=None is a fabricated pass "
+                "(build via evidence_for_computed(artifact=...))"
+            )
+        if self.status is EvidenceStatus.LABEL_NOT_MATURE and self.artifact is not None:
+            raise ValueError(
+                "MetricEvidence status=LABEL_NOT_MATURE must carry artifact=None "
+                "(no IC exists until the forward label window elapses; never a "
+                "fabricated zero/artifact)"
             )
 
     @property
@@ -205,7 +317,14 @@ __all__ = [
     "evidence_for_computed",
     "evidence_for_not_computed",
     "evidence_for_label_not_mature",
+    "STATUS_REASON_ALLOWED",
+    "validate_status_reason",
 ]
+
+
+def validate_status_reason(status: EvidenceStatus, reason: EvidenceReasonCode) -> None:
+    """Public fail-closed check for a status/reason combination (P0-QE-001)."""
+    _validate_status_reason(status, reason)
 
 
 def evidence_for_computed(

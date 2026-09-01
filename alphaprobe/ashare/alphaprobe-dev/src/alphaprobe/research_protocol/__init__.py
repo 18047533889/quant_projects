@@ -23,6 +23,7 @@ __all__ = [
     "assert_sealed_test_zero_reads",
     "sealed_test_read_count",
     "reset_sealed_test_counters",
+    "segment_for_fidelity",
 ]
 
 
@@ -61,6 +62,34 @@ def reset_sealed_test_counters() -> None:
     _counter.reset()
 
 
+def segment_for_fidelity(
+    fidelity: FidelityLevel,
+    split_spec: ResearchSplitSpec | None,
+) -> DateRange | None:
+    """按保真度返回该 stage 合法消费的数据段（返回 None = 无市场段 / 无 split）。
+
+    L0 静态检查不消费市场回测段 → None；
+    L1 scout 用 train 段（先跑低成本小窗，后续可按需收窄）、L2 train、
+    L3 search_valid、L4 audit_valid（缺省回退 search_valid）、L5 sealed_test。
+    split_spec 为 None 时不拦（放行任意段），调用方保持现行为。
+    """
+    if split_spec is None:
+        return None
+    if fidelity == FidelityLevel.L0_STATIC:
+        return None
+    if fidelity == FidelityLevel.L1_SCOUT:
+        return split_spec.train
+    if fidelity == FidelityLevel.L2_FULL_TRAIN:
+        return split_spec.train
+    if fidelity == FidelityLevel.L3_SEARCH_VALID:
+        return split_spec.search_valid
+    if fidelity == FidelityLevel.L4_POOL_AUDIT:
+        return split_spec.audit_valid or split_spec.search_valid
+    if fidelity == FidelityLevel.L5_SEALED_TEST:
+        return split_spec.sealed_test
+    return None
+
+
 class LeakageGuard:
     """§3.3：所有 datasource access 注入。
 
@@ -95,9 +124,12 @@ class LeakageGuard:
             )
 
     def assert_stage_permits(self, stage: FidelityLevel, fidelity_needed: FidelityLevel) -> None:
-        """保真度不得越级：如 L2 不得消费 L4 才有的指标。"""
+        """保真度不得越级：stage 未达到 fidelity_needed 级别即抛。
+
+        例如 L2 消费 L4 才有的指标 → 抛；L4 消费 L2 指标 → 放行。
+        """
         order = list(FidelityLevel)
-        if order.index(stage) > order.index(fidelity_needed):
+        if order.index(stage) < order.index(fidelity_needed):
             raise SealedTestViolation(
                 f"fidelity escalation blocked: stage={stage.value} < needed={fidelity_needed.value}"
             )

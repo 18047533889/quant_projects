@@ -60,6 +60,23 @@ from factor_preprocess.neutralization.diagnostics_artifact import (
 )
 from factor_preprocess.neutralization.spec import NeutralizationSpec
 
+# Treatment identity split (P0-FP #103): SPEC vs MATERIALIZATION typed
+# identities + the A股 PIT/unit materialization contract.
+from factor_preprocess.contracts.treatment_spec import (
+    PriceBasis,
+    ValueUnit,
+    MaterializationSplit,
+    TreatmentSpecIdentity,
+    TreatmentMaterializationIdentity,
+    neutralization_spec_identity,
+    neutralization_binding,
+    ensure_materialization_split_valid,
+    materialize_identity,
+    spec_to_materialization_identity,
+    ASHARE_INDUSTRY_SCHEMA,
+    ASHARE_SIZE_DEFINITION,
+)
+
 # Deprecated compatibility view — NOT primary. Kept only so existing importers
 # keep working. See ``registry.policies`` for the canonical authority.
 from factor_preprocess.contracts.policy import PreprocessingPolicy, TransformSpec, TransformKind, TransformMode
@@ -71,6 +88,7 @@ from factor_preprocess.errors import (
     InvalidContractError,
     TimingContractError,
     SnapshotMismatchError,
+    TreatmentMaterializationError,
     CapabilityError,
     UnsupportedTransformError,
     OptionalDependencyMissing,
@@ -119,6 +137,19 @@ __all__ = [
     "NeutralizationDiagnostics",
     "RankDeficientResolution",
     "NeutralizationSpec",
+    # Treatment identity split (P0-FP #103)
+    "PriceBasis",
+    "ValueUnit",
+    "MaterializationSplit",
+    "TreatmentSpecIdentity",
+    "TreatmentMaterializationIdentity",
+    "neutralization_spec_identity",
+    "neutralization_binding",
+    "ensure_materialization_split_valid",
+    "materialize_identity",
+    "spec_to_materialization_identity",
+    "ASHARE_INDUSTRY_SCHEMA",
+    "ASHARE_SIZE_DEFINITION",
     # Core contracts
     "FittedState",
     "PreprocessingPolicy",
@@ -137,6 +168,7 @@ __all__ = [
     "InvalidContractError",
     "TimingContractError",
     "SnapshotMismatchError",
+    "TreatmentMaterializationError",
     "CapabilityError",
     "UnsupportedTransformError",
     "OptionalDependencyMissing",

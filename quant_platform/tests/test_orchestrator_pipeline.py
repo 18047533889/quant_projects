@@ -176,7 +176,13 @@ def _make_pipeline(
 
 def _eval_from(rank_ic: float | None, **extra) -> CandidateEvaluation:
     candidate_ref = extra.pop("candidate_ref", None) or "test-candidate"
-    evidence = {"candidate_ref": candidate_ref, "rank_ic": rank_ic}
+    evidence = {
+        "candidate_ref": candidate_ref,
+        "rank_ic": rank_ic,
+        "evidence_status": "computed",
+        "return_basis": "vwap_to_vwap",
+        "label_maturity": True,
+    }
     evidence.update(extra)
     return build_with_evidence(evidence)
 
@@ -208,6 +214,7 @@ def test_pipeline_happy_path_register_one_and_publishes_four_events():
                     "candidate_ref": cid,
                     "rank_ic": 0.09,
                     "evidence_status": "computed",
+                    "return_basis": "vwap_to_vwap",
                 }
             )
         if cid == bad_id:
@@ -216,6 +223,7 @@ def test_pipeline_happy_path_register_one_and_publishes_four_events():
                     "candidate_ref": cid,
                     "rank_ic": 0.008,  # below the AUTHORITY's 0.02 floor
                     "evidence_status": "computed",
+                    "return_basis": "vwap_to_vwap",
                 }
             )
         return _eval_from(None, candidate_ref=cid)
@@ -235,12 +243,12 @@ def test_pipeline_happy_path_register_one_and_publishes_four_events():
     assert report.num_evaluation_failed == 0
     assert report.num_registered == 1
 
-    statuses = {st["candidate_id"]: st["status"] for st in report.states}
+    statuses = {st.candidate_id: st.status for st in report.states}
     assert statuses[good_id] == "APPROVED"
     assert statuses[bad_id] == "REJECTED"
     assert any(
-        st["candidate_id"] == bad_id
-        and st["reason"] == PipelineStatusReason.QRP_GATE_REJECTED_RANK_IC
+        st.candidate_id == bad_id
+        and st.reason == PipelineStatusReason.QRP_GATE_REJECTED_RANK_IC
         for st in report.states
     )
 
@@ -286,6 +294,8 @@ def test_pipeline_workerloop_drains_all_milestone_events():
             {
                 "candidate_ref": str(getattr(candidate, "candidate_id", "")),
                 "rank_ic": 0.11,
+                "evidence_status": "computed",
+                "return_basis": "vwap_to_vwap",
             }
         )
 
@@ -331,6 +341,8 @@ def test_pipeline_duplicate_replay_skips_and_no_new_events():
             {
                 "candidate_ref": str(getattr(candidate, "candidate_id", "")),
                 "rank_ic": 0.12,
+                "evidence_status": "computed",
+                "return_basis": "vwap_to_vwap",
             }
         )
 
@@ -349,7 +361,7 @@ def test_pipeline_duplicate_replay_skips_and_no_new_events():
     assert second.num_events_published == 0
     assert len(outbox) == first_event_count  # no new outbox rows
     assert all(
-        st["reason"] == PipelineStatusReason.QRP_REPLAY_DETECTED for st in second.states
+        st.reason == PipelineStatusReason.QRP_REPLAY_DETECTED for st in second.states
     )
 
     # A DIFFERENT batch still runs normally.
@@ -373,6 +385,8 @@ def test_pipeline_duplicate_content_hash_reconcile_skipped():
             {
                 "candidate_ref": str(getattr(candidate, "candidate_id", "")),
                 "rank_ic": 0.1,
+                "evidence_status": "computed",
+                "return_basis": "vwap_to_vwap",
             }
         )
 
@@ -382,10 +396,10 @@ def test_pipeline_duplicate_content_hash_reconcile_skipped():
     assert report.num_duplicates == 1
     assert report.num_approved == 1
     duplicate_state = [
-        st for st in report.states if st["status"] == "DUPLICATE_SKIPPED"
+        st for st in report.states if st.status == "DUPLICATE_SKIPPED"
     ]
     assert len(duplicate_state) == 1
-    assert duplicate_state[0]["reason"] == PipelineStatusReason.QRP_DUPLICATE_SKIPPED
+    assert duplicate_state[0].reason == PipelineStatusReason.QRP_DUPLICATE_SKIPPED
 
 
 # --------------------------------------------------------------------------- #
@@ -403,7 +417,7 @@ def test_admission_is_delegated_to_the_injected_authority():
     authority = _DelegatedAuthority()
     pipeline = _make_pipeline(
         evaluate_candidate=lambda c, ctx: build_with_evidence(
-            {"candidate_ref": str(getattr(c, "candidate_id", "")), "rank_ic": 0.09}
+            {"candidate_ref": str(getattr(c, "candidate_id", "")), "rank_ic": 0.09, "evidence_status": "computed", "return_basis": "vwap_to_vwap"}
         ),
         admission_authority=authority,
     )
@@ -434,7 +448,7 @@ def test_admission_is_delegated_to_the_injected_authority():
 def test_admission_low_rank_ic_is_rejected_by_the_authority_not_the_platform():
     pipeline = _make_pipeline(
         evaluate_candidate=lambda c, ctx: build_with_evidence(
-            {"candidate_ref": str(getattr(c, "candidate_id", "")), "rank_ic": 0.005}
+            {"candidate_ref": str(getattr(c, "candidate_id", "")), "rank_ic": 0.005, "evidence_status": "computed", "return_basis": "vwap_to_vwap"}
         )
     )
     report = pipeline.run(
@@ -442,10 +456,10 @@ def test_admission_low_rank_ic_is_rejected_by_the_authority_not_the_platform():
     )
     assert report.num_approved == 0
     assert report.num_rejected == 1
-    rejected_states = [st for st in report.states if st["status"] == "REJECTED"]
+    rejected_states = [st for st in report.states if st.status == "REJECTED"]
     assert len(rejected_states) == 1
     # the reason code came FROM the authority, mapped onto the platform vocabulary
-    assert rejected_states[0]["reason"] == PipelineStatusReason.QRP_GATE_REJECTED_RANK_IC
+    assert rejected_states[0].reason == PipelineStatusReason.QRP_GATE_REJECTED_RANK_IC
     verdict = pipeline.verdicts()[0]
     assert verdict.decision == DECISION_REJECTED
 
@@ -462,7 +476,7 @@ def test_admission_shadowed_verdict_is_recorded_not_applied():
     registry = ArtifactRegistry()
     pipeline = _make_pipeline(
         evaluate_candidate=lambda c, ctx: build_with_evidence(
-            {"candidate_ref": str(getattr(c, "candidate_id", "")), "rank_ic": 0.3}
+            {"candidate_ref": str(getattr(c, "candidate_id", "")), "rank_ic": 0.3, "evidence_status": "computed", "return_basis": "vwap_to_vwap"}
         ),
         registry=registry,
         admission_authority=_Shadowing(),
@@ -475,9 +489,9 @@ def test_admission_shadowed_verdict_is_recorded_not_applied():
     assert report.num_shadowed == 1
     assert report.num_registered == 0
     assert registry.contains(_h("shadow")) is False
-    shadowed_states = [st for st in report.states if st["status"] == "SHADOWED"]
+    shadowed_states = [st for st in report.states if st.status == "SHADOWED"]
     assert len(shadowed_states) == 1
-    assert shadowed_states[0]["reason"] == PipelineStatusReason.QRP_ADMISSION_SHADOWED
+    assert shadowed_states[0].reason == PipelineStatusReason.QRP_ADMISSION_SHADOWED
 
 
 def test_platform_without_authority_fails_closed_and_never_fabricates_approval():
@@ -485,7 +499,7 @@ def test_platform_without_authority_fails_closed_and_never_fabricates_approval()
     # and records the machine-parseable absence reason.
     pipeline = _make_pipeline(
         evaluate_candidate=lambda c, ctx: build_with_evidence(
-            {"candidate_ref": str(getattr(c, "candidate_id", "")), "rank_ic": 0.5}
+            {"candidate_ref": str(getattr(c, "candidate_id", "")), "rank_ic": 0.5, "evidence_status": "computed", "return_basis": "vwap_to_vwap"}
         ),
         admission_authority=RefuseAdmission(),
     )
@@ -494,10 +508,10 @@ def test_platform_without_authority_fails_closed_and_never_fabricates_approval()
     )
     assert report.num_approved == 0
     assert report.num_rejected == 1
-    rejected_states = [st for st in report.states if st["status"] == "REJECTED"]
+    rejected_states = [st for st in report.states if st.status == "REJECTED"]
     assert len(rejected_states) == 1
     assert (
-        rejected_states[0]["reason"] == PipelineStatusReason.QRP_ADMISSION_AUTHORITY_ABSENT
+        rejected_states[0].reason == PipelineStatusReason.QRP_ADMISSION_AUTHORITY_ABSENT
     )
     verdict = pipeline.verdicts()[0]
     assert verdict.decision == DECISION_REJECTED
@@ -529,7 +543,7 @@ def test_admission_request_carries_domain_refs_only():
 
     pipeline = _make_pipeline(
         evaluate_candidate=lambda c, ctx: build_with_evidence(
-            {"candidate_ref": "irrelevant", "rank_ic": 0.2}
+            {"candidate_ref": "irrelevant", "rank_ic": 0.2, "evidence_status": "computed", "return_basis": "vwap_to_vwap"}
         ),
         admission_authority=_Capture(),
     )
@@ -554,6 +568,8 @@ def test_pipeline_rejection_path_no_registry_and_no_approved():
             {
                 "candidate_ref": str(getattr(candidate, "candidate_id", "")),
                 "rank_ic": 0.01,
+                "evidence_status": "computed",
+                "return_basis": "vwap_to_vwap",
             }
         )
 
@@ -590,7 +606,7 @@ def test_pipeline_evaluation_failure_marks_failed_and_registers_nothing():
     assert report.num_evaluation_failed == 1
     assert report.num_approved == 0
     assert report.num_registered == 0
-    failed_states = [st for st in report.states if st["status"] == "FAILED"]
+    failed_states = [st for st in report.states if st.status == "FAILED"]
     assert len(failed_states) == 1
 
 
@@ -617,6 +633,8 @@ def test_pipeline_feature_snapshot_and_retrain_diff_across_rounds():
             {
                 "candidate_ref": str(getattr(candidate, "candidate_id", "")),
                 "rank_ic": 0.1,
+                "evidence_status": "computed",
+                "return_basis": "vwap_to_vwap",
             }
         )
 
@@ -677,12 +695,20 @@ def test_pipline_report_immutable_builders():
     assert len(extended.states) == 1
     assert report.states == ()  # original untouched
     assert report.num_consumed == 0
+    # P0-PLAT-006: state items are immutable — a caller cannot rewrite a
+    # reported state, and caller-side dict mutation must not leak in.
+    with pytest.raises(AttributeError):
+        extended.states[0].status = "APPROVED"
+    state["status"] = "APPROVED"
+    assert extended.states[0].status == "NEW_CONSUMED"
+    assert extended.states[0].candidate_id == "c1"
+    assert extended.states[0].content_hash == _h("a")
+    assert extended.states[0].reason == "QRP_OK"
 
     replaced = extended.with_consumed(candidate_id="c2", content_hash=_h("b"), status="NEW_CONSUMED", reason="QRP_OK")
     assert replaced.num_consumed == 1
     assert replaced is not extended
     assert extended.num_consumed == 0
-    assert extended.states == (state,)
 
     with_ev = extended.with_event("evt-1")
     assert with_ev.num_events_published == 1
@@ -722,6 +748,8 @@ def test_pipeline_registry_register_idempotent_across_rounds():
             {
                 "candidate_ref": str(getattr(candidate, "candidate_id", "")),
                 "rank_ic": 0.1,
+                "evidence_status": "computed",
+                "return_basis": "vwap_to_vwap",
             }
         )
 

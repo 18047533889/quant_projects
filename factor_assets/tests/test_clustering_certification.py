@@ -226,6 +226,7 @@ def test_production_leiden_cluster_artifact_records_certification():
 
 
 def test_production_accepts_string_mode_and_exactly_certified_classes():
+    pytest.importorskip("igraph")
     graph = _two_triangles_graph()
     for completeness in CERTIFIED_COMPLETENESS_CLASSES:
         cert = _certify(graph, completeness=completeness)
@@ -265,6 +266,7 @@ def test_research_mode_keeps_relaxed_path():
 
 def test_research_mode_with_a_stale_graph_is_still_allowed():
     """Research mode never content-hash-checks: the relaxed path is retained."""
+    pytest.importorskip("igraph")
     graph = _two_triangles_graph()
     cert = _certify(graph)
     # Deliberately hand back a DIFFERENT graph than the one certified.

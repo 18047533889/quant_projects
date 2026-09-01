@@ -163,6 +163,12 @@ class AggregationFitArtifact:
     not change the computed weights: the weights are bound to the fit split,
     so a re-fit on a different split yields a different artifact (and a
     different weight set), never a silent mutation of the original.
+
+    The artifact is the FIT side of a fit/evaluate split: a subsequent
+    out-of-sample EVALUATION must record its OWN split reference (distinct
+    from ``fit_split_ref``) on the evaluation artifact, so a same-split
+    evaluation can never be mistaken for an out-of-sample one (P1-FA-013
+    aggregation OOS boundary).
     """
 
     fit_id: str
@@ -208,6 +214,49 @@ class AggregationFitArtifact:
             object.__setattr__(
                 self, "created_at", datetime.now(timezone.utc).isoformat()
             )
+
+    @classmethod
+    def make_oos_evaluation_ref(cls, fit_artifact: "AggregationFitArtifact") -> dict:
+        """Build the OOS evaluation reference that MUST accompany any
+        out-of-sample evaluation of a fit (P1-FA-013 aggregation OOS boundary).
+
+        A fit may only be evaluated on a split that is NOT the fit split.
+        The returned reference records both the fit split (provenance) and
+        requires the evaluation to carry its own distinct split — see
+        :func:`validate_oos_evaluation`.
+        """
+        return {
+            "fit_id": fit_artifact.fit_id,
+            "fit_split_ref": fit_artifact.fit_split_ref,
+        }
+
+    @staticmethod
+    def validate_oos_evaluation(
+        fit_artifact: "AggregationFitArtifact",
+        *,
+        eval_split_ref: Optional[str],
+        eval_window_ref: Optional[str] = None,
+        eval_snapshot_ref: Optional[str] = None,
+    ) -> str:
+        """Validate that an evaluation of a fit is genuinely out-of-sample.
+
+        A same-split evaluation is LEAKAGE: the fit was trained on that split,
+        so evaluating on it cannot be out-of-sample.  Raises ``ValueError``
+        when ``eval_split_ref`` is missing or equals the fit split; returns
+        the validated ``eval_split_ref`` otherwise.
+        """
+        if not eval_split_ref:
+            raise ValueError(
+                "an out-of-sample evaluation of an aggregation fit requires "
+                "eval_split_ref — evaluating on the fit split would be leakage"
+            )
+        if eval_split_ref == fit_artifact.fit_split_ref:
+            raise ValueError(
+                f"out-of-sample evaluation split {eval_split_ref!r} equals the "
+                f"fit split {fit_artifact.fit_split_ref!r}; fitting and "
+                "evaluating on the SAME split is leakage — use a held-out split"
+            )
+        return eval_split_ref
 
     def to_dict(self) -> dict:
         return {

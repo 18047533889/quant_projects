@@ -81,6 +81,7 @@ from quant_platform.app.worker.publish import InMemoryOutbox
 __all__ = [
     "PipelineConfig",
     "PipelineReport",
+    "PipelineStateItem",
     "PipelineStatusReason",
     "CandidateEvaluation",
     "Pipeline",
@@ -137,6 +138,53 @@ class PipelineStatusReason:
         return frozenset(v for k, v in vars(cls).items() if k.startswith("QRP_"))
 
 
+class PipelineStateItem:
+    """Immutable per-candidate terminal state (P0-PLAT-006).
+
+    ``PipelineReport.states`` used to be ``tuple[dict[str, str], ...]`` — the
+    dicts were caller-owned and mutable, so a caller could mutate a reported
+    state after the fact.  A frozen dataclass makes each state item immutable.
+    """
+
+    __slots__ = ("candidate_id", "content_hash", "status", "reason")
+
+    candidate_id: str
+    content_hash: str
+    status: str
+    reason: str
+
+    def __init__(self, candidate_id: str, content_hash: str, status: str, reason: str) -> None:
+        if not isinstance(candidate_id, str) or not candidate_id:
+            raise ValueError("candidate_id must be a non-empty string")
+        if not isinstance(content_hash, str) or not content_hash:
+            raise ValueError("content_hash must be a non-empty string")
+        if not isinstance(status, str) or not status:
+            raise ValueError("status must be a non-empty string")
+        if not isinstance(reason, str) or not reason:
+            raise ValueError("reason must be a non-empty string")
+        object.__setattr__(self, "candidate_id", candidate_id)
+        object.__setattr__(self, "content_hash", content_hash)
+        object.__setattr__(self, "status", status)
+        object.__setattr__(self, "reason", reason)
+
+    def __setattr__(self, name: str, value: object) -> None:
+        raise AttributeError(f"PipelineStateItem is a frozen value object; cannot assign {name!r}")
+
+    def to_dict(self) -> dict[str, str]:
+        return {
+            "candidate_id": self.candidate_id,
+            "content_hash": self.content_hash,
+            "status": self.status,
+            "reason": self.reason,
+        }
+
+    def __repr__(self) -> str:  # pragma: no cover - trivial
+        return (
+            f"PipelineStateItem(candidate_id={self.candidate_id!r}, "
+            f"status={self.status!r}, reason={self.reason!r})"
+        )
+
+
 @dataclass(frozen=True)
 class PipelineReport:
     """Immutable result of one pipeline run.
@@ -165,10 +213,10 @@ class PipelineReport:
     feature_snapshot_version: str | None = None
     feature_set_artifacts: tuple[FeatureSetArtifact, ...] = ()
 
-    #: Per-candidate terminal states: dicts with ``candidate_id`` /
-    #: ``content_hash`` / ``status`` (APPROVED / REJECTED / DUPLICATE_SKIPPED /
-    #: FAILED / NEW_CONSUMED) and a machine-parseable ``reason``.
-    states: tuple[dict[str, str], ...] = ()
+    #: Per-candidate terminal states: immutable ``PipelineStateItem`` records
+    #: (candidate_id / content_hash / status / reason).  P0-PLAT-006: never a
+    #: mutable dict — a caller must not be able to rewrite a reported state.
+    states: tuple[PipelineStateItem, ...] = ()
     #: ids of candidates consumed as NEW (reconciled + scheduled), in order.
     consumed_ids: tuple[str, ...] = ()
     #: EventEnvelope event_ids appended to the outbox.
@@ -204,12 +252,12 @@ class PipelineReport:
         content_hash: str,
     ) -> "PipelineReport":
         """New report with one per-candidate state appended (never mutates)."""
-        item = {
-            "candidate_id": candidate_id,
-            "content_hash": content_hash,
-            "status": status,
-            "reason": reason,
-        }
+        item = PipelineStateItem(
+            candidate_id=candidate_id,
+            content_hash=content_hash,
+            status=status,
+            reason=reason,
+        )
         return replace(self, states=self.states + (item,))
 
     def with_consumed(
@@ -397,21 +445,35 @@ def build_with_evidence(evidence: Mapping[str, Any]) -> CandidateEvaluation:
     candidate_ref = str(evidence.get("candidate_ref") or "")
     if not candidate_ref:
         raise ValueError("build_with_evidence: candidate_ref is required")
-    maturity = bool(evidence.get("label_maturity", True))
+    # P0-PLAT-007: no optimistic defaults.  A label that has not matured must
+    # never be dressed up as computed evidence; the carrier either has real
+    # evidence or says so explicitly.
+    maturity = evidence.get("label_maturity")
+    if maturity is None:
+        maturity = True
+    maturity = bool(maturity)
     if not maturity:
         raise ValueError(
             "build_with_evidence: label_maturity must be True for computed evidence"
+        )
+    evidence_status = evidence.get("evidence_status")
+    if not evidence_status:
+        raise ValueError(
+            "build_with_evidence: evidence_status is required (no 'computed' "
+            "default — a not-computed carrier must say 'not_computed')"
+        )
+    return_basis = evidence.get("return_basis")
+    if not return_basis:
+        raise ValueError(
+            "build_with_evidence: return_basis is required (no 'vwap_to_vwap' "
+            "default — the basis must be carried explicitly)"
         )
     return CandidateEvaluation(
         candidate_ref=candidate_ref,
         rank_ic=evidence.get("rank_ic"),
         label_maturity=True,
-        evidence_status=str(
-            evidence.get("evidence_status") or "computed"
-        ),
-        return_basis=str(
-            evidence.get("return_basis") or "vwap_to_vwap"
-        ),
+        evidence_status=str(evidence_status),
+        return_basis=str(return_basis),
         evidence_ref=evidence.get("evidence_ref"),
         evaluation_ref=evidence.get("evaluation_ref"),
         treatment_optimization_ref=evidence.get("treatment_optimization_ref"),
@@ -472,6 +534,12 @@ class Pipeline:
         records it. Default: :class:`RefuseAdmission` (fail closed — an
         uncomposed pipeline approves nothing).
     config : sizing / policy switches.
+    run_storage : OPTIONAL durable anti-replay backing store (P0-PLAT-004). A
+        :class:`~quant_platform.app.db.durable_store.RunStateStore` (SQLite or
+        Postgres) persists processed batch fingerprints + consumed candidates
+        so a PROCESS RESTART does not let a replayed batch through anti-replay.
+        When ``None`` (default) the pipeline keeps its anti-replay state in
+        memory only — EXACTLY today's behavior.
 
     ``run`` is deterministic and idempotent in the sense that replaying the same
     batch short-circuits through ``batch_fingerprint`` anti-replay.
@@ -487,6 +555,7 @@ class Pipeline:
         admission_authority: AdmissionAuthority | None = None,
         config: PipelineConfig | None = None,
         worker_id: str = "qrpp5-worker",
+        run_storage: Any | None = None,
     ) -> None:
         self.registry = registry if registry is not None else ArtifactRegistry()
         self.outbox = outbox if outbox is not None else InMemoryOutbox()
@@ -496,6 +565,9 @@ class Pipeline:
         #: the delegated decision-maker (domain-owned). Never None: without a
         #: composed authority the pipeline refuses admission (fail closed).
         self.admission_authority = admission_authority if admission_authority is not None else RefuseAdmission()
+        #: OPTIONAL durable backing store for anti-replay state (P0-PLAT-004).
+        #: ``None`` = pure in-memory (today's behavior, unchanged).
+        self.run_storage = run_storage
 
         self._processed_fingerprints: set[str] = set()
         self._consumed_manifests: list[Any] = []
@@ -503,6 +575,18 @@ class Pipeline:
         self._run_counter = 0
         self._evaluation_by_job: dict[str, CandidateEvaluation] = {}
         self._verdict_by_job: dict[str, AdmissionVerdict] = {}
+
+        # P0-PLAT-004: seed anti-replay state from the durable store so a
+        # process restart preserves it. Fingerprints recorded by past runs make
+        # a replayed batch short-circuit; consumed content hashes make an
+        # already-consumed candidate reconcile as a duplicate (never re-enters
+        # the NEW path).
+        if run_storage is not None:
+            for fp in run_storage.consumed_fingerprints():
+                self._processed_fingerprints.add(fp)
+            self._consumed_hash_seed = set(run_storage.consumed_hashes())
+        else:
+            self._consumed_hash_seed = set()
 
     # ---- queries -------------------------------------------------------------
     @property
@@ -559,7 +643,15 @@ class Pipeline:
 
         # 2. Anti-replay: a batch whose fingerprint we already consumed is a
         #    replay — short-circuit (no new events, all candidates skipped).
-        if fingerprint in self._processed_fingerprints:
+        #    P0-PLAT-004: with a durable store the check is also durable — a
+        #    fingerprint recorded by a PREVIOUS process restarts the pipeline
+        #    with the same in-memory short-circuit (the store is consulted for
+        #    any fingerprint the in-memory seed may have missed).
+        if fingerprint in self._processed_fingerprints or (
+            self.run_storage is not None and self.run_storage.has_fingerprint(fingerprint)
+        ):
+            if self.run_storage is not None:
+                self._processed_fingerprints.add(fingerprint)
             report = PipelineReport(batch_fingerprint=fingerprint).as_replayed()
             for manifest in manifests:
                 report = report.with_duplicate(
@@ -581,8 +673,17 @@ class Pipeline:
 
         # Known registry for reconciliation: every manifest this Pipeline has
         # consumed across past runs (a duplicate content/semantic identity is a
-        # replay of an earlier consumed candidate).
+        # replay of an earlier consumed candidate). P0-PLAT-004: with a durable
+        # store the consumed-manifest known-set is ALSO seeded from the store
+        # (all consumed content hashes), so a candidate consumed by a PREVIOUS
+        # process still reconciles as a duplicate.
         known = list(self._consumed_manifests)
+        if self.run_storage is not None:
+            known_hash_entries: list[Any] = []
+            for manifest in manifests:
+                if manifest.factor_spec_sha256 in self._consumed_hash_seed:
+                    known_hash_entries.append(manifest)
+            known = known + known_hash_entries
         reconcile = reconcile_candidates(manifests, known)
 
         # Per-candidate classification via the dual-key reconcile logic.
@@ -648,6 +749,15 @@ class Pipeline:
                 reason=PipelineStatusReason.QRP_OK,
             )
             self._consumed_manifests.append(manifest)
+            # P0-PLAT-004: durably record the NEW consumption so a process
+            # restart still anti-replays this candidate.
+            if self.run_storage is not None:
+                self.run_storage.record_consumed(
+                    candidate_id=str(manifest.candidate_id),
+                    content_hash=ch,
+                    semantic=str(manifest.semantic_family_hint or ""),
+                    consumed_at=now,
+                )
 
             # Schedule the candidate on the JobRunner (treatment + evaluation).
             job_key = (
@@ -767,6 +877,12 @@ class Pipeline:
             report = self._snapshot_feature_set(report, library_snapshot)
 
         self._processed_fingerprints.add(fingerprint)
+        # P0-PLAT-004: durably record the batch fingerprint after the batch so
+        # a process restart still anti-replays THIS batch. The store is
+        # idempotent — a crash mid-run that partially consumed candidates and a
+        # replay of the same batch records the fingerprint again harmlessly.
+        if self.run_storage is not None:
+            self.run_storage.record_fingerprint(fingerprint)
         # Anti-replay must survive run() returning: a replay of THIS batch is
         # caught at the top of the next run() via _processed_fingerprints.
         if hasattr(report, "num_replayed") and report.num_replayed:

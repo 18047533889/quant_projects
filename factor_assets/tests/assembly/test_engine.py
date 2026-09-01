@@ -1,11 +1,14 @@
 from factor_assets.assembly import FactorSetAssembler
 from factor_assets.contracts.asset import AssetMetadata, FactorAsset
+from factor_assets.contracts.assembly_evidence import AssemblyPolicy
 from factor_assets.contracts.factor_set import FactorSetSpec
 from factor_assets.contracts.lifecycle import LifecycleState
 from factor_assets.contracts.lineage import LineageRef
 from factor_assets.contracts.evidence_ref import EvidenceBundleRef
 from factor_assets.selection import SelectionDecision, SelectionReason
 from types import MappingProxyType
+
+import pytest
 
 
 def make_asset(factor_id, *, frequency="daily", domains=("price",), state=LifecycleState.APPROVED):
@@ -689,3 +692,87 @@ def test_validation_status_orthogonal_to_lifecycle():
     legacy = make_asset("F2")
     assert legacy.validation_status == ValidationStatus.UNVALIDATED
     assert legacy.health_state == HealthState.ACTIVE
+
+
+# ---------------------------------------------------------------------------
+# AssemblyPolicy runtime enforcement (P1-FA-013 / audit item 3)
+# ---------------------------------------------------------------------------
+
+
+def test_assembly_policy_max_per_microcluster_is_enforced():
+    """A supplied AssemblyPolicy is a budget contract, not just ranking
+    weights: per-microcluster budget (max_per_microcluster) must actually cap
+    how many members share one grouping.  A policy that is accepted but never
+    applied is the audit bug."""
+    # All three assets share the same family (microcluster grouping).
+    assets = [make_asset("F1"), make_asset("F2"), make_asset("F3")]
+    # Override the family so F3 shares it too — make_asset gives F3 family-b.
+    from dataclasses import replace as _replace
+
+    assets = [_replace(a, family="shared") for a in assets]
+    spec = make_spec("set-policy-1", "Policy", "manual", max_factors=10)
+    result = FactorSetAssembler().assemble(
+        spec,
+        assets,
+        selection_decisions=[make_decision("F1"), make_decision("F2"), make_decision("F3")],
+        assembly_policy=AssemblyPolicy(
+            "pol-micro", "1.0", max_per_microcluster=1, max_per_macrocluster=5
+        ),
+    )
+    # Only ONE member may be admitted from the shared microcluster.
+    assert result.factor_ids == ("F1",)
+
+
+def test_assembly_policy_max_per_macrocluster_is_enforced():
+    """Per-macrocluster budget (max_per_macrocluster) caps how many members
+    share the macro grouping."""
+    from dataclasses import replace as _replace
+
+    assets = [make_asset("F1"), make_asset("F2"), make_asset("F3")]
+    # F1/F2 share macro "mom"; F3 is its own macro bucket.
+    assets = [_replace(a, family="mom" if a.factor_id != "F3" else "vol") for a in assets]
+    spec = make_spec("set-policy-2", "Policy", "manual", max_factors=10)
+    result = FactorSetAssembler().assemble(
+        spec,
+        assets,
+        selection_decisions=[make_decision("F1"), make_decision("F2"), make_decision("F3")],
+        assembly_policy=AssemblyPolicy(
+            "pol-macro", "1.0", max_per_microcluster=1, max_per_macrocluster=1
+        ),
+    )
+    # At most one member from the "mom" macro bucket; F3 stays (its own bucket).
+    assert result.factor_ids == ("F1", "F3")
+
+
+def test_assembly_policy_capacity_budget_is_enforced():
+    """capacity_budget caps the total assembled set before max_factors."""
+    spec = make_spec("set-policy-3", "Policy", "manual", max_factors=10)
+    result = FactorSetAssembler().assemble(
+        spec,
+        [make_asset("F1"), make_asset("F2"), make_asset("F3")],
+        selection_decisions=[make_decision("F1"), make_decision("F2"), make_decision("F3")],
+        assembly_policy=AssemblyPolicy(
+            "pol-cap", "1.0", max_per_microcluster=5, max_per_macrocluster=5,
+            capacity_budget=2,
+        ),
+    )
+    assert result.factor_ids == ("F1", "F2")
+
+
+def test_assembly_policy_without_policy_preserves_legacy_behaviour():
+    """No policy supplied -> no budget is silently applied (a default policy
+    must not cap the assembly behind the caller's back)."""
+    spec = make_spec("set-nopolicy", "NoPolicy", "manual", max_factors=10)
+    result = FactorSetAssembler().assemble(
+        spec,
+        [make_asset("F1"), make_asset("F2"), make_asset("F3")],
+        selection_decisions=[make_decision("F1"), make_decision("F2"), make_decision("F3")],
+    )
+    assert result.factor_ids == ("F1", "F2", "F3")
+
+
+def test_assembly_policy_rejects_inverted_cluster_budgets():
+    """A microcluster is a subset of a macrocluster — a policy with
+    max_per_microcluster > max_per_macrocluster fails closed at construction."""
+    with pytest.raises(ValueError, match="max_per_microcluster must be <= "):
+        AssemblyPolicy("pol-bad", "1.0", max_per_microcluster=3, max_per_macrocluster=2)

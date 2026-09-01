@@ -14,7 +14,7 @@ lose a burned-budget record.
 
 import hashlib
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
 from factor_optimizer.contracts.trial import Trial, TrialStatus
@@ -37,13 +37,22 @@ TRIAL_STATUS_OUTCOMES = frozenset(TRIAL_OUTCOMES)
 
 @dataclass(frozen=True)
 class LedgerEntry:
-    """An immutable, append-only record of a single proposal attempt."""
+    """An immutable, append-only record of a single proposal attempt.
+
+    P0-FO-004: every entry carries ``previous_entry_hash`` and ``entry_hash`` so
+    a truncated or reordered ledger is detected by re-verifying the chain.  The
+    hashes cover the entry's own semantic fields (sequence / status / trial_id /
+    failure_reason / recorded_at) PLUS the previous entry's hash, so deleting
+    any tail entry breaks every subsequent hash.
+    """
 
     sequence: int
     status: TrialStatus
     trial_id: Optional[str] = None
     failure_reason: Optional[str] = None
-    recorded_at: datetime = field(default_factory=datetime.now)
+    recorded_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    previous_entry_hash: str = "0" * 64
+    entry_hash: str = ""
 
     def __post_init__(self) -> None:
         if isinstance(self.sequence, bool) or not isinstance(self.sequence, int):
@@ -58,6 +67,22 @@ class LedgerEntry:
             raise TypeError("ledger entry failure_reason must be a string or None")
         if not isinstance(self.recorded_at, datetime):
             raise TypeError("ledger entry recorded_at must be a datetime")
+        if self.entry_hash:
+            expected = self.compute_entry_hash()
+            if self.entry_hash != expected:
+                raise ValueError("LedgerEntry.entry_hash does not match its content")
+        else:
+            object.__setattr__(self, "entry_hash", self.compute_entry_hash())
+
+    def _hash_payload(self) -> bytes:
+        return (
+            f"{self.sequence}|{self.status_value}|{self.trial_id}|"
+            f"{self.failure_reason}|{self.recorded_at.isoformat()}|"
+            f"{self.previous_entry_hash}"
+        ).encode("utf-8")
+
+    def compute_entry_hash(self) -> str:
+        return hashlib.sha256(self._hash_payload()).hexdigest()
 
     @property
     def status_value(self) -> str:
@@ -72,6 +97,8 @@ class LedgerEntry:
             "trial_id": self.trial_id,
             "failure_reason": self.failure_reason,
             "recorded_at": self.recorded_at.isoformat(),
+            "previous_entry_hash": self.previous_entry_hash,
+            "entry_hash": self.entry_hash,
         }
 
     @classmethod
@@ -83,8 +110,9 @@ class LedgerEntry:
         if isinstance(recorded, str):
             values["recorded_at"] = datetime.fromisoformat(recorded)
         elif recorded is None:
-            values["recorded_at"] = datetime.now()
-        return cls(**values)
+            values["recorded_at"] = datetime.now(timezone.utc)
+        entry = cls(**values)
+        return entry
 
     def __str__(self) -> str:
         return (
@@ -95,11 +123,20 @@ class LedgerEntry:
 
 
 class TrialLedger:
-    """Append-only, order-validated record of every proposal attempt."""
+    """Append-only, hash-chained, order-validated record of every proposal attempt.
+
+    P0-FO-004: the ledger is a hash chain — every entry's ``entry_hash`` covers
+    the previous entry's hash, so a truncated tail or a reordered entry breaks
+    re-verification.  ``seal()`` closes the ledger and records the head hash /
+    count; a sealed ledger rejects further appends.
+    """
 
     def __init__(self) -> None:
         self._entries: Tuple[LedgerEntry, ...] = ()
         self._closed: bool = False
+        self._sealed_head_hash: Optional[str] = None
+        self._sealed_entry_count: Optional[int] = None
+        self._sealed_at: Optional[datetime] = None
 
     def append(
         self,
@@ -108,17 +145,20 @@ class TrialLedger:
         failure_reason: Optional[str] = None,
         recorded_at: Optional[datetime] = None,
     ) -> LedgerEntry:
-        """Append an immutable entry and return it."""
+        """Append an immutable, hash-chained entry and return it."""
         if self._closed:
             raise ValueError("ledger is sealed and no longer accepts entries")
         status_value = self._coerce_sequence(status)
         seq = len(self._entries) + 1
+        prev_hash = self._entries[-1].entry_hash if self._entries else "0" * 64
         entry = LedgerEntry(
             sequence=seq,
             status=status_value,
             trial_id=trial_id,
             failure_reason=failure_reason,
-            recorded_at=recorded_at or datetime.now(),
+            recorded_at=recorded_at or datetime.now(timezone.utc),
+            previous_entry_hash=prev_hash,
+            entry_hash="",  # derived in __post_init__
         )
         self._entries = self._entries + (entry,)
         return entry
@@ -139,6 +179,83 @@ class TrialLedger:
     def close(self) -> None:
         self._closed = True
 
+    def seal(self) -> None:
+        """Close the ledger and record the head hash / entry count.
+
+        After ``seal()`` the ledger is immutable: no further appends and the
+        sealed identity (``sealed_head_hash`` / ``sealed_entry_count`` /
+        ``sealed_at``) can be bound by an OptimizationResult so a tampered or
+        truncated ledger is caught on checkpoint reload.
+        """
+        if self._sealed_head_hash is not None:
+            raise ValueError("ledger is already sealed")
+        if self._sealed_entry_count is not None:
+            raise ValueError("ledger is already sealed")
+        self._closed = True
+        self._sealed_head_hash = self._entries[-1].entry_hash if self._entries else "0" * 64
+        self._sealed_entry_count = len(self._entries)
+        self._sealed_at = datetime.now(timezone.utc)
+
+    @property
+    def sealed(self) -> bool:
+        return self._sealed_head_hash is not None
+
+    @property
+    def sealed_head_hash(self) -> Optional[str]:
+        return self._sealed_head_hash
+
+    @property
+    def sealed_entry_count(self) -> Optional[int]:
+        return self._sealed_entry_count
+
+    @property
+    def sealed_at(self) -> Optional[datetime]:
+        return self._sealed_at
+
+    def verify_chain(self) -> None:
+        """Re-verify the full hash chain, fail-closed on any tamper/truncation.
+
+        Checks, in order: contiguous sequence, monotonic timestamps, the
+        chained hashes (each entry's ``entry_hash`` matches its recomputation
+        and covers the previous entry's hash), and — when sealed — that the
+        head hash and entry count match the recorded seal.
+        """
+        prev_hash = "0" * 64
+        for i, entry in enumerate(self._entries):
+            if entry.sequence != i + 1:
+                raise ValueError(
+                    f"ledger entry {i} has non-contiguous sequence "
+                    f"{entry.sequence} (expected {i + 1})"
+                )
+            if entry.previous_entry_hash != prev_hash:
+                raise ValueError(
+                    f"ledger entry {i} breaks the hash chain (previous hash "
+                    f"mismatch); the ledger was reordered or truncated"
+                )
+            if entry.entry_hash != entry.compute_entry_hash():
+                raise ValueError(
+                    f"ledger entry {i} content hash mismatch; the ledger was "
+                    "tampered"
+                )
+            if i > 0 and self._entries[i - 1].recorded_at > entry.recorded_at:
+                raise ValueError(
+                    f"ledger entry {i} timestamp precedes the previous entry; "
+                    "the ledger was reordered or tampered"
+                )
+            prev_hash = entry.entry_hash
+        if self._sealed_head_hash is not None:
+            if self._sealed_entry_count != len(self._entries):
+                raise ValueError(
+                    f"sealed ledger entry count mismatch: expected "
+                    f"{self._sealed_entry_count}, got {len(self._entries)}; the "
+                    "ledger tail was truncated"
+                )
+            if prev_hash != self._sealed_head_hash:
+                raise ValueError(
+                    "sealed ledger head hash mismatch; the ledger was truncated "
+                    "or tampered after sealing"
+                )
+
     def __len__(self) -> int:
         return len(self._entries)
 
@@ -153,6 +270,10 @@ class TrialLedger:
         return {
             "entries": [entry.to_dict() for entry in self._entries],
             "next_sequence": len(self._entries) + 1,
+            "sealed": self._sealed_head_hash is not None,
+            "sealed_head_hash": self._sealed_head_hash,
+            "sealed_entry_count": self._sealed_entry_count,
+            "sealed_at": self._sealed_at.isoformat() if self._sealed_at else None,
         }
 
     @classmethod
@@ -163,25 +284,21 @@ class TrialLedger:
         if not isinstance(raw, list):
             raise ValueError("ledger entries must be a list")
         entries = [LedgerEntry.from_dict(item) for item in raw]
-        # Validate append-only invariants fail-closed: contiguous sequences,
-        # monotonic timestamps (>= previous), no reordering/dedup.
-        seen = set()
-        for i, entry in enumerate(entries):
-            if entry.sequence != i + 1:
-                raise ValueError(
-                    f"ledger entry {i} has non-contiguous sequence "
-                    f"{entry.sequence} (expected {i + 1})"
-                )
-            if entry.status not in TRIAL_STATUS_OUTCOMES:
-                raise ValueError(f"ledger entry {i} has unknown status {entry.status!r}")
-            if i > 0 and entries[i - 1].recorded_at > entry.recorded_at:
-                raise ValueError(
-                    f"ledger entry {i} timestamp precedes the previous entry; "
-                    "the ledger was reordered or tampered"
-                )
         ledger = cls()
         ledger._entries = tuple(entries)
-        ledger._closed = False
+        # Re-seal when the checkpoint recorded a sealed ledger so the loaded
+        # state rejects further appends and re-verifies the chain.
+        if data.get("sealed"):
+            sealed_at = data.get("sealed_at")
+            if isinstance(sealed_at, str):
+                sealed_at = datetime.fromisoformat(sealed_at)
+            ledger._sealed_head_hash = data.get("sealed_head_hash")
+            ledger._sealed_entry_count = data.get("sealed_entry_count")
+            ledger._sealed_at = sealed_at
+            ledger._closed = True
+        else:
+            ledger._closed = False
+        ledger.verify_chain()
         return ledger
 
     def _coerce_sequence(self, status) -> str:

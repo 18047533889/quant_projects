@@ -4,7 +4,11 @@ import json
 import numbers
 import warnings
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
+
+#: P1-FO-005: canonical tz-aware UTC now for all session timestamps.
+def _utcnow() -> datetime:
+    return datetime.now(timezone.utc)
 from math import isfinite
 from types import MappingProxyType
 from typing import Any, Callable, Dict, List, Optional
@@ -24,6 +28,7 @@ from factor_optimizer.contracts.evaluation_artifact import (
 )
 from factor_optimizer.contracts.trial import Trial, TrialStatus
 from factor_optimizer.contracts.trial_ledger import TrialLedger
+from factor_optimizer.contracts.multiplicity import MultiplicityArtifact
 from factor_optimizer.contracts.splits import (
     EvaluationProtocol,
     LabelBundle,
@@ -95,8 +100,22 @@ class SearchConfig:
     # direction must agree with objective_spec (the existing strategy-direction
     # guard in SearchRunner.__init__ reuses this).
     candidate_strategy: Optional[SearchStrategy] = None
+    # P1-FO-006: the candidate strategy's SEMANTIC spec (type + ctor + seed) is
+    # what enters checkpoint identity — the runtime strategy object is not
+    # serialized, but a resumed run can verify it is running the SAME strategy
+    # spec the checkpoint was created under.
+    candidate_strategy_spec: Optional["SearchStrategySpec"] = None
 
     def __post_init__(self):
+        # P1-FO-006: derive the candidate-strategy spec from the runtime
+        # strategy so the checkpoint always records the strategy actually run.
+        if self.candidate_strategy is not None:
+            from factor_optimizer.search.strategies import SearchStrategySpec
+
+            if self.candidate_strategy_spec is None:
+                self.candidate_strategy_spec = SearchStrategySpec.from_strategy(
+                    self.candidate_strategy
+                )
         if isinstance(self.execution_mode, str):
             try:
                 self.execution_mode = ExecutionMode(self.execution_mode)
@@ -182,6 +201,14 @@ class SearchConfig:
                 if self.tiered_evaluation is not None
                 else None
             ),
+            # P1-FO-006: the candidate strategy's SEMANTIC spec (type + ctor +
+            # seed) enters the config payload so a resumed run reproduces the
+            # exact same proposal strategy; the runtime object itself stays out.
+            "candidate_strategy_spec": (
+                self.candidate_strategy_spec.to_dict()
+                if self.candidate_strategy_spec is not None
+                else None
+            ),
             "candidate_strategy": None,
         }
 
@@ -201,6 +228,14 @@ class SearchConfig:
             values["tiered_evaluation"] = TieredEvaluationPolicy.from_dict(
                 values["tiered_evaluation"]
             )
+        # P1-FO-006: restore the candidate-strategy SPEC (type + ctor + seed)
+        # so a resumed run knows which strategy the checkpoint was run under.
+        if values.get("candidate_strategy_spec") is not None:
+            from factor_optimizer.search.strategies import SearchStrategySpec
+
+            values["candidate_strategy_spec"] = SearchStrategySpec.from_dict(
+                values["candidate_strategy_spec"]
+            )
         # ``candidate_strategy`` is a runtime object, not serialized into the
         # config payload; a checkpoint round-trip must not try to reconstruct
         # one from the dict.
@@ -219,7 +254,7 @@ class SearchSession:
     duplicate_trials: List[Trial] = field(default_factory=list)
     best_score: Optional[float] = None
     best_trial_id: Optional[str] = None
-    started_at: datetime = field(default_factory=datetime.now)
+    started_at: datetime = field(default_factory=_utcnow)
     finished_at: Optional[datetime] = None
     stop_reason: Optional[str] = None
     recent_scores: List[float] = field(default_factory=list)
@@ -234,6 +269,9 @@ class SearchSession:
     # proposal (raised / non-Trial) is recorded here as PROPOSAL_FAILED /
     # INVALID_PROPOSAL, NOT silently dropped and NOT mislabelled as DUPLICATE.
     ledger: TrialLedger = field(default_factory=TrialLedger)
+    # P0-FO-003: full-proposal-process multiplicity artifact, derived once at
+    # finish() so the true hypothesis count is bound to the search result.
+    multiplicity_artifact: Optional["MultiplicityArtifact"] = None
 
     def __setattr__(self, name: str, value: Any) -> None:
         # Sealed-test state is append-only through freeze/consume; direct
@@ -298,10 +336,59 @@ class SearchSession:
         return [t for t in self.trials if t.is_successful()]
 
     def finish(self, reason: str) -> None:
-        """Mark session as finished."""
+        """Mark session as finished (idempotent) and seal the multiplicity ledger.
+
+        P0-FO-003: finishing finalizes the full-proposal-process multiplicity
+        artifact from the append-only ledger — every proposal attempt (parse
+        failed / invalid / duplicate / proposed / evaluated / selected / ...)
+        has exactly one terminal ledger outcome, so the true hypothesis count is
+        never lost.  ``multiplicity_artifact`` is derived once at finish.
+        """
         self._ensure_mutable()
-        self.finished_at = datetime.now()
+        self.finished_at = _utcnow()
         self.stop_reason = reason
+        if self.multiplicity_artifact is None:
+            from factor_optimizer.contracts.multiplicity import MultiplicityArtifact
+
+            counts = self.ledger.status_counts()
+            total = len(self.ledger)
+            # Every proposal attempt must have exactly one terminal outcome.
+            # Map the ledger statuses to the multiplicity buckets; any status
+            # that is not one of the known buckets would make the artifact
+            # fail its own accounted<=total invariant, so we surface it here.
+            known = {
+                "PROPOSAL_FAILED",
+                "INVALID_PROPOSAL",
+                "DUPLICATE",
+                "ILLEGAL",
+                "EVALUATED",
+                "EVALUATION_FAILED",
+                "PROPOSED",
+                "SELECTED",
+            }
+            accounted = 0
+            for key, n in counts.items():
+                if key not in known:
+                    raise ValueError(
+                        f"ledger contains outcome {key!r} with no multiplicity "
+                        "bucket; every proposal must map to exactly one terminal "
+                        "outcome"
+                    )
+                accounted += n
+            if accounted != total:
+                raise ValueError(
+                    "ledger outcome count mismatch; every proposal must have "
+                    "exactly one terminal outcome"
+                )
+            self.multiplicity_artifact = MultiplicityArtifact(
+                search_session_id=self.session_id,
+                total_proposals=total,
+                parse_failures=counts.get("PROPOSAL_FAILED", 0),
+                duplicates=counts.get("DUPLICATE", 0),
+                valid_evaluated=counts.get("EVALUATED", 0),
+                failed_evaluations=counts.get("EVALUATION_FAILED", 0),
+                illegal=counts.get("ILLEGAL", 0),
+            )
 
     def freeze_for_sealed_test(self, split_plan: SplitPlan) -> SealedTestHandle:
         """Freeze the finished winner and issue its one-shot test authority."""
@@ -324,7 +411,7 @@ class SearchSession:
                 "sealed test_mask overlaps the search-time train/validation masks; "
                 "the sealed segment must be disjoint from all search data"
             )
-        self.frozen_at = datetime.now()
+        self.frozen_at = _utcnow()
         # Allow the freeze itself to set the sealed identity exactly once.
         object.__setattr__(self, "_sealing", True)
         try:
@@ -452,7 +539,7 @@ class SearchSession:
 
     def duration_seconds(self) -> float:
         """Return session duration in seconds."""
-        end = self.finished_at or datetime.now()
+        end = self.finished_at or _utcnow()
         return (end - self.started_at).total_seconds()
 
     # -- checkpoint / resume ---------------------------------------------------

@@ -25,16 +25,16 @@ from quant_platform.app.contracts.cluster import (
     classify_cluster_label_drift,
     resolve_incremental_cluster,
 )
+from quant_platform.app.contracts.cluster import (
+    ClusterLineageEdge,
+)
 from quant_platform.app.contracts.cluster_library import (
     ClusterConversionType,
-    ClusterLineageEdge,
-    ClusterSetVersion,
-    ClusterVersion,
-    LogicalCluster,
-    SimilarityGraphVersion,
+    ClusterSetVersionRef,
+    ClusterVersionRef,
 )
 from quant_platform.app.contracts.factor_library import (
-    FactorLibraryVersion,
+    FactorLibraryVersionView,
     LibraryActivePointer,
     LibraryMembership,
     LibraryPromotionStep,
@@ -94,14 +94,14 @@ def test_library_version_is_immutable_and_promotes():
         cluster_id="CL_PV_MOM_017",
         evidence_ref="E1",
     )
-    v102 = FactorLibraryVersion(
+    v102 = FactorLibraryVersionView(
         library_version_id="FLV_102",
         logical_library_id="CORE_LOW_REDUNDANCY",
         cluster_set_version_id="CS1",
         members=(m,),
         status="PRODUCTION",
     )
-    v103 = FactorLibraryVersion(
+    v103 = FactorLibraryVersionView(
         library_version_id="FLV_103",
         logical_library_id="CORE_LOW_REDUNDANCY",
         cluster_set_version_id="CS1",
@@ -141,14 +141,14 @@ def test_library_version_is_immutable_and_promotes():
 
 def test_rollback_flips_pointer_and_never_deletes_v103():
     m = LibraryMembership(factor_definition_id="FD1")
-    v102 = FactorLibraryVersion(
+    v102 = FactorLibraryVersionView(
         library_version_id="FLV_102",
         logical_library_id="CORE_LOW_REDUNDANCY",
         cluster_set_version_id="CS1",
         members=(m,),
         status="PRODUCTION",
     )
-    v103 = FactorLibraryVersion(
+    v103 = FactorLibraryVersionView(
         library_version_id="FLV_103",
         logical_library_id="CORE_LOW_REDUNDANCY",
         cluster_set_version_id="CS1",
@@ -309,16 +309,16 @@ def test_diff_rejects_different_feature_set_ids():
 
 # ---- (d) cluster label-drift + lineage continuity ----
 def test_algorithm_label_separate_from_logical_id():
-    graph = SimilarityGraphVersion(graph_version_id="G1", graph_ref="graph://1")
-    csv = ClusterSetVersion(cluster_set_version_id="CS1", similarity_graph_version=graph, algorithm="leiden")
-    prev = ClusterVersion(
+    prev = ClusterVersionRef(
         cluster_version_id="CV1",
+        digest="a" * 64,
         logical_cluster_id="CL_PV_MOM_017",
         cluster_set_version_id="CS1",
         algorithm_cluster_label="cluster 18",
     )
-    next_ = ClusterVersion(
+    next_ = ClusterVersionRef(
         cluster_version_id="CV2",
+        digest="b" * 64,
         logical_cluster_id="CL_PV_MOM_017",  # same logical id
         cluster_set_version_id="CS1",
         algorithm_cluster_label="cluster 22",  # different algorithm label
@@ -331,16 +331,16 @@ def test_algorithm_label_separate_from_logical_id():
 
 
 def test_unchanged_label_is_unchanged_transition():
-    graph = SimilarityGraphVersion(graph_version_id="G1", graph_ref="graph://1")
-    csv = ClusterSetVersion(cluster_set_version_id="CS1", similarity_graph_version=graph, algorithm="leiden")
-    prev = ClusterVersion(
+    prev = ClusterVersionRef(
         cluster_version_id="CV1",
+        digest="a" * 64,
         logical_cluster_id="CL_PV_MOM_017",
         cluster_set_version_id="CS1",
         algorithm_cluster_label="cluster 18",
     )
-    next_ = ClusterVersion(
+    next_ = ClusterVersionRef(
         cluster_version_id="CV2",
+        digest="b" * 64,
         logical_cluster_id="CL_PV_MOM_017",
         cluster_set_version_id="CS1",
         algorithm_cluster_label="cluster 18",

@@ -29,11 +29,16 @@ from factor_preprocess.transforms.decomposition.cycle import (
     christiano_fitzgerald_filter,
 )
 
-from factor_preprocess.transforms.decomposition.wavelet import (
-    wavelet_decompose,
-    wavelet_smooth,
-    wavelet_denoise,
-)
+try:
+    from factor_preprocess.transforms.decomposition.wavelet import (
+        wavelet_decompose,
+        wavelet_smooth,
+        wavelet_denoise,
+    )
+except ImportError:  # pragma: no cover - PyWavelets is an optional heavy dep
+    wavelet_decompose = None  # type: ignore[assignment]
+    wavelet_smooth = None  # type: ignore[assignment]
+    wavelet_denoise = None  # type: ignore[assignment]
 
 __all__ = [
     # Trend

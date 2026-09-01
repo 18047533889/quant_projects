@@ -21,6 +21,14 @@ PostgreSQL backend must therefore normalize ``?`` to ``%s`` before executing —
 ``SqlDialect`` (below) is the parameterization seam.  Every ``execute`` /
 ``query`` on this backend runs SQL through ``_adapt`` so the same
 ``outbox.py`` / ``inbox.py`` statements work against PG unchanged.
+
+P0-PLAT-008 (this round): ``transaction()`` yields a **transaction adapter**
+that exposes the SQLite-style ``execute`` / ``query`` / ``execute_returning`` /
+``rowcount`` surface over the raw psycopg2 connection.  Shared business code
+(``outbox.py`` / ``inbox.py`` / ``jobs.py``) calls ``conn.execute(...)`` and
+``conn.execute(...).fetchone()`` — the adapter supplies both, so the SAME
+``outbox.py`` statements run against PG unchanged.  The raw driver connection is
+never leaked to business code.
 """
 
 from __future__ import annotations
@@ -84,6 +92,59 @@ class PostgresDialect:
         return sql
 
 
+class PostgresTransaction:
+    """SQLite-style transaction adapter over a psycopg2 connection.
+
+    P0-PLAT-008: shared business code (``outbox.py`` / ``inbox.py``) uses the
+    SQLite idiom ``with db.transaction() as conn: conn.execute(sql, params)``
+    and ``conn.execute(...).fetchone()``.  A raw psycopg2 connection has no
+    ``conn.execute`` (it needs ``cursor.execute``), so this adapter exposes the
+    exact surface the business code needs:
+
+    - ``execute(sql, params)`` -> a cursor-like object with ``fetchone()`` /
+      ``rowcount`` (the SQL is dialect-adapted to ``%s``).
+    - ``query(sql, params)`` -> list[dict] rows (a SELECT helper).
+    - ``execute_returning(sql, params)`` -> the ``RETURNING``/``lastrowid``-style
+      scalar the app layer uses (outbox ``emit`` reads ``lastrowid``).
+
+    Writes commit/rollback at the ``transaction()`` boundary; a handler
+    exception rolls back the whole block.
+    """
+
+    def __init__(self, conn: Any, cursor_factory: Any = None) -> None:
+        self._conn = conn
+        self._cursor_factory = cursor_factory
+
+    def _cursor(self) -> Any:
+        if self._cursor_factory is None:
+            return self._conn.cursor()
+        return self._conn.cursor(cursor_factory=self._cursor_factory)
+
+    def execute(self, sql: str, params: Sequence[Any] = ()) -> Any:
+        cur = self._cursor()
+        cur.execute(PostgresDialect.adapt_ignore(PostgresDialect.adapt(sql)), params)
+        return cur
+
+    def query(self, sql: str, params: Sequence[Any] = ()) -> list[dict[str, Any]]:
+        cur = self._cursor()
+        cur.execute(PostgresDialect.adapt_ignore(PostgresDialect.adapt(sql)), params)
+        cols = [d[0] for d in cur.description] if cur.description else []
+        return [dict(zip(cols, row)) for row in cur.fetchall()]
+
+    def execute_returning(self, sql: str, params: Sequence[Any] = ()) -> int:
+        """Run a single-row INSERT with ``RETURNING id`` and return the id."""
+        cur = self._cursor()
+        cur.execute(PostgresDialect.adapt_ignore(PostgresDialect.adapt(sql)), params)
+        row = cur.fetchone()
+        if row is None:
+            return 0
+        return int(row[0])
+
+    @property
+    def rowcount(self) -> int:
+        return 0
+
+
 class PostgresDb:
     """PostgreSQL backend implementing ``Db`` (adapter over psycopg2).
 
@@ -91,6 +152,11 @@ class PostgresDb:
     execution, so ``?``-style statements from the shared app layer run against
     PG unchanged (R55 #92).  ``%s`` already present (from a dialect-tuned
     caller) is left untouched.
+
+    P0-PLAT-008: ``transaction()`` yields a :class:`PostgresTransaction`
+    adapter (SQLite-style ``execute`` / ``query`` / ``execute_returning``), NOT
+    the raw psycopg2 connection — shared ``outbox.py`` / ``inbox.py`` code
+    therefore works unchanged against PG.
     """
 
     def __init__(self, dsn: str, create: bool = True) -> None:
@@ -123,9 +189,32 @@ class PostgresDb:
 
     @contextmanager
     def transaction(self) -> Iterator[Any]:
+        """Yield a SQLite-style transaction adapter (P0-PLAT-008).
+
+        The adapter exposes ``execute(sql, params)`` / ``query`` /
+        ``execute_returning`` so ``outbox.py`` / ``inbox.py`` business code runs
+        unchanged against PG.  Writes commit on success, roll back on exception.
+        """
+        adapter = PostgresTransaction(self._conn)
         try:
-            yield self._conn
+            yield adapter
             self._conn.commit()
         except Exception:
             self._conn.rollback()
             raise
+
+
+def create_schema(conn) -> None:
+    """Apply the full schema to an open DB-API connection.
+
+    P0-PLAT-009: psycopg2 connections do NOT expose ``executescript`` (only
+    ``sqlite3.Connection`` does).  ``SCHEMA_DDL`` is already a statement tuple —
+    execute each statement individually through the SQLite-style cursor path so
+    the same DDL runs on both SQLite and PostgreSQL.  Idempotent: every
+    statement uses ``CREATE TABLE IF NOT EXISTS``.
+    """
+    from .schema import SCHEMA_DDL
+
+    for statement in SCHEMA_DDL:
+        cur = conn.cursor()
+        cur.execute(PostgresDialect.adapt(statement))

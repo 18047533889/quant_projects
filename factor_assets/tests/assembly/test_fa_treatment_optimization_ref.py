@@ -185,7 +185,10 @@ class TestFactorMembershipTreatmentOptimizationRef:
         )
         with pytest.raises(ValueError, match="non-empty"):
             FactorMembership(factor_id="F1", treatment_optimization_ref="")
-        with pytest.raises(TypeError, match="str or None"):
+        # P0-FA-014 (Task #105): the membership canonicalizes the ref into its
+        # transport form (str shorthand / dict PURE-DTO), so a non-str value
+        # fails with the canonicalization error rather than a "str or None" one.
+        with pytest.raises((TypeError, ValueError), match="treatment_optimization_ref"):
             FactorMembership(factor_id="F1", treatment_optimization_ref=123)
 
     def test_content_hash_sensitive_assembly_hash(self):

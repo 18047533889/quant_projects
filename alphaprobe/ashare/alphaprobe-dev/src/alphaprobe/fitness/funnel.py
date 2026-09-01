@@ -17,11 +17,6 @@ from alphaprobe.contracts import (
     RejectionReason,
 )
 from alphaprobe.fitness import check_hard_gates
-from alphaprobe.dedup import (
-    GlobalSeenIndex,
-    canonicalize_dsl,
-    signal_equivalence_id,
-)
 
 __all__ = [
     "FidelityFunnel",
@@ -104,14 +99,21 @@ class L0StaticCheck:
         self,
         *,
         dsl_validator: Callable[[str], tuple[bool, str]] | None = None,
-        seen: GlobalSeenIndex | None = None,
+        seen: Any | None = None,
         factor_engine_adapter: Any | None = None,
         min_coverage: float = 0.5,
         max_untradeable: float = 0.5,
         unsafe_numeric_check: Callable[[str], bool] | None = None,
+        dedup_client: Any | None = None,
     ) -> None:
         self.dsl_validator = dsl_validator
-        self.seen = seen or GlobalSeenIndex()
+        self.dedup_client = dedup_client
+        # 不提供 dedup_client 时：行为与现在完全一致（内存版 GlobalSeenIndex）
+        if seen is None and dedup_client is None:
+            from alphaprobe.dedup import GlobalSeenIndex
+
+            seen = GlobalSeenIndex()
+        self.seen = seen
         self.fe_adapter = factor_engine_adapter
         self.min_coverage = min_coverage
         self.max_untradeable = max_untradeable
@@ -158,7 +160,21 @@ class L0StaticCheck:
     # -- 去重 ---------------------------------------------------------------
 
     def _identity(self, formula: str) -> tuple[str, str, str]:
-        """返回 (canonical, signal_id, family_key)；family 无 adapter 时为 ''。"""
+        """返回 (canonical, signal_id, family_key)；family 无 adapter 时为 ''。
+
+        提供 dedup_client 时优先走 client.get_identity()（统一 identity 入口），
+        否则保持现有 fe_adapter → 文本 canonical 逻辑。
+        """
+        if self.dedup_client is not None:
+            try:
+                view = self.dedup_client.get_identity(formula)
+                canonical = str(getattr(view, "canonical_formula", "") or "")
+                signal_id = str(getattr(view, "signal_equivalence_id", "") or "")
+                family = str(getattr(view, "parameter_family_id", "") or "") or ""
+                if signal_id:
+                    return canonical or formula, signal_id, family
+            except Exception:  # noqa: BLE001 - fallthrough
+                pass
         if self.fe_adapter is not None:
             try:
                 canonical_out = self.fe_adapter.canonicalize(formula)
@@ -168,6 +184,8 @@ class L0StaticCheck:
                     return canonical, signal_id, ""
             except Exception:  # noqa: BLE001 - fallthrough
                 pass
+        from alphaprobe.dedup import canonicalize_dsl, signal_equivalence_id
+
         canonical = canonicalize_dsl(formula)
         return canonical, signal_equivalence_id(canonical), ""
 
@@ -203,7 +221,26 @@ class L0StaticCheck:
             return out  # 不合法 DSL 不继续做 dedup 判定
 
         # 去重
-        if self._is_exact_duplicate(signal_id, factor_id):
+        if self.dedup_client is not None:
+            verdict = self.dedup_client.check_new_candidate(out.formula)
+            if verdict is not None and verdict.rejection_reason is not None:
+                # EXACT / SIGN 都算 duplicate，各自 RejectionReason
+                out.rejections.append(verdict.rejection_reason)
+            else:
+                # NEW：原子预留（§11.6 NEW→RESERVED），二次同 signal 才能判重
+                try:
+                    self.dedup_client.reserve(
+                        out.formula,
+                        source_system="funnel.L0",
+                        run_id="",
+                        worker_id="",
+                        factor_id=factor_id or None,
+                    )
+                except Exception:  # noqa: BLE001 - 预留失败不阻塞判定
+                    pass
+            with self._lock:
+                self._last_reserve_ok = True
+        elif self._is_exact_duplicate(signal_id, factor_id):
             out.rejections.append(RejectionReason.EXACT_DUPLICATE)
         return out
 
@@ -269,9 +306,18 @@ class FidelityFunnel:
         rankic = mb.get("rankic")
         if rankic is not None and rankic <= 0.0:
             rejects.append(RejectionReason.LOW_PREDICTIVE)
+        # D10 双重 tolerance 修复：metric "d10_cliff_penalty" 本身已是
+        # max(0, d_top-0.12)（见 fitness.d10_cliff_penalty），再用 >0.12 判定
+        # 等于 d_top>0.24 才拒（容差叠加）。已 adjust 的 key → penalty > 0 即拒；
+        # raw d_top 类 key（如 "d10_drop_ratio"）→ 保持 > 0.12 判定。
         d10 = mb.get("d10_cliff_penalty")
-        if d10 is not None and d10 > 0.12:
-            rejects.append(RejectionReason.D10_COLLAPSE)
+        if d10 is not None:
+            if d10 > 0.0:
+                rejects.append(RejectionReason.D10_COLLAPSE)
+        else:
+            d10_raw = mb.get("d10_drop_ratio")
+            if d10_raw is not None and d10_raw > 0.12:
+                rejects.append(RejectionReason.D10_COLLAPSE)
         return rejects
 
     def _l3_gate(self, record: EvaluationRecord) -> list[RejectionReason]:
@@ -358,7 +404,9 @@ class FidelityFunnel:
                 reasons = list(out.rejections)
             elif record is not None:
                 reasons = self.gate(from_level, record)
-            # 无 record 且非 L0：升级 gate 视为通过（记录由 EvaluatorClient 消费）
+            else:
+                # 无 record 且非 L0：fail-closed（§审阅 11），不允许静默通过
+                reasons = [RejectionReason.EVALUATION_MISSING]
 
             if reasons:
                 self.counters["L0_rejects"] += 1

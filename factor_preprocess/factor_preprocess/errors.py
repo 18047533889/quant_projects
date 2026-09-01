@@ -48,6 +48,24 @@ class SnapshotMismatchError(ContractError):
     pass
 
 
+class TreatmentMaterializationError(ContractError):
+    """A treatment materialization violates the fail-closed contract.
+
+    Raised when a treatment is materialized in a way that must not be
+    admitted:
+
+    - a ``FitBoundary.FULL_SAMPLE_RESEARCH`` recipe is materialized against an
+      evaluation-valid split (validation / test / production) — full-sample
+      leakage would otherwise be silently allowed;
+    - a research-only neutralization method (pca / kernel / quantile / lad) is
+      materialized against an evaluation-valid split;
+    - a materialization identity would be confused with a spec identity
+      (typed split: ``TreatmentMaterializationIdentity`` vs
+      ``TreatmentSpecIdentity``).
+    """
+    pass
+
+
 # ============================================================================
 # Capability Errors
 # ============================================================================
@@ -190,6 +208,7 @@ __all__ = [
     "InvalidContractError",
     "TimingContractError",
     "SnapshotMismatchError",
+    "TreatmentMaterializationError",
     # Capability
     "CapabilityError",
     "UnsupportedTransformError",

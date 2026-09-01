@@ -17,7 +17,7 @@ from alphaprobe.contracts import (
     FidelityLevel,
 )
 from alphaprobe.evalcache import EvaluationCache, build_cache_key
-from alphaprobe.research_protocol import LeakageGuard
+from alphaprobe.research_protocol import LeakageGuard, segment_for_fidelity
 
 
 class LegacyCompatEvaluator:
@@ -51,12 +51,14 @@ class LegacyCompatEvaluator:
         context: ExperimentContext | None = None,
     ) -> list[EvaluationRecord]:
         ctx = context or self.context
-        # §3.3：L0-L4 禁触 sealed test
-        self.guard.assert_access_allowed(
-            stage=fidelity,
-            segment=ctx.split_spec.sealed_test if ctx.split_spec else "1970-01-01..2999-12-31",
-            caller="LegacyCompatEvaluator.evaluate",
-        )
+        segment = segment_for_fidelity(fidelity, ctx.split_spec)
+        if segment is not None:
+            # §3.3：L0-L4 禁触 sealed test。此处传真实合法段（L5 才传 sealed）。
+            self.guard.assert_access_allowed(
+                stage=fidelity,
+                segment=segment,
+                caller="LegacyCompatEvaluator.evaluate",
+            )
         records: list[EvaluationRecord] = []
         # 批量去重：同 cache key 只算一次（§89.2）
         todo: list[tuple[FactorCandidate, str]] = []
@@ -80,6 +82,7 @@ class LegacyCompatEvaluator:
         return records
 
     def _key(self, c: FactorCandidate, fidelity: FidelityLevel, ctx: ExperimentContext) -> str:
+        segment = segment_for_fidelity(fidelity, ctx.split_spec)
         return build_cache_key(
             canonical_formula_hash=c.identity.canonical_ast_hash,
             orientation=c.identity.orientation,
@@ -88,7 +91,7 @@ class LegacyCompatEvaluator:
             factor_engine_version=ctx.factor_engine_version,
             operator_semantics_version=ctx.operator_semantics_version,
             label_spec_hash=ctx.label_spec.hash_key,
-            segment="train",
+            segment=self._segment_label(segment),
             fidelity=fidelity.value,
             evaluator_version=self.evaluator_version,
         )
@@ -100,9 +103,10 @@ class LegacyCompatEvaluator:
         ctx: ExperimentContext,
         metric_bundle: dict[str, float | None] | None,
     ) -> EvaluationRecord:
+        segment = segment_for_fidelity(fidelity, ctx.split_spec)
         return EvaluationRecord(
             factor_id=c.identity.factor_id,
-            segment="train",
+            segment=self._segment_label(segment),
             fidelity=fidelity.value,
             metric_bundle=dict(metric_bundle or {}),
             artifact_refs={},
@@ -112,6 +116,13 @@ class LegacyCompatEvaluator:
             label_spec_hash=ctx.label_spec.hash_key,
             created_at=datetime.now(timezone.utc),
         )
+
+    @staticmethod
+    def _segment_label(segment: Any) -> str:
+        """稳定字符串段名：DateRange 取 start（如 '2016-01-01'），无段时 'all'。"""
+        if segment is None:
+            return "all"
+        return getattr(segment, "start", str(segment))
 
     def get_artifact(self, artifact_id: str) -> Any:
         return self.cache.get(artifact_id)

@@ -582,7 +582,7 @@ class LeidenClustering:
     """
 
     RESEARCH_ONLY = False
-    PRODUCTION_CAPABLE = True
+    PRODUCTION_CAPABLE = True  # re-derived at import in _LeidenBackendGuard (P1-FA-012)
     #: The only algorithm certified for production clustering (R55 P0-13).
     PRODUCTION_ALGORITHM = "leiden"
 
@@ -640,7 +640,19 @@ class LeidenClustering:
         # entry point, so a caller cannot escape it by holding a
         # research-constructed object and calling cluster() in production.
         self._gate(algorithm=self.PRODUCTION_ALGORITHM)
-        self._backend = self._detect_backend()
+        # P1-FA-012: backend detection is eager for PRODUCTION runs (a
+        # production clustering must never silently fall back to a research
+        # backend).  RESEARCH runs detect the backend lazily — the graph is
+        # still never clustered without a mature Leiden library (fails closed),
+        # but construction stays possible so the certified-graph gate can be
+        # exercised independently of the optional igraph/leidenalg dependency.
+        if self.execution_mode is ExecutionMode.PRODUCTION:
+            self._backend = self._detect_backend()
+        else:
+            try:
+                self._backend = self._detect_backend()
+            except ImportError:
+                self._backend = ""
 
     @property
     def run_config(self) -> Dict[str, object]:
@@ -680,252 +692,38 @@ class LeidenClustering:
             "rather than faking a clustering result."
         )
 
-    def _gate(self, *, algorithm: str, now: Optional[object] = None):
-        """Run the certified-graph gate for this run (R55 P0-13).
 
-        In production mode an uncertified / stale / algorithm-mismatched graph
-        raises :class:`~factor_assets.errors.ProductionClusterViolation`;
-        research mode passes through unchanged.  Returns the certification that
-        authorised the run (or ``None`` in research without certification).
-        """
-        return enforce_certified_graph(
-            self.execution_mode,
-            self.graph,
-            self.certification,
-            algorithm=algorithm,
-            now=now,
-        )
+# P1-FA-012: the class-level ``PRODUCTION_CAPABLE`` flag is re-derived at
+# import so ``LeidenClustering.PRODUCTION_CAPABLE`` honestly reflects the
+# installed backends.  A class that is NOT production-capable must not be
+# reported as such by a stale classvar.
+try:
+    LeidenClustering._detect_backend()  # noqa: SLF001
+except ImportError:
+    LeidenClustering.PRODUCTION_CAPABLE = False  # type: ignore[assignment]
 
-    def cluster(self, *, now: Optional[object] = None) -> ClusterResult:
-        """
-        Run Leiden clustering on the sparse graph.
 
-        Args:
-            now: optional gate clock (see :func:`~factor_assets.clustering.
-                certification.enforce_certified_graph`).
+def _leiden_gate(self, *, algorithm: str, now: Optional[object] = None):
+    """Certified-graph gate for LeidenClustering (R55 P0-13).
 
-        Returns:
-            ClusterResult with cluster assignments and sizes.
-        """
-        # R55 P0-13: the gate runs at EVERY entry point — no bypass path.
-        self._gate(algorithm=self.PRODUCTION_ALGORITHM, now=now)
-        if self.graph.node_count == 0:
-            return ClusterResult(
-                assignments={},
-                cluster_sizes={},
-                certification_id=(
-                    self.certification.certification_id
-                    if self.certification is not None
-                    else None
-                ),
-                graph_content_hash=(
-                    self.certification.graph_content_hash
-                    if self.certification is not None
-                    else None
-                ),
-                execution_mode=self.execution_mode.value,
-            )
+    In production mode an uncertified / stale / algorithm-mismatched graph
+    raises :class:`~factor_assets.errors.ProductionClusterViolation`; research
+    mode passes through unchanged.  Returns the certification that authorised
+    the run (or ``None`` in research without certification).
+    """
+    return _certified_graph_gate(self, algorithm=algorithm, now=now)
 
-        if self._backend == "igraph":
-            return self._cluster_igraph()
-        return self._cluster_leidenalg()
 
-    def cluster_artifact(
-        self,
-        *,
-        snapshot_ref: Optional[str] = None,
-        universe_ref: Optional[str] = None,
-        similarity_spec_ref: Optional[str] = None,
-        now: Optional[object] = None,
-    ) -> ClusterArtifact:
-        """Produce a production :class:`ClusterArtifact` with full provenance.
-
-        Wraps the raw :class:`ClusterResult` with the algorithm, backend /
-        backend_version / seed / resolution that produced it, the graph
-        identity, snapshot / universe / similarity-spec refs, one representative
-        per cluster, and a derived ``content_hash``.  In production mode the
-        certification that authorised the run is recorded on the artifact
-        (``certification_id`` / ``execution_mode``).
-        """
-        # R55 P0-13: the gate runs here too (this is a clustering entry point,
-        # not just a wrapper around cluster()).
-        certified = self._gate(
-            algorithm=self.PRODUCTION_ALGORITHM, now=now
-        )
-        result = self.cluster(now=now)
-        cluster_of: Dict[int, List[str]] = defaultdict(list)
-        for fid, cid in result.assignments.items():
-            cluster_of[cid].append(fid)
-        representatives = tuple(sorted(min(members) for members in cluster_of.values()))
-        return ClusterArtifact(
-            graph_identity=self.graph.graph_identity,
-            algorithm="leiden",
-            assignments=dict(result.assignments),
-            representatives=representatives,
-            snapshot_ref=snapshot_ref,
-            universe_ref=universe_ref,
-            similarity_spec_ref=similarity_spec_ref,
-            backend=self._backend,
-            backend_version=self._backend_version(),
-            seed=self.seed,
-            resolution=self.resolution,
-            min_cluster_size=self.min_cluster_size,
-            min_cluster_policy=self.min_cluster_policy,
-            content_hash="",  # derived in __post_init__
-            certification_id=(
-                certified.certification_id if certified is not None else None
-            ),
-            execution_mode=self.execution_mode.value,
-        )
-
-    @staticmethod
-    def _backend_version() -> str:
-        try:
-            import igraph
-            return getattr(igraph, "__version__", "unknown")
-        except ImportError:
-            return "unknown"
-
-    def _cluster_igraph(self) -> ClusterResult:
-        """Leiden via python-igraph."""
-        import random
-
-        import igraph
-
-        factor_ids = sorted(self.graph.nodes)
-        id_to_idx = {fid: idx for idx, fid in enumerate(factor_ids)}
-        edges = []
-        weights = []
-        for edge in self.graph.to_edge_list():
-            edges.append((id_to_idx[edge.factor_a], id_to_idx[edge.factor_b]))
-            weights.append(edge.abs_correlation)
-
-        g = igraph.Graph(n=len(factor_ids), edges=edges, directed=False)
-        g.es["weight"] = weights
-
-        # Stable seed for reproducibility.  igraph 1.x exposes only
-        # `set_random_number_generator(generator)` (no `igraph.Random` class);
-        # a fresh `random.Random(seed)` per run yields deterministic Leiden.
-        igraph.set_random_number_generator(random.Random(self.seed))
-        partition = g.community_leiden(
-            objective_function="modularity",
-            weights="weight",
-            resolution=self.resolution,
-            n_iterations=2,
-        )
-
-        assignments = {
-            factor_ids[idx]: int(member)
-            for idx, member in enumerate(partition.membership)
-        }
-        return self._finalize(assignments)
-
-    def _cluster_leidenalg(self) -> ClusterResult:
-        """Leiden via leidenalg (requires igraph for the graph object)."""
-        import igraph
-        import leidenalg
-
-        factor_ids = sorted(self.graph.nodes)
-        id_to_idx = {fid: idx for idx, fid in enumerate(factor_ids)}
-        edges = []
-        weights = []
-        for edge in self.graph.to_edge_list():
-            edges.append((id_to_idx[edge.factor_a], id_to_idx[edge.factor_b]))
-            weights.append(edge.abs_correlation)
-
-        g = igraph.Graph(n=len(factor_ids), edges=edges, directed=False)
-        g.es["weight"] = weights
-
-        partition = leidenalg.find_partition(
-            g,
-            leidenalg.RBConfigurationVertexPartition,
-            weights="weight",
-            resolution_parameter=self.resolution,
-            seed=self.seed,
-        )
-        assignments = {
-            factor_ids[idx]: int(member)
-            for idx, member in enumerate(partition.membership)
-        }
-        return self._finalize(assignments)
-
-    def _finalize(self, assignments: Dict[str, int]) -> ClusterResult:
-        """Renumber clusters contiguously and compute sizes, then enforce the
-        min-cluster-size policy so it is never a dead parameter."""
-        unique = sorted(set(assignments.values()))
-        cluster_map = {old: new for new, old in enumerate(unique)}
-
-        # DLIB-FA-007/57: the algorithm label is unstable (Leiden label ``18``
-        # may be ``5`` next refresh).  Stable logical cluster identity is owned
-        # by the cluster-governance layer (:class:`~factor_assets.contracts.
-        # cluster_governance.LogicalCluster` / ``ClusterVersionArtifact``).
-        # This renumbering keeps the algorithm order contiguous and
-        # deterministic (smallest factor_id first), which is the only locality
-        # guaranteed here.
-        ordered_ids = sorted(assignments)
-        label_order = {cid: idx for idx, cid in enumerate(sorted(set(assignments.values())))}
-        # The map from old cluster-id to contiguous label must be deterministic
-        # and order-INVARIANT: build it by walking the sorted factor ids, not
-        # by sorting raw integer cluster ids (which are arbitrary backend ids).
-        cluster_map = {}
-        for fid in ordered_ids:
-            old = assignments[fid]
-            if old not in cluster_map:
-                cluster_map[old] = len(cluster_map)
-        renumbered = {fid: cluster_map[cid] for fid, cid in assignments.items()}
-        sizes = defaultdict(int)
-        for cid in renumbered.values():
-            sizes[cid] += 1
-
-        unstable: List[int] = []
-        if self.min_cluster_size > 1 and self.min_cluster_policy == "MERGE_NEAREST":
-            # Greedily merge every cluster smaller than min_cluster_size into
-            # the nearest neighbor cluster (largest aggregate edge weight).
-            by_cluster: Dict[int, List[str]] = defaultdict(list)
-            for fid, cid in renumbered.items():
-                by_cluster[cid].append(fid)
-            small = sorted(
-                [cid for cid, members in by_cluster.items() if len(members) < self.min_cluster_size]
-            )
-            for small_cid in small:
-                if small_cid not in renumbered.values():
-                    continue
-                members = [fid for fid, cid in renumbered.items() if cid == small_cid]
-                if not members:
-                    continue
-                # Find nearest cluster by sum of |corr| edge weights.
-                best_cid: Optional[int] = None
-                best_weight = -1.0
-                for fid in members:
-                    for neighbor, corr in self.graph.neighbors(fid):
-                        ncid = renumbered.get(neighbor)
-                        if ncid is None or ncid == small_cid:
-                            continue
-                        w = abs(corr)
-                        if w > best_weight:
-                            best_weight = w
-                            best_cid = ncid
-                if best_cid is None:
-                    continue
-                for fid in members:
-                    renumbered[fid] = best_cid
-            # Recompute sizes after merging.
-            sizes = defaultdict(int)
-            for cid in renumbered.values():
-                sizes[cid] += 1
-        elif self.min_cluster_size > 1 and self.min_cluster_policy == "MARK_UNSTABLE":
-            unstable = sorted(
-                [cid for cid, size in sizes.items() if size < self.min_cluster_size]
-            )
-
+def _leiden_cluster(self, *, now: Optional[object] = None) -> ClusterResult:
+    """Leiden clustering entry point (gate runs at EVERY entry point)."""
+    # R55 P0-13: the gate runs at every entry point — no bypass path.
+    self._gate(algorithm=self.PRODUCTION_ALGORITHM, now=now)
+    if self.graph.node_count == 0:
         return ClusterResult(
-            assignments=renumbered,
-            cluster_sizes=dict(sizes),
-            unstable_clusters=tuple(unstable),
+            assignments={},
+            cluster_sizes={},
             certification_id=(
-                self.certification.certification_id
-                if self.certification is not None
-                else None
+                self.certification.certification_id if self.certification else None
             ),
             graph_content_hash=(
                 self.certification.graph_content_hash
@@ -934,6 +732,250 @@ class LeidenClustering:
             ),
             execution_mode=self.execution_mode.value,
         )
+    # RESEARCH runs may construct without a Leiden backend (so the certified-graph
+    # gate can be exercised independently of the optional igraph/leidenalg dep);
+    # a research clustering without a backend fails closed with a clear message
+    # rather than fabricating a partition.
+    if self.execution_mode is ExecutionMode.PRODUCTION:
+        if self._backend == "igraph":
+            return _leiden_cluster_igraph(self)
+        if self._backend == "leidenalg":
+            return _leiden_cluster_leidenalg(self)
+        raise RuntimeError(f"unknown Leiden backend: {self._backend!r}")
+    # RESEARCH runs carry a fully-detected backend when a mature Leiden library
+    # is installed (the real research clustering path); an empty ``_backend``
+    # only occurs when construction ran under P1-FA-012's research relaxation
+    # WITHOUT a backend — that path fails closed rather than fabricating a
+    # partition.
+    if self._backend == "igraph":
+        return _leiden_cluster_igraph(self)
+    if self._backend == "leidenalg":
+        return _leiden_cluster_leidenalg(self)
+    raise RuntimeError(
+        "research-mode Leiden clustering requires igraph or leidenalg "
+        "installed; this object was constructed without a backend"
+    )
+
+
+# Wire the module-level helpers onto the class so the certification gate and
+# clustering entry point are always present, whether or not a Leiden backend is
+# installed (the class-body methods would otherwise be absent in the
+# no-backend build).
+LeidenClustering._gate = _leiden_gate
+LeidenClustering.cluster = _leiden_cluster
+
+
+def _leiden_cluster_artifact(
+    self,
+    *,
+    snapshot_ref: Optional[str] = None,
+    universe_ref: Optional[str] = None,
+    similarity_spec_ref: Optional[str] = None,
+    now: Optional[object] = None,
+) -> "ClusterArtifact":
+    """Produce a production :class:`ClusterArtifact` with full provenance.
+
+    Wraps the raw :class:`ClusterResult` with the algorithm, backend /
+    backend_version / seed / resolution that produced it, the graph
+    identity, snapshot / universe / similarity-spec refs, one representative
+    per cluster, and a derived ``content_hash``.  In production mode the
+    certification that authorised the run is recorded on the artifact
+    (``certification_id`` / ``execution_mode``).
+    """
+    # R55 P0-13: the gate runs here too (this is a clustering entry point,
+    # not just a wrapper around cluster()).
+    certified = self._gate(algorithm=self.PRODUCTION_ALGORITHM, now=now)
+    result = self.cluster(now=now)
+    cluster_of: Dict[int, List[str]] = defaultdict(list)
+    for fid, cid in result.assignments.items():
+        cluster_of[cid].append(fid)
+    representatives = tuple(sorted(min(members) for members in cluster_of.values()))
+    return ClusterArtifact(
+        graph_identity=self.graph.graph_identity,
+        algorithm="leiden",
+        assignments=dict(result.assignments),
+        representatives=representatives,
+        snapshot_ref=snapshot_ref,
+        universe_ref=universe_ref,
+        similarity_spec_ref=similarity_spec_ref,
+        backend=self._backend,
+        backend_version=self._backend_version(),
+        seed=self.seed,
+        resolution=self.resolution,
+        min_cluster_size=self.min_cluster_size,
+        min_cluster_policy=self.min_cluster_policy,
+        content_hash="",  # derived in __post_init__
+        certification_id=(
+            certified.certification_id if certified is not None else None
+        ),
+        execution_mode=self.execution_mode.value,
+    )
+
+
+LeidenClustering.cluster_artifact = _leiden_cluster_artifact
+
+
+@staticmethod
+def _leiden_backend_version() -> str:
+    try:
+        import igraph
+        return getattr(igraph, "__version__", "unknown")
+    except ImportError:
+        return "unknown"
+
+LeidenClustering._backend_version = _leiden_backend_version
+
+
+def _leiden_cluster_igraph(self) -> ClusterResult:
+    """Leiden via python-igraph."""
+    import random
+
+    import igraph
+
+    factor_ids = sorted(self.graph.nodes)
+    id_to_idx = {fid: idx for idx, fid in enumerate(factor_ids)}
+    edges = []
+    weights = []
+    for edge in self.graph.to_edge_list():
+        edges.append((id_to_idx[edge.factor_a], id_to_idx[edge.factor_b]))
+        weights.append(edge.abs_correlation)
+
+    g = igraph.Graph(n=len(factor_ids), edges=edges, directed=False)
+    g.es["weight"] = weights
+
+    # Stable seed for reproducibility.  igraph 1.x exposes only
+    # `set_random_number_generator(generator)` (no `igraph.Random` class);
+    # a fresh `random.Random(seed)` per run yields deterministic Leiden.
+    igraph.set_random_number_generator(random.Random(self.seed))
+    partition = g.community_leiden(
+        objective_function="modularity",
+        weights="weight",
+        resolution=self.resolution,
+        n_iterations=2,
+    )
+
+    assignments = {
+        factor_ids[idx]: int(member)
+        for idx, member in enumerate(partition.membership)
+    }
+    return _leiden_finalize(self, assignments)
+
+
+def _leiden_cluster_leidenalg(self) -> ClusterResult:
+    """Leiden via leidenalg (requires igraph for the graph object)."""
+    import igraph
+    import leidenalg
+
+    factor_ids = sorted(self.graph.nodes)
+    id_to_idx = {fid: idx for idx, fid in enumerate(factor_ids)}
+    edges = []
+    weights = []
+    for edge in self.graph.to_edge_list():
+        edges.append((id_to_idx[edge.factor_a], id_to_idx[edge.factor_b]))
+        weights.append(edge.abs_correlation)
+
+    g = igraph.Graph(n=len(factor_ids), edges=edges, directed=False)
+    g.es["weight"] = weights
+
+    partition = leidenalg.find_partition(
+        g,
+        leidenalg.RBConfigurationVertexPartition,
+        weights="weight",
+        resolution_parameter=self.resolution,
+        seed=self.seed,
+    )
+    assignments = {
+        factor_ids[idx]: int(member)
+        for idx, member in enumerate(partition.membership)
+    }
+    return _leiden_finalize(self, assignments)
+
+
+def _leiden_finalize(self, assignments: Dict[str, int]) -> ClusterResult:
+    """Renumber clusters contiguously and compute sizes, then enforce the
+    min-cluster-size policy so it is never a dead parameter."""
+    unique = sorted(set(assignments.values()))
+    cluster_map = {old: new for new, old in enumerate(unique)}
+
+    # DLIB-FA-007/57: the algorithm label is unstable (Leiden label ``18``
+    # may be ``5`` next refresh).  Stable logical cluster identity is owned
+    # by the cluster-governance layer (:class:`~factor_assets.contracts.
+    # cluster_governance.LogicalCluster` / ``ClusterVersionArtifact``).
+    # This renumbering keeps the algorithm order contiguous and
+    # deterministic (smallest factor_id first), which is the only locality
+    # guaranteed here.
+    ordered_ids = sorted(assignments)
+    label_order = {cid: idx for idx, cid in enumerate(sorted(set(assignments.values())))}
+    # The map from old cluster-id to contiguous label must be deterministic
+    # and order-INVARIANT: build it by walking the sorted factor ids, not
+    # by sorting raw integer cluster ids (which are arbitrary backend ids).
+    cluster_map = {}
+    for fid in ordered_ids:
+        old = assignments[fid]
+        if old not in cluster_map:
+            cluster_map[old] = len(cluster_map)
+    renumbered = {fid: cluster_map[cid] for fid, cid in assignments.items()}
+    sizes = defaultdict(int)
+    for cid in renumbered.values():
+        sizes[cid] += 1
+
+    unstable: List[int] = []
+    if self.min_cluster_size > 1 and self.min_cluster_policy == "MERGE_NEAREST":
+        # Greedily merge every cluster smaller than min_cluster_size into
+        # the nearest neighbor cluster (largest aggregate edge weight).
+        by_cluster: Dict[int, List[str]] = defaultdict(list)
+        for fid, cid in renumbered.items():
+            by_cluster[cid].append(fid)
+        small = sorted(
+            [cid for cid, members in by_cluster.items() if len(members) < self.min_cluster_size]
+        )
+        for small_cid in small:
+            if small_cid not in renumbered.values():
+                continue
+            members = [fid for fid, cid in renumbered.items() if cid == small_cid]
+            if not members:
+                continue
+            # Find nearest cluster by sum of |corr| edge weights.
+            best_cid: Optional[int] = None
+            best_weight = -1.0
+            for fid in members:
+                for neighbor, corr in self.graph.neighbors(fid):
+                    ncid = renumbered.get(neighbor)
+                    if ncid is None or ncid == small_cid:
+                        continue
+                    w = abs(corr)
+                    if w > best_weight:
+                        best_weight = w
+                        best_cid = ncid
+            if best_cid is None:
+                continue
+            for fid in members:
+                renumbered[fid] = best_cid
+        # Recompute sizes after merging.
+        sizes = defaultdict(int)
+        for cid in renumbered.values():
+            sizes[cid] += 1
+    elif self.min_cluster_size > 1 and self.min_cluster_policy == "MARK_UNSTABLE":
+        unstable = sorted(
+            [cid for cid, size in sizes.items() if size < self.min_cluster_size]
+        )
+
+    return ClusterResult(
+        assignments=renumbered,
+        cluster_sizes=dict(sizes),
+        unstable_clusters=tuple(unstable),
+        certification_id=(
+            self.certification.certification_id
+            if self.certification is not None
+            else None
+        ),
+        graph_content_hash=(
+            self.certification.graph_content_hash
+            if self.certification is not None
+            else None
+        ),
+        execution_mode=self.execution_mode.value,
+    )
 
 
 @dataclass(frozen=True)

@@ -220,25 +220,19 @@ def test_feature_set_version_has_semantic_hash_including_members():
     assert v.semantic_hash != v2.semantic_hash
 
 
-# ---- (e) Cluster/library layered model ----
+# ---- (e) Cluster/library layered model (refs + views only) ----
 def test_factor_library_version_requires_cluster_set_version_id():
-    graph = c.SimilarityGraphVersion(graph_version_id="G1", graph_ref="graph://1")
-    csv = c.ClusterSetVersion(
-        cluster_set_version_id="CS1",
-        similarity_graph_version=graph,
-        algorithm="leiden",
-    )
-    lib = c.FactorLibraryVersion(
+    lib = c.FactorLibraryVersionView(
         library_version_id="L1",
         logical_library_id="CORE_LOW_REDUNDANCY",
-        cluster_set_version_id=csv.cluster_set_version_id,
+        cluster_set_version_id="CS1",
     )
     assert lib.cluster_set_version_id == "CS1"
     # No cluster_version_id field may exist anymore.
     assert not hasattr(lib, "cluster_version_id")
     # And you cannot construct it with the old field name.
     with pytest.raises(TypeError):
-        c.FactorLibraryVersion(
+        c.FactorLibraryVersionView(
             library_version_id="L1",
             logical_library_id="CORE_LOW_REDUNDANCY",
             cluster_version_id="CV1",  # old name
@@ -246,23 +240,23 @@ def test_factor_library_version_requires_cluster_set_version_id():
 
 
 def test_cluster_set_version_references_similarity_graph_version():
-    graph = c.SimilarityGraphVersion(graph_version_id="G1", graph_ref="graph://1")
-    csv = c.ClusterSetVersion(
+    ref = c.ClusterSetVersionRef(
         cluster_set_version_id="CS1",
-        similarity_graph_version=graph,
-        algorithm="leiden",
+        digest="a" * 64,
+        similarity_graph_version_ref="G1",
     )
-    assert csv.similarity_graph_version.graph_version_id == "G1"
+    assert ref.similarity_graph_version_ref == "G1"
 
 
 def test_cluster_version_belongs_to_cluster_set():
-    cv = c.ClusterVersion(
+    ref = c.ClusterVersionRef(
         cluster_version_id="CV1",
+        digest="a" * 64,
         logical_cluster_id="CL_PV_MOM_017",
         cluster_set_version_id="CS1",
         algorithm_cluster_label="cluster 18",
     )
-    assert cv.cluster_set_version_id == "CS1"
+    assert ref.cluster_set_version_id == "CS1"
 
 
 # ---- (f) LifecycleState vs QRPPipelineStage separation ----

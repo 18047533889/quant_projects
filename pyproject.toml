@@ -182,6 +182,10 @@ testpaths = ["tests"]
 addopts = "-ra"
 markers = [
     "integration: 需本地 parquet 或 RUN_* 环境变量",
+    # Task #107 cross-package contract integration harness
+    # (integration_tests/).  Run via `pytest -m integration` (hermetic, no
+    # parquet / PG / network needed) or `pytest integration_tests/`.
+    "cross_package_contracts: Task #107 跨包契约回灌测试 (integration_tests/，无需本地数据)",
     "slow: 大面板 nightly 基准",
     "modin: 需要安装 modin，默认 CI 不跑",
     "perf: 轻量性能回归 smoke",

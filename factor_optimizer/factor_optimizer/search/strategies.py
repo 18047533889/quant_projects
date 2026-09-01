@@ -17,6 +17,53 @@ from factor_optimizer.contracts.trial import Trial, TrialStatus
 
 
 # ---------------------------------------------------------------------------
+# Serializable search-strategy SPEC (P1-FO-006)
+# ---------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class SearchStrategySpec:
+    """Semantic spec of a search strategy for checkpoint identity.
+
+    The runtime strategy object is not serialized into a ``SearchConfig``
+    checkpoint; this spec carries the strategy TYPE + constructor config + seed
+    so a resumed run reproduces the exact same proposal strategy.  The strategy's
+    stochastic STATE is captured separately by ``SearchStrategyState``; the spec
+    is what goes into ``SearchConfig.to_dict()``.
+    """
+
+    strategy_type: str
+    ctor: Dict[str, Any] = field(default_factory=dict)
+    seed: Optional[int] = None
+
+    @classmethod
+    def from_strategy(cls, strategy: "SearchStrategy") -> "SearchStrategySpec":
+        """Capture the semantic spec of a strategy instance."""
+        return cls(
+            strategy_type=type(strategy).__name__,
+            ctor=strategy._state_fields().get("ctor", {}),  # noqa: SLF001
+            seed=getattr(strategy, "seed", None),
+        )
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "strategy_type": self.strategy_type,
+            "ctor": self.ctor,
+            "seed": self.seed,
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "SearchStrategySpec":
+        if not isinstance(data, dict) or "strategy_type" not in data:
+            raise ValueError("SearchStrategySpec checkpoint missing 'strategy_type'")
+        return cls(
+            strategy_type=str(data["strategy_type"]),
+            ctor=dict(data.get("ctor") or {}),
+            seed=data.get("seed"),
+        )
+
+
+
+# ---------------------------------------------------------------------------
 # Serializable search-strategy state
 # ---------------------------------------------------------------------------
 

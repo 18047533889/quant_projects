@@ -181,6 +181,7 @@ class FactorSetAssembler:
                     matched.append(asset)
 
         matched = self._rank(matched, spec, latest_decisions, similarity_provider, assembly_policy)
+        matched = self._apply_policy_constraints(matched, assembly_policy)
         matched = self._apply_family_constraints(matched, spec.family_constraints)
         if spec.max_factors is not None:
             matched = matched[: spec.max_factors]
@@ -598,6 +599,65 @@ class FactorSetAssembler:
         return digest.hexdigest()
 
     @staticmethod
+    def _apply_policy_constraints(
+        assets: list[FactorAsset], assembly_policy: Optional[AssemblyPolicy]
+    ) -> list[FactorAsset]:
+        """Enforce the typed :class:`AssemblyPolicy` budgets when a policy is
+        EXPLICITLY supplied.
+
+        The policy is not merely a ranking weight provider — it is a budget /
+        concentration contract.  In ranked order (the same order that later
+        feeds ``max_factors``):
+
+        - ``max_per_microcluster`` caps how many members share one microcluster
+          grouping (``family``).
+        - ``max_per_macrocluster`` caps how many members share one macrocluster
+          grouping (``family``).
+        - ``capacity_budget`` caps the total set size before ``spec.max_factors``
+          is applied (a policy may be stricter than the spec).
+
+        A missing grouping is its own bucket (never silently exempt).  When NO
+        policy is supplied, nothing is changed (legacy behaviour preserved) — a
+        default policy must not cap the assembly behind the caller's back.
+
+        A policy that is accepted but never applied is the audit bug this
+        method closes: when a caller EXPLICITLY supplies a policy, its budgets
+        are enforced here.
+        """
+        if assembly_policy is None:
+            return assets
+
+        micro_limit = assembly_policy.max_per_microcluster
+        macro_limit = assembly_policy.max_per_macrocluster
+        capacity = assembly_policy.capacity_budget
+        micro_counts: dict[str, int] = {}
+        macro_counts: dict[str, int] = {}
+        selected: list[FactorAsset] = []
+        for asset in assets:
+            if capacity is not None and len(selected) >= capacity:
+                break
+            # ``family`` is the microcluster grouping; a missing grouping is
+            # its own bucket — never silently exempt from the cap.
+            micro = (
+                f"__micro_{asset.factor_id}"
+                if asset.family is None
+                else f"micro_{asset.family}"
+            )
+            macro = (
+                f"__macro_{asset.factor_id}"
+                if asset.family is None
+                else f"macro_{asset.family}"
+            )
+            if micro_counts.get(micro, 0) >= micro_limit:
+                continue
+            if macro_counts.get(macro, 0) >= macro_limit:
+                continue
+            selected.append(asset)
+            micro_counts[micro] = micro_counts.get(micro, 0) + 1
+            macro_counts[macro] = macro_counts.get(macro, 0) + 1
+        return selected
+
+    @staticmethod
     def _apply_family_constraints(
         assets: list[FactorAsset], constraints: Optional[str]
     ) -> list[FactorAsset]:
@@ -816,7 +876,10 @@ def _decision_score(decision: Optional[SelectionDecision]) -> Optional[float]:
 
     Reads the ``score`` key (a finite float) from the decision metadata.  Used
     to populate ``FactorMembership.assembly_score``.  Returns None when absent
-    or malformed — a member is never scored on a fabricated value.
+    or malformed — a member is never scored on a fabricated value.  A
+    NaN / ±inf / non-numeric score is treated as None (P0-FA-015): a
+    non-finite score can never reach ``FactorMembership.assembly_score``,
+    whose contract requires a finite value.
     """
     if decision is None or not decision.metadata:
         return None
@@ -892,6 +955,30 @@ class _DiversePolicy:
             return f"{self.assembly_policy.policy_id}@{self.assembly_policy.version}"
         return None
 
+    @property
+    def quality_weight_abs(self) -> float:
+        """Absolute value of ``quality_weight`` (finite, non-boolean).
+
+        The MMR weights are validated by :class:`AssemblyPolicy` at
+        construction (finite, in [0, 1]), but a caller could supply a raw
+        float-backed object that evades the check; the ranker must fail closed
+        rather than multiply by a NaN/±inf weight.
+        """
+        value = self.quality_weight
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise ValueError(
+                "quality_weight must be a non-boolean number; "
+                f"got {value!r} — failing closed (a non-finite weight would "
+                "corrupt the MMR ranking)"
+            )
+        fv = float(value)
+        if fv != fv or fv in (float("inf"), float("-inf")):
+            raise ValueError(
+                "quality_weight must be finite; failing closed (a non-finite "
+                "weight would corrupt the MMR ranking)"
+            )
+        return fv
+
 
 def _diverse_mmr_rank(
     assets: list[FactorAsset],
@@ -933,8 +1020,8 @@ def _diverse_mmr_rank(
         )
 
     policy = _DiversePolicy(assembly_policy)
-    q_weight = policy.quality_weight
-    r_weight = policy.redundancy_weight
+    q_weight = policy.quality_weight_abs
+    r_weight = abs(float(policy.redundancy_weight))
 
     def quality(asset: FactorAsset, recency_rank: int) -> float:
         decision = decisions.get(asset.factor_id)

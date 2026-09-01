@@ -29,9 +29,9 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from .cluster import ClusterLabelDrift, ClusterVersionPair, classify_cluster_label_drift
-from .cluster_library import ClusterConversionType, ClusterLineageEdge
+from .cluster_library import ClusterConversionType, FactorLibraryVersionRef
 from .factor_library import (
-    FactorLibraryVersion,
+    FactorLibraryVersionView,
     LibraryActivePointer,
     LibraryPromotionRecord,
     LibraryStatus,
@@ -58,10 +58,10 @@ __all__ = [
     # re-exported chain types
     "ClusterLabelDrift",
     "ClusterVersionPair",
-    "ClusterLineageEdge",
     "ClusterConversionType",
     "classify_cluster_label_drift",
-    "FactorLibraryVersion",
+    "FactorLibraryVersionRef",
+    "FactorLibraryVersionView",
     "LibraryActivePointer",
     "LibraryPromotionRecord",
     "LibraryStatus",

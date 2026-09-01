@@ -513,6 +513,7 @@ class EvaluationArtifact:
     split_ref: Optional[DomainArtifactRef] = None
     snapshot_ref: Optional[DomainArtifactRef] = None
     universe_ref: Optional[DomainArtifactRef] = None
+    evaluation_mode: str = "RESEARCH"  # RESEARCH / VALIDATION / PRODUCTION
     metric_evidence_refs: Tuple[DomainArtifactRef, ...] = ()
     diagnostic_refs: Tuple[DomainArtifactRef, ...] = ()
     spec_identity: Optional[EvaluationSpecIdentity] = None
@@ -560,6 +561,15 @@ class EvaluationArtifact:
                 "EvaluationArtifact.created_at must be a string, got "
                 f"{type(self.created_at).__name__}"
             )
+        if not isinstance(self.evaluation_mode, str) or self.evaluation_mode not in {
+            "RESEARCH",
+            "VALIDATION",
+            "PRODUCTION",
+        }:
+            raise ValueError(
+                f"EvaluationArtifact.evaluation_mode must be one of "
+                f"RESEARCH/VALIDATION/PRODUCTION, got {self.evaluation_mode!r}"
+            )
         # Typed cross-domain references (R55 audit #24): every reference field
         # is a validated DomainArtifactRef (or tuple of them).  Bare strings /
         # ad-hoc dicts are rejected fail-closed at construction.
@@ -584,6 +594,29 @@ class EvaluationArtifact:
             _coerce_domain_ref_tuple(self.diagnostic_refs, "diagnostic_refs"),
         )
         object.__setattr__(self, "timing", _freeze_mapping(self.timing, "timing"))
+        # P0-QE-003: PRODUCTION evaluation must carry the full evidence
+        # provenance — a production EvaluationArtifact with snapshot=None /
+        # split=None / universe=None would be consumed downstream as production
+        # evidence while lacking the provenance that makes it trustworthy.
+        if self.evaluation_mode == "PRODUCTION":
+            _missing = [
+                name
+                for name in (
+                    "factor_value_ref",
+                    "label_definition_ref",
+                    "evaluation_policy_ref",
+                    "evaluation_profile_ref",
+                    "split_ref",
+                    "snapshot_ref",
+                    "universe_ref",
+                )
+                if getattr(self, name) is None
+            ]
+            if _missing:
+                raise ValueError(
+                    "EvaluationArtifact(evaluation_mode=PRODUCTION) requires "
+                    f"non-null provenance refs, missing: {sorted(_missing)}"
+                )
         # R55 #23: three-part identity.  The spec identity defaults to one
         # derived from the artifact's own spec-relevant fields; the result
         # content defaults to the run timing; the envelope combines them.

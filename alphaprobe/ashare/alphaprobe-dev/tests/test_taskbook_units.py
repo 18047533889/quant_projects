@@ -107,6 +107,40 @@ class TestCalibrator:
         bad = c.utility("mdd", 0.95, lower_is_better=True)
         assert good > bad
 
+    def test_lower_is_better_z_equals_neg_standard_z(self):
+        # Bug3 回归：lower_is_better 分支 z = -( (x-median)/MAD )
+        c = MetricCalibrator()
+        vals = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
+        for v in vals:
+            c.observe("mdd", v)
+        c.freeze("r1")
+        good = c.utility("mdd", 0.2, lower_is_better=True)
+        bad = c.utility("mdd", 0.9, lower_is_better=True)
+        assert good > bad
+        # 数值等于 -(标准 z) 再 sigmoid
+        import statistics
+
+        med = statistics.median(vals)
+        mad = statistics.median([abs(x - med) for x in vals])
+        z_good = -(0.2 - med) / (1.4826 * mad + 1e-9)
+        z_bad = -(0.9 - med) / (1.4826 * mad + 1e-9)
+        assert good == pytest.approx(c._sigmoid(z_good))
+        assert bad == pytest.approx(c._sigmoid(z_bad))
+        assert good > c._sigmoid(-z_good) or good >= 0.5  # 方向性 sanity
+
+    def test_lower_is_better_smaller_mdd_higher_utility(self):
+        # Bug3 验收：更小 mdd → 更高 utility（freeze 后）
+        c = MetricCalibrator()
+        for v in [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]:
+            c.observe("mdd", v)
+        c.freeze("r1")
+        prev = None
+        for v in (0.05, 0.3, 0.55, 0.8, 1.2):
+            u = c.utility("mdd", v, lower_is_better=True)
+            if prev is not None:
+                assert u < prev  # 更小 mdd → 更高 utility（递减）
+            prev = u
+
     def test_per_round_freeze(self):
         c = MetricCalibrator()
         for v in range(10, 60):
@@ -125,6 +159,71 @@ class TestCalibrator:
         c.observe("m", 500.0)
         c.freeze("r2")
         assert c.frozen_round == "r2"
+
+    def test_utility_not_observed_metric_after_freeze_half(self):
+        # freeze 后首次消费未观测 metric → 0.5（不 NaN、不越界）
+        c = MetricCalibrator()
+        for v in range(10, 60):
+            c.observe("m", float(v))
+        c.freeze("r1")
+        u = c.utility("mdd", 0.3, lower_is_better=True)
+        assert u == 0.5
+
+
+# §87.3b warmup ordinal 模式（Bug4）
+class TestCalibratorWarmup:
+    def test_warmup_monotonic_within_sample(self):
+        # 未 freeze：同指标不同值 → 单调 utility
+        c = MetricCalibrator(min_warmup_n=10)
+        vals = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
+        for v in vals:
+            c.observe("m", v)
+        us = [c.utility("m", v) for v in vals]
+        assert all(b >= a for a, b in zip(us, us[1:]))  # 单调不减
+        assert us[0] == pytest.approx(0.1) and us[-1] == pytest.approx(1.0)
+
+    def test_warmup_lower_is_better_monotonic(self):
+        c = MetricCalibrator(min_warmup_n=10)
+        vals = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
+        for v in vals:
+            c.observe("mdd", v)
+        us = [c.utility("mdd", v, lower_is_better=True) for v in vals]
+        assert all(b <= a for a, b in zip(us, us[1:]))  # 单调不增（更小 → 更高）
+        assert us[0] == pytest.approx(1.0) and us[-1] == pytest.approx(0.1)
+
+    def test_seed_prior_then_freeze_immediately(self):
+        # seed_prior 预填 10 万 seed 分布后立即 freeze 成功
+        c = MetricCalibrator(min_warmup_n=100_000)
+        c.seed_prior({"rankic": [0.01 + 0.001 * (i % 100) for i in range(100_000)]})
+        c.freeze("seed_r1")
+        assert c.is_frozen()
+        u = c.utility("rankic", 0.05)
+        assert 0.0 < u <= 1.0
+
+    def test_small_warmup_path(self):
+        # min_warmup_n=10 小样本：未达阈值走 ordinal，达阈值后可 freeze
+        c = MetricCalibrator(min_warmup_n=10)
+        for v in [1.0, 2.0, 3.0]:
+            c.observe("m", v)
+        assert c.warmup_active("m") is True
+        u_hi = c.utility("m", 3.0)
+        u_lo = c.utility("m", 1.0)
+        assert u_hi > u_lo
+        for v in range(4, 12):
+            c.observe("m", float(v))
+        c.freeze("r1")
+        assert c.warmup_active("m") is False
+        assert c.is_frozen()
+
+    def test_frozen_path_unchanged_by_warmup(self):
+        # 已 freeze 路径行为不受 warmup 影响
+        c = MetricCalibrator(min_warmup_n=1000)
+        for v in range(10, 60):
+            c.observe("m", float(v))
+        c.freeze("r1")
+        u1 = c.utility("m", 30.0)
+        assert c.utility("m", 30.0) == u1
+        assert c.is_frozen()
 
 
 # §87.4 D10

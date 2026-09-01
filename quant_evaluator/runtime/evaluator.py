@@ -40,7 +40,10 @@ from quant_evaluator.runtime.budgets import (
     BudgetTracker,
     ResourceUsage,
 )
-from quant_evaluator.registry.metrics import CANONICAL_METRIC_ALIASES, get_metric
+from quant_evaluator.registry.metrics import (
+    CANONICAL_METRIC_ALIASES,
+    get_metric,
+)
 
 
 def _resolve_alias(metric_id: str) -> str:
@@ -820,6 +823,31 @@ def _to_per_factor_array(raw, metric_id: str, num_factors: int) -> np.ndarray:
 
     from quant_evaluator.contracts.errors import UnsupportedMetricError
 
+    # QE-R2: returns-panel metrics.  The registry compute_fn receives the raw
+    # (T, N) panel (not the (T, F) per-factor reduction); the metric value per
+    # factor is derived from the factor cross-section each day, so the raw
+    # panel IS the per-factor result: scalar stats reduce over all finite
+    # returns, long_short_returns keeps the (T,) long-minus-short series.
+    if metric_id in _RETURNS_PANEL_METRIC_IDS:
+        if metric_id == "long_short_returns":
+            # compute_long_short_returns returns (long, short, long_short);
+            # the registered metric is the long-minus-short series.
+            if not isinstance(raw, (tuple, list)) or len(raw) != 3:
+                raise UnsupportedMetricError(
+                    f"Metric '{metric_id}' did not return the (long, short, "
+                    f"long_short) triple (got {type(raw).__name__})"
+                )
+            raw = raw[2]
+        if not isinstance(raw, np.ndarray):
+            raise UnsupportedMetricError(
+                f"Metric '{metric_id}' did not return per-factor values "
+                f"(got {type(raw).__name__})"
+            )
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", RuntimeWarning)
+            with np.errstate(invalid="ignore"):
+                return np.asarray([np.nanmean(raw)], dtype=np.float64)
+
     if not isinstance(raw, np.ndarray):
         raise UnsupportedMetricError(
             f"Metric '{metric_id}' did not return per-factor values "
@@ -890,6 +918,91 @@ def _ic_method_for_metric(registry_name: str) -> str:
         return get_metric(registry_name).ic_method
     except (KeyError, AttributeError):
         return "pearson"
+
+
+def _make_panel_wrapper(cfn: Callable) -> Callable:
+    """Wrap a registry compute_fn that consumes raw return/factor panels.
+
+    The generic runtime binder supplies ``factor_batch`` / ``label_bundle``
+    (and ``computed_metrics`` / ``metadata``); the panel metrics need the raw
+    (T, N) forward-return panel (and, for long/short construction, the raw
+    factor panel) instead.  Derive the panel-shaped parameters from the
+    contracts and forward only the arguments the compute_fn accepts, so the
+    registry implementation stays the single source of truth.
+    """
+    def _panel_wrapper(
+        factor_batch: Optional[FactorBatch] = None,
+        label_bundle: Optional[LabelBundle] = None,
+        computed_metrics: Optional[Dict[str, Any]] = None,
+        **kwargs: Any,
+    ) -> np.ndarray:
+        try:
+            fn_sig = inspect.signature(cfn)
+        except (TypeError, ValueError):
+            filtered = dict(kwargs)
+        else:
+            if any(
+                p.kind == inspect.Parameter.VAR_KEYWORD
+                for p in fn_sig.parameters.values()
+            ):
+                filtered = dict(kwargs)
+            else:
+                filtered = {
+                    k: v for k, v in kwargs.items() if k in fn_sig.parameters
+                }
+        if "returns" in fn_sig.parameters:
+            if label_bundle is None:
+                raise InvalidContractError(
+                    "returns-panel metric requires label_bundle"
+                )
+            filtered["returns"] = _label_return_panel(label_bundle)
+        if "forward_returns" in fn_sig.parameters:
+            if label_bundle is None:
+                raise InvalidContractError(
+                    "returns-panel metric requires label_bundle"
+                )
+            filtered["forward_returns"] = _label_return_panel(label_bundle)
+        if "factor_values" in fn_sig.parameters:
+            if factor_batch is None:
+                raise InvalidContractError(
+                    "long_short_returns requires factor_batch"
+                )
+            values = np.asarray(factor_batch.values, dtype=np.float64)
+            if factor_batch.validity is not None:
+                values = np.where(
+                    np.asarray(factor_batch.validity, dtype=bool),
+                    values,
+                    np.nan,
+                )
+            filtered["factor_values"] = values
+        if "validity_mask" in fn_sig.parameters:
+            if factor_batch is not None and factor_batch.validity is not None:
+                filtered["validity_mask"] = np.asarray(
+                    factor_batch.validity, dtype=bool
+                )
+        return cfn(**filtered)
+    return _panel_wrapper
+
+
+def _label_return_panel(label_bundle: LabelBundle) -> np.ndarray:
+    """Return the raw (T, N) forward-return panel of a LabelBundle."""
+    values = np.asarray(label_bundle.values, dtype=np.float64)
+    if label_bundle.validity is not None:
+        values = np.where(
+            np.asarray(label_bundle.validity, dtype=bool), values, np.nan
+        )
+    return values
+
+
+# QE-R2: registry metric ids whose compute_fn consumes the raw (T, N) return
+# (and factor) panel rather than a per-factor reduction.  Kept out of the
+# generic argument binder; the facade wraps them with ``_make_panel_wrapper``.
+_RETURNS_PANEL_METRIC_IDS = frozenset({
+    "long_short_returns",
+    "sharpe_ratio",
+    "sortino_ratio",
+    "win_rate",
+})
 
 
 def evaluate(
@@ -986,6 +1099,11 @@ def evaluate(
     # inputs — the registry compute_fn remains the single source of truth
     # for the metric value.
     facade_ic_wrappers: Dict[str, Callable] = {}
+    # QE-R2: returns-panel metrics (long_short_returns / sharpe_ratio /
+    # sortino_ratio / win_rate) bind panel-shaped parameters that the generic
+    # runtime argument binder cannot supply; the facade wraps their registry
+    # compute_fn to derive the return series from the factor/label panels.
+    facade_panel_wrappers: Dict[str, Callable] = {}
 
     # QE-METRIC-P0-02: the registry is the single truth. No local closures
     # shadow it anymore — every requested metric must resolve through
@@ -1004,6 +1122,16 @@ def evaluate(
                 f"Public evaluate does not support metric '{metric_id}'"
             ) from None
         metric_specs.append({"metric_id": metric_id, "metric_kind": "custom"})
+        # QE-R2: returns-based portfolio metrics (long/short backtest family)
+        # consume the raw (T, N) forward-return panel — not a per-factor
+        # reduction.  Declare full-batch so the chunker never slices the
+        # factor/return panel for these metrics, and inject a thin input
+        # adapter so the runtime's generic argument binding satisfies their
+        # panel-shaped parameters.  The registry compute_fn remains the single
+        # source of truth for the metric value.
+        if metric_id in _RETURNS_PANEL_METRIC_IDS:
+            metric_specs[-1]["requires_full_batch"] = True
+            facade_panel_wrappers[metric_id] = _make_panel_wrapper(spec.compute_fn)
         if "ICSeriesArtifact" in (spec.requires or []):
             compute_fn = spec.compute_fn
             # QE-P1-27: the wrapper IC series must follow the metric —
@@ -1040,6 +1168,12 @@ def evaluate(
             )
             runtime.register_metric(metric_id, facade_ic_wrappers[metric_id])
 
+    # QE-R2: register the returns-panel adapters so the runtime resolves the
+    # panel-shaped compute_fn through its registered callables (same route as
+    # the ICSeriesArtifact wrappers above).
+    for metric_id, wrapper in facade_panel_wrappers.items():
+        runtime.register_metric(metric_id, wrapper)
+
     result = runtime.evaluate(factor_batch, label_bundle, metric_specs, use_chunking=False)
 
     # Adapt registry compute_fn outputs (ndarray per factor, or (T, F)
@@ -1061,12 +1195,15 @@ def evaluate(
         values = adapted_values[metric_id]
         counts = observation_counts[metric_id]
         for index, factor_id in enumerate(factor_batch.factor_ids):
-            numeric = float(values[index])
+            # QE-R2: returns-panel metrics return one scalar for the whole
+            # panel; the same value is reported for every factor.
+            metric_value_index = 0 if metric_id in _RETURNS_PANEL_METRIC_IDS else index
+            numeric = float(values[metric_value_index])
             grouped_metrics[factor_id][metric_id] = MetricValue(
                 metric_id=metric_id,
                 value=None if not np.isfinite(numeric) else numeric,
                 valid=bool(np.isfinite(numeric)),
-                observation_count=int(counts[index]),
+                observation_count=int(counts[metric_value_index]),
                 warnings=() if np.isfinite(numeric) else ("non-finite result",),
             )
 
@@ -1075,6 +1212,17 @@ def evaluate(
         if factor_batch.num_factors == 1
         else {}
     )
+    if factor_batch.num_factors > 1:
+        # QE-R2: returns-panel metrics are panel-level, not per-factor: report
+        # the same scalar through every factor so the single-factor facade
+        # contract (``metric_values``) and the grouped view stay consistent.
+        for metric_id in metric_ids:
+            if metric_id in _RETURNS_PANEL_METRIC_IDS:
+                first = grouped_metrics[factor_batch.factor_ids[0]].get(metric_id)
+                if first is not None:
+                    for factor_id in factor_batch.factor_ids:
+                        grouped_metrics[factor_id][metric_id] = first
+                    metric_values[metric_id] = first
     bundle_metadata = dict(request_metadata)
     bundle_metadata.update(request_fields)
     bundle_metadata.update({"context": context, "where": None, "runtime": result.metadata})

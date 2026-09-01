@@ -7,7 +7,11 @@ per-asset to ensure no future leakage.
 import numpy as np
 import pandas as pd
 from typing import Optional, Tuple, NamedTuple
-from statsmodels.tsa.seasonal import STL as STL_statsmodels
+
+try:
+    from statsmodels.tsa.seasonal import STL as STL_statsmodels
+except ImportError:  # pragma: no cover - statsmodels is an optional heavy dep
+    STL_statsmodels = None  # type: ignore[assignment]
 
 
 class STLResult(NamedTuple):
@@ -108,6 +112,11 @@ def stl_decompose(
 
         if filled.isna().any():
             # Still have NaN at the start
+            na_series = pd.Series(np.nan, index=series.index)
+            return na_series.copy(), na_series.copy(), na_series.copy()
+
+        if STL_statsmodels is None:
+            # statsmodels not installed: STL decomposition is unavailable.
             na_series = pd.Series(np.nan, index=series.index)
             return na_series.copy(), na_series.copy(), na_series.copy()
 

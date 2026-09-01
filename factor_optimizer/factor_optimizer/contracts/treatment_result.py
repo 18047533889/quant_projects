@@ -14,7 +14,7 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, Optional, Tuple
 
 from factor_optimizer.contracts.library_snapshot_ref import LibrarySnapshotRef
@@ -77,7 +77,7 @@ class TreatmentOptimizationResultArtifact:
     selected_trial_ref: str = ""
     uncertainty_evidence_ref: str = ""
     sealed_test_ref: Optional[str] = None
-    created_at: datetime = field(default_factory=datetime.now)
+    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
     def __post_init__(self) -> None:
         for name in (

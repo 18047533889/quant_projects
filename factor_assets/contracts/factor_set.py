@@ -46,7 +46,7 @@ class FactorMembership:
     # it carries the reference produced upstream by the optimizer (a bare str
     # content-hash shorthand or a full ``LibrarySnapshotRef``-shaped dict
     # PURE-DTO) and never recomputes or fabricates it.
-    treatment_optimization_ref: Optional[str] = None  # FO optimization result that produced the treatment
+    treatment_optimization_ref: Optional[str | dict] = None  # FO optimization result that produced the treatment
     assembly_score: Optional[float] = None     # policy score that ranked this member
     selection_rank: Optional[int] = None       # 0-based rank within the assembled set
     reason: Optional[str] = None               # SelectionReason value
@@ -56,13 +56,27 @@ class FactorMembership:
             raise ValueError("factor_id is required")
         if self.orientation is not None and self.orientation not in (-1, 1):
             raise ValueError("orientation must be -1, 1, or None")
-        if self.assembly_score is not None and self.assembly_score != self.assembly_score:
-            raise ValueError("assembly_score must be finite")
+        if self.assembly_score is not None:
+            if isinstance(self.assembly_score, bool) or not isinstance(
+                self.assembly_score, (int, float)
+            ):
+                raise TypeError("assembly_score must be a non-boolean number or None")
+            score = float(self.assembly_score)
+            if score != score or score in (float("inf"), float("-inf")):
+                raise ValueError("assembly_score must be finite")
+            object.__setattr__(self, "assembly_score", score)
+        # Canonicalize the treatment-optimization reference into its transport
+        # form (str shorthand / full ref mapping PURE-DTO) so the assembly hash
+        # covers the canonical value regardless of the shape a caller passes.
+        object.__setattr__(
+            self,
+            "treatment_optimization_ref",
+            _canonical_ref(self.treatment_optimization_ref),
+        )
         for _name, _ref in (
             ("treatment_selection_ref", self.treatment_selection_ref),
             ("preprocess_policy_ref", self.preprocess_policy_ref),
             ("preprocess_state_ref", self.preprocess_state_ref),
-            ("treatment_optimization_ref", self.treatment_optimization_ref),
         ):
             if _ref is not None and not isinstance(_ref, str):
                 raise TypeError(f"{_name} must be a str or None")

@@ -1,7 +1,7 @@
 """SeenCache: track previously evaluated factors to avoid duplicates."""
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, Optional, Set
 
 
@@ -88,7 +88,7 @@ class SeenCache:
         # New record
         record = SeenRecord(
             canonical_hash=canonical_hash,
-            first_seen_at=datetime.now(),
+            first_seen_at=datetime.now(timezone.utc),
             trial_id=trial_id,
             factor_id=factor_id,
             metadata=metadata,

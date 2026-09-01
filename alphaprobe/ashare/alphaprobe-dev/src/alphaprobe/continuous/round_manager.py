@@ -68,6 +68,9 @@ class RoundManager:
         self._calibrator_factory = calibrator_factory
         self.patience_tracker = patience_tracker
         self.campaign_callback = campaign_callback or self._default_campaign
+        # §41：上一轮 MemoryPacket（parents/structural_neighbors）→ 下一轮搜索输入
+        self.current_packet: Any | None = None
+        self._packet_error: str | None = None
         if state_dir is None:
             state_dir = Path.cwd() / "data" / "logs" / "continuous"
         self.state_dir = Path(state_dir)
@@ -102,12 +105,34 @@ class RoundManager:
         return False
 
     def _load_memory(self) -> dict[str, Any] | None:
+        """load memory：build_memory_packet 结果存 self.current_packet（§41 闭环）。
+
+        返回 packet 的 parent 视图像（供 _default_campaign 构造 pipeline parents）。
+        """
         if self.store is None:
             return None
         try:
-            return self.store.build_memory_packet(parent_node={"factor_id": "round_root"})
-        except Exception:  # noqa: BLE001 - memory 不可用不阻塞
+            packet = self.store.build_memory_packet(parent_node={"factor_id": "round_root"})
+        except Exception as exc:  # noqa: BLE001 - memory 不可用不阻塞，但记录原因
+            self._packet_error = f"build_memory_packet failed: {exc}"
+            self.current_packet = None
             return None
+        self.current_packet = packet
+        self._packet_error = None
+        # 上一轮知识 → 下一轮搜索输入：parents = packet.parent + structural_neighbors
+        if hasattr(packet, "parent") and isinstance(packet.parent, dict):
+            parent = dict(packet.parent)
+        elif isinstance(packet, dict):
+            parent = dict(packet.get("parent") or {})
+        else:
+            parent = {}
+        neighbors: list[dict[str, Any]] = []
+        for n in getattr(packet, "structural_neighbors", []) or []:
+            if isinstance(n, dict):
+                neighbors.append(dict(n))
+        parents = [parent] if parent else []
+        parents.extend(neighbors[:5])
+        return {"parents": parents, "packet": packet}
 
     def _freeze_calibrator(self, round_id: str) -> None:
         cal = self.calibrator
@@ -119,6 +144,7 @@ class RoundManager:
     def _update_memory(self, round_id: str, result: dict[str, Any]) -> None:
         if self.store is None:
             return
+        # §50 事件 + §41 pool_snapshot/attempts 实时写（不做 round 结束一次性 upsert）
         try:
             if hasattr(self.store, "add_regime_event"):
                 self.store.add_regime_event(
@@ -128,8 +154,59 @@ class RoundManager:
                     description=f"round {round_id} complete",
                     payload={"pool_size": result.get("pool_size", 0)},
                 )
-        except Exception:  # noqa: BLE001
-            pass
+        except Exception as exc:  # noqa: BLE001 - memory 阶段失败不阻塞主循环
+            print(f"[round_manager] add_regime_event failed: {exc}")
+
+        # RoundResult（alphaprobe.pipeline.RoundResult）→ pool_snapshot upsert factor_nodes
+        rr = result.get("round_result")
+        pool_snapshot = []
+        if rr is not None:
+            try:
+                pool_snapshot = list(getattr(rr, "pool_snapshot", []) or [])
+            except Exception as exc:  # noqa: BLE001
+                print(f"[round_manager] read pool_snapshot failed: {exc}")
+                pool_snapshot = []
+        for member in pool_snapshot[:50]:
+            formula = str(member.get("formula") or member.get("canonical_formula") or "")
+            fid = str(member.get("factor_id") or "")
+            if not formula or not fid:
+                continue
+            try:
+                from alphaprobe.dedup import (
+                    canonical_ast_hash,
+                    canonicalize_dsl,
+                    signal_equivalence_id,
+                )
+
+                canonical = canonicalize_dsl(formula)
+                self.store.upsert_factor_node(
+                    factor_id=fid,
+                    canonical_formula=canonical,
+                    canonical_ast_hash=canonical_ast_hash(formula),
+                    signal_equivalence_id=signal_equivalence_id(formula),
+                    source_system="alphaprobe",
+                    source_snapshot=str(round_id),
+                    source_type="MINED",
+                    exportable=False,
+                )
+            except Exception as exc:  # noqa: BLE001 - 单节点失败不阻塞
+                print(f"[round_manager] upsert_factor_node failed: {exc}")
+
+        # attempts / evaluations 计数更新（bump_exploration 由 pipeline 内实时写，
+        # 这里从 result 计数做一次汇总事件快照）
+        try:
+            n_eval = int(getattr(rr, "evaluated", 0) or 0) if rr is not None else 0
+            n_admit = int(getattr(rr, "admitted", 0) or 0) if rr is not None else 0
+            if hasattr(self.store, "add_regime_event") and (n_eval or n_admit):
+                self.store.add_regime_event(
+                    event_id=f"round_{round_id}_summary",
+                    start_date=str(round_id),
+                    end_date=str(round_id),
+                    description=f"round {round_id} pipeline summary",
+                    payload={"evaluated": n_eval, "admitted": n_admit},
+                )
+        except Exception as exc:  # noqa: BLE001
+            print(f"[round_manager] summary event failed: {exc}")
 
     def _persist_state(self, round_id: str, campaign_id: str, status: str = "running") -> None:
         path = self.state_dir / STATE_FILENAME
@@ -154,10 +231,40 @@ class RoundManager:
 
     @staticmethod
     def _default_campaign(round_no: int, calibrator: Any = None, **kwargs: Any) -> dict[str, Any]:
-        """默认单轮逻辑：委托 continuous.run_mining_campaign（args 来自 kwargs）。"""
-        # 延迟导入避免与 alphaprobe.continuous（模块）循环导入；
-        # 真实 campaign 由 runner 层注入，这里只做兜底占位。
-        return {"pool_size": 0, "round_no": round_no}
+        """默认单轮逻辑：委托 alphaprobe.pipeline.SearchPipeline（§41 主链真身）。
+
+        - 真实 campaign 由 runner 层注入；这里做兜底（离线 stub：stub llm_fn +
+          内存 dedup + 静态 evaluate_fn，不跑真实 LLM / 数据）。
+        - pipeline 构造失败才回落 {"pool_size": 0} 并 log 原因（不静默）。
+        - parents 从 kwargs['parents']（RoundManager._load_memory 的 MemoryPacket
+          结果）传入 run_round —— 上一轮知识 → 下一轮搜索输入闭环。
+        """
+        # 延迟 import 防循环（round_manager ↔ pipeline ↔ runner）
+        try:
+            from alphaprobe.pipeline import PipelineConfig, SearchPipeline
+
+            pipeline = SearchPipeline(
+                experiment=None,
+                data_train=None,
+                config=PipelineConfig(pool_target=8, pool_max=16, budget_per_round=6),
+                memory_store=kwargs.get("memory_store"),
+                llm_fn=None,  # 确定性 stub，不跑真实 LLM
+            )
+        except Exception as exc:
+            print(f"[round_manager] pipeline construct failed, fallback placeholder: {exc}")
+            return {"pool_size": 0, "round_no": round_no, "fallback_reason": str(exc)}
+
+        parents = kwargs.get("parents") or []
+        try:
+            result = pipeline.run_round(round_id=f"round_{round_no}", parents=parents)
+        except Exception as exc:  # noqa: BLE001 - 单轮失败不中断 7×24
+            print(f"[round_manager] pipeline.run_round failed, fallback placeholder: {exc}")
+            return {"pool_size": 0, "round_no": round_no, "fallback_reason": str(exc)}
+        return {
+            "round_no": round_no,
+            "pool_size": pipeline.pool_size(),
+            "round_result": result,
+        }
 
     # -- main loop -----------------------------------------------------------
 
@@ -169,7 +276,7 @@ class RoundManager:
             campaign_id = f"campaign_{self.round_no}"
 
             # load memory
-            self._load_memory()
+            memory = self._load_memory()
             # freeze calibrator
             self._freeze_calibrator(round_id)
             # lineage early stop（§56.3）
@@ -189,6 +296,9 @@ class RoundManager:
                 calibrator=self.calibrator,
                 round_id=round_id,
                 campaign_id=campaign_id,
+                # §41：上一轮 MemoryPacket → 本轮搜索输入（parents）
+                parents=(memory or {}).get("parents", []) if memory else [],
+                packet=self.current_packet,
             ) or {}
             # memory update
             self._update_memory(round_id, result)

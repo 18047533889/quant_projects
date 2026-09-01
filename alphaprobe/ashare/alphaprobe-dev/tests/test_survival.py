@@ -210,10 +210,26 @@ class TestOperatorSurvivalStats:
         lo, hi = wilson_interval(0, 10)
         assert 0.0 <= lo <= hi <= 1.0
         lo, hi = wilson_interval(10, 10)
-        # Wilson 95% 下界数学性质：n=10 全成 → lo≈0.72；n=100 全成 → lo≈0.96>0.9
+        # Wilson 95% 双侧下界：n=10 全成 → lo≈0.722（标准公式；旧手写单侧特判
+        # 1.6449²/(n+1.6449²)=0.213 会把 lo 拉到 0.213——那是错的）
         assert 0.70 <= lo <= 0.75 and hi <= 1.0
         lo, hi = wilson_interval(100, 100)
-        assert lo > 0.9
+        # n=100 全成 → lo≈0.963
+        assert 0.953 <= lo <= 0.973
+
+    def test_wilson_interval_matches_standard_formula(self):
+        """wilson_interval(3,10) 与标准 Wilson 双侧公式数值一致（无手写特判）。"""
+        z = 1.96
+        total = 10
+        p = 3 / total
+        denom = 1.0 + z * z / total
+        centre = p + z * z / (2.0 * total)
+        half = z * math.sqrt(p * (1.0 - p) / total + z * z / (4.0 * total * total))
+        exp_lo = max(0.0, (centre - half) / denom)
+        exp_hi = min(1.0, (centre + half) / denom)
+        lo, hi = wilson_interval(3, 10)
+        assert lo == pytest.approx(exp_lo)
+        assert hi == pytest.approx(exp_hi)
 
     def test_mechanism_stats(self):
         factors = [

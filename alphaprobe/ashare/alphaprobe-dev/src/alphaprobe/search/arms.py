@@ -44,6 +44,13 @@ _CONTEXT_PATTERNS = (
     re.compile(r"\bif_else\s*\(", re.IGNORECASE),
     re.compile(r"\bwhere\s*\(", re.IGNORECASE),
 )
+# §27 crossover 组合条件子串：if_else(cond, val, otherwise) 的第一实参（括号平衡）。
+# §27 crossover 组合条件子串：if_else(cond, val, otherwise) 的第一实参（括号平衡）。
+# 条件本身可含函数调用，如 gt(ts_mean(volume, 5), 0.5)。
+_IF_ELSE_ARG_RE = re.compile(
+    r"\bif_else\s*\(\s*((?:[^(),]|\([^()]*\)|\([^()]*\([^()]*\)[^()]*\))*)",
+    re.IGNORECASE,
+)
 
 # §25.4 SchemaExploreArm：9 个 schema 维度（值只做表面归一，语义标注交给 LLM/记忆）
 SCHEMA_DIMENSIONS: tuple[str, ...] = (
@@ -160,7 +167,13 @@ def infer_formula_roles(formula: str) -> dict[str, str]:
     s = str(formula).strip()
     roles: dict[str, str] = {}
     if any(p.search(s) for p in _CONTEXT_PATTERNS):
+        # 首版启发：if_else/where 外层 = 整条 context_condition。抽取条件子串
+        # 时对 if_else 进一步取第一实参（条件部分），而非整条（否则组合出的
+        # if_else(if_else(...), core, 0.0) 会让真实条件嵌套失真）。
         roles["context_condition"] = s
+        m = _IF_ELSE_ARG_RE.match(s)
+        if m:
+            roles["context_condition"] = m.group(1).strip()
     elif any(p.search(s) for p in _QUALITY_PATTERNS):
         roles["quality_filter"] = s
     else:
@@ -329,13 +342,22 @@ class EvolutionArm:
         a: dict[str, Any],
         b: dict[str, Any],
         role: str,
+        *,
+        cond_override: str | None = None,
     ) -> GeneratedCandidate:
-        """role-aware crossover：A.signal_core 包裹 B.context_condition。"""
+        """role-aware crossover：A.signal_core 包裹 B.context_condition。
+
+        cond_override 由调用方传入 B 的已抽取条件子串（B 可能没有 context_condition
+        角色而用了 quality_filter/signal_core 段作条件）；None 时退回自动抽取。
+        """
         fa = str(a.get("formula") or a.get("canonical_formula") or "")
         fb = str(b.get("formula") or b.get("canonical_formula") or "")
         core_a = _extract_role(fa, "signal_core")
-        cond_b = _extract_role(fb, "context_condition")
-        cond_b = cond_b if cond_b != fb else _extract_role(fb, _default_role(fb))
+        if cond_override is not None:
+            cond_b = cond_override
+        else:
+            cond_b = _extract_role(fb, "context_condition")
+            cond_b = cond_b if cond_b != fb else _extract_role(fb, _default_role(fb))
         combined = f"if_else({cond_b}, {core_a}, 0.0)"
         tags = dict(_schema_tags_of(a))
         tags.update(_schema_tags_of(b))
@@ -375,10 +397,63 @@ class EvolutionArm:
         out: list[GeneratedCandidate] = []
         p = ps[0]
         out.append(self._mutate(str(p.get("formula") or ""), rng, p))
-        if len(ps) >= 2:
-            out.append(self._crossover(ps[0], ps[1], "signal_core"))
-        if len(ps) >= 3:
-            out.append(self._crossover(ps[0], ps[2], "quality_filter"))
+        # §27 真 multi-parent role-aware crossover：≥2 parents 时按角色抽取
+        # 产出 if_else(B.context_condition, A.signal_core, 0.0)；角色抽取失败
+        # 或 parents 不足 → 回落单 parent 路径（不抛）。parents 间无序
+        # （补充 parent 不一定排在 ps[1]，角色解析前先做确定性去重）。
+        uniq: list[dict[str, Any]] = []
+        _seen_f: set[str] = set()
+        for _p in ps:
+            _pf = str(_p.get("formula") or _p.get("canonical_formula") or "").strip()
+            if _pf and _pf not in _seen_f:
+                _seen_f.add(_pf)
+                uniq.append(_p)
+        if not uniq:
+            uniq = ps
+        core = _extract_role(str(uniq[0].get("formula") or uniq[0].get("canonical_formula") or ""), "signal_core")
+        for b in uniq[1:]:
+            fb = str(b.get("formula") or b.get("canonical_formula") or "")
+            cond = _extract_role(fb, "context_condition")
+            if cond != fb:
+                out.append(self._crossover(uniq[0], b, "signal_core", cond_override=cond))
+                continue
+            # B 无 context 角色：quality_filter / signal_core 任一段都可能是条件
+            cond = _extract_role(fb, "quality_filter")
+            if cond != fb:
+                out.append(self._crossover(uniq[0], b, "signal_core", cond_override=cond))
+                continue
+            cond = _extract_role(fb, "signal_core")
+            if cond != fb:
+                out.append(self._crossover(uniq[0], b, "signal_core", cond_override=cond))
+        # 没有任何 pair 产出 crossover（全部无 context）→ 单 parent 回落：
+        # 补一条基于 ps[0] 的 no-op mutation（不抛、不静默变空）。
+        if not any(c.action_type == "CROSSOVER" for c in out):
+            # 全部 pair 都无 context 角色可抽 → 单 parent 回落：直接用核心 parent
+            # 的 signal_core 再试一次 B 的 context_condition（B 可能整条就是条件）。
+            if len(uniq) >= 2:
+                b = uniq[1]
+                fb2 = str(b.get("formula") or b.get("canonical_formula") or "")
+                cond2 = _extract_role(fb2, "context_condition")
+                if cond2 != fb2 and core:
+                    out.append(self._crossover(uniq[0], b, "signal_core", cond_override=cond2))
+            if not any(c.action_type == "CROSSOVER" for c in out):
+                # 二次兜底：uniq[0] 本身带 context（本身就是 if_else 条件包装）→
+                # 用 uniq[0] 作条件、uniq[1] 作核心再试（保证 ≥2 parents 必有 pair）。
+                if len(uniq) >= 2 and core == str(uniq[0].get("formula") or uniq[0].get("canonical_formula") or ""):
+                    cond0 = _extract_role(str(uniq[0].get("formula") or ""), "context_condition")
+                    if cond0 != str(uniq[0].get("formula") or ""):
+                        out.append(self._crossover(uniq[1], uniq[0], "signal_core", cond_override=cond0))
+            if not any(c.action_type == "CROSSOVER" for c in out):
+                out.append(
+                    GeneratedCandidate(
+                        formula=str(p.get("formula") or p.get("canonical_formula") or ""),
+                        explanation="crossover fallback: no context_condition parent; single-parent path",
+                        hypothesis="缺少可作条件的 context parent，回落单 parent 生成",
+                        action_type=action_type,
+                        parent_ids=_parent_ids([p]),
+                        schema_tags=_schema_tags_of(p),
+                    )
+                )
         return out
 
 

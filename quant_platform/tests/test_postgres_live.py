@@ -125,6 +125,44 @@ def pg() -> PostgresDb:
         db.close()
 
 
+def test_live_transaction_yields_sqlite_style_adapter(pg: PostgresDb):
+    """P0-PLAT-008: ``transaction()`` yields a SQLite-style adapter, not the raw
+    psycopg2 connection — shared outbox/inbox business code (``conn.execute`` /
+    ``conn.execute(...).fetchone()``) must run against PG unchanged."""
+    with pg.transaction() as conn:
+        conn.execute(
+            "INSERT INTO outbox_events "
+            "(event_type, aggregate_type, aggregate_id, correlation_id, "
+            "idempotency_key, payload_json, occurred_at, status, attempts) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', 0) RETURNING id",
+            ("adapter_test", "agg", "a1", "c1", "k-adapter", "{}", 0),
+        )
+    # verify the row landed (committed)
+    rows = pg.query(
+        "SELECT event_type FROM outbox_events WHERE idempotency_key = ?",
+        ("k-adapter",),
+    )
+    assert rows and rows[0]["event_type"] == "adapter_test"
+
+
+def test_live_transaction_adapter_execute_returning(pg: PostgresDb):
+    """P0-PLAT-008: ``execute_returning`` returns the inserted surrogate id."""
+    with pg.transaction() as conn:
+        rid = conn.execute_returning(
+            "INSERT INTO outbox_events "
+            "(event_type, aggregate_type, aggregate_id, correlation_id, "
+            "idempotency_key, payload_json, occurred_at, status, attempts) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', 0) RETURNING id",
+            ("ret_test", "agg", "a2", "c2", "k-ret", "{}", 0),
+        )
+    assert isinstance(rid, int) and rid > 0
+    rows = pg.query(
+        "SELECT event_type FROM outbox_events WHERE idempotency_key = ?",
+        ("k-ret",),
+    )
+    assert rows and rows[0]["event_type"] == "ret_test"
+
+
 def test_live_schema_ddl_applies_to_postgres(pg: PostgresDb):
     """The shared, PostgreSQL-compatible DDL must apply verbatim on a real PG.
 

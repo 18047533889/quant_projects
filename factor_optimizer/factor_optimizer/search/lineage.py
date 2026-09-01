@@ -2,7 +2,12 @@
 
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Set
-from datetime import datetime
+from datetime import datetime, timezone
+
+
+def _utcnow() -> datetime:
+    """P1-FO-005: canonical tz-aware UTC now (never tz-naive)."""
+    return datetime.now(timezone.utc)
 
 
 @dataclass
@@ -24,7 +29,7 @@ class LineageNode:
     mutation_type: Optional[str] = None
     generation: int = 0
     score: Optional[float] = None
-    created_at: datetime = field(default_factory=datetime.now)
+    created_at: datetime = field(default_factory=_utcnow)
     metadata: Dict[str, Any] = field(default_factory=dict)
 
     def is_seed(self) -> bool:

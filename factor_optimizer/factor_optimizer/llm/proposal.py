@@ -3,7 +3,7 @@
 import json
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from factor_optimizer.contracts.candidate_mutation import CandidateMutation
@@ -129,9 +129,9 @@ class ProposalGenerator:
         prompt_hash = compute_hash(full_prompt)
 
         # Mock LLM call (real implementation would call actual API)
-        start_time = datetime.now()
+        start_time = datetime.now(timezone.utc)
         raw_response = self._mock_llm_call(request, template)
-        end_time = datetime.now()
+        end_time = datetime.now(timezone.utc)
         latency_ms = (end_time - start_time).total_seconds() * 1000
 
         # Compute response hash
@@ -227,7 +227,7 @@ class ProposalGenerator:
                         parameters=proposal_data["parameters"],
                         mechanism_hypothesis=proposal_data.get("mechanism_hypothesis"),
                         expected_signatures=proposal_data.get("expected_signatures", []),
-                        created_at=datetime.now(),
+                        created_at=datetime.now(timezone.utc),
                         producer="llm_proposal_generator",
                         producer_version="0.1.0",
                     )

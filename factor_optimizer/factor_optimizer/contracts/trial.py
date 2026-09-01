@@ -1,7 +1,7 @@
 """Trial: record of a single mutation attempt with status and results."""
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Dict, Optional
 
@@ -64,8 +64,8 @@ class Trial:
     parent_factor_ids: list[str] = field(default_factory=list)
 
     # Timestamps
-    created_at: datetime = field(default_factory=datetime.now)
-    updated_at: datetime = field(default_factory=datetime.now)
+    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
     # Results
     legality_check: Optional[Dict[str, Any]] = None
@@ -76,7 +76,7 @@ class Trial:
     def update_status(self, new_status: TrialStatus, **kwargs) -> None:
         """Update trial status and timestamp."""
         self.status = new_status
-        self.updated_at = datetime.now()
+        self.updated_at = datetime.now(timezone.utc)
 
         # Update optional fields from kwargs
         if "legality_check" in kwargs:

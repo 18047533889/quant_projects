@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
 from pathlib import Path
 from typing import Any
@@ -249,6 +250,79 @@ def _make_stock_data(
     )
 
 
+def _run_pipeline_mining(
+    args: Any,
+    experiment: ExperimentConfig,
+    data: Any,
+    *,
+    campaign_id: str,
+    parents: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """--pipeline new 主链：SearchPipeline.run_round 循环 + disk.v1 导出。
+
+    沿用现有 quota/stop 逻辑（search_time 轮次上限）；全程不触 test 段。
+    """
+    from alphaprobe.pipeline import PipelineConfig, SearchPipeline
+
+    config = PipelineConfig(
+        pool_target=max(16, args.pool_capacity),
+        pool_max=max(32, args.pool_capacity * 2),
+        budget_per_round=max(4, args.generate_num),
+        max_rounds=int(args.search_time),
+    )
+    pipeline = SearchPipeline(
+        experiment=experiment,
+        data_train=data,
+        config=config,
+        memory_store=None,
+        llm_fn=None,  # 默认确定性 stub，不跑真实 LLM（硬规矩）
+    )
+    round_result = None
+    for _round in range(int(args.search_time)):
+        round_result = pipeline.run_round(
+            round_id=f"round_{_round + 1}",
+            parents=parents,
+        )
+        if pipeline.pool_size() >= config.pool_target:
+            break
+    print(
+        "[pipeline] rounds done: "
+        f"pool={pipeline.pool_size()} last_round={round_result}"
+    )
+    return {
+        "campaign_id": campaign_id,
+        "pool_size": pipeline.pool_size(),
+        "round_result": round_result,
+        "pipeline": pipeline,
+    }
+
+
+def _exportable_pool_from_pipeline(pipeline: Any) -> Any:
+    """把 SearchPipeline 的 ActivePool 映射为 export_from_pool 可消费的池对象。
+
+    export_from_pool 需要 .exprs / .size / .topics / .descriptions / .single_ics /
+    .icir（AlphaKnowledgePool 契约）。ActivePool 是 Pareto+QD 结构，这里构造一个
+    最小适配对象，用 canonical_formula 作 exprs，其余字段置空。
+    """
+    from alphaprobe.pool import ActivePool
+
+    pool = getattr(pipeline, "pool", None)
+    if not isinstance(pool, ActivePool) or len(pool.members) == 0:
+        return None
+    snapshot = pool.snapshot()
+
+    class _ExportPool:
+        def __init__(self, members: list[dict[str, Any]]) -> None:
+            self.exprs: list[Any] = [m["formula"] for m in members]
+            self.size = len(self.exprs)
+            self.topics: list[str] = ["" for _ in self.exprs]
+            self.descriptions: list[str] = [f"alpha-probe factor {m['factor_id']}" for m in members]
+            self.single_ics: list[float] = [m.get("fitness", 0.0) for m in members]
+            self.icir: list[float] = [0.0 for _ in self.exprs]
+
+    return _ExportPool(snapshot)
+
+
 def run_mining_campaign(
     args: Any,
     *,
@@ -285,15 +359,53 @@ def run_mining_campaign(
     )
 
     data = _make_stock_data(experiment, args, train_period[0], train_period[1])
-    # §3.3 Test 封存：data_test 构造保留（test_period 仍写入 config/投递 metadata），
-    # 但不传入 trainer 训练路径（传 None）——search loop 不触碰 test 段。
-    data_test = _make_stock_data(experiment, args, test_period[0], test_period[1])
+    # §3.3 Test 封存：搜索期绝不构造 test 段数据（L0-L4 Test Data Zero Touch）。
+    # test_period 仅写入 config / 投递 metadata（_make_stock_data 不再为 test 段调用）。
 
     # Fitness 标签：vwap→vwap 远期收益（非 close→close / open→open）
     # RankIC = Spearman(factor, target)；IC = Pearson(factor, target)
     vwap = Feature(FeatureType.VWAP)
     label_days = int(args.label_days)
     target = Ref(vwap, -label_days) / vwap - 1
+
+    if getattr(args, "pipeline", "new") == "new":
+        # 默认主链：SearchPipeline（新架构真身），不走 AlphaKnowledgeTrainer
+        initial_exprs = resolve_cold_start(experiment, args)
+        parents: list[dict[str, Any]] = [
+            {
+                "formula": str(expr) if not hasattr(expr, "dsl") else getattr(expr, "dsl"),
+                "factor_id": f"seed_{i}",
+                "fitness": 0.0,
+            }
+            for i, expr in enumerate(initial_exprs[: min(5, len(initial_exprs))])
+        ]
+        campaign_id = experiment.delivery.resolved_campaign_id()
+        mining_result = _run_pipeline_mining(
+            args,
+            experiment,
+            data,
+            campaign_id=campaign_id,
+            parents=parents,
+        )
+        export_result: dict[str, Any] = {}
+        if experiment.has_delivery_block:
+            # 新链导出走 DiskV1DeliveryExporter（pool 对象 → export_from_pool）。
+            # 兼容池契约：构造 ActivePool 兼容的最小映射对象（exprs/topics/size）。
+            # 注：SearchPipeline.pool 是 alphaprobe.pool.ActivePool（Pareto+QD），
+            # export_from_pool 需要 .exprs —— 用 pool.snapshot() 构造导出源。
+            pool = _exportable_pool_from_pipeline(pipeline)
+            if pool is not None:
+                device = torch.device(f"cuda:{args.cuda}" if torch.cuda.is_available() else "cpu")
+                exporter = DiskV1DeliveryExporter(experiment)
+                export_result = exporter.export_from_pool(pool, target, experiment, device)
+                print("[delivery] candidate_pool export:", export_result)
+                _set_last_pool(pool)
+                _record_exported_to_memory(experiment, pool, export_result)
+        return {
+            "campaign_id": campaign_id,
+            "pool_size": mining_result["pool_size"],
+            "export": export_result,
+        }
 
     initial_exprs = resolve_cold_start(experiment, args)
 
@@ -359,7 +471,9 @@ def _record_exported_to_memory(
     for m in manifests:
         try:
             payload = json.loads(Path(str(m)).read_text(encoding="utf-8"))
-        except Exception:
+        except (OSError, json.JSONDecodeError) as exc:
+            # fail-fast：清单不可读/坏 JSON 记日志，绝不吞 NameError 类编程错误
+            print(f"[memory] manifest unreadable, skip: {m!r}: {exc}")
             continue
         f = str(payload.get("formula") or "").strip()
         if f:
@@ -416,6 +530,13 @@ def build_train_parser() -> argparse.ArgumentParser:
     parser.add_argument("--campaign_id", type=str, default=None, help="覆盖 delivery.campaign_id")
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--cuda", type=int, default=1)
+    parser.add_argument(
+        "--pipeline",
+        type=str,
+        default="new",
+        choices=("legacy", "new"),
+        help="搜索主链：new=SearchPipeline（默认，Test 零构造）；legacy=AlphaKnowledgeTrainer",
+    )
     parser.add_argument("--instruments", type=str, default=None)
     parser.add_argument(
         "--data_backend",

@@ -1,24 +1,26 @@
-"""FactorLibraryVersion — immutable governance asset set with promotion/rollback.
+"""FactorLibraryVersion — platform projection of the domain library artifact.
 
-DRAFT. Implements ``platform/docs/PLATFORM_CONTRACTS_DRAFT.md`` §4.7 (spec §15,
-§16, §17, §53.8). PURE stdlib frozen dataclasses + enum.
+P0-PLAT-002: a library version BODY is immutable.  ``factor_assets/library_governance``
+is the **sole domain authority** for library semantics — it owns the immutable
+``FactorLibraryVersionArtifact``, the lifecycle state machine and the active
+pointer.  The platform's job here is persistence / projection of the domain's
+decisions:
 
-THE FOUR-LAYER VERSIONING MODEL:
+- ``LibraryMembership`` — a PURE-DTO projection of the domain membership (never
+  an alternate membership semantic).
+- ``FactorLibraryVersionView`` — read-model of the domain version artifact; the
+  ``status`` field is a *rendered* lifecycle state, not a mutable field on an
+  immutable artifact.
+- ``LibraryLifecycleEvent`` / ``LibraryActivePointer`` / ``LibraryPromotionRecord``
+  — the append-only event log + the pointer the platform persists.  Promotion
+  NEVER rebuilds the same ``library_version_id`` with a different status (that
+  would violate immutable-version semantics); it appends an event and flips the
+  pointer.
 
-    ClusterVersion -> FactorLibraryVersion -> FeatureSetVersion -> ModelVersion
-
-A ``FactorLibraryVersion`` is the *governance asset set*: which factor
-definitions, with which selected treatment and orientation, are admitted into a
-logical library at a point in time. It is IMMUTABLE — never updated in place.
-Promotion/rollback is expressed through an *active pointer* (e.g. ``PRODUCTION``)
-that can point to ``FLV_102``; a new ``FLV_103`` moves CANDIDATE -> SHADOW ->
-APPROVED -> PRODUCTION. ``v102`` history is preserved; rollback flips the pointer
-back to ``v102`` and NEVER deletes ``v103``.
-
-Members are NOT just ``factor_id`` — each is a ``LibraryMembership`` carrying
-``factor_definition_id``, ``selected_treatment_id``, ``orientation``,
-``cluster_id`` and health/evidence refs. ``weight_in_model`` does NOT live here;
-it belongs to ``ModelVersion`` (see ``model_version.py``).
+``promote_library_version`` / ``rollback_library_version`` here are a narrow
+platform-shaped transition helper that mirrors what the domain enforces — they
+return a NEW view + pointer + record, never mutating a version body.  Callers
+that need the authoritative transition go through ``factor_assets/library_governance``.
 """
 
 from __future__ import annotations
@@ -31,21 +33,23 @@ __all__ = [
     "LibraryStatus",
     "LibraryPromotionStep",
     "LibraryMembership",
-    "FactorLibraryVersion",
+    "FactorLibraryVersionView",
     "LibraryActivePointer",
     "LibraryPromotionRecord",
+    "LibraryLifecycleEvent",
     "promote_library_version",
     "rollback_library_version",
 ]
 
 
 class LibraryStatus(enum.Enum):
-    """Lifecycle status of a FactorLibraryVersion (spec §16)."""
+    """Lifecycle status of a library version (domain lifecycle; platform records)."""
 
     CANDIDATE = "CANDIDATE"
     SHADOW = "SHADOW"
     APPROVED = "APPROVED"
     PRODUCTION = "PRODUCTION"
+    RETIRED = "RETIRED"
 
 
 class LibraryPromotionStep(enum.Enum):
@@ -67,7 +71,7 @@ class LibraryPromotionStep(enum.Enum):
 
 @dataclass(frozen=True)
 class LibraryMembership:
-    """A library member — not just a factor_id (spec §15).
+    """A library member (PURE-DTO projection) — not just a factor_id (spec §15).
 
     ``weight_in_model`` is deliberately ABSENT: it belongs to ``ModelVersion``.
     """
@@ -89,11 +93,13 @@ class LibraryMembership:
 
 
 @dataclass(frozen=True)
-class FactorLibraryVersion:
-    """Immutable library version (spec §15/§16/§17).
+class FactorLibraryVersionView:
+    """Read-model projection of the domain ``FactorLibraryVersionArtifact``.
 
-    A library spans MANY clusters, so it binds to a global clustering run
-    (``cluster_set_version_id``), NOT a single ``cluster_version_id``.
+    The version body is immutable; ``status`` is the *rendered* lifecycle state
+    the domain last ordered for this version id (projected from
+    ``LibraryLifecycleEvent``).  It is NOT a second mutable copy of the domain
+    status.
     """
 
     library_version_id: str
@@ -102,7 +108,7 @@ class FactorLibraryVersion:
     members: tuple[LibraryMembership, ...] = ()
     policy_hash: str = ""
     evidence_snapshot: str = ""
-    status: str = "CANDIDATE"  # CANDIDATE/SHADOW/APPROVED/PRODUCTION
+    status: str = "CANDIDATE"  # CANDIDATE/SHADOW/APPROVED/PRODUCTION/RETIRED
     created_at: datetime | None = None
 
     def __post_init__(self) -> None:
@@ -118,7 +124,7 @@ class FactorLibraryVersion:
 
 @dataclass(frozen=True)
 class LibraryActivePointer:
-    """The mutable *active pointer* that promotion/rollback flips (spec §53.8).
+    """The active pointer the platform persists (CAS-updated, spec §53.8).
 
     The pointer is the ONLY mutable part of the library versioning model. It
     records which version is currently PRODUCTION (or the highest promoted step)
@@ -158,19 +164,33 @@ class LibraryPromotionRecord:
             raise ValueError("version_id is required")
 
 
+@dataclass(frozen=True)
+class LibraryLifecycleEvent:
+    """Append-only event for one library version status transition (P0-PLAT-002)."""
+
+    logical_library_id: str
+    version_id: str
+    event_kind: str  # CREATED / PROMOTED / RETIRED / ROLLED_BACK
+    from_status: str | None = None
+    to_status: str | None = None
+    actor_principal_id: str = ""
+    reason: str = ""
+    created_at: datetime | None = None
+
+
 def promote_library_version(
-    version: FactorLibraryVersion,
+    version: FactorLibraryVersionView,
     pointer: LibraryActivePointer,
     actor_principal_id: str = "",
     reason: str = "",
-) -> tuple[FactorLibraryVersion, LibraryActivePointer, LibraryPromotionRecord]:
+) -> tuple[FactorLibraryVersionView, LibraryActivePointer, LibraryPromotionRecord]:
     """Advance a library version one promotion step and flip the active pointer.
 
-    Returns ``(new_version, new_pointer, record)``. The version is immutable, so
-    promotion produces a NEW ``FactorLibraryVersion`` with the next status. The
-    pointer is updated to point at this version once it reaches PRODUCTION (or
-    whenever it is the highest promoted step). History is preserved — the old
-    version object is untouched.
+    Returns ``(new_view, new_pointer, record)``.  The version body is NOT
+    rebuilt with a different status — a NEW view is produced for rendering and
+    the pointer is updated; the appended ``LibraryPromotionRecord`` is what the
+    platform persists (as a ``LibraryLifecycleEvent``).  History is preserved —
+    the old version object is untouched.
     """
     current = LibraryPromotionStep(version.status)
     nxt = LibraryPromotionStep.next(current)
@@ -179,7 +199,7 @@ def promote_library_version(
             f"version {version.library_version_id!r} is already at terminal status "
             f"{version.status!r}; cannot promote further"
         )
-    new_version = FactorLibraryVersion(
+    new_view = FactorLibraryVersionView(
         library_version_id=version.library_version_id,
         logical_library_id=version.logical_library_id,
         cluster_set_version_id=version.cluster_set_version_id,
@@ -202,7 +222,7 @@ def promote_library_version(
         actor_principal_id=actor_principal_id,
         reason=reason,
     )
-    return new_version, new_pointer, record
+    return new_view, new_pointer, record
 
 
 def rollback_library_version(

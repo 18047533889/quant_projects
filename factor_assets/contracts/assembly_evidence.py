@@ -258,10 +258,53 @@ class AssemblyPolicy:
             if not 0.0 <= v <= 1.0:
                 raise ValueError(f"{name} must be in [0, 1]")
             object.__setattr__(self, name, v)
+        if isinstance(self.max_per_microcluster, bool) or not isinstance(
+            self.max_per_microcluster, int
+        ):
+            raise TypeError("max_per_microcluster must be an int")
+        if isinstance(self.max_per_macrocluster, bool) or not isinstance(
+            self.max_per_macrocluster, int
+        ):
+            raise TypeError("max_per_macrocluster must be an int")
         if self.max_per_microcluster < 1:
             raise ValueError("max_per_microcluster must be >= 1")
         if self.max_per_macrocluster < 1:
             raise ValueError("max_per_macrocluster must be >= 1")
+        if self.max_per_microcluster > self.max_per_macrocluster:
+            raise ValueError(
+                "max_per_microcluster must be <= max_per_macrocluster — a "
+                "microcluster is a subset of a macrocluster, so per-micro "
+                "budget cannot exceed the per-macro budget"
+            )
+        if self.capacity_budget is not None:
+            if isinstance(self.capacity_budget, bool) or not isinstance(
+                self.capacity_budget, int
+            ):
+                raise TypeError("capacity_budget must be an int or None")
+            if self.capacity_budget < 1:
+                raise ValueError("capacity_budget must be >= 1 or None")
+        if self.turnover_budget is not None:
+            if isinstance(self.turnover_budget, bool) or not isinstance(
+                self.turnover_budget, (int, float)
+            ):
+                raise TypeError("turnover_budget must be a non-boolean number or None")
+            tb = float(self.turnover_budget)
+            if tb != tb or tb in (float("inf"), float("-inf")):
+                raise ValueError("turnover_budget must be finite")
+            if tb < 0.0:
+                raise ValueError("turnover_budget must be non-negative or None")
+            object.__setattr__(self, "turnover_budget", tb)
+        if self.health_floor is not None:
+            if isinstance(self.health_floor, bool) or not isinstance(
+                self.health_floor, (int, float)
+            ):
+                raise TypeError("health_floor must be a non-boolean number or None")
+            hf = float(self.health_floor)
+            if hf != hf or hf in (float("inf"), float("-inf")):
+                raise ValueError("health_floor must be finite")
+            if not 0.0 <= hf <= 1.0:
+                raise ValueError("health_floor must be in [0, 1] or None")
+            object.__setattr__(self, "health_floor", hf)
 
     def to_dict(self) -> dict:
         return {

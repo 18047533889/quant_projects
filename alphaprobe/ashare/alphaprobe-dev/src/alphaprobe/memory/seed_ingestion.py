@@ -23,7 +23,10 @@ from alphaprobe.memory import GlobalMemoryStore
 def _identity_default(
     formula: str,
 ) -> tuple[str, str, str, str | None]:
-    """默认 identity：raw 兜底（caller 未提供 alphaprobe.dedup identity 时）。"""
+    """默认 identity：raw 兜底（caller 未提供 alphaprobe.dedup identity 时）。
+
+    NOTE: DedupClient（alphaprobe.dedup_client）是统一入口，后续应替换此处的
+    alphaprobe.dedup 直接调用，以统一 identity 降级链和 seen 索引。"""
     from alphaprobe.dedup import canonical_ast_hash, canonicalize_dsl, signal_equivalence_id
 
     canonical = canonicalize_dsl(formula)

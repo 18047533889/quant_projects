@@ -25,19 +25,39 @@ from datetime import datetime
 
 from .cluster_library import (
     ClusterConversionType,
-    ClusterLineageEdge,
-    ClusterVersion,
-    LogicalCluster,
+    ClusterVersionRef,
 )
 
 __all__ = [
     "ClusterLabelDrift",
+    "ClusterLineageEdge",
     "IncrementalClusterDecision",
     "ClusterVersionPair",
     "classify_cluster_label_drift",
     "resolve_incremental_cluster",
     "build_lineage_edges",
 ]
+
+
+@dataclass(frozen=True)
+class ClusterLineageEdge:
+    """Old→new cluster version transition (spec §14) — carried ref pair.
+
+    ``old_version_id`` / ``new_version_id`` are the domain version refs'
+    ``cluster_version_id`` values; ``transition`` labels the change the domain
+    certified.  The platform renders lineage, never re-derives it.
+    """
+
+    old_version_id: str
+    new_version_id: str
+    transition: ClusterConversionType
+    created_at: datetime | None = None
+
+    def __post_init__(self) -> None:
+        if not self.old_version_id:
+            raise ValueError("old_version_id is required")
+        if not self.new_version_id:
+            raise ValueError("new_version_id is required")
 
 
 @dataclass(frozen=True)
@@ -61,20 +81,23 @@ class ClusterLabelDrift:
 
 
 def classify_cluster_label_drift(
-    prev: ClusterVersion,
-    next_: ClusterVersion,
+    prev: ClusterVersionRef,
+    next_: ClusterVersionRef,
 ) -> ClusterLabelDrift:
     """Classify label drift between two versions of the same logical cluster.
 
     The logical cluster id must match (that is what makes them the "same"
-    cluster). The algorithm label may differ — that is the drift.
+    cluster). The algorithm label may differ — that is the drift.  The refs are
+    carried from the domain's ClusterVersionArtifact; the platform only
+    classifies the *transition label* it renders, never re-derives cluster
+    membership semantics.
     """
     if prev.logical_cluster_id != next_.logical_cluster_id:
         raise ValueError(
             "cannot classify drift across different logical clusters: "
             f"{prev.logical_cluster_id!r} vs {next_.logical_cluster_id!r}"
         )
-    label_changed = prev.algorithm_cluster_label != next_.algorithm_cluster_label
+    label_changed = _ref_label(prev) != _ref_label(next_)
     transition = (
         ClusterConversionType.MIGRATED
         if label_changed
@@ -82,11 +105,17 @@ def classify_cluster_label_drift(
     )
     return ClusterLabelDrift(
         logical_cluster_id=prev.logical_cluster_id,
-        prev_algorithm_label=prev.algorithm_cluster_label,
-        next_algorithm_label=next_.algorithm_cluster_label,
+        prev_algorithm_label=_ref_label(prev),
+        next_algorithm_label=_ref_label(next_),
         label_changed=label_changed,
         transition=transition,
     )
+
+
+def _ref_label(ref: ClusterVersionRef) -> str:
+    """Render the domain algorithm-cluster label the ref carries ('' when absent)."""
+    label = getattr(ref, "algorithm_cluster_label", "") or ""
+    return str(label)
 
 
 @dataclass(frozen=True)
@@ -208,7 +237,6 @@ class ClusterVersionPair:
             transition=self.transition,
             created_at=self.created_at,
         )
-
     def __post_init__(self) -> None:
         if not self.logical_cluster_id:
             raise ValueError("logical_cluster_id is required")

@@ -18,6 +18,7 @@ name: CI
 #     -> UNIT/DETERMINISM  capability/concurrency + data consistency
 #     -> SEMANTIC          numerical oracle / property / cross-package
 #     -> PIT_LEAKAGE       PIT audit + leakage properties + HP prefix-invariance
+#     -> CROSS_PACKAGE     Task #107 cross-package contract round-trip harness
 #     -> BACKEND_PARITY    cross-backend parity suite (tests/backend_parity)
 #     -> SCALE             scale gates (1K default-on; 10K default-on;
 #                          100K manual-gated/scheduled -> NOT_RUN honest, never
@@ -28,7 +29,8 @@ name: CI
 # REQUIRED CHECKS to configure in GitHub branch protection (check names —
 # CI cannot set these itself):
 #   CI_BOOTSTRAP / SUPPLY_CHAIN / PACKAGE_BUILD / IMPORT
-#   UNIT / DETERMINISM / SEMANTIC / PIT_LEAKAGE / BACKEND_PARITY
+#   UNIT / DETERMINISM / SEMANTIC / PIT_LEAKAGE / CROSS_PACKAGE_CONTRACTS /
+#   BACKEND_PARITY
 #   1K_SCALE / 10K_SCALE   (100K_SCALE NOT required: manual/scheduled, will
 #                           show NOT_RUN/skipped honestly, never a fake pass)
 # =============================================================================
@@ -262,6 +264,31 @@ jobs:
             factor_preprocess/tests/contracts/test_leakage_properties.py \
             factor_preprocess/tests/transforms/test_hp_prefix_invariance.py \
             -q -p no:cacheprovider
+        shell: bash -e {0}
+
+  # -- Tier 6b (Task #107): cross-package contract integration harness -------
+  # Runs integration_tests/ (the round-trip contracts harness) from the repo
+  # root.  Hermetic: no parquet / PG / network needed.  The integration
+  # conftest pins the source tree for factor_engine/data_access/quant_evaluator/
+  # factor_assets/quant_platform and the inner factor_preprocess/factor_optimizer
+  # dirs shadow the (potentially stale) venv wheels, so this tier exercises the
+  # SAME source the per-package contract tasks are landing.
+  CROSS_PACKAGE_CONTRACTS:
+    name: CROSS_PACKAGE_CONTRACTS
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    needs: [SUPPLY_CHAIN]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Install lock deps + pytest
+        run: bash scripts/ci_smoke.sh && python3 -m pip install -q pytest
+        shell: bash -e {0}
+      - name: Run CROSS_PACKAGE_CONTRACTS (integration_tests/)
+        run: |
+          python3 -m pytest integration_tests/ -q -p no:cacheprovider
         shell: bash -e {0}
 
   # -- Tier 7 ------------------------------------------------------------

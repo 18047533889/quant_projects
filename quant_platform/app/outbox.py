@@ -48,6 +48,12 @@ __all__ = [
     "OutboxClaimError",
     "Inbox",
     "InboxEventNotFound",
+    "INBOX_RECEIVED",
+    "INBOX_PROCESSING",
+    "INBOX_DONE",
+    "INBOX_FAILED",
+    "INBOX_STATUSES",
+    "INBOX_MAX_RETRIES",
 ]
 
 
@@ -104,6 +110,32 @@ class Outbox:
         Returns the new outbox row id.
         """
         payload_json = json.dumps(payload or {})
+        # P0-PLAT-008: ``emit`` runs inside ``db.transaction()``.  SQLite's raw
+        # connection cursor exposes ``lastrowid``; the PostgreSQL backend exposes
+        # ``execute_returning`` (``RETURNING id``) for the same scalar.  Route
+        # through ``db.execute_returning`` when available so the SAME insert
+        # works on both backends.
+        returning = getattr(self._db, "execute_returning", None)
+        if returning is not None:
+            row_id = returning(
+                "INSERT INTO outbox_events "
+                "(event_type, aggregate_type, aggregate_id, correlation_id, causation_id, "
+                " trace_id, actor_principal_id, idempotency_key, payload_json, occurred_at, status, attempts) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', 0) RETURNING id",
+                (
+                    event_type,
+                    aggregate_type,
+                    aggregate_id,
+                    correlation_id,
+                    causation_id,
+                    trace_id,
+                    actor_principal_id,
+                    idempotency_key,
+                    payload_json,
+                    int(time.time()),
+                ),
+            )
+            return int(row_id)
         cur = self._db.execute(
             "INSERT INTO outbox_events "
             "(event_type, aggregate_type, aggregate_id, correlation_id, causation_id, "
@@ -514,3 +546,22 @@ class Inbox:
                 # handled so the broker/consumer does not drop it.
                 handled += 1
         return handled, duplicates
+
+    # ---- production ops ----
+    def dead_lettered(self) -> list[dict[str, Any]]:
+        """Rows in the terminal dead-letter state (production ops visibility).
+
+        P0-PLAT-005: the inbox stores a ``dead_letter`` flag but had no
+        read-side export for operations to drain/review.  This returns every
+        inbox row with ``dead_letter = 1``, newest last_error first.  Each dict
+        is a raw row (``idempotency_key`` / ``status`` / ``retry_count`` /
+        ``last_error`` / ``dead_letter_reason`` / ``processed_at``) — an honest
+        snapshot, never an auto-retry.
+        """
+        return list(
+            self._db.query(
+                "SELECT idempotency_key, status, retry_count, last_error, "
+                "dead_letter_reason, processed_at FROM inbox_events "
+                "WHERE dead_letter = 1 ORDER BY processed_at DESC"
+            )
+        )

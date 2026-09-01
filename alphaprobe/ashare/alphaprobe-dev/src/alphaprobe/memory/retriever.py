@@ -7,10 +7,10 @@ Retriever 是 LLM 与 Global Memory 之间的唯一通道——LLM 不直接读�
 
 from __future__ import annotations
 
-import json
-from typing import Any
+import json  # noqa: F401  (保留：_fitness_of 历史实现参考 / 未来 schema 解析)
 
 from alphaprobe.memory import GlobalMemoryStore, MemoryPacket
+from alphaprobe.memory import _fitness_of
 
 
 class MemoryRetriever:
@@ -29,67 +29,41 @@ class MemoryRetriever:
     ) -> list[dict[str, Any]]:
         """同 parameter family 的最近 k 个节点（排除自身）。
 
-        按 fitness（single_ic 归一化）降序取最近 5 个；family_id 缺失或
-        无同族节点时返回空表。
+        fitness 优先取 evaluations 表（store._fitness_from_evaluations），
+        取不到再 fallback schema_json（_fitness_of）。按 fitness 降序取最近
+        5 个；family_id 缺失或无同族节点时返回空表。
         """
-        node = self.store.get_node(factor_id)
-        if node is None:
-            return []
-        family_id = node.get("parameter_family_id")
-        if not family_id:
-            return []
-        rows = self.store._conn.execute(
-            "SELECT factor_id, canonical_formula, parameter_family_id,"
-            " schema_json, last_seen_at FROM factor_nodes"
-            " WHERE parameter_family_id=? AND factor_id<>?",
-            (family_id, factor_id),
-        ).fetchall()
-        out: list[dict[str, Any]] = []
-        for fid, formula, _fam, schema_json, last_seen in rows:
-            fitness = self._fitness_of(schema_json)
-            out.append(
-                {
-                    "factor_id": fid,
-                    "formula": formula,
-                    "fitness": fitness,
-                    "last_seen_at": last_seen,
-                }
-            )
-        out.sort(key=lambda d: (d["fitness"] is not None, d["fitness"] or 0.0), reverse=True)
-        return out[:k]
+        return self.store._numerical_neighbors_of(factor_id, k=k)
 
     @staticmethod
     def _fitness_of(schema_json: Any) -> float | None:
-        """从 factor_nodes.schema_json 提取 fitness（single_ic / 归一化值）。"""
-        if not schema_json:
-            return None
-        try:
-            if isinstance(schema_json, str):
-                schema_json = json.loads(schema_json)
-        except Exception:
-            return None
-        if not isinstance(schema_json, dict):
-            return None
-        for key in ("fitness", "single_ic", "search_fitness", "norm_ic"):
-            v = schema_json.get(key)
-            if v is not None:
-                try:
-                    return float(v)
-                except (TypeError, ValueError):
-                    continue
-        return None
+        """从 factor_nodes.schema_json 提取 fitness（single_ic / 归一化值）。
+
+        保留为纯 schema_json fallback；numerical_neighbors 已优先走
+        store._fitness_from_evaluations（evaluations 表）再 fallback 本函数。
+        """
+        return _fitness_of(schema_json)
 
     # -- §41 build packet -------------------------------------------------------
 
-    def build_packet(self, factor_id: str) -> MemoryPacket | None:
+    def build_packet(
+        self,
+        factor_id: str,
+        *,
+        allowed_fields: list[str] | None = None,
+        allowed_operators: list[str] | None = None,
+    ) -> MemoryPacket | None:
         """构建 MemoryPacket。factor_id 未知时返回 None（不抛异常）。
 
-        结构邻居（store 层）与数值邻居（本模块）都缺省为空表，若 store 层
-        有邻居来源可后续注入；to_prompt_text 保证 <4000 字符（§32 定长）。
+        numerical_neighbors / survival_exemplars / cluster_context /
+        allowed_fields / allowed_operators 已由 store.build_memory_packet 填充；
+        本方法仅透传 allowed 列表（round_manager/pipeline 接线时使用）。
         """
         node = self.store.get_node(factor_id)
         if node is None:
             return None
-        packet = self.store.build_memory_packet(parent_node=node)
-        packet.numerical_neighbors = self.numerical_neighbors(factor_id)
-        return packet
+        return self.store.build_memory_packet(
+            parent_node=node,
+            allowed_fields=allowed_fields,
+            allowed_operators=allowed_operators,
+        )

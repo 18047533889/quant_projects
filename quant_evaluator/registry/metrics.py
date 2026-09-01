@@ -13,6 +13,12 @@ import hashlib
 import inspect
 
 from quant_evaluator.metrics.ic import compute_ic_std, compute_mean_ic_value
+from quant_evaluator.metrics.portfolio_stats import (
+    compute_long_short_returns,
+    compute_sharpe_ratio,
+    compute_sortino_ratio,
+    compute_win_rate,
+)
 from quant_evaluator.metrics.registry_adapters import (
     compute_block_bootstrap_ci_value,
     compute_coverage_value,
@@ -1396,6 +1402,121 @@ _REGISTRY.register(MetricSpec(
     required_axes=("lag",),
     units="correlation",
     direction="neutral",
+    missing_policy="nan",
+    numeric_policy="finite",
+))
+
+# ---------------------------------------------------------------------------
+# QE-METRIC portfolio-statistics family (R2 AlphaPROBE integration).
+#
+# Long/short backtest and risk-adjusted-return metrics used by AlphaPROBE's
+# research-probe profile.  All four delegate to the implementations in
+# ``metrics/portfolio_stats.py`` (the single authority for these kernels) and
+# consume a (T,) or (T, F) return series.  Registered at module import time,
+# i.e. during the BUILDING phase, so the sealed-registry lifecycle is
+# respected: they are visible to ``list_metrics()`` and ``get_metric()``, and
+# any later seal freezes them along with the rest of the catalog.
+# ---------------------------------------------------------------------------
+
+# ---- Domain DRAWDOWN (returns-based) ----
+_REGISTRY.register(MetricSpec(
+    name="long_short_returns",
+    display_name="long_short_returns",
+    description=(
+        "Time series of long-minus-short portfolio returns, shape (T,) or "
+        "(T, F). Portfolio construction: long bucket = factor values above "
+        "the long_threshold quantile (default 0.8), short bucket = values "
+        "below short_threshold (default 0.2); equal-weight mean of forward "
+        "returns per bucket per day, long minus short. Missing-return policy "
+        "defaults to 'zero_fill' (NaN returns contribute 0)."
+    ),
+    status=MetricStatus.STABLE,
+    tier=MetricTier.EXTENDED,
+    compute_fn=compute_long_short_returns,
+    domain=Domain.DRAWDOWN,
+    metric_id="long_short_returns",
+    required_inputs={"factor", "forward_returns"},
+    output_type="timeseries",
+    implementation_id="quant_evaluator.metrics.portfolio_stats.compute_long_short_returns",
+    metric_version="1.0.0",
+    required_axes=("time",),
+    units="return",
+    direction="higher_is_better",
+    missing_policy="zero_fill",
+    numeric_policy="finite",
+))
+
+_REGISTRY.register(MetricSpec(
+    name="sharpe_ratio",
+    display_name="sharpe_ratio",
+    description=(
+        "Annualized Sharpe ratio of a return series per factor: "
+        "mean(excess return) / std(excess return, ddof=1) * sqrt(periods_per_year), "
+        "with excess return = return - risk_free_rate / periods_per_year. "
+        "NaN when fewer than min_periods finite returns or when the return "
+        "standard deviation is not positive-finite. period: daily (252)."
+    ),
+    status=MetricStatus.STABLE,
+    tier=MetricTier.EXTENDED,
+    compute_fn=compute_sharpe_ratio,
+    domain=Domain.DRAWDOWN,
+    metric_id="sharpe_ratio",
+    required_inputs={"forward_returns"},
+    output_type="scalar",
+    implementation_id="quant_evaluator.metrics.portfolio_stats.compute_sharpe_ratio",
+    metric_version="1.0.0",
+    units="ratio",
+    direction="higher_is_better",
+    missing_policy="nan",
+    numeric_policy="finite",
+))
+
+_REGISTRY.register(MetricSpec(
+    name="sortino_ratio",
+    display_name="sortino_ratio",
+    description=(
+        "Annualized Sortino ratio of a return series per factor: "
+        "mean(excess return) / downside deviation * sqrt(periods_per_year), "
+        "where downside deviation is the root mean square of negative excess "
+        "returns only (no ddof). NaN when fewer than min_periods finite "
+        "returns, when there are no negative excess returns, or when the "
+        "downside deviation is not positive-finite."
+    ),
+    status=MetricStatus.STABLE,
+    tier=MetricTier.EXTENDED,
+    compute_fn=compute_sortino_ratio,
+    domain=Domain.DRAWDOWN,
+    metric_id="sortino_ratio",
+    required_inputs={"forward_returns"},
+    output_type="scalar",
+    implementation_id="quant_evaluator.metrics.portfolio_stats.compute_sortino_ratio",
+    metric_version="1.0.0",
+    units="ratio",
+    direction="higher_is_better",
+    missing_policy="nan",
+    numeric_policy="finite",
+))
+
+_REGISTRY.register(MetricSpec(
+    name="win_rate",
+    display_name="win_rate",
+    description=(
+        "Win rate of a return series per factor: fraction of finite returns "
+        "that are strictly positive, in [0, 1]. NaN when there are no finite "
+        "returns. (Returns equal to exactly 0 count as neither wins nor "
+        "losses.)"
+    ),
+    status=MetricStatus.STABLE,
+    tier=MetricTier.EXTENDED,
+    compute_fn=compute_win_rate,
+    domain=Domain.DRAWDOWN,
+    metric_id="win_rate",
+    required_inputs={"forward_returns"},
+    output_type="scalar",
+    implementation_id="quant_evaluator.metrics.portfolio_stats.compute_win_rate",
+    metric_version="1.0.0",
+    units="fraction",
+    direction="higher_is_better",
     missing_policy="nan",
     numeric_policy="finite",
 ))

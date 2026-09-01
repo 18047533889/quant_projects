@@ -12,6 +12,20 @@ from factor_preprocess.contracts.feature_bundle import (
     ChannelRef,
     FeatureManifest,
 )
+from factor_preprocess.contracts.treatment_spec import (
+    PriceBasis,
+    ValueUnit,
+    MaterializationSplit,
+    TreatmentSpecIdentity,
+    TreatmentMaterializationIdentity,
+    neutralization_spec_identity,
+    neutralization_binding,
+    ensure_materialization_split_valid,
+    materialize_identity,
+    spec_to_materialization_identity,
+    ASHARE_INDUSTRY_SCHEMA,
+    ASHARE_SIZE_DEFINITION,
+)
 
 __all__ = [
     "PreprocessingPolicy",
@@ -23,4 +37,17 @@ __all__ = [
     "AxisRef",
     "ChannelRef",
     "FeatureManifest",
+    # Treatment identity split (P0-FP #103)
+    "PriceBasis",
+    "ValueUnit",
+    "MaterializationSplit",
+    "TreatmentSpecIdentity",
+    "TreatmentMaterializationIdentity",
+    "neutralization_spec_identity",
+    "neutralization_binding",
+    "ensure_materialization_split_valid",
+    "materialize_identity",
+    "spec_to_materialization_identity",
+    "ASHARE_INDUSTRY_SCHEMA",
+    "ASHARE_SIZE_DEFINITION",
 ]

@@ -650,6 +650,20 @@ class SimilarityViewRegistry:
         self._views: dict[str, str] = dict(views or {})
         for key in SIMILARITY_VIEW_KEYS:
             self._views.setdefault(key, key)
+        # Construction gate (P0-FA-005 / DLIB-FA-004): a registry built with a
+        # view key that is NOT in the registered canonical view set is a
+        # silent typo — reject it now rather than letting a producer emit an
+        # unknown key and have ``validate`` fail later.  The gate checks the
+        # caller-supplied keys against the CANONICAL set (a key becomes
+        # self-consistent the moment it is added to ``_views``, so checking
+        # against the live dict would never fire).
+        for _key in list(views or {}):
+            if _key not in SIMILARITY_VIEW_KEYS:
+                raise ValueError(
+                    f"similarity view key {_key!r} is not a registered canonical "
+                    f"view (registry version {self.version}); a silent typo must "
+                    "not reach production"
+                )
 
     @property
     def view_keys(self) -> tuple[str, ...]:

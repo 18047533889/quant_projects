@@ -70,7 +70,10 @@ def wilson_interval(successes: int, total: int, z: float = 1.96) -> tuple[float,
     """标准 Wilson score interval（小样本不依赖正态近似，§47.1）。
 
     边界精确化：0/total 下界 0，total/total 上界 1（对称性质，
-    与连续性修正无关；下界仍由标准公式给出）。
+    与连续性修正无关；下界仍由标准公式给出）。全成功时标准公式本身
+    已给出正确下界（lo = z²/(2n+z²)/(1+z²/n) = z²/(2n+z²)，n=100 → ≈0.963），
+    无需手写单侧特判（旧代码 1.6449²/(n+1.6449²) 是 90% 单侧界，且与双侧
+    z 不一致）。
     """
     if total <= 0:
         return (0.0, 1.0)
@@ -84,8 +87,6 @@ def wilson_interval(successes: int, total: int, z: float = 1.96) -> tuple[float,
         lo = 0.0
     if successes == total:
         hi = 1.0
-        # 单侧 95% 下界：z^2/(n+z^2)（Wilson 单侧，symmetric 不适用）
-        lo = max(lo, (1.6449 * 1.6449) / (total + 1.6449 * 1.6449))
     return (lo, hi)
 
 

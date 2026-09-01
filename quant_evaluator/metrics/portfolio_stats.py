@@ -133,6 +133,10 @@ def compute_long_short_returns(
             ret_t = np.where(np.isfinite(ret_t), ret_t, 0.0)
 
         if np.sum(finite_mask) < 2:
+            # QE-R2 (P0-FA-015 hardening): a long/short bucket needs at least
+            # two valid cross-sectional observations (a single asset cannot
+            # form a top-20%/bottom-20% bucket pair).  Leave the period NaN —
+            # an empty bucket is never a fabricated 0.
             continue
 
         factor_valid = factor_t[finite_mask]
@@ -202,7 +206,7 @@ def compute_sharpe_ratio(
         mean_excess = np.mean(excess_ret)
         std_excess = np.std(excess_ret, ddof=1)
 
-        if std_excess == 0 or std_excess < 1e-10 or not np.isfinite(std_excess):
+        if not np.isfinite(std_excess) or std_excess <= 1e-10:
             continue
 
         # Annualize
@@ -373,7 +377,7 @@ def compute_calmar_ratio(
         # Maximum drawdown
         max_dd, _, _ = compute_maximum_drawdown(ret_valid)
 
-        if max_dd == 0 or not np.isfinite(max_dd):
+        if not np.isfinite(max_dd) or max_dd <= 1e-12:
             continue
 
         calmar[f] = ann_ret / max_dd
@@ -430,7 +434,7 @@ def compute_sortino_ratio(
 
         downside_std = np.sqrt(np.mean(downside_ret ** 2))
 
-        if downside_std == 0 or not np.isfinite(downside_std):
+        if not np.isfinite(downside_std) or downside_std <= 1e-12:
             continue
 
         # Annualize

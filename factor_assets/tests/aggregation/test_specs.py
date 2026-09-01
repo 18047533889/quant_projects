@@ -5,6 +5,7 @@ from factor_assets.aggregation.specs import (
     WeightingScheme,
     AggregationSpec,
     AggregationResult,
+    AggregationFitArtifact,
 )
 
 
@@ -369,3 +370,60 @@ def test_aggregation_result_with_quality_metrics():
     assert result.max_weight_used == 0.4
     assert result.min_weight_used == 0.1
     assert result.sample_size == 1000
+
+
+# ---------------------------------------------------------------------------
+# AggregationFitArtifact OOS boundary (P1-FA-013 / audit item 4)
+# ---------------------------------------------------------------------------
+
+
+def _fit_artifact(split="train/2024H1"):
+    spec = AggregationSpec(
+        spec_id="agg-oos",
+        name="OOS",
+        weighting_scheme=WeightingScheme.IC_WEIGHTED,
+        factor_ids=("F1", "F2"),
+    )
+    return AggregationFitArtifact(
+        fit_id="fit-oos-1",
+        spec=spec,
+        fit_split_ref=split,
+        fit_window_ref="2024",
+        fit_snapshot_ref="snap1",
+        fit_universe_ref="u1",
+        fit_method="rank_ic_normalized",
+        computed_weights=(0.6, 0.4),
+    )
+
+
+def test_aggregation_fit_oos_evaluation_rejects_same_split():
+    """Fitting on a split and evaluating on the SAME split must be rejected —
+    that is leakage, not out-of-sample (P1-FA-013 aggregation OOS boundary)."""
+    fit = _fit_artifact(split="train/2024H1")
+    with pytest.raises(ValueError, match="SAME split"):
+        AggregationFitArtifact.validate_oos_evaluation(
+            fit, eval_split_ref="train/2024H1"
+        )
+
+
+def test_aggregation_fit_oos_evaluation_requires_eval_split():
+    """An OOS evaluation without an explicit evaluation split is rejected."""
+    fit = _fit_artifact()
+    with pytest.raises(ValueError, match="eval_split_ref"):
+        AggregationFitArtifact.validate_oos_evaluation(fit, eval_split_ref=None)
+    with pytest.raises(ValueError, match="eval_split_ref"):
+        AggregationFitArtifact.validate_oos_evaluation(fit, eval_split_ref="")
+
+
+def test_aggregation_fit_oos_evaluation_carries_distinct_split():
+    """A proper out-of-sample evaluation carries a split distinct from the fit
+    split; the validated ref is returned and recorded."""
+    fit = _fit_artifact(split="train/2024H1")
+    validated = AggregationFitArtifact.validate_oos_evaluation(
+        fit, eval_split_ref="test/2024H2"
+    )
+    assert validated == "test/2024H2"
+    # The OOS evaluation ref explicitly records the fit split provenance too.
+    oos_ref = AggregationFitArtifact.make_oos_evaluation_ref(fit)
+    assert oos_ref["fit_id"] == "fit-oos-1"
+    assert oos_ref["fit_split_ref"] == "train/2024H1"

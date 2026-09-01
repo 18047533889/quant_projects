@@ -413,6 +413,48 @@ CREATE TABLE IF NOT EXISTS sessions (
 """
 
 # ---------------------------------------------------------------------------
+# Durable orchestration state (P0-PLAT-004)
+# ---------------------------------------------------------------------------
+
+WORKFLOW_STAGE_RUNS = """
+CREATE TABLE IF NOT EXISTS workflow_stage_runs (
+    workflow_id     TEXT NOT NULL REFERENCES workflow_runs(workflow_id),
+    stage_name      TEXT NOT NULL,
+    status          TEXT NOT NULL,
+    started_at      TIMESTAMP,
+    finished_at     TIMESTAMP,
+    attempts        INTEGER NOT NULL DEFAULT 0,
+    last_error      TEXT,
+    PRIMARY KEY (workflow_id, stage_name)
+)
+"""
+
+CONSUMED_MANIFESTS = """
+CREATE TABLE IF NOT EXISTS consumed_manifests (
+    candidate_id    TEXT PRIMARY KEY,
+    content_hash    TEXT NOT NULL,
+    semantic        TEXT NOT NULL,
+    consumed_at     TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+)
+"""
+
+BATCH_FINGERPRINTS = """
+CREATE TABLE IF NOT EXISTS batch_fingerprints (
+    fingerprint     TEXT PRIMARY KEY,
+    consumed_at     TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+)
+"""
+
+STAGE_IDEMPOTENCY_KEYS = """
+CREATE TABLE IF NOT EXISTS stage_idempotency_keys (
+    stage_name      TEXT NOT NULL,
+    idempotency_key TEXT NOT NULL,
+    created_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (stage_name, idempotency_key)
+)
+"""
+
+# ---------------------------------------------------------------------------
 # Audit
 # ---------------------------------------------------------------------------
 
@@ -465,6 +507,10 @@ SCHEMA_DDL: tuple[str, ...] = (
     PRODUCTION_POINTERS,
     SESSIONS,
     AUDIT_LOGS,
+    WORKFLOW_STAGE_RUNS,
+    CONSUMED_MANIFESTS,
+    BATCH_FINGERPRINTS,
+    STAGE_IDEMPOTENCY_KEYS,
 )
 
 TABLE_NAMES: tuple[str, ...] = (
@@ -499,14 +545,27 @@ TABLE_NAMES: tuple[str, ...] = (
     "production_pointers",
     "sessions",
     "audit_logs",
+    "workflow_stage_runs",
+    "consumed_manifests",
+    "batch_fingerprints",
+    "stage_idempotency_keys",
 )
 
 
 def create_schema(conn) -> None:
     """Apply the full schema to an open DB-API connection.
 
-    ``conn`` must expose ``executescript`` (both ``sqlite3.Connection`` and a
-    psycopg connection do). Idempotent: every statement uses
-    ``CREATE TABLE IF NOT EXISTS``.
+    P0-PLAT-009: ``conn`` may be ``sqlite3.Connection`` (has ``executescript``)
+    OR a psycopg2 connection (does NOT).  ``SCHEMA_DDL`` is already a tuple of
+    statements — execute each statement individually through the driver's
+    cursor so the same DDL runs on both backends.  Idempotent: every statement
+    uses ``CREATE TABLE IF NOT EXISTS``.
     """
-    conn.executescript(";\n".join(SCHEMA_DDL) + ";")
+    # Prefer the driver's executescript (SQLite) when available; otherwise
+    # (psycopg2) execute statement-by-statement through a cursor.
+    if hasattr(conn, "executescript"):
+        conn.executescript(";\n".join(SCHEMA_DDL) + ";")
+        return
+    for statement in SCHEMA_DDL:
+        cur = conn.cursor()
+        cur.execute(statement)

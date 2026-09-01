@@ -23,6 +23,19 @@ the recomputed digest and rejected on mismatch (fail closed). Two recipes with
 the same ordered step sequence (semantic id + params + stage) but different
 ordering, or the same recipe on two different factor values, must hash to
 different identities.
+
+SPEC vs MATERIALIZATION identity (P0-FP #103)
+---------------------------------------------
+``content_hash`` / ``treatment_identity`` / ``spec_identity`` describe the
+treatment *specification* ONLY — the transform chain, ordered parameters and
+neutralization spec identity. The materialization context (data snapshot /
+universe / split / asof PIT anchor / price basis / unit) is NEVER part of the
+recipe content: an identical recipe materialized against two different data
+contexts shares the same spec identity but MUST produce different
+:class:`~factor_preprocess.contracts.treatment_spec.
+TreatmentMaterializationIdentity` values (use ``recipe.materialize(...)``).
+The two identity classes are deliberately different types so a spec identity
+can never be confused with a materialization identity.
 """
 from dataclasses import dataclass, field
 from typing import Any, Dict, Optional
@@ -30,7 +43,7 @@ from collections.abc import Mapping
 from enum import Enum
 import hashlib
 
-from factor_preprocess.errors import InvalidContractError
+from factor_preprocess.errors import InvalidContractError, TreatmentMaterializationError
 from factor_preprocess.contracts._deep_freeze import deep_freeze
 
 
@@ -67,6 +80,14 @@ def _stable_repr(value: Any) -> str:
     # Enums compare equal to their .value by identity; hash via value.
     if isinstance(value, Enum):
         return f"Enum:{type(value).__name__}:{_stable_repr(value.value)}"
+    # NeutralizationSpec participates in the recipe content hash (its semantic
+    # surface is part of the recipe identity). Normalize via its own
+    # content-stable form so the hash is cross-process deterministic.
+    if type(value).__name__ == "NeutralizationSpec" and type(value).__module__.endswith(
+        "neutralization.spec"
+    ):
+        from factor_preprocess.contracts.treatment_spec import neutralization_spec_identity
+        return f"NeutralizationSpec{{identity:{neutralization_spec_identity(value)}}}"
     raise TypeError(
         "_stable_repr does not support type "
         f"{type(value).__module__}.{type(value).__qualname__}"
@@ -163,6 +184,9 @@ class TreatmentRecipe:
                 "(fail closed on caller-supplied mismatch)"
             )
         object.__setattr__(self, "content_hash", actual_hash)
+        # Materialization context (data snapshot / universe / split / asof /
+        # price basis) is NEVER part of the recipe content hash: the recipe is
+        # the SPEC, and the spec identity must be data-independent (P0-FP #103).
 
     # -- identity ----------------------------------------------------------
     def _derive_content_hash(self) -> str:
@@ -207,6 +231,91 @@ class TreatmentRecipe:
         unambiguously part of the treatment identity (DLIB-FP-017).
         """
         return self.content_hash
+
+    @property
+    def spec_identity(self) -> "TreatmentSpecIdentity":
+        """SPEC identity of this recipe (definition-only, data-independent).
+
+        See :class:`factor_preprocess.contracts.treatment_spec.
+        TreatmentSpecIdentity`. Derived from the treatment definition ONLY
+        (ordered transform names + params + neutralization spec identity); the
+        materialization context (data snapshot / universe / split / asof /
+        price basis) is deliberately excluded (P0-FP #103). The identity is
+        derived and cannot be caller-supplied.
+        """
+        from factor_preprocess.contracts.treatment_spec import (
+            TreatmentSpecIdentity,
+            neutralization_spec_identity,
+        )
+        steps = []
+        for step in self.ordered_steps:
+            steps.append(
+                (step.step_id, step.semantic_transform_id, step.stage, step.parameters)
+            )
+        return TreatmentSpecIdentity(
+            spec_id=self.recipe_id,
+            recipe_ref=self.content_hash,
+            semantic_transform_ids=tuple(steps),
+            neutralization_spec_identity=neutralization_spec_identity(
+                self.neutralization_spec
+            ),
+            fit_boundary=self.fit_boundary,
+        )
+
+    @property
+    def is_full_sample_research(self) -> bool:
+        """True if this recipe fits on the full sample (research-only).
+
+        A full-sample-research recipe MUST NOT be materialized against an
+        evaluation-valid split (validation / test / production). The runtime
+        rejection is enforced by :func:`ensure_materialization_split_valid`
+        (P0-FP #103).
+        """
+        return self.fit_boundary == FitBoundary.FULL_SAMPLE_RESEARCH
+
+    def materialize(
+        self,
+        *,
+        materialization_ref: str,
+        data_snapshot_ref: str,
+        universe_ref: str,
+        split_ref: str,
+        split,
+        neutralization_spec=None,
+        asof_timestamp=None,
+        price_basis=None,
+        industry_schema=None,
+        size_definition=None,
+        pit_identity=None,
+        unit=None,
+        require_split_valid: bool = True,
+    ) -> "TreatmentMaterializationIdentity":
+        """Materialize this recipe against a concrete context.
+
+        Runs the fail-closed split check (a FULL_SAMPLE_RESEARCH recipe is
+        rejected on evaluation-valid splits) and derives the
+        :class:`TreatmentMaterializationIdentity` from the spec identity PLUS
+        the materialization context, including the A股 neutralization binding.
+        """
+        from factor_preprocess.contracts.treatment_spec import (
+            materialize_identity,
+        )
+        return materialize_identity(
+            self,
+            materialization_ref=materialization_ref,
+            data_snapshot_ref=data_snapshot_ref,
+            universe_ref=universe_ref,
+            split_ref=split_ref,
+            split=split,
+            neutralization_spec=neutralization_spec,
+            asof_timestamp=asof_timestamp,
+            price_basis=price_basis,
+            industry_schema=industry_schema,
+            size_definition=size_definition,
+            pit_identity=pit_identity,
+            unit=unit,
+            require_split_valid=require_split_valid,
+        )
 
     def step_semantic_ids(self) -> tuple:
         """Ordered semantic transform ids of the recipe steps."""

@@ -17,6 +17,31 @@ from pathlib import Path
 from typing import Any, Iterator
 
 
+def _fitness_of(schema_json: Any) -> float | None:
+    """从 factor_nodes.schema_json 提取 fitness（single_ic / 归一化值）。
+
+    模块级函数：GlobalMemoryStore（build_memory_packet）与
+    MemoryRetriever（_fitness_of 静态方法）共用同一实现。
+    """
+    if not schema_json:
+        return None
+    try:
+        if isinstance(schema_json, str):
+            schema_json = json.loads(schema_json)
+    except Exception:
+        return None
+    if not isinstance(schema_json, dict):
+        return None
+    for key in ("fitness", "single_ic", "search_fitness", "norm_ic"):
+        v = schema_json.get(key)
+        if v is not None:
+            try:
+                return float(v)
+            except (TypeError, ValueError):
+                continue
+    return None
+
+
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS factor_nodes (
     factor_id TEXT PRIMARY KEY,
@@ -222,6 +247,14 @@ class MemoryPacket:
                 "[Structural neighbors] "
                 + "; ".join(n.get("formula", "?") for n in self.structural_neighbors[:5])
             )
+        if self.numerical_neighbors:
+            parts.append(
+                "[Numerical neighbors] "
+                + "; ".join(
+                    f"{n.get('formula','?')}(fitness={n.get('fitness','?')})"
+                    for n in self.numerical_neighbors[:5]
+                )
+            )
         if self.successful_offspring:
             parts.append(
                 "[Successful offspring] "
@@ -239,6 +272,20 @@ class MemoryPacket:
             parts.append("[Saturated actions] " + ",".join(self.saturated_actions[:8]))
         if self.unexplored_actions:
             parts.append("[Unexplored actions] " + ",".join(self.unexplored_actions[:8]))
+        if self.survival_exemplars:
+            parts.append(
+                "[2026 survival exemplars] "
+                + "; ".join(
+                    f"{e.get('formula','?')}(survival_rate={e.get('survival_rate','?')})"
+                    for e in self.survival_exemplars[:3]
+                )
+            )
+        if self.cluster_context:
+            parts.append(f"[Cluster context] {self.cluster_context}")
+        if self.allowed_fields:
+            parts.append("[Allowed fields] " + ",".join(self.allowed_fields[:12]))
+        if self.allowed_operators:
+            parts.append("[Allowed operators] " + ",".join(self.allowed_operators[:12]))
         return "\n".join(parts)
 
 
@@ -515,14 +562,47 @@ class GlobalMemoryStore:
             {"factor_id": r[0], "reason": r[1], "structural": bool(r[2])} for r in rows
         ]
 
+    def survival_exemplars(self, k: int = 3) -> list[dict[str, Any]]:
+        """§43：survival_profiles 表中置信度最高的 k 个 exemplar。
+
+        每行带 formula（从 factor_nodes 联表取）+ survival_rate（confidence）。
+        """
+        rows = self._conn.execute(
+            "SELECT sp.factor_id, sp.status, sp.confidence,"
+            " sp.support_periods, fn.canonical_formula"
+            " FROM survival_profiles sp LEFT JOIN factor_nodes fn"
+            "   ON fn.factor_id = sp.factor_id"
+            " ORDER BY sp.confidence DESC LIMIT ?",
+            (k,),
+        ).fetchall()
+        return [
+            {
+                "factor_id": r[0],
+                "status": r[1],
+                "survival_rate": r[2],
+                "support_periods": r[3],
+                "formula": r[4],
+            }
+            for r in rows
+        ]
+
     # -- §43 Survival Memory ----------------------------------------------------
 
     def update_survival(self, profile: Any) -> None:
+        """§43：写入/更新 survival_profiles。
+
+        接受 SurvivalProfile（dataclass，asdict 可用）或普通对象
+        （asdict 会 TypeError，回退为 vars()）。
+        """
+        try:
+            payload = json.dumps(asdict(profile))
+        except (TypeError, ValueError):
+            payload = json.dumps(vars(profile))
         with self._lock:
             self._conn.execute(
                 "INSERT OR REPLACE INTO survival_profiles VALUES (?,?,?,?,?,?)",
                 (
-                    profile.factor_id, profile.status, json.dumps(asdict(profile)),
+                    profile.factor_id, profile.status, payload,
                     profile.confidence, profile.support_periods, time.time(),
                 ),
             )
@@ -562,6 +642,33 @@ class GlobalMemoryStore:
             {"cluster_id": r[0], "member_count": r[1], "saturation": r[2], "survival_rate": r[3]}
             for r in rows
         ]
+
+    def cluster_summary(self) -> dict[str, Any]:
+        """§48：direction_clusters 聚合摘要（最小实现，成员数降序）。
+
+        返回 None 值 dict（无数据时 `not cluster_summary()` 为 True）：
+        {
+            "total_clusters": int,
+            "total_members": int,
+            "top": [{"cluster_id", "member_count", "survival_rate"}, ...最多 5],
+        }
+        """
+        count = self._conn.execute(
+            "SELECT COUNT(*), COALESCE(SUM(member_count), 0) FROM direction_clusters"
+        ).fetchone()
+        total_clusters, total_members = int(count[0]), int(count[1])
+        rows = self._conn.execute(
+            "SELECT cluster_id, member_count, survival_rate FROM direction_clusters"
+            " ORDER BY member_count DESC LIMIT 5"
+        ).fetchall()
+        return {
+            "total_clusters": total_clusters,
+            "total_members": total_members,
+            "top": [
+                {"cluster_id": r[0], "member_count": r[1], "survival_rate": r[2]}
+                for r in rows
+            ],
+        }
 
     # -- §50 Regime Memory ---------------------------------------------------------
 
@@ -652,6 +759,18 @@ class GlobalMemoryStore:
             self._conn.commit()
         return created
 
+    def get_evaluations(self, factor_id: str) -> list[dict[str, Any]]:
+        """evaluations 表中某 factor 的全部评估记录（metric_bundle 已解析）。"""
+        rows = self._conn.execute(
+            "SELECT segment, fidelity, metric_bundle FROM evaluations"
+            " WHERE factor_id=? ORDER BY created_at DESC",
+            (factor_id,),
+        ).fetchall()
+        return [
+            {"segment": r[0], "fidelity": r[1], "metric_bundle": json.loads(r[2] or "{}")}
+            for r in rows
+        ]
+
     # -- §41 Retriever / MemoryPacket -------------------------------------------
 
     def build_memory_packet(
@@ -660,11 +779,20 @@ class GlobalMemoryStore:
         parent_node: dict[str, Any],
         neighbors: list[dict[str, Any]] | None = None,
         max_items: int = 5,
+        allowed_fields: list[str] | None = None,
+        allowed_operators: list[str] | None = None,
     ) -> MemoryPacket:
-        """§32/§40：Full Global Memory → Retriever → MemoryPacket → LLM。"""
-        explored = {e["action_family"] for e in self.exploration_of(parent_node.get("factor_id", ""))}
+        """§32/§40：Full Global Memory → Retriever → MemoryPacket → LLM。
+
+        填充：numerical_neighbors（同 family 数值邻居，复用 retriever 的
+        _fitness_of/_fitness_from_evaluations 逻辑）、survival_exemplars
+        （survival_profiles top exemplars）、cluster_context（direction_clusters
+        聚合摘要）、allowed_fields/allowed_operators（可选传入，缺省 []）。
+        """
+        fid = parent_node.get("factor_id", "")
+        explored = {e["action_family"] for e in self.exploration_of(fid)}
         saturated = [
-            e["action_family"] for e in self.exploration_of(parent_node.get("factor_id", ""))
+            e["action_family"] for e in self.exploration_of(fid)
             if e.get("saturation", 0) > 0.8
         ]
         all_actions = [
@@ -676,15 +804,77 @@ class GlobalMemoryStore:
         return MemoryPacket(
             parent=parent_node,
             structural_neighbors=(neighbors or [])[:max_items],
+            numerical_neighbors=self._numerical_neighbors_of(fid)[:max_items],
             successful_offspring=[],
             representative_failures=self.recent_failures(limit=3),
             ancestry_summary=parent_node.get("ancestry_summary", ""),
             unexplored_actions=unexplored,
             saturated_actions=saturated,
             rare_directions=self.rare_directions(k=5),
-            allowed_fields=[],
-            allowed_operators=[],
+            survival_exemplars=self.survival_exemplars(k=3),
+            allowed_fields=list(allowed_fields or []),
+            allowed_operators=list(allowed_operators or []),
+            cluster_context=self.cluster_summary(),
         )
+
+    # -- §41 numerical neighbors（store 侧实现；retriever 复用） ----------------
+
+    def _numerical_neighbors_of(self, factor_id: str, *, k: int = 5) -> list[dict[str, Any]]:
+        """同 parameter family 的最近 k 个节点（排除自身）。
+
+        fitness 优先取 evaluations 表（_fitness_from_evaluations），取不到再
+        fallback schema_json（_fitness_of）。family_id 缺失或没有同族节点时
+        返回空表。
+        """
+        if not factor_id:
+            return []
+        node = self.get_node(factor_id)
+        if node is None:
+            return []
+        family_id = node.get("parameter_family_id")
+        if not family_id:
+            return []
+        rows = self._conn.execute(
+            "SELECT factor_id, canonical_formula, schema_json, last_seen_at"
+            " FROM factor_nodes"
+            " WHERE parameter_family_id=? AND factor_id<>?",
+            (family_id, factor_id),
+        ).fetchall()
+        out: list[dict[str, Any]] = []
+        for fid, formula, schema_json, last_seen in rows:
+            fitness = self._fitness_from_evaluations(fid)
+            if fitness is None:
+                fitness = _fitness_of(schema_json)
+            out.append(
+                {
+                    "factor_id": fid,
+                    "formula": formula,
+                    "fitness": fitness,
+                    "last_seen_at": last_seen,
+                }
+            )
+        out.sort(key=lambda d: (d["fitness"] is not None, d["fitness"] or 0.0), reverse=True)
+        return out[:k]
+
+    def _fitness_from_evaluations(self, factor_id: str) -> float | None:
+        """evaluations 表里优先取 single_ic / rank_ic / fitness（最新段）。
+
+        查不到或值非有限 → None（不伪造）。
+        """
+        for ev in self.get_evaluations(factor_id):
+            bundle = ev.get("metric_bundle") or {}
+            for key in ("single_ic", "rank_ic", "fitness", "norm_ic", "search_fitness"):
+                v = bundle.get(key)
+                if v is None:
+                    continue
+                try:
+                    fv = float(v)
+                except (TypeError, ValueError):
+                    continue
+                if fv != fv:  # NaN
+                    continue
+                return fv
+        return None
 
 
 # Phase 7 接线：Retriever / seed ingestion（子模块）从包外 re-export。

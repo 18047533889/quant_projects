@@ -51,8 +51,9 @@ def test_evidence_status_from_value_fails_closed_on_unknown():
 
 
 def test_metric_evidence_computed_property():
+    art = ScalarMetricArtifact(metric_id="rank_ic", domain="ic", values=[0.1, 0.2])
     ev = evidence_for_computed(
-        artifact=None, observations=42, minimum_required=10
+        artifact=art, observations=42, minimum_required=10
     )
     assert ev.computed is True
     assert ev.status is EvidenceStatus.COMPUTED
@@ -72,6 +73,7 @@ def test_metric_evidence_accepts_string_reason_code():
     ev = MetricEvidence(
         status="failed",
         reason_code="kernel_failure",
+        artifact=ScalarMetricArtifact(metric_id="rank_ic", domain="ic", values=[0.1]),
         reason_detail="boom",
     )
     assert ev.status is EvidenceStatus.FAILED
@@ -80,12 +82,54 @@ def test_metric_evidence_accepts_string_reason_code():
 
 def test_metric_evidence_rejects_negative_observations():
     with pytest.raises(ValueError):
-        MetricEvidence(status=EvidenceStatus.COMPUTED, observations=-1)
+        MetricEvidence(status=EvidenceStatus.COMPUTED, observations=-1,
+                       artifact=ScalarMetricArtifact(metric_id="rank_ic", domain="ic", values=[0.1]))
 
 
 def test_metric_evidence_rejects_non_artifact():
     with pytest.raises(TypeError):
         MetricEvidence(status=EvidenceStatus.COMPUTED, artifact="not-an-artifact")
+
+
+def test_computed_requires_artifact_fail_closed():
+    """P0-QE-001: COMPUTED status with artifact=None is a fabricated pass."""
+    with pytest.raises(ValueError):
+        MetricEvidence(
+            status=EvidenceStatus.COMPUTED,
+            reason_code=EvidenceReasonCode.OK,
+            observations=5,
+            artifact=None,
+        )
+
+
+def test_computed_rejects_non_ok_reason():
+    """P0-QE-001: COMPUTED + reason != OK is illegal."""
+    with pytest.raises(ValueError):
+        MetricEvidence(
+            status=EvidenceStatus.COMPUTED,
+            reason_code=EvidenceReasonCode.KERNEL_FAILURE,
+            artifact=ScalarMetricArtifact(metric_id="rank_ic", domain="ic", values=[0.1]),
+        )
+
+
+def test_label_not_mature_rejects_artifact():
+    """P0-QE-001: LABEL_NOT_MATURE must never carry a real computed artifact."""
+    with pytest.raises(ValueError):
+        MetricEvidence(
+            status=EvidenceStatus.LABEL_NOT_MATURE,
+            reason_code=EvidenceReasonCode.LABEL_NOT_YET_MATURE,
+            artifact=ScalarMetricArtifact(metric_id="rank_ic", domain="ic", values=[0.1]),
+        )
+
+
+def test_failed_rejects_ok_reason():
+    """P0-QE-001: FAILED + reason=OK is a lie."""
+    with pytest.raises(ValueError):
+        MetricEvidence(
+            status=EvidenceStatus.FAILED,
+            reason_code=EvidenceReasonCode.OK,
+            artifact=ScalarMetricArtifact(metric_id="rank_ic", domain="ic", values=[0.1]),
+        )
 
 
 def test_metric_evidence_artifact_fields():

@@ -644,6 +644,20 @@ REVIEWED_MIGRATION_MANIFEST: dict[str, dict[str, str]] = {
     for canonical in sorted(DAILY_FACTOR_MIGRATED)
 }
 
+# R56-P1 identity: 冻结的 daily surface 快照（DAILY_CANONICALS ∪ 已迁移名单），
+# 供 ``classify_canonical`` 的 O(1) 成员测试。放在 manifest 种子之后、任何
+# ``register_daily_migration`` 之前定义；迁移注册会主动重建本快照（见
+# ``register_daily_migration`` / :func:`_rebuild_daily_surface_cache`）。
+_DAILY_SURFACE_CACHE: frozenset[str] = frozenset(set(DAILY_CANONICALS) | set(REVIEWED_MIGRATION_MANIFEST))
+
+
+def _rebuild_daily_surface_cache() -> None:
+    """重建 daily surface 冻结快照（``register_daily_migration`` 时调用）。"""
+    global _DAILY_SURFACE_CACHE
+    _DAILY_SURFACE_CACHE = frozenset(
+        set(DAILY_CANONICALS) | set(REVIEWED_MIGRATION_MANIFEST)
+    )
+
 # R34 P0-013：把 86 个核心 daily authoring surface（DAILY_CANONICALS）也并入
 # review manifest——它们不是"迁移"算子，但同样是 production daily 表面，必须有
 # version-bound review 记录，否则 R30_EVERY_CURRENT_CANONICAL_REVIEWED 无法
@@ -658,6 +672,9 @@ for _canonical in sorted(DAILY_CANONICALS):
             "approved_authoring_tier": "daily",
         },
     )
+
+# R34 循环之后重建快照，把 DAILY_CANONICALS 的并入也纳入缓存。
+_rebuild_daily_surface_cache()
 
 
 def register_daily_migration(
@@ -682,6 +699,7 @@ def register_daily_migration(
     }
     global DAILY_FACTOR_MIGRATED
     DAILY_FACTOR_MIGRATED = frozenset(set(DAILY_FACTOR_MIGRATED) | {canonical})
+    _rebuild_daily_surface_cache()
 
 
 def daily_factor_migrated() -> frozenset[str]:
@@ -808,7 +826,9 @@ def backend_capability(canonical: str, backend: str) -> BackendCapability:
 
 def classify_canonical(canonical:str)->str:
     if canonical in INTERNAL_ONLY_CANONICALS:return "internal"
-    if canonical in DAILY_CANONICALS or canonical in daily_factor_migrated():return "daily"
+    # R56-P1 identity: ``daily_factor_migrated()`` rebuilds a frozenset from the
+    # review manifest on EVERY call; hoist it out of the hot membership test.
+    if canonical in _DAILY_SURFACE_CACHE:return "daily"
     if canonical in EXTENDED_ONLY_CANONICALS:return "extended"
     if canonical in RESEARCH_ONLY_CANONICALS:
         # R22-009..012/144: ``research`` is an authoring/lifecycle tier, never a

@@ -157,6 +157,60 @@ class TestEvolutionCrossover:
         )
         assert infer_formula_roles("ts_mean(close, 20)")["signal_core"]
 
+    def test_two_parents_role_aware_if_else(self):
+        """两 parents：产出 if_else 形式；条件来自 B（context），核心来自 A（signal_core）。"""
+        arm = EvolutionArm()
+        a = self._parent("a1", "rank(ts_mean(close, 20))")
+        b = self._parent("b1", "if_else(gt(volume, 0.5), rank(close), 0.0)")
+        cands = arm.generate([a, b], None, llm_fn=None)
+        cross = [c for c in cands if c.action_type == "CROSSOVER"]
+        assert cross, "crossover 候选缺失"
+        c = cross[0]
+        assert c.formula.startswith("if_else(")
+        assert c.formula.endswith(", 0.0)")
+        assert "gt(volume, 0.5)" in c.formula  # 条件来自 B
+        assert "ts_mean(close, 20)" in c.formula  # 核心来自 A
+        assert c.formula.count("(") == c.formula.count(")")
+        # parent_ids 同时含 A 与 B
+        assert "a1" in c.parent_ids and "b1" in c.parent_ids
+
+    def test_single_parent_no_crossover_fallback(self):
+        """单 parent：不抛，仅 mutation；无 crossover 也非空。"""
+        arm = EvolutionArm()
+        a = self._parent("a1", "rank(ts_mean(close, 20))")
+        cands = arm.generate([a], None, llm_fn=None)
+        assert cands
+        assert not [c for c in cands if c.action_type == "CROSSOVER" and "if_else" in c.formula]
+
+    def test_two_parents_both_no_context_falls_back_no_raise(self):
+        """parents=2 但都无 context 角色：回落单 parent 路径，不抛。"""
+        arm = EvolutionArm()
+        a = self._parent("a1", "ts_mean(close, 20)")
+        b = self._parent("b1", "rank(close)")
+        cands = arm.generate([a, b], None, llm_fn=None)
+        assert cands
+        # 不产出双 parent if_else 组合（B 无 context 段）
+        assert not any(
+            c.action_type == "CROSSOVER" and "if_else(" in c.formula
+            for c in cands
+        )
+
+    def test_multi_parent_all_with_context_each_pair(self):
+        """parents=3 全带 context：每个补充 parent 都产出 if_else 组合。"""
+        arm = EvolutionArm()
+        a = self._parent("a1", "rank(ts_mean(close, 20))")
+        b1 = self._parent("b1", "if_else(gt(volume, 0.5), rank(close), 0.0)")
+        b2 = self._parent("b2", "if_else(gt(amount, 0.5), rank(close), 0.0)")
+        cands = arm.generate([a, b1, b2], None, llm_fn=None)
+        crosses = [c for c in cands if c.action_type == "CROSSOVER" and "if_else(" in c.formula]
+        assert len(crosses) == 2
+        conds = [c.formula.split("if_else(")[1].split(",", 1)[0].strip() for c in crosses]
+        assert any(cd.startswith("gt(volume") for cd in conds)
+        assert any(cd.startswith("gt(amount") for cd in conds)
+    def test_empty_parents_returns_empty(self):
+        arm = EvolutionArm()
+        assert arm.generate([], None, llm_fn=None) == []
+
 
 # ---------------------------------------------------------------------------
 # §30 model_route：CROSSOVER→strong、REFINE→cheap
