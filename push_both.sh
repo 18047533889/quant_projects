@@ -1,10 +1,12 @@
 #!/bin/bash
-# push_both.sh — sync 12 library directories from quant_projects to their
-# HKUST-QUANT-SOCIETY mirrors on GitHub.
+# push_both.sh — sync 13 library directories from quant_projects to their
+# HKUST-QUANT-SOCIETY mirrors on GitHub, then push the root repo itself to
+# github.com/18047533889/quant_projects (origin main).
 #
 # Usage:
-#   bash push_both.sh                 # sync all 12 repos
+#   bash push_both.sh                 # sync all 13 repos + push root repo
 #   bash push_both.sh --only fe       # sync repos whose name contains "fe"
+#                                     # (--only skips the root-repo push)
 #
 # Design notes:
 #   * Code is synced whole (never split); only regenerable artifacts are excluded
@@ -120,4 +122,19 @@ if [ "$fail" -eq 0 ]; then
 else
     echo "=== syncs finished WITH ERRORS (see $LOG) ===" | tee -a "$LOG"
 fi
+
+# ---- push the root repo itself to origin (18047533889/quant_projects) ----
+# --only 模式跳过总仓推送（只刷个别库时不动 root 历史）
+# push 只发送已提交历史，脏树不影响正确性 —— 脏文件仅提示不阻断
+if [ -z "$ONLY" ] && [ "$fail" -eq 0 ]; then
+    ts=$(date '+%Y-%m-%d %H:%M:%S')
+    echo "=== [$ts] push root repo -> 18047533889/quant_projects ===" | tee -a "$LOG"
+    if ! git -C "$ROOT" diff --quiet || ! git -C "$ROOT" diff --cached --quiet; then
+        echo "    WARN: root working tree dirty ($(git -C "$ROOT" status --porcelain | wc -l) files uncommitted)" | tee -a "$LOG"
+    fi
+    git -C "$ROOT" push -q origin main 2>>"$LOG" \
+        && echo "    done (pushed root main)" | tee -a "$LOG" \
+        || { echo "    root push FAILED" | tee -a "$LOG"; fail=1; }
+fi
+
 exit "$fail"
