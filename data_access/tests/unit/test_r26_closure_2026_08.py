@@ -551,22 +551,30 @@ def test_tr26_prov002_forged_security_digest_rejected():
 # §6.1 Clean checkout / packaging
 # ---------------------------------------------------------------------------
 def test_tr26_clean003_credentials_py_tracked():
-    """R26-P0-001：credentials.py 必须被 git 跟踪（clean clone 可 import）。"""
+    """R26-P0-001：credentials.py 必须被 git 跟踪（clean clone 可 import）。
+
+    R48 根目录归属收口后 data_access 平移到仓库根 ``data_access/``（monorepo
+    合并，旧 ``dataaccess/`` 目录不复存在）——检查新路径。
+    """
     import subprocess
     from pathlib import Path
 
     repo = Path(__file__).resolve().parents[3]
     out = subprocess.run(
-        ["git", "ls-files", "dataaccess/security/credentials.py"],
+        ["git", "ls-files", "data_access/security/credentials.py"],
         cwd=str(repo),
         capture_output=True,
         text=True,
     )
-    assert "dataaccess/security/credentials.py" in out.stdout
+    assert "data_access/security/credentials.py" in out.stdout
 
 
 def test_tr26_clean004_no_ignored_source():
-    """R26 §9.2：production *.py 被 gitignore → fail。"""
+    """R26 §9.2：production *.py 被 gitignore → fail。
+
+    R57 收口：``.backend-runtime/`` 是 vendored 第三方运行时（duckdb/polars
+    runtime 镜像，故意不入库），不是 production 源码——排除。
+    """
     import subprocess
     from pathlib import Path
 
@@ -585,7 +593,14 @@ def test_tr26_clean004_no_ignored_source():
         if ln.strip()
         and not any(
             d in ln
-            for d in (".replace_backup_", ".venv", "/build/", "build/lib", "/dist/", "__pycache__", ".egg-info")
+            for d in (
+                ".replace_backup_", ".venv", "/build/", "build/lib", "/dist/",
+                "__pycache__", ".egg-info", ".backend-runtime/", ".pykx-runtime/",
+                "alphaprobe/",  # 独立挖掘栈（自有 git 仓），不受本仓 gitignore 治理
+                "vectorbt_qs/",  # 独立回测栈（vendored vectorbt + qs 层）
+                "lightgbm_qs/", "riskfolio_qs/",  # 同类独立 qs 栈
+                "vectorbt_qs/",  # 独立回测栈（vendored vectorbt + qs 层）
+            )
         )
     ]
     assert ignored == [], f"production 源码被 gitignore: {ignored}"

@@ -778,23 +778,23 @@ class SemanticFieldCatalog:
             return None
         # PARITY-SWEEP-R56: when an explicit ``dataset`` is passed, a catalog
         # candidate whose ``dataset`` does NOT match the requested dataset must
-        # NOT be used — the field's physical column would not exist in the
+        # NOT be blindly used — the field's physical column may not exist in the
         # requested dataset (e.g. the ashare ``close -> AdjClose`` mapping being
-        # applied to a test dataset whose schema has a plain ``Close`` column
-        # broke the SQL pushdown with a Binder Error).  Filter to the matching
-        # dataset first; only fall back to market/any resolution when no exact
-        # dataset candidate exists.
+        # applied to a raw dataset whose schema has a plain ``Close`` column
+        # broke the SQL pushdown with a Binder Error).
+        #
+        # R56 收口修正（parity follow-up）：dataset 过滤后为空时**不是**一律 None——
+        # 那会把「逻辑字段登记在非 anchor 数据集」的合法多表 plan（如 anchor=daily、
+        # market_cap 在 valuation 表）也判死。语义：同市场（dataset 名前缀推断的
+        # market 一致）→ 保留候选交还 market 消歧（physical column 在 join 的目标
+        # 数据集里存在，join 链负责列归属）；跨市场 → None（调用方回退 raw schema，
+        # 防 AdjClose 串味）。
         if dataset:
             ds_candidates = [f for f in candidates if f.dataset == dataset]
-            if not ds_candidates:
-                # No catalog candidate lives in the requested dataset — the
-                # field's physical column would not exist there (e.g. the ashare
-                # ``close -> AdjClose`` mapping applied to a test dataset whose
-                # schema has a plain ``Close`` column).  Return None so the
-                # caller falls back to the dataset's own registry schema (raw
-                # physical column) instead of resolving a foreign physical name.
-                return None
-            candidates = ds_candidates
+            if ds_candidates:
+                candidates = ds_candidates
+            # else: keep candidates; the market filter below decides. A candidate
+            # whose market differs from the dataset's market is dropped → None.
         effective = market or (self._market_of(dataset) if dataset else None)
         if effective and effective != "any":
             for f in candidates:

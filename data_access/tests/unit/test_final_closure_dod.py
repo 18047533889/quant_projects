@@ -341,7 +341,7 @@ def test_dataset_level_required_filter_not_bypassable(tmp_path):
     store = _store(
         tmp_path,
         {
-            "ashare_stock_industry": {
+            "test_industry_filter": {
                 "kind": "static", "access_mode": "published", "layout": "plain",
                 "root": str(d), "glob": "*.parquet",
                 "time_column": "TradeDate", "instrument_column": "Symbol",
@@ -352,10 +352,15 @@ def test_dataset_level_required_filter_not_bypassable(tmp_path):
     )
     os.environ["QUANT_PRODUCTION_MODE"] = "1"
     try:
-        store.read_arrow("ashare_stock_industry", columns=["Industry"], IndustrySource="sw_l1")
+        # production 模式下 mirror-registry 同名数据集强制走 COS remote（实际拉远程
+        # parquet），与本测试的 DoD #8 语义无关。用未注册 mirror 的数据集名避开。
+        store.read_arrow("test_industry_filter", columns=["IndustrySource"],
+                         IndustrySource="sw_l1",
+                         time_range=("2024-01-01", "2024-01-01"))
         # columns=None 也必须被 IndustrySource required filter 挡下
         with pytest.raises(Exception):
-            store.read_arrow("ashare_stock_industry", columns=None)
+            store.read_arrow("test_industry_filter", columns=None,
+                             time_range=("2024-01-01", "2024-01-01"))
     finally:
         os.environ.pop("QUANT_PRODUCTION_MODE", None)
 

@@ -94,6 +94,8 @@ _SKIP_DIRS = {
     ".vscode",
     ".idea",
     "site-packages",
+    ".backend-runtime",
+    ".pykx-runtime",
 }
 
 

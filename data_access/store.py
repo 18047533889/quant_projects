@@ -3887,6 +3887,39 @@ class DataAccessStore:
         catalog = get_semantic_catalog()
         out: list[Any] = []
         for name in names:
+            # PARITY-SWEEP-R56 收口：显式 dataset 下，**该数据集自身 schema 含此列**
+            # （大小写不敏感）时优先用本表物理列——这正是 R56 注释承诺的「caller
+            # falls back to the dataset's own registry schema (raw physical column)」。
+            # 放在 catalog 之前：防止全局 catalog 的 AdjClose 映射把 anchor=daily、
+            # 本表已有 Close 列的读链判到未注册的 adj 数据集（未注册数据集 ValidationError）。
+            if dataset:
+                ds = self._registry.get(dataset)
+                schema = getattr(ds, "schema", None) or {}
+                ci_matches = [
+                    col for col in schema if col.lower() == str(name).lower()
+                ]
+                if len(ci_matches) == 1:
+                    col = ci_matches[0]
+                    # catalog 已登记该物理列的语义（scale/availability…）→ 用
+                    # catalog 定义（单位归一化依赖 scale 元数据）；catalog 未覆盖
+                    # 才退回裸物理列占位。
+                    by_phys = catalog.resolve_by_physical(dataset, col)
+                    if by_phys is not None:
+                        out.append(by_phys)
+                    else:
+                        out.append(
+                            SemanticField(
+                                logical_name=name,
+                                dataset=dataset,
+                                physical_name=col,
+                                dtype=schema[col],
+                            )
+                        )
+                    continue
+            # 当 dataset 给定但 catalog 无候选、且该 dataset 的 registry schema
+            # 不含此物理列名时，fall through 到 catalog resolve_one（跨市场消歧 /
+            # 多表共享逻辑名）。catalog 此时可能返回其它 dataset 的映射（如 market_cap
+            # → valuation 表），plan 层会通过 per_ds 拆分到正确数据集。
             # #41 跨市场：传 dataset 让 catalog 按市场消歧（A股 return_bp 的 alias
             # 'ret' 与美股独立字段 'ret' 不再串味）。
             f = catalog.resolve_one(name, dataset=dataset)
@@ -3911,19 +3944,6 @@ class DataAccessStore:
                     "availability / mining_allowed / market 等语义。research/legacy "
                     "模式保留物理列回退。"
                 )
-            if dataset:
-                ds = self._registry.get(dataset)
-                schema = getattr(ds, "schema", None) or {}
-                if name in schema:
-                    out.append(
-                        SemanticField(
-                            logical_name=name,
-                            dataset=dataset,
-                            physical_name=name,
-                            dtype=schema[name],
-                        )
-                    )
-                    continue
             found: list[tuple[str, str]] = []
             for dsn in self._registry.names():
                 d = self._registry.get(dsn)

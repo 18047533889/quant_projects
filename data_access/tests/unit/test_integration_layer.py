@@ -163,8 +163,9 @@ def test_semantic_catalog_resolve(tree):
     store = tree["store"]
     fs = store.resolve_fields(["close", "market_cap", "total_assets"])
     by = {f.logical_name: f for f in fs}
-    assert by["close"].dataset == "ashare_stock_daily"
-    assert by["close"].physical_name == "Close"
+    # ADJ_FIELD_MIGRATION（yaml 单一真相）：bare ``close`` 解析到复权表 AdjClose。
+    assert by["close"].dataset == "ashare_stock_daily_adj"
+    assert by["close"].physical_name == "AdjClose"
     assert by["market_cap"].physical_name == "MarketCap"
     assert by["total_assets"].dataset == "ashare_stock_balance"
     # 物理列反查 → 拿到 scale（单位归一化）
@@ -886,3 +887,4 @@ def test_sql_relation_snapshot_datasets(tree):
     assert rh._snapshot is not None
     tbl = rh.collect()
     assert tbl.num_rows == 10
+

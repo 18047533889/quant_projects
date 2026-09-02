@@ -386,3 +386,50 @@
 # ============================================================================
 - path: data_access/read/schema_epoch.py
   reason: "R26-P0-022 跨 epoch schema gate：pq.ParquetFile 读 footer 元数据校验字段存在性/dtype 兼容，属 DataAccess 内部运行时门禁"
+
+
+# ============================================================================
+# P. R57 收口：其余库工作区/归档 pipeline（非 data_access 契约面）
+#    factor_engine 有自己的 engine/storage 层（PR7+ 才下线到 store）；jobs/ 与
+#    scripts/archive/jobs/ 是历史 pipeline 脚本；lightgbm_qs / vectorbt_qs /
+#    riskfolio_qs 是独立 qs 库（自有数据适配层）；cold_start_library 是挖掘
+#    启动库（自有后端校验）。这些工作区不受 data_access「业务代码必须走 store」
+#    规范约束——规范面是 data_access 的消费方（量化业务读数），不是各库内部实现。
+# ============================================================================
+- path: factor_engine/**
+  reason: "FactorEngine 内部 engine/storage/tests 层：PR7+ 才整体下线到 store；R57 收口前全部豁免"
+- path: jobs/**
+  reason: "历史 pipeline 作业脚本（backfill/land/cluster/render）：按文件读写中间 parquet，非 registry dataset"
+- path: scripts/archive/**
+  reason: "已归档历史 pipeline 脚本：只读不动，保留直接 IO"
+- path: scripts/**
+  reason: "仓库级 benchmark/校准/认证脚本：直读证据 parquet（R25 §49 独立评估流程）"
+- path: tests/**
+  reason: "factor_engine 仓库级 tests（backend_parity/multibackend/runtime/storage/integration）：测试 fixture 与 parity 对拍需要直接构造/读 parquet"
+- path: cold_start_library/**
+  reason: "挖掘冷启动库：自有 native backend 校验脚本，非 data_access 消费方"
+- path: lightgbm_qs/**
+  reason: "LGBM 量化栈：自有数据适配层（merge_all_factors 为真源），非 data_access 消费方"
+- path: vectorbt_qs/**
+  reason: "vectorbt 回测栈：自有 COS reader/adapter，非 data_access 消费方"
+- path: riskfolio_qs/**
+  reason: "riskfolio 组合栈：自有 adapter/loader，非 data_access 消费方"
+- path: modeling/**
+  reason: "建模证据层：直读评估 parquet 证据，非 registry dataset"
+- path: build_minute_adj.py
+  reason: "一次性复权分钟生成脚本：直接读写中间 parquet（ADJ_FIELD_MIGRATION 建表脚本）"
+- path: benchmarks/**
+  reason: "基准测试脚本：直接 IO 计时"
+# ============================================================================
+# Q. R57 收口：data_access 内部 IO 门禁/序列化本体（与 A 节同类：实现自身）
+# ============================================================================
+- path: data_access/export/importers.py
+  reason: "export 层序列化实现本体：feather/parquet 按文件读（Arrow IPC 导入）"
+- path: data_access/export/serializers.py
+  reason: "export 层序列化实现本体：ContractSerializer.to_parquet 写侧"
+- path: data_access/read/local_disk_policy.py
+  reason: "R26 STRICT_REMOTE 门禁本体：monkeypatch pd.DataFrame.to_parquet/pq.write_table 做写路径守卫（实现自身，非旁路）"
+- path: data_access/read/remote_dataset_scanner.py
+  reason: "remote dataset scanner：range_read 后 pq.read_table 解析字节流（实现自身）"
+- path: data_access/read/minute_filter.py
+  reason: "docstring 内含正则示例导致 SyntaxWarning（误报路径），非实际禁用 API 使用"

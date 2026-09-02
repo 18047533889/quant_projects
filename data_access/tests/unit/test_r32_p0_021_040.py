@@ -36,7 +36,7 @@ def test_p0_029_strict_manifest_must_have_explicit_complete():
         "dataset": "test",
         "objects": [],
         "object_count": 0,
-        "content_digest": "abc",
+        "content_digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5",
         "prefix": "s3://bucket/path",
         "published_at": "2024-01-01T00:00:00+00:00",
     }
@@ -68,7 +68,7 @@ def test_p0_030_strict_manifest_must_have_objects_field():
         "dataset": "test",
         "complete": True,
         "object_count": 0,
-        "content_digest": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "content_digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5",
         "prefix": "s3://bucket/path",
         "published_at": "2024-01-01T00:00:00+00:00",
     }
@@ -97,7 +97,7 @@ def test_p0_032_manifest_zero_byte_object_not_eaten():
             {"key": "s3://bucket/file.txt", "size": 0, "etag": "d41d8cd98f00b204e9800998ecf8427e"}
         ],
         "object_count": 1,
-        "content_digest": "abc",
+        "content_digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5",
         "prefix": "s3://bucket/",
         "published_at": "2024-01-01T00:00:00+00:00",
     }
@@ -120,7 +120,7 @@ def test_p0_033_manifest_version_gate_compatibility():
         "complete": True,
         "objects": [],
         "object_count": 0,
-        "content_digest": "abc",
+        "content_digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5",
         "prefix": "s3://bucket/path",
         "published_at": "2024-01-01T00:00:00+00:00",
     }
@@ -149,7 +149,7 @@ def test_p0_034_published_at_timezone_aware():
         "complete": True,
         "objects": [],
         "object_count": 0,
-        "content_digest": "abc",
+        "content_digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5",
         "prefix": "s3://bucket/path",
     }
 

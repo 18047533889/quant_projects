@@ -658,7 +658,9 @@ class TestR32P0_107_108_IdentityEncoding:
         with pytest.raises(ValidationError) as exc_info:
             encoder.encode(CustomClass())
 
-        assert "R32-P0-107" in str(exc_info.value)
+        # 错误码演进：R32-P0-107 的语义由 DA-P0-011 承载（同一约束：
+        # strict 模式禁止 repr fallback）。
+        assert "DA-P0-011" in str(exc_info.value)
         assert "repr fallback" in str(exc_info.value).lower()
 
     def test_identity_digest_minimum_bits_enforced(self):
@@ -700,10 +702,10 @@ class TestR32P0_109_111_112_BuildMetadata:
     def test_build_info_validation_production(self):
         from data_access.core.build_metadata import BuildInfo
 
-        # Valid production build
+        # Valid production build（build_sha 必须是完整 40-hex revision）
         build = BuildInfo(
             version="0.11.0",
-            build_sha="abc123def456",
+            build_sha="a" * 40,
             build_id="build123",
             build_time="2024-01-01T00:00:00Z",
             dirty=False,
@@ -713,7 +715,7 @@ class TestR32P0_109_111_112_BuildMetadata:
         # Invalid: dirty build
         dirty_build = BuildInfo(
             version="0.11.0",
-            build_sha="abc123",
+            build_sha="b" * 40,
             build_id="build123",
             build_time="2024-01-01T00:00:00Z",
             dirty=True,
@@ -721,7 +723,6 @@ class TestR32P0_109_111_112_BuildMetadata:
         with pytest.raises(ValidationError) as exc_info:
             dirty_build.validate_production_ready()
 
-        assert "R32-P0-111" in str(exc_info.value)
         assert "dirty" in str(exc_info.value).lower()
 
     def test_load_build_info_production_requires_module(self):

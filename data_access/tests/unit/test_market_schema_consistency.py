@@ -113,7 +113,9 @@ def test_us_financial_timeframe_present(registry):
 # ---------------------------------------------------------------------------
 
 def test_ret_disambiguates_by_market(catalog):
-    a = catalog.resolve_one("ret", dataset="ashare_stock_daily")
+    # PARITY-SWEEP-R56：resolve_one(name, dataset=X) 只解析该数据集内的候选；
+    # A股 bp Return 在复权表（ADJ_FIELD_MIGRATION），美股 Ret 在 us_stock_daily。
+    a = catalog.resolve_one("ret", dataset="ashare_stock_daily_adj")
     u = catalog.resolve_one("ret", dataset="us_stock_daily")
     assert a is not None and u is not None
     assert a.physical_name == "Return" and a.scale == 0.0001   # A股 bp → /10000
@@ -133,9 +135,9 @@ def test_financial_fields_disambiguate_by_market(catalog):
     assert a.physical_name == "OperatingRevenue"
     assert u.physical_name == "revenue"
     assert u.dataset == "us_stock_income"
-    # market_cap：A股 MarketCap vs 美股 market_cap
+    # market_cap：A股 MarketCap vs 美股 market_cap（us 在估值日频表）
     a = catalog.resolve_one("market_cap", dataset="ashare_stock_valuation_daily")
-    u = catalog.resolve_one("market_cap", dataset="us_stock_daily")
+    u = catalog.resolve_one("market_cap", dataset="us_stock_valuation_daily")
     assert a.physical_name == "MarketCap"
     assert u.physical_name == "market_cap" and u.dataset == "us_stock_valuation_daily"
 
@@ -166,8 +168,18 @@ def test_required_filters_accept_params(catalog):
 
 
 def test_catalog_required_filters_flag_present(catalog):
-    """美股财务字段的 required_filters 应含 timeframe（列过滤）。"""
-    for name in ("total_assets", "total_liabilities", "revenue", "net_income"):
+    """美股财务字段的 required_filters 应含 timeframe（列过滤）。
+
+    PARITY-SWEEP-R56 语义：resolve_one(name, dataset=X) 只返回**该数据集内**
+    的候选——physical column 不在请求数据集里就不能解析（防 AdjClose 串到 raw
+    表的 Binder Error）。total_assets/total_liabilities 是 us_stock_balance 字段，
+    revenue/net_income 是 us_stock_income 字段，按各自数据集断言。
+    """
+    for name in ("total_assets", "total_liabilities"):
+        f = catalog.resolve_one(name, dataset="us_stock_balance")
+        assert f is not None
+        assert "timeframe" in f.required_filters
+    for name in ("revenue", "net_income"):
         f = catalog.resolve_one(name, dataset="us_stock_income")
         assert f is not None
         assert "timeframe" in f.required_filters

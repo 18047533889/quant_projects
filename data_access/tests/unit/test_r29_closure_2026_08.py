@@ -423,7 +423,9 @@ def test_read_plan_pin_uses_verified_scope_strict(tmp_path):
     assert store.manifest_version("ds")["has_manifest"] is True
     os.environ["DATA_ACCESS_STRICT_READ"] = "1"
     try:
-        plan = store.plan(DataRequest(fields=["ts", "sym", "val"],
+        # R22 strict：未登记逻辑名禁止 dataset=None 的全 registry 物理回退——
+        # 显式传 anchor 让 resolve_fields 在该数据集自身 schema 内解析物理列。
+        plan = store.plan(DataRequest(fields=["ts", "sym", "val"], anchor="ds",
                                       snapshot_policy="pin"))
         out = plan.execute().to_arrow()
         assert out.num_rows >= 1
@@ -728,17 +730,18 @@ def test_mutation_owner_surfaces_in_manifest_version(tmp_path):
 # ===========================================================================
 
 def test_build_sha_in_version_and_snapshot():
-    """R29-21：build SHA 进 __version__/__build_sha__ 与 snapshot_id 身份。"""
+    """R29-21：build SHA 进 __build_sha__ 与 snapshot_id 身份。
+
+    版本语义演进：``__version__`` 是纯 semver，build 身份由独立的
+    ``__build_sha__`` 承载。P0-04 收口后 build 身份**只读自构建期生成的**
+    ``_build_info.py``（运行时不再接 env / SCM fallback——安装产物可能两样
+    都没有），env 覆盖路径已删除：这里验证 shim 稳定读生成模块。
+    """
     import data_access
 
     assert data_access.__build_sha__
-    assert "+build." in data_access.__version__
-    # 同一构建 snapshot_id 稳定；build_sha 换则身份变（模拟 env 覆盖）
-    os.environ["DATA_ACCESS_BUILD_SHA"] = "deadbeef" * 5
-    try:
-        import data_access._build_meta as bm
-        bm.build_sha.cache_clear()
-        assert bm.build_sha() == "deadbeef" * 5
-    finally:
-        os.environ.pop("DATA_ACCESS_BUILD_SHA", None)
-        bm.build_sha.cache_clear()
+
+    import data_access._build_meta as bm
+    # shim 与生成模块单一真相一致；两次读取稳定（同一构建内）
+    assert bm.build_sha() == data_access.__build_sha__
+    assert bm.build_sha() == bm.build_sha()
