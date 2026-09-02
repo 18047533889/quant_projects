@@ -85,6 +85,13 @@ class SearchOrchestrator:
     # 行为与旧版完全一致（向后兼容，全量测试不挂）。
     parent_selector: Any | None = None
 
+    # V2-H：结构化 generation 开关。False（默认）= 行为与旧版完全一致（全量测试
+    # 不挂）。True = 启用后，生成候选的 parents 来自 parent_selector 的 top-k DAG
+    # 采样（而非单 parent），且每个候选记录 lineage（parent ids 列表）。
+    structured_generation: bool = False
+    #: 结构化 generator 注入（默认惰性构造 StructuredGenerator）。
+    structured_generator: Any | None = None
+
     # 允许测试注入计数/延迟
     latency_ms: int = 0
     llm_cost: float = 0.0
@@ -170,12 +177,22 @@ class SearchOrchestrator:
             # 选补充 parent 池；默认 None → 走原 structural-distance 挑选。
             if self.parent_selector is not None:
                 chosen = self.parent_selector.select_parents(
-                    chosen, top_k=top_k, main=parent_node,
+                    chosen, k=top_k, main=parent_node,
                     action_to_retrieve=action_type,
                 )
             elif select_complement:
                 chosen = self._complement_parents(parent_node, list(extra_parents), top_k=top_k)
             parents.extend(chosen)
+
+        # V2-H：结构化 generation 开关。启用后，parents 来自 parent_selector 的
+        # top-k DAG 采样（而非单 parent），且每个候选记录 lineage（parent ids）。
+        # 默认 False = 行为与旧版完全一致（全量测试不挂）。
+        if self.structured_generation:
+            return self._step_structured(
+                parent_node, llm_fn, parents, action_type, model_class,
+                dedup_client=dedup_client,
+            )
+
         num = ARM_EXPECTED.get(action_type, self.expected_num)
         sys_p, usr_p = self.build_prompt(parents, action_type, num)
         t0 = time.monotonic()
@@ -261,6 +278,104 @@ class SearchOrchestrator:
         if cls is None:
             return None
         return cls()
+
+    # ------------------------------------------------------------------
+    # V2-H：结构化 generation 单步（§27 / §37）
+    # ------------------------------------------------------------------
+
+    def _step_structured(
+        self,
+        parent_node: dict[str, Any],
+        llm_fn: LLMFn | None,
+        parents: list[dict[str, Any]],
+        action_type: str,
+        model_class: str,
+        *,
+        dedup_client: Any | None = None,
+    ) -> OrchestratorStep:
+        """结构化 generation：parents 来自 parent_selector 的 top-k DAG 采样。
+
+        - llm_fn 输出经 ``normalize_llm_output`` 归一化为 action dict 列表
+          （旧文本输出 → identity action fallback，向后兼容）；
+        - ``StructuredGenerator.generate`` 把 action 应用到 parents → FE validate
+          → 候选池（非法/非白名单 op/FE 校验失败一律拒绝并记录原因）；
+        - 每个候选记录 lineage（parent ids 列表）。
+        """
+        from alphaprobe.generation.structured import (
+            StructuredGenerator,
+            normalize_llm_output,
+        )
+
+        gen = self.structured_generator
+        if gen is None:
+            gen = StructuredGenerator()
+            self.structured_generator = gen
+
+        num = ARM_EXPECTED.get(action_type, self.expected_num)
+        sys_p, usr_p = self.build_prompt(parents, action_type, num)
+        t0 = time.monotonic()
+        output = llm_fn(sys_p, usr_p, model_class) if llm_fn is not None else None
+        self.latency_ms = int((time.monotonic() - t0) * 1000)
+
+        actions = normalize_llm_output(output, parents=parents, default_action_type=action_type)
+        result = gen.generate(actions, parents, default_action_type=action_type)
+
+        candidates: list[GeneratedCandidate] = []
+        for cand in result.candidates:
+            candidates.append(
+                GeneratedCandidate(
+                    formula=cand.formula,
+                    explanation=cand.explanation,
+                    hypothesis=cand.hypothesis,
+                    action_type=cand.action_type,
+                    parent_ids=list(cand.parent_ids),
+                    schema_tags=dict(cand.schema_tags),
+                )
+            )
+
+        # §41：进昂贵评估前过滤硬重复（EXACT/SIGN）。挂 client 前行为完全不变。
+        duplicates_filtered = 0
+        if dedup_client is not None and candidates:
+            kept: list[GeneratedCandidate] = []
+            for cand in candidates:
+                try:
+                    verdict = dedup_client.check_new_candidate(cand.formula)
+                except Exception:  # noqa: BLE001 - 去重失败不阻塞生成
+                    verdict = None
+                if verdict is not None and verdict.rejection_reason is not None:
+                    duplicates_filtered += 1
+                    continue
+                kept.append(cand)
+            candidates = kept
+
+        action = make_action(
+            action_type=action_type,
+            parent_ids=[str(parent_node.get("factor_id") or parent_node.get("id") or "")]
+            if parent_node
+            else [],
+            round_id=self.round_id,
+            generation=self.generation,
+            llm_model_class=model_class,
+        )
+        attempts = [
+            AttemptRecord(
+                attempt_id=f"at_{uuid.uuid4().hex[:12]}",
+                action=action,
+                candidate_factor_id=None,
+                outcome="ok",
+                llm_cost=self.llm_cost,
+                eval_cost=self.eval_cost,
+                latency_ms=self.latency_ms,
+            )
+            for _ in range(max(1, len(candidates)))
+        ]
+        return OrchestratorStep(
+            action=action,
+            model_class=model_class,
+            candidates=candidates,
+            attempts=attempts,
+            duplicates_filtered=duplicates_filtered,
+        )
 
     # ------------------------------------------------------------------
     # §27 multi-parent 补充选择：top-K 中按「结构远」挑 complement parent

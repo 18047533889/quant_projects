@@ -361,7 +361,7 @@ def _upsert_pool_snapshot(
     if pool is None:
         logging.info("no pool snapshot available (in-process) — skipped")
         return
-    from alphaprobe.dedup import canonical_ast_hash, canonicalize_dsl, signal_equivalence_id
+    from alphaprobe.authority import FactorIdentityAuthorityError, build_identity_view
     from alphaprobe.fe_bridge.dsl_convert import expression_to_dsl
     from alphaprobe.delivery.exporter import _candidate_hash
 
@@ -376,13 +376,19 @@ def _upsert_pool_snapshot(
             formula = expression_to_dsl(expr)
         except Exception:
             continue
-        canonical = canonicalize_dsl(formula)
+        # FE 权威身份（§28）；FE 不可用 fail-closed skip，不回落文本 regex。
+        try:
+            iv = build_identity_view(formula)
+        except FactorIdentityAuthorityError as exc:
+            logging.warning("authority identity unavailable, skip pool snapshot: %r: %s", formula, exc)
+            continue
+        canonical = str(iv.get("canonical_formula") or formula)
         ok, existing = store.upsert_factor_node(
             factor_id=f"ap_{campaign_id}_{i}",
             canonical_formula=canonical,
-            canonical_ast_hash=canonical_ast_hash(formula),
-            signal_equivalence_id=signal_equivalence_id(formula),
-            parameter_family_id=None,
+            canonical_ast_hash=str(iv.get("canonical_ast_hash", "") or ""),
+            signal_equivalence_id=str(iv.get("signal_equivalence_id", "") or ""),
+            parameter_family_id=str(iv.get("parameter_family_id", "") or None),
             source_system="alphaprobe",
             source_snapshot=campaign_id,
             source_type="MINED",

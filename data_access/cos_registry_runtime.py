@@ -23,7 +23,10 @@ _REGISTRY_PATCHES: dict[str, dict[str, Any]] = {
             "LowLimit": "double",
             "Factor": "double",
             "IsSuspend": "bool",
-            "UpdateTime": "timestamp",
+            # #P1-final closure 11：实际 parquet 为 timestamp[ms, tz=UTC]（aware）。
+            # 声明 "timestamp" 会触发 schema 校验 warning（timestamp vs
+            # TIMESTAMP WITH TIME ZONE）；与 datasets.yaml 的 timestamptz 对齐。
+            "UpdateTime": "timestamptz",
         }
     },
     "ashare_stock_balance": {

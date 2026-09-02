@@ -278,28 +278,56 @@ def test_r32_gov_001_host_backed_duplicate_query_id_rejected():
 
 @pytest.mark.timeout(5)
 def test_r32_gov_003_host_lease_granted_but_local_fail_rolls_back():
-    """T-R32-GOV-003：host lease 成功但本地记账失败 → host lease 回滚。"""
-    gov = GlobalResourceGovernor(max_active_queries=1, max_total_reserved_memory=10000)
-    released = []
+    """T-R32-GOV-003：host lease 成功但本地记账失败 → host lease 回滚。
 
-    def fake_host_lease(*_):
-        lease = MagicMock()
-        lease.release = lambda: released.append(1)
-        return lease
+    同 P0-008：回滚语义在 strict/production 下生效——显式置 production 权威。
 
-    gov.set_host_lease_request(fake_host_lease)
+    R32-P0-007 语义：本地不变量检查**先于** host lease 请求，commit（写
+    ``_active``）在 host grant 之后。触发回滚必须让本地预检通过、commit 失败
+    ——用注入 commit 失败的方式（``_active.__setitem__`` 抛错）真实走到
+    「host granted → 本地记账失败 → 锁外回滚 host lease」分支。旧写法
+    （max_active_queries 预检拒绝）根本不会接触 host，测不到回滚。
+    """
+    from data_access.runtime.mode_identity import (
+        reset_runtime_mode_identity,
+        set_runtime_mode_identity,
+    )
 
-    # 先占满 max_active_queries
-    r1 = ResourceReservation("q1", "p1", estimated_memory=100)
-    gov.admit(r1)
+    token = set_runtime_mode_identity("production", source="test")
+    try:
+        gov = GlobalResourceGovernor(max_active_queries=8, max_total_reserved_memory=10000)
+        released = []
 
-    # 第二个请求：host 会给 lease，但本地 max_active_queries 已满
-    r2 = ResourceReservation("q2", "p1", estimated_memory=100)
-    with pytest.raises(ResourceAdmissionError):
-        gov.admit(r2)
+        def fake_host_lease(*_):
+            lease = MagicMock()
+            lease.release = lambda: released.append(1)
+            return lease
 
-    # 验证 host lease 被回滚
-    assert len(released) == 1
+        gov.set_host_lease_request(fake_host_lease)
+
+        r1 = ResourceReservation("q1", "p1", estimated_memory=100)
+        gov.admit(r1)
+
+        # 注入本地 commit 失败（q2）：本地预检通过、host 给 lease、
+        # bookkeeping 抛错 → 必须回滚 host lease 并拒绝 admission。
+        class _BoomDict(dict):
+            def __setitem__(self, key, value):
+                if key == "q2":
+                    raise RuntimeError("simulated bookkeeping failure")
+                super().__setitem__(key, value)
+
+        gov._active = _BoomDict(gov._active)
+
+        r2 = ResourceReservation("q2", "p1", estimated_memory=100)
+        with pytest.raises(ResourceAdmissionError, match="bookkeeping"):
+            gov.admit(r2)
+
+        # 验证 host lease 被回滚
+        assert len(released) == 1
+        # 本地状态未被污染（q2 不在 active 里）
+        assert gov.active_count() == 1
+    finally:
+        reset_runtime_mode_identity(token)
 
 
 # ---- P0-008：配置的 HostCoordinator broken 不回退 standalone ----
@@ -307,19 +335,32 @@ def test_r32_gov_003_host_lease_granted_but_local_fail_rolls_back():
 
 @pytest.mark.timeout(5)
 def test_r32_gov_002_broken_host_coordinator_fails_no_fallback():
-    """T-R32-GOV-002：配置了 host coordinator 但抛异常 → fail，不回退 standalone。"""
-    gov = GlobalResourceGovernor(max_total_reserved_memory=10000)
+    """T-R32-GOV-002：配置了 host coordinator 但抛异常 → fail，不回退 standalone。
 
-    def broken(*_):
-        raise RuntimeError("coordinator unreachable")
+    R32-P0-008 的 fail-closed 语义只在 strict/production 下生效（research 允许
+    fallback 本地 governor）——测试显式置 production 权威（R39 #51 唯一权威）。
+    """
+    from data_access.runtime.mode_identity import (
+        reset_runtime_mode_identity,
+        set_runtime_mode_identity,
+    )
 
-    gov.set_host_lease_request(broken)
+    token = set_runtime_mode_identity("production", source="test")
+    try:
+        gov = GlobalResourceGovernor(max_total_reserved_memory=10000)
 
-    r = ResourceReservation("fail", "principal", estimated_memory=100)
-    with pytest.raises(ResourceAdmissionError):
-        gov.admit(r)
+        def broken(*_):
+            raise RuntimeError("coordinator unreachable")
 
-    assert gov.active_count() == 0
+        gov.set_host_lease_request(broken)
+
+        r = ResourceReservation("fail", "principal", estimated_memory=100)
+        with pytest.raises(ResourceAdmissionError):
+            gov.admit(r)
+
+        assert gov.active_count() == 0
+    finally:
+        reset_runtime_mode_identity(token)
 
 
 # ---- P0-009：release 不持锁调用外部 host lease ----

@@ -112,11 +112,16 @@ class _FakeConn:
 
 def test_s3_state_is_per_connection(monkeypatch):
     state = S3ConfigState()
+    # fake creds 必须带齐 _creds_fingerprint 读的非 secret 身份字段
+    # （principal_id/credential_scope_id/credential_generation_id/expires_at，
+    # R24 P0-S1 §3.4：身份不含 secret）。
     monkeypatch.setattr(
         "data_access.cos.s3_duckdb.resolve_s3_credentials",
         lambda: type("C", (), {
             "access_key_id": "k", "secret_access_key": "s",
             "endpoint": "e", "region": "r", "url_style": "path", "use_ssl": True,
+            "principal_id": None, "credential_scope_id": None,
+            "credential_generation_id": None, "expires_at": None,
         })(),
     )
     monkeypatch.setattr(

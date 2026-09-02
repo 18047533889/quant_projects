@@ -2,6 +2,11 @@
 
 禁止 Pool full → pop lowest IC；改为 Pareto + Quality-Diversity + SearchValue + Niche。
 Embedding：第一次出现 encode once → cache，查询 ANN Top-K，不每轮重 encode 全池。
+
+淘汰策略（§42-§43）：入池/出池都按 Pareto rank（multi-objective non-dominated
+sorting，维度 = [fitness, novelty, 低复杂度, 低换手]），同 rank 内用 crowding
+distance + 确定性 tie-break，禁止按单一 IC pop。Pareto 排序实现在
+``pool/pareto.py``（纯函数，ActivePool 持有成员并调用）。
 """
 
 from __future__ import annotations
@@ -11,6 +16,13 @@ import math
 import threading
 from dataclasses import dataclass, field
 from typing import Any
+
+from alphaprobe.pool.pareto import (
+    ParetoPoint,
+    crowding_distance,
+    non_dominated_rank,
+    pool_snapshot as _pareto_pool_snapshot,
+)
 
 
 @dataclass
@@ -163,42 +175,51 @@ class ActivePool:
         self.members.pop(m.factor_id, None)
 
     def _eviction_candidate(self, *, exclude: PoolMember) -> PoolMember | None:
-        """淘汰优先级（从差到好保护）：低 SearchValue → 高饱和 niche → 低 utility。
+        """淘汰优先级（§42-§43）：按 Pareto rank（rank 越大越差 → 越该淘汰），
+        同 rank 内 crowding distance 越小越该淘汰，再确定性 tie-break。
         绝不使用 argmin(single IC)。
         """
         if not self.members:
             return None
-        niche_count: dict[tuple, int] = {}
-        for mem in self.members.values():
-            niche_count[mem.niche_key] = niche_count.get(mem.niche_key, 0) + 1
-        scored = []
-        for mem in self.members.values():
-            if mem.factor_id == exclude.factor_id:
+        points = [_to_pareto_point(m) for m in self.members.values()]
+        # 按 Pareto 从差到好排序（rank 大 → 差；同 rank crowding 小 → 差）
+        rank = non_dominated_rank(points)
+        crowding = crowding_distance(points, rank)
+
+        def _key(p: ParetoPoint) -> tuple[int, float, str]:
+            c = crowding.get(p.factor_id, 0.0)
+            c_key = float("inf") if c == float("inf") else c
+            return (rank[p.factor_id], c_key, p.factor_id)
+
+        for p in sorted(points, key=_key, reverse=True):
+            mem = self.members.get(p.factor_id)
+            if mem is None or mem.factor_id == (exclude.factor_id if exclude else None):
                 continue
-            niche_crowd = niche_count.get(mem.niche_key, 1)
-            # 综合分越低越该被淘汰
-            score = (
-                0.4 * mem.search_fitness
-                + 0.3 * mem.pool_utility
-                + 0.2 * mem.search_value
-                - 0.1 * (niche_crowd / max(1, len(self.members)))
-            )
-            scored.append((score, mem))
-        scored.sort(key=lambda t: t[0])
-        # 保护 QD elite：若候选是某 niche 的唯一代表且 niche_rarity 高则跳过
-        for score, mem in scored:
+            # 保护 QD elite：唯一 niche 代表且 niche_rarity 高 → 跳过
             cell = [x for x in self.members.values() if x.niche_key == mem.niche_key]
             if len(cell) <= 1 and mem.meta.get("niche_rarity", 0) > 0.7:
                 continue
             return mem
-        return scored[0][1] if scored else None
+        return None
 
     def _should_replace(self, victim: PoolMember, newcomer: PoolMember) -> bool:
-        margin = 0.02
-        return newcomer.search_fitness > victim.search_fitness + margin or (
-            newcomer.search_value > victim.search_value + margin
-            and newcomer.search_fitness >= victim.search_fitness - margin
-        )
+        """§43：入池者 Pareto rank 优于被淘汰者（或同 rank 但 crowding 更稀疏）
+        才换入。绝不按单一 IC 比较。
+        """
+        vp = _to_pareto_point(victim)
+        np_ = _to_pareto_point(newcomer)
+        if vp is None or np_ is None:
+            return False
+        rank = non_dominated_rank([vp, np_])
+        v_rank = rank[vp.factor_id]
+        n_rank = rank[np_.factor_id]
+        if n_rank < v_rank:
+            return True
+        if n_rank == v_rank:
+            # 同 rank：crowding 更稀疏（更大）者更值得保留
+            cd = crowding_distance([vp, np_], rank)
+            return cd.get(np_.factor_id, 0.0) > cd.get(vp.factor_id, 0.0)
+        return False
 
     def topk_neighbors(self, m: PoolMember, k: int = 5) -> list[tuple[str, int]]:
         """§78：ANN/LSH Top-K，不做全池 N²。
@@ -236,3 +257,22 @@ class ActivePool:
             }
             for m in self.members.values()
         ]
+
+    def pool_snapshot(self) -> dict[str, Any]:
+        """§42-§43：ActivePool 快照（供 retrieval/search_opportunity 消费 cluster
+        size 分布）。含 total / cluster_sizes / by_cluster / pareto_ranks。
+        """
+        return _pareto_pool_snapshot(self.members.values())
+
+
+def _to_pareto_point(m: PoolMember) -> ParetoPoint:
+    """从 PoolMember 构造 ParetoPoint（目标向量 = fitness / novelty / 低复杂度 /
+    低换手，§42）。"""
+    meta = m.meta or {}
+    novelty = float(meta.get("novelty", meta.get("structural_novelty", 0.0)) or 0.0)
+    complexity = float(meta.get("complexity", meta.get("ast_nodes", 0.0)) or 0.0)
+    turnover = float(meta.get("turnover", 0.0) or 0.0)
+    return ParetoPoint(
+        factor_id=m.factor_id,
+        values=(m.search_fitness, novelty, complexity, turnover),
+    )

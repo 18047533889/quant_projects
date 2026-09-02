@@ -76,21 +76,33 @@ def test_expired_resolution_and_slot_wait_fail():
     with pytest.raises(DeadlineExceeded):
         ResolutionLease("expired", absolute_deadline=time.monotonic() - 1).acquire_resolution()
     governor = GlobalResourceGovernor(max_duckdb_concurrency=1)
+    # R32-P0-010 权威 API：acquire_duckdb_slot / acquire_remote_slot（deadline 已过
+    # → raise DeadlineExceeded）。*_slot_lease 是 R48 前的旧名，不存在了。
     with pytest.raises(DeadlineExceeded):
-        governor.acquire_duckdb_slot_lease(deadline=time.monotonic() - 1)
+        governor.acquire_duckdb_slot(deadline=time.monotonic() - 1)
     with pytest.raises(DeadlineExceeded):
-        governor.acquire_remote_slot_lease(deadline=time.monotonic() - 1)
+        governor.acquire_remote_slot(deadline=time.monotonic() - 1)
 
 
 def test_host_backed_duplicate_and_broken_bridge_fail_closed():
-    governor = GlobalResourceGovernor(max_total_reserved_memory=1000)
-    governor.set_host_lease_request(lambda *_: object())
-    governor.admit(ResourceReservation("q", "p", estimated_memory=1))
-    with pytest.raises(ResourceAdmissionError):
-        governor.admit(ResourceReservation("q", "p", estimated_memory=1))
+    # 同 P0-008：fail-closed 语义只在 strict/production 下生效（R39 #51 权威）。
+    from data_access.runtime.mode_identity import (
+        reset_runtime_mode_identity,
+        set_runtime_mode_identity,
+    )
 
-    broken = GlobalResourceGovernor(max_total_reserved_memory=1000)
-    broken.set_host_lease_request(lambda *_: (_ for _ in ()).throw(RuntimeError("host down")))
-    with pytest.raises(ResourceAdmissionError):
-        broken.admit(ResourceReservation("broken", "p", estimated_memory=1))
-    assert broken.active_count() == 0
+    token = set_runtime_mode_identity("production", source="test")
+    try:
+        governor = GlobalResourceGovernor(max_total_reserved_memory=1000)
+        governor.set_host_lease_request(lambda *_: object())
+        governor.admit(ResourceReservation("q", "p", estimated_memory=1))
+        with pytest.raises(ResourceAdmissionError):
+            governor.admit(ResourceReservation("q", "p", estimated_memory=1))
+
+        broken = GlobalResourceGovernor(max_total_reserved_memory=1000)
+        broken.set_host_lease_request(lambda *_: (_ for _ in ()).throw(RuntimeError("host down")))
+        with pytest.raises(ResourceAdmissionError):
+            broken.admit(ResourceReservation("broken", "p", estimated_memory=1))
+        assert broken.active_count() == 0
+    finally:
+        reset_runtime_mode_identity(token)

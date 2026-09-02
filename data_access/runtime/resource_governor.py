@@ -105,14 +105,71 @@ class ResourceReservation:
 
     query_id: str
     principal_id: str
+    #: R32-P0-040：snapshot.total_bytes 在对象大小未知（remote 无 HEAD）时是
+    #: ``None``（未知 ≠ 0）。governor 数值门不执行 ``int + None``——``None``
+    #: 在 admit 入口规范化为保守上界（fail-closed，不静默当 0）。
     estimated_scan_bytes: int = 0
     estimated_memory: int = 0
     remote_requests: int = 0
+
+    def __post_init__(self) -> None:
+        self.estimated_scan_bytes = _coerce_bound(self.estimated_scan_bytes)
+        self.estimated_memory = _coerce_bound(self.estimated_memory)
 
     released: bool = field(default=False)
     #: R38 P0-020（P0-018）：host-backed 时附加的 HostLeaseRef（FE JobLease child
     #: lease）。release 时一并释放——DA 扫描真正进同一棵 host lease 树。
     host_lease: Any = field(default=None, repr=False)
+
+
+#: None 时的保守 scan-bytes 上界：与 ScanCost.COST_SAFE_CEILING_BYTES 同源
+#: （未知 ≠ 0；用 int64 上界会与真实数值门比较溢出语义冲突，这里用 governor
+#: 自身可达的最大整数值，即「必然超限」）。内存维度未知时同样按保守上界拒绝。
+_GOVERNOR_UNKNOWN_BOUND = (1 << 62) - 1
+
+
+def _coerce_bound(value: Any) -> int:
+    """把未知/非法的成本估计规范化为 governor 可比较的整数（fail-closed）。
+
+    - ``None`` → 保守上界（未知成本必须按最坏情况参与准入，绝不静默当 0——
+      那会让未知大小的 remote 扫描绕过 inflight 门）；
+    - ``bool`` → TypeError（bool 是 int 子类，但 True/False 不是合法字节数）；
+    - 非整数（float/str/…）→ TypeError；
+    - 负数 → 0（负成本无意义，clamp 到 0 让显式 0 语义保留）。
+    """
+    if value is None:
+        return _GOVERNOR_UNKNOWN_BOUND
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise TypeError(
+            f"ResourceReservation 成本估计必须是 int 或 None（未知），"
+            f"got {type(value).__name__}: {value!r}"
+        )
+    return max(0, value)
+
+
+#: 未知成本（``None``）的保守上界。R32-P0-040 区分「未知」与「0」：未知大小的
+#: remote 扫描绝不能静默当 0 绕过 inflight 门——按最坏情况参与准入（必然超限
+#: 即拒绝），与 ``ScanCost.COST_SAFE_CEILING_BYTES`` 同语义但取 int62 防止
+#: 与真实数值门比较时的溢出歧义。
+_GOVERNOR_UNKNOWN_BOUND = (1 << 62) - 1
+
+
+def _coerce_bound(value: Any) -> int:
+    """把未知/非法的成本估计规范化为 governor 可比较的整数（fail-closed）。
+
+    - ``None`` → 保守上界（未知成本按最坏情况参与准入，绝不静默当 0）；
+    - ``bool`` → TypeError（bool 是 int 子类，但 True/False 不是合法字节数）；
+    - 非整数（float/str/…）→ TypeError；
+    - 负数 → 0（负成本无意义，clamp 保留显式 0 语义）。
+    """
+    if value is None:
+        return _GOVERNOR_UNKNOWN_BOUND
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise TypeError(
+            f"ResourceReservation 成本估计必须是 int 或 None（未知），"
+            f"got {type(value).__name__}: {value!r}"
+        )
+    return max(0, value)
 
 
 class _DuckDBSemaphore(threading.BoundedSemaphore):

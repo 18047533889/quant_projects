@@ -55,6 +55,10 @@ class PipelineConfig:
     export_gate_enforced: bool = False
     # 结构化 arm 每次生成目标数
     expected_num: int = 3
+    # V2-H：结构化 generation 开关。False（默认）= 行为与旧版完全一致（全量测试
+    # 不挂）。True = orchestrator 启用结构化 generation（parents 来自 parent_selector
+    # 的 top-k DAG 采样，候选记录 lineage）。
+    structured_generation: bool = False
 
 
 @dataclass
@@ -102,18 +106,29 @@ def make_stub_llm_fn(
     *,
     rng: Any | None = None,
     forced_candidates: Sequence[dict[str, Any]] | None = None,
+    structured: bool = False,
 ) -> Callable[[str, str, str], str]:
     """构造确定性 stub llm_fn（返回 §31 JSON 文本）。
 
     forced_candidates 非空时：把固定 candidate JSON 序列化返回（测试用）；
     否则：从 parents 与 action 规则化生成变异候选（离线端到端默认路径）。
     绝不发起任何网络 / 模型调用。
+
+    ``structured=True``（V2-H）：返回结构化 action JSON（dict 含 ``action`` 字段），
+    供 ``normalize_llm_output`` 消费；默认 False = 返回旧文本（§31 candidates JSON），
+    向后兼容（既有 pipeline 测试原样全绿）。
     """
     import random as _random
 
     rng = rng or _random.Random(0)
 
     def _llm_fn(system_prompt: str, user_prompt: str, model_class: str) -> str:
+        if structured:
+            from alphaprobe.generation.structured import make_structured_stub_llm_fn
+
+            return make_structured_stub_llm_fn(
+                rng=rng, forced_actions=forced_candidates
+            )(system_prompt, user_prompt, model_class)
         if forced_candidates:
             return json.dumps({"candidates": list(forced_candidates)}, ensure_ascii=False)
         # 从 user_prompt 的 parent 行提取公式（"## Parent factor(s)" 之后 "- f :: desc"）。
@@ -282,6 +297,87 @@ def _bundle_from_plane(
         return _all_none()
 
 
+def make_qe_evaluate_fn(
+    stock_data: Any,
+    *,
+    label_days: int = 20,
+    segment: str = "train",
+    adapter: Any | None = None,
+) -> Callable[[Sequence[str], str, Any], list[dict[str, float | None] | None]]:
+    """统一评估层 evaluate_fn（V2-E）：内部走 QuantEvaluatorAdapter。
+
+    与 :func:`make_fe_evaluate_fn` 同签名（formulas, fidelity, context → bundle
+    dict 列表），但每个 bundle 由 QuantEvaluatorAdapter 产出（QE registry 指标 +
+    20d cohort portfolio 双口径），字段名与 fitness/contracts.py 的
+    EvaluationBundle 对齐。数据无法构造时返回全 None 并记录 degraded（不抛）。
+
+    泄漏纪律：只读传入的 train 段 stock_data，不接收 test 段数据。
+    """
+    import numpy as np
+    import pandas as pd
+
+    if adapter is None:
+        from alphaprobe.evaluator_adapter import QuantEvaluatorAdapter
+
+        adapter = QuantEvaluatorAdapter(label_days=label_days)
+
+    def _evaluate_fn(
+        formulas: Sequence[str],
+        fidelity: str = "L2_full_train",
+        context: Any = None,
+    ) -> list[dict[str, float | None] | None]:
+        if stock_data is None:
+            return [None] * len(formulas)
+        fmls = [str(f) for f in formulas if f]
+        try:
+            planes = stock_data.evaluate_many(fmls)  # type: ignore[attr-defined]
+        except Exception as exc:  # noqa: BLE001 - 数据不可用降级为全 None，不抛
+            logger.warning("pipeline qe evaluate_many failed, degraded: %s", exc)
+            return [None] * len(formulas)
+        try:
+            names = list(stock_data._field_names())
+            if "vwap" not in names:
+                logger.warning("pipeline qe: no vwap field, degraded")
+                return [None] * len(formulas)
+            vwap = stock_data.data[:, :, names.index("vwap")]
+            T = vwap.shape[0]
+            if T <= label_days:
+                logger.warning("pipeline qe: series too short for label_days, degraded")
+                return [None] * len(formulas)
+            label = vwap[label_days:, :] / vwap[:-label_days, :] - 1.0
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("pipeline qe vwap label build failed, degraded: %s", exc)
+            return [None] * len(formulas)
+        dates = list(stock_data._dates)
+        codes = list(stock_data._stock_ids)
+        seg_dates = dates[label_days:]
+        # 因子 / label / 价格面板对齐到同一 label 段（cohort 路径内部再错位 1 日）
+        label_df = pd.DataFrame(label, index=seg_dates, columns=codes)
+        price_df = pd.DataFrame(vwap[label_days:, :], index=seg_dates, columns=codes)
+        bundles: list[dict[str, float | None] | None] = []
+        for plane in planes:
+            try:
+                f_arr = np.asarray(plane, dtype=float)
+            except Exception:  # noqa: BLE001
+                f_arr = plane
+            if len(f_arr.shape) == 3:
+                f_arr = f_arr[:, :, -1]
+            try:
+                f_arr = f_arr[-label.shape[0]:, :]
+            except Exception:  # noqa: BLE001
+                pass
+            factor_df = pd.DataFrame(f_arr, index=seg_dates, columns=codes)
+            try:
+                eb = adapter.evaluate(factor_df, label_df, price_df)
+                bundles.append(eb.raw())
+            except Exception as exc:  # noqa: BLE001 - 单因子评估失败降级，不抛
+                logger.warning("pipeline qe adapter evaluate failed, degraded: %s", exc)
+                bundles.append(None)
+        return bundles
+
+    return _evaluate_fn
+
+
 def _all_none() -> dict[str, float | None]:
     return {
         "rankic": None,
@@ -330,6 +426,7 @@ class SearchPipeline:
                 scheduler=None,
                 memory=self.memory_store,
                 expected_num=self.config.expected_num,
+                structured_generation=bool(self.config.structured_generation),
             )
         if self.calibrator is None:
             from alphaprobe.fitness import MetricCalibrator
@@ -347,6 +444,15 @@ class SearchPipeline:
             except Exception as exc:  # noqa: BLE001 - 无 dedup_client 包时退回 seen 直用
                 logger.warning("DedupClient unavailable, using raw seen index: %s", exc)
                 self.dedup_client = seen
+        # 权威接线：引导 FE 路径（使 DedupClient FE-first 链可达）+ 校验 label 契约。
+        # fail-closed：FE/modeling 不可用 → degraded_reasons 记录，不 throw（搜索仍可降级运行）。
+        try:
+            from alphaprobe.authority import ensure_authority_available, validate_label_contract_20d
+
+            ensure_authority_available()
+            validate_label_contract_20d()
+        except Exception as exc:  # noqa: BLE001 - 权威缺失降级，明确记录
+            self.degraded_reasons.append(f"authority unavailable: {exc}")
         # evaluator：None → LegacyCompatEvaluator + fe_bridge 真算 fn
         if self.evaluator is None:
             self.evaluator = self._build_default_evaluator()
@@ -457,7 +563,13 @@ class SearchPipeline:
         return out
 
     def _identity_tuple(self, formula: str) -> tuple[str, str, str]:
-        """返回 (canonical, signal_id, family_id)。dedup_client 优先。"""
+        """返回 (canonical, signal_id, family_id)。
+
+        §28 权威化：身份唯一来源是 ``DedupClient.get_identity``（其内部降级链
+        FE identity → alphaprobe.identity → 文本 canonical，见 dedup_client.py），
+        不再在本主链上并行调用 ``dedup.canonicalize_dsl`` 的正则文本化简。FE
+        不可用时由 DedupClient 自身降级链兜底，绝不在此另起一套 regex 实现。
+        """
         if self.dedup_client is not None and hasattr(self.dedup_client, "get_identity"):
             try:
                 view = self.dedup_client.get_identity(formula)
@@ -468,10 +580,19 @@ class SearchPipeline:
                     return canonical, signal_id, family
             except Exception as exc:  # noqa: BLE001
                 logger.warning("get_identity failed for %r: %s", formula, exc)
-        from alphaprobe.dedup import canonical_ast_hash, canonicalize_dsl, parameter_family_key, signal_equivalence_id
+        # 备用：FE 权威直接视图（fail-closed，不回落文本 canonicalize_dsl）。
+        from alphaprobe.authority import FactorIdentityAuthorityError, build_identity_view
 
-        canonical = canonicalize_dsl(formula)
-        return canonical, signal_equivalence_id(canonical), parameter_family_key(canonical)
+        try:
+            view = build_identity_view(formula)
+        except FactorIdentityAuthorityError as exc:
+            logger.warning("authority identity unavailable for %r: %s", formula, exc)
+            return str(formula or ""), "", ""
+        return (
+            str(view.get("canonical_formula", formula)),
+            str(view.get("signal_equivalence_id", "") or ""),
+            str(view.get("parameter_family_id", "") or ""),
+        )
 
     def _evaluate(self, formulas: list[str]) -> list[dict[str, float | None] | None]:
         """评估 formulas → metric bundle 列表（once-compute；失败降级不抛）。
@@ -786,5 +907,6 @@ __all__ = [
     "SearchPipeline",
     "make_stub_llm_fn",
     "make_fe_evaluate_fn",
+    "make_qe_evaluate_fn",
     "DEFAULT_ROUNDS",
 ]

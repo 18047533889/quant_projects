@@ -464,7 +464,7 @@ def _record_exported_to_memory(
         return
     from alphaprobe.fe_bridge.dsl_convert import expression_to_dsl
     from alphaprobe.memory import GlobalMemoryStore
-    from alphaprobe.dedup import canonical_ast_hash, canonicalize_dsl, signal_equivalence_id
+    from alphaprobe.authority import FactorIdentityAuthorityError, build_identity_view
 
     # 收集真正 export 出的 formula（manifest.json 为准）
     exported_formulas: set[str] = set()
@@ -496,13 +496,19 @@ def _record_exported_to_memory(
                 continue
             if formula not in exported_formulas:
                 continue
-            canonical = canonicalize_dsl(formula)
+            # FE 权威身份（§28）；FE 不可用 fail-closed 跳过，绝不回落文本 regex。
+            try:
+                iv = build_identity_view(formula)
+            except FactorIdentityAuthorityError as exc:
+                print(f"[memory] authority identity unavailable, skip: {formula!r}: {exc}")
+                continue
+            canonical = str(iv.get("canonical_formula") or formula)
             ok, existing = store.upsert_factor_node(
                 factor_id=f"ap_{campaign_id}_{i}",
                 canonical_formula=canonical,
-                canonical_ast_hash=canonical_ast_hash(formula),
-                signal_equivalence_id=signal_equivalence_id(formula),
-                parameter_family_id=None,
+                canonical_ast_hash=str(iv.get("canonical_ast_hash", "") or ""),
+                signal_equivalence_id=str(iv.get("signal_equivalence_id", "") or ""),
+                parameter_family_id=str(iv.get("parameter_family_id", "") or None),
                 source_system="alphaprobe",
                 source_snapshot=campaign_id,
                 source_type="MINED",

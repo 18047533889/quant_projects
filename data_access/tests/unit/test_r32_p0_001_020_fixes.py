@@ -5,6 +5,7 @@ from unittest.mock import Mock, patch
 
 import pytest
 
+from data_access.core.exceptions import DeadlineExceeded
 from data_access.r30.resolution_lease import ResolutionLease, ResolutionPhase
 from data_access.r30.execution_lease import ExecutionLease
 from data_access.runtime.resource_governor import GlobalResourceGovernor, ResourceReservation
@@ -67,18 +68,24 @@ class TestR32P0002ResolutionLeaseLockFree:
 
 
 class TestR32P0003ResolutionLeaseDeadline:
-    """R32-P0-003：ResolutionLease absolute_deadline 必须真正执行。"""
+    """R32-P0-003：ResolutionLease absolute_deadline 必须真正执行。
+
+    R32-P0-003 最终语义（与 test_r32_lease_governor_p0.py 权威测试一致）：
+    已过期 deadline → **raise DeadlineExceeded**（fail-closed 显式信号），
+    不返回 False（False 会被调用方误判为「slot 暂时不可用」）。
+    """
 
     def test_deadline_expired_blocks_acquire(self):
-        """deadline 已过 → acquire 拒绝。"""
+        """deadline 已过 → acquire raise DeadlineExceeded。"""
         lease = ResolutionLease(
             lease_id="test",
             absolute_deadline=time.monotonic() - 1,  # 已过期
         )
-        assert not lease.acquire_resolution(1)
+        with pytest.raises(DeadlineExceeded, match="deadline 已过"):
+            lease.acquire_resolution(1)
 
     def test_deadline_expired_blocks_transition(self):
-        """deadline 已过 → transition 拒绝。"""
+        """deadline 已过 → transition raise DeadlineExceeded。"""
         lease = ResolutionLease(
             lease_id="test",
             absolute_deadline=time.monotonic() + 10,
@@ -87,7 +94,7 @@ class TestR32P0003ResolutionLeaseDeadline:
         lease.release_all_resolution()
         # 修改 deadline 为已过期。
         lease.absolute_deadline = time.monotonic() - 1
-        with pytest.raises(RuntimeError, match="deadline 已过"):
+        with pytest.raises(DeadlineExceeded, match="deadline 已过"):
             lease.transition_to_execution()
 
 
