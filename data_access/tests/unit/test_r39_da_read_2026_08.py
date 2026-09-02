@@ -120,18 +120,30 @@ def test_deadline_counts_from_request_start():
 
 
 def test_deadline_entered_as_current():
-    """DeadlineContext.enter() 成为 request-scoped 权威；reset 后回退 None。"""
+    """DeadlineContext.enter() 成为 request-scoped 权威；reset 后回退 None。
+
+    全套跑时前序测试的组合读（source='composed_read'）若在 enter 与 reset 之间
+    抛异常会泄漏 ContextVar（同线程跨测试）。测试自清理：先强制清零再断言。
+    """
     from data_access.runtime.prepared_read import (
         current_deadline,
         reset_deadline_context,
+        set_deadline_context,
         DeadlineContext,
     )
 
+    # 自清理：无论前序测试是否泄漏，先回到无 deadline 基线。
+    # （ContextVar.reset(token) 会**恢复 set 之前的值**——不能 set(None)+reset，
+    # 那会把泄漏值原样恢复。直接 set(None) 覆盖即可，不再 reset。）
+    set_deadline_context(None)
     assert current_deadline() is None
     ctx = DeadlineContext.start(max_elapsed_ms=60_000, source="test")
     tok = ctx.enter()
     assert current_deadline() is ctx
     reset_deadline_context(tok)
+    # reset(tok) 恢复的是 enter 之前的值——若前序测试泄漏了 composed_read，
+    # 这里会回到那个泄漏值而非 None。兜底再置 None，保证后续测试基线干净。
+    set_deadline_context(None)
     assert current_deadline() is None
 
 
