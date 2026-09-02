@@ -31,11 +31,22 @@ def pages_with_stale_marker() -> list[str]:
     )
 
 
+def pages_with_nested_image() -> list[str]:
+    return sorted(
+        p.stem.removeprefix("factor_")
+        for p in REPORTS.glob("factor_*.html")
+        if 'src="<img src="' in p.read_text(encoding="utf-8", errors="ignore")
+    )
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--only", default="", help="comma-separated page names")
+    parser.add_argument("--nested", action="store_true", help="rebuild pages with legacy nested image HTML")
     args = parser.parse_args()
-    selected = [x for x in args.only.split(",") if x] if args.only else pages_with_stale_marker()
+    selected = ([x for x in args.only.split(",") if x] if args.only
+                else pages_with_nested_image() if args.nested
+                else pages_with_stale_marker())
     meta = json.loads((ROOT / "weekly_backtest_output/optimized_meta.json").read_text())
     failures: list[str] = []
     for index, page in enumerate(selected, 1):
