@@ -148,6 +148,15 @@ read/read_auto → DataRequest 校验（engine/result/join/snapshot 白名单枚
 
 - 三模式：**mirror**（本地为主 COS 兜底）/ **remote**（COS 为主）/ **auto**（按成本路由）
 - `cos://` URI 直接可读；底层 DuckDB httpfs + Secret Manager 取凭证
+- **跨 domain（跨账号）bucket**（如 `qs-cold`）：本机静态密钥 IAM 不可见 →
+  httpfs/boto3 直连 `NoSuchBucket`/404。snapshot 的 LIST/HEAD 元数据钩子
+  （`store._cos_list_objects` / `_cos_head_object`）boto3 失败后自动落回
+  **COS CLI 网关**（`cos_cli_ls` / `cos_cli_head`，解析 coscli `ls` 表格），
+  回填真实 `content_length`/etag → governor 按真实 scan-bytes 准入（此前
+  未知大小被按保守上界拒绝，表现为「remote 读永远被 gate 拒」）。数据面在
+  跨账号 bucket 上仍走 **cli backend**（`DATA_ACCESS_COS_REMOTE_BACKEND=cli`
+  或 auto 探测失败自动选 cli，经 clean-cos-ro materialize 到 cache 后本地读）
+  ——httpfs 直读需要对该 bucket 有 IAM 权限的凭证（部署注入）。
 - 顶层运行时模块：`cos_contract.py` / `cos_contract_ashare.py` / `cos_contract_us.py`
   （A 股/美股表契约）、`cos_panel_runtime.py` / `cos_factor_runtime.py` /
   `cos_event_runtime.py` / `cos_registry_runtime.py` / `cos_storage_runtime.py`

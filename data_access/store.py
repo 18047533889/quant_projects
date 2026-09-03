@@ -308,6 +308,14 @@ class DataAccessStore:
             verifier=SnapshotVerifier(remote_meta_fn=self._remote_meta_head),
             resolver=SourceSnapshotResolver(
                 source_manifest_fn=self._source_manifest_fn,
+                # R57：把 COS 精确对象解析（LIST/HEAD）接进主读链。此前 resolver
+                # 只有 ``fallback_fn``，remote ``s3://``/``cos://`` pattern 直接走
+                # ``resolved_snapshot_from_files``（不 HEAD），ResolvedObject 的
+                # ``content_length`` 恒为 None → ``snapshot.total_bytes=None`` →
+                # governor 按未知成本（保守上界）拒绝，表现为「读 remote 永远被拒」。
+                # 现在 exact LIST 优先、无 LIST 能力时逐对象 HEAD 回填真实 size。
+                list_objects_fn=self._cos_list_objects,
+                head_object_fn=self._cos_head_object,
                 fallback_fn=_file_manifest_fallback,
             ),
         )
@@ -4386,6 +4394,146 @@ class DataAccessStore:
             return None
         return read_contract._remote_object_meta(
             str(uri), fresh=True, raise_on_error=True
+        )
+
+    def _cos_list_objects(self, prefix: str) -> list:
+        """R57：COS LIST 钩子——``s3://bucket/prefix`` → exact ResolvedObject 列表。
+
+        供 ``SourceSnapshotResolver.list_objects_fn``：resolver 对 remote pattern
+        先尝试精确 LIST，对象带真实 ``content_length``，snapshot.total_bytes 不再
+        是 None（此前 remote 一律走 fallback_fn，content_length 恒 None → governor
+        按未知成本拒绝，表现为「读 remote 永远被拒」）。
+
+        - 路径必须落在 ``allowed_s3_prefixes()`` 白名单（已登记 mirror / 声明
+          storage.source）之下才精确 LIST；否则返回 []（resolver 落回 HEAD/fallback，
+          授权语义与 ``authorize_s3_path`` 一致）。
+        - 首选 boto3 ``list_objects_v2``（部署凭证可见该 bucket 时零 subprocess
+          成本）；跨账号 bucket（IAM 不可见 → NoSuchBucket）落回 COS CLI 网关
+          （clean-cos-ro，COS 原生签名）。
+        - URI 统一回填 canonical ``s3://``（与 resolver 下发的 paths 同 scheme，
+          strict boundary 检查 ``_uri_is_within`` 才能命中）。
+        - 任何失败返回 []（best-effort；strict 下 resolver 自行 fail-closed）。
+        """
+        from data_access.cos.remote import allowed_s3_prefixes, cos_uri_to_s3_uri
+        from data_access.snapshot.source_snapshot import ResolvedObject
+
+        raw = str(prefix)
+        if not (raw.startswith("s3://") or raw.startswith("cos://")):
+            return []
+        s3_prefix = cos_uri_to_s3_uri(raw).rstrip("/")
+        rest = s3_prefix[len("s3://"):]
+        bucket, sep, key_prefix = rest.partition("/")
+        if not sep or not bucket:
+            return []
+        # 只在路径落在已登记白名单前缀下才精确 LIST（否则无法反解 dataset 授权）。
+        if not any(
+            s3_prefix == p.rstrip("/") or s3_prefix.startswith(p.rstrip("/") + "/")
+            for p in allowed_s3_prefixes()
+        ):
+            return []
+
+        def _obj(uri: str, etag: Any, size: Any, last_modified: Any) -> ResolvedObject:
+            return ResolvedObject(
+                uri=uri,
+                etag=etag,
+                content_length=size,
+                last_modified=last_modified,
+                source="exact_list",
+            )
+
+        # 1) boto3 直连（部署凭证对该 bucket 可见时最快）。
+        try:
+            from data_access.read.object_store import COSObjectStore
+
+            store = COSObjectStore(bucket)
+            s3 = store._s3()  # noqa: SLF001 — 同包内复用凭证感知 client
+            objs: list[ResolvedObject] = []
+            kwargs: dict = {"Bucket": bucket, "Prefix": key_prefix}
+            while True:
+                resp = s3.list_objects_v2(**kwargs)
+                for item in resp.get("Contents", []):
+                    objs.append(
+                        _obj(
+                            f"s3://{bucket}/{item['Key']}",
+                            str(item.get("ETag", "")).strip('"') or None,
+                            item.get("Size"),
+                            item.get("LastModified"),
+                        )
+                    )
+                if not resp.get("IsTruncated"):
+                    return objs
+                kwargs["ContinuationToken"] = resp.get("NextContinuationToken")
+        except Exception:
+            pass
+        # 2) CLI 网关 fallback（跨账号 bucket：本机静态密钥 IAM 不可见）。
+        #    coscli ``ls`` 语义：prefix 无尾斜杠 → 返回「目录行」（DIR，无 size），
+        #    必须补 ``/`` 才是对象枚举。
+        from data_access.cos.remote import cos_cli_ls
+
+        rows = cos_cli_ls(f"s3://{bucket}/{key_prefix}/")
+        return [
+            _obj(
+                f"s3://{bucket}/{row['key']}",
+                row.get("etag"),
+                row.get("size"),
+                row.get("last_modified"),
+            )
+            for row in rows
+        ]
+
+    def _cos_head_object(self, uri: str) -> "ResolvedObject | None":
+        """R57：COS HEAD 钩子——单条 remote 对象 → ResolvedObject（带真实 size）。
+
+        供 ``SourceSnapshotResolver.head_object_fn``：resolver 对无通配的 remote
+        路径逐对象 HEAD 回填 content_length/etag，snapshot.total_bytes 不再为 None。
+        URI 回填 canonical ``s3://``（与 LIST 一致；strict boundary 检查同 scheme
+        才能命中）。
+
+        首选 boto3 HEAD（``_remote_object_meta``，被 ``_remote_snapshot_meta_enabled``
+        gate——research 默认关，``DATA_ACCESS_REMOTE_SNAPSHOT_META=1`` 强制开）；
+        跨账号 bucket（IAM 不可见 → 404）落回 COS CLI 网关（clean-cos-ro）。两者都
+        无解 → None → resolver 落回 FileVersion 兜底（fail-closed 语义不变）。
+        """
+        from data_access.cos.remote import cos_uri_to_s3_uri
+        from data_access.snapshot.source_snapshot import ResolvedObject
+
+        raw = str(uri)
+        if not (raw.startswith("s3://") or raw.startswith("cos://")):
+            return None
+        if "*" in raw or "?" in raw or "{" in raw:
+            return None
+        s3_uri = cos_uri_to_s3_uri(raw)
+        meta = self._remote_object_meta_safe(s3_uri)
+        if not meta:
+            # 跨账号 bucket：boto3 IAM 不可见 → CLI 网关 fallback。
+            from data_access.cos.remote import cos_cli_head
+
+            row = cos_cli_head(s3_uri)
+            if not row:
+                return None
+            meta = {
+                "etag": row.get("etag"),
+                "version_id": None,
+                "content_length": row.get("size"),
+                "last_modified": row.get("last_modified"),
+            }
+        return ResolvedObject(
+            uri=s3_uri,
+            etag=meta.get("etag"),
+            version_id=meta.get("version_id"),
+            content_length=meta.get("content_length"),
+            last_modified=meta.get("last_modified"),
+            source="exact_head",
+        )
+
+    def _remote_object_meta_safe(self, uri: str) -> dict | None:
+        """R57：HEAD 单条对象元数据（失败返回 None，不抛、不误报越权）。"""
+        from data_access.read import read_contract
+
+        if not read_contract._remote_snapshot_meta_enabled():
+            return None
+        return read_contract._remote_object_meta(
+            str(uri), fresh=True, raise_on_error=False
         )
 
     def _source_manifest_fn(self, dataset: str) -> Any:

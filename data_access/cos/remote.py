@@ -15,7 +15,9 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import math
 import os
+import subprocess
 import threading
 from dataclasses import dataclass, field
 from datetime import date, datetime
@@ -196,6 +198,141 @@ def allowed_s3_prefixes() -> tuple[str, ...]:
                 cos_uri_to_s3_uri(_cos_table_uri(spec)).rstrip("/") + "/"
             )
     return tuple(sorted(prefixes))
+
+
+# ---------------------------------------------------------------------------
+# R57：COS CLI 网关 LIST/HEAD（跨账号 bucket 的元数据通路）
+# ---------------------------------------------------------------------------
+# server C 上 qs-cold 等数据 bucket 归属其他账号（跨 domain）——本机静态密钥
+# （~/.cos.yaml / CredentialProvider）对它们 IAM 不可见（boto3/httpfs 一律
+# NoSuchBucket/404）。唯一稳定通路是 coscli 网关（clean-cos-ro，COS 原生签名 +
+# root-only 凭证）。这两条 best-effort 钩子解析 ``<cli> ls`` 的人类可读表格，
+# 给 snapshot resolver 回填 content_length/etag（governor 才能做真实 scan-bytes
+# 准入，不再按未知成本保守拒绝）。任何失败返回 []/None → 落回 FileVersion
+# fallback（fail-closed 语义不变）。
+
+#: ``ls`` 表格 SIZE 列的乘数（coscli 人类可读单位）。
+_CLI_SIZE_UNITS = {
+    "B": 1,
+    "KB": 1024,
+    "MB": 1024**2,
+    "GB": 1024**3,
+    "TB": 1024**4,
+    "PB": 1024**5,
+}
+
+
+def _cli_size_to_bytes(raw: str) -> int | None:
+    """``"205.82 KB"`` → 210755（向上取整；未知单位返回 None）。"""
+    parts = raw.split()
+    if not parts:
+        return None
+    try:
+        value = float(parts[0])
+    except ValueError:
+        return None
+    unit = parts[1].upper() if len(parts) > 1 else "B"
+    scale = _CLI_SIZE_UNITS.get(unit)
+    if scale is None:
+        return None
+    return int(math.ceil(value * scale))
+
+
+def _parse_cos_cli_ls_output(output: str) -> list[dict[str, Any]]:
+    """解析 coscli ``ls`` 人类可读表格 → [{key, size, etag, last_modified}]。
+
+    表格形态（coscli 固定输出，管道可解析）::
+
+        KEY | TYPE | LAST MODIFIED | ETAG | SIZE | RESTORESTATUS
+        ----+-----+...（分隔线）
+        clean_data/.../2024-01-02.parquet | STANDARD | 2026-06-15T16:25:37+08:00 | "abc..." | 205.82 KB |
+
+    只接受「第 1 列像对象 key、ETAG 列是引号包裹 md5」的数据行；分隔线 /
+    TOTAL OBJECTS / 空 RESTORESTATUS 一律跳过。解析失败返回 []。
+    """
+    rows: list[dict[str, Any]] = []
+    for line in output.splitlines():
+        if "|" not in line:
+            continue
+        cells = [c.strip() for c in line.split("|")]
+        if len(cells) < 5:
+            continue
+        key, _typ, last_modified, etag, size_raw = cells[:5]
+        if not key or key == "KEY" or set(key) <= {"-"}:
+            continue
+        size = _cli_size_to_bytes(size_raw)
+        if size is None:
+            continue
+        etag_clean = etag.strip().strip('"')
+        if not etag_clean or len(etag_clean) < 8 or " " in etag_clean:
+            continue
+        if "OBJECTS" in line.upper() and not key.endswith(".parquet"):
+            continue
+        rows.append(
+            {
+                "key": key,
+                "size": size,
+                "etag": etag_clean or None,
+                "last_modified": last_modified or None,
+            }
+        )
+    return rows
+
+
+def cos_cli_ls(
+    uri: str,
+    *,
+    cli: str | None = None,
+    timeout_s: float = 60.0,
+) -> list[dict[str, Any]]:
+    """经 COS CLI 网关列出对象元数据（跨账号 bucket 的 LIST 通路）。
+
+    ``uri`` 是 ``cos://bucket/prefix``（``s3://`` 自动归一）。返回
+    ``_parse_cos_cli_ls_output`` 结构；CLI 失败/超时/输出异常 → []（best-effort，
+    绝不阻塞读路径——governor 会按未知成本拒绝，语义同 boto3 HEAD 不可用）。
+    """
+    from data_access.cos.mirror import COS_CLI as DEFAULT_CLI
+
+    cos_uri = str(uri)
+    if cos_uri.startswith("s3://"):
+        cos_uri = "cos://" + cos_uri[len("s3://"):]
+    if not cos_uri.startswith("cos://"):
+        return []
+    try:
+        proc = subprocess.run(
+            [cli or DEFAULT_CLI, "ls", cos_uri],
+            capture_output=True,
+            text=True,
+            timeout=timeout_s,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return []
+    if proc.returncode != 0:
+        return []
+    return _parse_cos_cli_ls_output(proc.stdout)
+
+
+def cos_cli_head(
+    uri: str,
+    *,
+    cli: str | None = None,
+    timeout_s: float = 30.0,
+) -> dict[str, Any] | None:
+    """经 COS CLI 网关取单对象元数据（跨账号 bucket 的 HEAD 通路）。
+
+    复用 ``cos_cli_ls``：CLI 对「精确对象 URI」的 ``ls`` 返回单行表格（实测）。
+    未命中/失败 → None。
+    """
+    cos_uri = str(uri)
+    if cos_uri.startswith("s3://"):
+        cos_uri = "cos://" + cos_uri[len("s3://"):]
+    if not cos_uri.startswith("cos://") or cos_uri.rstrip("/").endswith("/"):
+        return None
+    rows = cos_cli_ls(cos_uri, cli=cli, timeout_s=timeout_s)
+    if len(rows) != 1:
+        return None
+    return rows[0]
 
 
 def authorize_s3_path(path: str, extra_prefixes: Sequence[str] | None = None) -> None:
