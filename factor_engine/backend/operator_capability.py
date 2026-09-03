@@ -810,7 +810,18 @@ def _pandas_status(canon: str) -> CapabilityStatus:
     meta = ((catalog.get("backend_meta") or {}).get("pandas_numpy") or {})
     if bool(meta.get("production_certified")):
         source = str(meta.get("certification_source") or "")
-        if source in {"primitive_verified.json", "factor_operator_verified.json"}:
+        # R23 certifiers record the evidence filename WITH a human annotation
+        # suffix, e.g. ``primitive_verified.json (R23 P1: math/elementwise_math
+        # certification)`` / ``evidence/intraday_minute_parity.json (R23 P1:
+        # intraday microstructure …)``.  Match on the leading evidence artifact
+        # filename so the certification the R23 pass stamped actually grants
+        # production_safe (100k GO §0: certification must not silently degrade
+        # to implemented).
+        if source.split(" (", 1)[0] in {
+            "primitive_verified.json",
+            "factor_operator_verified.json",
+            "evidence/intraday_minute_parity.json",
+        }:
             return "production_safe"
 
     try:

@@ -1634,12 +1634,21 @@ def write_mining_search_space(
     return out
 
 
-def write_dsl_allowlist(path: str | Path) -> Path:
-    """将 ``export_dsl_allowlist_json()`` 写入 JSON 文件。"""
+def write_dsl_allowlist(path: str | Path, *, market: str = "us", surface: str = "daily") -> Path:
+    """将 ``export_dsl_allowlist_json()`` 写入 JSON 文件。
+
+    R21-P033: ``export_dsl_allowlist_json`` 要求显式 ``market``（默认 ``us``，
+    与既有 ``docs/dsl_allowlist.json`` 的 ``operator_policy=afv_us_pv_daily`` 一致）。
+    """
     out = Path(path)
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(
-        json.dumps(export_dsl_allowlist_json(), ensure_ascii=False, indent=2) + "\n",
+        json.dumps(
+            export_dsl_allowlist_json(market=market, surface=surface),
+            ensure_ascii=False,
+            indent=2,
+        )
+        + "\n",
         encoding="utf-8",
     )
     return out

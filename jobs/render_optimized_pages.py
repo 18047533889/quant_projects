@@ -33,6 +33,7 @@ sys.path.insert(0, str(PROJECT / "scripts" / "archive" / "jobs"))
 sys.path.insert(0, str(PROJECT / "jobs"))
 
 from quant_evaluator.metrics.ic import _spearman_rank_correlation
+from quant_evaluator.metrics.portfolio_stats import compute_wealth_curve
 
 # 中文字体
 _CN_FONT = "/home/sunhaiwei/.fonts/NotoSansSC-Regular.otf"
@@ -149,7 +150,7 @@ def plot_decile_compare(raw_mat, opt_mat, vwap, name, page_flipped=False):
         gids = np.floor(ranks * 10).clip(0, 9).astype(int)
         gids[~valid] = -1
         T = fv.shape[0]
-        gr = np.zeros((T, 10))
+        gr = np.full((T, 10), np.nan)
         prev_gids = np.full(fv.shape[1], -1)
         for t in range(T):
             # 换手成本：每组内与昨日组员不同的比例 × 双边成本
@@ -163,7 +164,10 @@ def plot_decile_compare(raw_mat, opt_mat, vwap, name, page_flipped=False):
                         turnover[k] = 1.0 - same.mean()
                     gr[t, k] = np.nanmean(fwd.values[t, mk]) - turnover[k] * COST
             prev_gids = gids[t].copy()
-        return common, np.cumprod(1 + gr, axis=0)
+        observed = np.isfinite(gr).all(axis=1)
+        return common[observed], np.column_stack([
+            compute_wealth_curve(gr[observed, k], missing_return_policy="drop") for k in range(10)
+        ])
     raw_common, raw_nav = decile_nav(raw_mat)
     opt_common, opt_nav = decile_nav(opt_mat)
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 3.4))
@@ -205,7 +209,7 @@ def plot_ls_compare(raw_mat, opt_mat, vwap, name, page_flipped=False):
         gids = np.floor(ranks * 10).clip(0, 9).astype(int)
         gids[~valid] = -1
         T = fv.shape[0]
-        gr = np.zeros((T, 10))
+        gr = np.full((T, 10), np.nan)
         prev_gids = np.full(fv.shape[1], -1)
         for t in range(T):
             for k in range(10):
@@ -219,7 +223,8 @@ def plot_ls_compare(raw_mat, opt_mat, vwap, name, page_flipped=False):
                     gr[t, k] = np.nanmean(fwd.values[t, mk]) - to_cost
             prev_gids = gids[t].copy()
         ls = gr[:, 9] - gr[:, 0]
-        return common, np.cumprod(1 + ls, axis=0)
+        observed = np.isfinite(ls)
+        return common[observed], compute_wealth_curve(ls[observed], missing_return_policy="drop")
     raw_common, raw = ls_nav(raw_mat)
     opt_common, opt = ls_nav(opt_mat)
     fig, ax = plt.subplots(figsize=(10, 3.2))

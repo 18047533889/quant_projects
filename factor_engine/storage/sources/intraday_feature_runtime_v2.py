@@ -270,6 +270,25 @@ def _grouped_bars(
     frame = base._hhmm_filter(frame, session_open, cutoff)
     frame["date"] = frame["timestamp"].dt.normalize()
 
+    # GO_PROMPT §3.9: A-share regular session is 09:31–11:30 / 13:01–15:00 =
+    # 240 one-minute bars (no 09:30/13:00 bar, no lunch bar).  A partial
+    # session must fail closed before any session-aware feature is computed —
+    # a missing bar would be treated as a real observation and skew rolling /
+    # pct_change / realized-vol features.  The completeness gate is applied to
+    # the raw minute timestamps (before resampling), so a sparse panel cannot
+    # hide behind ``min_coverage``.
+    if dataset == "ashare_stock_minute":
+        from data_access.read.session_calendar import get_market_session
+
+        session = get_market_session("ashare")
+        if session is not None:
+            session.assert_session_complete(
+                frame["timestamp"],
+                bar_freq="1min",
+                require_full=True,
+                context=f"intraday_feature minute panel {dataset!r}",
+            )
+
     usable_minutes = _effective_minutes(dataset, session_open, session_close, cutoff)
     if usable_minutes <= 0:
         raise ValueError("cutoff_time leaves no completed regular-session minutes")
@@ -306,6 +325,40 @@ def load_intraday_feature(source: Any, params: dict[str, Any]):
     feature = str(params.get("feature") or "").strip()
     if not feature:
         raise ValueError("intraday_feature requires feature")
+    # P0#5: single-feature path delegates to the single-scan compute_many so
+    # both entry points share one grouped-bars pass and one shared-intermediate
+    # computation.  Numerically identical to the previous per-feature loop.
+    return compute_many(source, [feature], params)[feature]
+
+
+def compute_many(
+    source: Any,
+    features: list[str],
+    params: dict[str, Any],
+) -> dict[str, pd.Series]:
+    """P0#5: single-scan compute of many intraday features.
+
+    One ``_grouped_bars`` pass loads/filters/groups/resamples the minute panel
+    once; each bar's shared intermediates (returns / realized variance / OHLCV
+    arrays) are computed once via ``base._calc_shared`` and reused across every
+    requested feature via ``base._calc_from_shared``.  This replaces the
+    per-feature ``load_intraday_feature`` loop that recomputed the shared
+    intermediates for every feature.
+
+    ``features`` must be non-empty.  All features share the same grouping
+    config (``bar_minutes`` / ``min_coverage`` / ``cutoff_time`` / ...) from
+    ``params``.  Profile features (which need cross-day history) are computed
+    through the existing ``_profile_scores`` path.
+
+    Returns ``{feature_name: aligned Series}``.  Numerically identical to
+    calling ``load_intraday_feature`` once per feature (verified by parity
+    test).
+    """
+    features = [str(f).strip() for f in features]
+    if not features:
+        raise ValueError("compute_many requires at least one feature")
+    if any(not f for f in features):
+        raise ValueError("compute_many feature names must be non-empty")
 
     bar_minutes = int(params.get("bar_minutes", 5))
     min_coverage = float(params.get("min_coverage", 0.8))
@@ -327,7 +380,16 @@ def load_intraday_feature(source: Any, params: dict[str, Any]):
     if _hm(cutoff) < _hm(session_open) or _hm(cutoff) > _hm(session_close):
         raise ValueError("cutoff_time must lie inside configured regular session")
 
-    minimum_bars = max(user_minimum, _FEATURE_MIN_BARS.get(feature, 2))
+    profile_features = [f for f in features if f in _PROFILE_FEATURES]
+    non_profile = [f for f in features if f not in _PROFILE_FEATURES]
+    if profile_features and history_days < 2:
+        raise ValueError("profile features require history_days >= 2")
+
+    # Single scan: one grouped-bars pass shared by every feature.
+    minimum_bars = max(
+        user_minimum,
+        max((_FEATURE_MIN_BARS.get(f, 2) for f in features), default=2),
+    )
     source_child, grouped, _ = _grouped_bars(
         source,
         dataset,
@@ -341,25 +403,27 @@ def load_intraday_feature(source: Any, params: dict[str, Any]):
         minimum_bars,
     )
 
-    values: dict[tuple[pd.Timestamp, str], float] = {}
-    if feature in _PROFILE_FEATURES:
-        if history_days < 2:
-            raise ValueError("profile features require history_days >= 2")
-        values = base._profile_scores(grouped, feature, history_days)
-    else:
+    out: dict[str, dict[tuple[pd.Timestamp, str], float]] = {
+        f: {} for f in features
+    }
+    if profile_features:
+        for f in profile_features:
+            out[f] = base._profile_scores(grouped, f, history_days)
+
+    if non_profile:
         previous_close: dict[str, float] = {}
         for date, instrument, bars in grouped:
+            shared = base._calc_shared(bars)
             calculation_params = {
                 **params,
                 "instrument": instrument,
                 "trade_date": date,
             }
-            values[(date, instrument)] = base._calc(
-                feature,
-                bars,
-                calculation_params,
-                prev_close=previous_close.get(instrument, np.nan),
-            )
+            prev = previous_close.get(instrument, np.nan)
+            for f in non_profile:
+                out[f][(date, instrument)] = base._calc_from_shared(
+                    f, shared, bars, calculation_params, prev_close=prev
+                )
             previous_close[instrument] = float(bars["close"].iloc[-1])
 
     if hasattr(source, "_record_dependency"):
@@ -367,7 +431,7 @@ def load_intraday_feature(source: Any, params: dict[str, Any]):
             dataset,
             kind="minute_to_daily",
             snapshot_id=getattr(source_child, "data_snapshot_id", None),
-            feature=feature,
+            feature=",".join(features),
             bar_minutes=bar_minutes,
             timestamp_convention=convention,
             cutoff_time=cutoff,
@@ -377,15 +441,20 @@ def load_intraday_feature(source: Any, params: dict[str, Any]):
         )
 
     anchor = source._anchor_index()
-    if not values:
-        return pd.Series(np.nan, index=anchor, name=f"intraday_{feature}")
-    index = pd.MultiIndex.from_tuples(
-        list(values), names=["timestamp", "instrument"]
-    )
-    series = pd.Series(
-        list(values.values()), index=index, name=f"intraday_{feature}"
-    ).sort_index()
-    return source._align_exact_by_instrument(anchor, series)
+    result: dict[str, pd.Series] = {}
+    for f in features:
+        values = out[f]
+        if not values:
+            result[f] = pd.Series(np.nan, index=anchor, name=f"intraday_{f}")
+            continue
+        index = pd.MultiIndex.from_tuples(
+            list(values), names=["timestamp", "instrument"]
+        )
+        series = pd.Series(
+            list(values.values()), index=index, name=f"intraday_{f}"
+        ).sort_index()
+        result[f] = source._align_exact_by_instrument(anchor, series)
+    return result
 
 
 def install_intraday_feature_runtime() -> None:

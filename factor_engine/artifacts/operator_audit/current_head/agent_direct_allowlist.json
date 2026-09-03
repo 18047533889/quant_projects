@@ -1,0 +1,3490 @@
+{
+ "schema": "fe.agent_direct_operators.v1",
+ "plane": "load_all(include_research=False) 1673 canonical @ HEAD 7628674b (dirty tree)",
+ "criteria": "production_admitted ∧ terminal_usable (DirectUse R64 ladder, fail-closed); intermediate/condition/state lanes excluded from terminal surface per 100k GO §30",
+ "terminal_count": 62,
+ "admitted_total": 86,
+ "admitted_non_terminal_lanes": {
+  "intermediate/condition/state": 24
+ },
+ "known_gaps": "BACKEND_PARITY_PASS/EDGE_PASS/SCALE_PASS=NOT_RUN and 37 MATH_ORACLE_PASS=NOT_PROVEN remain open evidence gates (GO risk register); admission currently rests on production_certified backend_meta + physical-evidence fast path",
+ "operators": [
+  {
+   "canonical": "abs",
+   "terminal": true,
+   "production_admitted": true,
+   "mining_lane": "alpha_direct",
+   "authoring_tier": "daily",
+   "aliases": [],
+   "input_slots": [
+    {
+     "parameter": "x",
+     "semantic_kinds": [
+      "field"
+     ],
+     "roles": [
+      "data"
+     ],
+     "cardinality": "panel"
+    }
+   ],
+   "scalar_parameters": [],
+   "searchable_params": [],
+   "output": {
+    "kind": "series",
+    "unit": null,
+    "grain": "daily",
+    "cardinality": "panel"
+   },
+   "stateful": false,
+   "execution_model": "independent_with_warmup",
+   "preferred_backend": "polars",
+   "cost": {
+    "runtime": 1,
+    "memory": 1
+   },
+   "causality": "causal",
+   "production_gates_nonpass": {
+    "BACKEND_PARITY_PASS": "NOT_RUN",
+    "EDGE_PASS": "NOT_RUN",
+    "SCALE_PASS": "NOT_RUN"
+   }
+  },
+  {
+   "canonical": "add",
+   "terminal": true,
+   "production_admitted": true,
+   "mining_lane": "alpha_direct",
+   "authoring_tier": "daily",
+   "aliases": [],
+   "input_slots": [
+    {
+     "parameter": "x",
+     "semantic_kinds": [
+      "field"
+     ],
+     "roles": [
+      "data"
+     ],
+     "cardinality": "panel"
+    },
+    {
+     "parameter": "y",
+     "semantic_kinds": [
+      "field"
+     ],
+     "roles": [
+      "data"
+     ],
+     "cardinality": "panel"
+    }
+   ],
+   "scalar_parameters": [],
+   "searchable_params": [],
+   "output": {
+    "kind": "series",
+    "unit": null,
+    "grain": "daily",
+    "cardinality": "panel"
+   },
+   "stateful": false,
+   "execution_model": "independent_with_warmup",
+   "preferred_backend": "polars",
+   "cost": {
+    "runtime": 0,
+    "memory": 0
+   },
+   "causality": "causal",
+   "production_gates_nonpass": {
+    "BACKEND_PARITY_PASS": "NOT_RUN",
+    "EDGE_PASS": "NOT_RUN",
+    "SCALE_PASS": "NOT_RUN"
+   }
+  },
+  {
+   "canonical": "clip",
+   "terminal": true,
+   "production_admitted": true,
+   "mining_lane": "alpha_direct",
+   "authoring_tier": "daily",
+   "aliases": [],
+   "input_slots": [
+    {
+     "parameter": "x",
+     "semantic_kinds": [
+      "field"
+     ],
+     "roles": [
+      "data"
+     ],
+     "cardinality": "panel"
+    },
+    {
+     "parameter": "lo",
+     "semantic_kinds": [
+      "scalar"
+     ],
+     "roles": [
+      "parameter"
+     ],
+     "cardinality": "scalar"
+    },
+    {
+     "parameter": "hi",
+     "semantic_kinds": [
+      "scalar"
+     ],
+     "roles": [
+      "parameter"
+     ],
+     "cardinality": "scalar"
+    }
+   ],
+   "scalar_parameters": [
+    "lo",
+    "hi"
+   ],
+   "searchable_params": [
+    "hi",
+    "lo"
+   ],
+   "output": {
+    "kind": "series",
+    "unit": null,
+    "grain": "daily",
+    "cardinality": "panel"
+   },
+   "stateful": false,
+   "execution_model": "independent_with_warmup",
+   "preferred_backend": "polars",
+   "cost": {
+    "runtime": 1,
+    "memory": 1
+   },
+   "causality": "causal",
+   "production_gates_nonpass": {
+    "MATH_ORACLE_PASS": "NOT_PROVEN",
+    "BACKEND_PARITY_PASS": "NOT_RUN",
+    "EDGE_PASS": "NOT_RUN",
+    "SCALE_PASS": "NOT_RUN"
+   }
+  },
+  {
+   "canonical": "cs_demean",
+   "terminal": true,
+   "production_admitted": true,
+   "mining_lane": "alpha_direct",
+   "authoring_tier": "daily",
+   "aliases": [],
+   "input_slots": [
+    {
+     "parameter": "x",
+     "semantic_kinds": [
+      "field"
+     ],
+     "roles": [
+      "data"
+     ],
+     "cardinality": "panel"
+    }
+   ],
+   "scalar_parameters": [],
+   "searchable_params": [],
+   "output": {
+    "kind": "series",
+    "unit": null,
+    "grain": "daily",
+    "cardinality": "panel"
+   },
+   "stateful": false,
+   "execution_model": "independent_with_warmup",
+   "preferred_backend": "polars",
+   "cost": {
+    "runtime": 1,
+    "memory": 1
+   },
+   "causality": "causal",
+   "production_gates_nonpass": {
+    "BACKEND_PARITY_PASS": "NOT_RUN",
+    "EDGE_PASS": "NOT_RUN",
+    "SCALE_PASS": "NOT_RUN"
+   }
+  },
+  {
+   "canonical": "cs_mad_zscore",
+   "terminal": true,
+   "production_admitted": true,
+   "mining_lane": "alpha_direct",
+   "authoring_tier": "daily",
+   "aliases": [],
+   "input_slots": [
+    {
+     "parameter": "x",
+     "semantic_kinds": [
+      "field"
+     ],
+     "roles": [
+      "data"
+     ],
+     "cardinality": "panel"
+    }
+   ],
+   "scalar_parameters": [],
+   "searchable_params": [],
+   "output": {
+    "kind": "series",
+    "unit": null,
+    "grain": "daily",
+    "cardinality": "panel"
+   },
+   "stateful": false,
+   "execution_model": "independent_with_warmup",
+   "preferred_backend": "polars",
+   "cost": {
+    "runtime": 1,
+    "memory": 1
+   },
+   "causality": "causal",
+   "production_gates_nonpass": {
+    "BACKEND_PARITY_PASS": "NOT_RUN",
+    "EDGE_PASS": "NOT_RUN",
+    "SCALE_PASS": "NOT_RUN"
+   }
+  },
+  {
+   "canonical": "cs_pct_rank",
+   "terminal": true,
+   "production_admitted": true,
+   "mining_lane": "alpha_direct",
+   "authoring_tier": "daily",
+   "aliases": [],
+   "input_slots": [
+    {
+     "parameter": "x",
+     "semantic_kinds": [
+      "field"
+     ],
+     "roles": [
+      "data"
+     ],
+     "cardinality": "panel"
+    }
+   ],
+   "scalar_parameters": [],
+   "searchable_params": [],
+   "output": {
+    "kind": "series",
+    "unit": null,
+    "grain": "daily",
+    "cardinality": "panel"
+   },
+   "stateful": false,
+   "execution_model": "independent_with_warmup",
+   "preferred_backend": "polars",
+   "cost": {
+    "runtime": 1,
+    "memory": 1
+   },
+   "causality": "causal",
+   "production_gates_nonpass": {
+    "BACKEND_PARITY_PASS": "NOT_RUN",
+    "EDGE_PASS": "NOT_RUN",
+    "SCALE_PASS": "NOT_RUN"
+   }
+  },
+  {
+   "canonical": "divide",
+   "terminal": true,
+   "production_admitted": true,
+   "mining_lane": "alpha_direct",
+   "authoring_tier": "daily",
+   "aliases": [],
+   "input_slots": [
+    {
+     "parameter": "x",
+     "semantic_kinds": [
+      "field"
+     ],
+     "roles": [
+      "data"
+     ],
+     "cardinality": "panel"
+    },
+    {
+     "parameter": "y",
+     "semantic_kinds": [
+      "field"
+     ],
+     "roles": [
+      "data"
+     ],
+     "cardinality": "panel"
+    }
+   ],
+   "scalar_parameters": [],
+   "searchable_params": [],
+   "output": {
+    "kind": "series",
+    "unit": null,
+    "grain": "daily",
+    "cardinality": "panel"
+   },
+   "stateful": false,
+   "execution_model": "independent_with_warmup",
+   "preferred_backend": "polars",
+   "cost": {
+    "runtime": 0,
+    "memory": 0
+   },
+   "causality": "causal",
+   "production_gates_nonpass": {
+    "BACKEND_PARITY_PASS": "NOT_RUN",
+    "EDGE_PASS": "NOT_RUN",
+    "SCALE_PASS": "NOT_RUN"
+   }
+  },
+  {
+   "canonical": "exp",
+   "terminal": true,
+   "production_admitted": true,
+   "mining_lane": "alpha_direct",
+   "authoring_tier": "daily",
+   "aliases": [],
+   "input_slots": [
+    {
+     "parameter": "x",
+     "semantic_kinds": [
+      "field"
+     ],
+     "roles": [
+      "data"
+     ],
+     "cardinality": "panel"
+    }
+   ],
+   "scalar_parameters": [],
+   "searchable_params": [],
+   "output": {
+    "kind": "series",
+    "unit": null,
+    "grain": "daily",
+    "cardinality": "panel"
+   },
+   "stateful": false,
+   "execution_model": "independent_with_warmup",
+   "preferred_backend": "polars",
+   "cost": {
+    "runtime": 1,
+    "memory": 1
+   },
+   "causality": "causal",
+   "production_gates_nonpass": {
+    "BACKEND_PARITY_PASS": "NOT_RUN",
+    "EDGE_PASS": "NOT_RUN",
+    "SCALE_PASS": "NOT_RUN"
+   }
+  },
+  {
+   "canonical": "group_neutralize",
+   "terminal": true,
+   "production_admitted": true,
+   "mining_lane": "alpha_direct",
+   "authoring_tier": "daily",
+   "aliases": [],
+   "input_slots": [
+    {
+     "parameter": "x",
+     "semantic_kinds": [
+      "field"
+     ],
+     "roles": [
+      "data"
+     ],
+     "cardinality": "panel"
+    },
+    {
+     "parameter": "group",
+     "semantic_kinds": [
+      "context",
+      "group",
+      "broadcast"
+     ],
+     "roles": [
+      "context"
+     ],
+     "cardinality": "broadcast"
+    },
+    {
+     "parameter": "fallback_policy",
+     "semantic_kinds": [
+      "scalar"
+     ],
+     "roles": [
+      "parameter"
+     ],
+     "cardinality": "scalar"
+    }
+   ],
+   "scalar_parameters": [
+    "fallback_policy"
+   ],
+   "searchable_params": [
+    "fallback_policy"
+   ],
+   "output": {
+    "kind": "series",
+    "unit": null,
+    "grain": "daily",
+    "cardinality": "panel"
+   },
+   "stateful": false,
+   "execution_model": "independent_with_warmup",
+   "preferred_backend": "polars",
+   "cost": {
+    "runtime": 1,
+    "memory": 1
+   },
+   "causality": "causal",
+   "production_gates_nonpass": {
+    "MATH_ORACLE_PASS": "NOT_PROVEN",
+    "BACKEND_PARITY_PASS": "NOT_RUN",
+    "EDGE_PASS": "NOT_RUN",
+    "SCALE_PASS": "NOT_RUN"
+   }
+  },
+  {
+   "canonical": "group_normalize",
+   "terminal": true,
+   "production_admitted": true,
+   "mining_lane": "alpha_direct",
+   "authoring_tier": "daily",
+   "aliases": [],
+   "input_slots": [
+    {
+     "parameter": "x",
+     "semantic_kinds": [
+      "field"
+     ],
+     "roles": [
+      "data"
+     ],
+     "cardinality": "panel"
+    },
+    {
+     "parameter": "group",
+     "semantic_kinds": [
+      "scalar"
+     ],
+     "roles": [
+      "parameter"
+     ],
+     "cardinality": "scalar"
+    },
+    {
+     "parameter": "fallback_policy",
+     "semantic_kinds": [
+      "scalar"
+     ],
+     "roles": [
+      "parameter"
+     ],
+     "cardinality": "scalar"
+    }
+   ],
+   "scalar_parameters": [
+    "group",
+    "fallback_policy"
+   ],
+   "searchable_params": [
+    "group",
+    "fallback_policy"
+   ],
+   "output": {
+    "kind": "series",
+    "unit": null,
+    "grain": "daily",
+    "cardinality": "panel"
+   },
+   "stateful": false,
+   "execution_model": "independent_with_warmup",
+   "preferred_backend": "polars",
+   "cost": {
+    "runtime": 1,
+    "memory": 1
+   },
+   "causality": "causal",
+   "production_gates_nonpass": {
+    "MATH_ORACLE_PASS": "NOT_PROVEN",
+    "BACKEND_PARITY_PASS": "NOT_RUN",
+    "EDGE_PASS": "NOT_RUN",
+    "SCALE_PASS": "NOT_RUN"
+   }
+  },
+  {
+   "canonical": "group_rank",
+   "terminal": true,
+   "production_admitted": true,
+   "mining_lane": "alpha_direct",
+   "authoring_tier": "daily",
+   "aliases": [],
+   "input_slots": [
+    {
+     "parameter": "x",
+     "semantic_kinds": [
+      "field"
+     ],
+     "roles": [
+      "data"
+     ],
+     "cardinality": "panel"
+    },
+    {
+     "parameter": "group",
+     "semantic_kinds": [
+      "context",
+      "group",
+      "broadcast"
+     ],
+     "roles": [
+      "context"
+     ],
+     "cardinality": "broadcast"
+    },
+    {
+     "parameter": "fallback_policy",
+     "semantic_kinds": [
+      "scalar"
+     ],
+     "roles": [
+      "parameter"
+     ],
+     "cardinality": "scalar"
+    }
+   ],
+   "scalar_parameters": [
+    "fallback_policy"
+   ],
+   "searchable_params": [
+    "fallback_policy"
+   ],
+   "output": {
+    "kind": "series",
+    "unit": null,
+    "grain": "daily",
+    "cardinality": "panel"
+   },
+   "stateful": false,
+   "execution_model": "independent_with_warmup",
+   "preferred_backend": "polars",
+   "cost": {
+    "runtime": 1,
+    "memory": 1
+   },
+   "causality": "causal",
+   "production_gates_nonpass": {
+    "MATH_ORACLE_PASS": "NOT_PROVEN",
+    "BACKEND_PARITY_PASS": "NOT_RUN",
+    "EDGE_PASS": "NOT_RUN",
+    "SCALE_PASS": "NOT_RUN"
+   }
+  },
+  {
+   "canonical": "group_winsorize",
+   "terminal": true,
+   "production_admitted": true,
+   "mining_lane": "alpha_direct",
+   "authoring_tier": "daily",
+   "aliases": [],
+   "input_slots": [
+    {
+     "parameter": "x",
+     "semantic_kinds": [
+      "field"
+     ],
+     "roles": [
+      "data"
+     ],
+     "cardinality": "panel"
+    },
+    {
+     "parameter": "group",
+     "semantic_kinds": [
+      "scalar"
+     ],
+     "roles": [
+      "parameter"
+     ],
+     "cardinality": "scalar"
+    },
+    {
+     "parameter": "a",
+     "semantic_kinds": [
+      "scalar"
+     ],
+     "roles": [
+      "parameter"
+     ],
+     "cardinality": "scalar"
+    }
+   ],
+   "scalar_parameters": [
+    "group",
+    "a"
+   ],
+   "searchable_params": [
+    "group",
+    "a"
+   ],
+   "output": {
+    "kind": "series",
+    "unit": null,
+    "grain": "daily",
+    "cardinality": "panel"
+   },
+   "stateful": false,
+   "execution_model": "independent_with_warmup",
+   "preferred_backend": "polars",
+   "cost": {
+    "runtime": 1,
+    "memory": 1
+   },
+   "causality": "causal",
+   "production_gates_nonpass": {
+    "MATH_ORACLE_PASS": "NOT_PROVEN",
+    "BACKEND_PARITY_PASS": "NOT_RUN",
+    "EDGE_PASS": "NOT_RUN",
+    "SCALE_PASS": "NOT_RUN"
+   }
+  },
+  {
+   "canonical": "group_zscore",
+   "terminal": true,
+   "production_admitted": true,
+   "mining_lane": "alpha_direct",
+   "authoring_tier": "daily",
+   "aliases": [],
+   "input_slots": [
+    {
+     "parameter": "x",
+     "semantic_kinds": [
+      "field"
+     ],
+     "roles": [
+      "data"
+     ],
+     "cardinality": "panel"
+    },
+    {
+     "parameter": "group",
+     "semantic_kinds": [
+      "context",
+      "group",
+      "broadcast"
+     ],
+     "roles": [
+      "context"
+     ],
+     "cardinality": "broadcast"
+    },
+    {
+     "parameter": "fallback_policy",
+     "semantic_kinds": [
+      "scalar"
+     ],
+     "roles": [
+      "parameter"
+     ],
+     "cardinality": "scalar"
+    }
+   ],
+   "scalar_parameters": [
+    "fallback_policy"
+   ],
+   "searchable_params": [
+    "fallback_policy"
+   ],
+   "output": {
+    "kind": "series",
+    "unit": null,
+    "grain": "daily",
+    "cardinality": "panel"
+   },
+   "stateful": false,
+   "execution_model": "independent_with_warmup",
+   "preferred_backend": "polars",
+   "cost": {
+    "runtime": 1,
+    "memory": 1
+   },
+   "causality": "causal",
+   "production_gates_nonpass": {
+    "MATH_ORACLE_PASS": "NOT_PROVEN",
+    "BACKEND_PARITY_PASS": "NOT_RUN",
+    "EDGE_PASS": "NOT_RUN",
+    "SCALE_PASS": "NOT_RUN"
+   }
+  },
+  {
+   "canonical": "intra_amihud",
+   "terminal": true,
+   "production_admitted": true,
+   "mining_lane": "alpha_direct",
+   "authoring_tier": "daily",
+   "aliases": [],
+   "input_slots": [
+    {
+     "parameter": "close",
+     "semantic_kinds": [
+      "field"
+     ],
+     "roles": [
+      "data"
+     ],
+     "cardinality": "panel"
+    },
+    {
+     "parameter": "amount",
+     "semantic_kinds": [
+      "field"
+     ],
+     "roles": [
+      "data"
+     ],
+     "cardinality": "panel"
+    },
+    {
+     "parameter": "scale",
+     "semantic_kinds": [
+      "scalar"
+     ],
+     "roles": [
+      "parameter"
+     ],
+     "cardinality": "scalar"
+    }
+   ],
+   "scalar_parameters": [
+    "scale"
+   ],
+   "searchable_params": [
+    "scale"
+   ],
+   "output": {
+    "kind": "series",
+    "unit": null,
+    "grain": "daily",
+    "cardinality": "panel"
+   },
+   "stateful": false,
+   "execution_model": "independent_with_warmup",
+   "preferred_backend": "polars",
+   "cost": {
+    "runtime": 1,
+    "memory": 1
+   },
+   "causality": "causal",
+   "production_gates_nonpass": {
+    "MATH_ORACLE_PASS": "NOT_PROVEN",
+    "BACKEND_PARITY_PASS": "NOT_RUN",
+    "EDGE_PASS": "NOT_RUN",
+    "SCALE_PASS": "NOT_RUN"
+   }
+  },
+  {
+   "canonical": "intra_bipower_variation",
+   "terminal": true,
+   "production_admitted": true,
+   "mining_lane": "alpha_direct",
+   "authoring_tier": "daily",
+   "aliases": [],
+   "input_slots": [
+    {
+     "parameter": "close",
+     "semantic_kinds": [
+      "field"
+     ],
+     "roles": [
+      "data"
+     ],
+     "cardinality": "panel"
+    }
+   ],
+   "scalar_parameters": [],
+   "searchable_params": [],
+   "output": {
+    "kind": "series",
+    "unit": null,
+    "grain": "daily",
+    "cardinality": "panel"
+   },
+   "stateful": false,
+   "execution_model": "independent_with_warmup",
+   "preferred_backend": "polars",
+   "cost": {
+    "runtime": 1,
+    "memory": 1
+   },
+   "causality": "causal",
+   "production_gates_nonpass": {
+    "BACKEND_PARITY_PASS": "NOT_RUN",
+    "EDGE_PASS": "NOT_RUN",
+    "SCALE_PASS": "NOT_RUN"
+   }
+  },
+  {
+   "canonical": "intra_concentration",
+   "terminal": true,
+   "production_admitted": true,
+   "mining_lane": "alpha_direct",
+   "authoring_tier": "daily",
+   "aliases": [],
+   "input_slots": [
+    {
+     "parameter": "value",
+     "semantic_kinds": [
+      "field"
+     ],
+     "roles": [
+      "data"
+     ],
+     "cardinality": "panel"
+    }
+   ],
+   "scalar_parameters": [],
+   "searchable_params": [],
+   "output": {
+    "kind": "series",
+    "unit": null,
+    "grain": "daily",
+    "cardinality": "panel"
+   },
+   "stateful": false,
+   "execution_model": "independent_with_warmup",
+   "preferred_backend": "polars",
+   "cost": {
+    "runtime": 1,
+    "memory": 1
+   },
+   "causality": "causal",
+   "production_gates_nonpass": {
+    "BACKEND_PARITY_PASS": "NOT_RUN",
+    "EDGE_PASS": "NOT_RUN",
+    "SCALE_PASS": "NOT_RUN"
+   }
+  },
+  {
+   "canonical": "intra_entropy",
+   "terminal": true,
+   "production_admitted": true,
+   "mining_lane": "alpha_direct",
+   "authoring_tier": "daily",
+   "aliases": [],
+   "input_slots": [
+    {
+     "parameter": "value",
+     "semantic_kinds": [
+      "field"
+     ],
+     "roles": [
+      "data"
+     ],
+     "cardinality": "panel"
+    },
+    {
+     "parameter": "normalize",
+     "semantic_kinds": [
+      "scalar"
+     ],
+     "roles": [
+      "parameter"
+     ],
+     "cardinality": "scalar"
+    }
+   ],
+   "scalar_parameters": [
+    "normalize"
+   ],
+   "searchable_params": [
+    "normalize"
+   ],
+   "output": {
+    "kind": "series",
+    "unit": null,
+    "grain": "daily",
+    "cardinality": "panel"
+   },
+   "stateful": false,
+   "execution_model": "independent_with_warmup",
+   "preferred_backend": "polars",
+   "cost": {
+    "runtime": 1,
+    "memory": 1
+   },
+   "causality": "causal",
+   "production_gates_nonpass": {
+    "MATH_ORACLE_PASS": "NOT_PROVEN",
+    "BACKEND_PARITY_PASS": "NOT_RUN",
+    "EDGE_PASS": "NOT_RUN",
+    "SCALE_PASS": "NOT_RUN"
+   }
+  },
+  {
+   "canonical": "intra_extreme_bar_return",
+   "terminal": true,
+   "production_admitted": true,
+   "mining_lane": "alpha_direct",
+   "authoring_tier": "daily",
+   "aliases": [],
+   "input_slots": [
+    {
+     "parameter": "close",
+     "semantic_kinds": [
+      "field"
+     ],
+     "roles": [
+      "data"
+     ],
+     "cardinality": "panel"
+    },
+    {
+     "parameter": "side",
+     "semantic_kinds": [
+      "scalar"
+     ],
+     "roles": [
+      "parameter"
+     ],
+     "cardinality": "scalar"
+    }
+   ],
+   "scalar_parameters": [
+    "side"
+   ],
+   "searchable_params": [
+    "side"
+   ],
+   "output": {
+    "kind": "series",
+    "unit": null,
+    "grain": "daily",
+    "cardinality": "panel"
+   },
+   "stateful": false,
+   "execution_model": "independent_with_warmup",
+   "preferred_backend": "polars",
+   "cost": {
+    "runtime": 1,
+    "memory": 1
+   },
+   "causality": "causal",
+   "production_gates_nonpass": {
+    "MATH_ORACLE_PASS": "NOT_PROVEN",
+    "BACKEND_PARITY_PASS": "NOT_RUN",
+    "EDGE_PASS": "NOT_RUN",
+    "SCALE_PASS": "NOT_RUN"
+   }
+  },
+  {
+   "canonical": "intra_jump_ratio",
+   "terminal": true,
+   "production_admitted": true,
+   "mining_lane": "alpha_direct",
+   "authoring_tier": "daily",
+   "aliases": [],
+   "input_slots": [
+    {
+     "parameter": "close",
+     "semantic_kinds": [
+      "field"
+     ],
+     "roles": [
+      "data"
+     ],
+     "cardinality": "panel"
+    }
+   ],
+   "scalar_parameters": [],
+   "searchable_params": [],
+   "output": {
+    "kind": "series",
+    "unit": null,
+    "grain": "daily",
+    "cardinality": "panel"
+   },
+   "stateful": false,
+   "execution_model": "independent_with_warmup",
+   "preferred_backend": "polars",
+   "cost": {
+    "runtime": 1,
+    "memory": 1
+   },
+   "causality": "causal",
+   "production_gates_nonpass": {
+    "BACKEND_PARITY_PASS": "NOT_RUN",
+    "EDGE_PASS": "NOT_RUN",
+    "SCALE_PASS": "NOT_RUN"
+   }
+  },
+  {
+   "canonical": "intra_kyle_lambda_proxy",
+   "terminal": true,
+   "production_admitted": true,
+   "mining_lane": "alpha_direct",
+   "authoring_tier": "daily",
+   "aliases": [],
+   "input_slots": [
+    {
+     "parameter": "close",
+     "semantic_kinds": [
+      "field"
+     ],
+     "roles": [
+      "data"
+     ],
+     "cardinality": "panel"
+    },
+    {
+     "parameter": "amount",
+     "semantic_kinds": [
+      "field"
+     ],
+     "roles": [
+      "data"
+     ],
+     "cardinality": "panel"
+    }
+   ],
+   "scalar_parameters": [],
+   "searchable_params": [],
+   "output": {
+    "kind": "series",
+    "unit": null,
+    "grain": "daily",
+    "cardinality": "panel"
+   },
+   "stateful": false,
+   "execution_model": "independent_with_warmup",
+   "preferred_backend": "polars",
+   "cost": {
+    "runtime": 1,
+    "memory": 1
+   },
+   "causality": "causal",
+   "production_gates_nonpass": {
+    "BACKEND_PARITY_PASS": "NOT_RUN",
+    "EDGE_PASS": "NOT_RUN",
+    "SCALE_PASS": "NOT_RUN"
+   }
+  },
+  {
+   "canonical": "intra_path_efficiency",
+   "terminal": true,
+   "production_admitted": true,
+   "mining_lane": "alpha_direct",
+   "authoring_tier": "daily",
+   "aliases": [],
+   "input_slots": [
+    {
+     "parameter": "close",
+     "semantic_kinds": [
+      "field"
+     ],
+     "roles": [
+      "data"
+     ],
+     "cardinality": "panel"
+    }
+   ],
+   "scalar_parameters": [],
+   "searchable_params": [],
+   "output": {
+    "kind": "series",
+    "unit": null,
+    "grain": "daily",
+    "cardinality": "panel"
+   },
+   "stateful": false,
+   "execution_model": "independent_with_warmup",
+   "preferred_backend": "polars",
+   "cost": {
+    "runtime": 1,
+    "memory": 1
+   },
+   "causality": "causal",
+   "production_gates_nonpass": {
+    "BACKEND_PARITY_PASS": "NOT_RUN",
+    "EDGE_PASS": "NOT_RUN",
+    "SCALE_PASS": "NOT_RUN"
+   }
+  },
+  {
+   "canonical": "intra_realized_semivariance",
+   "terminal": true,
+   "production_admitted": true,
+   "mining_lane": "alpha_direct",
+   "authoring_tier": "daily",
+   "aliases": [],
+   "input_slots": [
+    {
+     "parameter": "close",
+     "semantic_kinds": [
+      "field"
+     ],
+     "roles": [
+      "data"
+     ],
+     "cardinality": "panel"
+    },
+    {
+     "parameter": "side",
+     "semantic_kinds": [
+      "scalar"
+     ],
+     "roles": [
+      "parameter"
+     ],
+     "cardinality": "scalar"
+    }
+   ],
+   "scalar_parameters": [
+    "side"
+   ],
+   "searchable_params": [
+    "side"
+   ],
+   "output": {
+    "kind": "series",
+    "unit": null,
+    "grain": "daily",
+    "cardinality": "panel"
+   },
+   "stateful": false,
+   "execution_model": "independent_with_warmup",
+   "preferred_backend": "polars",
+   "cost": {
+    "runtime": 1,
+    "memory": 1
+   },
+   "causality": "causal",
+   "production_gates_nonpass": {
+    "MATH_ORACLE_PASS": "NOT_PROVEN",
+    "BACKEND_PARITY_PASS": "NOT_RUN",
+    "EDGE_PASS": "NOT_RUN",
+    "SCALE_PASS": "NOT_RUN"
+   }
+  },
+  {
+   "canonical": "intra_realized_variance",
+   "terminal": true,
+   "production_admitted": true,
+   "mining_lane": "alpha_direct",
+   "authoring_tier": "daily",
+   "aliases": [],
+   "input_slots": [
+    {
+     "parameter": "close",
+     "semantic_kinds": [
+      "field"
+     ],
+     "roles": [
+      "data"
+     ],
+     "cardinality": "panel"
+    }
+   ],
+   "scalar_parameters": [],
+   "searchable_params": [],
+   "output": {
+    "kind": "series",
+    "unit": null,
+    "grain": "daily",
+    "cardinality": "panel"
+   },
+   "stateful": false,
+   "execution_model": "independent_with_warmup",
+   "preferred_backend": "polars",
+   "cost": {
+    "runtime": 1,
+    "memory": 1
+   },
+   "causality": "causal",
+   "production_gates_nonpass": {
+    "BACKEND_PARITY_PASS": "NOT_RUN",
+    "EDGE_PASS": "NOT_RUN",
+    "SCALE_PASS": "NOT_RUN"
+   }
+  },
+  {
+   "canonical": "intra_segment_return",
+   "terminal": true,
+   "production_admitted": true,
+   "mining_lane": "alpha_direct",
+   "authoring_tier": "daily",
+   "aliases": [],
+   "input_slots": [
+    {
+     "parameter": "close",
+     "semantic_kinds": [
+      "field"
+     ],
+     "roles": [
+      "data"
+     ],
+     "cardinality": "panel"
+    },
+    {
+     "parameter": "segment",
+     "semantic_kinds": [
+      "scalar"
+     ],
+     "roles": [
+      "parameter"
+     ],
+     "cardinality": "scalar"
+    },
+    {
+     "parameter": "session_tz",
+     "semantic_kinds": [
+      "scalar"
+     ],
+     "roles": [
+      "parameter"
+     ],
+     "cardinality": "scalar"
+    },
+    {
+     "parameter": "endpoint_policy",
+     "semantic_kinds": [
+      "scalar"
+     ],
+     "roles": [
+      "parameter"
+     ],
+     "cardinality": "scalar"
+    }
+   ],
+   "scalar_parameters": [
+    "segment",
+    "session_tz",
+    "endpoint_policy"
+   ],
+   "searchable_params": [
+    "segment",
+    "session_tz",
+    "endpoint_policy"
+   ],
+   "output": {
+    "kind": "series",
+    "unit": null,
+    "grain": "daily",
+    "cardinality": "panel"
+   },
+   "stateful": false,
+   "execution_model": "independent_with_warmup",
+   "preferred_backend": "polars",
+   "cost": {
+    "runtime": 1,
+    "memory": 1
+   },
+   "causality": "causal",
+   "production_gates_nonpass": {
+    "MATH_ORACLE_PASS": "NOT_PROVEN",
+    "BACKEND_PARITY_PASS": "NOT_RUN",
+    "EDGE_PASS": "NOT_RUN",
+    "SCALE_PASS": "NOT_RUN"
+   }
+  },
+  {
+   "canonical": "intra_segment_volume_share",
+   "terminal": true,
+   "production_admitted": true,
+   "mining_lane": "alpha_direct",
+   "authoring_tier": "daily",
+   "aliases": [],
+   "input_slots": [
+    {
+     "parameter": "volume",
+     "semantic_kinds": [
+      "field"
+     ],
+     "roles": [
+      "data"
+     ],
+     "cardinality": "panel"
+    },
+    {
+     "parameter": "segment",
+     "semantic_kinds": [
+      "field"
+     ],
+     "roles": [
+      "data"
+     ],
+     "cardinality": "panel"
+    },
+    {
+     "parameter": "session_tz",
+     "semantic_kinds": [
+      "field"
+     ],
+     "roles": [
+      "data"
+     ],
+     "cardinality": "panel"
+    }
+   ],
+   "scalar_parameters": [],
+   "searchable_params": [],
+   "output": {
+    "kind": "series",
+    "unit": null,
+    "grain": "daily",
+    "cardinality": "panel"
+   },
+   "stateful": false,
+   "execution_model": "independent_with_warmup",
+   "preferred_backend": "polars",
+   "cost": {
+    "runtime": 1,
+    "memory": 1
+   },
+   "causality": "causal",
+   "production_gates_nonpass": {
+    "BACKEND_PARITY_PASS": "NOT_RUN",
+    "EDGE_PASS": "NOT_RUN",
+    "SCALE_PASS": "NOT_RUN"
+   }
+  },
+  {
+   "canonical": "intra_signed_imbalance_proxy",
+   "terminal": true,
+   "production_admitted": true,
+   "mining_lane": "alpha_direct",
+   "authoring_tier": "daily",
+   "aliases": [],
+   "input_slots": [
+    {
+     "parameter": "close",
+     "semantic_kinds": [
+      "field"
+     ],
+     "roles": [
+      "data"
+     ],
+     "cardinality": "panel"
+    },
+    {
+     "parameter": "value",
+     "semantic_kinds": [
+      "field"
+     ],
+     "roles": [
+      "data"
+     ],
+     "cardinality": "panel"
+    }
+   ],
+   "scalar_parameters": [],
+   "searchable_params": [],
+   "output": {
+    "kind": "series",
+    "unit": null,
+    "grain": "daily",
+    "cardinality": "panel"
+   },
+   "stateful": false,
+   "execution_model": "independent_with_warmup",
+   "preferred_backend": "polars",
+   "cost": {
+    "runtime": 1,
+    "memory": 1
+   },
+   "causality": "causal",
+   "production_gates_nonpass": {
+    "BACKEND_PARITY_PASS": "NOT_RUN",
+    "EDGE_PASS": "NOT_RUN",
+    "SCALE_PASS": "NOT_RUN"
+   }
+  },
+  {
+   "canonical": "intra_vwap_above_ratio",
+   "terminal": true,
+   "production_admitted": true,
+   "mining_lane": "alpha_direct",
+   "authoring_tier": "daily",
+   "aliases": [],
+   "input_slots": [
+    {
+     "parameter": "close",
+     "semantic_kinds": [
+      "field"
+     ],
+     "roles": [
+      "data"
+     ],
+     "cardinality": "panel"
+    },
+    {
+     "parameter": "amount",
+     "semantic_kinds": [
+      "field"
+     ],
+     "roles": [
+      "data"
+     ],
+     "cardinality": "panel"
+    },
+    {
+     "parameter": "volume",
+     "semantic_kinds": [
+      "field"
+     ],
+     "roles": [
+      "data"
+     ],
+     "cardinality": "panel"
+    }
+   ],
+   "scalar_parameters": [],
+   "searchable_params": [],
+   "output": {
+    "kind": "series",
+    "unit": null,
+    "grain": "daily",
+    "cardinality": "panel"
+   },
+   "stateful": false,
+   "execution_model": "independent_with_warmup",
+   "preferred_backend": "polars",
+   "cost": {
+    "runtime": 1,
+    "memory": 1
+   },
+   "causality": "causal",
+   "production_gates_nonpass": {
+    "BACKEND_PARITY_PASS": "NOT_RUN",
+    "EDGE_PASS": "NOT_RUN",
+    "SCALE_PASS": "NOT_RUN"
+   }
+  },
+  {
+   "canonical": "inverse",
+   "terminal": true,
+   "production_admitted": true,
+   "mining_lane": "alpha_direct",
+   "authoring_tier": "daily",
+   "aliases": [],
+   "input_slots": [
+    {
+     "parameter": "x",
+     "semantic_kinds": [
+      "field"
+     ],
+     "roles": [
+      "data"
+     ],
+     "cardinality": "panel"
+    }
+   ],
+   "scalar_parameters": [],
+   "searchable_params": [],
+   "output": {
+    "kind": "series",
+    "unit": null,
+    "grain": "daily",
+    "cardinality": "panel"
+   },
+   "stateful": false,
+   "execution_model": "independent_with_warmup",
+   "preferred_backend": "polars",
+   "cost": {
+    "runtime": 0,
+    "memory": 0
+   },
+   "causality": "causal",
+   "production_gates_nonpass": {
+    "BACKEND_PARITY_PASS": "NOT_RUN",
+    "EDGE_PASS": "NOT_RUN",
+    "SCALE_PASS": "NOT_RUN"
+   }
+  },
+  {
+   "canonical": "log",
+   "terminal": true,
+   "production_admitted": true,
+   "mining_lane": "alpha_direct",
+   "authoring_tier": "daily",
+   "aliases": [],
+   "input_slots": [
+    {
+     "parameter": "x",
+     "semantic_kinds": [
+      "field"
+     ],
+     "roles": [
+      "data"
+     ],
+     "cardinality": "panel"
+    }
+   ],
+   "scalar_parameters": [],
+   "searchable_params": [],
+   "output": {
+    "kind": "series",
+    "unit": null,
+    "grain": "daily",
+    "cardinality": "panel"
+   },
+   "stateful": false,
+   "execution_model": "independent_with_warmup",
+   "preferred_backend": "polars",
+   "cost": {
+    "runtime": 1,
+    "memory": 1
+   },
+   "causality": "causal",
+   "production_gates_nonpass": {
+    "BACKEND_PARITY_PASS": "NOT_RUN",
+    "EDGE_PASS": "NOT_RUN",
+    "SCALE_PASS": "NOT_RUN"
+   }
+  },
+  {
+   "canonical": "log_abs",
+   "terminal": true,
+   "production_admitted": true,
+   "mining_lane": "alpha_direct",
+   "authoring_tier": "daily",
+   "aliases": [],
+   "input_slots": [
+    {
+     "parameter": "x",
+     "semantic_kinds": [
+      "field"
+     ],
+     "roles": [
+      "data"
+     ],
+     "cardinality": "panel"
+    }
+   ],
+   "scalar_parameters": [],
+   "searchable_params": [],
+   "output": {
+    "kind": "series",
+    "unit": null,
+    "grain": "daily",
+    "cardinality": "panel"
+   },
+   "stateful": false,
+   "execution_model": "independent_with_warmup",
+   "preferred_backend": "polars",
+   "cost": {
+    "runtime": 1,
+    "memory": 1
+   },
+   "causality": "causal",
+   "production_gates_nonpass": {
+    "BACKEND_PARITY_PASS": "NOT_RUN",
+    "EDGE_PASS": "NOT_RUN",
+    "SCALE_PASS": "NOT_RUN"
+   }
+  },
+  {
+   "canonical": "maximum",
+   "terminal": true,
+   "production_admitted": true,
+   "mining_lane": "alpha_direct",
+   "authoring_tier": "daily",
+   "aliases": [],
+   "input_slots": [
+    {
+     "parameter": "x",
+     "semantic_kinds": [
+      "field"
+     ],
+     "roles": [
+      "data"
+     ],
+     "cardinality": "panel"
+    },
+    {
+     "parameter": "y",
+     "semantic_kinds": [
+      "field"
+     ],
+     "roles": [
+      "data"
+     ],
+     "cardinality": "panel"
+    }
+   ],
+   "scalar_parameters": [],
+   "searchable_params": [],
+   "output": {
+    "kind": "series",
+    "unit": null,
+    "grain": "daily",
+    "cardinality": "panel"
+   },
+   "stateful": false,
+   "execution_model": "independent_with_warmup",
+   "preferred_backend": "polars",
+   "cost": {
+    "runtime": 1,
+    "memory": 1
+   },
+   "causality": "causal",
+   "production_gates_nonpass": {
+    "BACKEND_PARITY_PASS": "NOT_RUN",
+    "EDGE_PASS": "NOT_RUN",
+    "SCALE_PASS": "NOT_RUN"
+   }
+  },
+  {
+   "canonical": "minimum",
+   "terminal": true,
+   "production_admitted": true,
+   "mining_lane": "alpha_direct",
+   "authoring_tier": "daily",
+   "aliases": [],
+   "input_slots": [
+    {
+     "parameter": "x",
+     "semantic_kinds": [
+      "field"
+     ],
+     "roles": [
+      "data"
+     ],
+     "cardinality": "panel"
+    },
+    {
+     "parameter": "y",
+     "semantic_kinds": [
+      "field"
+     ],
+     "roles": [
+      "data"
+     ],
+     "cardinality": "panel"
+    }
+   ],
+   "scalar_parameters": [],
+   "searchable_params": [],
+   "output": {
+    "kind": "series",
+    "unit": null,
+    "grain": "daily",
+    "cardinality": "panel"
+   },
+   "stateful": false,
+   "execution_model": "independent_with_warmup",
+   "preferred_backend": "polars",
+   "cost": {
+    "runtime": 1,
+    "memory": 1
+   },
+   "causality": "causal",
+   "production_gates_nonpass": {
+    "BACKEND_PARITY_PASS": "NOT_RUN",
+    "EDGE_PASS": "NOT_RUN",
+    "SCALE_PASS": "NOT_RUN"
+   }
+  },
+  {
+   "canonical": "multiply",
+   "terminal": true,
+   "production_admitted": true,
+   "mining_lane": "alpha_direct",
+   "authoring_tier": "daily",
+   "aliases": [],
+   "input_slots": [
+    {
+     "parameter": "x",
+     "semantic_kinds": [
+      "field"
+     ],
+     "roles": [
+      "data"
+     ],
+     "cardinality": "panel"
+    },
+    {
+     "parameter": "y",
+     "semantic_kinds": [
+      "field"
+     ],
+     "roles": [
+      "data"
+     ],
+     "cardinality": "panel"
+    }
+   ],
+   "scalar_parameters": [],
+   "searchable_params": [],
+   "output": {
+    "kind": "series",
+    "unit": null,
+    "grain": "daily",
+    "cardinality": "panel"
+   },
+   "stateful": false,
+   "execution_model": "independent_with_warmup",
+   "preferred_backend": "polars",
+   "cost": {
+    "runtime": 0,
+    "memory": 0
+   },
+   "causality": "causal",
+   "production_gates_nonpass": {
+    "BACKEND_PARITY_PASS": "NOT_RUN",
+    "EDGE_PASS": "NOT_RUN",
+    "SCALE_PASS": "NOT_RUN"
+   }
+  },
+  {
+   "canonical": "neg",
+   "terminal": true,
+   "production_admitted": true,
+   "mining_lane": "alpha_direct",
+   "authoring_tier": "daily",
+   "aliases": [],
+   "input_slots": [
+    {
+     "parameter": "x",
+     "semantic_kinds": [
+      "field"
+     ],
+     "roles": [
+      "data"
+     ],
+     "cardinality": "panel"
+    }
+   ],
+   "scalar_parameters": [],
+   "searchable_params": [],
+   "output": {
+    "kind": "series",
+    "unit": null,
+    "grain": "daily",
+    "cardinality": "panel"
+   },
+   "stateful": false,
+   "execution_model": "independent_with_warmup",
+   "preferred_backend": "polars",
+   "cost": {
+    "runtime": 1,
+    "memory": 1
+   },
+   "causality": "causal",
+   "production_gates_nonpass": {
+    "BACKEND_PARITY_PASS": "NOT_RUN",
+    "EDGE_PASS": "NOT_RUN",
+    "SCALE_PASS": "NOT_RUN"
+   }
+  },
+  {
+   "canonical": "normalize",
+   "terminal": true,
+   "production_admitted": true,
+   "mining_lane": "alpha_direct",
+   "authoring_tier": "daily",
+   "aliases": [],
+   "input_slots": [
+    {
+     "parameter": "x",
+     "semantic_kinds": [
+      "field"
+     ],
+     "roles": [
+      "data"
+     ],
+     "cardinality": "panel"
+    }
+   ],
+   "scalar_parameters": [],
+   "searchable_params": [],
+   "output": {
+    "kind": "series",
+    "unit": null,
+    "grain": "daily",
+    "cardinality": "panel"
+   },
+   "stateful": false,
+   "execution_model": "independent_with_warmup",
+   "preferred_backend": "polars",
+   "cost": {
+    "runtime": 1,
+    "memory": 1
+   },
+   "causality": "causal",
+   "production_gates_nonpass": {
+    "BACKEND_PARITY_PASS": "NOT_RUN",
+    "EDGE_PASS": "NOT_RUN",
+    "SCALE_PASS": "NOT_RUN"
+   }
+  },
+  {
+   "canonical": "rank",
+   "terminal": true,
+   "production_admitted": true,
+   "mining_lane": "alpha_direct",
+   "authoring_tier": "daily",
+   "aliases": [],
+   "input_slots": [
+    {
+     "parameter": "x",
+     "semantic_kinds": [
+      "field"
+     ],
+     "roles": [
+      "data"
+     ],
+     "cardinality": "panel"
+    }
+   ],
+   "scalar_parameters": [],
+   "searchable_params": [],
+   "output": {
+    "kind": "series",
+    "unit": null,
+    "grain": "daily",
+    "cardinality": "panel"
+   },
+   "stateful": false,
+   "execution_model": "independent_with_warmup",
+   "preferred_backend": "polars",
+   "cost": {
+    "runtime": 1,
+    "memory": 1
+   },
+   "causality": "causal",
+   "production_gates_nonpass": {
+    "BACKEND_PARITY_PASS": "NOT_RUN",
+    "EDGE_PASS": "NOT_RUN",
+    "SCALE_PASS": "NOT_RUN"
+   }
+  },
+  {
+   "canonical": "sign",
+   "terminal": true,
+   "production_admitted": true,
+   "mining_lane": "alpha_direct",
+   "authoring_tier": "daily",
+   "aliases": [],
+   "input_slots": [
+    {
+     "parameter": "x",
+     "semantic_kinds": [
+      "field"
+     ],
+     "roles": [
+      "data"
+     ],
+     "cardinality": "panel"
+    }
+   ],
+   "scalar_parameters": [],
+   "searchable_params": [],
+   "output": {
+    "kind": "series",
+    "unit": null,
+    "grain": "daily",
+    "cardinality": "panel"
+   },
+   "stateful": false,
+   "execution_model": "independent_with_warmup",
+   "preferred_backend": "polars",
+   "cost": {
+    "runtime": 1,
+    "memory": 1
+   },
+   "causality": "causal",
+   "production_gates_nonpass": {
+    "BACKEND_PARITY_PASS": "NOT_RUN",
+    "EDGE_PASS": "NOT_RUN",
+    "SCALE_PASS": "NOT_RUN"
+   }
+  },
+  {
+   "canonical": "signed_sqrt",
+   "terminal": true,
+   "production_admitted": true,
+   "mining_lane": "alpha_direct",
+   "authoring_tier": "daily",
+   "aliases": [],
+   "input_slots": [
+    {
+     "parameter": "x",
+     "semantic_kinds": [
+      "field"
+     ],
+     "roles": [
+      "data"
+     ],
+     "cardinality": "panel"
+    }
+   ],
+   "scalar_parameters": [],
+   "searchable_params": [],
+   "output": {
+    "kind": "series",
+    "unit": null,
+    "grain": "daily",
+    "cardinality": "panel"
+   },
+   "stateful": false,
+   "execution_model": "independent_with_warmup",
+   "preferred_backend": "polars",
+   "cost": {
+    "runtime": 0,
+    "memory": 0
+   },
+   "causality": "causal",
+   "production_gates_nonpass": {
+    "BACKEND_PARITY_PASS": "NOT_RUN",
+    "EDGE_PASS": "NOT_RUN",
+    "SCALE_PASS": "NOT_RUN"
+   }
+  },
+  {
+   "canonical": "sqrt",
+   "terminal": true,
+   "production_admitted": true,
+   "mining_lane": "alpha_direct",
+   "authoring_tier": "daily",
+   "aliases": [],
+   "input_slots": [
+    {
+     "parameter": "x",
+     "semantic_kinds": [
+      "field"
+     ],
+     "roles": [
+      "data"
+     ],
+     "cardinality": "panel"
+    }
+   ],
+   "scalar_parameters": [],
+   "searchable_params": [],
+   "output": {
+    "kind": "series",
+    "unit": null,
+    "grain": "daily",
+    "cardinality": "panel"
+   },
+   "stateful": false,
+   "execution_model": "independent_with_warmup",
+   "preferred_backend": "polars",
+   "cost": {
+    "runtime": 1,
+    "memory": 1
+   },
+   "causality": "causal",
+   "production_gates_nonpass": {
+    "BACKEND_PARITY_PASS": "NOT_RUN",
+    "EDGE_PASS": "NOT_RUN",
+    "SCALE_PASS": "NOT_RUN"
+   }
+  },
+  {
+   "canonical": "subtract",
+   "terminal": true,
+   "production_admitted": true,
+   "mining_lane": "alpha_direct",
+   "authoring_tier": "daily",
+   "aliases": [],
+   "input_slots": [
+    {
+     "parameter": "x",
+     "semantic_kinds": [
+      "field"
+     ],
+     "roles": [
+      "data"
+     ],
+     "cardinality": "panel"
+    },
+    {
+     "parameter": "y",
+     "semantic_kinds": [
+      "field"
+     ],
+     "roles": [
+      "data"
+     ],
+     "cardinality": "panel"
+    }
+   ],
+   "scalar_parameters": [],
+   "searchable_params": [],
+   "output": {
+    "kind": "series",
+    "unit": null,
+    "grain": "daily",
+    "cardinality": "panel"
+   },
+   "stateful": false,
+   "execution_model": "independent_with_warmup",
+   "preferred_backend": "polars",
+   "cost": {
+    "runtime": 0,
+    "memory": 0
+   },
+   "causality": "causal",
+   "production_gates_nonpass": {
+    "BACKEND_PARITY_PASS": "NOT_RUN",
+    "EDGE_PASS": "NOT_RUN",
+    "SCALE_PASS": "NOT_RUN"
+   }
+  },
+  {
+   "canonical": "tanh",
+   "terminal": true,
+   "production_admitted": true,
+   "mining_lane": "alpha_direct",
+   "authoring_tier": "daily",
+   "aliases": [],
+   "input_slots": [
+    {
+     "parameter": "x",
+     "semantic_kinds": [
+      "field"
+     ],
+     "roles": [
+      "data"
+     ],
+     "cardinality": "panel"
+    }
+   ],
+   "scalar_parameters": [],
+   "searchable_params": [],
+   "output": {
+    "kind": "series",
+    "unit": null,
+    "grain": "daily",
+    "cardinality": "panel"
+   },
+   "stateful": false,
+   "execution_model": "independent_with_warmup",
+   "preferred_backend": "polars",
+   "cost": {
+    "runtime": 1,
+    "memory": 1
+   },
+   "causality": "causal",
+   "production_gates_nonpass": {
+    "BACKEND_PARITY_PASS": "NOT_RUN",
+    "EDGE_PASS": "NOT_RUN",
+    "SCALE_PASS": "NOT_RUN"
+   }
+  },
+  {
+   "canonical": "ts_autocorr",
+   "terminal": true,
+   "production_admitted": true,
+   "mining_lane": "alpha_direct",
+   "authoring_tier": "daily",
+   "aliases": [],
+   "input_slots": [
+    {
+     "parameter": "x",
+     "semantic_kinds": [
+      "field"
+     ],
+     "roles": [
+      "data"
+     ],
+     "cardinality": "panel"
+    },
+    {
+     "parameter": "window",
+     "semantic_kinds": [
+      "scalar"
+     ],
+     "roles": [
+      "parameter"
+     ],
+     "cardinality": "scalar"
+    },
+    {
+     "parameter": "lag",
+     "semantic_kinds": [
+      "scalar"
+     ],
+     "roles": [
+      "parameter"
+     ],
+     "cardinality": "scalar"
+    },
+    {
+     "parameter": "min_periods",
+     "semantic_kinds": [
+      "scalar"
+     ],
+     "roles": [
+      "parameter"
+     ],
+     "cardinality": "scalar"
+    }
+   ],
+   "scalar_parameters": [
+    "window",
+    "lag",
+    "min_periods"
+   ],
+   "searchable_params": [
+    "lag",
+    "window"
+   ],
+   "output": {
+    "kind": "series",
+    "unit": null,
+    "grain": "daily",
+    "cardinality": "panel"
+   },
+   "stateful": false,
+   "execution_model": "independent_with_warmup",
+   "preferred_backend": "polars",
+   "cost": {
+    "runtime": 1,
+    "memory": 1
+   },
+   "causality": "causal",
+   "production_gates_nonpass": {
+    "MATH_ORACLE_PASS": "NOT_PROVEN",
+    "BACKEND_PARITY_PASS": "NOT_RUN",
+    "EDGE_PASS": "NOT_RUN",
+    "SCALE_PASS": "NOT_RUN"
+   }
+  },
+  {
+   "canonical": "ts_beta",
+   "terminal": true,
+   "production_admitted": true,
+   "mining_lane": "alpha_direct",
+   "authoring_tier": "daily",
+   "aliases": [],
+   "input_slots": [
+    {
+     "parameter": "y",
+     "semantic_kinds": [
+      "field"
+     ],
+     "roles": [
+      "data"
+     ],
+     "cardinality": "panel"
+    },
+    {
+     "parameter": "x",
+     "semantic_kinds": [
+      "field"
+     ],
+     "roles": [
+      "data"
+     ],
+     "cardinality": "panel"
+    },
+    {
+     "parameter": "window",
+     "semantic_kinds": [
+      "scalar"
+     ],
+     "roles": [
+      "parameter"
+     ],
+     "cardinality": "scalar"
+    },
+    {
+     "parameter": "min_periods",
+     "semantic_kinds": [
+      "scalar"
+     ],
+     "roles": [
+      "parameter"
+     ],
+     "cardinality": "scalar"
+    }
+   ],
+   "scalar_parameters": [
+    "window",
+    "min_periods"
+   ],
+   "searchable_params": [
+    "window"
+   ],
+   "output": {
+    "kind": "series",
+    "unit": null,
+    "grain": "daily",
+    "cardinality": "panel"
+   },
+   "stateful": false,
+   "execution_model": "independent_with_warmup",
+   "preferred_backend": "polars",
+   "cost": {
+    "runtime": 1,
+    "memory": 1
+   },
+   "causality": "causal",
+   "production_gates_nonpass": {
+    "MATH_ORACLE_PASS": "NOT_PROVEN",
+    "BACKEND_PARITY_PASS": "NOT_RUN",
+    "EDGE_PASS": "NOT_RUN",
+    "SCALE_PASS": "NOT_RUN"
+   }
+  },
+  {
+   "canonical": "ts_corr",
+   "terminal": true,
+   "production_admitted": true,
+   "mining_lane": "alpha_direct",
+   "authoring_tier": "daily",
+   "aliases": [],
+   "input_slots": [
+    {
+     "parameter": "x",
+     "semantic_kinds": [
+      "field"
+     ],
+     "roles": [
+      "data"
+     ],
+     "cardinality": "panel"
+    },
+    {
+     "parameter": "y",
+     "semantic_kinds": [
+      "field"
+     ],
+     "roles": [
+      "data"
+     ],
+     "cardinality": "panel"
+    },
+    {
+     "parameter": "window",
+     "semantic_kinds": [
+      "scalar"
+     ],
+     "roles": [
+      "parameter"
+     ],
+     "cardinality": "scalar"
+    },
+    {
+     "parameter": "min_periods",
+     "semantic_kinds": [
+      "scalar"
+     ],
+     "roles": [
+      "parameter"
+     ],
+     "cardinality": "scalar"
+    }
+   ],
+   "scalar_parameters": [
+    "window",
+    "min_periods"
+   ],
+   "searchable_params": [
+    "window"
+   ],
+   "output": {
+    "kind": "series",
+    "unit": null,
+    "grain": "daily",
+    "cardinality": "panel"
+   },
+   "stateful": false,
+   "execution_model": "independent_with_warmup",
+   "preferred_backend": "polars",
+   "cost": {
+    "runtime": 1,
+    "memory": 1
+   },
+   "causality": "causal",
+   "production_gates_nonpass": {
+    "MATH_ORACLE_PASS": "NOT_PROVEN",
+    "BACKEND_PARITY_PASS": "NOT_RUN",
+    "EDGE_PASS": "NOT_RUN",
+    "SCALE_PASS": "NOT_RUN"
+   }
+  },
+  {
+   "canonical": "ts_cov",
+   "terminal": true,
+   "production_admitted": true,
+   "mining_lane": "alpha_direct",
+   "authoring_tier": "daily",
+   "aliases": [],
+   "input_slots": [
+    {
+     "parameter": "x",
+     "semantic_kinds": [
+      "field"
+     ],
+     "roles": [
+      "data"
+     ],
+     "cardinality": "panel"
+    },
+    {
+     "parameter": "y",
+     "semantic_kinds": [
+      "field"
+     ],
+     "roles": [
+      "data"
+     ],
+     "cardinality": "panel"
+    },
+    {
+     "parameter": "window",
+     "semantic_kinds": [
+      "scalar"
+     ],
+     "roles": [
+      "parameter"
+     ],
+     "cardinality": "scalar"
+    },
+    {
+     "parameter": "ddof",
+     "semantic_kinds": [
+      "scalar"
+     ],
+     "roles": [
+      "parameter"
+     ],
+     "cardinality": "scalar"
+    },
+    {
+     "parameter": "min_periods",
+     "semantic_kinds": [
+      "scalar"
+     ],
+     "roles": [
+      "parameter"
+     ],
+     "cardinality": "scalar"
+    }
+   ],
+   "scalar_parameters": [
+    "window",
+    "ddof",
+    "min_periods"
+   ],
+   "searchable_params": [
+    "ddof",
+    "window"
+   ],
+   "output": {
+    "kind": "series",
+    "unit": null,
+    "grain": "daily",
+    "cardinality": "panel"
+   },
+   "stateful": false,
+   "execution_model": "independent_with_warmup",
+   "preferred_backend": "polars",
+   "cost": {
+    "runtime": 1,
+    "memory": 1
+   },
+   "causality": "causal",
+   "production_gates_nonpass": {
+    "MATH_ORACLE_PASS": "NOT_PROVEN",
+    "BACKEND_PARITY_PASS": "NOT_RUN",
+    "EDGE_PASS": "NOT_RUN",
+    "SCALE_PASS": "NOT_RUN"
+   }
+  },
+  {
+   "canonical": "ts_delay",
+   "terminal": true,
+   "production_admitted": true,
+   "mining_lane": "alpha_direct",
+   "authoring_tier": "daily",
+   "aliases": [],
+   "input_slots": [
+    {
+     "parameter": "x",
+     "semantic_kinds": [
+      "field"
+     ],
+     "roles": [
+      "data"
+     ],
+     "cardinality": "panel"
+    },
+    {
+     "parameter": "n",
+     "semantic_kinds": [
+      "scalar"
+     ],
+     "roles": [
+      "parameter"
+     ],
+     "cardinality": "scalar"
+    }
+   ],
+   "scalar_parameters": [
+    "n"
+   ],
+   "searchable_params": [
+    "n"
+   ],
+   "output": {
+    "kind": "series",
+    "unit": null,
+    "grain": "daily",
+    "cardinality": "panel"
+   },
+   "stateful": false,
+   "execution_model": "independent_with_warmup",
+   "preferred_backend": "polars",
+   "cost": {
+    "runtime": 1,
+    "memory": 1
+   },
+   "causality": "causal",
+   "production_gates_nonpass": {
+    "MATH_ORACLE_PASS": "NOT_PROVEN",
+    "BACKEND_PARITY_PASS": "NOT_RUN",
+    "EDGE_PASS": "NOT_RUN",
+    "SCALE_PASS": "NOT_RUN"
+   }
+  },
+  {
+   "canonical": "ts_delta",
+   "terminal": true,
+   "production_admitted": true,
+   "mining_lane": "alpha_direct",
+   "authoring_tier": "daily",
+   "aliases": [],
+   "input_slots": [
+    {
+     "parameter": "x",
+     "semantic_kinds": [
+      "field"
+     ],
+     "roles": [
+      "data"
+     ],
+     "cardinality": "panel"
+    },
+    {
+     "parameter": "n",
+     "semantic_kinds": [
+      "scalar"
+     ],
+     "roles": [
+      "parameter"
+     ],
+     "cardinality": "scalar"
+    }
+   ],
+   "scalar_parameters": [
+    "n"
+   ],
+   "searchable_params": [
+    "n"
+   ],
+   "output": {
+    "kind": "series",
+    "unit": null,
+    "grain": "daily",
+    "cardinality": "panel"
+   },
+   "stateful": false,
+   "execution_model": "independent_with_warmup",
+   "preferred_backend": "polars",
+   "cost": {
+    "runtime": 1,
+    "memory": 1
+   },
+   "causality": "causal",
+   "production_gates_nonpass": {
+    "MATH_ORACLE_PASS": "NOT_PROVEN",
+    "BACKEND_PARITY_PASS": "NOT_RUN",
+    "EDGE_PASS": "NOT_RUN",
+    "SCALE_PASS": "NOT_RUN"
+   }
+  },
+  {
+   "canonical": "ts_log_return",
+   "terminal": true,
+   "production_admitted": true,
+   "mining_lane": "alpha_direct",
+   "authoring_tier": "daily",
+   "aliases": [],
+   "input_slots": [
+    {
+     "parameter": "x",
+     "semantic_kinds": [
+      "field"
+     ],
+     "roles": [
+      "data"
+     ],
+     "cardinality": "panel"
+    },
+    {
+     "parameter": "d",
+     "semantic_kinds": [
+      "scalar"
+     ],
+     "roles": [
+      "parameter"
+     ],
+     "cardinality": "scalar"
+    }
+   ],
+   "scalar_parameters": [
+    "d"
+   ],
+   "searchable_params": [
+    "d"
+   ],
+   "output": {
+    "kind": "series",
+    "unit": null,
+    "grain": "daily",
+    "cardinality": "panel"
+   },
+   "stateful": false,
+   "execution_model": "independent_with_warmup",
+   "preferred_backend": "polars",
+   "cost": {
+    "runtime": 1,
+    "memory": 1
+   },
+   "causality": "causal",
+   "production_gates_nonpass": {
+    "MATH_ORACLE_PASS": "NOT_PROVEN",
+    "BACKEND_PARITY_PASS": "NOT_RUN",
+    "EDGE_PASS": "NOT_RUN",
+    "SCALE_PASS": "NOT_RUN"
+   }
+  },
+  {
+   "canonical": "ts_max",
+   "terminal": true,
+   "production_admitted": true,
+   "mining_lane": "alpha_direct",
+   "authoring_tier": "daily",
+   "aliases": [],
+   "input_slots": [
+    {
+     "parameter": "x",
+     "semantic_kinds": [
+      "field"
+     ],
+     "roles": [
+      "data"
+     ],
+     "cardinality": "panel"
+    },
+    {
+     "parameter": "window",
+     "semantic_kinds": [
+      "scalar"
+     ],
+     "roles": [
+      "parameter"
+     ],
+     "cardinality": "scalar"
+    }
+   ],
+   "scalar_parameters": [
+    "window"
+   ],
+   "searchable_params": [
+    "window"
+   ],
+   "output": {
+    "kind": "series",
+    "unit": null,
+    "grain": "daily",
+    "cardinality": "panel"
+   },
+   "stateful": false,
+   "execution_model": "independent_with_warmup",
+   "preferred_backend": "polars",
+   "cost": {
+    "runtime": 1,
+    "memory": 1
+   },
+   "causality": "causal",
+   "production_gates_nonpass": {
+    "MATH_ORACLE_PASS": "NOT_PROVEN",
+    "BACKEND_PARITY_PASS": "NOT_RUN",
+    "EDGE_PASS": "NOT_RUN",
+    "SCALE_PASS": "NOT_RUN"
+   }
+  },
+  {
+   "canonical": "ts_mean",
+   "terminal": true,
+   "production_admitted": true,
+   "mining_lane": "alpha_direct",
+   "authoring_tier": "daily",
+   "aliases": [],
+   "input_slots": [
+    {
+     "parameter": "x",
+     "semantic_kinds": [
+      "field"
+     ],
+     "roles": [
+      "data"
+     ],
+     "cardinality": "panel"
+    },
+    {
+     "parameter": "window",
+     "semantic_kinds": [
+      "scalar"
+     ],
+     "roles": [
+      "parameter"
+     ],
+     "cardinality": "scalar"
+    },
+    {
+     "parameter": "min_periods",
+     "semantic_kinds": [
+      "scalar"
+     ],
+     "roles": [
+      "parameter"
+     ],
+     "cardinality": "scalar"
+    }
+   ],
+   "scalar_parameters": [
+    "window",
+    "min_periods"
+   ],
+   "searchable_params": [
+    "window"
+   ],
+   "output": {
+    "kind": "series",
+    "unit": null,
+    "grain": "daily",
+    "cardinality": "panel"
+   },
+   "stateful": false,
+   "execution_model": "independent_with_warmup",
+   "preferred_backend": "polars",
+   "cost": {
+    "runtime": 1,
+    "memory": 1
+   },
+   "causality": "causal",
+   "production_gates_nonpass": {
+    "MATH_ORACLE_PASS": "NOT_PROVEN",
+    "BACKEND_PARITY_PASS": "NOT_RUN",
+    "EDGE_PASS": "NOT_RUN",
+    "SCALE_PASS": "NOT_RUN"
+   }
+  },
+  {
+   "canonical": "ts_median",
+   "terminal": true,
+   "production_admitted": true,
+   "mining_lane": "alpha_direct",
+   "authoring_tier": "daily",
+   "aliases": [],
+   "input_slots": [
+    {
+     "parameter": "x",
+     "semantic_kinds": [
+      "field"
+     ],
+     "roles": [
+      "data"
+     ],
+     "cardinality": "panel"
+    },
+    {
+     "parameter": "window",
+     "semantic_kinds": [
+      "scalar"
+     ],
+     "roles": [
+      "parameter"
+     ],
+     "cardinality": "scalar"
+    }
+   ],
+   "scalar_parameters": [
+    "window"
+   ],
+   "searchable_params": [
+    "window"
+   ],
+   "output": {
+    "kind": "series",
+    "unit": null,
+    "grain": "daily",
+    "cardinality": "panel"
+   },
+   "stateful": false,
+   "execution_model": "independent_with_warmup",
+   "preferred_backend": "polars",
+   "cost": {
+    "runtime": 1,
+    "memory": 1
+   },
+   "causality": "causal",
+   "production_gates_nonpass": {
+    "MATH_ORACLE_PASS": "NOT_PROVEN",
+    "BACKEND_PARITY_PASS": "NOT_RUN",
+    "EDGE_PASS": "NOT_RUN",
+    "SCALE_PASS": "NOT_RUN"
+   }
+  },
+  {
+   "canonical": "ts_min",
+   "terminal": true,
+   "production_admitted": true,
+   "mining_lane": "alpha_direct",
+   "authoring_tier": "daily",
+   "aliases": [],
+   "input_slots": [
+    {
+     "parameter": "x",
+     "semantic_kinds": [
+      "field"
+     ],
+     "roles": [
+      "data"
+     ],
+     "cardinality": "panel"
+    },
+    {
+     "parameter": "window",
+     "semantic_kinds": [
+      "scalar"
+     ],
+     "roles": [
+      "parameter"
+     ],
+     "cardinality": "scalar"
+    }
+   ],
+   "scalar_parameters": [
+    "window"
+   ],
+   "searchable_params": [
+    "window"
+   ],
+   "output": {
+    "kind": "series",
+    "unit": null,
+    "grain": "daily",
+    "cardinality": "panel"
+   },
+   "stateful": false,
+   "execution_model": "independent_with_warmup",
+   "preferred_backend": "polars",
+   "cost": {
+    "runtime": 1,
+    "memory": 1
+   },
+   "causality": "causal",
+   "production_gates_nonpass": {
+    "MATH_ORACLE_PASS": "NOT_PROVEN",
+    "BACKEND_PARITY_PASS": "NOT_RUN",
+    "EDGE_PASS": "NOT_RUN",
+    "SCALE_PASS": "NOT_RUN"
+   }
+  },
+  {
+   "canonical": "ts_pct",
+   "terminal": true,
+   "production_admitted": true,
+   "mining_lane": "alpha_direct",
+   "authoring_tier": "daily",
+   "aliases": [],
+   "input_slots": [
+    {
+     "parameter": "x",
+     "semantic_kinds": [
+      "field"
+     ],
+     "roles": [
+      "data"
+     ],
+     "cardinality": "panel"
+    },
+    {
+     "parameter": "d",
+     "semantic_kinds": [
+      "scalar"
+     ],
+     "roles": [
+      "parameter"
+     ],
+     "cardinality": "scalar"
+    }
+   ],
+   "scalar_parameters": [
+    "d"
+   ],
+   "searchable_params": [
+    "d"
+   ],
+   "output": {
+    "kind": "series",
+    "unit": null,
+    "grain": "daily",
+    "cardinality": "panel"
+   },
+   "stateful": false,
+   "execution_model": "independent_with_warmup",
+   "preferred_backend": "polars",
+   "cost": {
+    "runtime": 1,
+    "memory": 1
+   },
+   "causality": "causal",
+   "production_gates_nonpass": {
+    "MATH_ORACLE_PASS": "NOT_PROVEN",
+    "BACKEND_PARITY_PASS": "NOT_RUN",
+    "EDGE_PASS": "NOT_RUN",
+    "SCALE_PASS": "NOT_RUN"
+   }
+  },
+  {
+   "canonical": "ts_rank",
+   "terminal": true,
+   "production_admitted": true,
+   "mining_lane": "alpha_direct",
+   "authoring_tier": "daily",
+   "aliases": [],
+   "input_slots": [
+    {
+     "parameter": "x",
+     "semantic_kinds": [
+      "field"
+     ],
+     "roles": [
+      "data"
+     ],
+     "cardinality": "panel"
+    },
+    {
+     "parameter": "window",
+     "semantic_kinds": [
+      "scalar"
+     ],
+     "roles": [
+      "parameter"
+     ],
+     "cardinality": "scalar"
+    },
+    {
+     "parameter": "min_periods",
+     "semantic_kinds": [
+      "scalar"
+     ],
+     "roles": [
+      "parameter"
+     ],
+     "cardinality": "scalar"
+    }
+   ],
+   "scalar_parameters": [
+    "window",
+    "min_periods"
+   ],
+   "searchable_params": [
+    "window"
+   ],
+   "output": {
+    "kind": "series",
+    "unit": null,
+    "grain": "daily",
+    "cardinality": "panel"
+   },
+   "stateful": false,
+   "execution_model": "independent_with_warmup",
+   "preferred_backend": "polars",
+   "cost": {
+    "runtime": 1,
+    "memory": 1
+   },
+   "causality": "causal",
+   "production_gates_nonpass": {
+    "MATH_ORACLE_PASS": "NOT_PROVEN",
+    "BACKEND_PARITY_PASS": "NOT_RUN",
+    "EDGE_PASS": "NOT_RUN",
+    "SCALE_PASS": "NOT_RUN"
+   }
+  },
+  {
+   "canonical": "ts_sharpe",
+   "terminal": true,
+   "production_admitted": true,
+   "mining_lane": "alpha_direct",
+   "authoring_tier": "daily",
+   "aliases": [],
+   "input_slots": [
+    {
+     "parameter": "x",
+     "semantic_kinds": [
+      "field"
+     ],
+     "roles": [
+      "data"
+     ],
+     "cardinality": "panel"
+    },
+    {
+     "parameter": "window",
+     "semantic_kinds": [
+      "scalar"
+     ],
+     "roles": [
+      "parameter"
+     ],
+     "cardinality": "scalar"
+    },
+    {
+     "parameter": "ann_factor",
+     "semantic_kinds": [
+      "scalar"
+     ],
+     "roles": [
+      "parameter"
+     ],
+     "cardinality": "scalar"
+    }
+   ],
+   "scalar_parameters": [
+    "window",
+    "ann_factor"
+   ],
+   "searchable_params": [
+    "window"
+   ],
+   "output": {
+    "kind": "series",
+    "unit": null,
+    "grain": "daily",
+    "cardinality": "panel"
+   },
+   "stateful": false,
+   "execution_model": "independent_with_warmup",
+   "preferred_backend": "polars",
+   "cost": {
+    "runtime": 1,
+    "memory": 1
+   },
+   "causality": "causal",
+   "production_gates_nonpass": {
+    "MATH_ORACLE_PASS": "NOT_PROVEN",
+    "BACKEND_PARITY_PASS": "NOT_RUN",
+    "EDGE_PASS": "NOT_RUN",
+    "SCALE_PASS": "NOT_RUN"
+   }
+  },
+  {
+   "canonical": "ts_std",
+   "terminal": true,
+   "production_admitted": true,
+   "mining_lane": "alpha_direct",
+   "authoring_tier": "daily",
+   "aliases": [],
+   "input_slots": [
+    {
+     "parameter": "x",
+     "semantic_kinds": [
+      "field"
+     ],
+     "roles": [
+      "data"
+     ],
+     "cardinality": "panel"
+    },
+    {
+     "parameter": "window",
+     "semantic_kinds": [
+      "scalar"
+     ],
+     "roles": [
+      "parameter"
+     ],
+     "cardinality": "scalar"
+    }
+   ],
+   "scalar_parameters": [
+    "window"
+   ],
+   "searchable_params": [
+    "window"
+   ],
+   "output": {
+    "kind": "series",
+    "unit": null,
+    "grain": "daily",
+    "cardinality": "panel"
+   },
+   "stateful": false,
+   "execution_model": "independent_with_warmup",
+   "preferred_backend": "polars",
+   "cost": {
+    "runtime": 1,
+    "memory": 1
+   },
+   "causality": "causal",
+   "production_gates_nonpass": {
+    "MATH_ORACLE_PASS": "NOT_PROVEN",
+    "BACKEND_PARITY_PASS": "NOT_RUN",
+    "EDGE_PASS": "NOT_RUN",
+    "SCALE_PASS": "NOT_RUN"
+   }
+  },
+  {
+   "canonical": "ts_sum",
+   "terminal": true,
+   "production_admitted": true,
+   "mining_lane": "alpha_direct",
+   "authoring_tier": "daily",
+   "aliases": [],
+   "input_slots": [
+    {
+     "parameter": "x",
+     "semantic_kinds": [
+      "field"
+     ],
+     "roles": [
+      "data"
+     ],
+     "cardinality": "panel"
+    },
+    {
+     "parameter": "window",
+     "semantic_kinds": [
+      "scalar"
+     ],
+     "roles": [
+      "parameter"
+     ],
+     "cardinality": "scalar"
+    }
+   ],
+   "scalar_parameters": [
+    "window"
+   ],
+   "searchable_params": [
+    "window"
+   ],
+   "output": {
+    "kind": "series",
+    "unit": null,
+    "grain": "daily",
+    "cardinality": "panel"
+   },
+   "stateful": false,
+   "execution_model": "independent_with_warmup",
+   "preferred_backend": "polars",
+   "cost": {
+    "runtime": 1,
+    "memory": 1
+   },
+   "causality": "causal",
+   "production_gates_nonpass": {
+    "MATH_ORACLE_PASS": "NOT_PROVEN",
+    "BACKEND_PARITY_PASS": "NOT_RUN",
+    "EDGE_PASS": "NOT_RUN",
+    "SCALE_PASS": "NOT_RUN"
+   }
+  },
+  {
+   "canonical": "ts_var",
+   "terminal": true,
+   "production_admitted": true,
+   "mining_lane": "alpha_direct",
+   "authoring_tier": "daily",
+   "aliases": [],
+   "input_slots": [
+    {
+     "parameter": "x",
+     "semantic_kinds": [
+      "field"
+     ],
+     "roles": [
+      "data"
+     ],
+     "cardinality": "panel"
+    },
+    {
+     "parameter": "window",
+     "semantic_kinds": [
+      "scalar"
+     ],
+     "roles": [
+      "parameter"
+     ],
+     "cardinality": "scalar"
+    },
+    {
+     "parameter": "ddof",
+     "semantic_kinds": [
+      "scalar"
+     ],
+     "roles": [
+      "parameter"
+     ],
+     "cardinality": "scalar"
+    },
+    {
+     "parameter": "min_periods",
+     "semantic_kinds": [
+      "scalar"
+     ],
+     "roles": [
+      "parameter"
+     ],
+     "cardinality": "scalar"
+    }
+   ],
+   "scalar_parameters": [
+    "window",
+    "ddof",
+    "min_periods"
+   ],
+   "searchable_params": [
+    "window",
+    "ddof",
+    "min_periods"
+   ],
+   "output": {
+    "kind": "series",
+    "unit": null,
+    "grain": "daily",
+    "cardinality": "panel"
+   },
+   "stateful": false,
+   "execution_model": "independent_with_warmup",
+   "preferred_backend": "polars",
+   "cost": {
+    "runtime": 1,
+    "memory": 1
+   },
+   "causality": "causal",
+   "production_gates_nonpass": {
+    "MATH_ORACLE_PASS": "NOT_PROVEN",
+    "BACKEND_PARITY_PASS": "NOT_RUN",
+    "EDGE_PASS": "NOT_RUN",
+    "SCALE_PASS": "NOT_RUN"
+   }
+  },
+  {
+   "canonical": "ts_zscore",
+   "terminal": true,
+   "production_admitted": true,
+   "mining_lane": "alpha_direct",
+   "authoring_tier": "daily",
+   "aliases": [],
+   "input_slots": [
+    {
+     "parameter": "x",
+     "semantic_kinds": [
+      "field"
+     ],
+     "roles": [
+      "data"
+     ],
+     "cardinality": "panel"
+    },
+    {
+     "parameter": "window",
+     "semantic_kinds": [
+      "scalar"
+     ],
+     "roles": [
+      "parameter"
+     ],
+     "cardinality": "scalar"
+    },
+    {
+     "parameter": "min_periods",
+     "semantic_kinds": [
+      "scalar"
+     ],
+     "roles": [
+      "parameter"
+     ],
+     "cardinality": "scalar"
+    },
+    {
+     "parameter": "null_policy",
+     "semantic_kinds": [
+      "scalar"
+     ],
+     "roles": [
+      "parameter"
+     ],
+     "cardinality": "scalar"
+    },
+    {
+     "parameter": "nan_policy",
+     "semantic_kinds": [
+      "scalar"
+     ],
+     "roles": [
+      "parameter"
+     ],
+     "cardinality": "scalar"
+    },
+    {
+     "parameter": "includes_current_bar",
+     "semantic_kinds": [
+      "scalar"
+     ],
+     "roles": [
+      "parameter"
+     ],
+     "cardinality": "scalar"
+    },
+    {
+     "parameter": "ddof",
+     "semantic_kinds": [
+      "scalar"
+     ],
+     "roles": [
+      "parameter"
+     ],
+     "cardinality": "scalar"
+    },
+    {
+     "parameter": "zero_std_policy",
+     "semantic_kinds": [
+      "scalar"
+     ],
+     "roles": [
+      "parameter"
+     ],
+     "cardinality": "scalar"
+    }
+   ],
+   "scalar_parameters": [
+    "window",
+    "min_periods",
+    "null_policy",
+    "nan_policy",
+    "includes_current_bar",
+    "ddof",
+    "zero_std_policy"
+   ],
+   "searchable_params": [
+    "window",
+    "min_periods",
+    "null_policy",
+    "nan_policy",
+    "includes_current_bar",
+    "ddof",
+    "zero_std_policy"
+   ],
+   "output": {
+    "kind": "series",
+    "unit": null,
+    "grain": "daily",
+    "cardinality": "panel"
+   },
+   "stateful": false,
+   "execution_model": "independent_with_warmup",
+   "preferred_backend": "polars",
+   "cost": {
+    "runtime": 1,
+    "memory": 1
+   },
+   "causality": "causal",
+   "production_gates_nonpass": {
+    "MATH_ORACLE_PASS": "NOT_PROVEN",
+    "BACKEND_PARITY_PASS": "NOT_RUN",
+    "EDGE_PASS": "NOT_RUN",
+    "SCALE_PASS": "NOT_RUN"
+   }
+  },
+  {
+   "canonical": "where",
+   "terminal": true,
+   "production_admitted": true,
+   "mining_lane": "alpha_direct",
+   "authoring_tier": "daily",
+   "aliases": [],
+   "input_slots": [
+    {
+     "parameter": "condition",
+     "semantic_kinds": [
+      "field"
+     ],
+     "roles": [
+      "data"
+     ],
+     "cardinality": "panel"
+    },
+    {
+     "parameter": "x",
+     "semantic_kinds": [
+      "field"
+     ],
+     "roles": [
+      "data"
+     ],
+     "cardinality": "panel"
+    },
+    {
+     "parameter": "y",
+     "semantic_kinds": [
+      "field"
+     ],
+     "roles": [
+      "data"
+     ],
+     "cardinality": "panel"
+    }
+   ],
+   "scalar_parameters": [],
+   "searchable_params": [],
+   "output": {
+    "kind": "series",
+    "unit": null,
+    "grain": "daily",
+    "cardinality": "panel"
+   },
+   "stateful": false,
+   "execution_model": "independent_with_warmup",
+   "preferred_backend": "polars",
+   "cost": {
+    "runtime": 0,
+    "memory": 0
+   },
+   "causality": "causal",
+   "production_gates_nonpass": {
+    "BACKEND_PARITY_PASS": "NOT_RUN",
+    "EDGE_PASS": "NOT_RUN",
+    "SCALE_PASS": "NOT_RUN"
+   }
+  },
+  {
+   "canonical": "winsorize",
+   "terminal": true,
+   "production_admitted": true,
+   "mining_lane": "alpha_direct",
+   "authoring_tier": "daily",
+   "aliases": [],
+   "input_slots": [
+    {
+     "parameter": "x",
+     "semantic_kinds": [
+      "field"
+     ],
+     "roles": [
+      "data"
+     ],
+     "cardinality": "panel"
+    },
+    {
+     "parameter": "lower",
+     "semantic_kinds": [
+      "scalar"
+     ],
+     "roles": [
+      "parameter"
+     ],
+     "cardinality": "scalar"
+    },
+    {
+     "parameter": "upper",
+     "semantic_kinds": [
+      "scalar"
+     ],
+     "roles": [
+      "parameter"
+     ],
+     "cardinality": "scalar"
+    }
+   ],
+   "scalar_parameters": [
+    "lower",
+    "upper"
+   ],
+   "searchable_params": [
+    "lower",
+    "upper"
+   ],
+   "output": {
+    "kind": "series",
+    "unit": null,
+    "grain": "daily",
+    "cardinality": "panel"
+   },
+   "stateful": false,
+   "execution_model": "independent_with_warmup",
+   "preferred_backend": "polars",
+   "cost": {
+    "runtime": 1,
+    "memory": 1
+   },
+   "causality": "causal",
+   "production_gates_nonpass": {
+    "MATH_ORACLE_PASS": "NOT_PROVEN",
+    "BACKEND_PARITY_PASS": "NOT_RUN",
+    "EDGE_PASS": "NOT_RUN",
+    "SCALE_PASS": "NOT_RUN"
+   }
+  },
+  {
+   "canonical": "zscore",
+   "terminal": true,
+   "production_admitted": true,
+   "mining_lane": "alpha_direct",
+   "authoring_tier": "daily",
+   "aliases": [],
+   "input_slots": [
+    {
+     "parameter": "x",
+     "semantic_kinds": [
+      "field"
+     ],
+     "roles": [
+      "data"
+     ],
+     "cardinality": "panel"
+    }
+   ],
+   "scalar_parameters": [],
+   "searchable_params": [],
+   "output": {
+    "kind": "series",
+    "unit": null,
+    "grain": "daily",
+    "cardinality": "panel"
+   },
+   "stateful": false,
+   "execution_model": "independent_with_warmup",
+   "preferred_backend": "polars",
+   "cost": {
+    "runtime": 1,
+    "memory": 1
+   },
+   "causality": "causal",
+   "production_gates_nonpass": {
+    "BACKEND_PARITY_PASS": "NOT_RUN",
+    "EDGE_PASS": "NOT_RUN",
+    "SCALE_PASS": "NOT_RUN"
+   }
+  }
+ ]
+}

@@ -206,6 +206,13 @@ class PerfConfig:
             "FACTOR_ENGINE_RESULT_BUDGET_BYTES",
             "FACTOR_ENGINE_SPILL_DIR",
             "FACTOR_ENGINE_SPILL_BUDGET_BYTES",
+            # audit #TODO: 下面四个 env key 由本函数实际读取（构造 cls 时经
+            # _env_str），必须进入 cache key，否则环境变量变更不会使缓存失效
+            # （100k GO §26：cache key 必须覆盖全部读取的 env key）。
+            "FACTOR_ENGINE_SCHEDULER",
+            "FACTOR_ENGINE_RESOURCE_PROFILE",
+            "FACTOR_ENGINE_COEXIST",
+            "FACTOR_ENGINE_NATIVE_FUSION",
         )
         cache_key = tuple(os.environ.get(name) for name in cache_names)
         if _ENV_CACHE is not None and _ENV_CACHE_KEY == cache_key:

@@ -44,7 +44,8 @@ try:
 except Exception:
     _HAS_DUCKDB = False
 
-# 接上 quant_evaluator 评估库
+# 接上 quant_evaluator 评估库（报告生成必须依赖，禁止 legacy 私算回退）
+sys.path.insert(0, "/home/sunhaiwei/quant_projects")
 QE_AVAILABLE = False
 try:
     from quant_evaluator.metrics.ic import (
@@ -59,6 +60,12 @@ try:
         compute_maximum_drawdown,
         compute_win_rate,
         compute_long_short_returns,
+        compute_wealth_curve,
+    )
+    from quant_evaluator.metrics.ic import ic_significance
+    from quant_evaluator.metrics.probe_portfolio.sharpe import (
+        compute_annualized_return,
+        compute_portfolio_metrics,
     )
     from quant_evaluator.metrics.risk.drawdown_analysis import compute_drawdown_series
     from quant_evaluator.metrics.turnover import estimate_turnover_from_ranks
@@ -66,7 +73,7 @@ try:
     from quant_evaluator.contracts.label_bundle import LabelBundle
     QE_AVAILABLE = True
 except Exception as _qe_err:
-    _QE_IMPORT_ERR = _qe_err
+    raise RuntimeError("factor reports require quant_evaluator") from _qe_err
 
 PROJECT = Path("/home/sunhaiwei/quant_projects")
 CONV_DIR = Path("/home/sunhaiwei/factor_delivery_converted/factors_combined")
@@ -623,24 +630,6 @@ def _compute_all_factors_metrics() -> dict:
             ic_arr, valid_arr = compute_daily_ic(
                 fb, lb, method="spearman", min_assets=20
             )  # (T, F), (T, F)
-            # turn NaN → 0
-            ic_arr = np.where(np.isfinite(ic_arr), ic_arr, 0.0)
-        else:
-            # 兜底：手写每天 for 循环算 Spearman
-            ic_arr = np.zeros((T, len(factor_names)))
-            for fi, fn in enumerate(factor_names):
-                mn = mat_dict[fn].values
-                for t in range(T):
-                    m = mn[t]; r = fwd_a[t]
-                    mask = np.isfinite(m) & np.isfinite(r)
-                    if mask.sum() < 20:
-                        continue
-                    m_v = m[mask]; r_v = r[mask]
-                    rm = m_v.argsort().argsort()
-                    rr = r_v.argsort().argsort()
-                    sm = rm.std(); sr = rr.std()
-                    if sm > 1e-9 and sr > 1e-9:
-                        ic_arr[t, fi] = float(((rm - rm.mean()) * (rr - rr.mean())).sum() / (len(m_v) * sm * sr))
 
         # 4. 构造返回值
         out = {}
@@ -648,9 +637,10 @@ def _compute_all_factors_metrics() -> dict:
 
         for fi, fn in enumerate(factor_names):
             ic_series = pd.Series(ic_arr[:, fi], index=common_idx)
-            mean_ic = float(np.mean(ic_arr[:, fi]))
-            std_ic = float(np.std(ic_arr[:, fi], ddof=1))
-            icir = mean_ic / std_ic if std_ic > 1e-9 else 0.0
+            mean_arr, std_arr = compute_mean_ic(ic_arr[:, [fi]], min_periods=20)
+            mean_ic = float(mean_arr[0])
+            std_ic = float(std_arr[0])
+            icir = float(ic_significance(ic_arr[:, fi], min_periods=20)[0])
 
             # ===== 十分层 NAV（含双边交易成本，按 Top10% 组换手率 × 费率）=====
             fv = mat_dict[fn].values.astype(np.float64)
@@ -689,36 +679,27 @@ def _compute_all_factors_metrics() -> dict:
             mean_top_turnover = float(np.nanmean(top_turnover[1:])) if T > 1 else 0.0
 
             # NAV
-            decile_navs = {f"G{k+1}": np.cumprod(1 + group_ret[:, k]) for k in range(10)}
+            decile_navs = {f"G{k+1}": compute_wealth_curve(group_ret[:, k]) for k in range(10)}
             r_ls = group_ret[:, 9] - group_ret[:, 0]  # 多空收益（G10 已扣费，G1 已扣费）
-            decile_navs["LS"] = np.cumprod(1 + r_ls)
+            decile_navs["LS"] = compute_wealth_curve(r_ls)
 
             # 业绩指标
             ls_nav = decile_navs["LS"]
             ls_rets = np.diff(ls_nav) / ls_nav[:-1]
             ls_rets_safe = np.concatenate([[0.0], ls_rets])
 
-            if QE_AVAILABLE:
-                ls_sharpe = float(compute_sharpe_ratio(ls_rets_safe, periods_per_year=252))
-                ls_mdd_tup = compute_maximum_drawdown(ls_rets_safe, missing_return_policy="zero_fill")
-                ls_mdd = float(ls_mdd_tup[0]) if isinstance(ls_mdd_tup, tuple) else float(ls_mdd_tup)
-                ls_winrate = float(compute_win_rate(ls_rets_safe))
-            else:
-                ls_sharpe = float(np.mean(ls_rets_safe) / np.std(ls_rets_safe) * np.sqrt(252)) if np.std(ls_rets_safe) > 0 else 0
-                ls_mdd = float((pd.Series(ls_nav) / pd.Series(ls_nav).cummax() - 1).min()) if len(ls_nav) > 0 else 0
-                ls_winrate = float((ls_rets > 0).sum() / max(len(ls_rets), 1))
-
-            ls_annual = float(ls_nav[-1] ** (1.0 / max(n_years, 1e-6)) - 1) if T > 0 else 0.0
-            g10_ann = float(decile_navs["G10"][-1] ** (1.0 / max(n_years, 1e-6)) - 1) if T > 0 else 0
-            g1_ann = float(decile_navs["G1"][-1] ** (1.0 / max(n_years, 1e-6)) - 1) if T > 0 else 0
+            portfolio = compute_portfolio_metrics(ls_rets_safe, periods_per_year=252, min_periods=20)
+            ls_sharpe = float(portfolio["sharpe"])
+            ls_mdd = float(portfolio["max_drawdown"])
+            ls_winrate = float(portfolio["win_rate"])
+            ls_annual = float(portfolio["annualized_return"])
+            ls_cumulative = float(ls_nav[-1] - 1.0) if len(ls_nav) else np.nan
+            g10_ann = compute_annualized_return(group_ret[:, 9])
+            g1_ann = compute_annualized_return(group_ret[:, 0])
             g10_rets = np.diff(decile_navs["G10"]) / decile_navs["G10"][:-1]
             g1_rets = np.diff(decile_navs["G1"]) / decile_navs["G1"][:-1]
-            if QE_AVAILABLE:
-                g10_sharpe = float(compute_sharpe_ratio(np.nan_to_num(g10_rets), periods_per_year=252))
-                g1_sharpe = float(compute_sharpe_ratio(np.nan_to_num(g1_rets), periods_per_year=252))
-            else:
-                g10_sharpe = float(np.mean(g10_rets) / np.std(g10_rets) * np.sqrt(252)) if np.std(g10_rets) > 0 else 0
-                g1_sharpe = float(np.mean(g1_rets) / np.std(g1_rets) * np.sqrt(252)) if np.std(g1_rets) > 0 else 0
+            g10_sharpe = float(compute_sharpe_ratio(g10_rets, periods_per_year=252))
+            g1_sharpe = float(compute_sharpe_ratio(g1_rets, periods_per_year=252))
 
             # 写输出
             dates_out = list(common_idx)
@@ -733,6 +714,7 @@ def _compute_all_factors_metrics() -> dict:
                 "perf": {
                     "ls_sharpe": ls_sharpe,
                     "ls_annual": ls_annual,
+                    "ls_cumulative": ls_cumulative,
                     "ls_mdd": ls_mdd,
                     "ls_winrate": ls_winrate,
                     "g10_annual": g10_ann,
@@ -1133,6 +1115,7 @@ def build_detail_html(
     if perf and "ls_sharpe" in perf:
         ls_sharpe_gross = perf.get("ls_sharpe", 0)
         ls_annual_return = perf.get("ls_annual", 0) * 100  # → %
+        ls_cumulative_return = perf.get("ls_cumulative", np.nan) * 100
         ls_mdd = perf.get("ls_mdd", 0) * 100  # → %
         ls_winrate = perf.get("ls_winrate", 0) * 100
         g10_ann = perf.get("g10_annual", 0) * 100
@@ -1142,22 +1125,26 @@ def build_detail_html(
         if len(ls_vals) > 2:
             ls_ser = pd.Series(ls_vals)
             ls_rets = ls_ser.pct_change().dropna()
-            ls_sharpe_gross = compute_annualized_sharpe(ls_rets)
-            ls_nav_end = ls_vals[-1]
-            ls_nav_start = ls_vals[0] if ls_vals[0] != 0 else 1
-            ls_annual_return = (ls_nav_end / ls_nav_start - 1) * 100 * 252 / max(len(ls_vals), 1)
-            ls_mdd = compute_max_drawdown(ls_ser) * 100
-            ls_winrate = float((ls_rets > 0).sum() / max(len(ls_rets), 1)) * 100
+            fallback_perf = compute_portfolio_metrics(ls_rets.values, min_periods=20)
+            ls_sharpe_gross = fallback_perf["sharpe"]
+            ls_annual_return = fallback_perf["annualized_return"] * 100
+            ls_cumulative_return = (float(ls_vals[-1]) - 1.0) * 100
+            ls_mdd = fallback_perf["max_drawdown"] * 100
+            ls_winrate = fallback_perf["win_rate"] * 100
             g10_ann = g1_ann = 0
         else:
-            ls_sharpe_gross = ls_annual_return = ls_mdd = ls_winrate = g10_ann = g1_ann = 0
+            ls_sharpe_gross = ls_annual_return = ls_cumulative_return = ls_mdd = ls_winrate = g10_ann = g1_ann = np.nan
     else:
-        ls_sharpe_gross = ls_annual_return = ls_mdd = ls_winrate = g10_ann = g1_ann = 0
+        ls_sharpe_gross = ls_annual_return = ls_cumulative_return = ls_mdd = ls_winrate = g10_ann = g1_ann = np.nan
 
     def pcls(v):
+        if v is None or not np.isfinite(v):
+            return ""
         return "pos" if v >= 0 else "neg"
 
     def fmt(v, pct=False):
+        if v is None or not np.isfinite(v):
+            return "—"
         if pct:
             return f"{v:.2f}%"
         if abs(v) < 1:
@@ -1567,7 +1554,7 @@ def build_detail_html(
         '<div class="metric"><b class="' + pcls(ls_annual_return) + '">' + fmt(ls_annual_return, pct=True) + '</b><span>LS 年化</span></div>\n'
         '</div>\n'
         '<div class="grid-4">\n'
-        '<div class="metric"><b class="' + pcls(ls_annual_return * 2) + '">' + fmt(ls_annual_return * 2, pct=True) + '</b><span>LS 累计收益</span></div>\n'
+        '<div class="metric"><b class="' + pcls(ls_cumulative_return) + '">' + fmt(ls_cumulative_return, pct=True) + '</b><span>LS 累计收益</span></div>\n'
         '<div class="metric"><b class="' + pcls(ls_mdd) + '">' + fmt(ls_mdd, pct=True) + '</b><span>LS 最大回撤</span></div>\n'
         '<div class="metric"><b class="' + pcls(ls_winrate) + '">' + fmt(ls_winrate, pct=True) + '</b><span>LS 日胜率</span></div>\n'
         '<div class="metric"><b class="' + pcls(turnover_daily) + '">' + fmt(turnover_daily, pct=True) + '</b><span>Top10% 换手率 (日)</span></div>\n'
@@ -1650,7 +1637,7 @@ def build_detail_html(
         '<tr><td>RankIC 胜率</td><td class="' + pcls(win_rate) + '">' + fmt(win_rate, pct=True) + '</td></tr>\n'
         '<tr><td>LS Sharpe</td><td class="' + pcls(ls_sharpe_gross) + '">' + fmt(ls_sharpe_gross) + '</td></tr>\n'
         '<tr><td>LS 年化收益</td><td class="' + pcls(ls_annual_return) + '">' + fmt(ls_annual_return, pct=True) + '</td></tr>\n'
-        '<tr><td>LS 累计收益</td><td class="' + pcls(ls_annual_return * 2) + '">' + fmt(ls_annual_return * 2, pct=True) + '</td></tr>\n'
+        '<tr><td>LS 累计收益</td><td class="' + pcls(ls_cumulative_return) + '">' + fmt(ls_cumulative_return, pct=True) + '</td></tr>\n'
         '<tr><td>LS 最大回撤</td><td class="' + pcls(ls_mdd) + '">' + fmt(ls_mdd, pct=True) + '</td></tr>\n'
         '<tr><td>LS 日胜率</td><td class="' + pcls(ls_winrate) + '">' + fmt(ls_winrate, pct=True) + '</td></tr>\n'
         '<tr><td>Top10% 换手率 (日)</td><td>' + (fmt(perf.get('turnover', 0), pct=True) if perf else '—') + '</td></tr>\n'

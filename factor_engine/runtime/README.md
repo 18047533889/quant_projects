@@ -110,6 +110,7 @@ FactorEngine(backend=..., data_source=..., cache=None)
 | [`config_runtime.py`](config_runtime.py) | `resolve_run_kwargs` / `resolve_materialize_kwargs`；`PipelineConfigOverrides`；`config_*_batch_key` |
 | [`warmup_service.py`](warmup_service.py) | `prepare_run_warmup()` — 扩窗与 trim |
 | [`session_calendar.py`](session_calendar.py) | 分钟频 bar 级 session 日历 |
+| [`intraday_aggregator.py`](intraday_aggregator.py) | `IntradayAggregator`（分钟→日频聚合）+ `IntradayFeatureCompiler.compute_many`（P0#5 一次 scan 批量算分钟特征） |
 | [`lineage_service.py`](lineage_service.py) | 物化 lineage（`source_expr`、composite join） |
 | [`materialize_service.py`](materialize_service.py) | `execute_materialize()` / `execute_materialize_from_resolved()` |
 | [`dual_write_service.py`](dual_write_service.py) | staging → ClickHouse 双写 |

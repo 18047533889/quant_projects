@@ -1,0 +1,11 @@
+{
+  "count": 0,
+  "fingerprint": {
+    "dirty": true,
+    "head": "7628674b95348cc3227881546a7d21ed8cd50881"
+  },
+  "operators": [],
+  "pending_count": 0,
+  "research_count": 0,
+  "schema_version": "factor_engine.r18.direct_mining_manifest.v1"
+}

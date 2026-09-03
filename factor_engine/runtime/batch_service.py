@@ -26,6 +26,24 @@ logger = get_logger("factor_engine.runtime.batch_service")
 if TYPE_CHECKING:
     from factor_engine.runtime.engine import FactorEngine
 
+
+def _replan_duckdb_threads(plan, gov) -> Any:
+    """P0#9：worker 被共存配额 clamp 后，重算 DuckDB/Polars 线程数。
+
+    保持 ``workers × duckdb_threads <= cpu_budget`` 不变量（与
+    ``ExecutionResourcePlan.auto`` 的 oversubscription 约束一致）。
+    """
+    from dataclasses import replace
+
+    budget = gov.cpu_budget
+    duckdb_threads = max(1, min(plan.duckdb_threads, budget // gov.workers))
+    return replace(
+        plan,
+        max_workers=gov.workers,
+        duckdb_threads=duckdb_threads,
+        polars_threads=duckdb_threads,
+    )
+
 #: R39 Gate-01：adaptive-scheduler 主路径不允许发生 legacy full-union batch
 #: prefetch（``engine._prepare_batch_data``）。该计数由 ``_maybe_prepare_batch_data``
 #: 每次真正执行 union prefetch 时 +1；scheduler 路径根本不调用它，因此必须为 0。
@@ -46,6 +64,106 @@ def reset_legacy_union_prefetch_count() -> None:
     """测试用：清零进程级计数。"""
     global _legacy_union_prefetch_count
     _legacy_union_prefetch_count = 0
+
+
+def _canonicalize_batch_factors(
+    engine: "FactorEngine",
+    factors: Sequence[Factor],
+    *,
+    context: str,
+) -> list[Factor]:
+    """P0#6: run_many 入口输入规范化。
+
+    - 去重**结构完全相同**的因子（同 name+同 expr），使 run_many 对每个唯一根
+      恰好编译/执行一次（公式层 canonicalization；plan 层的结构去重交给 CSE）。
+    - 重复 *name* 仍由 :func:`assert_unique_factor_names` 硬拒绝（#322）——
+      只有当 name 与 expr 都相同时才判定为重复。
+    - 对每个保留因子与重复删除量计入 ``runmany`` telemetry（``requested`` /
+      ``unique`` / ``duplicates`` / ``factors``），使 canonicalization 可见、不静默。
+
+    参数：
+        engine: 因子引擎（用于统一结构比较函数）。
+        factors: run_many 请求的因子序列。
+        context: 调用上下文（日志用）。
+
+    返回：
+        规范化（去重）后的因子列表；顺序保持首次出现次序。
+    """
+    from factor_engine.telemetry.execution_telemetry import record as _et_record
+
+    if not factors:
+        return list(factors)
+    seen: set[tuple[str, str]] = set()
+    collapsed: list[Factor] = []
+    duplicates = 0
+    # §17 formula canonicalization at the run_many entry: normalize the AST
+    # (identity canonicalizer: bracket/idempotent/commutative-sort/const-fold)
+    # then serialize to a stable structural fingerprint. This merges
+    # textually-different-but-structurally-identical formulas
+    # (``ts_mean(close,2)+0`` vs ``ts_mean(close,2)``) BEFORE they reach CSE.
+    # ``canonical_ast_text`` never mutates the factor — it only feeds the dedup
+    # key, so execution receives the user's original expression untouched.
+    # Parameter-alias normalization stays at plan level (``structural_key`` /
+    # ``canonicalize_plan_parameters``); combined with this formula key it forms
+    # the full §17 pipeline (canonical AST → structural hash → exact dedup).
+    for f in factors:
+        try:
+            from factor_engine.identity.canonicalizer import canonicalize
+            from factor_engine.identity.serializer import canonical_ast_text
+
+            formula_key = canonical_ast_text(canonicalize(getattr(f, "expr", None)))
+        except Exception:  # pragma: no cover - unsupported node type => raw repr fallback
+            formula_key = str(getattr(f, "expr", None))
+        key = (f.name, formula_key)
+        if key in seen:
+            duplicates += 1
+            continue
+        seen.add(key)
+        collapsed.append(f)
+    try:
+        _et_record("runmany", "requested", len(factors))
+        _et_record("runmany", "unique", len(collapsed))
+        _et_record("runmany", "duplicates", duplicates)
+        _et_record("runmany", "factors", len(collapsed))
+        _et_record("runmany", "contexts", 1)
+    except Exception:  # pragma: no cover - telemetry never breaks execution
+        pass
+    if duplicates:
+        logger.info(
+            "run_many[%s] canonicalization: %d requested, %d unique, %d struct-dup "
+            "collapsed",
+            context,
+            len(factors),
+            len(collapsed),
+            duplicates,
+        )
+    return collapsed
+
+
+def _emit_pandas_fallback_telemetry(fallbacks: list) -> None:
+    """P0#7: 把 production pandas fallback 计入 registry，使 fallback 可见不静默。
+
+    backend 降级到 pandas 是执行链的慢路径；只要发生就在 ``fallback.pandas``
+    计数器累加，并附带最近一条 fallback 的算子信息（首次打日志）。
+    """
+    if not fallbacks:
+        return
+    try:
+        from factor_engine.telemetry.execution_telemetry import fallback_record
+
+        fallback_record("fallback", "pandas", len(fallbacks))
+        first = fallbacks[0]
+        import logging
+
+        logging.getLogger("factor_engine.runtime.batch_service").info(
+            "pandas fallback telemetry: %d event(s); first op=%s requested=%s actual=%s",
+            len(fallbacks),
+            first.get("op", "?"),
+            first.get("requested", "?"),
+            first.get("actual", "?"),
+        )
+    except Exception:  # pragma: no cover - telemetry never breaks execution
+        return
 
 
 def materialize_shared_nodes_parallel(
@@ -1207,6 +1325,7 @@ def _execute_run_many_scheduler(
         }
     assert_production_fastpath_runtime(ctx, mode=run_mode, context="run_many:scheduler")
     fallbacks = summarize_pandas_fallbacks(ctx)
+    _emit_pandas_fallback_telemetry(fallbacks)
     if fallbacks:
         batch_out["production_pandas_fallbacks"] = fallbacks
     from factor_engine.backend.path_summary import summarize_lazy_caches
@@ -1265,6 +1384,14 @@ def execute_run_many(
         ``input_dq``、``backend_paths`` 等的字典。
     """
     from factor_engine.runtime.production_policy import is_production_mode
+
+    # P0#6: input canonicalization — dedupe structurally identical factors so
+    # run_many compiles/executes each unique root exactly once (formula-level
+    # canonicalization; structural dedup is done by CSE at plan level). This
+    # mirrors GO-prompt §17 (requested_roots / unique_roots / duplicate_roots)
+    # and every admitted factor emits runmany telemetry. Duplicate *names*
+    # remain a hard error (#322) — only exact structural duplicates collapse.
+    factors = _canonicalize_batch_factors(engine, factors, context="execute_run_many")
 
     pit_enforce = bool(pit_enforce or is_production_mode(engine.run_mode))
     assert_production_run_flags(
@@ -1479,6 +1606,7 @@ def execute_run_many(
         }
     assert_production_fastpath_runtime(ctx, mode=run_mode, context="run_many")
     fallbacks = summarize_pandas_fallbacks(ctx)
+    _emit_pandas_fallback_telemetry(fallbacks)
     if fallbacks:
         batch_out["production_pandas_fallbacks"] = fallbacks
     from factor_engine.backend.path_summary import summarize_lazy_caches
@@ -1519,6 +1647,10 @@ def execute_run_many_iter(
     后流式物化使用）。
     """
     from factor_engine.runtime.production_policy import is_production_mode
+
+    # P0#6: run_many_iter is also a batch entry — canonicalize inputs the same
+    # way execute_run_many does (dedupe structural duplicates, emit telemetry).
+    factors = _canonicalize_batch_factors(engine, factors, context="execute_run_many_iter")
 
     pit_enforce = bool(pit_enforce or is_production_mode(engine.run_mode))
     if precompiled is not None:
@@ -1648,6 +1780,9 @@ def execute_run_many_parallel(
     """
     from factor_engine.runtime.production_policy import is_production_mode
 
+    # P0#6: run_many_parallel is also a batch entry — canonicalize like the rest.
+    factors = _canonicalize_batch_factors(engine, factors, context="execute_run_many_parallel")
+
     pit_enforce = bool(pit_enforce or is_production_mode(engine.run_mode))
     assert_production_run_flags(
         mode=engine.run_mode,
@@ -1681,6 +1816,23 @@ def execute_run_many_parallel(
 
         plan = resource_plan(n_jobs=workers)
         workers = plan.n_jobs
+        # 100k GO §110 item 9 / P0#9：多 worker 共存时按
+        # ``floor(31 / coexist_count)`` 配额 clamp，避免 N workers × 默认线程
+        # 超过 31 核（OOM 守卫）。默认单主进程内部并发（线程池），不隐式 spawn。
+        from factor_engine.runtime.multiworker_governance import (
+            log_governance_decision,
+            resolve_worker_budget,
+        )
+
+        _gov = resolve_worker_budget(
+            workers,
+            per_worker_threads=plan.duckdb_threads,
+            perf=perf,
+        )
+        if _gov.clamped:
+            workers = _gov.workers
+            plan = _replan_duckdb_threads(plan, _gov)
+        log_governance_decision(_gov)
         resource_scope = ExecutionResourceScope(
             plan,
             duckdb_threads=plan.duckdb_threads,
@@ -1882,6 +2034,7 @@ def execute_run_many_parallel(
         }
     assert_production_fastpath_runtime(ctx, mode=run_mode, context="run_many_parallel")
     fallbacks = summarize_pandas_fallbacks(ctx)
+    _emit_pandas_fallback_telemetry(fallbacks)
     if fallbacks:
         parallel_out["production_pandas_fallbacks"] = fallbacks
     from factor_engine.backend.path_summary import summarize_lazy_caches

@@ -4,9 +4,9 @@ from __future__ import annotations
 BUILT_AT_RUNTIME_FALLBACK = False
 
 __version__ = '0.10.2'
-__build_sha__ = 'fa9b6eb1461cd9d1f87cd8d41aa3e6b55747361f'
-__build_id__ = 'fa9b6eb1461c-c63a2512e287'
-__build_time__ = '2026-08-28T03:47:21Z'
+__build_sha__ = 'dbbc3fe75f38d75c88f62ad60e3e0eedc666f026'
+__build_id__ = 'dbbc3fe75f38-5d8180a65d2c'
+__build_time__ = '2026-09-03T09:12:58Z'
 __build_dirty__ = True
 __dependency_lock_hash__ = 'dc83e1f493ceab45b38be37154baa10437855c5a5292dd229e28b7d056ba5c30'
 __build_tag__ = None

@@ -1,0 +1,175 @@
+{
+ "method": "小面板对拍: pandas vs polars_long via FactorEngine, 同源 InMemorySeriesSource, corr 与 maxabsdiff 实测",
+ "legend": "corr=1.00000 且 maxdiff~1e-15 => parit; ERR => 后端差异/签名问题",
+ "families": {
+  "elementwise": [
+   {
+    "op": "abs",
+    "corr": 1.0,
+    "maxdiff": 0.0
+   },
+   {
+    "op": "log",
+    "corr": 1.0,
+    "maxdiff": 0.0
+   },
+   {
+    "op": "sqrt",
+    "corr": 1.0,
+    "maxdiff": 0.0
+   },
+   {
+    "op": "sign",
+    "corr": 1.0,
+    "maxdiff": 0.0
+   },
+   {
+    "op": "clip",
+    "corr": 1.0,
+    "maxdiff": 0.0
+   },
+   {
+    "op": "coalesce",
+    "corr": 1.0,
+    "maxdiff": 0.0
+   },
+   {
+    "op": "inverse",
+    "corr": 1.0,
+    "maxdiff": 0.0
+   },
+   {
+    "op": "add/sub/mul/div",
+    "corr": 1.0,
+    "maxdiff": 0.0
+   },
+   {
+    "op": "power",
+    "corr": 1.0,
+    "maxdiff": 3.55e-15
+   },
+   {
+    "op": "zscore",
+    "corr": 1.0,
+    "maxdiff": 2.22e-16
+   },
+   {
+    "op": "winsorize",
+    "corr": 1.0,
+    "maxdiff": 4.44e-16
+   }
+  ],
+  "ts_rolling": [
+   {
+    "op": "ts_mean/sum/max/min/rank/quantile/kurt/decay_linear/argmax/argmin",
+    "corr": 1.0,
+    "maxdiff": 0.0
+   },
+   {
+    "op": "ts_std",
+    "corr": 1.0,
+    "maxdiff": 2.22e-15
+   },
+   {
+    "op": "ts_skew",
+    "corr": 1.0,
+    "maxdiff": 5.81e-15
+   },
+   {
+    "op": "ts_delay/delta/pct",
+    "corr": 1.0,
+    "maxdiff": 0.0
+   },
+   {
+    "op": "ts_corr",
+    "corr": 1.0,
+    "maxdiff": 6.66e-16
+   },
+   {
+    "op": "ts_cov",
+    "corr": 1.0,
+    "maxdiff": 0.0
+   }
+  ],
+  "cross_sectional": [
+   {
+    "op": "cs_demean/rank/zscore/sum/mean/std",
+    "corr": 1.0,
+    "maxdiff": "~1e-16"
+   },
+   {
+    "op": "cs_quantile/pct_rank/rank_01/mad/mad_zscore",
+    "corr": 1.0,
+    "maxdiff": 0.0
+   },
+   {
+    "op": "cs_count/valid_count",
+    "corr": "nan(常数对拍)",
+    "maxdiff": 0.0
+   },
+   {
+    "op": "cs_neutralize/weighted_mean/weighted_zscore",
+    "corr": 1.0,
+    "maxdiff": 0.0
+   }
+  ],
+  "group": [
+   {
+    "op": "group_std/demean/zscore/neutralize/max/min/count",
+    "corr": 1.0,
+    "maxdiff": "~1e-16"
+   },
+   {
+    "op": "group_mean/sum/rank",
+    "status": "TypedInputContractError group需GroupKey dtype(非parity问题)"
+   },
+   {
+    "op": "group_ex_self_mean/std",
+    "status": "P1不一致: pandas正常, polars_long编译报'polars long compile failed'(polars有实现但polars_long路径缺失)"
+   }
+  ],
+  "technical": [
+   {
+    "op": "ts_macd/ts_ema/WMA/ts_wma/MACD",
+    "corr": 1.0,
+    "maxdiff": "~1e-14"
+   },
+   {
+    "op": "ts_adx/ts_rsi_wilder/ts_atr_wilder",
+    "corr": 1.0,
+    "maxdiff": "~1e-14"
+   },
+   {
+    "op": "ts_aroon/ts_cci/ts_roc/ts_mom/ts_obv/ts_trix/ts_bbands/ts_stoch/ts_willr/ts_rsi/ts_atr/ts_adxr/ts_stochf",
+    "status": "unknown canonical(已被 layer_governance 移入 RECIPE_CANONICALS, 非runtime算子)"
+   }
+  ],
+  "stateful": [
+   {
+    "op": "ts_ema/ts_ewm_std/ts_positive_streak/ts_abs_concentration/ts_interval_nesting_depth",
+    "corr": 1.0,
+    "maxdiff": "~1e-15"
+   },
+   {
+    "op": "ts_ewm_corr/ts_ewm_cov",
+    "status": "仅polars实现, pandas_numpy不可用(pandas get返回None), 无对拍基准"
+   }
+  ],
+  "fundamental": [
+   {
+    "op": "fin_common_size/fin_cash_conversion/fin_capex_intensity/fin_borrowing_intensity",
+    "corr": 1.0,
+    "maxdiff": 0.0
+   },
+   {
+    "op": "fin_cv/fin_cagr/fin_earnings_persistence 等",
+    "status": "stateful/period基算子需 full-history + period_id, 无 pandas_long 对拍基准"
+   }
+  ]
+ },
+ "notable_parity_issues": [
+  "group_ex_self_mean/group_ex_self_std: pandas正常 vs polars_long compile failed (P1不一致 - polars_long路径缺少该族原生支持)",
+  "float_share_ratio/free_float_share_ratio: polars_long 报 'cannot cast Array type' 错误 (P1)",
+  "group_mean/group_sum/group_rank: 报 TypedInputContractError group 需 GroupKey dtype (输入契约, 非parity)"
+ ]
+}

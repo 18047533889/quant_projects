@@ -1,0 +1,38 @@
+# -*- coding: utf-8 -*-
+# P1 operator-family audit — evidence drift fix
+# primitive_case_registry.json was stale: fillna had a live polars/duckdb parity
+# case (test_production_safe_bulk_parity.py) but was missing from the committed
+# case-registry lists that already carried fillna_const.  The evidence-contract
+# test (test_primitive_case_registry_matches_cases) failed on the missing fillna.
+task_id: P1_FAMILY_AUDIT_EVIDENCE_DRIFT
+schema_version: 1
+generation_timestamp: 2026-09-03
+current_sha: dbbc3fe75f38d75c88f62ad60e3e0eedc666f026
+head_sha: working-tree (uncommitted)
+status: CLOSED_LOCAL
+production_certification: NOT_RUN
+
+owned_files:
+  - evidence/primitive_case_registry.json
+      # Added "fillna" to polars_reference_parity / duckdb_reference_parity /
+      # duckdb_real_sql_verified (the 3 lists that already carried fillna_const).
+      # avg2 / ts_positive_streak were NOT added: under the pytest staging
+      # surface they are dropped by the daily-canonical filter (not present in
+      # the merged case list), so adding them would over-declare and re-break
+      # the six-way intersection.
+
+scope: |
+  P1 operator-family correctness audit (task #40).  Evidence-drift dimension:
+  operators claiming primitive_verified certification must have a matching
+  evidence artifact.  Spot-check of 10/72 primitive_verified claimants found 0
+  drift.  The one real drift was the committed primitive_case_registry.json
+  being stale w.r.t. the live case lists (fillna missing).  Regenerating the
+  file wholesale overshot (added avg2/ts_positive_streak that the pytest daily
+  filter drops), so the fix is a targeted fillna-only insertion matching the
+  pytest-context _collect_cases() output exactly.
+
+verification:
+  - "OMP_NUM_THREADS=4 python3 -m pytest tests/backend/test_primitive_evidence_contract.py -q -p no:cacheprovider"
+  - "result: 4 passed, 1 skipped (primitive_verified.json not regenerated), 0 failed"
+  - "OMP_NUM_THREADS=4 python3 -m pytest tests/backend/test_parameter_aliases.py tests/backend_parity/test_alias_semantic_equivalence.py tests/backend/test_primitive_evidence_contract.py -q -p no:cacheprovider"
+  - "result: 15 passed, 1 skipped, 0 failed"

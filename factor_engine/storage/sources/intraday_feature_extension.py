@@ -146,9 +146,25 @@ def _corr(a,b):
     return float(np.corrcoef(a[m],b[m])[0,1]) if m.sum()>=3 and np.std(a[m])>_EPS and np.std(b[m])>_EPS else np.nan
 
 
-def _calc(feature,bar,params,*,prev_close=np.nan):
+def _calc_shared(bar):
+    """Per-bar intermediates shared by every intraday feature (P0#5).
+
+    Extracted from ``_calc`` so ``compute_many`` can compute many features in a
+    single pass over the grouped bars without recomputing returns / realized
+    variance / OHLCV arrays per feature.  ``_calc`` keeps its public signature
+    and delegates here, so single-feature results are bit-identical.
+    """
     r=_returns(bar); finite=r[np.isfinite(r)]; close=np.asarray(bar["close"],float); high=np.asarray(bar["high"],float); low=np.asarray(bar["low"],float); volume=np.asarray(bar["volume"],float); amount=np.asarray(bar["amount"],float)
     n=len(bar); rv=_rv(r); bv=float(np.pi/2*np.nansum(np.abs(finite[1:])*np.abs(finite[:-1]))) if len(finite)>1 else np.nan
+    return {"r":r,"finite":finite,"close":close,"high":high,"low":low,"volume":volume,"amount":amount,"n":n,"rv":rv,"bv":bv}
+
+
+def _calc(feature,bar,params,*,prev_close=np.nan):
+    return _calc_from_shared(feature, _calc_shared(bar), bar, params, prev_close=prev_close)
+
+
+def _calc_from_shared(feature, shared, bar, params, *, prev_close=np.nan):
+    r=shared["r"]; finite=shared["finite"]; close=shared["close"]; high=shared["high"]; low=shared["low"]; volume=shared["volume"]; amount=shared["amount"]; n=shared["n"]; rv=shared["rv"]; bv=shared["bv"]
     if feature=="realized_variance":return rv
     if feature=="realized_vol":return float(np.sqrt(rv)) if np.isfinite(rv) else np.nan
     if feature=="realized_skew":return float(np.sqrt(len(finite))*np.sum(finite**3)/(np.sum(finite**2)**1.5)) if len(finite)>=3 and np.sum(finite**2)>_EPS else np.nan

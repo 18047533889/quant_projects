@@ -1161,6 +1161,20 @@ def _load_all_impl(*, include_research: bool = True) -> None:
 
     register_axis_effects_for_surface()
 
+    # 100k GO P0#1-followup: complete every registered operator's
+    # ``_physical_spec`` with the four 64-hex binding digests that
+    # ``PhysicalImplementationSpec`` requires for an immutable physical
+    # implementation id.  Each real spec today declares plaintext identity
+    # tokens in those fields (R47 added a strict 64-hex + closure requirement
+    # that no registration path fills), so every inventory row degraded to
+    # ``spec_complete=False`` and the whole catalog's physical production
+    # evidence / admission failed closed.  This pass replaces the four plaintext
+    # tokens with authoritative digests computed from current source / the
+    # canonical closure payload, so admission rests on real immutable hashes.
+    from factor_engine.cleaned_operators.spec_completion import complete_physical_specs
+
+    complete_physical_specs()
+
     OperatorRegistry.finalize()
     OperatorRegistry.freeze()
     _LOADED = True

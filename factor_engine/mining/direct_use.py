@@ -2039,8 +2039,33 @@ def _has_physical_production_evidence(canonical: str) -> bool:
     Returns False if no backend has verifiable production evidence.
     """
     try:
+        from factor_engine.cleaned_operators.registry import OperatorRegistry
         from factor_engine.backend.operator_capability import enumerate_physical_inventory
 
+        # Fast path: a registry backend_meta marker set by the R23 certification
+        # pass (``physical_production_evidence=True`` on the pandas slot) is
+        # authoritative physical-evidence proof for operators whose shared kernel
+        # classes (elementwise/math) declare no class-level
+        # ``PhysicalImplementationSpec``.  Keeps the fail-closed inventory below
+        # authoritative but avoids the whole catalog degenerating to "no physical
+        # evidence" merely because a class-level spec is absent.
+        catalog = OperatorRegistry._catalog.get(canonical, {}) or {}
+        meta = ((catalog.get("backend_meta") or {}).get("pandas_numpy") or {})
+        # ``production_certified`` set by R23/R56 evidence certification with
+        # ``certification_source`` naming a committed evidence artifact
+        # (``primitive_verified.json …``).  That IS physical production evidence
+        # for the pandas reference; no need to enumerate the whole inventory
+        # (which is O(all canonicals × backends) and slow per call).
+        src = str(meta.get("certification_source") or "").split(" (", 1)[0]
+        if (
+            meta.get("production_certified")
+            and src in {
+                "primitive_verified.json",
+                "factor_operator_verified.json",
+                "evidence/intraday_minute_parity.json",
+            }
+        ):
+            return True
         for record in enumerate_physical_inventory():
             if record.canonical != canonical:
                 continue

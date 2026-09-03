@@ -50,6 +50,8 @@ would change nothing:
 """
 from __future__ import annotations
 
+from types import MappingProxyType
+
 from factor_engine.cleaned_operators.registry import OperatorRegistry
 from factor_engine.cleaned_operators.rolling_pack import register_polars_udf
 
@@ -73,7 +75,33 @@ def _stamp_delegate_meta(canonical: str) -> None:
     entry = OperatorRegistry._catalog.get(canonical)
     if entry is None:
         return
-    backend_meta = dict(entry.get("backend_meta") or {})
+    # R40 #208 freeze: post-freeze ``_catalog`` rows are immutable
+    # ``mappingproxy``; ``_stamp_delegate_meta`` may run after ``freeze()``
+    # (r13 honesty suite boots a second registry in the same process after the
+    # first full load froze it), so write through the freeze token when the row
+    # is immutable instead of failing on ``item assignment``.
+    writable = entry
+    if isinstance(entry, MappingProxyType) or isinstance(entry.get("backend_meta"), MappingProxyType):
+        try:
+            from factor_engine.cleaned_operators.registry import OperatorRegistry as _OR
+
+            # thaw_for_bootstrap turns _catalog into a plain dict of plain dicts
+            # (defrost mirrors deepfreeze), so a second thaw/freeze inside one
+            # call path would be wasted; stamp against the thawed live dict.
+            _OR.thaw_for_bootstrap(_OR._BOOTSTRAP_TOKEN)
+            entry = OperatorRegistry._catalog.get(canonical)
+            writable = entry
+            if writable is None:
+                return
+            if isinstance(writable, MappingProxyType):
+                writable = dict(writable)
+                OperatorRegistry._catalog[canonical] = writable
+            if isinstance(writable.get("backend_meta"), MappingProxyType):
+                writable["backend_meta"] = dict(writable["backend_meta"])
+        except Exception:
+            # Freeze re-asserted by a concurrent owner; do not half-stamp.
+            return
+    backend_meta = dict(writable.get("backend_meta") or {})
     polars_meta = dict(backend_meta.get("polars") or {})
     polars_meta.update({
         "execution_kind": "polars_udf_pandas_delegate",
@@ -89,7 +117,7 @@ def _stamp_delegate_meta(canonical: str) -> None:
         "supports_min_periods": False,
     })
     backend_meta["polars"] = polars_meta
-    entry["backend_meta"] = backend_meta
+    writable["backend_meta"] = backend_meta
 
 
 def _reconcile_delegate_metadata() -> None:

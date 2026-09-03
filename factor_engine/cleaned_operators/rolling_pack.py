@@ -18,6 +18,11 @@ try:
 except Exception:
     pl = None
 
+from factor_engine.backend.contracts import (  # noqa: E402  (after optional polars guard)
+    ExecutionKind,
+    PhysicalImplementationSpec,
+)
+
 from factor_engine.cleaned_operators.base import ParamSpec, ParamRole
 
 
@@ -234,6 +239,21 @@ def register_polars_udf(canonical: str) -> None:
 
     class _PolarsUdf(PolarsSeriesOperator):
         metadata = PolarsMetadata(name=canonical, category="polars_udf", param_names=[])
+        # FE-P0-005 / R13 P0-63: explicit physical-spec declaration so production
+        # classification (`canonical_polars_kind`, fail-closed) reports this slot
+        # as a pandas delegate instead of `UNSUPPORTED` merely because the generic
+        # bridge class declares no spec (100k GO §0 backend honesty).
+        _physical_spec = PhysicalImplementationSpec(
+            canonical=canonical,
+            backend="polars",
+            execution_kind=ExecutionKind.POLARS_PANDAS_DELEGATE,
+            supports_lazy=False,
+            supports_streaming=False,
+            materializes_full_panel=True,
+            supports_nulls=True,
+            supports_nan=True,
+            supports_inf=True,
+        )
 
         def _calculate_series(self, *frames, **params):
             from factor_engine.cleaned_operators.registry import OperatorRegistry as _Reg

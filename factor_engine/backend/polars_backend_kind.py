@@ -225,7 +225,15 @@ def canonical_polars_kind(canonical: str, *, production_mode: bool = True) -> Po
         return PolarsImplementationKind.UNSUPPORTED
     if "polars" not in OperatorRegistry.backends_for(canonical):
         return PolarsImplementationKind.UNSUPPORTED
-    op = OperatorRegistry.get(canonical, "polars")
+    # R40 #208: ``OperatorRegistry.get`` is surface-gated — research / internal /
+    # unclassified canonicals return None under the default ``mode="production"``.
+    # The delegate-kind classifier must classify ANY registered polars slot (the
+    # gap-coverage bridge registers research/internal canonicals too), so read the
+    # live operator directly via the frozen snapshot instead of the gated getter.
+    try:
+        op = OperatorRegistry.get(canonical, "polars", mode="any")
+    except TypeError:  # older signature without mode
+        op = OperatorRegistry.get(canonical, "polars")
     if op is None:
         return PolarsImplementationKind.UNSUPPORTED
     meta = (

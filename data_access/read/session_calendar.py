@@ -32,11 +32,30 @@ from __future__ import annotations
 
 import datetime as _dt
 import hashlib
+import math
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable, Sequence
 
 from data_access.core.exceptions import AvailabilityLatencyError, ValidationError
+
+import pandas as pd
+
+
+def _bar_freq_minutes(bar_freq: str) -> int:
+    """Parse a bar-frequency string into whole minutes (``1min``/``1m``/``5m``…)."""
+    text = str(bar_freq).strip().lower()
+    if text.endswith("min"):
+        text = text[:-3]
+    elif text.endswith("m"):
+        text = text[:-1]
+    try:
+        minutes = int(text)
+    except ValueError as exc:
+        raise ValidationError(f"无法解析 bar_freq {bar_freq!r} 为分钟数") from exc
+    if minutes <= 0:
+        raise ValidationError(f"bar_freq {bar_freq!r} 必须为正分钟数")
+    return minutes
 
 # #7 唯一 Market canonicalizer：明确 alias → canonical market。未知值直接报错，
 # 绝不能 ``else → us``。
@@ -136,6 +155,55 @@ class MarketSession:
                     total += _minutes_between(seg.start, end) + 1
             return max(total, 1)
         return self.total_bars
+
+    def assert_session_complete(
+        self,
+        timestamps: Iterable[Any],
+        *,
+        bar_freq: str = "1min",
+        require_full: bool = True,
+        context: str = "minute panel",
+    ) -> None:
+        """Fail-closed session-completeness gate (GO_PROMPT §3.9).
+
+        A-share regular session is 09:31–11:30 / 13:01–15:00 = 240 one-minute
+        bars with NO 09:30 / 13:00 bar and no lunch bar.  A minute panel that
+        feeds a session-aware factor must not silently carry a partial session
+        (a missing bar would be treated as a real observation and skew
+        rolling / pct_change / realized-vol features).
+
+        ``timestamps`` are interpreted in the session-local timezone (naive
+        input is treated as already-local; tz-aware input is converted to
+        ``self.timezone``).  For every distinct trading day present, the
+        observed bar count is compared against the expected count for that day
+        (``bar_count_on``, which honours early-close).  ``require_full=True``
+        (production) raises on ANY shortfall; ``require_full=False`` (research)
+        only raises when a day is missing more than half its expected bars.
+
+        Raises ``ValidationError`` (fail-closed) when the session is incomplete.
+        """
+        if timestamps is None or len(list(timestamps)) == 0:
+            return
+        ts = pd.DatetimeIndex(pd.to_datetime(list(timestamps)))
+        if ts.tz is not None:
+            ts = ts.tz_convert(self.timezone).tz_localize(None)
+        width = max(1, int(_bar_freq_minutes(bar_freq)))
+        days = ts.normalize()
+        for day in sorted(set(days)):
+            expected = max(1, int(math.ceil(self.bar_count_on(day.date()) / width)))
+            observed = int((days == day).sum())
+            if observed >= expected:
+                continue
+            shortfall = expected - observed
+            if require_full or shortfall > expected // 2:
+                raise ValidationError(
+                    f"{context}: {day.date()} 分钟 session 不完整——期望 "
+                    f"{expected} 根 bar（{self.market} {bar_freq}），实际 "
+                    f"{observed} 根，缺 {shortfall} 根。A 股常规 session 为 "
+                    "09:31–11:30 / 13:01–15:00 共 240 根（无 09:30/13:00 bar，"
+                    "午休无 bar）；缺 bar 会被当成真实观测污染 session-aware "
+                    "因子，fail-closed 拒绝（GO_PROMPT §3.9）。"
+                )
 
     def effective_segments_on(self, d: _dt.date) -> tuple[SessionSegment, ...]:
         """该日生效的 segment 集合：early-close 日按提前收盘裁剪，否则原样。

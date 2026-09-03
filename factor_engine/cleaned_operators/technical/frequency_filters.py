@@ -239,6 +239,13 @@ class FIRLowpassCausal(SeriesOperator):
             valid = np.isfinite(series)
             if not valid.any():
                 continue
+            if len(series) < ntaps:
+                # A causal FIR needs at least ``ntaps`` trailing samples; a
+                # shorter input (e.g. a prefix slice) cannot produce a valid
+                # output, so it stays all-NaN rather than letting
+                # ``np.convolve(mode='same')`` return a longer array that
+                # breaks the ``filtered[~valid]`` mask.
+                continue
             # Convolve causally: each output uses trailing ntaps inputs
             filtered = np.convolve(np.where(valid, series, 0.0), h, mode='same')
             # Mask initial transient and non-finite inputs

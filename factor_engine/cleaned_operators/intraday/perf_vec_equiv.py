@@ -19,7 +19,17 @@ import pandas as pd
 
 from factor_engine.cleaned_operators.intraday import _core
 from factor_engine.cleaned_operators.intraday import perf_vec_kernels as pvk
+from factor_engine.cleaned_operators.intraday import smart_money as sm
 from factor_engine.cleaned_operators.intraday import true_gap_batch3 as tg
+from factor_engine.cleaned_operators.intraday import vwap_path as vp
+
+# PERF-2 vector kernels that MUST have a live __vec__ bind.  Any whitelisted
+# scalar kernel removed/renamed (so bind_whitelist can no longer attach its
+# vector impl) fails loudly here instead of silently narrowing the fast path
+# (100k GO §6.3 telemetry: intraday_vector_kernels_bound).
+_BOUND = [tg._session_mean_reversion_kernel, tg._price_delay_kernel,
+          tg._volume_imbalance_kernel, sm._stock_graph_features,
+          sm._common_trading_intensity, vp._time_above_vwap]
 
 
 def _session_minutes(days: int = 3, start: str = "2024-01-02") -> pd.DatetimeIndex:
@@ -43,6 +53,11 @@ def _base_panel(days: int = 3, cols=None, seed: int = 0):
 def _volume_panel(df, seed: int = 1):
     rng = np.random.default_rng(seed)
     return pd.DataFrame(rng.exponential(scale=1e6, size=df.shape), index=df.index, columns=df.columns)
+
+
+def _amount_panel(df, seed: int = 44):
+    rng = np.random.default_rng(seed)
+    return pd.DataFrame(rng.exponential(scale=1e8, size=df.shape), index=df.index, columns=df.columns)
 
 
 def _inject_nan(panel, seed: int = 7, gap_frac: float = 0.15, blank_day: int | None = None):
@@ -75,20 +90,36 @@ def _eq(a: pd.DataFrame, b: pd.DataFrame) -> str:
 
 
 def _scalar(fn, *frames, min_finite=2):
-    """Run daily_agg{,_two} with all vec kernels unbound (pure scalar)."""
-    for f in [tg._session_mean_reversion_kernel, tg._price_delay_kernel, tg._volume_imbalance_kernel]:
+    """Run daily_agg{,_two} with all vec kernels unbound (pure scalar).
+
+    PERF-2 bench fix (100k GO §6.2): pass ``fn`` DIRECTLY, never wrapped in a
+    lambda — a lambda has no ``__vec__`` attribute, so a wrapped call can never
+    take the vector path and a "vector" benchmark would silently time the
+    scalar path.  The scalar path is instead forced by unbinding the kernels
+    (above), which is the only honest way to reach it.
+    """
+    for f in [tg._session_mean_reversion_kernel, tg._price_delay_kernel, tg._volume_imbalance_kernel,
+              sm._stock_graph_features, sm._common_trading_intensity, vp._time_above_vwap]:
         if hasattr(f, "__vec__"):
             del f.__vec__
     if len(frames) == 1:
-        return _core.daily_agg(frames[0], lambda v, t: fn(v, t), min_finite=min_finite)
-    return _core.daily_agg_two(frames[0], frames[1], lambda a, b: fn(a, b, None), min_finite=min_finite)
+        return _core.daily_agg(frames[0], fn, min_finite=min_finite)
+    if len(frames) == 2:
+        return _core.daily_agg_two(frames[0], frames[1], fn, min_finite=min_finite)
+    return _core.daily_agg_three(frames[0], frames[1], frames[2], fn, min_finite=min_finite)
 
 
 def _vec(fn, *frames, min_finite=2):
     pvk.bind_whitelist()
+    assert getattr(fn, "__vec__", None) is not None, (
+        "PERF-2 vec path: kernel has no __vec__ after bind_whitelist — "
+        "benchmark would silently time the scalar path"
+    )
     if len(frames) == 1:
-        return _core.daily_agg(frames[0], lambda v, t: fn(v, t), min_finite=min_finite)
-    return _core.daily_agg_two(frames[0], frames[1], lambda a, b: fn(a, b, None), min_finite=min_finite)
+        return _core.daily_agg(frames[0], fn, min_finite=min_finite)
+    if len(frames) == 2:
+        return _core.daily_agg_two(frames[0], frames[1], fn, min_finite=min_finite)
+    return _core.daily_agg_three(frames[0], frames[1], frames[2], fn, min_finite=min_finite)
 
 
 # (kernel, frames-builder, min_finite, label)
@@ -96,17 +127,30 @@ _CASES = [
     (tg._session_mean_reversion_kernel, "one", 5, "session_mean_reversion"),
     (tg._price_delay_kernel, "two", 5, "price_delay"),
     (tg._volume_imbalance_kernel, "two", 3, "volume_imbalance"),
+    (sm._stock_graph_features, "one", 5, "dynamic_stock_graph_features"),
+    (sm._common_trading_intensity, "two", 3, "common_trading_intensity"),
+    (vp._time_above_vwap, "three", 4, "time_above_vwap"),
 ]
 
 
 def run_all(verbose: bool = True) -> list[tuple[str, str]]:
     """Run all whitelisted-kernel equivalence cases; returns [(label, msg)]."""
     results = []
+    pvk.bind_whitelist()
+    assert pvk.count_bound() == len(_BOUND), (
+        "PERF-2 coverage: expected %d bound kernels, got %d — a whitelisted "
+        "scalar kernel silently lost its __vec__ bind" % (len(_BOUND), pvk.count_bound())
+    )
     for fn, kind, mf, label in _CASES:
         # build fixtures
         if kind == "one":
             a = _inject_nan(_base_panel(days=4, seed=42), seed=7, gap_frac=0.15, blank_day=2)
             frames = (a,)
+        elif kind == "three":
+            a = _inject_nan(_base_panel(days=4, seed=42), seed=7, gap_frac=0.15, blank_day=2)
+            b = _inject_nan(_amount_panel(a, seed=44), seed=8, gap_frac=0.15, blank_day=2)
+            c = _inject_nan(_volume_panel(a, seed=43), seed=9, gap_frac=0.15, blank_day=2)
+            frames = (a, b, c)
         else:
             a = _inject_nan(_base_panel(days=4, seed=42), seed=7, gap_frac=0.15, blank_day=2)
             b = _inject_nan(_volume_panel(a, seed=43), seed=8, gap_frac=0.15, blank_day=2)

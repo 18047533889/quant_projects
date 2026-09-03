@@ -20,6 +20,7 @@ from factor_engine.ir.types import (
     lattice_join_semantic_attrs,
     semantic_type_of,
 )
+from factor_engine.ashare_contract_gate import AShareContractViolation
 
 _LAG_PARAM_NAMES = {
     "ts_delay": ("n", "d", "lag", "periods", "window"),
@@ -1510,6 +1511,16 @@ class Analyzer:
         period_errors = validate_fundamental_period_contracts(referenced_fields)
         if period_errors:
             raise PeriodSelectionContractError("; ".join(period_errors))
+        # P0#10 (GO prompt §110 item 10): A-share return-unit contract gate.
+        # A formula reaching a return field whose declared unit is not a return
+        # basis (ratio/percent/basis_point) fails closed at compile time — the
+        # repo convention is Vwap.pct_change().shift(-1) with the Adj-table
+        # Return column in basis points.  This is the non-bypassable hook.
+        from factor_engine.ashare_contract_gate import validate_ashare_return_unit_contracts
+
+        return_unit_errors = validate_ashare_return_unit_contracts(referenced_fields)
+        if return_unit_errors:
+            raise AShareContractViolation("; ".join(return_unit_errors))
         zero_impute_errors = validate_fundamental_zero_imputation(ir)
         if zero_impute_errors:
             raise FundamentalZeroImputationError("; ".join(zero_impute_errors))

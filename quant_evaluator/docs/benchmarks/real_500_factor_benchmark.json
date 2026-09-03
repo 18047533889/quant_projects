@@ -1,0 +1,33 @@
+{
+  "timestamp": "2026-09-04T00:42:20",
+  "git_head": "dbbc3fe75f38d75c88f62ad60e3e0eedc666f026",
+  "hardware": {
+    "gpu": "NVIDIA L20",
+    "driver": "580.126.20",
+    "cuda": "13.0",
+    "cupy": "14.2.0",
+    "ram_gb": 92
+  },
+  "workload": {
+    "T": 1854,
+    "N": 5447,
+    "F": 500,
+    "label": "spearman_vwap",
+    "tile": 16,
+    "num_tiles": 32
+  },
+  "timing": {
+    "gpu_tiled_rankic_seconds": 51.077534675598145,
+    "num_tiles": 32,
+    "cpu_per_factor_seconds": 1.7519742846488953,
+    "est_cpu_500_seconds": 875.9871423244476,
+    "speedup_vs_cpu_single": 17.15014532099066
+  },
+  "memory": {
+    "peak_vram_gb": 24.9,
+    "factor_tensor_gb": 20.2
+  },
+  "throughput": {
+    "factor_per_second": 9.789039411858512
+  }
+}

@@ -54,6 +54,19 @@ from factor_engine.runtime.streaming_result_sink import ResultItem, StreamingRes
 
 _logger = logging.getLogger(__name__)
 
+
+def _resolve_execution_policy() -> str | None:
+    """P0#8（100k GO §11）：scheduler 执行策略单一权威。
+
+    返回 ``None`` → 交给 HybridExecutor 的 backend classifier（默认，推荐）；
+    返回 ``"thread"`` / ``"process"`` → 运维显式强制（``FACTOR_ENGINE_SCHEDULER``
+    env 权威覆盖 classifier）。scheduler 不再无条件覆盖 executor classifier。
+    """
+    raw = os.environ.get("FACTOR_ENGINE_SCHEDULER", "").strip().lower()
+    if raw in {"thread", "process"}:
+        return raw
+    return None
+
 #: R33-P0-040：``wait(FIRST_COMPLETED)`` 事件驱动，超时只作兜底上限（不再固定
 #: 50ms 轮询）。
 _EVENT_WAIT_TIMEOUT_S = 0.05
@@ -320,6 +333,18 @@ class AdaptiveBatchScheduler:
             run_mode=os.environ.get("FACTOR_ENGINE_RUN_MODE", "").strip().lower() or None,
         )
         self.executor = executor or HybridExecutor(broker=self.broker)
+        # P0#8（100k GO §11）：scheduler 强制 thread 与 HybridExecutor classifier
+        # 冲突的单一权威。默认 ``None`` → 交给 HybridExecutor 的 backend classifier
+        # （pandas/GIL-bound → process，native → thread）。仅当运维显式设置
+        # ``FACTOR_ENGINE_SCHEDULER=thread|process`` 时，scheduler 才强制覆盖
+        # classifier（env 权威）。scheduler 不再无条件覆盖 executor classifier。
+        self._execution_policy = _resolve_execution_policy()
+        if self._execution_policy is not None:
+            _logger.info(
+                "scheduler execution policy override active: %s "
+                "(FACTOR_ENGINE_SCHEDULER env authoritative)",
+                self._execution_policy,
+            )
         self.sink = sink
         self.wave_memory_budget = wave_memory_budget
         self.max_concurrency = max_concurrency
@@ -720,7 +745,7 @@ class AdaptiveBatchScheduler:
             future = self.executor.submit(
                 task.preferred_backend,
                 fn, task, backend, ctx, execute_root, materialize_shared,
-                prefer="thread",
+                prefer=self._execution_policy,
             )
             return future, None
         stage = self.broker.pressure_stage()
@@ -750,7 +775,7 @@ class AdaptiveBatchScheduler:
             future = self.executor.submit(
                 task.preferred_backend,
                 fn, task, backend, ctx, execute_root, materialize_shared,
-                prefer="thread",
+                prefer=self._execution_policy,
             )
         except Exception:
             self._task_started_at.pop(task.task_id, None)
@@ -1233,7 +1258,7 @@ class AdaptiveBatchScheduler:
                 future = self.executor.submit(
                     group.backend,
                     _dispatch_fusion, group, dag.tasks, backend, ctx, execute_root,
-                    prefer="thread",
+                    prefer=self._execution_policy,
                 )
                 futures[gkey] = future
                 future_to_task_id[future] = gkey
@@ -1329,7 +1354,7 @@ class AdaptiveBatchScheduler:
                             self._task_started_at[tid] = time.monotonic() * 1000.0
                         future = self.executor.submit(
                             mb.backend, dispatch_micro_batch, mb.roots, dag.tasks,
-                            execute_root, prefer="thread",
+                            execute_root, prefer=self._execution_policy,
                         )
                         futures[mb_key] = future
                         future_to_task_id[future] = mb_key
@@ -1667,6 +1692,9 @@ class AdaptiveBatchScheduler:
             "scheduler_wait_polling_count": self._perf_metrics[
                 "scheduler_wait_polling_count"
             ],
+            # P0#8（100k GO §11）：执行策略单一权威——None=classifier 权威，
+            # thread/process=env 强制覆盖。telemetry 可见。
+            "execution_policy": self._execution_policy,
         }
         return {
             "results": self._results,

@@ -696,12 +696,34 @@ def execute_fusion_group(
             stats=stats,
         )
         ctx.runtime_stats = stats  # type: ignore[attr-defined]
+        _emit_fusion_telemetry(stats)
         return results
     # backend 无 multi-root：诚实 per-root fallback。
     stats["native_fusion_planned"] = stats.get("native_fusion_planned", 0) + 1
     stats["native_fusion_fallback"] = stats.get("native_fusion_fallback", 0) + 1
     ctx.runtime_stats = stats  # type: ignore[attr-defined]
+    _emit_fusion_telemetry(stats)
     for tid in group.roots:
         task = task_by_id[tid]
         results[tid] = execute_root(task)
     return results
+
+
+def _emit_fusion_telemetry(stats: dict[str, Any]) -> None:
+    """P0#7: 把 fusion 运行指标转发到 registry counters，避免静默退化。"""
+    try:
+        from factor_engine.telemetry.execution_telemetry import fusion_record, fallback_record
+
+        fusion_record(
+            {
+                "planned": int(stats.get("native_fusion_planned", 0)),
+                "executed": int(stats.get("native_fusion_executed", 0)),
+                "binary_split": int(stats.get("native_fusion_binary_split", 0)),
+                "fallback": int(stats.get("native_fusion_fallback", 0)),
+                "roots_total": int(stats.get("native_fusion_roots_total", 0)),
+            }
+        )
+        if int(stats.get("native_fusion_fallback", 0)) > 0:
+            fallback_record("fusion", "fallback_events", int(stats.get("native_fusion_fallback", 0)))
+    except Exception:  # pragma: no cover - telemetry never breaks execution
+        return

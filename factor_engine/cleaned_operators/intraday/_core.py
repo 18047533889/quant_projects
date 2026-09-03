@@ -273,6 +273,7 @@ def daily_agg(
     fn: Callable[[np.ndarray, np.ndarray], float],
     *,
     min_finite: int = 2,
+    _grid: tuple | None = None,
 ) -> pd.DataFrame:
     """Apply per-(instrument, calendar-day) aggregation fn(vals, times).
 
@@ -281,9 +282,13 @@ def daily_agg(
     longer manufacture one.  Only ``DataDegeneracy`` (P1-18) — plus genuine
     ``ZeroDivisionError`` / ``OverflowError`` — maps to ``NaN``; a plain
     ``ValueError`` from a parameter/kernel bug propagates.
+
+    ``_grid`` (optional) is a pre-built ``_grid3`` tuple so the vectorized fast
+    path can reuse a grid materialized once by ``IntradayFeatureCompiler``
+    (P0#5 single-scan).  When omitted the fast path builds its own grid.
     """
     frame = as_panel(frame)
-    _fast = _vec_daily_agg(frame, fn, min_finite=min_finite)
+    _fast = _vec_daily_agg(frame, fn, min_finite=min_finite, _grid=_grid)
     if _fast is not None:
         return _fast
     out: dict[str, pd.Series] = {}
@@ -312,6 +317,7 @@ def daily_agg_two(
     fn: Callable[[np.ndarray, np.ndarray], float],
     *,
     min_finite: int = 2,
+    _grid: tuple | None = None,
 ) -> pd.DataFrame:
     """Apply fn(a_vals, b_vals) per (instrument, day).
 
@@ -319,12 +325,32 @@ def daily_agg_two(
     ``pd.concat(...).dropna(subset=["a"])`` below would silently compress a
     mismatched axis.  The ``dropna`` is kept; it only removes rows where the
     PRIMARY column (``a``) is NaN, and slot compression is now guarded.
+
+    PERF-2 dispatch (100k GO §6.2): ``fn`` is the KERNEL ITSELF (e.g.
+    ``tg._price_delay_kernel``), which carries the ``__vec__`` attribute; the
+    legacy lambda-wrapped call sites (``lambda v, vol: fn(v, vol, None)``)
+    cannot expose ``__vec__``.  Scalar kernels take ``(a, b, times)`` with
+    ``times=None`` tolerated — the unwrap below binds the third argument so
+    both call conventions work.
+
+    ``_grid`` (optional) is a pre-built ``_grid3`` tuple so the vectorized fast
+    path can reuse a grid materialized once by ``IntradayFeatureCompiler``
+    (P0#5 single-scan).  When omitted the fast path builds its own grid.
     """
     frame_a, frame_b = as_panel(frame_a), as_panel(frame_b)
     require_same_session_grid(frame_a, frame_b)
-    _fast = _vec_daily_agg_two(frame_a, frame_b, fn, min_finite=min_finite)
+    _fast = _vec_daily_agg_two(frame_a, frame_b, fn, min_finite=min_finite, _grid=_grid)
     if _fast is not None:
         return _fast
+    fn2 = fn
+    import inspect as _inspect
+
+    try:
+        _params = _inspect.signature(fn).parameters
+        if len(_params) >= 3:
+            fn2 = (lambda f: lambda va, vb: f(va, vb, None))(fn)
+    except (TypeError, ValueError):
+        fn2 = fn
     out: dict[str, pd.Series] = {}
     for inst in frame_a.columns:
         a, b = frame_a[inst], frame_b[inst]
@@ -338,7 +364,7 @@ def daily_agg_two(
                 per_day[day] = np.nan
                 continue
             try:
-                per_day[day] = float(fn(vals_a, vals_b))
+                per_day[day] = float(fn2(vals_a, vals_b))
             except (DataDegeneracy, ZeroDivisionError, OverflowError):
                 per_day[day] = np.nan
         out[inst] = pd.Series(per_day, dtype=float)
@@ -354,15 +380,20 @@ def daily_agg_three(
     fn: Callable[[np.ndarray, np.ndarray, np.ndarray], float],
     *,
     min_finite: int = 2,
+    _grid: tuple | None = None,
 ) -> pd.DataFrame:
     """Apply fn(a_vals, b_vals, c_vals) per (instrument, day).
 
     Same session-grid guard (P0-08) and ``DataDegeneracy`` catch (P1-18) as
     ``daily_agg_two``.
+
+    ``_grid`` (optional) is a pre-built ``_grid3`` tuple so the vectorized fast
+    path can reuse a grid materialized once by ``IntradayFeatureCompiler``
+    (P0#5 single-scan).  When omitted the fast path builds its own grid.
     """
     frame_a, frame_b, frame_c = as_panel(frame_a), as_panel(frame_b), as_panel(frame_c)
     require_same_session_grid(frame_a, frame_b, frame_c)
-    _fast = _vec_daily_agg_three(frame_a, frame_b, frame_c, fn, min_finite=min_finite)
+    _fast = _vec_daily_agg_three(frame_a, frame_b, frame_c, fn, min_finite=min_finite, _grid=_grid)
     if _fast is not None:
         return _fast
     out: dict[str, pd.Series] = {}
@@ -552,11 +583,12 @@ def _vec_daily_agg(
     fn,
     *,
     min_finite: int = 2,
+    _grid: tuple | None = None,
 ) -> pd.DataFrame | None:
     fnv = getattr(fn, "__vec__", None)
     if fnv is None:
         return None
-    return fnv(a, min_finite=min_finite)
+    return fnv(a, min_finite=min_finite, _grid=_grid)
 
 
 def _vec_daily_agg_two(
@@ -565,11 +597,12 @@ def _vec_daily_agg_two(
     fn,
     *,
     min_finite: int = 2,
+    _grid: tuple | None = None,
 ) -> pd.DataFrame | None:
     fnv = getattr(fn, "__vec__", None)
     if fnv is None:
         return None
-    return fnv(a, b, min_finite=min_finite)
+    return fnv(a, b, min_finite=min_finite, _grid=_grid)
 
 
 def _vec_daily_agg_three(
@@ -579,11 +612,12 @@ def _vec_daily_agg_three(
     fn,
     *,
     min_finite: int = 2,
+    _grid: tuple | None = None,
 ) -> pd.DataFrame | None:
     fnv = getattr(fn, "__vec__", None)
     if fnv is None:
         return None
-    return fnv(a, b, c, min_finite=min_finite)
+    return fnv(a, b, c, min_finite=min_finite, _grid=_grid)
 
 
 # ---- shared vectorized helpers (used by whitelisted kernels below) ---------
@@ -634,69 +668,134 @@ def _vec_autocorr1(x: np.ndarray) -> np.ndarray:
 # all-NaN days with rtol/atol 1e-12.  Only harness-proven kernels stay here.
 # ---------------------------------------------------------------------------
 
-def _vec_session_mean_reversion(a: pd.DataFrame, *, min_finite: int = 2) -> pd.DataFrame:
+def _vec_session_mean_reversion(
+    a: pd.DataFrame, *, min_finite: int = 2, _grid: tuple | None = None
+) -> pd.DataFrame:
     """Vector intra_session_mean_reversion (equal-weighted session mean reversion).
 
-    Scalar kernel: take finite values, mean, deviations, lag-1 autocorrelation
-    via corrcoef, then negate.  DataDegeneracy cases -> NaN (same as scalar map).
+    Scalar kernel (``true_gap_batch3._session_mean_reversion_kernel``): drop
+    NaN bars, take the mean of the finite values, compute deviations, then the
+    lag-1 autocorrelation over CONSECUTIVE FINITE values (``dev[:-1]`` vs
+    ``dev[1:]``) and negate.  The drop-then-pair semantic is what the scalar
+    ``np.corrcoef(dev[:-1], dev[1:])`` produces — pairing consecutive finite
+    bars, NOT consecutive grid positions (a NaN gap must not split the pair).
+
+    Vectorization: per (day, inst) column the finite values are packed to the
+    front with a stable argsort (preserving intra-session order), so the
+    packed prefix ``[:cnt]`` is exactly the scalar ``finite`` slice; the
+    autocorrelation then runs on the packed prefix with the same algebra.
+
+    ``_grid`` (optional) is a pre-built ``_grid3`` tuple so ``IntradayFeatureCompiler``
+    can materialize the (day, bar, inst) grid ONCE and dispatch several kernels
+    on the same grid (P0#5 single-scan).  When omitted the kernel builds its own
+    grid (standalone backward-compatible path).
     """
     import numpy as np
-    g, _, _, codes, uniq, active, filled = _grid3(a)
-    n = g.shape[0]
+    if _grid is None:
+        g, _, _, codes, uniq, active, filled = _grid3(a)
+    else:
+        g, _, _, codes, uniq, active, filled = _grid
+    n, B, C = g.shape
     fin = np.isfinite(g)
-    vals = np.where(fin, g, 0.0)
-    sums = np.sum(vals, axis=1)
-    cnts = np.sum(fin, axis=1)
-    means = sums / np.maximum(cnts, 1)
-    dev = np.where(fin, vals - means, 0.0)
-    # vwap-deviation autocorr
-    fin2 = np.roll(fin, shift=-1, axis=1) & fin
-    fin2[:, -1] = False
-    cnt2 = np.sum(fin2, axis=1)
-    xa = np.where(fin2, dev, 0.0)
-    xb = np.where(fin2, np.roll(dev, shift=-1, axis=1), 0.0)
+    cnts = np.sum(fin, axis=1)  # (D, C) finite count per (day, inst)
+
+    # Pack finite values to the front per (day, inst) column, order-preserving
+    # (stable sort on the negated mask puts finite rows first, keeping their
+    # original bar order — exactly the scalar's ``vals[np.isfinite(vals)]``).
+    neg_fin = ~fin
+    order = np.argsort(neg_fin, axis=1, kind="stable")  # (D, B, C)
+    packed = np.take_along_axis(g, order, axis=1)
+    packed[~np.isfinite(packed)] = 0.0
+
+    max_cnt = int(cnts.max()) if cnts.size and cnts.max() > 0 else 1
+    # (D, max_cnt, C) packed finite values; rows >= cnt are zero-padded and
+    # masked out below.
+    ar = np.arange(max_cnt)[None, :, None]  # (1, max_cnt, 1)
+    mask = ar < cnts[:, None, :]  # (D, max_cnt, C) finite membership
+    pf = np.where(mask, packed[:, :max_cnt, :], 0.0)
+
+    psum = np.sum(pf, axis=1)  # (D, C)
+    pmean = (psum / np.maximum(cnts, 1))[:, None, :]  # (1-ish, C) broadcast
+    pdev = np.where(mask, pf - pmean, 0.0)  # deviations, zero outside mask
+
+    # lag-1 pairs over the packed prefix: pair j with j+1 where both < cnt.
+    m2 = mask[:, :-1, :] & mask[:, 1:, :]  # (D, max_cnt-1, C)
+    xa = np.where(m2, pdev[:, :-1, :], 0.0)
+    xb = np.where(m2, pdev[:, 1:, :], 0.0)
+    cnt2 = np.sum(m2, axis=1)  # (D, C)
     sx = np.sum(xa, axis=1); sy = np.sum(xb, axis=1)
-    sxx = np.sum(xa*xa, axis=1); syy = np.sum(xb*xb, axis=1); sxy = np.sum(xa*xb, axis=1)
-    denom = np.sqrt((cnt2*sxx - sx*sx) * (cnt2*syy - sy*sy))
-    r = np.full((n, g.shape[2]), np.nan)
+    sxx = np.sum(xa * xa, axis=1); syy = np.sum(xb * xb, axis=1)
+    sxy = np.sum(xa * xb, axis=1)
+    denom = np.sqrt((cnt2 * sxx - sx * sx) * (cnt2 * syy - sy * sy))
+    r = np.full((n, C), np.nan)
     ok = (denom > 0) & np.isfinite(denom)
-    r[ok] = -(cnt2*sxy - sx*sy)[ok] / denom[ok]
-    # invalid days (min_finite) -> NaN
+    r[ok] = -(cnt2 * sxy - sx * sy)[ok] / denom[ok]
+
+    # min_finite gate and constant-deviation degeneracy -> NaN (scalar parity).
     valid = cnts >= min_finite
     r[~valid] = np.nan
-    std_ok = np.std(np.where(fin, vals, np.nan), axis=1) > 1e-12
+    with np.errstate(invalid="ignore"):
+        std_ok = np.nanstd(np.where(fin, g, np.nan), axis=1) > 1e-12
     r[~std_ok] = np.nan
-    return _vec_result_df(r, uniq, g.columns if hasattr(g, 'columns') else a.columns)
+    return _vec_result_df(r, uniq, a.columns)
 
 
-def _vec_price_delay(a: pd.DataFrame, b: pd.DataFrame, *, min_finite: int = 2) -> pd.DataFrame:
+def _vec_price_delay(
+    a: pd.DataFrame, b: pd.DataFrame, *, min_finite: int = 2, _grid: tuple | None = None
+) -> pd.DataFrame:
     """Vector intra_price_delay (volume-weighted lag-1 return autocorrelation)."""
-    g, gb, _, codes, uniq, active, filled = _grid3(a, b)
+    if _grid is None:
+        g, gb, _, codes, uniq, active, filled = _grid3(a, b)
+    else:
+        g, gb, _, codes, uniq, active, filled = _grid
     n = g.shape[0]
     fin = np.isfinite(g) & np.isfinite(gb) & (gb > 0)
     cnt = np.sum(fin, axis=1)
     prices = np.where(fin, g, np.nan)
     vols = np.where(fin, gb, 0.0)
-    # log returns between consecutive finite (price,vol>0) bars
-    prev_fin = np.roll(fin, shift=1, axis=1) & fin
-    prev_fin[:, 0] = False
-    ret_num = np.where(prev_fin, np.log(np.where(prev_fin, prices, 1.0) / np.where(prev_fin, np.roll(prices, shift=1, axis=1), 1.0)), 0.0)
-    ret_den_ok = prev_fin
-    rets_fin = prev_fin & np.isfinite(ret_num)
-    cnt_ret = np.sum(rets_fin, axis=1)
-    # only aligned rets count; zero-pad
+    # --- pack finite (price, vol>0) bars to the front per (day, inst) ---
+    # The scalar kernel computes log returns between CONSECUTIVE FINITE bars
+    # (``prices[1:] / prices[:-1]`` after the NaN drop), so a NaN gap must not
+    # split a return pair.  A stable argsort on the negated mask packs the
+    # finite bars to the prefix in original bar order (same as the scalar's
+    # ``vals[np.isfinite(vals)]``), then pair j with j+1 inside the prefix.
+    order = np.argsort(~fin, axis=1, kind="stable")  # (D, B, C)
+    p_px = np.take_along_axis(prices, order, axis=1)
+    p_vol = np.take_along_axis(vols, order, axis=1)
+    p_px[~np.isfinite(p_px)] = 0.0
+    p_vol[~np.isfinite(p_vol)] = 0.0
+
+    max_cnt = int(cnt.max()) if cnt.size and cnt.max() > 0 else 1
+    ar = np.arange(max_cnt)[None, :, None]  # (1, max_cnt, 1)
+    mask = ar < cnt[:, None, :]  # (D, max_cnt, C) finite membership
+    pf = np.where(mask, p_px[:, :max_cnt, :], 0.0)
+    vf = np.where(mask, p_vol[:, :max_cnt, :], 0.0)
+
+    # log returns on the packed prefix: pair j with j+1 where both < cnt
+    m2 = mask[:, :-1, :] & mask[:, 1:, :]  # (D, max_cnt-1, C)
+    ra = np.log(np.where(m2, pf[:, 1:, :], 1.0) / np.where(m2, pf[:, :-1, :], 1.0))
+    ra = np.where(m2, ra, 0.0)
+    vb = np.where(m2, vf[:, 1:, :], 0.0)  # volume at the "next" bar
+
+    sw = np.sum(vb, axis=1)  # (D, C) total volume of finite bars 1..
+    norm = np.where(sw[:, None, :] > 1e-10, vb / np.maximum(sw[:, None, :], 1e-12), 0.0)
+    weighted = ra * norm
+    # Scalar pairs consecutive weighted returns: corrcoef(wr[:-1], wr[1:]) —
+    # the observation unit is the per-pair weighted return, so the lag-1
+    # correlation over the cnt-1 pair entries uses cnt-2 pair-of-pair obs.
+    xm2 = m2[:, :-1, :] & m2[:, 1:, :]  # (D, max_cnt-2, C) valid lag-1 pairs
+    xa = np.where(xm2, weighted[:, :-1, :], 0.0)
+    xb = np.where(xm2, weighted[:, 1:, :], 0.0)
+    sx = np.sum(xa, axis=1); sy = np.sum(xb, axis=1)
+    sxx = np.sum(xa * xa, axis=1); syy = np.sum(xb * xb, axis=1); sxy = np.sum(xa * xb, axis=1)
+    cnt2 = np.sum(xm2, axis=1)
+    denom = np.sqrt((cnt2 * sxx - sx * sx) * (cnt2 * syy - sy * sy))
     r = np.full((n, g.shape[2]), np.nan)
-    for d in range(n):
-        pass
-    # vectorized over axis1 directly on masked matrix
+    ok = (denom > 0) & np.isfinite(denom)
+    r[ok] = (cnt2 * sxy - sx * sy)[ok] / denom[ok]
     valid = cnt >= min_finite
-    wr = np.where(rets_fin, ret_num, 0.0)
-    wv = np.where(rets_fin, vols, 0.0)
-    sw = np.sum(wv, axis=1)
-    norm = np.where(sw > 1e-10, wv / np.maximum(sw, 1e-12), 0.0)
-    weighted = wr * norm
-    r = _vec_autocorr_pairs(weighted)
     r[~valid] = np.nan
+    r[cnt2 < 2] = np.nan
     return _vec_result_df(r, uniq, a.columns)
 
 
@@ -718,10 +817,15 @@ def _vec_autocorr_pairs(x: np.ndarray) -> np.ndarray:
     return out
 
 
-def _vec_volume_imbalance(a: pd.DataFrame, b: pd.DataFrame, *, min_finite: int = 2) -> pd.DataFrame:
+def _vec_volume_imbalance(
+    a: pd.DataFrame, b: pd.DataFrame, *, min_finite: int = 2, _grid: tuple | None = None
+) -> pd.DataFrame:
     """Vector intra_volume_imbalance."""
     import numpy as np
-    g, gb, _, codes, uniq, active, filled = _grid3(a, b)
+    if _grid is None:
+        g, gb, _, codes, uniq, active, filled = _grid3(a, b)
+    else:
+        g, gb, _, codes, uniq, active, filled = _grid
     n = g.shape[0]
     fin = np.isfinite(g) & np.isfinite(gb) & (gb > 0)
     cnt = np.sum(fin, axis=1)
@@ -740,6 +844,157 @@ def _vec_volume_imbalance(a: pd.DataFrame, b: pd.DataFrame, *, min_finite: int =
     r[ok] = (vol_above[ok] - vol_below[ok]) / total_vol[ok]
     valid = cnt >= min_finite
     r[~valid] = np.nan
+    return _vec_result_df(r, uniq, a.columns)
+
+
+def _vec_stock_graph_features(
+    a: pd.DataFrame, *, min_finite: int = 2, _grid: tuple | None = None
+) -> pd.DataFrame:
+    """Vector intra_dynamic_stock_graph_features (correlation of log returns).
+
+    Scalar kernel (``smart_money._stock_graph_features``): drop NaN bars, log-
+    returns over CONSECUTIVE FINITE bars (``diff(log(finite))`` so a NaN gap
+    does not split a return pair), then lag-1 autocorrelation over the returns
+    ``corrcoef(ret[:-1], ret[1:])``.  Returns the lag-1 autocorrelation (NOT
+    negated — the graph proxy is positive co-movement).
+
+    Vectorization: pack finite bars to the prefix with a stable argsort
+    (order-preserving, same as the scalar's ``finite`` slice), derive returns
+    on packed pairs, then the pair-of-pair lag-1 autocorrelation on the returns.
+    """
+    import numpy as np
+    if _grid is None:
+        g, _, _, codes, uniq, active, filled = _grid3(a)
+    else:
+        g, _, _, codes, uniq, active, filled = _grid
+    n = g.shape[0]
+    fin = np.isfinite(g)
+    cnt = np.sum(fin, axis=1)  # (D, C)
+
+    order = np.argsort(~fin, axis=1, kind="stable")  # (D, B, C)
+    packed = np.take_along_axis(g, order, axis=1)
+    packed[~np.isfinite(packed)] = 0.0
+
+    max_cnt = int(cnt.max()) if cnt.size and cnt.max() > 0 else 1
+    ar = np.arange(max_cnt)[None, :, None]  # (1, max_cnt, 1)
+    mask = ar < cnt[:, None, :]  # (D, max_cnt, C)
+    pf = np.where(mask, packed[:, :max_cnt, :], 0.0)
+
+    with np.errstate(divide="ignore", invalid="ignore"):
+        logpf = np.where(mask, np.log(pf), 0.0)
+    # log returns on consecutive packed pairs (both < cnt == a valid pair).
+    m2 = mask[:, :-1, :] & mask[:, 1:, :]  # (D, max_cnt-1, C)
+    ra = np.where(m2, logpf[:, 1:, :] - logpf[:, :-1, :], 0.0)
+
+    # lag-1 autocorrelation over the return pairs (pair-of-pair).
+    xm2 = m2[:, :-1, :] & m2[:, 1:, :]  # (D, max_cnt-2, C)
+    xa = np.where(xm2, ra[:, :-1, :], 0.0)
+    xb = np.where(xm2, ra[:, 1:, :], 0.0)
+    sx = np.sum(xa, axis=1); sy = np.sum(xb, axis=1)
+    sxx = np.sum(xa * xa, axis=1); syy = np.sum(xb * xb, axis=1)
+    sxy = np.sum(xa * xb, axis=1)
+    cnt2 = np.sum(xm2, axis=1)  # (D, C)
+    denom = np.sqrt((cnt2 * sxx - sx * sx) * (cnt2 * syy - sy * sy))
+    r = np.full((n, g.shape[2]), np.nan)
+    ok = (denom > 0) & np.isfinite(denom)
+    r[ok] = (cnt2 * sxy - sx * sy)[ok] / denom[ok]
+
+    valid = cnt >= min_finite
+    r[~valid] = np.nan
+    # constant-returns degeneracy (std(ret) <= _EPS) -> NaN (scalar parity).
+    with np.errstate(invalid="ignore"):
+        rstd = np.nanstd(np.where(m2, ra, np.nan), axis=1)
+    r[rstd <= _EPS] = np.nan
+    r[cnt2 < 2] = np.nan
+    return _vec_result_df(r, uniq, a.columns)
+
+
+def _vec_common_trading_intensity(
+    a: pd.DataFrame, b: pd.DataFrame, *, min_finite: int = 2, _grid: tuple | None = None
+) -> pd.DataFrame:
+    """Vector intra_common_trading_intensity (peak/mean volume x concentration).
+
+    Scalar kernel (``smart_money._common_trading_intensity``): drop non-finite
+    / non-positive-volume bars, then ``(max_vol / mean_vol) * sum((v/total)^2)``.
+    No sequential state and no cross-bar correlation → the packed-order is not
+    needed for the algebra, only for the finite mask (volume > 0 filter).
+    """
+    import numpy as np
+    if _grid is None:
+        g, gb, _, codes, uniq, active, filled = _grid3(a, b)
+    else:
+        g, gb, _, codes, uniq, active, filled = _grid
+    n = g.shape[0]
+    fin = np.isfinite(g) & np.isfinite(gb) & (g > 0)
+    cnt = np.sum(fin, axis=1)
+
+    vols = np.where(fin, g, 0.0)
+    total_vol = np.sum(vols, axis=1)  # (D, C) (vols>0 on valid bars)
+    mean_vol = total_vol / np.maximum(cnt, 1)
+    max_vol = np.max(np.where(fin, vols, -np.inf), axis=1)  # masked max
+    share = vols / np.maximum(total_vol[:, None, :], 1e-12)
+    conc = np.sum(np.where(fin, share * share, 0.0), axis=1)
+
+    with np.errstate(divide="ignore", invalid="ignore"):
+        intensity = (max_vol / np.maximum(mean_vol, 1e-12)) * conc
+    r = np.full((n, g.shape[2]), np.nan)
+    valid = (cnt >= min_finite) & np.isfinite(intensity)
+    r[valid] = intensity[valid]
+    return _vec_result_df(r, uniq, a.columns)
+
+
+def _vec_time_above_vwap(
+    a: pd.DataFrame,
+    b: pd.DataFrame,
+    c: pd.DataFrame,
+    *,
+    min_finite: int = 2,
+    _grid: tuple | None = None,
+) -> pd.DataFrame:
+    """Vector intra_time_above_vwap (fraction of minutes price > cum-VWAP).
+
+    Scalar kernel (``vwap_path._time_above_vwap``): drop non-finite /
+    non-positive-volume bars preserving ORDER, build cumulative VWAP
+    (cumsum(amount) / cumsum(volume)) over the finite bars, then
+    ``mean(close > cum_vwap)``.  Sequential cumsum is fine for numpy — only
+    the packed-order-preserving prefix must be identical to the scalar's
+    filtered bars.
+    """
+    import numpy as np
+    if _grid is None:
+        g, gb, gc, codes, uniq, active, filled = _grid3(a, b, c)
+    else:
+        g, gb, gc, codes, uniq, active, filled = _grid
+    n = g.shape[0]
+    fin = np.isfinite(g) & np.isfinite(gb) & np.isfinite(gc) & (gc > 0)
+    cnt = np.sum(fin, axis=1)
+
+    px = np.where(fin, g, 0.0)
+    am = np.where(fin, gb, 0.0)
+    vo = np.where(fin, gc, 0.0)
+    order = np.argsort(~fin, axis=1, kind="stable")  # order-preserving pack
+    pp = np.take_along_axis(px, order, axis=1)
+    pa = np.take_along_axis(am, order, axis=1)
+    pv = np.take_along_axis(vo, order, axis=1)
+
+    max_cnt = int(cnt.max()) if cnt.size and cnt.max() > 0 else 1
+    ar = np.arange(max_cnt)[None, :, None]  # (1, max_cnt, 1)
+    mask = ar < cnt[:, None, :]
+    pp = pp[:, :max_cnt, :]; pa = pa[:, :max_cnt, :]; pv = pv[:, :max_cnt, :]
+
+    # cumulative sums only over the valid prefix (zero-padded tail is neutral).
+    cm = np.cumsum(np.where(mask, pv, 0.0), axis=1)
+    ca = np.cumsum(np.where(mask, pa, 0.0), axis=1)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        cum_vwap = np.where(cm > _EPS, ca / np.maximum(cm, _EPS), np.nan)
+
+    above = np.where(mask, pp, np.nan) > cum_vwap
+    above_cnt = np.sum(np.where(mask & np.isfinite(above), above, 0.0), axis=1)
+    frac = above_cnt / np.maximum(cnt, 1)
+
+    r = np.full((n, g.shape[2]), np.nan)
+    valid = cnt >= min_finite
+    r[valid] = frac[valid]
     return _vec_result_df(r, uniq, a.columns)
 
 

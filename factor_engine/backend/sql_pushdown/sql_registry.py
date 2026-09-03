@@ -53,9 +53,18 @@ class SqlCapableOperator:
     """
 
     canonical: str
+    # 100k GO P0#1: 缓存按方言构建的 PhysicalImplementationSpec 实例（frozen
+    # dataclass 用 object.__setattr__ 在首次 _physical_specs 读取时写入）。
+    __sql_spec_cache: object | None = None
 
-    @property
-    def _physical_specs(self) -> dict[str, PhysicalImplementationSpec]:
+    # 100k GO P0#1: SqlCapableOperator._physical_specs is a PROPERTY that builds
+    # a fresh PhysicalImplementationSpec on every read.  A spec-completion pass
+    # that mutates the returned specs therefore writes into throwaway objects and
+    # never persists.  Cache the completed spec objects here (built lazily on
+    # first access) so the same per-dialect PhysicalImplementationSpec instances
+    # are returned on every read and an enrichment pass can complete them in
+    # place.
+    def _build_sql_specs(self) -> dict[str, PhysicalImplementationSpec]:
         """Declare the concrete SQL implementation for each supported dialect."""
         return {
             "duckdb_sql": PhysicalImplementationSpec(
@@ -87,6 +96,17 @@ class SqlCapableOperator:
                 semantic_contract_hash="sql:semantic-contract:v1",
             ),
         }
+
+    @property
+    def _physical_specs(self) -> dict[str, PhysicalImplementationSpec]:
+        cache = getattr(self, "__sql_spec_cache", None)
+        if cache is None:
+            cache = self._build_sql_specs()
+            try:
+                object.__setattr__(self, "__sql_spec_cache", cache)
+            except Exception:
+                pass
+        return cache
 
     @property
     def metadata(self):

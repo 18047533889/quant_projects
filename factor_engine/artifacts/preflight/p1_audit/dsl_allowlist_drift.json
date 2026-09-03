@@ -1,0 +1,542 @@
+{
+ "live_count": 1481,
+ "static_count": 1421,
+ "live_only_count": 68,
+ "live_only": [
+  {
+   "name": "FillNA",
+   "kind": "alias",
+   "canonical": "fillna",
+   "classify": "daily",
+   "action": "回writing到静态"
+  },
+  {
+   "name": "atr_acceleration",
+   "kind": "canonical",
+   "canonical": "atr_acceleration",
+   "classify": "daily",
+   "action": "回writing到静态"
+  },
+  {
+   "name": "atr_pct",
+   "kind": "canonical",
+   "canonical": "atr_pct",
+   "classify": "daily",
+   "action": "回writing到静态"
+  },
+  {
+   "name": "atr_percentile",
+   "kind": "canonical",
+   "canonical": "atr_percentile",
+   "classify": "daily",
+   "action": "回writing到静态"
+  },
+  {
+   "name": "atr_short_long_ratio",
+   "kind": "canonical",
+   "canonical": "atr_short_long_ratio",
+   "classify": "daily",
+   "action": "回writing到静态"
+  },
+  {
+   "name": "atr_zscore",
+   "kind": "canonical",
+   "canonical": "atr_zscore",
+   "classify": "daily",
+   "action": "回writing到静态"
+  },
+  {
+   "name": "avg2",
+   "kind": "canonical",
+   "canonical": "avg2",
+   "classify": "daily",
+   "action": "回writing到静态"
+  },
+  {
+   "name": "bvc_imbalance_ma",
+   "kind": "canonical",
+   "canonical": "bvc_imbalance_ma",
+   "classify": "daily",
+   "action": "回writing到静态"
+  },
+  {
+   "name": "bvc_sign_pct",
+   "kind": "canonical",
+   "canonical": "bvc_sign_pct",
+   "classify": "daily",
+   "action": "回writing到静态"
+  },
+  {
+   "name": "candle_body_strength",
+   "kind": "canonical",
+   "canonical": "candle_body_strength",
+   "classify": "daily",
+   "action": "回writing到静态"
+  },
+  {
+   "name": "candle_pattern_count",
+   "kind": "canonical",
+   "canonical": "candle_pattern_count",
+   "classify": "daily",
+   "action": "回writing到静态"
+  },
+  {
+   "name": "candle_range_pct",
+   "kind": "canonical",
+   "canonical": "candle_range_pct",
+   "classify": "daily",
+   "action": "回writing到静态"
+  },
+  {
+   "name": "candle_wick_balance",
+   "kind": "canonical",
+   "canonical": "candle_wick_balance",
+   "classify": "daily",
+   "action": "回writing到静态"
+  },
+  {
+   "name": "chikou_distance_pct",
+   "kind": "canonical",
+   "canonical": "chikou_distance_pct",
+   "classify": "daily",
+   "action": "回writing到静态"
+  },
+  {
+   "name": "consolidation_pct",
+   "kind": "canonical",
+   "canonical": "consolidation_pct",
+   "classify": "daily",
+   "action": "回writing到静态"
+  },
+  {
+   "name": "consolidation_range_pct",
+   "kind": "canonical",
+   "canonical": "consolidation_range_pct",
+   "classify": "daily",
+   "action": "回writing到静态"
+  },
+  {
+   "name": "dema_distance_pct",
+   "kind": "canonical",
+   "canonical": "dema_distance_pct",
+   "classify": "daily",
+   "action": "回writing到静态"
+  },
+  {
+   "name": "donchian_breakout_down",
+   "kind": "canonical",
+   "canonical": "donchian_breakout_down",
+   "classify": "daily",
+   "action": "回writing到静态"
+  },
+  {
+   "name": "donchian_breakout_up",
+   "kind": "canonical",
+   "canonical": "donchian_breakout_up",
+   "classify": "daily",
+   "action": "回writing到静态"
+  },
+  {
+   "name": "donchian_channel_position",
+   "kind": "canonical",
+   "canonical": "donchian_channel_position",
+   "classify": "daily",
+   "action": "回writing到静态"
+  },
+  {
+   "name": "donchian_width_pct",
+   "kind": "canonical",
+   "canonical": "donchian_width_pct",
+   "classify": "daily",
+   "action": "回writing到静态"
+  },
+  {
+   "name": "ema_crossover",
+   "kind": "canonical",
+   "canonical": "ema_crossover",
+   "classify": "daily",
+   "action": "回writing到静态"
+  },
+  {
+   "name": "ema_distance_pct",
+   "kind": "canonical",
+   "canonical": "ema_distance_pct",
+   "classify": "daily",
+   "action": "回writing到静态"
+  },
+  {
+   "name": "event_cluster_score",
+   "kind": "canonical",
+   "canonical": "event_cluster_score",
+   "classify": "daily",
+   "action": "回writing到静态"
+  },
+  {
+   "name": "event_rate_pct",
+   "kind": "canonical",
+   "canonical": "event_rate_pct",
+   "classify": "daily",
+   "action": "回writing到静态"
+  },
+  {
+   "name": "event_recency_z",
+   "kind": "canonical",
+   "canonical": "event_recency_z",
+   "classify": "daily",
+   "action": "回writing到静态"
+  },
+  {
+   "name": "fillna",
+   "kind": "canonical",
+   "canonical": "fillna",
+   "classify": "daily",
+   "action": "回writing到静态"
+  },
+  {
+   "name": "kama_distance_pct",
+   "kind": "canonical",
+   "canonical": "kama_distance_pct",
+   "classify": "daily",
+   "action": "回writing到静态"
+  },
+  {
+   "name": "keltner_breakout_strength",
+   "kind": "canonical",
+   "canonical": "keltner_breakout_strength",
+   "classify": "daily",
+   "action": "回writing到静态"
+  },
+  {
+   "name": "keltner_compression",
+   "kind": "canonical",
+   "canonical": "keltner_compression",
+   "classify": "daily",
+   "action": "回writing到静态"
+  },
+  {
+   "name": "keltner_width_pct",
+   "kind": "canonical",
+   "canonical": "keltner_width_pct",
+   "classify": "daily",
+   "action": "回writing到静态"
+  },
+  {
+   "name": "ma_slope_pct",
+   "kind": "canonical",
+   "canonical": "ma_slope_pct",
+   "classify": "daily",
+   "action": "回writing到静态"
+  },
+  {
+   "name": "psar_days_since_flip",
+   "kind": "canonical",
+   "canonical": "psar_days_since_flip",
+   "classify": "daily",
+   "action": "回writing到静态"
+  },
+  {
+   "name": "psar_direction",
+   "kind": "canonical",
+   "canonical": "psar_direction",
+   "classify": "daily",
+   "action": "回writing到静态"
+  },
+  {
+   "name": "psar_distance_pct",
+   "kind": "canonical",
+   "canonical": "psar_distance_pct",
+   "classify": "daily",
+   "action": "回writing到静态"
+  },
+  {
+   "name": "psar_flip",
+   "kind": "canonical",
+   "canonical": "psar_flip",
+   "classify": "daily",
+   "action": "回writing到静态"
+  },
+  {
+   "name": "reg_forecast_error_pct",
+   "kind": "canonical",
+   "canonical": "reg_forecast_error_pct",
+   "classify": "daily",
+   "action": "回writing到静态"
+  },
+  {
+   "name": "reg_r2_trailing",
+   "kind": "canonical",
+   "canonical": "reg_r2_trailing",
+   "classify": "daily",
+   "action": "回writing到静态"
+  },
+  {
+   "name": "reg_residual_zscore",
+   "kind": "canonical",
+   "canonical": "reg_residual_zscore",
+   "classify": "daily",
+   "action": "回writing到静态"
+  },
+  {
+   "name": "reg_slope_tstat",
+   "kind": "canonical",
+   "canonical": "reg_slope_tstat",
+   "classify": "daily",
+   "action": "回writing到静态"
+  },
+  {
+   "name": "relation_distribution_kurtosis",
+   "kind": "alias",
+   "canonical": "relation_distribution_pearson_kurtosis",
+   "classify": "daily",
+   "action": "回writing到静态"
+  },
+  {
+   "name": "relation_distribution_pearson_kurtosis",
+   "kind": "canonical",
+   "canonical": "relation_distribution_pearson_kurtosis",
+   "classify": "daily",
+   "action": "回writing到静态"
+  },
+  {
+   "name": "senkou_span_causal_pct",
+   "kind": "canonical",
+   "canonical": "senkou_span_causal_pct",
+   "classify": "daily",
+   "action": "回writing到静态"
+  },
+  {
+   "name": "sma_distance_pct",
+   "kind": "canonical",
+   "canonical": "sma_distance_pct",
+   "classify": "daily",
+   "action": "回writing到静态"
+  },
+  {
+   "name": "spectral_energy_ratio",
+   "kind": "canonical",
+   "canonical": "spectral_energy_ratio",
+   "classify": "daily",
+   "action": "回writing到静态"
+  },
+  {
+   "name": "spectral_trend_share",
+   "kind": "canonical",
+   "canonical": "spectral_trend_share",
+   "classify": "daily",
+   "action": "回writing到静态"
+  },
+  {
+   "name": "sr_distance_pct",
+   "kind": "canonical",
+   "canonical": "sr_distance_pct",
+   "classify": "daily",
+   "action": "回writing到静态"
+  },
+  {
+   "name": "sr_touch_count",
+   "kind": "canonical",
+   "canonical": "sr_touch_count",
+   "classify": "daily",
+   "action": "回writing到静态"
+  },
+  {
+   "name": "state_dwell_pct",
+   "kind": "canonical",
+   "canonical": "state_dwell_pct",
+   "classify": "daily",
+   "action": "回writing到静态"
+  },
+  {
+   "name": "state_transition_surprise",
+   "kind": "canonical",
+   "canonical": "state_transition_surprise",
+   "classify": "daily",
+   "action": "回writing到静态"
+  },
+  {
+   "name": "supertrend_days_since_flip",
+   "kind": "canonical",
+   "canonical": "supertrend_days_since_flip",
+   "classify": "daily",
+   "action": "回writing到静态"
+  },
+  {
+   "name": "supertrend_direction",
+   "kind": "canonical",
+   "canonical": "supertrend_direction",
+   "classify": "daily",
+   "action": "回writing到静态"
+  },
+  {
+   "name": "supertrend_distance_pct",
+   "kind": "canonical",
+   "canonical": "supertrend_distance_pct",
+   "classify": "daily",
+   "action": "回writing到静态"
+  },
+  {
+   "name": "supertrend_flip",
+   "kind": "canonical",
+   "canonical": "supertrend_flip",
+   "classify": "daily",
+   "action": "回writing到静态"
+  },
+  {
+   "name": "tema_distance_pct",
+   "kind": "canonical",
+   "canonical": "tema_distance_pct",
+   "classify": "daily",
+   "action": "回writing到静态"
+  },
+  {
+   "name": "tenkan_kijun_cross",
+   "kind": "canonical",
+   "canonical": "tenkan_kijun_cross",
+   "classify": "daily",
+   "action": "回writing到静态"
+  },
+  {
+   "name": "true_range_pct",
+   "kind": "canonical",
+   "canonical": "true_range_pct",
+   "classify": "daily",
+   "action": "回writing到静态"
+  },
+  {
+   "name": "true_range_surprise",
+   "kind": "canonical",
+   "canonical": "true_range_surprise",
+   "classify": "daily",
+   "action": "回writing到静态"
+  },
+  {
+   "name": "true_range_zscore",
+   "kind": "canonical",
+   "canonical": "true_range_zscore",
+   "classify": "daily",
+   "action": "回writing到静态"
+  },
+  {
+   "name": "ts_abs_concentration",
+   "kind": "canonical",
+   "canonical": "ts_abs_concentration",
+   "classify": "daily",
+   "action": "回writing到静态"
+  },
+  {
+   "name": "ts_lower_tail_coexceedance_probability",
+   "kind": "canonical",
+   "canonical": "ts_lower_tail_coexceedance_probability",
+   "classify": "daily",
+   "action": "回writing到静态"
+  },
+  {
+   "name": "ts_lower_tail_dependence",
+   "kind": "alias",
+   "canonical": "ts_lower_tail_coexceedance_probability",
+   "classify": "daily",
+   "action": "回writing到静态"
+  },
+  {
+   "name": "ts_positive_streak",
+   "kind": "canonical",
+   "canonical": "ts_positive_streak",
+   "classify": "daily",
+   "action": "回writing到静态"
+  },
+  {
+   "name": "vpin_pct",
+   "kind": "canonical",
+   "canonical": "vpin_pct",
+   "classify": "daily",
+   "action": "回writing到静态"
+  },
+  {
+   "name": "vwap_distance_pct",
+   "kind": "canonical",
+   "canonical": "vwap_distance_pct",
+   "classify": "daily",
+   "action": "回writing到静态"
+  },
+  {
+   "name": "vwap_premium_pct",
+   "kind": "canonical",
+   "canonical": "vwap_premium_pct",
+   "classify": "daily",
+   "action": "回writing到静态"
+  },
+  {
+   "name": "vwap_slope_pct",
+   "kind": "canonical",
+   "canonical": "vwap_slope_pct",
+   "classify": "daily",
+   "action": "回writing到静态"
+  },
+  {
+   "name": "wavelet_detail_energy_ratio",
+   "kind": "canonical",
+   "canonical": "wavelet_detail_energy_ratio",
+   "classify": "daily",
+   "action": "回writing到静态"
+  }
+ ],
+ "static_only_count": 8,
+ "static_only": [
+  {
+   "name": "WMA",
+   "kind": "canonical",
+   "canonical": "WMA",
+   "classify": "extended",
+   "action": "删除(extended/非daily)"
+  },
+  {
+   "name": "col",
+   "kind": "dsl_keyword",
+   "canonical": null,
+   "classify": "n/a",
+   "action": "保留(语法关键字或应回写)"
+  },
+  {
+   "name": "ewm_corr",
+   "kind": "canonical",
+   "canonical": "ewm_corr",
+   "classify": "extended",
+   "action": "删除(extended/非daily)"
+  },
+  {
+   "name": "ewm_cov",
+   "kind": "canonical",
+   "canonical": "ewm_cov",
+   "classify": "extended",
+   "action": "删除(extended/非daily)"
+  },
+  {
+   "name": "field",
+   "kind": "dsl_keyword",
+   "canonical": null,
+   "classify": "n/a",
+   "action": "保留(语法关键字或应回写)"
+  },
+  {
+   "name": "fin_mad",
+   "kind": "alias",
+   "canonical": "fin_mean_abs_deviation",
+   "classify": "extended",
+   "action": "删除(extended/非daily)"
+  },
+  {
+   "name": "ts_ewm_corr",
+   "kind": "canonical",
+   "canonical": "ts_ewm_corr",
+   "classify": "daily",
+   "action": "保留(语法关键字或应回写)"
+  },
+  {
+   "name": "ts_ewm_cov",
+   "kind": "canonical",
+   "canonical": "ts_ewm_cov",
+   "classify": "daily",
+   "action": "保留(语法关键字或应回写)"
+  }
+ ]
+}

@@ -1,0 +1,88 @@
+{
+ "summary": "16 leak_detected + 91 unknown 全部为 R64 启发式判定，无真前视 bug（P0 无）。leak_detected 由 name-token 触发；unknown 由 recursive stateful + required_full_history 触发。",
+ "leak_detected": [
+  {
+   "canonical": "ts_regression_forecast_error",
+   "verdict": "误报(名字含forecast_)",
+   "evidence": "overhaul/regression.py _rolling_forecast_error 训练窗[start,row)截止t-1, 误差=y_t-ŷ_t OOS; polars ts_batch1.py compute_forecast_error 用s[:-1]预测s[-1]"
+  },
+  {
+   "canonical": "ts_regression_forecast_error_z",
+   "verdict": "误报",
+   "evidence": "同上, zscore版本除以样本内残差std"
+  },
+  {
+   "canonical": "ts_ridge_regression_forecast_error",
+   "verdict": "误报",
+   "evidence": "同 ts_regression_forecast_error"
+  },
+  {
+   "canonical": "ts_ridge_regression_forecast_error_z",
+   "verdict": "误报",
+   "evidence": "同"
+  },
+  {
+   "canonical": "ts_huber_regression_forecast_error",
+   "verdict": "误报",
+   "evidence": "同"
+  },
+  {
+   "canonical": "ts_huber_regression_forecast_error_z",
+   "verdict": "误报",
+   "evidence": "同"
+  },
+  {
+   "canonical": "ts_multi_regression_forecast_error",
+   "verdict": "误报",
+   "evidence": "同"
+  },
+  {
+   "canonical": "ts_multi_regression_forecast_error_z",
+   "verdict": "误报",
+   "evidence": "同"
+  },
+  {
+   "canonical": "ts_poly2_forecast_error",
+   "verdict": "误报",
+   "evidence": "同"
+  },
+  {
+   "canonical": "ts_poly2_forecast_error_z",
+   "verdict": "误报",
+   "evidence": "同"
+  },
+  {
+   "canonical": "ts_expectile_regression_forecast_error",
+   "verdict": "误报",
+   "evidence": "同"
+  },
+  {
+   "canonical": "reg_forecast_error_pct",
+   "verdict": "误报",
+   "evidence": "同"
+  },
+  {
+   "canonical": "group_tail_lead_score",
+   "verdict": "误报(_lead token)",
+   "evidence": "tail_systemic.py _tail_lead_impl 用f=d+lag且 if f>r: continue(只有 completed 前向观测), PIT-safe"
+  },
+  {
+   "canonical": "group_leader_laggard_exposure",
+   "verdict": "误报(_lead token)",
+   "evidence": "polars_group_advanced.py 纯截面 rank/count, 无时间维"
+  },
+  {
+   "canonical": "intra_market_lead_lag_ex_self",
+   "verdict": "误报(_lead token)",
+   "evidence": "time_structure_v2.py _lead_lag_panel 当日日内 corr 描述统计, 非未来泄漏(仅日内实盘不可用)"
+  },
+  {
+   "canonical": "intra_industry_lead_lag_ex_self",
+   "verdict": "误报(_lead token)",
+   "evidence": "同上"
+  }
+ ],
+ "unknown_reason": "91 全为 recursive state_model + required_full_history chunking 的保守 unknown(无正向泄漏证据也无正向causal证明), 非泄漏bug",
+ "audit_improvement": "leak 侧过激(name-token触发需结合kernel检查); unknown 侧过保守(recursive stateful+checkpoint 应升级为causal而非只看chunking=required_full_history)",
+ "p0_true_leak": []
+}

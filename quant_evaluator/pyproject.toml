@@ -39,6 +39,8 @@ full = [
     "matplotlib>=3.7",
     "jinja2>=3.1",
 ]
+gpu-cuda12 = ["cupy-cuda12x>=13.0"]
+gpu-cuda13 = ["cupy-cuda13x>=14.0"]
 
 [tool.setuptools]
 packages = [
@@ -49,6 +51,7 @@ packages = [
     "quant_evaluator.contracts",
     "quant_evaluator.diagnosis",
     "quant_evaluator.kernels",
+    "quant_evaluator.kernels.gpu",
     "quant_evaluator.metrics",
     "quant_evaluator.metrics.interactions",
     "quant_evaluator.metrics.risk",
@@ -57,6 +60,7 @@ packages = [
     "quant_evaluator.registry",
     "quant_evaluator.reporting",
     "quant_evaluator.runtime",
+    "quant_evaluator.scripts",
 ]
 
 [tool.setuptools.package-dir]
@@ -67,6 +71,7 @@ packages = [
 "quant_evaluator.contracts" = "contracts"
 "quant_evaluator.diagnosis" = "diagnosis"
 "quant_evaluator.kernels" = "kernels"
+"quant_evaluator.kernels.gpu" = "kernels/gpu"
 "quant_evaluator.metrics" = "metrics"
 "quant_evaluator.metrics.interactions" = "metrics/interactions"
 "quant_evaluator.metrics.risk" = "metrics/risk"

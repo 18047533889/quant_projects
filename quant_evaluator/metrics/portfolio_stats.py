@@ -17,6 +17,30 @@ import numpy as np
 _MISSING_RETURN_POLICIES = ("zero_fill", "drop", "fail")
 
 
+def compute_wealth_curve(
+    returns: np.ndarray,
+    missing_return_policy: str = "drop",
+) -> np.ndarray:
+    """Compute a canonical wealth curve from periodic returns.
+
+    ``drop`` removes unobserved periods instead of manufacturing flat days;
+    ``zero_fill`` preserves the original time axis; ``fail`` rejects missing
+    observations.  This function is the report/chart authority for NAV and
+    cumulative return.
+    """
+    values = np.asarray(returns, dtype=np.float64)
+    if values.ndim != 1:
+        raise ValueError(f"returns must be one-dimensional, got {values.ndim}D")
+    _validate_missing_return_policy(missing_return_policy)
+    if missing_return_policy == "fail" and np.any(~np.isfinite(values)):
+        raise ValueError("returns contains non-finite values and missing_return_policy='fail'")
+    if missing_return_policy == "drop":
+        values = values[np.isfinite(values)]
+    else:
+        values = np.where(np.isfinite(values), values, 0.0)
+    return np.cumprod(1.0 + values)
+
+
 def _validate_missing_return_policy(policy: str) -> str:
     if policy not in _MISSING_RETURN_POLICIES:
         raise ValueError(

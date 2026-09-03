@@ -1,0 +1,152 @@
+{
+ "total_aliases": 270,
+ "dangling": [],
+ "collisions": [],
+ "aliases_not_in_daily_allowlist": [
+  {
+   "alias": "FP_BETA",
+   "target": "rolling_beta_to_market",
+   "classify": "extended"
+  },
+  {
+   "alias": "Mad",
+   "target": "ts_mean_abs_deviation",
+   "classify": "extended"
+  },
+  {
+   "alias": "ROLLING_BETA_TO_MARKET",
+   "target": "rolling_beta_to_market",
+   "classify": "extended"
+  },
+  {
+   "alias": "activity_clock_lagged_value_prior",
+   "target": "ts_activity_clock_lagged_value_prior",
+   "classify": "extended"
+  },
+  {
+   "alias": "cs_multi_robust_resid",
+   "target": "cs_multi_ridge_resid",
+   "classify": "extended"
+  },
+  {
+   "alias": "cs_robust_resid",
+   "target": "cs_trimmed_ols_resid",
+   "classify": "extended"
+  },
+  {
+   "alias": "event_hawkes_branching_ratio",
+   "target": "event_hawkes_branching_ratio_proxy",
+   "classify": "extended"
+  },
+  {
+   "alias": "fin_mad",
+   "target": "fin_mean_abs_deviation",
+   "classify": "extended"
+  },
+  {
+   "alias": "fmax",
+   "target": "maximum",
+   "classify": "daily"
+  },
+  {
+   "alias": "fmin",
+   "target": "minimum",
+   "classify": "daily"
+  },
+  {
+   "alias": "fp_beta",
+   "target": "rolling_beta_to_market",
+   "classify": "extended"
+  },
+  {
+   "alias": "inv",
+   "target": "inverse",
+   "classify": "daily"
+  },
+  {
+   "alias": "mad",
+   "target": "ts_mean_abs_deviation",
+   "classify": "extended"
+  },
+  {
+   "alias": "reciprocal",
+   "target": "inverse",
+   "classify": "daily"
+  },
+  {
+   "alias": "relation_pagerank_centrality",
+   "target": "group_signal_attraction_share",
+   "classify": "extended"
+  },
+  {
+   "alias": "sqr",
+   "target": "square",
+   "classify": "daily"
+  },
+  {
+   "alias": "state_episode_duration",
+   "target": "state_age",
+   "classify": "extended"
+  },
+  {
+   "alias": "state_since_reduce",
+   "target": "state_since_sum",
+   "classify": "extended"
+  },
+  {
+   "alias": "ts_best_lag_corr",
+   "target": "ts_best_lag_corr_raw",
+   "classify": "extended"
+  },
+  {
+   "alias": "ts_cusum_break_score",
+   "target": "ts_cumulative_deviation_score",
+   "classify": "extended"
+  },
+  {
+   "alias": "ts_huber_regression_resid",
+   "target": "ts_huber_regression_in_sample_resid",
+   "classify": "extended"
+  },
+  {
+   "alias": "ts_mean_absolute_deviation",
+   "target": "ts_mean_abs_deviation",
+   "classify": "extended"
+  },
+  {
+   "alias": "ts_median_absolute_deviation",
+   "target": "ts_median_abs_deviation",
+   "classify": "extended"
+  },
+  {
+   "alias": "ts_ridge_regression_resid",
+   "target": "ts_ridge_regression_in_sample_resid",
+   "classify": "extended"
+  },
+  {
+   "alias": "ts_robust_zscore",
+   "target": "ts_robust_zscore_inclusive",
+   "classify": "extended"
+  },
+  {
+   "alias": "ts_variance_ratio",
+   "target": "ts_variance_ratio_proxy",
+   "classify": "extended"
+  },
+  {
+   "alias": "ts_weighted_semivariance_sqrt",
+   "target": "ts_weighted_downside_deviation",
+   "classify": "extended"
+  },
+  {
+   "alias": "ts_wma",
+   "target": "WMA",
+   "classify": "extended"
+  },
+  {
+   "alias": "wma",
+   "target": "WMA",
+   "classify": "extended"
+  }
+ ]
+}

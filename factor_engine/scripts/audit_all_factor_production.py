@@ -418,6 +418,7 @@ _SCALAR_VALUES: dict[str, Any] = {
     "min_effective_n": 3,
     "min_embeddings": 3,
     "min_nodes": 4,
+    "min_state_support": 3,
     "purge_gap": 5,
     "cutoff": 1,
     "max_pivot_age": 20,
@@ -841,6 +842,59 @@ _SPECIAL_SCALARS: dict[tuple[str, str], Any] = {
     # count and must NOT hit the generic ``min_`` threshold fallback (0.01).
     ("power", "y"): 2.0,
     ("session_event_recovery_score", "min_events"): 3,
+    # 2026-09 runtime-audit sweep: intraday state/event scalar params that
+    # collide with the generic panel names (``target``/``z``/``factor``/``event``
+    # are PANEL keys in the fixture, so the panel lookup wins before the scalar
+    # map and feeds a DataFrame into an int/float/str param).  Each value is the
+    # operator's own declared default / a feasible value for the audit window.
+    ("intra_state_count", "target"): 1,
+    ("intra_state_sum", "target"): 1,
+    ("intra_state_vwap", "target"): 1,
+    ("intra_state_interval_moment", "target"): 1,
+    ("intra_state_follow_ratio", "target"): 1,
+    ("intra_state_follow_beta", "target"): 1,
+    ("intra_state_follow_corr", "target"): 1,
+    ("intra_state_pair_same_slot_corr", "target_a"): 1,
+    ("intra_state_pair_same_slot_corr", "target_b"): 1,
+    ("intra_state_pair_same_slot_corr", "min_slots"): 8,
+    ("intra_state_dwell_stats", "min_slots"): 20,
+    ("intra_state_transition_entropy", "min_slots"): 30,
+    ("intra_impulse_event_detector", "event"): "up",
+    ("intra_impulse_event_detector", "threshold"): "robust_z",
+    ("intra_impulse_event_detector", "z"): 3.0,
+    ("intra_impulse_event_detector", "min_bars"): 1,
+    ("intra_post_impulse_response", "threshold"): "robust_z",
+    ("intra_post_impulse_response", "z"): 3.0,
+    ("intra_probe_outcome_score", "z"): 3.0,
+    ("intra_supply_absorption_score", "event"): "all",
+    ("intra_limit_pre_hit_pressure_profile", "side"): "up",
+    ("intra_round_price_clustering_share", "min_bars"): 10,
+    ("intra_slice_mask_reduce", "min_bars"): 10,
+    ("QQE", "factor"): 4.236,
+    # unclassified public params (no declared default -> the audit's generic
+    # map cannot resolve them; give the operator's own valid default).
+    ("event_decay_window", "halflife"): 10.0,
+    ("signed_event_decay", "halflife"): 10.0,
+    ("spectral_trend_share", "trend_bins"): 2,
+    ("sr_touch_count", "tol"): 0.01,
+    ("state_episode_age_capped", "max_cap"): 60,
+    # filter order/cutoff: the generic ``order="largest"`` / ``cutoff=1``
+    # collide with the numeric filter contracts.
+    ("ts_bessel_lowpass_causal", "order"): 4,
+    ("ts_bessel_lowpass_causal", "cutoff"): 0.05,
+    ("ts_butterworth_lowpass_causal", "order"): 2,
+    ("ts_fir_lowpass_causal", "cutoff"): 0.1,
+    ("ts_fir_lowpass_causal", "window"): "hamming",
+    # event-cluster rate window must exceed the (20) window.
+    ("event_cluster_score", "rate_window"): 40,
+    # wavelet window must be a power of two.
+    ("wavelet_detail_energy_ratio", "window"): 32,
+    # SSA needs embedding_dim > n_components (3).
+    ("ts_ssa_prior_reconstruction_error", "embedding_dim"): 4,
+    # cs_knn ``universe`` is a governance string, not a panel.
+    ("cs_knn_graph_dirichlet_energy", "universe"): "full_panel",
+    ("cs_knn_neighbor_retention", "universe"): "full_panel",
+    ("cs_knn_peer_mean_ex_self", "universe"): "full_panel",
 }
 _SPECIAL_POSITIONAL = {
     "cs_multi_resid": ("target", "exposure", "control"),
@@ -893,6 +947,14 @@ _MINUTE_PREFIX_DAYS = 20
 # activity, returns one scalar per day) despite the ``intraday_`` prefix.
 _MINUTE_SOURCE_EXTRA: frozenset[str] = frozenset(
     {"intraday_activity_duration_curvature", "intraday_impact_decay_rate"}
+)
+
+# 2026-09 runtime-audit sweep: minute-frequency -> minute-frequency operators
+# (grain_minute_to_minute).  They consume minute panels and return minute
+# panels (same session grid), so the audit must compare their output against a
+# MINUTE template, not the daily template.
+_MINUTE_TO_MINUTE: frozenset[str] = frozenset(
+    {"intra_neighbor_event_class", "intra_range_gap_flag", "same_clock_lag"}
 )
 
 # Operator parameter name -> minute panel key.  These names also exist as daily
@@ -1107,6 +1169,12 @@ def _panels(rows: int = 220, columns: int = 6) -> dict[str, pd.DataFrame]:
     group = pd.DataFrame(
         np.tile(group_labels, (rows, 1)), index=dates, columns=assets
     )
+    # 2026-09 runtime-audit sweep: numeric group-code panel (0/1/2) for
+    # operators that convert ``group``/``industry`` to float (the string
+    # G0/G1/G2 labels crash float conversion).
+    group_num = pd.DataFrame(
+        np.tile(np.arange(columns) % 3, (rows, 1)), index=dates, columns=assets
+    )
     condition = volume.gt(volume.rolling(5, min_periods=1).mean())
 
     report_number = np.arange(rows) // 10
@@ -1169,6 +1237,7 @@ def _panels(rows: int = 220, columns: int = 6) -> dict[str, pd.DataFrame]:
         "benchmark": market,
         "market": market,
         "open": open_,
+    "open_px": open_,
         "high": high,
         "low": low,
         "close": close,
@@ -1185,6 +1254,7 @@ def _panels(rows: int = 220, columns: int = 6) -> dict[str, pd.DataFrame]:
         "mask": condition,
         "event": condition,
         "group": group,
+        "group_num": group_num,
         "industry": group,
         "sector": group,
         "fiscal_quarter": fiscal_quarter,
@@ -1321,6 +1391,14 @@ def _declared_default(operator: Any, key: str) -> Any:
 _PANEL_SPECIAL: dict[tuple[str, str], str] = {
     ("ts_return_spectral_entropy", "x"): "returns",
     ("ts_spectral_entropy", "x"): "returns",
+    # 2026-09 runtime-audit sweep: these operators consume a NUMERIC group /
+    # industry code panel (``group.to_numpy(dtype=float)`` / industry codes),
+    # but the generic ``group``/``industry`` fixture panel holds string labels
+    # (G0/G1/G2) that crash float conversion.  Route them to a numeric-code
+    # panel with the same shape.
+    ("state_quantile_hysteresis", "group"): "group_num",
+    ("state_rank_deadband", "group"): "group_num",
+    ("industry_fiscal_resid", "industry"): "group_num",
 }
 
 
@@ -1540,14 +1618,21 @@ def audit(*, require_admission: bool = True) -> list[str]:
                 continue
         try:
             arguments, keyword_arguments = _build_call(canonical, operator, panels)
+            # 2026-09 runtime-audit sweep: minute->minute operators return a
+            # minute panel (same session grid as the minute inputs), so their
+            # axes / prefix checks must use a MINUTE template, not the daily one.
+            if canonical in _MINUTE_TO_MINUTE:
+                op_template = panels["minute_close"]
+            else:
+                op_template = template
             first = _to_frame(
-                operator.calculate(*arguments, **keyword_arguments), template
+                operator.calculate(*arguments, **keyword_arguments), op_template
             )
             second = _to_frame(
-                operator.calculate(*arguments, **keyword_arguments), template
+                operator.calculate(*arguments, **keyword_arguments), op_template
             )
-            if not first.index.equals(template.index) or not first.columns.equals(
-                template.columns
+            if not first.index.equals(op_template.index) or not first.columns.equals(
+                op_template.columns
             ):
                 errors.append(
                     f"{canonical}: output axes changed [{_implementation_label(operator)}]"
@@ -1562,18 +1647,23 @@ def audit(*, require_admission: bool = True) -> list[str]:
             if _minute_source(canonical):
                 # Minute kernels aggregate per complete trading day, so the
                 # prefix check slices inputs to whole days and compares the
-                # same number of daily output rows.
+                # same number of daily output rows.  Minute->minute operators
+                # keep the minute grid (whole days of minute bars).
                 prefix_args = [_slice_minute(value, _MINUTE_PREFIX_DAYS) for value in arguments]
                 prefix_kwargs = {
                     key: _slice_minute(value, _MINUTE_PREFIX_DAYS)
                     for key, value in keyword_arguments.items()
                 }
-                prefix_template = template.iloc[:_MINUTE_PREFIX_DAYS]
+                if canonical in _MINUTE_TO_MINUTE:
+                    prefix_rows = _MINUTE_PREFIX_DAYS * _MINUTES_PER_DAY
+                else:
+                    prefix_rows = _MINUTE_PREFIX_DAYS
+                prefix_template = op_template.iloc[:prefix_rows]
                 prefix = _to_frame(
                     operator.calculate(*prefix_args, **prefix_kwargs),
                     prefix_template,
                 )
-                historical = first.iloc[:_MINUTE_PREFIX_DAYS]
+                historical = first.iloc[:prefix_rows]
             else:
                 prefix_args = [_slice(value, prefix_rows) for value in arguments]
                 prefix_kwargs = {

@@ -17,13 +17,12 @@ from __future__ import annotations
 # package (as every intraday operator test does) activates the whitelist.
 from factor_engine.cleaned_operators.intraday import perf_vec_kernels as _pvk
 
-try:
-    _pvk.bind_whitelist()
-except Exception:
-    # Optional perf-kernel whitelist: smart_money / vwap_path are Polars-gated.
-    # When `polars` is absent the whole bind is skipped so intraday operator
-    # modules can still register their pandas backends (time_structure etc.).
-    pass
+# PERF-2 (100k GO §6.3): vector binding must NOT be silently swallowed — an
+# import/bind/feature-rename failure in the fast path would otherwise silently
+# fall back to the scalar path (and silently time scalar under a "vec"
+# benchmark / hide a slow path under production load).  Fail loudly here so a
+# broken whitelist is caught at import time.
+_pvk.bind_whitelist()
 del _pvk
 
 __all__ = [

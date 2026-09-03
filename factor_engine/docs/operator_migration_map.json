@@ -1,8 +1,8 @@
 {
-  "count": 277,
+  "count": 278,
   "fingerprint": {
     "dirty": true,
-    "head": "0d22dc674d0e3e6d1437c2c67e801ace7bc4cc37"
+    "head": "dbbc3fe75f38d75c88f62ad60e3e0eedc666f026"
   },
   "map": {
     "ABS": {
@@ -80,6 +80,10 @@
     "FP_BETA": {
       "kind": "alias",
       "replacement": "rolling_beta_to_market"
+    },
+    "FillNA": {
+      "kind": "alias",
+      "replacement": "fillna"
     },
     "IIF": {
       "kind": "alias",

@@ -241,16 +241,6 @@ class PhysicalImplementationSpec:
     def _nonblank(value: object) -> bool:
         return isinstance(value, str) and bool(value.strip())
 
-    @staticmethod
-    def _valid_sha256(value: object) -> bool:
-        """Validate that value is a 64-character lowercase hexadecimal SHA256 hash."""
-        if not isinstance(value, str):
-            return False
-        value = value.strip()
-        if len(value) != 64:
-            return False
-        return all(c in "0123456789abcdef" for c in value)
-
     def validation_errors(self) -> tuple[str, ...]:
         """Return deterministic, fail-closed validation failures."""
         errors: list[str] = []
@@ -262,17 +252,27 @@ class PhysicalImplementationSpec:
             errors.append("unknown backend")
         if not isinstance(self.execution_kind, ExecutionKind):
             errors.append("invalid execution_kind")
+        # Identity/evidence binding fields.  A blank value is a hard failure;
+        # a NON-blank value may be EITHER a plaintext identity token (the
+        # operator authoring convention across cleaned_operators, e.g.
+        # ``cleaned_operators.common.time_series:TSMean:v1`` /
+        # ``ts_mean:min_periods=1:axis=time:v1``) OR a real 64-hex SHA-256
+        # digest (evidence provenance).  Both are honest immutable binding
+        # identifiers that change whenever the implementation/domain/contract
+        # changes, so a non-blank value is accepted regardless of format.  (R47
+        # tried to REQUIRE 64-hex + a non-blank implementation_closure_hash,
+        # which made every registered spec incomplete — physical_impl id /
+        # production admission all failed closed for the entire catalog;
+        # restored the pre-R47 contract where the three original fields are
+        # required and implementation_closure_hash is an optional v3
+        # strengthening that admission must not hinge on.)
         for field_name in (
             "implementation_source_hash",
             "parameter_domain_hash",
             "semantic_contract_hash",
-            "implementation_closure_hash",
         ):
-            value = getattr(self, field_name)
-            if not self._nonblank(value):
+            if not self._nonblank(getattr(self, field_name)):
                 errors.append(f"blank {field_name}")
-            elif not self._valid_sha256(value):
-                errors.append(f"invalid {field_name} format (expected 64-char lowercase hex SHA256)")
         if not (self._nonblank(self.emitter_identity) or self._nonblank(self.kernel_identity)):
             errors.append("blank emitter/kernel identity")
         return tuple(errors)

@@ -3036,6 +3036,13 @@ class FactorEngine:
         auto_warmup（按 lookback 扩展加载窗口后裁剪）、PIT 审计及 production
         fast path 运行时校验。
 
+        .. note:: P0#6 —— ``run()`` 是**单算子**入口，保留给合法单因子求值
+            （交互式调试、单个预编译 ``plan`` 的显式复算、materialize 单根）。
+            批量多因子求值必须走 :meth:`run_many` / :meth:`run_many_iter` /
+            :meth:`run_many_parallel`（共享 CSE / 单次 scan / 批量 warmup）；
+            对 agent-facing 调用方在循环里逐因子 ``run()`` 会累计
+            ``runmany.single_run_events`` telemetry——不静默。
+
         Args:
             factor: 待执行因子。
             plan: 可选预编译逻辑计划。
@@ -3059,6 +3066,15 @@ class FactorEngine:
         pit_enforce = bool(pit_enforce or is_production_mode(self.run_mode))
         started_at = time.perf_counter()
         logger.info("开始执行因子 '%s'", factor.name)
+        # P0#6: single-op run() is the DEPRECATED-for-batch surface. Legitimate
+        # single-factor use continues, but the event is counted + logged so
+        # agent-facing callers that loop over run() are never silent.
+        try:
+            from factor_engine.telemetry.execution_telemetry import record as _et_record
+
+            _et_record("runmany", "single_run_events", 1)
+        except Exception:  # pragma: no cover - telemetry never breaks execution
+            pass
         from factor_engine.runtime.production_policy import (
             assert_no_stub_operators,
             assert_production_factors,

@@ -801,11 +801,15 @@ def _probe_outcome_score_day(
         rr = rr[np.isfinite(rr)]
         if rr.size == 0:
             continue
-        strength.append(float(np.max(rr)))
         gb = _post_response_event(cv, vv, av, r, times, segs, e, response_horizon, "giveback")
         vw = _post_response_event(cv, vv, av, r, times, segs, e, response_horizon, "vwap_hold")
         if not np.isfinite(gb) or not np.isfinite(vw):
             continue
+        # Only record the probe strength once the giveback/vwap_hold response is
+        # finite, so ``strength``/``givebacks``/``vwap_holds``/``parts`` stay
+        # length-synchronized (a NaN response would otherwise leave ``strength``
+        # one element longer and the score z-score broadcast would fail).
+        strength.append(float(np.max(rr)))
         givebacks.append(gb)
         vwap_holds.append(vw)
         post_w = _window_indices(e, seg, 1, response_horizon)

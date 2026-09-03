@@ -781,7 +781,14 @@ class GroupWinsorize(SeriesOperator):
         tags=["cross_sectional", "winsorize", "group", "outlier"]
     )
 
-    def _calculate_series(self, x: pd.DataFrame, group: pd.DataFrame = None, a: float = 0.05, **kwargs) -> pd.DataFrame:
+    def _calculate_series(
+        self,
+        x: pd.DataFrame,
+        group: pd.DataFrame = None,
+        a: float = 0.05,
+        fallback_policy: str = "nan",
+        **kwargs,
+    ) -> pd.DataFrame:
         result = pd.DataFrame(index=x.index, columns=x.columns, dtype=float)
 
         for date in x.index:

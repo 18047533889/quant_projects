@@ -5,8 +5,12 @@ from __future__ import annotations
 from enum import Enum
 from typing import Any
 
+import logging
+
 from factor_engine.planner.logical_plan import PlanNode
 from factor_engine.planner.plan_hash import structural_key
+
+logger = logging.getLogger(__name__)
 
 
 def deep_copy_plan(node: PlanNode) -> PlanNode:
@@ -427,6 +431,25 @@ def apply_cse(roots: list[PlanNode]) -> tuple[list[PlanNode], dict[str, PlanNode
         )
 
     new_roots = [rewrite(r, key_memo) for r in roots]
+    # P0#7: emit CSE telemetry so reuse is never silent. ``len(shared_keys)`` is
+    # the profitable shared-node count, ``counts`` are structural candidates,
+    # and the reuse edge total is the sum of consumers across shared definitions.
+    # ``nodes_released`` (execution-time refcount lifecycle) is counted separately
+    # where actual release happens (see ``_release_consumed_sids``) — plan-time
+    # apply_cse cannot know how many shared panels a run later evicts.
+    reuse_edges = max(0, sum(counts.get(k, 0) for k in shared_keys) - len(shared_keys))
+    try:
+        from factor_engine.telemetry.execution_telemetry import cse_record
+
+        cse_record(
+            {
+                "candidates": len(counts),
+                "shared_nodes": len(shared_keys),
+                "reuse_edges": reuse_edges,
+            }
+        )
+    except Exception:  # pragma: no cover - telemetry must never break execution
+        logger.debug("CSE telemetry emit failed (non-fatal)", exc_info=True)
     return new_roots, shared_nodes
 
 

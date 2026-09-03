@@ -718,7 +718,7 @@ rank(col("total_liabilities") / col("total_assets"))
 After running a factor configuration:
 
 ```python
-result = engine.run(factor)
+result = engine.run(factor)   # single-factor entry (interactive / single root)
 # Returns: {
 #     "factor": Factor object,
 #     "analysis": {lookback, has_ts_op, has_cs_op, referenced_columns},
@@ -726,6 +726,18 @@ result = engine.run(factor)
 #     "result": pd.Series (MultiIndex: (timestamp, instrument) → factor_value)
 # }
 ```
+
+> **P0#6 — batch execution is enforced through `run_many*`.**
+> For multi-factor (100k) work, call `engine.run_many([...])` /
+> `engine.run_many_iter([...])` / `engine.run_many_parallel([...])` — they share
+> the CSE DAG, a single read wave, and batch warmup. `run()` is retained for
+> legitimate single-factor use but is the **deprecated-for-batch** surface:
+> agent-facing callers that loop over `run()` are surfaced via
+> `runmany.single_run_events` telemetry, never silent. `run_many*` canonicalize
+> their inputs (exact name+expr structural duplicates are collapsed once;
+> duplicate *names* remain a hard error #322) and report requested/unique/
+> duplicates through `runmany.requested/unique/duplicates` counters.
+
 
 **Example DataFrame View**:
 ```

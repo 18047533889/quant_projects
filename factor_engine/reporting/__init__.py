@@ -1,0 +1,2 @@
+"""Canonical FactorEngine reporting integration."""
+

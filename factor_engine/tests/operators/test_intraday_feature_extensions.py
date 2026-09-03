@@ -133,3 +133,170 @@ def test_limit_features_nan_without_limit_price() -> None:
     assert np.isnan(_calc("limit_first_hit_time", bar, {}))
     assert np.isnan(_calc("limit_duration", bar, {}))
     assert np.isnan(_calc("limit_reopen_count", bar, {}))
+
+
+def _fake_source(anchor: pd.MultiIndex) -> Any:
+    """Minimal LQTPLogicalDataSource-like fixture for compute_many parity."""
+
+    class Inner:
+        start_date = None
+        end_date = None
+        instrument_filter = None
+        data_snapshot_id = "snap-1"
+        params = {}
+        dataset = "ashare_stock_minute"
+
+    class Source:
+        inner = Inner()
+
+        def _anchor_index(self):
+            return anchor
+
+        def _record_dependency(self, *args, **kwargs):
+            self._dep = (args, kwargs)
+
+        @staticmethod
+        def _align_exact_by_instrument(anchor, series):
+            s = series.copy()
+            s.index = s.index.set_names(["timestamp", "instrument"])
+            idx = anchor.set_names(["timestamp", "instrument"])
+            out = s.reindex(idx)
+            out.index = anchor
+            return out
+
+    return Source()
+
+
+def _grouped_fixture() -> list[tuple[pd.Timestamp, str, pd.DataFrame]]:
+    """Two instruments x two days of 5-minute bars (bar_end clock)."""
+    rows: list[tuple[pd.Timestamp, str, pd.DataFrame]] = []
+    for day in ("2024-01-02", "2024-01-03"):
+        for inst in ("A", "B"):
+            times = pd.to_datetime(
+                [f"{day} 09:31", f"{day} 09:36", f"{day} 09:41", f"{day} 09:46"]
+            )
+            rng = np.random.default_rng(hash((day, inst)) % (2**32))
+            close = 10.0 + np.cumsum(rng.normal(0, 0.01, 4))
+            open_px = np.concatenate([[10.0], close[:-1]])
+            high = np.maximum(open_px, close) + 0.01
+            low = np.minimum(open_px, close) - 0.01
+            volume = rng.integers(100, 500, 4).astype(float)
+            amount = volume * close
+            bar = pd.DataFrame(
+                {
+                    "timestamp": times,
+                    "open": open_px,
+                    "high": high,
+                    "low": low,
+                    "close": close,
+                    "volume": volume,
+                    "amount": amount,
+                }
+            )
+            rows.append((pd.Timestamp(day), inst, bar))
+    return rows
+
+
+def test_compute_many_matches_per_feature_loop() -> None:
+    """P0#5: single-scan compute_many is numerically identical to the old
+    per-feature loop (which recomputed shared intermediates each time)."""
+    from factor_engine.storage.sources import intraday_feature_runtime_v2 as v2
+
+    anchor = pd.MultiIndex.from_tuples(
+        [
+            (pd.Timestamp("2024-01-02"), "A"),
+            (pd.Timestamp("2024-01-02"), "B"),
+            (pd.Timestamp("2024-01-03"), "A"),
+            (pd.Timestamp("2024-01-03"), "B"),
+        ],
+        names=["timestamp", "instrument"],
+    )
+    source = _fake_source(anchor)
+    grouped = _grouped_fixture()
+    features = [
+        "realized_variance",
+        "realized_vol",
+        "trend_slope",
+        "trend_r2",
+        "vwap",
+        "close_to_vwap",
+        "volume_hhi",
+        "return_volume_corr",
+        "max_drawdown",
+        "jump_ratio",
+        "lunch_gap_return",
+        "segment_return",
+    ]
+    params = {"bar_minutes": 5, "min_coverage": 0.8, "min_bars": 2}
+
+    # Reference: original per-feature loop (recompute shared per feature).
+    reference: dict[str, pd.Series] = {}
+    for f in features:
+        previous_close: dict[str, float] = {}
+        values: dict[tuple[pd.Timestamp, str], float] = {}
+        for date, instrument, bars in grouped:
+            calc_params = {**params, "instrument": instrument, "trade_date": date}
+            values[(date, instrument)] = _calc(
+                f, bars, calc_params, prev_close=previous_close.get(instrument, np.nan)
+            )
+            previous_close[instrument] = float(bars["close"].iloc[-1])
+        idx = pd.MultiIndex.from_tuples(list(values), names=["timestamp", "instrument"])
+        reference[f] = (
+            pd.Series(list(values.values()), index=idx, name=f"intraday_{f}")
+            .sort_index()
+            .reindex(anchor)
+        )
+
+    # compute_many with a stubbed single grouped-bars pass.
+    import factor_engine.storage.sources.intraday_feature_runtime_v2 as _v2
+
+    original = _v2._grouped_bars
+    _v2._grouped_bars = lambda *a, **k: (object(), grouped, 4)
+    try:
+        out = v2.compute_many(source, features, params)
+    finally:
+        _v2._grouped_bars = original
+
+    assert set(out.keys()) == set(features)
+    for f in features:
+        got = out[f].reindex(anchor)
+        np.testing.assert_allclose(
+            got.to_numpy(), reference[f].to_numpy(), equal_nan=True, rtol=1e-12, atol=1e-12
+        )
+
+
+def test_compute_many_single_feature_equals_load_intraday_feature() -> None:
+    """P0#5: load_intraday_feature (single) delegates to compute_many and is
+    identical to the direct compute_many single-feature result."""
+    from factor_engine.storage.sources import intraday_feature_runtime_v2 as v2
+
+    anchor = pd.MultiIndex.from_tuples(
+        [
+            (pd.Timestamp("2024-01-02"), "A"),
+            (pd.Timestamp("2024-01-02"), "B"),
+            (pd.Timestamp("2024-01-03"), "A"),
+            (pd.Timestamp("2024-01-03"), "B"),
+        ],
+        names=["timestamp", "instrument"],
+    )
+    source = _fake_source(anchor)
+    grouped = _grouped_fixture()
+    params = {"bar_minutes": 5, "min_coverage": 0.8, "min_bars": 2}
+
+    import factor_engine.storage.sources.intraday_feature_runtime_v2 as _v2
+
+    original = _v2._grouped_bars
+    _v2._grouped_bars = lambda *a, **k: (object(), grouped, 4)
+    try:
+        single = v2.load_intraday_feature(source, {**params, "feature": "vwap"})
+        many = v2.compute_many(source, ["vwap"], params)["vwap"]
+    finally:
+        _v2._grouped_bars = original
+
+    np.testing.assert_allclose(
+        single.reindex(anchor).to_numpy(),
+        many.reindex(anchor).to_numpy(),
+        equal_nan=True,
+        rtol=1e-12,
+        atol=1e-12,
+    )

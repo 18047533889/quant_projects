@@ -482,3 +482,280 @@ class IntradayAggregatedDataSource(DataSource):
     def load_columns(self, names: list[str]) -> dict[str, Any]:
         """批量加载多个日频聚合列。"""
         return {n: self.load_column(n) for n in names}
+
+
+# --------------------------------------------------------------------------- #
+# IntradayFeatureCompiler (P0#5, 100k GO §8 / §110 item 5)
+#
+# One authoritative entry point that computes MANY minute-feature operators
+# from a SINGLE scan of the minute panel.  The (day, bar, inst) grid is
+# materialized once and shared across every grid-routed operator; non-grid
+# operators fall back to their standalone ``_calculate_series`` path.
+#
+# Grid-routed operators (PERF-2 whitelisted vector kernels) reuse the shared
+# grid via the ``_grid`` keyword on ``_core.daily_agg{,_two,_three}``.  The
+# scan counter proves the single-scan property: it increments once per grid
+# materialization, not once per operator.
+# --------------------------------------------------------------------------- #
+
+#: Operators whose vector kernel can run on a shared (day, bar, inst) grid.
+#: ``fields`` = the minute panels they consume (in grid order), ``min_finite``
+#: mirrors the standalone ``daily_agg*`` call, ``vec`` = the vector kernel.
+_GRID_ROUTED: dict[str, dict[str, Any]] = {}
+
+
+def _register_grid_routed(name: str, fields: list[str], min_finite: int, vec) -> None:
+    _GRID_ROUTED[name] = {
+        "fields": list(fields),
+        "min_finite": int(min_finite),
+        "vec": vec,
+    }
+
+
+def _install_grid_routed() -> None:
+    """Lazily register the grid-routed operators (avoids import cycles)."""
+    if _GRID_ROUTED:
+        return
+    from factor_engine.cleaned_operators.intraday import _core as _c
+
+    _register_grid_routed(
+        "intra_session_mean_reversion", ["close"], 5, _c._vec_session_mean_reversion
+    )
+    _register_grid_routed(
+        "intra_price_delay", ["close", "volume"], 5, _c._vec_price_delay
+    )
+    _register_grid_routed(
+        "intra_volume_imbalance", ["close", "volume"], 3, _c._vec_volume_imbalance
+    )
+
+
+@dataclass
+class IntradayFeatureCompiler:
+    """Compute many minute-feature operators from one scan of the minute panel.
+
+    Parameters
+    ----------
+    fields : tuple[str, ...]
+        The minute panel columns the compiler may consume (canonical names).
+    timezone : str
+        Session timezone for minute math (default ``Asia/Shanghai``).
+    session : str
+        Session key (default ``ashare_regular``).
+
+    The compiler is constructed with the *available* minute fields; the actual
+    panels are supplied to ``compute_many`` (either as a ``panels`` dict of
+    MultiIndex Series, or via a ``source`` exposing ``load_columns``).
+    """
+
+    fields: tuple[str, ...] = (
+        "Open", "High", "Low", "Close", "Volume", "Amount", "Vwap",
+    )
+    timezone: str = "Asia/Shanghai"
+    session: str = "ashare_regular"
+
+    _scan_count: int = field(default=0, init=False, repr=False)
+    _grid_cache: dict[str, Any] = field(
+        default_factory=dict, init=False, repr=False
+    )
+
+    @property
+    def scan_count(self) -> int:
+        """Number of (day, bar, inst) grid materializations performed.
+
+        A single ``compute_many`` over N grid-routed operators must leave this
+        at 1 (one scan), not N.
+        """
+        return self._scan_count
+
+    # ------------------------------------------------------------------ #
+    # Panel loading
+    # ------------------------------------------------------------------ #
+
+    @staticmethod
+    def _load_panels(source: Any, fields: list[str]) -> dict[str, pd.Series]:
+        """Load minute panels from a source exposing ``load_columns``."""
+        load_columns = getattr(source, "load_columns", None)
+        if callable(load_columns):
+            try:
+                loaded = load_columns(fields)
+                if isinstance(loaded, dict):
+                    return {k: v for k, v in loaded.items() if k in fields}
+            except (FileNotFoundError, KeyError, NotImplementedError):
+                pass
+        panels: dict[str, pd.Series] = {}
+        for f in fields:
+            try:
+                panels[f] = source.load_column(f)
+            except (FileNotFoundError, KeyError, NotImplementedError):
+                continue
+        return panels
+
+    @staticmethod
+    def _to_wide(series: pd.Series) -> pd.DataFrame:
+        """MultiIndex(timestamp, instrument) Series -> wide DataFrame."""
+        if not isinstance(series.index, pd.MultiIndex) or series.index.nlevels < 2:
+            raise ValueError(
+                "IntradayFeatureCompiler 面板列期望 MultiIndex(timestamp, instrument) Series"
+            )
+        wide = series.unstack(level="instrument")
+        if not isinstance(wide.index, pd.DatetimeIndex):
+            wide.index = pd.DatetimeIndex(wide.index)
+        if not wide.index.is_monotonic_increasing:
+            wide = wide.sort_index()
+        return wide
+
+    # ------------------------------------------------------------------ #
+    # Grid materialization (the single scan)
+    # ------------------------------------------------------------------ #
+
+    def _build_grid(self, panels: dict[str, pd.Series], fields: list[str]) -> tuple:
+        """Materialize the (day, bar, inst) grid for ``fields`` once.
+
+        Uses ``_core._grid3`` so the grid is byte-identical to the standalone
+        vectorized path.  Increments ``_scan_count`` exactly once per call.
+        """
+        from factor_engine.cleaned_operators.intraday import _core as _c
+
+        key = tuple(fields)
+        if key in self._grid_cache:
+            return self._grid_cache[key]
+        wides = [self._to_wide(panels[f]) for f in fields]
+        # _grid3 accepts up to 3 panels; pad with None.
+        a = wides[0]
+        b = wides[1] if len(wides) > 1 else None
+        c = wides[2] if len(wides) > 2 else None
+        grid = _c._grid3(a, b, c)
+        self._grid_cache[key] = grid
+        self._scan_count += 1
+        return grid
+
+    # ------------------------------------------------------------------ #
+    # compute_many
+    # ------------------------------------------------------------------ #
+
+    def compute_many(
+        self,
+        features: list[Any],
+        *,
+        dates: Any = None,
+        universe: Any = None,
+        panels: dict[str, pd.Series] | None = None,
+        source: Any = None,
+    ) -> dict[str, pd.DataFrame]:
+        """Compute many minute-feature operators from one scan of the panel.
+
+        Parameters
+        ----------
+        features : list
+            Operator names (canonical) or ``(name, params)`` tuples.  Each is
+            resolved through ``OperatorRegistry`` and computed.
+        dates / universe : optional
+            Accepted for API parity with the GO-prompt sketch; not yet used to
+            filter (the panels are assumed pre-scoped).
+        panels : dict[str, pd.Series], optional
+            MultiIndex(timestamp, instrument) Series keyed by field name.
+        source : optional
+            Data source exposing ``load_columns`` / ``load_column``; used to
+            load panels when ``panels`` is not given.
+
+        Returns
+        -------
+        dict[str, pd.DataFrame]
+            Feature name -> daily panel (index=date, columns=instrument).
+        """
+        _install_grid_routed()
+
+        # Resolve feature specs to (name, params).
+        specs: list[tuple[str, dict]] = []
+        for feat in features:
+            if isinstance(feat, (tuple, list)):
+                name, params = feat[0], dict(feat[1]) if len(feat) > 1 else {}
+            else:
+                name, params = str(feat), {}
+            specs.append((name, params))
+
+        # Determine the union of minute fields needed by grid-routed features.
+        grid_fields: list[str] = []
+        grid_specs: list[tuple[str, dict]] = []
+        fallback_specs: list[tuple[str, dict]] = []
+        for name, params in specs:
+            route = _GRID_ROUTED.get(name)
+            if route is not None:
+                grid_specs.append((name, params))
+                for f in route["fields"]:
+                    if f not in grid_fields:
+                        grid_fields.append(f)
+            else:
+                fallback_specs.append((name, params))
+
+        # Load panels if not supplied.
+        if panels is None:
+            if source is None:
+                raise ValueError("compute_many 需要 panels 或 source")
+            need = list(grid_fields)
+            for name, _p in fallback_specs:
+                op = self._resolve_operator(name)
+                if op is not None:
+                    for f in getattr(op.metadata, "param_names", []) or []:
+                        if f not in need:
+                            need.append(f)
+            panels = self._load_panels(source, need)
+        if not panels:
+            raise ValueError("compute_many 需要至少一列面板数据")
+
+        out: dict[str, pd.DataFrame] = {}
+
+        # --- grid-routed operators: ONE scan, shared grid ------------------ #
+        if grid_specs:
+            grid = self._build_grid(panels, grid_fields)
+            for name, params in grid_specs:
+                route = _GRID_ROUTED[name]
+                vec = route["vec"]
+                min_finite = params.get("min_finite", route["min_finite"])
+                # The vec kernel reads its inputs from the shared grid by
+                # position: fields[0] -> a, fields[1] -> b, fields[2] -> c.
+                n = len(route["fields"])
+                # The vec kernel reads its inputs from the shared grid by
+                # position; the panel args are only used for ``.columns``, so
+                # pass the wide frames (index=timestamp, columns=instrument).
+                wide = [self._to_wide(panels[f]) for f in route["fields"]]
+                if n == 1:
+                    result = vec(wide[0], min_finite=min_finite, _grid=grid)
+                elif n == 2:
+                    result = vec(wide[0], wide[1], min_finite=min_finite, _grid=grid)
+                else:
+                    result = vec(wide[0], wide[1], wide[2], min_finite=min_finite, _grid=grid)
+                out[name] = result
+
+        # --- fallback operators: standalone _calculate_series path ---------- #
+        for name, params in fallback_specs:
+            op = self._resolve_operator(name)
+            if op is None:
+                raise ValueError(f"未知 intraday 算子: {name!r}")
+            result = self._run_fallback(op, panels, params)
+            out[name] = result
+
+        return out
+
+    @staticmethod
+    def _resolve_operator(name: str):
+        from factor_engine.cleaned_operators.registry import OperatorRegistry
+
+        return OperatorRegistry.get(name, mode="any")
+
+    @staticmethod
+    def _run_fallback(op, panels: dict[str, pd.Series], params: dict) -> pd.DataFrame:
+        """Run a non-grid operator through its standalone ``_calculate_series``.
+
+        The operator's ``metadata.param_names`` declare the minute panels it
+        consumes; each is passed as a wide DataFrame (index=timestamp,
+        columns=instrument) — the same shape the standalone path expects.
+        """
+        param_names = list(getattr(op.metadata, "param_names", []) or [])
+        args = []
+        for p in param_names:
+            if p in panels:
+                args.append(IntradayFeatureCompiler._to_wide(panels[p]))
+            else:
+                args.append(None)
+        return op.calculate(*args, **params)

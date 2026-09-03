@@ -34,8 +34,12 @@ import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 
 PROJECT = Path("/home/sunhaiwei/quant_projects")
+sys.path.insert(0, str(PROJECT))
 sys.path.insert(0, str(PROJECT / "jobs"))
 from factor_report_sources import FULL_WINDOW_END, FULL_WINDOW_START, load_raw_full_window, resolve_raw_matrix
+from factor_engine.reporting.quant_evaluator_adapter import evaluate_report_arrays
+from quant_evaluator.metrics.portfolio_stats import compute_wealth_curve
+from quant_evaluator.metrics.ic import ic_significance
 REPORT_DIR = PROJECT / "factor_engine" / "docs" / "reports" / "2026-08-23"
 FACTORS_DIR = REPORT_DIR / "factors"
 RAW_DIR = PROJECT / "weekly_backtest_output" / "factor_matrices_all"
@@ -142,46 +146,23 @@ def _intersect(mat, vwap):
 
 
 def daily_rankic_series(factor_mat, vwap):
-    common = factor_mat.index.intersection(vwap.index)
-    fv = factor_mat.reindex(index=common)
-    vv = vwap.reindex(index=common)
-    cols = vv.columns.intersection(fv.columns)
-    fv = fv[cols]; vv = vv[cols]
-    fwd = vv.pct_change().shift(-2)  # vwap-to-vwap 后复权（t+1成交→t+2卖出）
-    T = fv.shape[0]
-    ic = np.full(T, np.nan)
-    fv_a = fv.values; fwd_a = fwd.values
-    from scipy.stats import rankdata
-    for t in range(T):
-        m = fv_a[t]; r = fwd_a[t]
-        mask = np.isfinite(m) & np.isfinite(r)
-        if mask.sum() < 20:
-            continue
-        ra = rankdata(m[mask]); rb = rankdata(r[mask])
-        am = ra - ra.mean(); bm = rb - rb.mean()
-        d = np.sqrt((am * am).sum() * (bm * bm).sum())
-        ic[t] = (am * bm).sum() / d if d > 1e-18 else 0.0
-    return pd.Series(ic, index=common)
+    fv, vv = _intersect(factor_mat, vwap)
+    result = evaluate_report_arrays(
+        fv.values, vv.pct_change().shift(-2).values,
+        n_quantiles=10, min_assets=10, min_ic_periods=20,
+        direction_training_periods=int((fv.index <= pd.Timestamp("2018-06-30")).sum()),
+    )
+    return pd.Series(result.rank_ic_series, index=fv.index)
 
 
 def _decile_ret(mat, vwap):
     fv, vv = _intersect(mat, vwap)
-    fwd = vv.pct_change().shift(-2)
-    T = fv.shape[0]
-    ranks = fv.rank(axis=1, method='first', pct=True).values
-    valid = np.isfinite(fv.values) & np.isfinite(fwd.values)
-    gids = np.floor(ranks * 10).clip(0, 9).astype(int)
-    gids[~valid] = -1
-    # Missing factor rows are not zero-return days.  Keep them as NaN so the
-    # report can reject incomplete matrices instead of drawing a false flat
-    # NAV continuation.
-    gr = np.full((T, 10), np.nan)
-    for t in range(T):
-        for k in range(10):
-            mk = (gids[t] == k)
-            if mk.any():
-                gr[t, k] = np.nanmean(fwd.values[t, mk])
-    return fv.index, gr
+    result = evaluate_report_arrays(
+        fv.values, vv.pct_change().shift(-2).values,
+        n_quantiles=10, min_assets=10, min_ic_periods=20,
+        direction_training_periods=int((fv.index <= pd.Timestamp("2018-06-30")).sum()),
+    )
+    return fv.index, result.quantile_returns
 
 
 def fig_to_b64(fig):
@@ -359,8 +340,8 @@ def plot_ic_compare(raw_ic, opt_ic, name):
     ax1.set_title(f"{name} — RankIC 时序: 原始 vs 优化后", fontsize=9)
     ax1.legend(fontsize=7)
     ax1.grid(ls="--", alpha=0.3)
-    raw_ir = raw_ic.dropna().mean() / raw_ic.dropna().std() if raw_ic.dropna().std() > 1e-9 else 0
-    opt_ir = opt_ic.dropna().mean() / opt_ic.dropna().std() if opt_ic.dropna().std() > 1e-9 else 0
+    raw_ir = ic_significance(raw_ic.values, min_periods=20)[0]
+    opt_ir = ic_significance(opt_ic.values, min_periods=20)[0]
     ax2.bar(["原始", "优化后"], [raw_ir, opt_ir], color=["#dc2626", "#0d9488"])
     ax2.set_title("RankIC IR", fontsize=9)
     ax2.grid(axis="y", ls="--", alpha=0.3)
@@ -371,13 +352,15 @@ def plot_ic_compare(raw_ic, opt_ic, name):
 def plot_decile_compare(raw_mat, opt_mat, vwap, name):
     raw_idx, raw_gr = _decile_ret(raw_mat, vwap)
     opt_idx, opt_gr = _decile_ret(opt_mat, vwap)
+    raw_ok = np.isfinite(raw_gr).all(axis=1); raw_idx = raw_idx[raw_ok]; raw_gr = raw_gr[raw_ok]
+    opt_ok = np.isfinite(opt_gr).all(axis=1); opt_idx = opt_idx[opt_ok]; opt_gr = opt_gr[opt_ok]
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 3.4))
-    raw_nav = np.cumprod(1 + raw_gr, axis=0)
+    raw_nav = np.column_stack([compute_wealth_curve(raw_gr[:, k]) for k in range(10)])
     for k in range(10):
         ax1.plot(raw_idx, raw_nav[:, k], lw=0.8, alpha=0.7)
     ax1.set_title(f"{name} — 原始十分层净值", fontsize=9)
     ax1.grid(ls="--", alpha=0.3)
-    opt_nav = np.cumprod(1 + opt_gr, axis=0)
+    opt_nav = np.column_stack([compute_wealth_curve(opt_gr[:, k]) for k in range(10)])
     for k in range(10):
         ax2.plot(opt_idx, opt_nav[:, k], lw=0.8, alpha=0.7)
     ax2.set_title(f"{name} — 优化后十分层净值", fontsize=9)
@@ -389,9 +372,11 @@ def plot_decile_compare(raw_mat, opt_mat, vwap, name):
 def plot_ls_compare(raw_mat, opt_mat, vwap, name):
     raw_idx, raw_gr = _decile_ret(raw_mat, vwap)
     opt_idx, opt_gr = _decile_ret(opt_mat, vwap)
+    raw_ok = np.isfinite(raw_gr[:, [0, 9]]).all(axis=1); raw_idx = raw_idx[raw_ok]; raw_gr = raw_gr[raw_ok]
+    opt_ok = np.isfinite(opt_gr[:, [0, 9]]).all(axis=1); opt_idx = opt_idx[opt_ok]; opt_gr = opt_gr[opt_ok]
     fig, ax = plt.subplots(figsize=(10, 3.2))
-    raw_ls = np.cumprod(1 + (raw_gr[:, 9] - raw_gr[:, 0]), axis=0)
-    opt_ls = np.cumprod(1 + (opt_gr[:, 9] - opt_gr[:, 0]), axis=0)
+    raw_ls = compute_wealth_curve(raw_gr[:, 9] - raw_gr[:, 0])
+    opt_ls = compute_wealth_curve(opt_gr[:, 9] - opt_gr[:, 0])
     ax.plot(raw_idx, raw_ls, color="#dc2626", lw=1.2, label="原始多空")
     ax.plot(opt_idx, opt_ls, color="#0d9488", lw=1.4, label="优化后多空")
     ax.axhline(1, color="#94a3b8", lw=0.6)
@@ -467,40 +452,49 @@ def required_columns(page, name):
 
 # ---------------- 核心指标 ----------------
 def compute_all_metrics(raw_mat, opt_mat, vwap):
-    """返回 (base_metrics, opt_ic)。base_metrics 是原始因子评估指标（与 456 页同口径）。"""
-    ic = daily_rankic_series(raw_mat, vwap)
+    """Return report data computed by the sole quant_evaluator boundary."""
+    fv, vv = _intersect(raw_mat, vwap)
+    fwd = vv.pct_change().shift(-2)
+    train_periods = int((fv.index <= pd.Timestamp("2018-06-30")).sum())
+    result = evaluate_report_arrays(
+        fv.values,
+        fwd.values,
+        n_quantiles=10,
+        min_assets=10,
+        min_ic_periods=20,
+        direction_training_periods=train_periods,
+    )
+    ic = pd.Series(result.rank_ic_series, index=fv.index)
     ic_clean = ic.dropna()
-    mean_rankic = float(ic_clean.mean()) if len(ic_clean) else 0.0
-    std_rankic = float(ic_clean.std()) if len(ic_clean) else 0.0
-    rankic_ir = mean_rankic / std_rankic if std_rankic > 1e-9 else 0.0
-    rankic_winrate = float((ic_clean > 0).mean()) if len(ic_clean) else 0.0
-    n_periods = len(ic_clean)
-
-    _, gr = _decile_ret(raw_mat, vwap)
+    gr = result.quantile_returns
     usable = np.isfinite(gr).all(axis=1)
     if usable.sum() < 1800:
         raise ValueError(f"insufficient usable decile history: {int(usable.sum())} days")
     gr = gr[usable]
-    nav_dates = raw_mat.index.intersection(vwap.index)[usable]
-    T = gr.shape[0]
-    g_nav = np.cumprod(1 + gr, axis=0)
-    r_ls = gr[:, 9] - gr[:, 0]
-    ls_nav = np.cumprod(1 + r_ls)
-    n_years = max(T / 252.0, 1e-6)
-    ls_annual = float(ls_nav[-1] ** (1 / n_years) - 1) if T > 0 else 0.0
-    ls_cum = float(ls_nav[-1] - 1) if T > 0 else 0.0
-    ls_mdd = float((pd.Series(ls_nav) / pd.Series(ls_nav).cummax() - 1).min()) if T > 1 else 0.0
-    ls_winrate = float((r_ls > 0).mean()) if T > 0 else 0.0
-    ls_sharpe = float(np.mean(r_ls) / np.std(r_ls) * np.sqrt(252)) if np.std(r_ls) > 0 else 0.0
-    g_annual = [float(g_nav[-1, k] ** (1 / n_years) - 1) if T > 0 else 0.0 for k in range(10)]
+    nav_dates = fv.index[usable]
+    g_nav = np.column_stack([
+        compute_wealth_curve(gr[:, k], missing_return_policy="drop") for k in range(10)
+    ])
+    ls_nav = result.long_short_nav
+    from quant_evaluator.metrics.probe_portfolio.sharpe import compute_annualized_return
+    g_annual = [compute_annualized_return(gr[:, k]) for k in range(10)]
 
-    opt_ic = daily_rankic_series(opt_mat, vwap)
+    opt_fv, opt_vv = _intersect(opt_mat, vwap)
+    opt_fwd = opt_vv.pct_change().shift(-2)
+    opt_result = evaluate_report_arrays(
+        opt_fv.values, opt_fwd.values, n_quantiles=10, min_assets=10,
+        min_ic_periods=20,
+        direction_training_periods=int((opt_fv.index <= pd.Timestamp("2018-06-30")).sum()),
+    )
+    opt_ic = pd.Series(opt_result.rank_ic_series, index=opt_fv.index)
 
     return {
-        "ic": ic, "mean_rankic": mean_rankic, "std_rankic": std_rankic,
-        "rankic_ir": rankic_ir, "rankic_winrate": rankic_winrate, "n_periods": n_periods,
-        "ls_sharpe": ls_sharpe, "ls_annual": ls_annual, "ls_cum": ls_cum,
-        "ls_mdd": ls_mdd, "ls_winrate": ls_winrate,
+        "ic": ic, "mean_rankic": result.mean_rank_ic, "std_rankic": result.rank_ic_std,
+        "rankic_ir": result.rank_ic_ir, "rankic_winrate": result.rank_ic_win_rate,
+        "n_periods": len(ic_clean),
+        "ls_sharpe": result.sharpe, "ls_annual": result.annualized_return,
+        "ls_cum": result.cumulative_return, "ls_mdd": -result.max_drawdown,
+        "ls_winrate": result.win_rate,
         "g_annual": g_annual, "g1_annual": g_annual[0], "g10_annual": g_annual[-1],
         "decile_navs": {"dates": [str(d)[:10] for d in nav_dates],
                         **{f"G{k+1}": g_nav[:, k].tolist() for k in range(10)},

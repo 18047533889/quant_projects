@@ -1,0 +1,43 @@
+{
+  "run_timestamp": "2026-09-03T17:30:20+0800",
+  "rungs": {
+    "small": {
+      "actual_roots": 200,
+      "checksum_mismatch_count": 0,
+      "completed_roots": 200,
+      "elapsed_sec": 20.672,
+      "failed_roots": 0,
+      "failures": {
+        "by_bucket": {},
+        "by_code": {},
+        "total": 0
+      },
+      "mem_peak_mb": -1.52,
+      "nominal_roots": 1000,
+      "ref_rows_filtered": 780000,
+      "rows_written": 780000,
+      "rung": "small",
+      "streaming_checksum": "6b0e67a0cd6c88a23f9eeb549b4a748866210ef8f1bb4e48136f39cb719f3a53",
+      "throughput_roots_per_sec": 9.675
+    },
+    "tiny": {
+      "actual_roots": 50,
+      "checksum_mismatch_count": 0,
+      "completed_roots": 50,
+      "elapsed_sec": 4.565,
+      "failed_roots": 0,
+      "failures": {
+        "by_bucket": {},
+        "by_code": {},
+        "total": 0
+      },
+      "mem_peak_mb": 32.789,
+      "nominal_roots": 100,
+      "ref_rows_filtered": 195000,
+      "rows_written": 195000,
+      "rung": "tiny",
+      "streaming_checksum": "37da62f00738ea39f9bac9754fdbf6f759eb0d71d12721348ed39315e946bc59",
+      "throughput_roots_per_sec": 10.953
+    }
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "summary": "7 个 backend_signature_consistent=False 全部为 parametername/metadata-bridge 差异 (arity 均 match pandas 或 trailing-default 扩展), R7-232 逻辑签名门在 load_all 全通过, 判定为 metadata 错标(P2), 非真实现不一致。",
+  "operators": [
+    {"canonical":"benchmark_relative_price","pandas":["price","benchmark_price"],"polars_catalog":["numerator","denominator"],"polars_actual":["price","benchmark_price"],"verdict":"metadata/bridge 参数名错标(P2); 对拍 corr=1.0"},
+    {"canonical":"float_share_ratio","pandas":["float_shares","total_shares"],"polars_catalog":["numerator","denominator"],"verdict":"桥参数名错标(P2); arity match"},
+    {"canonical":"free_float_share_ratio","pandas":["free_float_shares","total_shares"],"polars_catalog":["numerator","denominator"],"verdict":"桥参数名错标(P2); arity match"},
+    {"canonical":"fin_cash_earnings_gap","pandas":["earnings","cashflow","scale_base"],"polars_catalog":["earnings","cashflow","scale_base","flow_type"],"verdict":"polars trailing-default 扩展(arity 4>=3); metaparam flow_type, 非不一致(P2)"},
+    {"canonical":"intra_segment_amount_share","pandas":["amount","segment","session_tz"],"polars_catalog":["amount","segment","session_tz","market"],"verdict":"polars trailing-default 扩展(P2)"},
+    {"canonical":"intra_segment_volume_share","pandas":["volume","segment","session_tz"],"polars_catalog":["volume","segment","session_tz","market"],"verdict":"polars trailing-default 扩展(P2)"},
+    {"canonical":"ts_sharpe","pandas":["x","window","ann_factor"],"polars_catalog":["x","window","ann_factor","min_periods"],"verdict":"polars trailing-default 扩展(P2); 对拍 corr=1.0"}
+  ]
+}

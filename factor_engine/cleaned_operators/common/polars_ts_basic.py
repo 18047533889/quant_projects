@@ -10,6 +10,7 @@ try:
 except ImportError:  # pragma: no cover
     pl = None  # type: ignore
 
+from factor_engine.backend.contracts import ExecutionKind, PhysicalImplementationSpec
 from factor_engine.cleaned_operators.base_polars import OperatorMetadata, SeriesOperator, register_operator
 from factor_engine.cleaned_operators.base import ParamRole, ParamSpec
 
@@ -44,6 +45,29 @@ def _numeric_cols(df: pl.DataFrame) -> list[str]:
 )
 class TSMeanNative(SeriesOperator):
     """Rolling mean."""
+
+    # 100k GO P0#1: parity with the canonical ``TSMeanPolars`` in
+    # ``common.time_series`` — carry an explicit PhysicalImplementationSpec so a
+    # pytest late-surface staging of this module (conftest stages it before the
+    # canonical time_series registration) does NOT leave the ts_mean/polars slot
+    # spec-less.  Mirrors the time_series spec's binding fields.
+    _physical_spec = PhysicalImplementationSpec(
+        canonical="ts_mean",
+        backend="polars",
+        execution_kind=ExecutionKind.POLARS_NATIVE_EXPR,
+        supports_lazy=True,
+        supports_streaming=False,
+        stateful=False,
+        materializes_full_panel=True,
+        requires_sorted=True,
+        supports_nulls=True,
+        supports_nan=True,
+        supports_inf=True,
+        implementation_source_hash="cleaned_operators.common.polars_ts_basic:TSMeanNative:v1",
+        emitter_identity="polars.Expr.rolling_mean:v1",
+        parameter_domain_hash="ts_mean.window:int:min=1",
+        semantic_contract_hash="ts_mean:min_samples=1:axis=time:v1",
+    )
 
     metadata = OperatorMetadata(
         name="ts_mean",

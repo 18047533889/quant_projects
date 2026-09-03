@@ -72,6 +72,21 @@ try:
         register_backend,
         get_backend,
     )
+    from quant_evaluator.contracts.backend_policy import (
+        BackendPolicy,
+        PrecisionPolicy,
+        GPUExecutionPolicy,
+        DeviceFactorBatch,
+        DeviceLabelPanel,
+        DeviceEvaluationContext,
+    )
+    from quant_evaluator.backends.capability_registry import (
+        BackendImplementation,
+        BackendCapabilityRegistry,
+        get_backend_capability_registry,
+        register_backend_implementation,
+        seal_backend_capability_registry,
+    )
 
     __all__ = [
         "is_cupy_available",
@@ -87,6 +102,17 @@ try:
         "BackendRegistry",
         "register_backend",
         "get_backend",
+        "BackendPolicy",
+        "PrecisionPolicy",
+        "GPUExecutionPolicy",
+        "DeviceFactorBatch",
+        "DeviceLabelPanel",
+        "DeviceEvaluationContext",
+        "BackendImplementation",
+        "BackendCapabilityRegistry",
+        "get_backend_capability_registry",
+        "register_backend_implementation",
+        "seal_backend_capability_registry",
     ]
 except ImportError:
     # Graceful degradation if submodules fail to import
