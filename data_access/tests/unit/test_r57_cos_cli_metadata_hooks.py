@@ -305,3 +305,106 @@ class TestStoreCosHooks:
         from data_access.snapshot.fidelity import SnapshotFidelity
 
         assert snap.fidelity == SnapshotFidelity.REMOTE_VERSION_ID
+
+
+# ===========================================================================
+# R58 #1：remote wildcard 展开 → 精确对象列表（主读链自己展开，不直传 DuckDB）
+# ===========================================================================
+
+class TestRemoteWildcardExpansion:
+    def test_wildcard_expands_to_exact_uris(self, tmp_path, monkeypatch):
+        """``s3://…/2016-01-*.parquet`` → LIST prefix → fnmatch 过滤 → 精确 URI 列表。"""
+        import data_access.cos.remote as cr
+
+        store = _store(tmp_path)
+        monkeypatch.setattr(
+            cr, "cos_cli_ls",
+            lambda uri, **kw: [
+                {"key": "clean_data/ashare/lqtp_data/StockDailyBar/2016-01-04.parquet",
+                 "size": 100, "etag": "a" * 32, "last_modified": None},
+                {"key": "clean_data/ashare/lqtp_data/StockDailyBar/2016-01-05.parquet",
+                 "size": 200, "etag": "b" * 32, "last_modified": None},
+                {"key": "clean_data/ashare/lqtp_data/StockDailyBar/2016-02-01.parquet",
+                 "size": 300, "etag": "c" * 32, "last_modified": None},
+            ],
+        )
+        out = store._expand_glob_paths(
+            ["s3://qs-cold/clean_data/ashare/lqtp_data/StockDailyBar/2016-01-*.parquet"],
+            dataset="ds",
+        )
+        # 只保留 2016-01-* 匹配的精确对象，2016-02-01 被 fnmatch 过滤掉。
+        assert out == [
+            "s3://qs-cold/clean_data/ashare/lqtp_data/StockDailyBar/2016-01-04.parquet",
+            "s3://qs-cold/clean_data/ashare/lqtp_data/StockDailyBar/2016-01-05.parquet",
+        ]
+
+    def test_wildcard_strict_list_failure_raises_typed(self, tmp_path, monkeypatch):
+        """strict 下 LIST 失败 → RemoteMetadataUnavailable（不是 ResourceAdmissionError）。"""
+        import data_access.cos.remote as cr
+        from data_access.core.exceptions import RemoteMetadataUnavailable
+
+        store = _store(tmp_path)
+        monkeypatch.setenv("DATA_ACCESS_STRICT_READ", "1")
+        monkeypatch.setattr(cr, "cos_cli_ls", lambda uri, **kw: [])
+        with pytest.raises(RemoteMetadataUnavailable) as ei:
+            store._expand_glob_paths(
+                ["s3://qs-cold/clean_data/ashare/lqtp_data/StockDailyBar/2016-01-*.parquet"],
+                dataset="ds",
+            )
+        assert ei.value.retryable is True
+        assert ei.value.dataset == "ds"
+
+    def test_wildcard_research_keeps_pattern(self, tmp_path, monkeypatch):
+        """research 下 LIST 失败 → 保留原 pattern（旧行为，DuckDB 自行展开）。"""
+        import data_access.cos.remote as cr
+
+        store = _store(tmp_path)
+        monkeypatch.setattr(cr, "cos_cli_ls", lambda uri, **kw: [])
+        out = store._expand_glob_paths(
+            ["s3://qs-cold/clean_data/ashare/lqtp_data/StockDailyBar/2016-01-*.parquet"],
+            dataset="ds",
+        )
+        assert out == [
+            "s3://qs-cold/clean_data/ashare/lqtp_data/StockDailyBar/2016-01-*.parquet"
+        ]
+
+    def test_exact_remote_path_passthrough(self, tmp_path, monkeypatch):
+        """精确 s3:// 路径（无通配）→ 原样透传，不触发 LIST。"""
+        import data_access.cos.remote as cr
+
+        store = _store(tmp_path)
+        called = []
+        monkeypatch.setattr(cr, "cos_cli_ls", lambda uri, **kw: called.append(uri) or [])
+        out = store._expand_glob_paths(
+            ["s3://qs-cold/clean_data/ashare/lqtp_data/StockDailyBar/2016-01-04.parquet"],
+            dataset="ds",
+        )
+        assert out == [
+            "s3://qs-cold/clean_data/ashare/lqtp_data/StockDailyBar/2016-01-04.parquet"
+        ]
+        assert called == []  # 精确路径不 LIST
+
+
+# ===========================================================================
+# R58 #5：lineage 记录实际执行 backend（httpfs / cli / local）
+# ===========================================================================
+
+class TestEffectiveBackend:
+    def test_local_paths_report_local(self, tmp_path):
+        store = _store(tmp_path)
+        assert store._effective_read_backend(store._registry.get("ds"), ["/tmp/x/a.parquet"]) == "local"
+
+    def test_remote_paths_report_backend(self, tmp_path, monkeypatch):
+        import data_access.cos.remote as cr
+
+        store = _store(tmp_path)
+        monkeypatch.setenv("DATA_ACCESS_COS_REMOTE_BACKEND", "httpfs")
+        assert store._effective_read_backend(
+            store._registry.get("ds"),
+            ["s3://qs-cold/clean_data/ashare/lqtp_data/StockDailyBar/a.parquet"],
+        ) == "httpfs"
+        monkeypatch.setenv("DATA_ACCESS_COS_REMOTE_BACKEND", "cli")
+        assert store._effective_read_backend(
+            store._registry.get("ds"),
+            ["s3://qs-cold/clean_data/ashare/lqtp_data/StockDailyBar/a.parquet"],
+        ) == "cli"

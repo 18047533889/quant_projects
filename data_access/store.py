@@ -1781,7 +1781,7 @@ class DataAccessStore:
                         params=params,
                         instrument_filter=instrument_filter,
                     )
-                    paths = self._expand_glob_paths(paths)
+                    paths = self._expand_glob_paths(paths, dataset=ds.name)
                 snapshot_policy = physical_scope.snapshot_policy
                 publisher_snapshot = physical_scope.publisher_snapshot
                 # R28-6：Verified 分支同样强制 dataset-specific 物理边界——authorize
@@ -1804,7 +1804,7 @@ class DataAccessStore:
                     else [str(physical_scope)]
                 )
                 # #6/#17：精确 URI scope 冻结一次，execution 与 snapshot 消费同一份
-                paths = self._expand_glob_paths(scope)
+                paths = self._expand_glob_paths(scope, dataset=ds.name)
                 self._enforce_dataset_path_boundary(ds, paths)
         else:
             # R29-P0 #205：job 级 resolution 缓存命中 → 跳过 glob 重解析/文件
@@ -1832,7 +1832,7 @@ class DataAccessStore:
                     instrument_filter=instrument_filter,
                 )
                 # #6 冻结 glob → 精确文件列表：DuckDB 不再二次 expand（TOCTOU）
-                paths = self._expand_glob_paths(paths)
+                paths = self._expand_glob_paths(paths, dataset=ds.name)
                 files = build_file_manifest(paths)
                 if _cache is not None:
                     _cache[_ckey] = (paths, files)
@@ -1890,6 +1890,8 @@ class DataAccessStore:
             params=snapshot.params,
             # R29-P0 #207：lineage 记录 build SHA（可复现）。
             build_sha=__build_sha__,
+            # R58 #5：lineage 记录实际执行 backend（httpfs / cli / local / …）。
+            effective_backend=self._effective_read_backend(ds, paths),
         )
         # ---- runtime contract（P0-011 hard-fail）----
         runtime_contract = self._compile_contract_strict(dataset)
@@ -6495,7 +6497,7 @@ class DataAccessStore:
                     if isinstance(physical_scope, (list, tuple))
                     else [str(physical_scope)]
                 )
-                paths = self._expand_glob_paths(scope)
+                paths = self._expand_glob_paths(scope, dataset=ds.name)
                 self._enforce_dataset_path_boundary(ds, paths)
         else:
             paths = self._prepare_dataset_read(
@@ -6505,7 +6507,7 @@ class DataAccessStore:
                 instrument_filter=instrument_filter,
             )
             # #6 冻结 glob → 精确文件列表，Scanner 与 snapshot 读到完全一致
-            paths = self._expand_glob_paths(paths)
+            paths = self._expand_glob_paths(paths, dataset=ds.name)
         files = build_file_manifest(paths)
         if (
             isinstance(physical_scope, VerifiedPhysicalScope)
@@ -8586,8 +8588,9 @@ class DataAccessStore:
                 return []
         return paths
 
-    @staticmethod
-    def _expand_glob_paths(paths: Sequence[str]) -> list[str]:
+    def _expand_glob_paths(
+        self, paths: Sequence[str], *, dataset: str | None = None
+    ) -> list[str]:
         """把 glob 路径展开成**精确文件列表**（#6 snapshot 与执行读到完全一致）。
 
         snapshot 构建后、DuckDB 真正展开 glob 前若新增 parquet，旧流程返回数据
@@ -8596,8 +8599,15 @@ class DataAccessStore:
 
         - 本地 glob（含 ``*``/``?``/``[``）→ glob.glob(recursive=True) 排序展开
         - 展开为空 → 保留原 pattern（调用方按空分支处理，行为与旧版一致）
-        - s3:// / cos:// 无法本地展开 → 原样保留（远程由 etag/version_id 表达版本）
+        - **remote wildcard（R58）**：``s3://…/*.parquet`` 不再原样直传 DuckDB
+          （AlphaFlow review #1：主读链必须自己展开）——
+          ``dataset pattern → COS LIST prefix → 过滤精确 key → 精确 s3:// 列表``。
+          strict/production 下 LIST 失败 → ``RemoteMetadataUnavailable``（含
+          dataset/prefix/provider/CLI fallback/retryable 诊断）；
+          research 默认保留原 pattern（旧行为），``DATA_ACCESS_ALLOW_UNKNOWN_
+          REMOTE_SCAN_COST=1`` 显式豁免时同样保留。
         """
+        import fnmatch
         import glob as glob_mod
 
         frozen: list[str] = []
@@ -8605,6 +8615,19 @@ class DataAccessStore:
         for pattern in paths:
             p = str(pattern)
             if p.startswith("s3://") or p.startswith("cos://"):
+                if any(ch in p for ch in "*?["):
+                    expanded = self._expand_remote_wildcard(p, dataset=dataset)
+                    if expanded is None:
+                        # research / 显式豁免：保留原 pattern（旧行为）。
+                        if p not in seen:
+                            seen.add(p)
+                            frozen.append(p)
+                        continue
+                    for uri in expanded:
+                        if uri not in seen:
+                            seen.add(uri)
+                            frozen.append(uri)
+                    continue
                 if p not in seen:
                     seen.add(p)
                     frozen.append(p)
@@ -8625,6 +8648,139 @@ class DataAccessStore:
                     seen.add(fp)
                     frozen.append(fp)
         return frozen
+
+    def _expand_remote_wildcard(self, pattern: str, *, dataset: str | None = None) -> list[str] | None:
+        """R58：remote wildcard pattern → 精确 ``s3://`` 对象 URI 列表。
+
+        AlphaFlow review #1：wildcard 不能拼成目录直传 DuckDB——
+        ``pattern → 解析 LIST prefix → COS LIST → fnmatch 过滤精确 key →
+        s3:// 对象列表``。返回 None = 无法解析（LIST 失败/未授权前缀）：
+
+        - strict/production → 抛 ``RemoteMetadataUnavailable``（fail-closed，
+          绝不让 governor 按"未知成本"拒绝而掩盖真实原因）；
+        - research（或 ``DATA_ACCESS_ALLOW_UNKNOWN_REMOTE_SCAN_COST=1``）→
+          返回 None，调用方保留原 pattern（旧行为，DuckDB 自行展开）。
+        """
+        from data_access.cos.remote import cos_uri_to_s3_uri
+        from data_access.core.exceptions import RemoteMetadataUnavailable
+        from data_access.read.query_budget import is_strict_semantics
+
+        import fnmatch
+
+        s3_pattern = cos_uri_to_s3_uri(str(pattern))
+        # LIST prefix = pattern 中**最后一段含通配部分之前的目录**。中段通配
+        # （``2016-01-*.parquet``）时 prefix 取文件所在目录（LIST 目录再按
+        # pattern fnmatch 过滤），不是「截到第一个 marker」（那会把
+        # ``…/2016-01-`` 当 prefix LIST——coscli 对无尾斜杠前缀返回 DIR 行）。
+        glob_marker_idx = min(
+            (i for i in (s3_pattern.find(m) for m in ("*", "?", "[", "{"))
+             if i >= 0),
+            default=-1,
+        )
+        if glob_marker_idx >= 0:
+            static_part = s3_pattern[: s3_pattern.rfind("/", 0, glob_marker_idx)]
+        else:
+            static_part = s3_pattern
+        static_part = static_part.rstrip("/")
+        if not static_part.startswith("s3://") or "/" not in static_part[5:]:
+            # 没法反解 bucket/key prefix（理论上不该发生）→ 按无法解析处理。
+            static_part = None
+        providers: list[str] = []
+        cli_attempted = False
+        objs: list = []
+        if static_part:
+            try:
+                objs = self._cos_list_objects(static_part + "/")
+                if objs:
+                    providers.append("boto3_or_cli")
+            except Exception:
+                objs = []
+        if not objs:
+            # LIST 未命中/失败：显式尝试 CLI 网关通道（可能 boto3 走的 CLI 已
+            # 覆盖；这里只补「未授权前缀/异常短路」的路径）。
+            from data_access.cos.remote import cos_cli_ls
+
+            cli_attempted = True
+            providers.append("cos-cli")
+            try:
+                rows = cos_cli_ls(f"{static_part}/") if static_part else []
+            except Exception:
+                rows = []
+            if rows:
+                objs = [
+                    type(
+                        "_Obj",
+                        (),
+                        {
+                            "uri": f"s3://{row['key']}"
+                            if not str(row["key"]).startswith("s3://")
+                            else str(row["key"]),
+                            "etag": row.get("etag"),
+                            "content_length": row.get("size"),
+                            "last_modified": row.get("last_modified"),
+                            "source": "exact_list",
+                        },
+                    )()
+                    for row in rows
+                ]
+        if not objs:
+            msg = (
+                f"remote wildcard 解析失败：LIST 未返回任何对象元数据。"
+                f"pattern={s3_pattern!r} prefix={static_part!r} "
+                f"providers={providers or ['none']} cli_fallback={cli_attempted}。"
+                "strict/production 拒绝未知 scan-cost 的 remote 读（R58）；"
+                "research 可设 DATA_ACCESS_ALLOW_UNKNOWN_REMOTE_SCAN_COST=1 "
+                "豁免（wildcard 原样直传，DuckDB 自行展开）。"
+            )
+            if is_strict_semantics():
+                raise RemoteMetadataUnavailable(
+                    msg,
+                    dataset=dataset,
+                    prefix=static_part,
+                    providers_attempted=providers,
+                    attempted_cli_fallback=cli_attempted,
+                    retryable=True,
+                )
+            return None
+        # fnmatch 过滤：LIST prefix 可能比原 pattern 更宽（pattern 中段含通配）。
+        out: list[str] = []
+        for o in objs:
+            uri = str(getattr(o, "uri", o))
+            key = uri[len("s3://"):].partition("/")[2]
+            if fnmatch.fnmatch(key, s3_pattern[len("s3://"):].partition("/")[2]):
+                if uri not in out:
+                    out.append(uri)
+        if not out:
+            # LIST 命中了对象但没有一个匹配原 pattern（prefix 宽、pattern 窄、
+            # 或数据真的不在）——严格模式按元数据解析失败处理，绝不静默空读。
+            if is_strict_semantics():
+                raise RemoteMetadataUnavailable(
+                    f"remote wildcard 解析后 0 个对象匹配 pattern={s3_pattern!r}"
+                    f"（prefix={static_part!r} LIST 命中 {len(objs)} 个对象）；"
+                    "检查 pattern/time_range 或改用显式 time_range 精确枚举。",
+                    dataset=dataset,
+                    prefix=static_part,
+                    providers_attempted=providers,
+                    attempted_cli_fallback=cli_attempted,
+                    retryable=False,
+                )
+            return []
+        return out
+
+    def _effective_read_backend(self, ds: Dataset, paths: Sequence[str]) -> str:
+        """R58 #5：lineage 记录实际执行 backend（httpfs / cli / local / …）。
+
+        从已解析的物理路径反推真实 backend，不靠 planner 推断：
+            - 任一路径是 ``s3://``/``cos://`` → 按 ``cos_remote_backend()``
+              判定 httpfs / cli（同一 dataset 在不同凭证/路由下走不同 backend，
+              provenance 必须能区分）；
+            - 否则本地 parquet → ``local``。
+        """
+        if any(str(p).startswith(("s3://", "cos://")) for p in paths):
+            from data_access.cos.remote import cos_remote_backend
+
+            return cos_remote_backend()
+        return "local"
 
     def _prepare_dataset_read(
         self,

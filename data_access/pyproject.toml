@@ -86,5 +86,14 @@ packages = [
 [tool.setuptools.package-dir]
 "data_access" = "."
 
+# R58 #7：wheel 必须携带 config/ 下的运行时数据（datasets.yaml /
+# semantic_fields.yaml / README.md）。``data_access`` 包映射到仓库根，因此
+# ``data_access/config/*`` 对应 ``config/*``。缺了这些文件，安装后的 wheel
+# 无法 ``get_store()`` / ``get_semantic_catalog()``（默认路径解析到
+# ``data_access/config/...`` 会 NotFound）。读取走 ``importlib.resources``
+# （见 registry/loader.py / read/semantic_catalog.py），不依赖 source path。
+[tool.setuptools.package-data]
+"data_access" = ["config/*.yaml", "config/README.md"]
+
 [tool.setuptools.exclude-package-data]
 "*" = ["*.pyc", "__pycache__", "test_*.py", "*_test.py"]

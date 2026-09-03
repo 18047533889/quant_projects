@@ -106,14 +106,18 @@ class ResourceReservation:
     query_id: str
     principal_id: str
     #: R32-P0-040：snapshot.total_bytes 在对象大小未知（remote 无 HEAD）时是
-    #: ``None``（未知 ≠ 0）。governor 数值门不执行 ``int + None``——``None``
-    #: 在 admit 入口规范化为保守上界（fail-closed，不静默当 0）。
+    #: ``None``（未知 ≠ 0）。R58 #6：governor 只接受**明确整数** scan-bytes——
+    #: ``None`` 在 admit 入口按 ``_coerce_scan_bytes`` 处理：strict/production
+    #: 抛 ``RemoteMetadataUnavailable``（fail-closed，绝不静默当 0 或按保守上界
+    #: 拒绝——那会把「元数据缺失」伪装成「scan bytes 超限」）；research 可显式
+    #: 豁免（``DATA_ACCESS_ALLOW_UNKNOWN_REMOTE_SCAN_COST=1`` 或
+    #: ``DATA_ACCESS_UNKNOWN_REMOTE_SCAN_BYTES``）。
     estimated_scan_bytes: int = 0
     estimated_memory: int = 0
     remote_requests: int = 0
 
     def __post_init__(self) -> None:
-        self.estimated_scan_bytes = _coerce_bound(self.estimated_scan_bytes)
+        self.estimated_scan_bytes = _coerce_scan_bytes(self.estimated_scan_bytes)
         self.estimated_memory = _coerce_bound(self.estimated_memory)
 
     released: bool = field(default=False)
@@ -127,11 +131,17 @@ class ResourceReservation:
 #: 自身可达的最大整数值，即「必然超限」）。内存维度未知时同样按保守上界拒绝。
 #: R32-P0-040 区分「未知」与「0」：未知大小的 remote 扫描绝不能静默当 0 绕过
 #: inflight 门——按最坏情况参与准入（必然超限即拒绝）。
+#:
+#: R58 #6：该保守上界**仅用于内存维度**（estimated_memory）。scan-bytes 维度
+#: 未知时不再 coerce 到上界——那会把「remote 元数据缺失」伪装成「scan bytes
+#: 超限」（AlphaFlow review #3/#6 直报的误导性报错）。scan-bytes 未知走
+#: ``_coerce_scan_bytes``：strict/production 抛 ``RemoteMetadataUnavailable``，
+#: research 可显式豁免。
 _GOVERNOR_UNKNOWN_BOUND = (1 << 62) - 1
 
 
 def _coerce_bound(value: Any) -> int:
-    """把未知/非法的成本估计规范化为 governor 可比较的整数（fail-closed）。
+    """把未知/非法的**内存**成本估计规范化为 governor 可比较的整数（fail-closed）。
 
     - ``None`` → 保守上界（未知成本必须按最坏情况参与准入，绝不静默当 0——
       那会让未知大小的 remote 扫描绕过 inflight 门）；
@@ -144,6 +154,84 @@ def _coerce_bound(value: Any) -> int:
     if isinstance(value, bool) or not isinstance(value, int):
         raise TypeError(
             f"ResourceReservation 成本估计必须是 int 或 None（未知），"
+            f"got {type(value).__name__}: {value!r}"
+        )
+    return max(0, value)
+
+
+def _unknown_remote_scan_opt_in() -> bool:
+    """R58 #6：research 显式豁免未知 remote scan 成本。
+
+    ``DATA_ACCESS_ALLOW_UNKNOWN_REMOTE_SCAN_COST=1`` 或
+    ``DATA_ACCESS_UNKNOWN_REMOTE_SCAN_BYTES=<int>`` 任一设置即豁免。后者同时
+    提供显式整数上界（governor 按该值准入，而不是保守上界）。
+    """
+    import os
+
+    allow = os.environ.get("DATA_ACCESS_ALLOW_UNKNOWN_REMOTE_SCAN_COST", "").strip().lower()
+    if allow in {"1", "true", "yes"}:
+        return True
+    raw = os.environ.get("DATA_ACCESS_UNKNOWN_REMOTE_SCAN_BYTES", "").strip()
+    if raw:
+        try:
+            return int(raw) >= 0
+        except ValueError:
+            return False
+    return False
+
+
+def _unknown_remote_scan_bytes() -> int:
+    """R58 #6：未知 remote scan 成本的显式整数上界（豁免时使用）。
+
+    ``DATA_ACCESS_UNKNOWN_REMOTE_SCAN_BYTES`` 提供明确整数；否则回退保守上界
+    （research 豁免下仍按最坏情况参与准入，不静默当 0）。
+    """
+    import os
+
+    raw = os.environ.get("DATA_ACCESS_UNKNOWN_REMOTE_SCAN_BYTES", "").strip()
+    if raw:
+        try:
+            return max(0, int(raw))
+        except ValueError:
+            pass
+    return _GOVERNOR_UNKNOWN_BOUND
+
+
+def _coerce_scan_bytes(value: Any) -> int:
+    """R58 #6：scan-bytes 成本估计的 fail-closed 规范化。
+
+    与 ``_coerce_bound``（内存维度）不同，scan-bytes 未知**不** coerce 到保守
+    上界——那会把「remote 元数据缺失」伪装成「scan bytes 超限」（AlphaFlow
+    review #3/#6 直报的误导性报错）。语义：
+
+    - ``None``（未知）→ strict/production 抛 ``RemoteMetadataUnavailable``
+      （fail-closed，绝不静默当 0 或按上界拒绝）；research 可显式豁免
+      （``DATA_ACCESS_ALLOW_UNKNOWN_REMOTE_SCAN_COST=1`` 或
+      ``DATA_ACCESS_UNKNOWN_REMOTE_SCAN_BYTES``），豁免时按显式整数/保守上界
+      参与准入；
+    - ``bool`` → TypeError；
+    - 非整数（float/str/…）→ TypeError；
+    - 负数 → 0。
+    """
+    if value is None:
+        from data_access.read.query_budget import is_strict_semantics
+
+        if is_strict_semantics() and not _unknown_remote_scan_opt_in():
+            from data_access.core.exceptions import RemoteMetadataUnavailable
+
+            raise RemoteMetadataUnavailable(
+                "remote 对象 scan-bytes 未知（estimated_scan_bytes=None）——"
+                "strict/production 拒绝未知成本（R58 #6）。对象已可 LIST/HEAD 但"
+                "拿不到 size 时，绝不能静默按未知成本参与准入（旧语义按保守上界"
+                "拒绝，报错面目全非：真实原因是元数据缺失，表面却是 scan bytes "
+                "超限）。research 可用 DATA_ACCESS_ALLOW_UNKNOWN_REMOTE_SCAN_COST=1 "
+                "或 DATA_ACCESS_UNKNOWN_REMOTE_SCAN_BYTES=<int> 显式豁免。",
+                retryable=True,
+            )
+        return _unknown_remote_scan_bytes()
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise TypeError(
+            f"ResourceReservation scan-bytes 必须是 int 或 None（未知），"
             f"got {type(value).__name__}: {value!r}"
         )
     return max(0, value)

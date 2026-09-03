@@ -1056,11 +1056,22 @@ class SemanticFieldCatalog:
         YAML 顶层是 mapping（逻辑字段名 → 声明），``_`` 前缀的键当作锚点模板跳过。
         """
         if path is None:
-            path = (
-                Path(__file__).resolve().parent.parent
-                / "config"
-                / "semantic_fields.yaml"
-            )
+            # R58 #7：wheel 安装后 ``data_access/config/semantic_fields.yaml`` 是
+            # 包内数据（package-data），不在 source tree——用 ``importlib.resources``
+            # 读取，不依赖 source path。source checkout 下同样命中（包内文件）。
+            try:
+                from importlib.resources import files as _pkg_files
+
+                data = _pkg_files("data_access").joinpath(
+                    "config/semantic_fields.yaml"
+                ).read_bytes()
+                return cls._from_yaml_bytes(data, context="data_access/config/semantic_fields.yaml")
+            except (FileNotFoundError, ModuleNotFoundError, OSError):
+                path = (
+                    Path(__file__).resolve().parent.parent
+                    / "config"
+                    / "semantic_fields.yaml"
+                )
         path = Path(path)
         if not path.exists():
             raise ValidationError(f"semantic_fields.yaml 不存在：{path}")
@@ -1070,9 +1081,25 @@ class SemanticFieldCatalog:
             from data_access.registry.yaml_loader import strict_yaml_load
 
             raw = strict_yaml_load(fh.read(), context=str(path)) or {}
+        return cls._from_yaml_raw(raw, source_path=path)
+
+    @classmethod
+    def _from_yaml_bytes(cls, data: bytes, *, context: str) -> "SemanticFieldCatalog":
+        """从字节加载（wheel 包内数据用，R58 #7）。"""
+        if yaml is None:
+            raise ValidationError("缺少 PyYAML 依赖，无法加载 SemanticFieldCatalog")
+        from data_access.registry.yaml_loader import strict_yaml_load
+
+        raw = strict_yaml_load(data.decode("utf-8"), context=context) or {}
+        return cls._from_yaml_raw(raw, source_path=context)
+
+    @classmethod
+    def _from_yaml_raw(
+        cls, raw: dict, *, source_path: str | Path
+    ) -> "SemanticFieldCatalog":
         if not isinstance(raw, dict):
             raise ValidationError(
-                f"{path}: 顶层必须是 mapping（字段名 → 声明）"
+                f"{source_path}: 顶层必须是 mapping（字段名 → 声明）"
             )
         fields: dict[str, SemanticField] = {}
         for name, body in raw.items():
@@ -1082,10 +1109,10 @@ class SemanticFieldCatalog:
                 body = {}
             if not isinstance(body, dict):
                 raise ValidationError(
-                    f"{path}: 字段 '{name}' 的声明必须是 mapping"
+                    f"{source_path}: 字段 '{name}' 的声明必须是 mapping"
                 )
             fields[name] = parse_semantic_field(name, body)
-        return cls(fields, source_path=path)
+        return cls(fields, source_path=source_path)
 
 
 # ---- 进程内缓存（惰性加载） ----

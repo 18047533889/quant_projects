@@ -798,7 +798,18 @@ def load_registry(config_path: str | Path | None = None) -> DatasetRegistry:
         if env_path:
             config_path = env_path
         else:
-            config_path = Path(__file__).resolve().parent.parent / "config" / "datasets.yaml"
+            # R58 #7：wheel 安装后 ``data_access/config/datasets.yaml`` 是包内
+            # 数据（package-data），不在 source tree——用 ``importlib.resources``
+            # 读取，不依赖 source path。source checkout 下同样命中（包内文件）。
+            try:
+                from importlib.resources import files as _pkg_files
+
+                return _load_registry_bytes(
+                    _pkg_files("data_access").joinpath("config/datasets.yaml").read_bytes(),
+                    context="data_access/config/datasets.yaml",
+                )
+            except (FileNotFoundError, ModuleNotFoundError, OSError):
+                config_path = Path(__file__).resolve().parent.parent / "config" / "datasets.yaml"
 
     config_path = Path(config_path)
     if not config_path.exists():
@@ -810,6 +821,19 @@ def load_registry(config_path: str | Path | None = None) -> DatasetRegistry:
     if not isinstance(raw, dict):
         raise ValidationError(f"{config_path}: 顶层必须是 mapping（数据集名 → 配置）")
 
+    datasets = {
+        name: _parse_dataset(name, body)
+        for name, body in raw.items()
+        if not name.startswith("_")  # 跳过 YAML 锚点模板键（如 _ashare_lqtp_defaults）
+    }
+    return DatasetRegistry(datasets)
+
+
+def _load_registry_bytes(data: bytes, *, context: str) -> DatasetRegistry:
+    """从字节加载登记表（wheel 包内数据用，R58 #7）。"""
+    raw = strict_yaml_load(data.decode("utf-8"), context=context) or {}
+    if not isinstance(raw, dict):
+        raise ValidationError(f"{context}: 顶层必须是 mapping（数据集名 → 配置）")
     datasets = {
         name: _parse_dataset(name, body)
         for name, body in raw.items()

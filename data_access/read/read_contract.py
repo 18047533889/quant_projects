@@ -214,6 +214,10 @@ class ReadLineage:
     # R29-P0 #207：lineage 携带 build SHA（可复现——同一 data 在不同代码构建下
     # 的 provenance 不同）。
     build_sha: str | None = None
+    # R58 #5：实际执行 backend（httpfs / cli / local / duckdb / …）。lineage 记录
+    # 真实 backend，不靠 planner 推断——同一 dataset 在不同凭证/路由下走不同
+    # backend，provenance 必须能区分。
+    effective_backend: str | None = None
 
     def __post_init__(self) -> None:
         # 统一把序列型字段冻结成 tuple（list/set 传入时防 lineage 被外部变异）。

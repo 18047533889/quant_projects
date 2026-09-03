@@ -11,6 +11,8 @@ data_access.exceptions —— 统一错误类型
 
 from __future__ import annotations
 
+from typing import Sequence
+
 
 class DataAccessError(Exception):
     """data_access 所有错误的基类，方便上层 except 时一把抓。"""
@@ -293,6 +295,42 @@ class SourceResolutionError(DataAccessError):
     远程不可达 / 授权拒绝）抛本错误；``[]`` 只能表示「合法空」，绝不静默
     同时代表「解析失败」。
     """
+
+
+class RemoteMetadataUnavailable(DataAccessError):
+    """R58：remote 对象元数据（LIST/HEAD）不可获取——strict/production fail-closed。
+
+    R58（AlphaFlow review #3/#6）：governor 只接受**明确的整数** scan-bytes。
+    remote 对象已可发起 LIST/HEAD 但拿不到 size 时，绝不能静默按未知成本参与
+    准入（旧语义按保守上界拒绝，报错面目全非：真实原因是元数据缺失，表面却是
+    "scan bytes 超限"）。本异常携带定位所需的全部上下文：
+
+    - ``dataset`` / ``prefix``：哪个数据集、哪段前缀解析失败；
+    - ``provider``：已尝试的元数据通道（boto3 / cos-cli / …）；
+    - ``attempted_cli_fallback`` / ``retryable``：诊断与重试提示。
+
+    research 可用 ``DATA_ACCESS_ALLOW_UNKNOWN_REMOTE_SCAN_COST=1`` 显式豁免
+    （保留 wildcard 原样直传的旧行为）；production/strict **必须拒绝**。
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        dataset: str | None = None,
+        prefix: str | None = None,
+        providers_attempted: Sequence[str] | None = None,
+        attempted_cli_fallback: bool = False,
+        retryable: bool = False,
+        original: BaseException | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.dataset = dataset
+        self.prefix = prefix
+        self.providers_attempted = tuple(providers_attempted or ())
+        self.attempted_cli_fallback = attempted_cli_fallback
+        self.retryable = retryable
+        self.original = original
 
 
 def propagate_authorization(exc: BaseException) -> None:
