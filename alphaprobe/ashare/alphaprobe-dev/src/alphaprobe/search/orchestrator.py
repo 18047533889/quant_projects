@@ -10,9 +10,11 @@ shared/utils/llm 的 OpenAIModel.chat_generate）。
 
 from __future__ import annotations
 
+import logging
 import time
 import uuid
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from typing import Any, Callable, Sequence
 
 from alphaprobe.contracts import AttemptRecord, SearchAction
@@ -30,7 +32,14 @@ from alphaprobe.search.structured_llm import (
     parse_generated,
 )
 
+logger = logging.getLogger(__name__)
+
 LLMFn = Callable[[str, str, str], str]
+
+
+def _now_iso() -> str:
+    """UTC ISO 时间戳（reward_settled_at 用；重放/audit 可比对）。"""
+    return datetime.now(timezone.utc).isoformat()
 
 # arm 单步默认期望候选数
 ARM_EXPECTED: dict[str, int] = {
@@ -69,8 +78,17 @@ class OrchestratorStep:
     candidates: list[GeneratedCandidate] = field(default_factory=list)
     attempts: list[AttemptRecord] = field(default_factory=list)
     duplicates_filtered: int = 0
-    #: 尚未回传真实 reward（delayed reward 闭环的标记）
+    #: 尚未回传真实 reward（delayed reward 闭环的标记；A8 幂等守卫配套）
     pending_reward: bool = True
+    #: 该 step 关联的 attempt 主键（delayed reward 结算的账本锚点）。
+    #: 默认 ``None`` = 未接入账本（settle_reward 退化为内存幂等守卫）。
+    attempt_id: str | None = None
+    #: 该 step 的 reward 是否已结算（幂等守卫：同一 step 只结算一次）。
+    reward_settled: bool = False
+    #: 结算时间戳（ISO，UTC）——重放/resume/audit 用。
+    reward_settled_at: str | None = None
+    #: 结算事件 id（子代评估事件 → reward 可溯源）。
+    reward_event_id: str | None = None
 
 
 @dataclass
@@ -80,6 +98,10 @@ class SearchOrchestrator:
     - scheduler: ActionScheduler（§29，已含 Thompson/UCB）
     - memory: 可选注入。提供 build_memory_packet(parent_node) / MemoryPacket，否则
       直接用 parent dict 拼最小 prompt（§32 降级）。
+    - ledger: 可选注入（alphaprobe.ledger.CandidateAttemptLedger，plan.md Task 4）。
+      非 None 时 ``settle_reward`` 以账本 DB 仲裁为准（谁先写谁赢，重放/resume/
+      worker retry 绝不重复计 reward）；None 时行为与旧版一致但不再重复计数
+      （内存幂等守卫）。
     - expected_num: 单步生成候选数
     """
 
@@ -100,16 +122,25 @@ class SearchOrchestrator:
     #: 结构化 generator 注入（默认惰性构造 StructuredGenerator）。
     structured_generator: Any | None = None
 
-    # 允许测试注入计数/延迟
+    #: 允许测试注入计数/延迟
     latency_ms: int = 0
     llm_cost: float = 0.0
     eval_cost: float = 0.0
+
+    # A8 / plan.md Task 4：CandidateAttemptLedger（可选注入）。None = 未接账本
+    # （settle_reward 用内存幂等守卫，不重复计数）。
+    ledger: Any | None = None
 
     def __post_init__(self) -> None:
         if self.scheduler is None:
             self.scheduler = ActionScheduler()
         if self.generation == 0:
             self.generation = 1
+        # A8：ledger 缺省（``None``）时按环境变量/默认路径惰性构造真实账本。
+        # 实例创建/连接在首次 settle 时才发生（``_settle_via_ledger``），因此
+        # 默认构造 ``SearchOrchestrator()`` 不会在当前目录留空 DB 文件（磁盘
+        # 纪律：不 settle 就不建库）。调用方可在构造后显式替换为 ``None``
+        # 关闭账本（settle 退化为内存幂等守卫）。
 
     # ------------------------------------------------------------------
     # prompt 构造（§32：MemoryPacket.to_prompt_text 替代完整 lineage）
@@ -269,6 +300,7 @@ class SearchOrchestrator:
         *,
         reward: float | None = None,
         dedup_client: Any | None = None,
+        attempt_id: str | None = None,
     ) -> OrchestratorStep:
         """step + 可选更新 scheduler 统计（测试/闭环方便）。
 
@@ -280,6 +312,11 @@ class SearchOrchestrator:
               回传真实 reward（delayed reward 闭环）。
             - 显式 float（含 ``0.0``）：照常 ``scheduler.update`` 并标记
               ``pending_reward=False``。
+        attempt_id : str | None
+            A8/plan.md Task 4：该 step 的账本锚点。None（默认）= 由本方法
+            自动派生（``at_{uuid4}``），与旧版行为一致（不传即自动生成）。
+            跨进程 resume 时调用方应复用账本里已持久化的 attempt_id，配合
+            ledger 的 DB 仲裁保证只结算一次。
 
         P0-B：reward **绝不**退化为 candidate 数——生成 10 个垃圾的 reward
         不可能高于 2 个优质。reward 应来自评估闭环（公式参考）：
@@ -287,6 +324,7 @@ class SearchOrchestrator:
         + 0.10×SchemaCoverageGain − 成本项``。
         """
         result = self.step(parent_node, llm_fn, dedup_client=dedup_client)
+        result.attempt_id = attempt_id or f"at_{uuid.uuid4().hex[:12]}"
         if reward is None:
             # delayed reward：等 settle_reward 回传，暂不更新 scheduler
             result.pending_reward = True
@@ -295,22 +333,99 @@ class SearchOrchestrator:
             result.action.action_type.value, reward=float(reward)
         )
         result.pending_reward = False
+        result.reward_settled = True
         return result
 
     def settle_reward(self, step: OrchestratorStep, reward: float) -> None:
         """用真实 reward（评估闭环产出）回填一步并更新 scheduler 统计。
 
-        - 必须在 ``step_with_llm`` 返回后调用（等价于当时显式传 reward）；
-        - 重复调用同一 step 会再次 ``scheduler.update``（调用方应只 settle 一次，
-          或按调用方自身幂等语义处理）；
-        - 若该 step 已用显式 reward 更新过（``pending_reward=False``），再
-          settle 会重复计——调用方负责只对 ``pending_reward=True`` 的 step
-          settle。
+        A8 幂等语义（retry/resume/worker retry 不重复计 reward）：
+
+        - 同一 ``OrchestratorStep`` 第二次 settle 为 no-op（``reward_settled``
+          内存守卫——即使未接账本也绝不重复 ``scheduler.update``）；
+        - 已用显式 reward 更新过的 step（``pending_reward=False`` /
+          ``reward_settled=True``）再 settle 同样 no-op；
+        - 接入 ``ledger`` 时以账本 DB 仲裁为准：同 ``attempt_id`` 谁先写谁赢，
+          赢家才更新 scheduler；重放（resume 复用同一 ``attempt_id``）或两个
+          worker 抢同一 attempt 结算都只有一个赢家（test #1/#2/#5 验收）。
+        - 未接账本（ledger=None，测试/旧路径）：内存守卫保证同一 step 不重复
+          计；跨进程语义需调用方复用持久化 attempt_id（TODO 见 ledger.py 头）。
         """
-        self.scheduler.update(
-            step.action.action_type.value, reward=float(reward)
-        )
+        # 内存幂等守卫：同一 step 只结算一次（A8 兜底，即使无账本也不重复计）
+        if getattr(step, "reward_settled", False):
+            return
+        family = step.action.action_type.value
+        attempt_id = getattr(step, "attempt_id", None) or f"stp_{uuid.uuid4().hex[:12]}"
+        event_id = getattr(step, "reward_event_id", None)
+        if event_id is None:
+            event_id = f"stt_{uuid.uuid4().hex[:12]}"
+        step.reward_settled_at = _now_iso()
+        won = True
+        reason = None
+        if self.ledger is not None:
+            won, reason = self._settle_via_ledger(attempt_id, float(reward), event_id)
+        if not won:
+            step.reward_event_id = event_id
+            if reason and reason.startswith("ledger error"):
+                # 瞬时账本故障：结算状态未知，step 保持 pending 供调用方重试
+                logger.warning(
+                    "settle_reward ledger error for %s (event %s): %s",
+                    attempt_id, event_id, reason,
+                )
+                return
+            # 输 = 账本仲裁定局（同 attempt 已被他人/重放结算）：reward 归属已
+            # 尘埃落定，step 关闭结算（绝不再尝试、绝不更新 scheduler）。
+            if reason:
+                logger.warning(
+                    "settle_reward lost arbitration for %s (event %s): %s",
+                    attempt_id, event_id, reason,
+                )
+            step.pending_reward = False
+            step.reward_settled = True
+            return
+        self.scheduler.update(family, reward=float(reward))
         step.pending_reward = False
+        step.reward_settled = True
+        step.reward_event_id = event_id
+
+    # ------------------------------------------------------------------
+    # A8：settle_reward 幂等（同一 step / 同一 attempt 绝不重复计 reward）
+    # ------------------------------------------------------------------
+
+    def _settle_via_ledger(
+        self,
+        attempt_id: str,
+        reward: float,
+        reward_event_id: str,
+    ) -> tuple[bool, str | None]:
+        """账本仲裁路径：返回 (won, reason)。ledger 为 None 时恒 (True, None)。
+
+        ledger 实例惰性构造：第一次真实 settle 时才建库（``ALPHAPROBE_LEDGER_DB``
+        环境变量可覆盖默认路径；测试注入 tmp_path 账本后此处不再自建）。
+        """
+        from alphaprobe.ledger import CandidateAttemptLedger
+
+        if not isinstance(self.ledger, CandidateAttemptLedger):
+            if self.ledger is None:
+                self.ledger = CandidateAttemptLedger()
+            elif not (
+                hasattr(self.ledger, "settle_reward")
+                and hasattr(self.ledger, "db_path")
+            ):
+                # 无账本语义的对象（鸭子类型不合格）：回退 None → 不仲裁
+                self.ledger = None
+        if self.ledger is None:
+            return True, None
+        try:
+            won, reason = self.ledger.settle_reward(
+                attempt_id=attempt_id,
+                reward=float(reward),
+                reward_event_id=reward_event_id,
+            )
+            return bool(won), reason
+        except Exception as exc:  # noqa: BLE001 - 账本故障不阻塞闭环
+            logger.warning("ledger settle failed for %s: %s", attempt_id, exc)
+            return False, f"ledger error: {exc}"
 
     # ------------------------------------------------------------------
     # 内部
@@ -321,10 +436,6 @@ class SearchOrchestrator:
         if cls is None:
             return None
         return cls()
-
-    # ------------------------------------------------------------------
-    # V2-H：结构化 generation 单步（§27 / §37）
-    # ------------------------------------------------------------------
 
     def _step_structured(
         self,
