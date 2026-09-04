@@ -16,7 +16,7 @@ non-dominated sorting（NSGA-II 风格）：
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from functools import cmp_to_key
 from typing import Any, Callable, Iterable, Sequence
 
@@ -44,12 +44,93 @@ class Objective:
 
 
 #: 默认目标维度（§42）：fitness / novelty 最大化，复杂度 / 换手最小化。
+#: plan Task 19：Pareto 维度保持克制（4 维），**不**把 P/Q/L/S/N/R 六维全摊成
+#: Pareto 目标——否则大多数成员互不支配（全在 front 0），Pareto 排序失去选择力。
 DEFAULT_OBJECTIVES: tuple[Objective, ...] = (
     Objective("fitness", maximize=True),
     Objective("novelty", maximize=True),
     Objective("complexity", maximize=False),
     Objective("turnover", maximize=False),
 )
+
+
+#: QD niche key 版本（plan Task 19 / Part G #29）：niche key 的语义版本。
+#: 版本变化 → 旧 archive 的 niche 键不再可信，读取方须按版本校验（无 stale
+#: archive 读取）。当前版本 1：niche = (mechanism, horizon_bucket,
+#: field_family, turnover_bucket)。
+NICHE_KEY_VERSION: int = 1
+
+
+#: QD niche 维度常量（§54 + plan Task 19 的 FactorAssets cluster / schema /
+#: horizon / turnover bucket / data domain 五类 cell 维度）。机制词表与顺序
+#: 构成 niche key 的稳定 schema；同一次运行内不允许混用不同顺序/词表。
+NICHE_DIMENSIONS: tuple[str, ...] = (
+    "mechanism",      # 机制/逻辑（FactorAssets cluster 代表）
+    "horizon_bucket", # 预测周期桶
+    "field_family",   # 数据域/字段族（schema 代表）
+    "turnover_bucket",# 换手桶
+    "data_domain",    # 数据域（stock/futures/...，可空默认 unknown）
+)
+
+
+@dataclass(frozen=True)
+class NicheSpec:
+    """QD niche 的定义值（全部字符串，可哈希、可序列化）。
+
+    ``as_key`` 返回稳定 tuple 键：带版本前缀，保证 niche key 版本稳定
+    （Part G #29 的 pool 侧体现——不同版本的 niche 语义不会互相当作同一
+    个 niche 合并）。
+    """
+
+    mechanism: str = "unknown"
+    horizon_bucket: str = "unknown"
+    field_family: str = "unknown"
+    turnover_bucket: str = "unknown"
+    data_domain: str = "unknown"
+    #: niche key 语义版本（参与哈希；默认当前版本）
+    version: int = NICHE_KEY_VERSION
+
+    @classmethod
+    def from_pool_member(cls, m: Any) -> "NicheSpec":
+        """从 PoolMember 构造（优先显式字段，其次 meta，最后 neutral）。"""
+        meta = getattr(m, "meta", None) or {}
+        nk = tuple(getattr(m, "niche_key", None) or ())
+        # 若 member 的 niche_key 已是 5 维 spec key → 解包回字段
+        if len(nk) == 5:
+            return cls(
+                mechanism=str(nk[0]),
+                horizon_bucket=str(nk[1]),
+                field_family=str(nk[2]),
+                turnover_bucket=str(nk[3]),
+                data_domain=str(nk[4]),
+            )
+        return cls(
+            mechanism=str(meta.get("mechanism", nk[0] if nk else "unknown")),
+            horizon_bucket=str(meta.get("horizon_bucket", nk[1] if len(nk) > 1 else "unknown")),
+            field_family=str(meta.get("field_family", nk[2] if len(nk) > 2 else "unknown")),
+            turnover_bucket=str(meta.get("turnover_bucket", nk[3] if len(nk) > 3 else "unknown")),
+            data_domain=str(meta.get("data_domain", "unknown")),
+        )
+
+    def as_key(self) -> tuple:
+        """稳定 niche 键：``(version, mechanism, horizon, field, turnover, domain)``。"""
+        return (
+            int(self.version),
+            str(self.mechanism),
+            str(self.horizon_bucket),
+            str(self.field_family),
+            str(self.turnover_bucket),
+            str(self.data_domain),
+        )
+
+    def as_key_v1_legacy(self) -> tuple:
+        """旧 4 维 niche key（不带版本）——向后兼容（pool/__init__.niche_key_of）。"""
+        return (
+            str(self.mechanism),
+            str(self.horizon_bucket),
+            str(self.field_family),
+            str(self.turnover_bucket),
+        )
 
 
 @dataclass(frozen=True)
@@ -69,6 +150,15 @@ class ParetoPoint:
             raise ValueError("factor_id is required")
         if len(self.values) != len(self.objectives):
             raise ValueError("values must match objectives length")
+        # plan Task 19：Pareto 维度克制——目标维度超过 4 即拒绝。把 P/Q/L/S/N/R
+        # 六维全摊成 Pareto 目标会让大多数成员互不支配（全在 front 0），
+        # 使 Pareto 排序失去选择力。
+        if len(self.objectives) > 4:
+            raise ValueError(
+                "Pareto objectives must stay <= 4 dimensions "
+                "(FactorFitness/Novelty/Complexity/Turnover); got "
+                f"{len(self.objectives)}: {[o.name for o in self.objectives]}"
+            )
         for v in self.values:
             if isinstance(v, bool) or not isinstance(v, (int, float)):
                 raise TypeError("values must be non-boolean numbers")

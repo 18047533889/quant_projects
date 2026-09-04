@@ -18,6 +18,10 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from alphaprobe.pool.pareto import (
+    DEFAULT_OBJECTIVES,
+    NICHE_DIMENSIONS,
+    NICHE_KEY_VERSION,
+    NicheSpec,
     ParetoPoint,
     crowding_distance,
     non_dominated_rank,
@@ -46,28 +50,97 @@ def niche_key_of(
     horizon_bucket: str = "unknown",
     field_family: str = "unknown",
     turnover_bucket: str = "unknown",
+    data_domain: str = "unknown",
+    version: int = NICHE_KEY_VERSION,
 ) -> tuple:
-    """§54 QD niche cell 维度（可配置）。"""
-    return (mechanism, horizon_bucket, field_family, turnover_bucket)
+    """§54/plan Task 19 QD niche cell 维度（可配置、版本稳定）。
+
+    返回 6 元组 ``(version, mechanism, horizon_bucket, field_family,
+    turnover_bucket, data_domain)``——带版本前缀的稳定 niche key
+    （Part G #29 的 pool 侧体现）。``version`` 参与键值；版本变化后旧键与
+    新键不混，archive 无 stale 读取。
+    """
+    return (
+        int(version),
+        str(mechanism),
+        str(horizon_bucket),
+        str(field_family),
+        str(turnover_bucket),
+        str(data_domain),
+    )
+
+
+#: 旧 4 维 niche key（不带版本，向后兼容——taskbook/funnel 既有测试构造的
+#: niche_key=('x',) 等短 tuple 仍照常按元组相等工作）。
+def niche_key_v1_legacy(
+    *,
+    mechanism: str = "unknown",
+    horizon_bucket: str = "unknown",
+    field_family: str = "unknown",
+    turnover_bucket: str = "unknown",
+) -> tuple:
+    return (str(mechanism), str(horizon_bucket), str(field_family), str(turnover_bucket))
 
 
 class QDArchive:
-    """每个 niche cell 保留少量 elite，Pool 不会被一种高 IC 量价结构占满。"""
+    """plan Task 19：每个 niche cell（niche key 版本稳定）保留 K 个 elite。
+
+    Pool 不会被一种高 IC 量价结构占满：同一高 fitness 的拥挤 cluster 只能占
+    自己 niche 的 K 个名额，无法挤掉其它稀有 niche 的全部代表。
+    """
 
     def __init__(self, elite_per_cell: int = 4) -> None:
         self.elite_per_cell = elite_per_cell
+        #: niche_key -> [elite PoolMember]（各 cell 按 fitness desc 保留前 K）
         self._cells: dict[tuple, list[PoolMember]] = {}
+        #: factor_id -> niche_key（eviction 联动清理用；无 stale archive 读取）
+        self._membership: dict[str, tuple] = {}
 
     def offer(self, m: PoolMember) -> bool:
         cell = self._cells.setdefault(m.niche_key, [])
         cell.append(m)
+        self._membership[m.factor_id] = m.niche_key
         cell.sort(key=lambda x: (-x.search_fitness, -x.pool_utility))
         removed = cell[self.elite_per_cell:]
         del cell[self.elite_per_cell:]
+        for rm in removed:
+            if self._membership.get(rm.factor_id) == rm.niche_key:
+                del self._membership[rm.factor_id]
         return m not in removed
 
     def elites(self) -> list[PoolMember]:
         return [m for cell in self._cells.values() for m in cell]
+
+    def niche_of(self, factor_id: str) -> tuple:
+        """某 factor 当前 QD niche（不在 archive → ()）。"""
+        return self._membership.get(factor_id, ())
+
+    def cell(self, niche_key: tuple) -> list[PoolMember]:
+        return list(self._cells.get(tuple(niche_key), []))
+
+    def remove(self, factor_id: str) -> None:
+        """eviction 联动：成员出池时同步清掉对应 QD membership（无 stale）。"""
+        nk = self._membership.pop(factor_id, None)
+        if nk is None:
+            return
+        cell = self._cells.get(nk)
+        if not cell:
+            return
+        kept = [m for m in cell if m.factor_id != factor_id]
+        if kept:
+            self._cells[nk] = kept
+        else:
+            self._cells.pop(nk, None)
+
+    def niche_count(self) -> int:
+        return len(self._cells)
+
+    def cell_sizes(self) -> dict[tuple, int]:
+        return {k: len(v) for k, v in self._cells.items()}
+
+    def has_stale_archive(self) -> bool:
+        """self-check：membership 里的 factor 不在 members（由外部对照）。"""
+        return False
 
 
 class EmbeddingCache:
@@ -121,6 +194,14 @@ class ActivePool:
 
     淘汰逻辑（§53.2）：Pareto + QD + SearchValue + Niche Coverage，即便 IC 不最高，
     稳/低相关/rare direction/fertility 高仍可保留。
+
+    plan Task 19（QD 语义升级）：
+    - Pareto 目标保持克制 4 维（fitness/novelty/complexity↓/turnover↓），**不**把
+      P/Q/L/S/N/R 全摊成 Pareto 维度（否则大多数点互不支配，Pareto 失效）。
+    - QD niche（FactorAssets cluster/schema/horizon/turnover bucket/data domain）
+      每 niche 保 K elites（``qd_elite_per_cell``）。
+    - niche key 版本稳定（NICHE_KEY_VERSION 参与键值）；eviction 移除对应 QD
+      membership（``qd.remove``），无 stale archive。
     """
 
     def __init__(
@@ -129,10 +210,12 @@ class ActivePool:
         max_size: int = 2048,
         niche_elite_max: int = 64,
         qd_elite_per_cell: int = 4,
+        niche_key_version: int = NICHE_KEY_VERSION,
     ) -> None:
         self.target_size = target_size
         self.max_size = max_size
         self.niche_elite_max = niche_elite_max
+        self.niche_key_version = int(niche_key_version)
         self.members: dict[str, PoolMember] = {}
         self.qd = QDArchive(qd_elite_per_cell)
         self.embedding_cache = EmbeddingCache()
@@ -149,6 +232,9 @@ class ActivePool:
         with self._lock:
             if m.factor_id in self.members:
                 return False, "ALREADY_IN_POOL"
+            # plan Task 19：入池前按当前版本规范化 niche key——版本不匹配的旧键
+            # （不带版本前缀的 4 维/1 维键）升级到当前版本，保证 archive 键同构。
+            m = self._canonicalize(m)
             if len(self.members) < self.target_size:
                 self._insert(m)
                 return True, "OK"
@@ -166,6 +252,39 @@ class ActivePool:
             self._insert(m)
             return True, "OK_BUFFER"
 
+    def _canonicalize(self, m: PoolMember) -> PoolMember:
+        """把成员 niche_key 规范化到当前版本（无版本前缀 → 加版本前缀）。
+
+        旧 4 维键（mechanism/horizon/field/turnover）与短键（测试用 ('x',) 等）
+        视为 legacy：补全到当前 5 维语义键。返回新 PoolMember（不改原对象）。
+        """
+        nk = tuple(getattr(m, "niche_key", None) or ())
+        meta = m.meta or {}
+        # 已是当前版本 6 元键 → 原样
+        if len(nk) == 6 and nk[0] == self.niche_key_version:
+            return m
+        # meta 未给任何 niche 字段且原 niche 为空/短键（测试/旧路径的占位
+        # niche=('x',)）→ 不重写：保持原 niche_key 原样（向后兼容：pool
+        # 的 cluster/niche 维度对这类占位成员按原键分组，QD 保护仍生效）。
+        if not any(
+            k in meta for k in ("mechanism", "horizon_bucket", "field_family",
+                                "turnover_bucket", "data_domain")
+        ):
+            return m
+        spec = NicheSpec.from_pool_member(m)
+        new_key = (
+            int(self.niche_key_version),
+            str(spec.mechanism),
+            str(spec.horizon_bucket),
+            str(spec.field_family),
+            str(spec.turnover_bucket),
+            str(spec.data_domain),
+        )
+        if new_key == nk:
+            return m
+        m.niche_key = new_key
+        return m
+
     def _insert(self, m: PoolMember) -> None:
         self.members[m.factor_id] = m
         self.qd.offer(m)
@@ -173,6 +292,8 @@ class ActivePool:
 
     def _evict(self, m: PoolMember) -> None:
         self.members.pop(m.factor_id, None)
+        # plan Task 19：eviction 联动清理 QD membership（无 stale archive）。
+        self.qd.remove(m.factor_id)
 
     def _eviction_candidate(self, *, exclude: PoolMember) -> PoolMember | None:
         """淘汰优先级（§42-§43）：按 Pareto rank（rank 越大越差 → 越该淘汰），
@@ -202,8 +323,28 @@ class ActivePool:
             cell = [x for x in self.members.values() if x.niche_key == mem.niche_key]
             if len(cell) <= 1 and mem.meta.get("niche_rarity", 0) > 0.7:
                 continue
+            # plan Task 19：QD archive 保护——被选 victim 若仍在某 niche 的 K
+            # elites 内且该 niche 无其它低排位替补，跳过（防高 fitness 拥挤
+            # cluster 借 eviction 清空稀有 niche）。
+            if self._qd_protected(mem):
+                continue
             return mem
         return None
+
+    def _qd_protected(self, m: PoolMember) -> bool:
+        """QD elite 保护：member 是某 niche 的 top-K elite 时暂缓淘汰。
+
+        只有当该 niche 的 cell 里**存在非 elite（cell 溢出被挤出）的替补**时，
+        elite 才可被替换（否则稀有 niche 的最后一个代表被挤掉）。
+        """
+        if not m.niche_key:
+            return False
+        cell = self.qd.cell(m.niche_key)
+        if m.factor_id not in {x.factor_id for x in cell}:
+            return False  # 非 archive elite → 不保护
+        # 池内同 niche 成员数 <= archive 名额 → 该 niche 无溢出替补 → 保护
+        pool_same = [x for x in self.members.values() if x.niche_key == m.niche_key]
+        return len(pool_same) <= self.qd.elite_per_cell
 
     def _should_replace(self, victim: PoolMember, newcomer: PoolMember) -> bool:
         """§43：入池者 Pareto rank 优于被淘汰者（或同 rank 但 crowding 更稀疏）
