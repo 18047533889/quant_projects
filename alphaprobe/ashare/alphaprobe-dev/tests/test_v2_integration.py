@@ -487,9 +487,15 @@ class TestDoneDefinition:
         assert contract.return_basis == "vwap_to_vwap"
 
     def test_structured_generation_default_off(self):
-        """structured_generation 默认关闭行为不变。"""
+        """structured_generation 默认关闭行为不变（SP 消费层旧行为）。
+
+        P0-A：PipelineConfig 裸默认值是 UNSET 哨兵（生产语义在 SearchPipeline
+        构造时解析）；OFLLINE_TEST 默认路径下 orchestrator 的
+        structured_generation 仍为 False——旧行为不变（与 test_v3_p0_pipeline
+        的兼容层断言一致）。
+        """
         cfg = PipelineConfig()
-        assert cfg.structured_generation is False
+        assert cfg.structured_generation is not False  # UNSET 哨兵
         sp = SearchPipeline(experiment=None, data_train=None, config=cfg)
         assert sp.orchestrator.structured_generation is False
 

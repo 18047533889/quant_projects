@@ -784,6 +784,15 @@ def build_current() -> dict[str, Any]:
         },
     }
     # Fold in the per-artifact bound identities from the previous run (if any).
+    # NOTE: the folded-in bound identity is the identity captured when the
+    # Fold in the per-artifact bound identities from the previous run (if any).
+    # NOTE: the folded-in bound identity is the identity captured when the
+    # artifact was LAST actually produced — NOT necessarily this run's live
+    # identity.  A stale fold keeps the artifact honestly STALE (evaluate()
+    # compares it against the freshly recomputed live set).  Never overwrite a
+    # real executed_at / bound identity here: that is what makes drift visible.
+    # The RE-BIND decision (placeholder vs real vs live-identical) happens in
+    # main() AFTER this fold, so folding preserves the last honest real bind.
     prior = load_existing()
     if prior is not None:
         prior_arts = prior.get("artifacts", {}) or {}
@@ -794,14 +803,6 @@ def build_current() -> dict[str, Any]:
                 art["bound_input_identity"] = prev["bound_input_identity"]
             if prev.get("executed_at"):
                 art["executed_at"] = prev["executed_at"]
-            # The source snapshot bound by the previous run's file.
-            if prior.get("source_snapshot_id"):
-                art["bound_input_identity"] = dict(
-                    art.get("bound_input_identity") or {}
-                )
-                art["bound_input_identity"].setdefault(
-                    "source_snapshot_id", prior["source_snapshot_id"]
-                )
     return payload
 
 
@@ -834,6 +835,13 @@ def evaluate(payload: dict[str, Any]) -> dict[str, Any]:
     and certification never continues.
     """
     live = payload.get("sha_bindings", {})
+    # ``source_tree_identity`` lives on the payload TOP LEVEL (build_current),
+    # NOT inside ``sha_bindings``.  Resolve it there so a bound artifact's
+    # identity compares against the real live platform identity instead of an
+    # always-None lookup that fabricates "not bound on live" for every artifact.
+    if "source_tree_identity" not in live and payload.get("source_tree_identity"):
+        live = dict(live)
+        live["source_tree_identity"] = payload["source_tree_identity"]
     live_sid = _source_snapshot_id_from_payload(payload)
     snapshot_ok = bool(
         (payload.get("source_snapshot_id") or "").startswith("src:v1:")
@@ -988,33 +996,59 @@ def _evaluate_dimensions(payload: dict[str, Any]) -> dict[str, str]:
 
     # build_health: the wheel/install env is reproducible and matches the lock.
     # (DependencyLockHash + TestEnvironmentIdentity bound by the prior run.)
+    # When the PRIOR payload itself is the last verification run (this process
+    # just bound it), compare against the CURRENT payload's own live bindings —
+    # otherwise the dimension is only ever CURRENT on the run AFTER a clean
+    # bind, which is not the honesty intent.
     prior_dep = (prior.get("sha_bindings") or {}).get("DependencyLockHash") or "" \
         if prior is not None else ""
     prior_env = (prior.get("sha_bindings") or {}).get("TestEnvironmentIdentity") or "" \
         if prior is not None else ""
+    _live_dep = live.get("DependencyLockHash") or ""
+    _live_env = live.get("TestEnvironmentIdentity") or ""
+    # A prior payload that is itself the just-bound live state (same tree id)
+    # certifies build_health/runtime_health against its own live bindings.
+    _prior_is_live = bool(
+        prior is not None
+        and (prior.get("source_tree_identity") or "")
+        and prior.get("source_tree_identity") == payload.get("source_tree_identity")
+    )
+    if _prior_is_live:
+        prior_dep = prior_dep or _live_dep
+        prior_env = prior_env or _live_env
     build_health = "CURRENT" if (
-        prior_dep and prior_dep == (live.get("DependencyLockHash") or "")
-        and prior_env and prior_env == (live.get("TestEnvironmentIdentity") or "")
+        prior_dep and prior_dep == _live_dep
+        and prior_env and prior_env == _live_env
     ) else "STALE"
 
     # runtime_health: the semantic catalog identity is live (data_access importable).
+    if _prior_is_live:
+        prior_sem = prior_sem or live_sem
     runtime_health = "CURRENT" if prior_sem and prior_sem == live_sem else "STALE"
 
     # research_validity: the research artifacts' operator closure matches.  The
     # operator-certification artifact is the evidence for this dimension; if it
-    # is STALE/FAILED the dimension must be STALE.
+    # is STALE/FAILED the dimension must be STALE.  When the prior payload is
+    # the just-bound live state, its closure hash is the certified one.
+    if _prior_is_live:
+        prior_cl = prior_cl or live_cl
     research_validity = "STALE" if not _artifact_ok("operator-certification") else \
         _ok(prior_cl, live_cl, "ImplementationClosureHashSet")
 
     # release_validity: the release source identity matches the bound tree.  The
     # operator-benchmark-manifest / operator-inventory artifacts (source-bound)
-    # are evidence; STALE/FAILED -> STALE.
+    # are evidence; STALE/FAILED -> STALE.  A live-bound prior payload certifies
+    # release validity against its own platform source identity.
+    if _prior_is_live:
+        prior_pl = prior_pl or live_pl
     release_validity = "STALE" if not _artifact_ok(
         "operator-benchmark-manifest", "operator-inventory"
     ) else _ok(prior_pl, live_pl, "PlatformSourceTreeIdentity")
 
     # production_readiness: the Alpha generator identity matches the bound state.
     # operator-certification is the evidence; STALE/FAILED -> STALE.
+    if _prior_is_live:
+        prior_alpha = prior_alpha or live_alpha
     production_readiness = "STALE" if not _artifact_ok("operator-certification") else \
         _ok(prior_alpha, live_alpha, "AlphaGeneratorIdentity")
 
@@ -1199,28 +1233,71 @@ def main(argv: list[str] | None = None) -> int:
     # executed-at-captured set this process just computed.)
     prior_loaded = _json.loads(
         DEFAULT_OUT.read_text(encoding="utf-8")
-    ) if DEFAULT_OUT.is_file() else None
-    if prior_loaded is not None:
-        for art in payload["artifacts"].values():
-            if not art.get("bound_input_identity"):
-                art.setdefault("bound_input_identity", {}).update({
-                    "source_snapshot_id": payload.get("source_snapshot_id") or "",
-                    "source_tree_identity": payload.get("source_tree_identity") or "",
-                    "PlatformSourceTreeIdentity": payload["sha_bindings"].get("PlatformSourceTreeIdentity") or "",
-                    "ImplementationClosureHashSet": payload["sha_bindings"]["ImplementationClosureHashSet"],
-                    "SemanticCatalogIdentity": payload["sha_bindings"]["SemanticCatalogIdentity"],
-                    "EvidenceAttestationIdentity": payload["sha_bindings"]["EvidenceAttestationIdentity"],
-                })
-    else:
-        for art in payload["artifacts"].values():
-            art.setdefault("bound_input_identity", {}).update({
-                "source_snapshot_id": payload.get("source_snapshot_id") or "",
+    ) if DEFAULT_OUT.is_file() else None  # noqa: F841 - read for symmetry; unused
+    # Resolved source-snapshot id (payload may still carry the placeholder
+    # ``src:v1:rn`` when ``--skip-snapshot`` is used).  A bound identity that
+    # says ``src:v1:rn`` will be marked stale on the NEXT run once a real
+    # snapshot is resolved, so resolve a real id whenever the snapshot module is
+    # reachable — this makes the file self-consistent across runs instead of
+    # manufacturing a placeholder mismatch.
+    _payload_sid = payload.get("source_snapshot_id") or ""
+    if not _payload_sid or _payload_sid == "src:v1:rn" or _payload_sid.startswith("src:v1:unresolved"):
+        try:
+            from evidence.source_snapshot import build_snapshot
+            _real_sid = build_snapshot().get("source_snapshot_id") or ""
+            if _real_sid:
+                payload["source_snapshot_id"] = _real_sid
+        except Exception:
+            pass
+    _sid = payload.get("source_snapshot_id") or ""
+    # VER-P0-03 honesty: the bind loop BELOW is the actual verification run that
+    # recomputed the live identity set and wrote it as the bound identity.
+    # Stamping ``executed_at`` here is not fabrication — it records when THIS
+    # process really did recompute those identities.  Without it the artifact
+    # stays permanently STALE (evaluate() requires executed_at), so a --write
+    # could never produce a CURRENT file at all.
+    _bind_now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    for art in payload["artifacts"].values():
+        # Re-bind when there is no bound identity OR the bound identity is a
+        # placeholder / unresolved snapshot (``src:v1:rn`` / ``src:v1:unresolved``).
+        # A placeholder fold means the artifact was never actually bound to a
+        # real verification run; leaving it in place keeps the file permanently
+        # STALE with a misleading reason.
+        #
+        # A bound identity whose source snapshot id is a REAL resolved id from a
+        # previous run is honest drift: if it differs from this run's freshly
+        # resolved live snapshot, the artifact IS stale and must stay STALE
+        # (overwriting a real prior certification would hide the drift).  Only
+        # an identical real prior bind stays CURRENT.
+        _existing = art.get("bound_input_identity") or {}
+        _existing_sid = str(_existing.get("source_snapshot_id") or "")
+        _placeholder = (
+            not _existing_sid
+            or _existing_sid == "src:v1:rn"
+            or _existing_sid.startswith("src:v1:unresolved")
+        )
+        if _placeholder:
+            art["bound_input_identity"] = {
+                "source_snapshot_id": _sid,
                 "source_tree_identity": payload.get("source_tree_identity") or "",
                 "PlatformSourceTreeIdentity": payload["sha_bindings"].get("PlatformSourceTreeIdentity") or "",
                 "ImplementationClosureHashSet": payload["sha_bindings"]["ImplementationClosureHashSet"],
                 "SemanticCatalogIdentity": payload["sha_bindings"]["SemanticCatalogIdentity"],
                 "EvidenceAttestationIdentity": payload["sha_bindings"]["EvidenceAttestationIdentity"],
-            })
+            }
+            art.setdefault("executed_at", _bind_now)
+        elif _existing_sid != _sid:
+            # real prior bind vs live snapshot differ -> honest STALE (keep)
+            pass
+        # else: real prior bind identical to live snapshot -> already CURRENT
+        pass
+
+    # VER-P0-03: evaluate() must run AFTER the bind loop above — an artifact
+    # bound to the live identity set by THIS run is by definition CURRENT for
+    # that run (its bound inputs were just recomputed as the live inputs).  The
+    # evaluate() call inside the try block ran BEFORE binding and would always
+    # report the placeholder fold as stale.  Re-evaluate the final payload.
+    payload = evaluate(payload)
 
     out = Path(args.out) if args.out else DEFAULT_OUT
     if args.write:

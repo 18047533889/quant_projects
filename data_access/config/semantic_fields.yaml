@@ -10,6 +10,10 @@
 #   physical_name 数据集内的物理列名（缺省 = 逻辑名）
 #   scale          source_unit → canonical_unit 的乘子；None/1.0 表示不归一化
 #   join_policy    exact / pit_asof_backward / latest_period ...
+#   data_domains   R61-FI-010 field-domain taxonomy token（可多个；见
+#                  read/semantic_catalog.py 的 VALID_FIELD_DOMAINS）
+#   economic_roles R61-FI-010 经济角色 token（VALID_ECONOMIC_ROLES）
+#   frequency_class / pit_class：跨市场可比的分桶语义（可选）
 #   _ 前缀的键是锚点模板，不会当字段。
 # ############################################################################
 
@@ -38,6 +42,10 @@ close:
   temporal_model: panel
   join_policy: exact
   mining_allowed: true
+  data_domains: [PRICE]
+  economic_roles: [price_level]
+  frequency_class: daily
+  pit_class: panel_same_day
 
 open:
   dataset: ashare_stock_daily_adj
@@ -52,6 +60,10 @@ open:
   temporal_model: panel
   join_policy: exact
   mining_allowed: true
+  data_domains: [PRICE]
+  economic_roles: [price_level]
+  frequency_class: daily
+  pit_class: panel_same_day
 
 high:
   dataset: ashare_stock_daily_adj
@@ -66,6 +78,10 @@ high:
   temporal_model: panel
   join_policy: exact
   mining_allowed: true
+  data_domains: [PRICE]
+  economic_roles: [price_level]
+  frequency_class: daily
+  pit_class: panel_same_day
 
 low:
   dataset: ashare_stock_daily_adj
@@ -80,6 +96,10 @@ low:
   temporal_model: panel
   join_policy: exact
   mining_allowed: true
+  data_domains: [PRICE]
+  economic_roles: [price_level]
+  frequency_class: daily
+  pit_class: panel_same_day
 
 volume:
   dataset: ashare_stock_daily_adj
@@ -94,6 +114,10 @@ volume:
   temporal_model: panel
   join_policy: exact
   mining_allowed: true
+  data_domains: [VOLUME]
+  economic_roles: [volume_traded]
+  frequency_class: daily
+  pit_class: panel_same_day
   # LQTP 平台 functions.yaml：volume = Volume / Factor（后复权量）。生成的
   # StockDailyBarAdj 表保持 Volume 原始值，Factor 列同表存在；derived_expression
   # 使 bare ``volume`` 解析为 Volume / Factor（业界 LQTP/adjusted-volume 口径）。
@@ -116,6 +140,10 @@ amount:
   temporal_model: panel
   join_policy: exact
   mining_allowed: true
+  data_domains: [VOLUME, LIQUIDITY]
+  economic_roles: [money_traded]
+  frequency_class: daily
+  pit_class: panel_same_day
 
 vwap:
   dataset: ashare_stock_daily_adj
@@ -130,6 +158,10 @@ vwap:
   temporal_model: panel
   join_policy: exact
   mining_allowed: true
+  data_domains: [PRICE]
+  economic_roles: [price_level]
+  frequency_class: daily
+  pit_class: panel_same_day
 
 pre_close:
   market: ashare
@@ -145,6 +177,10 @@ pre_close:
   join_policy: exact
   mining_allowed: true
   aliases: [prev_close]
+  data_domains: [PRICE]
+  economic_roles: [price_level]
+  frequency_class: daily
+  pit_class: panel_same_day
 
 # 收益率 bp → decimal（A股专属；alias 'ret' 在美股上下文解析到美股小数 ret）
 return_bp:
@@ -164,6 +200,10 @@ return_bp:
   join_policy: exact
   mining_allowed: true
   aliases: [ret, returns]
+  data_domains: [PRICE]
+  economic_roles: [return]
+  frequency_class: daily
+  pit_class: panel_same_day
 
 # ---- 估值（日频，随行情 exact join） ----
 
@@ -183,6 +223,10 @@ market_cap:
   temporal_model: panel
   join_policy: exact
   mining_allowed: true
+  data_domains: [FUNDAMENTAL.VALUE]
+  economic_roles: [size]
+  frequency_class: daily
+  pit_class: panel_same_day
 
 circulating_market_cap:
   market: ashare
@@ -199,6 +243,10 @@ circulating_market_cap:
   temporal_model: panel
   join_policy: exact
   mining_allowed: true
+  data_domains: [FUNDAMENTAL.VALUE]
+  economic_roles: [size]
+  frequency_class: daily
+  pit_class: panel_same_day
 
 pe_ratio:
   market: ashare
@@ -213,6 +261,10 @@ pe_ratio:
   temporal_model: panel
   join_policy: exact
   mining_allowed: true
+  data_domains: [FUNDAMENTAL.VALUE]
+  economic_roles: [value]
+  frequency_class: daily
+  pit_class: panel_same_day
 
 pb_ratio:
   market: ashare
@@ -227,6 +279,10 @@ pb_ratio:
   temporal_model: panel
   join_policy: exact
   mining_allowed: true
+  data_domains: [FUNDAMENTAL.VALUE]
+  economic_roles: [value]
+  frequency_class: daily
+  pit_class: panel_same_day
 
 # TurnoverRatio % → ratio（A股专属；美股无同构换手面板）
 turnover_ratio:
@@ -245,6 +301,10 @@ turnover_ratio:
   join_policy: exact
   mining_allowed: true
   aliases: [turnover]
+  data_domains: [LIQUIDITY]
+  economic_roles: [liquidity_proxy]
+  frequency_class: daily
+  pit_class: panel_same_day
 
 # ---- 指标（日频，含财报期引用；ROE % → ratio） ----
 
@@ -272,6 +332,10 @@ eps:
   join_policy: pit_asof_backward
   period_selection: latest_period
   mining_allowed: true
+  data_domains: [FUNDAMENTAL.VALUE, FUNDAMENTAL.QUALITY]
+  economic_roles: [value]
+  frequency_class: daily
+  pit_class: announcement_pit
 
 roe:
   market: ashare
@@ -295,6 +359,10 @@ roe:
   availability: next_trading_day
   join_policy: pit_asof_backward
   mining_allowed: true
+  data_domains: [FUNDAMENTAL.QUALITY]
+  economic_roles: [quality]
+  frequency_class: daily
+  pit_class: announcement_pit
 
 # ---- 资产负债表（事件/时点表，PIT asof 对齐） ----
 # 注意：knowledge_time 用 PubDate（公告可见时点），不是 TradeDate（供应商记录日）。
@@ -321,6 +389,10 @@ total_assets:
   availability: next_trading_day
   join_policy: pit_asof_backward
   mining_allowed: true
+  data_domains: [FUNDAMENTAL.VALUE, FUNDAMENTAL.LEVERAGE]
+  economic_roles: [size, capital_structure]
+  frequency_class: quarterly
+  pit_class: announcement_pit
 
 total_liabilities:
   market: ashare
@@ -342,6 +414,10 @@ total_liabilities:
   availability: next_trading_day
   join_policy: pit_asof_backward
   mining_allowed: true
+  data_domains: [FUNDAMENTAL.LEVERAGE]
+  economic_roles: [capital_structure, leverage]
+  frequency_class: quarterly
+  pit_class: announcement_pit
 
 # ---- 利润表 ----
 
@@ -366,6 +442,10 @@ operating_revenue:
   join_policy: pit_asof_backward
   mining_allowed: true
   aliases: [revenue]
+  data_domains: [FUNDAMENTAL.GROWTH, FUNDAMENTAL.VALUE]
+  economic_roles: [size, growth]
+  frequency_class: quarterly
+  pit_class: announcement_pit
 
 net_profit:
   market: ashare
@@ -388,6 +468,10 @@ net_profit:
   join_policy: pit_asof_backward
   mining_allowed: true
   aliases: [net_income]
+  data_domains: [FUNDAMENTAL.QUALITY, FUNDAMENTAL.GROWTH]
+  economic_roles: [quality, growth]
+  frequency_class: quarterly
+  pit_class: announcement_pit
 
 # ---- 指数权重（成分股权重，精确日频；必须指定 IndexSymbol） ----
 # IndexConstituent.Weight 是 PERCENT（如 0.5 表示 0.5%）→ canonical ratio 0.005。
@@ -411,6 +495,10 @@ index_weight:
   required_filters: [IndexSymbol]
   primary_key: [TradeDate, Symbol, IndexSymbol]
   mining_allowed: true
+  data_domains: [FUNDAMENTAL.VALUE]
+  economic_roles: [size, index_membership]
+  frequency_class: daily
+  pit_class: panel_same_day
 
 # ---- 涨跌停价格（HighLimit/LowLimit；涨跌停价的唯一价格权威） ----
 # #R50 P0：涨跌停价由数据源提供，是 limit-up/down 的唯一价格权威。
@@ -430,6 +518,10 @@ high_limit:
   temporal_model: panel
   join_policy: exact
   mining_allowed: true
+  data_domains: [PRICE, EVENT]
+  economic_roles: [price_level, event_marker]
+  frequency_class: daily
+  pit_class: panel_same_day
 
 low_limit:
   market: ashare
@@ -444,6 +536,10 @@ low_limit:
   temporal_model: panel
   join_policy: exact
   mining_allowed: true
+  data_domains: [PRICE, EVENT]
+  economic_roles: [price_level, event_marker]
+  frequency_class: daily
+  pit_class: panel_same_day
 
 # ---- 分钟复权（StockMinuteBarAdj；realizations.md §5.6） ----
 # A 股分钟权威口径 = 后复权分钟表 StockMinuteBarAdj（Adj* 字段集）。bare
@@ -463,6 +559,10 @@ minute_open:
   join_policy: exact
   mining_allowed: true
   aliases: [m_open]
+  data_domains: [PRICE]
+  economic_roles: [price_level]
+  frequency_class: minute
+  pit_class: panel_same_day
 
 minute_high:
   market: ashare
@@ -478,6 +578,10 @@ minute_high:
   join_policy: exact
   mining_allowed: true
   aliases: [m_high]
+  data_domains: [PRICE]
+  economic_roles: [price_level]
+  frequency_class: minute
+  pit_class: panel_same_day
 
 minute_low:
   market: ashare
@@ -493,6 +597,10 @@ minute_low:
   join_policy: exact
   mining_allowed: true
   aliases: [m_low]
+  data_domains: [PRICE]
+  economic_roles: [price_level]
+  frequency_class: minute
+  pit_class: panel_same_day
 
 minute_close:
   market: ashare
@@ -508,6 +616,10 @@ minute_close:
   join_policy: exact
   mining_allowed: true
   aliases: [m_close]
+  data_domains: [PRICE]
+  economic_roles: [price_level]
+  frequency_class: minute
+  pit_class: panel_same_day
 
 minute_volume:
   market: ashare
@@ -523,6 +635,10 @@ minute_volume:
   join_policy: exact
   mining_allowed: true
   aliases: [m_volume]
+  data_domains: [VOLUME]
+  economic_roles: [volume_traded]
+  frequency_class: minute
+  pit_class: panel_same_day
 
 minute_amount:
   market: ashare
@@ -538,6 +654,10 @@ minute_amount:
   join_policy: exact
   mining_allowed: true
   aliases: [m_amount]
+  data_domains: [VOLUME, LIQUIDITY]
+  economic_roles: [money_traded]
+  frequency_class: minute
+  pit_class: panel_same_day
 
 minute_vwap:
   market: ashare
@@ -553,6 +673,10 @@ minute_vwap:
   join_policy: exact
   mining_allowed: true
   aliases: [m_vwap]
+  data_domains: [PRICE]
+  economic_roles: [price_level]
+  frequency_class: minute
+  pit_class: panel_same_day
 
 # ---- 行业分类（多分类系统，必须指定 IndustrySource） ----
 # #R50 P0-35 hard contract：同一股票同一天可有多个行业分类（SW/CITIC/CSRC…），
@@ -575,6 +699,10 @@ stock_industry:
   primary_key: [TradeDate, Symbol, IndustrySource]
   mining_allowed: true
   aliases: [industry_code]
+  data_domains: [EVENT]
+  economic_roles: [index_membership]
+  frequency_class: daily
+  pit_class: panel_same_day
 
 # ---- 股东/质押/集中度（财报 PIT：PubDate 可见、下一交易日可用） ----
 # 单位均为 PERCENT（如股东占比 15 表示 15%）→ canonical ratio 乘子 0.01。
@@ -610,6 +738,10 @@ pledged_share_ratio:
   join_policy: pit_asof_backward
   period_selection: latest_period
   mining_allowed: true
+  data_domains: [FUNDAMENTAL.LEVERAGE]
+  economic_roles: [capital_structure, leverage]
+  frequency_class: daily
+  pit_class: announcement_pit
 
 
 # ############################################################################
@@ -632,6 +764,10 @@ ret:
   temporal_model: panel
   join_policy: exact
   mining_allowed: true
+  data_domains: [PRICE]
+  economic_roles: [return]
+  frequency_class: daily
+  pit_class: panel_same_day
 
 ret_intra:
   market: us
@@ -646,6 +782,10 @@ ret_intra:
   temporal_model: panel
   join_policy: exact
   mining_allowed: true
+  data_domains: [PRICE, MICROSTRUCTURE]
+  economic_roles: [return]
+  frequency_class: daily
+  pit_class: panel_same_day
 
 ret_overnight:
   market: us
@@ -660,6 +800,10 @@ ret_overnight:
   temporal_model: panel
   join_policy: exact
   mining_allowed: true
+  data_domains: [PRICE]
+  economic_roles: [return]
+  frequency_class: daily
+  pit_class: panel_same_day
 
 adj_factor:
   market: us
@@ -674,6 +818,10 @@ adj_factor:
   temporal_model: panel
   join_policy: exact
   mining_allowed: true
+  data_domains: [PRICE]
+  economic_roles: [price_level]
+  frequency_class: daily
+  pit_class: panel_same_day
 
 high_low_ratio:
   market: us
@@ -688,6 +836,10 @@ high_low_ratio:
   temporal_model: panel
   join_policy: exact
   mining_allowed: true
+  data_domains: [PRICE]
+  economic_roles: [return]
+  frequency_class: daily
+  pit_class: panel_same_day
 
 # ---- 美股估值（X0 稀疏；比率已是小数，禁止再 /100） ----
 # #P0-23 X0 稀疏原始字段 mining_allowed=false：原始估值表不是完整日频横截面，
@@ -706,6 +858,10 @@ dividend_yield:
   temporal_model: sparse_event
   join_policy: exact
   mining_allowed: false
+  data_domains: [EVENT, FUNDAMENTAL.VALUE]
+  economic_roles: [value, event_marker]
+  frequency_class: daily
+  pit_class: event_effective
 
 return_on_equity:
   market: us
@@ -720,6 +876,10 @@ return_on_equity:
   temporal_model: sparse_event
   join_policy: exact
   mining_allowed: false
+  data_domains: [FUNDAMENTAL.QUALITY]
+  economic_roles: [quality]
+  frequency_class: daily
+  pit_class: announcement_pit
 
 return_on_assets:
   market: us
@@ -734,6 +894,10 @@ return_on_assets:
   temporal_model: sparse_event
   join_policy: exact
   mining_allowed: false
+  data_domains: [FUNDAMENTAL.QUALITY]
+  economic_roles: [quality]
+  frequency_class: daily
+  pit_class: announcement_pit
 
 price_to_earnings:
   market: us
@@ -748,6 +912,10 @@ price_to_earnings:
   temporal_model: sparse_event
   join_policy: exact
   mining_allowed: false
+  data_domains: [FUNDAMENTAL.VALUE]
+  economic_roles: [value]
+  frequency_class: daily
+  pit_class: announcement_pit
 
 price_to_book:
   market: us
@@ -762,6 +930,10 @@ price_to_book:
   temporal_model: sparse_event
   join_policy: exact
   mining_allowed: false
+  data_domains: [FUNDAMENTAL.VALUE]
+  economic_roles: [value]
+  frequency_class: daily
+  pit_class: announcement_pit
 
 us_market_cap:
   market: us
@@ -779,6 +951,10 @@ us_market_cap:
   temporal_model: sparse_event
   join_policy: exact
   mining_allowed: false
+  data_domains: [FUNDAMENTAL.VALUE]
+  economic_roles: [size]
+  frequency_class: daily
+  pit_class: panel_same_day
 
 # ---- 美股真实市值（derived，字典 §C23.2 / #P0-24） ----
 # X0 market_cap 只作为 sparse raw reference；挖掘/因子用 derived 日频市值
@@ -799,6 +975,10 @@ us_market_cap_daily:
   # #P1-final closure 7：DerivedFieldCompiler 未实现执行链 → 明确 fail-closed。
   # 不宣称 mining_allowed=true；Planner 遇到 derived 字段给清晰 ValidationError。
   mining_allowed: false
+  data_domains: [FUNDAMENTAL.VALUE]
+  economic_roles: [size, market_neutral_denominator]
+  frequency_class: daily
+  pit_class: panel_same_day
 
 # ---- 美股财务（E2 事件；PIT=filing_date；必须 filter timeframe） ----
 revenue:
@@ -822,6 +1002,10 @@ revenue:
   flow_semantics: single_period_flow
   join_policy: pit_asof_backward
   mining_allowed: true
+  data_domains: [FUNDAMENTAL.GROWTH, FUNDAMENTAL.VALUE]
+  economic_roles: [size, growth]
+  frequency_class: quarterly
+  pit_class: announcement_pit
 
 # R24 P0-XM4 §20：consolidated vs attributable **不是同义词**，不能静默 alias。
 # US consolidated_net_income_loss vs net_income_loss_attributable_common_shareholders
@@ -850,6 +1034,10 @@ net_income_consolidated:
   flow_semantics: single_period_flow
   join_policy: pit_asof_backward
   mining_allowed: true
+  data_domains: [FUNDAMENTAL.QUALITY, FUNDAMENTAL.GROWTH]
+  economic_roles: [quality, growth]
+  frequency_class: quarterly
+  pit_class: announcement_pit
 
 net_income_attributable:
   market: us
@@ -872,6 +1060,10 @@ net_income_attributable:
   flow_semantics: single_period_flow
   join_policy: pit_asof_backward
   mining_allowed: true
+  data_domains: [FUNDAMENTAL.QUALITY, FUNDAMENTAL.GROWTH]
+  economic_roles: [quality, growth]
+  frequency_class: quarterly
+  pit_class: announcement_pit
 
 net_income:
   market: us
@@ -894,6 +1086,10 @@ net_income:
   flow_semantics: single_period_flow
   join_policy: pit_asof_backward
   mining_allowed: true
+  data_domains: [FUNDAMENTAL.QUALITY, FUNDAMENTAL.GROWTH]
+  economic_roles: [quality, growth]
+  frequency_class: quarterly
+  pit_class: announcement_pit
 
 us_total_assets:
   market: us
@@ -917,6 +1113,10 @@ us_total_assets:
   flow_semantics: point_in_time_stock
   join_policy: pit_asof_backward
   mining_allowed: true
+  data_domains: [FUNDAMENTAL.VALUE, FUNDAMENTAL.LEVERAGE]
+  economic_roles: [size, capital_structure]
+  frequency_class: quarterly
+  pit_class: announcement_pit
 
 us_total_liabilities:
   market: us
@@ -940,6 +1140,10 @@ us_total_liabilities:
   flow_semantics: point_in_time_stock
   join_policy: pit_asof_backward
   mining_allowed: true
+  data_domains: [FUNDAMENTAL.LEVERAGE]
+  economic_roles: [capital_structure, leverage]
+  frequency_class: quarterly
+  pit_class: announcement_pit
 
 # ---- 美股市值中性：Close × weighted_shares_outstanding（字典 §C23.2） ----
 shares_outstanding:
@@ -956,6 +1160,10 @@ shares_outstanding:
   temporal_model: panel
   join_policy: exact
   mining_allowed: true
+  data_domains: [FUNDAMENTAL.VALUE]
+  economic_roles: [share_count, size]
+  frequency_class: daily
+  pit_class: panel_same_day
 
 # ---- 美股分红（E2 事件）----
 # R24 P0-XM1 §17：契约漂移修复——DA semantic field 必须与 cos_contract_us.py
@@ -987,6 +1195,10 @@ cash_dividend_local:
   requires_fx: true
   mining_allowed: false
   duplicate_policy: error  # missing declaration_date => unavailable
+  data_domains: [EVENT, FUNDAMENTAL.VALUE]
+  economic_roles: [event_marker, value]
+  frequency_class: event
+  pit_class: event_effective
 
 cash_dividend_usd:
   market: us
@@ -1010,6 +1222,10 @@ cash_dividend_usd:
   mining_allowed: false
   duplicate_policy: error
   # 仅当 currency == USD；其他币种必须被过滤/不可用，绝不静默当 USD。
+  data_domains: [EVENT, FUNDAMENTAL.VALUE]
+  economic_roles: [event_marker, value]
+  frequency_class: event
+  pit_class: event_effective
 
 # 兼容旧名 cash_dividend → local（value+currency）；语义不再暗示 USD。
 cash_dividend:
@@ -1033,6 +1249,10 @@ cash_dividend:
   requires_fx: true
   mining_allowed: false
   aliases: [cash_dividend_local]
+  data_domains: [EVENT, FUNDAMENTAL.VALUE]
+  economic_roles: [event_marker, value]
+  frequency_class: event
+  pit_class: event_effective
 
 
 # ---- R24 P1-XM7 §23：canonical adjusted_price_backward ----
@@ -1063,3 +1283,7 @@ adjusted_price_backward:
   # 直接统一成一个 raw column。canonical concept 由 market provider 构造，物理列
   # 仍是各自市场的原始列。
   mining_allowed: false
+  data_domains: [PRICE]
+  economic_roles: [price_level]
+  frequency_class: daily
+  pit_class: panel_same_day

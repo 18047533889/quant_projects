@@ -191,6 +191,40 @@ def _apply_env_llm_settings(experiment: ExperimentConfig) -> None:
     experiment.delivery.llm_provider = provider
 
 
+def _resolve_llm_mode(experiment: ExperimentConfig, args: Any) -> Any:
+    """从 experiment config / args 读 llm.mode（P0-A）。
+
+    yaml 侧 ``mining.llm.mode`` 优先；其次 ``args.llm_mode``；缺省 OFFLINE_TEST
+    （保持现状行为——stub 可跑）。
+    """
+    from alphaprobe.llm_client import ExecutionMode
+
+    raw_mode = None
+    try:
+        mining_raw = dict((experiment.raw.get("mining") or {}))
+        raw_mode = (mining_raw.get("llm") or {}).get("mode")
+    except Exception:  # noqa: BLE001
+        raw_mode = None
+    if raw_mode is None:
+        raw_mode = getattr(args, "llm_mode", None)
+    if raw_mode is None:
+        return ExecutionMode.OFFLINE_TEST
+    try:
+        return ExecutionMode(str(raw_mode).strip().lower())
+    except ValueError:
+        return ExecutionMode.OFFLINE_TEST
+
+
+def _resolve_llm_client(experiment: ExperimentConfig, args: Any) -> Any:
+    """从 experiment config / args 装配真实 LLM client（P0-A）。
+
+    真实接入点当前在 runner 外层注入（``args.llm_client``）；yaml/环境变量
+    provider 装配留 P1（真实 OpenAI-compatible client 需 network）。本函数
+    OFFLINE_TEST 下返回 None（由 resolve_llm_fn 落 stub）。
+    """
+    return getattr(args, "llm_client", None)
+
+
 def _apply_mining_yaml_defaults(experiment: ExperimentConfig, args: Any) -> None:
     m = experiment.mining
     args.label_days = m.label_days
@@ -261,7 +295,12 @@ def _run_pipeline_mining(
     """--pipeline new 主链：SearchPipeline.run_round 循环 + disk.v1 导出。
 
     沿用现有 quota/stop 逻辑（search_time 轮次上限）；全程不触 test 段。
+
+    P0-A llm 模式接线：从 experiment config / args 读 ``mining.llm.mode``
+    （缺省 OFFLINE_TEST，保持现状行为）；SearchPipeline 构造时传 mode + 相应
+    llm_client（PRODUCTION 缺 llm_client → fail-closed 抛）。
     """
+    from alphaprobe.llm_client import ExecutionMode, resolve_llm_fn
     from alphaprobe.pipeline import PipelineConfig, SearchPipeline
 
     config = PipelineConfig(
@@ -269,14 +308,34 @@ def _run_pipeline_mining(
         pool_max=max(32, args.pool_capacity * 2),
         budget_per_round=max(4, args.generate_num),
         max_rounds=int(args.search_time),
+        # P0-A：生产语义默认结构化 generation（runner 主链即生产主链）。
+        structured_generation=True,
     )
-    pipeline = SearchPipeline(
+    llm_mode = _resolve_llm_mode(experiment, args)
+    llm_client = getattr(args, "llm_client", None)
+    if llm_client is None:
+        # 从 experiment config 读 llm client（真实接入点在 runner 外层注入；
+        # yaml 侧暂不装配真实 client——OFFLINE_TEST 默认 stub）。
+        llm_client = _resolve_llm_client(experiment, args)
+    pipeline_kwargs: dict[str, Any] = dict(
         experiment=experiment,
         data_train=data,
         config=config,
         memory_store=None,
-        llm_fn=None,  # 默认确定性 stub，不跑真实 LLM（硬规矩）
+        mode=llm_mode,
     )
+    if llm_mode in (ExecutionMode.PRODUCTION, ExecutionMode.RESEARCH_DEGRADED):
+        # P0-A：真实 LLM client 由外层注入（args.llm_client）。未注入即 fail-closed
+        # 抛（绝不静默切 stub）。llm_fn 显式传 None 也走 resolve_llm_fn 守卫。
+        pipeline_kwargs["llm_client"] = llm_client
+        pipeline_kwargs["llm_fn"] = None
+    else:
+        # OFFLINE_TEST：默认确定性 stub（保持现状行为）。resolve_llm_fn 在
+        # llm_client 为 None 时落 DeterministicStubLLMClient；llm_fn 在
+        # __post_init__ 里非 None 优先于 stub 默认，行为与旧版一致。
+        llm_fn = resolve_llm_fn(llm_client, ExecutionMode.OFFLINE_TEST, structured=True)
+        pipeline_kwargs["llm_fn"] = llm_fn
+    pipeline = SearchPipeline(**pipeline_kwargs)
     round_result = None
     for _round in range(int(args.search_time)):
         round_result = pipeline.run_round(
@@ -369,16 +428,22 @@ def run_mining_campaign(
     target = Ref(vwap, -label_days) / vwap - 1
 
     if getattr(args, "pipeline", "new") == "new":
-        # 默认主链：SearchPipeline（新架构真身），不走 AlphaKnowledgeTrainer
+        # 默认主链：SearchPipeline（新架构真身），不走 AlphaKnowledgeTrainer。
+        # P0-A：不再硬编码 initial_exprs[:5] 截断——直接把全部 cold-start 条目
+        # （上限放宽到 args.generate_num*4，至少覆盖全部 seed）转为 parents 传给
+        # pipeline（SeedProvider 意图的完整 parents 列表）。后续 P1 由
+        # BayesianRetriever + FactorAssets 做 memory-driven seed 选择。
         initial_exprs = resolve_cold_start(experiment, args)
-        parents: list[dict[str, Any]] = [
-            {
-                "formula": str(expr) if not hasattr(expr, "dsl") else getattr(expr, "dsl"),
-                "factor_id": f"seed_{i}",
-                "fitness": 0.0,
-            }
-            for i, expr in enumerate(initial_exprs[: min(5, len(initial_exprs))])
-        ]
+        parent_cap = max(4, int(getattr(args, "generate_num", 5)) * 4)
+        parents: list[dict[str, Any]] = []
+        for i, expr in enumerate(initial_exprs[: min(parent_cap, len(initial_exprs))]):
+            parents.append(
+                {
+                    "formula": str(expr) if not hasattr(expr, "dsl") else getattr(expr, "dsl"),
+                    "factor_id": f"seed_{i}",
+                    "fitness": 0.0,
+                }
+            )
         campaign_id = experiment.delivery.resolved_campaign_id()
         mining_result = _run_pipeline_mining(
             args,

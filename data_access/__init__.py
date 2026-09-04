@@ -36,8 +36,11 @@ from data_access.read.read_handle import ReadHandle
 from data_access.read.relation_handle import RelationHandle
 from data_access.read.data_request import DataRequest, ReadPlan
 from data_access.read.semantic_catalog import (
+    FieldSemanticDescriptor,
+    FieldTaxonomyProvider,
     SemanticField,
     SemanticFieldCatalog,
+    SemanticFieldTaxonomyProvider,
     get_semantic_catalog,
 )
 from . import store as _store_module
@@ -104,6 +107,9 @@ __all__ = [
     "ReadPlan",
     "SemanticField",
     "SemanticFieldCatalog",
+    "SemanticFieldTaxonomyProvider",
+    "FieldSemanticDescriptor",
+    "FieldTaxonomyProvider",
     "get_semantic_catalog",
     "COSDatasetContract",
     "COS_DATASET_CONTRACTS",

@@ -35,7 +35,7 @@ import os
 import threading
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import Any, Mapping, Protocol, Sequence
 
 from data_access.core.exceptions import ValidationError
 
@@ -171,6 +171,15 @@ class SemanticField:
     requires_fx: bool = False                  # 需要显式 FX dataset + FX PIT 才能统一
     # ---- R24 P0-XM5 §21：flow semantics（机器可读）----
     flow_semantics: str | None = None          # cumulative_ytd_flow / single_period_flow / point_in_time_stock
+    # ---- R61-FI-010 A2：field-domain taxonomy metadata（可空扩展） ----
+    # ``data_domains`` / ``economic_roles`` 用模块级注册表里的规范 token
+    # （见 ``VALID_FIELD_DOMAINS`` / ``VALID_ECONOMIC_ROLES``）；``frequency_class``
+    # / ``pit_class`` 是跨市场可比的分桶语义。全部可选：既有 YAML 行缺省解析为
+    # 空/None，绝不改变老字段的内容 hash（``to_dict`` 只在非缺省时输出这些键）。
+    data_domains: tuple[str, ...] = ()
+    economic_roles: tuple[str, ...] = ()
+    frequency_class: str | None = None
+    pit_class: str | None = None
 
     @property
     def is_scale_applicable(self) -> bool:
@@ -217,6 +226,32 @@ class SemanticField:
             "cross_market_comparable": self.cross_market_comparable,
             "requires_fx": self.requires_fx,
             "flow_semantics": self.flow_semantics,
+            # R61-FI-010 A2：taxonomy 元数据只在**显式声明**时进序列化输出。
+            # 未声明的字段不输出 ``data_domains``/``economic_roles``/
+            # ``frequency_class``/``pit_class`` 键 → 老字段（无 tag）的
+            # to_dict/身份 digest 与扩展前逐字节一致（目录内容 hash 稳定性）。
+            # 注意：JSON 反序列化后无法区分「空 list」与「缺失键」，因此这里
+            # 用 None 表示缺失，空 tuple 只在显式声明空序列时出现（解析时
+            # YAML 的 None/空 list 都被归一成 None，不会输出空键）。
+            **(
+                {}
+                if not (
+                    self.data_domains
+                    or self.economic_roles
+                    or self.frequency_class is not None
+                    or self.pit_class is not None
+                )
+                else {
+                    "data_domains": (
+                        list(self.data_domains) if self.data_domains else None
+                    ),
+                    "economic_roles": (
+                        list(self.economic_roles) if self.economic_roles else None
+                    ),
+                    "frequency_class": self.frequency_class,
+                    "pit_class": self.pit_class,
+                }
+            ),
         }
 
 
@@ -405,6 +440,157 @@ _VALID_PERIOD_SELECTIONS = {
 }
 _VALID_MARKETS = {"any", "ashare", "us", "unknown"}
 
+# ---------------------------------------------------------------------------
+# R61-FI-010 A2b：field-domain taxonomy 词表（模块级 frozen 注册表）。
+#
+# ``data_domains`` / ``economic_roles`` 的值必须是这里的规范 token——FO/FA 等
+# 消费方做领域归类/去重时**禁止**从字段名做 substring 猜测（"vol" 既可能指
+# volume 也可能指 volatility），只能消费 catalog/descriptor 声明的规范 tag。
+# 一个字段可同时属于多个 domain（amount → VOLUME + LIQUIDITY）。
+#
+# 语义（跨市场可比的分桶）：
+#   PRICE            价格水平/OHLC（含后复权价与价格派生）
+#   VOLUME           成交量（股/手）、成交额
+#   LIQUIDITY        换手率等可交易流动性代理
+#   FUNDAMENTAL.*    基本面：规模/质量/成长/投资/现金流/杠杆
+#   EVENT            事件（分红/拆股/涨跌停价等）
+#   FLOW_SENTIMENT   资金流/情绪代理
+#   MICROSTRUCTURE   微结构（盘口/日内价量关系）
+#   RISK             风险代理（beta/波动率等）
+#   CALENDAR         日历/交易日
+#   ALTERNATIVE      另类数据
+# ---------------------------------------------------------------------------
+VALID_FIELD_DOMAINS: frozenset[str] = frozenset({
+    "PRICE",
+    "VOLUME",
+    "LIQUIDITY",
+    "FUNDAMENTAL.VALUE",
+    "FUNDAMENTAL.QUALITY",
+    "FUNDAMENTAL.GROWTH",
+    "FUNDAMENTAL.INVESTMENT",
+    "FUNDAMENTAL.CASHFLOW",
+    "FUNDAMENTAL.LEVERAGE",
+    "EVENT",
+    "FLOW_SENTIMENT",
+    "MICROSTRUCTURE",
+    "RISK",
+    "CALENDAR",
+    "ALTERNATIVE",
+})
+
+# economic_roles：R61-FI-010 A2 允许的核心经济角色（保守集合，可后扩）。
+VALID_ECONOMIC_ROLES: frozenset[str] = frozenset({
+    "price_level",
+    "return",
+    "volume_traded",
+    "money_traded",
+    "liquidity_proxy",
+    "size",
+    "value",
+    "quality",
+    "growth",
+    "investment",
+    "cashflow",
+    "leverage",
+    "capital_structure",
+    "event_marker",
+    "index_membership",
+    "share_count",
+    "market_neutral_denominator",
+})
+
+# frequency_class / pit_class 的合法值（同 A2 语义：显式声明才进 to_dict）。
+VALID_FREQUENCY_CLASSES: frozenset[str] = frozenset({
+    "tick",
+    "minute",
+    "daily",
+    "weekly",
+    "monthly",
+    "quarterly",
+    "annual",
+    "event",
+})
+VALID_PIT_CLASSES: frozenset[str] = frozenset({
+    "panel_same_day",       # 行情面板：交易日本身可见（same_day / 无滞后）
+    "announcement_pit",     # 公告日可见的 PIT（knowledge=PubDate/filing_date）
+    "snapshot_pit",         # 日终快照（S1）
+    "event_effective",      # 事件按其生效日（ex-date / 涨跌停）——无向后知识
+    "na",                   # 不适用/未声明
+})
+
+
+def _sequence_of_tokens(
+    value: Any,
+    *,
+    allowed: frozenset[str],
+    context: str,
+    uppercase: bool = False,
+) -> tuple[str, ...] | None:
+    """解析 domain/role token 序列。
+
+    - 未声明 / 空 → None（表示「无 tag」，序列化时不出键，内容 hash 不变）；
+    - list/tuple → 逐项去空白后按规范 token 严格校验（unknown 立即报错，
+      fail-closed，绝不静默丢弃或猜别名）；
+    - 单个裸字符串（``data_domains: PRICE``）→ 按单元素处理；裸数字/其它类型
+      报错。
+    """
+    if value is None:
+        return None
+    if isinstance(value, (str, bytes)):
+        text = str(value).strip()
+        if not text:
+            return None
+        items = [text]
+    elif isinstance(value, (list, tuple)):
+        items = list(value)
+    else:
+        raise ValidationError(
+            f"{context}: 必须是字符串或字符串序列，收到 "
+            f"{type(value).__name__} {value!r}"
+        )
+    out: list[str] = []
+    for raw in items:
+        if isinstance(raw, bool) or not isinstance(raw, str):
+            raise ValidationError(
+                f"{context}: tag 元素必须是字符串，收到 {type(raw).__name__} {raw!r}"
+            )
+        token = raw.strip()
+        normalized = token.upper() if uppercase else token.lower()
+        if not normalized:
+            continue
+        if normalized not in allowed:
+            raise ValidationError(
+                f"{context}: 非法 tag {token!r}（应为 {sorted(allowed)} 之一）"
+            )
+        if normalized not in out:
+            out.append(normalized)
+    if not out:
+        return None
+    return tuple(out)
+
+
+def _single_token_or_none(
+    value: Any,
+    *,
+    allowed: frozenset[str],
+    context: str,
+) -> str | None:
+    """解析单值枚举 tag（frequency_class / pit_class）。缺省 → None。"""
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, str):
+        raise ValidationError(
+            f"{context}: 必须是字符串枚举值，收到 {type(value).__name__} {value!r}"
+        )
+    token = value.strip().lower()
+    if not token:
+        return None
+    if token not in allowed:
+        raise ValidationError(
+            f"{context}: 非法 {token!r}（应为 {sorted(allowed)} 之一）"
+        )
+    return token
+
 
 # R22 fail-closed：catalog 未显式登记 availability 的字段以 UNKNOWN 表示
 # （生产 PIT 由 R21 assert_semantic_field_production_ready 拒绝）。以下辅助函数
@@ -567,12 +753,28 @@ def parse_semantic_field(name: str, raw: dict[str, Any]) -> SemanticField:
         "cross_market_comparable",
         "requires_fx",
         "flow_semantics",
+        # R61-FI-010 A2：field-domain taxonomy keys（可选，缺省即无 tag）
+        "data_domains",
+        "economic_roles",
+        "frequency_class",
+        "pit_class",
     }
-    unknown = sorted(set(raw) - _KNOWN_KEYS)
+    # from_dict 反序列化的 dict 里旧字段可能带 taxonomy key；toload 用
+    # parse_semantic_field 时这些 key 同样应被接受。空 dict 放行（不校验 key）。
+    if not raw:
+        unknown = []
+    else:
+        unknown = sorted(set(raw) - _KNOWN_KEYS)
     if unknown:
         raise ValidationError(
             f"{context}: 未知配置 key {unknown}（应为 {sorted(_KNOWN_KEYS)} 之一）"
         )
+    # 兼容语义：data_domains 等允许以 None 显式表示（等价未声明）。
+    for _k in ("data_domains", "economic_roles"):
+        if raw.get(_k) is None:
+            raw = dict(raw)
+            raw[_k] = []
+            break
     latency_raw = raw.get("availability_latency")
     if latency_raw is not None:
         if isinstance(latency_raw, bool) or not isinstance(latency_raw, int):
@@ -696,6 +898,29 @@ def parse_semantic_field(name: str, raw: dict[str, Any]) -> SemanticField:
             raw.get("requires_fx"), context=context, default=False
         ),
         flow_semantics=_str_or_none(raw.get("flow_semantics")),
+        data_domains=_sequence_of_tokens(
+            raw.get("data_domains"),
+            allowed=VALID_FIELD_DOMAINS,
+            context=f"{context}.data_domains",
+            uppercase=True,
+        )
+        or (),
+        economic_roles=_sequence_of_tokens(
+            raw.get("economic_roles"),
+            allowed=VALID_ECONOMIC_ROLES,
+            context=f"{context}.economic_roles",
+        )
+        or (),
+        frequency_class=_single_token_or_none(
+            raw.get("frequency_class"),
+            allowed=VALID_FREQUENCY_CLASSES,
+            context=f"{context}.frequency_class",
+        ),
+        pit_class=_single_token_or_none(
+            raw.get("pit_class"),
+            allowed=VALID_PIT_CLASSES,
+            context=f"{context}.pit_class",
+        ),
     )
 
 
@@ -1113,6 +1338,264 @@ class SemanticFieldCatalog:
                 )
             fields[name] = parse_semantic_field(name, body)
         return cls(fields, source_path=source_path)
+
+
+# ---------------------------------------------------------------------------
+# R61-FI-010 A3：typed FieldTaxonomyProvider。
+#
+# ``FieldSemanticDescriptor`` 是 SemanticField 的**薄视图**（不复制权威）：它
+# 持有 domain/role/frequency_class/pit_class 这四个 taxonomy 元数据 + 基础字段
+# 元数据（canonical id / dataset / physical / market / frequency / time/PIT
+# 字段），全部转发自 catalog 里那个 SemanticField 对象。没有第二份真相源。
+#
+# 反序列化支持：``from_dict`` 允许重建 descriptor（与 to_dict 对称），供进程
+# 边界/缓存传递。``base_field_payload`` 用 catalog 的 to_dict 语义（只有显式
+# 声明 taxonomy 的字段才带 taxonomy 键），保证与 SemanticField 序列化一致。
+# ---------------------------------------------------------------------------
+
+
+def _field_to_taxonomy_dict(
+    f: SemanticField,
+    *,
+    include_full_metadata: bool = True,
+) -> dict[str, Any]:
+    """把一个 SemanticField 编译成 descriptor 的 payload dict。
+
+    只暴露 descriptor 需要的元数据，且 taxonomy 键只在显式声明时出现（与
+    ``SemanticField.to_dict`` 同一缺省规则，保持 hash/序列化稳定）。
+    """
+    payload: dict[str, Any] = {
+        "logical_name": f.logical_name,
+        "dataset": f.dataset,
+        "physical_name": f.physical_name,
+        "market": f.market,
+        "dtype": f.dtype,
+        "frequency": f.frequency,
+        "grain": f.grain,
+        "availability": f.availability,
+        "time_role": f.time_role,
+        "temporal_model": f.temporal_model,
+        "knowledge_time": f.knowledge_time,
+        "effective_time": f.effective_time,
+        "period_time": f.period_time,
+        "join_policy": f.join_policy,
+        "pit_fidelity": f.pit_fidelity,
+    }
+    if f.data_domains:
+        payload["data_domains"] = list(f.data_domains)
+    if f.economic_roles:
+        payload["economic_roles"] = list(f.economic_roles)
+    if f.frequency_class is not None:
+        payload["frequency_class"] = f.frequency_class
+    if f.pit_class is not None:
+        payload["pit_class"] = f.pit_class
+    return payload
+
+
+@dataclass(frozen=True)
+class FieldSemanticDescriptor:
+    """R61-FI-010 A3：一个逻辑字段的 taxonomy 描述（catalog SemanticField 的视图）。
+
+    Attributes:
+        canonical_field_id: catalog 登记的 canonical 逻辑名（非 alias）。
+        data_domains: PRICE / VOLUME / FUNDAMENTAL.* 等（见 VALID_FIELD_DOMAINS）。
+        economic_roles: 经济角色 token（VALID_ECONOMIC_ROLES）。
+        frequency_class / pit_class: 跨市场可比分桶（见各自合法集合）。
+        dataset / physical_name / market / frequency / grain: 字段落点基础元数据。
+        availability / time_role / temporal_model / knowledge_time /
+        effective_time / period_time / join_policy / pit_fidelity: PIT 相关元数据
+            （与 catalog 同一来源——descriptor 只转发，不重复权威）。
+    """
+
+    canonical_field_id: str
+    data_domains: tuple[str, ...] = ()
+    economic_roles: tuple[str, ...] = ()
+    frequency_class: str | None = None
+    pit_class: str | None = None
+    dataset: str | None = None
+    physical_name: str | None = None
+    market: str | None = None
+    dtype: str | None = None
+    frequency: str | None = None
+    grain: str | None = None
+    availability: str | None = None
+    time_role: str | None = None
+    temporal_model: str | None = None
+    knowledge_time: str | None = None
+    effective_time: str | None = None
+    period_time: str | None = None
+    join_policy: str | None = None
+    pit_fidelity: str | None = None
+
+    @property
+    def has_domain_tags(self) -> bool:
+        return bool(self.data_domains or self.economic_roles)
+
+    @classmethod
+    def from_field(
+        cls,
+        field: SemanticField,
+        *,
+        canonical_field_id: str | None = None,
+    ) -> "FieldSemanticDescriptor":
+        return cls(
+            canonical_field_id=(
+                canonical_field_id or field.logical_name
+            ),
+            data_domains=tuple(field.data_domains),
+            economic_roles=tuple(field.economic_roles),
+            frequency_class=field.frequency_class,
+            pit_class=field.pit_class,
+            dataset=field.dataset,
+            physical_name=field.physical_name,
+            market=field.market,
+            dtype=field.dtype,
+            frequency=field.frequency,
+            grain=field.grain,
+            availability=field.availability,
+            time_role=field.time_role,
+            temporal_model=field.temporal_model,
+            knowledge_time=field.knowledge_time,
+            effective_time=field.effective_time,
+            period_time=field.period_time,
+            join_policy=field.join_policy,
+            pit_fidelity=field.pit_fidelity,
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        return _field_to_taxonomy_dict_of(self)
+
+    @classmethod
+    def from_dict(cls, raw: Mapping[str, Any]) -> "FieldSemanticDescriptor":
+        return cls(
+            canonical_field_id=str(raw["canonical_field_id"]),
+            data_domains=tuple(raw.get("data_domains") or ()),
+            economic_roles=tuple(raw.get("economic_roles") or ()),
+            frequency_class=raw.get("frequency_class"),
+            pit_class=raw.get("pit_class"),
+            dataset=raw.get("dataset"),
+            physical_name=raw.get("physical_name"),
+            market=raw.get("market"),
+            dtype=raw.get("dtype"),
+            frequency=raw.get("frequency"),
+            grain=raw.get("grain"),
+            availability=raw.get("availability"),
+            time_role=raw.get("time_role"),
+            temporal_model=raw.get("temporal_model"),
+            knowledge_time=raw.get("knowledge_time"),
+            effective_time=raw.get("effective_time"),
+            period_time=raw.get("period_time"),
+            join_policy=raw.get("join_policy"),
+            pit_fidelity=raw.get("pit_fidelity"),
+        )
+
+    # field 身份对齐（可空）：新 taxonomy 键可能出现在旧 field dict 里
+    # （to_dict 只在新字段显式声明时输出）——from_dict 已处理缺省，无需额外分支。
+
+
+def _field_to_taxonomy_dict_of(desc: "FieldSemanticDescriptor") -> dict[str, Any]:
+    """descriptor.to_dict 的实现：taxonomy 键只在有值时输出（与 field 对称）。"""
+    payload: dict[str, Any] = {
+        "canonical_field_id": desc.canonical_field_id,
+        "dataset": desc.dataset,
+        "physical_name": desc.physical_name,
+        "market": desc.market,
+        "dtype": desc.dtype,
+        "frequency": desc.frequency,
+        "grain": desc.grain,
+        "availability": desc.availability,
+        "time_role": desc.time_role,
+        "temporal_model": desc.temporal_model,
+        "knowledge_time": desc.knowledge_time,
+        "effective_time": desc.effective_time,
+        "period_time": desc.period_time,
+        "join_policy": desc.join_policy,
+        "pit_fidelity": desc.pit_fidelity,
+    }
+    if desc.data_domains:
+        payload["data_domains"] = list(desc.data_domains)
+    if desc.economic_roles:
+        payload["economic_roles"] = list(desc.economic_roles)
+    if desc.frequency_class is not None:
+        payload["frequency_class"] = desc.frequency_class
+    if desc.pit_class is not None:
+        payload["pit_class"] = desc.pit_class
+    return payload
+
+
+class FieldTaxonomyProvider(Protocol):
+    """R61-FI-010 A3：``canonical_field_ids → FieldSemanticDescriptor`` 端口。
+
+    FO/FA 消费方只 import 本 Protocol + descriptor 类型；具体实现注入。语义
+    **fail-closed**：未知/未登记 canonical id 必须抛错，禁止从名字做 substring
+    猜测（``vol`` 既可能指 volume 也可能指 volatility）。
+    """
+
+    def describe_fields(
+        self, canonical_field_ids: Sequence[str]
+    ) -> Mapping[str, FieldSemanticDescriptor]:
+        """返回 ``canonical_field_id -> descriptor`` 映射（全量解析成功才返回）。
+
+        任一 id 无法按 catalog 解析为登记字段时抛 ``ValidationError``（不返回
+        部分结果）。
+        """
+        ...
+
+
+class SemanticFieldTaxonomyProvider:
+    """基于 ``SemanticFieldCatalog`` 的默认 ``FieldTaxonomyProvider`` 实现。
+
+    解析规则（复用 catalog 的 ``resolve_one`` / aliases，单一事实源）：
+      - id 在 catalog（含 aliases / 跨市场多候选）→ 描述该字段；
+      - id 不在 catalog → 抛 ``ValidationError``（fail-closed；不猜）。
+    多市场消歧：``market`` / ``dataset`` 显式给出时传给 catalog 消歧。
+    """
+
+    def __init__(
+        self,
+        catalog: SemanticFieldCatalog | None = None,
+        *,
+        market: str | None = None,
+        dataset: str | None = None,
+    ) -> None:
+        if catalog is None:
+            catalog = get_semantic_catalog()
+        self._catalog = catalog
+        self._market = market
+        self._dataset = dataset
+
+    @property
+    def catalog(self) -> SemanticFieldCatalog:
+        return self._catalog
+
+    def describe_fields(
+        self, canonical_field_ids: Sequence[str]
+    ) -> dict[str, FieldSemanticDescriptor]:
+        out: dict[str, FieldSemanticDescriptor] = {}
+        for cid in canonical_field_ids:
+            name = str(cid)
+            f = self._catalog.resolve_one(
+                name, market=self._market, dataset=self._dataset
+            )
+            if f is None:
+                raise ValidationError(
+                    f"FieldTaxonomyProvider: 字段 '{name}' 未登记在 "
+                    "SemanticFieldCatalog 中（taxonomy fail-closed，不做名字猜测）。"
+                    f"可用: {self._catalog.names()}"
+                )
+            # canonical id 用 catalog 里该字段的登记名（alias 输入 → 真名输出）。
+            canonical = name
+            for n, cand in self._catalog._fields.items():
+                if cand is f:
+                    canonical = n
+                    break
+            out[name] = FieldSemanticDescriptor.from_field(
+                f, canonical_field_id=canonical
+            )
+        return out
+
+    def describe_field(self, canonical_field_id: str) -> FieldSemanticDescriptor:
+        return self.describe_fields([canonical_field_id])[canonical_field_id]
 
 
 # ---- 进程内缓存（惰性加载） ----

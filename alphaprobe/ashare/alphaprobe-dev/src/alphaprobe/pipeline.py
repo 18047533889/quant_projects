@@ -24,6 +24,11 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Callable, Sequence
 
+# P0-A：ExecutionMode 供 SearchPipeline dataclass 字段默认值使用。延迟 import
+# 会破坏 dataclass 字段默认值求值，故模块级轻量导入（llm_client 不 import
+# torch/openai，无副作用）。
+from alphaprobe.llm_client import ExecutionMode
+
 logger = logging.getLogger(__name__)
 
 # 默认搜索轮预算：与 runner --search_time 语义一致（沿用 quota/stop 逻辑）。
@@ -36,6 +41,24 @@ DEFAULT_MAX = 2048
 # ---------------------------------------------------------------------------
 # 配置 / 结果
 # ---------------------------------------------------------------------------
+
+
+#: PipelineConfig.structured_generation 的「用户未显式传」哨兵（P0-A）。
+#: 生产语义默认 True；OFFLINE_TEST 下保持旧行为（False）以不破坏既有离线测试
+#: ——用 dataclass field 对象哨兵区分「用户没传」与「显式传 False」。
+UNSET = object()
+
+
+def _offline_test_mode() -> Any:
+    """SearchPipeline.mode 的 dataclass 默认工厂。
+
+    顶层不 import llm_client（模块级不 import torch/openai 的纪律；llm_client
+    本身轻量，但 class-body 引用 ExecutionMode 会让 dataclass 默认值在模块
+    导入期求值）。改为惰性工厂，模块导入即安全。
+    """
+    from alphaprobe.llm_client import ExecutionMode
+
+    return ExecutionMode.OFFLINE_TEST
 
 
 @dataclass
@@ -55,10 +78,11 @@ class PipelineConfig:
     export_gate_enforced: bool = False
     # 结构化 arm 每次生成目标数
     expected_num: int = 3
-    # V2-H：结构化 generation 开关。False（默认）= 行为与旧版完全一致（全量测试
-    # 不挂）。True = orchestrator 启用结构化 generation（parents 来自 parent_selector
-    # 的 top-k DAG 采样，候选记录 lineage）。
-    structured_generation: bool = False
+    # V2-H：结构化 generation 开关。生产语义默认 True（orchestrator 结构化路径，
+    # parents 来自 parent_selector top-k DAG 采样、候选记录 lineage）。P0-A 兼容：
+    # SearchPipeline.__post_init__ 在 mode==OFFLINE_TEST 且用户未显式传本字段时，
+    # 保持旧行为（False）——见 _resolve_structured_generation。
+    structured_generation: Any = UNSET
 
 
 @dataclass
@@ -170,7 +194,12 @@ def make_stub_llm_fn(
 
 
 def _default_llm_fn() -> Callable[[str, str, str], str]:
-    """pipeline 模块级默认 stub（模块不 import torch/openai，离线可跑）。"""
+    """pipeline 模块级默认 stub（模块不 import torch/openai，离线可跑）。
+
+    .. note:: **legacy（仅 OFFLINE_TEST）**——P0-A 起 llm 解析走
+       :func:`alphaprobe.llm_client.resolve_llm_fn`；本函数仅保留给未显式传
+       mode 的默认构造路径（mode==OFFLINE_TEST）。PRODUCTION fail-closed。
+    """
     return make_stub_llm_fn()
 
 
@@ -193,6 +222,10 @@ def make_fe_evaluate_fn(
 
     数据无法构造时返回全 None bundle 并记录 degraded（不抛）。
     泄漏纪律：只读传入的 train 段 stock_data，不接收 test 段数据。
+
+    .. note:: **legacy（仅 OFFLINE_TEST）**——生产评估只认 evaluator/QE 权威，
+       ``make_fe_evaluate_fn`` 属本地 numpy/scipy 手算回退路径，PRODUCTION 模式
+       由 SearchPipeline._evaluate 的 fail-closed 守卫禁止回落本函数。
     """
     import numpy as np
 
@@ -249,7 +282,11 @@ def _bundle_from_plane(
     plane: Any,
     label: Any,
 ) -> dict[str, float | None]:
-    """单因子平面 × label → 基础 metric bundle（离线 numpy/scipy，不跑 qlib）。"""
+    """单因子平面 × label → 基础 metric bundle（离线 numpy/scipy，不跑 qlib）。
+
+    .. note:: **legacy（仅 OFFLINE_TEST）**——同 :func:`make_fe_evaluate_fn`，
+       PRODUCTION 评估不消费本函数（无手算回退）。
+    """
     try:
         import numpy as np
         from scipy import stats as _scipy_stats
@@ -396,7 +433,16 @@ def _all_none() -> dict[str, float | None]:
 
 @dataclass
 class SearchPipeline:
-    """§41-§42 默认主链。run_round = 一轮完整搜索（不触 test 段）。"""
+    """§41-§42 默认主链。run_round = 一轮完整搜索（不触 test 段）。
+
+    P0-A Train/Valid 分离：
+    - ``data_train``（保留，向后兼容）= L1_scout / L2_full_train 段；
+    - ``data_search_valid`` = L3_search_valid 段（valid 指标唯一来源；
+      ``rankic_valid`` 等 valid 指标绝不能用 train 段数据填——关键正确性断言）；
+    - ``data_audit_valid`` = L4_pool_audit 预留段（当前版本不消费，留接线）；
+    - ``mode`` / ``llm_client``：见 :mod:`alphaprobe.llm_client`。PRODUCTION
+      缺 llm → 构造即抛（fail-closed）；OFFLINE_TEST 缺 llm → stub。
+    """
 
     experiment: Any
     data_train: Any
@@ -408,17 +454,54 @@ class SearchPipeline:
     orchestrator: Any | None = None
     calibrator: Any | None = None
     evaluator_factory: Callable[..., Any] | None = None
+    # P0-A：search_valid / audit_valid 段数据与运行模式
+    data_search_valid: Any = None
+    data_audit_valid: Any = None
+    mode: Any = field(default_factory=_offline_test_mode)
+    llm_client: Any = None
 
     def __post_init__(self) -> None:
         if self.config is None:
             self.config = PipelineConfig()
+        # P0-A：mode 归一（str → ExecutionMode）。
+        from alphaprobe.llm_client import resolve_llm_fn
+
+        self.mode = (
+            ExecutionMode(self.mode)
+            if not isinstance(self.mode, ExecutionMode)
+            else self.mode
+        )
+        # P0-A：structured_generation 解析——production 语义默认 True；
+        # OFFLINE_TEST 且用户未显式传（config.structured_generation is UNSET）时
+        # 保持旧行为（False），不破坏既有离线测试。
+        self._structured_unset = self.config.structured_generation is UNSET
+        if self.config.structured_generation is UNSET:
+            # 用户未显式传：OFFLINE_TEST 保持 False（向后兼容既有离线测试）；
+            # PRODUCTION / RESEARCH_DEGRADED 默认 True（生产结构化路径）。
+            self.config.structured_generation = self.mode is not ExecutionMode.OFFLINE_TEST
         self.round_no = 0
         self.funnel: Any | None = None
         self.pool: Any | None = None
         self.degraded_reasons: list[str] = []
-        if self.llm_fn is None:
-            # 无 LLM 额度默认路径：确定性 stub，不发起任何网络/模型调用
-            self.llm_fn = _default_llm_fn()
+        # P0-A：llm_fn 处理（mode 感知）。
+        # - llm_client 非 None：一律经 resolve_llm_fn 转成 llm_fn（stub 仅 OFFLINE_TEST）；
+        # - PRODUCTION/RESEARCH_DEGRADED 且 llm_fn/llm_client 都缺：fail-closed 抛
+        #   （resolve_llm_fn 的守卫，绝不静默切 stub）；
+        # - OFFLINE_TEST 且 llm_fn 为 None：确定性 stub（现状不变）。
+        if self.llm_client is not None:
+            self.llm_fn = resolve_llm_fn(
+                self.llm_client,
+                self.mode,
+                structured=self._structured_effective(),
+            )
+        elif self.llm_fn is None:
+            # resolve_llm_fn 对 PRODUCTION 缺 client 抛 LLMConfigurationError
+            # （fail-closed）；OFFLINE_TEST 落确定性 stub。
+            self.llm_fn = resolve_llm_fn(
+                None,
+                self.mode,
+                structured=self._structured_effective(),
+            )
         if self.orchestrator is None:
             from alphaprobe.search.orchestrator import SearchOrchestrator
 
@@ -426,7 +509,7 @@ class SearchPipeline:
                 scheduler=None,
                 memory=self.memory_store,
                 expected_num=self.config.expected_num,
-                structured_generation=bool(self.config.structured_generation),
+                structured_generation=self._structured_effective(),
             )
         if self.calibrator is None:
             from alphaprobe.fitness import MetricCalibrator
@@ -456,8 +539,36 @@ class SearchPipeline:
         # evaluator：None → LegacyCompatEvaluator + fe_bridge 真算 fn
         if self.evaluator is None:
             self.evaluator = self._build_default_evaluator()
-        # 默认 evaluate_fn（供 funnel 消费的 metric bundle 真算）
+        # 默认 evaluate_fn（供 funnel 消费的 metric bundle 真算）：train 段
         self._evaluate_fn = make_fe_evaluate_fn(self.data_train)
+        # P0-A Train/Valid 分离：data_search_valid 非 None → valid 段 evaluate_fn
+        # （L3_search_valid 专用；valid 指标唯一来源，绝不用 train 段数据填）。
+        self._evaluate_fn_valid = None
+        if self.data_search_valid is not None:
+            self._evaluate_fn_valid = make_qe_evaluate_fn(
+                self.data_search_valid, label_days=20, segment="search_valid"
+            )
+        # P0-A：audit_valid 段预留（L4_pool_audit；本版本不消费，留接线位）。
+        self._evaluate_fn_audit = None
+        if self.data_audit_valid is not None:
+            self._evaluate_fn_audit = make_qe_evaluate_fn(
+                self.data_audit_valid, label_days=20, segment="audit_valid"
+            )
+
+    # ------------------------------------------------------------------
+    # P0-A：structured_generation 兼容解析
+    # ------------------------------------------------------------------
+
+    def _structured_effective(self) -> bool:
+        """SearchPipeline 消费点：OFFLINE_TEST + UNSET → False（旧行为）。
+
+        __post_init__ 已把 config.structured_generation 定值（默认 True），
+        此处只针对「默认构造、未显式传、且 mode==OFFLINE_TEST」的既有测试
+        路径回退 False（orchestrator / stub 用该值），生产语义仍默认 True。
+        """
+        if self.mode == ExecutionMode.OFFLINE_TEST and getattr(self, "_structured_unset", False):
+            return False
+        return bool(self.config.structured_generation)
 
     # ------------------------------------------------------------------
     # evaluator 构建（可注入 evaluator_factory 覆盖）
@@ -595,10 +706,14 @@ class SearchPipeline:
         )
 
     def _evaluate(self, formulas: list[str]) -> list[dict[str, float | None] | None]:
-        """评估 formulas → metric bundle 列表（once-compute；失败降级不抛）。
+        """评估 formulas → metric bundle 列表（once-compute）。
 
-        优先 evaluator（记录缓存 + 泄漏 gate）；evaluator 结果全空/全 None 时
-        回落到本地 _evaluate_fn（数据不可用等场景），保证可降级。
+        P0-A 删手算回退语义：
+        - OFFLINE_TEST：evaluator 结果全空/全 None → 回落本地 ``_evaluate_fn``
+          （离线可跑，保证 stub/合成数据端到端）；
+        - PRODUCTION / RESEARCH_DEGRADED：evaluator 失败/空 → 直接把该候选记
+          EVALUATION_MISSING（返回 ``[None]*len``），**绝不手算**——生产评估
+          只认 evaluator/QE 权威，不回落 fe_bridge 本地 numpy/scipy。
         """
         if not formulas:
             return []
@@ -623,12 +738,22 @@ class SearchPipeline:
                             logger.warning("record_evaluation failed: %s", exc)
                 if useful:
                     return out
-                # evaluator 结果无有效指标 → 回落本地真算
+                if self.mode in (ExecutionMode.PRODUCTION, ExecutionMode.RESEARCH_DEGRADED):
+                    # P0-A：生产 evaluator 空结果 → EVALUATION_MISSING，不手算。
+                    logger.warning(
+                        "evaluator returned empty bundles in %s mode → EVALUATION_MISSING",
+                        self.mode.value,
+                    )
+                    return [None] * len(formulas)
+                # OFFLINE_TEST：evaluator 无有效指标 → 回落本地真算
                 logger.warning("evaluator returned empty bundles, falling back to local evaluate_fn")
-            except Exception as exc:  # noqa: BLE001 - evaluator 异常 → 静态降级
+            except Exception as exc:  # noqa: BLE001 - evaluator 异常 → 降级
                 logger.warning("evaluator.evaluate failed, static degrade: %s", exc)
                 self.degraded_reasons.append(f"evaluator.evaluate failed: {exc}")
-        # 静态降级：跑本地 bundle 计算（纯 numpy/scipy，无网络无模型）
+                if self.mode in (ExecutionMode.PRODUCTION, ExecutionMode.RESEARCH_DEGRADED):
+                    # P0-A：生产 evaluator 异常 → EVALUATION_MISSING，绝不手算。
+                    return [None] * len(formulas)
+        # 静态降级（OFFLINE_TEST）：跑本地 bundle 计算（纯 numpy/scipy，无网络无模型）
         bundles: list[dict[str, float | None] | None] = []
         try:
             bundles = self._evaluate_fn(formulas, "L2_full_train", None)
@@ -638,8 +763,30 @@ class SearchPipeline:
             bundles = [None] * len(formulas)
         return bundles
 
+    def _evaluate_valid(self, formulas: list[str]) -> list[dict[str, float | None] | None]:
+        """L3_search_valid 段评估（data_search_valid 提供）。
+
+        valid 指标（rankic_valid 等）唯一来源是 search_valid 段 evaluate_fn；
+        **绝不能用 train 段数据填 valid 指标**（关键正确性断言）。本方法不做
+        evaluator 通路——L3 valid 段只消费注入的 valid evaluate_fn（QE 全窗）。
+        data_search_valid 为 None 时返回全 None（调用方据 fidelity 决定是否拒）。
+        """
+        if not formulas or self._evaluate_fn_valid is None:
+            return [None] * len(formulas)
+        try:
+            return list(self._evaluate_fn_valid(formulas, "L3_search_valid", None))
+        except Exception as exc:  # noqa: BLE001 - valid 段评估失败不抛
+            logger.warning("valid evaluate_fn failed, degraded: %s", exc)
+            self.degraded_reasons.append(f"valid evaluate_fn failed: {exc}")
+            return [None] * len(formulas)
+
     def _run_funnel(self, cand: Any) -> tuple[bool, dict[str, Any], Any | None]:
-        """L0 → L1 scout → fingerprint nearest confirm → L2 full（funnel gate）。"""
+        """L0 → L1 scout → L2 full（train 段）→ L3_search_valid gate（P0-A）。
+
+        泄漏纪律：L1/L2 只消费 data_train；L3_search_valid 只在 data_search_valid
+        非 None 时评估，record.segment="search_valid"，valid 指标（rankic_valid 等）
+        唯一来自 valid 段 evaluate_fn，绝不用 train 段数据填。
+        """
         formula = str(getattr(cand, "formula", "") or "")
         canonical, signal_id, family_id = self._identity_tuple(formula)
         factor_id = f"ap_{self.round_id()}_{signal_id[:8]}"
@@ -649,7 +796,7 @@ class SearchPipeline:
         out = self.funnel.l0(formula, factor_id=factor_id)
         if not out.passed:
             return False, {"level": "L0", "rejections": [r.value for r in out.rejections]}, None
-        # L1 scout：静态 bundle（低成本）
+        # L1 scout：静态 bundle（低成本，train 段）
         mb = (self._evaluate([formula]) or [None])[0]
         if mb is None or all(v is None for v in mb.values()):
             return False, {"level": "L1", "rejections": ["EVALUATION_MISSING"]}, None
@@ -657,12 +804,35 @@ class SearchPipeline:
         reasons = self.funnel.gate("L1_scout", record)
         if reasons:
             return False, {"level": "L1", "rejections": [r.value for r in reasons]}, None
-        # L2 full：现有 funnel gate 消费同一 metric bundle（once-compute）
+        # L2 full：train 段，funnel gate 消费同一 metric bundle（once-compute）
         record2 = _make_record(factor_id, formula, mb, segment="train", fidelity="L2_full_train")
         reasons2 = self.funnel.gate("L2_full_train", record2)
         if reasons2:
             return False, {"level": "L2", "rejections": [r.value for r in reasons2]}, None
-        return True, {"level": "L2", "rejections": []}, record2
+        # P0-A L3_search_valid：L2 gate 之后、admit 之前，用 valid 段 evaluate_fn
+        # 算一次 L3_search_valid bundle 并 gate。funnel 对未知 level 的 gate 返回 []
+        # （不拒，见 funnel.gate 分发兜底）；data_search_valid 缺失时只记录 bundle
+        # 不 gate（valid 指标无法构造 → 不强制拒绝，保持向后兼容）。
+        record3 = None
+        if self.data_search_valid is not None:
+            mb_valid = (self._evaluate_valid([formula]) or [None])[0]
+            if mb_valid is not None and any(v is not None for v in mb_valid.values()):
+                # valid bundle 字段并入 train bundle（train 字段优先保留；valid 键
+                # 显式覆盖——train bundle 绝不包含 valid 指标）。
+                merged = dict(mb)
+                for k, v in mb_valid.items():
+                    if v is not None:
+                        merged[k] = v
+                record3 = _make_record(
+                    factor_id, formula, merged, segment="search_valid", fidelity="L3_search_valid"
+                )
+                reasons3 = self.funnel.gate("L3_search_valid", record3)
+                if reasons3:
+                    return False, {"level": "L3", "rejections": [r.value for r in reasons3]}, record3
+        # L2/L3 通过：返回带 valid 指标的 record（record3 有 valid 数据则用之）。
+        return True, {"level": "L3" if record3 is not None else "L2", "rejections": []}, (
+            record3 or record2
+        )
 
     def _admit(self, cand: Any, record: Any, formula: str) -> bool:
         if self.pool is None:
@@ -902,6 +1072,7 @@ def _make_record(
 
 
 __all__ = [
+    "UNSET",
     "PipelineConfig",
     "RoundResult",
     "SearchPipeline",
