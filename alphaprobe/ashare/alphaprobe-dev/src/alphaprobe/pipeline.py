@@ -376,6 +376,9 @@ class SearchPipeline:
         self.funnel: Any | None = None
         self.pool: Any | None = None
         self.degraded_reasons: list[str] = []
+        # Task 2：最近一轮 parent selection 诊断（score/rank/action/diagnostics），
+        # _generate 每次生成前刷新；AttemptLedger / observability 消费入口。
+        self._last_parent_selection: list[dict[str, Any]] = []
         # P0-A：llm_fn 处理（mode 感知）。
         # - llm_client 非 None：一律经 resolve_llm_fn 转成 llm_fn（stub 仅 OFFLINE_TEST）；
         # - PRODUCTION/RESEARCH_DEGRADED 且 llm_fn/llm_client 都缺：fail-closed 抛
@@ -398,11 +401,38 @@ class SearchPipeline:
         if self.orchestrator is None:
             from alphaprobe.search.orchestrator import SearchOrchestrator
 
+            # Task 2（plan A1）：PRODUCTION / RESEARCH_DEGRADED 把 Bayesian
+            # Retriever 装配为 orchestrator.parent_selector——parent 选择由
+            # RetrieverScore 主导（排序 top-k），不再由输入位置前 N 个主导。
+            # OFFLINE_TEST 默认不注入（旧行为；显式传 orchestrator / 换
+            # config 可开启）。ablation 开关：BayesianRetrieverConfig.enabled。
+            parent_selector: Any = None
+            if self.mode in (ExecutionMode.PRODUCTION, ExecutionMode.RESEARCH_DEGRADED):
+                try:
+                    from alphaprobe.retrieval.bayesian_retriever import BayesianRetriever
+                    from alphaprobe.retrieval.parent_selector import ParentSelector
+
+                    retriever = BayesianRetriever(memory_store=self.memory_store)
+                    parent_selector = ParentSelector(
+                        retriever=retriever, enabled=True
+                    )
+                except Exception as exc:  # noqa: BLE001 - retriever 装配失败降级
+                    # fail-closed：生产路径 retriever 不可用 → 记录 degraded
+                    # （生成仍可跑；parent 选择语义由调用方 orchestrator 分支
+                    # 决定——orchestrator 显式注入过 selector 则优先）。
+                    logger.warning(
+                        "BayesianRetriever assembly failed in %s (parent_selector=None): %s",
+                        self.mode.value, exc,
+                    )
+                    self.degraded_reasons.append(
+                        f"retriever assembly failed: {exc}"
+                    )
             self.orchestrator = SearchOrchestrator(
                 scheduler=None,
                 memory=self.memory_store,
                 expected_num=self.config.expected_num,
                 structured_generation=self._structured_effective(),
+                parent_selector=parent_selector,
             )
         if self.calibrator is None:
             from alphaprobe.fitness import MetricCalibrator
@@ -601,14 +631,82 @@ class SearchPipeline:
     # ------------------------------------------------------------------
 
     def _generate(self, parents: list[dict[str, Any]]) -> list[Any]:
-        """结构化变异臂生成 raw candidates（llm_fn 由 __post_init__ 兜底）。"""
+        """生成 raw candidates（llm_fn 由 __post_init__ 兜底）。
+
+        Task 2 / plan A1：**parent selection 不再由输入位置前 N 个主导**。
+        - retriever 生效时（orchestrator.parent_selector 注入，生产默认注入）：
+          以传入 parents 为 eligible universe，select_parents(k) 按
+          RetrieverScore 降序选被检索起点；每个被选 parent 走一次
+          orchestrator.step（生成以该 parent 为中心；legacy 路径只用其
+          parents[0] = 被选 parent；结构化路径额外经 selector 选补充池）。
+        - retriever 关闭（ablation / OFFLINE_TEST 默认）：保持旧版逐 parent
+          语义（但每个输入 parent 都参与一次 step，不做「输入前三个」的位置
+          截断；输入方先自行裁剪则尊重输入）。
+        - 无 eligible parent → 空 round（不随机取第一个）。
+
+        每个被选 parent 记一次检索事件 + 把选择诊断写进
+        ``self._last_parent_selection``（AttemptLedger / observability 消费；
+        本模块不直接依赖 ledger DB 路径，避免给无账本的 OFFLINE 测试建库）。
+        """
         if not parents:
             return []
         out: list[Any] = []
         seen: set[str] = set()
-        for p in parents[:3]:
+        # A1：从完整 eligible 池挑生成起点（分数主导；输入位置只作 tie-break）。
+        chosen: list[dict[str, Any]]
+        selector = getattr(self.orchestrator, "parent_selector", None) if self.orchestrator is not None else None
+        # 鸭子类型：有 select_parents 即视为可消费；显式 ``active=False`` 才关闭
+        # （BayesianRetriever 自身无 active——其 config.enabled 内部处理 disabled）。
+        selector_active = (
+            selector is not None
+            and hasattr(selector, "select_parents")
+            and getattr(selector, "active", True)
+        )
+        if selector_active:
+            try:
+                chosen = list(selector.select_parents(parents, k=len(parents)))
+            except Exception as exc:  # noqa: BLE001 - retriever 失败退化为逐 parent（不截断）
+                logger.warning("select_parents failed, fallback to per-parent: %s", exc)
+                self.degraded_reasons.append(f"select_parents failed: {exc}")
+                chosen = list(parents)
+        else:
+            # ablation / 未注入：逐 parent 语义（输入已被上游裁剪时即尊重）。
+            # 不再做「输入前三个」位置截断。
+            chosen = list(parents)
+        # 记录选择诊断（score/rank/factor_id/action），供 AttemptLedger /
+        # observability / audit 消费。selector 不返回 score（只返回对象）时，
+        # 用 retriever.rank 拿完整诊断（best-effort）。
+        diagnostics: list[dict[str, Any]] = []
+        try:
+            scorer = getattr(selector, "retriever", None) if selector is not None else None
+            if scorer is not None and hasattr(scorer, "rank") and chosen:
+                ranked = scorer.rank(
+                    list(chosen),
+                    action_to_retrieve=getattr(self.orchestrator, "_last_action_type", None),
+                )
+                scored_ids = {d.get("factor_id"): d for d in ranked if d.get("factor_id")}
+                for rank_i, c in enumerate(chosen):
+                    fid = str(c.get("factor_id") or c.get("id") or "")
+                    sd = scored_ids.get(fid) or {}
+                    diagnostics.append(
+                        {
+                            "factor_id": fid,
+                            "score": float(sd.get("retriever_score", 0.0) or 0.0),
+                            "rank": rank_i,
+                            "action_type": getattr(self.orchestrator, "_last_action_type", None),
+                            "diagnostics": dict(sd.get("components") or {}),
+                        }
+                    )
+        except Exception as exc:  # noqa: BLE001 - 诊断失败不阻塞生成
+            logger.warning("parent selection diagnostics failed: %s", exc)
+        self._last_parent_selection = diagnostics
+
+        for p in chosen:
             if self.orchestrator is None:
                 continue
+            # 检索事件：selector 命中时由 BayesianRetriever.record_retrieval 记
+            # 一次（select_parents 内部已记）；未注入 selector 的逐 parent 路径
+            # 不重复计（retrieval_count 语义 = 真被检索选中的次数）。
             step = self.orchestrator.step(
                 dict(p),
                 self.llm_fn,
