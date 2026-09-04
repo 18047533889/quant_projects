@@ -11,6 +11,11 @@
 - ``uncertainty``：不确定度（影响 UncertaintyBonus）；
 - ``retrieval_count``：节点被检索（选为 parent / 生成）的总次数。
 
+A5（V3.1）：``global_total_attempts``（全局池/候选空间的尝试总量）与
+``total_attempts``（本节点被挖的点级尝试量）**分开存储**——UCB 探索加成
+sqrt(log(1+global) / (1+node)) 需要两个不同计数器；把 node 当 global 会使
+加成恒退化为 1。
+
 per-action 统计（n_attempt / n_success / n_elite / mean_delta_fitness /
 mean_novelty_gain / mean_pool_utility_gain）由 ``branch_posterior`` 维护；
 本状态只持有点级汇总视图。
@@ -39,7 +44,13 @@ class BayesianNodeState:
     depth: int = 0
 
     # 点级汇总（per-action 明细在 BetaBranchPosterior）
+    # A5：total_attempts = 本节点的点级尝试量（UCB 的 node_attempts）；
+    # global_total_attempts = 全局池/候选空间的尝试总量（UCB 的 total_attempts）。
+    # 两者必须分开存：node 计数恒 < global 才有探索空间；历史序列化没有
+    # global 字段 → from_dict 默认 0（score_from_state 对 <=0 退化回节点
+    # 计数，保持旧版 UCB 中性 1.0，不伪造探索空间）。
     total_attempts: int = 0
+    global_total_attempts: int = 0
     total_successes: int = 0
     total_elites: int = 0
     mean_delta_fitness: float = 0.0
@@ -73,6 +84,7 @@ class BayesianNodeState:
             "retrieval_count": self.retrieval_count,
             "depth": self.depth,
             "total_attempts": self.total_attempts,
+            "global_total_attempts": self.global_total_attempts,
             "total_successes": self.total_successes,
             "total_elites": self.total_elites,
             "mean_delta_fitness": self.mean_delta_fitness,

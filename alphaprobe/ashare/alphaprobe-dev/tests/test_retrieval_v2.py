@@ -467,19 +467,21 @@ class TestMemoryIntegration:
         assert so.cluster_rarity_of("c1") == pytest.approx(1.0 / math.sqrt(6.0))
 
     def test_local_fallback_cluster_size_one(self):
-        """无 cluster 成员表时 cluster_fn 返回 1.0（已知自成 singleton）。
+        """本地退化 cluster 成员表存在、且表内明确该因子自成 singleton。
 
-        P0-B：cluster_size=1 是「已知自成 singleton」（合法 rarity 输入，
-        1/sqrt(2)≈0.707），不是「无 cluster 上下文（None→中性 0.5）」。
+        V3.1（A7）：cluster 成员表读到 member_count=1 是「已确认的独立
+        singleton」（合法 rarity 输入，1/sqrt(2)≈0.707）；**完全无 cluster
+        证据**（表空）→ None → 中性 0.5（见 test_v31_retrieval_statistics.py）。
+        本测试用成员表明确返回 size=1 的 store 验证 0.707 路径。
         """
-        class EmptyStore:
+        class SingletonStore:
             def rare_directions(self, k=50):
-                return []
+                return [{"cluster_id": "c_lone", "member_count": 1}]
 
-        so = SearchOpportunity.from_memory_store(EmptyStore())
-        # 本地退化 cluster_fn 返回 cluster_size=1.0
-        assert so.cluster_fn("anything") == pytest.approx(1.0)
-        assert so.cluster_rarity_of("anything") == pytest.approx(1.0 / math.sqrt(2.0))
+        so = SearchOpportunity.from_memory_store(SingletonStore())
+        # 本地退化 cluster_fn 返回 cluster_size=1.0（成员表确认的 singleton）
+        assert so.cluster_fn("c_lone") == pytest.approx(1.0)
+        assert so.cluster_rarity_of("c_lone") == pytest.approx(1.0 / math.sqrt(2.0))
 
     def test_cluster_fn_none_is_neutral(self):
         """cluster_fn 返回 None（adapter 无该因子信息）→ ClusterRarity 中性 0.5。"""

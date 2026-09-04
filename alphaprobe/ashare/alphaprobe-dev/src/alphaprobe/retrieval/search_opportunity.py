@@ -159,10 +159,12 @@ class SearchOpportunity:
 
     cluster_fn : Callable[[str], float | None] | None
         factor_assets 或本地 cluster 统计的 adapter 槽位。返回该因子所在
-        cluster 的 size（None = 无 cluster 信息 → ClusterRarity 中性
-        ``CLUSTER_RARITY_NEUTRAL = 0.5``）。本地退化实现：从 memory 的
+        cluster 的 size；``None`` = 无 cluster 证据（→ ClusterRarity 中性
+        ``CLUSTER_RARITY_NEUTRAL = 0.5``）；size=1 必须是成员表**明确证明**
+        的独立 singleton（→ 1/sqrt(2)≈0.707）。本地退化实现：从 memory 的
         direction_clusters / rare_directions 统计 member_count（见
-        ``from_memory_store``）。
+        ``from_memory_store``），读不到 cluster 表时返回 None（无证据 ≠
+        singleton，A7）。
     survival_source : Callable[[str], Mapping[str, Any] | None] | None
         返回该因子「cutoff 已可见」的 survival 记忆；None 或返回 None → 中性。
         sealed 段必须返回 None（由调用方保证，本类不访问任何未闸门数据）。
@@ -184,11 +186,16 @@ class SearchOpportunity:
         """本地退化 cluster 统计：从 memory 的 direction_clusters 读 member_count。
 
         只调用公共 API（``rare_directions`` / ``cluster_summary``）。store 无对应
-        方法或读不到 → 该因子 cluster_size=None（ClusterRarity 中性
-        ``CLUSTER_RARITY_NEUTRAL = 0.5``）。
+        方法、表空、或读不到 → 无任何 cluster 证据 → 该因子 cluster_size=None
+        （ClusterRarity 中性 ``CLUSTER_RARITY_NEUTRAL = 0.5``，A7：无证据 ≠
+        singleton）。已确认 singleton（成员表 member_count=1）→ size=1 → 0.707。
         """
         obj = cls(config=config or SearchOpportunityConfig())
         sizes: dict[str, float] = {}
+        # 成员表证据的读取顺序不关键（两个方法都来自同一 cluster 事实表）；
+        # 关键是**有没有读到任何成员表证据**——一个都没有 → 完全无 cluster
+        # 上下文（A7：`_local_cluster_sizes` 保持空 dict，cluster_fn 返回
+        # None → ClusterRarity 中性 0.5，绝不把「无证据」当成 singleton）。
         try:
             if hasattr(store, "rare_directions"):
                 for d in store.rare_directions(k=50):
@@ -209,32 +216,40 @@ class SearchOpportunity:
                         obj._local_cluster_sizes[cid] = float(cnt)
             except Exception:  # noqa: BLE001 - 退化中性
                 pass
-        # 本地退化 cluster adapter：按 factor 在 cluster 中的成员数估计。
-        # cluster 成员表存在但该 factor 不在任何簇 → _local_cluster_sizes 已含
-        # 全部簇，查不到 → 返回 1.0：这是「已知自成 singleton」（有成员表且确认
-        # 该 factor 不属于任何多成员簇），ClusterRarity = 1/sqrt(2) ≈ 0.707，
-        # 是「真稀有可能」而非「无信息」。
-        # cluster 成员表完全不存在（rare_directions/cluster_summary 均空）→
-        # _local_cluster_sizes 为空 dict，cluster_fn 拿不到任何 context：此处仍
-        # 返回 1.0（保持旧版向后兼容 + 外部已有断言），语义由调用方在 cluster_size
-        # 进入 cluster_rarity 前决定——本包最重要的语义是「被挖烂的大簇 → 低机会」，
-        # 无外部信息时宁可保守按 singleton 处理，也不假设拥挤（不会把稀缺性封顶到 1.0）。
+        # 本地退化 cluster adapter 的语义（A7 修正）：
+        # - `_local_cluster_sizes` 完全为空（成员表不存在 / 无任何 cluster
+        #   证据）→ 该 factor 无 cluster 信息 → 返回 None → rarity 中性 0.5。
+        #   旧实现把这种情况重分类为 singleton（返回 1.0 → 0.707），等于把
+        #   「不知道」当成「最稀有机会」，会引导 Retriever 盲目追捧无信息节点；
+        # - 成员表非空、且表内查得到该 factor 所在 cluster → 返回 member_count
+        #   （size=1 是**成员表明确证明**的独立 singleton → 1/sqrt(2)≈0.707；
+        #   大簇 → 低机会，单调递减）；
+        # - 成员表非空、但该 factor 不在表内（查询无命中）→ None → 中性：
+        #   rare_directions 只返回前 k 个成员最少的簇，查不到 ≠ 自成 singleton，
+        #   只是「没有证据」。确认 singleton 必须来自成员表（member_count=1）。
         obj.cluster_fn = obj._local_cluster_size_of
         return obj
 
     def _local_cluster_size_of(self, factor_id: str) -> float | None:
-        """本地退化：按 factor_id 前缀匹配 direction cluster；查不到 → 1.0。
+        """本地退化：按 factor_id 精确匹配 cluster 成员表；无证据 → None。
 
-        返回 1.0 表示「已知自成 singleton（cluster_size=1）」：这是合法的 rarity
-        计算输入（1/sqrt(2)≈0.707），不是「无 cluster 上下文（None→中性 0.5）」。
+        Returns
+        -------
+        float | None
+            cluster_size 或 None（无 cluster 证据 → ClusterRarity 中性 0.5）。
+            None 表示「无信息」，绝不重分类为 singleton。
         """
         if not factor_id:
-            return 1.0
-        if self._local_cluster_sizes:
-            hit = self._local_cluster_sizes.get(factor_id)
-            if hit is not None:
-                return float(hit)
-        return 1.0
+            return None
+        if not self._local_cluster_sizes:
+            # 完全没有 cluster/member 证据 → 无信息，不猜 singleton（A7）。
+            return None
+        # 精确匹配（不做前缀猜测：前缀匹配会把「无证据」误判成「在簇里」）。
+        hit = self._local_cluster_sizes.get(factor_id)
+        if hit is not None:
+            return float(hit)
+        # 有成员表但该 factor 不在表内：查不到 ≠ 独立 singleton。
+        return None
 
     # ------------------------------------------------------------------
     # 四维

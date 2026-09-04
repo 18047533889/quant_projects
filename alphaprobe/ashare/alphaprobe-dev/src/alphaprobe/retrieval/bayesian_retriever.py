@@ -154,15 +154,31 @@ def retriever_score_from_state(
     z_temperature: float = DEFAULT_Z_TEMPERATURE,
     beta_ucb: float = DEFAULT_BETA_UCB,
 ) -> float:
-    """从 BayesianNodeState 直接算 RetrieverScore（不重算 opportunity）。"""
+    """从 BayesianNodeState 直接算 RetrieverScore（不重算 opportunity）。
+
+    A5：``global_total_attempts``（全局池尝试总量）与 ``total_attempts``
+    （本节点点级尝试量）是两个不同的计数器，必须分别传给 UCB 的 total /
+    node 槽位——旧实现把 ``state.total_attempts`` 同时传两个位置，导致
+    node>=total 时 UncertaintyBonus 恒退化为 1。
+
+    历史 state 没有 global 字段（=0）→ 退化用节点计数当全局：无全局证据
+    时不给探索加成（与旧版行为一致），绝不伪造探索空间。
+    """
+    total = int(getattr(state, "global_total_attempts", 0) or 0)
+    node = int(getattr(state, "total_attempts", 0) or 0)
+    if total <= 0:
+        # 无全局尝试证据：退化为 node==total 的中性（UCB = 1.0）。
+        # 注意不能把 node 直接当 total——那会重演 A5 恒退化，只是此时
+        # 的语义是「无信息不给加成」而非「node 已挖满」。
+        total = node
     return compute_retriever_score(
         factor_fitness=state.prior_quality,
         depth=state.depth,
         retrieval_times=state.retrieval_count,
         posterior_success=state.posterior_success,
         search_opportunity=state.search_opportunity,
-        total_attempts=state.total_attempts,
-        node_attempts=state.total_attempts,
+        total_attempts=total,
+        node_attempts=node,
         gamma=gamma,
         omega=omega,
         z_temperature=z_temperature,
@@ -426,6 +442,8 @@ class BayesianRetriever:
         cand_depth: int | None = None
         cand_retrieval: int | None = None
         cand_attempts: int | None = None
+        cand_global_attempts: int | None = None
+        cand_node_attempts: int | None = None
         cand_successes: int | None = None
         if isinstance(candidate, Mapping):
             cd = dict(candidate)
@@ -446,6 +464,18 @@ class BayesianRetriever:
                 cand_attempts = int(cd["total_attempts"])
             except (TypeError, ValueError):
                 cand_attempts = None
+        # A5：显式 global_total_attempts 优先；否则 total_attempts 退化为
+        # 「本节点尝试规模」（node 维度）；node_attempts 独立读取（可为 None）。
+        if "global_total_attempts" in cd:
+            try:
+                cand_global_attempts = int(cd["global_total_attempts"])
+            except (TypeError, ValueError):
+                cand_global_attempts = None
+        if "node_attempts" in cd:
+            try:
+                cand_node_attempts = int(cd["node_attempts"])
+            except (TypeError, ValueError):
+                cand_node_attempts = None
         if "total_successes" in cd:
             try:
                 cand_successes = int(cd["total_successes"])
@@ -470,14 +500,20 @@ class BayesianRetriever:
             if cand_attempts is not None
             else int(stats.get("total_attempts", 0))
         )
-        # node 维度的尝试规模：显式 node_attempts 优先；否则 = 该节点总尝试；
-        # 仍缺失（retrieval_times 仅检索频率）→ 用 retrieval_times 作代理。
-        cand_node_attempts: int | None = None
-        if isinstance(candidate, Mapping) and "node_attempts" in dict(candidate):
-            try:
-                cand_node_attempts = int(dict(candidate)["node_attempts"])
-            except (TypeError, ValueError):
-                cand_node_attempts = None
+        # A5：UCB 的 total 槽位取「全局池尝试总量」：显式 global_total_attempts
+        # 优先；candidate 仍给 total_attempts 且未给 node_attempts（旧版契约，
+        # total_attempts 即节点尝试规模）→ 节点规模就是全局规模，不加成。
+        if cand_global_attempts is not None:
+            global_attempts = cand_global_attempts
+        else:
+            # 无全局证据：旧版语义 total_attempts 即节点尝试量 → global=node
+            # （不给探索加成），绝不虚构全局规模制造假的探索空间。
+            global_attempts = (
+                cand_attempts
+                if cand_attempts is not None
+                else int(stats.get("total_attempts", 0))
+            )
+        # node 维度的尝试规模：显式 node_attempts 优先；否则退化为节点总尝试。
         if cand_node_attempts is not None:
             node_attempts = cand_node_attempts
         else:
@@ -493,17 +529,28 @@ class BayesianRetriever:
         # node_attempts（本节点已尝试数）缺失时 = total_attempts；
         # total_attempts 缺失但 retrieval_times 存在 → 用 retrieval_times 作代理
         # （被挖 200 次 ≈ 200 attempts，§19 核心场景语义）。
-        # total_attempts 至少 = node_attempts（全局池规模 ≥ 节点规模）。
+        # global_attempts（UCB 的 total 槽位）至少 = node_attempts：全局池规模
+        # ≥ 节点规模；node_attempts 全缺失 → node=0 → UCB 对未尝试节点给最大
+        # 探索加成（无信息时不给加成也不惩罚是另一条路径，见下方 node_attempts
+        # 显式置 0 注释——此处 total 有全局证据才成立）。
         if total_attempts <= 0 and retrieval_times > 0:
             total_attempts = retrieval_times
         if node_attempts <= 0 and retrieval_times > 0:
             node_attempts = retrieval_times
+        if global_attempts <= 0 and retrieval_times > 0:
+            global_attempts = retrieval_times
+        if global_attempts < node_attempts:
+            global_attempts = node_attempts
         if total_attempts < node_attempts:
             total_attempts = node_attempts
+        if total_attempts < global_attempts:
+            total_attempts = global_attempts
         # node_attempts 全缺失（retrieval_times=0 且无 total）→ node=0：
         # 无信息 → UCB 中性 1.0（不给加成也不惩罚）。
         if node_attempts <= 0:
             node_attempts = 0
+        if global_attempts <= 0:
+            global_attempts = 0
 
         if explicit_success_probability is not None:
             ps = explicit_success_probability
@@ -537,7 +584,7 @@ class BayesianRetriever:
             )
             opp = float(comps["total"])
 
-        ub = uncertainty_bonus(total_attempts, node_attempts, beta_ucb=self.config.beta_ucb)
+        ub = uncertainty_bonus(global_attempts, node_attempts, beta_ucb=self.config.beta_ucb)
 
         score = compute_retriever_score(
             factor_fitness=fitness,
@@ -545,7 +592,7 @@ class BayesianRetriever:
             retrieval_times=retrieval_times,
             posterior_success=ps,
             search_opportunity=opp,
-            total_attempts=total_attempts,
+            total_attempts=global_attempts,
             node_attempts=node_attempts,
             gamma=self.config.gamma,
             omega=self.config.omega,
