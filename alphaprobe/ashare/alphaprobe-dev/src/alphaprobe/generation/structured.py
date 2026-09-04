@@ -1,19 +1,23 @@
-"""结构化 generation（任务书 §27 / §37）。
+"""结构化 generation（任务书 §27 / §37 / R61 Task7-A9）。
 
 LLM 输出结构化 action JSON（如 ``{"action": "transform", "op": "zscore",
 "target": "parent_0", "params": {...}}`` 或 ``{"action": "combine",
-"parents": [...], "weights": [...]}``），经 action schema 校验 → AST Transform
-构造器把 parent 因子 AST 按 action 变换成新 AST → FE validate（调 FE 的
-validate/parse，非法即拒绝并记录原因）。
+"parents": [...], "weights": [...]}``），经 action schema 校验 → **FE typed AST
+transform**（``factor_engine.api.ast_transform``）把 parent 因子 AST 按 action
+变换成新 Expr → serialize 回 DSL 文本 → FE validate/identity。
 
-设计约束：
-- 禁止发明 FE 没有的算子语义：``op`` 必须在 FE operator surface 白名单内
-  （``fe_operator_surface`` 运行时从 FE daily allowlist 读取；FE 不可 import 时
-  退化为内置保守白名单，仅含已验证的简单算子）；
-- 不修改 factor_engine/、data_access/；只读消费 FE 的 validate / allowlist；
-- 不跑真实 LLM：stub 注入（``make_structured_stub_llm_fn`` 确定性、可种子复现）；
-- 向后兼容：``normalize_llm_output`` 把旧文本输出（§31 candidates JSON）映射为
-  identity action 并打日志，pipeline 的 llm_fn 契约升级不破坏旧路径。
+设计约束（R61 Task7/A9, Part E 边界）：
+- **算子语义一律来自 FE registry**：arity / 参数角色 / window role / surface /
+  输入类型（condition 必须 bool）全部由 ``factor_engine.api.ast_transform``
+  读取；本模块**不再维护**任何本地 op 分类表（``_TRANSFORM_UNARY_OPS`` /
+  ``_WINDOW_OPS`` / ``_BINARY_OPS`` / ``_CONDITIONAL_OPS`` 已删除）。
+- 生产路径**不经过字符串 ``_wrap()``**：action 意图由 FE typed transform 执行
+  （带类型校验 + fail-closed）。仅 ``OFFLINE_TEST``（显式 ``_LEGACY_STRING_PATH
+  = True``）保留最小字符串兼容面，绝不作为生产 fallback。
+- 最终产物仍是 FE 可 parse 的 DSL 文本 + FE identity 可计算（reparse →
+  canonical_ast_hash / signal_equivalence_id 一致是硬验收）。
+- 向后兼容：``normalize_llm_output`` 仍把旧文本输出（§31 candidates JSON）映射
+  为 identity action（该路径只回传原公式，不重建算子语义）。
 """
 
 from __future__ import annotations
@@ -27,11 +31,36 @@ from typing import Any, Callable, Mapping, Sequence
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
+# legacy 字符串路径开关（OFFLINE_TEST-only；生产默认 False）
+# ---------------------------------------------------------------------------
+
+#: 显式 OFFLINE_TEST-only：True 时才允许字符串拼接 legacy 路径（仅测试/离线），
+#: 绝不作为生产 fallback（R61 Task7/A9：生产 AST 变异走 FE typed transform）。
+_LEGACY_STRING_PATH = False
+
+
+def _ast_transform() -> Any:
+    """加载 FE typed AST transform 公共 API（懒加载）。
+
+    Raises
+    ------
+    RuntimeError
+        FE transform API 不可用（fail-closed：生产路径拒绝而不是字符串降级）。
+    """
+    from alphaprobe.fe_bridge.paths import ensure_factor_engine_importable
+
+    ensure_factor_engine_importable()
+    import factor_engine.api as fe_api
+
+    return fe_api
+
+
+# ---------------------------------------------------------------------------
 # FE operator surface（运行时校验白名单）
 # ---------------------------------------------------------------------------
 
-#: 内置保守白名单：FE 不可 import 时退化为这些已验证的简单算子（测试/离线可用）。
-#: 仅含 FE daily allowlist 中确认存在的算子（见 tests 对拍）。
+#: 内置保守白名单：仅 OFFLINE_TEST（FE 不可 import 且 _LEGACY_STRING_PATH=True）
+#: 时才使用；生产一律以 FE registry 表面为准。
 _BUILTIN_OP_WHITELIST: frozenset[str] = frozenset(
     {
         "zscore", "rank", "add", "multiply", "subtract", "divide", "neg", "abs",
@@ -49,7 +78,7 @@ _BUILTIN_OP_WHITELIST: frozenset[str] = frozenset(
     }
 )
 
-#: 默认 action 允许的 op 白名单（FE 表面 ∩ 内置保守集；运行时再与 FE 表面求交）。
+#: 默认 action 允许的 op 白名单（保守动作面；运行时再与 FE registry 表面求交）。
 DEFAULT_ACTION_OP_WHITELIST: frozenset[str] = frozenset(
     {
         "zscore", "rank", "add", "multiply", "subtract", "divide", "neg", "abs",
@@ -75,7 +104,8 @@ def fe_operator_surface(*, surface: str = "daily") -> frozenset[str]:
     """FE 已注册算子表面（daily allowlist 的 key 集合）。
 
     FE 可 import 时从 ``factor_engine.api.operator_registry.build_dsl_allowlist``
-    读取（只读消费，不修改 FE）；不可 import 时退化为内置保守白名单。
+    读取（只读消费，不修改 FE）；不可 import 时退化为内置保守白名单（仅
+    OFFLINE_TEST；生产路径由调用方决定 fail-closed）。
     结果缓存（首次调用约 10-35s 加载 cleaned_operators 注册表）。
     """
     global _FE_SURFACE_CACHE, _FE_SURFACE_TRIED
@@ -107,43 +137,6 @@ def fe_operator_surface(*, surface: str = "daily") -> frozenset[str]:
 ACTION_TRANSFORM = "transform"
 ACTION_COMBINE = "combine"
 ACTION_IDENTITY = "identity"
-
-#: 一元变换算子（transform action 的 op 白名单）
-_TRANSFORM_UNARY_OPS: frozenset[str] = frozenset(
-    {
-        "zscore", "rank", "neg", "abs", "log", "sqrt", "sign", "scale",
-        "cs_rank", "cs_zscore", "cs_demean", "clip", "winsorize", "delay",
-        "delta", "is_nan", "is_infinite", "is_null", "is_not_null",
-        "cap_neutralize", "industry_neutralize", "ind_neutralize", "neutralize",
-        "market_cap_neutralize", "size_neutralize",
-    }
-)
-
-#: 二元/多元组合算子（combine action 的 op 白名单）
-_COMBINE_OPS: frozenset[str] = frozenset(
-    {"add", "multiply", "subtract", "divide", "ts_corr", "ts_cov", "corr", "cov"}
-)
-
-#: 窗口算子（transform 可带 window 参数）
-_WINDOW_OPS: frozenset[str] = frozenset(
-    {
-        "ts_mean", "ts_std", "ts_rank", "ts_sum", "ts_max", "ts_min",
-        "ts_median", "ts_delta", "ts_corr", "ts_cov", "ts_pct", "ts_skew",
-        "ts_kurt", "ts_quantile", "ts_product", "ts_var", "ts_decay_linear",
-        "ts_regression_slope", "ts_time_slope", "ts_topk_sum", "ema", "beta",
-        "rolling_beta", "percentile",
-    }
-)
-
-#: 二元比较/逻辑算子（transform 可带 second 参数）
-_BINARY_OPS: frozenset[str] = frozenset(
-    {"gt", "lt", "ge", "le", "eq", "ne", "and_", "or_", "subtract", "divide"}
-)
-
-#: 条件算子（transform 可带 cond/otherwise 参数）
-_CONDITIONAL_OPS: frozenset[str] = frozenset(
-    {"if_else", "where", "iif", "coalesce", "fillna"}
-)
 
 
 @dataclass
@@ -196,6 +189,13 @@ def _as_int(value: Any) -> int | None:
         return None
 
 
+#: 条件算子（action 侧白名单；FE 侧 `where/if_else` 的 condition 槽由 registry
+#: 签名校验必须 bool——此处只做轻量 action 级检查，语义校验在 FE transform）。
+_CONDITIONAL_OPS: frozenset[str] = frozenset(
+    {"if_else", "where", "iif", "coalesce", "fillna"}
+)
+
+
 def validate_action(
     action: Mapping[str, Any],
     *,
@@ -206,8 +206,9 @@ def validate_action(
 
     - ``action`` 必须是 dict，含 ``action`` 字段（transform/combine/identity）；
     - ``op`` 必须在 op 白名单内（默认 ``DEFAULT_ACTION_OP_WHITELIST`` ∩ FE 表面）；
-    - 参数类型/数量按 action 类型校验（transform 一元/窗口/二元/条件；combine
-      需 ≥2 parents 且 weights 长度匹配）。
+    - 参数按 action 类型做**轻量**检查（combine ≥2 parents 且 weights 长度匹配；
+      conditional op 需 cond；window 需正整数）；**类型级语义校验**（condition
+      必须 bool、window 只改声明槽等）统一在 FE typed transform 执行。
     """
     if not isinstance(action, Mapping):
         return ActionValidation(False, "action must be a JSON object")
@@ -241,10 +242,6 @@ def validate_action(
             return ActionValidation(
                 False, "combine requires >=2 parents", action_type=action_type, op=op
             )
-        if op not in _COMBINE_OPS:
-            return ActionValidation(
-                False, f"op {op!r} not allowed for combine", action_type=action_type, op=op
-            )
         weights = _as_float_list(a.get("weights"))
         if weights and len(weights) != len(parents):
             return ActionValidation(
@@ -255,23 +252,7 @@ def validate_action(
             )
         return ActionValidation(True, action_type=action_type, op=op)
 
-    # transform
-    if op in _TRANSFORM_UNARY_OPS:
-        return ActionValidation(True, action_type=action_type, op=op)
-    if op in _WINDOW_OPS:
-        window = _as_int(a.get("params", {}).get("window") if isinstance(a.get("params"), Mapping) else a.get("window"))
-        if window is None or window <= 0:
-            return ActionValidation(
-                False, f"window op {op!r} requires positive window", action_type=action_type, op=op
-            )
-        return ActionValidation(True, action_type=action_type, op=op)
-    if op in _BINARY_OPS:
-        second = a.get("second")
-        if second is None:
-            return ActionValidation(
-                False, f"binary op {op!r} requires second operand", action_type=action_type, op=op
-            )
-        return ActionValidation(True, action_type=action_type, op=op)
+    # transform（轻量参数检查）
     if op in _CONDITIONAL_OPS:
         cond = a.get("cond")
         if cond is None:
@@ -279,14 +260,40 @@ def validate_action(
                 False, f"conditional op {op!r} requires cond", action_type=action_type, op=op
             )
         return ActionValidation(True, action_type=action_type, op=op)
-    return ActionValidation(
-        False, f"op {op!r} not supported for transform", action_type=action_type, op=op
+    params = a.get("params")
+    window = (
+        _as_int(params.get("window"))
+        if isinstance(params, Mapping) and "window" in params
+        else _as_int(a.get("window"))
     )
+    if window is not None and window <= 0:
+        return ActionValidation(
+            False, f"op {op!r} requires positive window", action_type=action_type, op=op
+        )
+    second = a.get("second")
+    if second is None and _needs_second_operand(op):
+        return ActionValidation(
+            False, f"binary op {op!r} requires second operand", action_type=action_type, op=op
+        )
+    return ActionValidation(True, action_type=action_type, op=op)
+
+
+#: 需要 second 操作数的算子（二元比较/组合对；语义权威仍在 FE registry——
+#: 这里只做 action JSON 缺失参数提示，不做 arity 决策）。
+_BINARY_SECOND_OPS: frozenset[str] = frozenset(
+    {"gt", "lt", "ge", "le", "eq", "ne", "and_", "or_", "subtract", "divide",
+     "ts_corr", "ts_cov", "corr", "cov", "beta", "rolling_beta"}
+)
+
+
+def _needs_second_operand(op: str) -> bool:
+    return op in _BINARY_SECOND_OPS
 
 
 # ---------------------------------------------------------------------------
-# AST Transform 构造器：action → 新公式文本
+# AST Transform 构造器：action → 新公式文本（FE typed transform 权威）
 # ---------------------------------------------------------------------------
+
 
 def _parent_formula(parent: Mapping[str, Any]) -> str:
     return str(parent.get("formula") or parent.get("canonical_formula") or "").strip()
@@ -296,10 +303,6 @@ def _parent_id(parent: Mapping[str, Any]) -> str:
     return str(parent.get("factor_id") or parent.get("id") or "")
 
 
-def _wrap(op: str, *args: str) -> str:
-    return f"{op}({', '.join(args)})"
-
-
 def build_formula(
     action: Mapping[str, Any],
     parents: Sequence[Mapping[str, Any]],
@@ -307,10 +310,10 @@ def build_formula(
     op_whitelist: frozenset[str] | None = None,
     surface: str = "daily",
 ) -> tuple[str | None, str]:
-    """把 action 应用到 parents 的公式，构造新公式文本。
+    """把 action 应用到 parents，构造新公式文本（FE typed AST transform）。
 
     Returns (formula, reason)。成功时 reason=""；失败时 formula=None 且 reason
-    记录原因（非白名单 op / 参数缺失 / parent 缺失等）。
+    记录原因（非白名单 op / 参数缺失 / parent 缺失 / FE 类型校验失败等）。
     """
     if not isinstance(action, Mapping):
         return None, "action must be a JSON object"
@@ -320,7 +323,8 @@ def build_formula(
         if not parents:
             return None, "identity action requires a parent"
         # 旧文本兼容：identity action 可携带原公式（normalize_llm_output 从 §31
-        # candidates 提取）；否则用第一个 parent 的公式。
+        # candidates 提取）；否则用第一个 parent 的公式。该路径只回传原公式，
+        # 不重建算子语义。
         formula = str(a.get("formula") or "").strip()
         if formula:
             return formula, ""
@@ -330,58 +334,89 @@ def build_formula(
     if not v.ok:
         return None, v.reason
 
+    try:
+        fe_api = _ast_transform()
+    except Exception as exc:  # noqa: BLE001
+        if _LEGACY_STRING_PATH:
+            # OFFLINE_TEST-only legacy 路径：显式开关才允许字符串拼接
+            logger.warning("legacy string path (OFFLINE_TEST-only): %s", exc)
+            return _build_formula_legacy(a, parents, v.op, surface=surface)
+        return None, f"FE AST transform unavailable (no production fallback): {exc}"
+
     if action_type == ACTION_COMBINE:
-        return _build_combine(a, parents, v.op)
-    return _build_transform(a, parents, v.op)
+        return _build_combine_ast(fe_api, a, parents, v.op)
+    return _build_transform_ast(fe_api, a, parents, v.op)
 
 
-def _build_combine(
-    a: Mapping[str, Any], parents: Sequence[Mapping[str, Any]], op: str
+def _resolve_parent_ref(
+    ref: str, parents: Sequence[Mapping[str, Any]]
+) -> Mapping[str, Any] | None:
+    by_id = {_parent_id(p): p for p in parents}
+    by_idx: dict[str, Mapping[str, Any]] = {}
+    for i, p in enumerate(parents):
+        by_idx[str(i)] = p
+        by_idx[f"parent_{i}"] = p
+    return by_id.get(ref) or by_idx.get(ref)
+
+
+# ---------------------------------------------------------------------------
+# FE typed AST 构造路径（生产）
+# ---------------------------------------------------------------------------
+
+
+def _build_combine_ast(
+    fe_api: Any,
+    a: Mapping[str, Any],
+    parents: Sequence[Mapping[str, Any]],
+    op: str,
 ) -> tuple[str | None, str]:
     parent_refs = _as_str_list(a.get("parents"))
     if len(parent_refs) < 2:
         return None, "combine requires >=2 parents"
-    by_id = {_parent_id(p): p for p in parents}
-    by_idx: dict[str, Mapping[str, Any]] = {}
-    for i, p in enumerate(parents):
-        by_idx[str(i)] = p
-        by_idx[f"parent_{i}"] = p
     chosen: list[Mapping[str, Any]] = []
     for ref in parent_refs:
-        p = by_id.get(ref) or by_idx.get(ref)
+        p = _resolve_parent_ref(ref, parents)
         if p is None:
             return None, f"combine parent ref not found: {ref!r}"
         chosen.append(p)
-    if len(chosen) < 2:
-        return None, "combine resolved <2 parents"
     formulas = [_parent_formula(p) for p in chosen]
     if any(not f for f in formulas):
         return None, "combine parent missing formula"
     weights = _as_float_list(a.get("weights"))
-    if weights and len(weights) == len(formulas):
-        # 加权和：add(multiply(w0, f0), multiply(w1, f1), ...)
-        terms = [_wrap("multiply", _fmt_num(w), f) for w, f in zip(weights, formulas)]
-        return _wrap("add", *terms), ""
-    # 无 weights → 等权 add
-    return _wrap("add", *formulas), ""
+    try:
+        if weights and len(weights) == len(formulas):
+            # 加权和：add(multiply(w0, f0), multiply(w1, f1), ...)
+            terms = []
+            for w, f in zip(weights, formulas):
+                if op not in {"add", "multiply"}:
+                    # 加权和只对可折叠标量组合算子成立；其他 combine 算子
+                    # 不接受 weights（保守拒绝）
+                    return (
+                        None,
+                        f"combine op {op!r} does not accept weights (only add/multiply)",
+                    )
+                # 权重是标量：作为 Literal 传入 ast_call（不能把 "0.5" 当公式 parse）
+                from factor_engine.expr.literal import Literal
+
+                mul = fe_api.ast_call("multiply", (Literal(float(w)), f), {})
+                terms.append(mul)
+            node = fe_api.ast_call("add", tuple(terms), {})
+            return fe_api.ast_to_dsl_text(node), ""
+        # 无 weights → 等权 op（按算子声明的 panel 数量校验）
+        node = fe_api.ast_call(op, tuple(formulas), {})
+        return fe_api.ast_to_dsl_text(node), ""
+    except Exception as exc:  # noqa: BLE001 - FE transform 校验失败即拒绝
+        return None, f"FE transform rejected combine: {exc}"
 
 
-def _fmt_num(x: float) -> str:
-    if float(x).is_integer():
-        return str(int(x))
-    return repr(float(x))
-
-
-def _build_transform(
-    a: Mapping[str, Any], parents: Sequence[Mapping[str, Any]], op: str
+def _build_transform_ast(
+    fe_api: Any,
+    a: Mapping[str, Any],
+    parents: Sequence[Mapping[str, Any]],
+    op: str,
 ) -> tuple[str | None, str]:
     target = str(a.get("target") or "parent_0")
-    by_id = {_parent_id(p): p for p in parents}
-    by_idx: dict[str, Mapping[str, Any]] = {}
-    for i, p in enumerate(parents):
-        by_idx[str(i)] = p
-        by_idx[f"parent_{i}"] = p
-    parent = by_id.get(target) or by_idx.get(target)
+    parent = _resolve_parent_ref(target, parents)
     if parent is None:
         return None, f"transform target not found: {target!r}"
     f = _parent_formula(parent)
@@ -390,11 +425,120 @@ def _build_transform(
 
     params = a.get("params")
     params = dict(params) if isinstance(params, Mapping) else {}
+    window = (
+        params.get("window")
+        if "window" in params
+        else a.get("window")
+    )
+    second = a.get("second")
+    cond = a.get("cond")
+    otherwise = a.get("otherwise", "0.0")
 
-    if op in _TRANSFORM_UNARY_OPS:
+    try:
+        semantics = fe_api.ast_resolve_op_semantics(op)
+        canon = semantics.canonical
+        window_names = tuple(semantics.window_names)
+        # WINDOW op：带 window param → 只改声明的 WINDOW 槽
+        if window_names and window is not None:
+            w = int(window)
+            params_out = dict(params)
+            params_out[window_names[0]] = w
+            node = fe_api.ast_call(canon, (f,), params_out)
+            return fe_api.ast_to_dsl_text(node), ""
+        # 双 panel 对算子：second 是额外 panel
+        pair_panels = len(tuple(semantics.panel_positions)) >= 2
+        if second is not None and pair_panels:
+            node = fe_api.ast_call(canon, (f, str(second)), {w_k: w for w_k, w in params.items() if w_k in window_names})
+            return fe_api.ast_to_dsl_text(node), ""
+        # 条件算子：cond 作为第一个面板输入（FE 签名要求 bool）
+        if op in _CONDITIONAL_OPS:
+            if cond is None:
+                return None, f"conditional op {op!r} requires cond"
+            node = fe_api.ast_call(canon, (str(cond), f, str(otherwise)), {})
+            return fe_api.ast_to_dsl_text(node), ""
+        # 其余：一元/普通二元（second 可选作面板；无 second 则单面板）
+        if second is not None:
+            node = fe_api.ast_call(canon, (f, str(second)), params)
+        else:
+            node = fe_api.ast_call(canon, (f,), params)
+        return fe_api.ast_to_dsl_text(node), ""
+    except Exception as exc:  # noqa: BLE001 - FE transform 校验失败即拒绝
+        return None, f"FE transform rejected {op!r}: {exc}"
+
+
+# ---------------------------------------------------------------------------
+# legacy 字符串拼接路径（OFFLINE_TEST-only，显式开关，不用于生产）
+# ---------------------------------------------------------------------------
+
+
+def _wrap(op: str, *args: str) -> str:
+    """legacy 字符串拼接（仅 OFFLINE_TEST；生产已删除对它的依赖）。"""
+    return f"{op}({', '.join(args)})"
+
+
+def _fmt_num(x: float) -> str:
+    if float(x).is_integer():
+        return str(int(x))
+    return repr(float(x))
+
+
+def _build_formula_legacy(
+    a: Mapping[str, Any],
+    parents: Sequence[Mapping[str, Any]],
+    op: str,
+    *,
+    surface: str = "daily",
+) -> tuple[str | None, str]:
+    """legacy 字符串路径（显式 OFFLINE_TEST-only；不构成生产 fallback）。
+
+    NOTE: 保留局部最小 op 分类表仅为离线/测试兼容；生产一律走
+    ``build_formula`` 的 FE typed transform 分支（本函数永不从生产调用）。
+    """
+    # 本地最小 legacy 分类（仅 offline 使用；与 FE registry 对拍由
+    # tests/test_v31_ast_generation.py 保证白名单 op 都可 parse）。
+    legacy_unary = frozenset(
+        {"zscore", "rank", "neg", "abs", "log", "sqrt", "sign", "scale",
+         "cs_rank", "cs_zscore", "cs_demean", "clip", "winsorize", "delay",
+         "delta", "is_nan", "is_infinite", "is_null", "is_not_null",
+         "cap_neutralize", "industry_neutralize", "ind_neutralize", "neutralize",
+         "market_cap_neutralize", "size_neutralize"}
+    )
+    legacy_window = frozenset(
+        {"ts_mean", "ts_std", "ts_rank", "ts_sum", "ts_max", "ts_min",
+         "ts_median", "ts_delta", "ts_corr", "ts_cov", "ts_pct", "ts_skew",
+         "ts_kurt", "ts_quantile", "ts_product", "ts_var", "ts_decay_linear",
+         "ts_regression_slope", "ts_time_slope", "ts_topk_sum", "ema", "beta",
+         "rolling_beta", "percentile"}
+    )
+    legacy_cond = frozenset({"if_else", "where", "iif", "coalesce", "fillna"})
+    if a.get("action") == ACTION_COMBINE:
+        parent_refs = _as_str_list(a.get("parents"))
+        formulas = []
+        for ref in parent_refs:
+            p = _resolve_parent_ref(ref, parents)
+            if p is None:
+                return None, f"combine parent ref not found: {ref!r}"
+            formulas.append(_parent_formula(p))
+        if any(not f for f in formulas):
+            return None, "combine parent missing formula"
+        weights = _as_float_list(a.get("weights"))
+        if weights and len(weights) == len(formulas):
+            terms = [_wrap("multiply", _fmt_num(w), f) for w, f in zip(weights, formulas)]
+            return _wrap("add", *terms), ""
+        return _wrap("add", *formulas), ""
+
+    target = str(a.get("target") or "parent_0")
+    parent = _resolve_parent_ref(target, parents)
+    if parent is None:
+        return None, f"transform target not found: {target!r}"
+    f = _parent_formula(parent)
+    if not f:
+        return None, "transform parent missing formula"
+    params = a.get("params")
+    params = dict(params) if isinstance(params, Mapping) else {}
+    if op in legacy_unary:
         return _wrap(op, f), ""
-
-    if op in _WINDOW_OPS:
+    if op in legacy_window:
         window = _as_int(params.get("window") if "window" in params else a.get("window"))
         if window is None or window <= 0:
             return None, f"window op {op!r} requires positive window"
@@ -404,26 +548,24 @@ def _build_transform(
                 return None, f"pair op {op!r} requires second operand"
             return _wrap(op, f, str(second), str(window)), ""
         return _wrap(op, f, str(window)), ""
-
-    if op in _BINARY_OPS:
+    if op in _BINARY_SECOND_OPS:
         second = a.get("second")
         if second is None:
             return None, f"binary op {op!r} requires second operand"
         return _wrap(op, f, str(second)), ""
-
-    if op in _CONDITIONAL_OPS:
+    if op in legacy_cond:
         cond = a.get("cond")
         otherwise = a.get("otherwise", "0.0")
         if cond is None:
             return None, f"conditional op {op!r} requires cond"
         return _wrap(op, str(cond), f, str(otherwise)), ""
-
     return None, f"op {op!r} not supported for transform"
 
 
 # ---------------------------------------------------------------------------
 # StructuredGenerator：action → 候选池（FE validate 过滤）
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class StructuredCandidate:
@@ -452,7 +594,7 @@ class GenerationResult:
 
 @dataclass
 class StructuredGenerator:
-    """action JSON → AST Transform → FE validate → 候选池。
+    """action JSON → FE typed AST transform → FE validate → 候选池。
 
     Parameters
     ----------
@@ -490,8 +632,9 @@ class StructuredGenerator:
     ) -> GenerationResult:
         """把 action 列表应用到 parents，产出候选池。
 
-        每个 action：build_formula → FE validate → 通过则进候选池（记录 lineage
-        = 该 action 引用的 parent ids）；失败则记录 rejected（含原因）。
+        每个 action：build_formula（FE typed AST transform）→ FE validate →
+        通过则进候选池（记录 lineage = 该 action 引用的 parent ids）；失败则
+        记录 rejected（含原因）。
         """
         result = GenerationResult()
         parent_list = list(parents or [])
@@ -670,7 +813,7 @@ def make_structured_stub_llm_fn(
                         "action": "transform",
                         "op": op,
                         "target": f"parent_{i}",
-                        "params": {"window": 20} if op in _WINDOW_OPS else {},
+                        "params": {"window": 20} if _stub_window_op(op) else {},
                         "action_type": "REFINE",
                         "explanation": f"structured-stub transform #{k}",
                         "hypothesis": "确定性 stub：action JSON 变换",
@@ -680,6 +823,17 @@ def make_structured_stub_llm_fn(
         return {"actions": out}
 
     return _llm_fn
+
+
+def _stub_window_op(op: str) -> bool:
+    """stub 是否给该 op 带 window 参数（离线确定性；仅影响 stub 生成）。"""
+    return op in {
+        "ts_mean", "ts_std", "ts_rank", "ts_sum", "ts_max", "ts_min",
+        "ts_median", "ts_delta", "ts_pct", "ts_skew", "ts_kurt",
+        "ts_quantile", "ts_product", "ts_var", "ts_decay_linear",
+        "ts_regression_slope", "ts_time_slope", "ts_topk_sum", "ema",
+        "beta", "rolling_beta", "percentile",
+    }
 
 
 def _stub_op(rng: Any, i: int, k: int) -> str:

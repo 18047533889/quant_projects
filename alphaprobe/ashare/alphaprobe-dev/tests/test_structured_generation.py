@@ -160,9 +160,11 @@ class TestNonWhitelistOp:
 
 class TestFeValidateReject:
     def test_fe_validate_failure_not_in_pool(self):
-        """FE 校验失败（如括号不平衡）的 action 不进候选池，记录原因。"""
+        """FE 校验失败（语法无效）的 action 不进候选池，记录原因。"""
         gen = StructuredGenerator()
         # 构造一个 build 成功但 FE validate 失败的公式：zscore(rank(close) 缺右括号
+        # （V31：parent 公式语法无效在 FE typed transform 阶段即被拒（build
+        # stage）；两者都要求 candidates == [] 且 rejected 记录原因）。
         bad_parents = [{"factor_id": "p1", "formula": "rank(close"}]
         res = gen.generate(
             [{"action": "transform", "op": "zscore", "target": "parent_0"}],
@@ -170,7 +172,8 @@ class TestFeValidateReject:
         )
         assert res.candidates == []
         assert len(res.rejected) == 1
-        assert res.rejected[0]["stage"] == "fe_validate"
+        assert res.rejected[0]["stage"] in ("build", "fe_validate")
+        assert res.rejected[0]["reason"]
 
     def test_injected_validator_rejects(self):
         """注入假 validator 返回 False → 不进候选池。"""

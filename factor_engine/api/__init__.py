@@ -35,11 +35,24 @@ ts_std_dev = make_cleaned_call_factory("ts_std_dev")
 zscore = make_cleaned_call_factory("zscore")
 delay = make_cleaned_call_factory("delay")
 
+#: ``ast_transform``（typed AST transform 公共 API）的懒导出映射。
+#: 名字映射到 ast_transform 模块的函数；避免 api 包启动时加载 registry。
+_AST_TRANSFORM_EXPORTS: dict[str, str] = {
+    "ast_call": "call",
+    "ast_crossover": "crossover",
+    "ast_expr_kind": "expr_kind",
+    "ast_infer_expr_kind": "infer_expr_kind",
+    "ast_resolve_op_semantics": "resolve_op_semantics",
+    "ast_scale_window": "scale_window",
+    "ast_substitute_field": "substitute_field",
+    "ast_to_dsl_text": "to_dsl_text",
+}
+
 __all__ = [
     "Factor",
     "col",
-    "field",
     "delay",
+    "field",
     "make_cleaned_call_factory",
     "rank",
     "ts_mean",
@@ -72,6 +85,10 @@ def __getattr__(name: str) -> Callable[..., Any]:
     """
     from factor_engine.api.operator_registry import build_dsl_allowlist
 
+    if name in _AST_TRANSFORM_EXPORTS:
+        import factor_engine.api.ast_transform as _at
+
+        return getattr(_at, _AST_TRANSFORM_EXPORTS[name])
     if name not in build_dsl_allowlist():
         raise AttributeError(
             f"module {__name__!r} has no public daily-factor operator {name!r}"
