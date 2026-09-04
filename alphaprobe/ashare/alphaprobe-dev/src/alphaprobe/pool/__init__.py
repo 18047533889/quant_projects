@@ -186,12 +186,15 @@ class ActivePool:
         rank = non_dominated_rank(points)
         crowding = crowding_distance(points, rank)
 
+        # 淘汰语义：rank 越大越先淘汰；同 rank crowding 越小（越拥挤）越先淘汰；
+        # crowding inf（边界）最不该淘汰。排序键升序 = 差到好，
+        # 首元素 = 最该淘汰者（排序键取负翻转，勿用 reverse=True 对 crowding 取反）。
         def _key(p: ParetoPoint) -> tuple[int, float, str]:
             c = crowding.get(p.factor_id, 0.0)
-            c_key = float("inf") if c == float("inf") else c
+            c_key = -c if c != float("inf") else float("inf")
             return (rank[p.factor_id], c_key, p.factor_id)
 
-        for p in sorted(points, key=_key, reverse=True):
+        for p in sorted(points, key=_key):
             mem = self.members.get(p.factor_id)
             if mem is None or mem.factor_id == (exclude.factor_id if exclude else None):
                 continue

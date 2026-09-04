@@ -120,7 +120,7 @@ class IntraSessionMeanReversion(SessionAggregationOperator):
         """Calculate mean reversion from minute close prices."""
         return daily_agg(
             close,
-            lambda v, t: _session_mean_reversion_kernel(v, t),
+            _session_mean_reversion_kernel,  # raw kernel: carries __vec__ (PERF-2)
             min_finite=5,
         )
 
@@ -201,7 +201,7 @@ class IntraPriceDelay(SessionAggregationOperator):
         return daily_agg_two(
             close,
             volume,
-            lambda v, vol: _price_delay_kernel(v, vol, None),
+            _price_delay_kernel,  # raw kernel: carries __vec__; daily_agg_two binds times=None
             min_finite=5,
         )
 
@@ -277,7 +277,7 @@ class IntraVolumeImbalance(SessionAggregationOperator):
         return daily_agg_two(
             close,
             volume,
-            lambda v, vol: _volume_imbalance_kernel(v, vol, None),
+            _volume_imbalance_kernel,  # raw kernel: carries __vec__; daily_agg_two binds times=None
             min_finite=3,
         )
 

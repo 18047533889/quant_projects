@@ -219,13 +219,21 @@ OperatorRegistry.register_alias("clamp", "clip")
 OperatorRegistry.register_alias("ts_ewm_mean", "ts_ema")
 OperatorRegistry.register_alias("ts_ewma", "ts_ema")
 OperatorRegistry.register_alias("ts_sma", "ts_mean")
-OperatorRegistry.register_alias("ts_ewm_cov", "ewm_cov")
-OperatorRegistry.register_alias("ts_ewm_corr", "ewm_corr")
+# ts_ewm_cov/ts_ewm_corr are NOT aliases: they are genuine polars-only pairwise
+# canonicals promoted over any alias (NEW-037), distinct from pandas ewm_cov/
+# ewm_corr.  test_new_aliases_2026_08_13.py asserts they are identical — a
+# pre-existing test/design conflict (see layer_governance ewm_cov->ts_ewm_cov).
 OperatorRegistry.register_alias("ts_lag", "ts_delay")
 OperatorRegistry.register_alias("wdecay", "ts_decay_linear")
 OperatorRegistry.register_alias("safe_divide", "safe_div_null")
 OperatorRegistry.register_alias("div_safe", "safe_div_null")
-OperatorRegistry.register_alias("ret", "ts_pct")
+# ``ret`` is NOT registered as an operator alias: in the LQTP surface ``ret`` is
+# the conventional return FIELD name, and an operator alias collides with that
+# dual semantics (a bare ``ret`` arg inside ``rolling_beta_to_market(ret, 20)``
+# / ``tail_beta`` / ``historical_var`` would then raise DSLParseError "Bare name
+# 'ret' is not a column reference").  ``test_new_aliases_2026_08_13.py`` asserts
+# ``get("ret") is get("ts_pct")`` — a pre-existing authoring-test expectation
+# that conflicts with the LQTP runtime contract; kept resolved-to-field.
 OperatorRegistry.register_alias("bound", "clip")
 OperatorRegistry.register_alias("cs_standardize", "zscore")
 OperatorRegistry.register_alias("ma", "ts_mean")

@@ -1,0 +1,967 @@
+{
+  "schema": "intraday_vector_coverage/v1",
+  "version": "1.0.0",
+  "generated_at": "a07ea23020f86f4a63f50f67ec5b0ae1023b5b22",
+  "bound_count": 13,
+  "operators": [
+    {
+      "canonical": "intra_common_trading_intensity",
+      "scalar_impl": "smart_money:proven-scalar-kernel",
+      "vector_impl": "_vec_common_trading_intensity",
+      "vector_bound": true,
+      "vector_equivalence": "harness-proven (rtol/atol 1e-12)",
+      "fallback_reason": null,
+      "routes": [
+        {
+          "canonical": "intra_common_trading_intensity",
+          "module": "smart_money",
+          "aggf": "daily_agg_two",
+          "arg_expr": "_common_trading_intensity",
+          "route_kind": "module-level-fn",
+          "line": 145
+        }
+      ]
+    },
+    {
+      "canonical": "intra_continuous_variance",
+      "scalar_impl": "higher_moments:proven-scalar-kernel",
+      "vector_impl": "_vec_param(_vec_bipower_and_jump)",
+      "vector_bound": true,
+      "vector_equivalence": "harness-proven (rtol/atol 1e-12)",
+      "fallback_reason": null,
+      "routes": [
+        {
+          "canonical": "intra_continuous_variance",
+          "module": "higher_moments",
+          "aggf": "daily_agg",
+          "arg_expr": "_continuous_variance",
+          "route_kind": "module-level-fn",
+          "line": 266
+        }
+      ]
+    },
+    {
+      "canonical": "intra_dynamic_stock_graph_features",
+      "scalar_impl": "smart_money:proven-scalar-kernel",
+      "vector_impl": "_vec_stock_graph_features",
+      "vector_bound": true,
+      "vector_equivalence": "harness-proven (rtol/atol 1e-12)",
+      "fallback_reason": null,
+      "routes": [
+        {
+          "canonical": "intra_dynamic_stock_graph_features",
+          "module": "smart_money",
+          "aggf": "daily_agg",
+          "arg_expr": "_stock_graph_features",
+          "route_kind": "module-level-fn",
+          "line": 86
+        }
+      ]
+    },
+    {
+      "canonical": "intra_jump_variation",
+      "scalar_impl": "higher_moments:proven-scalar-kernel",
+      "vector_impl": "_vec_param(_vec_bipower_and_jump)",
+      "vector_bound": true,
+      "vector_equivalence": "harness-proven (rtol/atol 1e-12)",
+      "fallback_reason": null,
+      "routes": [
+        {
+          "canonical": "intra_jump_variation",
+          "module": "higher_moments",
+          "aggf": "daily_agg",
+          "arg_expr": "_jump_variation",
+          "route_kind": "module-level-fn",
+          "line": 283
+        }
+      ]
+    },
+    {
+      "canonical": "intra_price_delay",
+      "scalar_impl": "true_gap_batch3:proven-scalar-kernel",
+      "vector_impl": "_vec_price_delay",
+      "vector_bound": true,
+      "vector_equivalence": "harness-proven (rtol/atol 1e-12)",
+      "fallback_reason": null,
+      "routes": [
+        {
+          "canonical": "intra_price_delay",
+          "module": "true_gap_batch3",
+          "aggf": "daily_agg_two",
+          "arg_expr": "_price_delay_kernel",
+          "route_kind": "raw-kernel-fn",
+          "line": 201
+        }
+      ]
+    },
+    {
+      "canonical": "intra_realized_kurtosis",
+      "scalar_impl": "higher_moments:proven-scalar-kernel",
+      "vector_impl": "_vec_param(_vec_realized_moments)",
+      "vector_bound": true,
+      "vector_equivalence": "harness-proven (rtol/atol 1e-12)",
+      "fallback_reason": null,
+      "routes": [
+        {
+          "canonical": "intra_realized_kurtosis",
+          "module": "higher_moments",
+          "aggf": "daily_agg",
+          "arg_expr": "_realized_kurtosis",
+          "route_kind": "module-level-fn",
+          "line": 160
+        }
+      ]
+    },
+    {
+      "canonical": "intra_realized_quarticity",
+      "scalar_impl": "higher_moments:proven-scalar-kernel",
+      "vector_impl": "_vec_param(_vec_realized_moments)",
+      "vector_bound": true,
+      "vector_equivalence": "harness-proven (rtol/atol 1e-12)",
+      "fallback_reason": null,
+      "routes": [
+        {
+          "canonical": "intra_realized_quarticity",
+          "module": "higher_moments",
+          "aggf": "daily_agg",
+          "arg_expr": "_realized_quarticity",
+          "route_kind": "module-level-fn",
+          "line": 185
+        }
+      ]
+    },
+    {
+      "canonical": "intra_realized_skewness",
+      "scalar_impl": "higher_moments:proven-scalar-kernel",
+      "vector_impl": "_vec_param(_vec_realized_moments)",
+      "vector_bound": true,
+      "vector_equivalence": "harness-proven (rtol/atol 1e-12)",
+      "fallback_reason": null,
+      "routes": [
+        {
+          "canonical": "intra_realized_skewness",
+          "module": "higher_moments",
+          "aggf": "daily_agg",
+          "arg_expr": "_realized_skewness",
+          "route_kind": "module-level-fn",
+          "line": 129
+        }
+      ]
+    },
+    {
+      "canonical": "intra_session_mean_reversion",
+      "scalar_impl": "true_gap_batch3:proven-scalar-kernel",
+      "vector_impl": "_vec_session_mean_reversion",
+      "vector_bound": true,
+      "vector_equivalence": "harness-proven (rtol/atol 1e-12)",
+      "fallback_reason": null,
+      "routes": [
+        {
+          "canonical": "intra_session_mean_reversion",
+          "module": "true_gap_batch3",
+          "aggf": "daily_agg",
+          "arg_expr": "_session_mean_reversion_kernel",
+          "route_kind": "raw-kernel-fn",
+          "line": 121
+        }
+      ]
+    },
+    {
+      "canonical": "intra_time_above_vwap",
+      "scalar_impl": "vwap_path:proven-scalar-kernel",
+      "vector_impl": "_vec_time_above_vwap",
+      "vector_bound": true,
+      "vector_equivalence": "harness-proven (rtol/atol 1e-12)",
+      "fallback_reason": null,
+      "routes": [
+        {
+          "canonical": "intra_time_above_vwap",
+          "module": "vwap_path",
+          "aggf": "daily_agg_three",
+          "arg_expr": "_time_above_vwap",
+          "route_kind": "module-level-fn",
+          "line": 261
+        }
+      ]
+    },
+    {
+      "canonical": "intra_tripower_quarticity",
+      "scalar_impl": "higher_moments:proven-scalar-kernel",
+      "vector_impl": "_vec_tripower_quarticity",
+      "vector_bound": true,
+      "vector_equivalence": "harness-proven (rtol/atol 1e-12)",
+      "fallback_reason": null,
+      "routes": [
+        {
+          "canonical": "intra_tripower_quarticity",
+          "module": "higher_moments",
+          "aggf": "daily_agg",
+          "arg_expr": "_tripower_quarticity",
+          "route_kind": "module-level-fn",
+          "line": 222
+        }
+      ]
+    },
+    {
+      "canonical": "intra_volume_imbalance",
+      "scalar_impl": "true_gap_batch3:proven-scalar-kernel",
+      "vector_impl": "_vec_volume_imbalance",
+      "vector_bound": true,
+      "vector_equivalence": "harness-proven (rtol/atol 1e-12)",
+      "fallback_reason": null,
+      "routes": [
+        {
+          "canonical": "intra_volume_imbalance",
+          "module": "true_gap_batch3",
+          "aggf": "daily_agg_two",
+          "arg_expr": "_volume_imbalance_kernel",
+          "route_kind": "raw-kernel-fn",
+          "line": 277
+        }
+      ]
+    },
+    {
+      "canonical": "intra_vwap_reversion_speed",
+      "scalar_impl": "vwap_path:proven-scalar-kernel",
+      "vector_impl": "_vec_vwap_reversion_speed",
+      "vector_bound": true,
+      "vector_equivalence": "harness-proven (rtol/atol 1e-12)",
+      "fallback_reason": null,
+      "routes": [
+        {
+          "canonical": "intra_vwap_reversion_speed",
+          "module": "vwap_path",
+          "aggf": "daily_agg_three",
+          "arg_expr": "_vwap_reversion_speed",
+          "route_kind": "module-level-fn",
+          "line": 433
+        }
+      ]
+    },
+    {
+      "canonical": "intra_covariance_manifold_shift",
+      "scalar_impl": "topology_manifold:_fn",
+      "vector_impl": null,
+      "vector_bound": false,
+      "vector_equivalence": "unproven",
+      "fallback_reason": "kernel not vectorized: per-(inst,day) Python loop",
+      "routes": [
+        {
+          "canonical": "intra_covariance_manifold_shift",
+          "module": "topology_manifold",
+          "aggf": "daily_agg",
+          "arg_expr": "_fn",
+          "route_kind": null,
+          "line": 475
+        }
+      ]
+    },
+    {
+      "canonical": "intra_critical_transition_score",
+      "scalar_impl": "topology_manifold:_fn",
+      "vector_impl": null,
+      "vector_bound": false,
+      "vector_equivalence": "unproven",
+      "fallback_reason": "kernel not vectorized: per-(inst,day) Python loop",
+      "routes": [
+        {
+          "canonical": "intra_critical_transition_score",
+          "module": "topology_manifold",
+          "aggf": "daily_agg",
+          "arg_expr": "_fn",
+          "route_kind": null,
+          "line": 621
+        }
+      ]
+    },
+    {
+      "canonical": "intra_dmd_koopman_features",
+      "scalar_impl": "topology_manifold:_fn",
+      "vector_impl": null,
+      "vector_bound": false,
+      "vector_equivalence": "unproven",
+      "fallback_reason": "kernel not vectorized: per-(inst,day) Python loop",
+      "routes": [
+        {
+          "canonical": "intra_dmd_koopman_features",
+          "module": "topology_manifold",
+          "aggf": "daily_agg",
+          "arg_expr": "_fn",
+          "route_kind": null,
+          "line": 339
+        }
+      ]
+    },
+    {
+      "canonical": "intra_drawdown_depth",
+      "scalar_impl": "vwap_path:make_drawdown_metric(\"depth\")",
+      "vector_impl": null,
+      "vector_bound": false,
+      "vector_equivalence": "unproven",
+      "fallback_reason": "kernel not vectorized: per-(inst,day) Python loop",
+      "routes": [
+        {
+          "canonical": "intra_drawdown_depth",
+          "module": "vwap_path",
+          "aggf": "daily_agg",
+          "arg_expr": "make_drawdown_metric(\"depth\")",
+          "route_kind": null,
+          "line": 556
+        }
+      ]
+    },
+    {
+      "canonical": "intra_drawdown_duration",
+      "scalar_impl": "vwap_path:make_drawdown_metric(\"duration\")",
+      "vector_impl": null,
+      "vector_bound": false,
+      "vector_equivalence": "unproven",
+      "fallback_reason": "kernel not vectorized: per-(inst,day) Python loop",
+      "routes": [
+        {
+          "canonical": "intra_drawdown_duration",
+          "module": "vwap_path",
+          "aggf": "daily_agg",
+          "arg_expr": "make_drawdown_metric(\"duration\")",
+          "route_kind": null,
+          "line": 575
+        }
+      ]
+    },
+    {
+      "canonical": "intra_drawdown_recovery_half_life",
+      "scalar_impl": "vwap_path:make_drawdown_metric(\"recovery\")",
+      "vector_impl": null,
+      "vector_bound": false,
+      "vector_equivalence": "unproven",
+      "fallback_reason": "kernel not vectorized: per-(inst,day) Python loop",
+      "routes": [
+        {
+          "canonical": "intra_drawdown_recovery_half_life",
+          "module": "vwap_path",
+          "aggf": "daily_agg",
+          "arg_expr": "make_drawdown_metric(\"recovery\")",
+          "route_kind": null,
+          "line": 594
+        }
+      ]
+    },
+    {
+      "canonical": "intra_functional_motif_score",
+      "scalar_impl": "state_space:lambda p, v, _: _kernel(p, v, None)",
+      "vector_impl": null,
+      "vector_bound": false,
+      "vector_equivalence": "unproven",
+      "fallback_reason": "kernel not vectorized: per-(inst,day) Python loop — fresh lambda closure carries no __vec__",
+      "routes": [
+        {
+          "canonical": "intra_functional_motif_score",
+          "module": "state_space",
+          "aggf": "daily_agg_three",
+          "arg_expr": "lambda p, v, _: _kernel(p, v, None)",
+          "route_kind": "lambda",
+          "line": 340
+        }
+      ]
+    },
+    {
+      "canonical": "intra_interval_amount_share",
+      "scalar_impl": "time_structure:lambda v, t: _interval_share(v, t, s, e)",
+      "vector_impl": null,
+      "vector_bound": false,
+      "vector_equivalence": "unproven",
+      "fallback_reason": "kernel not vectorized: per-(inst,day) Python loop — fresh lambda closure carries no __vec__",
+      "routes": [
+        {
+          "canonical": "intra_interval_amount_share",
+          "module": "time_structure",
+          "aggf": "daily_agg",
+          "arg_expr": "lambda v, t: _interval_share(v, t, s, e)",
+          "route_kind": "lambda",
+          "line": 124
+        }
+      ]
+    },
+    {
+      "canonical": "intra_interval_realized_variance",
+      "scalar_impl": "time_structure:lambda v, t: _interval_rv(v, t, s, e)",
+      "vector_impl": null,
+      "vector_bound": false,
+      "vector_equivalence": "unproven",
+      "fallback_reason": "kernel not vectorized: per-(inst,day) Python loop — fresh lambda closure carries no __vec__",
+      "routes": [
+        {
+          "canonical": "intra_interval_realized_variance",
+          "module": "time_structure",
+          "aggf": "daily_agg",
+          "arg_expr": "lambda v, t: _interval_rv(v, t, s, e)",
+          "route_kind": "lambda",
+          "line": 158
+        }
+      ]
+    },
+    {
+      "canonical": "intra_interval_return",
+      "scalar_impl": "time_structure:lambda v, t: _interval_return(v, t, s, e)",
+      "vector_impl": null,
+      "vector_bound": false,
+      "vector_equivalence": "unproven",
+      "fallback_reason": "kernel not vectorized: per-(inst,day) Python loop — fresh lambda closure carries no __vec__",
+      "routes": [
+        {
+          "canonical": "intra_interval_return",
+          "module": "time_structure",
+          "aggf": "daily_agg",
+          "arg_expr": "lambda v, t: _interval_return(v, t, s, e)",
+          "route_kind": "lambda",
+          "line": 70
+        }
+      ]
+    },
+    {
+      "canonical": "intra_interval_volume_share",
+      "scalar_impl": "time_structure:lambda v, t: _interval_share(v, t, s, e)",
+      "vector_impl": null,
+      "vector_bound": false,
+      "vector_equivalence": "unproven",
+      "fallback_reason": "kernel not vectorized: per-(inst,day) Python loop — fresh lambda closure carries no __vec__",
+      "routes": [
+        {
+          "canonical": "intra_interval_volume_share",
+          "module": "time_structure",
+          "aggf": "daily_agg",
+          "arg_expr": "lambda v, t: _interval_share(v, t, s, e)",
+          "route_kind": "lambda",
+          "line": 102
+        }
+      ]
+    },
+    {
+      "canonical": "intra_jump_clustering",
+      "scalar_impl": "higher_moments:_fn",
+      "vector_impl": null,
+      "vector_bound": false,
+      "vector_equivalence": "unproven",
+      "fallback_reason": "kernel not vectorized: per-(inst,day) Python loop",
+      "routes": [
+        {
+          "canonical": "intra_jump_clustering",
+          "module": "higher_moments",
+          "aggf": "daily_agg",
+          "arg_expr": "_fn",
+          "route_kind": null,
+          "line": 594
+        }
+      ]
+    },
+    {
+      "canonical": "intra_jump_concentration",
+      "scalar_impl": "higher_moments:_fn",
+      "vector_impl": null,
+      "vector_bound": false,
+      "vector_equivalence": "unproven",
+      "fallback_reason": "kernel not vectorized: per-(inst,day) Python loop",
+      "routes": [
+        {
+          "canonical": "intra_jump_concentration",
+          "module": "higher_moments",
+          "aggf": "daily_agg",
+          "arg_expr": "_fn",
+          "route_kind": null,
+          "line": 522
+        }
+      ]
+    },
+    {
+      "canonical": "intra_jump_count",
+      "scalar_impl": "higher_moments:_fn",
+      "vector_impl": null,
+      "vector_bound": false,
+      "vector_equivalence": "unproven",
+      "fallback_reason": "kernel not vectorized: per-(inst,day) Python loop",
+      "routes": [
+        {
+          "canonical": "intra_jump_count",
+          "module": "higher_moments",
+          "aggf": "daily_agg",
+          "arg_expr": "_fn",
+          "route_kind": null,
+          "line": 421
+        }
+      ]
+    },
+    {
+      "canonical": "intra_jump_first_time",
+      "scalar_impl": "higher_moments:_fn",
+      "vector_impl": null,
+      "vector_bound": false,
+      "vector_equivalence": "unproven",
+      "fallback_reason": "kernel not vectorized: per-(inst,day) Python loop",
+      "routes": [
+        {
+          "canonical": "intra_jump_first_time",
+          "module": "higher_moments",
+          "aggf": "daily_agg",
+          "arg_expr": "_fn",
+          "route_kind": null,
+          "line": 546
+        }
+      ]
+    },
+    {
+      "canonical": "intra_jump_last_time",
+      "scalar_impl": "higher_moments:_fn",
+      "vector_impl": null,
+      "vector_bound": false,
+      "vector_equivalence": "unproven",
+      "fallback_reason": "kernel not vectorized: per-(inst,day) Python loop",
+      "routes": [
+        {
+          "canonical": "intra_jump_last_time",
+          "module": "higher_moments",
+          "aggf": "daily_agg",
+          "arg_expr": "_fn",
+          "route_kind": null,
+          "line": 570
+        }
+      ]
+    },
+    {
+      "canonical": "intra_kalman_latent_price",
+      "scalar_impl": "state_space:_kernel",
+      "vector_impl": null,
+      "vector_bound": false,
+      "vector_equivalence": "unproven",
+      "fallback_reason": "kernel not vectorized: raw kernel passed but not PERF-2-whitelisted (needs harness equivalence before binding)",
+      "routes": [
+        {
+          "canonical": "intra_kalman_latent_price",
+          "module": "state_space",
+          "aggf": "daily_agg",
+          "arg_expr": "_kernel",
+          "route_kind": "raw-kernel-fn",
+          "line": 146
+        }
+      ]
+    },
+    {
+      "canonical": "intra_local_conditional_entropy",
+      "scalar_impl": "smart_money:lambda c, v: _local_conditional_entropy(c, v)",
+      "vector_impl": null,
+      "vector_bound": false,
+      "vector_equivalence": "unproven",
+      "fallback_reason": "kernel not vectorized: per-(inst,day) Python loop — fresh lambda closure carries no __vec__",
+      "routes": [
+        {
+          "canonical": "intra_local_conditional_entropy",
+          "module": "smart_money",
+          "aggf": "daily_agg_two",
+          "arg_expr": "lambda c, v: _local_conditional_entropy(c, v)",
+          "route_kind": "lambda",
+          "line": 220
+        }
+      ]
+    },
+    {
+      "canonical": "intra_longest_above_vwap_streak",
+      "scalar_impl": "vwap_path:make_longest_streak(\"above\")",
+      "vector_impl": null,
+      "vector_bound": false,
+      "vector_equivalence": "unproven",
+      "fallback_reason": "kernel not vectorized: per-(inst,day) Python loop",
+      "routes": [
+        {
+          "canonical": "intra_longest_above_vwap_streak",
+          "module": "vwap_path",
+          "aggf": "daily_agg_three",
+          "arg_expr": "make_longest_streak(\"above\")",
+          "route_kind": null,
+          "line": 375
+        }
+      ]
+    },
+    {
+      "canonical": "intra_longest_below_vwap_streak",
+      "scalar_impl": "vwap_path:make_longest_streak(\"below\")",
+      "vector_impl": null,
+      "vector_bound": false,
+      "vector_equivalence": "unproven",
+      "fallback_reason": "kernel not vectorized: per-(inst,day) Python loop",
+      "routes": [
+        {
+          "canonical": "intra_longest_below_vwap_streak",
+          "module": "vwap_path",
+          "aggf": "daily_agg_three",
+          "arg_expr": "make_longest_streak(\"below\")",
+          "route_kind": null,
+          "line": 396
+        }
+      ]
+    },
+    {
+      "canonical": "intra_matrix_profile_session_features",
+      "scalar_impl": "topology_manifold:_fn",
+      "vector_impl": null,
+      "vector_bound": false,
+      "vector_equivalence": "unproven",
+      "fallback_reason": "kernel not vectorized: per-(inst,day) Python loop",
+      "routes": [
+        {
+          "canonical": "intra_matrix_profile_session_features",
+          "module": "topology_manifold",
+          "aggf": "daily_agg",
+          "arg_expr": "_fn",
+          "route_kind": null,
+          "line": 187
+        }
+      ]
+    },
+    {
+      "canonical": "intra_max_drawdown",
+      "scalar_impl": "vwap_path:make_max_drawdown(\"down\")",
+      "vector_impl": null,
+      "vector_bound": false,
+      "vector_equivalence": "unproven",
+      "fallback_reason": "kernel not vectorized: per-(inst,day) Python loop",
+      "routes": [
+        {
+          "canonical": "intra_max_drawdown",
+          "module": "vwap_path",
+          "aggf": "daily_agg",
+          "arg_expr": "make_max_drawdown(\"down\")",
+          "route_kind": null,
+          "line": 466
+        }
+      ]
+    },
+    {
+      "canonical": "intra_max_drawup",
+      "scalar_impl": "vwap_path:make_max_drawdown(\"up\")",
+      "vector_impl": null,
+      "vector_bound": false,
+      "vector_equivalence": "unproven",
+      "fallback_reason": "kernel not vectorized: per-(inst,day) Python loop",
+      "routes": [
+        {
+          "canonical": "intra_max_drawup",
+          "module": "vwap_path",
+          "aggf": "daily_agg",
+          "arg_expr": "make_max_drawdown(\"up\")",
+          "route_kind": null,
+          "line": 485
+        }
+      ]
+    },
+    {
+      "canonical": "intra_negative_jump_variation",
+      "scalar_impl": "higher_moments:_fn",
+      "vector_impl": null,
+      "vector_bound": false,
+      "vector_equivalence": "unproven",
+      "fallback_reason": "kernel not vectorized: per-(inst,day) Python loop",
+      "routes": [
+        {
+          "canonical": "intra_negative_jump_variation",
+          "module": "higher_moments",
+          "aggf": "daily_agg",
+          "arg_expr": "_fn",
+          "route_kind": null,
+          "line": 363
+        }
+      ]
+    },
+    {
+      "canonical": "intra_positive_jump_variation",
+      "scalar_impl": "higher_moments:_fn",
+      "vector_impl": null,
+      "vector_bound": false,
+      "vector_equivalence": "unproven",
+      "fallback_reason": "kernel not vectorized: per-(inst,day) Python loop",
+      "routes": [
+        {
+          "canonical": "intra_positive_jump_variation",
+          "module": "higher_moments",
+          "aggf": "daily_agg",
+          "arg_expr": "_fn",
+          "route_kind": null,
+          "line": 339
+        }
+      ]
+    },
+    {
+      "canonical": "intra_price_peak_ridge_valley_state",
+      "scalar_impl": "pattern_recognition:_kernel",
+      "vector_impl": null,
+      "vector_bound": false,
+      "vector_equivalence": "unproven",
+      "fallback_reason": "kernel not vectorized: raw kernel passed but not PERF-2-whitelisted (needs harness equivalence before binding)",
+      "routes": [
+        {
+          "canonical": "intra_price_peak_ridge_valley_state",
+          "module": "pattern_recognition",
+          "aggf": "daily_agg",
+          "arg_expr": "_kernel",
+          "route_kind": "raw-kernel-fn",
+          "line": 242
+        }
+      ]
+    },
+    {
+      "canonical": "intra_price_vwap_max_negative_excursion",
+      "scalar_impl": "vwap_path:make_vwap_excursion(\"min\")",
+      "vector_impl": null,
+      "vector_bound": false,
+      "vector_equivalence": "unproven",
+      "fallback_reason": "kernel not vectorized: per-(inst,day) Python loop",
+      "routes": [
+        {
+          "canonical": "intra_price_vwap_max_negative_excursion",
+          "module": "vwap_path",
+          "aggf": "daily_agg_three",
+          "arg_expr": "make_vwap_excursion(\"min\")",
+          "route_kind": null,
+          "line": 231
+        }
+      ]
+    },
+    {
+      "canonical": "intra_price_vwap_max_positive_excursion",
+      "scalar_impl": "vwap_path:make_vwap_excursion(\"max\")",
+      "vector_impl": null,
+      "vector_bound": false,
+      "vector_equivalence": "unproven",
+      "fallback_reason": "kernel not vectorized: per-(inst,day) Python loop",
+      "routes": [
+        {
+          "canonical": "intra_price_vwap_max_positive_excursion",
+          "module": "vwap_path",
+          "aggf": "daily_agg_three",
+          "arg_expr": "make_vwap_excursion(\"max\")",
+          "route_kind": null,
+          "line": 209
+        }
+      ]
+    },
+    {
+      "canonical": "intra_signed_jump_ratio",
+      "scalar_impl": "higher_moments:_fn",
+      "vector_impl": null,
+      "vector_bound": false,
+      "vector_equivalence": "unproven",
+      "fallback_reason": "kernel not vectorized: per-(inst,day) Python loop",
+      "routes": [
+        {
+          "canonical": "intra_signed_jump_ratio",
+          "module": "higher_moments",
+          "aggf": "daily_agg",
+          "arg_expr": "_fn",
+          "route_kind": null,
+          "line": 399
+        }
+      ]
+    },
+    {
+      "canonical": "intra_signed_tail_variation_ratio",
+      "scalar_impl": "higher_moments:_fn",
+      "vector_impl": null,
+      "vector_bound": false,
+      "vector_equivalence": "unproven",
+      "fallback_reason": "kernel not vectorized: per-(inst,day) Python loop",
+      "routes": [
+        {
+          "canonical": "intra_signed_tail_variation_ratio",
+          "module": "higher_moments",
+          "aggf": "daily_agg",
+          "arg_expr": "_fn",
+          "route_kind": null,
+          "line": 498
+        }
+      ]
+    },
+    {
+      "canonical": "intra_smart_money_vwap_ratio",
+      "scalar_impl": "smart_money:lambda c, a, v: _smart_money_vwap_ratio(c, a, v)",
+      "vector_impl": null,
+      "vector_bound": false,
+      "vector_equivalence": "unproven",
+      "fallback_reason": "kernel not vectorized: per-(inst,day) Python loop — fresh lambda closure carries no __vec__",
+      "routes": [
+        {
+          "canonical": "intra_smart_money_vwap_ratio",
+          "module": "smart_money",
+          "aggf": "daily_agg_three",
+          "arg_expr": "lambda c, a, v: _smart_money_vwap_ratio(c, a, v)",
+          "route_kind": "lambda",
+          "line": 292
+        }
+      ]
+    },
+    {
+      "canonical": "intra_state_space_volume_components",
+      "scalar_impl": "state_space:_kernel",
+      "vector_impl": null,
+      "vector_bound": false,
+      "vector_equivalence": "unproven",
+      "fallback_reason": "kernel not vectorized: raw kernel passed but not PERF-2-whitelisted (needs harness equivalence before binding)",
+      "routes": [
+        {
+          "canonical": "intra_state_space_volume_components",
+          "module": "state_space",
+          "aggf": "daily_agg",
+          "arg_expr": "_kernel",
+          "route_kind": "raw-kernel-fn",
+          "line": 235
+        }
+      ]
+    },
+    {
+      "canonical": "intra_visibility_graph_features",
+      "scalar_impl": "state_space:_kernel",
+      "vector_impl": null,
+      "vector_bound": false,
+      "vector_equivalence": "unproven",
+      "fallback_reason": "kernel not vectorized: raw kernel passed but not PERF-2-whitelisted (needs harness equivalence before binding)",
+      "routes": [
+        {
+          "canonical": "intra_visibility_graph_features",
+          "module": "state_space",
+          "aggf": "daily_agg",
+          "arg_expr": "_kernel",
+          "route_kind": "raw-kernel-fn",
+          "line": 450
+        }
+      ]
+    },
+    {
+      "canonical": "intra_volume_peak_ridge_valley_state",
+      "scalar_impl": "pattern_recognition:_kernel",
+      "vector_impl": null,
+      "vector_bound": false,
+      "vector_equivalence": "unproven",
+      "fallback_reason": "kernel not vectorized: raw kernel passed but not PERF-2-whitelisted (needs harness equivalence before binding)",
+      "routes": [
+        {
+          "canonical": "intra_volume_peak_ridge_valley_state",
+          "module": "pattern_recognition",
+          "aggf": "daily_agg",
+          "arg_expr": "_kernel",
+          "route_kind": "raw-kernel-fn",
+          "line": 308
+        }
+      ]
+    },
+    {
+      "canonical": "intra_vwap_path_curvature",
+      "scalar_impl": "vwap_path:make_vwap_path(2, 2, False)",
+      "vector_impl": null,
+      "vector_bound": false,
+      "vector_equivalence": "unproven",
+      "fallback_reason": "kernel not vectorized: per-(inst,day) Python loop",
+      "routes": [
+        {
+          "canonical": "intra_vwap_path_curvature",
+          "module": "vwap_path",
+          "aggf": "daily_agg_three",
+          "arg_expr": "make_vwap_path(2, 2, False)",
+          "route_kind": null,
+          "line": 116
+        }
+      ]
+    },
+    {
+      "canonical": "intra_vwap_path_curvature_pct",
+      "scalar_impl": "vwap_path:make_vwap_path(2, 2, True)",
+      "vector_impl": null,
+      "vector_bound": false,
+      "vector_equivalence": "unproven",
+      "fallback_reason": "kernel not vectorized: per-(inst,day) Python loop",
+      "routes": [
+        {
+          "canonical": "intra_vwap_path_curvature_pct",
+          "module": "vwap_path",
+          "aggf": "daily_agg_three",
+          "arg_expr": "make_vwap_path(2, 2, True)",
+          "route_kind": null,
+          "line": 174
+        }
+      ]
+    },
+    {
+      "canonical": "intra_vwap_path_slope",
+      "scalar_impl": "vwap_path:make_vwap_path(1, 1, False)",
+      "vector_impl": null,
+      "vector_bound": false,
+      "vector_equivalence": "unproven",
+      "fallback_reason": "kernel not vectorized: per-(inst,day) Python loop",
+      "routes": [
+        {
+          "canonical": "intra_vwap_path_slope",
+          "module": "vwap_path",
+          "aggf": "daily_agg_three",
+          "arg_expr": "make_vwap_path(1, 1, False)",
+          "route_kind": null,
+          "line": 95
+        }
+      ]
+    },
+    {
+      "canonical": "intra_vwap_path_slope_pct",
+      "scalar_impl": "vwap_path:make_vwap_path(1, 1, True)",
+      "vector_impl": null,
+      "vector_bound": false,
+      "vector_equivalence": "unproven",
+      "fallback_reason": "kernel not vectorized: per-(inst,day) Python loop",
+      "routes": [
+        {
+          "canonical": "intra_vwap_path_slope_pct",
+          "module": "vwap_path",
+          "aggf": "daily_agg_three",
+          "arg_expr": "make_vwap_path(1, 1, True)",
+          "route_kind": null,
+          "line": 155
+        }
+      ]
+    },
+    {
+      "canonical": "intraday_rv_signature_slope",
+      "scalar_impl": "higher_moments:lambda v, t: _rv_signature_slope(v)",
+      "vector_impl": null,
+      "vector_bound": false,
+      "vector_equivalence": "unproven",
+      "fallback_reason": "kernel not vectorized: per-(inst,day) Python loop — fresh lambda closure carries no __vec__",
+      "routes": [
+        {
+          "canonical": "intraday_rv_signature_slope",
+          "module": "higher_moments",
+          "aggf": "daily_agg",
+          "arg_expr": "lambda v, t: _rv_signature_slope(v)",
+          "route_kind": "lambda",
+          "line": 655
+        }
+      ]
+    },
+    {
+      "canonical": "intraday_value_at_extreme_state",
+      "scalar_impl": "intra_state_space:_kernel",
+      "vector_impl": null,
+      "vector_bound": false,
+      "vector_equivalence": "unproven",
+      "fallback_reason": "kernel not vectorized: raw kernel passed but not PERF-2-whitelisted (needs harness equivalence before binding)",
+      "routes": [
+        {
+          "canonical": "intraday_value_at_extreme_state",
+          "module": "intra_state_space",
+          "aggf": "daily_agg_three",
+          "arg_expr": "_kernel",
+          "route_kind": "raw-kernel-fn",
+          "line": 1164
+        }
+      ]
+    }
+  ],
+  "summary": {
+    "total": 53,
+    "vectorized": 13,
+    "scalar_only": 40
+  }
+}

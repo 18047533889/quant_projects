@@ -17,6 +17,7 @@ non-dominated sorting（NSGA-II 风格）：
 from __future__ import annotations
 
 from dataclasses import dataclass
+from functools import cmp_to_key
 from typing import Any, Callable, Iterable, Sequence
 
 __all__ = [
@@ -154,10 +155,25 @@ def crowding_distance(
         by_rank.setdefault(rank[p.factor_id], []).append(i)
 
     for r, idxs in by_rank.items():
-        if len(idxs) <= 2:
+        # 同 rank 全等价（任意两点全维都无差异）→ 无法从目标空间区分谁更差，
+        # 整组按边界 inf 处理，淘汰侧退化为纯 tie-break（factor_id 字典序）——
+        # 与任务书「完全等价点按字典序确定性淘汰」一致；且绝不误伤真边界。
+        vals = {tuple(maximized[i]) for i in idxs}
+        if len(vals) == 1:
             for i in idxs:
                 dist[points[i].factor_id] = float("inf")
             continue
+        if len(idxs) <= 2:
+            # 同 rank 少于 3 个：无内部点可区分，NSGA-II 惯例一律视作边界 inf
+            # （极值保护）→ 全排最不该淘汰，由确定性 tie-break 兜底。
+            for i in idxs:
+                dist[points[i].factor_id] = float("inf")
+            continue
+        # 每维排序后，若出现重复极值（span == 0）不能把整组当 inf：
+        # 那样会让「完全相同点」与真边界点混淆，甚至漏掉应淘汰的内部重复者。
+        # 正确做法：只把当前维严格两端标 inf，剩余内部点按间距累加；
+        # 同 rank 存在部分等价（某维重复极值）→ 内部重复者 crowding 保持 0
+        # （最拥挤），由淘汰侧 tie-break 确定性选择，杜绝淘汰边界。
         for obj in range(m):
             idxs_sorted = sorted(idxs, key=lambda i: maximized[i][obj])
             dist[points[idxs_sorted[0]].factor_id] = float("inf")
@@ -214,16 +230,28 @@ def pareto_eviction_candidate(
             return tie_break(a, b)
         return -1 if a < b else (1 if a > b else 0)
 
-    # 排序：rank 越大越差（优先淘汰）；同 rank crowding 越小越差；再 tie-break。
-    # 取 max（最差者）。
-    def _key(p: ParetoPoint) -> tuple[int, float, str]:
-        r = rank[p.factor_id]
-        c = crowding.get(p.factor_id, 0.0)
-        # crowding inf（边界）视为最稀疏 → 最后淘汰；非 inf 越小越先淘汰。
-        c_key = float("inf") if c == float("inf") else c
-        return (r, c_key, p.factor_id)
+    # 淘汰优先级（「更该淘汰」= 比较序更小，min 取最该淘汰者）：
+    #   1) rank 越大越差 → 更该淘汰（rank 0 = 最前 front，绝不能因 min 反成淘汰它）；
+    #   2) 同 rank：crowding 越小（越拥挤）越该淘汰；crowding=inf（边界点，
+    #      最稀疏）→ 视为 +inf，最不该淘汰（排最后）；
+    #   3) 完全并列：tie_break / factor_id 字典序确定性（返回负 = 前者优先淘汰）。
+    # 不可用单一 max：max 对 crowding 取最大值会把最稀疏者误选为淘汰对象（方向反）。
+    # 不可用 min(rank, ...)：rank 0 是最优 front，min 会把最优者误选为淘汰对象。
+    def _cmp(a: ParetoPoint, b: ParetoPoint) -> int:
+        ra = rank[a.factor_id]
+        rb = rank[b.factor_id]
+        if ra != rb:
+            return -1 if ra > rb else 1  # rank 大者（更差 front）优先淘汰
+        ca = crowding.get(a.factor_id, 0.0)
+        cb = crowding.get(b.factor_id, 0.0)
+        # 有限值越小越拥挤 → 越该淘汰；inf（边界）视为 +inf → 最不该淘汰。
+        ca_key = float("inf") if ca == float("inf") else ca
+        cb_key = float("inf") if cb == float("inf") else cb
+        if ca_key != cb_key:
+            return -1 if ca_key < cb_key else 1
+        return _tie(a.factor_id, b.factor_id)
 
-    return max(cands, key=_key)
+    return min(cands, key=cmp_to_key(_cmp))
 
 
 def pareto_rank_of(

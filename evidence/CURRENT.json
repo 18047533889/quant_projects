@@ -1,23 +1,24 @@
 {
   "schema_version": 3,
-  "generated_at": "2026-08-28T09:21:14.210579+00:00",
+  "generated_at": "2026-09-03T21:42:37.395051+00:00",
   "source_snapshot_id": "src:v1:rn",
   "sha_bindings": {
-    "RootRepoSHA": "{\"HEAD\":\"fa9b6eb1461cd9d1f87cd8d41aa3e6b55747361f\",\"cached_diff_hash\":\"af5570f5a1810b7af78caf4bc70a660f0df51e42baf91d4de5b2328de0e83dfc\",\"diff_hash\":\"6f6f855a0044665cd47c3014c3a348141b15df199db981bcaa3fbfba23ff5c38\",\"dirty\":true,\"identity_hash\":\"b546dd9f1f38ac2617ef1069a98d92f71ef44a7987c9b57cb4c01452f6cb3dd1\",\"untracked_source_hash\":\"cfea68b91faa787490f61380b2389a9c72ed0f8895d7f105b12c49bd0d8fa454\"}",
-    "SourceTreeIdentity": "{\"HEAD\":\"fa9b6eb1461cd9d1f87cd8d41aa3e6b55747361f\",\"cached_diff_hash\":\"af5570f5a1810b7af78caf4bc70a660f0df51e42baf91d4de5b2328de0e83dfc\",\"diff_hash\":\"6f6f855a0044665cd47c3014c3a348141b15df199db981bcaa3fbfba23ff5c38\",\"dirty\":true,\"identity_hash\":\"b546dd9f1f38ac2617ef1069a98d92f71ef44a7987c9b57cb4c01452f6cb3dd1\",\"untracked_source_hash\":\"cfea68b91faa787490f61380b2389a9c72ed0f8895d7f105b12c49bd0d8fa454\"}",
-    "PlatformSourceTreeIdentity": "23344b79d8c71354f3708c1f35db86d28178ed23ef08efc5924ef33a87cfc409",
-    "AlphaGeneratorIdentity": "a2d47c9770f58d06a862e21009aafb3eadbb93f58eda61b4ad5579b95754787c",
-    "EvidenceAttestationIdentity": "86a796aca05edb49104e3c7451a8942cafc7bd1b36619fbc325dbf8061421cf7",
-    "OperatorCatalogSHA": "60df13214029c779c73788ded0e56b0edd1451260ebf3f95c23a64651bb86890",
-    "SemanticCatalogIdentity": "3404567f135dc555f20cd81c660cbe37da9f6a16e54592b60fc12708f9cea497",
-    "ImplementationClosureHashSet": "e1f7aa9318e4d7c8d617933475b584bde6e37ad55ed1ef2dec074e0f9d6a9cd5",
+    "RootRepoSHA": "{\"HEAD\":\"a07ea23020f86f4a63f50f67ec5b0ae1023b5b22\",\"cached_diff_hash\":\"af5570f5a1810b7af78caf4bc70a660f0df51e42baf91d4de5b2328de0e83dfc\",\"diff_hash\":\"2439ade788743a2bc3dc934ba490165967edd87e6294ace4d570058b8b5be954\",\"dirty\":true,\"identity_hash\":\"40e68113a900a66f7f87d5ddd1a67a5b47680890b09f224144981b1501705840\",\"untracked_source_hash\":\"89a46293006337020a2a5fab3ef25859827747da5bd41d4664236479e7bedb2f\"}",
+    "SourceTreeIdentity": "{\"HEAD\":\"a07ea23020f86f4a63f50f67ec5b0ae1023b5b22\",\"cached_diff_hash\":\"af5570f5a1810b7af78caf4bc70a660f0df51e42baf91d4de5b2328de0e83dfc\",\"diff_hash\":\"2439ade788743a2bc3dc934ba490165967edd87e6294ace4d570058b8b5be954\",\"dirty\":true,\"identity_hash\":\"40e68113a900a66f7f87d5ddd1a67a5b47680890b09f224144981b1501705840\",\"untracked_source_hash\":\"89a46293006337020a2a5fab3ef25859827747da5bd41d4664236479e7bedb2f\"}",
+    "PlatformSourceTreeIdentity": "904b3d74b35e6063bbc680849de770712438d081dcee1eeda83cf85181b2f1a1",
+    "AlphaGeneratorIdentity": "5b239291ea977e1d3e6d9dace5cbb91dbd55d09ddd3e71b85001c10936fadb4d",
+    "EvidenceAttestationIdentity": "47d77b0737b0870e8b17ac1ee74937adff4b0b93938db7f31a668999c459afcf",
+    "OperatorCatalogSHA": "3d5b77e1d2bce6bf1adbaaa36679fd10c65834d44ac5fc64bd14e984aefe4dfc",
+    "SemanticCatalogIdentity": "12c797030a8c5dcaa5449c141cbc8ecaca9c867db3ccec7081efa1d97b3024bb",
+    "ImplementationClosureHashSet": "226ed42882701f7fb485c097bddb4e15e07e8cc1398f1606272461349cda2b8f",
     "DependencyLockHash": "c64a63ae28873dbe7fdcd907c689037cc552309c40ba0698de46d12268f55813",
-    "TestEnvironmentIdentity": "c44855e75e0cc40950503af234d9222159ed9dacdcacf1232fa8140b072a03b7"
+    "TestEnvironmentIdentity": "839409ec5d3b9e7fc7efb91b47b6fde90ecaf9d4ea68eb6a64b7eb89671448fb"
   },
+  "source_tree_identity": "904b3d74b35e6063bbc680849de770712438d081dcee1eeda83cf85181b2f1a1",
   "sha_binding_metadata": {
     "OperatorCatalogPath": "build/mining/direct_mining_catalog.json",
     "DependencyLockPath": "requirements-production.lock",
-    "OperatorCatalogCount": 1671,
+    "OperatorCatalogCount": 1674,
     "gitlink_count": 1,
     "platform_packages": [
       "alphaprobe",
@@ -33,28 +34,73 @@
   "artifacts": {
     "operator-benchmark-manifest": {
       "artifact_id": "operator-benchmark-manifest",
-      "status": "CURRENT",
-      "details": "All inputs unchanged",
-      "stale_inputs": []
+      "status": "STALE",
+      "details": "no executed_at (artifact was not produced by an actual verification run)",
+      "stale_inputs": [
+        "no executed_at (artifact was not produced by an actual verification run)"
+      ],
+      "bound_input_identity": {
+        "source_snapshot_id": "src:v1:rn"
+      }
     },
     "operator-certification": {
       "artifact_id": "operator-certification",
-      "status": "CURRENT",
-      "details": "All inputs unchanged",
-      "stale_inputs": []
+      "status": "STALE",
+      "details": "no executed_at (artifact was not produced by an actual verification run)",
+      "stale_inputs": [
+        "no executed_at (artifact was not produced by an actual verification run)"
+      ],
+      "bound_input_identity": {
+        "source_snapshot_id": "src:v1:rn"
+      }
     },
     "operator-inventory": {
       "artifact_id": "operator-inventory",
-      "status": "CURRENT",
-      "details": "All inputs unchanged",
-      "stale_inputs": []
+      "status": "STALE",
+      "details": "no executed_at (artifact was not produced by an actual verification run)",
+      "stale_inputs": [
+        "no executed_at (artifact was not produced by an actual verification run)"
+      ],
+      "bound_input_identity": {
+        "source_snapshot_id": "src:v1:rn"
+      }
     }
   },
   "summary": {
     "total": 3,
-    "current": 3,
-    "stale": 0,
+    "current": 0,
+    "stale": 3,
     "failed": 0,
     "not_run": 0
+  },
+  "validator": {
+    "module": "evidence.current",
+    "id": "R22-CURRENT-TRUTH",
+    "rebind_command": "python -m evidence.current --write",
+    "staleness_rule": "An artifact is CURRENT only when its BOUND input identity (source_snapshot_id + ImplementationClosureHashSet + SemanticCatalogIdentity at the time it was built) equals the freshly recomputed live identity AND the artifact was produced by an actual verification run (executed_at present).  Any difference -> STALE.  Unresolvable source snapshot -> UNRESOLVED (fail-closed)."
+  },
+  "dimensions": {
+    "build_health": "CURRENT",
+    "runtime_health": "CURRENT",
+    "research_validity": "STALE",
+    "release_validity": "STALE",
+    "production_readiness": "STALE"
+  },
+  "evaluation": {
+    "staleness_evaluated_at": "2026-09-03T21:42:37.406554+00:00",
+    "status": "STALE",
+    "changed_artifacts": [
+      "operator-benchmark-manifest",
+      "operator-certification",
+      "operator-inventory"
+    ],
+    "note": "status is CURRENT only when every artifact's BOUND input identity matches the LIVE identity set AND the artifact has an executed_at from a real verification run.",
+    "dimensions": {
+      "build_health": "CURRENT",
+      "runtime_health": "CURRENT",
+      "research_validity": "STALE",
+      "release_validity": "STALE",
+      "production_readiness": "STALE"
+    }
   }
 }

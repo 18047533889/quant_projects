@@ -14,7 +14,7 @@ import pytest
 from factor_engine.cleaned_operators.intraday import perf_vec_equiv as pve
 
 
-@pytest.mark.parametrize("case", range(6))
+@pytest.mark.parametrize("case", range(len(pve.run_all(verbose=False))))
 def test_intra_vec_equiv(case: int) -> None:
     results = pve.run_all(verbose=False)
     label, msg = results[case]

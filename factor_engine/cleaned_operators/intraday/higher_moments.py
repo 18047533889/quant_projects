@@ -15,6 +15,7 @@ import numpy as np
 from factor_engine.cleaned_operators.base import register_operator
 from factor_engine.cleaned_operators.intraday._core import (
     _EPS,
+    _REALIZED_MIN_RETURNS,
     SessionAggregationOperator,
     daily_agg,
     log_returns,
@@ -30,7 +31,8 @@ _CANONICALS: list[str] = []
 # realized skewness / kurtosis estimate is emitted.  30 returns == at least 31
 # closes; below that the sample is too degenerate to identify a third/fourth
 # moment (n=1 trivially yields +/-1 skewness and 1.0 kurtosis, n=2 is noise).
-_REALIZED_MIN_RETURNS = 30
+# Single-source constant lives in ``_core._REALIZED_MIN_RETURNS`` (shared with
+# the PERF-2 vector kernels).
 
 
 def _realized_var(r: np.ndarray) -> float:
@@ -96,7 +98,7 @@ def _jump_mask(r: np.ndarray, threshold_scale: float) -> np.ndarray:
 # ---------------------------------------------------------------------------
 
 
-def _realized_skewness(close_v: np.ndarray) -> float:
+def _realized_skewness(close_v: np.ndarray, times: np.ndarray | None = None) -> float:
     r = log_returns(close_v)
     n = int(np.sum(np.isfinite(r)))
     # P0-09: a degenerate (n<30) sample must not emit a spurious moment; n=1
@@ -124,10 +126,10 @@ class IntraRealizedSkewness(SessionAggregationOperator):
     metadata = metadata("intra_realized_skewness", "日内已实现偏度 RSK。", ["close"], unit="level")
 
     def _calculate_series(self, close, **_):
-        return daily_agg(close, lambda v, t: _realized_skewness(v))
+        return daily_agg(close, _realized_skewness)  # raw kernel: carries __vec__ (PERF-2)
 
 
-def _realized_kurtosis(close_v: np.ndarray) -> float:
+def _realized_kurtosis(close_v: np.ndarray, times: np.ndarray | None = None) -> float:
     r = log_returns(close_v)
     n = int(np.sum(np.isfinite(r)))
     # P0-09: same degenerate-sample guard as skewness (n=1 kurtosis is trivially
@@ -155,10 +157,10 @@ class IntraRealizedKurtosis(SessionAggregationOperator):
     metadata = metadata("intra_realized_kurtosis", "日内已实现峰度 RKT。", ["close"], unit="level")
 
     def _calculate_series(self, close, **_):
-        return daily_agg(close, lambda v, t: _realized_kurtosis(v))
+        return daily_agg(close, _realized_kurtosis)  # raw kernel: carries __vec__ (PERF-2)
 
 
-def _realized_quarticity(close_v: np.ndarray) -> float:
+def _realized_quarticity(close_v: np.ndarray, times: np.ndarray | None = None) -> float:
     r = log_returns(close_v)
     n = int(np.sum(np.isfinite(r)))
     if n < 2:
@@ -180,10 +182,10 @@ class IntraRealizedQuarticity(SessionAggregationOperator):
     metadata = metadata("intra_realized_quarticity", "日内已实现四次变差。", ["close"], unit="quarticity")
 
     def _calculate_series(self, close, **_):
-        return daily_agg(close, lambda v, t: _realized_quarticity(v))
+        return daily_agg(close, _realized_quarticity)  # raw kernel: carries __vec__ (PERF-2)
 
 
-def _tripower_quarticity(close_v: np.ndarray) -> float:
+def _tripower_quarticity(close_v: np.ndarray, times: np.ndarray | None = None) -> float:
     r = log_returns(close_v)
     # P1-100: same slot-axis rule as bipower — a triple product is only
     # admissible across three *adjacent* minute slots, all present.  Compressing
@@ -217,7 +219,7 @@ class IntraTripowerQuarticity(SessionAggregationOperator):
     metadata = metadata("intra_tripower_quarticity", "Tripower quarticity 估计。", ["close"], unit="quarticity")
 
     def _calculate_series(self, close, **_):
-        return daily_agg(close, lambda v, t: _tripower_quarticity(v))
+        return daily_agg(close, _tripower_quarticity)  # raw kernel: carries __vec__ (PERF-2)
 
 
 # ---------------------------------------------------------------------------
@@ -235,6 +237,18 @@ def _continuous_and_jump(close_v: np.ndarray) -> tuple[float, float]:
     return cont, jump
 
 
+def _continuous_variance(close_v: np.ndarray, times: np.ndarray | None = None) -> float:
+    """Continuous-variance component min(RV, BV); carries ``__vec__`` (PERF-2)."""
+    c, _j = _continuous_and_jump(close_v)
+    return c
+
+
+def _jump_variation(close_v: np.ndarray, times: np.ndarray | None = None) -> float:
+    """Jump-variation component max(RV-BV, 0); carries ``__vec__`` (PERF-2)."""
+    _c, j = _continuous_and_jump(close_v)
+    return j
+
+
 @register_operator(
     name="intra_continuous_variance",
     category="intraday_microstructure",
@@ -249,11 +263,7 @@ class IntraContinuousVariance(SessionAggregationOperator):
     metadata = metadata("intra_continuous_variance", "日内连续方差分量 min(RV,BV)。", ["close"], unit="variance")
 
     def _calculate_series(self, close, **_):
-        def _fn(v, t):
-            c, _j = _continuous_and_jump(v)
-            return c
-
-        return daily_agg(close, _fn)
+        return daily_agg(close, _continuous_variance)  # raw kernel: carries __vec__ (PERF-2)
 
 
 @register_operator(
@@ -270,11 +280,7 @@ class IntraJumpVariation(SessionAggregationOperator):
     metadata = metadata("intra_jump_variation", "日内跳跃方差分量 max(RV-BV,0)。", ["close"], unit="variance")
 
     def _calculate_series(self, close, **_):
-        def _fn(v, t):
-            c, j = _continuous_and_jump(v)
-            return j
-
-        return daily_agg(close, _fn)
+        return daily_agg(close, _jump_variation)  # raw kernel: carries __vec__ (PERF-2)
 
 
 def _signed_jump_stats(close_v: np.ndarray, threshold_scale: float) -> tuple[float, float, float, float, float, float, float]:

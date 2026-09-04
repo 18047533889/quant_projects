@@ -108,23 +108,28 @@ class TestCertTechnicalSignalBaseline:
             )
 
     def test_stale_evidence_artifact_is_blocker(self):
-        """Confirm the evidence artifact is stale (root cause)."""
+        """Confirm the evidence artifact is now valid after re-certification.
+
+        R23 P1 certification sprint: certify_factor_operator_evidence.py was
+        re-run (2026-09-04).  The artifact is now fresh — bound to current HEAD,
+        hashes re-derived, pandas-reference operators certified.  The previous
+        "stale blocker" that kept every technical_signal canonical experimental
+        is resolved.  ``backend_meta.production_certified`` is True for all 46;
+        top-level ``production_certified`` stays False only because the
+        independent semantic_golden / source_contract gates have no dedicated
+        payload record yet (P0-18 fail-closed), which is the honest remaining
+        gap before these can claim full six-gate production.
+        """
         from factor_engine.backend.factor_operator_evidence import (
             factor_operator_evidence_valid,
             validation_errors,
         )
         valid = factor_operator_evidence_valid()
         errs = validation_errors()
-        assert not valid, (
-            "Evidence artifact should be stale (test environment). "
-            f"If it's valid now, the certification sprint can proceed. Errors: {errs}"
-        )
-        assert any("hashes are stale" in e for e in errs), (
-            f"Expected stale-hash error, got: {errs}"
-        )
+        assert valid, f"Evidence artifact should be valid after re-certification. Errors: {errs}"
 
     def test_evidence_artifact_commit_mismatch(self):
-        """The evidence artifact commit does not match current HEAD."""
+        """The evidence artifact commit now matches current HEAD."""
         import json
         artifact = json.load(open("evidence/factor_operator_verified.json"))
         recorded_commit = artifact.get("commit_sha", "")
@@ -133,7 +138,7 @@ class TestCertTechnicalSignalBaseline:
             subprocess.check_output(["git", "rev-parse", "HEAD"])
             .decode().strip()
         )
-        assert recorded_commit != current_head, (
-            f"Evidence artifact commit {recorded_commit} matches HEAD — "
-            "evidence may be valid. If so, the certification blocker is resolved."
+        assert recorded_commit == current_head, (
+            f"Evidence artifact commit {recorded_commit} does not match HEAD "
+            f"{current_head} — the certifier must be re-run to bind it."
         )

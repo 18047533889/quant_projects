@@ -1,5 +1,21 @@
 from __future__ import annotations
 
+import copy
+from types import MappingProxyType
+
+
+def _mutable_deepcopy(x):
+    """Recursively defrost the frozen catalog (R40 #208 nested MappingProxyType)
+    into a plain mutable dict so a test can safely stage production-state edits
+    on a throwaway copy instead of mutating the live frozen catalog."""
+    if isinstance(x, MappingProxyType):
+        return _mutable_deepcopy(dict(x))
+    if isinstance(x, dict):
+        return {k: _mutable_deepcopy(v) for k, v in x.items()}
+    if isinstance(x, list):
+        return [_mutable_deepcopy(v) for v in x]
+    return x
+
 
 def test_segmented_execution_set_matches_runtime_restore_implementations():
     """Every advertised segmented operator must have a real checkpoint-restore
@@ -51,8 +67,11 @@ def test_segmented_execution_set_matches_runtime_restore_implementations():
         )
         catalog = OperatorRegistry.catalog()[canonical]
         assert catalog["segmented_execution_supported"] is True, canonical
-        pandas_meta = catalog["backend_meta"]["pandas_numpy"]
-        assert pandas_meta["supports_streaming"] is True, canonical
+        # ts_ewm_cov/ts_ewm_corr are polars-only pairwise canonicals (no pandas_numpy
+        # reference backend), so they carry no pandas streaming flag; every op that
+        # HAS a pandas_numpy backend must advertise pandas streaming to be segmented.
+        if "pandas_numpy" in catalog["backends"]:
+            assert catalog["backend_meta"]["pandas_numpy"]["supports_streaming"] is True, canonical
         assert catalog["checkpoint_contract"]["segmented_execution_supported"] is True, canonical
 
 
@@ -90,17 +109,29 @@ def test_pandas_production_status_does_not_fall_back_to_lifecycle_label(monkeypa
 
     load_all()
     canonical = "KAMA"
-    catalog = OperatorRegistry._catalog[canonical]
-    meta = catalog.setdefault("backend_meta", {}).setdefault("pandas_numpy", {})
+    # The frozen catalog (R40 #208) is read-only on purpose: a capability
+    # contract read must never see a test's staged production-state edits leak
+    # into the live registry.  Stage on a mutable deepcopy and monkeypatch the
+    # registry reference inside the module under test for the duration only.
+    live_catalog = dict(OperatorRegistry._catalog)
+    canned = OperatorRegistry._catalog[canonical]
+    # ``canned`` (and everything nested) is a frozen MappingProxyType, so stage a
+    # mutable copy of just the pandas_numpy backend_meta entry we need to mutate.
+    backend_meta = _mutable_deepcopy(canned.get("backend_meta", {}))
+    meta = backend_meta.get("pandas_numpy", {})
+    patched_catalog = dict(live_catalog)
+    patched_catalog[canonical] = _mutable_deepcopy(canned)
+    patched_catalog[canonical]["backend_meta"]["pandas_numpy"] = meta
     original_certified = meta.get("production_certified")
     original_source = meta.get("certification_source")
     try:
-        catalog["status"] = "production"
+        patched_catalog[canonical]["status"] = "production"
         meta["production_certified"] = False
         meta["certification_source"] = None
         monkeypatch.setattr(
             provenance, "evidence_artifact_valid", lambda *args, **kwargs: False
         )
+        monkeypatch.setattr(OperatorRegistry, "_catalog", patched_catalog)
         assert capability._pandas_status(canonical) == "implemented"
         assert capability.production_eligible_backends(canonical) == ()
     finally:

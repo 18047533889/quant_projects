@@ -19,6 +19,7 @@ import pandas as pd
 
 from factor_engine.cleaned_operators.intraday import _core
 from factor_engine.cleaned_operators.intraday import perf_vec_kernels as pvk
+from factor_engine.cleaned_operators.intraday import higher_moments as hm
 from factor_engine.cleaned_operators.intraday import smart_money as sm
 from factor_engine.cleaned_operators.intraday import true_gap_batch3 as tg
 from factor_engine.cleaned_operators.intraday import vwap_path as vp
@@ -29,7 +30,11 @@ from factor_engine.cleaned_operators.intraday import vwap_path as vp
 # (100k GO §6.3 telemetry: intraday_vector_kernels_bound).
 _BOUND = [tg._session_mean_reversion_kernel, tg._price_delay_kernel,
           tg._volume_imbalance_kernel, sm._stock_graph_features,
-          sm._common_trading_intensity, vp._time_above_vwap]
+          sm._common_trading_intensity, vp._time_above_vwap,
+          vp._vwap_reversion_speed,
+          hm._realized_skewness, hm._realized_kurtosis,
+          hm._realized_quarticity, hm._tripower_quarticity,
+          hm._continuous_variance, hm._jump_variation]
 
 
 def _session_minutes(days: int = 3, start: str = "2024-01-02") -> pd.DatetimeIndex:
@@ -90,23 +95,36 @@ def _eq(a: pd.DataFrame, b: pd.DataFrame) -> str:
 
 
 def _scalar(fn, *frames, min_finite=2):
-    """Run daily_agg{,_two} with all vec kernels unbound (pure scalar).
+    """Run daily_agg{,_two,_three} with all vec kernels unbound (pure scalar).
 
     PERF-2 bench fix (100k GO §6.2): pass ``fn`` DIRECTLY, never wrapped in a
     lambda — a lambda has no ``__vec__`` attribute, so a wrapped call can never
     take the vector path and a "vector" benchmark would silently time the
-    scalar path.  The scalar path is instead forced by unbinding the kernels
-    (above), which is the only honest way to reach it.
+    scalar path.  The scalar path is instead forced by unbinding the module
+    kernels AND temporarily masking ``fn``'s own ``__vec__`` (restored before
+    return so the later vector leg still works).
     """
     for f in [tg._session_mean_reversion_kernel, tg._price_delay_kernel, tg._volume_imbalance_kernel,
-              sm._stock_graph_features, sm._common_trading_intensity, vp._time_above_vwap]:
+              sm._stock_graph_features, sm._common_trading_intensity, vp._time_above_vwap,
+              vp._vwap_reversion_speed,
+              hm._realized_skewness, hm._realized_kurtosis, hm._realized_quarticity,
+              hm._tripower_quarticity, hm._continuous_variance, hm._jump_variation]:
         if hasattr(f, "__vec__"):
             del f.__vec__
-    if len(frames) == 1:
-        return _core.daily_agg(frames[0], fn, min_finite=min_finite)
-    if len(frames) == 2:
-        return _core.daily_agg_two(frames[0], frames[1], fn, min_finite=min_finite)
-    return _core.daily_agg_three(frames[0], frames[1], frames[2], fn, min_finite=min_finite)
+    saved_vec = getattr(fn, "__vec__", None)
+    if hasattr(fn, "__vec__"):
+        del fn.__vec__
+    try:
+        if len(frames) == 1:
+            res = _core.daily_agg(frames[0], fn, min_finite=min_finite)
+        elif len(frames) == 2:
+            res = _core.daily_agg_two(frames[0], frames[1], fn, min_finite=min_finite)
+        else:
+            res = _core.daily_agg_three(frames[0], frames[1], frames[2], fn, min_finite=min_finite)
+    finally:
+        if saved_vec is not None:
+            fn.__vec__ = saved_vec  # type: ignore[attr-defined]
+    return res
 
 
 def _vec(fn, *frames, min_finite=2):
@@ -122,7 +140,23 @@ def _vec(fn, *frames, min_finite=2):
     return _core.daily_agg_three(frames[0], frames[1], frames[2], fn, min_finite=min_finite)
 
 
-# (kernel, frames-builder, min_finite, label)
+# Reuse one day/bar/inst grid per parametric kernel so the vector vs scalar
+# comparison shares the same NaN pattern.  Each is
+# ``(kernel closure, kind, min_finite, label, frames)``.
+def _mk_three(kernel, label, mf=4):
+    a = _inject_nan(_base_panel(days=4, seed=42), seed=7, gap_frac=0.15, blank_day=2)
+    b = _inject_nan(_amount_panel(a, seed=44), seed=8, gap_frac=0.15, blank_day=2)
+    c = _inject_nan(_volume_panel(a, seed=43), seed=9, gap_frac=0.15, blank_day=2)
+    return (kernel, "three", mf, label, (a, b, c))
+
+
+def _mk_one_dd(kernel, label, mf=2):
+    a = _inject_nan(_base_panel(days=4, seed=42), seed=7, gap_frac=0.15, blank_day=2)
+    return (kernel, "one", mf, label, (a,))
+
+
+# (kernel, kind, min_finite, label) for the existing whitelisted kernels; the
+# parametric vwap-path / excursion / streak / drawdown kernels reuse one grid.
 _CASES = [
     (tg._session_mean_reversion_kernel, "one", 5, "session_mean_reversion"),
     (tg._price_delay_kernel, "two", 5, "price_delay"),
@@ -130,31 +164,60 @@ _CASES = [
     (sm._stock_graph_features, "one", 5, "dynamic_stock_graph_features"),
     (sm._common_trading_intensity, "two", 3, "common_trading_intensity"),
     (vp._time_above_vwap, "three", 4, "time_above_vwap"),
+    (vp._vwap_reversion_speed, "three", 4, "vwap_reversion_speed"),
+    (hm._realized_skewness, "one", 2, "realized_skewness"),
+    (hm._realized_kurtosis, "one", 2, "realized_kurtosis"),
+    (hm._realized_quarticity, "one", 2, "realized_quarticity"),
+    (hm._tripower_quarticity, "one", 2, "tripower_quarticity"),
+    (hm._continuous_variance, "one", 2, "continuous_variance"),
+    (hm._jump_variation, "one", 2, "jump_variation"),
+    _mk_three(vp.make_vwap_path(1, 1, False), "vwap_path_slope"),
+    _mk_three(vp.make_vwap_path(2, 2, False), "vwap_path_curvature"),
+    _mk_three(vp.make_vwap_path(1, 1, True), "vwap_path_slope_pct"),
+    _mk_three(vp.make_vwap_path(2, 2, True), "vwap_path_curvature_pct"),
+    _mk_three(vp.make_vwap_excursion("max"), "vwap_excursion_max"),
+    _mk_three(vp.make_vwap_excursion("min"), "vwap_excursion_min"),
+    _mk_three(vp.make_longest_streak("above"), "longest_above_vwap_streak"),
+    _mk_three(vp.make_longest_streak("below"), "longest_below_vwap_streak"),
+    _mk_one_dd(vp.make_max_drawdown("down"), "max_drawdown"),
+    _mk_one_dd(vp.make_max_drawdown("up"), "max_drawup"),
+    _mk_one_dd(vp.make_drawdown_metric("depth"), "drawdown_depth"),
+    _mk_one_dd(vp.make_drawdown_metric("duration"), "drawdown_duration"),
+    _mk_one_dd(vp.make_drawdown_metric("recovery"), "drawdown_recovery_half_life"),
 ]
 
 
 def run_all(verbose: bool = True) -> list[tuple[str, str]]:
-    """Run all whitelisted-kernel equivalence cases; returns [(label, msg)]."""
+    """Run all whitelisted-kernel equivalence cases; returns [(label, msg)].
+
+    Each case is ``(fn, kind, min_finite, label)`` or, for the pre-materialized
+    parametric kernels, ``(fn, kind, min_finite, label, frames)`` — the latter
+    reuse one day/bar/inst grid so the vector vs scalar comparison shares the
+    same NaN pattern.
+    """
     results = []
     pvk.bind_whitelist()
     assert pvk.count_bound() == len(_BOUND), (
         "PERF-2 coverage: expected %d bound kernels, got %d — a whitelisted "
         "scalar kernel silently lost its __vec__ bind" % (len(_BOUND), pvk.count_bound())
     )
-    for fn, kind, mf, label in _CASES:
-        # build fixtures
-        if kind == "one":
-            a = _inject_nan(_base_panel(days=4, seed=42), seed=7, gap_frac=0.15, blank_day=2)
-            frames = (a,)
-        elif kind == "three":
-            a = _inject_nan(_base_panel(days=4, seed=42), seed=7, gap_frac=0.15, blank_day=2)
-            b = _inject_nan(_amount_panel(a, seed=44), seed=8, gap_frac=0.15, blank_day=2)
-            c = _inject_nan(_volume_panel(a, seed=43), seed=9, gap_frac=0.15, blank_day=2)
-            frames = (a, b, c)
+    for case in _CASES:
+        fn, kind, mf, label = case[:4]
+        if len(case) == 5:
+            frames = case[4]
         else:
-            a = _inject_nan(_base_panel(days=4, seed=42), seed=7, gap_frac=0.15, blank_day=2)
-            b = _inject_nan(_volume_panel(a, seed=43), seed=8, gap_frac=0.15, blank_day=2)
-            frames = (a, b)
+            if kind == "one":
+                a = _inject_nan(_base_panel(days=4, seed=42), seed=7, gap_frac=0.15, blank_day=2)
+                frames = (a,)
+            elif kind == "three":
+                a = _inject_nan(_base_panel(days=4, seed=42), seed=7, gap_frac=0.15, blank_day=2)
+                b = _inject_nan(_amount_panel(a, seed=44), seed=8, gap_frac=0.15, blank_day=2)
+                c = _inject_nan(_volume_panel(a, seed=43), seed=9, gap_frac=0.15, blank_day=2)
+                frames = (a, b, c)
+            else:
+                a = _inject_nan(_base_panel(days=4, seed=42), seed=7, gap_frac=0.15, blank_day=2)
+                b = _inject_nan(_volume_panel(a, seed=43), seed=8, gap_frac=0.15, blank_day=2)
+                frames = (a, b)
         ref = _scalar(fn, *frames, min_finite=mf)
         got = _vec(fn, *frames, min_finite=mf)
         msg = _eq(got, ref)

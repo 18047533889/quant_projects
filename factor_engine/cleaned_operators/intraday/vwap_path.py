@@ -13,6 +13,7 @@ import numpy as np
 import pandas as pd
 
 from factor_engine.cleaned_operators.base import SeriesOperator, register_operator
+from factor_engine.cleaned_operators.intraday import _core as _c
 from factor_engine.cleaned_operators.intraday._core import (
     _EPS,
     daily_agg,
@@ -90,7 +91,8 @@ class IntraVwapPathSlope(SeriesOperator):
     )
 
     def _calculate_series(self, close, amount, volume, **_):
-        return daily_agg_three(close, amount, volume, lambda a, b, c: _vwap_path_common(a, b, c, 1, 1))
+        # raw closure carries __vec__ (PERF-2): parameterized slope, degree=1.
+        return daily_agg_three(close, amount, volume, make_vwap_path(1, 1, False))
 
 
 @register_operator(
@@ -110,7 +112,8 @@ class IntraVwapPathCurvature(SeriesOperator):
     )
 
     def _calculate_series(self, close, amount, volume, **_):
-        return daily_agg_three(close, amount, volume, lambda a, b, c: _vwap_path_common(a, b, c, 2, 2))
+        # raw closure carries __vec__ (PERF-2): parameterized curvature, degree=2.
+        return daily_agg_three(close, amount, volume, make_vwap_path(2, 2, False))
 
 
 def _vwap_path_pct_common(close_v, amt_v, vol_v, degree: int, coeff_idx: int) -> float:
@@ -148,7 +151,8 @@ class IntraVwapPathSlopePct(SeriesOperator):
     metadata = metadata("intra_vwap_path_slope_pct", "VWAP 路径斜率（%首价）。", ["close", "amount", "volume"], unit="ratio")
 
     def _calculate_series(self, close, amount, volume, **_):
-        return daily_agg_three(close, amount, volume, lambda a, b, c: _vwap_path_pct_common(a, b, c, 1, 1))
+        # raw closure carries __vec__ (PERF-2): parameterized pct slope, degree=1.
+        return daily_agg_three(close, amount, volume, make_vwap_path(1, 1, True))
 
 
 @register_operator(
@@ -166,7 +170,8 @@ class IntraVwapPathCurvaturePct(SeriesOperator):
     metadata = metadata("intra_vwap_path_curvature_pct", "VWAP 路径曲率（%首价）。", ["close", "amount", "volume"], unit="ratio")
 
     def _calculate_series(self, close, amount, volume, **_):
-        return daily_agg_three(close, amount, volume, lambda a, b, c: _vwap_path_pct_common(a, b, c, 2, 2))
+        # raw closure carries __vec__ (PERF-2): parameterized pct curvature, degree=2.
+        return daily_agg_three(close, amount, volume, make_vwap_path(2, 2, True))
 
 
 def _vwap_excursion(close_v, amt_v, vol_v, side: str) -> float:
@@ -200,7 +205,8 @@ class IntraPriceVwapMaxPositiveExcursion(SeriesOperator):
     )
 
     def _calculate_series(self, close, amount, volume, **_):
-        return daily_agg_three(close, amount, volume, lambda a, b, c: _vwap_excursion(a, b, c, "max"))
+        # raw closure carries __vec__ (PERF-2): positive excursion.
+        return daily_agg_three(close, amount, volume, make_vwap_excursion("max"))
 
 
 @register_operator(
@@ -221,7 +227,8 @@ class IntraPriceVwapMaxNegativeExcursion(SeriesOperator):
     )
 
     def _calculate_series(self, close, amount, volume, **_):
-        return daily_agg_three(close, amount, volume, lambda a, b, c: _vwap_excursion(a, b, c, "min"))
+        # raw closure carries __vec__ (PERF-2): negative excursion.
+        return daily_agg_three(close, amount, volume, make_vwap_excursion("min"))
 
 
 def _time_above_vwap(close_v, amt_v, vol_v) -> float:
@@ -251,7 +258,81 @@ class IntraTimeAboveVwap(SeriesOperator):
     metadata = metadata("intra_time_above_vwap", "高于累计 VWAP 的分钟比例。", ["close", "amount", "volume"], unit="ratio")
 
     def _calculate_series(self, close, amount, volume, **_):
-        return daily_agg_three(close, amount, volume, lambda a, b, c: _time_above_vwap(a, b, c))
+        return daily_agg_three(close, amount, volume, _time_above_vwap)  # raw kernel: carries __vec__ (PERF-2)
+
+
+# ---------------------------------------------------------------------------
+# PERF-2 parametric kernels: each of the parameterized scalar kernels below is
+# exposed through a module-level closure factory so the operator's
+# ``_calculate_series`` can hand ``daily_agg*`` the raw closure that carries
+# ``__vec__`` (the dispatch fast path reads ``getattr(fn, "__vec__", None)``).
+# The vector implementations live in ``_core`` and are bound lazily by
+# ``perf_vec_kernels.bind_whitelist()`` at package import time.
+# ---------------------------------------------------------------------------
+
+def _vec_param(impl, **params):
+    fn = impl
+    def vecfn(*args, min_finite=2, _grid=None):
+        return fn(*args, min_finite=min_finite, _grid=_grid, **params)
+
+    vecfn.__doc__ = f"PERF-2 param vec({impl.__name__}, {params})"
+    return vecfn
+
+
+def make_vwap_path(degree: int, coeff_idx: int, pct: bool):
+    vec = _vec_param(_c._vec_vwap_path, degree=degree, coeff_idx=coeff_idx, pct=pct)
+
+    def scalar(a, b, c):
+        return (_vwap_path_pct_common if pct else _vwap_path_common)(a, b, c, degree, coeff_idx)
+
+    scalar.__vec__ = vec  # type: ignore[attr-defined]
+    return scalar
+
+
+def make_vwap_excursion(side: str):
+    vec = _vec_param(_c._vec_vwap_excursion, side=side)
+
+    def scalar(a, b, c):
+        return _vwap_excursion(a, b, c, side)
+
+    scalar.__vec__ = vec  # type: ignore[attr-defined]
+    return scalar
+
+
+def make_longest_streak(side: str):
+    vec = _vec_param(_c._vec_longest_streak, side=side)
+
+    def scalar(a, b, c):
+        return _longest_streak(a, b, c, side)
+
+    scalar.__vec__ = vec  # type: ignore[attr-defined]
+    return scalar
+
+
+# _vwap_reversion_speed and _time_above_vwap are non-parametric (unary side);
+# their scalar kernels already carry a __vec__ bind via the binder.
+def make_max_drawdown(side: str):
+    vec = _vec_param(_c._vec_max_drawdown, side=side)
+
+    def scalar(v, times):
+        return _max_drawdown(v, side)
+
+    scalar.__vec__ = vec  # type: ignore[attr-defined]
+    return scalar
+
+
+def make_drawdown_metric(metric: str):
+    vec = _vec_param(_c._vec_drawdown_metrics, metric=metric)
+
+    def scalar(v, times):
+        if metric == "depth":
+            return _drawdown_depth(v)
+        if metric == "duration":
+            return _drawdown_duration(v)
+        return _drawdown_recovery_half_life(v)
+
+    scalar.__vec__ = vec  # type: ignore[attr-defined]
+    return scalar
 
 
 def _longest_streak(close_v, amt_v, vol_v, side: str) -> float:
@@ -290,7 +371,8 @@ class IntraLongestAboveVwapStreak(SeriesOperator):
     )
 
     def _calculate_series(self, close, amount, volume, **_):
-        return daily_agg_three(close, amount, volume, lambda a, b, c: _longest_streak(a, b, c, "above"))
+        # raw closure carries __vec__ (PERF-2): above-vwap streak.
+        return daily_agg_three(close, amount, volume, make_longest_streak("above"))
 
 
 @register_operator(
@@ -310,7 +392,8 @@ class IntraLongestBelowVwapStreak(SeriesOperator):
     )
 
     def _calculate_series(self, close, amount, volume, **_):
-        return daily_agg_three(close, amount, volume, lambda a, b, c: _longest_streak(a, b, c, "below"))
+        # raw closure carries __vec__ (PERF-2): below-vwap streak.
+        return daily_agg_three(close, amount, volume, make_longest_streak("below"))
 
 
 def _vwap_reversion_speed(close_v, amt_v, vol_v) -> float:
@@ -346,7 +429,8 @@ class IntraVwapReversionSpeed(SeriesOperator):
     )
 
     def _calculate_series(self, close, amount, volume, **_):
-        return daily_agg_three(close, amount, volume, lambda a, b, c: _vwap_reversion_speed(a, b, c))
+        # raw kernel carries __vec__ (PERF-2).
+        return daily_agg_three(close, amount, volume, _vwap_reversion_speed)
 
 
 def _max_drawdown(close_v: np.ndarray, side: str) -> float:
@@ -378,7 +462,8 @@ class IntraMaxDrawdown(SeriesOperator):
     metadata = metadata("intra_max_drawdown", "日内最大回撤。", ["close"], unit="ratio")
 
     def _calculate_series(self, close, **_):
-        return daily_agg(close, lambda v, t: _max_drawdown(v, "down"))
+        # raw closure carries __vec__ (PERF-2): max drawdown (down = peak->trough).
+        return daily_agg(close, make_max_drawdown("down"))
 
 
 @register_operator(
@@ -396,7 +481,8 @@ class IntraMaxDrawup(SeriesOperator):
     metadata = metadata("intra_max_drawup", "日内最大上涨段。", ["close"], unit="ratio")
 
     def _calculate_series(self, close, **_):
-        return daily_agg(close, lambda v, t: _max_drawdown(v, "up"))
+        # raw closure carries __vec__ (PERF-2): max drawup (up = trough->peak).
+        return daily_agg(close, make_max_drawdown("up"))
 
 
 def _drawdown_locate(finite: np.ndarray) -> tuple[int, int]:
@@ -466,7 +552,8 @@ class IntraDrawdownDepth(SeriesOperator):
     metadata = metadata("intra_drawdown_depth", "最大回撤深度。", ["close"], unit="ratio")
 
     def _calculate_series(self, close, **_):
-        return daily_agg(close, lambda v, t: _drawdown_depth(v))
+        # raw closure carries __vec__ (PERF-2): drawdown depth.
+        return daily_agg(close, make_drawdown_metric("depth"))
 
 
 @register_operator(
@@ -484,7 +571,8 @@ class IntraDrawdownDuration(SeriesOperator):
     metadata = metadata("intra_drawdown_duration", "最大回撤持续期。", ["close"], unit="count")
 
     def _calculate_series(self, close, **_):
-        return daily_agg(close, lambda v, t: _drawdown_duration(v))
+        # raw closure carries __vec__ (PERF-2): drawdown duration (peak->trough).
+        return daily_agg(close, make_drawdown_metric("duration"))
 
 
 @register_operator(
@@ -502,7 +590,8 @@ class IntraDrawdownRecoveryHalfLife(SeriesOperator):
     metadata = metadata("intra_drawdown_recovery_half_life", "回撤半恢复期。", ["close"], unit="count")
 
     def _calculate_series(self, close, **_):
-        return daily_agg(close, lambda v, t: _drawdown_recovery_half_life(v))
+        # raw closure carries __vec__ (PERF-2): drawdown recovery half-life.
+        return daily_agg(close, make_drawdown_metric("recovery"))
 
 
 _CANONICALS.extend(

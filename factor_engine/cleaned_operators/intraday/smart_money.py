@@ -83,7 +83,7 @@ class IntraDynamicStockGraphFeatures(SessionAggregationOperator):
     )
 
     def _calculate_series(self, close, **_):
-        return daily_agg(close, lambda v, t: _stock_graph_features(v, t), min_finite=5)
+        return daily_agg(close, _stock_graph_features, min_finite=5)  # raw kernel: carries __vec__ (PERF-2)
 
 
 # ---------------------------------------------------------------------------
@@ -142,7 +142,9 @@ class IntraCommonTradingIntensity(SessionAggregationOperator):
     )
 
     def _calculate_series(self, volume, amount, **_):
-        return daily_agg_two(volume, amount, lambda v, a: _common_trading_intensity(v, a), min_finite=3)
+        return daily_agg_two(
+            volume, amount, _common_trading_intensity, min_finite=3
+        )  # raw kernel: carries __vec__ (PERF-2)
 
 
 # ---------------------------------------------------------------------------

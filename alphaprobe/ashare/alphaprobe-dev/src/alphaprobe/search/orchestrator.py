@@ -56,13 +56,21 @@ _ARM_BY_FAMILY: dict[str, Any] = {
 
 @dataclass
 class OrchestratorStep:
-    """单步结果：候选 + 该步 AttemptRecord + action + 模型路由。"""
+    """单步结果：候选 + 该步 AttemptRecord + action + 模型路由。
+
+    P0-B（delayed reward 闭环）：reward 来自评估闭环，不在生成时用
+    candidate 数充数。``pending_reward=True`` 表示该步尚未回传真实 reward，
+    待下游评估完成后用 ``SearchOrchestrator.settle_reward(step, reward)``
+    回填并更新 scheduler 统计。
+    """
 
     action: SearchAction
     model_class: str
     candidates: list[GeneratedCandidate] = field(default_factory=list)
     attempts: list[AttemptRecord] = field(default_factory=list)
     duplicates_filtered: int = 0
+    #: 尚未回传真实 reward（delayed reward 闭环的标记）
+    pending_reward: bool = True
 
 
 @dataclass
@@ -259,15 +267,50 @@ class SearchOrchestrator:
         parent_node: dict[str, Any],
         llm_fn: LLMFn | None,
         *,
-        reward: float = 0.0,
+        reward: float | None = None,
         dedup_client: Any | None = None,
     ) -> OrchestratorStep:
-        """step + 用 reward 更新 scheduler 统计（测试/闭环方便）。"""
+        """step + 可选更新 scheduler 统计（测试/闭环方便）。
+
+        Parameters
+        ----------
+        reward : float | None
+            - ``None``（默认）：**不更新 scheduler**，step 标记
+              ``pending_reward=True``，等下游评估完成后用 ``settle_reward``
+              回传真实 reward（delayed reward 闭环）。
+            - 显式 float（含 ``0.0``）：照常 ``scheduler.update`` 并标记
+              ``pending_reward=False``。
+
+        P0-B：reward **绝不**退化为 candidate 数——生成 10 个垃圾的 reward
+        不可能高于 2 个优质。reward 应来自评估闭环（公式参考）：
+        ``0.45×ΔFactorFitness + 0.30×ΔPoolUtility + 0.15×NoveltyGain
+        + 0.10×SchemaCoverageGain − 成本项``。
+        """
         result = self.step(parent_node, llm_fn, dedup_client=dedup_client)
+        if reward is None:
+            # delayed reward：等 settle_reward 回传，暂不更新 scheduler
+            result.pending_reward = True
+            return result
         self.scheduler.update(
-            result.action.action_type.value, reward=reward or float(len(result.candidates))
+            result.action.action_type.value, reward=float(reward)
         )
+        result.pending_reward = False
         return result
+
+    def settle_reward(self, step: OrchestratorStep, reward: float) -> None:
+        """用真实 reward（评估闭环产出）回填一步并更新 scheduler 统计。
+
+        - 必须在 ``step_with_llm`` 返回后调用（等价于当时显式传 reward）；
+        - 重复调用同一 step 会再次 ``scheduler.update``（调用方应只 settle 一次，
+          或按调用方自身幂等语义处理）；
+        - 若该 step 已用显式 reward 更新过（``pending_reward=False``），再
+          settle 会重复计——调用方负责只对 ``pending_reward=True`` 的 step
+          settle。
+        """
+        self.scheduler.update(
+            step.action.action_type.value, reward=float(reward)
+        )
+        step.pending_reward = False
 
     # ------------------------------------------------------------------
     # 内部

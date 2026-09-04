@@ -26,6 +26,11 @@ import pandas as pd
 from factor_engine.cleaned_operators.base import OperatorMetadata, SeriesOperator
 
 _EPS = 1e-12
+# P0-09: minimum number of finite within-session returns required before a
+# realized skewness / kurtosis estimate is emitted.  30 returns == at least 31
+# closes; below that the sample is too degenerate to identify a third/fourth
+# moment (n=1 trivially yields +/-1 skewness and 1.0 kurtosis, n=2 is noise).
+_REALIZED_MIN_RETURNS = 30
 _SESSION_TZ = "Asia/Shanghai"
 _MORNING = (570, 690)   # 09:30 .. 11:30 minute-of-day
 _AFTERNOON = (780, 900)  # 13:00 .. 15:00 minute-of-day
@@ -291,6 +296,8 @@ def daily_agg(
     _fast = _vec_daily_agg(frame, fn, min_finite=min_finite, _grid=_grid)
     if _fast is not None:
         return _fast
+    import factor_engine.cleaned_operators.intraday.perf_vec_telemetry as _pvt
+    _pvt.increment_scalar_fallback()
     out: dict[str, pd.Series] = {}
     for inst in frame.columns:
         col = frame[inst]
@@ -342,6 +349,8 @@ def daily_agg_two(
     _fast = _vec_daily_agg_two(frame_a, frame_b, fn, min_finite=min_finite, _grid=_grid)
     if _fast is not None:
         return _fast
+    import factor_engine.cleaned_operators.intraday.perf_vec_telemetry as _pvt
+    _pvt.increment_scalar_fallback()
     fn2 = fn
     import inspect as _inspect
 
@@ -396,6 +405,8 @@ def daily_agg_three(
     _fast = _vec_daily_agg_three(frame_a, frame_b, frame_c, fn, min_finite=min_finite, _grid=_grid)
     if _fast is not None:
         return _fast
+    import factor_engine.cleaned_operators.intraday.perf_vec_telemetry as _pvt
+    _pvt.increment_scalar_fallback()
     out: dict[str, pd.Series] = {}
     for inst in frame_a.columns:
         joined = pd.concat(
@@ -998,6 +1009,472 @@ def _vec_time_above_vwap(
     return _vec_result_df(r, uniq, a.columns)
 
 
+def _param_vec(impl, **params):
+    """Wrap a parameterized 3-D vector kernel into a dispatch callable.
+
+    ``daily_agg{,_two,_three}`` dispatch hooks call ``fnv(*frames, min_finite=..,
+    _grid=..)``.  Parameterized kernels (VWAP-path slope/curvature, excursion,
+    streak, drawdown side/metric) share one vector implementation in ``_core``
+    distinguished by extra parameters (degree / coeff_idx / pct / side / metric).
+    This factory closes over those parameters and produces a callable with the
+    exact dispatch signature so it can serve as ``__vec__`` on a scalar kernel.
+    """
+    def vecfn(*args, min_finite: int = 2, _grid: tuple | None = None):
+        return impl(*args, min_finite=min_finite, _grid=_grid, **params)
+
+    vecfn.__name__ = f"_vec_param({impl.__name__})"
+    return vecfn
+
+
+def _vec_cum_vwap(g, gb, gc):
+    """(D,B,C) order-preserving packed cum-VWAP over the valid finite prefix.
+
+    Mirrors ``vwap_path._vwap_valid`` + ``_cum_vwap``: the three series are
+    masked by a *common* finite & volume>0 mask (so price / amount / volume stay
+    aligned), finite bars are packed to the front in original bar order, and the
+    cumulative price-weighted amount over volume is assembled over that packed
+    prefix only (the zero-padded tail is neutral for cumsums).
+    """
+    fin = np.isfinite(g) & np.isfinite(gb) & np.isfinite(gc) & (gc > 0)
+    cnt = np.sum(fin, axis=1)  # (D, C) finite count per (day, inst)
+    px = np.where(fin, g, 0.0)
+    am = np.where(fin, gb, 0.0)
+    vo = np.where(fin, gc, 0.0)
+    order = np.argsort(~fin, axis=1, kind="stable")  # order-preserving pack
+    pp = np.take_along_axis(px, order, axis=1)
+    pa = np.take_along_axis(am, order, axis=1)
+    pv = np.take_along_axis(vo, order, axis=1)
+    max_cnt = int(cnt.max()) if cnt.size and cnt.max() > 0 else 1
+    ar = np.arange(max_cnt)[None, :, None]
+    mask = ar < cnt[:, None, :]  # (D, max_cnt, C) finite membership
+    pp = pp[:, :max_cnt, :]; pa = pa[:, :max_cnt, :]; pv = pv[:, :max_cnt, :]
+    cm = np.cumsum(np.where(mask, pv, 0.0), axis=1)
+    ca = np.cumsum(np.where(mask, pa, 0.0), axis=1)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        cum_vwap = np.where(cm > _EPS, ca / np.maximum(cm, _EPS), np.nan)
+    return fin, cnt, mask, pp, cum_vwap
+
+
+def _vec_vwap_path(
+    a, b, c, *, min_finite: int = 2, _grid: tuple | None = None,
+    degree: int = 1, coeff_idx: int = 1, pct: bool = False,
+) -> pd.DataFrame:
+    """Vector intra_vwap_path_slope / _curvature [and _pct] (cum-VWAP path fit).
+
+    Scalar kernel (``vwap_path._vwap_path_common`` / ``_pct_common``): pack the
+    common finite/vol>0 mask, build cumulative VWAP over the packed prefix, and
+    least-squares fit the (degree)-order polynomial in normalized time
+    ``t=linspace(0,1,n)``; return the ``coeff_idx``-th coefficient.  ``n <
+    degree+2 -> NaN``.  The ``_pct`` family fits ``cum_vwap/first_price - 1``
+    and gates on ``first <= _EPS``.
+
+    Vectorization: per (day,inst) the packed cum-VWAP prefix is exactly the
+    scalar's ``y``.  Because ``t`` depends only on the count ``n``, cells sharing
+    the same count share one Vandermonde; the normal-equations solve per count
+    group reproduces scalar ``np.linalg.lstsq(rcond=None)`` to ~1e-15.
+    """
+    if _grid is None:
+        g, gb, gc, codes, uniq, active, filled = _grid3(a, b, c)
+    else:
+        g, gb, gc, codes, uniq, active, filled = _grid
+    n = g.shape[0]; S = g.shape[2]
+    fin, cnt, mask, pp, cum_vwap = _vec_cum_vwap(g, gb, gc)
+    needed = degree + 2  # scalar: ``n < degree + 2 -> NaN``
+    res = np.full((n, S), np.nan)
+    sel_base = cnt >= needed
+    if pct:
+        first = pp[:, 0, :]  # first packed close == scalar ``c[0]``
+        sel_base = sel_base & np.isfinite(first) & (first > _EPS)
+    prefix = cum_vwap[:, :, :]
+    if pct:
+        with np.errstate(divide="ignore", invalid="ignore"):
+            prefix = np.where(mask, prefix / np.maximum(first[:, None, :], _EPS) - 1.0, np.nan)
+    p = degree + 1
+    for gcnt in np.unique(cnt[sel_base]):
+        gcnt = int(gcnt)
+        sel = sel_base & (cnt == gcnt)
+        d_i, c_i = np.where(sel)
+        if d_i.size == 0:
+            continue
+        t = np.linspace(0.0, 1.0, gcnt)
+        Pd = np.column_stack([t ** k for k in range(p)])  # (gcnt, p)
+        # Stable least squares via QR; matches np.linalg.lstsq (SVD/QR-based)
+        # far more closely than the normal equations when the Vandermonde is
+        # ill-conditioned (gcnt near degree+1, tiny curvature coefficients).
+        Qd, Rd = np.linalg.qr(Pd)
+        Y = prefix[:, :gcnt, :][d_i, :, c_i]  # (Nsel, gcnt)
+        with np.errstate(invalid="ignore", divide="ignore", over="ignore"):
+            beta = np.linalg.solve(Rd, (Qd.T @ Y.T))  # (p, Nsel)
+        res[d_i, c_i] = beta[coeff_idx, :d_i.size]
+    res[cnt < min_finite] = np.nan
+    return _vec_result_df(res, uniq, a.columns)
+
+
+def _vec_vwap_excursion(
+    a, b, c, *, min_finite: int = 2, _grid: tuple | None = None, side: str = "max",
+) -> pd.DataFrame:
+    """Vector intra_price_vwap_max_positive/negative_excursion.
+
+    Scalar kernel (``vwap_path._vwap_excursion``): dev = close/cum_vwap - 1 over
+    the (finite & cum_vwap > _EPS) bars; return max (side="max") or min (side
+    "min"); all-invalid -> NaN.
+    """
+    if _grid is None:
+        g, gb, gc, codes, uniq, active, filled = _grid3(a, b, c)
+    else:
+        g, gb, gc, codes, uniq, active, filled = _grid
+    n = g.shape[0]; S = g.shape[2]
+    fin, cnt, mask, pp, cum_vwap = _vec_cum_vwap(g, gb, gc)
+    ok = mask & (cum_vwap > _EPS)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        dev = np.where(ok, np.divide(pp, np.where(ok, cum_vwap, 1)) - 1.0, np.nan)
+    ok_any = ok.any(axis=1)
+    res = np.full((n, S), np.nan)
+    if side == "max":
+        m = np.where(ok, dev, -np.inf).max(axis=1)
+    else:
+        m = np.where(ok, dev, np.inf).min(axis=1)
+    res[ok_any] = m[ok_any]
+    res[cnt < min_finite] = np.nan
+    return _vec_result_df(res, uniq, a.columns)
+
+
+def _vec_longest_streak(
+    a, b, c, *, min_finite: int = 2, _grid: tuple | None = None, side: str = "above",
+) -> pd.DataFrame:
+    """Vector intra_longest_above/below_vwap_streak (longest run of bars vs cum-VWAP).
+
+    Scalar kernel (``vwap_path._longest_streak``): over the packed bars, flag
+    ``close > cum_vwap`` (or its negation for below), then the longest run of
+    True flags.  The run length counts *bars* (minutes), measured in finite bars.
+    """
+    if _grid is None:
+        g, gb, gc, codes, uniq, active, filled = _grid3(a, b, c)
+    else:
+        g, gb, gc, codes, uniq, active, filled = _grid
+    n = g.shape[0]; S = g.shape[2]
+    fin, cnt, mask, pp, cum_vwap = _vec_cum_vwap(g, gb, gc)
+    above = (np.where(mask, pp, np.nan) > cum_vwap) & mask
+    if side == "below":
+        above = mask & ~above
+    # longest run of True per row (run[i] = current streak ending at i; resets
+    # at each False via cumulative-max of the reset point).
+    s = np.cumsum(above, axis=1)
+    reset = np.where(above, 0.0, s)
+    last_reset = np.maximum.accumulate(reset, axis=1)
+    run = s - last_reset
+    best = np.max(run, axis=1)
+    res = np.full((n, S), np.nan)
+    res[cnt >= 1] = best[cnt >= 1]
+    res[cnt < min_finite] = np.nan
+    return _vec_result_df(res, uniq, a.columns)
+
+
+def _vec_vwap_reversion_speed(
+    a, b, c, *, min_finite: int = 2, _grid: tuple | None = None,
+) -> pd.DataFrame:
+    """Vector intra_vwap_reversion_speed (AR(1) coefficient of VWAP deviation).
+
+    Scalar kernel (``vwap_path._vwap_reversion_speed``): dev = close/cum_vwap-1
+    over finite bars; regress ``dev[1:]`` on ``dev[:-1]`` via
+    ``cov(d, dprev)[0,1] / var(dprev)`` — NOTE ``np.cov`` uses ddof=1 while
+    ``np.var`` uses ddof=0, so beta = Sxy*n/(Sxx*(n-1)) with scatter sums over
+    the n pairs.  Gates: valid.sum()<5 -> NaN, len(d)<3 -> NaN,
+    std(dprev)<=_EPS -> NaN.
+    """
+    if _grid is None:
+        g, gb, gc, codes, uniq, active, filled = _grid3(a, b, c)
+    else:
+        g, gb, gc, codes, uniq, active, filled = _grid
+    n = g.shape[0]; S = g.shape[2]
+    fin, cnt, mask, pp, cum_vwap = _vec_cum_vwap(g, gb, gc)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        dev = np.where(mask, np.divide(pp, np.where(mask, cum_vwap, 1)) - 1.0, np.nan)
+    m2 = mask[:, :-1, :] & mask[:, 1:, :]  # consecutive finite pairs
+    dd = np.where(m2, dev[:, 1:, :], 0.0)
+    dp = np.where(m2, dev[:, :-1, :], 0.0)
+    n2 = np.sum(m2, axis=1)  # n pairs = cnt - 1
+    sx = np.sum(dd, axis=1); sy = np.sum(dp, axis=1)
+    sxy = np.sum(dd * dp, axis=1); sxx = np.sum(dp * dp, axis=1)
+    mx = sx / np.maximum(n2, 1); my = sy / np.maximum(n2, 1)
+    Sxy = sxy - n2 * mx * my
+    Sxx = sxx - n2 * my * my
+    with np.errstate(divide="ignore", invalid="ignore"):
+        b = np.where((Sxx > 0) & (n2 > 1), Sxy * n2 / (np.maximum(Sxx, 1e-300) * (n2 - 1)), np.nan)
+    # scalar gates: len(d)>=3 -> n2>=3 ; std(dprev)=sqrt(Sxx/n) > _EPS
+    popvar = np.where(n2 > 0, Sxx / np.maximum(n2, 1), np.inf)
+    std_dprev = np.sqrt(np.maximum(popvar, 0.0))
+    good = (n2 >= 3) & (std_dprev > _EPS) & np.isfinite(b)
+    res = np.full((n, S), np.nan)
+    res[good] = b[good]
+    res[cnt < 5] = np.nan  # scalar: valid.sum() < 5 -> NaN
+    res[cnt < min_finite] = np.nan
+    return _vec_result_df(res, uniq, a.columns)
+
+
+def _vec_max_drawdown(
+    a, *, min_finite: int = 2, _grid: tuple | None = None, side: str = "down",
+) -> pd.DataFrame:
+    """Vector intra_max_drawdown / intra_max_drawup (single close panel).
+
+    Scalar kernel (``vwap_path._max_drawdown``): drop non-finite prices
+    preserving order; ``down`` uses the running maximum (path = p/running_max-1,
+    take min), ``up`` uses the running minimum (path = p/running_min-1, take
+    max).  Fewer than 2 finite prices -> NaN.
+    """
+    if _grid is None:
+        g, _, _, codes, uniq, active, filled = _grid3(a)
+    else:
+        g, _, _, codes, uniq, active, filled = _grid
+    n = g.shape[0]; S = g.shape[2]
+    fin = np.isfinite(g)
+    cnt = np.sum(fin, axis=1)
+    order = np.argsort(~fin, axis=1, kind="stable")
+    pf = np.take_along_axis(g, order, axis=1)
+    pf[~np.isfinite(pf)] = 0.0
+    max_cnt = int(cnt.max()) if cnt.size and cnt.max() > 0 else 1
+    ar = np.arange(max_cnt)[None, :, None]
+    mask = ar < cnt[:, None, :]
+    pf = pf[:, :max_cnt, :]
+    if side == "down":
+        running = np.maximum.accumulate(np.where(mask, pf, 0.0), axis=1)
+    else:
+        running = np.minimum.accumulate(np.where(mask, pf, np.inf), axis=1)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        path = np.where(mask, pf / running - 1.0, np.nan)
+    has = mask.any(axis=1)
+    res = np.full((n, S), np.nan)
+    if side == "down":
+        # scalar: return np.min(path) — the most deeply negative drawdown.
+        v = np.where(mask, path, np.inf).min(axis=1)
+    else:
+        # scalar: return np.max(path) — the largest gain over running min.
+        v = np.where(mask, path, -np.inf).max(axis=1)
+    res[has] = v[has]
+    res[cnt < min_finite] = np.nan
+    return _vec_result_df(res, uniq, a.columns)
+
+
+def _vec_drawdown_metrics(
+    a, *, min_finite: int = 2, _grid: tuple | None = None, metric: str = "depth",
+) -> pd.DataFrame:
+    """Vector intra_drawdown_depth / _duration / _recovery_half_life.
+
+    Scalar kernels (``vwap_path._drawdown_locate`` + ``_depth/_duration/
+    _recovery_half_life``): locate the true max drawdown trough as argmin of
+    ``p/running_max - 1`` (NOT the global-peak-then-min), the peak as the running
+    maximum up to the trough.  Indexing is in the *finite-preserving packed*
+    (bars) coordinate space, which is what recovery-time / duration semantics
+    require.
+    """
+    if _grid is None:
+        g, _, _, codes, uniq, active, filled = _grid3(a)
+    else:
+        g, _, _, codes, uniq, active, filled = _grid
+    n = g.shape[0]; S = g.shape[2]
+    fin = np.isfinite(g)
+    cnt = np.sum(fin, axis=1)
+    order = np.argsort(~fin, axis=1, kind="stable")
+    pf = np.take_along_axis(g, order, axis=1)
+    pf[~np.isfinite(pf)] = 0.0
+    max_cnt = int(cnt.max()) if cnt.size and cnt.max() > 0 else 1
+    ar = np.arange(max_cnt)[None, :, None]
+    mask = ar < cnt[:, None, :]
+    pf = pf[:, :max_cnt, :]
+    running = np.maximum.accumulate(np.where(mask, pf, 0.0), axis=1)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        dd = np.where(mask, pf / running - 1.0, np.inf)
+    trough = np.argmin(dd, axis=1)  # (D, C) first min within prefix
+    kk = ar  # (1, max_cnt, 1)
+    in_to_trough = kk <= trough[:, None, :]
+    pfseg = np.where(in_to_trough & mask, pf, -np.inf)
+    peak = np.argmax(pfseg, axis=1)  # running max position up to trough
+    pv = np.take_along_axis(pf, trough[:, None, :], axis=1)[:, 0, :]
+    pk = np.take_along_axis(pf, peak[:, None, :], axis=1)[:, 0, :]
+    trough_i = trough.astype(float)
+    peak_i = peak.astype(float)
+    res = np.full((n, S), np.nan)
+    valid = cnt >= min_finite
+    if metric == "depth":
+        # scalar: finite[peak] <= _EPS -> NaN ; depth = trough/peak - 1
+        ok = valid & (pk > _EPS)
+        with np.errstate(divide="ignore", invalid="ignore"):
+            res[ok] = np.where(ok, pv / pk - 1.0, np.nan)[ok]
+    elif metric == "duration":
+        ok = valid
+        res[ok] = (trough_i - peak_i)[ok]
+    else:  # recovery
+        # scalar: trough<=_EPS or peak<=trough -> NaN
+        ok = valid & (pv > _EPS) & (pk > pv)
+        halfway = pv + 0.5 * (pk - pv)
+        ge = (kk >= trough[:, None, :]) & (kk < cnt[:, None, :]) & (pf >= halfway[:, None, :]) & mask
+        isrec = ge.any(axis=1) & ok
+        first = np.argmax(ge, axis=1)
+        res[isrec] = (first - trough)[isrec]
+    return _vec_result_df(res, uniq, a.columns)
+
+
+def _vec_logret_grid(g):
+    """(D,B,C) log returns on the *original minute-slot* grid.
+
+    Mirrors ``_core.log_returns``: ``r[t+1] = log(c[t+1]/c[t])``, NaN anywhere
+    the previous close is missing/non-finite (divide-by-zero ignored).  The grid
+    is day-padded so the (B-bar) row axis below is the union of all days' bars;
+    the day boundaries keep their leading NaN row (a single-bar day has zero
+    returns), which replicates the per-day scalar ``log_returns`` exactly.
+    """
+    n, B, C = g.shape
+    r = np.full((n, B, C), np.nan)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        r[:, 1:, :] = np.log(
+            np.where(np.isfinite(g[:, 1:, :]), g[:, 1:, :], np.nan)
+            / np.where(np.isfinite(g[:, :-1, :]), g[:, :-1, :], np.nan)
+        )
+    return r
+
+
+def _vec_realized_moments(
+    a, *, min_finite: int = 2, _grid: tuple | None = None, moment: str = "skew",
+) -> pd.DataFrame:
+    """Vector intra_realized_skewness _/_kurtosis/_quarticity (higher_moments).
+
+    Scalar kernels (``higher_moments._realized_skewness/_kurtosis/_quarticity``):
+    log-returns over the ORIGINAL minute grid (``_core.log_returns``), then:
+
+    * skewness:  n>=30 = ``_REALIZED_MIN_RETURNS``; ``r2=sum(r^2)>_EPS``;
+                 ``sqrt(n)*sum(r^3)/r2^1.5``.
+    * kurtosis:  same n>=30 and r2>_EPS gates; ``n*sum(r^4)/r2^2``.
+    * quarticity: n>=2; ``n/3*sum(r^4)``.
+
+    ``n`` is the FINITE RETURN count, gated against ``_REALIZED_MIN_RETURNS``,
+    while ``daily_agg``'s own ``min_finite`` gate is separately on the CLOSE
+    finite count (raw vals) — both are reproduced.  ``r2`` uses ``sum`` over the
+    finite mask (zero-padded ``nansum``); degenerate ``r2<=_EPS`` -> NaN.
+    """
+    if _grid is None:
+        g, _, _, codes, uniq, active, filled = _grid3(a)
+    else:
+        g, _, _, codes, uniq, active, filled = _grid
+    n = g.shape[0]
+    r = _vec_logret_grid(g)
+    fin = np.isfinite(r)
+    cnt = np.sum(fin, axis=1)  # (D, C) finite RETURN count
+    sq = np.sum(np.where(fin, r * r, 0.0), axis=1)  # (D, C) sum(r^2)
+    close_cnt = np.sum(np.isfinite(g), axis=1)
+    valid = close_cnt >= min_finite  # daily_agg raw-CLOSE gate (scalar parity)
+
+    out = np.full((n, g.shape[2]), np.nan)
+    if moment == "skew":
+        ok = valid & (cnt >= _REALIZED_MIN_RETURNS) & (sq > _EPS) & np.isfinite(sq)
+        with np.errstate(invalid="ignore", divide="ignore"):
+            out[ok] = (
+                np.sqrt(cnt) * np.sum(np.where(fin, r ** 3, 0.0), axis=1) / sq ** 1.5
+            )[ok]
+    elif moment == "kurt":
+        ok = valid & (cnt >= _REALIZED_MIN_RETURNS) & (sq > _EPS) & np.isfinite(sq)
+        with np.errstate(invalid="ignore", divide="ignore"):
+            out[ok] = (
+                cnt * np.sum(np.where(fin, r ** 4, 0.0), axis=1) / (sq * sq)
+            )[ok]
+    else:  # quarticity
+        ok = valid & (cnt >= 2)
+        out[ok] = (cnt / 3.0 * np.sum(np.where(fin, r ** 4, 0.0), axis=1))[ok]
+    return _vec_result_df(out, uniq, a.columns)
+
+
+def _vec_tripower_quarticity(
+    a, *, min_finite: int = 2, _grid: tuple | None = None,
+) -> pd.DataFrame:
+    """Vector intra_tripower_quarticity (higher_moments).
+
+    Scalar kernel (``higher_moments._tripower_quarticity``): triple absolute
+    moments ``|r_t|^(4/3)|r_{t-1}|^(4/3)|r_{t-2}|^(4/3)`` over ADJACENT grid
+    slots, all three finite (P1-100: never bridge a missing minute).  The result
+    is ``tripower_scale() * n_finite * sum(prod)``.  Scalar parity requires a
+    ``n_finite>=4`` gate AND an ``any(valid triple)`` gate — with >=4 finite
+    returns but no three consecutive ones the scalar returns NaN, never 0.
+    """
+    if _grid is None:
+        g, _, _, codes, uniq, active, filled = _grid3(a)
+    else:
+        g, _, _, codes, uniq, active, filled = _grid
+    n = g.shape[0]
+    r = _vec_logret_grid(g)
+    fin = np.isfinite(r)
+    cnt = np.sum(fin, axis=1)
+    tri = fin[:, 2:, :] & fin[:, 1:-1, :] & fin[:, :-2, :]  # (n, B-2, C)
+    any_tri = np.any(tri, axis=1)  # scalar ``np.any(valid)`` (P1-100)
+    with np.errstate(invalid="ignore", over="ignore"):
+        prod = np.where(
+            tri,
+            np.abs(r[:, 2:, :]) ** (4.0 / 3.0)
+            * np.abs(r[:, 1:-1, :]) ** (4.0 / 3.0)
+            * np.abs(r[:, :-2, :]) ** (4.0 / 3.0),
+            0.0,
+        )
+    total = np.sum(prod, axis=1)
+    close_cnt = np.sum(np.isfinite(g), axis=1)
+    out = np.full((n, g.shape[2]), np.nan)
+    ok = (close_cnt >= min_finite) & (cnt >= 4) & any_tri
+    out[ok] = tripower_scale() * cnt[ok] * total[ok]
+    return _vec_result_df(out, uniq, a.columns)
+
+
+def _vec_bipower_and_jump(
+    a, *, min_finite: int = 2, _grid: tuple | None = None, mode: str = "bipower",
+) -> pd.DataFrame:
+    """Vector intra_bipower_variation / _continuous_variance / _jump_variation.
+
+    Scalar kernels (``higher_moments._bipower_var`` / ``_continuous_and_jump``):
+    log-returns on the ORIGINAL minute grid, then:
+
+    * bipower:   ``(pi/2) * sum(|r_t||r_{t-1}|)`` over ADJACENT slots, both
+                 finite.  Scalar returns NaN when cnt<2 OR no adjacent pair
+                 (P1-100 — never a cross-product over a missing minute).  A day
+                 with two finite but non-adjacent returns yields NaN, not 0.
+    * continuous: ``min(RV, BV)``; ``_continuous_and_jump`` returns NaN when rv
+                 or bv non-finite or rv<=EPS.
+    * jump:      ``max(RV-BV, 0)`` under the same gate.
+
+    ``RV = sum(r^2)`` over finite returns; ``BV`` is the slot-adjacent bipower
+    (NaN when no valid pair).  ``min_finite`` (raw-CLOSE count) and the bipower
+    finite-count / finite-adjacency gates are both reproduced for scalar parity.
+    """
+    if _grid is None:
+        g, _, _, codes, uniq, active, filled = _grid3(a)
+    else:
+        g, _, _, codes, uniq, active, filled = _grid
+    n = g.shape[0]
+    r = _vec_logret_grid(g)
+    fin = np.isfinite(r)
+    cnt = np.sum(fin, axis=1)
+    both = fin[:, 1:, :] & fin[:, :-1, :]  # (n, B-1, C) adjacent finite pair
+    any_pair = np.any(both, axis=1)  # scalar ``np.any(valid)`` (P1-100)
+    with np.errstate(invalid="ignore", over="ignore"):
+        prod = np.where(both, np.abs(r[:, 1:, :]) * np.abs(r[:, :-1, :]), 0.0)
+    bp = (np.pi / 2.0) * np.sum(prod, axis=1)  # (D, C) bipower (slot-adjacent)
+
+    close_cnt = np.sum(np.isfinite(g), axis=1)
+    out = np.full((n, g.shape[2]), np.nan)
+    if mode == "bipower":
+        ok = (close_cnt >= min_finite) & (cnt >= 2) & any_pair
+        out[ok] = bp[ok]
+        return _vec_result_df(out, uniq, a.columns)
+
+    # continuous / jump
+    sq = np.sum(np.where(fin, r * r, 0.0), axis=1)  # RV
+    ok = (
+        np.isfinite(sq) & (sq > _EPS) & np.isfinite(bp)
+        & (close_cnt >= min_finite) & (cnt >= 2) & any_pair
+    )
+    if mode == "continuous":
+        out[ok] = np.minimum(sq, bp)[ok]
+    else:  # jump
+        out[ok] = np.maximum(sq - bp, 0.0)[ok]
+    return _vec_result_df(out, uniq, a.columns)
+
+
 # Wrapper bodies — the scalar kernels from the consumer modules get their
-# ``__vec__`` attribute attached lazily by ``_core.attach_vec_kernels()`` so we
-# avoid circular imports and keep _core a pure shared kernel.
+# ``__vec__`` attribute attached lazily by ``_core`` (via the factories in the
+# consumer modules / ``perf_vec_kernels.bind_whitelist``) so we avoid circular
+# imports and keep _core a pure shared kernel.

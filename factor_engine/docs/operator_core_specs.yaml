@@ -3,6 +3,9 @@
   frequency: any
   input_fields:
   - x
+  scalar_parameters: []
+  param_names:
+  - x
   output_type: series
   pit_safe: true
   domain_policy: all_numeric
@@ -22,11 +25,13 @@
   execution_kind: primitive
   production_policy: allowed
   lowering_available: false
-  dual_backend_target: true
+  dual_backend_target: false
 - name: add
   scope: elementwise
   frequency: any
   input_fields: []
+  scalar_parameters: []
+  param_names: []
   output_type: series
   pit_safe: true
   domain_policy: all_numeric
@@ -46,11 +51,13 @@
   execution_kind: primitive
   production_policy: allowed
   lowering_available: false
-  dual_backend_target: true
+  dual_backend_target: false
 - name: and_
   scope: elementwise
   frequency: any
   input_fields: []
+  scalar_parameters: []
+  param_names: []
   output_type: series
   pit_safe: true
   domain_policy: all_numeric
@@ -70,11 +77,44 @@
   execution_kind: primitive
   production_policy: allowed
   lowering_available: false
-  dual_backend_target: true
+  dual_backend_target: false
+- name: avg2
+  scope: time_series
+  frequency: any
+  input_fields:
+  - x
+  - y
+  scalar_parameters: []
+  param_names:
+  - x
+  - y
+  output_type: series
+  pit_safe: true
+  domain_policy: all_numeric
+  overflow_policy: ieee_propagate
+  null_policy: propagate
+  includes_current: true
+  lookback: null
+  min_periods: 2
+  nan_policy: propagate
+  status: experimental
+  allow_in_production: false
+  backends:
+  - pandas_numpy
+  - polars
+  - sql
+  description: 当期与上期均值
+  execution_kind: primitive
+  production_policy: denied
+  lowering_available: false
+  dual_backend_target: false
 - name: ceil
   scope: elementwise
   frequency: any
   input_fields:
+  - x
+  scalar_parameters: []
+  param_names:
   - x
   output_type: series
   pit_safe: true
@@ -95,11 +135,16 @@
   execution_kind: primitive
   production_policy: allowed
   lowering_available: false
-  dual_backend_target: true
+  dual_backend_target: false
 - name: clip
   scope: elementwise
   frequency: any
   input_fields:
+  - x
+  scalar_parameters:
+  - lo
+  - hi
+  param_names:
   - x
   - lo
   - hi
@@ -122,11 +167,15 @@
   execution_kind: primitive
   production_policy: allowed
   lowering_available: false
-  dual_backend_target: true
+  dual_backend_target: false
 - name: coalesce
   scope: elementwise
   frequency: any
-  input_fields:
+  input_fields: []
+  scalar_parameters:
+  - x
+  - y
+  param_names:
   - x
   - y
   output_type: series
@@ -148,11 +197,14 @@
   execution_kind: primitive
   production_policy: allowed
   lowering_available: false
-  dual_backend_target: true
+  dual_backend_target: false
 - name: cs_count
   scope: cross_sectional
   frequency: any
   input_fields:
+  - x
+  scalar_parameters: []
+  param_names:
   - x
   output_type: series
   pit_safe: true
@@ -169,15 +221,18 @@
   - pandas_numpy
   - polars
   - sql
-  description: 计算截面非空计数
+  description: 计算截面有限值计数（sample_validity=finite：±Inf 不计入）
   execution_kind: primitive
   production_policy: allowed
   lowering_available: false
-  dual_backend_target: true
+  dual_backend_target: false
 - name: cs_demean
   scope: cross_sectional
   frequency: any
   input_fields:
+  - x
+  scalar_parameters: []
+  param_names:
   - x
   output_type: series
   pit_safe: true
@@ -198,12 +253,15 @@
   execution_kind: primitive
   production_policy: allowed
   lowering_available: false
-  dual_backend_target: true
+  dual_backend_target: false
 - name: cs_mad
   scope: cross_sectional
   frequency: any
   input_fields:
   - x
+  scalar_parameters: []
+  param_names:
+  - x
   output_type: series
   pit_safe: true
   domain_policy: all_numeric
@@ -219,16 +277,19 @@
   - pandas_numpy
   - polars
   - sql
-  description: 截面中位绝对偏差（MAD，广播到各列）
+  description: 截面中位绝对偏差（MAD，广播到各列；sample_validity=finite）
   execution_kind: primitive
   production_policy: allowed
   lowering_available: false
-  dual_backend_target: true
+  dual_backend_target: false
 - name: cs_mad_zscore
   scope: cross_sectional
   frequency: any
   input_fields:
   - x
+  scalar_parameters: []
+  param_names:
+  - x
   output_type: series
   pit_safe: true
   domain_policy: all_numeric
@@ -244,16 +305,20 @@
   - pandas_numpy
   - polars
   - sql
-  description: MAD 稳健 Z-Score：(x - median) / MAD
+  description: raw-MAD standardized score：(x - median) / MAD；不做 0.6745 缩放，MAD 不乘 1.4826。要
+    scaled robust zscore 请显式构造：0.6745*cs_mad_zscore(x)。
   execution_kind: primitive
   production_policy: allowed
   lowering_available: false
-  dual_backend_target: true
+  dual_backend_target: false
 - name: cs_mean
   scope: cross_sectional
   frequency: any
   input_fields:
   - x
+  scalar_parameters: []
+  param_names:
+  - x
   output_type: series
   pit_safe: true
   domain_policy: all_numeric
@@ -269,16 +334,19 @@
   - pandas_numpy
   - polars
   - sql
-  description: 计算截面均值
+  description: 计算截面均值（sample_validity=finite：±Inf 不计入）
   execution_kind: primitive
   production_policy: allowed
   lowering_available: false
-  dual_backend_target: true
+  dual_backend_target: false
 - name: cs_pct_rank
   scope: cross_sectional
   frequency: any
   input_fields:
   - x
+  scalar_parameters: []
+  param_names:
+  - x
   output_type: series
   pit_safe: true
   domain_policy: all_numeric
@@ -294,40 +362,18 @@
   - pandas_numpy
   - polars
   - sql
-  description: 截面百分位排名（同 rank_pct）
+  description: 截面百分位排名（与 rank_pct 同实现）
   execution_kind: primitive
   production_policy: allowed
   lowering_available: false
-  dual_backend_target: true
+  dual_backend_target: false
 - name: cs_std
   scope: cross_sectional
   frequency: any
   input_fields:
   - x
-  output_type: series
-  pit_safe: true
-  domain_policy: all_numeric
-  overflow_policy: ieee_propagate
-  null_policy: propagate
-  includes_current: true
-  lookback: null
-  min_periods: null
-  nan_policy: propagate
-  status: production
-  allow_in_production: true
-  backends:
-  - pandas_numpy
-  - polars
-  - sql
-  description: 计算截面标准差
-  execution_kind: primitive
-  production_policy: allowed
-  lowering_available: false
-  dual_backend_target: true
-- name: cs_sum
-  scope: cross_sectional
-  frequency: any
-  input_fields:
+  scalar_parameters: []
+  param_names:
   - x
   output_type: series
   pit_safe: true
@@ -344,15 +390,45 @@
   - pandas_numpy
   - polars
   - sql
-  description: 计算截面求和
+  description: 计算截面标准差（sample_validity=finite：±Inf 不计入）
   execution_kind: primitive
   production_policy: allowed
   lowering_available: false
-  dual_backend_target: true
+  dual_backend_target: false
+- name: cs_sum
+  scope: cross_sectional
+  frequency: any
+  input_fields:
+  - x
+  scalar_parameters: []
+  param_names:
+  - x
+  output_type: series
+  pit_safe: true
+  domain_policy: all_numeric
+  overflow_policy: ieee_propagate
+  null_policy: propagate
+  includes_current: true
+  lookback: null
+  min_periods: null
+  nan_policy: propagate
+  status: production
+  allow_in_production: true
+  backends:
+  - pandas_numpy
+  - polars
+  - sql
+  description: 计算截面求和（sample_validity=finite：±Inf 不计入）
+  execution_kind: primitive
+  production_policy: allowed
+  lowering_available: false
+  dual_backend_target: false
 - name: divide
   scope: elementwise
   frequency: any
   input_fields: []
+  scalar_parameters: []
+  param_names: []
   output_type: series
   pit_safe: true
   domain_policy: all_numeric
@@ -372,11 +448,15 @@
   execution_kind: primitive
   production_policy: allowed
   lowering_available: false
-  dual_backend_target: true
+  dual_backend_target: false
 - name: eq
   scope: elementwise
   frequency: any
   input_fields:
+  - x
+  - y
+  scalar_parameters: []
+  param_names:
   - x
   - y
   output_type: series
@@ -398,11 +478,14 @@
   execution_kind: primitive
   production_policy: allowed
   lowering_available: false
-  dual_backend_target: true
+  dual_backend_target: false
 - name: exp
   scope: elementwise
   frequency: any
   input_fields:
+  - x
+  scalar_parameters: []
+  param_names:
   - x
   output_type: series
   pit_safe: true
@@ -419,15 +502,49 @@
   - pandas_numpy
   - polars
   - sql
-  description: 计算e的x次方
+  description: 计算e的x次方（溢出 exp(1000)=Inf 保留，不转 NaN；polars/duckdb 一致）
   execution_kind: primitive
   production_policy: allowed
   lowering_available: false
-  dual_backend_target: true
+  dual_backend_target: false
+- name: fillna
+  scope: elementwise
+  frequency: any
+  input_fields:
+  - x
+  scalar_parameters:
+  - method
+  param_names:
+  - x
+  - method
+  output_type: series
+  pit_safe: false
+  domain_policy: all_numeric
+  overflow_policy: ieee_propagate
+  null_policy: propagate
+  includes_current: true
+  lookback: null
+  min_periods: null
+  nan_policy: propagate
+  status: experimental
+  allow_in_production: false
+  backends:
+  - pandas_numpy
+  - polars
+  - sql
+  description: '缺失值填充（method: ''mean'', ''median'', ''zero'', ''ffill''）'
+  execution_kind: primitive
+  production_policy: denied
+  lowering_available: false
+  dual_backend_target: false
 - name: fillna_const
   scope: elementwise
   frequency: any
   input_fields:
+  - x
+  scalar_parameters:
+  - value
+  param_names:
   - x
   - value
   output_type: series
@@ -439,21 +556,24 @@
   lookback: null
   min_periods: null
   nan_policy: propagate
-  status: production
-  allow_in_production: true
+  status: experimental
+  allow_in_production: false
   backends:
   - pandas_numpy
   - polars
   - sql
   description: 常量填充
   execution_kind: primitive
-  production_policy: allowed
+  production_policy: denied
   lowering_available: false
-  dual_backend_target: true
+  dual_backend_target: false
 - name: floor
   scope: elementwise
   frequency: any
   input_fields:
+  - x
+  scalar_parameters: []
+  param_names:
   - x
   output_type: series
   pit_safe: true
@@ -474,11 +594,15 @@
   execution_kind: primitive
   production_policy: allowed
   lowering_available: false
-  dual_backend_target: true
+  dual_backend_target: false
 - name: ge
   scope: elementwise
   frequency: any
   input_fields:
+  - x
+  - y
+  scalar_parameters: []
+  param_names:
   - x
   - y
   output_type: series
@@ -500,13 +624,19 @@
   execution_kind: primitive
   production_policy: allowed
   lowering_available: false
-  dual_backend_target: true
+  dual_backend_target: false
 - name: group_count
   scope: group
   frequency: any
   input_fields:
   - x
+  scalar_parameters:
   - group
+  - fallback_policy
+  param_names:
+  - x
+  - group
+  - fallback_policy
   output_type: series
   pit_safe: true
   domain_policy: all_numeric
@@ -526,13 +656,19 @@
   execution_kind: primitive
   production_policy: allowed
   lowering_available: false
-  dual_backend_target: true
+  dual_backend_target: false
 - name: group_max
   scope: group
   frequency: any
   input_fields:
   - x
+  scalar_parameters:
   - group
+  - fallback_policy
+  param_names:
+  - x
+  - group
+  - fallback_policy
   output_type: series
   pit_safe: true
   domain_policy: all_numeric
@@ -552,13 +688,19 @@
   execution_kind: primitive
   production_policy: allowed
   lowering_available: false
-  dual_backend_target: true
+  dual_backend_target: false
 - name: group_mean
-  scope: cross_sectional
+  scope: group
   frequency: any
   input_fields:
   - x
+  scalar_parameters:
   - group
+  - fallback_policy
+  param_names:
+  - x
+  - group
+  - fallback_policy
   output_type: series
   pit_safe: true
   domain_policy: all_numeric
@@ -578,13 +720,19 @@
   execution_kind: primitive
   production_policy: allowed
   lowering_available: false
-  dual_backend_target: true
+  dual_backend_target: false
 - name: group_min
   scope: group
   frequency: any
   input_fields:
   - x
+  scalar_parameters:
   - group
+  - fallback_policy
+  param_names:
+  - x
+  - group
+  - fallback_policy
   output_type: series
   pit_safe: true
   domain_policy: all_numeric
@@ -604,13 +752,19 @@
   execution_kind: primitive
   production_policy: allowed
   lowering_available: false
-  dual_backend_target: true
+  dual_backend_target: false
 - name: group_neutralize
-  scope: cross_sectional
+  scope: group
   frequency: any
   input_fields:
   - x
+  scalar_parameters:
   - group
+  - fallback_policy
+  param_names:
+  - x
+  - group
+  - fallback_policy
   output_type: series
   pit_safe: true
   domain_policy: all_numeric
@@ -630,13 +784,19 @@
   execution_kind: primitive
   production_policy: allowed
   lowering_available: false
-  dual_backend_target: true
+  dual_backend_target: false
 - name: group_normalize
-  scope: cross_sectional
+  scope: group
   frequency: any
   input_fields:
   - x
+  scalar_parameters:
   - group
+  - fallback_policy
+  param_names:
+  - x
+  - group
+  - fallback_policy
   output_type: series
   pit_safe: true
   domain_policy: all_numeric
@@ -656,13 +816,19 @@
   execution_kind: primitive
   production_policy: allowed
   lowering_available: false
-  dual_backend_target: true
+  dual_backend_target: false
 - name: group_rank
-  scope: cross_sectional
+  scope: group
   frequency: any
   input_fields:
   - x
+  scalar_parameters:
   - group
+  - fallback_policy
+  param_names:
+  - x
+  - group
+  - fallback_policy
   output_type: series
   pit_safe: true
   domain_policy: all_numeric
@@ -682,13 +848,19 @@
   execution_kind: primitive
   production_policy: allowed
   lowering_available: false
-  dual_backend_target: true
+  dual_backend_target: false
 - name: group_std
-  scope: cross_sectional
+  scope: group
   frequency: any
   input_fields:
   - x
+  scalar_parameters:
   - group
+  - fallback_policy
+  param_names:
+  - x
+  - group
+  - fallback_policy
   output_type: series
   pit_safe: true
   domain_policy: all_numeric
@@ -708,13 +880,19 @@
   execution_kind: primitive
   production_policy: allowed
   lowering_available: false
-  dual_backend_target: true
+  dual_backend_target: false
 - name: group_sum
   scope: group
   frequency: any
   input_fields:
   - x
+  scalar_parameters:
   - group
+  - fallback_policy
+  param_names:
+  - x
+  - group
+  - fallback_policy
   output_type: series
   pit_safe: true
   domain_policy: all_numeric
@@ -734,11 +912,16 @@
   execution_kind: primitive
   production_policy: allowed
   lowering_available: false
-  dual_backend_target: true
+  dual_backend_target: false
 - name: group_winsorize
-  scope: cross_sectional
+  scope: group
   frequency: any
   input_fields:
+  - x
+  scalar_parameters:
+  - group
+  - a
+  param_names:
   - x
   - group
   - a
@@ -761,13 +944,19 @@
   execution_kind: primitive
   production_policy: allowed
   lowering_available: false
-  dual_backend_target: true
+  dual_backend_target: false
 - name: group_zscore
-  scope: cross_sectional
+  scope: group
   frequency: any
   input_fields:
   - x
+  scalar_parameters:
   - group
+  - fallback_policy
+  param_names:
+  - x
+  - group
+  - fallback_policy
   output_type: series
   pit_safe: true
   domain_policy: all_numeric
@@ -787,11 +976,15 @@
   execution_kind: primitive
   production_policy: allowed
   lowering_available: false
-  dual_backend_target: true
+  dual_backend_target: false
 - name: gt
   scope: elementwise
   frequency: any
   input_fields:
+  - x
+  - y
+  scalar_parameters: []
+  param_names:
   - x
   - y
   output_type: series
@@ -813,11 +1006,13 @@
   execution_kind: primitive
   production_policy: allowed
   lowering_available: false
-  dual_backend_target: true
+  dual_backend_target: false
 - name: inverse
   scope: elementwise
   frequency: any
   input_fields: []
+  scalar_parameters: []
+  param_names: []
   output_type: series
   pit_safe: true
   domain_policy: all_numeric
@@ -837,11 +1032,14 @@
   execution_kind: primitive
   production_policy: allowed
   lowering_available: false
-  dual_backend_target: true
+  dual_backend_target: false
 - name: is_finite
   scope: elementwise
   frequency: any
   input_fields:
+  - x
+  scalar_parameters: []
+  param_names:
   - x
   output_type: series
   pit_safe: true
@@ -850,23 +1048,26 @@
   null_policy: propagate
   includes_current: true
   lookback: null
-  min_periods: null
+  min_periods: 1
   nan_policy: propagate
-  status: production
-  allow_in_production: true
+  status: experimental
+  allow_in_production: false
   backends:
   - pandas_numpy
   - polars
   - sql
   description: 判断是否为有限数
   execution_kind: primitive
-  production_policy: allowed
+  production_policy: denied
   lowering_available: false
-  dual_backend_target: true
+  dual_backend_target: false
 - name: is_infinite
   scope: elementwise
   frequency: any
   input_fields:
+  - x
+  scalar_parameters: []
+  param_names:
   - x
   output_type: series
   pit_safe: true
@@ -877,21 +1078,24 @@
   lookback: null
   min_periods: null
   nan_policy: propagate
-  status: production
-  allow_in_production: true
+  status: experimental
+  allow_in_production: false
   backends:
   - pandas_numpy
   - polars
   - sql
   description: 判断是否为 ±Inf
   execution_kind: primitive
-  production_policy: allowed
+  production_policy: denied
   lowering_available: false
-  dual_backend_target: true
+  dual_backend_target: false
 - name: is_not_null
   scope: elementwise
   frequency: any
   input_fields:
+  - x
+  scalar_parameters: []
+  param_names:
   - x
   output_type: series
   pit_safe: true
@@ -902,21 +1106,24 @@
   lookback: null
   min_periods: null
   nan_policy: propagate
-  status: production
-  allow_in_production: true
+  status: experimental
+  allow_in_production: false
   backends:
   - pandas_numpy
   - polars
   - sql
   description: 判断是否非 NULL
   execution_kind: primitive
-  production_policy: allowed
+  production_policy: denied
   lowering_available: false
-  dual_backend_target: true
+  dual_backend_target: false
 - name: is_null
   scope: elementwise
   frequency: any
   input_fields:
+  - x
+  scalar_parameters: []
+  param_names:
   - x
   output_type: series
   pit_safe: true
@@ -927,21 +1134,25 @@
   lookback: null
   min_periods: null
   nan_policy: propagate
-  status: production
-  allow_in_production: true
+  status: experimental
+  allow_in_production: false
   backends:
   - pandas_numpy
   - polars
   - sql
   description: 判断是否为 NULL/缺失
   execution_kind: primitive
-  production_policy: allowed
+  production_policy: denied
   lowering_available: false
-  dual_backend_target: true
+  dual_backend_target: false
 - name: le
   scope: elementwise
   frequency: any
   input_fields:
+  - x
+  - y
+  scalar_parameters: []
+  param_names:
   - x
   - y
   output_type: series
@@ -963,12 +1174,13 @@
   execution_kind: primitive
   production_policy: allowed
   lowering_available: false
-  dual_backend_target: true
+  dual_backend_target: false
 - name: log
   scope: elementwise
   frequency: any
-  input_fields:
-  - x
+  input_fields: []
+  scalar_parameters: []
+  param_names: []
   output_type: series
   pit_safe: true
   domain_policy: all_numeric
@@ -988,11 +1200,14 @@
   execution_kind: primitive
   production_policy: allowed
   lowering_available: false
-  dual_backend_target: true
+  dual_backend_target: false
 - name: log_abs
   scope: elementwise
   frequency: any
   input_fields:
+  - x
+  scalar_parameters: []
+  param_names:
   - x
   output_type: series
   pit_safe: true
@@ -1013,11 +1228,15 @@
   execution_kind: primitive
   production_policy: allowed
   lowering_available: false
-  dual_backend_target: true
+  dual_backend_target: false
 - name: lt
   scope: elementwise
   frequency: any
   input_fields:
+  - x
+  - y
+  scalar_parameters: []
+  param_names:
   - x
   - y
   output_type: series
@@ -1039,11 +1258,15 @@
   execution_kind: primitive
   production_policy: allowed
   lowering_available: false
-  dual_backend_target: true
+  dual_backend_target: false
 - name: maximum
   scope: elementwise
   frequency: any
   input_fields:
+  - x
+  - y
+  scalar_parameters: []
+  param_names:
   - x
   - y
   output_type: series
@@ -1065,11 +1288,15 @@
   execution_kind: primitive
   production_policy: allowed
   lowering_available: false
-  dual_backend_target: true
+  dual_backend_target: false
 - name: minimum
   scope: elementwise
   frequency: any
   input_fields:
+  - x
+  - y
+  scalar_parameters: []
+  param_names:
   - x
   - y
   output_type: series
@@ -1091,11 +1318,13 @@
   execution_kind: primitive
   production_policy: allowed
   lowering_available: false
-  dual_backend_target: true
+  dual_backend_target: false
 - name: multiply
   scope: elementwise
   frequency: any
   input_fields: []
+  scalar_parameters: []
+  param_names: []
   output_type: series
   pit_safe: true
   domain_policy: all_numeric
@@ -1115,11 +1344,15 @@
   execution_kind: primitive
   production_policy: allowed
   lowering_available: false
-  dual_backend_target: true
+  dual_backend_target: false
 - name: ne
   scope: elementwise
   frequency: any
   input_fields:
+  - x
+  - y
+  scalar_parameters: []
+  param_names:
   - x
   - y
   output_type: series
@@ -1141,11 +1374,14 @@
   execution_kind: primitive
   production_policy: allowed
   lowering_available: false
-  dual_backend_target: true
+  dual_backend_target: false
 - name: neg
   scope: elementwise
   frequency: any
   input_fields:
+  - x
+  scalar_parameters: []
+  param_names:
   - x
   output_type: series
   pit_safe: true
@@ -1166,11 +1402,14 @@
   execution_kind: primitive
   production_policy: allowed
   lowering_available: false
-  dual_backend_target: true
+  dual_backend_target: false
 - name: normalize
   scope: cross_sectional
   frequency: any
   input_fields:
+  - x
+  scalar_parameters: []
+  param_names:
   - x
   output_type: series
   pit_safe: true
@@ -1191,11 +1430,13 @@
   execution_kind: primitive
   production_policy: allowed
   lowering_available: false
-  dual_backend_target: true
+  dual_backend_target: false
 - name: not_
   scope: elementwise
   frequency: any
   input_fields: []
+  scalar_parameters: []
+  param_names: []
   output_type: series
   pit_safe: true
   domain_policy: all_numeric
@@ -1215,11 +1456,45 @@
   execution_kind: primitive
   production_policy: allowed
   lowering_available: false
-  dual_backend_target: true
+  dual_backend_target: false
+- name: open_close_return
+  scope: elementwise
+  frequency: any
+  input_fields:
+  - open_px
+  - close
+  scalar_parameters:
+  - price_basis
+  param_names:
+  - open_px
+  - close
+  - price_basis
+  output_type: series
+  pit_safe: true
+  domain_policy: all_numeric
+  overflow_policy: ieee_propagate
+  null_policy: propagate
+  includes_current: true
+  lookback: null
+  min_periods: null
+  nan_policy: propagate
+  status: experimental
+  allow_in_production: false
+  backends:
+  - pandas_numpy
+  - polars
+  - sql
+  description: 开盘到收盘收益 close/open_px - 1。
+  execution_kind: primitive
+  production_policy: denied
+  lowering_available: false
+  dual_backend_target: false
 - name: or_
   scope: elementwise
   frequency: any
   input_fields: []
+  scalar_parameters: []
+  param_names: []
   output_type: series
   pit_safe: true
   domain_policy: all_numeric
@@ -1239,15 +1514,23 @@
   execution_kind: primitive
   production_policy: allowed
   lowering_available: false
-  dual_backend_target: true
+  dual_backend_target: false
 - name: period_average
   scope: fundamental_period
   frequency: any
-  input_fields:
+  input_fields: []
+  scalar_parameters:
   - x
   - period_id
   - periods
   - require_consecutive
+  - revision_policy
+  param_names:
+  - x
+  - period_id
+  - periods
+  - require_consecutive
+  - revision_policy
   output_type: series
   pit_safe: true
   domain_policy: all_numeric
@@ -1257,27 +1540,37 @@
   lookback: null
   min_periods: 1
   nan_policy: propagate
-  status: production
-  allow_in_production: true
+  status: experimental
+  allow_in_production: false
   backends:
   - pandas_numpy
   - polars
   - sql
-  description: 按连续报告期计算平均值
+  description: strict fiscal-period average
   execution_kind: primitive
-  production_policy: allowed
+  production_policy: denied
   lowering_available: false
-  dual_backend_target: true
+  dual_backend_target: false
 - name: period_cagr
   scope: fundamental_period
   frequency: any
-  input_fields:
+  input_fields: []
+  scalar_parameters:
   - x
   - period_id
   - periods
   - periods_per_year
   - sign_policy
   - require_consecutive
+  - revision_policy
+  param_names:
+  - x
+  - period_id
+  - periods
+  - periods_per_year
+  - sign_policy
+  - require_consecutive
+  - revision_policy
   output_type: series
   pit_safe: true
   domain_policy: all_numeric
@@ -1287,26 +1580,35 @@
   lookback: null
   min_periods: 2
   nan_policy: propagate
-  status: production
-  allow_in_production: true
+  status: experimental
+  allow_in_production: false
   backends:
   - pandas_numpy
   - polars
   - sql
-  description: 按连续报告期计算复合增长率
+  description: strict fiscal-period compound growth
   execution_kind: primitive
-  production_policy: allowed
+  production_policy: denied
   lowering_available: false
-  dual_backend_target: true
+  dual_backend_target: false
 - name: period_change
   scope: fundamental_period
   frequency: any
-  input_fields:
+  input_fields: []
+  scalar_parameters:
   - x
   - period_id
   - periods
   - mode
   - require_consecutive
+  - revision_policy
+  param_names:
+  - x
+  - period_id
+  - periods
+  - mode
+  - require_consecutive
+  - revision_policy
   output_type: series
   pit_safe: true
   domain_policy: all_numeric
@@ -1316,21 +1618,25 @@
   lookback: null
   min_periods: 1
   nan_policy: propagate
-  status: production
-  allow_in_production: true
+  status: experimental
+  allow_in_production: false
   backends:
   - pandas_numpy
   - polars
   - sql
-  description: 按连续报告期计算变化
+  description: strict fiscal-period change
   execution_kind: primitive
-  production_policy: allowed
+  production_policy: denied
   lowering_available: false
-  dual_backend_target: true
+  dual_backend_target: false
 - name: power
   scope: elementwise
   frequency: any
   input_fields:
+  - x
+  scalar_parameters:
+  - y
+  param_names:
   - x
   - y
   output_type: series
@@ -1348,15 +1654,21 @@
   - pandas_numpy
   - polars
   - sql
-  description: 计算x的y次方
+  description: 计算x的y次方（实数域策略：负数底数 & 非整数指数 → NaN，整数指数 → 实数）
   execution_kind: primitive
   production_policy: allowed
   lowering_available: false
-  dual_backend_target: true
+  dual_backend_target: false
 - name: quarter_from_cumulative
   scope: fundamental_period
   frequency: any
-  input_fields:
+  input_fields: []
+  scalar_parameters:
+  - x
+  - period_id
+  - fiscal_quarter
+  - revision_policy
+  param_names:
   - x
   - period_id
   - fiscal_quarter
@@ -1370,21 +1682,24 @@
   lookback: null
   min_periods: 1
   nan_policy: propagate
-  status: production
-  allow_in_production: true
+  status: experimental
+  allow_in_production: false
   backends:
   - pandas_numpy
   - polars
   - sql
   description: strict cumulative-to-quarter conversion
   execution_kind: primitive
-  production_policy: allowed
+  production_policy: denied
   lowering_available: false
-  dual_backend_target: true
+  dual_backend_target: false
 - name: rank
   scope: cross_sectional
   frequency: any
   input_fields:
+  - x
+  scalar_parameters: []
+  param_names:
   - x
   output_type: series
   pit_safe: true
@@ -1401,15 +1716,20 @@
   - pandas_numpy
   - polars
   - sql
-  description: 截面 0-1 排名（单有效值 → 0.5）；pandas 百分位排名见 rank_pct
+  description: 截面 0-1 排名（单有效值 → 0.5；与 cs_rank_01 同实现）；pandas 百分位排名见 rank_pct
   execution_kind: primitive
   production_policy: allowed
   lowering_available: false
-  dual_backend_target: true
+  dual_backend_target: false
 - name: safe_div_null
   scope: elementwise
   frequency: any
-  input_fields:
+  input_fields: []
+  scalar_parameters:
+  - x
+  - y
+  - epsilon
+  param_names:
   - x
   - y
   - epsilon
@@ -1422,21 +1742,24 @@
   lookback: null
   min_periods: null
   nan_policy: propagate
-  status: production
-  allow_in_production: true
+  status: experimental
+  allow_in_production: false
   backends:
   - pandas_numpy
   - polars
   - sql
   description: finite safe division returning null for near-zero denominator
   execution_kind: primitive
-  production_policy: allowed
+  production_policy: denied
   lowering_available: false
-  dual_backend_target: true
+  dual_backend_target: false
 - name: sign
   scope: elementwise
   frequency: any
   input_fields:
+  - x
+  scalar_parameters: []
+  param_names:
   - x
   output_type: series
   pit_safe: true
@@ -1457,11 +1780,14 @@
   execution_kind: primitive
   production_policy: allowed
   lowering_available: false
-  dual_backend_target: true
+  dual_backend_target: false
 - name: signed_log
   scope: elementwise
   frequency: any
   input_fields:
+  - x
+  scalar_parameters: []
+  param_names:
   - x
   output_type: series
   pit_safe: true
@@ -1470,23 +1796,26 @@
   null_policy: propagate
   includes_current: true
   lookback: null
-  min_periods: null
+  min_periods: 1
   nan_policy: propagate
-  status: production
-  allow_in_production: true
+  status: experimental
+  allow_in_production: false
   backends:
   - pandas_numpy
   - polars
   - sql
   description: 符号对数：sign(x) * log(|x|)
   execution_kind: primitive
-  production_policy: allowed
+  production_policy: denied
   lowering_available: false
-  dual_backend_target: true
+  dual_backend_target: false
 - name: signed_sqrt
   scope: elementwise
   frequency: any
   input_fields:
+  - x
+  scalar_parameters: []
+  param_names:
   - x
   output_type: series
   pit_safe: true
@@ -1507,11 +1836,14 @@
   execution_kind: primitive
   production_policy: allowed
   lowering_available: false
-  dual_backend_target: true
+  dual_backend_target: false
 - name: sqrt
   scope: elementwise
   frequency: any
   input_fields:
+  - x
+  scalar_parameters: []
+  param_names:
   - x
   output_type: series
   pit_safe: true
@@ -1532,11 +1864,13 @@
   execution_kind: primitive
   production_policy: allowed
   lowering_available: false
-  dual_backend_target: true
+  dual_backend_target: false
 - name: subtract
   scope: elementwise
   frequency: any
   input_fields: []
+  scalar_parameters: []
+  param_names: []
   output_type: series
   pit_safe: true
   domain_policy: all_numeric
@@ -1556,11 +1890,14 @@
   execution_kind: primitive
   production_policy: allowed
   lowering_available: false
-  dual_backend_target: true
+  dual_backend_target: false
 - name: tanh
   scope: elementwise
   frequency: any
   input_fields:
+  - x
+  scalar_parameters: []
+  param_names:
   - x
   output_type: series
   pit_safe: true
@@ -1581,14 +1918,21 @@
   execution_kind: primitive
   production_policy: allowed
   lowering_available: false
-  dual_backend_target: true
+  dual_backend_target: false
 - name: ts_autocorr
   scope: time_series
   frequency: any
   input_fields:
   - x
+  scalar_parameters:
   - window
   - lag
+  - min_periods
+  param_names:
+  - x
+  - window
+  - lag
+  - min_periods
   output_type: series
   pit_safe: true
   domain_policy: all_numeric
@@ -1596,7 +1940,7 @@
   null_policy: propagate
   includes_current: true
   lookback: null
-  min_periods: 3
+  min_periods: 2
   nan_policy: propagate
   status: production
   allow_in_production: true
@@ -1608,14 +1952,21 @@
   execution_kind: primitive
   production_policy: allowed
   lowering_available: false
-  dual_backend_target: true
+  dual_backend_target: false
 - name: ts_beta
   scope: time_series
   frequency: any
   input_fields:
   - y
   - x
+  scalar_parameters:
   - window
+  - min_periods
+  param_names:
+  - y
+  - x
+  - window
+  - min_periods
   output_type: series
   pit_safe: true
   domain_policy: all_numeric
@@ -1635,14 +1986,21 @@
   execution_kind: primitive
   production_policy: allowed
   lowering_available: false
-  dual_backend_target: true
+  dual_backend_target: false
 - name: ts_corr
   scope: time_series
   frequency: any
   input_fields:
   - x
   - y
+  scalar_parameters:
   - window
+  - min_periods
+  param_names:
+  - x
+  - y
+  - window
+  - min_periods
   output_type: series
   pit_safe: true
   domain_policy: all_numeric
@@ -1650,7 +2008,7 @@
   null_policy: propagate
   includes_current: true
   lookback: null
-  min_periods: 1
+  min_periods: 2
   nan_policy: propagate
   status: production
   allow_in_production: true
@@ -1662,14 +2020,53 @@
   execution_kind: primitive
   production_policy: allowed
   lowering_available: false
-  dual_backend_target: true
+  dual_backend_target: false
 - name: ts_cov
   scope: time_series
   frequency: any
   input_fields:
   - x
   - y
+  scalar_parameters:
   - window
+  - ddof
+  - min_periods
+  param_names:
+  - x
+  - y
+  - window
+  - ddof
+  - min_periods
+  output_type: series
+  pit_safe: true
+  domain_policy: all_numeric
+  overflow_policy: ieee_propagate
+  null_policy: propagate
+  includes_current: true
+  lookback: null
+  min_periods: 2
+  nan_policy: propagate
+  status: production
+  allow_in_production: true
+  backends:
+  - pandas_numpy
+  - polars
+  - sql
+  description: 滚动协方差 (与m_cov相同)
+  execution_kind: primitive
+  production_policy: allowed
+  lowering_available: false
+  dual_backend_target: false
+- name: ts_delay
+  scope: time_series
+  frequency: any
+  input_fields:
+  - x
+  scalar_parameters:
+  - n
+  param_names:
+  - x
+  - n
   output_type: series
   pit_safe: true
   domain_policy: all_numeric
@@ -1685,42 +2082,20 @@
   - pandas_numpy
   - polars
   - sql
-  description: 滚动协方差 (与m_cov相同)
-  execution_kind: primitive
-  production_policy: allowed
-  lowering_available: false
-  dual_backend_target: true
-- name: ts_delay
-  scope: time_series
-  frequency: any
-  input_fields:
-  - x
-  - n
-  output_type: series
-  pit_safe: true
-  domain_policy: all_numeric
-  overflow_policy: ieee_propagate
-  null_policy: propagate
-  includes_current: true
-  lookback: null
-  min_periods: null
-  nan_policy: propagate
-  status: production
-  allow_in_production: true
-  backends:
-  - pandas_numpy
-  - polars
-  - sql
   description: n期滞后 (与Ref相同)
   execution_kind: primitive
   production_policy: allowed
   lowering_available: false
-  dual_backend_target: true
+  dual_backend_target: false
 - name: ts_delta
   scope: time_series
   frequency: any
   input_fields:
   - x
+  scalar_parameters:
+  - n
+  param_names:
+  - x
   - n
   output_type: series
   pit_safe: true
@@ -1729,7 +2104,7 @@
   null_policy: propagate
   includes_current: true
   lookback: null
-  min_periods: null
+  min_periods: 1
   nan_policy: propagate
   status: production
   allow_in_production: true
@@ -1741,11 +2116,15 @@
   execution_kind: primitive
   production_policy: allowed
   lowering_available: false
-  dual_backend_target: true
+  dual_backend_target: false
 - name: ts_log_return
   scope: time_series
   frequency: any
   input_fields:
+  - x
+  scalar_parameters:
+  - d
+  param_names:
   - x
   - d
   output_type: series
@@ -1767,11 +2146,15 @@
   execution_kind: primitive
   production_policy: allowed
   lowering_available: false
-  dual_backend_target: true
+  dual_backend_target: false
 - name: ts_max
   scope: time_series
   frequency: any
   input_fields:
+  - x
+  scalar_parameters:
+  - window
+  param_names:
   - x
   - window
   output_type: series
@@ -1793,13 +2176,19 @@
   execution_kind: primitive
   production_policy: allowed
   lowering_available: false
-  dual_backend_target: true
+  dual_backend_target: false
 - name: ts_mean
   scope: time_series
   frequency: any
   input_fields:
   - x
+  scalar_parameters:
   - window
+  - min_periods
+  param_names:
+  - x
+  - window
+  - min_periods
   output_type: series
   pit_safe: true
   domain_policy: all_numeric
@@ -1819,11 +2208,15 @@
   execution_kind: primitive
   production_policy: allowed
   lowering_available: false
-  dual_backend_target: true
+  dual_backend_target: false
 - name: ts_median
   scope: time_series
   frequency: any
   input_fields:
+  - x
+  scalar_parameters:
+  - window
+  param_names:
   - x
   - window
   output_type: series
@@ -1845,11 +2238,15 @@
   execution_kind: primitive
   production_policy: allowed
   lowering_available: false
-  dual_backend_target: true
+  dual_backend_target: false
 - name: ts_min
   scope: time_series
   frequency: any
   input_fields:
+  - x
+  scalar_parameters:
+  - window
+  param_names:
   - x
   - window
   output_type: series
@@ -1871,11 +2268,15 @@
   execution_kind: primitive
   production_policy: allowed
   lowering_available: false
-  dual_backend_target: true
+  dual_backend_target: false
 - name: ts_pct
   scope: time_series
   frequency: any
   input_fields:
+  - x
+  scalar_parameters:
+  - d
+  param_names:
   - x
   - d
   output_type: series
@@ -1885,7 +2286,7 @@
   null_policy: propagate
   includes_current: true
   lookback: null
-  min_periods: null
+  min_periods: 1
   nan_policy: propagate
   status: production
   allow_in_production: true
@@ -1897,13 +2298,47 @@
   execution_kind: primitive
   production_policy: allowed
   lowering_available: false
-  dual_backend_target: true
+  dual_backend_target: false
+- name: ts_positive_streak
+  scope: time_series
+  frequency: any
+  input_fields:
+  - x
+  scalar_parameters: []
+  param_names:
+  - x
+  output_type: series
+  pit_safe: true
+  domain_policy: all_numeric
+  overflow_policy: ieee_propagate
+  null_policy: propagate
+  includes_current: true
+  lookback: null
+  min_periods: 1
+  nan_policy: propagate
+  status: experimental
+  allow_in_production: false
+  backends:
+  - pandas_numpy
+  - polars
+  - sql
+  description: 截至当前连续正值计数（NaN 重置）
+  execution_kind: primitive
+  production_policy: denied
+  lowering_available: false
+  dual_backend_target: false
 - name: ts_rank
   scope: time_series
   frequency: any
   input_fields:
   - x
+  scalar_parameters:
   - window
+  - min_periods
+  param_names:
+  - x
+  - window
+  - min_periods
   output_type: series
   pit_safe: true
   domain_policy: all_numeric
@@ -1923,11 +2358,16 @@
   execution_kind: primitive
   production_policy: allowed
   lowering_available: false
-  dual_backend_target: true
+  dual_backend_target: false
 - name: ts_sharpe
   scope: time_series
   frequency: any
   input_fields:
+  - x
+  scalar_parameters:
+  - window
+  - ann_factor
+  param_names:
   - x
   - window
   - ann_factor
@@ -1950,11 +2390,15 @@
   execution_kind: primitive
   production_policy: allowed
   lowering_available: false
-  dual_backend_target: true
+  dual_backend_target: false
 - name: ts_std
   scope: time_series
   frequency: any
   input_fields:
+  - x
+  scalar_parameters:
+  - window
+  param_names:
   - x
   - window
   output_type: series
@@ -1964,7 +2408,7 @@
   null_policy: propagate
   includes_current: true
   lookback: null
-  min_periods: 1
+  min_periods: 2
   nan_policy: propagate
   status: production
   allow_in_production: true
@@ -1976,11 +2420,15 @@
   execution_kind: primitive
   production_policy: allowed
   lowering_available: false
-  dual_backend_target: true
+  dual_backend_target: false
 - name: ts_sum
   scope: time_series
   frequency: any
   input_fields:
+  - x
+  scalar_parameters:
+  - window
+  param_names:
   - x
   - window
   output_type: series
@@ -2002,13 +2450,21 @@
   execution_kind: primitive
   production_policy: allowed
   lowering_available: false
-  dual_backend_target: true
+  dual_backend_target: false
 - name: ts_var
   scope: time_series
   frequency: any
   input_fields:
   - x
+  scalar_parameters:
   - window
+  - ddof
+  - min_periods
+  param_names:
+  - x
+  - window
+  - ddof
+  - min_periods
   output_type: series
   pit_safe: true
   domain_policy: all_numeric
@@ -2016,7 +2472,7 @@
   null_policy: propagate
   includes_current: true
   lookback: null
-  min_periods: 1
+  min_periods: 2
   nan_policy: propagate
   status: production
   allow_in_production: true
@@ -2028,13 +2484,29 @@
   execution_kind: primitive
   production_policy: allowed
   lowering_available: false
-  dual_backend_target: true
+  dual_backend_target: false
 - name: ts_zscore
   scope: time_series
   frequency: any
   input_fields:
   - x
+  scalar_parameters:
   - window
+  - min_periods
+  - null_policy
+  - nan_policy
+  - includes_current_bar
+  - ddof
+  - zero_std_policy
+  param_names:
+  - x
+  - window
+  - min_periods
+  - null_policy
+  - nan_policy
+  - includes_current_bar
+  - ddof
+  - zero_std_policy
   output_type: series
   pit_safe: true
   domain_policy: all_numeric
@@ -2054,11 +2526,17 @@
   execution_kind: primitive
   production_policy: allowed
   lowering_available: false
-  dual_backend_target: true
+  dual_backend_target: false
 - name: ttm_from_cumulative
   scope: fundamental_period
   frequency: any
-  input_fields:
+  input_fields: []
+  scalar_parameters:
+  - x
+  - period_id
+  - fiscal_quarter
+  - revision_policy
+  param_names:
   - x
   - period_id
   - fiscal_quarter
@@ -2072,21 +2550,28 @@
   lookback: null
   min_periods: 1
   nan_policy: propagate
-  status: production
-  allow_in_production: true
+  status: experimental
+  allow_in_production: false
   backends:
   - pandas_numpy
   - polars
   - sql
   description: strict cumulative-to-TTM
   execution_kind: primitive
-  production_policy: allowed
+  production_policy: denied
   lowering_available: false
-  dual_backend_target: true
+  dual_backend_target: false
 - name: ttm_from_quarterly
   scope: fundamental_period
   frequency: any
-  input_fields:
+  input_fields: []
+  scalar_parameters:
+  - x
+  - period_id
+  - periods
+  - require_consecutive
+  - revision_policy
+  param_names:
   - x
   - period_id
   - periods
@@ -2101,24 +2586,29 @@
   lookback: null
   min_periods: 1
   nan_policy: propagate
-  status: production
-  allow_in_production: true
+  status: experimental
+  allow_in_production: false
   backends:
   - pandas_numpy
   - polars
   - sql
   description: strict consecutive-period TTM
   execution_kind: primitive
-  production_policy: allowed
+  production_policy: denied
   lowering_available: false
-  dual_backend_target: true
+  dual_backend_target: false
 - name: where
   scope: elementwise
   frequency: any
   input_fields:
   - condition
-  - v1
-  - v2
+  - x
+  - y
+  scalar_parameters: []
+  param_names:
+  - condition
+  - x
+  - y
   output_type: series
   pit_safe: true
   domain_policy: all_numeric
@@ -2134,15 +2624,20 @@
   - pandas_numpy
   - polars
   - sql
-  description: 条件选择（与if_else相同）
+  description: conditional selection with symmetric scalar broadcasting
   execution_kind: primitive
   production_policy: allowed
   lowering_available: false
-  dual_backend_target: true
+  dual_backend_target: false
 - name: winsorize
   scope: cross_sectional
   frequency: any
   input_fields:
+  - x
+  scalar_parameters:
+  - lower
+  - upper
+  param_names:
   - x
   - lower
   - upper
@@ -2165,11 +2660,19 @@
   execution_kind: primitive
   production_policy: allowed
   lowering_available: false
-  dual_backend_target: true
+  dual_backend_target: false
 - name: yoy_by_period
   scope: fundamental_period
   frequency: any
-  input_fields:
+  input_fields: []
+  scalar_parameters:
+  - x
+  - period_id
+  - periods
+  - denominator
+  - require_consecutive
+  - revision_policy
+  param_names:
   - x
   - period_id
   - periods
@@ -2185,21 +2688,24 @@
   lookback: null
   min_periods: 5
   nan_policy: propagate
-  status: production
-  allow_in_production: true
+  status: experimental
+  allow_in_production: false
   backends:
   - pandas_numpy
   - polars
   - sql
   description: strict fiscal-period growth
   execution_kind: primitive
-  production_policy: allowed
+  production_policy: denied
   lowering_available: false
-  dual_backend_target: true
+  dual_backend_target: false
 - name: zscore
   scope: cross_sectional
   frequency: any
   input_fields:
+  - x
+  scalar_parameters: []
+  param_names:
   - x
   output_type: series
   pit_safe: true
@@ -2220,4 +2726,4 @@
   execution_kind: primitive
   production_policy: allowed
   lowering_available: false
-  dual_backend_target: true
+  dual_backend_target: false

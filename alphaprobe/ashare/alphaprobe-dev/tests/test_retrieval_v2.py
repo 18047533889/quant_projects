@@ -378,14 +378,15 @@ class TestNodeState:
 class TestClusterRarity:
     def test_basic(self):
         assert cluster_rarity(3) == pytest.approx(1.0 / math.sqrt(4.0))
-        assert cluster_rarity(None) == pytest.approx(1.0)
+        # P0-B：None（无信息）→ 中性 0.5，不再当作「最稀有机会」
+        assert cluster_rarity(None) == pytest.approx(0.5)
 
     def test_smaller_cluster_rarer(self):
         assert cluster_rarity(1) > cluster_rarity(100)
 
     def test_zero_or_negative_neutral(self):
-        assert cluster_rarity(0) == pytest.approx(1.0)
-        assert cluster_rarity(-5) == pytest.approx(1.0)
+        assert cluster_rarity(0) == pytest.approx(0.5)
+        assert cluster_rarity(-5) == pytest.approx(0.5)
 
 
 # ---------------------------------------------------------------------------
@@ -466,10 +467,24 @@ class TestMemoryIntegration:
         assert so.cluster_rarity_of("c1") == pytest.approx(1.0 / math.sqrt(6.0))
 
     def test_local_fallback_cluster_size_one(self):
-        """无 cluster 成员表时退化为 cluster_size=1（最稀），不假设拥挤。"""
+        """无 cluster 成员表时 cluster_fn 返回 1.0（已知自成 singleton）。
+
+        P0-B：cluster_size=1 是「已知自成 singleton」（合法 rarity 输入，
+        1/sqrt(2)≈0.707），不是「无 cluster 上下文（None→中性 0.5）」。
+        """
         class EmptyStore:
             def rare_directions(self, k=50):
                 return []
 
         so = SearchOpportunity.from_memory_store(EmptyStore())
+        # 本地退化 cluster_fn 返回 cluster_size=1.0
+        assert so.cluster_fn("anything") == pytest.approx(1.0)
         assert so.cluster_rarity_of("anything") == pytest.approx(1.0 / math.sqrt(2.0))
+
+    def test_cluster_fn_none_is_neutral(self):
+        """cluster_fn 返回 None（adapter 无该因子信息）→ ClusterRarity 中性 0.5。"""
+        def adapter(factor_id: str):
+            return None
+
+        so = SearchOpportunity(cluster_fn=adapter)
+        assert so.cluster_rarity_of("no_info") == pytest.approx(0.5)

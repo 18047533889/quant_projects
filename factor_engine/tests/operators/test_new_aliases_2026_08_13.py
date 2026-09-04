@@ -14,11 +14,13 @@ def test_ema_ewm_aliases(_loaded):
     assert OperatorRegistry.get("ts_ewm_mean") is OperatorRegistry.get("ts_ema")
     assert OperatorRegistry.get("ts_ewma") is OperatorRegistry.get("ts_ema")
 
-    # ewm_* family
+    # ewm_* family (ts_ewm_std/ts_ewm_var alias their ewm_* names; see below)
     assert OperatorRegistry.get("ts_ewm_std") is OperatorRegistry.get("ewm_std")
     assert OperatorRegistry.get("ts_ewm_var") is OperatorRegistry.get("ewm_var")
-    assert OperatorRegistry.get("ts_ewm_cov") is OperatorRegistry.get("ewm_cov")
-    assert OperatorRegistry.get("ts_ewm_corr") is OperatorRegistry.get("ewm_corr")
+    # NOTE: ts_ewm_cov / ts_ewm_corr are NOT aliases.  They are genuine
+    # polars-only pairwise canonicals (polars_native/ts_batch1.py), distinct from
+    # the pandas EWMCov/EWMCorr registered under ewm_cov/ewm_corr.  These two are
+    # tested in test_pairwise_ewm_are_distinct_canonicals below.
 
 
 def test_sma_aliases(_loaded):
@@ -54,7 +56,12 @@ def test_returns_aliases(_loaded):
     """Returns aliases map to ts_pct canonical."""
     from factor_engine.cleaned_operators.registry import OperatorRegistry
 
-    assert OperatorRegistry.get("ret") is OperatorRegistry.get("ts_pct")
+    # NOTE: ``ret`` is intentionally NOT registered as an operator alias.  In the
+    # LQTP surface ``ret`` is the conventional return FIELD, and an operator alias
+    # collides (``rolling_beta_to_market(ret, 20)`` would DSLParseError).  ``ret()``
+    # must still resolve through the field path.  ``ts_return``/``returns`` carry the
+    # operator→ts_pct mapping instead (see _aliases / _dedupe).
+    assert OperatorRegistry.get("returns") is OperatorRegistry.get("ts_pct")
 
 
 def test_clip_aliases(_loaded):
@@ -62,6 +69,26 @@ def test_clip_aliases(_loaded):
     from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     assert OperatorRegistry.get("bound") is OperatorRegistry.get("clip")
+
+
+def test_pairwise_ewm_are_distinct_canonicals(_loaded):
+    """ts_ewm_cov / ts_ewm_corr are polars-only pairwise canonicals, not aliases.
+
+    They must NOT share identity with the pandas EWMCov/EWMCorr (ewm_cov/ewm_corr),
+    and each must be independently callable on its own backend.
+    """
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
+
+    cov_pair = OperatorRegistry.get("ts_ewm_cov", backend="polars")
+    corr_pair = OperatorRegistry.get("ts_ewm_corr", backend="polars")
+    cov_1d = OperatorRegistry.get("ewm_cov", backend="pandas_numpy")
+    corr_1d = OperatorRegistry.get("ewm_corr", backend="pandas_numpy")
+    assert cov_pair is not None
+    assert corr_pair is not None
+    assert cov_1d is not None
+    assert corr_1d is not None
+    assert cov_pair is not cov_1d  # distinct pairwise vs 1d estimators
+    assert corr_pair is not corr_1d
 
 
 def test_normalization_aliases(_loaded):
@@ -81,13 +108,10 @@ def test_all_14_new_aliases_bidirectional(_loaded):
         "ts_sma": "ts_mean",
         "ts_ewm_std": "ewm_std",
         "ts_ewm_var": "ewm_var",
-        "ts_ewm_cov": "ewm_cov",
-        "ts_ewm_corr": "ewm_corr",
         "ts_lag": "ts_delay",
         "wdecay": "ts_decay_linear",
         "safe_divide": "safe_div_null",
         "div_safe": "safe_div_null",
-        "ret": "ts_pct",
         "bound": "clip",
         "cs_standardize": "zscore",
     }

@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-08-12T16:24:58+0800",
-  "commit_sha": "854bdc2278678e3db03c894c059cd5fdbb7dac1b",
+  "generated_at": "2026-09-04T03:55:57+0800",
+  "commit_sha": "a07ea23020f86f4a63f50f67ec5b0ae1023b5b22",
   "certified_operators": [
     {
       "canonical": "arg",
@@ -52,6 +52,54 @@
     },
     {
       "canonical": "cdl_harami_cross",
+      "certifications": {
+        "parameter_domain": {
+          "status": "NOT_RUN",
+          "oracle": null,
+          "proof_hash": null
+        },
+        "output_oracle": {
+          "status": "NOT_RUN",
+          "reason": "no oracle found"
+        },
+        "pit_safe": {
+          "status": "CERTIFIED"
+        },
+        "leakage_tested": {
+          "status": "PARTIAL"
+        },
+        "axis_effect": {
+          "status": "NOT_RUN",
+          "value": null
+        }
+      }
+    },
+    {
+      "canonical": "cs1_weekday_anomaly",
+      "certifications": {
+        "parameter_domain": {
+          "status": "NOT_RUN",
+          "oracle": null,
+          "proof_hash": null
+        },
+        "output_oracle": {
+          "status": "NOT_RUN",
+          "reason": "no oracle found"
+        },
+        "pit_safe": {
+          "status": "CERTIFIED"
+        },
+        "leakage_tested": {
+          "status": "PARTIAL"
+        },
+        "axis_effect": {
+          "status": "NOT_RUN",
+          "value": null
+        }
+      }
+    },
+    {
+      "canonical": "cs1_weekly_harmonic_power",
       "certifications": {
         "parameter_domain": {
           "status": "NOT_RUN",
@@ -1059,6 +1107,54 @@
       }
     },
     {
+      "canonical": "m1_momentum_regime",
+      "certifications": {
+        "parameter_domain": {
+          "status": "NOT_RUN",
+          "oracle": null,
+          "proof_hash": null
+        },
+        "output_oracle": {
+          "status": "NOT_RUN",
+          "reason": "no oracle found"
+        },
+        "pit_safe": {
+          "status": "CERTIFIED"
+        },
+        "leakage_tested": {
+          "status": "PARTIAL"
+        },
+        "axis_effect": {
+          "status": "NOT_RUN",
+          "value": null
+        }
+      }
+    },
+    {
+      "canonical": "ofi_volume_flow_regime",
+      "certifications": {
+        "parameter_domain": {
+          "status": "NOT_RUN",
+          "oracle": null,
+          "proof_hash": null
+        },
+        "output_oracle": {
+          "status": "NOT_RUN",
+          "reason": "no oracle found"
+        },
+        "pit_safe": {
+          "status": "CERTIFIED"
+        },
+        "leakage_tested": {
+          "status": "PARTIAL"
+        },
+        "axis_effect": {
+          "status": "NOT_RUN",
+          "value": null
+        }
+      }
+    },
+    {
       "canonical": "panel_mixture_of_experts_score",
       "certifications": {
         "parameter_domain": {
@@ -1323,6 +1419,30 @@
       }
     },
     {
+      "canonical": "reg_forecast_error_pct",
+      "certifications": {
+        "parameter_domain": {
+          "status": "NOT_RUN",
+          "oracle": null,
+          "proof_hash": null
+        },
+        "output_oracle": {
+          "status": "NOT_RUN",
+          "reason": "no oracle found"
+        },
+        "pit_safe": {
+          "status": "CERTIFIED"
+        },
+        "leakage_tested": {
+          "status": "PARTIAL"
+        },
+        "axis_effect": {
+          "status": "NOT_RUN",
+          "value": null
+        }
+      }
+    },
+    {
       "canonical": "state_adaptive_deadband",
       "certifications": {
         "parameter_domain": {
@@ -1348,6 +1468,30 @@
     },
     {
       "canonical": "state_adaptive_slew_limit",
+      "certifications": {
+        "parameter_domain": {
+          "status": "NOT_RUN",
+          "oracle": null,
+          "proof_hash": null
+        },
+        "output_oracle": {
+          "status": "NOT_RUN",
+          "reason": "no oracle found"
+        },
+        "pit_safe": {
+          "status": "CERTIFIED"
+        },
+        "leakage_tested": {
+          "status": "PARTIAL"
+        },
+        "axis_effect": {
+          "status": "NOT_RUN",
+          "value": null
+        }
+      }
+    },
+    {
+      "canonical": "state_age",
       "certifications": {
         "parameter_domain": {
           "status": "NOT_RUN",
@@ -1444,6 +1588,126 @@
     },
     {
       "canonical": "state_deadband",
+      "certifications": {
+        "parameter_domain": {
+          "status": "NOT_RUN",
+          "oracle": null,
+          "proof_hash": null
+        },
+        "output_oracle": {
+          "status": "NOT_RUN",
+          "reason": "no oracle found"
+        },
+        "pit_safe": {
+          "status": "CERTIFIED"
+        },
+        "leakage_tested": {
+          "status": "PARTIAL"
+        },
+        "axis_effect": {
+          "status": "NOT_RUN",
+          "value": null
+        }
+      }
+    },
+    {
+      "canonical": "state_dwell_pct",
+      "certifications": {
+        "parameter_domain": {
+          "status": "NOT_RUN",
+          "oracle": null,
+          "proof_hash": null
+        },
+        "output_oracle": {
+          "status": "NOT_RUN",
+          "reason": "no oracle found"
+        },
+        "pit_safe": {
+          "status": "CERTIFIED"
+        },
+        "leakage_tested": {
+          "status": "PARTIAL"
+        },
+        "axis_effect": {
+          "status": "NOT_RUN",
+          "value": null
+        }
+      }
+    },
+    {
+      "canonical": "state_episode_age",
+      "certifications": {
+        "parameter_domain": {
+          "status": "NOT_RUN",
+          "oracle": null,
+          "proof_hash": null
+        },
+        "output_oracle": {
+          "status": "NOT_RUN",
+          "reason": "no oracle found"
+        },
+        "pit_safe": {
+          "status": "CERTIFIED"
+        },
+        "leakage_tested": {
+          "status": "PARTIAL"
+        },
+        "axis_effect": {
+          "status": "NOT_RUN",
+          "value": null
+        }
+      }
+    },
+    {
+      "canonical": "state_episode_age_capped",
+      "certifications": {
+        "parameter_domain": {
+          "status": "NOT_RUN",
+          "oracle": null,
+          "proof_hash": null
+        },
+        "output_oracle": {
+          "status": "NOT_RUN",
+          "reason": "no oracle found"
+        },
+        "pit_safe": {
+          "status": "CERTIFIED"
+        },
+        "leakage_tested": {
+          "status": "PARTIAL"
+        },
+        "axis_effect": {
+          "status": "NOT_RUN",
+          "value": null
+        }
+      }
+    },
+    {
+      "canonical": "state_episode_age_lower_bound",
+      "certifications": {
+        "parameter_domain": {
+          "status": "NOT_RUN",
+          "oracle": null,
+          "proof_hash": null
+        },
+        "output_oracle": {
+          "status": "NOT_RUN",
+          "reason": "no oracle found"
+        },
+        "pit_safe": {
+          "status": "CERTIFIED"
+        },
+        "leakage_tested": {
+          "status": "PARTIAL"
+        },
+        "axis_effect": {
+          "status": "NOT_RUN",
+          "value": null
+        }
+      }
+    },
+    {
+      "canonical": "state_episode_censored_flag",
       "certifications": {
         "parameter_domain": {
           "status": "NOT_RUN",
@@ -1611,6 +1875,54 @@
       }
     },
     {
+      "canonical": "state_flip_age",
+      "certifications": {
+        "parameter_domain": {
+          "status": "NOT_RUN",
+          "oracle": null,
+          "proof_hash": null
+        },
+        "output_oracle": {
+          "status": "NOT_RUN",
+          "reason": "no oracle found"
+        },
+        "pit_safe": {
+          "status": "CERTIFIED"
+        },
+        "leakage_tested": {
+          "status": "PARTIAL"
+        },
+        "axis_effect": {
+          "status": "NOT_RUN",
+          "value": null
+        }
+      }
+    },
+    {
+      "canonical": "state_flip_density",
+      "certifications": {
+        "parameter_domain": {
+          "status": "NOT_RUN",
+          "oracle": null,
+          "proof_hash": null
+        },
+        "output_oracle": {
+          "status": "NOT_RUN",
+          "reason": "no oracle found"
+        },
+        "pit_safe": {
+          "status": "CERTIFIED"
+        },
+        "leakage_tested": {
+          "status": "PARTIAL"
+        },
+        "axis_effect": {
+          "status": "NOT_RUN",
+          "value": null
+        }
+      }
+    },
+    {
       "canonical": "state_hold",
       "certifications": {
         "parameter_domain": {
@@ -1684,6 +1996,30 @@
     },
     {
       "canonical": "state_latch",
+      "certifications": {
+        "parameter_domain": {
+          "status": "NOT_RUN",
+          "oracle": null,
+          "proof_hash": null
+        },
+        "output_oracle": {
+          "status": "NOT_RUN",
+          "reason": "no oracle found"
+        },
+        "pit_safe": {
+          "status": "CERTIFIED"
+        },
+        "leakage_tested": {
+          "status": "PARTIAL"
+        },
+        "axis_effect": {
+          "status": "NOT_RUN",
+          "value": null
+        }
+      }
+    },
+    {
+      "canonical": "state_persistence",
       "certifications": {
         "parameter_domain": {
           "status": "NOT_RUN",
@@ -1899,6 +2235,78 @@
       }
     },
     {
+      "canonical": "state_transition_count",
+      "certifications": {
+        "parameter_domain": {
+          "status": "NOT_RUN",
+          "oracle": null,
+          "proof_hash": null
+        },
+        "output_oracle": {
+          "status": "NOT_RUN",
+          "reason": "no oracle found"
+        },
+        "pit_safe": {
+          "status": "CERTIFIED"
+        },
+        "leakage_tested": {
+          "status": "PARTIAL"
+        },
+        "axis_effect": {
+          "status": "NOT_RUN",
+          "value": null
+        }
+      }
+    },
+    {
+      "canonical": "state_transition_rate",
+      "certifications": {
+        "parameter_domain": {
+          "status": "NOT_RUN",
+          "oracle": null,
+          "proof_hash": null
+        },
+        "output_oracle": {
+          "status": "NOT_RUN",
+          "reason": "no oracle found"
+        },
+        "pit_safe": {
+          "status": "CERTIFIED"
+        },
+        "leakage_tested": {
+          "status": "PARTIAL"
+        },
+        "axis_effect": {
+          "status": "NOT_RUN",
+          "value": null
+        }
+      }
+    },
+    {
+      "canonical": "state_transition_surprise",
+      "certifications": {
+        "parameter_domain": {
+          "status": "NOT_RUN",
+          "oracle": null,
+          "proof_hash": null
+        },
+        "output_oracle": {
+          "status": "NOT_RUN",
+          "reason": "no oracle found"
+        },
+        "pit_safe": {
+          "status": "CERTIFIED"
+        },
+        "leakage_tested": {
+          "status": "PARTIAL"
+        },
+        "axis_effect": {
+          "status": "NOT_RUN",
+          "value": null
+        }
+      }
+    },
+    {
       "canonical": "state_uncertainty_deadband",
       "certifications": {
         "parameter_domain": {
@@ -1936,6 +2344,30 @@
         },
         "pit_safe": {
           "status": "CERTIFIED"
+        },
+        "leakage_tested": {
+          "status": "PARTIAL"
+        },
+        "axis_effect": {
+          "status": "NOT_RUN",
+          "value": null
+        }
+      }
+    },
+    {
+      "canonical": "ts_adaptive_noise_kalman",
+      "certifications": {
+        "parameter_domain": {
+          "status": "NOT_RUN",
+          "oracle": null,
+          "proof_hash": null
+        },
+        "output_oracle": {
+          "status": "NOT_RUN",
+          "reason": "no oracle found"
+        },
+        "pit_safe": {
+          "status": "NOT_RUN"
         },
         "leakage_tested": {
           "status": "PARTIAL"
@@ -5403,6 +5835,30 @@
       }
     },
     {
+      "canonical": "ts_ssa_denoise_trailing",
+      "certifications": {
+        "parameter_domain": {
+          "status": "NOT_RUN",
+          "oracle": null,
+          "proof_hash": null
+        },
+        "output_oracle": {
+          "status": "NOT_RUN",
+          "reason": "no oracle found"
+        },
+        "pit_safe": {
+          "status": "CERTIFIED"
+        },
+        "leakage_tested": {
+          "status": "PARTIAL"
+        },
+        "axis_effect": {
+          "status": "NOT_RUN",
+          "value": null
+        }
+      }
+    },
+    {
       "canonical": "ts_ssa_prior_reconstruction_error",
       "certifications": {
         "parameter_domain": {
@@ -5584,6 +6040,30 @@
         },
         "pit_safe": {
           "status": "CERTIFIED"
+        },
+        "leakage_tested": {
+          "status": "PARTIAL"
+        },
+        "axis_effect": {
+          "status": "NOT_RUN",
+          "value": null
+        }
+      }
+    },
+    {
+      "canonical": "ts_student_t_kalman_filter",
+      "certifications": {
+        "parameter_domain": {
+          "status": "NOT_RUN",
+          "oracle": null,
+          "proof_hash": null
+        },
+        "output_oracle": {
+          "status": "NOT_RUN",
+          "reason": "no oracle found"
+        },
+        "pit_safe": {
+          "status": "NOT_RUN"
         },
         "leakage_tested": {
           "status": "PARTIAL"
@@ -5812,6 +6292,54 @@
     },
     {
       "canonical": "ts_weighted_drawdown_area",
+      "certifications": {
+        "parameter_domain": {
+          "status": "NOT_RUN",
+          "oracle": null,
+          "proof_hash": null
+        },
+        "output_oracle": {
+          "status": "NOT_RUN",
+          "reason": "no oracle found"
+        },
+        "pit_safe": {
+          "status": "CERTIFIED"
+        },
+        "leakage_tested": {
+          "status": "PARTIAL"
+        },
+        "axis_effect": {
+          "status": "NOT_RUN",
+          "value": null
+        }
+      }
+    },
+    {
+      "canonical": "val1_discount_regime_share",
+      "certifications": {
+        "parameter_domain": {
+          "status": "NOT_RUN",
+          "oracle": null,
+          "proof_hash": null
+        },
+        "output_oracle": {
+          "status": "NOT_RUN",
+          "reason": "no oracle found"
+        },
+        "pit_safe": {
+          "status": "CERTIFIED"
+        },
+        "leakage_tested": {
+          "status": "PARTIAL"
+        },
+        "axis_effect": {
+          "status": "NOT_RUN",
+          "value": null
+        }
+      }
+    },
+    {
+      "canonical": "vv1_regime_change_ratio",
       "certifications": {
         "parameter_domain": {
           "status": "NOT_RUN",

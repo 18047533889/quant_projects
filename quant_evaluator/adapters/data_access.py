@@ -106,11 +106,17 @@ class DataAccessEvaluationLoader:
             columns=columns,
         )
         df = handle.to_pandas()
-        # wide layout: index = datetime, columns = [asset, f1, f2, ...]
-        # pivot to (T, N, F)
-        time_col = df.index.name or "datetime"
+        # wide layout from read_factors: columns = [datetime, asset, f1, f2, ...]
+        # (datetime is a regular column, not the index, in data_access >= 0.10).
+        # Fall back to the index only when no datetime column is present.
+        time_col = "datetime"
         asset_col = "asset"
-        dates = sorted(df.index.unique())
+        if time_col not in df.columns:
+            time_col = df.index.name or "datetime"
+        if time_col in df.columns:
+            dates = sorted(df[time_col].unique())
+        else:
+            dates = list(df.index)
         assets = sorted(df[asset_col].unique()) if asset_col in df.columns else None
         if assets is None:
             # wide already pivoted: columns are factor ids, index is datetime

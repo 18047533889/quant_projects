@@ -263,10 +263,20 @@ class TestOrchestrator:
             assert isinstance(result, OrchestratorStep)
             seen_types.add(result.action.action_type.value)
         assert seen_types <= set(ACTION_FAMILIES)
+        # P0-B：不传 reward → scheduler 不被 update（等 settle_reward 回传），
+        # 统计不再因 candidate 数/步数虚增。
         total_attempts = sum(
             st.attempts for st in orch.scheduler.stats.values()
         )
-        assert total_attempts == 3
+        assert total_attempts == 0
+        # settle 闭环：显式回传真实 reward → stats 更新
+        for _ in range(3):
+            result = orch.step_with_llm(self._parent(), self._stub_llm)
+            orch.settle_reward(result, 0.5)
+        total_settled = sum(
+            st.attempts for st in orch.scheduler.stats.values()
+        )
+        assert total_settled == 3
 
     def test_candidates_parsed_from_stub(self):
         orch = SearchOrchestrator()

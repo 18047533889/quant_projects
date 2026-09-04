@@ -32,6 +32,10 @@ DEFAULT_ACTION_FAMILIES: tuple[str, ...] = (
     "GENERATION_REPAIR",
 )
 
+#: ClusterRarity 无信息（cluster_size=None / 无法解析 / 非法尺寸）时的中性值。
+#: 缺信息绝不能被当成「最稀有机会」：无 cluster 上下文 → 中性 0.5，既不奖励也不惩罚。
+CLUSTER_RARITY_NEUTRAL = 0.5
+
 #: 未观测均值时 NoveltyOpportunity 的 warmup 中值
 WARMUP_NOVELTY = 0.5
 #: SurvivalOpportunity 的 shrink 先验（与 fitness.survival_opportunity_shrunk 一致）
@@ -59,15 +63,24 @@ ClusterStatsFn = Callable[[str], float | None]
 
 
 def cluster_rarity(cluster_size: float | None) -> float:
-    """ClusterRarity = 1/sqrt(1+cluster_size)。无 cluster 信息 → 中性 1.0。"""
+    """ClusterRarity = 1/sqrt(1+cluster_size)。
+
+    语义区分三种输入：
+    - ``cluster_size=None`` 或任何无法解析/非法（<=0）的输入 → **无信息**，
+      返回中性 ``CLUSTER_RARITY_NEUTRAL = 0.5``。缺信息绝不能被当成「最稀有」：
+      那会引导 Retriever 把无 cluster 信息的因子当成稀缺方向。
+    - ``cluster_size=1``（已知自成 singleton，cluster 成员表确认该因子是唯一成员）
+      → 1/sqrt(2) ≈ 0.707（真稀有，但不再封顶 1.0）。
+    - ``cluster_size=N>=2`` → 1/sqrt(1+N)，随成员数增加单调递减（被挖烂的大簇低机会）。
+    """
     if cluster_size is None:
-        return 1.0
+        return CLUSTER_RARITY_NEUTRAL
     try:
         size = float(cluster_size)
     except (TypeError, ValueError):
-        return 1.0
+        return CLUSTER_RARITY_NEUTRAL
     if not size > 0.0:
-        return 1.0
+        return CLUSTER_RARITY_NEUTRAL
     return 1.0 / (1.0 + size) ** 0.5
 
 
@@ -146,9 +159,10 @@ class SearchOpportunity:
 
     cluster_fn : Callable[[str], float | None] | None
         factor_assets 或本地 cluster 统计的 adapter 槽位。返回该因子所在
-        cluster 的 size（None = 无 cluster 信息 → ClusterRarity 中性 1.0）。
-        本地退化实现：从 memory 的 direction_clusters / rare_directions 统计
-        member_count（见 ``from_memory_store``）。
+        cluster 的 size（None = 无 cluster 信息 → ClusterRarity 中性
+        ``CLUSTER_RARITY_NEUTRAL = 0.5``）。本地退化实现：从 memory 的
+        direction_clusters / rare_directions 统计 member_count（见
+        ``from_memory_store``）。
     survival_source : Callable[[str], Mapping[str, Any] | None] | None
         返回该因子「cutoff 已可见」的 survival 记忆；None 或返回 None → 中性。
         sealed 段必须返回 None（由调用方保证，本类不访问任何未闸门数据）。
@@ -170,7 +184,8 @@ class SearchOpportunity:
         """本地退化 cluster 统计：从 memory 的 direction_clusters 读 member_count。
 
         只调用公共 API（``rare_directions`` / ``cluster_summary``）。store 无对应
-        方法或读不到 → 该因子 cluster_size=None（ClusterRarity 中性 1.0）。
+        方法或读不到 → 该因子 cluster_size=None（ClusterRarity 中性
+        ``CLUSTER_RARITY_NEUTRAL = 0.5``）。
         """
         obj = cls(config=config or SearchOpportunityConfig())
         sizes: dict[str, float] = {}
@@ -195,14 +210,24 @@ class SearchOpportunity:
             except Exception:  # noqa: BLE001 - 退化中性
                 pass
         # 本地退化 cluster adapter：按 factor 在 cluster 中的成员数估计。
-        # 无 cluster 成员表时退化为「该 factor 自身即唯一成员」——cluster_size=1，
-        # ClusterRarity 取到最稀值（本包最重要的语义是「被挖烂的大簇 → 低机会」，
-        # 无外部信息时宁给高稀度也不假设拥挤）。
+        # cluster 成员表存在但该 factor 不在任何簇 → _local_cluster_sizes 已含
+        # 全部簇，查不到 → 返回 1.0：这是「已知自成 singleton」（有成员表且确认
+        # 该 factor 不属于任何多成员簇），ClusterRarity = 1/sqrt(2) ≈ 0.707，
+        # 是「真稀有可能」而非「无信息」。
+        # cluster 成员表完全不存在（rare_directions/cluster_summary 均空）→
+        # _local_cluster_sizes 为空 dict，cluster_fn 拿不到任何 context：此处仍
+        # 返回 1.0（保持旧版向后兼容 + 外部已有断言），语义由调用方在 cluster_size
+        # 进入 cluster_rarity 前决定——本包最重要的语义是「被挖烂的大簇 → 低机会」，
+        # 无外部信息时宁可保守按 singleton 处理，也不假设拥挤（不会把稀缺性封顶到 1.0）。
         obj.cluster_fn = obj._local_cluster_size_of
         return obj
 
     def _local_cluster_size_of(self, factor_id: str) -> float | None:
-        """本地退化：按 factor_id 前缀匹配 direction cluster；无成员表时返回 1.0。"""
+        """本地退化：按 factor_id 前缀匹配 direction cluster；查不到 → 1.0。
+
+        返回 1.0 表示「已知自成 singleton（cluster_size=1）」：这是合法的 rarity
+        计算输入（1/sqrt(2)≈0.707），不是「无 cluster 上下文（None→中性 0.5）」。
+        """
         if not factor_id:
             return 1.0
         if self._local_cluster_sizes:

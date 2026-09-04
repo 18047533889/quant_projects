@@ -13,6 +13,7 @@ import sqlite3
 import threading
 import time
 from dataclasses import asdict, dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterator
 
@@ -122,6 +123,14 @@ CREATE TABLE IF NOT EXISTS attempts (
     created_at REAL
 );
 
+CREATE TABLE IF NOT EXISTS retrieval_events (
+    event_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    factor_id TEXT NOT NULL,
+    ts REAL,
+    action TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_retrieval_events_factor ON retrieval_events(factor_id);
+
 CREATE TABLE IF NOT EXISTS evaluations (
     factor_id TEXT,
     segment TEXT,
@@ -194,6 +203,15 @@ CREATE TABLE IF NOT EXISTS market_regime_events (
     description TEXT,
     payload TEXT
 );
+
+CREATE TABLE IF NOT EXISTS search_run_events (
+    event_id TEXT PRIMARY KEY,
+    round_id TEXT,
+    description TEXT,
+    payload TEXT,
+    created_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_search_run_events_round ON search_run_events(round_id);
 
 CREATE TABLE IF NOT EXISTS source_ingestions (
     source_key TEXT PRIMARY KEY,
@@ -528,6 +546,34 @@ class GlobalMemoryStore:
             for r in rows
         ]
 
+    # -- §57 Retrieval Frequency Decay（P0-B：检索事件 = 被选为 parent 的真实次数） ---
+
+    def record_retrieval(self, *, factor_id: str, action: str | None = None) -> None:
+        """记录一次「factor 被检索（选为 parent / 生成）」事件。
+
+        检索频率衰减的计数必须是「被检索了多少次」而非「有几个孩子」：
+        每次 select_parents 命中该 factor 作为检索起点时由 pipeline /
+        orchestrator 调用。轻量 append 表，SQLite 天然支持并发计数。
+        """
+        if not factor_id:
+            return
+        with self._lock:
+            self._conn.execute(
+                "INSERT INTO retrieval_events(factor_id, ts, action) VALUES (?,?,?)",
+                (str(factor_id), time.time(), action),
+            )
+            self._conn.commit()
+
+    def retrieval_count_of(self, factor_id: str) -> int:
+        """该 factor 累计被检索（选为 parent）的真实次数。"""
+        if not factor_id:
+            return 0
+        row = self._conn.execute(
+            "SELECT COUNT(*) FROM retrieval_events WHERE factor_id=?",
+            (str(factor_id),),
+        ).fetchone()
+        return int(row[0]) if row else 0
+
     # -- §42 Failure Memory ----------------------------------------------------
 
     def record_failure(
@@ -687,6 +733,35 @@ class GlobalMemoryStore:
         """§50 幂等注册用：event_id 已存在返回 True。"""
         row = self._conn.execute(
             "SELECT 1 FROM market_regime_events WHERE event_id=?", (event_id,)
+        ).fetchone()
+        return row is not None
+
+    # -- Round 搜索轮事件（与 market regime 分离，§74） -------------------------
+
+    def add_search_run_event(
+        self, *, event_id: str, round_id: str, description: str,
+        payload: dict | None = None,
+    ) -> None:
+        """记录一轮搜索运行的完成/汇总事件（幂等 upsert）。
+
+        搜索轮次是引擎运行元数据，不是市场状态——round 事件不允许混进
+        market_regime_events（§74：regime 表从此只放市场 regime 事件，
+        由 survival.regime.register_2026_event 等写入）。
+        """
+        with self._lock:
+            self._conn.execute(
+                "INSERT OR REPLACE INTO search_run_events VALUES (?,?,?,?,?)",
+                (
+                    event_id, round_id, description,
+                    json.dumps(payload or {}), datetime.now(timezone.utc).isoformat(),
+                ),
+            )
+            self._conn.commit()
+
+    def search_run_event_exists(self, event_id: str) -> bool:
+        """幂等注册用：event_id 已存在返回 True。"""
+        row = self._conn.execute(
+            "SELECT 1 FROM search_run_events WHERE event_id=?", (event_id,)
         ).fetchone()
         return row is not None
 

@@ -99,6 +99,36 @@ class TestNonDominatedRank:
 # ---------------------------------------------------------------------------
 
 
+class TestCrowdingSemantics:
+    def test_crowding_distance_identical_points_not_biased(self):
+        """3 个完全相同点：互相完全等价 → 整组被视作「无内部可淘汰」。
+        crowding 全部 inf（或全部相等）→ 淘汰决策退化为确定性 tie-break，
+        不因 dict 遍历顺序 / 排序稳定性把某个等价点当「最拥挤」误淘汰。
+        """
+        A = _pt("A", 0.5, novelty=0.5, complexity=5, turnover=0.1)
+        B = _pt("B", 0.5, novelty=0.5, complexity=5, turnover=0.1)
+        C = _pt("C", 0.5, novelty=0.5, complexity=5, turnover=0.1)
+        rank = non_dominated_rank([A, B, C])
+        cd = crowding_distance([A, B, C], rank)
+        assert rank["A"] == rank["B"] == rank["C"] == 0
+        # 全等价 → 要么全 inf，要么全相等（不允许出现「某点特别小」的偏置）
+        finite = {cd[f] for f in ("A", "B", "C") if cd[f] != float("inf")}
+        assert not finite or len(finite) == 1
+
+    def test_identical_triple_evicts_lexicographic_first(self):
+        """3 个完全相同点 → crowding 无法区分谁更差时回退 tie-break：淘汰字典序最小 id。"""
+        A = _pt("A", 0.5, novelty=0.5, complexity=5, turnover=0.1)
+        B = _pt("B", 0.5, novelty=0.5, complexity=5, turnover=0.1)
+        C = _pt("C", 0.5, novelty=0.5, complexity=5, turnover=0.1)
+        v = pareto_eviction_candidate([C, B, A])
+        assert v.factor_id == "A"
+        # 排除 A 后 → B；排除 A、B 后 → C（确定性字典序）
+        v2 = pareto_eviction_candidate([C, B, A], exclude_factor_id="A")
+        assert v2.factor_id == "B"
+        v3 = pareto_eviction_candidate([C, B, A], exclude_factor_id="A", tie_break=lambda a, b: -1 if a > b else 1)
+        assert v3.factor_id == "C"
+
+
 class TestDeterministicTieBreak:
     def test_identical_points_tie_break_deterministic(self):
         """完全相同的目标向量 → 同 rank 同 crowding → 确定性 tie-break。"""
@@ -111,6 +141,21 @@ class TestDeterministicTieBreak:
         victims = {pareto_eviction_candidate([A, B, C]).factor_id for _ in range(5)}
         assert len(victims) == 1
 
+    def test_identical_points_lexicographic_tie_break(self):
+        """完全等价的点（不同 id）→ 字典序 tie-break 返回最小 id（负 = 优先淘汰）。"""
+        P = _pt("A", 0.5, novelty=0.5, complexity=5, turnover=0.1)
+        Q = _pt("B", 0.5, novelty=0.5, complexity=5, turnover=0.1)
+        v = pareto_eviction_candidate([Q, P])
+        assert v.factor_id == "A"
+
+    def test_tie_break_callable_overrides(self):
+        """自定义 tie_break 返回负 = 前者优先淘汰；用其反转默认字典序。"""
+        P = _pt("A", 0.5, novelty=0.5, complexity=5, turnover=0.1)
+        Q = _pt("B", 0.5, novelty=0.5, complexity=5, turnover=0.1)
+        # 反转：B 优先淘汰
+        v = pareto_eviction_candidate([Q, P], tie_break=lambda a, b: -1 if a > b else 1)
+        assert v.factor_id == "B"
+
     def test_crowding_distance_prefers_sparse(self):
         """同 rank 内 crowding 大（稀疏）者更该保留 → 淘汰 crowding 小者。"""
         # A 支配 B（fitness 高、novelty 相同）；C 与 A 互不支配
@@ -122,6 +167,58 @@ class TestDeterministicTieBreak:
         assert rank["B"] == 1  # B 被 A 支配 → 更差 front
         victim = pareto_eviction_candidate([A, B, C])
         assert victim.factor_id == "B"
+
+    def test_same_rank_evicts_most_crowded_not_boundary(self):
+        """同 rank（互不支配）3 点：淘汰 crowding 最小者，边界点（inf）最后。"""
+        # fitness/novelty 互不支配：A/C 是两端边界（crowding=inf），B 居中且最拥挤
+        A = _pt("A", 1.0, novelty=0.0, complexity=5, turnover=0.1)
+        B = _pt("B", 0.5, novelty=0.5, complexity=5, turnover=0.1)
+        C = _pt("C", 0.0, novelty=1.0, complexity=5, turnover=0.1)
+        rank = non_dominated_rank([A, B, C])
+        assert rank["A"] == rank["B"] == rank["C"] == 0  # 两两互不支配
+        cd = crowding_distance([A, B, C], rank)
+        assert cd["A"] == float("inf") and cd["C"] == float("inf")
+        assert cd["B"] < float("inf")  # B 居中，crowding 有限（最拥挤）
+        victim = pareto_eviction_candidate([A, B, C])
+        assert victim.factor_id == "B"  # 最拥挤（crowding 最小）先淘汰，非边界点
+
+    def test_same_rank_interior_vs_boundary_all_memberships(self):
+        """组合验证：任意 2 边界 + 1 拥挤点，淘汰的都是拥挤点而非边界点。"""
+        pts = [
+            _pt("A", 1.0, novelty=0.0, complexity=5, turnover=0.1),
+            _pt("B", 0.5, novelty=0.5, complexity=5, turnover=0.1),
+            _pt("C", 0.0, novelty=1.0, complexity=5, turnover=0.1),
+        ]
+        cd = crowding_distance(pts, non_dominated_rank(pts))
+        assert cd["B"] < float("inf")  # 只有 B 是内部点（最拥挤）
+        # 子集组合：每个子集里淘汰的必须是 crowding 非 inf 的成员（若存在）
+        import itertools
+
+        for r in range(2, 4):
+            for combo in itertools.combinations(pts, r):
+                rank = non_dominated_rank(list(combo))
+                cdd = crowding_distance(list(combo), rank)
+                victim = pareto_eviction_candidate(list(combo))
+                assert victim is not None
+                vc = cdd[victim.factor_id]
+                finite = [fid for fid, c in cdd.items() if c != float("inf")]
+                if finite:
+                    assert victim.factor_id in finite  # 永远不先淘汰边界点
+
+    def test_rank_priority_over_crowding(self):
+        """rank 优先：rank=1 的点无论 crowding 多大，都比 rank=0 边界点先淘汰。"""
+        # 构造：D 被 A 支配（rank=1，fitness 极低）但单独看无同 rank 邻居
+        #（集合 {A,B,C,D} 中 D 被 A 支配 → rank=1）
+        A = _pt("A", 1.0, novelty=0.0, complexity=5, turnover=0.1)
+        B = _pt("B", 0.5, novelty=0.5, complexity=5, turnover=0.1)
+        C = _pt("C", 0.0, novelty=1.0, complexity=5, turnover=0.1)
+        D = _pt("D", 0.01, novelty=0.01, complexity=5, turnover=0.1)  # 被 A 支配 → rank 1
+        rank = non_dominated_rank([A, B, C, D])
+        assert rank["D"] == 1 and rank["A"] == 0
+        cd = crowding_distance([A, B, C, D], rank)
+        assert cd["D"] == float("inf")  # 只有它一个在 rank 1 front → 边界 inf
+        victim = pareto_eviction_candidate([A, B, C, D])
+        assert victim.factor_id == "D"  # rank 优先，与 crowding 无关
 
 
 # ---------------------------------------------------------------------------

@@ -118,7 +118,7 @@ _EXACT_COMPAT={"decay_linear":"ts_decay_linear","ts_rank_pct":"ts_rank","ts_ewm_
 _FINANCIAL_IDENTITY_FUNCS={"ttm":"__lqtp_ttm__","quarter":"__lqtp_quarter__"}
 _AMBIGUOUS_EXTERNAL_NAMES=frozenset()
 _BLOCKED_SOURCE_NAMES={"l2_sum":"StockTransaction/L2 source contract is not configured","l2_sum_if":"StockTransaction/L2 source contract is not configured","l2_count":"StockTransaction/L2 source contract is not configured","l2_count_if":"StockTransaction/L2 source contract is not configured"}
-_BLOCKED_SEMANTIC_NAMES={"group_minmax":"exact LQTP group_minmax contract is not installed","group_quantile_mask":"exact LQTP group_quantile_mask contract is not installed"}
+_BLOCKED_SEMANTIC_NAMES={"group_minmax":"exact LQTP group_minmax contract is not installed","group_quantile_mask":"exact LQTP group_quantile_mask contract is not installed","ts_sumac":"exact semantic definition absent from supplied LQTP manual","ts_regression_slope_sequence":"exact semantic definition absent from supplied LQTP manual"}
 _LOGICAL_TABLES=frozenset({"DailyBar","StockDailyBar","MinuteBar","StockMinuteBar","BenchmarkIndexDailyBar","StockIncome","StockCashFlow","StockBalance","StockIndicator","StockValuationDaily","SizeDaily","TurnoverBaseDaily","IndustryDaily","StockIndustry","StockTransaction","EtfDailyBar","FuturesDailyBar"})
 # R55 platform-audit P0: platform intermediate factors are written
 # ``FactorIntermediateDaily__param_id_<hex>.Value`` — the ``__param_id_<hex>``
@@ -261,6 +261,15 @@ class _PlatformFnRewriter(ast.NodeTransformer):
         self.generic_visit(node)
         if isinstance(node.func, ast.Name):
             name = node.func.id
+            # 2026-09: ts_sumac / ts_regression_slope_sequence are recognised-but-
+            # BLOCKED in the LQTP capability manifest — their exact semantic
+            # definition is absent from the supplied LQTP manual, so FE must NEVER
+            # guess an expansion.  Leave them unconverted here so the parser's
+            # blocked dispatcher raises "recognized but not executable" (matching
+            # l2_sum / group_minmax semantics); the historical JoinQuant rewrite is
+            # dead code now.
+            if name == "ts_sumac" or name == "ts_regression_slope_sequence":
+                return node
             if name in self._IDENTITY and node.args:
                 return node.args[0]
             if name == "yoy" and len(node.args) == 1:

@@ -1,0 +1,83 @@
+{
+  "timestamp": "2026-09-04T09:39:39",
+  "hardware": {
+    "gpu": "NVIDIA L20",
+    "ram_gb": 92,
+    "cpu_cores": 32
+  },
+  "workload": {
+    "T": 1854,
+    "N": 5447,
+    "label": "spearman_vwap",
+    "nan_frac": 0.05,
+    "min_obs": 20
+  },
+  "scale": {
+    "250": {
+      "F": 250,
+      "wall_s": 25.23679256439209,
+      "tiles": 16,
+      "tile_size": 16,
+      "oom_retries": 0,
+      "peak_vram_gb": 20.53,
+      "baseline_used_gb": 8.27,
+      "factor_tensor_gb": 10.1,
+      "factors_per_sec": 9.906171688106596,
+      "eff_vs_500": 0.977
+    },
+    "500": {
+      "F": 500,
+      "wall_s": 49.33584475517273,
+      "tiles": 32,
+      "tile_size": 16,
+      "oom_retries": 0,
+      "peak_vram_gb": 24.87,
+      "baseline_used_gb": 20.53,
+      "factor_tensor_gb": 20.2,
+      "factors_per_sec": 10.134619210053687,
+      "eff_vs_500": 1.0
+    },
+    "1000": {
+      "F": 1000,
+      "wall_s": 115.7176718711853,
+      "tiles": 63,
+      "tile_size": 16,
+      "oom_retries": 0,
+      "peak_vram_gb": 20.66,
+      "baseline_used_gb": 8.27,
+      "factor_tensor_gb": 40.39,
+      "factors_per_sec": 8.641722425189998,
+      "eff_vs_500": 0.853
+    },
+    "2000": {
+      "F": 2000,
+      "wall_s": 393.564820766449,
+      "tiles": 125,
+      "tile_size": 16,
+      "oom_retries": 0,
+      "peak_vram_gb": 20.74,
+      "baseline_used_gb": 8.36,
+      "factor_tensor_gb": 80.79,
+      "factors_per_sec": 5.081755010788551,
+      "eff_vs_500": 0.501
+    }
+  },
+  "linearity": {
+    "conclusion": "approximately linear (GPU compute); F=2000 shows a super-linear host-IO tail",
+    "F500_over_F250_wall_ratio": 1.955,
+    "F1000_over_F500_wall_ratio": 2.346,
+    "F2000_over_F500_wall_ratio": 7.977,
+    "ideal_linear_F500_over_F250": 2.0,
+    "ideal_linear_F1000_over_F500": 2.0,
+    "ideal_linear_F2000_over_F500": 4.0,
+    "peak_vram_gb_stable_around": 21,
+    "oom_retiles": 0,
+    "observed_factors_per_sec": {
+      "250": 9.91,
+      "500": 10.13,
+      "1000": 8.64,
+      "2000": 5.08
+    },
+    "superlinear_tail_attribution": "host tile-read IO from the 80GB memmap on a shared 2TB disk with ~20 other heavy IO users, not the kernels (peak VRAM flat ~21GB, 0 OOM retiles across all four sizes)"
+  }
+}

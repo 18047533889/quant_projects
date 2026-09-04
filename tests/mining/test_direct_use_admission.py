@@ -25,6 +25,11 @@ from factor_engine.backend.operator_capability import (
 # `_has_physical_production_evidence` imports the inventory lazily from
 # `backend.operator_capability`, so patch it there (not on mining.direct_use).
 _INVENTORY = "factor_engine.backend.operator_capability.enumerate_physical_inventory"
+# The evidence gate itself is module-level in mining.direct_use; the empty-
+# inventory tests must also clear it because R23 added a catalog-certification
+# fast-path inside it (a pandas-certified slot is itself production evidence,
+# independent of the runtime inventory).
+_HAS_EVIDENCE = "factor_engine.mining.direct_use._has_physical_production_evidence"
 
 
 _SHA = "0123456789abcdef" * 4  # 64-char lowercase hex SHA-256
@@ -73,7 +78,7 @@ class TestProductionAdmittedRequiresPhysicalEvidence:
         canonical = "ts_mean"
         catalog = dict(OperatorRegistry._catalog.get(canonical, {}))
 
-        with patch(_INVENTORY, return_value=[]):
+        with patch(_INVENTORY, return_value=[]), patch(_HAS_EVIDENCE, return_value=False):
             row = build_direct_use_operator(canonical, catalog)
             assert row.production_admitted is False
 
@@ -91,7 +96,7 @@ class TestProductionAdmittedRequiresPhysicalEvidence:
         canonical = "ts_mean"
         catalog = dict(OperatorRegistry._catalog.get(canonical, {}))
 
-        with patch(_INVENTORY, return_value=[]):
+        with patch(_INVENTORY, return_value=[]), patch(_HAS_EVIDENCE, return_value=False):
             row = build_direct_use_operator(canonical, catalog)
             assert row.production_admitted is False
             assert row.directly_usable is False
@@ -117,9 +122,10 @@ class TestProductionAdmittedRequiresPhysicalEvidence:
                         if row.production_certified:
                             assert row.production_admitted is True
                             # The admitting implementation must be an exact
-                            # current-head PhysicalImplementationID.
+                            # current-head PhysicalImplementationID (version v3,
+                            # per PhysicalImplementationSpec.physical_implementation_id).
                             assert record.implementation_id is not None
-                            assert str(record.implementation_id).startswith("pi:v2:")
+                            assert str(record.implementation_id).startswith("pi:v3:")
 
 
 class TestDirectlyUsableRequiresProductionAdmitted:
@@ -134,7 +140,7 @@ class TestDirectlyUsableRequiresProductionAdmitted:
         canonical = "ts_mean"
         catalog = dict(OperatorRegistry._catalog.get(canonical, {}))
 
-        with patch(_INVENTORY, return_value=[]):
+        with patch(_INVENTORY, return_value=[]), patch(_HAS_EVIDENCE, return_value=False):
             row = build_direct_use_operator(canonical, catalog)
             if row.mining_visible:
                 assert row.directly_usable is False
@@ -177,7 +183,7 @@ class TestProductionAdmittedLogic:
         canonical = "ts_mean"
         catalog = dict(OperatorRegistry._catalog.get(canonical, {}))
 
-        with patch(_INVENTORY, return_value=[]):
+        with patch(_INVENTORY, return_value=[]), patch(_HAS_EVIDENCE, return_value=False):
             row = build_direct_use_operator(canonical, catalog)
             assert row.production_admitted is False
 

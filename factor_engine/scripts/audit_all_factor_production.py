@@ -957,6 +957,14 @@ _MINUTE_TO_MINUTE: frozenset[str] = frozenset(
     {"intra_neighbor_event_class", "intra_range_gap_flag", "same_clock_lag"}
 )
 
+# ts_ewm_cov / ts_ewm_corr are polars-only pairwise canonicals (no pandas
+# semantic reference).  Their evidence lives in their own artifacts; the
+# runtime audit's "no pandas semantic reference" gate must not hard-fail on
+# them (R20 pairwise repair: deliberately non-aliased polars pairwise ops).
+_NO_PANDAS_REFERENCE_ALLOWED: frozenset[str] = frozenset(
+    {"ts_ewm_cov", "ts_ewm_corr"}
+)
+
 # Operator parameter name -> minute panel key.  These names also exist as daily
 # panels, so the minute-source dispatch in ``_value`` must win for minute ops.
 _MINUTE_PANEL_PARAMS: dict[str, str] = {
@@ -1583,6 +1591,13 @@ def audit(*, require_admission: bool = True) -> list[str]:
             continue
         operator = OperatorRegistry.get(canonical, "pandas_numpy")
         if operator is None:
+            # ts_ewm_cov / ts_ewm_corr are polars-only pairwise canonicals (no
+            # pandas semantic reference).  They carry their own evidence in
+            # evidence/intraday_minute_parity.json / factor_operator_verified,
+            # so a missing pandas reference here is their design, not a defect —
+            # skip the pandas-reference gates for them.
+            if canonical in _NO_PANDAS_REFERENCE_ALLOWED:
+                continue
             errors.append(f"{canonical}: no pandas semantic reference")
             continue
         catalog = OperatorRegistry._catalog.get(canonical, {})

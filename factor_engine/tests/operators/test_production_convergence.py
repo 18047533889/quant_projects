@@ -34,17 +34,27 @@ def test_surfaces_are_disjoint_and_daily_contains_no_inactive_names() -> None:
     names = list(sets)
     for i, left in enumerate(names):
         for right in names[i + 1:]:
-            assert not sets[left] & sets[right], (left, right, sets[left] & sets[right])
+            # R55/R56 platform-audit P0: ``open_close_return`` is the canonical
+            # target of the ``intraday_return`` alias and legitimately lives on
+            # BOTH the daily and extended surfaces (classify_canonical checks
+            # daily first).  It is the one sanctioned cross-surface name.
+            sanctioned = {"open_close_return"} if {left, right} == {"daily", "extended"} else set()
+            assert not sets[left] & sets[right] - sanctioned, (
+                left, right, sets[left] & sets[right] - sanctioned
+            )
     assert set(surface.DAILY_CANONICALS) <= set(OperatorRegistry.list_canonical()) | {
         # Static review may include a not-yet-imported implementation only when
         # it is explicitly part of the sealed daily additions.
         "ts_ewm_std", "ts_ewm_var", "ts_ewm_cov", "ts_ewm_corr",
     }
     forbidden = {
-        "vwap", "ttm", "quarter", "yoy", "avg2", "volatility", "WMA",
+        "vwap", "ttm", "quarter", "yoy", "volatility", "WMA",
         "current_ratio", "downside_beta", "rank_corr", "size_neutralize",
         "acos", "atan2", "sin", "cos", "tan", "ts_moment", "ts_max_buildup",
     }
+    # avg2 was promoted to daily in R56 as the LQTP PIT-safe fiscal helper; it
+    # is no longer a forbidden daily name (test_strict_fiscal_period... holds the
+    # authoritative deny-list assertion).
     assert not forbidden & set(surface.DAILY_CANONICALS)
 
 
@@ -57,7 +67,13 @@ def test_strict_fiscal_period_operators_are_not_production_denied() -> None:
         "yoy_by_period",
     }
     assert not strict & PRODUCTION_DENIED_CANONICALS
-    assert {"ttm", "quarter", "yoy", "avg2"} <= PRODUCTION_DENIED_CANONICALS
+    # R56/R57: avg2 (and the other fiscal/period helpers) were promoted OUT of
+    # the deny list onto the daily surface as the LQTP PIT-safe fiscal helpers
+    # (operator_surface DAILY_CANONICALS line 18).  The deny list now holds only
+    # genuinely forbidden names; ttm/quarter/yoy are still denied because they
+    # are window-declaration-only (no PIT-safe FE runtime), avg2 is real.
+    assert {"ttm", "quarter", "yoy"} <= PRODUCTION_DENIED_CANONICALS
+    assert "avg2" not in PRODUCTION_DENIED_CANONICALS
 
 
 def test_pit_and_scope_metadata_do_not_confuse_domain_risk_with_lookahead() -> None:

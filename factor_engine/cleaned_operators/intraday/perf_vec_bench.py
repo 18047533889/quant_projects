@@ -19,6 +19,7 @@ import pandas as pd
 
 from factor_engine.cleaned_operators.intraday import _core
 from factor_engine.cleaned_operators.intraday import perf_vec_kernels as pvk
+from factor_engine.cleaned_operators.intraday import higher_moments as hm
 from factor_engine.cleaned_operators.intraday import smart_money as sm
 from factor_engine.cleaned_operators.intraday import true_gap_batch3 as tg
 from factor_engine.cleaned_operators.intraday import vwap_path as vp
@@ -26,7 +27,19 @@ from factor_engine.cleaned_operators.intraday import vwap_path as vp
 
 _BOUND = [tg._session_mean_reversion_kernel, tg._price_delay_kernel,
           tg._volume_imbalance_kernel, sm._stock_graph_features,
-          sm._common_trading_intensity, vp._time_above_vwap]
+          sm._common_trading_intensity, vp._time_above_vwap,
+          vp._vwap_reversion_speed,
+          hm._realized_skewness, hm._realized_kurtosis,
+          hm._realized_quarticity, hm._tripower_quarticity,
+          hm._continuous_variance, hm._jump_variation]
+
+# Parametric kernels: scalar reference is forced by stripping the factory
+# closure's own __vec__ (same trick as the equivalence harness).  min_finite is
+# the operator's default (daily_agg default 2 for the drawdown family, vwap-path
+# family uses the framework default 2; streak/excursion 2).
+def _strip_vec(fn):
+    if hasattr(fn, "__vec__"):
+        del fn.__vec__
 
 
 def _session_minutes(days: int, start: str = "2020-01-02") -> pd.DatetimeIndex:
@@ -89,21 +102,43 @@ def main() -> int:
         ("stock_graph_features", sm._stock_graph_features, (df,), 5),
         ("common_trading_intensity", sm._common_trading_intensity, (vol, amt), 3),
         ("time_above_vwap", vp._time_above_vwap, (df, amt, vol), 4),
+        ("vwap_reversion_speed", vp._vwap_reversion_speed, (df, amt, vol), 4),
+        ("realized_skewness", hm._realized_skewness, (df,), 2),
+        ("realized_kurtosis", hm._realized_kurtosis, (df,), 2),
+        ("realized_quarticity", hm._realized_quarticity, (df,), 2),
+        ("tripower_quarticity", hm._tripower_quarticity, (df,), 2),
+        ("continuous_variance", hm._continuous_variance, (df,), 2),
+        ("jump_variation", hm._jump_variation, (df,), 2),
+        ("vwap_path_slope", vp.make_vwap_path(1, 1, False), (df, amt, vol), 2),
+        ("vwap_path_curvature", vp.make_vwap_path(2, 2, False), (df, amt, vol), 2),
+        ("vwap_path_slope_pct", vp.make_vwap_path(1, 1, True), (df, amt, vol), 2),
+        ("vwap_path_curvature_pct", vp.make_vwap_path(2, 2, True), (df, amt, vol), 2),
+        ("vwap_excursion_max", vp.make_vwap_excursion("max"), (df, amt, vol), 2),
+        ("vwap_excursion_min", vp.make_vwap_excursion("min"), (df, amt, vol), 2),
+        ("longest_above_streak", vp.make_longest_streak("above"), (df, amt, vol), 2),
+        ("longest_below_streak", vp.make_longest_streak("below"), (df, amt, vol), 2),
+        ("max_drawdown", vp.make_max_drawdown("down"), (df,), 2),
+        ("max_drawup", vp.make_max_drawdown("up"), (df,), 2),
+        ("drawdown_depth", vp.make_drawdown_metric("depth"), (df,), 2),
+        ("drawdown_duration", vp.make_drawdown_metric("duration"), (df,), 2),
+        ("drawdown_recovery", vp.make_drawdown_metric("recovery"), (df,), 2),
     ]
 
     print(f"\n{'kernel':<24}{'scalar (s)':>14}{'vec (s)':>14}{'speedup':>10}")
     print("-" * 66)
     total_scalar = total_vec = 0.0
     for name, fn, frames, mf in cases:
-        # scalar: unbind so getattr(fn, '__vec__') is None → scalar loop
+        # scalar: unbind module kernels AND this fn's own __vec__ (the
+        # parametric factories pre-bind it at creation) so the scalar leg is
+        # honest.
         for f in _BOUND:
             if hasattr(f, "__vec__"):
                 del f.__vec__
-        assert getattr(fn, "__vec__", None) is None, (
-            f"scalar reference for {name} still has __vec__ — benchmark dishonest"
-        )
+        if hasattr(fn, "__vec__"):
+            del fn.__vec__
         t_scalar = _time_one(fn, *frames, min_finite=mf)
-        # vec
+        # vec: bind_whitelist (re-binds the module kernels); the parametric
+        # closures keep their own __vec__.
         pvk.bind_whitelist()
         assert getattr(fn, "__vec__", None) is not None, (
             f"vec path for {name} has no __vec__ after bind_whitelist — "

@@ -1,9 +1,9 @@
 {
-  "commit_sha": "854bdc2278678e3db03c894c059cd5fdbb7dac1b",
-  "canonical_count": 1502,
-  "model_like_count": 310,
-  "explicit_timing_count": 102,
+  "commit_sha": "a07ea23020f86f4a63f50f67ec5b0ae1023b5b22",
+  "canonical_count": 1740,
+  "model_like_count": 333,
+  "explicit_timing_count": 103,
   "final_direct_use_ready_count": 0,
-  "generated_at": "2026-08-12T16:45:21+0800",
+  "generated_at": "2026-09-04T03:51:27+0800",
   "runtime_versions": {}
 }

@@ -44,7 +44,7 @@ def evidence_path_excluded(path: Path, *, root: Path | None = None) -> bool:
     scan (root = FE_ROOT) sees ``tests/backend_parity`` as an intermediate
     component and skips it.
     """
-    base = (root or FE_ROOT).resolve()
+    base = (root or FE_ROOT.parent).resolve()
     try:
         relative = path.resolve().relative_to(base)
     except ValueError:

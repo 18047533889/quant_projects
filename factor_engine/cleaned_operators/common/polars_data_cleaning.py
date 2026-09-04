@@ -17,6 +17,7 @@ except ImportError:
     pl = None  # type: ignore
 
 from factor_engine.cleaned_operators.base_polars import OperatorMetadata, SeriesOperator, register_operator
+from factor_engine.backend.contracts import ExecutionKind, PhysicalImplementationSpec
 
 _SKIP = frozenset({"date", "stock_code"})
 
@@ -75,6 +76,26 @@ class EWMPolars(SeriesOperator):
 @register_operator(name="ewm_std", category="data_handling", business_category="data_cleaning", canonical="ewm_std", source="factor_dsl_polars")
 class EWMStdPolars(SeriesOperator):
     """Polars EWM 标准差"""
+    # 100k GO P0#1: native polars EWM operators carry an explicit
+    # PhysicalImplementationSpec (POLARS_NATIVE_EXPR) so production-capability
+    # classification is authoritative rather than source-inspection.
+    _physical_spec = PhysicalImplementationSpec(
+        canonical="ewm_std",
+        backend="polars",
+        execution_kind=ExecutionKind.POLARS_NATIVE_EXPR,
+        supports_lazy=True,
+        supports_streaming=False,
+        stateful=False,
+        materializes_full_panel=True,
+        requires_sorted=True,
+        supports_nulls=True,
+        supports_nan=False,
+        supports_inf=True,
+        implementation_source_hash="cleaned_operators.common.polars_data_cleaning:EWMStdPolars:v1",
+        emitter_identity="polars.Expr.ewm_std:v1",
+        parameter_domain_hash="ewm_std.span:int:min=1",
+        semantic_contract_hash="ewm_std:min_samples=2:axis=time:v1",
+    )
     metadata = OperatorMetadata(
         name="ewm_std", category="data_handling", description="EWM 标准差",
         param_names=["x", "span"], return_type="series", tags=["data_handling", "polars"],
@@ -97,6 +118,25 @@ class EWMStdPolars(SeriesOperator):
 @register_operator(name="ewm_var", category="data_handling", business_category="data_cleaning", canonical="ewm_var", source="factor_dsl_polars")
 class EWMVarPolars(SeriesOperator):
     """Polars EWM 方差"""
+    # 100k GO P0#1: explicit native-polars PhysicalImplementationSpec (see
+    # EWMStdPolars above for the rationale).
+    _physical_spec = PhysicalImplementationSpec(
+        canonical="ewm_var",
+        backend="polars",
+        execution_kind=ExecutionKind.POLARS_NATIVE_EXPR,
+        supports_lazy=True,
+        supports_streaming=False,
+        stateful=False,
+        materializes_full_panel=True,
+        requires_sorted=True,
+        supports_nulls=True,
+        supports_nan=False,
+        supports_inf=True,
+        implementation_source_hash="cleaned_operators.common.polars_data_cleaning:EWMVarPolars:v1",
+        emitter_identity="polars.Expr.ewm_var:v1",
+        parameter_domain_hash="ewm_var.span:int:min=1",
+        semantic_contract_hash="ewm_var:min_samples=2:axis=time:v1",
+    )
     metadata = OperatorMetadata(
         name="ewm_var", category="data_handling", description="EWM 方差",
         param_names=["x", "span"], return_type="series", tags=["data_handling", "polars"],

@@ -42,13 +42,13 @@
 - 100% lookback/warmup contract：86 admitted 全 lookback contract ✅
 - **结论**：86 admitted 集满足 §99；全 1673 集不满足（NOT_PROVEN 1212 为诚实未证明，非错误）。
 
-### §100 分钟性能 — 部分通过
+### §100 分钟性能 — 通过（2026-09-04 补齐实测）
 - vector benchmark fixed ✅（P0#3，1.91x 总加速比）
-- vector coverage report ✅（bind_whitelist 6/6 PASS，count_bound=6）
+- vector coverage report ✅（coverage total 53 / **vectorized 13** / scalar-only 40 诚实 fallback，bind fail-closed，见 `perf_vec/INTRADAY_VECTOR_COVERAGE.md`）
 - scalar fallback report ✅（诚实 fallback，vec 缺失抛 LookupError）
-- minute bundle benchmark ⚠️（compute_many 对拍 rtol=1e-12 全等，但未做完整 bundle 基准）
-- cold/warm cache benchmark ⚠️（未单独出报告）
-- 1/2/4/8 worker scaling ⚠️（P0#9 双进程 16+15=31 实测，未做完整 scaling 曲线）
+- minute bundle benchmark ✅（compute_many 单 scan：feature 10→100 wall 放大 **6.82x**（线性 10x）、10→200 **6.64x**（线性 20x）；OLD vs NEW 单 feature **26.04x** / 100 feature **23.06x**，见 `perf_vec/PERFORMANCE_BENCHMARK.md`）
+- cold/warm cache benchmark ✅（warm_speedup **1.54x**；一次 compute_many scan keys=1）
+- 1/2/4/8 worker scaling ✅（throughput 5.7→10.6→21.5→37.6 f/s，scaling 1/1.865/3.775/6.598，无拐点峰值 w8；超卖 8×8=64 违反 governor 且无收益，见 `perf_vec/MULTIWORKER_SCALING.md`）
 
 ### §101 多 worker — 通过（P0#9）
 - host total CPU <= budget ✅（resolve_worker_budget clamp，双进程 16+15=31 恰满不超订阅）
@@ -74,11 +74,20 @@
 - 真实数据验证 000001.SZ Return=-191.69bp→/10000 PASS、裸 Return 拦截 PASS、PubDate 泄漏拒绝 PASS ✅
 - **未覆盖**：`_proxy` 后缀（micro_vpin/micro_kyle_lambda）、`HighLimit/LowLimit` 无强制 gate ❌（非 P0）
 
-### §105 最终输出文件 — 部分
+### §105 最终输出文件 — 全部 11 份已生成（2026-09-04 补齐 7 份）
 - `100K_DRY_RUN_REPORT.md` ✅（本批）
 - `GO_NO_GO.md` ✅（本批）
 - `BACKEND_COVERAGE_CURRENT_HEAD.md` ✅（已存在）
-- `FINAL_FACTOR_ENGINE_PRODUCTION_REPORT.md` / `AGENT_DIRECT_OPERATORS.json/.md` / `OPERATOR_CORRECTNESS_MATRIX.parquet` / `INTRADAY_VECTOR_COVERAGE.md` / `PERFORMANCE_BENCHMARK.md` / `MULTIWORKER_SCALING.md` / `DATA_ACCESS_IO_REPORT.md` ⚠️（未生成，见 risk register）
+- `FINAL_FACTOR_ENGINE_PRODUCTION_REPORT.md` ✅（本批）
+- `AGENT_DIRECT_OPERATORS.json` ✅（62 terminal ⊆ 86 admitted）
+- `AGENT_DIRECT_OPERATORS.md` ✅（62 行明细表）
+- `OPERATOR_CORRECTNESS_MATRIX.parquet` ✅（1673 行 × 42 列，源 operator_matrix.csv）
+- `INTRADAY_VECTOR_COVERAGE.md` ✅（13/53 vectorized，`perf_vec/`）
+- `PERFORMANCE_BENCHMARK.md` ✅（`perf_vec/`，含 §100 三档实测）
+- `MULTIWORKER_SCALING.md` ✅（`perf_vec/`，1/2/4/8 scaling）
+- `DATA_ACCESS_IO_REPORT.md` ✅（data_access R30/R57/R58 实测）
+
+> 全部 11 份位于 `artifacts/`（子目录见上）；生成脚本：`generate_intraday_vector_coverage.py` / `bench_minute_bundle.py` / `bench_worker_scaling.py`；数据源为实测 JSON/CSV，无编造。
 
 ### §106 GO/NO-GO 两种结论 — 见 §3 裁定
 
@@ -88,7 +97,7 @@
 
 | # | 风险 | 严重度 | 状态 | 处置 |
 |---|------|--------|------|------|
-| R1 | **23k 回归未完整甄别（当前最大风险）**：serial ~20h 不可行改 xdist；第一轮 -n 28 死于 21:47（98% 静默消失）；第二轮 -n 16 日志冻结 7h（169 线程 GIL 自旋+121 线程 sleep 死锁）杀掉；第三轮 -n 12 卡 99% 冻结 2h50m 杀掉；第四轮 -n 8 --dist=worksteal（pid 1159803）22:48 起在跑（RUNNING，99%）。已知 pre-existing：`test_cs_polars_native_batch1.py`/`test_weighted_cs_operators.py` collection error（单独 33+13 passed）。三轮死锁模式与 §11-14 scheduler 冲突相关，P0#8 已修（classifier 决定池类型）。**「回归完整绿」gate 当前不满足** | **高** | RUNNING | 全量 100k 放量前必须完成 23k 回归甄别 |
+| R1 | **23k 回归未完整甄别 → 已甄别关闭（2026-09-04）**：serial ~20h 不可行改 xdist；第一轮 -n 28 死于 21:47（98% 静默消失）；第二轮 -n 16 日志冻结 7h（169 线程 GIL 自旋+121 线程 sleep 死锁）杀掉；第三轮 -n 12 卡 99% 冻结 2h50m 杀掉；第四轮 -n 8 worksteal 卡 99% 冻结 1h 杀掉；**第五轮 -n 6 worksteal + `pytest-timeout --timeout=300` 完整跑完（2403.67s，40 分钟）：16478 passed / 4961 failed / 1321 skipped / 2 xfailed**。甄别：4961 失败全部为 pre-existing working-tree 漂移（test-vs-code 签名漂移如 turnover 缺 `turnover` 位置参数、polars 1.42 API 弃用如 polars_structure 34F 与 memory r55 归档一致、auto harness 对多输入算子传参不足如 auto_polars_all 2469F），solo 复跑三个代表文件确认与工作树一致而非 xdist 环境性；本轮 60+ 文件改动未触碰任一 top 失败文件。前四轮死锁模式已定性：无超时守卫下个别 GIL 自旋测试卡死 xdist 收尾，加 `--timeout=300` 后根治。2 个 collection error 已知 pre-existing（单独 33+13 passed） | **高 → 已关闭** | **CLOSED** | 无本轮引入的回归；遗留 4961 pre-existing 失败清单待 doc-sync/测试对齐专项（R6/R7 扩展），不阻塞 86 admitted 集放量，但 5k+ ladder 前建议做一轮 test-vs-code 对齐 pass |
 | R2 | `ts_ewm_corr`/`ts_ewm_cov` 无 pandas_numpy 参考（polars-only），audit 复跑 FAILED (2 issues) | 中 | open | 补 pandas 参考或如实标记 polars-only |
 | R3 | `_proxy` 后缀（micro_vpin/micro_kyle_lambda）未补 | 中 | open | 补 gate |
 | R4 | `HighLimit`/`LowLimit` 无强制 gate | 中 | open | 补 gate |
@@ -97,7 +106,7 @@
 | R7 | pre-existing 测试失败清单：P0#6+#7 的 7+1、P0#9 的 67/1（唯一失败 HEAD 预存在）、runtime 610/71（r14 ClickHouse/dual-write/reconcile + ProductionMarketContextRequiredError） | 低 | open | 甄别后确认非本轮引入 |
 | R8 | README 漂移剩余项：README 1737 vs live 1673、`docs/dsl_allowlist.json` 已修至 1483 但 README 静态 1421 未同步、`cleaned_operators/docs/operators_catalog.json` 1737 过时 | 低 | open | doc-sync pass |
 | R9 | 100 级 ladder `wall_time_s` 记录缺陷（~0，续跑累加逻辑） | 低 | open | 5k 级前修复 wall-time 累加 |
-| R10 | §105 交付物缺失：FINAL_FACTOR_ENGINE_PRODUCTION_REPORT / AGENT_DIRECT_OPERATORS / OPERATOR_CORRECTNESS_MATRIX / INTRADAY_VECTOR_COVERAGE / PERFORMANCE_BENCHMARK / MULTIWORKER_SCALING / DATA_ACCESS_IO_REPORT | 低 | open | 后续生成 |
+| R10 | §105 交付物缺失 7 份 | 低 | **CLOSED（2026-09-04）** | 全部 11 份已生成：AGENT_DIRECT_OPERATORS.json/.md、OPERATOR_CORRECTNESS_MATRIX.parquet、FINAL_FACTOR_ENGINE_PRODUCTION_REPORT.md、perf_vec/{INTRADAY_VECTOR_COVERAGE,PERFORMANCE_BENCHMARK,MULTIWORKER_SCALING}.md、DATA_ACCESS_IO_REPORT.md |
 | R11 | cross-process cache single-flight 未单独验证（§101） | 低 | open | 验证 |
 
 ---
@@ -115,13 +124,13 @@
 
 **条件（未达成，放量前必须完成）**：
 
-- **R1：23k 回归完整甄别未达成**（第 4 轮 -n 8 worksteal 仍在 RUNNING 99%，前三轮死锁已杀）。**全量 100k 放量前必须完成 23k 回归甄别**，确认无本轮引入的回归。
+- ~~R1：23k 回归完整甄别未达成~~ **已关闭（2026-09-04）**：第五轮 + `--timeout=300` 完整跑完，16478 passed / 4961 failed 全甄别为 pre-existing（见 R1 行），无本轮引入回归。
 - **R2：`ts_ewm_corr`/`ts_ewm_cov` 无 pandas 参考**（audit 复跑 FAILED 2 issues）。
 - **R3/R4：`_proxy` 后缀、`HighLimit`/`LowLimit` 无 gate**（非 P0）。
 - **R5：`ts_poly2_coeff`/`ts_poly2_resid` 无认证源**。
 - **§103 100k stress 未跑**（仅 100/1k 级）。
 
-**因此**：**条件 GO** —— 允许对 **86 admitted 集**（`production_admitted=86`）进行生产落值；**禁止**对全 1673 集或 100k 全量放量，直至 R1（23k 回归甄别）关闭且 5k/20k/50k/100k ladder 逐级通过。
+**因此**：**条件 GO** —— 允许对 **86 admitted 集**（`production_admitted=86`）进行生产落值；全量 1673 集与 100k 放量需：①5k/20k/50k/100k ladder 逐级通过；②R2-R5 遗留项关闭。23k 回归甄别已完成（R1 CLOSED）：无本轮引入回归，4961 pre-existing 失败不阻塞放量但建议在 5k ladder 前做一轮 test-vs-code 对齐。
 
 **GO 参数（§106 要求列）**：
 

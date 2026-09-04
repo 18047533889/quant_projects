@@ -299,13 +299,42 @@ class BayesianRetriever:
             except Exception:  # noqa: BLE001 - 退化内存 dict
                 pass
         return int((self._node_states.get(factor_id) or {}).get("depth", FALLBACK_DEPTH))
+
+    # P0-B：检索频率必须是「被检索多少次」而不是「几个孩子」。record_retrieval
+    # 由 orchestrator/pipeline 在每次 select_parents 命中（选为 parent）时调用；
+    # memory API 可用 → 落 retrieval_events 轻量表；不可用 → 同步维护内存 dict
+    # 退化态（_node_states[factor_id]["retrieval_count"] += 1）。
+
+    def record_retrieval(
+        self, factor_id: str, *, action: str | None = None, memory: bool = True
+    ) -> None:
+        """记录一次检索事件（该 factor 被选为 parent / 检索起点）。"""
+        if not factor_id:
+            return
+        if memory and self.memory_store is not None:
+            try:
+                if hasattr(self.memory_store, "record_retrieval"):
+                    self.memory_store.record_retrieval(factor_id=factor_id, action=action)
+                    return
+            except Exception:  # noqa: BLE001 - 记失败不阻塞检索，退化内存计数
+                pass
+        st = self._node_states.setdefault(
+            str(factor_id), {"retrieval_count": 0, "depth": FALLBACK_DEPTH}
+        )
+        st["retrieval_count"] = int(st.get("retrieval_count", 0)) + 1
+        if action is not None:
+            st.setdefault("attempted_actions", [])
+            if action not in st["attempted_actions"]:
+                st["attempted_actions"].append(action)
+
     def _retrieval_count_of(self, factor_id: str) -> int:
+        # P0-B：被检索次数 = 真·检索事件计数（record_retrieval 落表），
+        # 不再是 lineage_parents 的「繁殖代数」——后者会随成功繁殖而增长，
+        # 造成越成功越被降权的反向激励。memory API 不可用 → 内存 dict 退化态。
         if self.memory_store is not None:
             try:
-                if hasattr(self.memory_store, "lineage_parents"):
-                    parents = self.memory_store.lineage_parents(factor_id)
-                    if parents:
-                        return int(len(parents))
+                if hasattr(self.memory_store, "retrieval_count_of"):
+                    return int(self.memory_store.retrieval_count_of(factor_id))
             except Exception:  # noqa: BLE001 - 退化内存 dict
                 pass
         return int((self._node_states.get(factor_id) or {}).get("retrieval_count", 0))
@@ -554,6 +583,10 @@ class BayesianRetriever:
         """按 RetrieverScore 排序选前 k 个 parent（不打乱原对象，返回子列表）。
 
         disabled 时直接返回前 k 个（顺序不变，零行为变化）。
+
+        P0-B：选中的 k 个 parent 会被作为检索起点繁殖 —— 这里即「被检索」的
+        真时点，命中即记一次检索事件（record_retrieval），驱动频率衰减计数。
+        disabled / 空候选 → 没有真正发生检索选择，不记。
         """
         if not self.config.enabled or not candidates:
             return list(candidates[:k])
@@ -564,7 +597,16 @@ class BayesianRetriever:
             )
             scored.append((float(d["retriever_score"]), i, c))
         scored.sort(key=lambda t: (-t[0], t[1]))
-        return [c for _, _, c in scored[:k]]
+        chosen = [c for _, _, c in scored[:k]]
+        for c in chosen:
+            fid = ""
+            if isinstance(c, Mapping):
+                fid = str(c.get("factor_id") or c.get("id") or "")
+            else:
+                fid = str(getattr(c, "factor_id", "") or "")
+            if fid:
+                self.record_retrieval(fid, action=action_to_retrieve)
+        return chosen
 
     def rank(
         self,
