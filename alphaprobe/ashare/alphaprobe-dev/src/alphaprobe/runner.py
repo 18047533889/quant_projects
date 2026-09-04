@@ -429,6 +429,173 @@ def _exportable_pool_from_pipeline(pipeline: Any) -> Any:
     return _ExportPool(snapshot)
 
 
+def _resolve_initial_parents(
+    experiment: ExperimentConfig,
+    args: Any,
+    *,
+    exec_mode: Any,
+    project_root: Path = PROJECT_ROOT,
+) -> list[dict[str, Any]]:
+    """构造搜索首轮的 parents（Task 20 SeedProvider 接线）。
+
+    优先级：
+    1. 显式 ``--seed-provider-fa-lib``（factor_assets 全局库路径）→ 用
+       SeedProvider 从该库 metadata 采样 K 个 seed（**只读 metadata，不拉因子
+       值面板**；选中 seed 才转 parents，10 万冷启动不整体物化进 DAG）；
+    2. 未显式指定 → OFFLINE_TEST 兼容开关（默认开）：走既有
+       ``resolve_cold_start`` 位置序路径（YAML seed 全量转 parents，行为与
+       Task 1 完全一致）。
+
+    开关（Ablation，Non-negotiable #30）：
+    - ``--seed-provider`` ``on|off``：显式启用/禁用 SeedProvider 路径；
+    - ``--seed-provider-fa-lib PATH``：factor_assets 全局库的 metadata 源路径
+      （目录内 catalog.json 或 sqlite）。缺省且 seed_provider 开启时回落
+      resolve_cold_start（无全局库时绝不停摆）。
+    - ``--seed-sample-size K``：SeedProvider 采样数（缺省 = generate_num*4）。
+    """
+    from alphaprobe.llm_client import ExecutionMode
+
+    mode_on = getattr(args, "seed_provider", None)
+    fa_lib = getattr(args, "seed_provider_fa_lib", None)
+    # 显式开关决定是否走 SeedProvider；未显式给 on/off 时默认兼容路径
+    want_seed_provider = bool(
+        fa_lib or (mode_on is not None and str(mode_on).strip().lower() == "on")
+    )
+    if not want_seed_provider:
+        return _parents_from_cold_start(experiment, args)
+
+    try:
+        from alphaprobe.seed_provider import SeedProvider, SeedProviderConfig
+    except Exception as exc:  # noqa: BLE001 - SeedProvider 不可用 → 兼容路径
+        print(f"[seed] SeedProvider unavailable, fallback cold-start: {exc}")
+        return _parents_from_cold_start(experiment, args)
+
+    try:
+        provider = SeedProvider(
+            config=SeedProviderConfig(
+                rng_seed=int(getattr(args, "seed", 0) or 0),
+            )
+        )
+        catalog = _open_factor_assets_catalog(fa_lib)
+        if catalog is None:
+            print("[seed] FactorAssets global library unavailable, fallback cold-start")
+            return _parents_from_cold_start(experiment, args)
+        sample_size = getattr(args, "seed_sample_size", None)
+        if sample_size is None:
+            sample_size = max(4, int(getattr(args, "generate_num", 5)) * 4)
+        seeds = provider.sample(catalog, k=int(sample_size))
+        diag = provider.diagnostics.to_dict()
+        print(
+            f"[seed] SeedProvider sampled {len(seeds)} seeds from FactorAssets "
+            f"library (requested={sample_size}, degraded={diag.get('degraded_buckets')})"
+        )
+        if not seeds:
+            return _parents_from_cold_start(experiment, args)
+        return [s.to_parent_dict() for s in seeds]
+    except Exception as exc:  # noqa: BLE001 - 采样失败不阻塞主链
+        print(f"[seed] SeedProvider sampling failed, fallback cold-start: {exc}")
+        return _parents_from_cold_start(experiment, args)
+
+
+def _parents_from_cold_start(
+    experiment: ExperimentConfig, args: Any,
+) -> list[dict[str, Any]]:
+    """既有 OFFLINE_TEST 兼容路径：resolve_cold_start 位置序全量转 parents。
+
+    不截断到 5（Task 1 行为：上限放宽到 generate_num*4，至少覆盖全部 seed）。
+    """
+    initial_exprs = resolve_cold_start(experiment, args)
+    parent_cap = max(4, int(getattr(args, "generate_num", 5)) * 4)
+    parents: list[dict[str, Any]] = []
+    for i, expr in enumerate(initial_exprs[: min(parent_cap, len(initial_exprs))]):
+        parents.append(
+            {
+                "formula": str(expr) if not hasattr(expr, "dsl") else getattr(expr, "dsl"),
+                "factor_id": f"seed_{i}",
+                "fitness": 0.0,
+            }
+        )
+    return parents
+
+
+def _open_factor_assets_catalog(
+    fa_lib: Any,
+) -> list[dict[str, Any]] | None:
+    """打开 factor_assets 全局库的 metadata catalog（SeedProvider 候选源）。
+
+    fa_lib 可以是：
+    - 目录路径：读取其下 ``seed_catalog.json``（list[dict]，含 factor_id /
+      canonical_repr / canonical_hash / fe_identity_ref / parameter_family_id /
+      bucket）；
+    - sqlite 路径：读取 assets 表（factor_assets registry 的 SQLite 库），只取
+      metadata 字段（不拉因子值面板）。
+
+    打开失败返回 None（调用方回落 resolve_cold_start）。零网络零模型。
+    """
+    import json
+    import os
+
+    if fa_lib is None:
+        return None
+    p = os.fspath(fa_lib) if not hasattr(fa_lib, "__fspath__") else str(fa_lib)
+    from pathlib import Path as _P
+
+    path = _P(p)
+    if path.is_dir():
+        cand = path / "seed_catalog.json"
+        if cand.exists():
+            try:
+                data = json.loads(cand.read_text(encoding="utf-8"))
+                if isinstance(data, list):
+                    return [dict(m) for m in data if isinstance(m, dict)]
+                if isinstance(data, dict) and isinstance(data.get("seeds"), list):
+                    return [dict(m) for m in data["seeds"] if isinstance(m, dict)]
+            except (OSError, json.JSONDecodeError) as exc:
+                print(f"[seed] catalog unreadable: {cand}: {exc}")
+                return None
+        return None
+    if path.is_file():
+        try:
+            import sqlite3
+
+            conn = sqlite3.connect(str(path))
+            try:
+                rows = conn.execute(
+                    "SELECT payload FROM assets ORDER BY factor_id LIMIT 500000"
+                ).fetchall()
+            except sqlite3.Error as exc:
+                print(f"[seed] sqlite assets table unreadable: {exc}")
+                return None
+            finally:
+                conn.close()
+            if not rows:
+                return None
+            out: list[dict[str, Any]] = []
+            for (payload,) in rows:
+                try:
+                    obj = json.loads(payload)
+                except (json.JSONDecodeError, TypeError):
+                    continue
+                md = obj.get("metadata") or obj
+                meta = {
+                    "factor_id": str(md.get("factor_id") or ""),
+                    "canonical_repr": str(md.get("canonical_repr") or md.get("canonical_formula") or ""),
+                    "canonical_hash": str(md.get("canonical_hash") or ""),
+                    "fe_identity_ref": str(md.get("fe_identity_ref") or md.get("signal_equivalence_id") or ""),
+                    "parameter_family_id": md.get("parameter_family_id"),
+                }
+                # bucket：从 payload schema_json / 顶层 tags 推断，缺省 None
+                # （SeedProvider 把缺省归 RANDOM 桶，随机探索兜底）
+                if meta["factor_id"] and meta["canonical_repr"]:
+                    out.append(meta)
+            return out
+        except Exception as exc:  # noqa: BLE001 - sqlite 打开失败
+            print(f"[seed] FactorAssets sqlite catalog open failed: {exc}")
+            return None
+    print(f"[seed] FactorAssets library path not found: {path}")
+    return None
+
+
 def run_mining_campaign(
     args: Any,
     *,
@@ -506,21 +673,16 @@ def run_mining_campaign(
 
     if getattr(args, "pipeline", "new") == "new":
         # 默认主链：SearchPipeline（新架构真身），不走 AlphaKnowledgeTrainer。
-        # P0-A：不再硬编码 initial_exprs[:5] 截断——直接把全部 cold-start 条目
-        # （上限放宽到 args.generate_num*4，至少覆盖全部 seed）转为 parents 传给
-        # pipeline（SeedProvider 意图的完整 parents 列表）。后续 P1 由
-        # BayesianRetriever + FactorAssets 做 memory-driven seed 选择。
-        initial_exprs = resolve_cold_start(experiment, args)
-        parent_cap = max(4, int(getattr(args, "generate_num", 5)) * 4)
-        parents: list[dict[str, Any]] = []
-        for i, expr in enumerate(initial_exprs[: min(parent_cap, len(initial_exprs))]):
-            parents.append(
-                {
-                    "formula": str(expr) if not hasattr(expr, "dsl") else getattr(expr, "dsl"),
-                    "factor_id": f"seed_{i}",
-                    "fitness": 0.0,
-                }
-            )
+        # Task 20（SeedProvider）：parents 的来源从「YAML 位置序全量」升级为
+        # 「SeedProvider 从 FactorAssets 全局库按配置比例采样」。未启用
+        # FactorAssets 全局库（OFFLINE_TEST / 无 factor_assets 库 / 用户显式
+        # 关）时保持既有 OFFLINE_TEST 兼容路径（resolve_cold_start 位置序）。
+        parents = _resolve_initial_parents(
+            experiment,
+            args,
+            exec_mode=exec_mode,
+            project_root=PROJECT_ROOT,
+        )
         campaign_id = experiment.delivery.resolved_campaign_id()
         mining_result = _run_pipeline_mining(
             args,
@@ -701,6 +863,27 @@ def build_train_parser() -> argparse.ArgumentParser:
     parser.add_argument("--cold_start_sample_size", type=int, default=None)
     parser.add_argument("--cold_start_pv_ratio", type=float, default=None)
     parser.add_argument("--cold_start_seed", type=int, default=None)
+    parser.add_argument(
+        "--seed-provider",
+        type=str,
+        default=None,
+        choices=("on", "off"),
+        help="Task 20：是否用 SeedProvider（从 FactorAssets 全局库采样 seed）"
+        "替代 YAML 位置序 parents。缺省 None → 兼容路径（resolve_cold_start）。",
+    )
+    parser.add_argument(
+        "--seed-provider-fa-lib",
+        type=str,
+        default=None,
+        help="Task 20：factor_assets 全局库路径（目录 seed_catalog.json 或 "
+        "SQLite assets 表）；SeedProvider 只读 metadata 采样，不物化全库。",
+    )
+    parser.add_argument(
+        "--seed-sample-size",
+        type=int,
+        default=None,
+        help="Task 20：SeedProvider 采样 seed 数；缺省 = generate_num*4。",
+    )
     parser.add_argument("--campaign_id", type=str, default=None, help="覆盖 delivery.campaign_id")
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--cuda", type=int, default=1)
