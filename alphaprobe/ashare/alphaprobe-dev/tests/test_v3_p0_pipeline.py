@@ -98,9 +98,11 @@ def _make_pipeline(**kwargs) -> SearchPipeline:
     cfg = kwargs.pop("config", None) or PipelineConfig(
         pool_target=8, pool_max=16, budget_per_round=6
     )
+    # Task 1：data_train 允许由调用方显式传（PRODUCTION 需 train 段 stock_data）。
+    data_train = kwargs.pop("data_train", None)
     return SearchPipeline(
         experiment=None,
-        data_train=None,
+        data_train=data_train,
         config=cfg,
         **kwargs,
     )
@@ -174,7 +176,11 @@ class TestProductionFailClosed:
 
     def test_production_real_client_ok(self):
         client = _RealLLMClient()
-        sp = _make_pipeline(mode=ExecutionMode.PRODUCTION, llm_client=client)
+        # Task 1：PRODUCTION evaluator 需 QE + data_train；用假 train 段 stock_data
+        # 使构造通过（QE evaluator 构造只存引用，不调方法）。
+        sp = _make_pipeline(
+            mode=ExecutionMode.PRODUCTION, llm_client=client, data_train=object()
+        )
         assert sp.llm_fn is not None
         # 生产路径 orchestrator structured_generation 默认 True
         assert sp.orchestrator.structured_generation is True
@@ -220,7 +226,12 @@ class TestStructuredDefault:
         cfg = PipelineConfig()
         # P0-A：默认值走 UNSET 哨兵，生产语义默认 True（由 SearchPipeline 解析）
         assert cfg.structured_generation is not False
-        sp = _make_pipeline(config=cfg, mode=ExecutionMode.PRODUCTION, llm_client=_RealLLMClient())
+        sp = _make_pipeline(
+            config=cfg,
+            mode=ExecutionMode.PRODUCTION,
+            llm_client=_RealLLMClient(),
+            data_train=object(),
+        )
         assert sp.orchestrator.structured_generation is True
         assert sp.config.structured_generation is True
 
@@ -333,11 +344,15 @@ class TestProductionNoHandFallback:
             def evaluate(self, candidates, **kw):
                 raise RuntimeError("qe unavailable")
 
-        sp = _make_pipeline(mode=ExecutionMode.PRODUCTION, llm_client=_RealLLMClient())
+        sp = _make_pipeline(
+            mode=ExecutionMode.PRODUCTION, llm_client=_RealLLMClient(), data_train=object()
+        )
         # 记录 patch 后 make_fe_evaluate_fn 被调用次数 = 构造期次数（__post_init__
-        # 默认 evaluator 构建；随运行顺序可能是 0 或 2）。运行期（_evaluate 的
+        # 默认 evaluator 构建；Task 1：PRODUCTION 走 QE evaluator，构造期也绝不调
+        # make_fe_evaluate_fn → construct_calls 应为 0）。运行期（_evaluate 的
         # 手算回退路径）绝不允许新增调用。
         construct_calls = counted["calls"]
+        assert construct_calls == 0, "PRODUCTION 构造期不得调用 make_fe_evaluate_fn"
         sp.evaluator = _BoomEvaluator()
         sp._evaluate_fn = None  # 即便残留本地 fn 也不应被调
 
@@ -472,8 +487,10 @@ def test_runner_parents_no_longer_truncated_to_five(monkeypatch):
     # 捕获传入 _run_pipeline_mining 的 parents
     captured = {}
 
-    def _fake_run_pipeline_mining(args, experiment, data, *, campaign_id, parents):
+    def _fake_run_pipeline_mining(args, experiment, data, *, campaign_id, parents,
+                                  data_search_valid=None, execution_mode=None):
         captured["parents"] = parents
+        captured["execution_mode"] = execution_mode
         return {"pool_size": 0, "round_result": None}
 
     monkeypatch.setattr(runner_mod, "_run_pipeline_mining", _fake_run_pipeline_mining)

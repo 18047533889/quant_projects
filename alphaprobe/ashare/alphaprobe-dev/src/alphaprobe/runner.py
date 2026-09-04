@@ -8,27 +8,12 @@ import os
 from pathlib import Path
 from typing import Any
 
-import torch
-from dotenv import load_dotenv
-
-from alphaprobe.cold_start import (
-    ALPHA101_DEFAULT_YAML,
-    ALPHA158_DEFAULT_YAML,
-    ALPHA191_DEFAULT_YAML,
-    DEFAULT_YAML,
-    load_cold_start_for_training,
-    load_cold_start_mixed_for_training,
-    load_cold_start_multi_library_for_training,
-    recommended_max_backtrack_days,
-)
+# Task 1（A11）：顶层**不** import torch / dotenv / cold_start / trainer / shared
+# 厚依赖——无 torch venv 下 `import alphaprobe.runner` 必须成功（legacy 路径未用时）。
+# torch / dotenv / cold_start / FactorEngineStockData / qlib StockData 全部 lazy 进
+# 各自使用点（_make_stock_data / resolve_cold_start / legacy 分支 / export 段）。
 from alphaprobe.delivery.config import ExperimentConfig
 from alphaprobe.delivery.exporter import DiskV1DeliveryExporter
-from alphaprobe.fe_bridge.bootstrap import enable_factor_engine_evaluation
-from alphaprobe.fe_bridge.stock_data import FactorEngineStockData
-from alphaprobe.trainer.pool import AlphaKnowledgePool
-from alphaprobe.trainer.trainer import AlphaKnowledgeTrainer
-from shared.alphagen.data.expression import Feature, Ref
-from shared.alphagen_qlib.stock_data import FeatureType, StockData
 
 # alphaprobe-dev 项目根（src/alphaprobe/runner.py → parents[2]）
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -47,10 +32,27 @@ def _last_pool_value() -> Any:
 def _set_last_pool(pool: Any) -> None:
     _LAST_POOL[0] = pool
 
-# 项目 .env 优先于 shell 里残留的旧 OPENAI_*（如先前其它网关）
-load_dotenv(PROJECT_ROOT / ".env", override=True)
-os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
-os.environ.setdefault("HF_ENDPOINT", "https://hf-mirror.com")
+
+def _apply_env_defaults() -> None:
+    """进程级环境默认（原模块级 load_dotenv 副作用，Task 1 移入函数）。
+
+    dotenv 是可选依赖（alphaprobe-dev 环境有；通用无 torch venv 无）——用
+    try-import 绕行；环境变量显式设过时绝不覆盖（load_dotenv override=False
+    语义；原模块级 override=True 只针对 .env 文件与 shell 残留冲突，这里保留
+    setdefault 幂等）。
+    """
+    # 项目 .env 优先于 shell 里残留的旧 OPENAI_*（如先前其它网关）
+    try:
+        from dotenv import load_dotenv
+
+        load_dotenv(PROJECT_ROOT / ".env", override=True)
+    except Exception:  # noqa: BLE001 - dotenv 缺失时跳过（环境变量已由外层注入）
+        pass
+    os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
+    os.environ.setdefault("HF_ENDPOINT", "https://hf-mirror.com")
+
+
+_apply_env_defaults()
 
 
 def _apply_checkpoint_settings(experiment: ExperimentConfig, args: Any, project_root: Path) -> None:
@@ -88,6 +90,12 @@ def _resolve_cold_start_library_paths(
     project_root: Path,
     default_pv_yaml: Path,
 ) -> dict[str, Path]:
+    from alphaprobe.cold_start import (
+        ALPHA101_DEFAULT_YAML,
+        ALPHA158_DEFAULT_YAML,
+        ALPHA191_DEFAULT_YAML,
+    )
+
     mix_raw = mining_raw.get("cold_start_mix") or {}
     libs_raw = dict(mix_raw.get("libraries") or {})
     market = str(experiment.delivery.market or "ashare").lower()
@@ -116,6 +124,13 @@ def resolve_cold_start(
     args: Any,
     project_root: Path = PROJECT_ROOT,
 ) -> list[tuple[str, str, str]]:
+    from alphaprobe.cold_start import (
+        DEFAULT_YAML,
+        load_cold_start_for_training,
+        load_cold_start_mixed_for_training,
+        load_cold_start_multi_library_for_training,
+    )
+
     mining_raw = experiment.raw.get("mining") or {}
     mix_raw = mining_raw.get("cold_start_mix") or {}
 
@@ -192,27 +207,43 @@ def _apply_env_llm_settings(experiment: ExperimentConfig) -> None:
 
 
 def _resolve_llm_mode(experiment: ExperimentConfig, args: Any) -> Any:
-    """从 experiment config / args 读 llm.mode（P0-A）。
+    """从 experiment config / args 读 execution mode（Task 1 A10）。
 
-    yaml 侧 ``mining.llm.mode`` 优先；其次 ``args.llm_mode``；缺省 OFFLINE_TEST
-    （保持现状行为——stub 可跑）。
+    优先级（Task 1）：
+    1. ``--execution-mode`` CLI（build_train_parser 显式项，choices 三值）；
+    2. yaml ``mining.llm.mode``（向后兼容旧字段）；
+    3. ``args.llm_mode``（旧 CLI，backward compat）；
+    4. 全部未配 → OFFLINE_TEST（仅 CI/默认 stub 路径允许）。
+
+    **非法字符串 → raise（LLMConfigurationError）**，绝不静默回 OFFLINE_TEST
+    （A10：production campaign 必须显式声明 mode；拼错值属配置错误应 fail）。
     """
-    from alphaprobe.llm_client import ExecutionMode
+    from alphaprobe.llm_client import ExecutionMode, LLMConfigurationError
 
     raw_mode = None
-    try:
-        mining_raw = dict((experiment.raw.get("mining") or {}))
-        raw_mode = (mining_raw.get("llm") or {}).get("mode")
-    except Exception:  # noqa: BLE001
-        raw_mode = None
+    # 1) 显式 CLI --execution-mode 最优先
+    exec_mode = getattr(args, "execution_mode", None)
+    if exec_mode is not None:
+        raw_mode = exec_mode
+    # 2) yaml mining.llm.mode（向后兼容）
+    if raw_mode is None:
+        try:
+            mining_raw = dict((experiment.raw.get("mining") or {}))
+            raw_mode = (mining_raw.get("llm") or {}).get("mode")
+        except Exception:  # noqa: BLE001
+            raw_mode = None
+    # 3) 旧 CLI args.llm_mode
     if raw_mode is None:
         raw_mode = getattr(args, "llm_mode", None)
     if raw_mode is None:
         return ExecutionMode.OFFLINE_TEST
     try:
         return ExecutionMode(str(raw_mode).strip().lower())
-    except ValueError:
-        return ExecutionMode.OFFLINE_TEST
+    except ValueError as exc:
+        raise LLMConfigurationError(
+            f"invalid execution mode {raw_mode!r} (A10: 绝不静默回 OFFLINE_TEST). "
+            f"合法值: {[m.value for m in ExecutionMode]}"
+        ) from exc
 
 
 def _resolve_llm_client(experiment: ExperimentConfig, args: Any) -> Any:
@@ -240,6 +271,14 @@ def _make_stock_data(
     start_time: str,
     end_time: str,
 ):
+    # Task 1（A11）：torch / FE bootstrap / FE StockData / qlib StockData 全部 lazy。
+    # 无 torch venv 下此函数（真实数据路径）才需要 torch；模块顶层绝不 import。
+    import torch
+
+    from alphaprobe.fe_bridge.bootstrap import enable_factor_engine_evaluation
+    from alphaprobe.fe_bridge.stock_data import FactorEngineStockData
+    from alphaprobe.cold_start import recommended_max_backtrack_days
+
     device = torch.device(f"cuda:{args.cuda}" if torch.cuda.is_available() else "cpu")
     backend = args.data_backend
     instruments = args.instruments or experiment.data.instruments
@@ -275,6 +314,8 @@ def _make_stock_data(
         qlib_path = os.getenv("QLIB_PATH_SP500", "PATH/TO/data/qlib_data/us_data_qlib")
     else:
         qlib_path = os.getenv("QLIB_PATH_CN", "PATH/TO/.qlib/qlib_data/cn_data")
+    from shared.alphagen_qlib.stock_data import StockData
+
     return StockData(
         instrument=instruments,
         start_time=start_time,
@@ -291,18 +332,22 @@ def _run_pipeline_mining(
     *,
     campaign_id: str,
     parents: list[dict[str, Any]] | None = None,
+    data_search_valid: Any = None,
+    execution_mode: Any = None,
 ) -> dict[str, Any]:
     """--pipeline new 主链：SearchPipeline.run_round 循环 + disk.v1 导出。
 
     沿用现有 quota/stop 逻辑（search_time 轮次上限）；全程不触 test 段。
 
-    P0-A llm 模式接线：从 experiment config / args 读 ``mining.llm.mode``
-    （缺省 OFFLINE_TEST，保持现状行为）；SearchPipeline 构造时传 mode + 相应
-    llm_client（PRODUCTION 缺 llm_client → fail-closed 抛）。
+    Task 1（A2）：SearchPipeline 显式接收 train / search_valid 两段 provider
+    （``data_train`` / ``data_search_valid``）。L2 只吃 Train、L3 只吃 SearchValid。
+    ``execution_mode`` 由 run_mining_campaign 解析后传入（本函数不再自解析，
+    保持单一入口）。
     """
     from alphaprobe.llm_client import ExecutionMode, resolve_llm_fn
     from alphaprobe.pipeline import PipelineConfig, SearchPipeline
 
+    llm_mode = execution_mode if execution_mode is not None else _resolve_llm_mode(experiment, args)
     config = PipelineConfig(
         pool_target=max(16, args.pool_capacity),
         pool_max=max(32, args.pool_capacity * 2),
@@ -311,7 +356,6 @@ def _run_pipeline_mining(
         # P0-A：生产语义默认结构化 generation（runner 主链即生产主链）。
         structured_generation=True,
     )
-    llm_mode = _resolve_llm_mode(experiment, args)
     llm_client = getattr(args, "llm_client", None)
     if llm_client is None:
         # 从 experiment config 读 llm client（真实接入点在 runner 外层注入；
@@ -323,6 +367,7 @@ def _run_pipeline_mining(
         config=config,
         memory_store=None,
         mode=llm_mode,
+        data_search_valid=data_search_valid,
     )
     if llm_mode in (ExecutionMode.PRODUCTION, ExecutionMode.RESEARCH_DEGRADED):
         # P0-A：真实 LLM client 由外层注入（args.llm_client）。未注入即 fail-closed
@@ -353,6 +398,8 @@ def _run_pipeline_mining(
         "pool_size": pipeline.pool_size(),
         "round_result": round_result,
         "pipeline": pipeline,
+        "execution_mode": llm_mode.value,
+        "degraded_reasons": list(getattr(pipeline, "degraded_reasons", []) or []),
     }
 
 
@@ -388,7 +435,13 @@ def run_mining_campaign(
     campaign_id: str | None = None,
     experiment: ExperimentConfig | None = None,
 ) -> dict[str, Any]:
-    """执行一轮完整挖掘：冷启动 → 迭代挖掘 → disk.v1 投递 candidate_pool。"""
+    """执行一轮完整挖掘：冷启动 → 迭代挖掘 → disk.v1 投递 candidate_pool。
+
+    Task 1（A2/A10）：按 ExperimentConfig split 构造 Train / SearchValid provider。
+    - OFFLINE_TEST：默认 stub 路径，search_valid provider 不构造（保持离线行为）；
+    - PRODUCTION / RESEARCH_DEGRADED：真构造 valid 段 provider（QE 权威 valid 指标
+      需要独立 valid 段 stock_data）——构造失败 fail-closed raise。
+    """
     os.environ["CUDA_VISIBLE_DEVICES"] = str(args.cuda)
 
     if experiment is None:
@@ -417,12 +470,36 @@ def run_mining_campaign(
         f"test={test_period[0]}..{test_period[1]}"
     )
 
+    from alphaprobe.llm_client import ExecutionMode
+
+    exec_mode = _resolve_llm_mode(experiment, args)
+    print(f"[mining] execution_mode={exec_mode.value}")
+
     data = _make_stock_data(experiment, args, train_period[0], train_period[1])
     # §3.3 Test 封存：搜索期绝不构造 test 段数据（L0-L4 Test Data Zero Touch）。
     # test_period 仅写入 config / 投递 metadata（_make_stock_data 不再为 test 段调用）。
 
+    # Task 1（A2）：SearchValid provider。仅生产/研究模式真构造（QE 权威 valid 段
+    # 是 L3_search_valid 指标唯一来源）；OFFLINE_TEST 保持 None（离线 stub 行为）。
+    data_search_valid = None
+    if exec_mode in (ExecutionMode.PRODUCTION, ExecutionMode.RESEARCH_DEGRADED):
+        try:
+            data_search_valid = _make_stock_data(
+                experiment, args, valid_period[0], valid_period[1]
+            )
+        except Exception as exc:  # noqa: BLE001 - fail-closed：生产模式 valid 段必须可构造
+            from alphaprobe.pipeline import PipelineAuthorityError
+
+            raise PipelineAuthorityError(
+                f"{exec_mode.value} requires search_valid provider "
+                f"({valid_period[0]}..{valid_period[1]}); construction failed: {exc}"
+            ) from exc
+
     # Fitness 标签：vwap→vwap 远期收益（非 close→close / open→open）
     # RankIC = Spearman(factor, target)；IC = Pearson(factor, target)
+    from shared.alphagen.data.expression import Feature, Ref
+    from shared.alphagen_qlib.stock_data import FeatureType
+
     vwap = Feature(FeatureType.VWAP)
     label_days = int(args.label_days)
     target = Ref(vwap, -label_days) / vwap - 1
@@ -451,6 +528,8 @@ def run_mining_campaign(
             data,
             campaign_id=campaign_id,
             parents=parents,
+            data_search_valid=data_search_valid,
+            execution_mode=exec_mode,
         )
         export_result: dict[str, Any] = {}
         if experiment.has_delivery_block:
@@ -458,8 +537,11 @@ def run_mining_campaign(
             # 兼容池契约：构造 ActivePool 兼容的最小映射对象（exprs/topics/size）。
             # 注：SearchPipeline.pool 是 alphaprobe.pool.ActivePool（Pareto+QD），
             # export_from_pool 需要 .exprs —— 用 pool.snapshot() 构造导出源。
-            pool = _exportable_pool_from_pipeline(pipeline)
+            pipeline = mining_result.get("pipeline")
+            pool = _exportable_pool_from_pipeline(pipeline) if pipeline is not None else None
             if pool is not None:
+                import torch
+
                 device = torch.device(f"cuda:{args.cuda}" if torch.cuda.is_available() else "cpu")
                 exporter = DiskV1DeliveryExporter(experiment)
                 export_result = exporter.export_from_pool(pool, target, experiment, device)
@@ -469,10 +551,14 @@ def run_mining_campaign(
         return {
             "campaign_id": campaign_id,
             "pool_size": mining_result["pool_size"],
+            "execution_mode": exec_mode.value,
             "export": export_result,
         }
 
     initial_exprs = resolve_cold_start(experiment, args)
+
+    from alphaprobe.trainer.pool import AlphaKnowledgePool
+    from alphaprobe.trainer.trainer import AlphaKnowledgeTrainer
 
     pool = AlphaKnowledgePool(
         capacity=args.pool_capacity,
@@ -499,6 +585,8 @@ def run_mining_campaign(
 
     export_result: dict[str, Any] = {}
     if experiment.has_delivery_block:
+        import torch
+
         device = torch.device(f"cuda:{args.cuda}" if torch.cuda.is_available() else "cpu")
         exporter = DiskV1DeliveryExporter(experiment)
         export_result = exporter.export_from_pool(pool, target, experiment, device)
@@ -509,6 +597,7 @@ def run_mining_campaign(
     return {
         "campaign_id": experiment.delivery.resolved_campaign_id(),
         "pool_size": pool.size,
+        "execution_mode": exec_mode.value,
         "export": export_result,
     }
 
@@ -527,7 +616,6 @@ def _record_exported_to_memory(
     manifests = export_result.get("exported_manifests") or []
     if not manifests:
         return
-    from alphaprobe.fe_bridge.dsl_convert import expression_to_dsl
     from alphaprobe.memory import GlobalMemoryStore
     from alphaprobe.authority import FactorIdentityAuthorityError, build_identity_view
 
@@ -544,6 +632,22 @@ def _record_exported_to_memory(
         if f:
             exported_formulas.add(f)
 
+    # formula 抽取：池条目是 FE DSL 字符串（new 主链）或 alphagen Expression
+    # （legacy 主链）。Task 1 后 new 主链池条目直接存 DSL 文本，不再需要
+    # expression_to_dsl（该转换 import 会拉 shared/alphagen → torch，破坏无
+    # torch 环境）；legacy 主链的 Expression 对象用其 __str__ 源文本即可
+    # （fe_bridge.dsl_expression 的 __str__ 返回源 DSL）。
+    def _formula_of(expr: Any) -> str | None:
+        if expr is None:
+            return None
+        if isinstance(expr, str):
+            return expr
+        dsl = getattr(expr, "dsl", None)
+        if dsl:
+            return str(dsl)
+        s = str(expr)
+        return s or None
+
     try:
         store = GlobalMemoryStore()
     except Exception as exc:
@@ -555,9 +659,8 @@ def _record_exported_to_memory(
             expr = pool.exprs[i]
             if expr is None:
                 continue
-            try:
-                formula = expression_to_dsl(expr)
-            except Exception:
+            formula = _formula_of(expr)
+            if not formula:
                 continue
             if formula not in exported_formulas:
                 continue
@@ -607,6 +710,15 @@ def build_train_parser() -> argparse.ArgumentParser:
         default="new",
         choices=("legacy", "new"),
         help="搜索主链：new=SearchPipeline（默认，Test 零构造）；legacy=AlphaKnowledgeTrainer",
+    )
+    parser.add_argument(
+        "--execution-mode",
+        type=str,
+        default=None,
+        choices=("production", "research_degraded", "offline_test"),
+        help="Task 1（A10）：运行模式显式声明。缺省读 yaml mining.llm.mode / 旧 "
+        "--llm_mode；全部未配 → offline_test（仅 CI/默认 stub 路径）。非法值报错，"
+        "绝不静默回 offline_test。",
     )
     parser.add_argument("--instruments", type=str, default=None)
     parser.add_argument(

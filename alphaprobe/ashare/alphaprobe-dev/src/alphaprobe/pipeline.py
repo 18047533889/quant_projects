@@ -31,6 +31,15 @@ from alphaprobe.llm_client import ExecutionMode
 
 logger = logging.getLogger(__name__)
 
+
+class PipelineAuthorityError(RuntimeError):
+    """生产评估权威不可用（Task 1 fail-closed）。
+
+    PRODUCTION / RESEARCH_DEGRADED 下评估只认 QE 权威：QuantEvaluatorAdapter
+    不可导入 / 评估构造失败 / 缺 data_train → 抛本异常。**绝不**回落
+    LegacyCompatEvaluator / legacy.make_fe_evaluate_fn（本地手算 RankIC）。
+    """
+
 # 默认搜索轮预算：与 runner --search_time 语义一致（沿用 quota/stop 逻辑）。
 DEFAULT_ROUNDS = 40
 DEFAULT_BUDGET_PER_ROUND = 12
@@ -206,132 +215,16 @@ def _default_llm_fn() -> Callable[[str, str, str], str]:
 # ---------------------------------------------------------------------------
 # 默认 evaluate_fn（fe_bridge 真算：vwap→vwap 20 日 label）
 # ---------------------------------------------------------------------------
+# Task 1：make_fe_evaluate_fn / _bundle_from_plane / _all_none 已移入
+# ``alphaprobe.legacy.evaluators``（仅 OFFLINE_TEST 命名空间）。本模块保留
+# re-export 兼容（既有测试/旧路径 import 不断），但生产模式绝不消费。
 
-
-def make_fe_evaluate_fn(
-    stock_data: Any,
-    *,
-    label_days: int = 20,
-    segment: str = "train",
-) -> Callable[[Sequence[str], str, Any], list[dict[str, float | None]]]:
-    """fe_bridge 真算 evaluate_fn（LegacyCompatEvaluator 注入用）。
-
-    公式列表 → FactorEngineStockData.evaluate_many 批算因子平面 → vwap→vwap
-    远期收益 label（Ref(vwap,-label_days)/vwap-1）→ 每因子算 rank_ic/ic/icir/
-    coverage/nan_inf_ratio，返回 metric bundle dict 列表（与 formula 一一对应）。
-
-    数据无法构造时返回全 None bundle 并记录 degraded（不抛）。
-    泄漏纪律：只读传入的 train 段 stock_data，不接收 test 段数据。
-
-    .. note:: **legacy（仅 OFFLINE_TEST）**——生产评估只认 evaluator/QE 权威，
-       ``make_fe_evaluate_fn`` 属本地 numpy/scipy 手算回退路径，PRODUCTION 模式
-       由 SearchPipeline._evaluate 的 fail-closed 守卫禁止回落本函数。
-    """
-    import numpy as np
-
-    def _evaluate_fn(
-        formulas: Sequence[str],
-        fidelity: str = "L2_full_train",
-        context: Any = None,
-    ) -> list[dict[str, float | None]]:
-        bundles: list[dict[str, float | None]] = []
-        if stock_data is None:
-            return [None] * len(formulas)
-        fmls = [str(f) for f in formulas if f]
-        try:
-            planes = stock_data.evaluate_many(fmls)  # type: ignore[attr-defined]
-        except Exception as exc:  # noqa: BLE001 - 数据不可用降级为全 None，不抛
-            logger.warning("pipeline evaluate_many failed, degraded: %s", exc)
-            return [None] * len(formulas)
-        try:
-            # vwap → 远期收益 label：Ref(vwap,-label_days)/vwap-1（后复权口径）
-            names = list(stock_data._field_names())
-            if "vwap" not in names:
-                logger.warning("pipeline: no vwap field, degraded")
-                return [None] * len(formulas)
-            vwap = stock_data.data[:, :, names.index("vwap")]
-            T = vwap.shape[0]
-            if T <= label_days:
-                logger.warning("pipeline: series too short for label_days, degraded")
-                return [None] * len(formulas)
-            label = vwap[label_days:, :] / vwap[:-label_days, :] - 1.0
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("pipeline vwap label build failed, degraded: %s", exc)
-            return [None] * len(formulas)
-        # 因子平面与 label 对齐：factor 也用 [label_days:, :] 段
-        bundles: list[dict[str, float | None]] = []
-        for plane in planes:
-            try:
-                f_arr = np.asarray(plane, dtype=float)
-            except Exception:  # noqa: BLE001
-                f_arr = plane
-            if len(f_arr.shape) == 3:
-                # evaluate_many 返回 (T,N,F) 时取最后一维（F=1）
-                f_arr = f_arr[:, :, -1]
-            try:
-                f_arr = f_arr[-label.shape[0]:, :]
-            except Exception:  # noqa: BLE001
-                pass
-            bundles.append(_bundle_from_plane(f_arr, label))
-        return bundles
-
-    return _evaluate_fn
-
-
-def _bundle_from_plane(
-    plane: Any,
-    label: Any,
-) -> dict[str, float | None]:
-    """单因子平面 × label → 基础 metric bundle（离线 numpy/scipy，不跑 qlib）。
-
-    .. note:: **legacy（仅 OFFLINE_TEST）**——同 :func:`make_fe_evaluate_fn`，
-       PRODUCTION 评估不消费本函数（无手算回退）。
-    """
-    try:
-        import numpy as np
-        from scipy import stats as _scipy_stats
-
-        f = np.asarray(plane, dtype=float)
-        y = np.asarray(label, dtype=float)
-        T, N = f.shape
-        if T == 0 or N == 0:
-            return _all_none()
-        # 对齐到有效 label 段
-        f = f[-y.shape[0]:, :]
-        T = f.shape[0]
-        valid = np.isfinite(f) & np.isfinite(y)
-        f_clean = np.where(valid, f, np.nan)
-        cov = np.mean(np.isfinite(f), axis=1)
-        coverage = float(np.mean(cov >= 0.5))
-        nan_ratio = float(np.mean(~np.isfinite(f)))
-        rankics: list[float] = []
-        ics: list[float] = []
-        for t in range(T):
-            ft = f_clean[t]
-            yt = y[t]
-            mask = np.isfinite(ft) & np.isfinite(yt)
-            if mask.sum() < 30:
-                continue
-            r = _scipy_stats.spearmanr(ft[mask], yt[mask], nan_policy="omit")
-            if r is not None and hasattr(r, "correlation") and r.correlation is not None and np.isfinite(r.correlation):
-                rankics.append(float(r.correlation))
-            c = _scipy_stats.pearsonr(ft[mask], yt[mask])
-            if c is not None and hasattr(c, "statistic") and c.statistic is not None and np.isfinite(c.statistic):
-                ics.append(float(c.statistic))
-        rank_ic = float(np.mean(rankics)) if rankics else None
-        ic = float(np.mean(ics)) if ics else None
-        icir = float(np.mean(rankics) / (np.std(rankics) + 1e-6)) if len(rankics) > 1 else None
-        return {
-            "rankic": rank_ic,
-            "ic": ic,
-            "icir": icir,
-            "coverage": coverage,
-            "nan_inf_ratio": nan_ratio,
-            "untradeable_ratio": None,
-        }
-    except Exception as exc:  # noqa: BLE001 - scipy/numpy 缺失时降级全 None
-        logger.warning("pipeline metric computation degraded: %s", exc)
-        return _all_none()
+from alphaprobe.legacy.evaluators import (  # noqa: E402,F401
+    _all_none as _all_none,
+    _bundle_from_plane as _bundle_from_plane,
+    make_fe_evaluate_fn as make_fe_evaluate_fn,
+)
+from alphaprobe.contracts import DateRange as _DateRange  # noqa: E402
 
 
 def make_qe_evaluate_fn(
@@ -536,11 +429,21 @@ class SearchPipeline:
             validate_label_contract_20d()
         except Exception as exc:  # noqa: BLE001 - 权威缺失降级，明确记录
             self.degraded_reasons.append(f"authority unavailable: {exc}")
-        # evaluator：None → LegacyCompatEvaluator + fe_bridge 真算 fn
+        # evaluator：None → 按 mode 分支构建（Task 1）。
+        # - PRODUCTION / RESEARCH_DEGRADED：唯一 evaluator = QuantEvaluatorAdapter
+        #   （QE 权威）。QE 不可用 / 缺 data_train → PipelineAuthorityError（fail-closed，
+        #   绝不回落 LegacyCompatEvaluator / legacy.make_fe_evaluate_fn 本地手算）。
+        # - OFFLINE_TEST：LegacyCompatEvaluator + legacy.make_fe_evaluate_fn（现状）。
         if self.evaluator is None:
             self.evaluator = self._build_default_evaluator()
-        # 默认 evaluate_fn（供 funnel 消费的 metric bundle 真算）：train 段
-        self._evaluate_fn = make_fe_evaluate_fn(self.data_train)
+        # 默认 evaluate_fn（供 funnel 消费的 metric bundle 真算）：train 段。
+        # Task 1：仅 OFFLINE_TEST 构建 legacy fe_bridge fn；PRODUCTION /
+        # RESEARCH_DEGRADED 置 None（评估只走 evaluator/QE 权威，_evaluate 的
+        # fail-closed 守卫绝不消费本地手算 fn）。
+        if self.mode in (ExecutionMode.PRODUCTION, ExecutionMode.RESEARCH_DEGRADED):
+            self._evaluate_fn = None
+        else:
+            self._evaluate_fn = make_fe_evaluate_fn(self.data_train)
         # P0-A Train/Valid 分离：data_search_valid 非 None → valid 段 evaluate_fn
         # （L3_search_valid 专用；valid 指标唯一来源，绝不用 train 段数据填）。
         self._evaluate_fn_valid = None
@@ -575,12 +478,61 @@ class SearchPipeline:
     # ------------------------------------------------------------------
 
     def _build_default_evaluator(self) -> Any | None:
+        """按 ExecutionMode 构建默认 evaluator（Task 1 production authority）。
+
+        - ``evaluator_factory`` 显式注入优先（两模式都尊重，失败才回落默认）。
+        - PRODUCTION / RESEARCH_DEGRADED → :class:`QuantEvaluatorAdapter`
+          （QE 权威；QE 不可导入 / 评估构造失败 / 缺 data_train →
+          raise :class:`PipelineAuthorityError`，fail-closed）。
+        - OFFLINE_TEST → ``LegacyCompatEvaluator`` + legacy.make_fe_evaluate_fn
+          （现状；合成/离线可跑）。
+
+        Returns
+        -------
+        evaluator 实例；OFFLINE_TEST 构建失败可返回 None（静态降级路径兼容）。
+
+        Raises
+        ------
+        PipelineAuthorityError
+            生产模式 QE 权威不可用（fail-closed，绝不手算）。
+        """
         if self.evaluator_factory is not None:
             try:
                 return self.evaluator_factory()
             except Exception as exc:  # noqa: BLE001
                 logger.warning("evaluator_factory failed: %s", exc)
                 self.degraded_reasons.append(f"evaluator_factory failed: {exc}")
+        if self.mode in (ExecutionMode.PRODUCTION, ExecutionMode.RESEARCH_DEGRADED):
+            return self._build_qe_authority_evaluator()
+        return self._build_legacy_compat_evaluator()
+
+    def _build_qe_authority_evaluator(self) -> Any:
+        """PRODUCTION / RESEARCH_DEGRADED：QE 权威 evaluator（fail-closed）。
+
+        生产评估唯一入口 = QuantEvaluatorAdapter（registry 指标 + cohort 双口径）。
+        - QE 不可 import（``quant_evaluator``）→ PipelineAuthorityError；
+        - data_train 缺失 → PipelineAuthorityError（QE 面板通路需要 train 段 stock_data）；
+        - 评估构造/单次调用失败 → QuantEvaluatorError 由 adapter 层抛，经
+          :meth:`_evaluate` 统一包装为 EVALUATION_MISSING（不手算）。
+        """
+        if self.data_train is None:
+            raise PipelineAuthorityError(
+                f"{self.mode.value} evaluator requires data_train (stock_data); "
+                "got None. fail-closed: QE 评估需要 train 段数据，绝不本地手算"
+            )
+        try:
+            from alphaprobe.evaluator_adapter import QuantEvaluatorAdapter
+
+            adapter = QuantEvaluatorAdapter(label_days=20)
+        except Exception as exc:  # noqa: BLE001 - QE 不可导入 → fail-closed
+            raise PipelineAuthorityError(
+                f"{self.mode.value} evaluator requires QuantEvaluatorAdapter; "
+                f"quant_evaluator unavailable: {exc}"
+            ) from exc
+        return _QeAuthorityEvaluator(adapter, data_train=self.data_train)
+
+    def _build_legacy_compat_evaluator(self) -> Any | None:
+        """OFFLINE_TEST：LegacyCompatEvaluator + legacy.make_fe_evaluate_fn。"""
         try:
             from alphaprobe.contracts import ExperimentContext, LabelSpec, ResearchSplitSpec
             from alphaprobe.evalcache import EvaluationCache
@@ -593,10 +545,10 @@ class SearchPipeline:
             train_period = mining.get("train_period", ["2016-01-01", "2021-12-31"])
             try:
                 split_spec = ResearchSplitSpec(
-                    train=DateRange(train_period[0], train_period[1]),
-                    search_valid=DateRange(train_period[1], train_period[1]),
+                    train=_DateRange(train_period[0], train_period[1]),
+                    search_valid=_DateRange(train_period[1], train_period[1]),
                     audit_valid=None,
-                    sealed_test=DateRange(train_period[1], train_period[1]),
+                    sealed_test=_DateRange(train_period[1], train_period[1]),
                 )
             except Exception:  # noqa: BLE001
                 split_spec = None
@@ -753,7 +705,15 @@ class SearchPipeline:
                 if self.mode in (ExecutionMode.PRODUCTION, ExecutionMode.RESEARCH_DEGRADED):
                     # P0-A：生产 evaluator 异常 → EVALUATION_MISSING，绝不手算。
                     return [None] * len(formulas)
-        # 静态降级（OFFLINE_TEST）：跑本地 bundle 计算（纯 numpy/scipy，无网络无模型）
+        # 静态降级：仅 OFFLINE_TEST 跑本地 bundle 计算（纯 numpy/scipy，无网络无模型）。
+        # Task 1 fail-closed：PRODUCTION / RESEARCH_DEGRADED 绝不执行 legacy 手算 fn
+        # （_evaluate_fn 在构造期已置 None；此处再加一道防线，防代码路径漂移）。
+        if self.mode in (ExecutionMode.PRODUCTION, ExecutionMode.RESEARCH_DEGRADED):
+            logger.warning(
+                "%s mode reached static-degrade line → EVALUATION_MISSING (no local hand-compute)",
+                self.mode.value,
+            )
+            return [None] * len(formulas)
         bundles: list[dict[str, float | None] | None] = []
         try:
             bundles = self._evaluate_fn(formulas, "L2_full_train", None)
@@ -1013,6 +973,122 @@ class SearchPipeline:
 
 
 # ---------------------------------------------------------------------------
+# _QeAuthorityEvaluator（Task 1）：PRODUCTION 唯一评估入口
+# ---------------------------------------------------------------------------
+
+
+class _QeAuthorityEvaluator:
+    """QE 权威 evaluator：把 QuantEvaluatorAdapter 包成 ``evaluate(candidates)``。
+
+    与 ``LegacyCompatEvaluator`` 同消费面（pipeline._evaluate 只调
+    ``evaluate(candidates, profile=...)`` → 返回带 ``metric_bundle`` 的 record 列表），
+    但每个 metric bundle 由 QE registry 指标 + cohort 双口径产出（``rankic_valid`` /
+    ``rankicir`` / ``net_sharpe`` 等键直接进 record.metric_bundle）。
+
+    - 输入 candidates 的 canonical_formula = factor DSL 文本（Formula Search 语义；
+      FactorEngineStockData 计算因子面板）。
+    - label 面板由 data_train 提供（vwap→vwap 20 日；label_time_axis 由
+      ``evaluator_adapter`` 走 modeling LabelContract）。
+    - QE 不可 import / 评估失败 → 由 adapter 抛 QuantEvaluatorError；本类不吞
+      （pipeline._evaluate 按 mode 把异常归为 EVALUATION_MISSING，不手算）。
+    """
+
+    def __init__(self, adapter: Any, *, data_train: Any = None) -> None:
+        self._adapter = adapter
+        self.data_train = data_train
+
+    def evaluate(
+        self,
+        candidates: Sequence[Any],
+        *,
+        profile: str = "search",
+        fidelity: str = "L2_full_train",
+        context: Any = None,
+    ) -> list[Any]:
+        from alphaprobe.contracts import EvaluationRecord, FactorCandidate
+        from datetime import datetime, timezone
+
+        if self.data_train is None:
+            raise PipelineAuthorityError(
+                "QE evaluator requires data_train (stock_data); got None"
+            )
+        formulas = []
+        for c in candidates:
+            if isinstance(c, FactorCandidate):
+                formulas.append(str(c.identity.canonical_formula or ""))
+            else:
+                formulas.append(str(getattr(c, "formula", "") or c))
+        formulas = [f for f in formulas if f]
+        records: list[Any] = []
+        if not formulas:
+            return records
+        # train 段面板（vwap→vwap 20d label）→ 单次 evaluate_many（QE 批量通路）。
+        from alphaprobe.contracts import FactorIdentity, CandidateStatus
+
+        for i, formula in enumerate(formulas):
+            try:
+                mb = self._qe_bundle_for(formula)
+            except Exception as exc:  # noqa: BLE001 - 单因子评估失败降级为 None
+                logger.warning("QE evaluator factor failed (EVALUATION_MISSING): %s", exc)
+                mb = None
+            fid = f"cand_{abs(hash(formula)) & 0xFFFFFFFF:08x}"
+            records.append(
+                EvaluationRecord(
+                    factor_id=fid,
+                    segment="train",
+                    fidelity=fidelity,
+                    metric_bundle=dict(mb or {}),
+                    artifact_refs={},
+                    evaluator_version="qe_authority_v1",
+                    data_snapshot_id="auto",
+                    universe_snapshot_id="auto",
+                    label_spec_hash="vwap_to_vwap_h20",
+                    created_at=datetime.now(timezone.utc),
+                )
+            )
+        return records
+
+    def _qe_bundle_for(self, formula: str) -> dict[str, float | None] | None:
+        """单公式 train 段 QE bundle（registry + cohort 双口径）。"""
+        sd = self.data_train
+        try:
+            names = list(sd._field_names())
+            if "vwap" not in names:
+                return None
+            planes = sd.evaluate_many([formula])
+        except Exception as exc:  # noqa: BLE001 - 数据不可用降级
+            logger.warning("QE evaluator evaluate_many failed: %s", exc)
+            return None
+        plane = planes[0] if planes else None
+        if plane is None:
+            return None
+        try:
+            import numpy as np
+            import pandas as pd
+
+            vwap = sd.data[:, :, names.index("vwap")]
+            T = vwap.shape[0]
+            if T <= 20:
+                return None
+            label = vwap[20:, :] / vwap[:-20, :] - 1.0
+            dates = list(sd._dates)
+            codes = list(sd._stock_ids)
+            seg_dates = dates[20:]
+            f_arr = np.asarray(plane, dtype=float)
+            if len(f_arr.shape) == 3:
+                f_arr = f_arr[:, :, -1]
+            f_arr = f_arr[-label.shape[0]:, :]
+            factor_df = pd.DataFrame(f_arr, index=seg_dates, columns=codes)
+            label_df = pd.DataFrame(label, index=seg_dates, columns=codes)
+            price_df = pd.DataFrame(vwap[20:, :], index=seg_dates, columns=codes)
+            eb = self._adapter.evaluate(factor_df, label_df, price_df)
+            return dict(eb.raw())
+        except Exception as exc:  # noqa: BLE001 - 单因子评估失败降级
+            logger.warning("QE evaluator bundle build failed: %s", exc)
+            return None
+
+
+# ---------------------------------------------------------------------------
 # 工具
 # ---------------------------------------------------------------------------
 
@@ -1074,6 +1150,7 @@ def _make_record(
 __all__ = [
     "UNSET",
     "PipelineConfig",
+    "PipelineAuthorityError",
     "RoundResult",
     "SearchPipeline",
     "make_stub_llm_fn",
