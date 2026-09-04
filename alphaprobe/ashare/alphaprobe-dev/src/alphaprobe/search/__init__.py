@@ -185,3 +185,31 @@ class LineagePatienceTracker:
     def strong_lineage_bonus(self, lineage_key: str) -> float:
         """强 lineage 获得更多预算（§56.3）。"""
         return 1.0 / (1.0 + self._no_gain_streak.get(lineage_key, 0))
+
+
+# ---------------------------------------------------------------------------
+# plan Task 11：Lineage Stagnation（depth decay 的替代判据）
+# ---------------------------------------------------------------------------
+
+from alphaprobe.search.stagnation import (  # noqa: E402
+    DEFAULT_STAGNATION_CONFIG,
+    GenerationRecord,
+    StagnationConfig,
+    StagnationEvaluator,
+    StagnationResult,
+)
+
+__all__ = [
+    "GenerationRepairArm",
+    "ArmStats",
+    "ActionScheduler",
+    "make_action",
+    "model_route",
+    "LineagePatienceTracker",
+    # plan Task 11
+    "GenerationRecord",
+    "StagnationConfig",
+    "StagnationResult",
+    "StagnationEvaluator",
+    "DEFAULT_STAGNATION_CONFIG",
+]

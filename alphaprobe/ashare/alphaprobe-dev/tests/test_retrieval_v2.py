@@ -117,10 +117,24 @@ class TestPrior:
         assert p == pytest.approx(0.5)
 
     def test_gamma_omega_effect(self):
-        # gamma 越大 → 深度惩罚越重
-        assert compute_prior(0.5, 5, 0, gamma=0.5) < compute_prior(0.5, 5, 0, gamma=0.1)
+        # stagnation_enabled=True（新默认）：gamma 只在 ablation 关闭时才生效。
+        # 显式关闭 → gamma 越大深度惩罚越重（旧语义保留）。
+        assert compute_prior(0.5, 5, 0, gamma=0.5, stagnation_enabled=False) < compute_prior(
+            0.5, 5, 0, gamma=0.1, stagnation_enabled=False
+        )
         # omega 越大 → 检索频率惩罚越重
         assert compute_prior(0.5, 0, 20, omega=0.2) < compute_prior(0.5, 0, 20, omega=0.05)
+        # stagnation 开启时 gamma 不再决定 depth 惩罚（小先验 depth_prior_decay）
+        assert compute_prior(0.5, 5, 0, gamma=0.5) == compute_prior(0.5, 5, 0, gamma=0.1)
+
+    def test_missing_fitness_still_neutral_with_small_depth_prior(self):
+        """stagnation 默认下 fitness 缺失且无停滞证据 → prior 仍 0.5（中性）。
+
+        depth 小复杂度先验（默认每层 0.02）对 fitness=None 的中性输入不额外
+        惩罚——无 fitness 证据时 depth 先验也不应改变 0.5 中性。
+        """
+        p = compute_prior(None, 0, 0)
+        assert p == pytest.approx(0.5)
 
 
 # ---------------------------------------------------------------------------

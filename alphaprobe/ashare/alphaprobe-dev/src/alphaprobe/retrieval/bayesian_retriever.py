@@ -51,6 +51,12 @@ DEFAULT_OMEGA = 0.05
 DEFAULT_BETA_UCB = 1.0
 #: memory 读不到时 depth 的退化默认
 FALLBACK_DEPTH = 0
+#: 停滞判据缺省（depth 只留小复杂度先验，见 stagnation.py）
+DEFAULT_STAGNATION_PENALTY = 0.0
+#: 缺省 stagnation 接入开关（默认 True：depth 硬指数衰减由 stagnation 取代）
+DEFAULT_STAGNATION_ENABLED = True
+#: depth 小先验（stagnation 开启时 depth 不再指数衰减，只留轻微复杂度先验）
+DEFAULT_DEPTH_PRIOR_DECAY = 0.02
 
 
 def _safe_fitness(value: Any) -> float | None:
@@ -78,20 +84,47 @@ def compute_prior(
     gamma: float = DEFAULT_GAMMA,
     omega: float = DEFAULT_OMEGA,
     z_temperature: float = DEFAULT_Z_TEMPERATURE,
+    stagnation_penalty: float = DEFAULT_STAGNATION_PENALTY,
+    stagnation_enabled: bool = DEFAULT_STAGNATION_ENABLED,
+    depth_prior_decay: float = DEFAULT_DEPTH_PRIOR_DECAY,
 ) -> float:
-    """Prior(F) = sigmoid(z(Fitness)) × (1-gamma)^depth × (1-omega)^retrieval_times。
+    """Prior(F) = sigmoid(z(Fitness)) × depth_factor × (1-omega)^retrieval_times。
 
-    三因子分解各自单调：fitness↑→prior↑、depth↑→prior↓、retrieval↑→prior↓。
-    Fitness 缺失（None）→ sigmoid(0) = 0.5（中性，不因缺指标额外惩罚）。
+    depth 项（plan Task 11：depth decay 替换为 Lineage Stagnation）：
+
+    - ``stagnation_enabled=False``（ablation）→ 旧硬指数衰减
+      ``(1-gamma)^depth``（历史行为完整保留，可对比）。
+    - ``stagnation_enabled=True``（默认）→ depth 只留小复杂度先验
+      ``(1-depth_prior_decay)^depth``（默认每层 0.02，远轻于旧 gamma=0.15），
+      真正的「该不该继续挖」交给 ``stagnation_penalty``（0~1，来自
+      stagnation.StagnationEvaluator）抑制停滞 branch；无停滞证据时中性。
+
+    三因子分解各自单调：fitness↑→prior↑、stagnation_penalty↑→prior↓、
+    retrieval↑→prior↓。Fitness 缺失（None）→ sigmoid(0) = 0.5（中性，
+    不因缺指标额外惩罚）。
     """
     q = (
         _sigmoid((float(factor_fitness) - 0.5) / max(z_temperature, EPS))
         if factor_fitness is not None
         else 0.5
     )
-    d = max(0.0, 1.0 - max(0.0, float(gamma))) ** max(0, int(depth))
+    depth_n = max(0, int(depth))
+    if stagnation_enabled:
+        # depth 小复杂度先验：默认每层 0.02，深 20 层才衰减到 ~0.67——
+        # 不再用旧 gamma=0.15 每层 15% 硬指数压制深 but fertile 的 branch。
+        d = max(0.0, 1.0 - max(0.0, float(depth_prior_decay))) ** depth_n
+        # stagnation 抑制（0 中性 → 1 全停）。gamma 参数在 stagnation 模式下
+        # **仅用于 ablation/旧调用对比**，不再参与 depth 衰减；无停滞证据
+        # （penalty=0）时 sp=1.0，fitness 中性（None）时 q=0.5 → prior=0.5。
+        s = max(0.0, min(1.0, float(stagnation_penalty or 0.0)))
+        sp = 1.0 - s
+    else:
+        # ablation（stagnation_enabled=False）：完整保留旧 depth 硬指数衰减
+        # ``(1-gamma)^depth``，与 V3.1 之前的 compute_prior 逐字一致。
+        d = max(0.0, 1.0 - max(0.0, float(gamma))) ** depth_n
+        sp = 1.0
     r = max(0.0, 1.0 - max(0.0, float(omega))) ** max(0, int(retrieval_times))
-    return max(0.0, q * d * r)
+    return max(0.0, q * d * sp * r)
 
 
 def uncertainty_bonus(
@@ -134,11 +167,17 @@ def compute_retriever_score(
     omega: float = DEFAULT_OMEGA,
     z_temperature: float = DEFAULT_Z_TEMPERATURE,
     beta_ucb: float = DEFAULT_BETA_UCB,
+    stagnation_penalty: float = DEFAULT_STAGNATION_PENALTY,
+    stagnation_enabled: bool = DEFAULT_STAGNATION_ENABLED,
+    depth_prior_decay: float = DEFAULT_DEPTH_PRIOR_DECAY,
 ) -> float:
     """RetrieverScore = Prior × P_success × (0.6 + 0.4×Opportunity) × UCB。"""
     prior = compute_prior(
         factor_fitness, depth, retrieval_times,
         gamma=gamma, omega=omega, z_temperature=z_temperature,
+        stagnation_penalty=stagnation_penalty,
+        stagnation_enabled=stagnation_enabled,
+        depth_prior_decay=depth_prior_decay,
     )
     ps = min(max(float(posterior_success), 0.0), 1.0)
     opp = min(max(float(search_opportunity), 0.0), 1.0)
@@ -153,6 +192,8 @@ def retriever_score_from_state(
     omega: float = DEFAULT_OMEGA,
     z_temperature: float = DEFAULT_Z_TEMPERATURE,
     beta_ucb: float = DEFAULT_BETA_UCB,
+    stagnation_enabled: bool = DEFAULT_STAGNATION_ENABLED,
+    stagnation_penalty: float = DEFAULT_STAGNATION_PENALTY,
 ) -> float:
     """从 BayesianNodeState 直接算 RetrieverScore（不重算 opportunity）。
 
@@ -183,6 +224,8 @@ def retriever_score_from_state(
         omega=omega,
         z_temperature=z_temperature,
         beta_ucb=beta_ucb,
+        stagnation_enabled=stagnation_enabled,
+        stagnation_penalty=stagnation_penalty,
     )
 
 
@@ -200,6 +243,12 @@ class BayesianRetrieverConfig:
     delta_pool: float = 0.01
     #: 0.6 + 0.4×Opportunity 的机会权重
     opportunity_weight: float = 0.4
+    #: plan Task 11：depth decay → Lineage Stagnation（ablation 开关，Part G #30）。
+    #: True（默认）= depth 只留小复杂度先验 + stagnation_penalty 抑制停滞 branch；
+    #: False = 完全回退旧 ``(1-gamma)^depth`` 硬指数衰减。
+    stagnation_enabled: bool = DEFAULT_STAGNATION_ENABLED
+    #: stagnation 判据权重配置（透传 StagnationConfig；None = 默认）
+    stagnation_config: Any | None = None
     enabled: bool = True
     action_families: tuple[str, ...] = DEFAULT_ACTION_FAMILIES
 
@@ -236,6 +285,8 @@ class BayesianRetriever:
     # 内存态退化（memory 读不到时用）
     _node_states: dict[str, dict[str, Any]] = field(default_factory=dict)
     _memory_ok: bool = True
+    #: branch 停滞 evaluator（plan Task 11）：lineage key -> StagnationEvaluator
+    _stagnation: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if self.config is None:
@@ -251,6 +302,42 @@ class BayesianRetriever:
                 )
         if self.fitness_fn is None:
             self.fitness_fn = self._default_fitness_fn
+
+    # ------------------------------------------------------------------
+    # plan Task 11：lineage stagnation 观测与积分
+    # ------------------------------------------------------------------
+
+    def record_generation(
+        self,
+        *,
+        lineage_key: str,
+        record: Any,
+    ) -> Any:
+        """累积一条 branch 生成记录并返回最新 StagnationResult。
+
+        与旧 depth 硬指数衰减正交：retriever 不再用 depth 直接罚深 branch，
+        而是把最近 K 代有没有产出（stagnation_penalty）作为先验抑制项。
+        lineage_key 可为 factor_id（branch 根）或 lineage 路径 key。
+        """
+        if not self.config.stagnation_enabled:
+            return None
+        from alphaprobe.search.stagnation import StagnationEvaluator
+
+        ev = self._stagnation.get(str(lineage_key))
+        if ev is None:
+            ev = StagnationEvaluator(config=self.config.stagnation_config)
+            self._stagnation[str(lineage_key)] = ev
+        return ev.observe(record)
+
+    def stagnation_penalty_of(self, lineage_key: str) -> float:
+        """branch 当前停滞分（0 = 中性/未接入，1 = 全停）。"""
+        ev = self._stagnation.get(str(lineage_key))
+        if ev is None or not self.config.stagnation_enabled:
+            return 0.0
+        res = ev.evaluate()
+        if res is None:
+            return 0.0
+        return float(res.stagnation)
 
     # ------------------------------------------------------------------
     # fitness 提取
@@ -445,6 +532,8 @@ class BayesianRetriever:
         cand_global_attempts: int | None = None
         cand_node_attempts: int | None = None
         cand_successes: int | None = None
+        cand_stagnation: float | None = None
+        cand_lineage_key: str | None = None
         if isinstance(candidate, Mapping):
             cd = dict(candidate)
         else:
@@ -481,6 +570,14 @@ class BayesianRetriever:
                 cand_successes = int(cd["total_successes"])
             except (TypeError, ValueError):
                 cand_successes = None
+        # plan Task 11：停滞分显式传入优先；否则按 lineage key 从内部累积查
+        if "stagnation_penalty" in cd:
+            try:
+                cand_stagnation = float(cd["stagnation_penalty"])
+            except (TypeError, ValueError):
+                cand_stagnation = None
+        if "lineage_key" in cd:
+            cand_lineage_key = str(cd["lineage_key"]) or None
         # 显式 total_attempts 缺失时：retrieval_count（被检索次数）就是该节点
         # 的尝试规模代理（保持 §19 核心场景的语义：被挖 200 次 = 200 attempts）。
         if cand_attempts is None and cand_retrieval is not None:
@@ -492,6 +589,14 @@ class BayesianRetriever:
             if cand_retrieval is not None
             else (self._retrieval_count_of(fid) if fid else 0)
         )
+        # plan Task 11：stagnation 抑制项（0~1）。显式传入优先；否则该 candidate
+        # 的 lineage_key（缺省用 factor_id）查内部累积的 StagnationEvaluator。
+        if cand_stagnation is not None:
+            stagnation_penalty = cand_stagnation
+        else:
+            stagnation_penalty = self.stagnation_penalty_of(
+                cand_lineage_key or fid or ""
+            )
         stats = self._node_stats_of(fid) if fid else {}
         attempted = self._attempted_actions_of(fid) if fid else []
 
@@ -598,6 +703,8 @@ class BayesianRetriever:
             omega=self.config.omega,
             z_temperature=self.config.z_temperature,
             beta_ucb=self.config.beta_ucb,
+            stagnation_penalty=stagnation_penalty,
+            stagnation_enabled=self.config.stagnation_enabled,
         )
         return {
             "factor_id": fid,
@@ -607,10 +714,13 @@ class BayesianRetriever:
                 gamma=self.config.gamma,
                 omega=self.config.omega,
                 z_temperature=self.config.z_temperature,
+                stagnation_penalty=stagnation_penalty,
+                stagnation_enabled=self.config.stagnation_enabled,
             ),
             "posterior_success": ps,
             "search_opportunity": opp,
             "uncertainty_bonus": ub,
+            "stagnation_penalty": float(stagnation_penalty),
             "retriever_score": score,
             "components": comps,
         }

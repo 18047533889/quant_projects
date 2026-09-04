@@ -145,13 +145,18 @@ class TestRetrievalCountMemoryDegraded:
         r.record_retrieval("f1")
         r.record_retrieval("f1")
         d = r.score_candidate({"factor_id": "f1", "factor_fitness": 0.7, "depth": 1})
-        assert d["prior"] == pytest.approx(0.5, abs=0.2)
+        # 该因子被检索 2 次 → 检索频率衰减生效（先验低于无检索时）
+        assert 0.0 < d["prior"] < 0.8
         # 用总公式验证 retrieval_times 被拾取：2 次检索 < 无检索时的先验
         from alphaprobe.retrieval import compute_prior
 
-        p2 = compute_prior(0.7, 1, 2)
-        p0 = compute_prior(0.7, 1, 0)
+        p2 = compute_prior(0.7, 1, 2, stagnation_enabled=False)
+        p0 = compute_prior(0.7, 1, 0, stagnation_enabled=False)
         assert p2 < p0
+        # 缺省（stagnation 开启）：depth 不再主导惩罚；检索衰减仍单调
+        p2_stag = compute_prior(0.7, 1, 2)
+        p0_stag = compute_prior(0.7, 1, 0)
+        assert p2_stag < p0_stag
 
 
 class TestSelectParentsRecordsRetrieval:
