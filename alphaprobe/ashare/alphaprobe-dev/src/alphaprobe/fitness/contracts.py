@@ -14,7 +14,8 @@ metrics/probe_portfolio 20d cohort 层）。本文件的 EvaluationBundle 只是
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
+from enum import Enum
+from typing import Any, Iterable, Mapping
 
 # 标准化 QE 指标键（与 quant_evaluator registry 一致；数值口径由数据源权威定义）。
 # 本模块只读这些键，不重算。
@@ -105,6 +106,116 @@ QE_LOWER_IS_BETTER = frozenset(
         "ic_decay",  # 衰减越小越好
     }
 )
+
+
+# ---------------------------------------------------------------------------
+# FactorFitness V2.1 —— metric requirement（plan Task 8.1 / Part G #19）
+# ---------------------------------------------------------------------------
+
+
+class MetricRequirement(Enum):
+    """给定 fidelity 下单个 metric 的缺失语义（plan Task 8.1）。
+
+    - REQUIRED   ：缺失 → 该 fidelity 不能 promote（funnel L3 gate 层拒绝）。
+    - OPTIONAL   ：缺失 → 该维度 utility 取 0.5（不是 0 也不是 1）。
+    - DIAGNOSTIC ：缺失 → 无 score 影响（默认；真零行为兼容）。
+    """
+
+    REQUIRED = "required"
+    OPTIONAL = "optional"
+    DIAGNOSTIC = "diagnostic"
+
+
+MetricRequirementMap = Mapping[str, MetricRequirement]
+"""metric 键 → MetricRequirement 的映射。
+
+缺失键 = DIAGNOSTIC（默认不惩罚，保证旧调用 0 行为差异）。
+"""
+
+
+class MetricRequirementPolicy:
+    """metric requirement 配置容器。
+
+    Parameters
+    ----------
+    requirements : Mapping[str, MetricRequirement] | None
+        按 fidelity 统一的一张 requirement 表。默认空表：所有键按 DIAGNOSTIC
+        处理，与 V2 行为完全一致。
+    required_missing_action : str
+        缺失 REQUIRED metric 时的收敛语义。取值：
+        - ``"fail"``：funnel gate 返回 RejectionReason.MISSING_METRIC（L3 不可过）。
+        - ``"neutral"``：允许通过但该维度得分为 0（已有 V2 的 calibrator
+          缺测→0 行为，仅在显式放弃 gate 语义时使用）。
+    default_requirement : MetricRequirement
+        不在表内的键所用的缺省 requirement（默认 DIAGNOSTIC）。
+    """
+
+    def __init__(
+        self,
+        requirements: Mapping[str, MetricRequirement] | None = None,
+        *,
+        required_missing_action: str = "fail",
+        default_requirement: MetricRequirement = MetricRequirement.DIAGNOSTIC,
+    ) -> None:
+        self.requirements = self._normalize(requirements)
+        if required_missing_action not in ("fail", "neutral"):
+            raise ValueError(
+                f"required_missing_action 必须是 'fail' 或 'neutral'，"
+                f"got {required_missing_action!r}"
+            )
+        self.required_missing_action = required_missing_action
+        self.default_requirement = MetricRequirement(default_requirement)
+
+    @staticmethod
+    def _normalize(
+        requirements: Mapping[str, MetricRequirement] | None,
+    ) -> dict[str, MetricRequirement]:
+        """同时接受 {metric_key: requirement} 与 {requirement: (keys...)} 两种写法。
+
+        后者便于在 funnel gate 处把一整套 REQUIRED 键批量声明；内部统一存储为
+        ``{metric_key: MetricRequirement}``。
+        """
+        out: dict[str, MetricRequirement] = {}
+        for k, v in dict(requirements or {}).items():
+            if isinstance(k, MetricRequirement):
+                # {MetricRequirement.REQUIRED: ("net_sharpe", "net_annualized_ls_return")}
+                for mkey in v or ():
+                    out[str(mkey)] = MetricRequirement(k)
+            else:
+                # {"net_sharpe": MetricRequirement.REQUIRED} / {"net_sharpe": "required"}
+                out[str(k)] = MetricRequirement(v)
+        return out
+
+    def requirement_for(self, key: str) -> MetricRequirement:
+        return self.requirements.get(str(key), self.default_requirement)
+
+    def required_keys(self) -> list[str]:
+        return [k for k, v in self.requirements.items() if v == MetricRequirement.REQUIRED]
+
+    def optional_keys(self) -> list[str]:
+        return [k for k, v in self.requirements.items() if v == MetricRequirement.OPTIONAL]
+
+    def missing_required(
+        self, bundle: "EvaluationBundle"
+    ) -> list[str]:
+        """bundle 中缺失（None / 非有限 / 不在 bundle 中）的 REQUIRED 键。"""
+        return [k for k in self.required_keys() if not _metric_observed(bundle, k)]
+
+
+DEFAULT_REQUIREMENT_POLICY = MetricRequirementPolicy()
+"""V2 兼容默认：空表、全部 DIAGNOSTIC、不阻断任何 promote。"""
+
+
+def _metric_observed(bundle: "EvaluationBundle", key: str) -> bool:
+    import math
+
+    v = bundle.get(key)
+    if v is None:
+        return False
+    try:
+        return math.isfinite(float(v))
+    except (TypeError, ValueError):
+        return False
 
 
 @dataclass

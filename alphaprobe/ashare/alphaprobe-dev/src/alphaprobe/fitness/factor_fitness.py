@@ -51,6 +51,39 @@ from alphaprobe.fitness.penalties import (
 )
 
 
+
+def _effective_n_for(
+    dimension_n_eff: Mapping[str, Any] | None,
+    *,
+    key: str,
+    metric_n_keys: tuple[str, ...],
+    bundle: EvaluationBundle | None = None,
+) -> float | None:
+    """解析某维度的有效样本数（V2.1 confidence shrinkage 辅助）。
+
+    优先级：
+      1. ``dimension_n_eff`` 显式 dict（{维度大写键: n_eff}）；
+      2. bundle 里的 ``metric_n_keys``（n_eff 元数据键，如 n_ls_days）；
+      3. 都没有 → None（不编造样本量；按 requirement 缺省语义处理）。
+    """
+    if dimension_n_eff:
+        v = dimension_n_eff.get(key)
+        if v is not None:
+            try:
+                return float(v)
+            except (TypeError, ValueError):
+                return None
+    if bundle is not None:
+        for nk in metric_n_keys:
+            v = bundle.get(nk)
+            if v is not None:
+                try:
+                    return float(v)
+                except (TypeError, ValueError):
+                    continue
+    return None
+
+
 @dataclass(frozen=True)
 class V2FactorWeights:
     """FactorFitness 总权重（初版）。所有字段配置化，逻辑不许硬编码数值。"""
@@ -99,6 +132,11 @@ def factor_fitness_v2(
         现有 calibrator（warmup ordinal / freeze z-score）。
     complexity : ComplexityInfo | None
         FactorEngine AST Analyzer 输出；None 时视为 (0, 0)（无罚）。
+
+    Notes
+    -----
+    V2.1 扩展（Task 8：confidence shrinkage / metric requirement missing policy /
+    soft floors）见 :func:`factor_fitness_v2_1`；本函数保持 V2 原公式不动。
     """
     eb = bundle if isinstance(bundle, EvaluationBundle) else EvaluationBundle(dict(bundle or {}))
     cx = complexity if complexity is not None else ComplexityInfo(nodes=0, depth=0)
@@ -149,3 +187,98 @@ def factor_fitness_v2(
         rejected=False,
         reject_reason="",
     )
+
+
+# ---------------------------------------------------------------------------
+# V2.1 扩展入口（plan Task 8：confidence shrinkage / metric requirement missing
+# policy / soft floors）。独立模块，避免 V2 原函数签名与语义被扩展参数污染；
+# 不传新参数时 ``factor_fitness_v2_1`` 结果与 ``factor_fitness_v2`` 一致。
+# 函数体只 re-export（真正的实现/配置在 factor_fitness_v21.py，不反向 import）。
+# ---------------------------------------------------------------------------
+
+def factor_fitness_v2_1(*args: Any, **kwargs: Any) -> Any:
+    """FactorFitness V2.1（plan Task 8）——见 factor_fitness_v21.factor_fitness_v2_1。"""
+    from alphaprobe.fitness.factor_fitness_v21 import factor_fitness_v2_1 as _impl
+
+    return _impl(*args, **kwargs)
+
+
+def guard_g(utility: float, *, floor: float, steepness: float = 1.0) -> float:
+    """平滑 soft guard（非硬门）——见 factor_fitness_v21.guard_g。"""
+    from alphaprobe.fitness.factor_fitness_v21 import guard_g as _impl
+
+    return _impl(utility, floor=floor, steepness=steepness)
+
+
+def product_guards(
+    *,
+    P: float, L: float, S: float, R: float,
+    floors: Any = None,
+) -> tuple[float, float, float, float]:
+    """(gP, gL, gS, gR)——见 factor_fitness_v21.product_guards。"""
+    from alphaprobe.fitness.factor_fitness_v21 import product_guards as _impl
+
+    return _impl(P=P, L=L, S=S, R=R, floors=floors)
+
+
+def _v21_config_classes() -> tuple[Any, Any]:
+    """惰性取 V2.1 配置类（避免模块级循环 import）。"""
+    from alphaprobe.fitness.factor_fitness_v21 import (
+        DEFAULT_V21_GUARD_FLOORS,
+        DEFAULT_V21_SOFT_FLOORS,
+        V21GuardFloors,
+        V21SoftFloorConfig,
+    )
+
+    return (V21GuardFloors, V21SoftFloorConfig, DEFAULT_V21_SOFT_FLOORS,
+            DEFAULT_V21_GUARD_FLOORS)
+
+
+# V2.1 配置类/常量（惰性 wrapper 只取函数；类名直接在此模块可导入，便于测试与
+# 下游引用——不参与函数默认值，故不会触发模块级循环 import）。
+class V21GuardFloors:
+    """V2.1 soft guard floors——见 factor_fitness_v21.V21GuardFloors。"""
+
+    def __new__(cls, *a: Any, **kw: Any) -> Any:
+        from alphaprobe.fitness.factor_fitness_v21 import V21GuardFloors as _impl
+
+        return _impl(*a, **kw)
+
+
+class V21SoftFloorConfig:
+    """V2.1 soft floor 总配置——见 factor_fitness_v21.V21SoftFloorConfig。"""
+
+    def __new__(cls, *a: Any, **kw: Any) -> Any:
+        from alphaprobe.fitness.factor_fitness_v21 import V21SoftFloorConfig as _impl
+
+        return _impl(*a, **kw)
+
+
+def _v21_default_soft_floors() -> Any:
+    """V2.1 默认 soft floor 配置（惰性取，避免模块级 import）。"""
+    from alphaprobe.fitness.factor_fitness_v21 import DEFAULT_V21_SOFT_FLOORS
+
+    return DEFAULT_V21_SOFT_FLOORS
+
+
+def _v21_default_guard_floors() -> Any:
+    """V2.1 默认 guard floor（惰性取）。"""
+    from alphaprobe.fitness.factor_fitness_v21 import DEFAULT_V21_GUARD_FLOORS
+
+    return DEFAULT_V21_GUARD_FLOORS
+
+
+__all__ = [
+    "V2FactorWeights",
+    "DEFAULT_V2_WEIGHTS",
+    "factor_fitness_v2",
+    # V2.1 扩展（re-export）
+    "factor_fitness_v2_1",
+    "guard_g",
+    "product_guards",
+    "V21GuardFloors",
+    "V21SoftFloorConfig",
+    "_v21_config_classes",
+    "_v21_default_soft_floors",
+    "_v21_default_guard_floors",
+]

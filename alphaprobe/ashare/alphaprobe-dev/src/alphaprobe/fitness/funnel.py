@@ -17,6 +17,10 @@ from alphaprobe.contracts import (
     RejectionReason,
 )
 from alphaprobe.fitness import check_hard_gates
+from alphaprobe.fitness.contracts import (
+    EvaluationBundle,
+    MetricRequirementPolicy,
+)
 
 __all__ = [
     "FidelityFunnel",
@@ -260,6 +264,7 @@ class FidelityFunnel:
         static: L0StaticCheck | None = None,
         hard_gates: Callable[..., list[str]] | None = None,
         l5_access: Any | None = None,
+        metric_requirements: MetricRequirementPolicy | None = None,
     ) -> None:
         if levels is None:
             levels = [lv.value for lv in FUNNEL_ORDER]
@@ -268,6 +273,7 @@ class FidelityFunnel:
         self.static = static or L0StaticCheck()
         self._hard_gates_fn = hard_gates or check_hard_gates
         self._l5_access = l5_access
+        self._metric_requirements = metric_requirements
         self._lock = threading.Lock()
         self._promotions: dict[str, FunnelPromotion] = {}
         self.counters: dict[str, int] = {
@@ -277,6 +283,21 @@ class FidelityFunnel:
             "L3_promoted": 0,
             "L4_promoted": 0,
         }
+
+    def _missing_metric_rejections(self, record: EvaluationRecord) -> list[RejectionReason]:
+        """REQUIRED metric 缺失 → MISSING_METRIC（policy action='fail'）。
+
+        policy 未配置 / 无 REQUIRED 键 → 恒 []（V2 行为 0 差异）。
+        """
+        policy = self._metric_requirements
+        if policy is None:
+            return []
+        if policy.required_missing_action != "fail":
+            return []
+        missing = policy.missing_required(EvaluationBundle(record.metric_bundle or {}))
+        if not missing:
+            return []
+        return [RejectionReason.MISSING_METRIC]
 
     # -- L0 ---------------------------------------------------------------
 
@@ -323,6 +344,9 @@ class FidelityFunnel:
     def _l3_gate(self, record: EvaluationRecord) -> list[RejectionReason]:
         mb = record.metric_bundle
         rejects: list[RejectionReason] = []
+        # V2.1 REQUIRED metric 缺失 → L3 不可过（Task 8.1 / Part G #19）。
+        # 默认无 policy 时恒 []（0 行为差异）。
+        rejects.extend(self._missing_metric_rejections(record))
         mdd = mb.get("mdd")
         if mdd is not None and abs(mdd) > 0.5:
             rejects.append(RejectionReason.AUDIT_FAIL)
@@ -355,8 +379,16 @@ class FidelityFunnel:
 
     # -- gate 分发 ----------------------------------------------------------
 
-    def gate(self, level: str, record: EvaluationRecord) -> list[RejectionReason]:
+    def gate(
+        self,
+        level: str,
+        record: EvaluationRecord,
+        *,
+        metric_requirements: MetricRequirementPolicy | None = None,
+    ) -> list[RejectionReason]:
         lv = FidelityLevel(level) if level in {lv.value for lv in FidelityLevel} else level
+        if metric_requirements is not None:
+            self._metric_requirements = metric_requirements
         if lv == FidelityLevel.L1_SCOUT:
             return self._l1_gate(record)
         if lv == FidelityLevel.L2_FULL_TRAIN:
@@ -403,7 +435,7 @@ class FidelityFunnel:
                 out = self.static.check(formula, factor_id=fid)
                 reasons = list(out.rejections)
             elif record is not None:
-                reasons = self.gate(from_level, record)
+                reasons = self.gate(from_level, record, metric_requirements=self._metric_requirements)
             else:
                 # 无 record 且非 L0：fail-closed（§审阅 11），不允许静默通过
                 reasons = [RejectionReason.EVALUATION_MISSING]
