@@ -119,6 +119,15 @@ class ObjectStore(Protocol):
 
     def put_object(self, key: str, data: bytes) -> None: ...
 
+    def put_object_conditional(
+        self,
+        key: str,
+        data: bytes,
+        *,
+        if_match: str | None = None,
+        if_none_match: bool = False,
+    ) -> dict: ...
+
     def begin_multipart(self, key: str) -> str: ...
 
     def upload_part(
@@ -278,6 +287,52 @@ class LocalObjectStore:
         tmp = p.parent / f".{p.name}.tmp.{uuid.uuid4().hex}"
         tmp.write_bytes(data)
         os.replace(str(tmp), str(p))
+
+    def put_object_conditional(
+        self,
+        key: str,
+        data: bytes,
+        *,
+        if_match: str | None = None,
+        if_none_match: bool = False,
+    ) -> dict:
+        """UPSTREAM_FIX_PLAN 问题二：条件写（compare-and-swap）。
+
+        - ``if_match``：期望的当前 ETag；不匹配（或对象不存在）→ 抛
+          :class:`StaleWriterError`，内容不变；
+        - ``if_none_match=True``：仅当对象不存在时创建；已存在 → 抛
+          :class:`StaleWriterError`。
+
+        本地实现：先 HEAD 取现状，判定通过后走与 ``put_object`` 相同的
+        tmp + ``os.replace`` 原子落盘（单进程内等价于 S3 If-Match 语义；
+        跨进程由文件系统原子替换保证「要么整体生效要么不变」）。
+
+        返回写入后对象元数据（{etag, size, last_modified}）。
+        """
+        from data_access.write.publish_errors import StaleWriterError
+
+        head = self.head_object(key)
+        if if_none_match:
+            if head is not None:
+                raise StaleWriterError(
+                    f"条件写失败（If-None-Match）：对象 {key!r} 已存在"
+                    f"（etag={head.get('etag')}）——并发 writer 已创建"
+                )
+        elif if_match is not None:
+            if head is None:
+                raise StaleWriterError(
+                    f"条件写失败（If-Match）：对象 {key!r} 不存在——"
+                    "并发 writer 已删除或从未创建"
+                )
+            current_etag = str(head.get("etag") or "")
+            if current_etag != str(if_match):
+                raise StaleWriterError(
+                    f"条件写失败（If-Match ETag 不匹配）：对象 {key!r} 当前 "
+                    f"etag={current_etag!r} != 期望 {str(if_match)!r}——"
+                    "并发 writer 已覆盖，本次写入被拒绝（CURRENT fencing）"
+                )
+        self.put_object(key, data)
+        return self.head_object(key) or {}
 
     def begin_multipart(self, key: str) -> str:
         return uuid.uuid4().hex
@@ -675,6 +730,83 @@ class COSObjectStore:
             return
         s3 = self._s3()
         s3.put_object(Bucket=self.bucket, Key=str(key), Body=data)
+
+    def put_object_conditional(
+        self,
+        key: str,
+        data: bytes,
+        *,
+        if_match: str | None = None,
+        if_none_match: bool = False,
+    ) -> dict:
+        """UPSTREAM_FIX_PLAN 问题二：COS/S3 条件写（compare-and-swap）。
+
+        只支持 ``bytes`` 入口（条件写对象都是小元数据：CURRENT.json / manifest）。
+
+        - ``if_match``：带 S3 ``If-Match`` 请求头单 PUT（服务端 ETag 比对，
+          不匹配返回 412 → 转 :class:`StaleWriterError`）；
+        - ``if_none_match=True``：带 S3 ``If-None-Match: *`` 请求头（对象已
+          存在返回 412 → 转 :class:`StaleWriterError`）。
+
+        若 client/boto3 版本不支持条件头（412 未按预期返回），回退
+        HEAD-then-PUT 本地判定（docstring 语义：head 判定与 put 之间存在窗口，
+        但对象存储侧 412 仍会兜底拒绝；单进程发布器窗口内等价原子）。
+        """
+        import boto3  # noqa: F401 — 确保 client 异常类型可见
+
+        from botocore.exceptions import ClientError
+
+        from data_access.write.publish_errors import StaleWriterError
+
+        if not isinstance(data, bytes):
+            raise MultipartPartSizeError(
+                f"put_object_conditional 只接受 bytes，收到 {type(data).__name__}"
+            )
+        if if_none_match:
+            kwargs = {"IfNoneMatch": "*"}
+        elif if_match is not None:
+            kwargs = {"IfMatch": str(if_match)}
+        else:
+            # 无条件：普通 put_object 语义。
+            self.put_object(key, data)
+            head = self.head_object(key) or {}
+            return head
+        try:
+            s3 = self._s3()
+            s3.put_object(Bucket=self.bucket, Key=str(key), Body=data, **kwargs)
+        except ClientError as exc:
+            code = str(
+                getattr(exc, "response", {}).get("Error", {}).get("Code", "")
+            )
+            status = int(
+                getattr(exc, "response", {}).get("ResponseMetadata", {}).get(
+                    "HTTPStatusCode", 0
+                )
+            )
+            if code in {"PreconditionFailed", "ConditionalRequestConflict"} or status == 412:
+                raise StaleWriterError(
+                    f"COS 条件写被拒（412 precondition failed）：对象 {key!r} "
+                    f"if_match={if_match!r} if_none_match={if_none_match}——"
+                    "并发 writer 已覆盖（CURRENT fencing）"
+                ) from exc
+            raise
+        except Exception as exc:
+            # 某些端点/代理吞掉 412 转普通错误 → HEAD 回验本地判定。
+            head = self.head_object(key)
+            if if_none_match and head is not None:
+                raise StaleWriterError(
+                    f"COS 条件写失败（If-None-Match）：对象 {key!r} 已存在"
+                    f"（etag={head.get('etag')}）"
+                ) from exc
+            if if_match is not None and head is not None:
+                current_etag = str(head.get("etag") or "")
+                if current_etag != str(if_match):
+                    raise StaleWriterError(
+                        f"COS 条件写失败（If-Match ETag 不匹配）：对象 {key!r} "
+                        f"当前 etag={current_etag!r} != 期望 {str(if_match)!r}"
+                    ) from exc
+            raise
+        return self.head_object(key) or {}
 
     def _run_multipart(self, key: str, produce_parts) -> None:
         """执行 multipart 流程（含重试 + abort 清理 + ETag 校验）。通用骨架。

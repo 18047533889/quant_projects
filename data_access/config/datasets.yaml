@@ -960,6 +960,64 @@ factor_matrix:
   # 宽矩阵：datetime + asset + factor_* 列，schema 随因子动态扩展
 
 
+# ---- 因子池正式库（UPSTREAM_FIX_PLAN 问题二：COS 对象存储代次发布） ---------
+# T8 因子归档的 published 目标：远端 COS qs-cold/factor_pool/library_v1，
+# 布局 = 不可变 generation（generations/<gid>/…）+ CURRENT.json 指针。
+# 写侧（write_arrow / publish_from_staging）经 ObjectStoreGenerationPublisher
+# 发布完整代次后条件写翻转 CURRENT——AlphaFlow 绝不直调 COS SDK。
+# 读侧沿 CURRENT.json → _manifest.json → 精确对象（绝不 glob 整库）。
+# 远端载体是 COS：qs-cold 为跨账号 bucket，LIST/HEAD 走 admin-cos/COS CLI 网关
+# （见 cos/remote.py R57 钩子）；写凭据只来自部署注入的 CredentialProvider/env/STS。
+factor_pool:
+  kind: parametric
+  access_mode: published
+  layout: plain
+  root_template: ${FACTOR_POOL_LOCAL_ROOT:-/home/shw/quant_projects/data/factor_pool/library_v1}/{factor_id}
+  glob_template: "**/*.parquet"
+  params_schema:
+    factor_id: str
+  time_column: datetime
+  instrument_column: asset
+  hive_partitioning: false
+  union_by_name: true
+  storage:
+    # UPSTREAM_FIX_PLAN 问题二：对象存储代次发布（COS 载体）
+    type: object_store
+    uri: cos://qs-cold/factor_pool/library_v1/{factor_id}
+    current_key: CURRENT.json
+    layout_version: 1
+  schema:
+    datetime: timestamp
+    asset: string
+    value: double
+  # root_template 仅作本地回读/诊断兜底（真身远端在 storage.uri）；
+  # FACTOR_POOL_LOCAL_ROOT 未设时默认路径可能不存在——读端必须走
+  # CURRENT→manifest 对象解析，不依赖本地目录。
+
+
+# ---- 因子池 staging（T8 发布前暂存，本地目录） ------------------------------
+# T8 五类 artifact（public_meta/secret_meta/value/evaluation/catalog）先落本地
+# staging（namespace 隔离），经 publish_from_staging 晋升到上面的 factor_pool。
+# staging root 必须由环境变量注入（ALPHAFLOW_STAGING_ROOT 或默认 workspace），
+# 禁止默认使用不存在的其他用户目录（UPSTREAM_FIX_PLAN 问题二）。
+factor_pool_staging:
+  kind: parametric
+  access_mode: staging
+  layout: hive
+  root_template: ${ALPHAFLOW_STAGING_ROOT:-${QUANTSOCIETY_WORKSPACE_DATA_ROOT:-/home/shw/quant_projects/data/factors/workspace}}/staging/${RUN_NAMESPACE}/factor_pool/{factor_id}
+  glob_template: "**/*.parquet"
+  params_schema:
+    factor_id: str
+  time_column: datetime
+  instrument_column: asset
+  hive_partitioning: true
+  union_by_name: true
+  schema:
+    datetime: timestamp
+    asset: string
+    value: double
+
+
 # ---- 个人单标的回测结果（每人隔离） -----------------------------------------
 # 路径自动带 ${RUN_NAMESPACE}，多人/多终端并发跑不会撞路径
 # 需要在 shell 里 export QUANT_RUN_NAMESPACE=你的名字，否则兜底成 anon__<branch>__<pid>

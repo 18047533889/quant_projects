@@ -41,9 +41,17 @@ class StorageBackend(str, Enum):
     HTTP = "http"
     CLI = "cli"          # clean-cos-ro 按需拉取
     CLICKHOUSE = "clickhouse"
+    # UPSTREAM_FIX_PLAN 问题二：对象存储 generation 发布（COS URI 载体）。
+    # 与 COS 的区别：读走 CURRENT.json → generation manifest → 精确对象
+    # （绝不 glob）；写走 ObjectStoreGenerationPublisher（不可变代次 + 条件写
+    # CURRENT 指针），绝不接受 wildcard 直读/直写。
+    OBJECT_STORE = "object_store"
 
 
-_REMOTE_BACKENDS = frozenset({StorageBackend.S3, StorageBackend.COS, StorageBackend.HTTP})
+_REMOTE_BACKENDS = frozenset({
+    StorageBackend.S3, StorageBackend.COS, StorageBackend.HTTP,
+    StorageBackend.OBJECT_STORE,
+})
 
 # ``scheme://``（URI 形态）匹配器。`..`/`/` 等非 URI 字符串不匹配。
 _SCHEME_RE = re.compile(r"^[A-Za-z][A-Za-z0-9+.\-]*://")
@@ -73,6 +81,23 @@ def _backend_from_uri_scheme(uri: Any) -> str | None:
             "不能把带 scheme 的 URI 静默当 local 处理。"
         )
     return None
+
+
+def _check_type_scheme_conflict(stype: str, inferred: str | None, uri: Any, context: str) -> None:
+    """显式 type 与 scheme 推导矛盾检查（UPSTREAM_FIX_PLAN 别名规则）。
+
+    ``object_store`` 是 COS URI 载体的**发布语义**别名：cos:// URI 推导出
+    ``cos``，显式 ``type=object_store`` 合法（发布后端=对象存储，载体=COS）。
+    其余矛盾仍拒绝。
+    """
+    if inferred is None or stype == inferred:
+        return
+    if stype == "object_store" and inferred in {"cos", "s3"}:
+        return
+    raise ValidationError(
+        f"{context}: uri={uri!r} 的 scheme 推导 backend={inferred!r}，"
+        f"与显式 type={stype!r} 矛盾。请删除其一使两者一致。"
+    )
 
 
 def _deep_freeze(value: Any) -> Any:
@@ -112,6 +137,12 @@ class StorageSpec:
     format: str | None = None       # parquet / arrow / feather / csv ...
     credential_profile: str | None = None  # COS 凭证 profile 名
     options: dict[str, Any] = field(default_factory=dict)
+    # ---- UPSTREAM_FIX_PLAN 问题二：对象存储 generation 发布声明 ----
+    # ``object_store`` token 数据集（write_arrow → ObjectStoreGenerationPublisher
+    # 发布不可变 generation + CURRENT 指针）的指针/代次布局键：
+    current_key: str | None = None      # CURRENT 指针对象 key（默认 CURRENT.json）
+    layout_version: int | None = None   # generation 布局版本（默认 1）
+    publish_target: str | None = None   # staging 数据集对应的发布目标数据集名
 
     def __post_init__(self) -> None:
         """#39 programmatic construction 也 fail-closed：非法 type 直接抛。
@@ -193,11 +224,7 @@ class StorageSpec:
         stype_raw = merged.get("type")
         if stype_raw:
             stype = str(stype_raw).strip().lower()
-            if inferred is not None and stype != inferred:
-                raise ValidationError(
-                    f"{context}: uri={uri_raw!r} 的 scheme 推导 backend={inferred!r}，"
-                    f"与显式 type={stype!r} 矛盾。请删除其一使两者一致。"
-                )
+            _check_type_scheme_conflict(stype, inferred, uri_raw, context)
         else:
             stype = inferred if inferred is not None else "local"
         try:
@@ -226,6 +253,13 @@ class StorageSpec:
                 str(merged.get("credential_profile", "")).strip() or None
             ),
             options={str(k): v for k, v in options.items()},
+            current_key=str(merged.get("current_key", "")).strip() or None,
+            layout_version=(
+                int(merged["layout_version"])
+                if merged.get("layout_version") is not None
+                else None
+            ),
+            publish_target=str(merged.get("publish_target", "")).strip() or None,
         )
 
 
@@ -237,10 +271,13 @@ class StorageSpec:
 _STORAGE_TOP_KEYS = frozenset({
     "type", "source", "uri", "root", "bucket", "prefix", "endpoint", "region",
     "secret", "mode", "options", "layout", "format", "credential_profile",
+    # UPSTREAM_FIX_PLAN 问题二：对象存储 generation 发布声明
+    "current_key", "layout_version", "publish_target",
 })
 _STORAGE_SOURCE_KEYS = frozenset({
     "type", "uri", "bucket", "prefix", "endpoint", "region", "secret", "mode",
     "options", "layout", "format", "credential_profile",
+    "current_key", "layout_version", "publish_target",
 })
 
 

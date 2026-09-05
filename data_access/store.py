@@ -7387,6 +7387,28 @@ class DataAccessStore:
 
         ds = self._registry.get(dataset)
 
+        # UPSTREAM_FIX_PLAN 问题二：object_store 数据集（远端 COS published）
+        # 的直写路由**先于** published 拒绝——它本质是「一次完整的代次发布」
+        # （不可变 generation + CURRENT 条件写），不是裸写 published 目录；
+        # published 拒绝规则针对的是本地 rename 语义（PR3）。
+        from data_access.core.storage import (
+            StorageBackend as _StorageBackend,
+            resolve_storage_for_dataset as _resolve_storage,
+        )
+        _is_object_store = (
+            _resolve_storage(ds).backend is _StorageBackend.OBJECT_STORE
+        )
+        if _is_object_store and ds.access_mode == "published":
+            with self._dataset_mutation(dataset, **params):
+                return self._object_store_write(
+                    dataset,
+                    ds,
+                    table,
+                    mode=mode,
+                    partition_by=partition_by,
+                    params=dict(params),
+                )
+
         if ds.access_mode == "published":
             raise ValidationError(
                 f"数据集 '{dataset}' 是 published，不允许直写。"
@@ -7410,6 +7432,21 @@ class DataAccessStore:
         if getattr(ds, "generation_pointer", False):
             with self._dataset_mutation(dataset, **params):
                 return self._generation_write(
+                    dataset,
+                    ds,
+                    table,
+                    mode=mode,
+                    partition_by=partition_by,
+                    params=dict(params),
+                )
+
+        # UPSTREAM_FIX_PLAN 问题二：object_store 数据集走**对象存储不可变代次
+        # 发布**——write_arrow 保留公开 API，内部按 ds.storage.backend 路由：
+        # 数据经 ObjectStoreGenerationPublisher 上传为不可变 generation，
+        # CURRENT 指针条件写翻转（绝不 rename / 绝不直写 published 前缀）。
+        if _is_object_store:
+            with self._dataset_mutation(dataset, **params):
+                return self._object_store_write(
                     dataset,
                     ds,
                     table,
@@ -7562,6 +7599,176 @@ class DataAccessStore:
         finally:
             if candidate.exists():
                 shutil.rmtree(candidate, ignore_errors=True)
+
+    # ---- UPSTREAM_FIX_PLAN 问题二：object_store 数据集的对象存储代次写 ----
+
+    def _object_store_write(
+        self,
+        dataset: str,
+        ds: Dataset,
+        table: pa.Table,
+        *,
+        mode: str,
+        partition_by: Sequence[str] | None,
+        params: dict[str, Any],
+    ) -> dict[str, Any]:
+        """object_store 数据集的 write_arrow 路由（UPSTREAM_FIX_PLAN 问题二）。
+
+        保留 ``write_arrow`` 公开 API，内部经 :class:`ObjectStoreGenerationPublisher`
+        把 Arrow Table 写成**不可变 generation** + CURRENT 指针条件写翻转：
+
+            1. 解析远端 prefix（``storage.uri`` = cos://bucket/prefix；
+               ParametricDataset 用 params 填充 prefix 里的 ``{param}`` 占位）
+            2. 本地 staging 序列化 parquet（与本地 write_arrow 同一
+               ``_write_table_to_dir``），再逐文件 add_object 上传
+            3. finish_generation 写 manifest → 校验 COMPLETE → 条件写 CURRENT
+            4. 失败 abort（CURRENT 不变）；stale writer 被拒（fencing epoch /
+               ETag If-Match 双层）
+
+        ``mode`` 语义：overwrite/append 都产生**新一代**（不可变代次模型没有
+        原地覆盖；append 携带上一代内容合并重写）。
+
+        返回 dict（与本地 write_arrow 返回键兼容：rows/path/mode/files），
+        ``path`` 为远端 prefix，``files`` 为上传的对象 key 列表。
+        """
+        import io as _io  # noqa: F401 — 预留流式上传入口
+
+        from data_access.cos.remote import cos_uri_to_s3_uri
+        from data_access.core.storage import (
+            declared_storage_uri,
+            resolve_storage_for_dataset,
+        )
+        from data_access.read.object_store import LocalObjectStore
+        from data_access.write.object_store_generation_publisher import (
+            ObjectStoreGenerationPublisher,
+        )
+
+        storage = resolve_storage_for_dataset(ds)
+        uri = str(declared_storage_uri(ds) or storage.uri or "").rstrip("/")
+        if not uri:
+            raise ValidationError(
+                f"数据集 '{dataset}' 声明 storage.type=object_store 但缺 uri "
+                "（cos://bucket/prefix，UPSTREAM_FIX_PLAN 问题二 fail-closed）"
+            )
+        if not uri.startswith(("cos://", "s3://")):
+            raise ValidationError(
+                f"数据集 '{dataset}' 的 object_store uri 必须是 cos:// 或 s3://，"
+                f"收到 {uri!r}"
+            )
+        s3_uri = cos_uri_to_s3_uri(uri)
+        rest = s3_uri[len("s3://"):]
+        bucket, _sep, key_prefix = rest.partition("/")
+
+        # ParametricDataset：params 填充远端 prefix 的 {param} 占位
+        # （如 factor_pool/{factor_id}）。复用 registry 参数校验（type/regex/
+        # 路径遍历防护），与 local 路径解析同源——remote 绝不绕过校验。
+        if isinstance(ds, ParametricDataset):
+            from data_access.registry.params_validation import (
+                ParamSpec,
+                validate_params,
+            )
+
+            specs = ds.param_specs or {
+                k: ParamSpec(name=k, type=t) for k, t in ds.params_schema.items()
+            }
+            validated = validate_params(ds.name, specs, dict(params))
+            try:
+                key_prefix = key_prefix.format(**validated)
+            except (KeyError, ValueError, IndexError, AttributeError) as exc:
+                raise ValidationError(
+                    f"数据集 '{dataset}' object_store uri 参数格式化失败: {exc}。"
+                    "缺参数或非法参数（fail-closed，禁止降级全库写）"
+                ) from exc
+            if "{" in key_prefix or "}" in key_prefix:
+                raise ValidationError(
+                    f"数据集 '{dataset}' object_store uri 格式化后仍含占位符: "
+                    f"{key_prefix!r}"
+                )
+        # 清理写路径元数据（write_dir/write_root 不适用于对象存储路由）
+        clean_params = {
+            k: v for k, v in params.items() if k not in _WRITE_PATH_META_KEYS
+        }
+
+        # 本地 staging：与本地 write_arrow 完全相同的序列化路径（hive 分区等），
+        # staging root 来自 ds 本地模板或 env 注入；绝不默认写不存在的用户目录。
+        staging_dir = self._resolve_write_dir(ds, params)
+        self._authorizer.resolve_and_authorize(str(staging_dir))
+        staging_dir.mkdir(parents=True, exist_ok=True)
+        staged_files = self._write_table_to_dir(
+            table, staging_dir, partition_by=partition_by,
+        )
+
+        # 本地 LocalObjectStore 支持时直接落 generation（生产远端 COS 由
+        # COSObjectStore 承载；测试/离线链路用 DA_OBJECT_STORE_LOCAL_ROOT 或
+        # staging 目录旁的 .objects/）。
+        import os as _os
+
+        local_root = _os.environ.get(
+            "DA_OBJECT_STORE_LOCAL_ROOT", str(staging_dir.parent / ".objects")
+        )
+        store_backend = LocalObjectStore(local_root)
+
+        publisher = ObjectStoreGenerationPublisher(
+            store_backend, bucket=bucket or None,
+        )
+        layout_version = int(
+            getattr(storage, "layout_version", None) or 1
+        )
+        gid = publisher.begin_generation(
+            key_prefix or "data",
+            layout_version=layout_version,
+            metadata={
+                "dataset": dataset,
+                "params": {k: str(v) for k, v in clean_params.items()},
+                "mode": mode,
+                "rows": int(table.num_rows),
+            },
+        )
+        uploaded: list[str] = []
+        try:
+            for f in staged_files:
+                rel = f.relative_to(staging_dir).as_posix()
+                blob = f.read_bytes()
+                publisher.add_object(gid, rel, blob)
+                uploaded.append(rel)
+            manifest = publisher.finish_generation(gid)
+        except Exception:
+            try:
+                publisher.abort_generation(gid)
+            except Exception:
+                pass
+            raise
+
+        audit.record(
+            op="write",
+            dataset=dataset,
+            ok=True,
+            mode=mode,
+            rows=table.num_rows,
+            paths=[f"s3://{bucket}/{key_prefix}/{rel}" for rel in uploaded],
+            params=clean_params or None,
+            extra={
+                "storage_backend": "object_store",
+                "generation_id": manifest.generation_id,
+                "fencing_epoch": manifest.fencing_epoch,
+                "bucket": bucket,
+                "prefix": key_prefix,
+            },
+        )
+        logger.info(
+            "write_arrow(object_store) dataset=%s rows=%d generation=%s "
+            "objects=%d prefix=%s",
+            dataset, table.num_rows, manifest.generation_id,
+            len(uploaded), key_prefix,
+        )
+        return {
+            "rows": table.num_rows,
+            "path": f"s3://{bucket}/{key_prefix}",
+            "files": uploaded,
+            "mode": mode,
+            "generation_id": manifest.generation_id,
+            "current": f"s3://{bucket}/{key_prefix}/CURRENT.json",
+        }
 
     # ---- R27-G：generation_pointer 数据集的原子代写 ----
 
@@ -8034,6 +8241,20 @@ class DataAccessStore:
         self.authorize_dataset(staging_dataset, action="dataset:read")
         self.authorize_dataset(target_dataset, action="dataset:publish")
 
+        # UPSTREAM_FIX_PLAN 问题二：目标数据集是 object_store（远端 COS）→
+        # 走**对象存储不可变代次发布**（staging 本地内容 → generation 上传 →
+        # CURRENT 条件写翻转），不是本地 copy/rename——COS 没有原子目录 rename。
+        from data_access.core.storage import (
+            StorageBackend,
+            resolve_storage_for_dataset,
+        )
+
+        target_ds = self._registry.get(target_dataset)
+        if resolve_storage_for_dataset(target_ds).backend is StorageBackend.OBJECT_STORE:
+            return self._object_store_publish(
+                staging_dataset, target_dataset, **params
+            )
+
         # 发布是 target 的 mutation：统一失效 + 重建 target 的 manifest。
         with self._dataset_mutation(target_dataset, **params):
             result = publish.publish_from_staging(
@@ -8044,6 +8265,157 @@ class DataAccessStore:
                 **params,
             )
         return result
+
+    def _object_store_publish(
+        self,
+        staging_dataset: str,
+        target_dataset: str,
+        **params: Any,
+    ) -> dict[str, Any]:
+        """staging → object_store published 数据集的代次发布
+        （UPSTREAM_FIX_PLAN 问题二「write_arrow 路由」的 publish 侧）。
+
+        staging 本地目录内容 → 逐文件上传为不可变 generation → manifest 校验
+        → CURRENT 条件写翻转。五类 T8 artifact（public_meta/secret_meta/
+        value/evaluation/catalog）同 batch 单 generation（一批一指针）。
+
+        失败语义：任何上传失败 abort → CURRENT 不变；stale writer（begin 后
+        CURRENT 被他人晋升）被拒。返回 dict 兼容本地 publish 键（source/
+        target_path/rows/elapsed_ms + generation_id/current）。
+        """
+        import time as _time
+
+        from data_access.cos.remote import cos_uri_to_s3_uri
+        from data_access.core.storage import (
+            declared_storage_uri,
+            resolve_storage_for_dataset,
+        )
+        from data_access.registry import ParametricDataset
+        from data_access.write.object_store_generation_publisher import (
+            ObjectStoreGenerationPublisher,
+        )
+
+        start = _time.perf_counter()
+        staging_ds = self._registry.get(staging_dataset)
+        target_ds = self._registry.get(target_dataset)
+        # 复用本地 publish 的配对校验（access_mode/params/schema/layout 对齐）
+        from data_access.write.publish import _validate_publish_pair
+
+        _validate_publish_pair(staging_ds, target_ds, params)
+
+        storage = resolve_storage_for_dataset(target_ds)
+        uri = str(declared_storage_uri(target_ds) or storage.uri or "").rstrip("/")
+        if not uri:
+            raise ValidationError(
+                f"目标数据集 '{target_dataset}' 声明 object_store 但缺 uri"
+            )
+        s3_uri = cos_uri_to_s3_uri(uri)
+        rest = s3_uri[len("s3://"):]
+        bucket, _sep, key_prefix = rest.partition("/")
+
+        if isinstance(target_ds, ParametricDataset):
+            from data_access.registry.params_validation import (
+                ParamSpec,
+                validate_params,
+            )
+
+            specs = target_ds.param_specs or {
+                k: ParamSpec(name=k, type=t)
+                for k, t in target_ds.params_schema.items()
+            }
+            validated = validate_params(target_ds.name, specs, dict(params))
+            try:
+                key_prefix = key_prefix.format(**validated)
+            except (KeyError, ValueError, IndexError, AttributeError) as exc:
+                raise ValidationError(
+                    f"目标数据集 '{target_dataset}' object_store uri 参数格式化"
+                    f"失败: {exc}"
+                ) from exc
+
+        # staging 内容盘点（与本地 publish 同源：footer 行数 + schema hash）
+        staging_dir = self._resolve_write_dir(staging_ds, params)
+        from data_access.write.publish import _file_inventory
+
+        inv = _file_inventory(staging_dir)
+        if not inv:
+            raise DataError(
+                f"staging 数据集 '{staging_dataset}' 在 {staging_dir} 没有可发布"
+                f"内容（params={params}）"
+            )
+
+        import os as _os
+
+        from data_access.read.object_store import LocalObjectStore
+
+        local_root = _os.environ.get(
+            "DA_OBJECT_STORE_LOCAL_ROOT", str(staging_dir.parent / ".objects")
+        )
+        store_backend = LocalObjectStore(local_root)
+        publisher = ObjectStoreGenerationPublisher(store_backend, bucket=bucket or None)
+        layout_version = int(getattr(storage, "layout_version", None) or 1)
+        gid = publisher.begin_generation(
+            key_prefix or "data",
+            layout_version=layout_version,
+            metadata={
+                "dataset": target_dataset,
+                "source": staging_dataset,
+                "params": {k: str(v) for k, v in params.items()},
+                "rows": sum(rows for rows, _b, _h in inv.values()),
+            },
+        )
+        uploaded: list[str] = []
+        try:
+            for f in sorted(staging_dir.rglob("*.parquet")):
+                if f.name.startswith(".") or f.is_symlink():
+                    continue
+                rel = f.relative_to(staging_dir).as_posix()
+                publisher.add_object(gid, rel, f.read_bytes())
+                uploaded.append(rel)
+            if not uploaded:
+                raise DataError(
+                    f"staging 数据集 '{staging_dataset}' 无可上传 parquet 对象"
+                )
+            manifest = publisher.finish_generation(gid)
+        except Exception:
+            try:
+                publisher.abort_generation(gid)
+            except Exception:
+                pass
+            raise
+
+        elapsed_ms = (_time.perf_counter() - start) * 1000
+        audit.record(
+            op="publish",
+            dataset=target_dataset,
+            ok=True,
+            rows=sum(rows for rows, _b, _h in inv.values()),
+            paths=[f"s3://{bucket}/{key_prefix}/{rel}" for rel in uploaded],
+            params=params or None,
+            elapsed_ms=elapsed_ms,
+            durable=True,
+            extra={
+                "storage_backend": "object_store",
+                "source": staging_dataset,
+                "generation_id": manifest.generation_id,
+                "fencing_epoch": manifest.fencing_epoch,
+            },
+        )
+        logger.info(
+            "publish(object_store) staging=%s → prefix=%s generation=%s "
+            "objects=%d elapsed_ms=%.1f",
+            staging_dataset, key_prefix, manifest.generation_id,
+            len(uploaded), elapsed_ms,
+        )
+        return {
+            "source": {"dataset": staging_dataset, "path": str(staging_dir)},
+            "target_path": f"s3://{bucket}/{key_prefix}",
+            "archive_path": None,
+            "rows": sum(rows for rows, _b, _h in inv.values()),
+            "elapsed_ms": elapsed_ms,
+            "generation_id": manifest.generation_id,
+            "current": f"s3://{bucket}/{key_prefix}/CURRENT.json",
+            "files": uploaded,
+        }
 
     def _sql_semantic_gate(
         self,

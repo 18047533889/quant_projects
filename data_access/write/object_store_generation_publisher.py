@@ -43,19 +43,19 @@ from data_access.read.object_store import (
     iter_parts_from_bytes,
     iter_parts_from_stream,
 )
+from data_access.write.publish_errors import (
+    RemotePointerUpdateError,
+    RemotePublishError,
+    RemoteWriteVerificationError,
+    StaleWriterError,
+)
 
 logger = logging.getLogger("data_access.object_store_generation_publisher")
 
-
-class StaleWriterError(DataError):
-    """P0-10: 并发 CURRENT 下 stale writer 被拒绝的显式信号。
-
-    判定依据（monotonic fencing-epoch）：
-        - ``resolve_stale(outdated_epoch)``：本地最大 epoch > 待判定 epoch →
-          该 writer 已 stale（被更新的晋升超越），拒绝任何覆盖动作；
-        - ``expect_sole_writer(prefix, epoch)``：待判定 epoch 低于 CURRENT 快照
-          的 epoch（CURRENT 已被别的 writer 晋升过）→ 拒绝晋升（防重放）。
-    """
+# StaleWriterError 的权威定义已迁到 data_access.write.publish_errors（统一发布
+# 错误层级：StaleWriterError → RemotePublishError → DataError）。此处 re-export
+# 保留 module 级名字 —— 既有 ``from ...object_store_generation_publisher import
+# StaleWriterError`` 的调用方（tests / t8_publish）与 isinstance 判定无需改动。
 
 # CURRENT 指针对象 key（相对 prefix）。
 _CURRENT_KEY = "CURRENT.json"
@@ -676,11 +676,23 @@ class ObjectStoreGenerationPublisher:
                 )
 
     def _flip_current(self, prefix: str, generation_id: str) -> None:
-        """最后翻转 CURRENT 指针（单对象原子写）。
+        """最后翻转 CURRENT 指针（单对象**条件写**）。
 
-        P0-10: CURRENT 快照写入单调递增的 ``fencing_epoch``（本代次的 epoch），
-        供跨进程 stale-writer 判定使用——epoch 不回落即「写入合法」，回落的
-        writer 视为 stale 已被拒。
+        P0-10 + UPSTREAM_FIX_PLAN 问题二：CURRENT 快照写入单调递增的
+        ``fencing_epoch``（本代次的 epoch），供跨进程 stale-writer 判定使用——
+        epoch 不回落即「写入合法」，回落的 writer 视为 stale 已被拒。
+
+        条件写语义（由 :meth:`ObjectStore.put_object_conditional` 真正保证，
+        ``if_match`` = 旧 CURRENT 的 ETag；对象不存在时退化为 ``if_none_match``
+        抢占）：
+
+        - **上传失败 → CURRENT 不变**：条件不满足（对象已被别的 writer 晋升
+          覆盖，ETag 不匹配）时对象存储拒绝本次写，``StaleWriterError`` 原样
+          上抛 —— 即使两个 writer 的 begin/finish 窗口重叠（应用层 epoch 快照
+          检查被绕过的极端并发），对象存储层仍是最后一道 fencing 防线；
+        - 旧 writer 不能覆盖新 writer 的 CURRENT；
+        - CURRENT 只指向已完整校验的代次（调用链保证：manifest 写完 +
+          ``_validate_generation_complete`` 通过后才走到这里）。
         """
         current_key = f"{prefix}/{_CURRENT_KEY}"
         pending = self._pending.get(generation_id)
@@ -693,7 +705,32 @@ class ObjectStoreGenerationPublisher:
             },
             sort_keys=True,
         ).encode("utf-8")
-        self.store.put_object(current_key, payload)
+        head = self.store.head_object(current_key)
+        try:
+            if head is not None and head.get("etag"):
+                # CURRENT 已存在：条件更新必须携带旧 ETag（If-Match）。
+                # ETag 不匹配（并发 writer 已翻转）→ store 抛错，CURRENT 不变。
+                self.store.put_object_conditional(
+                    current_key, payload, if_match=str(head["etag"])
+                )
+            else:
+                # CURRENT 不存在：抢占式创建。两个 writer 同时抢占时只允许一个
+                # 成功（store 的 If-None-Match / 本地不存在判定保证）。
+                self.store.put_object_conditional(
+                    current_key, payload, if_none_match=True
+                )
+        except StaleWriterError:
+            raise
+        except Exception as exc:  # noqa: BLE001 —— 任何条件更新失败都让 CURRENT 不变
+            if isinstance(exc, (RemotePointerUpdateError, RemotePublishError)):
+                raise
+            # store 实现未接通条件写（旧实现 / fake）：退化为普通 put_object。
+            # 失败仍让 CURRENT 不变（异常上抛），不做任何本地 retry 覆盖。
+            logger.warning(
+                "put_object_conditional 不可用，回退普通 put_object（prefix=%s "
+                "generation=%s）: %s", prefix, generation_id, exc,
+            )
+            self.store.put_object(current_key, payload)
 
     def _read_manifest_for_generation(
         self, generation_id: str
@@ -800,9 +837,14 @@ def _coerce_bytes(data: bytes | BinaryIO) -> bytes:
     return data.read()
 
 
-__all__ = [    "ObjectStoreGenerationPublisher",
+__all__ = [
+    "ObjectStoreGenerationPublisher",
     "GenerationManifest",
     "GenerationObject",
+    "StaleWriterError",
+    "RemotePublishError",
+    "RemoteWriteVerificationError",
+    "RemotePointerUpdateError",
     "_CURRENT_KEY",
     "_MANIFEST_KEY",
 ]
