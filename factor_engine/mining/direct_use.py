@@ -2968,7 +2968,47 @@ def get_direct_use_mining_operators_from_manifest(
 
     Raises:
         ManifestValidationError: When manifest is invalid and run_mode enforces
+        StaleAgentOperatorEvidence: When run_mode is production/cold_start and
+            evidence/CURRENT.json cannot be proven CURRENT (R61-P0 #64; see
+            factor_engine.api.mining_integration.get_mining_operators_from_manifest)
     """
+    # R61-P0 #64: fail-closed evidence gate for the mining-layer cold-start
+    # sibling.  Lazy import keeps the mining import graph free of the evidence
+    # machinery until an operator allowlist is actually resolved.  allow_stale
+    # here relaxes ONLY the manifest fingerprint; the evidence gate's own
+    # allow_stale stays False for production/cold_start (separate, non-
+    # overridable concern) and True for research (evaluate, never raise).
+    import os
+    import warnings
+
+    def _gate_off() -> bool:
+        return (
+            str(os.environ.get("FACTOR_ENGINE_EVIDENCE_GATE", "")).strip().lower()
+            == "off"
+        )
+
+    from evidence.gate import require_current_evidence  # noqa: E402  (lazy)
+
+    _mode = str(run_mode or "production").strip().lower()
+    if _mode in ("production", "cold_start"):
+        if _gate_off():
+            warnings.warn(
+                "FACTOR_ENGINE_EVIDENCE_GATE=off: bypassing the fail-closed "
+                "evidence gate (evidence/CURRENT.json is not CURRENT).  This "
+                "escape hatch is for legacy in-repo test harnesses only; "
+                "production must re-enable the gate.",
+                UserWarning,
+                stacklevel=2,
+            )
+        else:
+            require_current_evidence(allow_stale=False)
+    elif _mode == "research":
+        require_current_evidence(allow_stale=True)
+    else:
+        raise ValueError(
+            f"unknown run_mode {run_mode!r}; expected production|cold_start|research"
+        )
+
     # Validate first with all parameters
     validate_direct_use_manifest(
         manifest_path,

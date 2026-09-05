@@ -63,12 +63,35 @@ def require_current_evidence(*, allow_stale: bool = False) -> dict[str, Any]:
 
     ``allow_stale=True`` exists ONLY for research/diagnostic tooling; the
     production Agent surface must never pass it.
+
+    R61-P0 #64: factor_engine's production/cold-start operator-allowlist entry
+    (``factor_engine.api.mining_integration.get_mining_operators_from_manifest``)
+    calls this gate with ``allow_stale=False`` before returning operators.
+    Escape hatch for legacy in-repo test harnesses that cannot provide current
+    evidence: set ``FACTOR_ENGINE_EVIDENCE_GATE=off`` to convert the raise into
+    a ``warnings.warn`` (default = enforced; no warn-and-proceed path).
     """
+    # R61-P0 #64: explicit, documented off-switch for legacy test harnesses.
+    # Imported here (not at module top) so importing evidence.gate never reads
+    # the environment; only the gate evaluation does.
+    import os
+    import warnings
+
     report = current_evidence_report()
     if report.get("all_current") or allow_stale:
         return report
     changed = report.get("changed_artifacts") or []
     summary = report.get("summary") or {}
+    if str(os.environ.get("FACTOR_ENGINE_EVIDENCE_GATE", "")).strip().lower() == "off":
+        warnings.warn(
+            "FACTOR_ENGINE_EVIDENCE_GATE=off: bypassing the fail-closed evidence "
+            "gate (evidence/CURRENT.json is not CURRENT). This escape hatch is "
+            "for legacy in-repo test harnesses only; production must re-enable "
+            "the gate.",
+            UserWarning,
+            stacklevel=2,
+        )
+        return report
     raise StaleAgentOperatorEvidence(
         "evidence/CURRENT.json is not CURRENT against the live source tree "
         f"(status={report.get('status')}, current={summary.get('current')}/"

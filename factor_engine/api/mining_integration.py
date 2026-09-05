@@ -1241,10 +1241,27 @@ def get_mining_operators_from_manifest(
     - git HEAD lookup fails in production/cold-start mode
     - Context filtering removes all operators
 
+    R61-P0 #64 (fail-closed evidence gate): when ``run_mode`` is
+    ``"production"`` or ``"cold_start"`` this function ALSO calls
+    ``evidence.gate.require_current_evidence()`` BEFORE returning operators —
+    the Agent-direct operator surface may not run on stale CURRENT evidence.
+    A stale/missing ``evidence/CURRENT.json`` raises
+    ``evidence.gate.StaleAgentOperatorEvidence`` (fail-closed).  In
+    ``"research"`` mode the gate is evaluated with ``allow_stale=True``
+    (evaluate but never raise).  The gate is a SEPARATE, non-overridable
+    production concern: the caller's ``allow_stale`` relaxes ONLY the manifest
+    fingerprint check and never bypasses the evidence gate.
+
+    Escape hatch (legacy in-repo test harnesses only): set
+    ``FACTOR_ENGINE_EVIDENCE_GATE=off`` to disable the raise (a
+    ``warnings.warn`` is emitted instead).  Default (unset or any other value)
+    = enforced.  There is no warn-and-proceed path in production.
+
     Args:
         manifest_path: Path to direct-use manifest JSON
         run_mode: "production" | "cold_start" | "research"
-        allow_stale: Allow stale manifest fingerprint (default False)
+        allow_stale: Allow stale manifest fingerprint (default False);
+            relaxes ONLY the manifest-fingerprint check, never the evidence gate
         market: Market context for filtering (e.g., "ashare", "us")
         max_cost: Maximum runtime cost for filtering
         available_sources: Available data sources for filtering
@@ -1256,12 +1273,28 @@ def get_mining_operators_from_manifest(
     Raises:
         ManifestValidationError: When manifest validation fails in
             production/cold-start mode
+        StaleAgentOperatorEvidence: When run_mode is production/cold_start and
+            evidence/CURRENT.json cannot be proven CURRENT against the live tree
     """
     from factor_engine.market.context import Market
     from factor_engine.mining.direct_use import (
         DirectUseContext,
         get_direct_use_mining_operators_from_manifest,
     )
+
+    # R61-P0 #64: lazy evidence-gate import keeps the module import graph clean.
+    # run_mode normalization mirrors get_direct_use_mining_operators_from_manifest.
+    from evidence.gate import require_current_evidence
+
+    _mode = str(run_mode or "production").strip().lower()
+    if _mode in ("production", "cold_start"):
+        require_current_evidence(allow_stale=False)
+    elif _mode == "research":
+        require_current_evidence(allow_stale=True)
+    else:
+        raise ValueError(
+            f"unknown run_mode {run_mode!r}; expected production|cold_start|research"
+        )
 
     # Build context for filtering (performs real work, not a pass stub)
     # Convert string market to Market enum if provided
