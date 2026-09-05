@@ -131,6 +131,15 @@ class SearchOrchestrator:
     # （settle_reward 用内存幂等守卫，不重复计数）。
     ledger: Any | None = None
 
+    # plan.md Task 16：多阶段生成的 ablation switch（Non-negotiable #30）。
+    # False（默认）= 行为与旧版完全一致（全量测试不挂）。True = 启用九阶段
+    # pipeline hook（stage 常量 + 状态推进 + 失败不杀 hypothesis），由
+    # ``run_multistage`` 触发；单步 step/step_with_llm 语义不受影响。
+    multistage_generation: bool = False
+    #: 可选注入的多阶段 pipeline 运行时（默认惰性构造研究空间状态机；None 时
+    #: 仅当开关打开且调用方显式调 ``run_multistage`` 才使用）。
+    multistage_runner: Any | None = None
+
     def __post_init__(self) -> None:
         if self.scheduler is None:
             self.scheduler = ActionScheduler()
@@ -643,6 +652,48 @@ class SearchOrchestrator:
             if f.count("(") == f.count(")"):
                 final.append(c)
         return final
+
+    # ------------------------------------------------------------------
+    # plan.md Task 16：多阶段生成 hook（AlphaPROBE 差异化：状态机驱动，
+    # 不造 20 个常驻 agent）。默认关闭（ablation switch，#30）；打开时
+    # 单次调用 = 一条 hypothesis 的完整九阶段推进。
+    # ------------------------------------------------------------------
+
+    def run_multistage(
+        self,
+        actions: Sequence[Mapping[str, Any]],
+        *,
+        hypothesis: Any,
+        parents: Sequence[Mapping[str, Any]],
+        registry: Any | None = None,
+    ) -> dict[str, Any]:
+        """九阶段 pipeline（hypothesis → schema plan → AST action plan → FE
+        编译 → 确定性对齐 → 可选 critic → FE 验证/静态分析 → 去重 → 评估反馈）。
+
+        - 畸形 LLM action 由状态机在 stage 1-3 拦截，永远到不了 FE 执行；
+        - hypothesis 失败不杀：implementation 失败 → state 置
+          ``implementation_failed`` 但记录存活，可再次调用本方法生成替代实现；
+        - 确定性对齐（stage 5）可拒绝 domain 矛盾（无第二次 LLM）。
+        """
+        from alphaprobe.research_space.hypothesis import (
+            HypothesisRegistry,
+            StageHooks,
+            run_stage_pipeline,
+        )
+
+        runner = self.multistage_runner
+        registry = registry or (HypothesisRegistry() if runner is None else None)
+        if runner is None:
+            hooks = StageHooks()
+        else:
+            hooks = getattr(runner, "hooks", None) or StageHooks()
+        return run_stage_pipeline(
+            actions,
+            hypothesis=hypothesis,
+            parents=parents,
+            hooks=hooks,
+            dedup_client=getattr(self, "dedup_client", None),
+        )
 
 
 __all__ = ["SearchOrchestrator", "OrchestratorStep"]
