@@ -1,0 +1,128 @@
+{
+  "schema_version": "1.0",
+  "benchmark": "alphaprobe_search_scale",
+  "scale": 100000,
+  "rng_seed": 0,
+  "timestamp_utc": "2026-09-05T03:04:26Z",
+  "git_head": "c5bfbf03105e26228218993e021d639047d37d10",
+  "host": {
+    "cores": 32,
+    "python": "3.12.3",
+    "platform": "Linux-6.8.0-124-generic-x86_64-with-glibc2.39",
+    "faiss_available": false
+  },
+  "params": {
+    "seed_k": 128,
+    "ann_dim": 64,
+    "ann_k": 10,
+    "memory_packet_budget": 4000,
+    "retriever_mode": "audit",
+    "sqlite_events_batch": "commit-per-write (as-produced GlobalMemoryStore)"
+  },
+  "env_notes": [
+    "synthetic metadata only; no factor-value panel materialization",
+    "ANN uses injected vector backend; faiss NOT required",
+    "no O(N^2) cross-sectional correlation in harness",
+    "full suite baseline 984 passed / 0 failed / 1 skipped (faiss)"
+  ],
+  "sla": "targets recorded empirically; no invented SLA",
+  "results": {
+    "identity_lookup": {
+      "p50_ms": 6921.1363,
+      "p95_ms": 7094.778,
+      "p99_ms": 7125.577,
+      "mean_ms": 6929.1674,
+      "n": 5,
+      "peak_rss_mb": 28.0,
+      "wall_s": 41.555
+    },
+    "seed_selection": {
+      "p50_ms": 27.7194,
+      "p95_ms": 27.7194,
+      "p99_ms": 27.7194,
+      "mean_ms": 27.7194,
+      "n": 1,
+      "peak_rss_mb": 28.0,
+      "k_requested": 128,
+      "n_returned": 100,
+      "catalog_size": 100000,
+      "catalog_touched": 1792,
+      "touch_ratio": 0.01792,
+      "sublinear": true,
+      "ratio_ok": true,
+      "bucket_counts": {
+        "UNDEREXPLORED_GOOD": 26,
+        "RANDOM": 11,
+        "CLUSTER_REPRESENTATIVE": 11,
+        "SURVIVAL": 12,
+        "RARE_SCHEMA": 12,
+        "FERTILE": 28
+      },
+      "wall_s": 0.03
+    },
+    "ann_nearest": {
+      "p50_ms": 21.2166,
+      "p95_ms": 21.3923,
+      "p99_ms": 21.4079,
+      "mean_ms": 21.2745,
+      "n": 3,
+      "peak_rss_mb": 502.8,
+      "index_size": 100000,
+      "index_rebuild_count": 1,
+      "build_ms": 123.5884,
+      "wall_s": 1.491
+    },
+    "cluster_context": {
+      "p50_ms": 21.3798,
+      "p95_ms": 21.6237,
+      "p99_ms": 21.6454,
+      "mean_ms": 21.4487,
+      "n": 3,
+      "peak_rss_mb": 502.8,
+      "wall_s": 0.132
+    },
+    "retriever_scoring_100k": {
+      "p50_ms": 1074.6026,
+      "p95_ms": 1074.6026,
+      "p99_ms": 1074.6026,
+      "mean_ms": 1074.6026,
+      "n": 1,
+      "peak_rss_mb": 502.8,
+      "candidates": 100000,
+      "top1": "F1001",
+      "wall_s": 1.194
+    },
+    "memory_packet_generation": {
+      "p50_ms": 5428.7291,
+      "p95_ms": 5636.3214,
+      "p99_ms": 5654.7741,
+      "mean_ms": 5498.2563,
+      "n": 3,
+      "peak_rss_mb": 502.8,
+      "wall_s": 22.039
+    },
+    "sqlite_memory_event_writes": {
+      "p50_ms": 1.5174,
+      "p95_ms": 1.5174,
+      "p99_ms": 1.5174,
+      "mean_ms": 1.5174,
+      "n": 1,
+      "peak_rss_mb": 502.8,
+      "events": 100000,
+      "per_event_ms": 1.5174,
+      "total_ms": 151740.8489,
+      "writes_per_sec": 659.0,
+      "wall_s": 151.787
+    },
+    "resume_checkpoint_latency": {
+      "p50_ms": 86.3946,
+      "p95_ms": 87.6042,
+      "p99_ms": 87.7118,
+      "mean_ms": 86.7644,
+      "n": 3,
+      "peak_rss_mb": 502.8,
+      "wall_s": 0.377
+    }
+  },
+  "notes": []
+}
