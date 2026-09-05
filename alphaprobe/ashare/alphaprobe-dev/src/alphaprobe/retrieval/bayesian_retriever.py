@@ -744,6 +744,11 @@ class BayesianRetriever:
         P0-B：选中的 k 个 parent 会被作为检索起点繁殖 —— 这里即「被检索」的
         真时点，命中即记一次检索事件（record_retrieval），驱动频率衰减计数。
         disabled / 空候选 → 没有真正发生检索选择，不记。
+
+        plan Task 10 集成点：``ContextualRetriever``（contextual_retriever.py）
+        实现同一 ``select_parents(candidates, k=..., ...)`` / ``score_candidate``
+        契约，可作为 ``ParentSelector.retriever`` 的**超集**注入（schema 上下文
+        感知的 EV 排序，本契约不破坏）。
         """
         if not self.config.enabled or not candidates:
             return list(candidates[:k])

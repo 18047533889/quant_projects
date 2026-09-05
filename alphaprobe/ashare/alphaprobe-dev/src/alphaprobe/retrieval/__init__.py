@@ -39,6 +39,15 @@ from alphaprobe.retrieval.search_opportunity import (
 from alphaprobe.retrieval.parent_selector import ParentSelector
 from alphaprobe.retrieval.state import BayesianNodeState
 
+from alphaprobe.retrieval.contextual_retriever import (
+    ContextualRetriever,
+    ContextualRetrieverConfig,
+    GainModel,
+    CostModel,
+    LayerStats,
+    HierarchicalStats,
+)
+
 __all__ = [
     "BayesianNodeState",
     # bayesian_retriever.py
@@ -60,4 +69,11 @@ __all__ = [
     "survival_opportunity",
     # parent_selector.py
     "ParentSelector",
+    # contextual_retriever.py（T10 hierarchical re-export）
+    "ContextualRetriever",
+    "ContextualRetrieverConfig",
+    "GainModel",
+    "CostModel",
+    "LayerStats",
+    "HierarchicalStats",
 ]
