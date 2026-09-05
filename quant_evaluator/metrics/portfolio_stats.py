@@ -254,6 +254,13 @@ def compute_sharpe_ratio(
         squeeze = False
 
     T, F = returns.shape
+
+    if T == 0:
+        max_dd = np.full(F, np.nan, dtype=np.float64)
+        peaks = np.zeros(F, dtype=np.int64)
+        if squeeze:
+            return float("nan"), np.empty(0, dtype=np.float64), int(0)
+        return max_dd, np.empty((0, F), dtype=np.float64), peaks
     sharpe = np.full(F, np.nan)
 
     for f in range(F):

@@ -292,3 +292,57 @@ def test_report_manifest_persists_canonical_chart_artifact(tmp_path):
     assert arrays["quantile_nav"].shape == (2, 10)
     assert arrays["dates"].shape == (2,)
     assert len(payload["factors"]["factor_a"]["artifact_sha256"]) == 64
+
+
+def test_publish_from_manifest_uses_verified_artifact_without_re_evaluation(tmp_path, monkeypatch):
+    intake = load_intake()
+    artifacts = tmp_path / "artifacts"
+    artifacts.mkdir()
+    artifact = artifacts / "factor_a.npz"
+    np.savez_compressed(
+        artifact,
+        dates=np.asarray(pd.bdate_range("2016-01-04", periods=2), dtype="datetime64[ns]"),
+        rank_ic_series=np.asarray([0.1, 0.2]),
+        quantile_returns=np.ones((2, 10)),
+        quantile_nav=np.ones((2, 10)),
+        long_short_returns=np.asarray([0.01, 0.02]),
+        long_short_nav=np.asarray([1.01, 1.03]),
+        long_short_nav_aligned=np.asarray([1.01, 1.03]),
+    )
+    manifest = {
+        "schema_version": 1,
+        "factors": {
+            "factor_a": {
+                "factor_name": "Factor A",
+                "raw_formula": "rank(AdjClose)",
+                "direction": 1,
+                "artifact": "artifacts/factor_a.npz",
+                "artifact_sha256": intake.hashlib.sha256(artifact.read_bytes()).hexdigest(),
+                "metrics": {"rank_ic": 0.1, "ic_ir": 0.5, "ls_sharpe": 1.2,
+                            "ls_annual": 0.3, "ls_mdd": 0.1, "ls_winrate": 0.5,
+                            "n_days": 2},
+            },
+            "missing": {"factor_name": "Missing", "status": "unavailable",
+                        "reason": "matrix is incomplete", "raw_formula": "rank(x)",
+                        "metrics": {}},
+        },
+    }
+    manifest_path = tmp_path / "report_manifest.json"
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    calls = []
+
+    def render(factor, eval_result, *, report_result, report_dates, out_dir):
+        calls.append((factor, report_result, report_dates, out_dir))
+        return {"mode": "full"}
+
+    monkeypatch.setattr(intake, "stage_page_inject", render)
+    report_dir = tmp_path / "report"
+    result = intake.publish_report_from_manifest(manifest_path, report_dir=report_dir)
+
+    assert result == {"published": 2, "available": 1, "unavailable": 1}
+    assert len(calls) == 1
+    assert calls[0][0]["page_name"] == "factor_a"
+    assert calls[0][1].quantile_nav.shape == (2, 10)
+    assert calls[0][2].tolist() == pd.bdate_range("2016-01-04", periods=2).tolist()
+    assert "factor_a" in (report_dir / "index.html").read_text(encoding="utf-8")
+    assert (report_dir / "factors" / "factor_missing.html").exists()

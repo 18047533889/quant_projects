@@ -25,6 +25,8 @@ import tempfile
 import time
 import traceback
 from pathlib import Path
+from types import SimpleNamespace
+from html import escape
 
 os.environ.setdefault("OMP_NUM_THREADS", "8")
 
@@ -595,9 +597,148 @@ def write_report_manifest(records, batch_evaluation, *, target=REPORT_MANIFEST_J
     }
     target.parent.mkdir(parents=True, exist_ok=True)
     temporary = target.with_suffix(target.suffix + ".tmp")
-    temporary.write_text(json.dumps(payload, ensure_ascii=False, indent=1), encoding="utf-8")
+    def json_safe(value):
+        if isinstance(value, float) and not __import__("math").isfinite(value):
+            return None
+        if isinstance(value, dict):
+            return {key: json_safe(item) for key, item in value.items()}
+        if isinstance(value, (list, tuple)):
+            return [json_safe(item) for item in value]
+        return value
+
+    payload = json_safe(payload)
+    temporary.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=1, allow_nan=False),
+        encoding="utf-8",
+    )
     os.replace(temporary, target)
     return payload
+
+
+def _report_result_from_artifact(entry, artifact_path):
+    """Load the chart contract emitted by ``write_report_manifest``.
+
+    Publishing deliberately has no matrix or price-data dependency: a page is
+    a pure projection of a hash-verified QuantEvaluator artifact.
+    """
+    import numpy as np
+    import pandas as pd
+
+    expected = str(entry.get("artifact_sha256") or "")
+    actual = hashlib.sha256(artifact_path.read_bytes()).hexdigest()
+    if not expected or actual != expected:
+        raise ValueError(f"artifact checksum mismatch for {artifact_path.name}")
+    with np.load(artifact_path, allow_pickle=False) as arrays:
+        required = {
+            "dates", "rank_ic_series", "quantile_returns", "quantile_nav",
+            "long_short_returns", "long_short_nav", "long_short_nav_aligned",
+        }
+        missing = required.difference(arrays.files)
+        if missing:
+            raise ValueError(f"artifact {artifact_path.name} misses {sorted(missing)}")
+        values = {key: arrays[key].copy() for key in required}
+    dates = pd.DatetimeIndex(values.pop("dates"))
+    if values["quantile_nav"].ndim != 2 or len(dates) != len(values["rank_ic_series"]):
+        raise ValueError(f"artifact {artifact_path.name} has inconsistent chart axes")
+    metrics = dict(entry.get("metrics") or {})
+    return SimpleNamespace(
+        mean_rank_ic=metrics.get("rank_ic"),
+        rank_ic_ir=metrics.get("ic_ir"),
+        rank_ic_std=metrics.get("std"),
+        valid_return_periods=metrics.get("n_days", 0),
+        direction=entry.get("direction", 1),
+        sharpe=metrics.get("ls_sharpe"),
+        annualized_return=metrics.get("ls_annual"),
+        cumulative_return=metrics.get("ls_cumulative"),
+        max_drawdown=metrics.get("ls_mdd"),
+        win_rate=metrics.get("ls_winrate"),
+        rank_ic_win_rate=metrics.get("rank_ic_winrate"),
+        top_quantile_annualized_return=metrics.get("g10_annual"),
+        bottom_quantile_annualized_return=metrics.get("g1_annual"),
+        **values,
+    ), dates
+
+
+def _unavailable_report_page(page, entry):
+    reason = escape(str(entry.get("reason") or "required full-window matrix is unavailable"))
+    formula = escape(str(entry.get("raw_formula") or "—"))
+    return f"""<!doctype html><html lang=\"zh-CN\"><meta charset=\"utf-8\"/>
+<title>{escape(page)} — 数据待补齐</title><body><main>
+<p><a href=\"../index.html\">← 返回汇总</a></p><h1><code>{escape(page)}</code></h1>
+<h2>全窗评估暂不可用</h2><p>{reason}</p>
+<p>本页未展示或填充任何回测指标；待主链路完成 DataAccess → FactorEngine 落值后，将由同一报告发布流程自动更新。</p>
+<h2>FactorEngine DSL</h2><pre>{formula}</pre>
+</main></body></html>"""
+
+
+def _write_manifest_index(report_dir, factors):
+    """Render the home page directly from the canonical manifest entries."""
+    rows = []
+    for number, (page, entry) in enumerate(sorted(factors.items()), start=1):
+        metrics = entry.get("metrics") or {}
+        status = entry.get("status", "available")
+        if status == "unavailable":
+            cells = ("—", "—", "—", "数据待补齐")
+        else:
+            cells = (
+                f"{metrics.get('rank_ic', float('nan')):+.4f}",
+                f"{metrics.get('ic_ir', float('nan')):+.3f}",
+                f"{metrics.get('ls_sharpe', float('nan')):+.2f}",
+                "已翻正" if entry.get("is_flipped") else "原方向",
+            )
+        rows.append(
+            f"<tr><td>{number}</td><td><a href=\"factors/factor_{escape(page)}.html\"><code>{escape(page)}</code></a></td>"
+            f"<td>{cells[0]}</td><td>{cells[1]}</td><td>{cells[2]}</td><td>{cells[3]}</td></tr>"
+        )
+    available = sum(entry.get("status") != "unavailable" for entry in factors.values())
+    html = f"""<!doctype html><html lang=\"zh-CN\"><meta charset=\"utf-8\"/>
+<title>FactorEngine 因子报告</title><body><main><h1>FactorEngine 因子报告</h1>
+<p>共 {len(factors)} 个因子；{available} 个已完成全窗评估。所有指标及图表均来自同一 QuantEvaluator manifest/artifact。</p>
+<table><thead><tr><th>#</th><th>因子</th><th>RankIC</th><th>IR</th><th>LS Sharpe</th><th>状态</th></tr></thead>
+<tbody>{''.join(rows)}</tbody></table></main></body></html>"""
+    output = Path(report_dir) / "index.html"
+    output.parent.mkdir(parents=True, exist_ok=True)
+    temporary = output.with_suffix(".html.tmp")
+    temporary.write_text(html, encoding="utf-8")
+    os.replace(temporary, output)
+
+
+def publish_report_from_manifest(manifest_path, *, report_dir=REPORTS_DIR):
+    """Publish all pages from one verified QE manifest; never recompute metrics."""
+    manifest_path = Path(manifest_path)
+    payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    if payload.get("schema_version") != 1 or not isinstance(payload.get("factors"), dict):
+        raise ValueError("unsupported report manifest schema")
+    report_dir = Path(report_dir)
+    output_factors = report_dir / "factors"
+    output_factors.mkdir(parents=True, exist_ok=True)
+    published = available = unavailable = 0
+    for page, entry in payload["factors"].items():
+        status = entry.get("status", "available")
+        if status == "unavailable":
+            (output_factors / f"factor_{page}.html").write_text(
+                _unavailable_report_page(page, entry), encoding="utf-8")
+            unavailable += 1
+            published += 1
+            continue
+        artifact_ref = entry.get("artifact")
+        if not artifact_ref:
+            raise ValueError(f"available factor {page} has no chart artifact")
+        result, dates = _report_result_from_artifact(entry, manifest_path.parent / artifact_ref)
+        factor = {
+            "page_name": page,
+            "factor_name": entry.get("factor_name", page),
+            "fe_formula": entry.get("raw_formula", ""),
+            "is_flipped": bool(entry.get("is_flipped")),
+        }
+        stage_page_inject(
+            factor, report_evaluation_dict(result), report_result=result,
+            report_dates=dates, out_dir=output_factors,
+        )
+        available += 1
+        published += 1
+    _write_manifest_index(report_dir, payload["factors"])
+    return {"published": published, "available": available, "unavailable": unavailable}
 
 
 # --------------------------------------------------------------------------
@@ -825,10 +966,12 @@ def _check_banned(text, page=None):
     return None
 
 
-def stage_page_inject(factor, eval_result, *, report_result=None, report_dates=None):
+def stage_page_inject(factor, eval_result, *, report_result=None, report_dates=None, out_dir=None):
     """为每条新因子生成详情页（复用 render_evoalpha14_pages 的模板+图表函数）。
     图可省略或复用 optimize 图函数。禁止算法名字符串。"""
     page = factor["page_name"]
+    output_dir = Path(out_dir) if out_dir is not None else FACTORS_DIR
+    output_dir.mkdir(parents=True, exist_ok=True)
     is_flipped = bool((eval_result or {}).get("is_flipped", factor.get("is_flipped", False)))
     dsl_text = _dsl_text(factor)
     fe_formula_raw = factor.get("fe_formula", "")
@@ -847,7 +990,7 @@ def stage_page_inject(factor, eval_result, *, report_result=None, report_dates=N
     if not has_tpl:
         # 内联简版：无图单页
         html = _minimal_page(page, dsl_text, fe_formula_raw, is_flipped, eval_result)
-        out = FACTORS_DIR / f"factor_{page}.html"
+        out = output_dir / f"factor_{page}.html"
         out.write_text(html, encoding="utf-8")
         return {"page": str(out), "mode": "minimal"}
 
@@ -913,7 +1056,7 @@ def stage_page_inject(factor, eval_result, *, report_result=None, report_dates=N
         html = html.replace("回测区间 2019-01-02 ~ 2026-08-24",
                             f"全窗评估 {FULL_WINDOW_START.date()} ~ {FULL_WINDOW_END.date()}"
                             "（方向仅由 2016-01-04 ~ 2018-06-30 训练窗确定；vwap-to-vwap shift(-2)）")
-        out = FACTORS_DIR / f"factor_{page}.html"
+        out = output_dir / f"factor_{page}.html"
         out.write_text(html, encoding="utf-8")
 
         banned = _check_banned(html, page=page)
@@ -926,7 +1069,7 @@ def stage_page_inject(factor, eval_result, *, report_result=None, report_dates=N
     except Exception as exc:
         print(f"    [page_inject fallback] {type(exc).__name__}: {str(exc)[:120]}", flush=True)
         html = _minimal_page(page, dsl_text, fe_formula_raw, is_flipped, eval_result)
-        out = FACTORS_DIR / f"factor_{page}.html"
+        out = output_dir / f"factor_{page}.html"
         out.write_text(html, encoding="utf-8")
         return {"page": str(out), "mode": "minimal"}
 
@@ -1182,7 +1325,11 @@ def _new_mining_section(new_entries):
 # --------------------------------------------------------------------------
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--manifest", required=True)
+    ap.add_argument("--manifest")
+    ap.add_argument("--publish-from-manifest", type=Path,
+                    help="render index/detail HTML only from a verified QE report manifest")
+    ap.add_argument("--report-dir", type=Path, default=REPORTS_DIR,
+                    help="target report directory for --publish-from-manifest")
     ap.add_argument("--limit", type=int, default=None)
     ap.add_argument("--batch-size", type=int, default=8)
     ap.add_argument("--fe-backend", default="polars_long")
@@ -1192,6 +1339,15 @@ def main():
                     help="evaluate and write the manifest, but do not mutate pages/pool/state")
     ap.add_argument("--output-manifest", type=Path, default=REPORT_MANIFEST_JSON)
     args = ap.parse_args()
+
+    if args.publish_from_manifest is not None:
+        result = publish_report_from_manifest(
+            args.publish_from_manifest, report_dir=args.report_dir,
+        )
+        print(f"[publish] {json.dumps(result, ensure_ascii=False)}", flush=True)
+        return
+    if not args.manifest:
+        ap.error("--manifest is required unless --publish-from-manifest is used")
 
     manifest = load_manifest(args.manifest)
     if args.limit:

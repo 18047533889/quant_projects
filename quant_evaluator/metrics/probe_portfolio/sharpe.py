@@ -189,6 +189,19 @@ def compute_portfolio_metrics(
             drawdown_persistence / rolling_sharpe_q20 / positive_month_ratio
     """
     returns = _as_1d(returns)
+    if returns.size == 0:
+        return {
+            "sharpe": np.nan,
+            "sortino": np.nan,
+            "calmar": np.nan,
+            "max_drawdown": np.nan,
+            "win_rate": np.nan,
+            "annualized_return": np.nan,
+            "annualized_volatility": np.nan,
+            "rolling_sharpe_q20": np.nan,
+            "positive_month_ratio": np.nan,
+            "drawdown_persistence": np.nan,
+        }
     metrics = {
         "sharpe": float(compute_sharpe_ratio(
             returns, risk_free_rate=risk_free_rate,

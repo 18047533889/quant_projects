@@ -74,6 +74,7 @@ class DeviceEvaluationSession:
         self._total_vram = float(total)
         self._vram_budget = self._free_vram * self.policy.max_vram_fraction
         # session-scoped memory pool with a soft cap
+        self._previous_allocator = cp.cuda.get_allocator()
         pool = cp.cuda.MemoryPool()
         cp.cuda.set_allocator(pool.malloc)
         self._pool = pool
@@ -89,7 +90,17 @@ class DeviceEvaluationSession:
             return
         if self._cp is not None:
             try:
+                self._cp.cuda.Device().synchronize()
+                # Drop every session-owned device reference before asking the
+                # pool to release blocks. free_all_blocks cannot free arrays
+                # that are still retained in these caches.
+                self._staged_factors.clear()
+                self._staged_labels.clear()
+                self._intermediates.clear()
+                self._streams.clear()
+                self._pinned.clear()
                 self._pool.free_all_blocks()
+                self._cp.cuda.set_allocator(self._previous_allocator)
             except Exception:
                 pass
         self._closed = True

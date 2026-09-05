@@ -124,3 +124,18 @@ def test_single_factor_entrypoint_delegates_to_batch_authority(monkeypatch):
     assert result is sentinel
     assert calls[0][0] == (3, 4, 1)
     assert calls[0][2]["factor_ids"] == ("report_factor",)
+
+
+def test_empty_long_short_sample_returns_nan_metrics_instead_of_aborting_batch():
+    from factor_engine.reporting import quant_evaluator_adapter as adapter
+
+    factors = np.full((30, 100, 1), np.nan)
+    returns = np.zeros((30, 100))
+    result = adapter.evaluate_report_batch(
+        factors, returns, factor_ids=("empty",), backend="cpu",
+        min_assets=20, min_ic_periods=20,
+    ).factors["empty"]
+
+    assert result.valid_return_periods == 0
+    assert np.isnan(result.sharpe)
+    assert np.isnan(result.max_drawdown)
