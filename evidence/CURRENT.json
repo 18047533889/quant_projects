@@ -1,20 +1,20 @@
 {
   "schema_version": 3,
-  "generated_at": "2026-09-05T06:12:00.483091+00:00",
-  "source_snapshot_id": "src:v1:afd85cd2e3510f67",
+  "generated_at": "2026-09-05T06:23:30.813923+00:00",
+  "source_snapshot_id": "src:v1:cbd1d1fe7217c9d0",
   "sha_bindings": {
-    "RootRepoSHA": "{\"HEAD\":\"593507c1e25288e78ba95a5d7acc6bfef57daf1f\",\"cached_diff_hash\":\"af5570f5a1810b7af78caf4bc70a660f0df51e42baf91d4de5b2328de0e83dfc\",\"diff_hash\":\"b026254c642ca93b8833bb69ca2d11e66a7f17e60cacf74d774775bdb1103e20\",\"dirty\":true,\"identity_hash\":\"9cb777cd68c6f1e7ffb38e94eb9ae49aad81664432bb396a21e7a7ec27e75396\",\"untracked_source_hash\":\"bbc8102e1a8e63f38156ee002cd5ff6331da2ca3f9e494b7c4c9cb6a0e8b8eef\"}",
-    "SourceTreeIdentity": "{\"HEAD\":\"593507c1e25288e78ba95a5d7acc6bfef57daf1f\",\"cached_diff_hash\":\"af5570f5a1810b7af78caf4bc70a660f0df51e42baf91d4de5b2328de0e83dfc\",\"diff_hash\":\"b026254c642ca93b8833bb69ca2d11e66a7f17e60cacf74d774775bdb1103e20\",\"dirty\":true,\"identity_hash\":\"9cb777cd68c6f1e7ffb38e94eb9ae49aad81664432bb396a21e7a7ec27e75396\",\"untracked_source_hash\":\"bbc8102e1a8e63f38156ee002cd5ff6331da2ca3f9e494b7c4c9cb6a0e8b8eef\"}",
-    "PlatformSourceTreeIdentity": "4275ad9976e22920f962dea8d05c50a68b79f503cfd1d0875d97e1f02dc031d9",
+    "RootRepoSHA": "{\"HEAD\":\"ae7dc6224a3474373db37f1710e96e7a6637d8cb\",\"cached_diff_hash\":\"af5570f5a1810b7af78caf4bc70a660f0df51e42baf91d4de5b2328de0e83dfc\",\"diff_hash\":\"e2ddc83c83e5dd8596954bb7ebbcd6acd96ddd83d53da20ce93fe8b24d6abdb2\",\"dirty\":true,\"identity_hash\":\"2d778604f945768407691ee1befb6fb2c0bab537b4fe58a4394a13750dd9524b\",\"untracked_source_hash\":\"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\"}",
+    "SourceTreeIdentity": "{\"HEAD\":\"ae7dc6224a3474373db37f1710e96e7a6637d8cb\",\"cached_diff_hash\":\"af5570f5a1810b7af78caf4bc70a660f0df51e42baf91d4de5b2328de0e83dfc\",\"diff_hash\":\"e2ddc83c83e5dd8596954bb7ebbcd6acd96ddd83d53da20ce93fe8b24d6abdb2\",\"dirty\":true,\"identity_hash\":\"2d778604f945768407691ee1befb6fb2c0bab537b4fe58a4394a13750dd9524b\",\"untracked_source_hash\":\"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\"}",
+    "PlatformSourceTreeIdentity": "d986f8d21c884de49530d536a813f116583333efdaa42ed94b52f173950e8992",
     "AlphaGeneratorIdentity": "02331578bc354ce2d78f29b9b720b1ceae5242452b3a2fd50a17b855c9ae3ab3",
-    "EvidenceAttestationIdentity": "1809c7f2b3489b0bcde054fa1faac86eace4ecd9484d567e652f692b738fa4d9",
+    "EvidenceAttestationIdentity": "287479f6fb589ffe651bb8d5bf94e60ed63496c6244fb086148a1e959cc7e8b1",
     "OperatorCatalogSHA": "61ebbc3d187a03b6554ab84811f14bb51e078b3227e6c4a8dc58e72aedb9ecbe",
     "SemanticCatalogIdentity": "323575a13fe2025296df95afc5020140dff385bcb12c848613aebd8f276c54a0",
     "ImplementationClosureHashSet": "fa3c32ea80071a5d7774dcca64fa598e34e6d0e4c21f8a51c5caba56f6177eea",
     "DependencyLockHash": "c64a63ae28873dbe7fdcd907c689037cc552309c40ba0698de46d12268f55813",
     "TestEnvironmentIdentity": "4e227bdbe0e232bff7d808b8c15fb3c048198b1197b551ad50a402d678914753"
   },
-  "source_tree_identity": "4275ad9976e22920f962dea8d05c50a68b79f503cfd1d0875d97e1f02dc031d9",
+  "source_tree_identity": "d986f8d21c884de49530d536a813f116583333efdaa42ed94b52f173950e8992",
   "sha_binding_metadata": {
     "OperatorCatalogPath": "build/mining/direct_mining_catalog.json",
     "DependencyLockPath": "requirements-production.lock",
@@ -38,14 +38,14 @@
       "details": "BOUND inputs == LIVE inputs and executed_at present",
       "stale_inputs": [],
       "bound_input_identity": {
-        "source_snapshot_id": "src:v1:afd85cd2e3510f67",
-        "source_tree_identity": "4275ad9976e22920f962dea8d05c50a68b79f503cfd1d0875d97e1f02dc031d9",
-        "PlatformSourceTreeIdentity": "4275ad9976e22920f962dea8d05c50a68b79f503cfd1d0875d97e1f02dc031d9",
+        "source_snapshot_id": "src:v1:cbd1d1fe7217c9d0",
+        "source_tree_identity": "d986f8d21c884de49530d536a813f116583333efdaa42ed94b52f173950e8992",
+        "PlatformSourceTreeIdentity": "d986f8d21c884de49530d536a813f116583333efdaa42ed94b52f173950e8992",
         "ImplementationClosureHashSet": "fa3c32ea80071a5d7774dcca64fa598e34e6d0e4c21f8a51c5caba56f6177eea",
         "SemanticCatalogIdentity": "323575a13fe2025296df95afc5020140dff385bcb12c848613aebd8f276c54a0",
-        "EvidenceAttestationIdentity": "1809c7f2b3489b0bcde054fa1faac86eace4ecd9484d567e652f692b738fa4d9"
+        "EvidenceAttestationIdentity": "287479f6fb589ffe651bb8d5bf94e60ed63496c6244fb086148a1e959cc7e8b1"
       },
-      "executed_at": "2026-09-05T06:12:05.498621+00:00"
+      "executed_at": "2026-09-05T06:23:35.829762+00:00"
     },
     "operator-certification": {
       "artifact_id": "operator-certification",
@@ -53,14 +53,14 @@
       "details": "BOUND inputs == LIVE inputs and executed_at present",
       "stale_inputs": [],
       "bound_input_identity": {
-        "source_snapshot_id": "src:v1:afd85cd2e3510f67",
-        "source_tree_identity": "4275ad9976e22920f962dea8d05c50a68b79f503cfd1d0875d97e1f02dc031d9",
-        "PlatformSourceTreeIdentity": "4275ad9976e22920f962dea8d05c50a68b79f503cfd1d0875d97e1f02dc031d9",
+        "source_snapshot_id": "src:v1:cbd1d1fe7217c9d0",
+        "source_tree_identity": "d986f8d21c884de49530d536a813f116583333efdaa42ed94b52f173950e8992",
+        "PlatformSourceTreeIdentity": "d986f8d21c884de49530d536a813f116583333efdaa42ed94b52f173950e8992",
         "ImplementationClosureHashSet": "fa3c32ea80071a5d7774dcca64fa598e34e6d0e4c21f8a51c5caba56f6177eea",
         "SemanticCatalogIdentity": "323575a13fe2025296df95afc5020140dff385bcb12c848613aebd8f276c54a0",
-        "EvidenceAttestationIdentity": "1809c7f2b3489b0bcde054fa1faac86eace4ecd9484d567e652f692b738fa4d9"
+        "EvidenceAttestationIdentity": "287479f6fb589ffe651bb8d5bf94e60ed63496c6244fb086148a1e959cc7e8b1"
       },
-      "executed_at": "2026-09-05T06:12:05.498610+00:00"
+      "executed_at": "2026-09-05T06:23:35.829752+00:00"
     },
     "operator-inventory": {
       "artifact_id": "operator-inventory",
@@ -68,14 +68,14 @@
       "details": "BOUND inputs == LIVE inputs and executed_at present",
       "stale_inputs": [],
       "bound_input_identity": {
-        "source_snapshot_id": "src:v1:afd85cd2e3510f67",
-        "source_tree_identity": "4275ad9976e22920f962dea8d05c50a68b79f503cfd1d0875d97e1f02dc031d9",
-        "PlatformSourceTreeIdentity": "4275ad9976e22920f962dea8d05c50a68b79f503cfd1d0875d97e1f02dc031d9",
+        "source_snapshot_id": "src:v1:cbd1d1fe7217c9d0",
+        "source_tree_identity": "d986f8d21c884de49530d536a813f116583333efdaa42ed94b52f173950e8992",
+        "PlatformSourceTreeIdentity": "d986f8d21c884de49530d536a813f116583333efdaa42ed94b52f173950e8992",
         "ImplementationClosureHashSet": "fa3c32ea80071a5d7774dcca64fa598e34e6d0e4c21f8a51c5caba56f6177eea",
         "SemanticCatalogIdentity": "323575a13fe2025296df95afc5020140dff385bcb12c848613aebd8f276c54a0",
-        "EvidenceAttestationIdentity": "1809c7f2b3489b0bcde054fa1faac86eace4ecd9484d567e652f692b738fa4d9"
+        "EvidenceAttestationIdentity": "287479f6fb589ffe651bb8d5bf94e60ed63496c6244fb086148a1e959cc7e8b1"
       },
-      "executed_at": "2026-09-05T06:12:05.498625+00:00"
+      "executed_at": "2026-09-05T06:23:35.829767+00:00"
     }
   },
   "summary": {
@@ -99,7 +99,7 @@
     "production_readiness": "CURRENT"
   },
   "evaluation": {
-    "staleness_evaluated_at": "2026-09-05T06:12:05.498716+00:00",
+    "staleness_evaluated_at": "2026-09-05T06:23:35.829860+00:00",
     "status": "CURRENT",
     "changed_artifacts": [],
     "note": "status is CURRENT only when every artifact's BOUND input identity matches the LIVE identity set AND the artifact has an executed_at from a real verification run.",
