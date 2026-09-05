@@ -63,12 +63,22 @@ _WINDOW_EXTRA: dict[str, tuple[ArgSpec, ...]] = {
     "ts_mean": (
         ArgSpec("x", TypeKind.SERIES_FLOAT),
         ArgSpec("window", TypeKind.WINDOW),
-        ArgSpec("min_periods", TypeKind.SCALAR_INT, allow_scalar_broadcast=True),
+        ArgSpec(
+            "min_periods",
+            TypeKind.SCALAR_INT,
+            required=False,
+            allow_scalar_broadcast=True,
+        ),
     ),
     "ts_std": (
         ArgSpec("x", TypeKind.SERIES_FLOAT),
         ArgSpec("window", TypeKind.WINDOW),
-        ArgSpec("ddof", TypeKind.SCALAR_INT, allow_scalar_broadcast=True),
+        ArgSpec(
+            "ddof",
+            TypeKind.SCALAR_INT,
+            required=False,
+            allow_scalar_broadcast=True,
+        ),
     ),
 }
 

@@ -1,8 +1,8 @@
 # Intraday Vector Coverage
 
 Vectorized `daily_agg` kernel routing snapshot (GO_PROMPT §6.1 / §6.3).
-Generated head SHA: `a07ea23020f86f4a63f50f67ec5b0ae1023b5b22`
-Bound WHITELIST ids: `13` (count_bound == len(bind_whitelist()) == 13)
+Generated head SHA: `a18156566bb5c56504e4a6794dc1361346bf1877`
+Bound WHITELIST ids: `29` (count_bound == len(bind_whitelist()) == 29)
 
 Regenerate: `python3 scripts/generate_intraday_vector_coverage.py`
 
@@ -19,6 +19,22 @@ Regenerate: `python3 scripts/generate_intraday_vector_coverage.py`
 | intra_session_mean_reversion | True | true_gap_batch3:proven-scalar-kernel | _vec_session_mean_reversion | — |
 | intra_time_above_vwap | True | vwap_path:proven-scalar-kernel | _vec_time_above_vwap | — |
 | intra_tripower_quarticity | True | higher_moments:proven-scalar-kernel | _vec_tripower_quarticity | — |
+| intra_ts_amount_weighted_mean | True | sufficient_stats_ops:proven-scalar-kernel | _vec_ts_amount_weighted_mean | — |
+| intra_ts_argmax | True | sufficient_stats_ops:proven-scalar-kernel | _vec_ts_argmax | — |
+| intra_ts_argmin | True | sufficient_stats_ops:proven-scalar-kernel | _vec_ts_argmin | — |
+| intra_ts_first | True | sufficient_stats_ops:proven-scalar-kernel | _vec_ts_first | — |
+| intra_ts_last | True | sufficient_stats_ops:proven-scalar-kernel | _vec_ts_last | — |
+| intra_ts_last_value | True | sufficient_stats_ops:proven-scalar-kernel | _vec_ts_last | — |
+| intra_ts_max | True | sufficient_stats_ops:proven-scalar-kernel | _vec_ts_max | — |
+| intra_ts_mean | True | sufficient_stats_ops:proven-scalar-kernel | _vec_ts_mean | — |
+| intra_ts_min | True | sufficient_stats_ops:proven-scalar-kernel | _vec_ts_min | — |
+| intra_ts_realized_covariance | True | sufficient_stats_ops:proven-scalar-kernel | _vec_ts_realized_covariance | — |
+| intra_ts_realized_variance | True | sufficient_stats_ops:proven-scalar-kernel | _vec_ts_realized_variance | — |
+| intra_ts_std | True | sufficient_stats_ops:proven-scalar-kernel | _vec_ts_std | — |
+| intra_ts_sum | True | sufficient_stats_ops:proven-scalar-kernel | _vec_ts_sum | — |
+| intra_ts_variance | True | sufficient_stats_ops:proven-scalar-kernel | _vec_ts_variance | — |
+| intra_ts_volume_weighted_return | True | sufficient_stats_ops:proven-scalar-kernel | _vec_ts_volume_weighted_return | — |
+| intra_ts_vwap | True | sufficient_stats_ops:proven-scalar-kernel | _vec_ts_vwap | — |
 | intra_volume_imbalance | True | true_gap_batch3:proven-scalar-kernel | _vec_volume_imbalance | — |
 | intra_vwap_reversion_speed | True | vwap_path:proven-scalar-kernel | _vec_vwap_reversion_speed | — |
 | intra_covariance_manifold_shift | False | topology_manifold:_fn | — | kernel not vectorized: per-(inst,day) Python loop |
@@ -62,6 +78,6 @@ Regenerate: `python3 scripts/generate_intraday_vector_coverage.py`
 | intraday_rv_signature_slope | False | higher_moments:lambda v, t: _rv_signature_slope(v) | — | kernel not vectorized: per-(inst,day) Python loop — fresh lambda closure carries no __vec__ |
 | intraday_value_at_extreme_state | False | intra_state_space:_kernel | — | kernel not vectorized: raw kernel passed but not PERF-2-whitelisted (needs harness equivalence before binding) |
 
-## Summary — total=53 · vectorized=13 · scalar_only=40
+## Summary — total=69 · vectorized=29 · scalar_only=40
 
 > Scalar-only operators are unvectorized because a fresh `lambda` / module-level `_fn` closure carries no `__vec__`; only the PERF-2 harness-proven raw kernel call convention routes to the vectorized fast path.

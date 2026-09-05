@@ -17,6 +17,7 @@ from factor_engine.planner.backend_region import (
     PhysicalBackend,
     Representation,
     TransferEdge,
+    TransferTransform,
     estimate_transfer_cost_ms,
 )
 
@@ -100,7 +101,7 @@ class TestTransferCostEstimation:
         cost = estimate_transfer_cost_ms(
             source_repr=Representation.POLARS_LONG,
             target_repr=Representation.DUCKDB_RELATION,
-            estimated_memory_bytes=1_000_000,
+            estimated_bytes=1_000_000,
             requires_sort=False,
             requires_repartition=False,
             requires_reshape=False,
@@ -115,14 +116,14 @@ class TestTransferCostEstimation:
         cost_no_sort = estimate_transfer_cost_ms(
             source_repr=Representation.POLARS_LONG,
             target_repr=Representation.DUCKDB_RELATION,
-            estimated_memory_bytes=1_000_000,
+            estimated_bytes=1_000_000,
             requires_sort=False,
         )
 
         cost_with_sort = estimate_transfer_cost_ms(
             source_repr=Representation.POLARS_LONG,
             target_repr=Representation.DUCKDB_RELATION,
-            estimated_memory_bytes=1_000_000,
+            estimated_bytes=1_000_000,
             requires_sort=True,
         )
 
@@ -133,14 +134,14 @@ class TestTransferCostEstimation:
         cost_no_reshape = estimate_transfer_cost_ms(
             source_repr=Representation.PANDAS_LONG,
             target_repr=Representation.PANDAS_WIDE,
-            estimated_memory_bytes=1_000_000,
+            estimated_bytes=1_000_000,
             requires_reshape=False,
         )
 
         cost_with_reshape = estimate_transfer_cost_ms(
             source_repr=Representation.PANDAS_LONG,
             target_repr=Representation.PANDAS_WIDE,
-            estimated_memory_bytes=1_000_000,
+            estimated_bytes=1_000_000,
             requires_reshape=True,
         )
 
@@ -151,13 +152,13 @@ class TestTransferCostEstimation:
         cost_small = estimate_transfer_cost_ms(
             source_repr=Representation.POLARS_LONG,
             target_repr=Representation.DUCKDB_RELATION,
-            estimated_memory_bytes=100_000,
+            estimated_bytes=100_000,
         )
 
         cost_large = estimate_transfer_cost_ms(
             source_repr=Representation.POLARS_LONG,
             target_repr=Representation.DUCKDB_RELATION,
-            estimated_memory_bytes=10_000_000,
+            estimated_bytes=10_000_000,
         )
 
         assert cost_large > cost_small
@@ -179,6 +180,7 @@ class TestTransferEdgeContract:
             estimated_rows=100_000,
             estimated_bytes=800_000,
             estimated_transfer_ms=15.0,
+            transform=TransferTransform.POLARS_TO_NUMPY,
         )
 
         assert edge.edge_id == "e1"
@@ -199,6 +201,7 @@ class TestTransferEdgeContract:
             estimated_rows=100_000,
             estimated_bytes=800_000,
             estimated_transfer_ms=10.0,
+            transform=TransferTransform.POLARS_TO_NUMPY,
         )
 
         assert edge.preserves_pit is True
@@ -216,6 +219,7 @@ class TestTransferEdgeContract:
             estimated_rows=100_000,
             estimated_bytes=800_000,
             estimated_transfer_ms=10.0,
+            transform=TransferTransform.POLARS_TO_NUMPY,
         )
 
         assert edge.preserves_universe is True
@@ -233,6 +237,7 @@ class TestTransferEdgeContract:
             estimated_rows=100_000,
             estimated_bytes=800_000,
             estimated_transfer_ms=12.5,
+            transform=TransferTransform.POLARS_TO_NUMPY,
             requires_sort=True,
         )
 
@@ -261,6 +266,7 @@ class TestSortRequirements:
             estimated_rows=100_000,
             estimated_bytes=800_000,
             estimated_transfer_ms=15.0,
+            transform=TransferTransform.POLARS_TO_NUMPY,
             producer_guarantees_order=False,  # SQL doesn't guarantee
             requires_sort=True,  # Consumer requires sort
         )
@@ -281,6 +287,7 @@ class TestSortRequirements:
             estimated_rows=100_000,
             estimated_bytes=800_000,
             estimated_transfer_ms=10.0,
+            transform=TransferTransform.POLARS_TO_NUMPY,
             producer_sorted_by=("date", "instrument"),
             producer_guarantees_order=True,
             requires_sort=False,  # No additional sort needed
@@ -306,6 +313,7 @@ class TestRepartitionRequirements:
             estimated_rows=100_000,
             estimated_bytes=800_000,
             estimated_transfer_ms=20.0,
+            transform=TransferTransform.POLARS_TO_NUMPY,
             requires_repartition=True,
         )
 
@@ -324,6 +332,7 @@ class TestRepartitionRequirements:
             estimated_rows=100_000,
             estimated_bytes=800_000,
             estimated_transfer_ms=5.0,
+            transform=TransferTransform.POLARS_TO_NUMPY,
             requires_repartition=False,
         )
 
@@ -346,6 +355,7 @@ class TestPITPreservation:
             estimated_rows=100_000,
             estimated_bytes=800_000,
             estimated_transfer_ms=10.0,
+            transform=TransferTransform.POLARS_TO_NUMPY,
             preserves_pit=True,
         )
 
@@ -364,6 +374,7 @@ class TestPITPreservation:
             estimated_rows=100_000,
             estimated_bytes=800_000,
             estimated_transfer_ms=10.0,
+            transform=TransferTransform.POLARS_TO_NUMPY,
             preserves_pit=False,  # Explicitly marked as violating PIT
         )
 
@@ -382,6 +393,7 @@ class TestPITPreservation:
             estimated_rows=100_000,
             estimated_bytes=800_000,
             estimated_transfer_ms=10.0,
+            transform=TransferTransform.POLARS_TO_NUMPY,
             source_snapshot_id="snap_12345",
         )
 
@@ -404,6 +416,7 @@ class TestReshapeRequirements:
             estimated_rows=100_000,
             estimated_bytes=800_000,
             estimated_transfer_ms=25.0,
+            transform=TransferTransform.POLARS_TO_NUMPY,
             requires_reshape=True,
         )
 
@@ -422,6 +435,7 @@ class TestReshapeRequirements:
             estimated_rows=100_000,
             estimated_bytes=800_000,
             estimated_transfer_ms=10.0,
+            transform=TransferTransform.POLARS_TO_NUMPY,
             requires_reshape=False,
         )
 
@@ -444,6 +458,7 @@ class TestDtypeCasting:
             estimated_rows=100_000,
             estimated_bytes=800_000,
             estimated_transfer_ms=12.0,
+            transform=TransferTransform.POLARS_TO_NUMPY,
             requires_dtype_cast=True,
         )
 
@@ -462,6 +477,7 @@ class TestDtypeCasting:
             estimated_rows=100_000,
             estimated_bytes=800_000,
             estimated_transfer_ms=5.0,
+            transform=TransferTransform.POLARS_TO_NUMPY,
             requires_dtype_cast=False,
         )
 

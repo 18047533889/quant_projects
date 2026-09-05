@@ -266,7 +266,16 @@ def publish_current(artifact: EvidenceArtifact) -> Path:
 
 
 def _infer_inventory_inputs() -> list[str]:
+    # R61: the honest current-head inventory is rebuild_inventory.py's output
+    # set (preflight JSONs + operator_audit/current_head/operator_matrix.csv).
+    # The old candidates pointed at root-relative CSVs that no longer exist at
+    # those paths, leaving the artifact with zero observable inputs (an
+    # always-fresh identity that could never go stale — the opposite of
+    # fail-closed).  Bind the real generated files instead.
     candidates = [
+        "factor_engine/artifacts/preflight/inventory_manifest.json",
+        "factor_engine/artifacts/preflight/operator_inventory.json",
+        "factor_engine/artifacts/operator_audit/current_head/operator_matrix.csv",
         "operator_comprehensive_inventory.csv",
         "operator_inventory.csv",
     ]
@@ -299,8 +308,8 @@ def _register_default_artifacts() -> None:
             artifact_id="operator-inventory",
             artifact_type="inventory",
             description="Comprehensive and slim operator inventory CSVs (committed).",
-            generator_script="scripts/r30_phase1_inventory.py",
-            runner_command="python3 scripts/r30_phase1_inventory.py",
+            generator_script="factor_engine/artifacts/preflight/rebuild_inventory.py",
+            runner_command="python3 factor_engine/artifacts/preflight/rebuild_inventory.py",
             output_files=_infer_inventory_inputs(),
             input_dependencies=_infer_inventory_inputs(),
         )

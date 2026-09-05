@@ -50,9 +50,16 @@ Pre-existing（与 clean HEAD 一致）：`POLARS 生产模式算子 UNSUPPORTED
 
 新增（P0#11 100/1k/5k/20k/50k/100k ladder；P0#12 streaming sink + checkpoint + §73 失败分类）：
 
-- `benchmarks/dry_run_ladder.py` —— rung tiny/small/medium/large/xlarge/full（nominal 100/1k/5k/20k/50k/100k），
-  每级比较 `output checksum / DQ(rows) / throughput / memory / failures`；合成面板（不碰真数据/COS），
-  streaming 最终结果 == in-memory 基线（1e-12 对拍），结果写 `artifacts/dry_run_ladder/latest.json`。
+> R61-P0 #58：原 `benchmarks/dry_run_ladder.py` 与 `scripts/dry_run_ladder.py` 已由
+> **`scripts/production_factor_ladder.py`** 取代（真实 62 算子 FE-native 批量 ladder，每级一次
+> `engine.run_many(factors, enable_cse=True)`，`LadderRoot` 分层、>95% 结构唯一根、强制共享子树
+> `ts_mean(close,20)`/`ts_std(return,20)`、真实 `--workers`/`--per-factor-timeout`、失败六分类
+> 保留真实错误、`DryRunCheckpoint` 续跑、`StreamingSink` 5000 行 shard）。两个旧文件保留为
+> **thin compat shim**（DeprecationWarning + 委托），删除前请 grep 引用。
+
+- `scripts/production_factor_ladder.py` —— FE-native 批量 ladder（见上）；状态写
+  `/tmp/r61_ladder58/ladder_status.json`；CI 用 `--dry-level 100`（~1 min，20x80 面板）。
+- `benchmarks/dry_run_ladder.py` / `scripts/dry_run_ladder.py` —— DEPRECATED thin shim。
 - `storage/streaming_sink.py` —— 分片 pyarrow `ParquetWriter` 流式落盘，禁止 `dict[factor]=full_df` 一站式大内存；
   root done→validate→encode→partition write→release buffer；每 shard 写 sidecar（num_rows/bytes/checksum）。
 - `runtime/dry_run_checkpoint.py` —— campaign manifest / completed / failed / partition completion；atomic `os.replace`；
@@ -60,13 +67,13 @@ Pre-existing（与 clean HEAD 一致）：`POLARS 生产模式算子 UNSUPPORTED
 - `runtime/failure_classification.py` —— GO §73 11 code（INVALID_FORMULA/FIELD_CONTRACT/PIT_VIOLATION/BACKEND_PARITY/
   NUMERIC/DATA_MISSING/OOM/TIMEOUT/IO/WRITE/INTERNAL）→ 4 bucket（contract-violation / data-degeneracy /
   resource-exhaustion / internal-bug）；禁止 `except Exception: continue` 全吞，未知裸异常归 INTERNAL。
-- `tests/test_dry_run_ladder.py` —— 9 passed：checkpoint resume 跳过已完成、sink==baseline(1e-12)、
-  失败分类 DataDegeneracy vs contract 路由到互斥 bucket、OOM/MemoryError→resource-exhaustion、裸异常→internal-bug。
+- `tests/test_production_factor_ladder.py` —— 生成不变量/小级别端到端 batch+CSE/checkpoint resume/
+  失败不丢/workers+timeout 强制；`tests/test_dry_run_ladder.py` 保留对拍 + compat。
 
-smoke（`DRY_RUN_STOCKS=40 DRY_RUN_DAYS=100 OMP=8`）：
-- tiny(50 roots, nominal 100)：195000 行，checksum 37da62f0…，0 mismatch，10.95 roots/s，mem +32.8MB，failures 0
-- small(200 roots, nominal 1000)：780000 行，checksum 6b0e67a0…，0 mismatch，9.68 roots/s，failures 0
-- 二者无非线性恶化（吞吐量级相当）；medium 以上属真实放大，留给正式 ladder 跑（非本次 smoke 范围）。
+smoke（R61-P0 #58，`--dry-level 100 --panel-stocks 20 --panel-days 80`）：
+- level 100（57 roots，9 families）：43 passed / 14 failed（all-NaN semantic，intraday 算子跑日频面板，
+  真实失败保留），wall 63s，shared_nodes 9，reuse_edges 75，workers 4（governance clamp），
+  0 timeout / 0 OOM。pool 1000 roots 100% 结构唯一。
 
 ## Notes
 - 23k FE 回归（任务 #29, pid 2326486）与战役并行跑，勿互相干扰；其失败甄别与 p0 改动可能交叉。

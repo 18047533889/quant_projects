@@ -283,6 +283,20 @@ def assert_production_factors(
     from factor_engine.ir.analyzer import Analyzer
     from factor_engine.storage.catalog import compute_ir_hash
 
+    def _factor_market(factor: Any) -> str | None:
+        """Resolve the factor's explicit market (semantic_identity → factor).
+
+        R40 #174: production validation must never silently default a market;
+        a factor without one fails closed below."""
+        semantic = getattr(factor, "semantic_identity", None)
+        for cand in (
+            getattr(semantic, "market", None),
+            getattr(factor, "market", None),
+        ):
+            if cand is not None and str(cand) != "":
+                return str(cand)
+        return None
+
     violations: list[str] = []
     for factor in factors:
         source = getattr(factor, "source_expr", None)
@@ -291,17 +305,27 @@ def assert_production_factors(
                 f"{getattr(factor, 'name', '?')}: missing source_expr required for production validation"
             )
             continue
-        ok, message = validate_production_dsl(str(source))
+        market = _factor_market(factor)
+        if not market:
+            violations.append(
+                f"{getattr(factor, 'name', '?')}: production DSL validation requires "
+                "an explicit market (semantic_identity.market or factor.market); "
+                "market=None 只在 research/compat 模式合法（R40 #174）"
+            )
+            continue
+        ok, message = validate_production_dsl(str(source), market=market)
         if not ok:
             violations.append(f"{getattr(factor, 'name', '?')}: {message}")
             continue
         try:
             source_hash = compute_ir_hash(
-                Analyzer().lower(parse_expr(str(source), surface="daily")).ir,
+                Analyzer(production=True, market=market).lower(
+                    parse_expr(str(source), surface="daily")
+                ).ir,
                 structural_only=True
             )
             actual_hash = compute_ir_hash(
-                Analyzer().lower(factor.expr).ir,
+                Analyzer(production=True, market=market).lower(factor.expr).ir,
                 structural_only=True
             )
         except Exception as exc:

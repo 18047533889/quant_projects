@@ -19,6 +19,7 @@ from factor_engine.planner.backend_region import (
     Representation,
     BackendRegion,
     TransferEdge,
+    TransferTransform,
     PhysicalRegionPlan,
     ExecutionAxis,
     PhysicalProperties,
@@ -35,8 +36,8 @@ class TestSimpleFactorComputation:
 
         # Compute simple moving average factor
         df = df.sort_values(["instrument", "date"])
-        df["sma_5"] = df.group_by("instrument")["close"].transform(
-            lambda x: x.rolling(window=5, min_samples=1).mean()
+        df["sma_5"] = df.groupby("instrument")["close"].transform(
+            lambda x: x.rolling(window=5, min_periods=1).mean()
         )
 
         assert "sma_5" in df.columns
@@ -49,12 +50,12 @@ class TestSimpleFactorComputation:
 
         # Step 1: Time-series features (Polars/Pandas)
         df = df.sort_values(["instrument", "date"])
-        df["returns_ma"] = df.group_by("instrument")["returns"].transform(
-            lambda x: x.rolling(window=10, min_samples=1).mean()
+        df["returns_ma"] = df.groupby("instrument")["returns"].transform(
+            lambda x: x.rolling(window=10, min_periods=1).mean()
         )
 
         # Step 2: Cross-sectional rank (would use DuckDB)
-        df["rank_volume"] = df.group_by("date")["volume"].rank(pct=True)
+        df["rank_volume"] = df.groupby("date")["volume"].rank(pct=True)
 
         # Step 3: Combine
         df["composite"] = df["returns_ma"] * df["rank_volume"]
@@ -74,8 +75,8 @@ class TestLargeScaleBatch:
         # Simulate computing 100 simple factors
         for i in range(10):  # 10 factors for test speed
             window = 5 + i
-            df[f"sma_{window}"] = df.group_by("instrument")["close"].transform(
-                lambda x: x.rolling(window=window, min_samples=1).mean()
+            df[f"sma_{window}"] = df.groupby("instrument")["close"].transform(
+                lambda x: x.rolling(window=window, min_periods=1).mean()
             )
 
         # Check all factors computed
@@ -103,6 +104,7 @@ class TestLargeScaleBatch:
                     required_properties=PhysicalProperties(),
                     state_contract=StateContract(),
                     estimated_rows=100_000,
+                    estimated_compute_ms=50.0,
                     estimated_memory_bytes=8_000_000,
                 )
             )
@@ -135,8 +137,8 @@ class TestLargeScaleBatch:
         # Compute several factors
         df = df.sort_values(["instrument", "date"])
         for i in range(5):
-            df[f"feature_{i}"] = df.group_by("instrument")["close"].transform(
-                lambda x: x.rolling(window=10+i, min_samples=1).mean()
+            df[f"feature_{i}"] = df.groupby("instrument")["close"].transform(
+                lambda x: x.rolling(window=10+i, min_periods=1).mean()
             )
 
         final_memory = df.memory_usage(deep=True).sum()
@@ -160,6 +162,7 @@ class TestMemoryConstrainedScenarios:
             required_properties=PhysicalProperties(),
             state_contract=StateContract(),
             estimated_rows=10_000_000,
+            estimated_compute_ms=50.0,
             estimated_memory_bytes=50_000_000,
             streaming_capable=True,
         )
@@ -196,12 +199,13 @@ class TestMemoryConstrainedScenarios:
             required_properties=PhysicalProperties(),
             state_contract=StateContract(),
             estimated_rows=100_000_000,
+            estimated_compute_ms=50.0,
             estimated_memory_bytes=8_000_000_000,  # 8GB
         )
 
         # Memory budget exceeded - would trigger spill
         memory_budget = 4_000_000_000  # 4GB
-        assert large_region.estimated_bytes > memory_budget
+        assert large_region.estimated_memory_bytes > memory_budget
 
     def test_batch_size_reduction_under_memory_pressure(self):
         """Test reducing batch size under memory pressure."""
@@ -232,6 +236,7 @@ class TestConcurrentExecution:
             required_properties=PhysicalProperties(),
             state_contract=StateContract(),
             estimated_rows=100_000,
+            estimated_compute_ms=50.0,
             estimated_memory_bytes=8_000_000,
         )
 
@@ -244,6 +249,7 @@ class TestConcurrentExecution:
             required_properties=PhysicalProperties(),
             state_contract=StateContract(),
             estimated_rows=100_000,
+            estimated_compute_ms=50.0,
             estimated_memory_bytes=8_000_000,
         )
 
@@ -276,6 +282,7 @@ class TestConcurrentExecution:
             required_properties=PhysicalProperties(),
             state_contract=StateContract(),
             estimated_rows=100_000,
+            estimated_compute_ms=50.0,
             estimated_memory_bytes=8_000_000,
         )
 
@@ -288,6 +295,7 @@ class TestConcurrentExecution:
             required_properties=PhysicalProperties(),
             state_contract=StateContract(),
             estimated_rows=100_000,
+            estimated_compute_ms=50.0,
             estimated_memory_bytes=6_000_000,
         )
 
@@ -300,8 +308,9 @@ class TestConcurrentExecution:
             source_representation=Representation.POLARS_LONG,
             target_representation=Representation.DUCKDB_RELATION,
             estimated_rows=100_000,
-            estimated_memory_bytes=800_000,
+            estimated_bytes=800_000,
             estimated_transfer_ms=15.0,
+            transform=TransferTransform.POLARS_TO_NUMPY,
         )
 
         plan = PhysicalRegionPlan(
@@ -342,6 +351,7 @@ class TestFailureRecovery:
                     required_properties=PhysicalProperties(),
                     state_contract=StateContract(),
                     estimated_rows=100_000,
+                    estimated_compute_ms=50.0,
                     estimated_memory_bytes=6_000_000,
                 ),
             ),
@@ -370,6 +380,7 @@ class TestFailureRecovery:
                     required_properties=PhysicalProperties(),
                     state_contract=StateContract(),
                     estimated_rows=100_000,
+                    estimated_compute_ms=50.0,
                     estimated_memory_bytes=8_000_000,
                 ),
             ),
@@ -405,6 +416,7 @@ class TestFailureRecovery:
             required_properties=PhysicalProperties(),
             state_contract=StateContract(),
             estimated_rows=100_000_000,
+            estimated_compute_ms=50.0,
             estimated_memory_bytes=1_000_000_000,
         )
 
@@ -439,6 +451,7 @@ class TestFailureRecovery:
             required_properties=PhysicalProperties(),
             state_contract=StateContract(),
             estimated_rows=100_000,
+            estimated_compute_ms=50.0,
             estimated_memory_bytes=8_000_000,
         )
 
@@ -451,6 +464,7 @@ class TestFailureRecovery:
             required_properties=PhysicalProperties(),
             state_contract=StateContract(),
             estimated_rows=100_000,
+            estimated_compute_ms=50.0,
             estimated_memory_bytes=6_000_000,
         )
 
@@ -463,6 +477,7 @@ class TestFailureRecovery:
             required_properties=PhysicalProperties(),
             state_contract=StateContract(),
             estimated_rows=100_000,
+            estimated_compute_ms=50.0,
             estimated_memory_bytes=7_000_000,
         )
 
@@ -470,7 +485,34 @@ class TestFailureRecovery:
         original_plan = PhysicalRegionPlan(
             plan_id="original",
             regions=(region1, region2_failed, region3),
-            edges=(),
+            edges=(
+                TransferEdge(
+                    edge_id="e12",
+                    producer_region="r1",
+                    consumer_region="r2",
+                    source_backend=PhysicalBackend.POLARS_PANEL,
+                    target_backend=PhysicalBackend.DUCKDB_SQL,
+                    source_representation=Representation.POLARS_LONG,
+                    target_representation=Representation.DUCKDB_RELATION,
+                    estimated_rows=100_000,
+                    estimated_bytes=8_000_000,
+                    estimated_transfer_ms=10.0,
+                    transform=TransferTransform.POLARS_TO_NUMPY,
+                ),
+                TransferEdge(
+                    edge_id="e23",
+                    producer_region="r2",
+                    consumer_region="r3",
+                    source_backend=PhysicalBackend.DUCKDB_SQL,
+                    target_backend=PhysicalBackend.POLARS_PANEL,
+                    source_representation=Representation.DUCKDB_RELATION,
+                    target_representation=Representation.POLARS_LONG,
+                    estimated_rows=100_000,
+                    estimated_bytes=7_000_000,
+                    estimated_transfer_ms=10.0,
+                    transform=TransferTransform.POLARS_TO_NUMPY,
+                ),
+            ),
             topological_order=("r1", "r2", "r3"),
             root_region_ids=("r3",),
             total_compute_ms=90.0,
@@ -512,7 +554,7 @@ class TestComplexDataFlows:
         df = sample_panel_data.copy()
 
         # Step 1: Aggregation (would use DuckDB)
-        daily_agg = df.group_by("date").agg({
+        daily_agg = df.groupby("date").agg({
             "close": "mean",
             "volume": "sum"
         }).reset_index()

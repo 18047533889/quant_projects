@@ -209,6 +209,13 @@ tests/            # 168 个测试文件，1808 个测试函数（contract/securi
 - **收益**：`return_bp` 单位是 bp（×1/10000）；下游标签一律 **vwap-to-vwap** 后复权
   （全平台硬性口径）
 - **PIT**：历史快照读走 PIT/asof，禁止未来函数；好得离谱的回测先查数据口径
+- **分钟 session 完整性**：`read/session_calendar.py` 提供
+  `MarketSession.expected_slots` / `expected_minutes`（A 股 09:31–11:30 /
+  13:01–15:00 精确 240 根 bar_end 槽位）与 `validate_session_bars`
+  （按 (TradeDate, Symbol) 对期望槽位逐项比对，单独报告 missing /
+  duplicates / off_session / unexpected；停牌命中 → NaN 不 abort，
+  非停牌损坏组 → quarantine / fail-closed）——旧 `assert_session_complete`
+  按日计数已不适用于多标的分钟面板（R61-P0 #60）
 - **写**：所有写必须走受控写链路（原子生成 + 发布指针），禁止直接写数据目录
 
 ## 依赖与接口（谁 import 谁）

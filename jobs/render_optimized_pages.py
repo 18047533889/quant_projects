@@ -33,7 +33,7 @@ sys.path.insert(0, str(PROJECT / "scripts" / "archive" / "jobs"))
 sys.path.insert(0, str(PROJECT / "jobs"))
 
 from quant_evaluator.metrics.ic import _spearman_rank_correlation
-from quant_evaluator.metrics.portfolio_stats import compute_wealth_curve
+from quant_evaluator.metrics.portfolio_stats import compute_wealth_curve, apply_long_short_costs
 
 # 中文字体
 _CN_FONT = "/home/sunhaiwei/.fonts/NotoSansSC-Regular.otf"
@@ -142,7 +142,7 @@ def plot_decile_compare(raw_mat, opt_mat, vwap, name, page_flipped=False):
         vv = vwap.reindex(index=common)
         cols = vv.columns.intersection(fv.columns)
         fv = fv[cols]; vv = vv[cols]
-        fwd = vv.pct_change().shift(-2)  # vwap-to-vwap（t+1成交→t+2卖出，企业级）
+        fwd = vv.pct_change(fill_method=None).shift(-2)  # vwap-to-vwap（t+1成交→t+2卖出，企业级）
         if page_flipped:
             fv = -fv
         ranks = fv.rank(axis=1, method='first', pct=True).values
@@ -201,7 +201,7 @@ def plot_ls_compare(raw_mat, opt_mat, vwap, name, page_flipped=False):
         vv = vwap.reindex(index=common)
         cols = vv.columns.intersection(fv.columns)
         fv = fv[cols]; vv = vv[cols]
-        fwd = vv.pct_change().shift(-2)  # vwap-to-vwap（t+1成交→t+2卖出，企业级）
+        fwd = vv.pct_change(fill_method=None).shift(-2)  # vwap-to-vwap（t+1成交→t+2卖出，企业级）
         if page_flipped:
             fv = -fv
         ranks = fv.rank(axis=1, method='first', pct=True).values
@@ -209,7 +209,8 @@ def plot_ls_compare(raw_mat, opt_mat, vwap, name, page_flipped=False):
         gids = np.floor(ranks * 10).clip(0, 9).astype(int)
         gids[~valid] = -1
         T = fv.shape[0]
-        gr = np.full((T, 10), np.nan)
+        gross = np.full((T, 10), np.nan)
+        turnover = np.full((T, 10), np.nan)
         prev_gids = np.full(fv.shape[1], -1)
         for t in range(T):
             for k in range(10):
@@ -220,9 +221,14 @@ def plot_ls_compare(raw_mat, opt_mat, vwap, name, page_flipped=False):
                         to_cost = (1.0 - same.mean()) * COST  # 单腿换手成本
                     else:
                         to_cost = 0.0
-                    gr[t, k] = np.nanmean(fwd.values[t, mk]) - to_cost
+                    gross[t, k] = np.nanmean(fwd.values[t, mk])
+                    turnover[t, k] = to_cost / COST if COST else 0.0
             prev_gids = gids[t].copy()
-        ls = gr[:, 9] - gr[:, 0]
+        ls = apply_long_short_costs(
+            gross[:, 9], gross[:, 0],
+            long_turnover=turnover[:, 9], short_turnover=turnover[:, 0],
+            cost_rate=COST,
+        )
         observed = np.isfinite(ls)
         return common[observed], compute_wealth_curve(ls[observed], missing_return_policy="drop")
     raw_common, raw = ls_nav(raw_mat)

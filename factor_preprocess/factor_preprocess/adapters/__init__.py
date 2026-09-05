@@ -7,6 +7,9 @@ All adapters are optional and fail gracefully if dependencies are missing.
 
 - **factor_assets**: Convert FactorSet to preprocessing input
 - **data_access**: Fetch exposure context (industry, sector, size, beta)
+- **fe_operator** (R61-FI-041): lazy FE-operator-backed execution for
+  stateless FP transforms whose math is a parity-proved FE duplicate
+  (implementation_origin="FE_OPERATOR"; FE is never a hard FP dependency)
 
 ## Usage
 

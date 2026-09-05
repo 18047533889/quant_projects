@@ -300,3 +300,108 @@ def test_compute_many_single_feature_equals_load_intraday_feature() -> None:
         rtol=1e-12,
         atol=1e-12,
     )
+
+
+class _CountingWideSource:
+    """InMemory-ish wide-frame source that counts physical ``load_columns`` calls.
+
+    Resolution happens through ``_has_column`` (no scan); the ONLY physical
+    scan is a single batch ``load_columns`` — so the scan count is exactly one
+    for a frame needing up to six columns (R61 P0 #61 regression).
+    """
+
+    def __init__(self, data: dict[str, pd.Series]) -> None:
+        self._data = data
+        self.scan_count = 0
+
+    def _has_column(self, name: str) -> bool:
+        return name in self._data
+
+    def load_column(self, name: str):
+        return self._data[name]
+
+    def load_columns(self, names: list[str]) -> dict[str, pd.Series]:
+        self.scan_count += 1
+        return {n: self._data[n] for n in names if n in self._data}
+
+
+def _counting_src(data: dict[str, pd.Series]) -> _CountingWideSource:
+    return _CountingWideSource(data)
+
+
+def test_wide_frame_is_exactly_one_physical_scan() -> None:
+    """R61 P0 #61: the 6-column wide frame must be ONE multi-column scan.
+
+    The old implementation called ``_load_field`` → ``load_column`` once per
+    field (up to 6 physical scans for one frame, plus N merges).  The fix
+    resolves all candidates once (plan-level, no scan) and reads the union in a
+    single ``load_columns`` batch.
+    """
+    from factor_engine.storage.sources.intraday_feature_extension import _wide_frame
+
+    rng = np.random.default_rng(61)
+    idx = pd.MultiIndex.from_tuples(
+        [
+            (pd.Timestamp("2024-01-02 09:31"), "A"),
+            (pd.Timestamp("2024-01-02 09:36"), "A"),
+            (pd.Timestamp("2024-01-02 09:31"), "B"),
+            (pd.Timestamp("2024-01-02 09:36"), "B"),
+        ],
+        names=["timestamp", "instrument"],
+    )
+    data = {
+        "Open": pd.Series(10.0 + rng.normal(0, 0.01, len(idx)), index=idx),
+        "High": pd.Series(11.0 + rng.normal(0, 0.01, len(idx)), index=idx),
+        "Low": pd.Series(9.0 + rng.normal(0, 0.01, len(idx)), index=idx),
+        "Close": pd.Series(10.5 + rng.normal(0, 0.01, len(idx)), index=idx),
+        "Volume": pd.Series(rng.integers(100, 500, len(idx)).astype(float), index=idx),
+        "Amount": pd.Series(rng.normal(1000, 50, len(idx)), index=idx),
+    }
+    src = _counting_src(data)
+    frame = _wide_frame(src)
+    assert set(frame.columns) == {
+        "timestamp", "instrument", "open", "high", "low", "close", "volume", "amount"
+    }
+    assert len(frame) == 4
+    # EXACTLY ONE physical multi-column scan for a 6-column frame.
+    assert src.scan_count == 1, f"scan_count={src.scan_count}"
+
+    # Each resolved column landed in the same physical scan (no per-column
+    # re-reads): values are bit-identical to the source series.
+    for key, phys in (
+        ("open", "Open"), ("high", "High"), ("low", "Low"),
+        ("close", "Close"), ("volume", "Volume"), ("amount", "Amount"),
+    ):
+        np.testing.assert_array_equal(frame[key].to_numpy(), data[phys].to_numpy())
+
+
+def test_wide_frame_single_scan_with_optional_column_missing() -> None:
+    """R61 P0 #61: an optional column absent from the source must NOT cause a
+    second scan — resolution is already a no-scan probe, and the one batch
+    simply omits it; the merge-identical fallback fills the column."""
+    from factor_engine.storage.sources.intraday_feature_extension import _wide_frame
+
+    rng = np.random.default_rng(2)
+    idx = pd.MultiIndex.from_tuples(
+        [
+            (pd.Timestamp("2024-01-02 09:31"), "A"),
+            (pd.Timestamp("2024-01-02 09:36"), "B"),
+        ],
+        names=["timestamp", "instrument"],
+    )
+    data = {
+        "Open": pd.Series(11.0 + rng.normal(0, 0.01, len(idx)), index=idx),
+        "High": pd.Series(12.0 + rng.normal(0, 0.01, len(idx)), index=idx),
+        "Low": pd.Series(10.0 + rng.normal(0, 0.01, len(idx)), index=idx),
+        "Close": pd.Series(11.5 + rng.normal(0, 0.01, len(idx)), index=idx),
+        "Volume": pd.Series(rng.integers(50, 200, len(idx)).astype(float), index=idx),
+        # "Amount" intentionally absent → merged-identical close*volume fallback.
+    }
+    src = _counting_src(data)
+    frame = _wide_frame(src)
+    assert "amount" in frame.columns
+    np.testing.assert_allclose(
+        frame["amount"].to_numpy(),
+        frame["close"].abs().to_numpy() * frame["volume"].to_numpy(),
+    )
+    assert src.scan_count == 1, f"scan_count={src.scan_count}"

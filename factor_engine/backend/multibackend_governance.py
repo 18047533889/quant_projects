@@ -850,7 +850,9 @@ class ResourceLeakDetector:
     """Resource leak detection (MB-P2-015)."""
 
     def __init__(self):
-        self._lock = threading.Lock()
+        # RLock: get_stats() holds the lock and calls detect_leaks(), which also
+        # acquires it — a plain Lock self-deadlocks on the first stats query.
+        self._lock = threading.RLock()
         self._handles: dict[str, ResourceHandle] = {}
         self._leak_threshold_seconds = 300  # 5 minutes
 

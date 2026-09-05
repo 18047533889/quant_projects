@@ -6,8 +6,24 @@ from typing import Any, Dict, List, Optional
 
 
 class DiagnosisKind(Enum):
-    """Kind of failure diagnosis."""
+    """Kind of failure diagnosis.
 
+    Legacy members (kept for migration compatibility, R61-D09/D19) are listed
+    first with their historical values:
+
+    - HIGH_COMPLEXITY, POOR_COVERAGE, HIGH_VARIANCE, LOW_SIGNAL,
+      HIGH_TURNOVER, TIMING_VIOLATION, DOMAIN_MISMATCH,
+      NUMERICAL_INSTABILITY, SEMANTIC_DUPLICATE, OVERFITTING.
+
+    R61-FI-034 extends the taxonomy to the full plan E2 vocabulary.  Newer
+    members reuse the historical value where one already carried the semantic
+    (POOR_COVERAGE/LOW_SIGNAL/HIGH_TURNOVER/NUMERICAL_INSTABILITY/
+    SEMANTIC_DUPLICATE/HIGH_COMPLEXITY are kept as the canonical E2 name) and
+    add the remaining 23 plan E2 kinds with snake_case values derived from
+    their upper-snake canonical name.
+    """
+
+    # -- legacy vocabulary (migration compatibility) -----------------------
     HIGH_COMPLEXITY = "high_complexity"  # Exceeds compute/memory budget
     POOR_COVERAGE = "poor_coverage"  # Insufficient valid data points
     HIGH_VARIANCE = "high_variance"  # Unstable across periods
@@ -18,6 +34,123 @@ class DiagnosisKind(Enum):
     NUMERICAL_INSTABILITY = "numerical_instability"  # NaN/Inf production
     SEMANTIC_DUPLICATE = "semantic_duplicate"  # Equivalent to existing factor
     OVERFITTING = "overfitting"  # Train/test performance gap
+
+    # -- R61-FI-034 plan E2 extension (canonical E2 vocabulary) -------------
+    # Integrity / data quality
+    INTEGRITY_FAILURE = "integrity_failure"
+    PIT_VIOLATION = "pit_violation"
+    LABEL_TIMING_VIOLATION = "label_timing_violation"
+    DATA_QUALITY_FAILURE = "data_quality_failure"
+    STALE_DATA = "stale_data"
+    HIGH_TIE_RATIO = "high_tie_ratio"
+    SPARSE_FACTOR = "sparse_factor"
+    # Predictive / stability / generalization
+    LOW_PREDICTIVE = "low_predictive"
+    UNSTABLE_IC = "unstable_ic"
+    RECENT_DEGRADATION = "recent_degradation"
+    OVERFIT_GENERALIZATION = "overfit_generalization"
+    LOW_STATISTICAL_CONFIDENCE = "low_statistical_confidence"
+    # Shape
+    U_SHAPE = "u_shape"
+    INVERTED_U = "inverted_u"
+    TOP_TAIL_COLLAPSE = "top_tail_collapse"
+    BOTTOM_TAIL_COLLAPSE = "bottom_tail_collapse"
+    TAIL_ONLY = "tail_only"
+    NONSTATIONARY_SHAPE = "nonstationary_shape"
+    # Portfolio economics
+    HIGH_COST_DRAG = "high_cost_drag"
+    LOW_CAPACITY = "low_capacity"
+    HIGH_DRAWDOWN = "high_drawdown"
+    LONG_UNDERWATER = "long_underwater"
+    NEGATIVE_TAIL_RISK = "negative_tail_risk"
+    REGIME_DEPENDENT = "regime_dependent"
+    # Exposure / purity
+    SIZE_EXPOSURE = "size_exposure"
+    INDUSTRY_EXPOSURE = "industry_exposure"
+    BETA_EXPOSURE = "beta_exposure"
+    LIQUIDITY_EXPOSURE = "liquidity_exposure"
+    VOLATILITY_EXPOSURE = "volatility_exposure"
+    MULTI_STYLE_EXPOSURE = "multi_style_exposure"
+    # Novelty / redundancy / complexity
+    VALUE_NEAR_DUPLICATE = "value_near_duplicate"
+    LOW_NOVELTY = "low_novelty"
+
+    @classmethod
+    def canonical_names(cls) -> tuple[str, ...]:
+        """Upper-snake canonical E2 diagnosis kind names (plan E2/FA C7).
+
+        These are the names FO consumes from the FA diagnosis engine
+        (``factor_assets.profiling.diagnosis.DIAGNOSIS_TAGS`` upper-snake
+        tokens).  Every member's ``canonical_name`` is a member of this set.
+        """
+        return tuple(sorted(m.canonical_name() for m in cls))
+
+    def canonical_name(self) -> str:
+        """Upper-snake canonical name (e.g. ``HIGH_TURNOVER``)."""
+        return self.name
+
+
+class DiagnosisCategory(Enum):
+    """Functional grouping of diagnosis kinds (plan E2 taxonomy families)."""
+
+    INTEGRITY = "integrity"
+    DATA_QUALITY = "data_quality"
+    PREDICTIVE = "predictive"
+    STABILITY = "stability"
+    GENERALIZATION = "generalization"
+    SHAPE = "shape"
+    TRADABILITY = "tradability"
+    DRAWDOWN_RISK = "drawdown_risk"
+    EXPOSURE = "exposure"
+    NOVELTY_REDUNDANCY = "novelty_redundancy"
+    COMPLEXITY = "complexity"
+
+
+#: Canonical category assignment for every DiagnosisKind member.
+DIAGNOSIS_CATEGORY: Dict[DiagnosisKind, DiagnosisCategory] = {
+    DiagnosisKind.INTEGRITY_FAILURE: DiagnosisCategory.INTEGRITY,
+    DiagnosisKind.PIT_VIOLATION: DiagnosisCategory.INTEGRITY,
+    DiagnosisKind.LABEL_TIMING_VIOLATION: DiagnosisCategory.INTEGRITY,
+    DiagnosisKind.DATA_QUALITY_FAILURE: DiagnosisCategory.DATA_QUALITY,
+    DiagnosisKind.POOR_COVERAGE: DiagnosisCategory.DATA_QUALITY,
+    DiagnosisKind.STALE_DATA: DiagnosisCategory.DATA_QUALITY,
+    DiagnosisKind.HIGH_TIE_RATIO: DiagnosisCategory.DATA_QUALITY,
+    DiagnosisKind.SPARSE_FACTOR: DiagnosisCategory.DATA_QUALITY,
+    DiagnosisKind.NUMERICAL_INSTABILITY: DiagnosisCategory.DATA_QUALITY,
+    DiagnosisKind.LOW_SIGNAL: DiagnosisCategory.PREDICTIVE,
+    DiagnosisKind.LOW_PREDICTIVE: DiagnosisCategory.PREDICTIVE,
+    DiagnosisKind.UNSTABLE_IC: DiagnosisCategory.STABILITY,
+    DiagnosisKind.HIGH_VARIANCE: DiagnosisCategory.STABILITY,
+    DiagnosisKind.RECENT_DEGRADATION: DiagnosisCategory.STABILITY,
+    DiagnosisKind.OVERFITTING: DiagnosisCategory.GENERALIZATION,
+    DiagnosisKind.OVERFIT_GENERALIZATION: DiagnosisCategory.GENERALIZATION,
+    DiagnosisKind.LOW_STATISTICAL_CONFIDENCE: DiagnosisCategory.STABILITY,
+    DiagnosisKind.U_SHAPE: DiagnosisCategory.SHAPE,
+    DiagnosisKind.INVERTED_U: DiagnosisCategory.SHAPE,
+    DiagnosisKind.TOP_TAIL_COLLAPSE: DiagnosisCategory.SHAPE,
+    DiagnosisKind.BOTTOM_TAIL_COLLAPSE: DiagnosisCategory.SHAPE,
+    DiagnosisKind.TAIL_ONLY: DiagnosisCategory.SHAPE,
+    DiagnosisKind.NONSTATIONARY_SHAPE: DiagnosisCategory.SHAPE,
+    DiagnosisKind.HIGH_TURNOVER: DiagnosisCategory.TRADABILITY,
+    DiagnosisKind.HIGH_COST_DRAG: DiagnosisCategory.TRADABILITY,
+    DiagnosisKind.LOW_CAPACITY: DiagnosisCategory.TRADABILITY,
+    DiagnosisKind.HIGH_DRAWDOWN: DiagnosisCategory.DRAWDOWN_RISK,
+    DiagnosisKind.LONG_UNDERWATER: DiagnosisCategory.DRAWDOWN_RISK,
+    DiagnosisKind.NEGATIVE_TAIL_RISK: DiagnosisCategory.DRAWDOWN_RISK,
+    DiagnosisKind.REGIME_DEPENDENT: DiagnosisCategory.STABILITY,
+    DiagnosisKind.SIZE_EXPOSURE: DiagnosisCategory.EXPOSURE,
+    DiagnosisKind.INDUSTRY_EXPOSURE: DiagnosisCategory.EXPOSURE,
+    DiagnosisKind.BETA_EXPOSURE: DiagnosisCategory.EXPOSURE,
+    DiagnosisKind.LIQUIDITY_EXPOSURE: DiagnosisCategory.EXPOSURE,
+    DiagnosisKind.VOLATILITY_EXPOSURE: DiagnosisCategory.EXPOSURE,
+    DiagnosisKind.MULTI_STYLE_EXPOSURE: DiagnosisCategory.EXPOSURE,
+    DiagnosisKind.DOMAIN_MISMATCH: DiagnosisCategory.INTEGRITY,
+    DiagnosisKind.SEMANTIC_DUPLICATE: DiagnosisCategory.NOVELTY_REDUNDANCY,
+    DiagnosisKind.VALUE_NEAR_DUPLICATE: DiagnosisCategory.NOVELTY_REDUNDANCY,
+    DiagnosisKind.LOW_NOVELTY: DiagnosisCategory.NOVELTY_REDUNDANCY,
+    DiagnosisKind.HIGH_COMPLEXITY: DiagnosisCategory.COMPLEXITY,
+    DiagnosisKind.TIMING_VIOLATION: DiagnosisCategory.INTEGRITY,
+}
 
 
 class RepairStrategy(Enum):
@@ -36,6 +169,62 @@ class RepairStrategy(Enum):
     WINSORIZE = "winsorize"  # Add outlier capping
     LAG_CORRECTION = "lag_correction"  # Adjust timing/alignment
     ABANDON = "abandon"  # No repair available
+
+
+#: Canonical order-independent set of the 33 plan-E2 upper-snake diagnosis
+#: kind names.  FO consumes upper-snake tag strings from the FA diagnosis
+#: engine (``factor_assets.profiling.diagnosis.DIAGNOSIS_TAGS``) and must not
+#: need a QE/FA import to validate/route them.
+PLAN_E2_DIAGNOSIS_NAMES: tuple[str, ...] = (
+    # integrity / data quality
+    "INTEGRITY_FAILURE",
+    "PIT_VIOLATION",
+    "LABEL_TIMING_VIOLATION",
+    "DATA_QUALITY_FAILURE",
+    "POOR_COVERAGE",
+    "STALE_DATA",
+    "HIGH_TIE_RATIO",
+    "SPARSE_FACTOR",
+    "NUMERICAL_INSTABILITY",
+    # predictive / stability / generalization
+    "LOW_PREDICTIVE",
+    "UNSTABLE_IC",
+    "RECENT_DEGRADATION",
+    "OVERFIT_GENERALIZATION",
+    "LOW_STATISTICAL_CONFIDENCE",
+    # shape
+    "U_SHAPE",
+    "INVERTED_U",
+    "TOP_TAIL_COLLAPSE",
+    "BOTTOM_TAIL_COLLAPSE",
+    "TAIL_ONLY",
+    "NONSTATIONARY_SHAPE",
+    # portfolio economics
+    "HIGH_TURNOVER",
+    "HIGH_COST_DRAG",
+    "LOW_CAPACITY",
+    "HIGH_DRAWDOWN",
+    "LONG_UNDERWATER",
+    "NEGATIVE_TAIL_RISK",
+    "REGIME_DEPENDENT",
+    # exposure / purity
+    "SIZE_EXPOSURE",
+    "INDUSTRY_EXPOSURE",
+    "BETA_EXPOSURE",
+    "LIQUIDITY_EXPOSURE",
+    "VOLATILITY_EXPOSURE",
+    "MULTI_STYLE_EXPOSURE",
+    # novelty / redundancy / complexity
+    "SEMANTIC_DUPLICATE",
+    "VALUE_NEAR_DUPLICATE",
+    "LOW_NOVELTY",
+    "HIGH_COMPLEXITY",
+)
+
+
+def canonical_diagnosis_name(kind: DiagnosisKind) -> str:
+    """Upper-snake canonical E2 name of a DiagnosisKind."""
+    return kind.canonical_name()
 
 
 @dataclass

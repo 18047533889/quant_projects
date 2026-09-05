@@ -41,6 +41,49 @@ def compute_wealth_curve(
     return np.cumprod(1.0 + values)
 
 
+def compute_aligned_wealth_curve(returns: np.ndarray) -> np.ndarray:
+    """Return a time-aligned wealth curve with gaps on unobserved periods.
+
+    Missing returns never become zero-return observations.  The last observed
+    wealth is retained internally so the next valid period can continue, while
+    the missing position itself remains NaN for charts and coverage checks.
+    """
+    values = np.asarray(returns, dtype=np.float64)
+    if values.ndim != 1:
+        raise ValueError(f"returns must be one-dimensional, got {values.ndim}D")
+    out = np.full(values.shape, np.nan, dtype=np.float64)
+    wealth = 1.0
+    for index, value in enumerate(values):
+        if not np.isfinite(value):
+            continue
+        wealth *= 1.0 + float(value)
+        if wealth <= 0.0:
+            break
+        out[index] = wealth
+    return out
+
+
+def apply_long_short_costs(
+    long_returns: np.ndarray,
+    short_returns: np.ndarray,
+    *,
+    long_turnover: np.ndarray,
+    short_turnover: np.ndarray,
+    cost_rate: float,
+) -> np.ndarray:
+    """Compute net long-short returns and charge turnover on both legs."""
+    arrays = [
+        np.asarray(value, dtype=np.float64)
+        for value in (long_returns, short_returns, long_turnover, short_turnover)
+    ]
+    if len({value.shape for value in arrays}) != 1:
+        raise ValueError("returns and turnover arrays must have matching shapes")
+    if cost_rate < 0 or not np.isfinite(cost_rate):
+        raise ValueError("cost_rate must be a finite non-negative fraction")
+    long_ret, short_ret, long_to, short_to = arrays
+    return long_ret - short_ret - cost_rate * (long_to + short_to)
+
+
 def _validate_missing_return_policy(policy: str) -> str:
     if policy not in _MISSING_RETURN_POLICIES:
         raise ValueError(

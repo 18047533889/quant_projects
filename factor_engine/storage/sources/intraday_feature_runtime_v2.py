@@ -234,6 +234,100 @@ def _source_signature(source: Any, dataset: str, history_days: int) -> tuple[Any
     )
 
 
+def _suspension_calendar_child(source: Any) -> Any:
+    """构造读日频停牌日历（``ashare_stock_daily.IsSuspend``）的 child source。
+
+    继承父 source 的 start/end/instrument_filter（同分钟面板窗口），读
+    ``StockDailyBar`` 的 ``IsSuspend``。停牌是**当日已知状态**（日频 bar 收盘后
+    更新），对当日分钟因子是 knowledge-safe；PIT/回测上游如需严格 asof 语义，
+    由调用方注入自己的 ``expected_suspension_fn``。
+    """
+    inner = getattr(source, "inner", None) or source
+    from .data_access_source import DataAccessSource
+
+    return DataAccessSource(
+        dataset="ashare_stock_daily",
+        start_date=getattr(inner, "start_date", None),
+        end_date=getattr(inner, "end_date", None),
+        instrument_filter=getattr(inner, "instrument_filter", None),
+        run_mode=getattr(inner, "run_mode", None),
+        production=getattr(inner, "production", None),
+        strict_unknown_fields=getattr(inner, "strict_unknown_fields", None),
+    )
+
+
+def _default_suspension_fn(source: Any, dataset: str) -> Any | None:
+    """从 ``ashare_stock_daily.IsSuspend``（TradeDate, Symbol）构建停牌判定函数。
+
+    停牌语义（与 factor_engine/market/universe.py 一致）：``IsSuspend`` 为
+    EventBool，1 = 停牌、0 = 可交易、NaN = 未知。返回值
+    ``fn(TradeDate, Symbol) -> bool``：该 (日, 票) 在停牌日历上。
+    读不到（数据集未注册 / 读取失败）返回 None —— 没有停牌知识时调用方
+    只能把「缺 bar」按真实缺陷 quarantine（fail-closed），绝不把停牌当安全。
+
+    ``source`` 的窗口（start/end/instrument_filter）决定了读哪段日频停牌日历；
+    ``dataset`` 仅用于继承运行时窗口（分钟面板自身没有 IsSuspend 列）。
+    """
+    try:
+        # 继承 source 的 start/end/instrument_filter，把窗口打到日频停牌日历上。
+        child = _suspension_calendar_child(source)
+        raw = child.load_column("IsSuspend")
+    except Exception:
+        return None
+    if raw is None:
+        return None
+    suspend_values: dict[tuple[Any, Any], bool] = {}
+    try:
+        series = pd.to_datetime(raw.index.get_level_values(0))
+        instruments = raw.index.get_level_values(1)
+        values = pd.to_numeric(raw.to_numpy(), errors="coerce")
+    except Exception:
+        return None
+    for i in range(len(raw)):
+        val = values[i]
+        if pd.isna(val):
+            continue
+        suspend_values[(series[i].normalize(), str(instruments[i]))] = bool(val != 0)
+    if not suspend_values:
+        return None
+
+    def _fn(day: Any, symbol: Any) -> bool:
+        return suspend_values.get(
+            (pd.Timestamp(day).normalize(), str(symbol)), False
+        )
+
+    return _fn
+
+
+def _store_session_gate_report(source: Any, report: Any) -> None:
+    """把 per-(TradeDate,Symbol) session 门禁报告挂到 source 上供审计/测试用。"""
+    if source is None:
+        return
+    try:
+        if hasattr(source, "_session_gate_report"):
+            source._session_gate_report = report
+    except Exception:
+        pass
+    try:
+        source._feature_runtime_session_gate_report = report
+    except Exception:
+        pass
+
+
+def _session_gate_report(source: Any) -> Any:  # noqa: ANN201
+    """读取上一步 ``_store_session_gate_report`` 挂载的报告（无则 None）。"""
+    if source is None:
+        return None
+    for name in ("_session_gate_report", "_feature_runtime_session_gate_report"):
+        try:
+            value = getattr(source, name, None)
+        except Exception:
+            continue
+        if value is not None:
+            return value
+    return None
+
+
 def _grouped_bars(
     source: Any,
     dataset: str,
@@ -245,6 +339,9 @@ def _grouped_bars(
     history_days: int,
     timestamp_convention: str,
     minimum_bars: int,
+    *,
+    session_require_full: bool = True,
+    expected_suspension_fn: Any = None,
 ):
     identity = _source_signature(source, dataset, history_days)
     key = (
@@ -265,29 +362,64 @@ def _grouped_bars(
     frame_key = identity
     frame_cache = _cache(source, "frame")
     if frame_key not in frame_cache:
+        # base._wide_frame does ONE physical multi-column scan for the whole
+        # wide frame (R61 P0 #61) — never a per-column load_column loop.
         frame_cache[frame_key] = base._wide_frame(source_child)
     frame = frame_cache[frame_key].copy()
     frame = base._hhmm_filter(frame, session_open, cutoff)
     frame["date"] = frame["timestamp"].dt.normalize()
 
-    # GO_PROMPT §3.9: A-share regular session is 09:31–11:30 / 13:01–15:00 =
-    # 240 one-minute bars (no 09:30/13:00 bar, no lunch bar).  A partial
-    # session must fail closed before any session-aware feature is computed —
-    # a missing bar would be treated as a real observation and skew rolling /
-    # pct_change / realized-vol features.  The completeness gate is applied to
-    # the raw minute timestamps (before resampling), so a sparse panel cannot
-    # hide behind ``min_coverage``.
+    # R61-P0 #60: per-(TradeDate,Symbol) exact-slot completeness gate.
+    #
+    # Old behaviour: ``assert_session_complete`` on ``frame["timestamp"]`` ALONE
+    # was a per-day count across ALL symbols — 5000×240 ≫ 240 always passed, and
+    # a single stock's missing/duplicate/off-session bar (12:30, 11:31, 15:01)
+    # was entirely invisible.  This gate validates each (TradeDate, Symbol)
+    # group against the EXACT expected slot set (09:31–11:30 / 13:01–15:00 =
+    # 240 one-minute labels, bar_end), reports missing/duplicates/off_session/
+    # unexpected SEPARATELY, and quarantines non-suspended broken groups before
+    # any session-aware feature is computed.
+    suspended_groups: frozenset[tuple[pd.Timestamp, str]] | None = None
     if dataset == "ashare_stock_minute":
+        from data_access.core.exceptions import ValidationError as SessionValidationError
         from data_access.read.session_calendar import get_market_session
 
+        if expected_suspension_fn is None:
+            expected_suspension_fn = _default_suspension_fn(source, dataset)
         session = get_market_session("ashare")
         if session is not None:
-            session.assert_session_complete(
+            report = session.validate_session_bars(
                 frame["timestamp"],
+                frame["instrument"],
+                frame["date"],
                 bar_freq="1min",
-                require_full=True,
+                end_cutoff=cutoff,
+                expected_suspension_fn=expected_suspension_fn,
                 context=f"intraday_feature minute panel {dataset!r}",
             )
+            _store_session_gate_report(source, report)
+            suspended_groups = frozenset(
+                key
+                for key, rep in report.items()
+                if rep.get("expected_suspension") and not rep.get("quarantine")
+            )
+            quarantined = {
+                key: rep
+                for key, rep in report.items()
+                if rep.get("quarantine")
+            }
+            if quarantined and session_require_full:
+                example = next(iter(quarantined))
+                ex = quarantined[example]
+                raise SessionValidationError(
+                    f"intraday_feature minute panel {dataset!r}: (TradeDate,Symbol) "
+                    f"session 不完整且非停牌 → quarantine. 共 {len(quarantined)} 组。"
+                    f"示例 {str(example[0].date())} {example[1]}: "
+                    f"missing={len(ex['missing'])} duplicates={len(ex['duplicates'])} "
+                    f"off_session={len(ex['off_session'])} unexpected={len(ex['unexpected'])}. "
+                    "停牌组已按 expected_suspension 放行；其余组 fail-closed "
+                    "(GO_PROMPT §3.9 / R61-P0 #60)。"
+                )
 
     usable_minutes = _effective_minutes(dataset, session_open, session_close, cutoff)
     if usable_minutes <= 0:
@@ -303,6 +435,16 @@ def _grouped_bars(
     for (date, instrument), raw_group in frame.groupby(
         ["date", "instrument"], sort=True
     ):
+        date_key = pd.Timestamp(date).normalize()
+        inst_key = str(instrument)
+        # R61-P0 #60: EXPECTED_SUSPENSION —— 该 (TradeDate, Symbol) 在停牌日历上，
+        # 其分钟 bar 一律不进入 grouped → 下游对齐后为 NaN（不 abort）。
+        if (
+            dataset == "ashare_stock_minute"
+            and suspended_groups is not None
+            and (date_key, inst_key) in suspended_groups
+        ):
+            continue
         bars = _clock_bars(
             raw_group,
             bar_minutes,
@@ -315,7 +457,7 @@ def _grouped_bars(
         observed = min(len(bars), expected)
         coverage = observed / expected
         if observed >= required and coverage >= min_coverage:
-            grouped.append((pd.Timestamp(date), str(instrument), bars.iloc[:expected]))
+            grouped.append((pd.Timestamp(date), inst_key, bars.iloc[:expected]))
 
     grouped_cache[key] = (source_child, grouped, expected)
     return grouped_cache[key]

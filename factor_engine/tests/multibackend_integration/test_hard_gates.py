@@ -17,6 +17,7 @@ from factor_engine.planner.backend_region import (
     Representation,
     BackendRegion,
     TransferEdge,
+    TransferTransform,
     PhysicalRegionPlan,
     ExecutionAxis,
     PhysicalProperties,
@@ -159,6 +160,7 @@ class TestRegionBoundaryPITPreserved:
             estimated_rows=100_000,
             estimated_bytes=800_000,
             estimated_transfer_ms=10.0,
+            transform=TransferTransform.POLARS_TO_NUMPY,
         )
 
         # Default should preserve PIT
@@ -177,6 +179,7 @@ class TestRegionBoundaryPITPreserved:
             estimated_rows=100_000,
             estimated_bytes=800_000,
             estimated_transfer_ms=10.0,
+            transform=TransferTransform.POLARS_TO_NUMPY,
             preserves_pit=False,  # Explicitly marked
         )
 
@@ -195,12 +198,37 @@ class TestRegionBoundaryPITPreserved:
             estimated_rows=100_000,
             estimated_bytes=800_000,
             estimated_transfer_ms=10.0,
+            transform=TransferTransform.POLARS_TO_NUMPY,
             preserves_pit=True,
         )
 
+        region1 = BackendRegion(
+            region_id="r1",
+            backend=PhysicalBackend.POLARS_PANEL,
+            representation=Representation.POLARS_LONG,
+            node_ids=("n1",),
+            execution_axis=ExecutionAxis.TIME_PER_INSTRUMENT,
+            required_properties=PhysicalProperties(),
+            state_contract=StateContract(),
+            estimated_rows=100_000,
+            estimated_compute_ms=50.0,
+            estimated_memory_bytes=8_000_000,
+        )
+        region2 = BackendRegion(
+            region_id="r2",
+            backend=PhysicalBackend.DUCKDB_SQL,
+            representation=Representation.DUCKDB_RELATION,
+            node_ids=("n2",),
+            execution_axis=ExecutionAxis.RELATIONAL,
+            required_properties=PhysicalProperties(),
+            state_contract=StateContract(),
+            estimated_rows=100_000,
+            estimated_compute_ms=50.0,
+            estimated_memory_bytes=6_000_000,
+        )
         plan = PhysicalRegionPlan(
             plan_id="plan_003",
-            regions=(),
+            regions=(region1, region2),
             edges=(edge1,),
             topological_order=("r1", "r2"),
             root_region_ids=("r2",),

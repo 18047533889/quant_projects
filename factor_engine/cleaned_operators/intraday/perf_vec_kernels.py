@@ -10,6 +10,11 @@ equivalence harness (``factor_engine/tests/perf_intra_vec_equiv.py``) proves
 byte-equivalence (rtol/atol 1e-12) over random fixtures incl. NaN gaps and
 all-NaN days.  An unproven kernel is NOT whitelisted: ``daily_agg*`` falls
 back to the scalar path unchanged.
+
+R61-P1 #57: the sufficient-statistics family (``sufficient_stats_ops``) is
+bound the same way — its vector implementations in ``_core`` derive from the
+memoized per-frame sufficient-statistics bundle (one grid materialization per
+frame, O(1) per (day, inst) output) and are harness-proven (42/42).
 """
 from __future__ import annotations
 
@@ -65,6 +70,24 @@ def bind_whitelist(force: bool = True) -> list[str]:
         make_max_drawdown,
         make_drawdown_metric,
     )
+    from factor_engine.cleaned_operators.intraday.sufficient_stats_ops import (
+        _ts_sum,
+        _ts_mean,
+        _ts_variance,
+        _ts_std,
+        _ts_min,
+        _ts_max,
+        _ts_last,
+        _ts_first,
+        _ts_last_value,
+        _ts_argmax,
+        _ts_argmin,
+        _ts_realized_variance,
+        _ts_vwap,
+        _ts_volume_weighted_return,
+        _ts_realized_covariance,
+        _ts_amount_weighted_mean,
+    )
 
     # (scalar kernel, vector impl name) — a missing vector impl raises loudly
     # (fail-closed) rather than silently taking the scalar path.  The
@@ -85,6 +108,22 @@ def bind_whitelist(force: bool = True) -> list[str]:
         (_tripower_quarticity, "_vec_tripower_quarticity"),
         (_continuous_variance, "_vec_bipower_and_jump(continuous)"),
         (_jump_variation, "_vec_bipower_and_jump(jump)"),
+        (_ts_sum, "_vec_ts_sum"),
+        (_ts_mean, "_vec_ts_mean"),
+        (_ts_variance, "_vec_ts_variance"),
+        (_ts_std, "_vec_ts_std"),
+        (_ts_min, "_vec_ts_min"),
+        (_ts_max, "_vec_ts_max"),
+        (_ts_last, "_vec_ts_last"),
+        (_ts_first, "_vec_ts_first"),
+        (_ts_last_value, "_vec_ts_last"),
+        (_ts_argmax, "_vec_ts_argmax"),
+        (_ts_argmin, "_vec_ts_argmin"),
+        (_ts_realized_variance, "_vec_ts_realized_variance"),
+        (_ts_vwap, "_vec_ts_vwap"),
+        (_ts_volume_weighted_return, "_vec_ts_volume_weighted_return"),
+        (_ts_realized_covariance, "_vec_ts_realized_covariance"),
+        (_ts_amount_weighted_mean, "_vec_ts_amount_weighted_mean"),
     ]
     bound: list[str] = []
     _bound_fns = []
@@ -141,6 +180,22 @@ def bind_whitelist(force: bool = True) -> list[str]:
         "higher_moments:intra_tripower_quarticity[min_finite]",
         "higher_moments:intra_continuous_variance[min_finite]",
         "higher_moments:intra_jump_variation[min_finite]",
+        "sufficient_stats:intra_ts_sum[min_finite]",
+        "sufficient_stats:intra_ts_mean[min_finite]",
+        "sufficient_stats:intra_ts_variance[min_finite]",
+        "sufficient_stats:intra_ts_std[min_finite]",
+        "sufficient_stats:intra_ts_min[min_finite]",
+        "sufficient_stats:intra_ts_max[min_finite]",
+        "sufficient_stats:intra_ts_last[min_finite]",
+        "sufficient_stats:intra_ts_first[min_finite]",
+        "sufficient_stats:intra_ts_last_value[min_finite]",
+        "sufficient_stats:intra_ts_argmax[min_finite]",
+        "sufficient_stats:intra_ts_argmin[min_finite]",
+        "sufficient_stats:intra_ts_realized_variance[min_finite]",
+        "sufficient_stats:intra_ts_vwap[min_finite]",
+        "sufficient_stats:intra_ts_volume_weighted_return[min_finite]",
+        "sufficient_stats:intra_ts_realized_covariance[min_finite]",
+        "sufficient_stats:intra_ts_amount_weighted_mean[min_finite]",
     ]
 
 

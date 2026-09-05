@@ -23,6 +23,20 @@ from .treatment_integrity import (
     digest_value,
     require_integrity_evidence,
 )
+from .evidence_value import (
+    EvidenceStatus,
+    EvidenceTier,
+    EvidenceValue,
+    EvidenceSeries,
+    EVIDENCE_TIER_ORDER,
+    QE_STATUS_TOKENS,
+    status_of,
+)
+from .factor_fitness import (
+    FactorFitnessSpec,
+    CandidateFitnessArtifact,
+    MIN_EVIDENCE_TIER_LEVELS,
+)
 
 __all__ = [
     "CandidateMutation",
@@ -49,4 +63,15 @@ __all__ = [
     "describe_integrity_problem",
     "digest_value",
     "require_integrity_evidence",
+    # R61-FI-030/031: evidence-bound values + fitness contracts
+    "EvidenceStatus",
+    "EvidenceTier",
+    "EvidenceValue",
+    "EvidenceSeries",
+    "EVIDENCE_TIER_ORDER",
+    "QE_STATUS_TOKENS",
+    "status_of",
+    "FactorFitnessSpec",
+    "CandidateFitnessArtifact",
+    "MIN_EVIDENCE_TIER_LEVELS",
 ]

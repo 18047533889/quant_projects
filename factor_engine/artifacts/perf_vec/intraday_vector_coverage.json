@@ -1,8 +1,8 @@
 {
   "schema": "intraday_vector_coverage/v1",
   "version": "1.0.0",
-  "generated_at": "a07ea23020f86f4a63f50f67ec5b0ae1023b5b22",
-  "bound_count": 13,
+  "generated_at": "a18156566bb5c56504e4a6794dc1361346bf1877",
+  "bound_count": 29,
   "operators": [
     {
       "canonical": "intra_common_trading_intensity",
@@ -199,6 +199,294 @@
           "arg_expr": "_tripower_quarticity",
           "route_kind": "module-level-fn",
           "line": 222
+        }
+      ]
+    },
+    {
+      "canonical": "intra_ts_amount_weighted_mean",
+      "scalar_impl": "sufficient_stats_ops:proven-scalar-kernel",
+      "vector_impl": "_vec_ts_amount_weighted_mean",
+      "vector_bound": true,
+      "vector_equivalence": "harness-proven (rtol/atol 1e-12)",
+      "fallback_reason": null,
+      "routes": [
+        {
+          "canonical": "intra_ts_amount_weighted_mean",
+          "module": "sufficient_stats_ops",
+          "aggf": "daily_agg_two",
+          "arg_expr": "_ts_amount_weighted_mean",
+          "route_kind": "module-level-fn",
+          "line": 0
+        }
+      ]
+    },
+    {
+      "canonical": "intra_ts_argmax",
+      "scalar_impl": "sufficient_stats_ops:proven-scalar-kernel",
+      "vector_impl": "_vec_ts_argmax",
+      "vector_bound": true,
+      "vector_equivalence": "harness-proven (rtol/atol 1e-12)",
+      "fallback_reason": null,
+      "routes": [
+        {
+          "canonical": "intra_ts_argmax",
+          "module": "sufficient_stats_ops",
+          "aggf": "daily_agg",
+          "arg_expr": "_ts_argmax",
+          "route_kind": "module-level-fn",
+          "line": 0
+        }
+      ]
+    },
+    {
+      "canonical": "intra_ts_argmin",
+      "scalar_impl": "sufficient_stats_ops:proven-scalar-kernel",
+      "vector_impl": "_vec_ts_argmin",
+      "vector_bound": true,
+      "vector_equivalence": "harness-proven (rtol/atol 1e-12)",
+      "fallback_reason": null,
+      "routes": [
+        {
+          "canonical": "intra_ts_argmin",
+          "module": "sufficient_stats_ops",
+          "aggf": "daily_agg",
+          "arg_expr": "_ts_argmin",
+          "route_kind": "module-level-fn",
+          "line": 0
+        }
+      ]
+    },
+    {
+      "canonical": "intra_ts_first",
+      "scalar_impl": "sufficient_stats_ops:proven-scalar-kernel",
+      "vector_impl": "_vec_ts_first",
+      "vector_bound": true,
+      "vector_equivalence": "harness-proven (rtol/atol 1e-12)",
+      "fallback_reason": null,
+      "routes": [
+        {
+          "canonical": "intra_ts_first",
+          "module": "sufficient_stats_ops",
+          "aggf": "daily_agg",
+          "arg_expr": "_ts_first",
+          "route_kind": "module-level-fn",
+          "line": 0
+        }
+      ]
+    },
+    {
+      "canonical": "intra_ts_last",
+      "scalar_impl": "sufficient_stats_ops:proven-scalar-kernel",
+      "vector_impl": "_vec_ts_last",
+      "vector_bound": true,
+      "vector_equivalence": "harness-proven (rtol/atol 1e-12)",
+      "fallback_reason": null,
+      "routes": [
+        {
+          "canonical": "intra_ts_last",
+          "module": "sufficient_stats_ops",
+          "aggf": "daily_agg",
+          "arg_expr": "_ts_last",
+          "route_kind": "module-level-fn",
+          "line": 0
+        }
+      ]
+    },
+    {
+      "canonical": "intra_ts_last_value",
+      "scalar_impl": "sufficient_stats_ops:proven-scalar-kernel",
+      "vector_impl": "_vec_ts_last",
+      "vector_bound": true,
+      "vector_equivalence": "harness-proven (rtol/atol 1e-12)",
+      "fallback_reason": null,
+      "routes": [
+        {
+          "canonical": "intra_ts_last_value",
+          "module": "sufficient_stats_ops",
+          "aggf": "daily_agg_two",
+          "arg_expr": "_ts_last_value",
+          "route_kind": "module-level-fn",
+          "line": 0
+        }
+      ]
+    },
+    {
+      "canonical": "intra_ts_max",
+      "scalar_impl": "sufficient_stats_ops:proven-scalar-kernel",
+      "vector_impl": "_vec_ts_max",
+      "vector_bound": true,
+      "vector_equivalence": "harness-proven (rtol/atol 1e-12)",
+      "fallback_reason": null,
+      "routes": [
+        {
+          "canonical": "intra_ts_max",
+          "module": "sufficient_stats_ops",
+          "aggf": "daily_agg",
+          "arg_expr": "_ts_max",
+          "route_kind": "module-level-fn",
+          "line": 0
+        }
+      ]
+    },
+    {
+      "canonical": "intra_ts_mean",
+      "scalar_impl": "sufficient_stats_ops:proven-scalar-kernel",
+      "vector_impl": "_vec_ts_mean",
+      "vector_bound": true,
+      "vector_equivalence": "harness-proven (rtol/atol 1e-12)",
+      "fallback_reason": null,
+      "routes": [
+        {
+          "canonical": "intra_ts_mean",
+          "module": "sufficient_stats_ops",
+          "aggf": "daily_agg",
+          "arg_expr": "_ts_mean",
+          "route_kind": "module-level-fn",
+          "line": 0
+        }
+      ]
+    },
+    {
+      "canonical": "intra_ts_min",
+      "scalar_impl": "sufficient_stats_ops:proven-scalar-kernel",
+      "vector_impl": "_vec_ts_min",
+      "vector_bound": true,
+      "vector_equivalence": "harness-proven (rtol/atol 1e-12)",
+      "fallback_reason": null,
+      "routes": [
+        {
+          "canonical": "intra_ts_min",
+          "module": "sufficient_stats_ops",
+          "aggf": "daily_agg",
+          "arg_expr": "_ts_min",
+          "route_kind": "module-level-fn",
+          "line": 0
+        }
+      ]
+    },
+    {
+      "canonical": "intra_ts_realized_covariance",
+      "scalar_impl": "sufficient_stats_ops:proven-scalar-kernel",
+      "vector_impl": "_vec_ts_realized_covariance",
+      "vector_bound": true,
+      "vector_equivalence": "harness-proven (rtol/atol 1e-12)",
+      "fallback_reason": null,
+      "routes": [
+        {
+          "canonical": "intra_ts_realized_covariance",
+          "module": "sufficient_stats_ops",
+          "aggf": "daily_agg_two",
+          "arg_expr": "_ts_realized_covariance",
+          "route_kind": "module-level-fn",
+          "line": 0
+        }
+      ]
+    },
+    {
+      "canonical": "intra_ts_realized_variance",
+      "scalar_impl": "sufficient_stats_ops:proven-scalar-kernel",
+      "vector_impl": "_vec_ts_realized_variance",
+      "vector_bound": true,
+      "vector_equivalence": "harness-proven (rtol/atol 1e-12)",
+      "fallback_reason": null,
+      "routes": [
+        {
+          "canonical": "intra_ts_realized_variance",
+          "module": "sufficient_stats_ops",
+          "aggf": "daily_agg_two",
+          "arg_expr": "_ts_realized_variance",
+          "route_kind": "module-level-fn",
+          "line": 0
+        }
+      ]
+    },
+    {
+      "canonical": "intra_ts_std",
+      "scalar_impl": "sufficient_stats_ops:proven-scalar-kernel",
+      "vector_impl": "_vec_ts_std",
+      "vector_bound": true,
+      "vector_equivalence": "harness-proven (rtol/atol 1e-12)",
+      "fallback_reason": null,
+      "routes": [
+        {
+          "canonical": "intra_ts_std",
+          "module": "sufficient_stats_ops",
+          "aggf": "daily_agg",
+          "arg_expr": "_ts_std",
+          "route_kind": "module-level-fn",
+          "line": 0
+        }
+      ]
+    },
+    {
+      "canonical": "intra_ts_sum",
+      "scalar_impl": "sufficient_stats_ops:proven-scalar-kernel",
+      "vector_impl": "_vec_ts_sum",
+      "vector_bound": true,
+      "vector_equivalence": "harness-proven (rtol/atol 1e-12)",
+      "fallback_reason": null,
+      "routes": [
+        {
+          "canonical": "intra_ts_sum",
+          "module": "sufficient_stats_ops",
+          "aggf": "daily_agg",
+          "arg_expr": "_ts_sum",
+          "route_kind": "module-level-fn",
+          "line": 0
+        }
+      ]
+    },
+    {
+      "canonical": "intra_ts_variance",
+      "scalar_impl": "sufficient_stats_ops:proven-scalar-kernel",
+      "vector_impl": "_vec_ts_variance",
+      "vector_bound": true,
+      "vector_equivalence": "harness-proven (rtol/atol 1e-12)",
+      "fallback_reason": null,
+      "routes": [
+        {
+          "canonical": "intra_ts_variance",
+          "module": "sufficient_stats_ops",
+          "aggf": "daily_agg",
+          "arg_expr": "_ts_variance",
+          "route_kind": "module-level-fn",
+          "line": 0
+        }
+      ]
+    },
+    {
+      "canonical": "intra_ts_volume_weighted_return",
+      "scalar_impl": "sufficient_stats_ops:proven-scalar-kernel",
+      "vector_impl": "_vec_ts_volume_weighted_return",
+      "vector_bound": true,
+      "vector_equivalence": "harness-proven (rtol/atol 1e-12)",
+      "fallback_reason": null,
+      "routes": [
+        {
+          "canonical": "intra_ts_volume_weighted_return",
+          "module": "sufficient_stats_ops",
+          "aggf": "daily_agg_two",
+          "arg_expr": "_ts_volume_weighted_return",
+          "route_kind": "module-level-fn",
+          "line": 0
+        }
+      ]
+    },
+    {
+      "canonical": "intra_ts_vwap",
+      "scalar_impl": "sufficient_stats_ops:proven-scalar-kernel",
+      "vector_impl": "_vec_ts_vwap",
+      "vector_bound": true,
+      "vector_equivalence": "harness-proven (rtol/atol 1e-12)",
+      "fallback_reason": null,
+      "routes": [
+        {
+          "canonical": "intra_ts_vwap",
+          "module": "sufficient_stats_ops",
+          "aggf": "daily_agg",
+          "arg_expr": "_ts_vwap",
+          "route_kind": "module-level-fn",
+          "line": 0
         }
       ]
     },
@@ -960,8 +1248,8 @@
     }
   ],
   "summary": {
-    "total": 53,
-    "vectorized": 13,
+    "total": 69,
+    "vectorized": 29,
     "scalar_only": 40
   }
 }

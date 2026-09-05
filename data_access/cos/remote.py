@@ -1253,9 +1253,13 @@ def _cache_mirror_spec(spec: MirrorSpec) -> MirrorSpec:
     without_scheme = cos.split("://", 1)[-1]
     parts = without_scheme.split("/", 1)
     rel = parts[1] if len(parts) > 1 else parts[0]
+    # R61-P1 #56：local_root 在**每次调用**时基于 ``cos_cache_root()`` 现算——
+    # 不能用模块 import 时的快照。调用方（测试）可在每次请求前改
+    # ``DATA_ACCESS_COS_CACHE_ROOT`` 指向独立 cache（每档冷启动）。
+    base = cos_cache_root()
     return MirrorSpec(
         cos_prefix=spec.cos_prefix,
-        local_root=cos_cache_root() / rel,
+        local_root=base / rel,
         table=spec.table,
         layout=spec.layout,
         file_name=spec.file_name,

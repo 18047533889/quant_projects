@@ -96,7 +96,7 @@ Factor(expr) → expr AST → ir.Analyzer → planner（Lowerer + Optimizer + CS
 | 物理规划 | `planning/` | 多后端物理 region 规划（Pandas/Polars/DuckDB/q 区域切分） |
 | 执行 | `backend/` | 11 个后端 + numba 内核 + SQL 下推 + q 后端（128 顶层 .py） |
 | 算子 | `cleaned_operators/` | **唯一 runtime 算子库**（447 .py，1737 canonical） |
-| 存储 | `storage/` | `build_data_source`、`DataSource`、parquet/CH/long_table 源、物化/落盘/发布门 |
+| 存储 | `storage/` | `build_data_source`、`DataSource`、parquet/CH/long_table 源、物化/落盘/发布门。分钟→日 intraday_feature 运行时（`storage/sources/intraday_feature_runtime_v2.py`）在 `_grouped_bars` 对**每个 (TradeDate, Symbol)** 做精确槽位 session 完整性校验（R61-P0 #60）：A 股 09:31–11:30 / 13:01–15:00 共 240 根 bar_end；缺 bar/重复/盘外(12:30 等) 单独报告；停牌日历命中 → 该组 NaN 不 abort；非停牌损坏组 → quarantine，`session_require_full=True`（production 默认）fail-closed。停牌源 = `ashare_stock_daily.IsSuspend` |
 | 运行时 | `runtime/` | `FactorEngine`、批调度、多后端并行、dq_gates、生产策略（156 .py） |
 | 服务 | `service/` | 薄 FastAPI 适配层（15 路由，端口 8088） |
 | 挖掘 | `mining/` | `MiningRole` 分类、`get_mining_operators`、直接可用判定 |

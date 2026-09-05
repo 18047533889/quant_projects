@@ -16,7 +16,8 @@ root done → validate → encode → partition write → release root buffer
 
 契约：
 - 每根 root 独立可校验（checksum 写入 sidecar），最终 ``load_all()`` 可逐 shard
-  重读并与 in-memory 基线对拍（见 tests/test_dry_run_ladder.py 的 (b)）；
+  重读并与 in-memory 基线对拍（见 tests/test_dry_run_ladder.py 的 (b) 与
+  tests/test_production_factor_ladder.py）；
 - 禁止 ``dict[factor_name] = full_history_dataframe`` 形式的一站式大内存组装。
 """
 
@@ -101,6 +102,7 @@ class StreamingSink:
 
         _pq_writer: Any = field(default=None, init=False, repr=False)
         _rows: list[StreamRow] = field(default_factory=list, init=False, repr=False)
+        _all_rows: list[StreamRow] | None = field(default=None, init=False, repr=False)
         _num_rows: int = field(default=0, init=False)
         _path: Path = field(default=None, init=False, repr=False)  # type: ignore[assignment]
 
@@ -134,6 +136,12 @@ class StreamingSink:
             )
             self._pq_writer.write_table(tbl)
             self._num_rows += len(self._rows)
+            # 需要确定性 sorted checksum 时保留全部行（内存中排序哈希，不重读盘）
+            if self.sink.checksum_policy == "sorted":
+                if self._all_rows is None:
+                    self._all_rows = list(self._rows)
+                else:
+                    self._all_rows.extend(self._rows)
             self._rows = []  # 释放当前 batch，绝不累积全文
 
         def __exit__(self, exc_type, exc, tb) -> bool:
@@ -161,11 +169,24 @@ class StreamingSink:
             return False
 
         def _sha(self) -> str:
-            """确定性 checksum：稳定地读回 parquet 并对行排序后哈希。
+            """确定性 checksum：行排序后哈希。
 
             排序保证跨重跑确定性（同一数据 → 同一 checksum），且与
             in-memory 基线对拍（tests 直接对该值 1e-12 级比对）。
+            在 ``checksum_policy="sorted"`` 下使用**内存累积行**（``_all_rows``）
+            而不是重读刚写完的 parquet —— 后者在共享进程（多 worker 线程持 GIL）
+            下会触发 pyarrow.dataset 的再 import / /proc 遍历停顿（环境问题），
+            拖慢整个 sink 提交路径。
             """
+            if self.sink.checksum_policy == "sorted" and self._all_rows is not None:
+                triples = sorted(
+                    ((r.date, r.asset, r.value) for r in self._all_rows),
+                    key=lambda t: (t[0], t[1], str(t[2])),
+                )
+                hasher = hashlib.sha256()
+                for d, a, v in triples:
+                    hasher.update(f"{d}|{a}|{v!r}\n".encode("utf-8"))
+                return hasher.hexdigest()
             tbl = pq.read_table(self._path)
             cols = {"date": tbl["date"].to_pylist(), "asset": tbl["asset"].to_pylist(),
                     "value": tbl["value"].to_pylist()}

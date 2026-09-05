@@ -363,6 +363,8 @@ def _psi(namespace: str) -> tuple[float, float]:
 
 
 def _swap() -> tuple[int | None, int | None]:
+    if os.environ.get("FACTOR_ENGINE_HERMETIC_PROBES") == "1":
+        return (0, 0)
     try:
         from factor_engine.runtime.resource_monitor import swap_usage
 

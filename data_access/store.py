@@ -305,7 +305,14 @@ class DataAccessStore:
             return None
 
         self._pipeline = ReadPipeline(
-            verifier=SnapshotVerifier(remote_meta_fn=self._remote_meta_head),
+            verifier=SnapshotVerifier(
+                remote_meta_fn=self._remote_meta_head,
+                # R61-P1 #56：跨进程并发下载 benchmark 用 env 关 mtime 精确比较。
+                skip_mtime_verify=os.environ.get(
+                    "DATA_ACCESS_SKIP_MTIME_VERIFY", "0"
+                ).lower()
+                in {"1", "true", "yes"},
+            ),
             resolver=SourceSnapshotResolver(
                 source_manifest_fn=self._source_manifest_fn,
                 # R57：把 COS 精确对象解析（LIST/HEAD）接进主读链。此前 resolver

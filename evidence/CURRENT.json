@@ -1,24 +1,24 @@
 {
   "schema_version": 3,
-  "generated_at": "2026-09-04T12:37:40.764744+00:00",
-  "source_snapshot_id": "src:v1:0362b278df86bc05",
+  "generated_at": "2026-09-05T06:12:00.483091+00:00",
+  "source_snapshot_id": "src:v1:afd85cd2e3510f67",
   "sha_bindings": {
-    "RootRepoSHA": "{\"HEAD\":\"2f3abe229d242e663a6650dd2595896013c60c71\",\"cached_diff_hash\":\"af5570f5a1810b7af78caf4bc70a660f0df51e42baf91d4de5b2328de0e83dfc\",\"diff_hash\":\"c0ea509873a6d1d60b17113d9c2f57a8f29f79bd114c504f7dc089f9691b522d\",\"dirty\":true,\"identity_hash\":\"3ff5e585c3f0bd2035699c79efdc1b24de03b3d063a6feef1e58ca87b8606d72\",\"untracked_source_hash\":\"841b2ee72dcf83741cf5b82264f00013861f3b0e052119268214c91f3255e066\"}",
-    "SourceTreeIdentity": "{\"HEAD\":\"2f3abe229d242e663a6650dd2595896013c60c71\",\"cached_diff_hash\":\"af5570f5a1810b7af78caf4bc70a660f0df51e42baf91d4de5b2328de0e83dfc\",\"diff_hash\":\"c0ea509873a6d1d60b17113d9c2f57a8f29f79bd114c504f7dc089f9691b522d\",\"dirty\":true,\"identity_hash\":\"3ff5e585c3f0bd2035699c79efdc1b24de03b3d063a6feef1e58ca87b8606d72\",\"untracked_source_hash\":\"841b2ee72dcf83741cf5b82264f00013861f3b0e052119268214c91f3255e066\"}",
-    "PlatformSourceTreeIdentity": "b80113b9fe1c76bf71efad78e7ef1a021148d0c0b305ba971dc2e5a5b8cdf017",
-    "AlphaGeneratorIdentity": "a707b95ee1a644891456d6252ef1b8428b5eb53b20f42c48389ab919e595c24a",
-    "EvidenceAttestationIdentity": "eeb1fda50fd5592079fff78b4f577595a8b13df16359e37c7fca5fecb624cba8",
-    "OperatorCatalogSHA": "3d5b77e1d2bce6bf1adbaaa36679fd10c65834d44ac5fc64bd14e984aefe4dfc",
+    "RootRepoSHA": "{\"HEAD\":\"593507c1e25288e78ba95a5d7acc6bfef57daf1f\",\"cached_diff_hash\":\"af5570f5a1810b7af78caf4bc70a660f0df51e42baf91d4de5b2328de0e83dfc\",\"diff_hash\":\"b026254c642ca93b8833bb69ca2d11e66a7f17e60cacf74d774775bdb1103e20\",\"dirty\":true,\"identity_hash\":\"9cb777cd68c6f1e7ffb38e94eb9ae49aad81664432bb396a21e7a7ec27e75396\",\"untracked_source_hash\":\"bbc8102e1a8e63f38156ee002cd5ff6331da2ca3f9e494b7c4c9cb6a0e8b8eef\"}",
+    "SourceTreeIdentity": "{\"HEAD\":\"593507c1e25288e78ba95a5d7acc6bfef57daf1f\",\"cached_diff_hash\":\"af5570f5a1810b7af78caf4bc70a660f0df51e42baf91d4de5b2328de0e83dfc\",\"diff_hash\":\"b026254c642ca93b8833bb69ca2d11e66a7f17e60cacf74d774775bdb1103e20\",\"dirty\":true,\"identity_hash\":\"9cb777cd68c6f1e7ffb38e94eb9ae49aad81664432bb396a21e7a7ec27e75396\",\"untracked_source_hash\":\"bbc8102e1a8e63f38156ee002cd5ff6331da2ca3f9e494b7c4c9cb6a0e8b8eef\"}",
+    "PlatformSourceTreeIdentity": "4275ad9976e22920f962dea8d05c50a68b79f503cfd1d0875d97e1f02dc031d9",
+    "AlphaGeneratorIdentity": "02331578bc354ce2d78f29b9b720b1ceae5242452b3a2fd50a17b855c9ae3ab3",
+    "EvidenceAttestationIdentity": "1809c7f2b3489b0bcde054fa1faac86eace4ecd9484d567e652f692b738fa4d9",
+    "OperatorCatalogSHA": "61ebbc3d187a03b6554ab84811f14bb51e078b3227e6c4a8dc58e72aedb9ecbe",
     "SemanticCatalogIdentity": "323575a13fe2025296df95afc5020140dff385bcb12c848613aebd8f276c54a0",
-    "ImplementationClosureHashSet": "226ed42882701f7fb485c097bddb4e15e07e8cc1398f1606272461349cda2b8f",
+    "ImplementationClosureHashSet": "fa3c32ea80071a5d7774dcca64fa598e34e6d0e4c21f8a51c5caba56f6177eea",
     "DependencyLockHash": "c64a63ae28873dbe7fdcd907c689037cc552309c40ba0698de46d12268f55813",
-    "TestEnvironmentIdentity": "839409ec5d3b9e7fc7efb91b47b6fde90ecaf9d4ea68eb6a64b7eb89671448fb"
+    "TestEnvironmentIdentity": "4e227bdbe0e232bff7d808b8c15fb3c048198b1197b551ad50a402d678914753"
   },
-  "source_tree_identity": "b80113b9fe1c76bf71efad78e7ef1a021148d0c0b305ba971dc2e5a5b8cdf017",
+  "source_tree_identity": "4275ad9976e22920f962dea8d05c50a68b79f503cfd1d0875d97e1f02dc031d9",
   "sha_binding_metadata": {
     "OperatorCatalogPath": "build/mining/direct_mining_catalog.json",
     "DependencyLockPath": "requirements-production.lock",
-    "OperatorCatalogCount": 1674,
+    "OperatorCatalogCount": 1690,
     "gitlink_count": 1,
     "platform_packages": [
       "alphaprobe",
@@ -34,75 +34,54 @@
   "artifacts": {
     "operator-benchmark-manifest": {
       "artifact_id": "operator-benchmark-manifest",
-      "status": "STALE",
-      "details": "source_snapshot_id changed; SemanticCatalogIdentity changed; EvidenceAttestationIdentity changed; PlatformSourceTreeIdentity changed; source_tree_identity changed; source_tree_identity changed (evidence does not match live platform source)",
-      "stale_inputs": [
-        "source_snapshot_id changed",
-        "SemanticCatalogIdentity changed",
-        "EvidenceAttestationIdentity changed",
-        "PlatformSourceTreeIdentity changed",
-        "source_tree_identity changed",
-        "source_tree_identity changed (evidence does not match live platform source)"
-      ],
+      "status": "CURRENT",
+      "details": "BOUND inputs == LIVE inputs and executed_at present",
+      "stale_inputs": [],
       "bound_input_identity": {
-        "source_snapshot_id": "src:v1:55bf43129a97ee1a",
-        "source_tree_identity": "5698ca5e1de721bec7850ddfb4c70e28dd64800e4b5d7a26c1d543131859db9e",
-        "PlatformSourceTreeIdentity": "5698ca5e1de721bec7850ddfb4c70e28dd64800e4b5d7a26c1d543131859db9e",
-        "ImplementationClosureHashSet": "226ed42882701f7fb485c097bddb4e15e07e8cc1398f1606272461349cda2b8f",
-        "SemanticCatalogIdentity": "12c797030a8c5dcaa5449c141cbc8ecaca9c867db3ccec7081efa1d97b3024bb",
-        "EvidenceAttestationIdentity": "b5b911a8ef2fd02c0335ff872c376962074bf2c7d3b9e062763a7348fe8e8d4b"
+        "source_snapshot_id": "src:v1:afd85cd2e3510f67",
+        "source_tree_identity": "4275ad9976e22920f962dea8d05c50a68b79f503cfd1d0875d97e1f02dc031d9",
+        "PlatformSourceTreeIdentity": "4275ad9976e22920f962dea8d05c50a68b79f503cfd1d0875d97e1f02dc031d9",
+        "ImplementationClosureHashSet": "fa3c32ea80071a5d7774dcca64fa598e34e6d0e4c21f8a51c5caba56f6177eea",
+        "SemanticCatalogIdentity": "323575a13fe2025296df95afc5020140dff385bcb12c848613aebd8f276c54a0",
+        "EvidenceAttestationIdentity": "1809c7f2b3489b0bcde054fa1faac86eace4ecd9484d567e652f692b738fa4d9"
       },
-      "executed_at": "2026-09-04T09:53:33.562467+00:00"
+      "executed_at": "2026-09-05T06:12:05.498621+00:00"
     },
     "operator-certification": {
       "artifact_id": "operator-certification",
-      "status": "STALE",
-      "details": "source_snapshot_id changed; SemanticCatalogIdentity changed; EvidenceAttestationIdentity changed; PlatformSourceTreeIdentity changed; source_tree_identity changed; source_tree_identity changed (evidence does not match live platform source)",
-      "stale_inputs": [
-        "source_snapshot_id changed",
-        "SemanticCatalogIdentity changed",
-        "EvidenceAttestationIdentity changed",
-        "PlatformSourceTreeIdentity changed",
-        "source_tree_identity changed",
-        "source_tree_identity changed (evidence does not match live platform source)"
-      ],
+      "status": "CURRENT",
+      "details": "BOUND inputs == LIVE inputs and executed_at present",
+      "stale_inputs": [],
       "bound_input_identity": {
-        "source_snapshot_id": "src:v1:55bf43129a97ee1a",
-        "source_tree_identity": "5698ca5e1de721bec7850ddfb4c70e28dd64800e4b5d7a26c1d543131859db9e",
-        "PlatformSourceTreeIdentity": "5698ca5e1de721bec7850ddfb4c70e28dd64800e4b5d7a26c1d543131859db9e",
-        "ImplementationClosureHashSet": "226ed42882701f7fb485c097bddb4e15e07e8cc1398f1606272461349cda2b8f",
-        "SemanticCatalogIdentity": "12c797030a8c5dcaa5449c141cbc8ecaca9c867db3ccec7081efa1d97b3024bb",
-        "EvidenceAttestationIdentity": "b5b911a8ef2fd02c0335ff872c376962074bf2c7d3b9e062763a7348fe8e8d4b"
+        "source_snapshot_id": "src:v1:afd85cd2e3510f67",
+        "source_tree_identity": "4275ad9976e22920f962dea8d05c50a68b79f503cfd1d0875d97e1f02dc031d9",
+        "PlatformSourceTreeIdentity": "4275ad9976e22920f962dea8d05c50a68b79f503cfd1d0875d97e1f02dc031d9",
+        "ImplementationClosureHashSet": "fa3c32ea80071a5d7774dcca64fa598e34e6d0e4c21f8a51c5caba56f6177eea",
+        "SemanticCatalogIdentity": "323575a13fe2025296df95afc5020140dff385bcb12c848613aebd8f276c54a0",
+        "EvidenceAttestationIdentity": "1809c7f2b3489b0bcde054fa1faac86eace4ecd9484d567e652f692b738fa4d9"
       },
-      "executed_at": "2026-09-04T09:53:33.562467+00:00"
+      "executed_at": "2026-09-05T06:12:05.498610+00:00"
     },
     "operator-inventory": {
       "artifact_id": "operator-inventory",
-      "status": "STALE",
-      "details": "source_snapshot_id changed; SemanticCatalogIdentity changed; EvidenceAttestationIdentity changed; PlatformSourceTreeIdentity changed; source_tree_identity changed; source_tree_identity changed (evidence does not match live platform source)",
-      "stale_inputs": [
-        "source_snapshot_id changed",
-        "SemanticCatalogIdentity changed",
-        "EvidenceAttestationIdentity changed",
-        "PlatformSourceTreeIdentity changed",
-        "source_tree_identity changed",
-        "source_tree_identity changed (evidence does not match live platform source)"
-      ],
+      "status": "CURRENT",
+      "details": "BOUND inputs == LIVE inputs and executed_at present",
+      "stale_inputs": [],
       "bound_input_identity": {
-        "source_snapshot_id": "src:v1:55bf43129a97ee1a",
-        "source_tree_identity": "5698ca5e1de721bec7850ddfb4c70e28dd64800e4b5d7a26c1d543131859db9e",
-        "PlatformSourceTreeIdentity": "5698ca5e1de721bec7850ddfb4c70e28dd64800e4b5d7a26c1d543131859db9e",
-        "ImplementationClosureHashSet": "226ed42882701f7fb485c097bddb4e15e07e8cc1398f1606272461349cda2b8f",
-        "SemanticCatalogIdentity": "12c797030a8c5dcaa5449c141cbc8ecaca9c867db3ccec7081efa1d97b3024bb",
-        "EvidenceAttestationIdentity": "b5b911a8ef2fd02c0335ff872c376962074bf2c7d3b9e062763a7348fe8e8d4b"
+        "source_snapshot_id": "src:v1:afd85cd2e3510f67",
+        "source_tree_identity": "4275ad9976e22920f962dea8d05c50a68b79f503cfd1d0875d97e1f02dc031d9",
+        "PlatformSourceTreeIdentity": "4275ad9976e22920f962dea8d05c50a68b79f503cfd1d0875d97e1f02dc031d9",
+        "ImplementationClosureHashSet": "fa3c32ea80071a5d7774dcca64fa598e34e6d0e4c21f8a51c5caba56f6177eea",
+        "SemanticCatalogIdentity": "323575a13fe2025296df95afc5020140dff385bcb12c848613aebd8f276c54a0",
+        "EvidenceAttestationIdentity": "1809c7f2b3489b0bcde054fa1faac86eace4ecd9484d567e652f692b738fa4d9"
       },
-      "executed_at": "2026-09-04T09:53:33.562467+00:00"
+      "executed_at": "2026-09-05T06:12:05.498625+00:00"
     }
   },
   "summary": {
     "total": 3,
-    "current": 0,
-    "stale": 3,
+    "current": 3,
+    "stale": 0,
     "failed": 0,
     "not_run": 0
   },
@@ -115,25 +94,21 @@
   "dimensions": {
     "build_health": "CURRENT",
     "runtime_health": "CURRENT",
-    "research_validity": "STALE",
+    "research_validity": "CURRENT",
     "release_validity": "STALE",
-    "production_readiness": "STALE"
+    "production_readiness": "CURRENT"
   },
   "evaluation": {
-    "staleness_evaluated_at": "2026-09-04T12:37:45.491953+00:00",
-    "status": "STALE",
-    "changed_artifacts": [
-      "operator-benchmark-manifest",
-      "operator-certification",
-      "operator-inventory"
-    ],
+    "staleness_evaluated_at": "2026-09-05T06:12:05.498716+00:00",
+    "status": "CURRENT",
+    "changed_artifacts": [],
     "note": "status is CURRENT only when every artifact's BOUND input identity matches the LIVE identity set AND the artifact has an executed_at from a real verification run.",
     "dimensions": {
       "build_health": "CURRENT",
       "runtime_health": "CURRENT",
-      "research_validity": "STALE",
+      "research_validity": "CURRENT",
       "release_validity": "STALE",
-      "production_readiness": "STALE"
+      "production_readiness": "CURRENT"
     }
   }
 }

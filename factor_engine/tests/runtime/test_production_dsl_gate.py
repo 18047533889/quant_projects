@@ -9,7 +9,7 @@ import pytest
 
 from factor_engine.api.cleaned_ops import make_cleaned_call_factory
 from factor_engine.api.columns import col
-from factor_engine.api.factor import Factor
+from factor_engine.api.factor import Factor, FactorExecutionScopeHint
 from factor_engine.backend.factory import build_backend
 from factor_engine.cleaned_operators.operator_policy import normalize_bars_market
 from factor_engine.runtime.engine import FactorEngine, PhysicalPlanRequiredError, _assert_backend_plan_authority
@@ -23,6 +23,15 @@ from tests.helpers import InMemorySeriesSource
 
 
 shuffle = make_cleaned_call_factory("shuffle")
+def _prod_factor(name, expr, source_expr):
+    """Production factors in tests must carry an explicit market (R40 #174)."""
+    return Factor(
+        name=name,
+        expr=expr,
+        source_expr=source_expr,
+        semantic_identity=FactorExecutionScopeHint(market="ashare"),
+    )
+
 
 
 def test_hybrid_backend_rejects_logical_plan_without_physical_consumer():
@@ -51,7 +60,7 @@ def test_production_compile_blocks_shuffle():
     os.environ["QUANT_PRODUCTION_MODE"] = "1"
     try:
         eng = FactorEngine(backend=build_backend("pandas"), data_source=source, run_mode="production")
-        factor = Factor(name="bad", expr=shuffle(col("close"), 1), source_expr="shuffle(close, 1)")
+        factor = _prod_factor("bad", shuffle(col("close"), 1), "shuffle(close, 1)")
         with pytest.raises(KeyError, match="unknown operator canonical"):
             eng.compile(factor)
     finally:
@@ -72,18 +81,10 @@ def test_production_run_many_validates_source_expr():
     os.environ["QUANT_PRODUCTION_MODE"] = "1"
     try:
         eng = FactorEngine(backend=build_backend("pandas"), data_source=source, run_mode="production")
-        bad = Factor(
-            name="bad",
-            expr=shuffle(col("close"), 1),
-            source_expr="shuffle(close, 1)",
-        )
+        bad = _prod_factor("bad", shuffle(col("close"), 1), "shuffle(close, 1)")
         with pytest.raises(ProductionPolicyViolation, match="DSL 语法/兼容校验失败"):
             assert_production_factors([bad], mode="production", context="run_many")
-        good = Factor(
-            name="ok",
-            expr=ts_mean(col("close"), 2),
-            source_expr="ts_mean(close, 2)",
-        )
+        good = _prod_factor("ok", ts_mean(col("close"), 2), "ts_mean(close, 2)")
         assert_production_factors([good], mode="production", context="run_many")
     finally:
         os.environ.pop("QUANT_PRODUCTION_MODE", None)
@@ -92,11 +93,7 @@ def test_production_run_many_validates_source_expr():
 def test_production_rejects_source_expr_mismatch():
     from factor_engine.api import ts_mean
 
-    factor = Factor(
-        name="mismatch",
-        expr=ts_mean(col("close"), 2),
-        source_expr="ts_mean(close, 3)",
-    )
+    factor = _prod_factor("mismatch", ts_mean(col("close"), 2), "ts_mean(close, 3)")
     with pytest.raises(ProductionPolicyViolation, match="does not match"):
         assert_production_factors([factor], mode="production")
 

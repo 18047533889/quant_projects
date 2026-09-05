@@ -1,0 +1,7 @@
+factor_engine/tests/backend/test_polars_structure.py
+factor_engine/tests/operators/r28/test_all_canonicals_execute.py
+factor_engine/tests/operators/r28/test_r28_evidence_current.py
+factor_engine/tests/operators/test_auto_polars_all.py
+factor_engine/tests/operators/test_cs_polars_native_batch1.py
+factor_engine/tests/test_r32_p0_087_091_old.py
+factor_engine/tests/test_weighted_cs_operators.py

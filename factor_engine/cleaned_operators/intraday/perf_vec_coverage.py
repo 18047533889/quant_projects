@@ -44,6 +44,7 @@ _INTRA_OPERATORS_MODULES = (
     "intra_state_space",
     "smart_money",
     "true_gap_batch3",
+    "sufficient_stats_ops",
 )
 
 # Dispatch points we route through daily_agg{,_two,_three}.
@@ -58,6 +59,31 @@ class _Route:
     arg_expr: str
     route_kind: str  # "raw-kernel-fn" | "module-level-fn" | "lambda" | "unknown"
     line: int
+
+
+# Factory-registered canonical -> (module, arg_expr, route_kind) fallback for
+# operators whose registered name is a dynamic (variable) argument — an
+# ``ast.Name``, invisible to the AST route scan (e.g. the intraday
+# sufficient-statistics family).  Records point at the module-level raw
+# kernel so the report still shows them being dispatched to daily_agg*.
+_FACTORY_CANONICALS: dict[str, tuple[str, str, str]] = {
+    "intra_ts_sum": ("sufficient_stats_ops", "_ts_sum", "module-level-fn"),
+    "intra_ts_mean": ("sufficient_stats_ops", "_ts_mean", "module-level-fn"),
+    "intra_ts_variance": ("sufficient_stats_ops", "_ts_variance", "module-level-fn"),
+    "intra_ts_std": ("sufficient_stats_ops", "_ts_std", "module-level-fn"),
+    "intra_ts_min": ("sufficient_stats_ops", "_ts_min", "module-level-fn"),
+    "intra_ts_max": ("sufficient_stats_ops", "_ts_max", "module-level-fn"),
+    "intra_ts_last": ("sufficient_stats_ops", "_ts_last", "module-level-fn"),
+    "intra_ts_first": ("sufficient_stats_ops", "_ts_first", "module-level-fn"),
+    "intra_ts_last_value": ("sufficient_stats_ops", "_ts_last_value", "module-level-fn"),
+    "intra_ts_argmax": ("sufficient_stats_ops", "_ts_argmax", "module-level-fn"),
+    "intra_ts_argmin": ("sufficient_stats_ops", "_ts_argmin", "module-level-fn"),
+    "intra_ts_realized_variance": ("sufficient_stats_ops", "_ts_realized_variance", "module-level-fn"),
+    "intra_ts_vwap": ("sufficient_stats_ops", "_ts_vwap", "module-level-fn"),
+    "intra_ts_volume_weighted_return": ("sufficient_stats_ops", "_ts_volume_weighted_return", "module-level-fn"),
+    "intra_ts_realized_covariance": ("sufficient_stats_ops", "_ts_realized_covariance", "module-level-fn"),
+    "intra_ts_amount_weighted_mean": ("sufficient_stats_ops", "_ts_amount_weighted_mean", "module-level-fn"),
+}
 
 
 def _collect_module_routes(module: str) -> list[_Route]:
@@ -221,6 +247,21 @@ def build_vector_coverage() -> dict:
                 "route_kind": r.route_kind,
                 "line": r.line,
             })
+
+    # Factory-registered operators (``@register_operator(name=<var>, ...)``)
+    # are invisible to the AST route scan (the name is an ``ast.Name``, not a
+    # ``Constant``).  Surface them via the declarative fallback table so a
+    # bound kernel is never dropped from the report.
+    for _canonical, (_pmod, _kname, _rk) in _FACTORY_CANONICALS.items():
+        if _canonical not in seen:
+            seen[_canonical] = [{
+                "canonical": _canonical,
+                "module": _pmod,
+                "aggf": "daily_agg" if _rk == "module-level-fn" and len(_canonical.split("_")) <= 3 else "daily_agg_two",
+                "arg_expr": _kname,
+                "route_kind": _rk,
+                "line": 0,
+            }]
 
     operators: list[dict] = []
     for canonical, routes in seen.items():

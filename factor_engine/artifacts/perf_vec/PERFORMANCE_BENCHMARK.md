@@ -80,4 +80,35 @@ CPU-bound 合成 workload（1200 股 × 300 日，Pandas 向量化 ts_mean/ts_st
 ## 5. 旧 `perf_vec_bench` 的 `__vec__` 触发修复对照（P0#3）
 
 lambda 包裹丢 `__vec__` 时旧加速比全是假的（0.91x 噪声）；修复后实测真实 `__vec__` 路径：
-**price_delay 1.89x · volume_imbalance 3.08x · session_mean_reversion 1.25x · 总 1.91x**（4000 股 × 14 天 × 240 bars）；bind fail-closed（vec 缺失抛 LookupError）。覆盖快照：`artifacts/perf_vec/intraday_vector_coverage.json`（vectorized 13 / total 53，见 INTRADAY_VECTOR_COVERAGE.md）。
+**price_delay 1.89x · volume_imbalance 3.08x · session_mean_reversion 1.25x · 总 1.91x**（4000 股 × 14 天 × 240 bars）；bind fail-closed（vec 缺失抛 LookupError）。覆盖快照：`artifacts/perf_vec/intraday_vector_coverage.json`（vectorized 29 / total 69，见 INTRADAY_VECTOR_COVERAGE.md）。
+
+### 5.1 R61-P1 #57：共享 sufficient-statistics 向量化实测（O(1) 派生）
+
+同一 `perf_vec_bench`（4000 股 × 14 天 × 240 bars，`OMP_NUM_THREADS=4`）。16 个新算子从
+`sufficient_stats` bundle（每 frame 一次 (day,bar,inst) grid + Σx Σx² Σx³ Σx⁴ Σr Σr² Σr³ Σr⁴
+Σv Σv² Σpv Σa Σpa / max / min / first / last / argmax / argmin，按 frame identity 缓存）O(1) 派生：
+
+| kernel | scalar (s) | vec (s) | speedup |
+|---|---|---|---|
+| ts_sum | 4.055 | 0.097 | 41.68x |
+| ts_mean | 4.144 | 0.062 | 67.11x |
+| ts_variance | 4.634 | 0.062 | 74.52x |
+| ts_std | 4.737 | 0.061 | 77.64x |
+| ts_min | 4.005 | 0.061 | 65.17x |
+| ts_max | 3.998 | 0.062 | 65.00x |
+| ts_last | 3.902 | 0.061 | 63.65x |
+| ts_first | 3.861 | 0.062 | 62.57x |
+| ts_last_value | 3.864 | 0.061 | 63.00x |
+| ts_argmax | 3.947 | 0.060 | 65.24x |
+| ts_argmin | 3.940 | 0.061 | 64.08x |
+| ts_realized_variance | 4.552 | 0.062 | 73.97x |
+| ts_vwap | 9.939 | 0.383 | 25.93x |
+| ts_volume_weighted_return | 10.483 | 0.363 | 28.88x |
+| ts_realized_covariance | 10.701 | 0.388 | 27.61x |
+| ts_amount_weighted_mean | 9.986 | 0.139 | 72.01x |
+
+`__vec__` 等价比对（`perf_vec_equiv`）42/42 PASS（rtol/atol 1e-12，含 NaN 缺口与全 NaN 日）。
+绑定 fail-closed：`count_bound()==len(bind_whitelist())==29`。覆盖快照
+`intraday_vector_coverage.json`：vectorized 29 / total 69（53 既有 + 16 新增 canonical；
+40 scalar-only 不变）。scalar 列含 per-(inst,day) Python 循环开销；O(1) 算子几乎只付 bundle
+一次物化成本。

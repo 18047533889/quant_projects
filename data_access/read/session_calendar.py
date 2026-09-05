@@ -18,6 +18,16 @@ data_access.read.session_calendar —— 交易所 session / 交易日历（时�
         ``available_from`` 编译。
     ``get_market_session`` / ``get_market_calendar`` —— 进程内单例。
 
+    R61-P0 #60：``MarketSession.expected_slots`` / ``expected_minutes`` 产出
+    单交易日的**精确合法 bar 槽位**（A 股 09:31–11:30 / 13:01–15:00 共 240
+    根，bar_end，无 09:30/13:00、午休无 bar）；``MarketSession.validate_session_bars``
+    按 (TradeDate, Symbol) 分组对期望槽位集合做逐项比对，**单独报告** missing /
+    duplicates / off_session（12:30、11:31、15:01 等盘外）/ unexpected，
+    并区分 ``expected_suspension``（停牌日历命中 → NaN，不 abort）与
+    quarantine（非停牌损坏组 → 按 require_full 语义 fail-closed）。
+    旧 ``assert_session_complete``（按日计数）保留向后兼容；factor_engine 分钟
+    面板 gate 已迁移到 per-(TradeDate,Symbol) 精确校验。
+
 字典事实（COS_ashare_lqtp_data_dictionary.md）：
     - A 股 QuoteTime 存 UTC，北京时间 = UTC+8；
     - CST 时段 09:31–11:30 与 13:01–15:00（共 240 个分钟标签；午休无 bar；
@@ -204,6 +214,206 @@ class MarketSession:
                     "午休无 bar）；缺 bar 会被当成真实观测污染 session-aware "
                     "因子，fail-closed 拒绝（GO_PROMPT §3.9）。"
                 )
+
+    def expected_slots(
+        self,
+        day: Any,
+        *,
+        bar_freq: str = "1min",
+        end_cutoff: str | None = None,
+    ) -> list[pd.Timestamp]:
+        """该交易日的精确合法 bar 时间戳槽位（session-slot aware，跳过午休）。
+
+        A 股常规 session 为 09:31–11:30 / 13:01–15:00（bar_end 时钟，
+        ``(open, close]``）共 240 根，且**没有** 09:30 / 13:00 bar、午休无 bar。
+        ``bar_freq`` 大于 1 分钟时只返回该宽度下的网格起点槽位（如 5min →
+        48 根；09:31/09:36/…）。early-close 日（美股 half day）按该日 effective
+        segments 裁剪。``end_cutoff``（``"HH:MM"``）提供时只返回 <= 该时刻的
+        已完整槽位（盘中因子面板 = 已收盘分钟）。
+        """
+        ts_day = pd.Timestamp(day).normalize()
+        width = max(1, int(_bar_freq_minutes(bar_freq)))
+        cutoff_min: int | None = None
+        if end_cutoff is not None:
+            try:
+                h, m = (int(p) for p in str(end_cutoff).split(":", 1))
+            except (ValueError, TypeError) as exc:
+                raise ValidationError(
+                    f"end_cutoff 无法解析为 HH:MM: {end_cutoff!r}"
+                ) from exc
+            cutoff_min = h * 60 + m
+        out: list[pd.Timestamp] = []
+        for seg in self.effective_segments_on(ts_day.date()):
+            start_min = seg.start.hour * 60 + seg.start.minute
+            seg_end_min = seg.end.hour * 60 + seg.end.minute
+            end_min = (
+                min(seg_end_min, cutoff_min) if cutoff_min is not None else seg_end_min
+            )
+            # MarketSession 的 segment.start 即第一根 bar 标签（A 股 09:31），
+            # 之后每 width 分钟一根，直到 <= 段末（11:30 / 15:00；cutoff 截断）。
+            first = start_min
+            minute = first
+            while minute <= end_min:
+                out.append(ts_day + pd.Timedelta(minutes=minute))
+                minute += width
+        return sorted(set(out))
+
+    def expected_minutes(
+        self,
+        day: Any,
+        *,
+        bar_freq: str = "1min",
+        end_cutoff: str | None = None,
+    ) -> set[int]:
+        """该交易日精确合法 minute-of-day 集合（内部实现用；不含 UTC 换算）。"""
+        return {
+            ts.hour * 60 + ts.minute
+            for ts in self.expected_slots(day, bar_freq=bar_freq, end_cutoff=end_cutoff)
+        }
+
+    def validate_session_bars(
+        self,
+        timestamps: Iterable[Any],
+        symbols: Iterable[Any],
+        trade_dates: Iterable[Any],
+        *,
+        bar_freq: str = "1min",
+        end_cutoff: str | None = None,
+        expected_suspension_fn: Any = None,
+        calendar: "MarketCalendar | None" = None,
+        context: str = "minute panel",
+    ) -> dict[tuple[Any, Any], dict[str, Any]]:
+        """按 (TradeDate, Symbol) 分组的**精确槽位** session 完整性校验。
+
+        R61-P0 #60：旧 ``assert_session_complete`` 只按「每交易日计数」（跨所有
+        股票汇总），5000 只 × 240 根恒 >= 240 永远通过；单只股票的缺 bar /
+        重复 bar / 12:30 这类盘外 bar 也全部漏检。本函数对每个
+        (TradeDate, Symbol) 组对合法槽位集合做逐项精确比对，并单独报告：
+
+            - missing     —— 期望有、实际没有的槽位
+            - duplicates  —— 同一合法槽位出现多根
+            - off_session —— 任一合法交易时段之外的 bar（12:30 / 11:31 / 15:01…）
+            - unexpected  —— 在合法时段内但不在期望槽位网格上（bar_freq>1 时
+                             的窄 bin），或 timestamp 日期与组键日期不一致的行
+
+        停牌区分：
+            - ``expected_suspension_fn`` 判定为停牌的 (TradeDate, Symbol) →
+              ``expected_suspension=True``，**不**计入 quarantine（调用方把该组
+              bar 置 NaN 而不是 abort）；
+            - 其余组发现任何 missing/duplicates/off_session/unexpected →
+              ``quarantine=True``（调用方按 require_full 语义 fail-closed，
+              或收集进结构化 quarantine 报告）。
+
+        返回 ``{(TradeDate, Symbol): report}``，report 含：
+        ``expected_count / observed_count / missing / duplicates / off_session /
+        unexpected / off_session_minutes / expected_suspension / quarantine``。
+        ``bar_freq/end_cutoff`` 语义与 ``expected_slots`` 一致；``calendar``
+        显式提供 \"ashare\" 日历时用其 session（否则用 ``self``）。
+        """
+        if timestamps is None or symbols is None or trade_dates is None:
+            return {}
+        session = self
+        if calendar is not None:
+            cal_session = getattr(calendar, "session", None)
+            session = cal_session if cal_session is not None else self
+        ts = pd.to_datetime(list(timestamps))
+        syms = [str(x) for x in symbols]
+        days = pd.to_datetime(list(trade_dates))
+        ts_idx = pd.DatetimeIndex(ts)
+        if ts_idx.tz is not None:
+            ts_idx = ts_idx.tz_convert(session.timezone).tz_localize(None)
+        width = max(1, int(_bar_freq_minutes(bar_freq)))
+        if len(days) != len(syms) or len(syms) != len(ts_idx):
+            raise ValidationError(
+                f"validate_session_bars: timestamps/symbols/trade_dates 长度不一致 "
+                f"({len(ts_idx)}/{len(syms)}/{len(days)})"
+            )
+
+        groups: dict[tuple[Any, Any], dict[str, Any]] = {}
+        order: list[tuple[Any, Any]] = []
+        for d, s, t in zip(days, syms, ts_idx):
+            key = (d.normalize(), s)
+            if key not in groups:
+                groups[key] = {
+                    "expected_count": None,
+                    "observed_count": 0,
+                    "missing": [],
+                    "duplicates": [],
+                    "off_session": [],
+                    "unexpected": [],
+                    "off_session_minutes": [],
+                    "expected_suspension": False,
+                    "quarantine": False,
+                    "_slot_counts": {},
+                    "_expected_min": None,
+                }
+                order.append(key)
+            groups[key]["observed_count"] += 1
+            if key[0] != t.normalize():
+                groups[key]["unexpected"].append(str(t))
+                continue
+            minute = t.hour * 60 + t.minute
+            slots = groups[key].get("_expected_min")
+            if slots is None:
+                expected = session.expected_minutes(
+                    key[0], bar_freq=bar_freq, end_cutoff=end_cutoff
+                )
+                groups[key]["_expected_min"] = expected
+                groups[key]["expected_count"] = len(expected)
+            # 停牌判定用组键日期 + 该 ts 的实际日期（避免 00:00 键日）
+            suspended = bool(
+                expected_suspension_fn(key[0], s)
+                if expected_suspension_fn is not None
+                else False
+            )
+            if minute not in groups[key]["_expected_min"]:
+                groups[key]["off_session"].append(str(t))
+                groups[key]["off_session_minutes"].append(minute)
+            else:
+                groups[key]["_slot_counts"][minute] = (
+                    groups[key]["_slot_counts"].get(minute, 0) + 1
+                )
+            if not groups[key]["expected_suspension"]:
+                groups[key]["expected_suspension"] = bool(suspended)
+        # 汇总：把合法时段内但不在期望网格上的再分类，重分类后再判 quarantine。
+        extra_slots: set[int] = set()
+        if width > 1:
+            for key in order:
+                extra_slots |= session.expected_minutes(
+                    key[0], bar_freq=bar_freq, end_cutoff=end_cutoff
+                )
+        for key in order:
+            g = groups[key]
+            off: list[str] = []
+            unp = list(g["unexpected"])
+            for t in g["off_session"]:
+                tt = pd.Timestamp(t)
+                minute = tt.hour * 60 + tt.minute
+                if width > 1 and minute in extra_slots:
+                    unp.append(str(t))
+                else:
+                    off.append(str(t))
+            g["off_session"] = off
+            g["unexpected"] = unp
+            for minute, count in sorted(g["_slot_counts"].items()):
+                if count > 1:
+                    g["duplicates"].append({"minute": minute, "count": count})
+            if g["expected_count"] is not None:
+                expected_set = g["_expected_min"]
+                observed_set = set(g["_slot_counts"].keys())
+                g["missing"] = sorted(m for m in expected_set if m not in observed_set)
+            broken = bool(
+                g["missing"] or g["duplicates"] or g["off_session"] or g["unexpected"]
+            )
+            g["quarantine"] = broken and not g["expected_suspension"]
+            g.pop("_slot_counts", None)
+            g.pop("_expected_min", None)
+            # expected_suspension 且观测完整 → 不 quarantine
+            if g["expected_suspension"]:
+                g["quarantine"] = False
+        if not order:
+            return {}
+        return {k: {kk: vv for kk, vv in groups[k].items()} for k in order}
 
     def effective_segments_on(self, d: _dt.date) -> tuple[SessionSegment, ...]:
         """该日生效的 segment 集合：early-close 日按提前收盘裁剪，否则原样。

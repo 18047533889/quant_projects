@@ -26,7 +26,7 @@ class TestPandasBackend:
         assert len(filtered) <= len(df)
 
         # Basic aggregation
-        agg = df.group_by("instrument")["close"].mean()
+        agg = df.groupby("instrument")["close"].mean()
         assert len(agg) == df["instrument"].nunique()
 
     def test_pandas_rolling_operations(self, sample_panel_data):
@@ -35,8 +35,8 @@ class TestPandasBackend:
         df = df.sort_values(["instrument", "date"])
 
         # Rolling mean
-        df["rolling_mean"] = df.group_by("instrument")["close"].transform(
-            lambda x: x.rolling(window=5, min_samples=1).mean()
+        df["rolling_mean"] = df.groupby("instrument")["close"].transform(
+            lambda x: x.rolling(window=5, min_periods=1).mean()
         )
 
         assert "rolling_mean" in df.columns
@@ -48,7 +48,7 @@ class TestPandasBackend:
         df = df.sort_values(["instrument", "date"])
 
         # EWM
-        df["ewm_mean"] = df.group_by("instrument")["close"].transform(
+        df["ewm_mean"] = df.groupby("instrument")["close"].transform(
             lambda x: x.ewm(span=10).mean()
         )
 
@@ -64,7 +64,7 @@ class TestPandasCrossSection:
         df = sample_panel_data.copy()
 
         # Rank within each date
-        df["rank"] = df.group_by("date")["close"].rank(method="average", pct=True)
+        df["rank"] = df.groupby("date")["close"].rank(method="average", pct=True)
 
         assert "rank" in df.columns
         assert df["rank"].min() >= 0.0
@@ -75,7 +75,7 @@ class TestPandasCrossSection:
         df = sample_panel_data.copy()
 
         # Z-score within each date
-        df["zscore"] = df.group_by("date")["close"].transform(
+        df["zscore"] = df.groupby("date")["close"].transform(
             lambda x: (x - x.mean()) / x.std()
         )
 
@@ -91,7 +91,7 @@ class TestPandasCrossSection:
         df = sample_panel_data.copy()
 
         # Cut into quintiles within each date
-        df["quintile"] = df.group_by("date")["close"].transform(
+        df["quintile"] = df.groupby("date")["close"].transform(
             lambda x: pd.qcut(x, q=5, labels=False, duplicates="drop")
         )
 
@@ -106,7 +106,7 @@ class TestPandasGroupBy:
         df = sample_panel_data.copy()
 
         # Multiple aggregations
-        result = df.group_by("instrument").agg({
+        result = df.groupby("instrument").agg({
             "close": ["mean", "std", "min", "max"],
             "volume": ["sum", "mean"],
         })
@@ -118,11 +118,11 @@ class TestPandasGroupBy:
         df = sample_panel_data.copy()
 
         # Transform returns same shape
-        df["group_mean"] = df.group_by("instrument")["close"].transform("mean")
+        df["group_mean"] = df.groupby("instrument")["close"].transform("mean")
         assert len(df) == len(sample_panel_data)
 
         # Agg returns reduced shape
-        agg_result = df.group_by("instrument")["close"].agg("mean")
+        agg_result = df.groupby("instrument")["close"].agg("mean")
         assert len(agg_result) == df["instrument"].nunique()
 
     def test_pandas_custom_aggregation(self, sample_panel_data):
@@ -133,7 +133,7 @@ class TestPandasGroupBy:
         def custom_agg(x):
             return x.max() - x.min()
 
-        result = df.group_by("instrument")["close"].agg(custom_agg)
+        result = df.groupby("instrument")["close"].agg(custom_agg)
         assert len(result) == df["instrument"].nunique()
 
 
@@ -146,8 +146,8 @@ class TestPandasTimeSeries:
         df = df.sort_values(["instrument", "date"])
 
         # Lag
-        df["close_lag1"] = df.group_by("instrument")["close"].shift(1)
-        df["close_lead1"] = df.group_by("instrument")["close"].shift(-1)
+        df["close_lag1"] = df.groupby("instrument")["close"].shift(1)
+        df["close_lead1"] = df.groupby("instrument")["close"].shift(-1)
 
         assert "close_lag1" in df.columns
         assert "close_lead1" in df.columns
@@ -158,7 +158,7 @@ class TestPandasTimeSeries:
         df = df.sort_values(["instrument", "date"])
 
         # Diff
-        df["close_diff"] = df.group_by("instrument")["close"].diff()
+        df["close_diff"] = df.groupby("instrument")["close"].diff()
 
         assert "close_diff" in df.columns
 
@@ -168,7 +168,7 @@ class TestPandasTimeSeries:
         df = df.sort_values(["instrument", "date"])
 
         # Pct change
-        df["returns_calc"] = df.group_by("instrument")["close"].pct_change()
+        df["returns_calc"] = df.groupby("instrument")["close"].pct_change()
 
         assert "returns_calc" in df.columns
 
@@ -397,7 +397,7 @@ class TestPandasMultiIndex:
         df_indexed = df.set_index(["date", "instrument"])
 
         # GroupBy on first level
-        result = df_indexed.group_by(level=0)["close"].mean()
+        result = df_indexed.groupby(level=0)["close"].mean()
 
         assert len(result) == df["date"].nunique()
 
@@ -437,7 +437,7 @@ class TestPandasCategorical:
         df["instrument"] = df["instrument"].astype("category")
 
         # GroupBy still works
-        result = df.group_by("instrument")["close"].mean()
+        result = df.groupby("instrument")["close"].mean()
         assert len(result) == df["instrument"].nunique()
 
 
@@ -478,7 +478,7 @@ class TestPandasNullHandling:
         df.loc[df.index[10:15], "close"] = np.nan
 
         # Forward fill within groups
-        df["close_ffill"] = df.group_by("instrument")["close"].ffill()
+        df["close_ffill"] = df.groupby("instrument")["close"].ffill()
 
         # Should have fewer NAs
         assert df["close_ffill"].isna().sum() <= df["close"].isna().sum()

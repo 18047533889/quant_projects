@@ -757,15 +757,254 @@ def analyze_factor_definition(
     )
 
 
+# ---------------------------------------------------------------------------
+# R61-FI-012 — FE operator semantic metadata bridge
+#
+# 为 FP/FA 等下游提供算子语义元数据（FE 不 import FP）。本桥只把现有
+# registry 的既有 ``category/tags/status`` + 模块级声明表映射为冻结查询，
+# **不修改 OperatorRegistry / OperatorMetadata / catalog**，也不新增平行
+# catalog。未标注算子显式返回 UNKNOWN（禁止猜）。
+# ---------------------------------------------------------------------------
+
+#: 语义标签（semantic_tags）。仅声明表能证明的标签才列出；未覆盖不猜。
+#: 按算子的公开分类（canonical 名与 operator_surface）逐族归类：
+#:   rank/neutralize 等截面处理 → rank/neutralize；EWMA/rolling 等时序噪声
+#:   平滑 → smoothing；均值回复/波动率/流动性/动量族按算子语义。
+_OPERATOR_SEMANTIC_TAGS: dict[str, tuple[str, ...]] = {
+    # Rank / standardization（截面表征）
+    "rank": ("rank",),
+    "cs_pct_rank": ("rank",),
+    "zscore": ("rank", "zscore"),
+    "cs_demean": ("neutralize",),
+    "normalize": ("rank",),
+    "winsorize": ("winsorize",),
+    "group_rank": ("rank", "group"),
+    "group_zscore": ("rank", "zscore", "group"),
+    "group_winsorize": ("winsorize", "group"),
+    "group_neutralize": ("neutralize", "group"),
+    "cs_mad": ("dispersion", "cross_section"),
+    "cs_mad_zscore": ("dispersion", "cross_section"),
+    "cs_std": ("dispersion", "cross_section"),
+    "ts_std": ("volatility",),
+    "ts_var": ("volatility",),
+    "ts_zscore": ("zscore", "smoothing"),
+    # EWMA / EMA（自定义 smoothing）
+    "ts_ema": ("smoothing",),
+    "ts_ewma": ("smoothing",),
+    "ema": ("smoothing",),
+    # 动量 / 趋势
+    "ts_delta": ("momentum",),
+    "ts_pct": ("momentum",),
+    "ts_log_return": ("momentum",),
+    "ts_corr": ("correlation",),
+    "ts_cov": ("correlation",),
+    # 流动性
+    "intra_amihud": ("liquidity", "microstructure"),
+    "intra_kyle_lambda_proxy": ("liquidity", "microstructure"),
+    # 波动率 / 已实现
+    "intra_negative_jump_variation": ("volatility", "jump"),
+    "intra_positive_jump_variation": ("volatility", "jump"),
+    "intra_realized_variance": ("volatility",),
+    "intra_bipower_variation": ("volatility",),
+    "intra_idiosyncratic_variance": ("volatility",),
+    # 均值回复
+    "ts_mean_reversion_half_life": ("mean_reversion",),
+}
+
+#: stage_hint（raw / transform / neutralize / combine / smoothing /
+#: representation）。由处理家族推导。
+_OPERATOR_STAGE_HINT_TAGS: dict[str, str] = {
+    "rank": "representation",
+    "cs_pct_rank": "representation",
+    "zscore": "representation",
+    "cs_demean": "neutralize",
+    "normalize": "representation",
+    "winsorize": "transform",
+    "group_rank": "representation",
+    "group_zscore": "representation",
+    "group_winsorize": "transform",
+    "group_neutralize": "neutralize",
+    "cs_mad": "transform",
+    "cs_mad_zscore": "transform",
+    "cs_std": "transform",
+    "ts_std": "transform",
+    "ts_var": "transform",
+    "ts_zscore": "transform",
+    "ts_ema": "smoothing",
+    "ts_ewma": "smoothing",
+    "ema": "smoothing",
+    "ts_delta": "transform",
+    "ts_pct": "transform",
+    "ts_log_return": "transform",
+    "ts_corr": "combine",
+    "ts_cov": "combine",
+    "intra_amihud": "transform",
+    "intra_kyle_lambda_proxy": "transform",
+    "intra_negative_jump_variation": "transform",
+    "intra_positive_jump_variation": "transform",
+    "intra_realized_variance": "transform",
+    "intra_bipower_variation": "transform",
+    "intra_idiosyncratic_variance": "transform",
+    "ts_mean_reversion_half_life": "transform",
+}
+
+#: causality_class（causal-only / windowed / cross_sectional）。从
+#: AxisEffectContract 的精确 kind 与 category 断言映射：
+#:   ELEMENTWISE → "elementwise"；TIME_SERIES / STATEFUL / GRAIN_CHANGE →
+#:   "causal"（只消费历史/当前，天然 PIT-safe）；CROSS_SECTION /
+#:   GROUP_CROSS_SECTION / GLOBAL_PANEL → "cross_sectional"；RELATION → "relational"。
+_CAUSALITY_TS_KINDS = {"time_series", "stateful", "grain_change"}
+_CAUSALITY_CS_KINDS = {"cross_section", "group_cross_section", "global_panel"}
+
+
+@dataclass(frozen=True)
+class OperatorSemanticMetadata:
+    """算子语义元数据（R61-FI-012 查询结果）。
+
+    未标注字段一律 ``UNKNOWN``（显式字符串常量），**绝不猜测**。
+    ``operator_id`` 为归一的 canonical 名；``surface_known`` 为 registry
+    ``classify_canonical`` 的有效分类；``stage_hint`` 固定取声明表（命中
+    ``representation/transform/neutralize/combine/smoothing`` 之一）。
+    ``fitted_or_stateless`` 统一 ``"stateless"``（FE 算子为无状态逐行/滚动
+    算子；声明表里没有任何 fitted 算子）。
+    """
+
+    operator_id: str
+    semantic_tags: tuple[str, ...]
+    stage_hint: str
+    causality_class: str
+    fitted_or_stateless: str
+    surface_known: str = "UNKNOWN"
+    #: 元数据覆盖率口径：KNOWN 表示声明表覆盖（至少一个非 UNKNOWN 字段）；
+    #: UNKNOWN 表示完全未标注。
+    coverage: str = "KNOWN"
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "operator_id": self.operator_id,
+            "semantic_tags": list(self.semantic_tags),
+            "stage_hint": self.stage_hint,
+            "causality_class": self.causality_class,
+            "fitted_or_stateless": self.fitted_or_stateless,
+            "surface_known": self.surface_known,
+            "coverage": self.coverage,
+        }
+
+
+UNKNOWN_TAG = "UNKNOWN"
+UNKNOWN_STAGE = "UNKNOWN"
+UNKNOWN_CAUSALITY = "UNKNOWN"
+UNKNOWN_FITTED = "UNKNOWN"
+_UNKNOWN_METADATA_TOKENS = (UNKNOWN_TAG, UNKNOWN_STAGE, UNKNOWN_CAUSALITY, UNKNOWN_FITTED, "UNKNOWN")
+
+
+def _surface_classification(canonical: str) -> str:
+    try:
+        from factor_engine.cleaned_operators.operator_surface import classify_canonical
+
+        return str(classify_canonical(canonical))
+    except Exception:
+        return "UNKNOWN"
+
+
+def operator_semantic_metadata(query: str) -> OperatorSemanticMetadata:
+    """查询一个算子的语义元数据（R61-FI-012）。
+
+    ``query`` 可为 DSL 名或 canonical（先经 registry 别名归一）。未注册或
+    **未标注** 的算子显式返回 ``UNKNOWN``，绝不猜测、绝不抛错。
+
+    ``causality_class`` 使用 AxisEffectContract 精确 kind —— 与
+    ``analyze_factor_definition`` 的 timing 权威一致。
+    """
+    from factor_engine.backend.cleaned_bridge import ensure_cleaned_loaded
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
+    from factor_engine.ir.types import axis_effect_contract_for
+
+    # 与 identity.get_factor_identity 同款：公开查询入口触发一次 registry
+    # bootstrap（warm 后 <1s）；AxisEffectContract / migration manifest /
+    # daily-surface cache 只在 load 期构建。
+    ensure_cleaned_loaded()
+
+    try:
+        canonical = OperatorRegistry.resolve_canonical_strict(query)
+    except Exception:
+        return _unknown_metadata(str(query))
+
+    surface = _surface_classification(canonical)
+    tags = _OPERATOR_SEMANTIC_TAGS.get(canonical)
+    stage = _OPERATOR_STAGE_HINT_TAGS.get(canonical)
+    contract = axis_effect_contract_for(canonical)
+    axis_kind = contract.kind.value if contract is not None else None
+
+    if axis_kind in _CAUSALITY_TS_KINDS:
+        causality = "causal"
+    elif axis_kind in _CAUSALITY_CS_KINDS:
+        causality = "cross_sectional"
+    elif axis_kind == "elementwise":
+        causality = "elementwise"
+    elif axis_kind == "relation":
+        causality = "relational"
+    elif axis_kind is None:
+        causality = UNKNOWN_CAUSALITY
+    else:
+        causality = UNKNOWN_CAUSALITY
+    if causality is UNKNOWN_CAUSALITY and surface in ("daily", "extended"):
+        # 兼容回退：无 AxisEffectContract 时按 canonical 前缀保守归类，绝不猜编。
+        if canonical.startswith(("ts_", "expanding_")):
+            causality = "causal"
+        elif canonical.startswith(("cs_", "group_")):
+            causality = "cross_sectional"
+        else:
+            causality = UNKNOWN_CAUSALITY
+
+    if tags is None and stage is None and causality is UNKNOWN_CAUSALITY:
+        # 完全未标注 —— 显式 UNKNOWN
+        return _unknown_metadata(canonical, surface=surface)
+
+    return OperatorSemanticMetadata(
+        operator_id=canonical,
+        semantic_tags=tags or (UNKNOWN_TAG,),
+        stage_hint=stage or UNKNOWN_STAGE,
+        causality_class=causality,
+        fitted_or_stateless="stateless",
+        surface_known=surface,
+        coverage="KNOWN",
+    )
+
+
+def _unknown_metadata(query: str, *, surface: str = "UNKNOWN") -> OperatorSemanticMetadata:
+    """未标注/未注册算子的显式 UNKNOWN 元数据（禁猜）。"""
+    return OperatorSemanticMetadata(
+        operator_id=str(query),
+        semantic_tags=(UNKNOWN_TAG,),
+        stage_hint=UNKNOWN_STAGE,
+        causality_class=UNKNOWN_CAUSALITY,
+        fitted_or_stateless=UNKNOWN_FITTED,
+        surface_known=surface,
+        coverage="UNKNOWN",
+    )
+
+
+def _operator_metadata_from_usage(op_id: str) -> dict[str, Any]:
+    """从 operator usage 链路取算子元数据（供 FO/FA 消费）。"""
+    return operator_semantic_metadata(op_id).to_dict()
+
+
 __all__ = [
     "DirectOrDerived",
     "FactorStaticAnalysisArtifact",
     "FieldUsage",
     "OperatorUsage",
+    "OperatorSemanticMetadata",
     "TreatmentSemanticId",
+    "UNKNOWN_CAUSALITY",
+    "UNKNOWN_FITTED",
+    "UNKNOWN_STAGE",
+    "UNKNOWN_TAG",
     "analyze_factor_definition",
     "causality_class_of",
     "existing_treatment_semantic_id_of",
+    "operator_semantic_metadata",
     "resolve_canonical_operator",
     "semantic_stage_hint_of",
 ]

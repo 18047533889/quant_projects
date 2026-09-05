@@ -23,6 +23,25 @@ from factor_preprocess.representation.neural_ready import (
     NeuralReadyConfig,
     NeuralReadyResult,
 )
+from factor_preprocess.representation.policy import (
+    RepresentationProfileId,
+    REPRESENTATION_POLICY_VERSION,
+    RepresentationPolicy,
+    UnknownRepresentationProfileError,
+    get_representation_policy,
+    list_representation_policies,
+    ArtifactKind,
+    CANONICAL_FACTOR_NAMESPACE_PREFIX,
+    REPRESENTATION_NAMESPACE_PREFIX,
+    CanonicalAssetOverwriteError,
+    FeatureRepresentationArtifact,
+    register_feature_representation,
+    NonInferiorityTolerance,
+    NON_INFERIORITY_POLICY_VERSION,
+    DEFAULT_NON_INFERIORITY_TOLERANCE,
+    non_inferior,
+    SignalDestructionConflict,
+)
 
 __all__ = [
     "build_multichannel",
@@ -40,4 +59,22 @@ __all__ = [
     "prepare_embeddings",
     "NeuralReadyConfig",
     "NeuralReadyResult",
+    # R61-FI-044 model-specific representation policy profiles
+    "RepresentationProfileId",
+    "REPRESENTATION_POLICY_VERSION",
+    "RepresentationPolicy",
+    "UnknownRepresentationProfileError",
+    "get_representation_policy",
+    "list_representation_policies",
+    "ArtifactKind",
+    "CANONICAL_FACTOR_NAMESPACE_PREFIX",
+    "REPRESENTATION_NAMESPACE_PREFIX",
+    "CanonicalAssetOverwriteError",
+    "FeatureRepresentationArtifact",
+    "register_feature_representation",
+    "NonInferiorityTolerance",
+    "NON_INFERIORITY_POLICY_VERSION",
+    "DEFAULT_NON_INFERIORITY_TOLERANCE",
+    "non_inferior",
+    "SignalDestructionConflict",
 ]

@@ -105,10 +105,11 @@ def test_run_many_auto_warmup_shared_window_single_load():
     assert set(ww) == {"a", "b"}
     assert ww["a"]["requested_start"] == "2024-01-04"
     assert ww["b"]["requested_start"] == "2024-01-04"
-    # 最大 lookback(5) 决定共享加载起点
-    lb5 = effective_lookback(5)
+    # 最大 lookback(5) 决定共享加载起点。缓冲 bar 数以运行窗口实际 warmup_bars
+    # 为准（#248 后 warmup authority 来自 execution contract；该值 = requested
+    # 起点按交易日历前推的 bar 数），并用与运行路径相同的 bdate 回退断言。
     assert ww["b"]["actual_load_start"] == business_day_offset(
-        "2024-01-04", -lb5
+        "2024-01-04", -ww["b"]["warmup_bars"]
     ).strftime("%Y-%m-%d")
 
     # 结果与逐因子 run 一致，且在请求窗口内无 NaN（warmup 足够）

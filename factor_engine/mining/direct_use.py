@@ -2042,13 +2042,32 @@ def _has_physical_production_evidence(canonical: str) -> bool:
         from factor_engine.cleaned_operators.registry import OperatorRegistry
         from factor_engine.backend.operator_capability import enumerate_physical_inventory
 
+        # The REAL inventory is authoritative and fails closed: NOT_RUN /
+        # absent records can never be "physical production evidence".
+        records = list(enumerate_physical_inventory())
+        canonical_records = [
+            r for r in records if r.canonical == canonical and r.implementation_id is not None
+        ]
+        for record in canonical_records:
+            if record.admission.spec_complete and record.admission.evidence_production_safe:
+                return True
+
+        # R21-P030 fail-closed: with NO physical inventory rows at all this
+        # canonical is NOT_RUN — the certification fast path below must not
+        # fire, because "all backends NOT_RUN" can never be production
+        # evidence (the R21 admission contract).
+        if not canonical_records:
+            return False
+
         # Fast path: a registry backend_meta marker set by the R23 certification
         # pass (``physical_production_evidence=True`` on the pandas slot) is
         # authoritative physical-evidence proof for operators whose shared kernel
         # classes (elementwise/math) declare no class-level
         # ``PhysicalImplementationSpec``.  Keeps the fail-closed inventory below
         # authoritative but avoids the whole catalog degenerating to "no physical
-        # evidence" merely because a class-level spec is absent.
+        # evidence" merely because a class-level spec is absent.  It may only
+        # fire when the canonical genuinely HAS physical implementations
+        # (``canonical_records`` above) — never for a phantom/NOT_RUN slot.
         catalog = OperatorRegistry._catalog.get(canonical, {}) or {}
         meta = ((catalog.get("backend_meta") or {}).get("pandas_numpy") or {})
         # ``production_certified`` set by R23/R56 evidence certification with
@@ -2066,13 +2085,6 @@ def _has_physical_production_evidence(canonical: str) -> bool:
             }
         ):
             return True
-        for record in enumerate_physical_inventory():
-            if record.canonical != canonical:
-                continue
-            if record.implementation_id is None:
-                continue
-            if record.admission.spec_complete and record.admission.evidence_production_safe:
-                return True
         return False
     except Exception:
         # FAIL-CLOSED (R50): on any evidence-lookup error we return False, i.e.

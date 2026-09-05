@@ -55,6 +55,10 @@ class SnapshotVerifier:
     remote_meta_fn: Any = None
     local_stat_fn: Any = None
     strict: bool | None = None
+    # R61-P1 #56：mtime 精确比较门。默认保持精确（False → 比较 mtime_ns）。
+    # 跨进程并发下载 benchmark 用 ``DATA_ACCESS_SKIP_MTIME_VERIFY=1`` 关闭 mtime
+    # 纳秒比较（size 身份仍校验），避免并发写缓存时误报 SourceSnapshotChanged。
+    skip_mtime_verify: bool = False
 
     def _effective_strict(self) -> bool:
         if self.strict is not None:
@@ -206,6 +210,10 @@ class SnapshotVerifier:
                 # R28-4：优先原始 ``mtime_ns`` **精确**比较（消除 2s 容差下
                 # 「同大小文件替换」的漏网）；仅老构造（无 mtime_ns）回退
                 # last_modified 的 2s 容差。
+                if self.skip_mtime_verify:
+                    # R61-P1 #56：并发下载研究场景关闭 mtime 纳秒比较（size 已
+                    # 校验，内容同一性由缓存对象 + 下载后 manifest 保证）。
+                    continue
                 if obj.mtime_ns is not None:
                     if st.mtime_ns != int(obj.mtime_ns):
                         raise SourceSnapshotChanged(

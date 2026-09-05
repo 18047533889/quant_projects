@@ -20,7 +20,7 @@
 | 8 | A/B 修 scheduler 强制 thread 与 HybridExecutor classifier 冲突 | `runtime/adaptive_batch_scheduler.py` | 4 处强制 `prefer="thread"` 改 `prefer=self._execution_policy`（默认 None→HybridExecutor classifier 权威；`FACTOR_ENGINE_SCHEDULER` env 可覆盖）；A/B 定案 **thread 0.68x vs process 6.81x（比值 10.06x）**；classifier 路径快 **1.32x/1.41x/1.56x** 三档实测；telemetry execution_policy 可见 | **8+46 passed**（`tests/test_p8_scheduler_execution_policy.py` 6 + `tests/test_p8_ab_bench.py` 1 等） |
 | 9 | 多 worker 默认单主进程内部并发；多进程共享资源配额 | `runtime/multiworker_governance.py`（新增） | `resolve_worker_budget()`：solo 31 核、`FACTOR_ENGINE_COEXIST=sharedN` 按 `floor(31/N)` 均分、`workers×threads<=budget` clamp+告警；9 个 worker 启动点审计入表；双进程实测 **16+15=31 恰满不超订阅、RSS 0.11G** | **8+30 passed**（`tests/test_multiworker_governance.py` 8）；67/1 大回归（唯一失败 HEAD 预存在） |
 | 10 | A股 Return/%/PIT/minute/session/industry/index/relation contract 做成不可绕过 production gate | `storage/sources/intraday_feature_runtime_v2.py`（`assert_session_complete`）、`tests/test_ashare_contract_gate.py` | 12 条矩阵 10 条已有（Return bp/PubDate PIT/财务累计/IndustrySource/TopTen/IndexSymbol/分红 effective）；新增 `assert_session_complete`（240 bars fail-closed，1min/5min 通用，生产缺 1 bar 即拒）接入 `_grouped_bars`；真实数据验证 **000001.SZ Return=-191.69bp→/10000 PASS、裸 Return 拦截 PASS、PubDate 泄漏拒绝 PASS** | **111+26 passed**（`tests/test_ashare_contract_gate.py` 20 等）；遗留 2 条非 P0（见 risk register） |
-| 11 | 建立 100/1k/5k/20k/50k/100k dry-run ladder | `scripts/dry_run_ladder.py`（新增） | 全级支持/分层抽样/streaming sink 5000 行 shard/checkpoint 每 25 公式/六类失败分类；续跑实测通过（中断 4 条→resume 补 6 条；1k 级 3 次被杀成功续跑完）；**100 级 30 passed/70 failed**（param 28/data 15/semantic 9/other 18）rss 301.5MB；**1k 级 227 passed/773 failed**（param 329/data 144/semantic 66/other 234）wall 1194.4s rss 493MB，**0 timeout 0 OOM**；失败归因真实 | `tests/test_dry_run_ladder.py`（9 用例） |
+| 11 | 建立 100/1k/5k/20k/50k/100k dry-run ladder | `scripts/production_factor_ladder.py`（R61-P0 #58 取代旧 `scripts/dry_run_ladder.py`，后者保留为 thin shim） | 全级支持/分层抽样/streaming sink 5000 行 shard/checkpoint 每 25 公式/六类失败分类；续跑实测通过（中断 4 条→resume 补 6 条；1k 级 3 次被杀成功续跑完）；**100 级 30 passed/70 failed**（param 28/data 15/semantic 9/other 18）rss 301.5MB；**1k 级 227 passed/773 failed**（param 329/data 144/semantic 66/other 234）wall 1194.4s rss 493MB，**0 timeout 0 OOM**；失败归因真实 | `tests/test_dry_run_ladder.py`（9 用例） |
 | 12 | 所有 P0 关闭后再开始正式落 10 万因子 | — | 见 §2 裁定 | — |
 
 **P0 补充项（53 算子 runtime audit）**：before 53 → after 2；51 fixture 缺口修（参数撞面板名/撞 generic fallback/minute→minute 模板）；2 真 bug 修（`intra_probe_outcome_score` 列表不同步、`ts_fir_lowpass_causal` 短输入 convolve 长度错位）；`ts_ewm_corr`/`ts_ewm_cov` 真 gap（无 pandas_numpy 参考，如实报告）。audit 复跑 FAILED (2 issues) 确认。
@@ -49,6 +49,7 @@
 - minute bundle benchmark ✅（compute_many 单 scan：feature 10→100 wall 放大 **6.82x**（线性 10x）、10→200 **6.64x**（线性 20x）；OLD vs NEW 单 feature **26.04x** / 100 feature **23.06x**，见 `perf_vec/PERFORMANCE_BENCHMARK.md`）
 - cold/warm cache benchmark ✅（warm_speedup **1.54x**；一次 compute_many scan keys=1）
 - 1/2/4/8 worker scaling ✅（throughput 5.7→10.6→21.5→37.6 f/s，scaling 1/1.865/3.775/6.598，无拐点峰值 w8；超卖 8×8=64 违反 governor 且无收益，见 `perf_vec/MULTIWORKER_SCALING.md`）
+- Real DA/COS IO scaling ✅（R61-P1 #56：真实 data_access+COS 冷读 1/2/4/8 → f/s 0.27→0.66→1.50→2.65（w8 vs w1=9.8×），每档 remote fetch 恒=10 且 duplicate-download=0 —— 跨进程 cache single-flight 真实成立；cache hit 37.5→92.2%，见 `perf_vec/MULTIWORKER_SCALING.md`「Real DA/COS IO scaling」段）
 
 ### §101 多 worker — 通过（P0#9）
 - host total CPU <= budget ✅（resolve_worker_budget clamp，双进程 16+15=31 恰满不超订阅）
@@ -56,7 +57,7 @@
 - DuckDB threads <= CPU ✅（multiworker_governance 配额）
 - Polars threads controlled ✅
 - remote concurrency controlled ✅
-- cross-process cache single-flight ⚠️（未单独验证，见 risk register）
+- cross-process cache single-flight ✅（R61-P1 #56：真实 COS 4 进程并发同对象 → fetch=1/hit=3；`data_access/tests/unit/test_cache_single_flight.py` 2 passed）
 
 ### §102 Backend — 通过（P0#1）
 - backend coverage 当前 HEAD 重生成 ✅（`artifacts/BACKEND_COVERAGE_CURRENT_HEAD.md`）
@@ -87,7 +88,7 @@
 - `MULTIWORKER_SCALING.md` ✅（`perf_vec/`，1/2/4/8 scaling）
 - `DATA_ACCESS_IO_REPORT.md` ✅（data_access R30/R57/R58 实测）
 
-> 全部 11 份位于 `artifacts/`（子目录见上）；生成脚本：`generate_intraday_vector_coverage.py` / `bench_minute_bundle.py` / `bench_worker_scaling.py`；数据源为实测 JSON/CSV，无编造。
+> 全部 11 份位于 `artifacts/`（子目录见上）；生成脚本：`generate_intraday_vector_coverage.py` / `bench_minute_bundle.py` / `bench_worker_scaling.py`（synthetic CPU-bound）/ `bench_worker_scaling_real.py`（真实 DA/COS IO，R61-P1 #56）；数据源为实测 JSON/CSV，无编造。
 
 ### §106 GO/NO-GO 两种结论 — 见 §3 裁定
 

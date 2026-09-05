@@ -394,7 +394,7 @@ class TestPolarsPerformance:
         start = time.time()
         result_pandas = (
             large_panel_data
-            .group_by("instrument")["close"]
+            .groupby("instrument")["close"]
             .mean()
         )
         pandas_time = time.time() - start
@@ -428,9 +428,9 @@ class TestPolarsPerformance:
             df_pl
             .group_by("instrument")
             .agg([
-                pl.col("close").mean(),
-                pl.col("close").std(),
-                pl.col("volume").sum(),
+                pl.col("close").mean().alias("avg_close"),
+                pl.col("close").std().alias("std_close"),
+                pl.col("volume").sum().alias("total_volume"),
             ])
         )
 

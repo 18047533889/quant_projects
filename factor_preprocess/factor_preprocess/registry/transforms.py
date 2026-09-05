@@ -103,6 +103,30 @@ class TransformMetadata:
     cost_class: Optional[str] = None
     output_channels: Tuple[str, ...] = field(default_factory=tuple)
 
+    # R61-FI-040/041 implementation-origin surface (plan §26 F2).  The FP
+    # registry keeps a *routing* view of where a transform's authoritative
+    # math lives:
+    #   ``implementation_origin``: Literal["FE_OPERATOR", "FP_NATIVE"]
+    #       - FE_OPERATOR: execution is routed through the FE adapter
+    #         (factor_preprocess/adapters/fe_operator.py) after parity proved
+    #         the FP-native kernel and the FE operator agree.  The FP-native
+    #         kernel is RETAINED as a deprecated fallback (never deleted in
+    #         one shot — plan §26 F3 migration period).
+    #       - FP_NATIVE: no FE equivalent (fitted / exposure-aware /
+    #         freshness / decomposition semantics), FP math stays
+    #         authoritative.
+    #   ``fe_operator_id``: canonical FE operator id when
+    #     ``implementation_origin == "FE_OPERATOR"`` (None otherwise).
+    #   ``fit_kind``: "stateless" | "fitted" — mirrors ``requires_fit`` for
+    #     machine-readable routing (only stateless transforms may route to
+    #     FE; fitted transforms are always FP_NATIVE).
+    # ``fe_equivalent_semantics`` is intentionally left as the *semantic*
+    # (DSL-family) descriptor (informational); ``fe_operator_id`` is the
+    # exact canonical operator id consumed by the adapter.
+    implementation_origin: Optional[str] = None
+    fe_operator_id: Optional[str] = None
+    fit_kind: Optional[str] = None
+
     # Every registry-provided metadata snapshot is deeply immutable: plain
     # attribute assignment (``meta.stage = 'x'``) and nested-container
     # mutation both raise.  ``_frozen`` / ``enrich`` / ``__init__`` use
@@ -150,6 +174,9 @@ class TransformMetadata:
         fe_equivalent_semantics: Optional[str] = None,
         cost_class: Optional[str] = None,
         output_channels: Optional[Tuple[str, ...]] = None,
+        implementation_origin: Optional[str] = None,
+        fe_operator_id: Optional[str] = None,
+        fit_kind: Optional[str] = None,
     ):
         """Manually-defined initializer (``init=False``).
 
@@ -186,6 +213,9 @@ class TransformMetadata:
         object.__setattr__(self, "fe_equivalent_semantics", fe_equivalent_semantics)
         object.__setattr__(self, "cost_class", cost_class)
         object.__setattr__(self, "output_channels", tuple(output_channels) if output_channels else ())
+        object.__setattr__(self, "implementation_origin", implementation_origin)
+        object.__setattr__(self, "fe_operator_id", fe_operator_id)
+        object.__setattr__(self, "fit_kind", fit_kind)
         self.__post_init__()
 
     def __post_init__(self):
@@ -274,9 +304,10 @@ class TransformMetadata:
         causality_class, requires_fit/exposure/universe, allowed families /
         asset types / frequencies, parameter_domain, numeric_policy,
         production_admission, fe_equivalent_semantics, cost_class,
-        output_channels) is part of the snapshot identity and must therefore
-        also be reflected in this hash so a semantic-only drift changes the
-        registry identity (R55 #93).
+        output_channels, implementation_origin, fe_operator_id, fit_kind) is
+        part of the snapshot identity and must therefore also be reflected in
+        this hash so a semantic-only drift changes the registry identity
+        (R55 #93).
         """
         # Deterministic ordering: sort tags and parameter keys.
         def canonical_params(p):
@@ -312,6 +343,9 @@ class TransformMetadata:
             str(self.fe_equivalent_semantics or ""),
             str(self.cost_class or ""),
             ",".join(str(c) for c in (as_plain(self.output_channels) or ())),
+            str(self.implementation_origin or ""),
+            str(self.fe_operator_id or ""),
+            str(self.fit_kind or ""),
         ])
         return _hash_bytes(payload)[:16]
 
@@ -383,6 +417,9 @@ class TransformRegistry:
         fe_equivalent_semantics: Optional[str] = None,
         cost_class: Optional[str] = None,
         output_channels: Optional[Tuple[str, ...]] = None,
+        implementation_origin: Optional[str] = None,
+        fe_operator_id: Optional[str] = None,
+        fit_kind: Optional[str] = None,
     ) -> None:
         """
         Register a transform.
@@ -437,6 +474,17 @@ class TransformRegistry:
             Runtime cost classification
         output_channels : tuple, optional
             Output channel names
+        implementation_origin : str, optional
+            ``"FE_OPERATOR"`` when this transform's execution routes through
+            the FE adapter (parity-proved stateless duplicate — R61-FI-041);
+            ``"FP_NATIVE"`` otherwise. Fitted transforms are always
+            ``"FP_NATIVE"``.
+        fe_operator_id : str, optional
+            Canonical FE operator id consumed by the adapter when
+            ``implementation_origin == "FE_OPERATOR"`` (else None).
+        fit_kind : str, optional
+            ``"stateless"`` or ``"fitted"`` (machine-readable mirror of
+            ``requires_fit`` for origin routing).
         """
         # Existing callers omit admission for ordinary causal transforms;
         # make that omission explicit rather than treating it as unknown.
@@ -472,6 +520,9 @@ class TransformRegistry:
             fe_equivalent_semantics=fe_equivalent_semantics,
             cost_class=cost_class,
             output_channels=tuple(output_channels) if output_channels else (),
+            implementation_origin=implementation_origin,
+            fe_operator_id=fe_operator_id,
+            fit_kind=fit_kind,
         )
 
         if name not in self._transforms:
@@ -514,6 +565,9 @@ class TransformRegistry:
                 and existing.fe_equivalent_semantics == metadata.fe_equivalent_semantics
                 and existing.cost_class == metadata.cost_class
                 and existing.output_channels == metadata.output_channels
+                and existing.implementation_origin == metadata.implementation_origin
+                and existing.fe_operator_id == metadata.fe_operator_id
+                and existing.fit_kind == metadata.fit_kind
             )
             if not same_registration:
                 raise ValueError(
@@ -573,6 +627,7 @@ class TransformRegistry:
             "allowed_factor_families", "allowed_asset_types",
             "allowed_frequencies", "parameter_domain", "numeric_policy",
             "fe_equivalent_semantics", "cost_class", "output_channels",
+            "implementation_origin", "fe_operator_id", "fit_kind",
         }
         unknown = set(fields) - allowed
         if unknown:
@@ -617,6 +672,46 @@ class TransformRegistry:
         if not metadata.causal_safe:
             raise ValueError(f"Transform '{name}' is not production-causal-safe")
         return metadata._frozen
+
+    def resolve_origin(self, name: str) -> str:
+        """Resolve the effective implementation origin for a transform.
+
+        Returns ``"FE_OPERATOR"`` when the transform is stateless and has a
+        bound ``fe_operator_id`` (parity-proved — R61-FI-041), otherwise
+        ``"FP_NATIVE"``.  Fitted transforms can never route to FE; unknown
+        transforms fail closed.
+        """
+        metadata = self._transforms.get(name)
+        if metadata is None:
+            raise ValueError(f"Transform '{name}' is not registered")
+        if metadata.fit_kind == "fitted":
+            return "FP_NATIVE"
+        if metadata.implementation_origin == "FE_OPERATOR" and metadata.fe_operator_id:
+            return "FE_OPERATOR"
+        return "FP_NATIVE"
+
+    def get_execution(self, name: str):
+        """Return the callable to execute for a transform.
+
+        For ``FE_OPERATOR``-origin transforms the FP registry does NOT
+        hard-import FE (dependency isolation): execution goes through the
+        adapter hook installed in
+        :mod:`factor_preprocess.adapters.fe_operator` (lazy-injected).  When
+        the adapter is unavailable (FE not importable), the FP-native kernel
+        (deprecated but retained fallback — plan §26 F3) is used so the
+        registry remains executable in any environment.
+        """
+        if self.resolve_origin(name) == "FE_OPERATOR":
+            try:
+                from factor_preprocess.adapters.fe_operator import get_fe_executor
+            except Exception:
+                get_fe_executor = None
+            if get_fe_executor is not None:
+                meta = self._transforms[name]
+                executor = get_fe_executor(meta.fe_operator_id, fallback=meta.func)
+                if executor is not None:
+                    return executor
+        return self._transforms[name].func
 
     def get_function(self, name: str) -> Optional[Callable]:
         """Get transform function by name."""
@@ -1171,6 +1266,81 @@ def create_default_registry() -> TransformRegistry:
     registry.enrich("freshness_score", semantic_id="FRESHNESS:score", stage="missingness",
                     family_tags=set(ALL_FAMILY_TAGS), causality_class="one_sided_causal",
                     requires_fit=False, output_channels=("freshness",))
+
+    # ------------------------------------------------------------------
+    # R61-FI-040/041: implementation-origin routing (plan §26 F2/F3).
+    #
+    # The transforms below are *stateless* and have an FE canonical operator
+    # whose math parity against the retained FP-native kernel is proven in
+    # tests/test_fe_operator_parity.py (maxabs diff == 0.0 over randomized
+    # (T, N) panels with NaN/tie/Inf cases; explicit tolerances recorded).
+    # Their execution therefore routes through the FE adapter
+    # (adapters/fe_operator.py, lazy-injected — FE is not a hard FP
+    # dependency); the FP-native kernel is RETAINED as the deprecated
+    # fallback (never deleted in one shot — plan §26 F3 migration period).
+    #
+    # Cross-sectional exact duplicates:
+    #   cs_rank    <- FE rank        (0-1 pct rank, singleton 0.5, average ties)
+    #   cs_demean  <- FE cs_demean   (CS demean; singleton demean == 0.0 both)
+    #   cs_winsor  <- FE winsorize   (CS quantile clip, linear interpolation)
+    # NOTE cs_zscore is intentionally NOT routed: the FE zscore kernel emits an
+    # all-NaN row for a singleton cross-section (std ddof=1 == NaN is not
+    # replaced), whereas the FP kernel returns ``constant_value`` (0.0) at the
+    # single finite cell (``np.nanstd`` NaN -> ``np.where(std > 0, ...,
+    # constant_value)`` with NaN>0 False).  Degenerate singleton rows are
+    # reachable in sparse/illiquid cross-sections, so this is a real semantic
+    # difference -> cs_zscore stays FP_NATIVE (documented in
+    # docs/FE_OPERATOR_REUSE_MATRIX.md as partial:normal).
+    # Missingness exact duplicate:
+    #   forward_fill <- FE ffill_limit (bounded ffill == pandas ffill(limit))
+    # Neutralization exact duplicate (add_intercept=False, joint exposures):
+    #   ols_neutralize <- FE cs_neutralize
+    #     (industry_neutral / size_neutral / dual_neutral are semantic aliases
+    #      bound to the SAME kernel; their adapter execution is therefore the
+    #      same route and is stamped below).
+    #
+    # Anything NOT listed here (fitted / exposure-aware residualization with
+    # fitted state, freshness, temporal smoothing with halflife/current-bar
+    # semantics FE does not reproduce, decomposition, volatility) stays
+    # FP_NATIVE.
+    # ------------------------------------------------------------------
+    _FE_ROUTED = {
+        "cs_rank": ("rank", "stateless"),
+        "cs_demean": ("cs_demean", "stateless"),
+        "cs_winsor": ("winsorize", "stateless"),
+        "forward_fill": ("ffill_limit", "stateless"),
+        "ols_neutralize": ("cs_neutralize", "stateless"),
+        "industry_neutral": ("cs_neutralize", "stateless"),
+        "size_neutral": ("cs_neutralize", "stateless"),
+        "dual_neutral": ("cs_neutralize", "stateless"),
+    }
+    for _name, (_fe_id, _fit_kind) in _FE_ROUTED.items():
+        registry.enrich(
+            _name,
+            implementation_origin="FE_OPERATOR",
+            fe_operator_id=_fe_id,
+            fit_kind=_fit_kind,
+        )
+    del _name, _fe_id, _fit_kind, _FE_ROUTED
+
+    # Every transform left FP_NATIVE is explicitly stamped (fail-closed:
+    # ``implementation_origin`` is never None on a production transform so a
+    # routing audit can enumerate the full catalog without guessing).
+    for _meta in registry.all_transforms():
+        if _meta.name in {
+            "cs_rank", "cs_demean", "cs_winsor",
+            "forward_fill", "ols_neutralize", "industry_neutral",
+            "size_neutral", "dual_neutral",
+        }:
+            continue
+        _kind = "fitted" if _meta.requires_fit else "stateless"
+        registry.enrich(
+            _meta.name,
+            implementation_origin="FP_NATIVE",
+            fe_operator_id=None,
+            fit_kind=_kind,
+        )
+    del _meta, _kind
 
     return registry
 

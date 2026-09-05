@@ -1,67 +1,171 @@
 {
  "header": {
   "schema_version": "factor_engine.current_head.inventory.v1",
-  "generated_at_utc": "2026-09-03T09:37:49Z",
+  "generated_at_utc": "2026-09-05T03:49:08Z",
   "load_mode": "load_all(include_research=False)",
-  "commit_sha": "dbbc3fe75f38d75c88f62ad60e3e0eedc666f026",
+  "commit_sha": "593507c1e25288e78ba95a5d7acc6bfef57daf1f",
   "dirty": true,
   "dirty_files": [
-   "M factor_engine/backend/contracts/__init__.py",
-   " M factor_engine/backend/operator_capability.py",
-   " M factor_engine/backend/polars_backend_kind.py",
-   " M factor_engine/backend/sql_pushdown/sql_registry.py",
-   " M factor_engine/cleaned_operators/__init__.py",
-   " M factor_engine/cleaned_operators/common/group.py",
-   " M factor_engine/cleaned_operators/common/polars_ts_basic.py",
+   "M benchmarks/operator_manifest.json",
+   " M data_access/README.md",
+   " M data_access/cos/mirror.py",
+   " M data_access/cos/remote.py",
+   " M data_access/read/session_calendar.py",
+   " M data_access/snapshot/verifier.py",
+   " M data_access/store.py",
+   " M docs/factor_intelligence/CAPABILITY_GAP_MATRIX.md",
+   " M docs/factor_intelligence/IMPLEMENTATION_DECISIONS.md",
+   " M docs/factor_intelligence/progress_log.md",
+   " M evidence/CURRENT.json",
+   " M evidence/current.py",
+   " M evidence/factor_operator_verified.json",
+   " M evidence/registry.py",
+   " M factor_engine/README.md",
+   " M factor_engine/api/static_analysis.py",
+   " M factor_engine/artifacts/100K_DRY_RUN_REPORT.md",
+   " M factor_engine/artifacts/GO_NO_GO.md",
+   " M factor_engine/artifacts/operator_audit/current_head/operator_matrix.csv",
+   " M factor_engine/artifacts/perf_vec/INTRADAY_VECTOR_COVERAGE.md",
+   " M factor_engine/artifacts/perf_vec/MULTIWORKER_SCALING.md",
+   " M factor_engine/artifacts/perf_vec/PERFORMANCE_BENCHMARK.md",
+   " M factor_engine/artifacts/perf_vec/intraday_vector_coverage.json",
+   " M factor_engine/artifacts/preflight/alias_inventory.json",
+   " M factor_engine/artifacts/preflight/backend_matrix.json",
+   " M factor_engine/artifacts/preflight/direct_use_matrix.json",
+   " M factor_engine/artifacts/preflight/field_registry.json",
+   " M factor_engine/artifacts/preflight/inventory_manifest.json",
+   " M factor_engine/artifacts/preflight/operator_inventory.json",
+   " M factor_engine/artifacts/preflight/source_contract_matrix.json",
+   " M factor_engine/artifacts/preflight/surface_inventory.json",
+   " M factor_engine/backend/multibackend_governance.py",
+   " M factor_engine/backend/operator_signatures_phase1.py",
+   " M factor_engine/benchmarks/dry_run_ladder.py",
+   " M factor_engine/cleaned_operators/intraday/__init__.py",
    " M factor_engine/cleaned_operators/intraday/_core.py",
    " M factor_engine/cleaned_operators/intraday/perf_vec_bench.py",
+   " M factor_engine/cleaned_operators/intraday/perf_vec_coverage.py",
    " M factor_engine/cleaned_operators/intraday/perf_vec_equiv.py",
    " M factor_engine/cleaned_operators/intraday/perf_vec_kernels.py",
-   " M factor_engine/cleaned_operators/polars_gap_coverage.py",
-   " M factor_engine/cleaned_operators/r23_cert_math.py",
-   " M factor_engine/cleaned_operators/rolling_pack.py",
-   " M factor_engine/docs/R18_DELETE_PLAN.json",
-   " M factor_engine/docs/R18_DELETE_PLAN.md",
-   " M factor_engine/docs/R18_DIRECT_USE_MATRIX.csv",
-   " M factor_engine/docs/R18_DIRECT_USE_MATRIX.json",
-   " M factor_engine/docs/R18_DIRECT_USE_MATRIX.md",
-   " M factor_engine/docs/R18_OPERATOR_SMOKE_RECIPES.json",
-   " M factor_engine/docs/operator_migration_map.json",
-   " M factor_engine/ir/analyzer.py",
+   " M factor_engine/loop/fe100k/status.md",
    " M factor_engine/mining/direct_use.py",
-   " M factor_engine/planner/cse.py",
-   " M factor_engine/planner/native_fusion.py",
+   " M factor_engine/reporting/quant_evaluator_adapter.py",
    " M factor_engine/runtime/adaptive_batch_scheduler.py",
-   " M factor_engine/runtime/batch_service.py",
    " M factor_engine/runtime/engine.py",
-   " M factor_engine/runtime/intraday_aggregator.py",
-   " M factor_engine/runtime/perf_config.py",
+   " M factor_engine/runtime/production_policy.py",
+   " M factor_engine/scripts/dry_run_ladder.py",
    " M factor_engine/storage/sources/intraday_feature_extension.py",
    " M factor_engine/storage/sources/intraday_feature_runtime_v2.py",
+   " M factor_engine/storage/streaming_sink.py",
+   " M factor_engine/tests/conftest.py",
+   " M factor_engine/tests/multibackend_integration/test_backend_execution.py",
+   " M factor_engine/tests/multibackend_integration/test_cost_model.py",
+   " M factor_engine/tests/multibackend_integration/test_duckdb_region.py",
+   " M factor_engine/tests/multibackend_integration/test_end_to_end.py",
+   " M factor_engine/tests/multibackend_integration/test_hard_gates.py",
+   " M factor_engine/tests/multibackend_integration/test_pandas_region.py",
+   " M factor_engine/tests/multibackend_integration/test_polars_region.py",
+   " M factor_engine/tests/multibackend_integration/test_region_optimizer.py",
+   " M factor_engine/tests/multibackend_integration/test_region_planning.py",
+   " M factor_engine/tests/multibackend_integration/test_representation_transfer.py",
    " M factor_engine/tests/operators/test_intraday_feature_extensions.py",
-   "?? FACTOR_ENGINE_100K_PRODUCTION_GO_PROMPT.md",
-   "?? factor_engine/artifacts/",
-   "?? factor_engine/ashare_contract_gate.py",
-   "?? factor_engine/benchmarks/dry_run_ladder.py",
-   "?? factor_engine/cleaned_operators/spec_completion.py",
-   "?? factor_engine/loop/",
-   "?? factor_engine/runtime/dry_run_checkpoint.py",
-   "?? factor_engine/runtime/failure_classification.py",
-   "?? factor_engine/runtime/multiworker_governance.py",
-   "?? factor_engine/storage/streaming_sink.py",
-   "?? factor_engine/telemetry/execution_telemetry.py",
-   "?? factor_engine/tests/backend/test_perf_config_env_cache.py",
-   "?? factor_engine/tests/runtime/test_intraday_compute_many.py",
-   "?? factor_engine/tests/test_ashare_contract_gate.py",
-   "?? factor_engine/tests/test_dry_run_ladder.py",
-   "?? factor_engine/tests/test_multiworker_governance.py",
-   "?? jobs/backfill_incremental_aliases.py"
+   " M factor_engine/tests/runtime/test_batch_warmup_pit.py",
+   " M factor_engine/tests/runtime/test_production_dsl_gate.py",
+   " M factor_engine/tests/test_ashare_mining_matrix.py",
+   " M factor_engine/tests/test_dry_run_ladder.py",
+   " M factor_engine/tests/test_multibackend_governance.py",
+   " M factor_optimizer/factor_optimizer/contracts/__init__.py",
+   " M factor_optimizer/factor_optimizer/contracts/treatment_result.py",
+   " M factor_optimizer/factor_optimizer/policy/repair.py",
+   " M factor_optimizer/factor_optimizer/search/multifidelity.py",
+   " M factor_optimizer/factor_optimizer/search/treatment_decision.py",
+   " M factor_preprocess/factor_preprocess/__init__.py",
+   " M factor_preprocess/factor_preprocess/adapters/__init__.py",
+   " M factor_preprocess/factor_preprocess/contracts/treatment_recipe.py",
+   " M factor_preprocess/factor_preprocess/grammar/search_grammar.py",
+   " M factor_preprocess/factor_preprocess/registry/policies.py",
+   " M factor_preprocess/factor_preprocess/registry/transforms.py",
+   " M factor_preprocess/factor_preprocess/representation/__init__.py",
+   " M jobs/incremental_factor_intake.py",
+   " M jobs/render_evoalpha14_pages.py",
+   " M jobs/render_optimized_pages.py",
+   " M quant_evaluator/kernels/gpu/__init__.py",
+   " M quant_evaluator/metrics/__init__.py",
+   " M quant_evaluator/metrics/portfolio_stats.py",
+   " M quant_evaluator/registry/__init__.py",
+   " M quant_evaluator/registry/metrics.py",
+   " M quant_evaluator/registry/presets.py",
+   " M scripts/archive/jobs/rebuild_factor_detail_pages.py",
+   " M tests/reporting_test_quant_evaluator_report_contract.py",
+   "?? alphaprobe/ashare/alphaprobe-dev/tests/test_ctor_probe_plugin.py",
+   "?? data_access/tests/unit/test_cache_single_flight.py",
+   "?? data_access/tests/unit/test_session_exact_slots.py",
+   "?? docs/factor_intelligence/QE_EVIDENCE_AUDIT.md",
+   "?? evidence/gate.py",
+   "?? evidence/r2/R61_P1_56_REAL_DACOS_WORKER_SCALING.yaml",
+   "?? factor_assets/profiling/",
+   "?? factor_assets/tests/profiling/",
+   "?? factor_engine/artifacts/perf_vec/MULTIWORKER_REAL.json",
+   "?? factor_engine/cleaned_operators/intraday/sufficient_stats.py",
+   "?? factor_engine/cleaned_operators/intraday/sufficient_stats_ops.py",
+   "?? factor_engine/docs/TEST_TIERING.md",
+   "?? factor_engine/scripts/bench_worker_scaling_real.py",
+   "?? factor_engine/scripts/check_production_critical.sh",
+   "?? factor_engine/scripts/production_factor_ladder.py",
+   "?? factor_engine/scripts/run_test_tiers.py",
+   "?? factor_engine/tests/legacy_quarantine.txt",
+   "?? factor_engine/tests/operators/test_intraday_sufficient_stats.py",
+   "?? factor_engine/tests/production_critical.txt",
+   "?? factor_engine/tests/research_extended.txt",
+   "?? factor_engine/tests/runtime/test_session_gate_per_symbol.py",
+   "?? factor_engine/tests/static_analysis/test_operator_metadata.py",
+   "?? factor_engine/tests/test_production_factor_ladder.py",
+   "?? factor_optimizer/factor_optimizer/adapters/factor_assets.py",
+   "?? factor_optimizer/factor_optimizer/adapters/fitness.py",
+   "?? factor_optimizer/factor_optimizer/contracts/evidence_value.py",
+   "?? factor_optimizer/factor_optimizer/contracts/factor_fitness.py",
+   "?? factor_optimizer/factor_optimizer/policy/repair_registry.py",
+   "?? factor_optimizer/factor_optimizer/ports/",
+   "?? factor_optimizer/factor_optimizer/search/conditional_search.py",
+   "?? factor_optimizer/tests/search/test_conditional_search.py",
+   "?? factor_optimizer/tests/search/test_multifidelity_profiles.py",
+   "?? factor_optimizer/tests/test_diagnosis_repair_policy.py",
+   "?? factor_optimizer/tests/test_factor_fitness.py",
+   "?? factor_optimizer/tests/test_factor_intelligence_provider.py",
+   "?? factor_optimizer/tests/test_missing_evidence_semantics.py",
+   "?? factor_optimizer/tests/test_raw_outcomes.py",
+   "?? factor_optimizer/tests/test_repair_registry.py",
+   "?? factor_optimizer/tests/test_search_budget.py",
+   "?? factor_optimizer/tests/test_treatment_decision_generalized.py",
+   "?? factor_preprocess/docs/FE_OPERATOR_REUSE_MATRIX.md",
+   "?? factor_preprocess/factor_preprocess/adapters/fe_operator.py",
+   "?? factor_preprocess/factor_preprocess/contracts/fit_apply.py",
+   "?? factor_preprocess/factor_preprocess/contracts/lineage_policy.py",
+   "?? factor_preprocess/factor_preprocess/representation/policy.py",
+   "?? factor_preprocess/tests/contracts/test_fit_apply_guards.py",
+   "?? factor_preprocess/tests/contracts/test_lineage_dedup.py",
+   "?? factor_preprocess/tests/representation/",
+   "?? factor_preprocess/tests/test_fe_operator_parity.py",
+   "?? factor_preprocess/tests/test_preset_semantic_order.py",
+   "?? factor_preprocess/tests/test_transform_metadata.py",
+   "?? quant_evaluator/contracts/adaptive_bins_policy.py",
+   "?? quant_evaluator/kernels/gpu/exposure_evidence.py",
+   "?? quant_evaluator/metrics/exposure_evidence.py",
+   "?? quant_evaluator/metrics/generalization_evidence.py",
+   "?? quant_evaluator/metrics/shape_evidence.py",
+   "?? quant_evaluator/metrics/underwater.py",
+   "?? quant_evaluator/tests/test_drawdown_evidence.py",
+   "?? quant_evaluator/tests/test_evidence_profiles.py",
+   "?? quant_evaluator/tests/test_exposure_evidence.py",
+   "?? quant_evaluator/tests/test_generalization_evidence.py",
+   "?? quant_evaluator/tests/test_shape_evidence.py",
+   "?? tests/test_evidence_gate.py",
+   "?? tests/test_incremental_report_mainline.py"
   ],
-  "registry_fingerprint": "189a00582ba4e9a4"
+  "registry_fingerprint": "201a7bbc75caf6b9"
  },
- "canonical_count": 1673,
+ "canonical_count": 1689,
  "direct_use_status_counts": {
-  "direct_alpha": 1397,
+  "direct_alpha": 1413,
   "direct_intermediate": 49,
   "direct_alpha_high_cost": 49,
   "move_internal": 23,
@@ -28305,6 +28409,7 @@
    "canonical": "clip",
    "aliases": [
     "CLIP",
+    "bound",
     "cap",
     "clamp"
    ],
@@ -109621,12 +109726,12 @@
    "preferred_backend": "polars",
    "reference_backend": "pandas_numpy",
    "production_certified": true,
-   "directly_usable": true,
+   "directly_usable": false,
    "mining_visible": true,
    "composition_usable": true,
    "terminal_usable": true,
-   "production_terminal_usable": true,
-   "production_admitted": true,
+   "production_terminal_usable": false,
+   "production_admitted": false,
    "context_admitted": false,
    "parameter_injectivity_declared": false,
    "math_probe_missing": false,
@@ -110454,12 +110559,12 @@
    "preferred_backend": "polars",
    "reference_backend": "pandas_numpy",
    "production_certified": true,
-   "directly_usable": true,
+   "directly_usable": false,
    "mining_visible": true,
    "composition_usable": true,
    "terminal_usable": true,
-   "production_terminal_usable": true,
-   "production_admitted": true,
+   "production_terminal_usable": false,
+   "production_admitted": false,
    "context_admitted": false,
    "parameter_injectivity_declared": false,
    "math_probe_missing": false,
@@ -110845,12 +110950,12 @@
    "preferred_backend": "polars",
    "reference_backend": "pandas_numpy",
    "production_certified": true,
-   "directly_usable": true,
+   "directly_usable": false,
    "mining_visible": true,
    "composition_usable": true,
    "terminal_usable": true,
-   "production_terminal_usable": true,
-   "production_admitted": true,
+   "production_terminal_usable": false,
+   "production_admitted": false,
    "context_admitted": false,
    "parameter_injectivity_declared": false,
    "math_probe_missing": false,
@@ -112062,12 +112167,12 @@
    "preferred_backend": "polars",
    "reference_backend": "pandas_numpy",
    "production_certified": true,
-   "directly_usable": true,
+   "directly_usable": false,
    "mining_visible": true,
    "composition_usable": true,
    "terminal_usable": true,
-   "production_terminal_usable": true,
-   "production_admitted": true,
+   "production_terminal_usable": false,
+   "production_admitted": false,
    "context_admitted": false,
    "parameter_injectivity_declared": false,
    "math_probe_missing": false,
@@ -112832,12 +112937,12 @@
    "preferred_backend": "polars",
    "reference_backend": "pandas_numpy",
    "production_certified": true,
-   "directly_usable": true,
+   "directly_usable": false,
    "mining_visible": true,
    "composition_usable": true,
    "terminal_usable": true,
-   "production_terminal_usable": true,
-   "production_admitted": true,
+   "production_terminal_usable": false,
+   "production_admitted": false,
    "context_admitted": false,
    "parameter_injectivity_declared": false,
    "math_probe_missing": false,
@@ -116076,12 +116181,12 @@
    "preferred_backend": "polars",
    "reference_backend": "pandas_numpy",
    "production_certified": true,
-   "directly_usable": true,
+   "directly_usable": false,
    "mining_visible": true,
    "composition_usable": true,
    "terminal_usable": true,
-   "production_terminal_usable": true,
-   "production_admitted": true,
+   "production_terminal_usable": false,
+   "production_admitted": false,
    "context_admitted": false,
    "parameter_injectivity_declared": false,
    "math_probe_missing": false,
@@ -116330,12 +116435,12 @@
    "preferred_backend": "polars",
    "reference_backend": "pandas_numpy",
    "production_certified": true,
-   "directly_usable": true,
+   "directly_usable": false,
    "mining_visible": true,
    "composition_usable": true,
    "terminal_usable": true,
-   "production_terminal_usable": true,
-   "production_admitted": true,
+   "production_terminal_usable": false,
+   "production_admitted": false,
    "context_admitted": false,
    "parameter_injectivity_declared": false,
    "math_probe_missing": false,
@@ -119472,12 +119577,12 @@
    "preferred_backend": "polars",
    "reference_backend": "pandas_numpy",
    "production_certified": true,
-   "directly_usable": true,
+   "directly_usable": false,
    "mining_visible": true,
    "composition_usable": true,
    "terminal_usable": true,
-   "production_terminal_usable": true,
-   "production_admitted": true,
+   "production_terminal_usable": false,
+   "production_admitted": false,
    "context_admitted": false,
    "parameter_injectivity_declared": false,
    "math_probe_missing": false,
@@ -121857,12 +121962,12 @@
    "preferred_backend": "polars",
    "reference_backend": "pandas_numpy",
    "production_certified": true,
-   "directly_usable": true,
+   "directly_usable": false,
    "mining_visible": true,
    "composition_usable": true,
    "terminal_usable": true,
-   "production_terminal_usable": true,
-   "production_admitted": true,
+   "production_terminal_usable": false,
+   "production_admitted": false,
    "context_admitted": false,
    "parameter_injectivity_declared": false,
    "math_probe_missing": false,
@@ -122095,12 +122200,12 @@
    "preferred_backend": "polars",
    "reference_backend": "pandas_numpy",
    "production_certified": true,
-   "directly_usable": true,
+   "directly_usable": false,
    "mining_visible": true,
    "composition_usable": true,
    "terminal_usable": true,
-   "production_terminal_usable": true,
-   "production_admitted": true,
+   "production_terminal_usable": false,
+   "production_admitted": false,
    "context_admitted": false,
    "parameter_injectivity_declared": false,
    "math_probe_missing": false,
@@ -123897,12 +124002,12 @@
    "preferred_backend": "polars",
    "reference_backend": "pandas_numpy",
    "production_certified": true,
-   "directly_usable": true,
+   "directly_usable": false,
    "mining_visible": true,
    "composition_usable": true,
    "terminal_usable": true,
-   "production_terminal_usable": true,
-   "production_admitted": true,
+   "production_terminal_usable": false,
+   "production_admitted": false,
    "context_admitted": false,
    "parameter_injectivity_declared": false,
    "math_probe_missing": false,
@@ -124046,12 +124151,12 @@
    "preferred_backend": "polars",
    "reference_backend": "pandas_numpy",
    "production_certified": true,
-   "directly_usable": true,
+   "directly_usable": false,
    "mining_visible": true,
    "composition_usable": true,
    "terminal_usable": true,
-   "production_terminal_usable": true,
-   "production_admitted": true,
+   "production_terminal_usable": false,
+   "production_admitted": false,
    "context_admitted": false,
    "parameter_injectivity_declared": false,
    "math_probe_missing": false,
@@ -124821,12 +124926,12 @@
    "preferred_backend": "polars",
    "reference_backend": "pandas_numpy",
    "production_certified": true,
-   "directly_usable": true,
+   "directly_usable": false,
    "mining_visible": true,
    "composition_usable": true,
    "terminal_usable": true,
-   "production_terminal_usable": true,
-   "production_admitted": true,
+   "production_terminal_usable": false,
+   "production_admitted": false,
    "context_admitted": false,
    "parameter_injectivity_declared": false,
    "math_probe_missing": false,
@@ -128919,6 +129024,2100 @@
    }
   },
   {
+   "canonical": "intra_ts_amount_weighted_mean",
+   "aliases": [],
+   "module": "factor_engine.cleaned_operators.intraday.sufficient_stats_ops",
+   "class_name": "_Op2",
+   "authoring_tier": "extended",
+   "direct_use_status": "direct_alpha",
+   "mining_role": "intraday_eod",
+   "terminal_allowed": true,
+   "allowed_ast_positions": [
+    "intermediate",
+    "terminal"
+   ],
+   "mining_lane": "alpha_direct",
+   "retention_reason": "stock-level alpha (verified role)",
+   "delete_reason": "",
+   "replacement": "",
+   "economic_effect_family": "intraday_microstructure",
+   "semantic_redundancy_group": "",
+   "monotonic_transform_class": "",
+   "input_slots": [
+    {
+     "parameter": "close",
+     "allowed_semantic_kinds": [
+      "field"
+     ],
+     "allowed_units": [],
+     "allowed_roles": [
+      "data"
+     ],
+     "cardinality": "panel",
+     "axis_semantics": "per_instrument",
+     "context": "data"
+    },
+    {
+     "parameter": "volume",
+     "allowed_semantic_kinds": [
+      "field"
+     ],
+     "allowed_units": [],
+     "allowed_roles": [
+      "data"
+     ],
+     "cardinality": "panel",
+     "axis_semantics": "per_instrument",
+     "context": "data"
+    }
+   ],
+   "data_inputs": [
+    "close",
+    "volume"
+   ],
+   "scalar_parameters": [],
+   "context_inputs": [],
+   "group_inputs": [],
+   "event_inputs": [],
+   "condition_slot": "",
+   "output_semantic_kind": "series",
+   "output_unit": null,
+   "output_cardinality": "panel",
+   "output_value_domain": "continuous_signed",
+   "output_grain": "daily",
+   "default_input_recipe": {
+    "close": "continuous_close",
+    "volume": "continuous_volume_shares"
+   },
+   "smoke_recipe_ids": [
+    "smoke:intra_ts_amount_weighted_mean::close=continuous_close,volume=continuous_volume_shares"
+   ],
+   "supported_markets": [
+    "ashare",
+    "us"
+   ],
+   "source_recipes": [
+    "minute_bar"
+   ],
+   "default_params": [
+    "close",
+    "volume"
+   ],
+   "searchable_params": [],
+   "search_grade_by_param": {},
+   "parameter_injectivity_passed": true,
+   "stateful": false,
+   "execution_model": "independent_with_warmup",
+   "checkpoint_supported": false,
+   "full_history_replay_allowed": true,
+   "runtime_cost": 6,
+   "memory_cost": 6,
+   "preferred_backend": "polars",
+   "reference_backend": "pandas_numpy",
+   "production_certified": false,
+   "directly_usable": false,
+   "mining_visible": true,
+   "composition_usable": true,
+   "terminal_usable": true,
+   "production_terminal_usable": false,
+   "production_admitted": false,
+   "context_admitted": false,
+   "parameter_injectivity_declared": false,
+   "math_probe_missing": false,
+   "r64_production_gates": {
+    "REGISTERED": "PASS",
+    "IMPLEMENTED": "PASS",
+    "BACKEND_WIRED": "PASS",
+    "BACKEND_RUNTIME_WIRED": "PASS",
+    "PARAM_WIRED": "PASS",
+    "MATH_ORACLE_PASS": "PASS",
+    "CAUSALITY_PASS": "PASS",
+    "PIT_PASS": "NOT_RUN",
+    "BACKEND_PARITY_PASS": "NOT_RUN",
+    "EDGE_PASS": "NOT_RUN",
+    "SCALE_PASS": "NOT_RUN"
+   },
+   "r64_causality": "causal",
+   "min_effective_samples": {},
+   "scale_sensitive": {
+    "scale_sensitive": false,
+    "size_sensitive": false,
+    "liquidity_exposure": false
+   },
+   "search_prior": 1.0,
+   "family_budget": 16,
+   "cost_budget": 9,
+   "retention_usage": {
+    "terminal": true,
+    "intermediate": true,
+    "condition": false,
+    "interaction": false,
+    "state_gate": false,
+    "event_gate": false,
+    "group_context": false,
+    "global_context": false
+   }
+  },
+  {
+   "canonical": "intra_ts_argmax",
+   "aliases": [],
+   "module": "factor_engine.cleaned_operators.intraday.sufficient_stats_ops",
+   "class_name": "_Op",
+   "authoring_tier": "extended",
+   "direct_use_status": "direct_alpha",
+   "mining_role": "intraday_eod",
+   "terminal_allowed": true,
+   "allowed_ast_positions": [
+    "intermediate",
+    "terminal"
+   ],
+   "mining_lane": "alpha_direct",
+   "retention_reason": "stock-level alpha (verified role)",
+   "delete_reason": "",
+   "replacement": "",
+   "economic_effect_family": "intraday_microstructure",
+   "semantic_redundancy_group": "",
+   "monotonic_transform_class": "",
+   "input_slots": [
+    {
+     "parameter": "close",
+     "allowed_semantic_kinds": [
+      "field"
+     ],
+     "allowed_units": [],
+     "allowed_roles": [
+      "data"
+     ],
+     "cardinality": "panel",
+     "axis_semantics": "per_instrument",
+     "context": "data"
+    }
+   ],
+   "data_inputs": [
+    "close"
+   ],
+   "scalar_parameters": [],
+   "context_inputs": [],
+   "group_inputs": [],
+   "event_inputs": [],
+   "condition_slot": "",
+   "output_semantic_kind": "series",
+   "output_unit": null,
+   "output_cardinality": "panel",
+   "output_value_domain": "continuous_signed",
+   "output_grain": "daily",
+   "default_input_recipe": {
+    "close": "continuous_close"
+   },
+   "smoke_recipe_ids": [
+    "smoke:intra_ts_argmax::close=continuous_close"
+   ],
+   "supported_markets": [
+    "ashare",
+    "us"
+   ],
+   "source_recipes": [
+    "minute_bar"
+   ],
+   "default_params": [
+    "close"
+   ],
+   "searchable_params": [],
+   "search_grade_by_param": {},
+   "parameter_injectivity_passed": true,
+   "stateful": false,
+   "execution_model": "independent_with_warmup",
+   "checkpoint_supported": false,
+   "full_history_replay_allowed": true,
+   "runtime_cost": 6,
+   "memory_cost": 6,
+   "preferred_backend": "polars",
+   "reference_backend": "pandas_numpy",
+   "production_certified": false,
+   "directly_usable": false,
+   "mining_visible": true,
+   "composition_usable": true,
+   "terminal_usable": true,
+   "production_terminal_usable": false,
+   "production_admitted": false,
+   "context_admitted": false,
+   "parameter_injectivity_declared": false,
+   "math_probe_missing": false,
+   "r64_production_gates": {
+    "REGISTERED": "PASS",
+    "IMPLEMENTED": "PASS",
+    "BACKEND_WIRED": "PASS",
+    "BACKEND_RUNTIME_WIRED": "PASS",
+    "PARAM_WIRED": "PASS",
+    "MATH_ORACLE_PASS": "PASS",
+    "CAUSALITY_PASS": "PASS",
+    "PIT_PASS": "NOT_RUN",
+    "BACKEND_PARITY_PASS": "NOT_RUN",
+    "EDGE_PASS": "NOT_RUN",
+    "SCALE_PASS": "NOT_RUN"
+   },
+   "r64_causality": "causal",
+   "min_effective_samples": {},
+   "scale_sensitive": {
+    "scale_sensitive": false,
+    "size_sensitive": false,
+    "liquidity_exposure": false
+   },
+   "search_prior": 1.0,
+   "family_budget": 16,
+   "cost_budget": 9,
+   "retention_usage": {
+    "terminal": true,
+    "intermediate": true,
+    "condition": false,
+    "interaction": false,
+    "state_gate": false,
+    "event_gate": false,
+    "group_context": false,
+    "global_context": false
+   }
+  },
+  {
+   "canonical": "intra_ts_argmin",
+   "aliases": [],
+   "module": "factor_engine.cleaned_operators.intraday.sufficient_stats_ops",
+   "class_name": "_Op",
+   "authoring_tier": "extended",
+   "direct_use_status": "direct_alpha",
+   "mining_role": "intraday_eod",
+   "terminal_allowed": true,
+   "allowed_ast_positions": [
+    "intermediate",
+    "terminal"
+   ],
+   "mining_lane": "alpha_direct",
+   "retention_reason": "stock-level alpha (verified role)",
+   "delete_reason": "",
+   "replacement": "",
+   "economic_effect_family": "intraday_microstructure",
+   "semantic_redundancy_group": "",
+   "monotonic_transform_class": "",
+   "input_slots": [
+    {
+     "parameter": "close",
+     "allowed_semantic_kinds": [
+      "field"
+     ],
+     "allowed_units": [],
+     "allowed_roles": [
+      "data"
+     ],
+     "cardinality": "panel",
+     "axis_semantics": "per_instrument",
+     "context": "data"
+    }
+   ],
+   "data_inputs": [
+    "close"
+   ],
+   "scalar_parameters": [],
+   "context_inputs": [],
+   "group_inputs": [],
+   "event_inputs": [],
+   "condition_slot": "",
+   "output_semantic_kind": "series",
+   "output_unit": null,
+   "output_cardinality": "panel",
+   "output_value_domain": "continuous_signed",
+   "output_grain": "daily",
+   "default_input_recipe": {
+    "close": "continuous_close"
+   },
+   "smoke_recipe_ids": [
+    "smoke:intra_ts_argmin::close=continuous_close"
+   ],
+   "supported_markets": [
+    "ashare",
+    "us"
+   ],
+   "source_recipes": [
+    "minute_bar"
+   ],
+   "default_params": [
+    "close"
+   ],
+   "searchable_params": [],
+   "search_grade_by_param": {},
+   "parameter_injectivity_passed": true,
+   "stateful": false,
+   "execution_model": "independent_with_warmup",
+   "checkpoint_supported": false,
+   "full_history_replay_allowed": true,
+   "runtime_cost": 6,
+   "memory_cost": 6,
+   "preferred_backend": "polars",
+   "reference_backend": "pandas_numpy",
+   "production_certified": false,
+   "directly_usable": false,
+   "mining_visible": true,
+   "composition_usable": true,
+   "terminal_usable": true,
+   "production_terminal_usable": false,
+   "production_admitted": false,
+   "context_admitted": false,
+   "parameter_injectivity_declared": false,
+   "math_probe_missing": false,
+   "r64_production_gates": {
+    "REGISTERED": "PASS",
+    "IMPLEMENTED": "PASS",
+    "BACKEND_WIRED": "PASS",
+    "BACKEND_RUNTIME_WIRED": "PASS",
+    "PARAM_WIRED": "PASS",
+    "MATH_ORACLE_PASS": "PASS",
+    "CAUSALITY_PASS": "PASS",
+    "PIT_PASS": "NOT_RUN",
+    "BACKEND_PARITY_PASS": "NOT_RUN",
+    "EDGE_PASS": "NOT_RUN",
+    "SCALE_PASS": "NOT_RUN"
+   },
+   "r64_causality": "causal",
+   "min_effective_samples": {},
+   "scale_sensitive": {
+    "scale_sensitive": false,
+    "size_sensitive": false,
+    "liquidity_exposure": false
+   },
+   "search_prior": 1.0,
+   "family_budget": 16,
+   "cost_budget": 9,
+   "retention_usage": {
+    "terminal": true,
+    "intermediate": true,
+    "condition": false,
+    "interaction": false,
+    "state_gate": false,
+    "event_gate": false,
+    "group_context": false,
+    "global_context": false
+   }
+  },
+  {
+   "canonical": "intra_ts_first",
+   "aliases": [],
+   "module": "factor_engine.cleaned_operators.intraday.sufficient_stats_ops",
+   "class_name": "_Op",
+   "authoring_tier": "extended",
+   "direct_use_status": "direct_alpha",
+   "mining_role": "intraday_eod",
+   "terminal_allowed": true,
+   "allowed_ast_positions": [
+    "intermediate",
+    "terminal"
+   ],
+   "mining_lane": "alpha_direct",
+   "retention_reason": "stock-level alpha (verified role)",
+   "delete_reason": "",
+   "replacement": "",
+   "economic_effect_family": "intraday_microstructure",
+   "semantic_redundancy_group": "",
+   "monotonic_transform_class": "",
+   "input_slots": [
+    {
+     "parameter": "close",
+     "allowed_semantic_kinds": [
+      "field"
+     ],
+     "allowed_units": [],
+     "allowed_roles": [
+      "data"
+     ],
+     "cardinality": "panel",
+     "axis_semantics": "per_instrument",
+     "context": "data"
+    }
+   ],
+   "data_inputs": [
+    "close"
+   ],
+   "scalar_parameters": [],
+   "context_inputs": [],
+   "group_inputs": [],
+   "event_inputs": [],
+   "condition_slot": "",
+   "output_semantic_kind": "series",
+   "output_unit": null,
+   "output_cardinality": "panel",
+   "output_value_domain": "continuous_signed",
+   "output_grain": "daily",
+   "default_input_recipe": {
+    "close": "continuous_close"
+   },
+   "smoke_recipe_ids": [
+    "smoke:intra_ts_first::close=continuous_close"
+   ],
+   "supported_markets": [
+    "ashare",
+    "us"
+   ],
+   "source_recipes": [
+    "minute_bar"
+   ],
+   "default_params": [
+    "close"
+   ],
+   "searchable_params": [],
+   "search_grade_by_param": {},
+   "parameter_injectivity_passed": true,
+   "stateful": false,
+   "execution_model": "independent_with_warmup",
+   "checkpoint_supported": false,
+   "full_history_replay_allowed": true,
+   "runtime_cost": 6,
+   "memory_cost": 6,
+   "preferred_backend": "polars",
+   "reference_backend": "pandas_numpy",
+   "production_certified": false,
+   "directly_usable": false,
+   "mining_visible": true,
+   "composition_usable": true,
+   "terminal_usable": true,
+   "production_terminal_usable": false,
+   "production_admitted": false,
+   "context_admitted": false,
+   "parameter_injectivity_declared": false,
+   "math_probe_missing": false,
+   "r64_production_gates": {
+    "REGISTERED": "PASS",
+    "IMPLEMENTED": "PASS",
+    "BACKEND_WIRED": "PASS",
+    "BACKEND_RUNTIME_WIRED": "PASS",
+    "PARAM_WIRED": "PASS",
+    "MATH_ORACLE_PASS": "PASS",
+    "CAUSALITY_PASS": "PASS",
+    "PIT_PASS": "NOT_RUN",
+    "BACKEND_PARITY_PASS": "NOT_RUN",
+    "EDGE_PASS": "NOT_RUN",
+    "SCALE_PASS": "NOT_RUN"
+   },
+   "r64_causality": "causal",
+   "min_effective_samples": {},
+   "scale_sensitive": {
+    "scale_sensitive": false,
+    "size_sensitive": false,
+    "liquidity_exposure": false
+   },
+   "search_prior": 1.0,
+   "family_budget": 16,
+   "cost_budget": 9,
+   "retention_usage": {
+    "terminal": true,
+    "intermediate": true,
+    "condition": false,
+    "interaction": false,
+    "state_gate": false,
+    "event_gate": false,
+    "group_context": false,
+    "global_context": false
+   }
+  },
+  {
+   "canonical": "intra_ts_last",
+   "aliases": [],
+   "module": "factor_engine.cleaned_operators.intraday.sufficient_stats_ops",
+   "class_name": "_Op",
+   "authoring_tier": "extended",
+   "direct_use_status": "direct_alpha",
+   "mining_role": "intraday_eod",
+   "terminal_allowed": true,
+   "allowed_ast_positions": [
+    "intermediate",
+    "terminal"
+   ],
+   "mining_lane": "alpha_direct",
+   "retention_reason": "stock-level alpha (verified role)",
+   "delete_reason": "",
+   "replacement": "",
+   "economic_effect_family": "intraday_microstructure",
+   "semantic_redundancy_group": "",
+   "monotonic_transform_class": "",
+   "input_slots": [
+    {
+     "parameter": "close",
+     "allowed_semantic_kinds": [
+      "field"
+     ],
+     "allowed_units": [],
+     "allowed_roles": [
+      "data"
+     ],
+     "cardinality": "panel",
+     "axis_semantics": "per_instrument",
+     "context": "data"
+    },
+    {
+     "parameter": "window",
+     "allowed_semantic_kinds": [
+      "scalar"
+     ],
+     "allowed_units": [],
+     "allowed_roles": [
+      "parameter"
+     ],
+     "cardinality": "scalar",
+     "axis_semantics": "none",
+     "context": "scalar"
+    }
+   ],
+   "data_inputs": [
+    "close"
+   ],
+   "scalar_parameters": [
+    "window"
+   ],
+   "context_inputs": [],
+   "group_inputs": [],
+   "event_inputs": [],
+   "condition_slot": "",
+   "output_semantic_kind": "series",
+   "output_unit": null,
+   "output_cardinality": "panel",
+   "output_value_domain": "continuous_signed",
+   "output_grain": "daily",
+   "default_input_recipe": {
+    "close": "continuous_close"
+   },
+   "smoke_recipe_ids": [
+    "smoke:intra_ts_last::close=continuous_close"
+   ],
+   "supported_markets": [
+    "ashare",
+    "us"
+   ],
+   "source_recipes": [
+    "minute_bar"
+   ],
+   "default_params": [
+    "close",
+    "window"
+   ],
+   "searchable_params": [
+    "window"
+   ],
+   "search_grade_by_param": {},
+   "parameter_injectivity_passed": false,
+   "stateful": false,
+   "execution_model": "independent_with_warmup",
+   "checkpoint_supported": false,
+   "full_history_replay_allowed": true,
+   "runtime_cost": 6,
+   "memory_cost": 6,
+   "preferred_backend": "polars",
+   "reference_backend": "pandas_numpy",
+   "production_certified": false,
+   "directly_usable": false,
+   "mining_visible": true,
+   "composition_usable": true,
+   "terminal_usable": true,
+   "production_terminal_usable": false,
+   "production_admitted": false,
+   "context_admitted": false,
+   "parameter_injectivity_declared": false,
+   "math_probe_missing": false,
+   "r64_production_gates": {
+    "REGISTERED": "PASS",
+    "IMPLEMENTED": "PASS",
+    "BACKEND_WIRED": "PASS",
+    "BACKEND_RUNTIME_WIRED": "PASS",
+    "PARAM_WIRED": "PASS",
+    "MATH_ORACLE_PASS": "NOT_PROVEN",
+    "CAUSALITY_PASS": "PASS",
+    "PIT_PASS": "NOT_RUN",
+    "BACKEND_PARITY_PASS": "NOT_RUN",
+    "EDGE_PASS": "NOT_RUN",
+    "SCALE_PASS": "NOT_RUN"
+   },
+   "r64_causality": "causal",
+   "min_effective_samples": {},
+   "scale_sensitive": {
+    "scale_sensitive": false,
+    "size_sensitive": false,
+    "liquidity_exposure": false
+   },
+   "search_prior": 1.0,
+   "family_budget": 16,
+   "cost_budget": 9,
+   "retention_usage": {
+    "terminal": true,
+    "intermediate": true,
+    "condition": false,
+    "interaction": false,
+    "state_gate": false,
+    "event_gate": false,
+    "group_context": false,
+    "global_context": false
+   }
+  },
+  {
+   "canonical": "intra_ts_last_value",
+   "aliases": [],
+   "module": "factor_engine.cleaned_operators.intraday.sufficient_stats_ops",
+   "class_name": "_Op",
+   "authoring_tier": "extended",
+   "direct_use_status": "direct_alpha",
+   "mining_role": "intraday_eod",
+   "terminal_allowed": true,
+   "allowed_ast_positions": [
+    "intermediate",
+    "terminal"
+   ],
+   "mining_lane": "alpha_direct",
+   "retention_reason": "stock-level alpha (verified role)",
+   "delete_reason": "",
+   "replacement": "",
+   "economic_effect_family": "intraday_microstructure",
+   "semantic_redundancy_group": "",
+   "monotonic_transform_class": "",
+   "input_slots": [
+    {
+     "parameter": "close",
+     "allowed_semantic_kinds": [
+      "field"
+     ],
+     "allowed_units": [],
+     "allowed_roles": [
+      "data"
+     ],
+     "cardinality": "panel",
+     "axis_semantics": "per_instrument",
+     "context": "data"
+    }
+   ],
+   "data_inputs": [
+    "close"
+   ],
+   "scalar_parameters": [],
+   "context_inputs": [],
+   "group_inputs": [],
+   "event_inputs": [],
+   "condition_slot": "",
+   "output_semantic_kind": "series",
+   "output_unit": null,
+   "output_cardinality": "panel",
+   "output_value_domain": "continuous_signed",
+   "output_grain": "daily",
+   "default_input_recipe": {
+    "close": "continuous_close"
+   },
+   "smoke_recipe_ids": [
+    "smoke:intra_ts_last_value::close=continuous_close"
+   ],
+   "supported_markets": [
+    "ashare",
+    "us"
+   ],
+   "source_recipes": [
+    "minute_bar"
+   ],
+   "default_params": [
+    "close"
+   ],
+   "searchable_params": [],
+   "search_grade_by_param": {},
+   "parameter_injectivity_passed": true,
+   "stateful": false,
+   "execution_model": "independent_with_warmup",
+   "checkpoint_supported": false,
+   "full_history_replay_allowed": true,
+   "runtime_cost": 6,
+   "memory_cost": 6,
+   "preferred_backend": "polars",
+   "reference_backend": "pandas_numpy",
+   "production_certified": false,
+   "directly_usable": false,
+   "mining_visible": true,
+   "composition_usable": true,
+   "terminal_usable": true,
+   "production_terminal_usable": false,
+   "production_admitted": false,
+   "context_admitted": false,
+   "parameter_injectivity_declared": false,
+   "math_probe_missing": false,
+   "r64_production_gates": {
+    "REGISTERED": "PASS",
+    "IMPLEMENTED": "PASS",
+    "BACKEND_WIRED": "PASS",
+    "BACKEND_RUNTIME_WIRED": "PASS",
+    "PARAM_WIRED": "PASS",
+    "MATH_ORACLE_PASS": "PASS",
+    "CAUSALITY_PASS": "PASS",
+    "PIT_PASS": "NOT_RUN",
+    "BACKEND_PARITY_PASS": "NOT_RUN",
+    "EDGE_PASS": "NOT_RUN",
+    "SCALE_PASS": "NOT_RUN"
+   },
+   "r64_causality": "causal",
+   "min_effective_samples": {},
+   "scale_sensitive": {
+    "scale_sensitive": false,
+    "size_sensitive": false,
+    "liquidity_exposure": false
+   },
+   "search_prior": 1.0,
+   "family_budget": 16,
+   "cost_budget": 9,
+   "retention_usage": {
+    "terminal": true,
+    "intermediate": true,
+    "condition": false,
+    "interaction": false,
+    "state_gate": false,
+    "event_gate": false,
+    "group_context": false,
+    "global_context": false
+   }
+  },
+  {
+   "canonical": "intra_ts_max",
+   "aliases": [],
+   "module": "factor_engine.cleaned_operators.intraday.sufficient_stats_ops",
+   "class_name": "_Op",
+   "authoring_tier": "extended",
+   "direct_use_status": "direct_alpha",
+   "mining_role": "intraday_eod",
+   "terminal_allowed": true,
+   "allowed_ast_positions": [
+    "intermediate",
+    "terminal"
+   ],
+   "mining_lane": "alpha_direct",
+   "retention_reason": "stock-level alpha (verified role)",
+   "delete_reason": "",
+   "replacement": "",
+   "economic_effect_family": "intraday_microstructure",
+   "semantic_redundancy_group": "",
+   "monotonic_transform_class": "",
+   "input_slots": [
+    {
+     "parameter": "close",
+     "allowed_semantic_kinds": [
+      "field"
+     ],
+     "allowed_units": [],
+     "allowed_roles": [
+      "data"
+     ],
+     "cardinality": "panel",
+     "axis_semantics": "per_instrument",
+     "context": "data"
+    },
+    {
+     "parameter": "window",
+     "allowed_semantic_kinds": [
+      "scalar"
+     ],
+     "allowed_units": [],
+     "allowed_roles": [
+      "parameter"
+     ],
+     "cardinality": "scalar",
+     "axis_semantics": "none",
+     "context": "scalar"
+    }
+   ],
+   "data_inputs": [
+    "close"
+   ],
+   "scalar_parameters": [
+    "window"
+   ],
+   "context_inputs": [],
+   "group_inputs": [],
+   "event_inputs": [],
+   "condition_slot": "",
+   "output_semantic_kind": "series",
+   "output_unit": null,
+   "output_cardinality": "panel",
+   "output_value_domain": "continuous_signed",
+   "output_grain": "daily",
+   "default_input_recipe": {
+    "close": "continuous_close"
+   },
+   "smoke_recipe_ids": [
+    "smoke:intra_ts_max::close=continuous_close"
+   ],
+   "supported_markets": [
+    "ashare",
+    "us"
+   ],
+   "source_recipes": [
+    "minute_bar"
+   ],
+   "default_params": [
+    "close",
+    "window"
+   ],
+   "searchable_params": [
+    "window"
+   ],
+   "search_grade_by_param": {},
+   "parameter_injectivity_passed": false,
+   "stateful": false,
+   "execution_model": "independent_with_warmup",
+   "checkpoint_supported": false,
+   "full_history_replay_allowed": true,
+   "runtime_cost": 6,
+   "memory_cost": 6,
+   "preferred_backend": "polars",
+   "reference_backend": "pandas_numpy",
+   "production_certified": false,
+   "directly_usable": false,
+   "mining_visible": true,
+   "composition_usable": true,
+   "terminal_usable": true,
+   "production_terminal_usable": false,
+   "production_admitted": false,
+   "context_admitted": false,
+   "parameter_injectivity_declared": false,
+   "math_probe_missing": false,
+   "r64_production_gates": {
+    "REGISTERED": "PASS",
+    "IMPLEMENTED": "PASS",
+    "BACKEND_WIRED": "PASS",
+    "BACKEND_RUNTIME_WIRED": "PASS",
+    "PARAM_WIRED": "PASS",
+    "MATH_ORACLE_PASS": "NOT_PROVEN",
+    "CAUSALITY_PASS": "PASS",
+    "PIT_PASS": "NOT_RUN",
+    "BACKEND_PARITY_PASS": "NOT_RUN",
+    "EDGE_PASS": "NOT_RUN",
+    "SCALE_PASS": "NOT_RUN"
+   },
+   "r64_causality": "causal",
+   "min_effective_samples": {},
+   "scale_sensitive": {
+    "scale_sensitive": false,
+    "size_sensitive": false,
+    "liquidity_exposure": false
+   },
+   "search_prior": 1.0,
+   "family_budget": 16,
+   "cost_budget": 9,
+   "retention_usage": {
+    "terminal": true,
+    "intermediate": true,
+    "condition": false,
+    "interaction": false,
+    "state_gate": false,
+    "event_gate": false,
+    "group_context": false,
+    "global_context": false
+   }
+  },
+  {
+   "canonical": "intra_ts_mean",
+   "aliases": [],
+   "module": "factor_engine.cleaned_operators.intraday.sufficient_stats_ops",
+   "class_name": "_Op",
+   "authoring_tier": "extended",
+   "direct_use_status": "direct_alpha",
+   "mining_role": "intraday_eod",
+   "terminal_allowed": true,
+   "allowed_ast_positions": [
+    "intermediate",
+    "terminal"
+   ],
+   "mining_lane": "alpha_direct",
+   "retention_reason": "stock-level alpha (verified role)",
+   "delete_reason": "",
+   "replacement": "",
+   "economic_effect_family": "intraday_microstructure",
+   "semantic_redundancy_group": "",
+   "monotonic_transform_class": "",
+   "input_slots": [
+    {
+     "parameter": "close",
+     "allowed_semantic_kinds": [
+      "field"
+     ],
+     "allowed_units": [],
+     "allowed_roles": [
+      "data"
+     ],
+     "cardinality": "panel",
+     "axis_semantics": "per_instrument",
+     "context": "data"
+    },
+    {
+     "parameter": "window",
+     "allowed_semantic_kinds": [
+      "scalar"
+     ],
+     "allowed_units": [],
+     "allowed_roles": [
+      "parameter"
+     ],
+     "cardinality": "scalar",
+     "axis_semantics": "none",
+     "context": "scalar"
+    }
+   ],
+   "data_inputs": [
+    "close"
+   ],
+   "scalar_parameters": [
+    "window"
+   ],
+   "context_inputs": [],
+   "group_inputs": [],
+   "event_inputs": [],
+   "condition_slot": "",
+   "output_semantic_kind": "series",
+   "output_unit": null,
+   "output_cardinality": "panel",
+   "output_value_domain": "continuous_signed",
+   "output_grain": "daily",
+   "default_input_recipe": {
+    "close": "continuous_close"
+   },
+   "smoke_recipe_ids": [
+    "smoke:intra_ts_mean::close=continuous_close"
+   ],
+   "supported_markets": [
+    "ashare",
+    "us"
+   ],
+   "source_recipes": [
+    "minute_bar"
+   ],
+   "default_params": [
+    "close",
+    "window"
+   ],
+   "searchable_params": [
+    "window"
+   ],
+   "search_grade_by_param": {},
+   "parameter_injectivity_passed": false,
+   "stateful": false,
+   "execution_model": "independent_with_warmup",
+   "checkpoint_supported": false,
+   "full_history_replay_allowed": true,
+   "runtime_cost": 6,
+   "memory_cost": 6,
+   "preferred_backend": "polars",
+   "reference_backend": "pandas_numpy",
+   "production_certified": false,
+   "directly_usable": false,
+   "mining_visible": true,
+   "composition_usable": true,
+   "terminal_usable": true,
+   "production_terminal_usable": false,
+   "production_admitted": false,
+   "context_admitted": false,
+   "parameter_injectivity_declared": false,
+   "math_probe_missing": false,
+   "r64_production_gates": {
+    "REGISTERED": "PASS",
+    "IMPLEMENTED": "PASS",
+    "BACKEND_WIRED": "PASS",
+    "BACKEND_RUNTIME_WIRED": "PASS",
+    "PARAM_WIRED": "PASS",
+    "MATH_ORACLE_PASS": "NOT_PROVEN",
+    "CAUSALITY_PASS": "PASS",
+    "PIT_PASS": "NOT_RUN",
+    "BACKEND_PARITY_PASS": "NOT_RUN",
+    "EDGE_PASS": "NOT_RUN",
+    "SCALE_PASS": "NOT_RUN"
+   },
+   "r64_causality": "causal",
+   "min_effective_samples": {},
+   "scale_sensitive": {
+    "scale_sensitive": false,
+    "size_sensitive": false,
+    "liquidity_exposure": false
+   },
+   "search_prior": 1.0,
+   "family_budget": 16,
+   "cost_budget": 9,
+   "retention_usage": {
+    "terminal": true,
+    "intermediate": true,
+    "condition": false,
+    "interaction": false,
+    "state_gate": false,
+    "event_gate": false,
+    "group_context": false,
+    "global_context": false
+   }
+  },
+  {
+   "canonical": "intra_ts_min",
+   "aliases": [],
+   "module": "factor_engine.cleaned_operators.intraday.sufficient_stats_ops",
+   "class_name": "_Op",
+   "authoring_tier": "extended",
+   "direct_use_status": "direct_alpha",
+   "mining_role": "intraday_eod",
+   "terminal_allowed": true,
+   "allowed_ast_positions": [
+    "intermediate",
+    "terminal"
+   ],
+   "mining_lane": "alpha_direct",
+   "retention_reason": "stock-level alpha (verified role)",
+   "delete_reason": "",
+   "replacement": "",
+   "economic_effect_family": "intraday_microstructure",
+   "semantic_redundancy_group": "",
+   "monotonic_transform_class": "",
+   "input_slots": [
+    {
+     "parameter": "close",
+     "allowed_semantic_kinds": [
+      "field"
+     ],
+     "allowed_units": [],
+     "allowed_roles": [
+      "data"
+     ],
+     "cardinality": "panel",
+     "axis_semantics": "per_instrument",
+     "context": "data"
+    },
+    {
+     "parameter": "window",
+     "allowed_semantic_kinds": [
+      "scalar"
+     ],
+     "allowed_units": [],
+     "allowed_roles": [
+      "parameter"
+     ],
+     "cardinality": "scalar",
+     "axis_semantics": "none",
+     "context": "scalar"
+    }
+   ],
+   "data_inputs": [
+    "close"
+   ],
+   "scalar_parameters": [
+    "window"
+   ],
+   "context_inputs": [],
+   "group_inputs": [],
+   "event_inputs": [],
+   "condition_slot": "",
+   "output_semantic_kind": "series",
+   "output_unit": null,
+   "output_cardinality": "panel",
+   "output_value_domain": "continuous_signed",
+   "output_grain": "daily",
+   "default_input_recipe": {
+    "close": "continuous_close"
+   },
+   "smoke_recipe_ids": [
+    "smoke:intra_ts_min::close=continuous_close"
+   ],
+   "supported_markets": [
+    "ashare",
+    "us"
+   ],
+   "source_recipes": [
+    "minute_bar"
+   ],
+   "default_params": [
+    "close",
+    "window"
+   ],
+   "searchable_params": [
+    "window"
+   ],
+   "search_grade_by_param": {},
+   "parameter_injectivity_passed": false,
+   "stateful": false,
+   "execution_model": "independent_with_warmup",
+   "checkpoint_supported": false,
+   "full_history_replay_allowed": true,
+   "runtime_cost": 6,
+   "memory_cost": 6,
+   "preferred_backend": "polars",
+   "reference_backend": "pandas_numpy",
+   "production_certified": false,
+   "directly_usable": false,
+   "mining_visible": true,
+   "composition_usable": true,
+   "terminal_usable": true,
+   "production_terminal_usable": false,
+   "production_admitted": false,
+   "context_admitted": false,
+   "parameter_injectivity_declared": false,
+   "math_probe_missing": false,
+   "r64_production_gates": {
+    "REGISTERED": "PASS",
+    "IMPLEMENTED": "PASS",
+    "BACKEND_WIRED": "PASS",
+    "BACKEND_RUNTIME_WIRED": "PASS",
+    "PARAM_WIRED": "PASS",
+    "MATH_ORACLE_PASS": "NOT_PROVEN",
+    "CAUSALITY_PASS": "PASS",
+    "PIT_PASS": "NOT_RUN",
+    "BACKEND_PARITY_PASS": "NOT_RUN",
+    "EDGE_PASS": "NOT_RUN",
+    "SCALE_PASS": "NOT_RUN"
+   },
+   "r64_causality": "causal",
+   "min_effective_samples": {},
+   "scale_sensitive": {
+    "scale_sensitive": false,
+    "size_sensitive": false,
+    "liquidity_exposure": false
+   },
+   "search_prior": 1.0,
+   "family_budget": 16,
+   "cost_budget": 9,
+   "retention_usage": {
+    "terminal": true,
+    "intermediate": true,
+    "condition": false,
+    "interaction": false,
+    "state_gate": false,
+    "event_gate": false,
+    "group_context": false,
+    "global_context": false
+   }
+  },
+  {
+   "canonical": "intra_ts_realized_covariance",
+   "aliases": [],
+   "module": "factor_engine.cleaned_operators.intraday.sufficient_stats_ops",
+   "class_name": "_Op2",
+   "authoring_tier": "extended",
+   "direct_use_status": "direct_alpha",
+   "mining_role": "intraday_eod",
+   "terminal_allowed": true,
+   "allowed_ast_positions": [
+    "intermediate",
+    "terminal"
+   ],
+   "mining_lane": "alpha_direct",
+   "retention_reason": "stock-level alpha (verified role)",
+   "delete_reason": "",
+   "replacement": "",
+   "economic_effect_family": "intraday_microstructure",
+   "semantic_redundancy_group": "",
+   "monotonic_transform_class": "",
+   "input_slots": [
+    {
+     "parameter": "close",
+     "allowed_semantic_kinds": [
+      "field"
+     ],
+     "allowed_units": [],
+     "allowed_roles": [
+      "data"
+     ],
+     "cardinality": "panel",
+     "axis_semantics": "per_instrument",
+     "context": "data"
+    },
+    {
+     "parameter": "volume",
+     "allowed_semantic_kinds": [
+      "field"
+     ],
+     "allowed_units": [],
+     "allowed_roles": [
+      "data"
+     ],
+     "cardinality": "panel",
+     "axis_semantics": "per_instrument",
+     "context": "data"
+    }
+   ],
+   "data_inputs": [
+    "close",
+    "volume"
+   ],
+   "scalar_parameters": [],
+   "context_inputs": [],
+   "group_inputs": [],
+   "event_inputs": [],
+   "condition_slot": "",
+   "output_semantic_kind": "series",
+   "output_unit": null,
+   "output_cardinality": "panel",
+   "output_value_domain": "continuous_signed",
+   "output_grain": "daily",
+   "default_input_recipe": {
+    "close": "continuous_close",
+    "volume": "continuous_volume_shares"
+   },
+   "smoke_recipe_ids": [
+    "smoke:intra_ts_realized_covariance::close=continuous_close,volume=continuous_volume_shares"
+   ],
+   "supported_markets": [
+    "ashare",
+    "us"
+   ],
+   "source_recipes": [
+    "minute_bar"
+   ],
+   "default_params": [
+    "close",
+    "volume"
+   ],
+   "searchable_params": [],
+   "search_grade_by_param": {},
+   "parameter_injectivity_passed": true,
+   "stateful": false,
+   "execution_model": "independent_with_warmup",
+   "checkpoint_supported": false,
+   "full_history_replay_allowed": true,
+   "runtime_cost": 6,
+   "memory_cost": 6,
+   "preferred_backend": "polars",
+   "reference_backend": "pandas_numpy",
+   "production_certified": false,
+   "directly_usable": false,
+   "mining_visible": true,
+   "composition_usable": true,
+   "terminal_usable": true,
+   "production_terminal_usable": false,
+   "production_admitted": false,
+   "context_admitted": false,
+   "parameter_injectivity_declared": false,
+   "math_probe_missing": false,
+   "r64_production_gates": {
+    "REGISTERED": "PASS",
+    "IMPLEMENTED": "PASS",
+    "BACKEND_WIRED": "PASS",
+    "BACKEND_RUNTIME_WIRED": "PASS",
+    "PARAM_WIRED": "PASS",
+    "MATH_ORACLE_PASS": "PASS",
+    "CAUSALITY_PASS": "PASS",
+    "PIT_PASS": "NOT_RUN",
+    "BACKEND_PARITY_PASS": "NOT_RUN",
+    "EDGE_PASS": "NOT_RUN",
+    "SCALE_PASS": "NOT_RUN"
+   },
+   "r64_causality": "causal",
+   "min_effective_samples": {},
+   "scale_sensitive": {
+    "scale_sensitive": false,
+    "size_sensitive": false,
+    "liquidity_exposure": false
+   },
+   "search_prior": 1.0,
+   "family_budget": 16,
+   "cost_budget": 9,
+   "retention_usage": {
+    "terminal": true,
+    "intermediate": true,
+    "condition": false,
+    "interaction": false,
+    "state_gate": false,
+    "event_gate": false,
+    "group_context": false,
+    "global_context": false
+   }
+  },
+  {
+   "canonical": "intra_ts_realized_variance",
+   "aliases": [],
+   "module": "factor_engine.cleaned_operators.intraday.sufficient_stats_ops",
+   "class_name": "_Op",
+   "authoring_tier": "extended",
+   "direct_use_status": "direct_alpha",
+   "mining_role": "intraday_eod",
+   "terminal_allowed": true,
+   "allowed_ast_positions": [
+    "intermediate",
+    "terminal"
+   ],
+   "mining_lane": "alpha_direct",
+   "retention_reason": "stock-level alpha (verified role)",
+   "delete_reason": "",
+   "replacement": "",
+   "economic_effect_family": "intraday_microstructure",
+   "semantic_redundancy_group": "",
+   "monotonic_transform_class": "",
+   "input_slots": [
+    {
+     "parameter": "close",
+     "allowed_semantic_kinds": [
+      "field"
+     ],
+     "allowed_units": [],
+     "allowed_roles": [
+      "data"
+     ],
+     "cardinality": "panel",
+     "axis_semantics": "per_instrument",
+     "context": "data"
+    }
+   ],
+   "data_inputs": [
+    "close"
+   ],
+   "scalar_parameters": [],
+   "context_inputs": [],
+   "group_inputs": [],
+   "event_inputs": [],
+   "condition_slot": "",
+   "output_semantic_kind": "series",
+   "output_unit": null,
+   "output_cardinality": "panel",
+   "output_value_domain": "continuous_nonnegative",
+   "output_grain": "daily",
+   "default_input_recipe": {
+    "close": "continuous_close"
+   },
+   "smoke_recipe_ids": [
+    "smoke:intra_ts_realized_variance::close=continuous_close"
+   ],
+   "supported_markets": [
+    "ashare",
+    "us"
+   ],
+   "source_recipes": [
+    "minute_bar"
+   ],
+   "default_params": [
+    "close"
+   ],
+   "searchable_params": [],
+   "search_grade_by_param": {},
+   "parameter_injectivity_passed": true,
+   "stateful": false,
+   "execution_model": "independent_with_warmup",
+   "checkpoint_supported": false,
+   "full_history_replay_allowed": true,
+   "runtime_cost": 6,
+   "memory_cost": 6,
+   "preferred_backend": "polars",
+   "reference_backend": "pandas_numpy",
+   "production_certified": false,
+   "directly_usable": false,
+   "mining_visible": true,
+   "composition_usable": true,
+   "terminal_usable": true,
+   "production_terminal_usable": false,
+   "production_admitted": false,
+   "context_admitted": false,
+   "parameter_injectivity_declared": false,
+   "math_probe_missing": false,
+   "r64_production_gates": {
+    "REGISTERED": "PASS",
+    "IMPLEMENTED": "PASS",
+    "BACKEND_WIRED": "PASS",
+    "BACKEND_RUNTIME_WIRED": "PASS",
+    "PARAM_WIRED": "PASS",
+    "MATH_ORACLE_PASS": "PASS",
+    "CAUSALITY_PASS": "PASS",
+    "PIT_PASS": "NOT_RUN",
+    "BACKEND_PARITY_PASS": "NOT_RUN",
+    "EDGE_PASS": "NOT_RUN",
+    "SCALE_PASS": "NOT_RUN"
+   },
+   "r64_causality": "causal",
+   "min_effective_samples": {},
+   "scale_sensitive": {
+    "scale_sensitive": false,
+    "size_sensitive": false,
+    "liquidity_exposure": false
+   },
+   "search_prior": 1.0,
+   "family_budget": 16,
+   "cost_budget": 9,
+   "retention_usage": {
+    "terminal": true,
+    "intermediate": true,
+    "condition": false,
+    "interaction": false,
+    "state_gate": false,
+    "event_gate": false,
+    "group_context": false,
+    "global_context": false
+   }
+  },
+  {
+   "canonical": "intra_ts_std",
+   "aliases": [],
+   "module": "factor_engine.cleaned_operators.intraday.sufficient_stats_ops",
+   "class_name": "_Op",
+   "authoring_tier": "extended",
+   "direct_use_status": "direct_alpha",
+   "mining_role": "intraday_eod",
+   "terminal_allowed": true,
+   "allowed_ast_positions": [
+    "intermediate",
+    "terminal"
+   ],
+   "mining_lane": "alpha_direct",
+   "retention_reason": "stock-level alpha (verified role)",
+   "delete_reason": "",
+   "replacement": "",
+   "economic_effect_family": "intraday_microstructure",
+   "semantic_redundancy_group": "",
+   "monotonic_transform_class": "",
+   "input_slots": [
+    {
+     "parameter": "close",
+     "allowed_semantic_kinds": [
+      "field"
+     ],
+     "allowed_units": [],
+     "allowed_roles": [
+      "data"
+     ],
+     "cardinality": "panel",
+     "axis_semantics": "per_instrument",
+     "context": "data"
+    },
+    {
+     "parameter": "window",
+     "allowed_semantic_kinds": [
+      "scalar"
+     ],
+     "allowed_units": [],
+     "allowed_roles": [
+      "parameter"
+     ],
+     "cardinality": "scalar",
+     "axis_semantics": "none",
+     "context": "scalar"
+    }
+   ],
+   "data_inputs": [
+    "close"
+   ],
+   "scalar_parameters": [
+    "window"
+   ],
+   "context_inputs": [],
+   "group_inputs": [],
+   "event_inputs": [],
+   "condition_slot": "",
+   "output_semantic_kind": "series",
+   "output_unit": null,
+   "output_cardinality": "panel",
+   "output_value_domain": "continuous_signed",
+   "output_grain": "daily",
+   "default_input_recipe": {
+    "close": "continuous_close"
+   },
+   "smoke_recipe_ids": [
+    "smoke:intra_ts_std::close=continuous_close"
+   ],
+   "supported_markets": [
+    "ashare",
+    "us"
+   ],
+   "source_recipes": [
+    "minute_bar"
+   ],
+   "default_params": [
+    "close",
+    "window"
+   ],
+   "searchable_params": [
+    "window"
+   ],
+   "search_grade_by_param": {},
+   "parameter_injectivity_passed": false,
+   "stateful": false,
+   "execution_model": "independent_with_warmup",
+   "checkpoint_supported": false,
+   "full_history_replay_allowed": true,
+   "runtime_cost": 6,
+   "memory_cost": 6,
+   "preferred_backend": "polars",
+   "reference_backend": "pandas_numpy",
+   "production_certified": false,
+   "directly_usable": false,
+   "mining_visible": true,
+   "composition_usable": true,
+   "terminal_usable": true,
+   "production_terminal_usable": false,
+   "production_admitted": false,
+   "context_admitted": false,
+   "parameter_injectivity_declared": false,
+   "math_probe_missing": false,
+   "r64_production_gates": {
+    "REGISTERED": "PASS",
+    "IMPLEMENTED": "PASS",
+    "BACKEND_WIRED": "PASS",
+    "BACKEND_RUNTIME_WIRED": "PASS",
+    "PARAM_WIRED": "PASS",
+    "MATH_ORACLE_PASS": "NOT_PROVEN",
+    "CAUSALITY_PASS": "PASS",
+    "PIT_PASS": "NOT_RUN",
+    "BACKEND_PARITY_PASS": "NOT_RUN",
+    "EDGE_PASS": "NOT_RUN",
+    "SCALE_PASS": "NOT_RUN"
+   },
+   "r64_causality": "causal",
+   "min_effective_samples": {},
+   "scale_sensitive": {
+    "scale_sensitive": false,
+    "size_sensitive": false,
+    "liquidity_exposure": false
+   },
+   "search_prior": 1.0,
+   "family_budget": 16,
+   "cost_budget": 9,
+   "retention_usage": {
+    "terminal": true,
+    "intermediate": true,
+    "condition": false,
+    "interaction": false,
+    "state_gate": false,
+    "event_gate": false,
+    "group_context": false,
+    "global_context": false
+   }
+  },
+  {
+   "canonical": "intra_ts_sum",
+   "aliases": [],
+   "module": "factor_engine.cleaned_operators.intraday.sufficient_stats_ops",
+   "class_name": "_Op",
+   "authoring_tier": "extended",
+   "direct_use_status": "direct_alpha",
+   "mining_role": "intraday_eod",
+   "terminal_allowed": true,
+   "allowed_ast_positions": [
+    "intermediate",
+    "terminal"
+   ],
+   "mining_lane": "alpha_direct",
+   "retention_reason": "stock-level alpha (verified role)",
+   "delete_reason": "",
+   "replacement": "",
+   "economic_effect_family": "intraday_microstructure",
+   "semantic_redundancy_group": "",
+   "monotonic_transform_class": "",
+   "input_slots": [
+    {
+     "parameter": "close",
+     "allowed_semantic_kinds": [
+      "field"
+     ],
+     "allowed_units": [],
+     "allowed_roles": [
+      "data"
+     ],
+     "cardinality": "panel",
+     "axis_semantics": "per_instrument",
+     "context": "data"
+    },
+    {
+     "parameter": "window",
+     "allowed_semantic_kinds": [
+      "scalar"
+     ],
+     "allowed_units": [],
+     "allowed_roles": [
+      "parameter"
+     ],
+     "cardinality": "scalar",
+     "axis_semantics": "none",
+     "context": "scalar"
+    }
+   ],
+   "data_inputs": [
+    "close"
+   ],
+   "scalar_parameters": [
+    "window"
+   ],
+   "context_inputs": [],
+   "group_inputs": [],
+   "event_inputs": [],
+   "condition_slot": "",
+   "output_semantic_kind": "series",
+   "output_unit": null,
+   "output_cardinality": "panel",
+   "output_value_domain": "continuous_signed",
+   "output_grain": "daily",
+   "default_input_recipe": {
+    "close": "continuous_close"
+   },
+   "smoke_recipe_ids": [
+    "smoke:intra_ts_sum::close=continuous_close"
+   ],
+   "supported_markets": [
+    "ashare",
+    "us"
+   ],
+   "source_recipes": [
+    "minute_bar"
+   ],
+   "default_params": [
+    "close",
+    "window"
+   ],
+   "searchable_params": [
+    "window"
+   ],
+   "search_grade_by_param": {},
+   "parameter_injectivity_passed": false,
+   "stateful": false,
+   "execution_model": "independent_with_warmup",
+   "checkpoint_supported": false,
+   "full_history_replay_allowed": true,
+   "runtime_cost": 6,
+   "memory_cost": 6,
+   "preferred_backend": "polars",
+   "reference_backend": "pandas_numpy",
+   "production_certified": false,
+   "directly_usable": false,
+   "mining_visible": true,
+   "composition_usable": true,
+   "terminal_usable": true,
+   "production_terminal_usable": false,
+   "production_admitted": false,
+   "context_admitted": false,
+   "parameter_injectivity_declared": false,
+   "math_probe_missing": false,
+   "r64_production_gates": {
+    "REGISTERED": "PASS",
+    "IMPLEMENTED": "PASS",
+    "BACKEND_WIRED": "PASS",
+    "BACKEND_RUNTIME_WIRED": "PASS",
+    "PARAM_WIRED": "PASS",
+    "MATH_ORACLE_PASS": "NOT_PROVEN",
+    "CAUSALITY_PASS": "PASS",
+    "PIT_PASS": "NOT_RUN",
+    "BACKEND_PARITY_PASS": "NOT_RUN",
+    "EDGE_PASS": "NOT_RUN",
+    "SCALE_PASS": "NOT_RUN"
+   },
+   "r64_causality": "causal",
+   "min_effective_samples": {},
+   "scale_sensitive": {
+    "scale_sensitive": false,
+    "size_sensitive": false,
+    "liquidity_exposure": false
+   },
+   "search_prior": 1.0,
+   "family_budget": 16,
+   "cost_budget": 9,
+   "retention_usage": {
+    "terminal": true,
+    "intermediate": true,
+    "condition": false,
+    "interaction": false,
+    "state_gate": false,
+    "event_gate": false,
+    "group_context": false,
+    "global_context": false
+   }
+  },
+  {
+   "canonical": "intra_ts_variance",
+   "aliases": [],
+   "module": "factor_engine.cleaned_operators.intraday.sufficient_stats_ops",
+   "class_name": "_Op",
+   "authoring_tier": "extended",
+   "direct_use_status": "direct_alpha",
+   "mining_role": "intraday_eod",
+   "terminal_allowed": true,
+   "allowed_ast_positions": [
+    "intermediate",
+    "terminal"
+   ],
+   "mining_lane": "alpha_direct",
+   "retention_reason": "stock-level alpha (verified role)",
+   "delete_reason": "",
+   "replacement": "",
+   "economic_effect_family": "intraday_microstructure",
+   "semantic_redundancy_group": "",
+   "monotonic_transform_class": "",
+   "input_slots": [
+    {
+     "parameter": "close",
+     "allowed_semantic_kinds": [
+      "field"
+     ],
+     "allowed_units": [],
+     "allowed_roles": [
+      "data"
+     ],
+     "cardinality": "panel",
+     "axis_semantics": "per_instrument",
+     "context": "data"
+    },
+    {
+     "parameter": "window",
+     "allowed_semantic_kinds": [
+      "scalar"
+     ],
+     "allowed_units": [],
+     "allowed_roles": [
+      "parameter"
+     ],
+     "cardinality": "scalar",
+     "axis_semantics": "none",
+     "context": "scalar"
+    }
+   ],
+   "data_inputs": [
+    "close"
+   ],
+   "scalar_parameters": [
+    "window"
+   ],
+   "context_inputs": [],
+   "group_inputs": [],
+   "event_inputs": [],
+   "condition_slot": "",
+   "output_semantic_kind": "series",
+   "output_unit": null,
+   "output_cardinality": "panel",
+   "output_value_domain": "continuous_nonnegative",
+   "output_grain": "daily",
+   "default_input_recipe": {
+    "close": "continuous_close"
+   },
+   "smoke_recipe_ids": [
+    "smoke:intra_ts_variance::close=continuous_close"
+   ],
+   "supported_markets": [
+    "ashare",
+    "us"
+   ],
+   "source_recipes": [
+    "minute_bar"
+   ],
+   "default_params": [
+    "close",
+    "window"
+   ],
+   "searchable_params": [
+    "window"
+   ],
+   "search_grade_by_param": {},
+   "parameter_injectivity_passed": false,
+   "stateful": false,
+   "execution_model": "independent_with_warmup",
+   "checkpoint_supported": false,
+   "full_history_replay_allowed": true,
+   "runtime_cost": 6,
+   "memory_cost": 6,
+   "preferred_backend": "polars",
+   "reference_backend": "pandas_numpy",
+   "production_certified": false,
+   "directly_usable": false,
+   "mining_visible": true,
+   "composition_usable": true,
+   "terminal_usable": true,
+   "production_terminal_usable": false,
+   "production_admitted": false,
+   "context_admitted": false,
+   "parameter_injectivity_declared": false,
+   "math_probe_missing": false,
+   "r64_production_gates": {
+    "REGISTERED": "PASS",
+    "IMPLEMENTED": "PASS",
+    "BACKEND_WIRED": "PASS",
+    "BACKEND_RUNTIME_WIRED": "PASS",
+    "PARAM_WIRED": "PASS",
+    "MATH_ORACLE_PASS": "NOT_PROVEN",
+    "CAUSALITY_PASS": "PASS",
+    "PIT_PASS": "NOT_RUN",
+    "BACKEND_PARITY_PASS": "NOT_RUN",
+    "EDGE_PASS": "NOT_RUN",
+    "SCALE_PASS": "NOT_RUN"
+   },
+   "r64_causality": "causal",
+   "min_effective_samples": {},
+   "scale_sensitive": {
+    "scale_sensitive": false,
+    "size_sensitive": false,
+    "liquidity_exposure": false
+   },
+   "search_prior": 1.0,
+   "family_budget": 16,
+   "cost_budget": 9,
+   "retention_usage": {
+    "terminal": true,
+    "intermediate": true,
+    "condition": false,
+    "interaction": false,
+    "state_gate": false,
+    "event_gate": false,
+    "group_context": false,
+    "global_context": false
+   }
+  },
+  {
+   "canonical": "intra_ts_volume_weighted_return",
+   "aliases": [],
+   "module": "factor_engine.cleaned_operators.intraday.sufficient_stats_ops",
+   "class_name": "_Op2",
+   "authoring_tier": "extended",
+   "direct_use_status": "direct_alpha",
+   "mining_role": "intraday_eod",
+   "terminal_allowed": true,
+   "allowed_ast_positions": [
+    "intermediate",
+    "terminal"
+   ],
+   "mining_lane": "alpha_direct",
+   "retention_reason": "stock-level alpha (verified role)",
+   "delete_reason": "",
+   "replacement": "",
+   "economic_effect_family": "intraday_microstructure",
+   "semantic_redundancy_group": "",
+   "monotonic_transform_class": "",
+   "input_slots": [
+    {
+     "parameter": "close",
+     "allowed_semantic_kinds": [
+      "field"
+     ],
+     "allowed_units": [],
+     "allowed_roles": [
+      "data"
+     ],
+     "cardinality": "panel",
+     "axis_semantics": "per_instrument",
+     "context": "data"
+    },
+    {
+     "parameter": "volume",
+     "allowed_semantic_kinds": [
+      "field"
+     ],
+     "allowed_units": [],
+     "allowed_roles": [
+      "data"
+     ],
+     "cardinality": "panel",
+     "axis_semantics": "per_instrument",
+     "context": "data"
+    }
+   ],
+   "data_inputs": [
+    "close",
+    "volume"
+   ],
+   "scalar_parameters": [],
+   "context_inputs": [],
+   "group_inputs": [],
+   "event_inputs": [],
+   "condition_slot": "",
+   "output_semantic_kind": "series",
+   "output_unit": null,
+   "output_cardinality": "panel",
+   "output_value_domain": "continuous_signed",
+   "output_grain": "daily",
+   "default_input_recipe": {
+    "close": "continuous_close",
+    "volume": "continuous_volume_shares"
+   },
+   "smoke_recipe_ids": [
+    "smoke:intra_ts_volume_weighted_return::close=continuous_close,volume=continuous_volume_shares"
+   ],
+   "supported_markets": [
+    "ashare",
+    "us"
+   ],
+   "source_recipes": [
+    "minute_bar"
+   ],
+   "default_params": [
+    "close",
+    "volume"
+   ],
+   "searchable_params": [],
+   "search_grade_by_param": {},
+   "parameter_injectivity_passed": true,
+   "stateful": false,
+   "execution_model": "independent_with_warmup",
+   "checkpoint_supported": false,
+   "full_history_replay_allowed": true,
+   "runtime_cost": 6,
+   "memory_cost": 6,
+   "preferred_backend": "polars",
+   "reference_backend": "pandas_numpy",
+   "production_certified": false,
+   "directly_usable": false,
+   "mining_visible": true,
+   "composition_usable": true,
+   "terminal_usable": true,
+   "production_terminal_usable": false,
+   "production_admitted": false,
+   "context_admitted": false,
+   "parameter_injectivity_declared": false,
+   "math_probe_missing": false,
+   "r64_production_gates": {
+    "REGISTERED": "PASS",
+    "IMPLEMENTED": "PASS",
+    "BACKEND_WIRED": "PASS",
+    "BACKEND_RUNTIME_WIRED": "PASS",
+    "PARAM_WIRED": "PASS",
+    "MATH_ORACLE_PASS": "PASS",
+    "CAUSALITY_PASS": "PASS",
+    "PIT_PASS": "NOT_RUN",
+    "BACKEND_PARITY_PASS": "NOT_RUN",
+    "EDGE_PASS": "NOT_RUN",
+    "SCALE_PASS": "NOT_RUN"
+   },
+   "r64_causality": "causal",
+   "min_effective_samples": {},
+   "scale_sensitive": {
+    "scale_sensitive": false,
+    "size_sensitive": false,
+    "liquidity_exposure": false
+   },
+   "search_prior": 1.0,
+   "family_budget": 16,
+   "cost_budget": 9,
+   "retention_usage": {
+    "terminal": true,
+    "intermediate": true,
+    "condition": false,
+    "interaction": false,
+    "state_gate": false,
+    "event_gate": false,
+    "group_context": false,
+    "global_context": false
+   }
+  },
+  {
+   "canonical": "intra_ts_vwap",
+   "aliases": [],
+   "module": "factor_engine.cleaned_operators.intraday.sufficient_stats_ops",
+   "class_name": "_Op2",
+   "authoring_tier": "extended",
+   "direct_use_status": "direct_alpha",
+   "mining_role": "intraday_eod",
+   "terminal_allowed": true,
+   "allowed_ast_positions": [
+    "intermediate",
+    "terminal"
+   ],
+   "mining_lane": "alpha_direct",
+   "retention_reason": "stock-level alpha (verified role)",
+   "delete_reason": "",
+   "replacement": "",
+   "economic_effect_family": "intraday_microstructure",
+   "semantic_redundancy_group": "",
+   "monotonic_transform_class": "",
+   "input_slots": [
+    {
+     "parameter": "close",
+     "allowed_semantic_kinds": [
+      "field"
+     ],
+     "allowed_units": [],
+     "allowed_roles": [
+      "data"
+     ],
+     "cardinality": "panel",
+     "axis_semantics": "per_instrument",
+     "context": "data"
+    },
+    {
+     "parameter": "volume",
+     "allowed_semantic_kinds": [
+      "field"
+     ],
+     "allowed_units": [],
+     "allowed_roles": [
+      "data"
+     ],
+     "cardinality": "panel",
+     "axis_semantics": "per_instrument",
+     "context": "data"
+    }
+   ],
+   "data_inputs": [
+    "close",
+    "volume"
+   ],
+   "scalar_parameters": [],
+   "context_inputs": [],
+   "group_inputs": [],
+   "event_inputs": [],
+   "condition_slot": "",
+   "output_semantic_kind": "series",
+   "output_unit": null,
+   "output_cardinality": "panel",
+   "output_value_domain": "continuous_signed",
+   "output_grain": "daily",
+   "default_input_recipe": {
+    "close": "continuous_close",
+    "volume": "continuous_volume_shares"
+   },
+   "smoke_recipe_ids": [
+    "smoke:intra_ts_vwap::close=continuous_close,volume=continuous_volume_shares"
+   ],
+   "supported_markets": [
+    "ashare",
+    "us"
+   ],
+   "source_recipes": [
+    "minute_bar"
+   ],
+   "default_params": [
+    "close",
+    "volume"
+   ],
+   "searchable_params": [],
+   "search_grade_by_param": {},
+   "parameter_injectivity_passed": true,
+   "stateful": false,
+   "execution_model": "independent_with_warmup",
+   "checkpoint_supported": false,
+   "full_history_replay_allowed": true,
+   "runtime_cost": 6,
+   "memory_cost": 6,
+   "preferred_backend": "polars",
+   "reference_backend": "pandas_numpy",
+   "production_certified": false,
+   "directly_usable": false,
+   "mining_visible": true,
+   "composition_usable": true,
+   "terminal_usable": true,
+   "production_terminal_usable": false,
+   "production_admitted": false,
+   "context_admitted": false,
+   "parameter_injectivity_declared": false,
+   "math_probe_missing": false,
+   "r64_production_gates": {
+    "REGISTERED": "PASS",
+    "IMPLEMENTED": "PASS",
+    "BACKEND_WIRED": "PASS",
+    "BACKEND_RUNTIME_WIRED": "PASS",
+    "PARAM_WIRED": "PASS",
+    "MATH_ORACLE_PASS": "PASS",
+    "CAUSALITY_PASS": "PASS",
+    "PIT_PASS": "NOT_RUN",
+    "BACKEND_PARITY_PASS": "NOT_RUN",
+    "EDGE_PASS": "NOT_RUN",
+    "SCALE_PASS": "NOT_RUN"
+   },
+   "r64_causality": "causal",
+   "min_effective_samples": {},
+   "scale_sensitive": {
+    "scale_sensitive": false,
+    "size_sensitive": false,
+    "liquidity_exposure": false
+   },
+   "search_prior": 1.0,
+   "family_budget": 16,
+   "cost_budget": 9,
+   "retention_usage": {
+    "terminal": true,
+    "intermediate": true,
+    "condition": false,
+    "interaction": false,
+    "state_gate": false,
+    "event_gate": false,
+    "group_context": false,
+    "global_context": false
+   }
+  },
+  {
    "canonical": "intra_up_down_semibeta",
    "aliases": [],
    "module": "factor_engine.cleaned_operators.intraday.realized_beta",
@@ -130916,12 +133115,12 @@
    "preferred_backend": "polars",
    "reference_backend": "pandas_numpy",
    "production_certified": true,
-   "directly_usable": true,
+   "directly_usable": false,
    "mining_visible": true,
    "composition_usable": true,
    "terminal_usable": true,
-   "production_terminal_usable": true,
-   "production_admitted": true,
+   "production_terminal_usable": false,
+   "production_admitted": false,
    "context_admitted": false,
    "parameter_injectivity_declared": false,
    "math_probe_missing": false,
@@ -167732,7 +169931,9 @@
    "canonical": "safe_div_null",
    "aliases": [
     "div_or_null",
-    "safe_div"
+    "div_safe",
+    "safe_div",
+    "safe_divide"
    ],
    "module": "factor_engine.cleaned_operators.overhaul.base",
    "class_name": "PandasFunctionOperator",
@@ -197505,7 +199706,8 @@
     "DECAY_LINEAR",
     "TS_DECAY_LINEAR",
     "decay_linear",
-    "ts_decay"
+    "ts_decay",
+    "wdecay"
    ],
    "module": "factor_engine.cleaned_operators.common.time_series",
    "class_name": "TSDecayLinear",
@@ -197650,7 +199852,8 @@
     "delay",
     "m_delay",
     "prev",
-    "shift"
+    "shift",
+    "ts_lag"
    ],
    "module": "factor_engine.cleaned_operators.common.time_series",
    "class_name": "TSDelay",
@@ -200368,7 +202571,9 @@
     "EMA",
     "ema",
     "ewm",
-    "ewm_mean"
+    "ewm_mean",
+    "ts_ewm_mean",
+    "ts_ewma"
    ],
    "module": "factor_engine.cleaned_operators.common.time_series",
    "class_name": "EMA",
@@ -224645,6 +226850,7 @@
     "mean",
     "move",
     "running_mean",
+    "ts_sma",
     "window_mean"
    ],
    "module": "factor_engine.cleaned_operators.common.time_series",
@@ -282696,6 +284902,7 @@
     "CS_ZSCORE",
     "ZSCORE",
     "c_zscore",
+    "cs_standardize",
     "cs_zscore",
     "panel_standardize",
     "panel_zscore",

@@ -297,9 +297,31 @@ def create_default_policies() -> PolicyRegistry:
     registry.register(causal_basic)
 
     # Policy 3: production_full - Full production pipeline with all safety checks
+    #
+    # R61-FI-042 (plan §3.5/§27): the stage order was previously
+    #   forward_fill → missing_indicator → cs_winsor → ewma →
+    #   volatility_scale → cs_rank → cs_zscore → ols_neutralize
+    # which placed neutralization (D) AFTER rank/z-score (E) and contradicted
+    # the canonical stage grammar (A Missingness → B Outlier → C Temporal
+    # Stabilization → D Neutralization → E Representation/Scaling).  Fixed
+    # with the preferred Option A: volatility_scale is classified as a
+    # temporal/risk-scaling treatment that belongs to the C segment
+    # (volatility_scale's own metadata stage is "scaling", which the certified
+    # canonical mapping treats as C temporal stabilization — risk scaling),
+    # and neutralization now runs before the representation (rank/zscore)
+    # final step.  A single representation is applied last; because the
+    # canonical representation output must be ONE standardized scale and this
+    # production default targets tree/linear models through the shared
+    # normalization, cs_rank (the [0,1] monotone representation) is the
+    # certified production default and cs_zscore is applied only when a
+    # linear-model representation is requested (see
+    # factor_preprocess/representation/policy.py LINEAR).  Keeping BOTH in the
+    # preset would double-standardize the same axis (lineage duplicate guard,
+    # plan §26 F4); the preset keeps the certified single-representation form.
     production_full = PolicyPreset(
         name="production_full",
-        description="Production-grade pipeline with volatility scaling and neutralization",
+        description="Production-grade pipeline: missingness, outlier, temporal stabilization "
+                    "(smoothing + risk scaling), neutralization, representation",
         level=PolicyLevel.PRODUCTION,
         steps=[
             TransformStep(
@@ -323,17 +345,13 @@ def create_default_policies() -> PolicyRegistry:
                 parameters={"window": 60, "min_periods": 20},
             ),
             TransformStep(
-                name="cs_rank",
-                parameters={"pct": True},
-            ),
-            TransformStep(
-                name="cs_zscore",
-                parameters={"ddof": 1},
-            ),
-            TransformStep(
                 name="ols_neutralize",
                 parameters={},
                 skip_if_missing=False,
+            ),
+            TransformStep(
+                name="cs_rank",
+                parameters={"pct": True},
             ),
         ],
         causal_safe=True,

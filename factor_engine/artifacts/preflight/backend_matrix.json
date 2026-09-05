@@ -1,75 +1,179 @@
 {
  "header": {
   "schema_version": "factor_engine.current_head.inventory.v1",
-  "generated_at_utc": "2026-09-03T09:37:49Z",
+  "generated_at_utc": "2026-09-05T03:49:08Z",
   "load_mode": "load_all(include_research=False)",
-  "commit_sha": "dbbc3fe75f38d75c88f62ad60e3e0eedc666f026",
+  "commit_sha": "593507c1e25288e78ba95a5d7acc6bfef57daf1f",
   "dirty": true,
   "dirty_files": [
-   "M factor_engine/backend/contracts/__init__.py",
-   " M factor_engine/backend/operator_capability.py",
-   " M factor_engine/backend/polars_backend_kind.py",
-   " M factor_engine/backend/sql_pushdown/sql_registry.py",
-   " M factor_engine/cleaned_operators/__init__.py",
-   " M factor_engine/cleaned_operators/common/group.py",
-   " M factor_engine/cleaned_operators/common/polars_ts_basic.py",
+   "M benchmarks/operator_manifest.json",
+   " M data_access/README.md",
+   " M data_access/cos/mirror.py",
+   " M data_access/cos/remote.py",
+   " M data_access/read/session_calendar.py",
+   " M data_access/snapshot/verifier.py",
+   " M data_access/store.py",
+   " M docs/factor_intelligence/CAPABILITY_GAP_MATRIX.md",
+   " M docs/factor_intelligence/IMPLEMENTATION_DECISIONS.md",
+   " M docs/factor_intelligence/progress_log.md",
+   " M evidence/CURRENT.json",
+   " M evidence/current.py",
+   " M evidence/factor_operator_verified.json",
+   " M evidence/registry.py",
+   " M factor_engine/README.md",
+   " M factor_engine/api/static_analysis.py",
+   " M factor_engine/artifacts/100K_DRY_RUN_REPORT.md",
+   " M factor_engine/artifacts/GO_NO_GO.md",
+   " M factor_engine/artifacts/operator_audit/current_head/operator_matrix.csv",
+   " M factor_engine/artifacts/perf_vec/INTRADAY_VECTOR_COVERAGE.md",
+   " M factor_engine/artifacts/perf_vec/MULTIWORKER_SCALING.md",
+   " M factor_engine/artifacts/perf_vec/PERFORMANCE_BENCHMARK.md",
+   " M factor_engine/artifacts/perf_vec/intraday_vector_coverage.json",
+   " M factor_engine/artifacts/preflight/alias_inventory.json",
+   " M factor_engine/artifacts/preflight/backend_matrix.json",
+   " M factor_engine/artifacts/preflight/direct_use_matrix.json",
+   " M factor_engine/artifacts/preflight/field_registry.json",
+   " M factor_engine/artifacts/preflight/inventory_manifest.json",
+   " M factor_engine/artifacts/preflight/operator_inventory.json",
+   " M factor_engine/artifacts/preflight/source_contract_matrix.json",
+   " M factor_engine/artifacts/preflight/surface_inventory.json",
+   " M factor_engine/backend/multibackend_governance.py",
+   " M factor_engine/backend/operator_signatures_phase1.py",
+   " M factor_engine/benchmarks/dry_run_ladder.py",
+   " M factor_engine/cleaned_operators/intraday/__init__.py",
    " M factor_engine/cleaned_operators/intraday/_core.py",
    " M factor_engine/cleaned_operators/intraday/perf_vec_bench.py",
+   " M factor_engine/cleaned_operators/intraday/perf_vec_coverage.py",
    " M factor_engine/cleaned_operators/intraday/perf_vec_equiv.py",
    " M factor_engine/cleaned_operators/intraday/perf_vec_kernels.py",
-   " M factor_engine/cleaned_operators/polars_gap_coverage.py",
-   " M factor_engine/cleaned_operators/r23_cert_math.py",
-   " M factor_engine/cleaned_operators/rolling_pack.py",
-   " M factor_engine/docs/R18_DELETE_PLAN.json",
-   " M factor_engine/docs/R18_DELETE_PLAN.md",
-   " M factor_engine/docs/R18_DIRECT_USE_MATRIX.csv",
-   " M factor_engine/docs/R18_DIRECT_USE_MATRIX.json",
-   " M factor_engine/docs/R18_DIRECT_USE_MATRIX.md",
-   " M factor_engine/docs/R18_OPERATOR_SMOKE_RECIPES.json",
-   " M factor_engine/docs/operator_migration_map.json",
-   " M factor_engine/ir/analyzer.py",
+   " M factor_engine/loop/fe100k/status.md",
    " M factor_engine/mining/direct_use.py",
-   " M factor_engine/planner/cse.py",
-   " M factor_engine/planner/native_fusion.py",
+   " M factor_engine/reporting/quant_evaluator_adapter.py",
    " M factor_engine/runtime/adaptive_batch_scheduler.py",
-   " M factor_engine/runtime/batch_service.py",
    " M factor_engine/runtime/engine.py",
-   " M factor_engine/runtime/intraday_aggregator.py",
-   " M factor_engine/runtime/perf_config.py",
+   " M factor_engine/runtime/production_policy.py",
+   " M factor_engine/scripts/dry_run_ladder.py",
    " M factor_engine/storage/sources/intraday_feature_extension.py",
    " M factor_engine/storage/sources/intraday_feature_runtime_v2.py",
+   " M factor_engine/storage/streaming_sink.py",
+   " M factor_engine/tests/conftest.py",
+   " M factor_engine/tests/multibackend_integration/test_backend_execution.py",
+   " M factor_engine/tests/multibackend_integration/test_cost_model.py",
+   " M factor_engine/tests/multibackend_integration/test_duckdb_region.py",
+   " M factor_engine/tests/multibackend_integration/test_end_to_end.py",
+   " M factor_engine/tests/multibackend_integration/test_hard_gates.py",
+   " M factor_engine/tests/multibackend_integration/test_pandas_region.py",
+   " M factor_engine/tests/multibackend_integration/test_polars_region.py",
+   " M factor_engine/tests/multibackend_integration/test_region_optimizer.py",
+   " M factor_engine/tests/multibackend_integration/test_region_planning.py",
+   " M factor_engine/tests/multibackend_integration/test_representation_transfer.py",
    " M factor_engine/tests/operators/test_intraday_feature_extensions.py",
-   "?? FACTOR_ENGINE_100K_PRODUCTION_GO_PROMPT.md",
-   "?? factor_engine/artifacts/",
-   "?? factor_engine/ashare_contract_gate.py",
-   "?? factor_engine/benchmarks/dry_run_ladder.py",
-   "?? factor_engine/cleaned_operators/spec_completion.py",
-   "?? factor_engine/loop/",
-   "?? factor_engine/runtime/dry_run_checkpoint.py",
-   "?? factor_engine/runtime/failure_classification.py",
-   "?? factor_engine/runtime/multiworker_governance.py",
-   "?? factor_engine/storage/streaming_sink.py",
-   "?? factor_engine/telemetry/execution_telemetry.py",
-   "?? factor_engine/tests/backend/test_perf_config_env_cache.py",
-   "?? factor_engine/tests/runtime/test_intraday_compute_many.py",
-   "?? factor_engine/tests/test_ashare_contract_gate.py",
-   "?? factor_engine/tests/test_dry_run_ladder.py",
-   "?? factor_engine/tests/test_multiworker_governance.py",
-   "?? jobs/backfill_incremental_aliases.py"
+   " M factor_engine/tests/runtime/test_batch_warmup_pit.py",
+   " M factor_engine/tests/runtime/test_production_dsl_gate.py",
+   " M factor_engine/tests/test_ashare_mining_matrix.py",
+   " M factor_engine/tests/test_dry_run_ladder.py",
+   " M factor_engine/tests/test_multibackend_governance.py",
+   " M factor_optimizer/factor_optimizer/contracts/__init__.py",
+   " M factor_optimizer/factor_optimizer/contracts/treatment_result.py",
+   " M factor_optimizer/factor_optimizer/policy/repair.py",
+   " M factor_optimizer/factor_optimizer/search/multifidelity.py",
+   " M factor_optimizer/factor_optimizer/search/treatment_decision.py",
+   " M factor_preprocess/factor_preprocess/__init__.py",
+   " M factor_preprocess/factor_preprocess/adapters/__init__.py",
+   " M factor_preprocess/factor_preprocess/contracts/treatment_recipe.py",
+   " M factor_preprocess/factor_preprocess/grammar/search_grammar.py",
+   " M factor_preprocess/factor_preprocess/registry/policies.py",
+   " M factor_preprocess/factor_preprocess/registry/transforms.py",
+   " M factor_preprocess/factor_preprocess/representation/__init__.py",
+   " M jobs/incremental_factor_intake.py",
+   " M jobs/render_evoalpha14_pages.py",
+   " M jobs/render_optimized_pages.py",
+   " M quant_evaluator/kernels/gpu/__init__.py",
+   " M quant_evaluator/metrics/__init__.py",
+   " M quant_evaluator/metrics/portfolio_stats.py",
+   " M quant_evaluator/registry/__init__.py",
+   " M quant_evaluator/registry/metrics.py",
+   " M quant_evaluator/registry/presets.py",
+   " M scripts/archive/jobs/rebuild_factor_detail_pages.py",
+   " M tests/reporting_test_quant_evaluator_report_contract.py",
+   "?? alphaprobe/ashare/alphaprobe-dev/tests/test_ctor_probe_plugin.py",
+   "?? data_access/tests/unit/test_cache_single_flight.py",
+   "?? data_access/tests/unit/test_session_exact_slots.py",
+   "?? docs/factor_intelligence/QE_EVIDENCE_AUDIT.md",
+   "?? evidence/gate.py",
+   "?? evidence/r2/R61_P1_56_REAL_DACOS_WORKER_SCALING.yaml",
+   "?? factor_assets/profiling/",
+   "?? factor_assets/tests/profiling/",
+   "?? factor_engine/artifacts/perf_vec/MULTIWORKER_REAL.json",
+   "?? factor_engine/cleaned_operators/intraday/sufficient_stats.py",
+   "?? factor_engine/cleaned_operators/intraday/sufficient_stats_ops.py",
+   "?? factor_engine/docs/TEST_TIERING.md",
+   "?? factor_engine/scripts/bench_worker_scaling_real.py",
+   "?? factor_engine/scripts/check_production_critical.sh",
+   "?? factor_engine/scripts/production_factor_ladder.py",
+   "?? factor_engine/scripts/run_test_tiers.py",
+   "?? factor_engine/tests/legacy_quarantine.txt",
+   "?? factor_engine/tests/operators/test_intraday_sufficient_stats.py",
+   "?? factor_engine/tests/production_critical.txt",
+   "?? factor_engine/tests/research_extended.txt",
+   "?? factor_engine/tests/runtime/test_session_gate_per_symbol.py",
+   "?? factor_engine/tests/static_analysis/test_operator_metadata.py",
+   "?? factor_engine/tests/test_production_factor_ladder.py",
+   "?? factor_optimizer/factor_optimizer/adapters/factor_assets.py",
+   "?? factor_optimizer/factor_optimizer/adapters/fitness.py",
+   "?? factor_optimizer/factor_optimizer/contracts/evidence_value.py",
+   "?? factor_optimizer/factor_optimizer/contracts/factor_fitness.py",
+   "?? factor_optimizer/factor_optimizer/policy/repair_registry.py",
+   "?? factor_optimizer/factor_optimizer/ports/",
+   "?? factor_optimizer/factor_optimizer/search/conditional_search.py",
+   "?? factor_optimizer/tests/search/test_conditional_search.py",
+   "?? factor_optimizer/tests/search/test_multifidelity_profiles.py",
+   "?? factor_optimizer/tests/test_diagnosis_repair_policy.py",
+   "?? factor_optimizer/tests/test_factor_fitness.py",
+   "?? factor_optimizer/tests/test_factor_intelligence_provider.py",
+   "?? factor_optimizer/tests/test_missing_evidence_semantics.py",
+   "?? factor_optimizer/tests/test_raw_outcomes.py",
+   "?? factor_optimizer/tests/test_repair_registry.py",
+   "?? factor_optimizer/tests/test_search_budget.py",
+   "?? factor_optimizer/tests/test_treatment_decision_generalized.py",
+   "?? factor_preprocess/docs/FE_OPERATOR_REUSE_MATRIX.md",
+   "?? factor_preprocess/factor_preprocess/adapters/fe_operator.py",
+   "?? factor_preprocess/factor_preprocess/contracts/fit_apply.py",
+   "?? factor_preprocess/factor_preprocess/contracts/lineage_policy.py",
+   "?? factor_preprocess/factor_preprocess/representation/policy.py",
+   "?? factor_preprocess/tests/contracts/test_fit_apply_guards.py",
+   "?? factor_preprocess/tests/contracts/test_lineage_dedup.py",
+   "?? factor_preprocess/tests/representation/",
+   "?? factor_preprocess/tests/test_fe_operator_parity.py",
+   "?? factor_preprocess/tests/test_preset_semantic_order.py",
+   "?? factor_preprocess/tests/test_transform_metadata.py",
+   "?? quant_evaluator/contracts/adaptive_bins_policy.py",
+   "?? quant_evaluator/kernels/gpu/exposure_evidence.py",
+   "?? quant_evaluator/metrics/exposure_evidence.py",
+   "?? quant_evaluator/metrics/generalization_evidence.py",
+   "?? quant_evaluator/metrics/shape_evidence.py",
+   "?? quant_evaluator/metrics/underwater.py",
+   "?? quant_evaluator/tests/test_drawdown_evidence.py",
+   "?? quant_evaluator/tests/test_evidence_profiles.py",
+   "?? quant_evaluator/tests/test_exposure_evidence.py",
+   "?? quant_evaluator/tests/test_generalization_evidence.py",
+   "?? quant_evaluator/tests/test_shape_evidence.py",
+   "?? tests/test_evidence_gate.py",
+   "?? tests/test_incremental_report_mainline.py"
   ],
-  "registry_fingerprint": "189a00582ba4e9a4"
+  "registry_fingerprint": "201a7bbc75caf6b9"
  },
- "canonical_count": 1673,
+ "canonical_count": 1689,
  "backend_status_dist": {
-  "implemented": 1673
+  "implemented": 1689
  },
  "backend_passed_dist": {
-  "false": 1517,
-  "true": 86,
+  "false": 1526,
+  "true": 93,
   "null": 70
  },
  "backend_signature_consistent_dist": {
-  "true": 1666,
+  "true": 1682,
   "false": 7
  },
  "rows": {
@@ -4278,7 +4382,7 @@
       "x"
      ],
      "implementation_type": "AbsPolars",
-     "no_fallback_runtime_verified": false,
+     "no_fallback_runtime_verified": true,
      "production_native_source_of_truth": "verified_runtime_evidence"
     },
     "sql": {
@@ -4688,7 +4792,7 @@
       "y"
      ],
      "implementation_type": "AddPolars",
-     "no_fallback_runtime_verified": false,
+     "no_fallback_runtime_verified": true,
      "production_native_source_of_truth": "verified_runtime_evidence"
     },
     "sql": {
@@ -5034,7 +5138,7 @@
       "y"
      ],
      "implementation_type": "AndPolarsAuto",
-     "no_fallback_runtime_verified": false,
+     "no_fallback_runtime_verified": true,
      "production_native_source_of_truth": "verified_runtime_evidence"
     },
     "sql": {
@@ -14098,7 +14202,7 @@
       "x"
      ],
      "implementation_type": "CeilPolars",
-     "no_fallback_runtime_verified": false,
+     "no_fallback_runtime_verified": true,
      "production_native_source_of_truth": "verified_runtime_evidence"
     },
     "sql": {
@@ -14460,7 +14564,7 @@
       "hi"
      ],
      "implementation_type": "ClipPolars",
-     "no_fallback_runtime_verified": false,
+     "no_fallback_runtime_verified": true,
      "production_native_source_of_truth": "verified_runtime_evidence"
     },
     "sql": {
@@ -14549,7 +14653,7 @@
       "y"
      ],
      "implementation_type": "CoalescePolarsAuto",
-     "no_fallback_runtime_verified": false,
+     "no_fallback_runtime_verified": true,
      "production_native_source_of_truth": "verified_runtime_evidence"
     },
     "sql": {
@@ -16689,7 +16793,7 @@
       "x"
      ],
      "implementation_type": "CrossSectionalCountPolars",
-     "no_fallback_runtime_verified": false,
+     "no_fallback_runtime_verified": true,
      "production_native_source_of_truth": "verified_runtime_evidence"
     },
     "sql": {
@@ -16857,7 +16961,7 @@
       "x"
      ],
      "implementation_type": "CrossSectionalDemeanPolars",
-     "no_fallback_runtime_verified": false,
+     "no_fallback_runtime_verified": true,
      "production_native_source_of_truth": "verified_runtime_evidence"
     },
     "sql": {
@@ -18644,7 +18748,7 @@
       "x"
      ],
      "implementation_type": "CSMadNative",
-     "no_fallback_runtime_verified": false,
+     "no_fallback_runtime_verified": true,
      "production_native_source_of_truth": "verified_runtime_evidence"
     },
     "sql": {
@@ -18729,7 +18833,7 @@
       "x"
      ],
      "implementation_type": "CSMadZscoreNative",
-     "no_fallback_runtime_verified": false,
+     "no_fallback_runtime_verified": true,
      "production_native_source_of_truth": "verified_runtime_evidence"
     },
     "sql": {
@@ -18884,7 +18988,7 @@
       "x"
      ],
      "implementation_type": "CrossSectionalMeanPolars",
-     "no_fallback_runtime_verified": false,
+     "no_fallback_runtime_verified": true,
      "production_native_source_of_truth": "verified_runtime_evidence"
     },
     "sql": {
@@ -19297,7 +19401,7 @@
       "x"
      ],
      "implementation_type": "CsPctRankPolars",
-     "no_fallback_runtime_verified": false,
+     "no_fallback_runtime_verified": true,
      "production_native_source_of_truth": "verified_runtime_evidence"
     },
     "sql": {
@@ -20813,7 +20917,7 @@
       "x"
      ],
      "implementation_type": "CSStdNative",
-     "no_fallback_runtime_verified": false,
+     "no_fallback_runtime_verified": true,
      "production_native_source_of_truth": "verified_runtime_evidence"
     },
     "sql": {
@@ -20898,7 +21002,7 @@
       "x"
      ],
      "implementation_type": "CrossSectionalSumPolars",
-     "no_fallback_runtime_verified": false,
+     "no_fallback_runtime_verified": true,
      "production_native_source_of_truth": "verified_runtime_evidence"
     },
     "sql": {
@@ -22274,7 +22378,7 @@
       "y"
      ],
      "implementation_type": "DividePolars",
-     "no_fallback_runtime_verified": false,
+     "no_fallback_runtime_verified": true,
      "production_native_source_of_truth": "verified_runtime_evidence"
     },
     "sql": {
@@ -23796,7 +23900,7 @@
       "y"
      ],
      "implementation_type": "EQPolarsAuto",
-     "no_fallback_runtime_verified": false,
+     "no_fallback_runtime_verified": true,
      "production_native_source_of_truth": "verified_runtime_evidence"
     },
     "sql": {
@@ -27852,7 +27956,7 @@
       "x"
      ],
      "implementation_type": "ExpPolars",
-     "no_fallback_runtime_verified": false,
+     "no_fallback_runtime_verified": true,
      "production_native_source_of_truth": "verified_runtime_evidence"
     },
     "sql": {
@@ -28205,15 +28309,15 @@
     "sql"
    ],
    "backend_status": "implemented",
-   "backend_passed": false,
+   "backend_passed": true,
    "backend_signature_consistent": true,
    "backend_signatures": "{'pandas_numpy': ['x', 'value'], 'polars': ['x', 'value'], 'sql': []}",
    "backend_meta": {
     "pandas_numpy": {
      "explicit": false,
      "source": "factor_dsl_np",
-     "production_certified": false,
-     "certification_tier": "candidate",
+     "production_certified": true,
+     "certification_tier": "pandas_reference",
      "certification_source": "primitive_verified.json+primitive_verified_delta.json",
      "reference_backend": true,
      "execution_kind": "pandas_numpy_reference",
@@ -28253,7 +28357,7 @@
       "value"
      ],
      "implementation_type": "FillNAConstPolars",
-     "no_fallback_runtime_verified": false,
+     "no_fallback_runtime_verified": true,
      "production_native_source_of_truth": "verified_runtime_evidence"
     },
     "sql": {
@@ -38810,7 +38914,7 @@
       "x"
      ],
      "implementation_type": "FloorPolars",
-     "no_fallback_runtime_verified": false,
+     "no_fallback_runtime_verified": true,
      "production_native_source_of_truth": "verified_runtime_evidence"
     },
     "sql": {
@@ -39351,7 +39455,7 @@
       "y"
      ],
      "implementation_type": "GEPolarsAuto",
-     "no_fallback_runtime_verified": false,
+     "no_fallback_runtime_verified": true,
      "production_native_source_of_truth": "verified_runtime_evidence"
     },
     "sql": {
@@ -39510,7 +39614,7 @@
       "fallback_policy"
      ],
      "implementation_type": "GroupCountPolars",
-     "no_fallback_runtime_verified": false,
+     "no_fallback_runtime_verified": true,
      "production_native_source_of_truth": "verified_runtime_evidence"
     },
     "sql": {
@@ -40940,7 +41044,7 @@
       "fallback_policy"
      ],
      "implementation_type": "GroupMaxPolars",
-     "no_fallback_runtime_verified": false,
+     "no_fallback_runtime_verified": true,
      "production_native_source_of_truth": "verified_runtime_evidence"
     },
     "sql": {
@@ -41029,7 +41133,7 @@
       "fallback_policy"
      ],
      "implementation_type": "GroupMeanPolars",
-     "no_fallback_runtime_verified": false,
+     "no_fallback_runtime_verified": true,
      "production_native_source_of_truth": "verified_runtime_evidence"
     },
     "sql": {
@@ -41118,7 +41222,7 @@
       "fallback_policy"
      ],
      "implementation_type": "GroupMinPolars",
-     "no_fallback_runtime_verified": false,
+     "no_fallback_runtime_verified": true,
      "production_native_source_of_truth": "verified_runtime_evidence"
     },
     "sql": {
@@ -41346,7 +41450,7 @@
       "fallback_policy"
      ],
      "implementation_type": "GroupNeutralizeNative",
-     "no_fallback_runtime_verified": false,
+     "no_fallback_runtime_verified": true,
      "production_native_source_of_truth": "verified_runtime_evidence"
     },
     "sql": {
@@ -41435,7 +41539,7 @@
       "fallback_policy"
      ],
      "implementation_type": "GroupNormalizeNative",
-     "no_fallback_runtime_verified": false,
+     "no_fallback_runtime_verified": true,
      "production_native_source_of_truth": "verified_runtime_evidence"
     },
     "sql": {
@@ -41920,7 +42024,7 @@
       "fallback_policy"
      ],
      "implementation_type": "GroupRankPolars",
-     "no_fallback_runtime_verified": false,
+     "no_fallback_runtime_verified": true,
      "production_native_source_of_truth": "verified_runtime_evidence"
     },
     "sql": {
@@ -42369,7 +42473,7 @@
       "fallback_policy"
      ],
      "implementation_type": "GroupStdPolars",
-     "no_fallback_runtime_verified": false,
+     "no_fallback_runtime_verified": true,
      "production_native_source_of_truth": "verified_runtime_evidence"
     },
     "sql": {
@@ -42458,7 +42562,7 @@
       "fallback_policy"
      ],
      "implementation_type": "GroupSumPolars",
-     "no_fallback_runtime_verified": false,
+     "no_fallback_runtime_verified": true,
      "production_native_source_of_truth": "verified_runtime_evidence"
     },
     "sql": {
@@ -43247,7 +43351,7 @@
       "a"
      ],
      "implementation_type": "GroupWinsorizeNative",
-     "no_fallback_runtime_verified": false,
+     "no_fallback_runtime_verified": true,
      "production_native_source_of_truth": "verified_runtime_evidence"
     },
     "sql": {
@@ -43336,7 +43440,7 @@
       "fallback_policy"
      ],
      "implementation_type": "GroupZscorePolars",
-     "no_fallback_runtime_verified": false,
+     "no_fallback_runtime_verified": true,
      "production_native_source_of_truth": "verified_runtime_evidence"
     },
     "sql": {
@@ -43425,7 +43529,7 @@
       "y"
      ],
      "implementation_type": "GTPolarsAuto",
-     "no_fallback_runtime_verified": false,
+     "no_fallback_runtime_verified": true,
      "production_native_source_of_truth": "verified_runtime_evidence"
     },
     "sql": {
@@ -57291,6 +57395,1052 @@
    "determinism_verified": false,
    "production_backend_policy": "at_least_one_certified_backend"
   },
+  "intra_ts_amount_weighted_mean": {
+   "canonical": "intra_ts_amount_weighted_mean",
+   "backends": [
+    "pandas_numpy",
+    "polars"
+   ],
+   "backend_count": 2,
+   "runtime_impl_backends": [
+    "pandas_numpy",
+    "polars"
+   ],
+   "backend_status": "implemented",
+   "backend_passed": false,
+   "backend_signature_consistent": true,
+   "backend_signatures": "{'pandas_numpy': ['close', 'volume'], 'polars': ['close', 'volume']}",
+   "backend_meta": {
+    "pandas_numpy": {
+     "explicit": true,
+     "source": "intraday.sufficient_stats_ops",
+     "production_certified": false,
+     "certification_tier": "candidate",
+     "certification_source": "factor_operator_verified.json",
+     "reference_backend": true,
+     "execution_kind": "pandas_numpy_reference",
+     "supports_nulls": true,
+     "supports_nan": true,
+     "supports_inf": true,
+     "supports_scalar_broadcast": true,
+     "supports_min_periods": true,
+     "supports_group": false,
+     "supports_window": false,
+     "supports_lazy": false,
+     "supports_streaming": false,
+     "materializes_full_panel": true,
+     "param_names": [
+      "close",
+      "volume"
+     ],
+     "implementation_type": "_Op2"
+    },
+    "polars": {
+     "explicit": true,
+     "source": "polars_udf",
+     "execution_kind": "polars_udf_pandas_delegate",
+     "supports_lazy": false,
+     "supports_streaming": false,
+     "materializes_full_panel": true,
+     "supports_nulls": true,
+     "supports_nan": true,
+     "supports_inf": true,
+     "supports_scalar_broadcast": true,
+     "supports_group": false,
+     "supports_window": false,
+     "supports_min_periods": false,
+     "param_names": [
+      "close",
+      "volume"
+     ],
+     "no_fallback_runtime_verified": false,
+     "production_native_source_of_truth": "verified_runtime_evidence"
+    }
+   },
+   "runtime_execution_verified": false,
+   "determinism_verified": false,
+   "production_backend_policy": "at_least_one_certified_backend"
+  },
+  "intra_ts_argmax": {
+   "canonical": "intra_ts_argmax",
+   "backends": [
+    "pandas_numpy",
+    "polars"
+   ],
+   "backend_count": 2,
+   "runtime_impl_backends": [
+    "pandas_numpy",
+    "polars"
+   ],
+   "backend_status": "implemented",
+   "backend_passed": false,
+   "backend_signature_consistent": true,
+   "backend_signatures": "{'pandas_numpy': ['close'], 'polars': ['close']}",
+   "backend_meta": {
+    "pandas_numpy": {
+     "explicit": true,
+     "source": "intraday.sufficient_stats_ops",
+     "production_certified": false,
+     "certification_tier": "candidate",
+     "certification_source": "factor_operator_verified.json",
+     "reference_backend": true,
+     "execution_kind": "pandas_numpy_reference",
+     "supports_nulls": true,
+     "supports_nan": true,
+     "supports_inf": true,
+     "supports_scalar_broadcast": true,
+     "supports_min_periods": true,
+     "supports_group": false,
+     "supports_window": false,
+     "supports_lazy": false,
+     "supports_streaming": false,
+     "materializes_full_panel": true,
+     "param_names": [
+      "close"
+     ],
+     "implementation_type": "_Op"
+    },
+    "polars": {
+     "explicit": true,
+     "source": "polars_udf",
+     "execution_kind": "polars_udf_pandas_delegate",
+     "supports_lazy": false,
+     "supports_streaming": false,
+     "materializes_full_panel": true,
+     "supports_nulls": true,
+     "supports_nan": true,
+     "supports_inf": true,
+     "supports_scalar_broadcast": true,
+     "supports_group": false,
+     "supports_window": false,
+     "supports_min_periods": false,
+     "param_names": [
+      "close"
+     ],
+     "no_fallback_runtime_verified": false,
+     "production_native_source_of_truth": "verified_runtime_evidence"
+    }
+   },
+   "runtime_execution_verified": false,
+   "determinism_verified": false,
+   "production_backend_policy": "at_least_one_certified_backend"
+  },
+  "intra_ts_argmin": {
+   "canonical": "intra_ts_argmin",
+   "backends": [
+    "pandas_numpy",
+    "polars"
+   ],
+   "backend_count": 2,
+   "runtime_impl_backends": [
+    "pandas_numpy",
+    "polars"
+   ],
+   "backend_status": "implemented",
+   "backend_passed": false,
+   "backend_signature_consistent": true,
+   "backend_signatures": "{'pandas_numpy': ['close'], 'polars': ['close']}",
+   "backend_meta": {
+    "pandas_numpy": {
+     "explicit": true,
+     "source": "intraday.sufficient_stats_ops",
+     "production_certified": false,
+     "certification_tier": "candidate",
+     "certification_source": "factor_operator_verified.json",
+     "reference_backend": true,
+     "execution_kind": "pandas_numpy_reference",
+     "supports_nulls": true,
+     "supports_nan": true,
+     "supports_inf": true,
+     "supports_scalar_broadcast": true,
+     "supports_min_periods": true,
+     "supports_group": false,
+     "supports_window": false,
+     "supports_lazy": false,
+     "supports_streaming": false,
+     "materializes_full_panel": true,
+     "param_names": [
+      "close"
+     ],
+     "implementation_type": "_Op"
+    },
+    "polars": {
+     "explicit": true,
+     "source": "polars_udf",
+     "execution_kind": "polars_udf_pandas_delegate",
+     "supports_lazy": false,
+     "supports_streaming": false,
+     "materializes_full_panel": true,
+     "supports_nulls": true,
+     "supports_nan": true,
+     "supports_inf": true,
+     "supports_scalar_broadcast": true,
+     "supports_group": false,
+     "supports_window": false,
+     "supports_min_periods": false,
+     "param_names": [
+      "close"
+     ],
+     "no_fallback_runtime_verified": false,
+     "production_native_source_of_truth": "verified_runtime_evidence"
+    }
+   },
+   "runtime_execution_verified": false,
+   "determinism_verified": false,
+   "production_backend_policy": "at_least_one_certified_backend"
+  },
+  "intra_ts_first": {
+   "canonical": "intra_ts_first",
+   "backends": [
+    "pandas_numpy",
+    "polars"
+   ],
+   "backend_count": 2,
+   "runtime_impl_backends": [
+    "pandas_numpy",
+    "polars"
+   ],
+   "backend_status": "implemented",
+   "backend_passed": false,
+   "backend_signature_consistent": true,
+   "backend_signatures": "{'pandas_numpy': ['close'], 'polars': ['close']}",
+   "backend_meta": {
+    "pandas_numpy": {
+     "explicit": true,
+     "source": "intraday.sufficient_stats_ops",
+     "production_certified": false,
+     "certification_tier": "candidate",
+     "certification_source": "factor_operator_verified.json",
+     "reference_backend": true,
+     "execution_kind": "pandas_numpy_reference",
+     "supports_nulls": true,
+     "supports_nan": true,
+     "supports_inf": true,
+     "supports_scalar_broadcast": true,
+     "supports_min_periods": true,
+     "supports_group": false,
+     "supports_window": false,
+     "supports_lazy": false,
+     "supports_streaming": false,
+     "materializes_full_panel": true,
+     "param_names": [
+      "close"
+     ],
+     "implementation_type": "_Op"
+    },
+    "polars": {
+     "explicit": true,
+     "source": "polars_udf",
+     "execution_kind": "polars_udf_pandas_delegate",
+     "supports_lazy": false,
+     "supports_streaming": false,
+     "materializes_full_panel": true,
+     "supports_nulls": true,
+     "supports_nan": true,
+     "supports_inf": true,
+     "supports_scalar_broadcast": true,
+     "supports_group": false,
+     "supports_window": false,
+     "supports_min_periods": false,
+     "param_names": [
+      "close"
+     ],
+     "no_fallback_runtime_verified": false,
+     "production_native_source_of_truth": "verified_runtime_evidence"
+    }
+   },
+   "runtime_execution_verified": false,
+   "determinism_verified": false,
+   "production_backend_policy": "at_least_one_certified_backend"
+  },
+  "intra_ts_last": {
+   "canonical": "intra_ts_last",
+   "backends": [
+    "pandas_numpy",
+    "polars"
+   ],
+   "backend_count": 2,
+   "runtime_impl_backends": [
+    "pandas_numpy",
+    "polars"
+   ],
+   "backend_status": "implemented",
+   "backend_passed": false,
+   "backend_signature_consistent": true,
+   "backend_signatures": "{'pandas_numpy': ['close', 'window'], 'polars': ['close', 'window']}",
+   "backend_meta": {
+    "pandas_numpy": {
+     "explicit": true,
+     "source": "intraday.sufficient_stats_ops",
+     "production_certified": false,
+     "certification_tier": "candidate",
+     "certification_source": "factor_operator_verified.json",
+     "reference_backend": true,
+     "execution_kind": "pandas_numpy_reference",
+     "supports_nulls": true,
+     "supports_nan": true,
+     "supports_inf": true,
+     "supports_scalar_broadcast": true,
+     "supports_min_periods": true,
+     "supports_group": false,
+     "supports_window": false,
+     "supports_lazy": false,
+     "supports_streaming": false,
+     "materializes_full_panel": true,
+     "param_names": [
+      "close",
+      "window"
+     ],
+     "implementation_type": "_Op"
+    },
+    "polars": {
+     "explicit": true,
+     "source": "polars_udf",
+     "execution_kind": "polars_udf_pandas_delegate",
+     "supports_lazy": false,
+     "supports_streaming": false,
+     "materializes_full_panel": true,
+     "supports_nulls": true,
+     "supports_nan": true,
+     "supports_inf": true,
+     "supports_scalar_broadcast": true,
+     "supports_group": false,
+     "supports_window": false,
+     "supports_min_periods": false,
+     "param_names": [
+      "close",
+      "window"
+     ],
+     "no_fallback_runtime_verified": false,
+     "production_native_source_of_truth": "verified_runtime_evidence"
+    }
+   },
+   "runtime_execution_verified": false,
+   "determinism_verified": false,
+   "production_backend_policy": "at_least_one_certified_backend"
+  },
+  "intra_ts_last_value": {
+   "canonical": "intra_ts_last_value",
+   "backends": [
+    "pandas_numpy",
+    "polars"
+   ],
+   "backend_count": 2,
+   "runtime_impl_backends": [
+    "pandas_numpy",
+    "polars"
+   ],
+   "backend_status": "implemented",
+   "backend_passed": false,
+   "backend_signature_consistent": true,
+   "backend_signatures": "{'pandas_numpy': ['close'], 'polars': ['close']}",
+   "backend_meta": {
+    "pandas_numpy": {
+     "explicit": true,
+     "source": "intraday.sufficient_stats_ops",
+     "production_certified": false,
+     "certification_tier": "candidate",
+     "certification_source": "factor_operator_verified.json",
+     "reference_backend": true,
+     "execution_kind": "pandas_numpy_reference",
+     "supports_nulls": true,
+     "supports_nan": true,
+     "supports_inf": true,
+     "supports_scalar_broadcast": true,
+     "supports_min_periods": true,
+     "supports_group": false,
+     "supports_window": false,
+     "supports_lazy": false,
+     "supports_streaming": false,
+     "materializes_full_panel": true,
+     "param_names": [
+      "close"
+     ],
+     "implementation_type": "_Op"
+    },
+    "polars": {
+     "explicit": true,
+     "source": "polars_udf",
+     "execution_kind": "polars_udf_pandas_delegate",
+     "supports_lazy": false,
+     "supports_streaming": false,
+     "materializes_full_panel": true,
+     "supports_nulls": true,
+     "supports_nan": true,
+     "supports_inf": true,
+     "supports_scalar_broadcast": true,
+     "supports_group": false,
+     "supports_window": false,
+     "supports_min_periods": false,
+     "param_names": [
+      "close"
+     ],
+     "no_fallback_runtime_verified": false,
+     "production_native_source_of_truth": "verified_runtime_evidence"
+    }
+   },
+   "runtime_execution_verified": false,
+   "determinism_verified": false,
+   "production_backend_policy": "at_least_one_certified_backend"
+  },
+  "intra_ts_max": {
+   "canonical": "intra_ts_max",
+   "backends": [
+    "pandas_numpy",
+    "polars"
+   ],
+   "backend_count": 2,
+   "runtime_impl_backends": [
+    "pandas_numpy",
+    "polars"
+   ],
+   "backend_status": "implemented",
+   "backend_passed": false,
+   "backend_signature_consistent": true,
+   "backend_signatures": "{'pandas_numpy': ['close', 'window'], 'polars': ['close', 'window']}",
+   "backend_meta": {
+    "pandas_numpy": {
+     "explicit": true,
+     "source": "intraday.sufficient_stats_ops",
+     "production_certified": false,
+     "certification_tier": "candidate",
+     "certification_source": "factor_operator_verified.json",
+     "reference_backend": true,
+     "execution_kind": "pandas_numpy_reference",
+     "supports_nulls": true,
+     "supports_nan": true,
+     "supports_inf": true,
+     "supports_scalar_broadcast": true,
+     "supports_min_periods": true,
+     "supports_group": false,
+     "supports_window": false,
+     "supports_lazy": false,
+     "supports_streaming": false,
+     "materializes_full_panel": true,
+     "param_names": [
+      "close",
+      "window"
+     ],
+     "implementation_type": "_Op"
+    },
+    "polars": {
+     "explicit": true,
+     "source": "polars_udf",
+     "execution_kind": "polars_udf_pandas_delegate",
+     "supports_lazy": false,
+     "supports_streaming": false,
+     "materializes_full_panel": true,
+     "supports_nulls": true,
+     "supports_nan": true,
+     "supports_inf": true,
+     "supports_scalar_broadcast": true,
+     "supports_group": false,
+     "supports_window": false,
+     "supports_min_periods": false,
+     "param_names": [
+      "close",
+      "window"
+     ],
+     "no_fallback_runtime_verified": false,
+     "production_native_source_of_truth": "verified_runtime_evidence"
+    }
+   },
+   "runtime_execution_verified": false,
+   "determinism_verified": false,
+   "production_backend_policy": "at_least_one_certified_backend"
+  },
+  "intra_ts_mean": {
+   "canonical": "intra_ts_mean",
+   "backends": [
+    "pandas_numpy",
+    "polars"
+   ],
+   "backend_count": 2,
+   "runtime_impl_backends": [
+    "pandas_numpy",
+    "polars"
+   ],
+   "backend_status": "implemented",
+   "backend_passed": false,
+   "backend_signature_consistent": true,
+   "backend_signatures": "{'pandas_numpy': ['close', 'window'], 'polars': ['close', 'window']}",
+   "backend_meta": {
+    "pandas_numpy": {
+     "explicit": true,
+     "source": "intraday.sufficient_stats_ops",
+     "production_certified": false,
+     "certification_tier": "candidate",
+     "certification_source": "factor_operator_verified.json",
+     "reference_backend": true,
+     "execution_kind": "pandas_numpy_reference",
+     "supports_nulls": true,
+     "supports_nan": true,
+     "supports_inf": true,
+     "supports_scalar_broadcast": true,
+     "supports_min_periods": true,
+     "supports_group": false,
+     "supports_window": false,
+     "supports_lazy": false,
+     "supports_streaming": false,
+     "materializes_full_panel": true,
+     "param_names": [
+      "close",
+      "window"
+     ],
+     "implementation_type": "_Op"
+    },
+    "polars": {
+     "explicit": true,
+     "source": "polars_udf",
+     "execution_kind": "polars_udf_pandas_delegate",
+     "supports_lazy": false,
+     "supports_streaming": false,
+     "materializes_full_panel": true,
+     "supports_nulls": true,
+     "supports_nan": true,
+     "supports_inf": true,
+     "supports_scalar_broadcast": true,
+     "supports_group": false,
+     "supports_window": false,
+     "supports_min_periods": false,
+     "param_names": [
+      "close",
+      "window"
+     ],
+     "no_fallback_runtime_verified": false,
+     "production_native_source_of_truth": "verified_runtime_evidence"
+    }
+   },
+   "runtime_execution_verified": false,
+   "determinism_verified": false,
+   "production_backend_policy": "at_least_one_certified_backend"
+  },
+  "intra_ts_min": {
+   "canonical": "intra_ts_min",
+   "backends": [
+    "pandas_numpy",
+    "polars"
+   ],
+   "backend_count": 2,
+   "runtime_impl_backends": [
+    "pandas_numpy",
+    "polars"
+   ],
+   "backend_status": "implemented",
+   "backend_passed": false,
+   "backend_signature_consistent": true,
+   "backend_signatures": "{'pandas_numpy': ['close', 'window'], 'polars': ['close', 'window']}",
+   "backend_meta": {
+    "pandas_numpy": {
+     "explicit": true,
+     "source": "intraday.sufficient_stats_ops",
+     "production_certified": false,
+     "certification_tier": "candidate",
+     "certification_source": "factor_operator_verified.json",
+     "reference_backend": true,
+     "execution_kind": "pandas_numpy_reference",
+     "supports_nulls": true,
+     "supports_nan": true,
+     "supports_inf": true,
+     "supports_scalar_broadcast": true,
+     "supports_min_periods": true,
+     "supports_group": false,
+     "supports_window": false,
+     "supports_lazy": false,
+     "supports_streaming": false,
+     "materializes_full_panel": true,
+     "param_names": [
+      "close",
+      "window"
+     ],
+     "implementation_type": "_Op"
+    },
+    "polars": {
+     "explicit": true,
+     "source": "polars_udf",
+     "execution_kind": "polars_udf_pandas_delegate",
+     "supports_lazy": false,
+     "supports_streaming": false,
+     "materializes_full_panel": true,
+     "supports_nulls": true,
+     "supports_nan": true,
+     "supports_inf": true,
+     "supports_scalar_broadcast": true,
+     "supports_group": false,
+     "supports_window": false,
+     "supports_min_periods": false,
+     "param_names": [
+      "close",
+      "window"
+     ],
+     "no_fallback_runtime_verified": false,
+     "production_native_source_of_truth": "verified_runtime_evidence"
+    }
+   },
+   "runtime_execution_verified": false,
+   "determinism_verified": false,
+   "production_backend_policy": "at_least_one_certified_backend"
+  },
+  "intra_ts_realized_covariance": {
+   "canonical": "intra_ts_realized_covariance",
+   "backends": [
+    "pandas_numpy",
+    "polars"
+   ],
+   "backend_count": 2,
+   "runtime_impl_backends": [
+    "pandas_numpy",
+    "polars"
+   ],
+   "backend_status": "implemented",
+   "backend_passed": false,
+   "backend_signature_consistent": true,
+   "backend_signatures": "{'pandas_numpy': ['close', 'volume'], 'polars': ['close', 'volume']}",
+   "backend_meta": {
+    "pandas_numpy": {
+     "explicit": true,
+     "source": "intraday.sufficient_stats_ops",
+     "production_certified": false,
+     "certification_tier": "candidate",
+     "certification_source": "factor_operator_verified.json",
+     "reference_backend": true,
+     "execution_kind": "pandas_numpy_reference",
+     "supports_nulls": true,
+     "supports_nan": true,
+     "supports_inf": true,
+     "supports_scalar_broadcast": true,
+     "supports_min_periods": true,
+     "supports_group": false,
+     "supports_window": false,
+     "supports_lazy": false,
+     "supports_streaming": false,
+     "materializes_full_panel": true,
+     "param_names": [
+      "close",
+      "volume"
+     ],
+     "implementation_type": "_Op2"
+    },
+    "polars": {
+     "explicit": true,
+     "source": "polars_udf",
+     "execution_kind": "polars_udf_pandas_delegate",
+     "supports_lazy": false,
+     "supports_streaming": false,
+     "materializes_full_panel": true,
+     "supports_nulls": true,
+     "supports_nan": true,
+     "supports_inf": true,
+     "supports_scalar_broadcast": true,
+     "supports_group": false,
+     "supports_window": false,
+     "supports_min_periods": false,
+     "param_names": [
+      "close",
+      "volume"
+     ],
+     "no_fallback_runtime_verified": false,
+     "production_native_source_of_truth": "verified_runtime_evidence"
+    }
+   },
+   "runtime_execution_verified": false,
+   "determinism_verified": false,
+   "production_backend_policy": "at_least_one_certified_backend"
+  },
+  "intra_ts_realized_variance": {
+   "canonical": "intra_ts_realized_variance",
+   "backends": [
+    "pandas_numpy",
+    "polars"
+   ],
+   "backend_count": 2,
+   "runtime_impl_backends": [
+    "pandas_numpy",
+    "polars"
+   ],
+   "backend_status": "implemented",
+   "backend_passed": false,
+   "backend_signature_consistent": true,
+   "backend_signatures": "{'pandas_numpy': ['close'], 'polars': ['close']}",
+   "backend_meta": {
+    "pandas_numpy": {
+     "explicit": true,
+     "source": "intraday.sufficient_stats_ops",
+     "production_certified": false,
+     "certification_tier": "candidate",
+     "certification_source": "factor_operator_verified.json",
+     "reference_backend": true,
+     "execution_kind": "pandas_numpy_reference",
+     "supports_nulls": true,
+     "supports_nan": true,
+     "supports_inf": true,
+     "supports_scalar_broadcast": true,
+     "supports_min_periods": true,
+     "supports_group": false,
+     "supports_window": false,
+     "supports_lazy": false,
+     "supports_streaming": false,
+     "materializes_full_panel": true,
+     "param_names": [
+      "close"
+     ],
+     "implementation_type": "_Op"
+    },
+    "polars": {
+     "explicit": true,
+     "source": "polars_udf",
+     "execution_kind": "polars_udf_pandas_delegate",
+     "supports_lazy": false,
+     "supports_streaming": false,
+     "materializes_full_panel": true,
+     "supports_nulls": true,
+     "supports_nan": true,
+     "supports_inf": true,
+     "supports_scalar_broadcast": true,
+     "supports_group": false,
+     "supports_window": false,
+     "supports_min_periods": false,
+     "param_names": [
+      "close"
+     ],
+     "no_fallback_runtime_verified": false,
+     "production_native_source_of_truth": "verified_runtime_evidence"
+    }
+   },
+   "runtime_execution_verified": false,
+   "determinism_verified": false,
+   "production_backend_policy": "at_least_one_certified_backend"
+  },
+  "intra_ts_std": {
+   "canonical": "intra_ts_std",
+   "backends": [
+    "pandas_numpy",
+    "polars"
+   ],
+   "backend_count": 2,
+   "runtime_impl_backends": [
+    "pandas_numpy",
+    "polars"
+   ],
+   "backend_status": "implemented",
+   "backend_passed": false,
+   "backend_signature_consistent": true,
+   "backend_signatures": "{'pandas_numpy': ['close', 'window'], 'polars': ['close', 'window']}",
+   "backend_meta": {
+    "pandas_numpy": {
+     "explicit": true,
+     "source": "intraday.sufficient_stats_ops",
+     "production_certified": false,
+     "certification_tier": "candidate",
+     "certification_source": "factor_operator_verified.json",
+     "reference_backend": true,
+     "execution_kind": "pandas_numpy_reference",
+     "supports_nulls": true,
+     "supports_nan": true,
+     "supports_inf": true,
+     "supports_scalar_broadcast": true,
+     "supports_min_periods": true,
+     "supports_group": false,
+     "supports_window": false,
+     "supports_lazy": false,
+     "supports_streaming": false,
+     "materializes_full_panel": true,
+     "param_names": [
+      "close",
+      "window"
+     ],
+     "implementation_type": "_Op"
+    },
+    "polars": {
+     "explicit": true,
+     "source": "polars_udf",
+     "execution_kind": "polars_udf_pandas_delegate",
+     "supports_lazy": false,
+     "supports_streaming": false,
+     "materializes_full_panel": true,
+     "supports_nulls": true,
+     "supports_nan": true,
+     "supports_inf": true,
+     "supports_scalar_broadcast": true,
+     "supports_group": false,
+     "supports_window": false,
+     "supports_min_periods": false,
+     "param_names": [
+      "close",
+      "window"
+     ],
+     "no_fallback_runtime_verified": false,
+     "production_native_source_of_truth": "verified_runtime_evidence"
+    }
+   },
+   "runtime_execution_verified": false,
+   "determinism_verified": false,
+   "production_backend_policy": "at_least_one_certified_backend"
+  },
+  "intra_ts_sum": {
+   "canonical": "intra_ts_sum",
+   "backends": [
+    "pandas_numpy",
+    "polars"
+   ],
+   "backend_count": 2,
+   "runtime_impl_backends": [
+    "pandas_numpy",
+    "polars"
+   ],
+   "backend_status": "implemented",
+   "backend_passed": false,
+   "backend_signature_consistent": true,
+   "backend_signatures": "{'pandas_numpy': ['close', 'window'], 'polars': ['close', 'window']}",
+   "backend_meta": {
+    "pandas_numpy": {
+     "explicit": true,
+     "source": "intraday.sufficient_stats_ops",
+     "production_certified": false,
+     "certification_tier": "candidate",
+     "certification_source": "factor_operator_verified.json",
+     "reference_backend": true,
+     "execution_kind": "pandas_numpy_reference",
+     "supports_nulls": true,
+     "supports_nan": true,
+     "supports_inf": true,
+     "supports_scalar_broadcast": true,
+     "supports_min_periods": true,
+     "supports_group": false,
+     "supports_window": false,
+     "supports_lazy": false,
+     "supports_streaming": false,
+     "materializes_full_panel": true,
+     "param_names": [
+      "close",
+      "window"
+     ],
+     "implementation_type": "_Op"
+    },
+    "polars": {
+     "explicit": true,
+     "source": "polars_udf",
+     "execution_kind": "polars_udf_pandas_delegate",
+     "supports_lazy": false,
+     "supports_streaming": false,
+     "materializes_full_panel": true,
+     "supports_nulls": true,
+     "supports_nan": true,
+     "supports_inf": true,
+     "supports_scalar_broadcast": true,
+     "supports_group": false,
+     "supports_window": false,
+     "supports_min_periods": false,
+     "param_names": [
+      "close",
+      "window"
+     ],
+     "no_fallback_runtime_verified": false,
+     "production_native_source_of_truth": "verified_runtime_evidence"
+    }
+   },
+   "runtime_execution_verified": false,
+   "determinism_verified": false,
+   "production_backend_policy": "at_least_one_certified_backend"
+  },
+  "intra_ts_variance": {
+   "canonical": "intra_ts_variance",
+   "backends": [
+    "pandas_numpy",
+    "polars"
+   ],
+   "backend_count": 2,
+   "runtime_impl_backends": [
+    "pandas_numpy",
+    "polars"
+   ],
+   "backend_status": "implemented",
+   "backend_passed": false,
+   "backend_signature_consistent": true,
+   "backend_signatures": "{'pandas_numpy': ['close', 'window'], 'polars': ['close', 'window']}",
+   "backend_meta": {
+    "pandas_numpy": {
+     "explicit": true,
+     "source": "intraday.sufficient_stats_ops",
+     "production_certified": false,
+     "certification_tier": "candidate",
+     "certification_source": "factor_operator_verified.json",
+     "reference_backend": true,
+     "execution_kind": "pandas_numpy_reference",
+     "supports_nulls": true,
+     "supports_nan": true,
+     "supports_inf": true,
+     "supports_scalar_broadcast": true,
+     "supports_min_periods": true,
+     "supports_group": false,
+     "supports_window": false,
+     "supports_lazy": false,
+     "supports_streaming": false,
+     "materializes_full_panel": true,
+     "param_names": [
+      "close",
+      "window"
+     ],
+     "implementation_type": "_Op"
+    },
+    "polars": {
+     "explicit": true,
+     "source": "polars_udf",
+     "execution_kind": "polars_udf_pandas_delegate",
+     "supports_lazy": false,
+     "supports_streaming": false,
+     "materializes_full_panel": true,
+     "supports_nulls": true,
+     "supports_nan": true,
+     "supports_inf": true,
+     "supports_scalar_broadcast": true,
+     "supports_group": false,
+     "supports_window": false,
+     "supports_min_periods": false,
+     "param_names": [
+      "close",
+      "window"
+     ],
+     "no_fallback_runtime_verified": false,
+     "production_native_source_of_truth": "verified_runtime_evidence"
+    }
+   },
+   "runtime_execution_verified": false,
+   "determinism_verified": false,
+   "production_backend_policy": "at_least_one_certified_backend"
+  },
+  "intra_ts_volume_weighted_return": {
+   "canonical": "intra_ts_volume_weighted_return",
+   "backends": [
+    "pandas_numpy",
+    "polars"
+   ],
+   "backend_count": 2,
+   "runtime_impl_backends": [
+    "pandas_numpy",
+    "polars"
+   ],
+   "backend_status": "implemented",
+   "backend_passed": false,
+   "backend_signature_consistent": true,
+   "backend_signatures": "{'pandas_numpy': ['close', 'volume'], 'polars': ['close', 'volume']}",
+   "backend_meta": {
+    "pandas_numpy": {
+     "explicit": true,
+     "source": "intraday.sufficient_stats_ops",
+     "production_certified": false,
+     "certification_tier": "candidate",
+     "certification_source": "factor_operator_verified.json",
+     "reference_backend": true,
+     "execution_kind": "pandas_numpy_reference",
+     "supports_nulls": true,
+     "supports_nan": true,
+     "supports_inf": true,
+     "supports_scalar_broadcast": true,
+     "supports_min_periods": true,
+     "supports_group": false,
+     "supports_window": false,
+     "supports_lazy": false,
+     "supports_streaming": false,
+     "materializes_full_panel": true,
+     "param_names": [
+      "close",
+      "volume"
+     ],
+     "implementation_type": "_Op2"
+    },
+    "polars": {
+     "explicit": true,
+     "source": "polars_udf",
+     "execution_kind": "polars_udf_pandas_delegate",
+     "supports_lazy": false,
+     "supports_streaming": false,
+     "materializes_full_panel": true,
+     "supports_nulls": true,
+     "supports_nan": true,
+     "supports_inf": true,
+     "supports_scalar_broadcast": true,
+     "supports_group": false,
+     "supports_window": false,
+     "supports_min_periods": false,
+     "param_names": [
+      "close",
+      "volume"
+     ],
+     "no_fallback_runtime_verified": false,
+     "production_native_source_of_truth": "verified_runtime_evidence"
+    }
+   },
+   "runtime_execution_verified": false,
+   "determinism_verified": false,
+   "production_backend_policy": "at_least_one_certified_backend"
+  },
+  "intra_ts_vwap": {
+   "canonical": "intra_ts_vwap",
+   "backends": [
+    "pandas_numpy",
+    "polars"
+   ],
+   "backend_count": 2,
+   "runtime_impl_backends": [
+    "pandas_numpy",
+    "polars"
+   ],
+   "backend_status": "implemented",
+   "backend_passed": false,
+   "backend_signature_consistent": true,
+   "backend_signatures": "{'pandas_numpy': ['close', 'volume'], 'polars': ['close', 'volume']}",
+   "backend_meta": {
+    "pandas_numpy": {
+     "explicit": true,
+     "source": "intraday.sufficient_stats_ops",
+     "production_certified": false,
+     "certification_tier": "candidate",
+     "certification_source": "factor_operator_verified.json",
+     "reference_backend": true,
+     "execution_kind": "pandas_numpy_reference",
+     "supports_nulls": true,
+     "supports_nan": true,
+     "supports_inf": true,
+     "supports_scalar_broadcast": true,
+     "supports_min_periods": true,
+     "supports_group": false,
+     "supports_window": false,
+     "supports_lazy": false,
+     "supports_streaming": false,
+     "materializes_full_panel": true,
+     "param_names": [
+      "close",
+      "volume"
+     ],
+     "implementation_type": "_Op2"
+    },
+    "polars": {
+     "explicit": true,
+     "source": "polars_udf",
+     "execution_kind": "polars_udf_pandas_delegate",
+     "supports_lazy": false,
+     "supports_streaming": false,
+     "materializes_full_panel": true,
+     "supports_nulls": true,
+     "supports_nan": true,
+     "supports_inf": true,
+     "supports_scalar_broadcast": true,
+     "supports_group": false,
+     "supports_window": false,
+     "supports_min_periods": false,
+     "param_names": [
+      "close",
+      "volume"
+     ],
+     "no_fallback_runtime_verified": false,
+     "production_native_source_of_truth": "verified_runtime_evidence"
+    }
+   },
+   "runtime_execution_verified": false,
+   "determinism_verified": false,
+   "production_backend_policy": "at_least_one_certified_backend"
+  },
   "intra_up_down_semibeta": {
    "canonical": "intra_up_down_semibeta",
    "backends": [
@@ -60788,7 +61938,7 @@
       "x"
      ],
      "implementation_type": "InversePolars",
-     "no_fallback_runtime_verified": false,
+     "no_fallback_runtime_verified": true,
      "production_native_source_of_truth": "verified_runtime_evidence"
     },
     "sql": {
@@ -60827,15 +61977,15 @@
     "sql"
    ],
    "backend_status": "implemented",
-   "backend_passed": false,
+   "backend_passed": true,
    "backend_signature_consistent": true,
    "backend_signatures": "{'pandas_numpy': ['x'], 'sql': [], 'polars': ['x']}",
    "backend_meta": {
     "pandas_numpy": {
      "explicit": false,
      "source": "factor_dsl_np",
-     "production_certified": false,
-     "certification_tier": "candidate",
+     "production_certified": true,
+     "certification_tier": "pandas_reference",
      "certification_source": "primitive_verified.json+primitive_verified_delta.json",
      "reference_backend": true,
      "execution_kind": "pandas_numpy_reference",
@@ -60871,7 +62021,7 @@
      "param_names": [
       "x"
      ],
-     "no_fallback_runtime_verified": false,
+     "no_fallback_runtime_verified": true,
      "production_native_source_of_truth": "verified_runtime_evidence"
     },
     "sql": {
@@ -60910,15 +62060,15 @@
     "sql"
    ],
    "backend_status": "implemented",
-   "backend_passed": false,
+   "backend_passed": true,
    "backend_signature_consistent": true,
    "backend_signatures": "{'pandas_numpy': ['x'], 'polars': ['x'], 'sql': []}",
    "backend_meta": {
     "pandas_numpy": {
      "explicit": false,
      "source": "factor_dsl_np",
-     "production_certified": false,
-     "certification_tier": "candidate",
+     "production_certified": true,
+     "certification_tier": "pandas_reference",
      "certification_source": "primitive_verified.json+primitive_verified_delta.json",
      "reference_backend": true,
      "execution_kind": "pandas_numpy_reference",
@@ -60956,7 +62106,7 @@
       "x"
      ],
      "implementation_type": "IsInfinitePolars",
-     "no_fallback_runtime_verified": false,
+     "no_fallback_runtime_verified": true,
      "production_native_source_of_truth": "verified_runtime_evidence"
     },
     "sql": {
@@ -61080,15 +62230,15 @@
     "sql"
    ],
    "backend_status": "implemented",
-   "backend_passed": false,
+   "backend_passed": true,
    "backend_signature_consistent": true,
    "backend_signatures": "{'pandas_numpy': ['x'], 'polars': ['x'], 'sql': []}",
    "backend_meta": {
     "pandas_numpy": {
      "explicit": false,
      "source": "factor_dsl_np",
-     "production_certified": false,
-     "certification_tier": "candidate",
+     "production_certified": true,
+     "certification_tier": "pandas_reference",
      "certification_source": "primitive_verified.json+primitive_verified_delta.json",
      "reference_backend": true,
      "execution_kind": "pandas_numpy_reference",
@@ -61126,7 +62276,7 @@
       "x"
      ],
      "implementation_type": "IsNotNullPolars",
-     "no_fallback_runtime_verified": false,
+     "no_fallback_runtime_verified": true,
      "production_native_source_of_truth": "verified_runtime_evidence"
     },
     "sql": {
@@ -61165,15 +62315,15 @@
     "sql"
    ],
    "backend_status": "implemented",
-   "backend_passed": false,
+   "backend_passed": true,
    "backend_signature_consistent": true,
    "backend_signatures": "{'pandas_numpy': ['x'], 'polars': ['x'], 'sql': []}",
    "backend_meta": {
     "pandas_numpy": {
      "explicit": false,
      "source": "factor_dsl_np",
-     "production_certified": false,
-     "certification_tier": "candidate",
+     "production_certified": true,
+     "certification_tier": "pandas_reference",
      "certification_source": "primitive_verified.json+primitive_verified_delta.json",
      "reference_backend": true,
      "execution_kind": "pandas_numpy_reference",
@@ -61211,7 +62361,7 @@
       "x"
      ],
      "implementation_type": "IsNullPolars",
-     "no_fallback_runtime_verified": false,
+     "no_fallback_runtime_verified": true,
      "production_native_source_of_truth": "verified_runtime_evidence"
     },
     "sql": {
@@ -61594,7 +62744,7 @@
       "y"
      ],
      "implementation_type": "LEPolarsAuto",
-     "no_fallback_runtime_verified": false,
+     "no_fallback_runtime_verified": true,
      "production_native_source_of_truth": "verified_runtime_evidence"
     },
     "sql": {
@@ -62637,7 +63787,7 @@
       "x"
      ],
      "implementation_type": "LogPolars",
-     "no_fallback_runtime_verified": false,
+     "no_fallback_runtime_verified": true,
      "production_native_source_of_truth": "verified_runtime_evidence"
     },
     "sql": {
@@ -62894,7 +64044,7 @@
       "x"
      ],
      "implementation_type": "LogAbsPolarsAuto",
-     "no_fallback_runtime_verified": false,
+     "no_fallback_runtime_verified": true,
      "production_native_source_of_truth": "verified_runtime_evidence"
     },
     "sql": {
@@ -63119,7 +64269,7 @@
       "y"
      ],
      "implementation_type": "LTPolarsAuto",
-     "no_fallback_runtime_verified": false,
+     "no_fallback_runtime_verified": true,
      "production_native_source_of_truth": "verified_runtime_evidence"
     },
     "sql": {
@@ -63873,7 +65023,7 @@
       "y"
      ],
      "implementation_type": "MaximumPolars",
-     "no_fallback_runtime_verified": false,
+     "no_fallback_runtime_verified": true,
      "production_native_source_of_truth": "verified_runtime_evidence"
     },
     "sql": {
@@ -64019,7 +65169,7 @@
       "y"
      ],
      "implementation_type": "MinimumPolars",
-     "no_fallback_runtime_verified": false,
+     "no_fallback_runtime_verified": true,
      "production_native_source_of_truth": "verified_runtime_evidence"
     },
     "sql": {
@@ -64177,7 +65327,7 @@
       "y"
      ],
      "implementation_type": "MultiplyPolars",
-     "no_fallback_runtime_verified": false,
+     "no_fallback_runtime_verified": true,
      "production_native_source_of_truth": "verified_runtime_evidence"
     },
     "sql": {
@@ -64266,7 +65416,7 @@
       "y"
      ],
      "implementation_type": "NEPolarsAuto",
-     "no_fallback_runtime_verified": false,
+     "no_fallback_runtime_verified": true,
      "production_native_source_of_truth": "verified_runtime_evidence"
     },
     "sql": {
@@ -64353,7 +65503,7 @@
       "x"
      ],
      "implementation_type": "NegPolars",
-     "no_fallback_runtime_verified": false,
+     "no_fallback_runtime_verified": true,
      "production_native_source_of_truth": "verified_runtime_evidence"
     },
     "sql": {
@@ -64627,7 +65777,7 @@
       "x"
      ],
      "implementation_type": "NormalizeNative",
-     "no_fallback_runtime_verified": false,
+     "no_fallback_runtime_verified": true,
      "production_native_source_of_truth": "verified_runtime_evidence"
     },
     "sql": {
@@ -64712,7 +65862,7 @@
       "x"
      ],
      "implementation_type": "NotPolarsAuto",
-     "no_fallback_runtime_verified": false,
+     "no_fallback_runtime_verified": true,
      "production_native_source_of_truth": "verified_runtime_evidence"
     },
     "sql": {
@@ -65563,7 +66713,7 @@
       "y"
      ],
      "implementation_type": "OrPolarsAuto",
-     "no_fallback_runtime_verified": false,
+     "no_fallback_runtime_verified": true,
      "production_native_source_of_truth": "verified_runtime_evidence"
     },
     "sql": {
@@ -69149,7 +70299,7 @@
       "y"
      ],
      "implementation_type": "PowerPolars",
-     "no_fallback_runtime_verified": false,
+     "no_fallback_runtime_verified": true,
      "production_native_source_of_truth": "verified_runtime_evidence"
     },
     "sql": {
@@ -70104,7 +71254,7 @@
       "x"
      ],
      "implementation_type": "RankPolars",
-     "no_fallback_runtime_verified": false,
+     "no_fallback_runtime_verified": true,
      "production_native_source_of_truth": "verified_runtime_evidence"
     },
     "sql": {
@@ -74286,15 +75436,15 @@
     "sql"
    ],
    "backend_status": "implemented",
-   "backend_passed": false,
+   "backend_passed": true,
    "backend_signature_consistent": true,
    "backend_signatures": "{'pandas_numpy': ['x', 'y', 'epsilon'], 'polars': ['x', 'y', 'epsilon'], 'sql': []}",
    "backend_meta": {
     "pandas_numpy": {
      "explicit": true,
      "source": "operator_overhaul_audited",
-     "production_certified": false,
-     "certification_tier": "candidate",
+     "production_certified": true,
+     "certification_tier": "pandas_reference",
      "certification_source": "primitive_verified.json+primitive_verified_delta.json",
      "reference_backend": true,
      "execution_kind": "pandas_numpy_reference",
@@ -74336,7 +75486,7 @@
       "epsilon"
      ],
      "implementation_type": "PolarsFunctionOperator",
-     "no_fallback_runtime_verified": false,
+     "no_fallback_runtime_verified": true,
      "production_native_source_of_truth": "verified_runtime_evidence"
     },
     "sql": {
@@ -74968,7 +76118,7 @@
       "x"
      ],
      "implementation_type": "SignPolars",
-     "no_fallback_runtime_verified": false,
+     "no_fallback_runtime_verified": true,
      "production_native_source_of_truth": "verified_runtime_evidence"
     },
     "sql": {
@@ -75230,15 +76380,15 @@
     "sql"
    ],
    "backend_status": "implemented",
-   "backend_passed": false,
+   "backend_passed": true,
    "backend_signature_consistent": true,
    "backend_signatures": "{'pandas_numpy': ['x'], 'sql': [], 'polars': ['x']}",
    "backend_meta": {
     "pandas_numpy": {
      "explicit": false,
      "source": "factor_dsl_np",
-     "production_certified": false,
-     "certification_tier": "candidate",
+     "production_certified": true,
+     "certification_tier": "pandas_reference",
      "certification_source": "primitive_verified.json+primitive_verified_delta.json",
      "reference_backend": true,
      "execution_kind": "pandas_numpy_reference",
@@ -75274,7 +76424,7 @@
      "param_names": [
       "x"
      ],
-     "no_fallback_runtime_verified": false,
+     "no_fallback_runtime_verified": true,
      "production_native_source_of_truth": "verified_runtime_evidence"
     },
     "sql": {
@@ -75446,7 +76596,7 @@
       "x"
      ],
      "implementation_type": "SignedSqrtNative",
-     "no_fallback_runtime_verified": false,
+     "no_fallback_runtime_verified": true,
      "production_native_source_of_truth": "verified_runtime_evidence"
     },
     "sql": {
@@ -76236,7 +77386,7 @@
       "x"
      ],
      "implementation_type": "SqrtPolars",
-     "no_fallback_runtime_verified": false,
+     "no_fallback_runtime_verified": true,
      "production_native_source_of_truth": "verified_runtime_evidence"
     },
     "sql": {
@@ -79134,7 +80284,7 @@
       "y"
      ],
      "implementation_type": "SubtractPolars",
-     "no_fallback_runtime_verified": false,
+     "no_fallback_runtime_verified": true,
      "production_native_source_of_truth": "verified_runtime_evidence"
     },
     "sql": {
@@ -80125,7 +81275,7 @@
       "x"
      ],
      "implementation_type": "TanhPolars",
-     "no_fallback_runtime_verified": false,
+     "no_fallback_runtime_verified": true,
      "production_native_source_of_truth": "verified_runtime_evidence"
     },
     "sql": {
@@ -83322,7 +84472,7 @@
       "min_periods"
      ],
      "implementation_type": "TSAutocorrPolars",
-     "no_fallback_runtime_verified": false,
+     "no_fallback_runtime_verified": true,
      "production_native_source_of_truth": "verified_runtime_evidence"
     },
     "sql": {
@@ -83900,7 +85050,7 @@
       "min_periods"
      ],
      "implementation_type": "TSBetaPolars",
-     "no_fallback_runtime_verified": false,
+     "no_fallback_runtime_verified": true,
      "production_native_source_of_truth": "verified_runtime_evidence"
     },
     "sql": {
@@ -86152,7 +87302,7 @@
       "min_periods"
      ],
      "implementation_type": "TSCorrNative",
-     "no_fallback_runtime_verified": false,
+     "no_fallback_runtime_verified": true,
      "production_native_source_of_truth": "verified_runtime_evidence"
     },
     "sql": {
@@ -86408,7 +87558,7 @@
       "min_periods"
      ],
      "implementation_type": "TSCovNative",
-     "no_fallback_runtime_verified": false,
+     "no_fallback_runtime_verified": true,
      "production_native_source_of_truth": "verified_runtime_evidence"
     },
     "sql": {
@@ -88231,7 +89381,7 @@
       "n"
      ],
      "implementation_type": "TSDelayPolars",
-     "no_fallback_runtime_verified": false,
+     "no_fallback_runtime_verified": true,
      "production_native_source_of_truth": "verified_runtime_evidence"
     },
     "sql": {
@@ -88394,7 +89544,7 @@
       "n"
      ],
      "implementation_type": "TSDeltaPolars",
-     "no_fallback_runtime_verified": false,
+     "no_fallback_runtime_verified": true,
      "production_native_source_of_truth": "verified_runtime_evidence"
     },
     "sql": {
@@ -97556,7 +98706,7 @@
       "d"
      ],
      "implementation_type": "TSLogReturnNative",
-     "no_fallback_runtime_verified": false,
+     "no_fallback_runtime_verified": true,
      "production_native_source_of_truth": "verified_runtime_evidence"
     },
     "sql": {
@@ -98907,7 +100057,7 @@
       "window"
      ],
      "implementation_type": "TSMaxPolars",
-     "no_fallback_runtime_verified": false,
+     "no_fallback_runtime_verified": true,
      "production_native_source_of_truth": "verified_runtime_evidence"
     },
     "sql": {
@@ -99361,7 +100511,7 @@
       "min_periods"
      ],
      "implementation_type": "TSMeanPolars",
-     "no_fallback_runtime_verified": false,
+     "no_fallback_runtime_verified": true,
      "production_native_source_of_truth": "verified_runtime_evidence"
     },
     "sql": {
@@ -99844,7 +100994,7 @@
       "window"
      ],
      "implementation_type": "TSMedianPolars",
-     "no_fallback_runtime_verified": false,
+     "no_fallback_runtime_verified": true,
      "production_native_source_of_truth": "verified_runtime_evidence"
     },
     "sql": {
@@ -100061,7 +101211,7 @@
       "window"
      ],
      "implementation_type": "TSMinPolars",
-     "no_fallback_runtime_verified": false,
+     "no_fallback_runtime_verified": true,
      "production_native_source_of_truth": "verified_runtime_evidence"
     },
     "sql": {
@@ -103236,7 +104386,7 @@
       "d"
      ],
      "implementation_type": "TSPctPolars",
-     "no_fallback_runtime_verified": false,
+     "no_fallback_runtime_verified": true,
      "production_native_source_of_truth": "verified_runtime_evidence"
     },
     "sql": {
@@ -106317,7 +107467,7 @@
       "min_periods"
      ],
      "implementation_type": "TSRankNative",
-     "no_fallback_runtime_verified": false,
+     "no_fallback_runtime_verified": true,
      "production_native_source_of_truth": "verified_runtime_evidence"
     },
     "sql": {
@@ -110180,7 +111330,7 @@
       "min_periods"
      ],
      "implementation_type": "TSSharpeNative",
-     "no_fallback_runtime_verified": false,
+     "no_fallback_runtime_verified": true,
      "production_native_source_of_truth": "verified_runtime_evidence"
     },
     "sql": {
@@ -111703,7 +112853,7 @@
       "window"
      ],
      "implementation_type": "TSStdPolars",
-     "no_fallback_runtime_verified": false,
+     "no_fallback_runtime_verified": true,
      "production_native_source_of_truth": "verified_runtime_evidence"
     },
     "sql": {
@@ -112189,7 +113339,7 @@
       "window"
      ],
      "implementation_type": "TSSumPolars",
-     "no_fallback_runtime_verified": false,
+     "no_fallback_runtime_verified": true,
      "production_native_source_of_truth": "verified_runtime_evidence"
     },
     "sql": {
@@ -116308,7 +117458,7 @@
       "min_periods"
      ],
      "implementation_type": "TSVarPolars",
-     "no_fallback_runtime_verified": false,
+     "no_fallback_runtime_verified": true,
      "production_native_source_of_truth": "verified_runtime_evidence"
     },
     "sql": {
@@ -118341,7 +119491,7 @@
       "zero_std_policy"
      ],
      "implementation_type": "TSZScorePolars",
-     "no_fallback_runtime_verified": false,
+     "no_fallback_runtime_verified": true,
      "production_native_source_of_truth": "verified_runtime_evidence"
     },
     "sql": {
@@ -123610,7 +124760,7 @@
       "y"
      ],
      "implementation_type": "WherePolars",
-     "no_fallback_runtime_verified": false,
+     "no_fallback_runtime_verified": true,
      "production_native_source_of_truth": "verified_runtime_evidence"
     },
     "sql": {
@@ -123701,7 +124851,7 @@
       "upper"
      ],
      "implementation_type": "WinsorizeNative",
-     "no_fallback_runtime_verified": false,
+     "no_fallback_runtime_verified": true,
      "production_native_source_of_truth": "verified_runtime_evidence"
     },
     "sql": {
@@ -124215,7 +125365,7 @@
       "x"
      ],
      "implementation_type": "ZscorePolars",
-     "no_fallback_runtime_verified": false,
+     "no_fallback_runtime_verified": true,
      "production_native_source_of_truth": "verified_runtime_evidence"
     },
     "sql": {

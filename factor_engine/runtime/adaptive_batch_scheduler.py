@@ -1302,7 +1302,8 @@ class AdaptiveBatchScheduler:
                     stage = self.broker.pressure_stage()
                 except Exception:
                     stage = ""
-                if stage not in {"PRESSURE_3", "PRESSURE_4", "CRITICAL"}:
+                if stage not in {"PRESSURE_3", "PRESSURE_4", "CRITICAL"} and \
+                        os.environ.get("FACTOR_ENGINE_MICRO_BATCH") != "0":
                     micro_batches = self._plan_micro_batches(
                         ready, dag, group_by_root, micro_batched
                     )

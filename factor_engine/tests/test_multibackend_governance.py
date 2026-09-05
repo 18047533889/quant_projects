@@ -705,9 +705,13 @@ def test_integration_failure_retry_flow():
     # 1. Start execution
     gov.execution_logger.start_region("r1", "polars", 10)
 
-    # 2. Failure occurs
-    error = Exception("connection timeout")
-    event = gov.failure_retry_governor.record_failure("r1", "polars", error, 0)
+    # 2. Failure occurs — use a message that classifies as TIMEOUT (the
+    # governor treats bare "connection"/"network" errors as TRANSIENT_NETWORK
+    # immediate-retry; a timeout retries then falls back per DEFAULT_RETRY_STRATEGIES).
+    # Pass retry_count == max_retries so the event is past retry and falls back,
+    # which is the governor's documented semantics for exhausted-retry events.
+    error = Exception("execution exceeded timeout")
+    event = gov.failure_retry_governor.record_failure("r1", "polars", error, 2)
 
     assert event.failure_mode == FailureMode.TIMEOUT
     assert event.will_fallback is True

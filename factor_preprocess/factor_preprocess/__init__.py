@@ -40,6 +40,18 @@ from factor_preprocess.contracts.treatment_lineage import (
     build_signature_from_lineage,
     map_fe_dsl_to_semantic,
 )
+from factor_preprocess.contracts.lineage_policy import (
+    LINEAGE_POLICY_VERSION,
+    IDEMPOTENT_SEMANTIC_CLASSES,
+    NEUTRALIZATION_TOPOLOGY,
+    RedundancyClass,
+    LineagePolicyDecision,
+    RedundantTransformError,
+    UnsupportedPolicyVersionError,
+    LineagePolicyError,
+    canonicalize_lineage,
+    is_losslessly_collapsible,
+)
 from factor_preprocess.contracts.treatment_recipe import (
     TreatmentRecipe,
     RecipeStep,
@@ -75,6 +87,38 @@ from factor_preprocess.contracts.treatment_spec import (
     spec_to_materialization_identity,
     ASHARE_INDUSTRY_SCHEMA,
     ASHARE_SIZE_DEFINITION,
+)
+
+# Fit-apply governance (R61-FI-029, plan §29).
+from factor_preprocess.contracts.fit_apply import (
+    CausalityClass,
+    FitScope,
+    ApplicationSplit,
+    TreatmentFitApplyDeclaration,
+    assert_prefix_invariant,
+    assert_fit_state_context_match,
+    assert_label_access_legal,
+)
+
+# Model-specific representation policy (R61-FI-044, plan §28).
+from factor_preprocess.representation.policy import (
+    RepresentationProfileId,
+    REPRESENTATION_POLICY_VERSION,
+    RepresentationPolicy,
+    UnknownRepresentationProfileError,
+    get_representation_policy,
+    list_representation_policies,
+    ArtifactKind,
+    CANONICAL_FACTOR_NAMESPACE_PREFIX,
+    REPRESENTATION_NAMESPACE_PREFIX,
+    CanonicalAssetOverwriteError,
+    FeatureRepresentationArtifact,
+    register_feature_representation,
+    NonInferiorityTolerance,
+    NON_INFERIORITY_POLICY_VERSION,
+    DEFAULT_NON_INFERIORITY_TOLERANCE,
+    non_inferior,
+    SignalDestructionConflict,
 )
 
 # Deprecated compatibility view — NOT primary. Kept only so existing importers
@@ -129,6 +173,17 @@ __all__ = [
     "ExistingTreatmentStatus",
     "build_signature_from_lineage",
     "map_fe_dsl_to_semantic",
+    # Treatment lineage duplicate-guard policy (R61-FI-043)
+    "LINEAGE_POLICY_VERSION",
+    "IDEMPOTENT_SEMANTIC_CLASSES",
+    "NEUTRALIZATION_TOPOLOGY",
+    "RedundancyClass",
+    "LineagePolicyDecision",
+    "RedundantTransformError",
+    "UnsupportedPolicyVersionError",
+    "LineagePolicyError",
+    "canonicalize_lineage",
+    "is_losslessly_collapsible",
     "TreatmentRecipe",
     "RecipeStep",
     "FitBoundary",
@@ -150,6 +205,32 @@ __all__ = [
     "spec_to_materialization_identity",
     "ASHARE_INDUSTRY_SCHEMA",
     "ASHARE_SIZE_DEFINITION",
+    # Fit-apply governance (R61-FI-029)
+    "CausalityClass",
+    "FitScope",
+    "ApplicationSplit",
+    "TreatmentFitApplyDeclaration",
+    "assert_prefix_invariant",
+    "assert_fit_state_context_match",
+    "assert_label_access_legal",
+    # Model-specific representation policy (R61-FI-044)
+    "RepresentationProfileId",
+    "REPRESENTATION_POLICY_VERSION",
+    "RepresentationPolicy",
+    "UnknownRepresentationProfileError",
+    "get_representation_policy",
+    "list_representation_policies",
+    "ArtifactKind",
+    "CANONICAL_FACTOR_NAMESPACE_PREFIX",
+    "REPRESENTATION_NAMESPACE_PREFIX",
+    "CanonicalAssetOverwriteError",
+    "FeatureRepresentationArtifact",
+    "register_feature_representation",
+    "NonInferiorityTolerance",
+    "NON_INFERIORITY_POLICY_VERSION",
+    "DEFAULT_NON_INFERIORITY_TOLERANCE",
+    "non_inferior",
+    "SignalDestructionConflict",
     # Core contracts
     "FittedState",
     "PreprocessingPolicy",

@@ -23,6 +23,7 @@ from factor_engine.cleaned_operators.intraday import higher_moments as hm
 from factor_engine.cleaned_operators.intraday import smart_money as sm
 from factor_engine.cleaned_operators.intraday import true_gap_batch3 as tg
 from factor_engine.cleaned_operators.intraday import vwap_path as vp
+from factor_engine.cleaned_operators.intraday import sufficient_stats_ops as sso
 
 # PERF-2 vector kernels that MUST have a live __vec__ bind.  Any whitelisted
 # scalar kernel removed/renamed (so bind_whitelist can no longer attach its
@@ -34,7 +35,14 @@ _BOUND = [tg._session_mean_reversion_kernel, tg._price_delay_kernel,
           vp._vwap_reversion_speed,
           hm._realized_skewness, hm._realized_kurtosis,
           hm._realized_quarticity, hm._tripower_quarticity,
-          hm._continuous_variance, hm._jump_variation]
+          hm._continuous_variance, hm._jump_variation] + [
+          sso._ts_sum, sso._ts_mean, sso._ts_variance, sso._ts_std,
+          sso._ts_min, sso._ts_max, sso._ts_last, sso._ts_first,
+          sso._ts_last_value, sso._ts_argmax, sso._ts_argmin,
+          sso._ts_realized_variance, sso._ts_vwap,
+          sso._ts_volume_weighted_return, sso._ts_realized_covariance,
+          sso._ts_amount_weighted_mean,
+      ]
 
 
 def _session_minutes(days: int = 3, start: str = "2024-01-02") -> pd.DatetimeIndex:
@@ -108,7 +116,14 @@ def _scalar(fn, *frames, min_finite=2):
               sm._stock_graph_features, sm._common_trading_intensity, vp._time_above_vwap,
               vp._vwap_reversion_speed,
               hm._realized_skewness, hm._realized_kurtosis, hm._realized_quarticity,
-              hm._tripower_quarticity, hm._continuous_variance, hm._jump_variation]:
+              hm._tripower_quarticity, hm._continuous_variance, hm._jump_variation] + [
+              sso._ts_sum, sso._ts_mean, sso._ts_variance, sso._ts_std,
+              sso._ts_min, sso._ts_max, sso._ts_last, sso._ts_first,
+              sso._ts_last_value, sso._ts_argmax, sso._ts_argmin,
+              sso._ts_realized_variance, sso._ts_vwap,
+              sso._ts_volume_weighted_return, sso._ts_realized_covariance,
+              sso._ts_amount_weighted_mean,
+          ]:
         if hasattr(f, "__vec__"):
             del f.__vec__
     saved_vec = getattr(fn, "__vec__", None)
@@ -171,6 +186,24 @@ _CASES = [
     (hm._tripower_quarticity, "one", 2, "tripower_quarticity"),
     (hm._continuous_variance, "one", 2, "continuous_variance"),
     (hm._jump_variation, "one", 2, "jump_variation"),
+    # R61-P1 #57: sufficient-statistics family — one-panel (close).
+    (sso._ts_sum, "one", 2, "ts_sum"),
+    (sso._ts_mean, "one", 2, "ts_mean"),
+    (sso._ts_variance, "one", 2, "ts_variance"),
+    (sso._ts_std, "one", 2, "ts_std"),
+    (sso._ts_min, "one", 2, "ts_min"),
+    (sso._ts_max, "one", 2, "ts_max"),
+    (sso._ts_last, "one", 2, "ts_last"),
+    (sso._ts_first, "one", 2, "ts_first"),
+    (sso._ts_last_value, "one", 2, "ts_last_value"),
+    (sso._ts_argmax, "one", 1, "ts_argmax"),
+    (sso._ts_argmin, "one", 1, "ts_argmin"),
+    (sso._ts_realized_variance, "one", 2, "ts_realized_variance"),
+    # R61-P1 #57: sufficient-statistics family — two-panel (close + volume/amount).
+    (sso._ts_vwap, "two", 2, "ts_vwap"),
+    (sso._ts_volume_weighted_return, "two", 2, "ts_volume_weighted_return"),
+    (sso._ts_realized_covariance, "two", 2, "ts_realized_covariance"),
+    (sso._ts_amount_weighted_mean, "two", 2, "ts_amount_weighted_mean"),
     _mk_three(vp.make_vwap_path(1, 1, False), "vwap_path_slope"),
     _mk_three(vp.make_vwap_path(2, 2, False), "vwap_path_curvature"),
     _mk_three(vp.make_vwap_path(1, 1, True), "vwap_path_slope_pct"),

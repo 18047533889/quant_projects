@@ -150,8 +150,8 @@ class TestBackendExecutionCorrectness:
 
         # Simple rolling mean
         df = df.sort_values(["instrument", "date"])
-        df["rolling_mean"] = df.group_by("instrument")["close"].transform(
-            lambda x: x.rolling(window=5, min_samples=1).mean()
+        df["rolling_mean"] = df.groupby("instrument")["close"].transform(
+            lambda x: x.rolling(window=5, min_periods=1).mean()
         )
 
         assert "rolling_mean" in df.columns

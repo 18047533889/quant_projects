@@ -16,6 +16,7 @@ from factor_engine.planner.backend_region import (
     Representation,
     BackendRegion,
     TransferEdge,
+    TransferTransform,
     PhysicalRegionPlan,
     ExecutionAxis,
     PhysicalProperties,
@@ -52,11 +53,12 @@ class TestPerBackendCostEstimation:
             required_properties=PhysicalProperties(),
             state_contract=StateContract(),
             estimated_rows=1_000_000,
+            estimated_compute_ms=50.0,
             estimated_memory_bytes=60_000_000,
         )
 
         # Polars generally uses less memory for same operations
-        assert polars_region.estimated_bytes <= pandas_region.estimated_bytes
+        assert polars_region.estimated_memory_bytes <= pandas_region.estimated_memory_bytes
 
     def test_duckdb_cost_for_aggregation(self):
         """DuckDB should be efficient for aggregation operations."""
@@ -69,6 +71,7 @@ class TestPerBackendCostEstimation:
             required_properties=PhysicalProperties(),
             state_contract=StateContract(),
             estimated_rows=100_000,
+            estimated_compute_ms=50.0,
             estimated_memory_bytes=8_000_000,
         )
 
@@ -87,6 +90,7 @@ class TestPerBackendCostEstimation:
             required_properties=PhysicalProperties(),
             state_contract=StateContract(),
             estimated_rows=10_000,
+            estimated_compute_ms=50.0,
             estimated_memory_bytes=800_000,
         )
 
@@ -99,11 +103,12 @@ class TestPerBackendCostEstimation:
             required_properties=PhysicalProperties(),
             state_contract=StateContract(),
             estimated_rows=1_000_000,
+            estimated_compute_ms=50.0,
             estimated_memory_bytes=80_000_000,
         )
 
         # Memory should scale with rows
-        assert large_region.estimated_bytes > small_region.estimated_bytes
+        assert large_region.estimated_memory_bytes > small_region.estimated_memory_bytes
 
 
 class TestTransferCostCalculation:
@@ -114,7 +119,7 @@ class TestTransferCostCalculation:
         cost = estimate_transfer_cost_ms(
             source_repr=Representation.POLARS_LONG,
             target_repr=Representation.POLARS_LONG,
-            estimated_memory_bytes=1_000_000,
+            estimated_bytes=1_000_000,
         )
 
         # Should be very low (near zero)
@@ -126,7 +131,7 @@ class TestTransferCostCalculation:
         cost = estimate_transfer_cost_ms(
             source_repr=Representation.PANDAS_LONG,
             target_repr=Representation.DUCKDB_RELATION,
-            estimated_memory_bytes=1_000_000,
+            estimated_bytes=1_000_000,
         )
 
         # Should have measurable cost
@@ -137,14 +142,14 @@ class TestTransferCostCalculation:
         cost_no_sort = estimate_transfer_cost_ms(
             source_repr=Representation.POLARS_LONG,
             target_repr=Representation.DUCKDB_RELATION,
-            estimated_memory_bytes=10_000_000,
+            estimated_bytes=10_000_000,
             requires_sort=False,
         )
 
         cost_with_sort = estimate_transfer_cost_ms(
             source_repr=Representation.POLARS_LONG,
             target_repr=Representation.DUCKDB_RELATION,
-            estimated_memory_bytes=10_000_000,
+            estimated_bytes=10_000_000,
             requires_sort=True,
         )
 
@@ -156,14 +161,14 @@ class TestTransferCostCalculation:
         cost_no_reshape = estimate_transfer_cost_ms(
             source_repr=Representation.PANDAS_LONG,
             target_repr=Representation.POLARS_LONG,
-            estimated_memory_bytes=10_000_000,
+            estimated_bytes=10_000_000,
             requires_reshape=False,
         )
 
         cost_with_reshape = estimate_transfer_cost_ms(
             source_repr=Representation.PANDAS_LONG,
             target_repr=Representation.PANDAS_WIDE,
-            estimated_memory_bytes=10_000_000,
+            estimated_bytes=10_000_000,
             requires_reshape=True,
         )
 
@@ -227,6 +232,7 @@ class TestTotalPlanCost:
             required_properties=PhysicalProperties(),
             state_contract=StateContract(),
             estimated_rows=100_000,
+            estimated_compute_ms=50.0,
             estimated_memory_bytes=8_000_000,
         )
 
@@ -261,7 +267,7 @@ class TestTotalPlanCost:
             total_ttdc_ms=95.0,
             peak_memory_bytes=12_000_000,
             logical_node_count=5,
-            backend_switch_count=1,
+            backend_switch_count=0,
             native_fraction=0.85,
         )
 
@@ -282,7 +288,7 @@ class TestTotalPlanCost:
             total_ttdc_ms=135.0,
             peak_memory_bytes=15_000_000,
             logical_node_count=6,
-            backend_switch_count=1,
+            backend_switch_count=0,
             native_fraction=0.90,
         )
 
@@ -310,6 +316,7 @@ class TestMemoryFootprintEstimation:
             required_properties=PhysicalProperties(),
             state_contract=StateContract(),
             estimated_rows=100_000,
+            estimated_compute_ms=50.0,
             estimated_memory_bytes=8_000_000,
         )
 
@@ -328,7 +335,7 @@ class TestMemoryFootprintEstimation:
             native_fraction=1.0,
         )
 
-        assert plan.peak_memory_bytes == region.estimated_bytes
+        assert plan.peak_memory_bytes == region.estimated_memory_bytes
 
     def test_peak_memory_multi_region_sequential(self):
         """Peak memory for sequential regions is max of individual regions."""
@@ -341,6 +348,7 @@ class TestMemoryFootprintEstimation:
             required_properties=PhysicalProperties(),
             state_contract=StateContract(),
             estimated_rows=100_000,
+            estimated_compute_ms=50.0,
             estimated_memory_bytes=8_000_000,
         )
 
@@ -353,16 +361,31 @@ class TestMemoryFootprintEstimation:
             required_properties=PhysicalProperties(),
             state_contract=StateContract(),
             estimated_rows=100_000,
+            estimated_compute_ms=50.0,
             estimated_memory_bytes=6_000_000,
         )
 
         # If sequential, peak is max
-        peak = max(region1.estimated_bytes, region2.estimated_bytes)
+        peak = max(region1.estimated_memory_bytes, region2.estimated_memory_bytes)
+
+        transfer_edge = TransferEdge(
+            edge_id="e_r1_r2",
+            producer_region="r1",
+            consumer_region="r2",
+            source_backend=PhysicalBackend.POLARS_PANEL,
+            target_backend=PhysicalBackend.DUCKDB_SQL,
+            source_representation=Representation.POLARS_LONG,
+            target_representation=Representation.DUCKDB_RELATION,
+            transform=TransferTransform.POLARS_TO_NUMPY,
+            estimated_rows=100_000,
+            estimated_bytes=8_000_000,
+            estimated_transfer_ms=10.0,
+        )
 
         plan = PhysicalRegionPlan(
             plan_id="plan_002",
             regions=(region1, region2),
-            edges=(),
+            edges=(transfer_edge,),
             topological_order=("r1", "r2"),
             root_region_ids=("r2",),
             total_compute_ms=70.0,
@@ -412,7 +435,7 @@ class TestNativeFractionCalculation:
             total_ttdc_ms=95.0,
             peak_memory_bytes=12_000_000,
             logical_node_count=10,
-            backend_switch_count=1,
+            backend_switch_count=0,
             native_fraction=0.75,  # 75% native
         )
 

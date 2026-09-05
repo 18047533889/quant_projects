@@ -1,0 +1,81 @@
+{
+  "mode": "real-cos",
+  "cos_cli": "/usr/local/bin/research-cos",
+  "cos_base": "cos://qs-cold/clean_data/ashare/lqtp_data",
+  "window": [
+    "2026-06-15",
+    "2026-06-30"
+  ],
+  "window_days": 8,
+  "rounds_per_worker": 3,
+  "levels": [
+    {
+      "workers": 1,
+      "omp_per_worker": 31,
+      "threads_cap": 31,
+      "wall_s": 3.662,
+      "reads": 1,
+      "rows": 31240,
+      "throughput_reads_s": 0.27,
+      "throughput_factors_s": 0.27,
+      "remote_object_fetches": 10,
+      "duplicate_download_count": 0,
+      "duplicate_keys": {},
+      "cache_hit_pct": 37.5,
+      "cpu_pct": 0.0,
+      "rss_mb": 0.0
+    },
+    {
+      "workers": 2,
+      "omp_per_worker": 15,
+      "threads_cap": 30,
+      "wall_s": 3.011,
+      "reads": 2,
+      "rows": 62480,
+      "throughput_reads_s": 0.66,
+      "throughput_factors_s": 0.66,
+      "remote_object_fetches": 10,
+      "duplicate_download_count": 0,
+      "duplicate_keys": {},
+      "cache_hit_pct": 68.75,
+      "cpu_pct": 0.0,
+      "rss_mb": 0.0
+    },
+    {
+      "workers": 4,
+      "omp_per_worker": 7,
+      "threads_cap": 28,
+      "wall_s": 2.658,
+      "reads": 4,
+      "rows": 124960,
+      "throughput_reads_s": 1.5,
+      "throughput_factors_s": 1.5,
+      "remote_object_fetches": 10,
+      "duplicate_download_count": 0,
+      "duplicate_keys": {},
+      "cache_hit_pct": 84.38,
+      "cpu_pct": 0.0,
+      "rss_mb": 0.0
+    },
+    {
+      "workers": 8,
+      "omp_per_worker": 3,
+      "threads_cap": 24,
+      "wall_s": 3.013,
+      "reads": 8,
+      "rows": 249920,
+      "throughput_reads_s": 2.65,
+      "throughput_factors_s": 2.65,
+      "remote_object_fetches": 10,
+      "duplicate_download_count": 0,
+      "duplicate_keys": {},
+      "cache_hit_pct": 92.19,
+      "cpu_pct": 0.0,
+      "rss_mb": 0.0
+    }
+  ],
+  "env": {
+    "DATA_ACCESS_COS_READ_MODE": "remote",
+    "DATA_ACCESS_COS_SINGLE_FLIGHT": "1"
+  }
+}

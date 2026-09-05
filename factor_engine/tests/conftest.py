@@ -60,6 +60,7 @@ _LATE_SURFACE_MODULES: tuple[str, ...] = (
     "factor_engine.cleaned_operators.intraday.smart_money",
     "factor_engine.cleaned_operators.intraday.topology_manifold",
     "factor_engine.cleaned_operators.intraday.true_gap_batch3",
+    "factor_engine.cleaned_operators.intraday.sufficient_stats_ops",
     "factor_engine.cleaned_operators.polars_native.ts_advanced_batch1",
     "factor_engine.cleaned_operators.technical.adaptive_filters",
     "factor_engine.cleaned_operators.fundamental.fiscal_batch2",

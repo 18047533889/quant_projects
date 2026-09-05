@@ -148,7 +148,7 @@ def _intersect(mat, vwap):
 def daily_rankic_series(factor_mat, vwap):
     fv, vv = _intersect(factor_mat, vwap)
     result = evaluate_report_arrays(
-        fv.values, vv.pct_change().shift(-2).values,
+        fv.values, vv.pct_change(fill_method=None).shift(-2).values,
         n_quantiles=10, min_assets=10, min_ic_periods=20,
         direction_training_periods=int((fv.index <= pd.Timestamp("2018-06-30")).sum()),
     )
@@ -158,7 +158,7 @@ def daily_rankic_series(factor_mat, vwap):
 def _decile_ret(mat, vwap):
     fv, vv = _intersect(mat, vwap)
     result = evaluate_report_arrays(
-        fv.values, vv.pct_change().shift(-2).values,
+        fv.values, vv.pct_change(fill_method=None).shift(-2).values,
         n_quantiles=10, min_assets=10, min_ic_periods=20,
         direction_training_periods=int((fv.index <= pd.Timestamp("2018-06-30")).sum()),
     )
@@ -454,7 +454,7 @@ def required_columns(page, name):
 def compute_all_metrics(raw_mat, opt_mat, vwap):
     """Return report data computed by the sole quant_evaluator boundary."""
     fv, vv = _intersect(raw_mat, vwap)
-    fwd = vv.pct_change().shift(-2)
+    fwd = vv.pct_change(fill_method=None).shift(-2)
     train_periods = int((fv.index <= pd.Timestamp("2018-06-30")).sum())
     result = evaluate_report_arrays(
         fv.values,
@@ -480,7 +480,7 @@ def compute_all_metrics(raw_mat, opt_mat, vwap):
     g_annual = [compute_annualized_return(gr[:, k]) for k in range(10)]
 
     opt_fv, opt_vv = _intersect(opt_mat, vwap)
-    opt_fwd = opt_vv.pct_change().shift(-2)
+    opt_fwd = opt_vv.pct_change(fill_method=None).shift(-2)
     opt_result = evaluate_report_arrays(
         opt_fv.values, opt_fwd.values, n_quantiles=10, min_assets=10,
         min_ic_periods=20,

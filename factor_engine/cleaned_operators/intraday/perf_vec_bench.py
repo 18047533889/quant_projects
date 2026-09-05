@@ -23,6 +23,7 @@ from factor_engine.cleaned_operators.intraday import higher_moments as hm
 from factor_engine.cleaned_operators.intraday import smart_money as sm
 from factor_engine.cleaned_operators.intraday import true_gap_batch3 as tg
 from factor_engine.cleaned_operators.intraday import vwap_path as vp
+from factor_engine.cleaned_operators.intraday import sufficient_stats_ops as sso
 
 
 _BOUND = [tg._session_mean_reversion_kernel, tg._price_delay_kernel,
@@ -31,7 +32,14 @@ _BOUND = [tg._session_mean_reversion_kernel, tg._price_delay_kernel,
           vp._vwap_reversion_speed,
           hm._realized_skewness, hm._realized_kurtosis,
           hm._realized_quarticity, hm._tripower_quarticity,
-          hm._continuous_variance, hm._jump_variation]
+          hm._continuous_variance, hm._jump_variation] + [
+          sso._ts_sum, sso._ts_mean, sso._ts_variance, sso._ts_std,
+          sso._ts_min, sso._ts_max, sso._ts_last, sso._ts_first,
+          sso._ts_last_value, sso._ts_argmax, sso._ts_argmin,
+          sso._ts_realized_variance, sso._ts_vwap,
+          sso._ts_volume_weighted_return, sso._ts_realized_covariance,
+          sso._ts_amount_weighted_mean,
+      ]
 
 # Parametric kernels: scalar reference is forced by stripping the factory
 # closure's own __vec__ (same trick as the equivalence harness).  min_finite is
@@ -40,6 +48,35 @@ _BOUND = [tg._session_mean_reversion_kernel, tg._price_delay_kernel,
 def _strip_vec(fn):
     if hasattr(fn, "__vec__"):
         del fn.__vec__
+
+
+def _recover_param_vec(fn, name: str):
+    """Re-attach the parametric factory's ``__vec__`` after the scalar leg
+    deleted it (the closure was created once at module import and the scalar
+    leg strips its ``__vec__`` every iteration)."""
+    import factor_engine.cleaned_operators.intraday.vwap_path as _vp
+
+    _factories = {
+        "vwap_path_slope": lambda: _vp.make_vwap_path(1, 1, False),
+        "vwap_path_curvature": lambda: _vp.make_vwap_path(2, 2, False),
+        "vwap_path_slope_pct": lambda: _vp.make_vwap_path(1, 1, True),
+        "vwap_path_curvature_pct": lambda: _vp.make_vwap_path(2, 2, True),
+        "vwap_excursion_max": lambda: _vp.make_vwap_excursion("max"),
+        "vwap_excursion_min": lambda: _vp.make_vwap_excursion("min"),
+        "longest_above_streak": lambda: _vp.make_longest_streak("above"),
+        "longest_below_streak": lambda: _vp.make_longest_streak("below"),
+        "max_drawdown": lambda: _vp.make_max_drawdown("down"),
+        "max_drawup": lambda: _vp.make_max_drawdown("up"),
+        "drawdown_depth": lambda: _vp.make_drawdown_metric("depth"),
+        "drawdown_duration": lambda: _vp.make_drawdown_metric("duration"),
+        "drawdown_recovery": lambda: _vp.make_drawdown_metric("recovery"),
+    }
+    fac = _factories.get(name)
+    if fac is None:
+        return
+    fresh = fac()
+    if getattr(fresh, "__vec__", None) is not None:
+        fn.__vec__ = fresh.__vec__
 
 
 def _session_minutes(days: int, start: str = "2020-01-02") -> pd.DatetimeIndex:
@@ -109,6 +146,23 @@ def main() -> int:
         ("tripower_quarticity", hm._tripower_quarticity, (df,), 2),
         ("continuous_variance", hm._continuous_variance, (df,), 2),
         ("jump_variation", hm._jump_variation, (df,), 2),
+        # R61-P1 #57: sufficient-statistics family (O(1) bundle reads).
+        ("ts_sum", sso._ts_sum, (df,), 2),
+        ("ts_mean", sso._ts_mean, (df,), 2),
+        ("ts_variance", sso._ts_variance, (df,), 2),
+        ("ts_std", sso._ts_std, (df,), 2),
+        ("ts_min", sso._ts_min, (df,), 2),
+        ("ts_max", sso._ts_max, (df,), 2),
+        ("ts_last", sso._ts_last, (df,), 2),
+        ("ts_first", sso._ts_first, (df,), 2),
+        ("ts_last_value", sso._ts_last_value, (df,), 2),
+        ("ts_argmax", sso._ts_argmax, (df,), 1),
+        ("ts_argmin", sso._ts_argmin, (df,), 1),
+        ("ts_realized_variance", sso._ts_realized_variance, (df,), 2),
+        ("ts_vwap", sso._ts_vwap, (df, vol), 2),
+        ("ts_volume_weighted_return", sso._ts_volume_weighted_return, (df, vol), 2),
+        ("ts_realized_covariance", sso._ts_realized_covariance, (df, vol), 2),
+        ("ts_amount_weighted_mean", sso._ts_amount_weighted_mean, (df, vol), 2),
         ("vwap_path_slope", vp.make_vwap_path(1, 1, False), (df, amt, vol), 2),
         ("vwap_path_curvature", vp.make_vwap_path(2, 2, False), (df, amt, vol), 2),
         ("vwap_path_slope_pct", vp.make_vwap_path(1, 1, True), (df, amt, vol), 2),
@@ -138,7 +192,12 @@ def main() -> int:
             del fn.__vec__
         t_scalar = _time_one(fn, *frames, min_finite=mf)
         # vec: bind_whitelist (re-binds the module kernels); the parametric
-        # closures keep their own __vec__.
+        # closures keep their own __vec__ — re-attach here because the scalar
+        # leg just deleted it and the factory-created bind in the whitelist
+        # routine materializes FRESH closures it does not return (the passed
+        # closure would otherwise stay __vec__-less and fail the assert).
+        if not hasattr(fn, "__vec__"):
+            _recover_param_vec(fn, name)
         pvk.bind_whitelist()
         assert getattr(fn, "__vec__", None) is not None, (
             f"vec path for {name} has no __vec__ after bind_whitelist — "

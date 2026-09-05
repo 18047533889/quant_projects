@@ -16,20 +16,23 @@
   - is_flipped=True 的因子评估负矩阵（×-1 后让 rank_ic 为正）
 """
 import argparse
+import hashlib
 import json
 import os
 import re
 import sys
+import tempfile
 import time
 import traceback
 from pathlib import Path
 
-os.environ.setdefault("OMP_NUM_THREADS", "31")
+os.environ.setdefault("OMP_NUM_THREADS", "8")
 
 ROOT = Path("/home/sunhaiwei/quant_projects")
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "jobs"))
 from factor_report_sources import FULL_WINDOW_END, FULL_WINDOW_START, resolve_raw_matrix
+from factor_engine.reporting.quant_evaluator_adapter import evaluate_report_arrays
 
 POOL_JSON = Path("/home/sunhaiwei/factor_delivery_converted/formula_lqtp_all.json")
 CLUSTERS_JSON = ROOT / "weekly_backtest_output/factor_clusters.json"
@@ -39,6 +42,7 @@ OPT_DIR = ROOT / "weekly_backtest_output/optimized_factors"
 REPORTS_DIR = ROOT / "factor_engine/docs/reports/2026-08-23"
 FACTORS_DIR = REPORTS_DIR / "factors"
 INDEX_HTML = REPORTS_DIR / "index.html"
+REPORT_MANIFEST_JSON = REPORTS_DIR / "report_manifest.json"
 STATE_JSON = Path("/tmp/intake_state.json")
 DONE_JSON = Path("/tmp/intake_done.json")
 
@@ -107,30 +111,31 @@ def matrix_path(page):
 _HAS_VWAP = None
 
 
-def load_vwap():
+def load_vwap(*, source=None, start_date=EVAL_START, end_date=EVAL_END):
     global _HAS_VWAP
-    if _HAS_VWAP is not None:
+    uses_default_window = start_date == EVAL_START and end_date == EVAL_END
+    if source is None and uses_default_window and _HAS_VWAP is not None:
         return _HAS_VWAP
     import pandas as pd
-    cache = Path("/tmp/intake_vwap_2016_2018.parquet")
-    if cache.exists():
-        _HAS_VWAP = pd.read_parquet(cache)
-        return _HAS_VWAP
-    import duckdb
-    files = sorted(Path.home().glob("cos_data/StockDailyBarAdj/*.parquet"))
-    fs = "[" + ",".join(f"'{f}'" for f in files) + "]"
-    con = duckdb.connect()
-    df = con.execute(f"""
-        SELECT TradeDate as date, Symbol as symbol, AdjVwap as vwap
-        FROM read_parquet({fs})
-        WHERE TradeDate >= DATE '{EVAL_START}' AND TradeDate <= DATE '{EVAL_END}'
-    """).df()
-    m = df.pivot_table(index="date", columns="symbol", values="vwap", aggfunc="first")
-    m.index = pd.to_datetime(m.index)
-    m = m.sort_index().astype("float64")
-    m.to_parquet(cache)
-    _HAS_VWAP = m
-    return _HAS_VWAP
+    if source is None:
+        os.environ.setdefault("ASHARE_PARQUET_ROOT", str(Path.home() / "cos_data"))
+        os.environ.setdefault("DATA_ACCESS_SKIP_COS_MIRROR", "1")
+        from factor_engine.storage.factory import build_data_source
+
+        source = build_data_source({
+            "type": "data_access",
+            "dataset": "ashare_stock_daily_adj",
+            "start_date": start_date,
+            "end_date": end_date,
+        })
+    values = source.load_column("AdjVwap")
+    if not isinstance(values.index, pd.MultiIndex) or values.index.nlevels != 2:
+        raise ValueError("DataAccess AdjVwap must use timestamp × instrument MultiIndex")
+    panel = values.unstack(level=-1).sort_index().astype("float64")
+    panel.index = pd.to_datetime(panel.index)
+    if uses_default_window and source is not None and source.__class__.__module__.startswith("factor_engine"):
+        _HAS_VWAP = panel
+    return panel
 
 
 def load_matrix(page, flip=False):
@@ -148,9 +153,8 @@ def load_matrix(page, flip=False):
 # 评估核心：逐日 spearman rankic / ic_ir（vwap-to-vwap shift(-2)）
 # --------------------------------------------------------------------------
 def eval_matrix(mat, vwap=None):
-    """mat: date-index × symbol 因子矩阵（已按 is_flipped 翻转）。返回 dict。"""
+    """Evaluate a raw matrix through the canonical QuantEvaluator adapter."""
     import numpy as np
-    from scipy.stats import rankdata
     if vwap is None:
         vwap = load_vwap()
     common = mat.index.intersection(vwap.index)
@@ -164,27 +168,29 @@ def eval_matrix(mat, vwap=None):
     fv = fv[cols].values.astype(np.float64)
     vv = vv[cols]
     fwd = vv.pct_change(fill_method=None).shift(-2).values.astype(np.float64)
-    ics = []
-    for t in range(len(fv)):
-        x = fv[t]
-        y = fwd[t]
-        mask = np.isfinite(x) & np.isfinite(y)
-        if mask.sum() < MIN_UNIVERSE:
-            continue
-        rx = rankdata(x[mask])
-        ry = rankdata(y[mask])
-        am = rx - rx.mean()
-        bm = ry - ry.mean()
-        d = np.sqrt((am * am).sum() * (bm * bm).sum())
-        if d > 1e-18:
-            ics.append((am * bm).sum() / d)
-    ics = np.array(ics, dtype=np.float64)
-    if len(ics) == 0:
-        return {"rank_ic": 0.0, "ic_ir": 0.0, "n_days": 0}
-    mean_ic = float(ics.mean())
-    std_ic = float(ics.std(ddof=1)) if len(ics) > 1 else 0.0
-    return {"rank_ic": mean_ic, "ic_ir": mean_ic / (std_ic + 1e-12),
-            "n_days": int(len(ics)), "std": std_ic}
+    evaluated = evaluate_report_arrays(
+        fv,
+        fwd,
+        n_quantiles=10,
+        min_assets=MIN_UNIVERSE,
+        min_ic_periods=20,
+        direction_training_periods=len(common),
+    )
+    return {
+        "rank_ic": evaluated.mean_rank_ic,
+        "ic_ir": evaluated.rank_ic_ir,
+        "n_days": evaluated.valid_return_periods,
+        "std": evaluated.rank_ic_std,
+        "direction": evaluated.direction,
+        "ls_sharpe": evaluated.sharpe,
+        "ls_annual": evaluated.annualized_return,
+        "ls_cumulative": evaluated.cumulative_return,
+        "ls_mdd": evaluated.max_drawdown,
+        "ls_winrate": evaluated.win_rate,
+        "rank_ic_winrate": getattr(evaluated, "rank_ic_win_rate", None),
+        "g10_annual": getattr(evaluated, "top_quantile_annualized_return", None),
+        "g1_annual": getattr(evaluated, "bottom_quantile_annualized_return", None),
+    }
 
 
 # --------------------------------------------------------------------------
@@ -216,19 +222,361 @@ def stage_landing(factor):
     return {"landed": False, "error": "matrix missing"}
 
 
+def land_factor_batch(factors, *, engine, sink):
+    """Compile and land one incremental wave through FactorEngine ``run_many``.
+
+    The sink boundary keeps factor matrices out of the aggregate result so a
+    weekly batch does not retain every full panel in RAM.
+    """
+    parsed = []
+    for record in factors:
+        name = str(record.get("page_name") or record.get("factor_name") or "").strip()
+        formula = str(record.get("fe_formula") or "").strip()
+        if not name or not formula:
+            raise ValueError(f"factor record requires page_name and fe_formula: {name or '<unnamed>'}")
+        parsed.append(factor_from_record(record))
+
+    engine.run_many(
+        parsed,
+        enable_cse=True,
+        auto_warmup=True,
+        trim_warmup=True,
+        input_dq_check=True,
+        pit_enforce=True,
+        pit_forbid_forward_fill=True,
+        warmup_clusters=True,
+        result_policy="sink",
+        sink=sink,
+    )
+    return {"landed": [factor.name for factor in parsed], "count": len(parsed)}
+
+
+def factor_from_record(record):
+    """Build a Factor from canonical JSON AST or native FactorEngine DSL."""
+    from factor_engine.api.dsl_parser import parse_factor
+    from factor_engine.api.factor import Factor
+
+    name = str(record.get("page_name") or record.get("factor_name") or "").strip()
+    formula = str(record.get("fe_formula") or "").strip()
+    try:
+        node = json.loads(formula)
+    except json.JSONDecodeError:
+        return parse_factor(formula, name=name)
+    if not isinstance(node, dict) or "kind" not in node:
+        return parse_factor(formula, name=name)
+
+    from factor_engine.api.cleaned_ops import make_cleaned_call_factory
+    from factor_engine.api.columns import col
+    import factor_engine.cleaned_operators as cleaned_operators
+
+    cleaned_operators.load_all(include_research=False)
+    operator_aliases = {"and": "and_", "or": "or_", "not": "not_"}
+
+    def build(current):
+        kind = current.get("kind")
+        if kind == "column":
+            return col(str(current["name"]))
+        if kind == "literal":
+            return current.get("value")
+        if kind != "call":
+            raise ValueError(f"unsupported FactorEngine JSON node kind: {kind!r}")
+        operator = operator_aliases.get(str(current.get("op")), str(current.get("op")))
+        arguments = [build(argument) for argument in current.get("args", [])]
+        keywords = dict(current.get("kwargs") or {})
+        return make_cleaned_call_factory(operator)(*arguments, **keywords)
+
+    return Factor(name=name, expr=build(node), source_expr=formula)
+
+
+def build_incremental_engine(*, start_date, end_date, backend_name="polars_long"):
+    """Build the mainline FactorEngine over its canonical DataAccess source."""
+    os.environ.setdefault("ASHARE_PARQUET_ROOT", str(Path.home() / "cos_data"))
+    os.environ.setdefault("DATA_ACCESS_SKIP_COS_MIRROR", "1")
+    from factor_engine.backend.factory import build_backend
+    from factor_engine.runtime.engine import FactorEngine
+    from factor_engine.storage.factory import build_data_source
+
+    source = build_data_source({
+        "type": "data_access",
+        "dataset": "ashare_stock_daily_adj",
+        "start_date": start_date,
+        "end_date": end_date,
+        "read_auto": True,
+    })
+    return FactorEngine(build_backend(backend_name), source, run_mode="research")
+
+
+def matrix_sink(output_dir):
+    """Create an atomic streaming sink for wide report matrices."""
+    import pandas as pd
+
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    def write(name, value):
+        series = value.get("result") if isinstance(value, dict) else value
+        if not isinstance(series, pd.Series) or not isinstance(series.index, pd.MultiIndex):
+            raise TypeError(f"run_many result for {name!r} must be a MultiIndex Series")
+        matrix = series.unstack(level=-1).sort_index().astype("float32")
+        target = output_dir / f"{name}.parquet"
+        temporary = target.with_suffix(".parquet.tmp")
+        matrix.to_parquet(temporary)
+        os.replace(temporary, target)
+
+    return write
+
+
+def land_factor_batch_windowed(
+    records,
+    *,
+    backend_name="polars_long",
+    start_date=FULL_WINDOW_START,
+    end_date=FULL_WINDOW_END,
+    window_years=1,
+    warmup_days=550,
+):
+    """Land a factor wave in bounded date windows, then atomically merge.
+
+    FactorEngine still evaluates each factor wave with ``run_many``.  The date
+    window prevents a ten-year long table from being materialized in RAM;
+    overlap supplies rolling/EMA history and is trimmed before persistence.
+    """
+    import pandas as pd
+
+    start = pd.Timestamp(start_date)
+    end = pd.Timestamp(end_date)
+    names = [str(record["page_name"]) for record in records]
+    with tempfile.TemporaryDirectory(prefix="factor_engine_landing_") as temp_name:
+        temp_dir = Path(temp_name)
+        cursor = start
+        part = 0
+        while cursor <= end:
+            window_end = min(end, cursor + pd.DateOffset(years=window_years) - pd.Timedelta(days=1))
+            load_start = cursor - pd.Timedelta(days=warmup_days)
+            engine = build_incremental_engine(
+                start_date=str(load_start.date()),
+                end_date=str(window_end.date()),
+                backend_name=backend_name,
+            )
+
+            def sink(name, value, *, _part=part, _start=cursor, _end=window_end):
+                series = value.get("result") if isinstance(value, dict) else value
+                if not isinstance(series, pd.Series) or not isinstance(series.index, pd.MultiIndex):
+                    raise TypeError(f"run_many result for {name!r} must be a MultiIndex Series")
+                dates = pd.to_datetime(series.index.get_level_values(0))
+                selected = series[(dates >= _start) & (dates <= _end)]
+                matrix = selected.unstack(level=-1).sort_index().astype("float32")
+                matrix.to_parquet(temp_dir / f"{name}.{_part:03d}.parquet")
+
+            land_factor_batch(records, engine=engine, sink=sink)
+            cursor = window_end + pd.Timedelta(days=1)
+            part += 1
+
+        for name in names:
+            pieces = [pd.read_parquet(path) for path in sorted(temp_dir.glob(f"{name}.*.parquet"))]
+            if not pieces:
+                raise RuntimeError(f"FactorEngine produced no window for {name}")
+            matrix = pd.concat(pieces).sort_index()
+            matrix = matrix[~matrix.index.duplicated(keep="last")]
+            target = MATRICES_DIR / f"{name}.parquet"
+            temporary = target.with_suffix(".parquet.tmp")
+            matrix.to_parquet(temporary)
+            os.replace(temporary, target)
+    return {"landed": names, "count": len(names), "date_windows": part}
+
+
+def land_missing_factors(factors, *, batch_size=8, backend_name="polars_long"):
+    """Land missing executable DSL factors in bounded run_many waves."""
+    missing = [record for record in factors if matrix_path(record["page_name"]) is None]
+    # Capability metadata is advisory and is absent on older/new-mining
+    # manifests.  The formula itself is authoritative: always try FE first.
+    pending = [record for record in missing if str(record.get("fe_formula") or "").strip()]
+    unsupported = [record["page_name"] for record in missing if record not in pending]
+    if not pending:
+        return {"landed": [], "count": 0, "pending": len(missing), "python_fallback": unsupported}
+    landed = []
+    errors = {}
+    for offset in range(0, len(pending), batch_size):
+        wave = pending[offset:offset + batch_size]
+        try:
+            result = land_factor_batch_windowed(wave, backend_name=backend_name)
+            landed.extend(result["landed"])
+        except Exception as wave_error:
+            # Isolate a bad formula without discarding valid peers from the
+            # bounded wave. Every failure remains explicit in provenance.
+            for record in wave:
+                name = record["page_name"]
+                try:
+                    result = land_factor_batch_windowed([record], backend_name=backend_name)
+                    landed.extend(result["landed"])
+                except Exception as factor_error:
+                    errors[name] = (
+                        f"wave={type(wave_error).__name__}: {wave_error}; "
+                        f"factor={type(factor_error).__name__}: {factor_error}"
+                    )
+    return {
+        "landed": landed,
+        "count": len(landed),
+        "pending": len(missing),
+        "python_fallback": unsupported,
+        "factor_engine_errors": errors,
+    }
+
+
 # --------------------------------------------------------------------------
 # stage: eval
 # --------------------------------------------------------------------------
 def stage_eval(factor):
     page = factor["page_name"]
-    is_flipped = bool(factor.get("is_flipped", False))
-    mat = load_matrix(page, flip=is_flipped)
+    mat = load_matrix(page, flip=False)
     if mat is None:
         return {"error": "matrix missing"}
     res = eval_matrix(mat)
-    res["is_flipped"] = is_flipped
+    res["is_flipped"] = res.get("direction") == -1
     res["matrix_path"] = str(matrix_path(page))
     return res
+
+
+def evaluate_factor_batch(
+    factors,
+    *,
+    vwap=None,
+    matrix_loader=None,
+    evaluator=evaluate_report_arrays,
+    batch_size=8,
+    backend="auto",
+):
+    """Evaluate factor matrices in bounded QuantEvaluator tiles."""
+    import numpy as np
+    import pandas as pd
+    from factor_engine.reporting.quant_evaluator_adapter import evaluate_report_batch
+
+    if evaluator is evaluate_report_arrays:
+        evaluator = evaluate_report_batch
+    vwap = load_vwap(
+        start_date=str(FULL_WINDOW_START.date()),
+        end_date=str(FULL_WINDOW_END.date()),
+    ) if vwap is None else vwap
+    matrix_loader = matrix_loader or (lambda name: load_matrix(name, flip=False))
+    names = [str(record["page_name"]) for record in factors]
+    evaluated = {}
+    backends = set()
+    fallbacks = {}
+    for offset in range(0, len(names), max(1, batch_size)):
+        tile_names = names[offset:offset + max(1, batch_size)]
+        matrices = [matrix_loader(name) for name in tile_names]
+        if any(matrix is None for matrix in matrices):
+            missing = [name for name, matrix in zip(tile_names, matrices) if matrix is None]
+            raise FileNotFoundError(f"factor matrices missing: {missing}")
+        # DataAccess owns the report universe.  A sparse or newly-landed factor
+        # must contribute NaNs on its missing cells; it must never truncate the
+        # dates/assets (and therefore labels) of every other factor in a tile.
+        dates = vwap.index
+        columns = vwap.columns
+        labels = vwap.reindex(index=dates, columns=columns).pct_change(fill_method=None).shift(-2)
+        values = np.stack([
+            matrix.reindex(index=dates, columns=columns).values.astype(np.float64)
+            for matrix in matrices
+        ], axis=-1)
+        train_periods = int((pd.DatetimeIndex(dates) <= pd.Timestamp(EVAL_END)).sum())
+        result = evaluator(
+            values,
+            labels.values.astype(np.float64),
+            factor_ids=tuple(tile_names),
+            backend=backend,
+            n_quantiles=10,
+            min_assets=20,
+            min_ic_periods=20,
+            direction_training_periods=train_periods,
+        )
+        evaluated.update(result.factors)
+        backends.add(result.backend_used)
+        if result.backend_fallback_reason:
+            fallbacks[",".join(tile_names)] = result.backend_fallback_reason
+    return {
+        "factors": evaluated,
+        "backend_used": backends,
+        "fallbacks": fallbacks,
+        "dates": pd.DatetimeIndex(vwap.index),
+    }
+
+
+def report_evaluation_dict(evaluated):
+    """Project the canonical QE result into the incremental manifest schema."""
+    return {
+        "rank_ic": evaluated.mean_rank_ic,
+        "ic_ir": evaluated.rank_ic_ir,
+        "std": evaluated.rank_ic_std,
+        "n_days": evaluated.valid_return_periods,
+        "direction": evaluated.direction,
+        "is_flipped": evaluated.direction == -1,
+        "ls_sharpe": evaluated.sharpe,
+        "ls_annual": evaluated.annualized_return,
+        "ls_cumulative": evaluated.cumulative_return,
+        "ls_mdd": evaluated.max_drawdown,
+        "ls_winrate": evaluated.win_rate,
+        "rank_ic_winrate": getattr(evaluated, "rank_ic_win_rate", None),
+        "g10_annual": getattr(evaluated, "top_quantile_annualized_return", None),
+        "g1_annual": getattr(evaluated, "bottom_quantile_annualized_return", None),
+    }
+
+
+def write_report_manifest(records, batch_evaluation, *, target=REPORT_MANIFEST_JSON):
+    """Atomically publish the sole metric source for index and detail pages."""
+    import numpy as np
+
+    target = Path(target)
+    artifact_dir = target.parent / "artifacts"
+    artifact_dir.mkdir(parents=True, exist_ok=True)
+    dates = batch_evaluation.get("dates")
+    by_name = {str(record["page_name"]): record for record in records}
+    factors = {}
+    for name, evaluated in batch_evaluation["factors"].items():
+        metrics = report_evaluation_dict(evaluated)
+        record = by_name[name]
+        raw_formula = str(record.get("fe_formula") or record.get("formula") or "")
+        direction = metrics.pop("direction")
+        entry = {
+            "factor_name": record.get("factor_name", name),
+            "direction": direction,
+            "is_flipped": metrics.pop("is_flipped"),
+            "raw_formula": raw_formula,
+            "effective_formula": f"neg({raw_formula})" if direction == -1 and raw_formula else raw_formula,
+            "matrix_path": str(matrix_path(name) or ""),
+            "metrics": metrics,
+        }
+        if dates is not None and hasattr(evaluated, "rank_ic_series"):
+            safe_name = re.sub(r"[^A-Za-z0-9_.-]+", "_", name)
+            artifact = artifact_dir / f"{safe_name}.npz"
+            temporary = artifact.with_suffix(".npz.tmp")
+            with temporary.open("wb") as stream:
+                np.savez_compressed(
+                    stream,
+                    dates=np.asarray(dates, dtype="datetime64[ns]"),
+                    rank_ic_series=np.asarray(evaluated.rank_ic_series),
+                    quantile_returns=np.asarray(evaluated.quantile_returns),
+                    quantile_nav=np.asarray(evaluated.quantile_nav),
+                    long_short_returns=np.asarray(evaluated.long_short_returns),
+                    long_short_nav=np.asarray(evaluated.long_short_nav),
+                    long_short_nav_aligned=np.asarray(evaluated.long_short_nav_aligned),
+                )
+            os.replace(temporary, artifact)
+            entry["artifact"] = artifact.relative_to(target.parent).as_posix()
+            entry["artifact_sha256"] = hashlib.sha256(artifact.read_bytes()).hexdigest()
+        factors[name] = entry
+    payload = {
+        "schema_version": 1,
+        "price_convention": "adj_vwap_t1_to_t2",
+        "training_window": [EVAL_START, EVAL_END],
+        "backend_used": sorted(batch_evaluation["backend_used"]),
+        "backend_fallbacks": batch_evaluation["fallbacks"],
+        "factors": factors,
+    }
+    target.parent.mkdir(parents=True, exist_ok=True)
+    temporary = target.with_suffix(target.suffix + ".tmp")
+    temporary.write_text(json.dumps(payload, ensure_ascii=False, indent=1), encoding="utf-8")
+    os.replace(temporary, target)
+    return payload
 
 
 # --------------------------------------------------------------------------
@@ -456,13 +804,16 @@ def _check_banned(text, page=None):
     return None
 
 
-def stage_page_inject(factor, eval_result):
+def stage_page_inject(factor, eval_result, *, report_result=None, report_dates=None):
     """为每条新因子生成详情页（复用 render_evoalpha14_pages 的模板+图表函数）。
     图可省略或复用 optimize 图函数。禁止算法名字符串。"""
     page = factor["page_name"]
-    is_flipped = bool(factor.get("is_flipped", False))
+    is_flipped = bool((eval_result or {}).get("is_flipped", factor.get("is_flipped", False)))
     dsl_text = _dsl_text(factor)
     fe_formula_raw = factor.get("fe_formula", "")
+    if is_flipped:
+        dsl_text = f"neg({dsl_text})" if dsl_text else dsl_text
+        fe_formula_raw = f"neg({fe_formula_raw})" if fe_formula_raw else fe_formula_raw
     note = "本周新挖增量因子"
 
     # 尝试 import 复用 evo14 渲染器
@@ -491,29 +842,45 @@ def stage_page_inject(factor, eval_result):
                 "gate_msg": qg.get("message", ""),
                 "rep_factor": rep_factor}
 
-        vwap_full = R.load_vwap()
-        # The training-window sign is applied to the matrix before *any*
-        # calculation.  Flipping scalar RankIC after the fact leaves deciles,
-        # long-short NAV and charts in the opposite direction.
-        raw_mat = load_matrix(page, flip=is_flipped)
-        if raw_mat is None:
-            return {"error": "matrix missing"}
-        opt_path = OPT_DIR / f"{page}.parquet"
-        opt_mat = None
-        if opt_path.exists():
-            import pandas as pd
-            opt_mat = pd.read_parquet(opt_path)
-
-        base, opt_ic = R.compute_all_metrics(raw_mat, opt_mat if opt_mat is not None else raw_mat, vwap_full)
-        charts = {
-            "svg_ts": R.plot_ic_timeseries_svg(base["ic"], page),
-            "monthly": R.plot_ic_monthly_heatmap(base["ic"], page),
-            "decile": R.plot_decile_nav(base["decile_navs"], page),
-            "ls": R.plot_long_short_nav(base["decile_navs"], page),
-            "dist": R.plot_ic_distribution(base["ic"], page),
+        if report_result is None or report_dates is None:
+            raise ValueError("canonical QuantEvaluator result is required for full report rendering")
+        import pandas as pd
+        dates = pd.DatetimeIndex(report_dates)
+        ic_series = pd.Series(report_result.rank_ic_series, index=dates)
+        decile_navs = {
+            "dates": dates.tolist(),
+            **{
+                f"G{group + 1}": report_result.quantile_nav[:, group].tolist()
+                for group in range(report_result.quantile_nav.shape[1])
+            },
+            "LS": report_result.long_short_nav_aligned.tolist(),
         }
-        # ``stage_optimize_lite`` persists the selected matrix in signed form.
-        opt_charts = _opt_compare_charts(page, raw_mat, opt_mat, False)
+        base = {
+            "mean_rankic": report_result.mean_rank_ic,
+            "std_rankic": report_result.rank_ic_std,
+            "rankic_ir": report_result.rank_ic_ir,
+            "rankic_winrate": report_result.rank_ic_win_rate,
+            "ls_sharpe": report_result.sharpe,
+            "ls_annual": report_result.annualized_return,
+            "ls_cum": report_result.cumulative_return,
+            "ls_mdd": report_result.max_drawdown,
+            "ls_winrate": report_result.win_rate,
+            "g10_annual": report_result.top_quantile_annualized_return,
+            "g1_annual": report_result.bottom_quantile_annualized_return,
+            "n_periods": report_result.valid_return_periods,
+            "ic": ic_series,
+            "decile_navs": decile_navs,
+        }
+        charts = {
+            "svg_ts": R.plot_ic_timeseries_svg(ic_series, page),
+            "monthly": R.plot_ic_monthly_heatmap(ic_series, page),
+            "decile": R.plot_decile_nav(decile_navs, page),
+            "ls": R.plot_long_short_nav(decile_navs, page),
+            "dist": R.plot_ic_distribution(ic_series, page),
+        }
+        # Optimization comparisons have their own canonical batch artifact;
+        # never silently recompute them inside the page renderer.
+        opt_charts = ""
 
         dsl_note = "factor_engine DSL（本因子由增量管线落值）"
         req_cols = _required_columns(dsl_text)
@@ -708,27 +1075,23 @@ def update_index(new_entries):
     3) 在 robustness 前插入「本周新挖」区块（列出 26 条）
     """
     html = INDEX_HTML.read_text(encoding="utf-8")
-    total = 470 + len(new_entries)  # 496
-    n_new = 14 + len(new_entries)   # 40
+    pool_pages = {str(record.get("page_name")) for record in load_pool() if record.get("page_name")}
+    total = len(pool_pages)
+    n_new = len({str(entry["page_name"]) for entry in new_entries})
 
     # 1) header 统计
-    html = html.replace("<b>470</b><span>因子总数</span>",
-                        f"<b>{total}</b><span>因子总数</span>")
-    html = html.replace("<b>+14</b><span>本周新挖</span>",
-                        f"<b>+{n_new}</b><span>本周新挖</span>")
-    html = html.replace("<b>470</b><span>因子总数（含本周新挖 14）</span>",
-                        f"<b>{total}</b><span>因子总数（含本周新挖 {n_new}）</span>")
-    html = html.replace("含本周新挖 14", f"含本周新挖 {n_new}")
-    html = html.replace("<h2 id=\"all-factors\">全部 470 个因子</h2>",
-                        f"<h2 id=\"all-factors\">全部 {total} 个因子</h2>")
-    # robustness 区块里的 470
-    html = html.replace("<b>470</b><span>因子总数</span>",
-                        f"<b>{total}</b><span>因子总数</span>")
-    html = re.sub(r"存活 82/470", f"存活 82/{total}", html)
+    html = re.sub(r"<b>\d+</b><span>因子总数</span>",
+                  f"<b>{total}</b><span>因子总数</span>", html)
+    html = re.sub(r"<b>\+\d+</b><span>本周新挖</span>",
+                  f"<b>+{n_new}</b><span>本周新挖</span>", html)
+    html = re.sub(r'<h2 id="all-factors">全部 \d+ 个因子</h2>',
+                  f'<h2 id="all-factors">全部 {total} 个因子</h2>', html)
+    html = re.sub(r"含本周新挖 \d+", f"含本周新挖 {n_new}", html)
+    html = re.sub(r"存活 (\d+)/\d+", rf"存活 \1/{total}", html)
 
     # 2) 新挖因子区块（插入 all-factors 表后，robustness 前）
     rows = []
-    for i, en in enumerate(new_entries, start=456 + 1):
+    for i, en in enumerate(new_entries, start=max(1, total - n_new + 1)):
         page = en["page_name"]
         ic = en.get("rank_ic", 0.0)
         ir = en.get("ic_ir", 0.0)
@@ -783,8 +1146,8 @@ def _new_mining_section(new_entries):
         )
     return f'''
 <section id="new-mining">
-<h2>🆕 本周新挖增量因子（26）</h2>
-<p style="font-size:0.82rem;color:#64748b">本次增量入库 26 条，评估口径与既有池一致（vwap-to-vwap shift(-2) 后复权）。</p>
+<h2>🆕 本周新挖增量因子（{len(new_entries)}）</h2>
+<p style="font-size:0.82rem;color:#64748b">本次增量入库 {len(new_entries)} 条，评估口径与既有池一致（vwap-to-vwap shift(-2) 后复权）。</p>
 <table>
   <thead><tr><th>#</th><th>因子</th><th>RankIC</th><th>IR</th><th>因子族</th></tr></thead>
   <tbody>{rows}</tbody>
@@ -800,11 +1163,47 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--manifest", required=True)
     ap.add_argument("--limit", type=int, default=None)
+    ap.add_argument("--batch-size", type=int, default=8)
+    ap.add_argument("--fe-backend", default="polars_long")
+    ap.add_argument("--qe-backend", choices=("auto", "cpu", "cuda", "cuda_strict"), default="auto")
+    ap.add_argument("--skip-landing", action="store_true")
+    ap.add_argument("--evaluate-only", action="store_true",
+                    help="evaluate and write the manifest, but do not mutate pages/pool/state")
+    ap.add_argument("--output-manifest", type=Path, default=REPORT_MANIFEST_JSON)
     args = ap.parse_args()
 
     manifest = load_manifest(args.manifest)
     if args.limit:
         manifest = manifest[:args.limit]
+
+    if not args.skip_landing:
+        landing = land_missing_factors(
+            manifest,
+            batch_size=max(1, args.batch_size),
+            backend_name=args.fe_backend,
+        )
+        print(f"[run_many] {json.dumps(landing, ensure_ascii=False)}", flush=True)
+
+    batch_evaluation = evaluate_factor_batch(
+        manifest,
+        batch_size=max(1, args.batch_size),
+        backend=args.qe_backend,
+    )
+    written_manifest = write_report_manifest(
+        manifest, batch_evaluation, target=args.output_manifest,
+    )
+    print(
+        f"[quant_evaluator] backends={sorted(batch_evaluation['backend_used'])} "
+        f"fallbacks={batch_evaluation['fallbacks']}",
+        flush=True,
+    )
+    if args.evaluate_only:
+        print(
+            f"[evaluate-only] factors={len(written_manifest['factors'])} "
+            f"manifest={args.output_manifest}",
+            flush=True,
+        )
+        return
 
     state = load_state()
     done = {}
@@ -824,7 +1223,8 @@ def main():
                 elif stage == "landing":
                     res = stage_landing(factor)
                 elif stage == "eval":
-                    res = stage_eval(factor)
+                    res = report_evaluation_dict(batch_evaluation["factors"][page])
+                    res["matrix_path"] = str(matrix_path(page))
                 elif stage == "cluster_assign":
                     res = stage_cluster_assign(
                         factor, state[fname]["result"].get("eval", {}))
@@ -833,7 +1233,11 @@ def main():
                         factor, state[fname]["result"].get("eval", {}))
                 elif stage == "page_inject":
                     res = stage_page_inject(
-                        factor, state[fname]["result"].get("eval", {}))
+                        factor,
+                        state[fname]["result"].get("eval", {}),
+                        report_result=batch_evaluation["factors"][page],
+                        report_dates=batch_evaluation["dates"],
+                    )
                 elif stage == "json_writeback":
                     res = stage_json_writeback(
                         factor,

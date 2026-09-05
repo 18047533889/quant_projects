@@ -6,6 +6,13 @@ normal minute_at/range/bar behavior and only intercepts transform=
 ``intraday_feature``.  Non-A-share minute datasets must be explicitly pinned via
 ``minute_dataset`` (DataAccessSource params, function kwarg, or environment) so a
 US strategy can never silently read the A-share minute mirror.
+
+Load path (R61 P0 #61): the wide OHLCV minute frame is assembled by
+``_wide_frame`` from ONE physical multi-column scan — the per-field candidate
+fallback is resolved first at plan level (no read), then the union of resolved
+logical names is fetched in a single ``src.load_columns`` batch and merged onto
+the shared (timestamp, instrument) axis.  There is no longer a per-column
+``load_column`` + sequential-merge path for a single wide frame.
 """
 from __future__ import annotations
 
@@ -74,26 +81,135 @@ def _load_field(src: DataAccessSource, candidates: tuple[str,...], *, required=T
     return None
 
 
+#: (frame column → candidate logical names in preference order).  Each field's
+#: candidate-fallback resolution tries candidates in order; the first candidate
+#: the source can plan is used (exactly like the old per-field ``_load_field``).
+#: The *resolved* names are then read in ONE physical multi-column batch so a
+#: wide frame is assembled from a single scan instead of N ``load_column``
+#: scans + N merges.
+_FIELD_CANDIDATES: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("open",   ("Open",   "open")),
+    ("high",   ("High",   "high")),
+    ("low",    ("Low",    "low")),
+    ("close",  ("Close",  "close")),
+    ("volume", ("Volume", "volume")),
+    ("amount", ("Amount", "amount", "DollarVolume", "dollar_volume")),
+)
+
+
+def _field_specs(src: DataAccessSource) -> dict[str, str | None]:
+    """Resolve each wide-frame column to one logical name (cheap, no read).
+
+    For each field, ``src`` first tries its ``fields`` map / registry / catalog
+    in preference order — the nearest thing to the old ``_load_field`` probe
+    that does NOT trigger a physical scan (in research mode a failed lookup
+    returns ``None`` instead of raising).  A source with no resolution support
+    yields ``None`` for every optional field (no per-candidate scan is ever
+    emitted during resolution).  ``None`` marks an optional field the source
+    cannot provide; the ``close`` contract still hard-requires at least one
+    candidate.
+    """
+    specs: dict[str, str | None] = {}
+    for key, candidates in _FIELD_CANDIDATES:
+        for name in candidates:
+            value = _probe_field(src, name)
+            if value is not None:
+                specs[key] = name
+                break
+        else:
+            if key == "close":
+                raise MissingDataDependencyError(
+                    f"minute dataset missing required field candidates={candidates}"
+                )
+            specs[key] = None
+    return specs
+
+
+def _probe_field(src: DataAccessSource, name: str):
+    """Return ``None`` when ``name`` is not readable on ``src``.
+
+    Resolution is plan/schema-level only — never a physical read:
+      (1) real ``DataAccessSource`` → ``_resolve_columns`` (pure plan building);
+      (2) duck-typed sources with ``_has_column`` / ``_columns``;
+      (3) raw pass-through for a bare candidate when the source is not
+          fail-closed (research) or the name maps to a real dataset column;
+      (4) NO other source is probed by default (returns ``None``) so a
+          single-column scan is never emitted during resolution on an
+          unrecognized test double.
+    ``None`` collapses to "try the next fallback candidate" (match the old
+    ``_load_field`` try/except per candidate), but the plan path never scans.
+    """
+    if isinstance(src, DataAccessSource):
+        try:
+            physical, _ = src._resolve_columns([name])
+        except Exception:
+            return None
+        return name if physical else None
+    has_column = getattr(src, "_has_column", None)
+    if callable(has_column):
+        try:
+            return name if has_column(name) else None
+        except Exception:
+            return None
+    columns = getattr(src, "_columns", None)
+    if isinstance(columns, (set, frozenset, dict)):
+        return name if name in columns else None
+    return None
+
+
 def _wide_frame(src: DataAccessSource):
-    fields={
-        "open":_load_field(src,("Open","open"),required=False),
-        "high":_load_field(src,("High","high"),required=False),
-        "low":_load_field(src,("Low","low"),required=False),
-        "close":_load_field(src,("Close","close"),required=True),
-        "volume":_load_field(src,("Volume","volume"),required=False),
-        "amount":_load_field(src,("Amount","amount","DollarVolume","dollar_volume"),required=False),
-    }
-    close=fields["close"]
-    base=close.rename("close").reset_index(); base.columns=["timestamp","instrument","close"]
-    for key,series in fields.items():
-        if key=="close" or series is None: continue
-        temp=series.rename(key).reset_index(); temp.columns=["timestamp","instrument",key]
-        base=base.merge(temp,on=["timestamp","instrument"],how="left",sort=False)
-    base["timestamp"]=pd.to_datetime(base["timestamp"])
-    for key in ("open","high","low"):
-        if key not in base: base[key]=base["close"]
-    if "volume" not in base: base["volume"]=1.0
-    if "amount" not in base: base["amount"]=base["close"].abs()*base["volume"]
+    """Assemble the intraday wide frame with ONE physical multi-column scan.
+
+    ``_field_specs`` resolves each field's candidate fallback first — pure
+    plan-level probes, no physical read — then the union of resolved logical
+    names is read in ONE ``load_columns`` batch (one physical scan for the
+    whole frame) and merged onto the shared (timestamp, instrument) axis.
+    Column values, names and merge alignment are identical to the former
+    N-scan + N-merge path.
+    """
+    specs = _field_specs(src)
+    resolved = {k: v for k, v in specs.items() if v is not None}
+    load_columns = getattr(src, "load_columns", None)
+    if not callable(load_columns):
+        raise MissingDataDependencyError(
+            "intraday wide frame requires src.load_columns (multi-column scan)"
+        )
+    # ONE physical multi-column scan for the whole wide frame (instead of up to
+    # six ``load_column`` scans).  ``DataAccessSource.load_columns`` batches all
+    # names into a single store read; a counting subclass sees exactly one
+    # ``load_columns`` call.  ``None`` entries keep their merge-identical
+    # fallbacks below.
+    batch = load_columns(list(resolved.values()))
+    fields: dict[str, pd.Series] = {}
+    for key, logical in resolved.items():
+        value = batch.get(logical)
+        if value is None and key != "close":
+            fields[key] = None
+            continue
+        if value is None:
+            raise MissingDataDependencyError(
+                f"minute dataset batch load_columns returned no column for "
+                f"resolved {logical!r} (frame key {key!r}); names loaded: "
+                f"{sorted(batch)}"
+            )
+        fields[key] = pd.Series(value, name=key)
+    close = fields["close"]
+    base = close.rename("close").reset_index()
+    base.columns = ["timestamp", "instrument", "close"]
+    for key, series in fields.items():
+        if key == "close" or series is None:
+            continue
+        temp = series.rename(key).reset_index()
+        temp.columns = ["timestamp", "instrument", key]
+        base = base.merge(temp, on=["timestamp", "instrument"], how="left", sort=False)
+    base["timestamp"] = pd.to_datetime(base["timestamp"])
+    for key in ("open", "high", "low"):
+        if key not in base:
+            base[key] = base["close"]
+    if "volume" not in base:
+        base["volume"] = 1.0
+    if "amount" not in base:
+        base["amount"] = base["close"].abs() * base["volume"]
     return base
 
 

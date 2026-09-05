@@ -1474,6 +1474,231 @@ def _vec_bipower_and_jump(
     return _vec_result_df(out, uniq, a.columns)
 
 
+# ---------------------------------------------------------------------------
+# R61-P1 #57: sufficient-statistics vector kernels.
+#
+# One shared per-frame bundle (``sufficient_stats.compute_sufficient_statistics``
+# / ``two_panel_statistics`` / ``three_panel_statistics``, memoized per frame
+# identity) materializes the (day, bar, inst) grid ONCE plus Σx Σx² Σx³ Σx⁴,
+# Σv Σv² Σpv, Σa Σpa, max/min, first/last, argmax/argmin and the return
+# moments Σr² Σr³ Σr⁴.  Every kernel below derives its per-(day, inst) output
+# from the bundle:
+#     sum / mean / variance / std / min / max / last / first / last_value /
+#     argmax / argmin / realized_variance / vwap / amount-weighted mean
+#   -> O(1) (direct statistic read / one arithmetic expression).
+#     volume_weighted_return / realized_covariance
+#   -> one O(n) weighted-moment pass per (day, inst) window (weighted moments
+#      are not reducible from scalar aggregates), sharing the joint finite
+#      mask and the grid materialization.
+# Equivalence vs the scalar kernels in ``sufficient_stats_ops`` is enforced by
+# the PERF-2 harness (rtol/atol 1e-12) over random fixtures incl. NaN gaps and
+# all-NaN days; the fail-closed bind count covers them.
+# ---------------------------------------------------------------------------
+
+def _ss_bundle(frame: pd.DataFrame) -> dict:
+    """Memoized sufficient-statistics bundle for one frame (lazy import)."""
+    from factor_engine.cleaned_operators.intraday import sufficient_stats as _ss
+    return _ss.compute_sufficient_statistics(frame)
+
+
+def _ss_pair(a: pd.DataFrame, b: pd.DataFrame) -> dict:
+    from factor_engine.cleaned_operators.intraday import sufficient_stats as _ss
+    return _ss.two_panel_statistics(a, b)
+
+
+def _ss_triple(a: pd.DataFrame, b: pd.DataFrame, c: pd.DataFrame) -> dict:
+    from factor_engine.cleaned_operators.intraday import sufficient_stats as _ss
+    return _ss.three_panel_statistics(a, b, c)
+
+
+def _vec_one_from_bundle(bundle: dict, kind: str, *, min_finite: int):
+    """(D, C) result for a one-panel sufficient-statistics family member.
+
+    ``kind`` in {sum, mean, variance, std, min, max, last, first, argmax,
+    argmin, realized_variance}.  All direct-statistic reads (O(1)):
+      sum        = Σx
+      mean       = Σx / cnt (bundle mean)
+      variance   = packed-prefix two-pass var (bit-identical to np.var)
+      std        = sqrt(var)
+      min/max    = direct masked extrema (NaN-aware)
+      first/last = packed-prefix first/last value
+      argmax/argmin = packed-prefix index of first extreme
+      realized_variance = Σr² over finite returns
+    """
+    cnt = bundle["cnt"]
+    if kind in ("sum", "mean", "variance", "std"):
+        if kind == "sum":
+            val = bundle["sum"].copy()
+        elif kind == "mean":
+            val = bundle["mean"].copy()
+        else:
+            # variance / std read the bundle's two-pass packed-prefix variance
+            # (bit-identical to scalar ``np.var(compressed)``); std is
+            # sqrt(var) elementwise.
+            var = bundle["var"]
+            val = var if kind == "variance" else np.sqrt(np.maximum(var, 0.0))
+        out = np.full(val.shape, np.nan)
+        ok = cnt >= min_finite
+        out[ok] = val[ok]
+        return out
+    if kind in ("min", "max"):
+        val = bundle["min" if kind == "min" else "max"]
+        out = np.full(val.shape, np.nan)
+        ok = np.isfinite(val) & (cnt >= min_finite)
+        out[ok] = val[ok]
+        return out
+    if kind in ("first", "last"):
+        val = bundle["first" if kind == "first" else "last"]
+        out = np.full(val.shape, np.nan)
+        ok = np.isfinite(val) & (cnt >= min_finite)
+        out[ok] = val[ok]
+        return out
+    if kind in ("argmax", "argmin"):
+        pos = bundle["argmax_pos" if kind == "argmax" else "argmin_pos"]
+        out = np.full(pos.shape, np.nan)
+        ok = cnt >= min_finite
+        out[ok] = pos[ok].astype(float)
+        return out
+    if kind == "realized_variance":
+        r2 = bundle["r2"]
+        rcnt = bundle["ret_cnt"]
+        out = np.full(r2.shape, np.nan)
+        # scalar gate: realized variance NaN when fewer than 2 finite returns.
+        ok = (cnt >= min_finite) & (rcnt >= 2)
+        out[ok] = r2[ok]
+        return out
+    raise ValueError(f"unknown one-panel statistic kind {kind!r}")
+
+
+def _vec_ts_sum(a, *, min_finite: int = 2, _grid: tuple | None = None) -> pd.DataFrame:
+    b = _ss_bundle(a)
+    return _vec_result_df(_vec_one_from_bundle(b, "sum", min_finite=min_finite), b["uniq_days"], a.columns)
+
+
+def _vec_ts_mean(a, *, min_finite: int = 2, _grid: tuple | None = None) -> pd.DataFrame:
+    b = _ss_bundle(a)
+    return _vec_result_df(_vec_one_from_bundle(b, "mean", min_finite=min_finite), b["uniq_days"], a.columns)
+
+
+def _vec_ts_variance(a, *, min_finite: int = 2, _grid: tuple | None = None) -> pd.DataFrame:
+    b = _ss_bundle(a)
+    return _vec_result_df(_vec_one_from_bundle(b, "variance", min_finite=min_finite), b["uniq_days"], a.columns)
+
+
+def _vec_ts_std(a, *, min_finite: int = 2, _grid: tuple | None = None) -> pd.DataFrame:
+    b = _ss_bundle(a)
+    return _vec_result_df(_vec_one_from_bundle(b, "std", min_finite=min_finite), b["uniq_days"], a.columns)
+
+
+def _vec_ts_min(a, *, min_finite: int = 2, _grid: tuple | None = None) -> pd.DataFrame:
+    b = _ss_bundle(a)
+    return _vec_result_df(_vec_one_from_bundle(b, "min", min_finite=min_finite), b["uniq_days"], a.columns)
+
+
+def _vec_ts_max(a, *, min_finite: int = 2, _grid: tuple | None = None) -> pd.DataFrame:
+    b = _ss_bundle(a)
+    return _vec_result_df(_vec_one_from_bundle(b, "max", min_finite=min_finite), b["uniq_days"], a.columns)
+
+
+def _vec_ts_last(a, *, min_finite: int = 2, _grid: tuple | None = None) -> pd.DataFrame:
+    b = _ss_bundle(a)
+    return _vec_result_df(_vec_one_from_bundle(b, "last", min_finite=min_finite), b["uniq_days"], a.columns)
+
+
+def _vec_ts_first(a, *, min_finite: int = 2, _grid: tuple | None = None) -> pd.DataFrame:
+    b = _ss_bundle(a)
+    return _vec_result_df(_vec_one_from_bundle(b, "first", min_finite=min_finite), b["uniq_days"], a.columns)
+
+
+def _vec_ts_last_value(a, *, min_finite: int = 2, _grid: tuple | None = None) -> pd.DataFrame:
+    b = _ss_bundle(a)
+    return _vec_result_df(_vec_one_from_bundle(b, "last", min_finite=min_finite), b["uniq_days"], a.columns)
+
+
+def _vec_ts_argmax(a, *, min_finite: int = 2, _grid: tuple | None = None) -> pd.DataFrame:
+    b = _ss_bundle(a)
+    return _vec_result_df(_vec_one_from_bundle(b, "argmax", min_finite=min_finite), b["uniq_days"], a.columns)
+
+
+def _vec_ts_argmin(a, *, min_finite: int = 2, _grid: tuple | None = None) -> pd.DataFrame:
+    b = _ss_bundle(a)
+    return _vec_result_df(_vec_one_from_bundle(b, "argmin", min_finite=min_finite), b["uniq_days"], a.columns)
+
+
+def _vec_ts_realized_variance(a, *, min_finite: int = 2, _grid: tuple | None = None) -> pd.DataFrame:
+    b = _ss_bundle(a)
+    return _vec_result_df(_vec_one_from_bundle(b, "realized_variance", min_finite=min_finite), b["uniq_days"], a.columns)
+
+
+def _vec_ts_vwap(a, b, *, min_finite: int = 2, _grid: tuple | None = None) -> pd.DataFrame:
+    """Vector intra_ts_vwap: Σ(p·v)/Σv over the joint finite (close, vol>0)."""
+    sb = _ss_pair(a, b)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        vwap = np.where(sb["vsum"] > _EPS, sb["pvsum"] / np.maximum(sb["vsum"], _EPS), np.nan)
+    out = np.full(vwap.shape, np.nan)
+    ok = np.isfinite(vwap) & (sb["cnt"] >= min_finite)
+    out[ok] = vwap[ok]
+    return _vec_result_df(out, sb["uniq_days"], a.columns)
+
+
+def _vec_ts_volume_weighted_return(a, b, *, min_finite: int = 2, _grid: tuple | None = None) -> pd.DataFrame:
+    """Vector intra_ts_volume_weighted_return: Σ(r·v)/Σv.
+
+    Scalar contract: ``daily_agg_two`` drops NaN-CLOSE rows first, then the
+    kernel computes ``log_returns`` over the CLOSE-COMPRESSED series (missing
+    minutes do not split a return pair) and weights each return by the volume
+    at the return's own bar with volume>0.  The bundle's packed prefix (pc,
+    pv, rp) reproduces that compressed series exactly; one O(n) pass per
+    (day, inst) over the shared packed prefix.
+    """
+    sb = _ss_pair(a, b)
+    rp = sb["rp"]  # (D, max_cnt, C) compressed log returns (r[:,0]=NaN)
+    pv = sb["pv"]
+    pmask = sb["pmask"]
+    vmask = pmask & np.isfinite(pv) & (pv > 0) & np.isfinite(rp)
+    num = np.where(vmask, np.where(vmask, rp, 0.0) * pv, 0.0).sum(axis=1)
+    den = np.where(vmask, pv, 0.0).sum(axis=1)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        val = np.where(den > _EPS, num / np.maximum(den, _EPS), np.nan)
+    out = np.full(val.shape, np.nan)
+    # min_finite gate uses the CLOSE finite count (daily_agg_two's gate on the
+    # A-panel; an all-NaN-returns day still passes if closes exist, then the
+    # kernel returns NaN because den==0 -> val NaN).
+    ok = np.isfinite(val) & (sb["close_cnt"] >= min_finite)
+    out[ok] = val[ok]
+    return _vec_result_df(out, sb["uniq_days"], a.columns)
+
+
+def _vec_ts_realized_covariance(a, b, *, min_finite: int = 2, _grid: tuple | None = None) -> pd.DataFrame:
+    """Vector intra_ts_realized_covariance: Σ(r²·v)/Σv over the packed prefix."""
+    sb = _ss_pair(a, b)
+    rp = sb["rp"]
+    pv = sb["pv"]
+    pmask = sb["pmask"]
+    vmask = pmask & np.isfinite(pv) & (pv > 0) & np.isfinite(rp)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        rv = np.where(vmask, rp, 0.0)
+        num = (rv * rv * np.where(vmask, pv, 0.0)).sum(axis=1)
+        den = np.where(vmask, pv, 0.0).sum(axis=1)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        val = np.where(den > _EPS, num / np.maximum(den, _EPS), np.nan)
+    out = np.full(val.shape, np.nan)
+    ok = np.isfinite(val) & (sb["close_cnt"] >= min_finite)
+    out[ok] = val[ok]
+    return _vec_result_df(out, sb["uniq_days"], a.columns)
+
+
+def _vec_ts_amount_weighted_mean(a, b, *, min_finite: int = 2, _grid: tuple | None = None) -> pd.DataFrame:
+    """Vector intra_ts_amount_weighted_mean: Σ(c·a)/Σa, amount>0 bars."""
+    sb = _ss_pair(a, b)  # b treated as the amount panel (joint mask amount>0)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        val = np.where(sb["vsum"] > _EPS, sb["pvsum"] / np.maximum(sb["vsum"], _EPS), np.nan)
+    out = np.full(val.shape, np.nan)
+    ok = np.isfinite(val) & (sb["cnt"] >= min_finite)
+    out[ok] = val[ok]
+    return _vec_result_df(out, sb["uniq_days"], a.columns)
+
+
 # Wrapper bodies — the scalar kernels from the consumer modules get their
 # ``__vec__`` attribute attached lazily by ``_core`` (via the factories in the
 # consumer modules / ``perf_vec_kernels.bind_whitelist``) so we avoid circular

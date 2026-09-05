@@ -11,10 +11,17 @@ data_access.cos.mirror —— COS 清洗数据本地镜像按需同步（A 股 /
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import os
 import subprocess
+import time
+
+try:  # POSIX 专属；无 fcntl 平台降级为无锁原行为。
+    import fcntl  # noqa: F401
+except ImportError:  # pragma: no cover - 非 POSIX
+    fcntl = None  # type: ignore[assignment]
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from pathlib import Path
@@ -502,10 +509,100 @@ def physical_partition_for(dataset_name: str, registry: Any = None) -> Any:
     )
 
 
-def _run_cos_cli(args: Sequence[str]) -> None:
-    cmd = [COS_CLI, *args]
+def _run_cos_cli(args: Sequence[str], dest: Path | None = None) -> bool:
+    """执行 COS CLI（R61-P1 #56：跨进程 single-flight 的**执行原子**）。
+
+    .. note:: per-key 跨进程 flock 由 ``_sync_cos_file`` 持有（覆盖 fresh 复检 +
+        cp + os.replace + manifest 完整下载事务）。本函数**不再自加锁**——否则
+        同一进程内两次 open 同一锁文件会因 flock 文件描述语义自死锁。
+
+    返回 ``True``（保留签名兼容调用方）。``dest`` 参数仅保留兼容旧调用。
+    """
+    cmd = [_cli_binary(), *args]
     logger.info("cos_mirror: %s", " ".join(cmd))
     subprocess.run(cmd, check=True, capture_output=True, text=True)
+    # R61-P1 #56：fetch 计数日志（benchmark/single-flight 证明用）。每个真正
+    # 执行 COS CLI cp 的进程追加一行 JSONL，记录对象 key。
+    if args and args[0] == "cp":
+        import re as _re
+
+        for a in args[1:]:
+            if isinstance(a, str) and a.startswith("cos://"):
+                _log_cos_fetch(_re.sub(r"^cos://[^/]+/", "", a).rstrip("/"))
+                break
+    return True
+
+
+def _log_cos_fetch(remote_key: str) -> None:
+    """R61-P1 #56：跨进程 fetch 计数器。
+
+    ``DATA_ACCESS_COS_FETCH_LOG`` 指向一个 JSONL 文件（benchmark 构造，位于
+    approved local root 内），每个真正走到 COS CLI cp 的进程追加一行
+    ``{"key": ..., "pid": ..., "ts": ...}``。配合 ``_run_cos_cli`` 的 per-key
+    flock 单飞，可精确统计「同一对象跨进程重复下载」次数。
+    """
+    path = os.environ.get("DATA_ACCESS_COS_FETCH_LOG", "").strip()
+    if not path:
+        return
+    import json as _json
+    import socket as _socket
+
+    try:
+        line = _json.dumps(
+            {
+                "key": remote_key,
+                "pid": os.getpid(),
+                "host": _socket.gethostname(),
+                "ts": time.time(),
+            },
+            ensure_ascii=False,
+            separators=(",", ":"),
+        )
+        with open(path, "a", encoding="utf-8") as fh:
+            fh.write(line + "\n")
+    except Exception:  # noqa: BLE001 - 计数失败不阻断读路径
+        pass
+
+
+def _record_download(dest: Path, kind: str, remote_key: str) -> None:
+    """R61-P1 #56：每次对象同步尝试记一行 JSONL（hit=缓存命中 / fetch=真下载）。
+
+    ``DATA_ACCESS_COS_DOWNLOAD_LOG`` 指向 benchmark 构造的 JSONL 文件。写失败
+    不影响读路径（best-effort）。文件模式 0600，追加写（跨进程每行原子）。
+    """
+    path = os.environ.get("DATA_ACCESS_COS_DOWNLOAD_LOG", "").strip()
+    if not path:
+        return
+    import json as _json
+
+    try:
+        st = dest.stat()
+        size = st.st_size
+    except OSError:
+        size = None
+    try:
+        line = _json.dumps(
+            {
+                "kind": kind,
+                "key": remote_key,
+                "dest": str(dest),
+                "size": size,
+                "pid": os.getpid(),
+                "ts": time.time(),
+            },
+            ensure_ascii=False,
+            separators=(",", ":"),
+        )
+        try:
+            fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+        except OSError:
+            return
+        try:
+            os.write(fd, (line + "\n").encode("utf-8"))
+        finally:
+            os.close(fd)
+    except Exception:  # noqa: BLE001 - 计数失败不阻断读路径
+        pass
 
 
 def _is_missing_object_error(exc: subprocess.CalledProcessError) -> bool:
@@ -513,7 +610,7 @@ def _is_missing_object_error(exc: subprocess.CalledProcessError) -> bool:
     return any(
         token in combined
         for token in ("nosuchkey", "not found", "404", "object not found")
-    )
+    ) or (exc.returncode != 0 and not combined.strip())
 
 
 def _cos_table_uri(spec: MirrorSpec) -> str:
@@ -793,6 +890,13 @@ def _sync_cos_file(
       原子创建随机名）下载，防止 tmp 抢占 / 并发 writer 覆盖 / symlink 替换；
     - 下载完成后 ``chmod 0600``（文件默认私有，绝不开 world-readable）；
     - ``os.replace`` 原子落盘 + 写 scope 绑定的 manifest。
+
+    R61-P1 #56（跨进程 cache single-flight）：per-key flock **覆盖整个关键区**
+    （fresh 复检 + cp 下载 + ``os.replace`` + manifest 原子写）。只把锁放在
+    ``_run_cos_cli`` 内不够——first 进程 release 锁后、``os.replace``/manifest
+    写之前的窗口会让排队的进程看到「文件已存在但 manifest 未落」的不完整状态，
+    导致重复下载。锁覆盖整个下载事务后，等待进程拿到锁只能看到「已完整可用」
+    或「尚未开始」两种状态 → K 进程同对象恰好 1 次 fetch。
     """
     import os as _os
     import tempfile as _tempfile
@@ -801,7 +905,95 @@ def _sync_cos_file(
 
     dest.parent.mkdir(parents=True, exist_ok=True)
     if _local_file_fresh(dest):
+        _record_download(dest, "hit", cos_uri)
         return
+    if dest.is_symlink():
+        raise ValidationError(
+            f"本地镜像目标 {dest} 是 symlink，拒绝覆盖（T-S08 symlink 攻击 fail-closed）"
+        )
+    lock_ctx = _cos_fetch_lock(cos_uri)
+    if lock_ctx is None:
+        _sync_cos_file_unlocked(
+            cos_uri,
+            dest,
+            missing_semantics=missing_semantics,
+            dataset_name=dataset_name,
+        )
+        return
+    lock_path, lfh = lock_ctx
+    try:
+        fcntl.flock(lfh.fileno(), fcntl.LOCK_EX)
+        try:
+            # R61-P1 #56：锁内 freshness 复检 —— 排队进程拿锁后，目标若已被
+            # 其他进程完整下载（数据 + manifest 均已 os.replace 落盘），跳过
+            # 本次 cp 直接复用缓存。锁覆盖整个事务 ⇒ 不存在半成品窗口。
+            if dest.exists() and _local_file_usable(dest):
+                _record_download(dest, "hit", cos_uri)
+                return
+            _sync_cos_file_unlocked(
+                cos_uri,
+                dest,
+                missing_semantics=missing_semantics,
+                dataset_name=dataset_name,
+            )
+        finally:
+            fcntl.flock(lfh.fileno(), fcntl.LOCK_UN)
+    finally:
+        lfh.close()
+
+
+def _cos_fetch_lock(cos_uri: str) -> tuple[Path, Any] | None:
+    """R61-P1 #56：per-key 跨进程 flock（POSIX）。返回 (lock_path, open_file) 或 None。
+
+    锁路径派生自对象 key（同一 key → 同一锁文件），root = cache root 下
+    ``.single_flight_locks/``。单飞关闭（``DATA_ACCESS_COS_SINGLE_FLIGHT=0``）
+    或非 POSIX 平台 → None（调用方降级为无锁原行为）。
+    """
+    if os.environ.get("DATA_ACCESS_COS_SINGLE_FLIGHT", "1").lower() in {
+        "0", "false", "no", "off",
+    }:
+        return None
+    try:
+        import fcntl  # noqa: F401
+    except ImportError:  # pragma: no cover - 非 POSIX
+        return None
+    import re as _re
+
+    target = _re.sub(r"^cos://[^/]+/", "", str(cos_uri)).rstrip("/")
+    if not target:
+        return None
+    try:
+        from data_access.cos.remote import cos_cache_root
+
+        base = cos_cache_root()
+    except Exception:  # noqa: BLE001
+        base = Path("/tmp")
+    lock_dir = Path(base) / ".single_flight_locks"
+    lock_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+    lock_path = lock_dir / (hashlib.sha1(target.encode()).hexdigest() + ".lock")
+    try:
+        lfh = open(lock_path, "a+b")
+    except OSError:
+        return None
+    return lock_path, lfh
+
+
+def _sync_cos_file_unlocked(
+    cos_uri: str,
+    dest: Path,
+    *,
+    missing_semantics: str = "error",
+    dataset_name: str | None = None,
+) -> None:
+    """无锁实现：fresh 复检已由调用方完成；此处 = 下载 + 原子落盘 + manifest。
+
+    不单独调用（内部 helper）。调用方负责持锁（跨进程单飞）。
+    """
+    import os as _os
+    import tempfile as _tempfile
+
+    from data_access.core.exceptions import MissingRequiredPartition
+
     if dest.is_symlink():
         raise ValidationError(
             f"本地镜像目标 {dest} 是 symlink，拒绝覆盖（T-S08 symlink 攻击 fail-closed）"
@@ -814,7 +1006,7 @@ def _sync_cos_file(
         )
         tmp_path = Path(tmp.name)
         tmp.close()
-        _run_cos_cli(["cp", cos_uri, str(tmp_path)])
+        _run_cos_cli(["cp", cos_uri, str(tmp_path)], dest=None)
         if not tmp_path.exists() or tmp_path.stat().st_size <= 0:
             # 空下载：按语义处理（error 强制 / empty_ok 跳过）。
             try:
@@ -841,6 +1033,7 @@ def _sync_cos_file(
             )
         tmp_path.replace(dest)
         _write_download_manifest(dest, remote_key=cos_uri)
+        _record_download(dest, "fetch", cos_uri)
     except subprocess.CalledProcessError as exc:
         if tmp is not None:
             try:
@@ -887,6 +1080,11 @@ def _daily_filename(spec: MirrorSpec, day: date) -> str:
     if spec.file_selector:
         return f"{spec.file_selector}{day.isoformat()}.parquet"
     return f"{day.isoformat()}.parquet"
+
+
+def _cli_binary() -> str:
+    """R61-P1 #56：COS CLI 二进制（运行期读取，测试可注入 fake CLI）。"""
+    return os.environ.get("DATA_ACCESS_COS_CLI", os.environ.get("ASHARE_COS_CLI", COS_CLI))
 
 
 def _sync_daily_file(spec: MirrorSpec, day: date, dataset_name: str | None = None) -> None:

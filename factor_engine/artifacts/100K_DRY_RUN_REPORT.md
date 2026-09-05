@@ -4,6 +4,17 @@
 > 权威数据源：`/tmp/ladder_100k/ladder_status.json`、`/tmp/ladder_100k/ladder_checkpoint.json`、`factor_engine/scripts/dry_run_ladder.py`
 > 本报告对应 GO_PROMPT §71（ladder 判据）、§72（checkpoint）、§73（失败分类）、§99–§105（Launch Gates）、§105 交付物清单中的 `100K_DRY_RUN_REPORT.md`。
 
+> **R61-P0 #58 更新**：本报告所述实现（`scripts/dry_run_ladder.py` 逐因子 `run_many([f])`、
+> 字符串级假分层、`~1446` 硬上限、假 `--workers/--per-factor-timeout`）已被
+> **`scripts/production_factor_ladder.py`**（FE-native 批量 ladder）取代。旧 ladder 与
+> `benchmarks/dry_run_ladder.py` 保留为 thin compat shim。新 ladder：每级一次
+> `engine.run_many(factors, enable_cse=True)`（永不逐因子循环）、62 真实算子池、
+> `LadderRoot` 结构指纹（数值字面量归一化）>95% 唯一、强制共享子树
+> `ts_mean(close,20)`/`ts_std(return,20)`、`--workers` 经 multiworker_governance clamp、
+> `--per-factor-timeout` 真 watchdog（timeout=0 拒绝）、失败六分类保留 `(formula, error, category)`
+> 永不 `(fid, None)`、`StreamingSink` 5000 行 shard + `DryRunCheckpoint` 每 25 公式续跑。
+> 历史数据（本报告下文）仅存档，不代表新 ladder 口径。
+
 ---
 
 ## 1. Ladder 架构与判据（GO_PROMPT §71 抄录）
@@ -21,7 +32,7 @@
 
 §72 要求生产 checkpoint 支持 `campaign manifest / completed root IDs / failed root IDs / source snapshot / factor hash / partition completion`，断点重启不得重算全部。§73 要求失败分类（`INVALID_FORMULA / FIELD_CONTRACT / PIT_VIOLATION / BACKEND_PARITY / NUMERIC / DATA_MISSING / OOM / TIMEOUT / IO / WRITE / INTERNAL`），禁止全部 `Exception + continue`。
 
-### 实现（`factor_engine/scripts/dry_run_ladder.py`，556 行）
+### 实现（历史：`factor_engine/scripts/dry_run_ladder.py`，556 行 — 已被 production_factor_ladder.py 取代）
 
 - **分层抽样** `stratified_sample()`：按 `(economic_effect_family, 输入源数)` 分层，每层至少 1 个，其余按比例补齐，绝不只取前 N 条。公式集来自 `load_terminal_operators()`（`terminal_allowed`，1446 条）。
 - **批量计算**：每因子走 `engine.run_many([factor], enable_cse=True)`（P0#6 强制，禁止逐因子 `run()`）。
@@ -92,7 +103,7 @@
 
 - **已跑**：100 级（Stage A 核语义）、1000 级（Stage B CSE/IO）。
 - **未跑**：5000（Stage C scheduler/RSS）、20k（Stage D write/cache）、50k（Stage E long-run stability）、100k（Stage F 正式）。
-- **runner 就绪**：`scripts/dry_run_ladder.py` 支持 `--levels 100,1000,5000,20000,50000,100000` 任意组合、`--resume` 续跑、`--workers`、`--seed`、`--per-factor-timeout`、`--smoke`。checkpoint 机制已就绪，可断点续跑不重算全部。
+- **runner 就绪**（历史）：旧 `scripts/dry_run_ladder.py` 的 CLI 已由新 `scripts/production_factor_ladder.py --levels ... --dry-level 100 --gen-only N --workers N --per-factor-timeout S` 取代；checkpoint 续跑由 `DryRunCheckpoint` 每 25 公式原子写支撑（`--no-resume` 可忽略）。
 - **放量前置条件**：§6 的 A股 contract 专项测试 + 23k 回归甄别（见 GO_NO_GO risk register）完成后，方可进入 5k 级。
 
 ---

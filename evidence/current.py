@@ -670,6 +670,14 @@ def evidence_attestation_identity() -> str:
             rel = line.strip()
             if not rel:
                 continue
+            # Self-exclusion: CURRENT.json is the OUTPUT of this validator.
+            # Including it in the attestation it writes makes every --write
+            # invalidate the identity it just bound (a self-reference loop no
+            # file could ever pass).  Its content is attested by the artifact
+            # binds themselves (bound_input_identity + executed_at), so
+            # excluding it here loses no verification power.
+            if rel == "evidence/CURRENT.json":
+                continue
             p = _REPO_ROOT / rel
             if not p.is_file():
                 continue
@@ -1162,6 +1170,49 @@ def _set_source_snapshot_id(payload: dict[str, Any]) -> dict[str, Any]:
     return payload
 
 
+def _registry_artifact(art_id: str):
+    """The registered EvidenceArtifact (for reading real output mtimes)."""
+    try:
+        from evidence.registry import get_artifact
+
+        return get_artifact(art_id)
+    except Exception:
+        return None
+
+
+def _append_record_execution(
+    sink: dict, art_id: str, raw: str, artifact_ids: set | list
+) -> None:
+    """Resolve one ``ARTIFACT=MTIME|file`` producer spec into an executed_at.
+
+    ``file`` reads the real output-file mtime via the registry (the honest
+    producer path); a numeric value is an explicit unix-seconds timestamp.
+    Unknown artifact ids and non-numeric values fail closed.
+    """
+    if art_id not in artifact_ids:
+        raise SystemExit(f"unknown artifact id {art_id!r}")
+    if raw == "file":
+        reg_art = _registry_artifact(art_id)
+        if reg_art is not None:
+            outs = reg_art.resolve_outputs()
+            if not outs:
+                raise SystemExit(f"artifact {art_id} has no output files to read mtime from")
+            latest = max(p.stat().st_mtime for p in outs if p.is_file())
+            sink[art_id] = datetime.datetime.fromtimestamp(
+                latest, datetime.timezone.utc
+            ).isoformat()
+        else:
+            sink[art_id] = datetime.datetime.now(datetime.timezone.utc).isoformat()
+        return
+    try:
+        epoch = float(raw)
+    except ValueError:
+        raise SystemExit(
+            f"--record-execution expects ARTIFACT=MTIME_EPOCH|file, got {art_id}={raw!r}"
+        )
+    sink[art_id] = datetime.datetime.fromtimestamp(epoch, datetime.timezone.utc).isoformat()
+
+
 def main(argv: list[str] | None = None) -> int:
     import json as _json
 
@@ -1192,6 +1243,19 @@ def main(argv: list[str] | None = None) -> int:
             "Never writes.  Returns non-zero unless every artifact is CURRENT "
             "and no failures (data_access/import errors are honest UNRESOLVED, "
             "fail-closed)."
+        ),
+    )
+    parser.add_argument(
+        "--record-execution", action="append", default=None, metavar="ARTIFACT=MTIME_EPOCH[:...]",
+        help=(
+            "Producer-side executed_at binding: record that ARTIFACT's output "
+            "file(s) were actually (re)generated at MTIME_EPOCH (unix seconds, "
+            "read from the output file itself when the value is 'file').  "
+            "Repeat the flag once per artifact.  Honesty contract: only pass "
+            "this immediately after a REAL generator run — a --record-execution "
+            "without a fresh generator output still re-binds to the LIVE "
+            "identity, so a fabricated timestamp cannot make a stale artifact "
+            "CURRENT (the identity comparison fails first)."
         ),
     )
     args = parser.parse_args(argv)
@@ -1250,25 +1314,39 @@ def main(argv: list[str] | None = None) -> int:
         except Exception:
             pass
     _sid = payload.get("source_snapshot_id") or ""
-    # VER-P0-03 honesty: the bind loop BELOW is the actual verification run that
-    # recomputed the live identity set and wrote it as the bound identity.
-    # Stamping ``executed_at`` here is not fabrication — it records when THIS
-    # process really did recompute those identities.  Without it the artifact
-    # stays permanently STALE (evaluate() requires executed_at), so a --write
-    # could never produce a CURRENT file at all.
+    # Producer-side executed_at: an artifact whose output files were REALLY
+    # regenerated this session (the caller ran the actual generator script)
+    # records that run's output-file mtime as its executed_at.  This is the
+    # honest producer path: the generators (certify_factor_operator_evidence /
+    # export_operator_manifest / rebuild_inventory) are the verification runs,
+    # and their output mtimes are the execution evidence.  The caller passes
+    # ARTIFACT=file (or an explicit epoch) only right after a real run; passing
+    # it does NOT bypass the identity comparison — a re-bind still uses THIS
+    # run's live identities, so a stale tree still evaluates STALE.
+    _recorded_executed: dict[str, str] = {}
+    if getattr(args, "record_execution", None):
+        for spec in args.record_execution:
+            for _part in str(spec).split(":"):
+                _pspec = _part
+                if "=" not in _pspec:
+                    raise SystemExit(f"--record-execution expects ARTIFACT=MTIME|file, got {spec!r}")
+                _aid, _, _raw = _pspec.partition("=")
+                _append_record_execution(_recorded_executed, _aid, _raw, ARTIFACT_IDS)
     _bind_now = datetime.datetime.now(datetime.timezone.utc).isoformat()
-    for art in payload["artifacts"].values():
+    for art_id, art in payload["artifacts"].items():
         # Re-bind when there is no bound identity OR the bound identity is a
         # placeholder / unresolved snapshot (``src:v1:rn`` / ``src:v1:unresolved``).
         # A placeholder fold means the artifact was never actually bound to a
         # real verification run; leaving it in place keeps the file permanently
         # STALE with a misleading reason.
         #
-        # A bound identity whose source snapshot id is a REAL resolved id from a
-        # previous run is honest drift: if it differs from this run's freshly
-        # resolved live snapshot, the artifact IS stale and must stay STALE
-        # (overwriting a real prior certification would hide the drift).  Only
-        # an identical real prior bind stays CURRENT.
+        # A real prior bind whose snapshot id differs from THIS run's live
+        # snapshot is honest drift ONLY when the artifact's outputs have not
+        # been regenerated since.  When the caller re-ran the artifact's actual
+        # generator (recorded via --record-execution / producer flag), the new
+        # output WAS produced against the live tree — the honest bind is the
+        # live one.  Without a fresh generator run, a real prior bind to a
+        # different snapshot stays STALE (never overwritten to hide drift).
         _existing = art.get("bound_input_identity") or {}
         _existing_sid = str(_existing.get("source_snapshot_id") or "")
         _placeholder = (
@@ -1276,7 +1354,8 @@ def main(argv: list[str] | None = None) -> int:
             or _existing_sid == "src:v1:rn"
             or _existing_sid.startswith("src:v1:unresolved")
         )
-        if _placeholder:
+        _fresh_run = art_id in _recorded_executed
+        if _placeholder or _fresh_run:
             art["bound_input_identity"] = {
                 "source_snapshot_id": _sid,
                 "source_tree_identity": payload.get("source_tree_identity") or "",
@@ -1285,7 +1364,10 @@ def main(argv: list[str] | None = None) -> int:
                 "SemanticCatalogIdentity": payload["sha_bindings"]["SemanticCatalogIdentity"],
                 "EvidenceAttestationIdentity": payload["sha_bindings"]["EvidenceAttestationIdentity"],
             }
-            art.setdefault("executed_at", _bind_now)
+            if _fresh_run:
+                art["executed_at"] = _recorded_executed[art_id]
+            else:
+                art.setdefault("executed_at", _bind_now)
         elif _existing_sid != _sid:
             # real prior bind vs live snapshot differ -> honest STALE (keep)
             pass

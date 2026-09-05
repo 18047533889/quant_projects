@@ -12,6 +12,8 @@ import copyreg
 import hashlib
 import inspect
 
+import numpy as np
+
 from quant_evaluator.metrics.ic import compute_ic_std, compute_mean_ic_value
 from quant_evaluator.metrics.predictive import (
     compute_ic_positive_ratio,
@@ -38,6 +40,21 @@ from quant_evaluator.metrics.quantile_shape import (
     compute_quantile_monotonicity,
     compute_quantile_tail_asymmetry,
     compute_top_quantile_cliff,
+)
+from quant_evaluator.metrics.shape_evidence import (
+    compute_adaptive_quantile_count,
+    compute_bottom_quantile_cliff_robust,
+    compute_bottom_tail_slope,
+    compute_inverted_u_score,
+    compute_left_right_asymmetry,
+    compute_linear_trend_score,
+    compute_shape_bootstrap_confidence,
+    compute_shape_regime_stability,
+    compute_shape_stability,
+    compute_tail_vs_middle_contrast,
+    compute_top_quantile_cliff_robust,
+    compute_top_tail_slope,
+    compute_u_shape_score,
 )
 from quant_evaluator.metrics.stability_regime import (
     compute_change_point_score,
@@ -78,6 +95,30 @@ from quant_evaluator.metrics.portfolio_stats import (
     compute_sharpe_ratio,
     compute_sortino_ratio,
     compute_win_rate,
+)
+from quant_evaluator.metrics.underwater import (
+    compute_max_underwater_duration,
+    compute_mean_underwater_duration,
+    compute_time_to_recovery,
+    compute_worst_period_return,
+    compute_rolling_sharpe_tail,
+    compute_return_skew,
+    compute_downside_deviation,
+    compute_cvar_expected_shortfall,
+)
+from quant_evaluator.metrics.exposure_evidence import (
+    compute_style_exposure_evidence,
+    compute_max_absolute_style_exposure,
+    compute_exposure_drift,
+    compute_purity_ratio,
+    compute_neutralized_rank_ic,
+    compute_residual_rank_ic,
+    compute_industry_exposure,
+    compute_size_exposure,
+    compute_beta_exposure,
+    compute_liquidity_exposure,
+    compute_volatility_exposure,
+    compute_momentum_exposure,
 )
 from quant_evaluator.metrics.registry_adapters import (
     compute_block_bootstrap_ci_value,
@@ -125,6 +166,8 @@ class Domain(Enum):
     REGIME = "regime"
     DATA_QUALITY = "data_quality"
     RESEARCH_INTEGRITY = "research_integrity"
+    UNDERWATER = "underwater"
+    EXPOSURE = "exposure"
 
 
 class MetricTier(Enum):
@@ -2802,6 +2845,1103 @@ _REGISTRY.register(MetricSpec(
     metric_version="1.0.0",
     units="pvalue",
     direction="lower_is_better",
+    missing_policy="nan",
+    numeric_policy="finite",
+))
+
+# ---------------------------------------------------------------------------
+# R61-FI-023: probe-PnL underwater / drawdown-extent evidence (plan §13.9).
+#
+# All kernels consume a dot-frequency (T,) probe daily PnL series (output of
+# metrics.probe_portfolio.compute_cohort_pnl).  max_drawdown already exists
+# (portfolio_stats.compute_maximum_drawdown) and is REUSED/MAPPED — never
+# re-registered.  Missing data -> NaN evidence (never fabricated 0.0).
+# ---------------------------------------------------------------------------
+_REGISTRY.register(MetricSpec(
+    name="max_underwater_duration",
+    display_name="Max Underwater Duration",
+    description=(
+        "Longest continuous stretch (periods) of the probe daily PnL series "
+        "staying below its running-max wealth (waterline). Computed by "
+        "metrics.underwater.compute_max_underwater_duration on a (T,) "
+        "dot-frequency series (probe cohort pnl). NaN when insufficient data — "
+        "never a fabricated 0."
+    ),
+    status=MetricStatus.EXPERIMENTAL,
+    tier=MetricTier.EXTENDED,
+    compute_fn=compute_max_underwater_duration,
+    requires=["probe_pnl"],
+    min_periods=10,
+    domain=Domain.UNDERWATER,
+    metric_id="max_underwater_duration",
+    required_inputs={"probe_pnl"},
+    output_type="scalar",
+    implementation_id="quant_evaluator.metrics.underwater.compute_max_underwater_duration",
+    metric_version="1.0.0",
+    units="periods",
+    direction="lower_is_better",
+    missing_policy="nan",
+    numeric_policy="finite",
+))
+_REGISTRY.register(MetricSpec(
+    name="mean_underwater_duration",
+    display_name="Mean Underwater Duration",
+    description=(
+        "Mean length (periods) of underwater episodes of the probe daily PnL "
+        "series. NaN when insufficient data; 0.0 when never underwater."
+    ),
+    status=MetricStatus.EXPERIMENTAL,
+    tier=MetricTier.EXTENDED,
+    compute_fn=compute_mean_underwater_duration,
+    requires=["probe_pnl"],
+    min_periods=10,
+    domain=Domain.UNDERWATER,
+    metric_id="mean_underwater_duration",
+    required_inputs={"probe_pnl"},
+    output_type="scalar",
+    implementation_id="quant_evaluator.metrics.underwater.compute_mean_underwater_duration",
+    metric_version="1.0.0",
+    units="periods",
+    direction="lower_is_better",
+    missing_policy="nan",
+    numeric_policy="finite",
+))
+_REGISTRY.register(MetricSpec(
+    name="time_to_recovery",
+    display_name="Time to Recovery",
+    description=(
+        "Mean time (periods) from an underwater episode's trough back to a new "
+        "wealth high. Only completed recoveries are averaged; an ongoing "
+        "all-episode drawdown reports the observed lookback instead (not 0). "
+        "NaN when insufficient data."
+    ),
+    status=MetricStatus.EXPERIMENTAL,
+    tier=MetricTier.EXTENDED,
+    compute_fn=compute_time_to_recovery,
+    requires=["probe_pnl"],
+    min_periods=10,
+    domain=Domain.UNDERWATER,
+    metric_id="time_to_recovery",
+    required_inputs={"probe_pnl"},
+    output_type="scalar",
+    implementation_id="quant_evaluator.metrics.underwater.compute_time_to_recovery",
+    metric_version="1.0.0",
+    units="periods",
+    direction="lower_is_better",
+    missing_policy="nan",
+    numeric_policy="finite",
+))
+_REGISTRY.register(MetricSpec(
+    name="worst_month",
+    display_name="Worst Month",
+    description=(
+        "Worst fixed 21-period (trading) block compounded return of the probe "
+        "daily PnL series. Uses the codebase's fixed trading-period calendar "
+        "(21/period month); NaN when the series is shorter than one block."
+    ),
+    status=MetricStatus.EXPERIMENTAL,
+    tier=MetricTier.EXTENDED,
+    compute_fn=compute_worst_period_return,
+    requires=["probe_pnl"],
+    min_periods=21,
+    domain=Domain.UNDERWATER,
+    metric_id="worst_month",
+    required_inputs={"probe_pnl"},
+    output_type="scalar",
+    implementation_id="quant_evaluator.metrics.underwater.compute_worst_period_return",
+    metric_version="1.0.0",
+    units="return",
+    direction="higher_is_better",
+    missing_policy="nan",
+    numeric_policy="finite",
+))
+_REGISTRY.register(MetricSpec(
+    name="worst_quarter",
+    display_name="Worst Quarter",
+    description=(
+        "Worst fixed 63-period (trading) block compounded return of the probe "
+        "daily PnL series. NaN when the series is shorter than one block."
+    ),
+    status=MetricStatus.EXPERIMENTAL,
+    tier=MetricTier.EXTENDED,
+    compute_fn=compute_worst_period_return,
+    requires=["probe_pnl"],
+    min_periods=63,
+    domain=Domain.UNDERWATER,
+    metric_id="worst_quarter",
+    required_inputs={"probe_pnl"},
+    output_type="scalar",
+    implementation_id="quant_evaluator.metrics.underwater.compute_worst_period_return",
+    metric_version="1.0.0",
+    units="return",
+    direction="higher_is_better",
+    missing_policy="nan",
+    numeric_policy="finite",
+))
+_REGISTRY.register(MetricSpec(
+    name="worst_12m",
+    display_name="Worst 12-Month",
+    description=(
+        "Worst fixed 252-period (trading) block compounded return of the probe "
+        "daily PnL series. NaN when the series is shorter than one 12m block."
+    ),
+    status=MetricStatus.EXPERIMENTAL,
+    tier=MetricTier.EXTENDED,
+    compute_fn=compute_worst_period_return,
+    requires=["probe_pnl"],
+    min_periods=252,
+    domain=Domain.UNDERWATER,
+    metric_id="worst_12m",
+    required_inputs={"probe_pnl"},
+    output_type="scalar",
+    implementation_id="quant_evaluator.metrics.underwater.compute_worst_period_return",
+    metric_version="1.0.0",
+    units="return",
+    direction="higher_is_better",
+    missing_policy="nan",
+    numeric_policy="finite",
+))
+_REGISTRY.register(MetricSpec(
+    name="rolling_1y_sharpe_min",
+    display_name="Rolling 1Y Sharpe Min",
+    description=(
+        "Minimum rolling-252-period annualized Sharpe of the probe daily PnL "
+        "series (worst observed 1y window). NaN when the series is shorter "
+        "than one window."
+    ),
+    status=MetricStatus.EXPERIMENTAL,
+    tier=MetricTier.EXTENDED,
+    compute_fn=compute_rolling_sharpe_tail,
+    requires=["probe_pnl"],
+    min_periods=60,
+    domain=Domain.UNDERWATER,
+    metric_id="rolling_1y_sharpe_min",
+    required_inputs={"probe_pnl"},
+    output_type="scalar",
+    implementation_id="quant_evaluator.metrics.underwater.compute_rolling_sharpe_tail",
+    metric_version="1.0.0",
+    units="ratio",
+    direction="higher_is_better",
+    missing_policy="nan",
+    numeric_policy="finite",
+))
+_REGISTRY.register(MetricSpec(
+    name="rolling_1y_sharpe_q10",
+    display_name="Rolling 1Y Sharpe Q10",
+    description=(
+        "10th-percentile rolling-252-period annualized Sharpe of the probe "
+        "daily PnL series (tail floor of the 1y rolling Sharpe distribution). "
+        "NaN when the series is shorter than one window."
+    ),
+    status=MetricStatus.EXPERIMENTAL,
+    tier=MetricTier.EXTENDED,
+    compute_fn=compute_rolling_sharpe_tail,
+    requires=["probe_pnl"],
+    min_periods=60,
+    domain=Domain.UNDERWATER,
+    metric_id="rolling_1y_sharpe_q10",
+    required_inputs={"probe_pnl"},
+    output_type="scalar",
+    implementation_id="quant_evaluator.metrics.underwater.compute_rolling_sharpe_tail",
+    metric_version="1.0.0",
+    units="ratio",
+    direction="higher_is_better",
+    missing_policy="nan",
+    numeric_policy="finite",
+))
+_REGISTRY.register(MetricSpec(
+    name="return_skew",
+    display_name="Return Skew",
+    description=(
+        "Sample skewness of the probe daily PnL return series "
+        "(population convention, same statistic as the tail-risk "
+        "distribution.compute_skewness family). NaN when insufficient data "
+        "or zero std."
+    ),
+    status=MetricStatus.EXPERIMENTAL,
+    tier=MetricTier.EXTENDED,
+    compute_fn=compute_return_skew,
+    requires=["probe_pnl"],
+    min_periods=20,
+    domain=Domain.UNDERWATER,
+    metric_id="return_skew",
+    required_inputs={"probe_pnl"},
+    output_type="scalar",
+    implementation_id="quant_evaluator.metrics.underwater.compute_return_skew",
+    metric_version="1.0.0",
+    units="dimensionless",
+    direction="neutral",
+    missing_policy="nan",
+    numeric_policy="finite",
+))
+_REGISTRY.register(MetricSpec(
+    name="downside_deviation",
+    display_name="Downside Deviation",
+    description=(
+        "Annualized downside deviation (RMS of negative excess returns) of "
+        "the probe daily PnL series, matching the portfolio_stats.sortino "
+        "semantics. NaN when insufficient data or no negative excess returns."
+    ),
+    status=MetricStatus.EXPERIMENTAL,
+    tier=MetricTier.EXTENDED,
+    compute_fn=compute_downside_deviation,
+    requires=["probe_pnl"],
+    min_periods=20,
+    domain=Domain.UNDERWATER,
+    metric_id="downside_deviation",
+    required_inputs={"probe_pnl"},
+    output_type="scalar",
+    implementation_id="quant_evaluator.metrics.underwater.compute_downside_deviation",
+    metric_version="1.0.0",
+    units="return",
+    direction="lower_is_better",
+    missing_policy="nan",
+    numeric_policy="finite",
+))
+_REGISTRY.register(MetricSpec(
+    name="cvar_expected_shortfall",
+    display_name="CVaR Expected Shortfall",
+    description=(
+        "Historical CVaR / expected shortfall at 95% of the probe daily PnL "
+        "series (delegates to risk.var_cvar.compute_cvar — single numeric "
+        "authority). Positive loss magnitude; NaN when insufficient data."
+    ),
+    status=MetricStatus.EXPERIMENTAL,
+    tier=MetricTier.EXTENDED,
+    compute_fn=compute_cvar_expected_shortfall,
+    requires=["probe_pnl"],
+    min_periods=20,
+    domain=Domain.UNDERWATER,
+    metric_id="cvar_expected_shortfall",
+    required_inputs={"probe_pnl"},
+    output_type="scalar",
+    implementation_id="quant_evaluator.metrics.underwater.compute_cvar_expected_shortfall",
+    metric_version="1.0.0",
+    units="fraction",
+    direction="lower_is_better",
+    missing_policy="nan",
+    numeric_policy="finite",
+))
+
+# ---------------------------------------------------------------------------
+# R61-FI-024: per-style exposure / purity evidence (plan §13.11 + §16.2).
+#
+# Every metric consumes an injected ExposurePanel (DataAccess-authoritative
+# ref; QE never fabricates exposure data).  Per-style typed fields only —
+# there is no single scalar "exposure" metric.  GPU parity path reuses the
+# R60 kernels/gpu/exposure.py batch kernels (CPU reference authoritative).
+# ---------------------------------------------------------------------------
+_REGISTRY.register(MetricSpec(
+    name="industry_exposure",
+    display_name="Industry Exposure",
+    description=(
+        "Signed mean industry-style exposure of the factor (typed per-style "
+        "field, from the injected ExposurePanel). NaN when style absent or no "
+        "finite cells."
+    ),
+    status=MetricStatus.EXPERIMENTAL,
+    tier=MetricTier.EXTENDED,
+    compute_fn=compute_industry_exposure,
+    requires=["exposure_panel"],
+    min_periods=None,
+    domain=Domain.EXPOSURE,
+    metric_id="industry_exposure",
+    required_inputs={"exposure_panel"},
+    output_type="scalar",
+    implementation_id="quant_evaluator.metrics.exposure_evidence.compute_industry_exposure",
+    metric_version="1.0.0",
+    units="exposure",
+    direction="neutral",
+    missing_policy="nan",
+    numeric_policy="finite",
+))
+_REGISTRY.register(MetricSpec(
+    name="size_exposure",
+    display_name="Size Exposure",
+    description=(
+        "Signed mean size-style exposure of the factor (typed per-style "
+        "field). NaN when style absent or no finite cells."
+    ),
+    status=MetricStatus.EXPERIMENTAL,
+    tier=MetricTier.EXTENDED,
+    compute_fn=compute_size_exposure,
+    requires=["exposure_panel"],
+    min_periods=None,
+    domain=Domain.EXPOSURE,
+    metric_id="size_exposure",
+    required_inputs={"exposure_panel"},
+    output_type="scalar",
+    implementation_id="quant_evaluator.metrics.exposure_evidence.compute_size_exposure",
+    metric_version="1.0.0",
+    units="exposure",
+    direction="neutral",
+    missing_policy="nan",
+    numeric_policy="finite",
+))
+_REGISTRY.register(MetricSpec(
+    name="beta_exposure",
+    display_name="Beta Exposure",
+    description=(
+        "Signed mean beta-style exposure of the factor (typed per-style "
+        "field). NaN when style absent or no finite cells."
+    ),
+    status=MetricStatus.EXPERIMENTAL,
+    tier=MetricTier.EXTENDED,
+    compute_fn=compute_beta_exposure,
+    requires=["exposure_panel"],
+    min_periods=None,
+    domain=Domain.EXPOSURE,
+    metric_id="beta_exposure",
+    required_inputs={"exposure_panel"},
+    output_type="scalar",
+    implementation_id="quant_evaluator.metrics.exposure_evidence.compute_beta_exposure",
+    metric_version="1.0.0",
+    units="exposure",
+    direction="neutral",
+    missing_policy="nan",
+    numeric_policy="finite",
+))
+_REGISTRY.register(MetricSpec(
+    name="liquidity_exposure",
+    display_name="Liquidity Exposure",
+    description=(
+        "Signed mean liquidity-style exposure of the factor (typed per-style "
+        "field). NaN when style absent or no finite cells."
+    ),
+    status=MetricStatus.EXPERIMENTAL,
+    tier=MetricTier.EXTENDED,
+    compute_fn=compute_liquidity_exposure,
+    requires=["exposure_panel"],
+    min_periods=None,
+    domain=Domain.EXPOSURE,
+    metric_id="liquidity_exposure",
+    required_inputs={"exposure_panel"},
+    output_type="scalar",
+    implementation_id="quant_evaluator.metrics.exposure_evidence.compute_liquidity_exposure",
+    metric_version="1.0.0",
+    units="exposure",
+    direction="neutral",
+    missing_policy="nan",
+    numeric_policy="finite",
+))
+_REGISTRY.register(MetricSpec(
+    name="volatility_exposure",
+    display_name="Volatility Exposure",
+    description=(
+        "Signed mean volatility-style exposure of the factor (typed per-style "
+        "field). NaN when style absent or no finite cells."
+    ),
+    status=MetricStatus.EXPERIMENTAL,
+    tier=MetricTier.EXTENDED,
+    compute_fn=compute_volatility_exposure,
+    requires=["exposure_panel"],
+    min_periods=None,
+    domain=Domain.EXPOSURE,
+    metric_id="volatility_exposure",
+    required_inputs={"exposure_panel"},
+    output_type="scalar",
+    implementation_id="quant_evaluator.metrics.exposure_evidence.compute_volatility_exposure",
+    metric_version="1.0.0",
+    units="exposure",
+    direction="neutral",
+    missing_policy="nan",
+    numeric_policy="finite",
+))
+_REGISTRY.register(MetricSpec(
+    name="momentum_exposure",
+    display_name="Momentum Exposure",
+    description=(
+        "Signed mean momentum-style exposure of the factor (typed per-style "
+        "field). NaN when style absent or no finite cells."
+    ),
+    status=MetricStatus.EXPERIMENTAL,
+    tier=MetricTier.EXTENDED,
+    compute_fn=compute_momentum_exposure,
+    requires=["exposure_panel"],
+    min_periods=None,
+    domain=Domain.EXPOSURE,
+    metric_id="momentum_exposure",
+    required_inputs={"exposure_panel"},
+    output_type="scalar",
+    implementation_id="quant_evaluator.metrics.exposure_evidence.compute_momentum_exposure",
+    metric_version="1.0.0",
+    units="exposure",
+    direction="neutral",
+    missing_policy="nan",
+    numeric_policy="finite",
+))
+_REGISTRY.register(MetricSpec(
+    name="max_absolute_style_exposure",
+    display_name="Max Absolute Style Exposure",
+    description=(
+        "The style dimension with the largest mean absolute exposure (dict: "
+        "style / value / absolute_mean / counts). NaN when no style has "
+        "enough finite cells."
+    ),
+    status=MetricStatus.EXPERIMENTAL,
+    tier=MetricTier.EXTENDED,
+    compute_fn=compute_max_absolute_style_exposure,
+    requires=["exposure_panel"],
+    min_periods=None,
+    domain=Domain.EXPOSURE,
+    metric_id="max_absolute_style_exposure",
+    required_inputs={"exposure_panel"},
+    output_type="scalar",
+    implementation_id="quant_evaluator.metrics.exposure_evidence.compute_max_absolute_style_exposure",
+    metric_version="1.0.0",
+    units="exposure",
+    direction="neutral",
+    missing_policy="nan",
+    numeric_policy="finite",
+))
+_REGISTRY.register(MetricSpec(
+    name="exposure_drift",
+    display_name="Exposure Drift",
+    description=(
+        "Mean absolute change of the per-style exposure panel between "
+        "adjacent periods (persistence / stability measure). NaN when fewer "
+        "than 2 periods or no finite adjacent pair."
+    ),
+    status=MetricStatus.EXPERIMENTAL,
+    tier=MetricTier.EXTENDED,
+    compute_fn=compute_exposure_drift,
+    requires=["exposure_panel"],
+    min_periods=2,
+    domain=Domain.EXPOSURE,
+    metric_id="exposure_drift",
+    required_inputs={"exposure_panel"},
+    output_type="scalar",
+    implementation_id="quant_evaluator.metrics.exposure_evidence.compute_exposure_drift",
+    metric_version="1.0.0",
+    units="exposure",
+    direction="lower_is_better",
+    missing_policy="nan",
+    numeric_policy="finite",
+))
+_REGISTRY.register(MetricSpec(
+    name="neutralized_rank_ic",
+    display_name="Neutralized Rank IC",
+    description=(
+        "Cross-sectional residual (neutralized) rank IC: per date regress the "
+        "factor on the exposure panel (OLS intercept + styles), Spearman-"
+        "correlate residuals with forward returns, time-mean. A factor whose "
+        "IC survives neutralization has alpha orthogonal to style exposures. "
+        "CPU reference; GPU optional (kernels/gpu/exposure_evidence.py)."
+    ),
+    status=MetricStatus.EXPERIMENTAL,
+    tier=MetricTier.EXTENDED,
+    compute_fn=compute_neutralized_rank_ic,
+    requires=["factor_values", "forward_returns", "exposure_panel"],
+    min_periods=10,
+    domain=Domain.EXPOSURE,
+    metric_id="neutralized_rank_ic",
+    required_inputs={"factor_values", "forward_returns", "exposure_panel"},
+    output_type="scalar",
+    implementation_id="quant_evaluator.metrics.exposure_evidence.compute_neutralized_rank_ic",
+    metric_version="1.0.0",
+    units="correlation",
+    direction="higher_is_better",
+    missing_policy="nan",
+    numeric_policy="finite",
+))
+_REGISTRY.register(MetricSpec(
+    name="residual_rank_ic",
+    display_name="Residual Rank IC",
+    description=(
+        "Named alias of neutralized_rank_ic (residual version of the rank "
+        "IC, residualized against style exposures). Same kernel, registered "
+        "under its own id for downstream reporting."
+    ),
+    status=MetricStatus.EXPERIMENTAL,
+    tier=MetricTier.EXTENDED,
+    compute_fn=compute_residual_rank_ic,
+    requires=["factor_values", "forward_returns", "exposure_panel"],
+    min_periods=10,
+    domain=Domain.EXPOSURE,
+    metric_id="residual_rank_ic",
+    required_inputs={"factor_values", "forward_returns", "exposure_panel"},
+    output_type="scalar",
+    implementation_id="quant_evaluator.metrics.exposure_evidence.compute_residual_rank_ic",
+    metric_version="1.0.0",
+    units="correlation",
+    direction="higher_is_better",
+    missing_policy="nan",
+    numeric_policy="finite",
+))
+_REGISTRY.register(MetricSpec(
+    name="purity_ratio",
+    display_name="Purity Ratio",
+    description=(
+        "Purity ratio = 1 - style-explained share of total exposure "
+        "dispersion. Higher = cleaner (the factor's own signal dominates its "
+        "style footprint). NaN when the panel has no valid style."
+    ),
+    status=MetricStatus.EXPERIMENTAL,
+    tier=MetricTier.EXTENDED,
+    compute_fn=compute_purity_ratio,
+    requires=["exposure_panel"],
+    min_periods=None,
+    domain=Domain.EXPOSURE,
+    metric_id="purity_ratio",
+    required_inputs={"exposure_panel"},
+    output_type="scalar",
+    implementation_id="quant_evaluator.metrics.exposure_evidence.compute_purity_ratio",
+    metric_version="1.0.0",
+    units="fraction",
+    direction="higher_is_better",
+    missing_policy="nan",
+    numeric_policy="finite",
+))
+
+# ---------------------------------------------------------------------------
+# R61-FI-021 (plan §13.4/§14.1/§14.3/§14.4): shape-evidence family additions.
+#
+# Audit result (2026-09-05): the pre-existing SHAPE family (monotonicity /
+# curvature / tail_asymmetry / adjacent_spread / extreme_cliff / top+bottom
+# cliff above) is REUSED unchanged.  This block registers the plan ids that
+# were MISSING: u_shape_score / inverted_u_score / adaptive_quantile_count /
+# top_tail_slope / bottom_tail_slope / tail_vs_middle_contrast /
+# left_right_asymmetry / linear_trend_score / shape_stability /
+# shape_regime_stability / shape_bootstrap_confidence plus the robust tail
+# cliff variants (plan §14.4: Q_K - mean(Q_(K-3..K-1))) which are a DIFFERENT
+# semantic from the one-bin top_quantile_cliff / bottom_quantile_cliff, so
+# they are separate ids (top_quantile_cliff_robust / bottom_quantile_cliff_robust).
+#
+# All are CPU reference implementations in metrics/shape_evidence.py consuming
+# a QuantileReturnArtifact (n_quantiles, F) profile (or (W, nq, F) windowed
+# profiles for the stability family).  Orientation metadata (plan §14.4:
+# never assume all factors positive) is carried on each MetricSpec.direction.
+# ---------------------------------------------------------------------------
+_REGISTRY.register(MetricSpec(
+    name="u_shape_score",
+    display_name="U-Shape Score",
+    description=(
+        "U-shape score in [0, 1] per factor (plan §14.3). NOT RankIC-about-0 "
+        "detection: combines U-template R^2 (middle underperforms both tails, "
+        "convex), the fraction of positive (convex) interior second "
+        "differences, and the requirement that the U-template fit EXCEEDS the "
+        "monotone-linear template fit. 1 = textbook U, 0 = not U."
+    ),
+    status=MetricStatus.EXPERIMENTAL,
+    tier=MetricTier.EXTENDED,
+    compute_fn=compute_u_shape_score,
+    requires=["QuantileReturnArtifact"],
+    min_periods=20,
+    domain=Domain.QUANTILE_SHAPE,
+    metric_id="u_shape_score",
+    required_inputs={"quantile_returns"},
+    output_type="scalar",
+    implementation_id="quant_evaluator.metrics.shape_evidence.compute_u_shape_score",
+    metric_version="1.0.0",
+    units="score",
+    direction="higher_is_better",
+    missing_policy="nan",
+    numeric_policy="finite",
+))
+_REGISTRY.register(MetricSpec(
+    name="inverted_u_score",
+    display_name="Inverted-U Shape Score",
+    description=(
+        "Inverted-U (hill) score in [0, 1] per factor. Mirror of "
+        "u_shape_score with concave curvature and an inverted-U template; "
+        "template fit must exceed the monotone fit."
+    ),
+    status=MetricStatus.EXPERIMENTAL,
+    tier=MetricTier.EXTENDED,
+    compute_fn=compute_inverted_u_score,
+    requires=["QuantileReturnArtifact"],
+    min_periods=20,
+    domain=Domain.QUANTILE_SHAPE,
+    metric_id="inverted_u_score",
+    required_inputs={"quantile_returns"},
+    output_type="scalar",
+    implementation_id="quant_evaluator.metrics.shape_evidence.compute_inverted_u_score",
+    metric_version="1.0.0",
+    units="score",
+    direction="higher_is_better",
+    missing_policy="nan",
+    numeric_policy="finite",
+))
+_REGISTRY.register(MetricSpec(
+    name="adaptive_quantile_count",
+    display_name="Adaptive Quantile Count",
+    description=(
+        "ACTUAL quantile-bin count used to build the profile per factor "
+        "(plan §14.1 adaptive 20 -> (10, 5) fallback). Reads the artifact's "
+        "n_quantiles; consumers never assume 20. Integer-valued float. "
+        "NaN when no profile exists (never 0 bins)."
+    ),
+    status=MetricStatus.EXPERIMENTAL,
+    tier=MetricTier.EXTENDED,
+    compute_fn=compute_adaptive_quantile_count,
+    requires=["QuantileReturnArtifact"],
+    min_periods=20,
+    domain=Domain.QUANTILE_SHAPE,
+    metric_id="adaptive_quantile_count",
+    required_inputs={"quantile_returns"},
+    output_type="scalar",
+    implementation_id="quant_evaluator.metrics.shape_evidence.compute_adaptive_quantile_count",
+    metric_version="1.0.0",
+    units="count",
+    direction="neutral",
+    missing_policy="nan",
+    numeric_policy="finite",
+))
+_REGISTRY.register(MetricSpec(
+    name="top_tail_slope",
+    display_name="Top Tail Slope",
+    description=(
+        "Mean adjacent return difference over the TOP segment of the "
+        "quantile profile as drawn (quantiles K-3..K-1), per factor. "
+        "Positive for a positively inclined factor; large = top-tail cliff. "
+        "Direction NEUTRAL: the metric measures the drawn profile's top "
+        "segment; orientation is informative, never assumed (plan §14.4)."
+    ),
+    status=MetricStatus.EXPERIMENTAL,
+    tier=MetricTier.EXTENDED,
+    compute_fn=compute_top_tail_slope,
+    requires=["QuantileReturnArtifact"],
+    min_periods=20,
+    domain=Domain.QUANTILE_SHAPE,
+    metric_id="top_tail_slope",
+    required_inputs={"quantile_returns"},
+    output_type="scalar",
+    implementation_id="quant_evaluator.metrics.shape_evidence.compute_top_tail_slope",
+    metric_version="1.0.0",
+    units="return",
+    direction="neutral",
+    missing_policy="nan",
+    numeric_policy="finite",
+))
+_REGISTRY.register(MetricSpec(
+    name="bottom_tail_slope",
+    display_name="Bottom Tail Slope",
+    description=(
+        "Mean adjacent return difference over the BOTTOM segment of the "
+        "quantile profile as drawn (quantiles 0..2), per factor. Direction "
+        "NEUTRAL (orientation informative, never assumed, plan §14.4)."
+    ),
+    status=MetricStatus.EXPERIMENTAL,
+    tier=MetricTier.EXTENDED,
+    compute_fn=compute_bottom_tail_slope,
+    requires=["QuantileReturnArtifact"],
+    min_periods=20,
+    domain=Domain.QUANTILE_SHAPE,
+    metric_id="bottom_tail_slope",
+    required_inputs={"quantile_returns"},
+    output_type="scalar",
+    implementation_id="quant_evaluator.metrics.shape_evidence.compute_bottom_tail_slope",
+    metric_version="1.0.0",
+    units="return",
+    direction="neutral",
+    missing_policy="nan",
+    numeric_policy="finite",
+))
+_REGISTRY.register(MetricSpec(
+    name="tail_vs_middle_contrast",
+    display_name="Tail vs Middle Contrast",
+    description=(
+        "Mean |tail returns - middle return| per factor (tails = outer "
+        "quartiles of the quantile range). High for U/inverted-U profiles, "
+        "low for flat. Always >= 0. NaN when profile too small or tail/middle "
+        "returns not finite."
+    ),
+    status=MetricStatus.EXPERIMENTAL,
+    tier=MetricTier.EXTENDED,
+    compute_fn=compute_tail_vs_middle_contrast,
+    requires=["QuantileReturnArtifact"],
+    min_periods=20,
+    domain=Domain.QUANTILE_SHAPE,
+    metric_id="tail_vs_middle_contrast",
+    required_inputs={"quantile_returns"},
+    output_type="scalar",
+    implementation_id="quant_evaluator.metrics.shape_evidence.compute_tail_vs_middle_contrast",
+    metric_version="1.0.0",
+    units="return",
+    direction="neutral",
+    missing_policy="nan",
+    numeric_policy="finite",
+))
+_REGISTRY.register(MetricSpec(
+    name="left_right_asymmetry",
+    display_name="Left-Right Asymmetry",
+    description=(
+        "Signed asymmetry of the quantile profile about the median quantile "
+        "per factor: (top-half rise) - (bottom-half rise). Positive = "
+        "upside tail stronger. Direction NEUTRAL (informative sign). NOTE: "
+        "on an even quantile count the drawn quantile grid itself is "
+        "asymmetric, so a perfectly symmetric latent U reports a small "
+        "positive value - compare across factors, never read absolute."
+    ),
+    status=MetricStatus.EXPERIMENTAL,
+    tier=MetricTier.EXTENDED,
+    compute_fn=compute_left_right_asymmetry,
+    requires=["QuantileReturnArtifact"],
+    min_periods=20,
+    domain=Domain.QUANTILE_SHAPE,
+    metric_id="left_right_asymmetry",
+    required_inputs={"quantile_returns"},
+    output_type="scalar",
+    implementation_id="quant_evaluator.metrics.shape_evidence.compute_left_right_asymmetry",
+    metric_version="1.0.0",
+    units="return",
+    direction="neutral",
+    missing_policy="nan",
+    numeric_policy="finite",
+))
+_REGISTRY.register(MetricSpec(
+    name="linear_trend_score",
+    display_name="Linear Trend Score",
+    description=(
+        "Pearson correlation of the quantile profile with the linear "
+        "quantile coordinate per factor in [-1, 1]. +1 = perfectly monotone "
+        "increasing, -1 = decreasing, ~0 = flat or U-shaped (separate the U "
+        "with u_shape_score)."
+    ),
+    status=MetricStatus.EXPERIMENTAL,
+    tier=MetricTier.EXTENDED,
+    compute_fn=compute_linear_trend_score,
+    requires=["QuantileReturnArtifact"],
+    min_periods=20,
+    domain=Domain.QUANTILE_SHAPE,
+    metric_id="linear_trend_score",
+    required_inputs={"quantile_returns"},
+    output_type="scalar",
+    implementation_id="quant_evaluator.metrics.shape_evidence.compute_linear_trend_score",
+    metric_version="1.0.0",
+    units="correlation",
+    direction="higher_is_better",
+    missing_policy="nan",
+    numeric_policy="finite",
+))
+_REGISTRY.register(MetricSpec(
+    name="shape_stability",
+    display_name="Shape Stability",
+    description=(
+        "Mean Fisher-z window-vs-overall correlation of the quantile "
+        "profile across W windows per factor. Consumes a (W, n_quantiles, F) "
+        "windowed profile panel. 1 = identical shape in every window. NaN "
+        "for a single-window profile (stability is undefined - missing "
+        "evidence, never 0/1)."
+    ),
+    status=MetricStatus.EXPERIMENTAL,
+    tier=MetricTier.EXTENDED,
+    compute_fn=compute_shape_stability,
+    requires=["QuantileReturnArtifact"],
+    min_periods=20,
+    domain=Domain.QUANTILE_SHAPE,
+    metric_id="shape_stability",
+    required_inputs={"quantile_returns"},
+    output_type="scalar",
+    implementation_id="quant_evaluator.metrics.shape_evidence.compute_shape_stability",
+    metric_version="1.0.0",
+    units="correlation",
+    direction="higher_is_better",
+    missing_policy="nan",
+    numeric_policy="finite",
+))
+_REGISTRY.register(MetricSpec(
+    name="shape_regime_stability",
+    display_name="Shape Regime Stability",
+    description=(
+        "Regime version of shape stability: mean Fisher-z correlation of "
+        "CONSECUTIVE window profiles per factor (W >= 3 windows). Drops a "
+        "single common shape that is stable overall but regime-uncorrelated. "
+        "NaN when fewer than 3 windows."
+    ),
+    status=MetricStatus.EXPERIMENTAL,
+    tier=MetricTier.EXTENDED,
+    compute_fn=compute_shape_regime_stability,
+    requires=["QuantileReturnArtifact"],
+    min_periods=20,
+    domain=Domain.QUANTILE_SHAPE,
+    metric_id="shape_regime_stability",
+    required_inputs={"quantile_returns"},
+    output_type="scalar",
+    implementation_id="quant_evaluator.metrics.shape_evidence.compute_shape_regime_stability",
+    metric_version="1.0.0",
+    units="correlation",
+    direction="higher_is_better",
+    missing_policy="nan",
+    numeric_policy="finite",
+))
+_REGISTRY.register(MetricSpec(
+    name="shape_bootstrap_confidence",
+    display_name="Shape Bootstrap Confidence",
+    description=(
+        "Bootstrap confidence of the profile's quantile RANK ORDER per "
+        "factor: fraction of window-resamples whose order reproduces the "
+        "overall mean profile order (W >= 3). 1 = shape ordering reproduced "
+        "in every resample. Deterministic (seeded). NaN for single-window."
+    ),
+    status=MetricStatus.EXPERIMENTAL,
+    tier=MetricTier.EXTENDED,
+    compute_fn=compute_shape_bootstrap_confidence,
+    requires=["QuantileReturnArtifact"],
+    min_periods=20,
+    domain=Domain.QUANTILE_SHAPE,
+    metric_id="shape_bootstrap_confidence",
+    required_inputs={"quantile_returns"},
+    output_type="scalar",
+    implementation_id="quant_evaluator.metrics.shape_evidence.compute_shape_bootstrap_confidence",
+    metric_version="1.0.0",
+    units="fraction",
+    direction="higher_is_better",
+    missing_policy="nan",
+    numeric_policy="finite",
+))
+_REGISTRY.register(MetricSpec(
+    name="top_quantile_cliff_robust",
+    display_name="Top Quantile Cliff (Robust)",
+    description=(
+        "ROBUST top cliff per factor: Q_K - mean(Q_(K-3)..Q_(K-1)) (plan "
+        "§14.4 - contrast the top bucket against the mean of the three "
+        "PRIOR buckets, not the noisy one-bin Q_K - Q_(K-1)). Direction "
+        "higher_is_better (big positive jump into the top bucket). NaN when "
+        "the top 4 quantile returns are not all finite."
+    ),
+    status=MetricStatus.EXPERIMENTAL,
+    tier=MetricTier.EXTENDED,
+    compute_fn=compute_top_quantile_cliff_robust,
+    requires=["QuantileReturnArtifact"],
+    min_periods=20,
+    domain=Domain.QUANTILE_SHAPE,
+    metric_id="top_quantile_cliff_robust",
+    required_inputs={"quantile_returns"},
+    output_type="scalar",
+    implementation_id="quant_evaluator.metrics.shape_evidence.compute_top_quantile_cliff_robust",
+    metric_version="1.0.0",
+    units="return",
+    direction="higher_is_better",
+    missing_policy="nan",
+    numeric_policy="finite",
+))
+_REGISTRY.register(MetricSpec(
+    name="bottom_quantile_cliff_robust",
+    display_name="Bottom Quantile Cliff (Robust)",
+    description=(
+        "ROBUST bottom cliff per factor: Q_1 - mean(Q_2..Q_4) (plan §14.4 "
+        "mirror). Direction higher_is_better (big positive step out of the "
+        "bottom bucket). NaN when the bottom 4 quantile returns are not all "
+        "finite."
+    ),
+    status=MetricStatus.EXPERIMENTAL,
+    tier=MetricTier.EXTENDED,
+    compute_fn=compute_bottom_quantile_cliff_robust,
+    requires=["QuantileReturnArtifact"],
+    min_periods=20,
+    domain=Domain.QUANTILE_SHAPE,
+    metric_id="bottom_quantile_cliff_robust",
+    required_inputs={"quantile_returns"},
+    output_type="scalar",
+    implementation_id="quant_evaluator.metrics.shape_evidence.compute_bottom_quantile_cliff_robust",
+    metric_version="1.0.0",
+    units="return",
+    direction="higher_is_better",
+    missing_policy="nan",
+    numeric_policy="finite",
+))
+
+# ---------------------------------------------------------------------------
+# R61-FI-022 (plan §13.6): train-vs-validation generalization evidence.
+#
+# Registered ids (8) expose typed comparison fields of the frozen
+# TrainVsValidationArtifact (metrics/generalization_evidence.py).  These are
+# per-factor SCALAR reporting metrics for the registry/facade; the full typed
+# artifact (retention + reasons + confidence interval + sign consistency +
+# versioned policy) is the authoritative container consumed by callers that
+# need the whole comparison.  NO metric here exposes or references a
+# sealed/Test split - the sealed boundary is contracts/sealed_split.py.
+# ---------------------------------------------------------------------------
+_REGISTRY.register(MetricSpec(
+    name="train_predictive_dimension",
+    display_name="Train Predictive Dimension",
+    description=(
+        "Train-side predictive dimension of the authorized train-vs-validation "
+        "comparison (plan §13.6), per factor (e.g. mean daily rank IC on the "
+        "train evaluation)."
+    ),
+    status=MetricStatus.EXPERIMENTAL,
+    tier=MetricTier.EXTENDED,
+    compute_fn=lambda v: np.asarray(v, dtype=np.float64).reshape(-1),
+    requires=["factor_batch"],
+    min_periods=20,
+    domain=Domain.QUANTILE_SHAPE,
+    metric_id="train_predictive_dimension",
+    required_inputs={"factor_batch"},
+    output_type="scalar",
+    implementation_id="quant_evaluator.metrics.generalization_evidence.train_predictive_dimension",
+    metric_version="1.0.0",
+    units="correlation",
+    direction="neutral",
+    missing_policy="nan",
+    numeric_policy="finite",
+))
+_REGISTRY.register(MetricSpec(
+    name="validation_predictive_dimension",
+    display_name="Validation Predictive Dimension",
+    description=(
+        "Validation-side predictive dimension of the authorized "
+        "train-vs-validation comparison (plan §13.6), per factor."
+    ),
+    status=MetricStatus.EXPERIMENTAL,
+    tier=MetricTier.EXTENDED,
+    compute_fn=lambda v: np.asarray(v, dtype=np.float64).reshape(-1),
+    requires=["factor_batch"],
+    min_periods=20,
+    domain=Domain.QUANTILE_SHAPE,
+    metric_id="validation_predictive_dimension",
+    required_inputs={"factor_batch"},
+    output_type="scalar",
+    implementation_id="quant_evaluator.metrics.generalization_evidence.validation_predictive_dimension",
+    metric_version="1.0.0",
+    units="correlation",
+    direction="neutral",
+    missing_policy="nan",
+    numeric_policy="finite",
+))
+_REGISTRY.register(MetricSpec(
+    name="validation_retention",
+    display_name="Validation Retention",
+    description=(
+        "Robust validation/train retention per factor (plan §13.6): "
+        "validation/train where the train denominator is stable, NaN with an "
+        "explicit reason (train_near_zero / sign_flip_guard / "
+        "insufficient_data) otherwise - never a blind division by a tiny "
+        "train value. Grade anchors are versioned policy constants in "
+        "RetentionPolicy."
+    ),
+    status=MetricStatus.EXPERIMENTAL,
+    tier=MetricTier.EXTENDED,
+    compute_fn=lambda v: np.asarray(v, dtype=np.float64).reshape(-1),
+    requires=["factor_batch"],
+    min_periods=20,
+    domain=Domain.QUANTILE_SHAPE,
+    metric_id="validation_retention",
+    required_inputs={"factor_batch"},
+    output_type="scalar",
+    implementation_id="quant_evaluator.metrics.generalization_evidence.compute_validation_retention_array",
+    metric_version="1.0.0",
+    units="fraction",
+    direction="higher_is_better",
+    missing_policy="nan",
+    numeric_policy="finite",
+))
+_REGISTRY.register(MetricSpec(
+    name="train_validation_rankic_delta",
+    display_name="Train-Validation RankIC Delta",
+    description=(
+        "Absolute rank-IC delta (validation - train) per factor (plan "
+        "§13.6). A DELTA, never a ratio: well-defined even when train is "
+        "near zero. NaN when either side is not finite."
+    ),
+    status=MetricStatus.EXPERIMENTAL,
+    tier=MetricTier.EXTENDED,
+    compute_fn=lambda v: np.asarray(v, dtype=np.float64).reshape(-1),
+    requires=["factor_batch"],
+    min_periods=20,
+    domain=Domain.QUANTILE_SHAPE,
+    metric_id="train_validation_rankic_delta",
+    required_inputs={"factor_batch"},
+    output_type="scalar",
+    implementation_id="quant_evaluator.metrics.generalization_evidence.compute_generalization_deltas",
+    metric_version="1.0.0",
+    units="correlation",
+    direction="neutral",
+    missing_policy="nan",
+    numeric_policy="finite",
+))
+_REGISTRY.register(MetricSpec(
+    name="train_validation_icir_delta",
+    display_name="Train-Validation ICIR Delta",
+    description=(
+        "Absolute ICIR delta (validation - train) per factor (plan §13.6). "
+        "Delta, never a ratio."
+    ),
+    status=MetricStatus.EXPERIMENTAL,
+    tier=MetricTier.EXTENDED,
+    compute_fn=lambda v: np.asarray(v, dtype=np.float64).reshape(-1),
+    requires=["factor_batch"],
+    min_periods=20,
+    domain=Domain.QUANTILE_SHAPE,
+    metric_id="train_validation_icir_delta",
+    required_inputs={"factor_batch"},
+    output_type="scalar",
+    implementation_id="quant_evaluator.metrics.generalization_evidence.compute_generalization_deltas",
+    metric_version="1.0.0",
+    units="ratio",
+    direction="neutral",
+    missing_policy="nan",
+    numeric_policy="finite",
+))
+_REGISTRY.register(MetricSpec(
+    name="train_validation_sharpe_delta",
+    display_name="Train-Validation Sharpe Delta",
+    description=(
+        "Absolute long/short Sharpe delta (validation - train) per factor "
+        "(plan §13.6). Delta, never a ratio."
+    ),
+    status=MetricStatus.EXPERIMENTAL,
+    tier=MetricTier.EXTENDED,
+    compute_fn=lambda v: np.asarray(v, dtype=np.float64).reshape(-1),
+    requires=["factor_batch"],
+    min_periods=20,
+    domain=Domain.QUANTILE_SHAPE,
+    metric_id="train_validation_sharpe_delta",
+    required_inputs={"factor_batch"},
+    output_type="scalar",
+    implementation_id="quant_evaluator.metrics.generalization_evidence.compute_generalization_deltas",
+    metric_version="1.0.0",
+    units="ratio",
+    direction="neutral",
+    missing_policy="nan",
+    numeric_policy="finite",
+))
+_REGISTRY.register(MetricSpec(
+    name="train_validation_shape_delta",
+    display_name="Train-Validation Shape Delta",
+    description=(
+        "Absolute shape-evidence delta (validation - train) per factor "
+        "(plan §13.6). Delta, never a ratio."
+    ),
+    status=MetricStatus.EXPERIMENTAL,
+    tier=MetricTier.EXTENDED,
+    compute_fn=lambda v: np.asarray(v, dtype=np.float64).reshape(-1),
+    requires=["factor_batch"],
+    min_periods=20,
+    domain=Domain.QUANTILE_SHAPE,
+    metric_id="train_validation_shape_delta",
+    required_inputs={"factor_batch"},
+    output_type="scalar",
+    implementation_id="quant_evaluator.metrics.generalization_evidence.compute_generalization_deltas",
+    metric_version="1.0.0",
+    units="score",
+    direction="neutral",
+    missing_policy="nan",
+    numeric_policy="finite",
+))
+_REGISTRY.register(MetricSpec(
+    name="parameter_generalization",
+    display_name="Parameter Generalization",
+    description=(
+        "Parameter-generalization summary per factor (plan §13.6): the "
+        "robust retention mean where the train denominator is stable, NaN "
+        "when no factor has a stable denominator (missing evidence - never "
+        "0). Versioned anchors in RetentionPolicy."
+    ),
+    status=MetricStatus.EXPERIMENTAL,
+    tier=MetricTier.EXTENDED,
+    compute_fn=lambda v: np.asarray(v, dtype=np.float64).reshape(-1),
+    requires=["factor_batch"],
+    min_periods=20,
+    domain=Domain.QUANTILE_SHAPE,
+    metric_id="parameter_generalization",
+    required_inputs={"factor_batch"},
+    output_type="scalar",
+    implementation_id="quant_evaluator.metrics.generalization_evidence.compute_validation_retention",
+    metric_version="1.0.0",
+    units="fraction",
+    direction="higher_is_better",
     missing_policy="nan",
     numeric_policy="finite",
 ))

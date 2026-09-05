@@ -4,7 +4,8 @@ from pathlib import Path
 import sys
 
 # Add project root to path
-project_root = Path(__file__).parent.parent
+project_root = Path(__file__).parent.parent  # factor_engine/
+repo_root = project_root.parent  # quant_projects/ (evidence/ lives at repo root)
 sys.path.insert(0, str(project_root))
 
 
@@ -174,7 +175,7 @@ def test_evidence_generation():
 def test_yaml_export():
     """Test YAML export."""
     import yaml
-    yaml_path = project_root / "evidence" / "r2" / "R21-ASHARE-MINING-MATRIX.yaml"
+    yaml_path = repo_root / "evidence" / "r2" / "R21-ASHARE-MINING-MATRIX.yaml"
 
     assert yaml_path.exists()
 

@@ -1290,7 +1290,14 @@ class FactorEngine:
         # research-policy analyzer.
         from factor_engine.runtime.production_policy import is_production_mode
 
-        self.analyzer = Analyzer(production=is_production_mode(self.run_mode))
+        # R40 #174: a production Analyzer REQUIRES an explicit market at
+        # construction (it raises with market=None).  The engine's market is
+        # per-factor and only known at compile time, so the init-time analyzer
+        # stays research-policy; the production compile path (below) constructs
+        # its own Analyzer(production=True, market=<factor market>).  Never
+        # build Analyzer(production=True, market=None) here — that would abort
+        # engine construction before any factor is seen.
+        self.analyzer = Analyzer(production=False)
         self.lowerer = Lowerer()  # IR → 逻辑计划树
         self.optimizer = Optimizer()  # 计划级优化（常折叠等）
 

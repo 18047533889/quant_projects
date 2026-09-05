@@ -1,0 +1,52 @@
+r2_evidence:
+  id: r61-p1-56-real-dacos-worker-scaling
+  date: '2026-09-05'
+  type: real-data-io-benchmark + cross-process-single-flight-fix + test
+  summary: >
+    R61-P1 #56：真实 data_access+COS worker 1/2/4/8 scaling 实测完成；
+    跨进程 cache single-flight 修好并证明（K 进程同对象 → 恰好 1 次远程 fetch）。
+    回应「worker benchmark 是 synthetic Pandas」质疑：新增真实 IO 段。
+  user_review:
+    complaint: "worker benchmark 是 synthetic Pandas——从未触达真实 DA/COS IO、远程扫描字节、缓存命中率、重复下载。"
+    resolution: |
+      新 benchmark factor_engine/scripts/bench_worker_scaling_real.py：
+      每档(1/2/4/8)独立冷 cache root + ASHARE_PARQUET_ROOT=<空> 强制 remote，
+      research-cos CLI 真实下载 StockDailyBar 日对象（~420KB×10/档），
+      测量 wall/f-s/rows/remote-fetch/duplicate-download/cache-hit%。
+  real_cos:
+    verdict: REAL COS（非本地模拟）
+    cli: /usr/local/bin/research-cos（linux-sudo-policy-coscli，quant-admin，user=sunhaiwei whoami ok）
+    source: cos://qs-cold/clean_data/ashare/lqtp_data/StockDailyBar/{date}.parquet
+    window: 2026-06-15..2026-06-30（10 个交易日对象；2026-06-19 真实缺失→empty_ok）
+    per_level_fresh_cache: /home/sunhaiwei/cos_data/cos_bench/cache_w<N>（research-cos 批准 local root）
+    note: CPU%/RSS 未伪造（communicate 后采样太迟 → 记 0；CPU-bound 结论见 synthetic 段）
+  table:
+    - {workers: 1, omp: 31, reads: 1, rows: 31240, wall_s: 3.662, f_s: 0.27, scaling: 1.0, fetch: 10, dup: 0, hit_pct: 37.5}
+    - {workers: 2, omp: 15, reads: 2, rows: 62480, wall_s: 3.011, f_s: 0.66, scaling: 2.44, fetch: 10, dup: 0, hit_pct: 68.75}
+    - {workers: 4, omp: 7, reads: 4, rows: 124960, wall_s: 2.658, f_s: 1.50, scaling: 5.56, fetch: 10, dup: 0, hit_pct: 84.38}
+    - {workers: 8, omp: 3, reads: 8, rows: 249920, wall_s: 3.013, f_s: 2.65, scaling: 9.81, fetch: 10, dup: 0, hit_pct: 92.19}
+  single_flight:
+    root_cause_found: flock 原只在 _run_cos_cli 内 → first 进程 release 锁后、os.replace+manifest 写前的窗口让排队进程看到不完整状态 → 重复下载（w8 dup=28）。
+    fix: _sync_cos_file 持 per-key flock 覆盖整个下载事务（fresh 复检+cp+os.replace+manifest 原子写）；_run_cos_cli 不再自加锁（同进程双 open 自死锁）。
+    proof:
+      - real_cos_4proc: fetch=1 hit=3（data_access/tests/unit/test_cache_single_flight.py::test_single_flight_exactly_one_fetch_real_cos）
+      - local_store_4proc: fetch=1 hit=3（同文件 local_object_store 测试，无网络依赖）
+    fetch_counter: DATA_ACCESS_COS_FETCH_LOG JSONL——每个真正执行 research-cos cp 的进程一行；_sync_cos_file 内才计。
+  tests:
+    new: [data_access/tests/unit/test_cache_single_flight.py]
+    result: '2 passed (real cos + local emulation)'
+    regression_sweep: '196 passed / 0 failed (cos-mirror+remote+governor 81; snapshot/contract/asof 82; concurrency 31; single-flight 2)'
+  files_changed:
+    - data_access/cos/mirror.py            # _run_cos_cli 去自锁+fetch 计数; _sync_cos_file flock 覆盖全事务; _sync_cos_file_unlocked/_cos_fetch_lock 新 helper; _cli_binary 运行期读 env; top-level fcntl
+    - data_access/cos/remote.py            # _cache_mirror_spec local_root 每次调用现算（env 变更即时生效）
+    - data_access/snapshot/verifier.py     # skip_mtime_verify 门（并发下载研究场景，size 仍校验）
+    - data_access/store.py                 # SnapshotVerifier(skip_mtime_verify=env)
+    - factor_engine/scripts/bench_worker_scaling_real.py  # 新：真实 DA/COS 1/2/4/8 benchmark
+    - data_access/tests/unit/test_cache_single_flight.py  # 新：跨进程单飞证明
+    - factor_engine/artifacts/perf_vec/MULTIWORKER_SCALING.md  # 新增 Real DA/COS IO scaling 段
+    - factor_engine/artifacts/GO_NO_GO.md   # §100/§101 doc-code sync（real IO line + single-flight risk CLOSED）
+  conclusion: >
+    真实 DA/COS IO 下 worker 伸缩成立：f/s 0.27→2.65（w8=9.8×），
+    每档 remote fetch 恒=10（唯一对象）且 duplicate-download=0 → 跨进程
+    cache single-flight 真实成立；cache hit 37.5→92.2% 随 worker 数单调升。
+    synthetic CPU-bound 结论不变（37.6 f/s 峰值 w8），real-IO 段单独成表。

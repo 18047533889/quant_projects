@@ -21,6 +21,7 @@ from factor_engine.planner.backend_region import (
     StateContract,
     PhysicalRegionPlan,
     TransferEdge,
+    TransferTransform,
 )
 from factor_engine.planner.logical_plan import PlanNode
 
@@ -39,6 +40,7 @@ class TestSingleRegionPlanning:
             required_properties=PhysicalProperties(),
             state_contract=StateContract(),
             estimated_rows=100_000,
+            estimated_compute_ms=50.0,
             estimated_memory_bytes=8_000_000,
         )
 
@@ -74,6 +76,7 @@ class TestSingleRegionPlanning:
             required_properties=PhysicalProperties(),
             state_contract=StateContract(),
             estimated_rows=50_000,
+            estimated_compute_ms=50.0,
             estimated_memory_bytes=4_000_000,
         )
 
@@ -105,6 +108,7 @@ class TestSingleRegionPlanning:
             required_properties=PhysicalProperties(),
             state_contract=StateContract(),
             estimated_rows=100_000,
+            estimated_compute_ms=50.0,
             estimated_memory_bytes=6_000_000,
         )
 
@@ -141,6 +145,7 @@ class TestMultiRegionPlanning:
             required_properties=PhysicalProperties(),
             state_contract=StateContract(),
             estimated_rows=100_000,
+            estimated_compute_ms=50.0,
             estimated_memory_bytes=8_000_000,
         )
 
@@ -153,6 +158,7 @@ class TestMultiRegionPlanning:
             required_properties=PhysicalProperties(),
             state_contract=StateContract(),
             estimated_rows=100_000,
+            estimated_compute_ms=50.0,
             estimated_memory_bytes=6_000_000,
         )
 
@@ -165,8 +171,9 @@ class TestMultiRegionPlanning:
             source_representation=Representation.POLARS_LONG,
             target_representation=Representation.DUCKDB_RELATION,
             estimated_rows=100_000,
-            estimated_memory_bytes=800_000,
+            estimated_bytes=800_000,
             estimated_transfer_ms=15.0,
+            transform=TransferTransform.POLARS_TO_NUMPY,
             requires_sort=False,
             preserves_pit=True,
         )
@@ -202,6 +209,7 @@ class TestMultiRegionPlanning:
             required_properties=PhysicalProperties(),
             state_contract=StateContract(),
             estimated_rows=100_000,
+            estimated_compute_ms=50.0,
             estimated_memory_bytes=4_000_000,
         )
 
@@ -214,6 +222,7 @@ class TestMultiRegionPlanning:
             required_properties=PhysicalProperties(),
             state_contract=StateContract(),
             estimated_rows=100_000,
+            estimated_compute_ms=50.0,
             estimated_memory_bytes=6_000_000,
         )
 
@@ -226,6 +235,7 @@ class TestMultiRegionPlanning:
             required_properties=PhysicalProperties(),
             state_contract=StateContract(),
             estimated_rows=100_000,
+            estimated_compute_ms=50.0,
             estimated_memory_bytes=5_000_000,
         )
 
@@ -238,8 +248,9 @@ class TestMultiRegionPlanning:
             source_representation=Representation.PANDAS_LONG,
             target_representation=Representation.POLARS_LONG,
             estimated_rows=100_000,
-            estimated_memory_bytes=800_000,
+            estimated_bytes=800_000,
             estimated_transfer_ms=10.0,
+            transform=TransferTransform.POLARS_TO_NUMPY,
         )
 
         edge2 = TransferEdge(
@@ -251,8 +262,9 @@ class TestMultiRegionPlanning:
             source_representation=Representation.POLARS_LONG,
             target_representation=Representation.DUCKDB_RELATION,
             estimated_rows=100_000,
-            estimated_memory_bytes=800_000,
+            estimated_bytes=800_000,
             estimated_transfer_ms=12.0,
+            transform=TransferTransform.POLARS_TO_NUMPY,
         )
 
         plan = PhysicalRegionPlan(
@@ -287,6 +299,7 @@ class TestMultiRegionPlanning:
             required_properties=PhysicalProperties(),
             state_contract=StateContract(),
             estimated_rows=100_000,
+            estimated_compute_ms=50.0,
             estimated_memory_bytes=6_000_000,
         )
 
@@ -299,6 +312,7 @@ class TestMultiRegionPlanning:
             required_properties=PhysicalProperties(),
             state_contract=StateContract(),
             estimated_rows=100_000,
+            estimated_compute_ms=50.0,
             estimated_memory_bytes=6_000_000,
         )
 
@@ -311,6 +325,7 @@ class TestMultiRegionPlanning:
             required_properties=PhysicalProperties(),
             state_contract=StateContract(),
             estimated_rows=100_000,
+            estimated_compute_ms=50.0,
             estimated_memory_bytes=5_000_000,
         )
 
@@ -323,8 +338,9 @@ class TestMultiRegionPlanning:
             source_representation=Representation.POLARS_LONG,
             target_representation=Representation.DUCKDB_RELATION,
             estimated_rows=100_000,
-            estimated_memory_bytes=800_000,
+            estimated_bytes=800_000,
             estimated_transfer_ms=12.0,
+            transform=TransferTransform.POLARS_TO_NUMPY,
         )
 
         edge2 = TransferEdge(
@@ -336,8 +352,9 @@ class TestMultiRegionPlanning:
             source_representation=Representation.POLARS_LONG,
             target_representation=Representation.DUCKDB_RELATION,
             estimated_rows=100_000,
-            estimated_memory_bytes=800_000,
+            estimated_bytes=800_000,
             estimated_transfer_ms=12.0,
+            transform=TransferTransform.POLARS_TO_NUMPY,
         )
 
         plan = PhysicalRegionPlan(
@@ -374,8 +391,9 @@ class TestRegionBoundaryValidation:
             source_representation=Representation.POLARS_LONG,
             target_representation=Representation.DUCKDB_RELATION,
             estimated_rows=100_000,
-            estimated_memory_bytes=800_000,
+            estimated_bytes=800_000,
             estimated_transfer_ms=10.0,
+            transform=TransferTransform.POLARS_TO_NUMPY,
             preserves_pit=True,
         )
 
@@ -393,6 +411,7 @@ class TestRegionBoundaryValidation:
                 required_properties=PhysicalProperties(partitioned_by=("instrument",)),
                 state_contract=StateContract(),
                 estimated_rows=100_000,
+                estimated_compute_ms=50.0,
                 estimated_memory_bytes=6_000_000,
             )
 
@@ -407,11 +426,11 @@ class TestRegionBoundaryValidation:
                 execution_axis=ExecutionAxis.RECURSIVE_TIME_PER_INSTRUMENT,
                 required_properties=PhysicalProperties(),
                 state_contract=StateContract(
-                    has_state=True,
-                    checkpoint_capable=False,
+                    requires_checkpoint=False,
                     sequential_only=False,  # Should fail
                 ),
                 estimated_rows=100_000,
+                estimated_compute_ms=50.0,
                 estimated_memory_bytes=6_000_000,
             )
 
@@ -426,6 +445,7 @@ class TestRegionBoundaryValidation:
             required_properties=PhysicalProperties(),
             state_contract=StateContract(),
             estimated_rows=100_000,
+            estimated_compute_ms=50.0,
             estimated_memory_bytes=6_000_000,
         )
 
@@ -438,6 +458,7 @@ class TestRegionBoundaryValidation:
             required_properties=PhysicalProperties(),
             state_contract=StateContract(),
             estimated_rows=100_000,
+            estimated_compute_ms=50.0,
             estimated_memory_bytes=5_000_000,
         )
 
@@ -482,7 +503,7 @@ class TestTopologicalOrdering:
             total_ttdc_ms=120.0,
             peak_memory_bytes=15_000_000,
             logical_node_count=6,
-            backend_switch_count=2,
+            backend_switch_count=0,
             native_fraction=0.85,
         )
 

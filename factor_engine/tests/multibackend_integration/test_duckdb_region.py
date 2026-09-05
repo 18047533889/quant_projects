@@ -496,11 +496,14 @@ class TestDuckDBRelationConversion:
         conn = duckdb.connect(":memory:")
         rel = conn.from_df(sample_panel_data)
 
-        # Convert to Arrow
-        arrow_table = rel.arrow()
-
-        assert isinstance(arrow_table, pa.Table)
-        assert arrow_table.num_rows == len(sample_panel_data)
+        # Convert to Arrow — newer duckdb versions return a pyarrow
+        # RecordBatchReader instead of a Table; normalize so the row-count
+        # contract is checked on an actual Table either way.
+        arrow_result = rel.arrow()
+        if isinstance(arrow_result, pa.RecordBatchReader):
+            arrow_result = arrow_result.read_all()
+        assert isinstance(arrow_result, pa.Table)
+        assert arrow_result.num_rows == len(sample_panel_data)
 
         conn.close()
 

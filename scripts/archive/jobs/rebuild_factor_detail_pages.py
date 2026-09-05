@@ -61,6 +61,8 @@ try:
         compute_win_rate,
         compute_long_short_returns,
         compute_wealth_curve,
+        compute_aligned_wealth_curve,
+        apply_long_short_costs,
     )
     from quant_evaluator.metrics.ic import ic_significance
     from quant_evaluator.metrics.probe_portfolio.sharpe import (
@@ -597,7 +599,7 @@ def _compute_all_factors_metrics() -> dict:
             if _is_flipped_by_meta(fn) or lqtp_flip:
                 mat_dict[fn] = -mat_dict[fn]
 
-        fwd = vwap.pct_change().shift(_HORIZON_SHIFT)  # 后复权 vwap-to-vwap（t+1成交→t+2卖出，企业级）
+        fwd = vwap.pct_change(fill_method=None).shift(_HORIZON_SHIFT)  # 后复权 vwap-to-vwap（t+1成交→t+2卖出，企业级）
         fwd_a = fwd.values.astype(np.float64)
 
         T, N = vwap.shape
@@ -654,8 +656,8 @@ def _compute_all_factors_metrics() -> dict:
 
             # 预计算每列次日是否同组（用于组换手率）
             prev_gids = np.full(N, -1)
-            group_ret = np.zeros((T, 10))          # 已扣费后的各组收益
-            top_turnover = np.zeros(T)             # Top10% 组每日换手率
+            gross_group_ret = np.full((T, 10), np.nan)
+            group_turnover = np.full((T, 10), np.nan)
 
             for t in range(T):
                 for k in range(10):
@@ -668,36 +670,41 @@ def _compute_all_factors_metrics() -> dict:
                         to_rate = 1.0 - float(same.mean())
                     else:
                         to_rate = 0.0
-                    gr_ret = float(np.nanmean(fr[t, mk]))
-                    if k == 9:
-                        top_turnover[t] = to_rate
-                    group_ret[t, k] = gr_ret - to_rate * _TOTAL_COST
+                    gross_group_ret[t, k] = float(np.nanmean(fr[t, mk]))
+                    group_turnover[t, k] = to_rate
                 prev_gids = group_ids[t].copy()
 
-            # 第 0 天无前日，换手按 0 计（成本不扣）
-            top_turnover[0] = 0.0
-            mean_top_turnover = float(np.nanmean(top_turnover[1:])) if T > 1 else 0.0
+            group_ret = gross_group_ret - group_turnover * _TOTAL_COST
+            mean_top_turnover = float(np.nanmean(group_turnover[1:, 9])) if T > 1 else 0.0
 
             # NAV
-            decile_navs = {f"G{k+1}": compute_wealth_curve(group_ret[:, k]) for k in range(10)}
-            r_ls = group_ret[:, 9] - group_ret[:, 0]  # 多空收益（G10 已扣费，G1 已扣费）
-            decile_navs["LS"] = compute_wealth_curve(r_ls)
+            decile_navs = {
+                f"G{k+1}": compute_aligned_wealth_curve(group_ret[:, k]) for k in range(10)
+            }
+            r_ls = apply_long_short_costs(
+                gross_group_ret[:, 9],
+                gross_group_ret[:, 0],
+                long_turnover=group_turnover[:, 9],
+                short_turnover=group_turnover[:, 0],
+                cost_rate=_TOTAL_COST,
+            )
+            decile_navs["LS"] = compute_aligned_wealth_curve(r_ls)
 
             # 业绩指标
             ls_nav = decile_navs["LS"]
-            ls_rets = np.diff(ls_nav) / ls_nav[:-1]
-            ls_rets_safe = np.concatenate([[0.0], ls_rets])
+            ls_rets_safe = r_ls[np.isfinite(r_ls)]
 
             portfolio = compute_portfolio_metrics(ls_rets_safe, periods_per_year=252, min_periods=20)
             ls_sharpe = float(portfolio["sharpe"])
             ls_mdd = float(portfolio["max_drawdown"])
             ls_winrate = float(portfolio["win_rate"])
             ls_annual = float(portfolio["annualized_return"])
-            ls_cumulative = float(ls_nav[-1] - 1.0) if len(ls_nav) else np.nan
+            finite_nav = ls_nav[np.isfinite(ls_nav)]
+            ls_cumulative = float(finite_nav[-1] - 1.0) if len(finite_nav) else np.nan
             g10_ann = compute_annualized_return(group_ret[:, 9])
             g1_ann = compute_annualized_return(group_ret[:, 0])
-            g10_rets = np.diff(decile_navs["G10"]) / decile_navs["G10"][:-1]
-            g1_rets = np.diff(decile_navs["G1"]) / decile_navs["G1"][:-1]
+            g10_rets = group_ret[:, 9]
+            g1_rets = group_ret[:, 0]
             g10_sharpe = float(compute_sharpe_ratio(g10_rets, periods_per_year=252))
             g1_sharpe = float(compute_sharpe_ratio(g1_rets, periods_per_year=252))
 

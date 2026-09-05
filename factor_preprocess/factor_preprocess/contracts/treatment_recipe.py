@@ -163,6 +163,15 @@ class TreatmentRecipe:
         object.__setattr__(
             self, "ordered_steps", tuple(self.ordered_steps)
         )
+
+        # R61-FI-043 duplicate-guard (plan §26 F4): a recipe whose ordered step
+        # lineage is redundant (rank(rank(x)), EWMA twice, repeated
+        # neutralization, ...) and cannot be losslessly canonicalized FAILS
+        # CLOSED at construction. The caller must canonicalize the lineage
+        # first (e.g. via ``canonicalize_lineage``); a silently redundant
+        # recipe must never exist as a content-addressed artifact.
+        self._validate_lineage_guard()
+
         object.__setattr__(
             self, "existing_treatment_signature",
             deep_freeze(self.existing_treatment_signature),
@@ -320,6 +329,52 @@ class TreatmentRecipe:
     def step_semantic_ids(self) -> tuple:
         """Ordered semantic transform ids of the recipe steps."""
         return tuple(step.semantic_transform_id for step in self.ordered_steps)
+
+    def _validate_lineage_guard(self) -> None:
+        """R61-FI-043 fail-closed duplicate-guard over the ordered steps.
+
+        Redundant / non-canonicalizable chains (e.g. two sequential
+        neutralizations, EWMA twice, ``rank(rank(x))`` as separate steps)
+        must never materialize as a content-addressed recipe. Losslessly
+        collapsible pairs (``rank(rank(x))``, industry+size superset) are
+        also rejected here — the caller must canonicalize BEFORE constructing
+        the recipe, so the recipe artifact always holds the canonical form.
+        """
+        from factor_preprocess.contracts.lineage_policy import (
+            canonicalize_lineage,
+            RedundancyClass,
+        )
+        from factor_preprocess.contracts.treatment_lineage import (
+            TransformLineage,
+            TransformStep as LStep,
+            TransformSemanticID,
+        )
+        steps = []
+        for step in self.ordered_steps:
+            steps.append(
+                LStep(
+                    semantic_id=TransformSemanticID(step.semantic_transform_id),
+                    stage=step.stage,
+                    name=step.implementation_ref,
+                    parameters=dict(step.parameters),
+                )
+            )
+        decision = canonicalize_lineage(TransformLineage(tuple(steps)))
+        if decision.redundancy_class is RedundancyClass.REJECTED:
+            raise InvalidContractError(
+                f"TreatmentRecipe {self.recipe_id!r} violates the lineage "
+                f"duplicate-guard: redundant steps are not losslessly "
+                f"collapsible; canonicalize the lineage before constructing "
+                f"the recipe"
+            )
+        if decision.was_collapsed:
+            # A foldable chain (rank(rank(x)), industry->dual, ...) must be
+            # canonicalized by the caller, not stored in pre-folded form.
+            reasons = "; ".join(r[2] for r in decision.rejections)
+            raise InvalidContractError(
+                f"TreatmentRecipe {self.recipe_id!r} carries a redundant "
+                f"chain that must be canonicalized first: {reasons}"
+            )
 
 
 __all__ = ["TreatmentRecipe", "RecipeStep", "FitBoundary", "RecipeSchemaVersion"]
