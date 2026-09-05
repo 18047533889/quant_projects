@@ -1,61 +1,61 @@
 {
-  "commit_sha": "593507c1e25288e78ba95a5d7acc6bfef57daf1f",
+  "commit_sha": "58393a2dcd18d94d587548efeea893b486f035f4",
   "gates": {
     "MODEL_ZERO_DEAD_EXPLICIT_CONTRACT_KEYS": {
       "value": true,
       "status": "PASS",
       "check": "lane_dead=[] timing_dead=[]",
       "detail": "lane_dead=[] timing_dead=[]",
-      "evidence_sha": "593507c1e25288e78ba95a5d7acc6bfef57daf1f"
+      "evidence_sha": "58393a2dcd18d94d587548efeea893b486f035f4"
     },
     "MODEL_ZERO_UNCLASSIFIED_TRUE_MODELS": {
       "value": true,
       "status": "PASS",
       "check": "unclassified=[]",
       "detail": "unclassified=[]",
-      "evidence_sha": "593507c1e25288e78ba95a5d7acc6bfef57daf1f"
+      "evidence_sha": "58393a2dcd18d94d587548efeea893b486f035f4"
     },
     "MODEL_ALL_DIRECT_USE_HAVE_EXPLICIT_TIMING_KIND": {
       "value": true,
       "status": "PASS",
       "check": "no_kind=[]",
       "detail": "no_kind=[]",
-      "evidence_sha": "593507c1e25288e78ba95a5d7acc6bfef57daf1f"
+      "evidence_sha": "58393a2dcd18d94d587548efeea893b486f035f4"
     },
     "MODEL_ALL_DIRECT_USE_HAVE_EXPLICIT_TIMING": {
-      "value": false,
-      "status": "FAIL",
-      "check": "missing=['reg_forecast_error_pct']",
-      "detail": "missing=['reg_forecast_error_pct']",
-      "evidence_sha": "593507c1e25288e78ba95a5d7acc6bfef57daf1f"
+      "value": true,
+      "status": "PASS",
+      "check": "missing=[]",
+      "detail": "missing=[]",
+      "evidence_sha": "58393a2dcd18d94d587548efeea893b486f035f4"
     },
     "MODEL_ZERO_INSAMPLE_DIAGNOSTIC_IN_PREDICTIVE_LANE": {
       "value": true,
       "status": "PASS",
       "check": "diag_in_alpha=[]",
       "detail": "diag_in_alpha=[]",
-      "evidence_sha": "593507c1e25288e78ba95a5d7acc6bfef57daf1f"
+      "evidence_sha": "58393a2dcd18d94d587548efeea893b486f035f4"
     },
     "MODEL_ZERO_GENERATED_TIMING_USED_FOR_PRODUCTION": {
-      "value": false,
-      "status": "FAIL",
-      "check": "direct_use_with_generated_timing=['reg_forecast_error_pct']",
-      "detail": "direct_use_with_generated_timing=['reg_forecast_error_pct']",
-      "evidence_sha": "593507c1e25288e78ba95a5d7acc6bfef57daf1f"
+      "value": true,
+      "status": "PASS",
+      "check": "direct_use_with_generated_timing=[]",
+      "detail": "direct_use_with_generated_timing=[]",
+      "evidence_sha": "58393a2dcd18d94d587548efeea893b486f035f4"
     },
     "MODEL_ZERO_SILENT_PARAMETER_CLAMP": {
-      "value": false,
-      "status": "FAIL",
-      "check": "params_without_strict_dtype_spec=['ts_regime_duration:transition_prob,window', 'ts_regression_forecast_error:add_intercept,min_periods', 'ts_regression_forecast_error_z:add_intercept,min_periods', 'ts_two_state_regime_probability:transition_prob,window'] (count=4; kernel casts on these are silent)",
-      "detail": "params_without_strict_dtype_spec=['ts_regime_duration:transition_prob,window', 'ts_regression_forecast_error:add_intercept,min_periods', 'ts_regression_forecast_error_z:add_intercept,min_periods', 'ts_two_state_regime_probability:transition_prob,window'] (count=4; kernel casts on these are silent)",
-      "evidence_sha": "593507c1e25288e78ba95a5d7acc6bfef57daf1f"
+      "value": true,
+      "status": "PASS",
+      "check": "params_without_strict_dtype_spec=[] (count=0; kernel casts on these are silent)",
+      "detail": "params_without_strict_dtype_spec=[] (count=0; kernel casts on these are silent)",
+      "evidence_sha": "58393a2dcd18d94d587548efeea893b486f035f4"
     },
     "MODEL_ZERO_DUPLICATE_MINING_CANONICAL_ALIASES": {
       "value": true,
       "status": "PASS",
       "check": "duplicate_aliases=[]",
       "detail": "duplicate_aliases=[]",
-      "evidence_sha": "593507c1e25288e78ba95a5d7acc6bfef57daf1f"
+      "evidence_sha": "58393a2dcd18d94d587548efeea893b486f035f4"
     },
     "MODEL_ALL_DIRECT_USE_HAVE_PARAMETER_DOMAIN": {
       "value": false,
@@ -66,7 +66,7 @@
       "canonical_executed": 66,
       "canonical_pass": 0,
       "detail": "parameter_domain_certified: 0/66 applicable fresh rows executed; ledger_total=335 fresh_total=335; FAIL",
-      "evidence_sha": "593507c1e25288e78ba95a5d7acc6bfef57daf1f"
+      "evidence_sha": "58393a2dcd18d94d587548efeea893b486f035f4"
     },
     "MODEL_ALL_DIRECT_USE_HAVE_ORACLE": {
       "value": false,
@@ -77,7 +77,7 @@
       "canonical_executed": 0,
       "canonical_pass": 0,
       "detail": "oracle_pass: 0/66 applicable fresh rows executed; ledger_total=335 fresh_total=335; NOT_RUN",
-      "evidence_sha": "593507c1e25288e78ba95a5d7acc6bfef57daf1f"
+      "evidence_sha": "58393a2dcd18d94d587548efeea893b486f035f4"
     },
     "MODEL_ALL_DIRECT_USE_HAVE_CAUSALITY_EVIDENCE": {
       "value": false,
@@ -88,7 +88,7 @@
       "canonical_executed": 0,
       "canonical_pass": 0,
       "detail": "causality_pass: 0/66 applicable fresh rows executed; ledger_total=335 fresh_total=335; NOT_RUN",
-      "evidence_sha": "593507c1e25288e78ba95a5d7acc6bfef57daf1f"
+      "evidence_sha": "58393a2dcd18d94d587548efeea893b486f035f4"
     },
     "MODEL_ALL_DIRECT_USE_HAVE_MISSING_POLICY_EVIDENCE": {
       "value": false,
@@ -99,7 +99,7 @@
       "canonical_executed": 0,
       "canonical_pass": 0,
       "detail": "missing_gap_pass: 0/66 applicable fresh rows executed; ledger_total=335 fresh_total=335; NOT_RUN",
-      "evidence_sha": "593507c1e25288e78ba95a5d7acc6bfef57daf1f"
+      "evidence_sha": "58393a2dcd18d94d587548efeea893b486f035f4"
     },
     "MODEL_ALL_DIRECT_USE_HAVE_UNIT_EVIDENCE": {
       "value": false,
@@ -110,7 +110,7 @@
       "canonical_executed": 0,
       "canonical_pass": 0,
       "detail": "unit_contract_pass: 0/66 applicable fresh rows executed; ledger_total=335 fresh_total=335; NOT_RUN",
-      "evidence_sha": "593507c1e25288e78ba95a5d7acc6bfef57daf1f"
+      "evidence_sha": "58393a2dcd18d94d587548efeea893b486f035f4"
     },
     "MODEL_ALL_OPTIMIZED_PATHS_REFERENCE_PARITY": {
       "value": false,
@@ -121,7 +121,7 @@
       "canonical_executed": 0,
       "canonical_pass": 0,
       "detail": "optimized_reference_parity_pass: 0/66 applicable fresh rows executed; ledger_total=335 fresh_total=335; NOT_RUN",
-      "evidence_sha": "593507c1e25288e78ba95a5d7acc6bfef57daf1f"
+      "evidence_sha": "58393a2dcd18d94d587548efeea893b486f035f4"
     },
     "MODEL_ALL_STATEFUL_TIME_SHARD_SAFE_OR_FORBIDDEN": {
       "value": false,
@@ -132,7 +132,7 @@
       "canonical_executed": 0,
       "canonical_pass": 0,
       "detail": "batch_single_parity_pass: 0/6 applicable fresh rows executed; ledger_total=335 fresh_total=335; NOT_RUN",
-      "evidence_sha": "593507c1e25288e78ba95a5d7acc6bfef57daf1f"
+      "evidence_sha": "58393a2dcd18d94d587548efeea893b486f035f4"
     },
     "MODEL_NEGATIVE_CONTROLS_ALL_FIRE": {
       "value": false,
@@ -143,7 +143,7 @@
       "canonical_executed": 0,
       "canonical_pass": 0,
       "detail": "future_poison_pass: 0/335 applicable fresh rows executed; ledger_total=335 fresh_total=335; NOT_RUN",
-      "evidence_sha": "593507c1e25288e78ba95a5d7acc6bfef57daf1f"
+      "evidence_sha": "58393a2dcd18d94d587548efeea893b486f035f4"
     },
     "MODEL_ALL_DIRECT_USE_HAVE_TYPED_INPUTS": {
       "value": false,
@@ -154,7 +154,7 @@
       "canonical_executed": 0,
       "canonical_pass": 0,
       "detail": "feature_inputs declaration present for 0/66 direct-use fresh rows; ledger_total=335 fresh_total=335; FAIL",
-      "evidence_sha": "593507c1e25288e78ba95a5d7acc6bfef57daf1f"
+      "evidence_sha": "58393a2dcd18d94d587548efeea893b486f035f4"
     },
     "MODEL_ALL_STATEFUL_HAVE_STATE_CONTRACT": {
       "value": false,
@@ -165,14 +165,14 @@
       "canonical_executed": 0,
       "canonical_pass": 0,
       "detail": "state_contract_pass: 0/6 stateful fresh rows executed; ledger_total=335 fresh_total=335; NOT_RUN",
-      "evidence_sha": "593507c1e25288e78ba95a5d7acc6bfef57daf1f"
+      "evidence_sha": "58393a2dcd18d94d587548efeea893b486f035f4"
     },
     "MODEL_CURRENT_HEAD_EVIDENCE_FRESH": {
       "value": true,
       "status": "PASS",
-      "check": "evidence_sha='593507c1e25288e78ba95a5d7acc6bfef57daf1f' repository_HEAD='593507c1e25288e78ba95a5d7acc6bfef57daf1f'",
-      "detail": "evidence_sha='593507c1e25288e78ba95a5d7acc6bfef57daf1f' repository_HEAD='593507c1e25288e78ba95a5d7acc6bfef57daf1f'",
-      "evidence_sha": "593507c1e25288e78ba95a5d7acc6bfef57daf1f"
+      "check": "evidence_sha='58393a2dcd18d94d587548efeea893b486f035f4' repository_HEAD='58393a2dcd18d94d587548efeea893b486f035f4'",
+      "detail": "evidence_sha='58393a2dcd18d94d587548efeea893b486f035f4' repository_HEAD='58393a2dcd18d94d587548efeea893b486f035f4'",
+      "evidence_sha": "58393a2dcd18d94d587548efeea893b486f035f4"
     }
   }
 }

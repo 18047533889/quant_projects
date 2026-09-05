@@ -29,9 +29,19 @@ from factor_engine.cleaned_operators.overhaul.base import (
 # accepted as function kwargs but are NOT declared contract params.
 _REG_PARAM_SPECS: dict[str, ParamSpec] = {
     "window": ParamSpec(dtype=int, min=2, param_role=ParamRole.HORIZON, searchable=True),
+    # Explicit specs for the accepted-but-non-contract kwargs so the M-240
+    # silent-clamp gate sees strict dtypes (a kernel int()/bool() cast on them
+    # is a post-validation cast, not a silent coercion):
+    #   min_periods — statistical-support floor, NOT a search dimension;
+    #   add_intercept — boolean governance switch (production_repairs /
+    #   dynamic_regression precedent: dtype=bool, POLICY, non-searchable).
+    "min_periods": ParamSpec(dtype=int, min=1, searchable=False, param_role=ParamRole.SUPPORT_POLICY),
+    "add_intercept": ParamSpec(dtype=bool, searchable=False, param_role=ParamRole.POLICY),
 }
 _REG_PARAM_SPECS_Z: dict[str, ParamSpec] = {
     "window": ParamSpec(dtype=int, min=3, param_role=ParamRole.HORIZON, searchable=True),
+    "min_periods": ParamSpec(dtype=int, min=1, searchable=False, param_role=ParamRole.SUPPORT_POLICY),
+    "add_intercept": ParamSpec(dtype=bool, searchable=False, param_role=ParamRole.POLICY),
 }
 
 

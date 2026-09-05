@@ -349,6 +349,11 @@ MODEL_TIMING_CONTRACTS: dict[str, ModelTimingContract] = {
     "ts_regression_slope": ModelTimingContract("regression", fit_cutoff_offset=0, state_filtering="none"),
     "ts_regression_forecast_error": ModelTimingContract("regression", fit_cutoff_offset=1, forecast_horizon=1, state_filtering="none"),
     "ts_regression_forecast_error_z": ModelTimingContract("regression", fit_cutoff_offset=1, forecast_horizon=1, state_filtering="none"),
+    # reg_forecast_error_pct (technical/indicators_v2): trailing OLS time-trend
+    # fit on t-window..t-1 (target bar t EXCLUDED), one-step-ahead forecast of
+    # close_t normalized by close_t -> the same prior-fit-predictive shape as
+    # ts_regression_forecast_error (explicit contract, never a generated hint).
+    "reg_forecast_error_pct": ModelTimingContract("regression", fit_cutoff_offset=1, forecast_horizon=1, state_filtering="none"),
     "ts_poly2_forecast_error": ModelTimingContract("regression", fit_cutoff_offset=1, forecast_horizon=1, state_filtering="none"),
     "ts_poly2_forecast_error_z": ModelTimingContract("regression", fit_cutoff_offset=1, forecast_horizon=1, state_filtering="none"),
     "ts_mean_reversion_half_life": ModelTimingContract("ar", fit_cutoff_offset=0, state_filtering="none"),

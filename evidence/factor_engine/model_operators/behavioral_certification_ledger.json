@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-09-04T03:55:57+0800",
-  "commit_sha": "a07ea23020f86f4a63f50f67ec5b0ae1023b5b22",
+  "generated_at": "2026-09-05T15:13:08+0800",
+  "commit_sha": "58393a2dcd18d94d587548efeea893b486f035f4",
   "certified_operators": [
     {
       "canonical": "arg",
@@ -988,6 +988,54 @@
     },
     {
       "canonical": "intra_state_vwap",
+      "certifications": {
+        "parameter_domain": {
+          "status": "NOT_RUN",
+          "oracle": null,
+          "proof_hash": null
+        },
+        "output_oracle": {
+          "status": "NOT_RUN",
+          "reason": "no oracle found"
+        },
+        "pit_safe": {
+          "status": "CERTIFIED"
+        },
+        "leakage_tested": {
+          "status": "PARTIAL"
+        },
+        "axis_effect": {
+          "status": "NOT_RUN",
+          "value": null
+        }
+      }
+    },
+    {
+      "canonical": "intra_ts_argmax",
+      "certifications": {
+        "parameter_domain": {
+          "status": "NOT_RUN",
+          "oracle": null,
+          "proof_hash": null
+        },
+        "output_oracle": {
+          "status": "NOT_RUN",
+          "reason": "no oracle found"
+        },
+        "pit_safe": {
+          "status": "CERTIFIED"
+        },
+        "leakage_tested": {
+          "status": "PARTIAL"
+        },
+        "axis_effect": {
+          "status": "NOT_RUN",
+          "value": null
+        }
+      }
+    },
+    {
+      "canonical": "intra_ts_argmin",
       "certifications": {
         "parameter_domain": {
           "status": "NOT_RUN",

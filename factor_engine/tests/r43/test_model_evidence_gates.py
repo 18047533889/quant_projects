@@ -14,7 +14,11 @@ from pathlib import Path
 import pytest
 
 
-REPO = Path(__file__).resolve().parents[2]
+# R49 reorg: this file lives at <monorepo>/factor_engine/tests/r43/, so the
+# monorepo root (where evidence/factor_engine/model_operators and the git HEAD
+# both resolve) is parents[3], NOT parents[2] (which is factor_engine/ itself
+# and would shadow the real evidence tree with a stray factor_engine/evidence/).
+REPO = Path(__file__).resolve().parents[3]
 
 
 def _current_head() -> str | None:

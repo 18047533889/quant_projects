@@ -280,13 +280,21 @@ def main() -> int:
         json.dumps({"commit_sha": sha, "gates": gates},
                    indent=2, ensure_ascii=False), encoding="utf-8")
 
-    summary = {k: ("PASS" if "PASS" in v else "FAIL" if "FAIL" in v else "NOT_RUN")
-               for k, v in gates.items()}
+    # Each gate's status lives in its entry's "status" key; membership tests on
+    # the whole dict ("PASS" in v) check keys and never match, so read it
+    # explicitly.  NOT_RUN is an honest not-proven and must never masquerade as
+    # a PASS (or be counted as one).
+    summary = {k: str(v.get("status", "NOT_RUN")) for k, v in gates.items()}
     npass = sum(1 for s in summary.values() if s == "PASS")
-    print(f"MODEL_FINAL_HARD_GATES.json: {len(gates)} gates, {npass} PASS")
+    nfail = sum(1 for s in summary.values() if s == "FAIL")
+    nnotrun = sum(1 for s in summary.values() if s == "NOT_RUN")
+    print(f"MODEL_FINAL_HARD_GATES.json: {len(gates)} gates, "
+          f"{npass} PASS, {nfail} FAIL, {nnotrun} NOT_RUN")
     for k in sorted(summary):
         print(f"  {k}: {summary[k]}")
-    return 0
+    # Fail-closed: any hard gate in FAIL aborts the script; NOT_RUN alone does
+    # not (it is an honest not-proven, not a broken gate).
+    return 1 if nfail else 0
 
 
 if __name__ == "__main__":
