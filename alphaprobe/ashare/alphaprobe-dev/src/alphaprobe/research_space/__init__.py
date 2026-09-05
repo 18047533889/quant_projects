@@ -1,4 +1,4 @@
-"""research_space —— 五层研究空间的包入口（plan Part B / Task 6 / Task 12）。
+"""research_space —— 五层研究空间的包入口（plan Part B / Task 6 / Task 12 / Task 16）。
 
 五层：Market Logic → Schema → Hypothesis → Implementation Plan → Factor AST。
 本包已实现（按收口顺序）：
@@ -46,6 +46,30 @@ from alphaprobe.research_space.schema import (
     SchemaValidationError,
     validate_schema_plan,
 )
+from alphaprobe.research_space.logic import (
+    FactorFact,
+    LogicLibrary,
+    LogicNode,
+    LogicSignature,
+    SurvivalFact,
+    derive_logic_id,
+)
+from alphaprobe.research_space.logic_miner import (
+    LogicMiner,
+    LogicMiningConfig,
+    LogicMiningReport,
+)
+from alphaprobe.research_space.hypothesis import (
+    DEFAULT_MAX_ALTERNATIVE_IMPLEMENTATIONS,
+    HypothesisRecord,
+    HypothesisRegistry,
+    STAGES,
+    Stage,
+    StageHooks,
+    ImplementationAttempt,
+    register_hypothesis,
+    run_stage_pipeline,
+)
 
 __all__ = [
     "AlignmentResult",
@@ -61,4 +85,22 @@ __all__ = [
     "bare_field_name",
     "validate_schema_plan",
     "DEFAULT_DOMAIN_VOCABULARY",
+    "FactorFact",
+    "LogicLibrary",
+    "LogicNode",
+    "LogicSignature",
+    "SurvivalFact",
+    "derive_logic_id",
+    "LogicMiner",
+    "LogicMiningConfig",
+    "LogicMiningReport",
+    "HypothesisRecord",
+    "HypothesisRegistry",
+    "Stage",
+    "STAGES",
+    "StageHooks",
+    "ImplementationAttempt",
+    "register_hypothesis",
+    "run_stage_pipeline",
+    "DEFAULT_MAX_ALTERNATIVE_IMPLEMENTATIONS",
 ]

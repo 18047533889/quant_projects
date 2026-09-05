@@ -612,10 +612,12 @@ class GlobalMemoryStore:
         """§43：survival_profiles 表中置信度最高的 k 个 exemplar。
 
         每行带 formula（从 factor_nodes 联表取）+ survival_rate（confidence）。
+        ``payload``（JSON 文本）也带回——retriever 的 sealed 版本隔离（Task 21
+        #23）需要读取 payload 内嵌的 research_version/version_key。
         """
         rows = self._conn.execute(
             "SELECT sp.factor_id, sp.status, sp.confidence,"
-            " sp.support_periods, fn.canonical_formula"
+            " sp.support_periods, fn.canonical_formula, sp.payload"
             " FROM survival_profiles sp LEFT JOIN factor_nodes fn"
             "   ON fn.factor_id = sp.factor_id"
             " ORDER BY sp.confidence DESC LIMIT ?",
@@ -628,6 +630,7 @@ class GlobalMemoryStore:
                 "survival_rate": r[2],
                 "support_periods": r[3],
                 "formula": r[4],
+                "payload": r[5],
             }
             for r in rows
         ]
