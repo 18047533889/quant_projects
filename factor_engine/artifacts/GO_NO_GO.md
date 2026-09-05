@@ -45,6 +45,7 @@
 - **R61-P1 #60 — minute session gate**：`data_access/read/session_calendar.py` `expected_slots()/expected_minutes()/validate_session_bars()`（按 (TradeDate,Symbol) 精确 slot 校验；**240 one-minute slots 09:31–11:30 / 13:01–15:00**，bar_freq/end_cutoff aware）；`factor_engine/storage/sources/intraday_feature_runtime_v2.py` `_grouped_bars` 接 `session_require_full=True`（默认）精确校验；停牌经 `ashare_stock_daily.IsSuspend` → 停牌 symbol-day → NaN（放行）、**非停牌残缺 → ValidationError fail-closed**；gate report 持久化。session-gate 测试子集：**40 passed**。
 - **R61-P1 #57 — intraday 向量覆盖（shared sufficient statistics）**：`factor_engine/cleaned_operators/intraday/sufficient_stats.py` + `sufficient_stats_ops.py`（单趟 bundle Σx..Σx⁴、Σr..Σr⁴、Σv/Σv²/Σpv、Σa/Σpa、max/min、first/last、packed-prefix argmax/argmin、two-pass variance；per-frame LRU cache）+ **16 个新 `intra_ts_*` 算子**，`_core.py` 内 `_vec_` kernels（bind whitelist 现 **29** 条）；bind fail-closed `count_bound()==29`。sufficient-stats 测试 **23 passed**。
 - **R61-P1 #61 — minute `_wide_frame` 单物理 scan**：整帧一次多列 parquet scan（替代逐列 scan）。
+- **R61-P0 #64 — Gate 接线**：`api.mining_integration.get_mining_operators_from_manifest()` + mining 冷启动 sibling（`mining/direct_use.get_direct_use_mining_operators_from_manifest`）production/cold_start 返回前接 `require_current_evidence()` fail-closed（research 只评估）；`FACTOR_ENGINE_EVIDENCE_GATE=off` 逃生门仅 legacy harness。
 
 > task #63 编号勘误：session gate 在本 doc 原标记为「R61-P0 #60」，任务清单编号为 **R61-P1 #60**（同行内容一致，均指 session gate；本 §2b 各行与 FINAL report §1b 已按任务清单规整为 R61-P1 #60）。
 

@@ -158,6 +158,21 @@ all_presets = default_mining_data_source_presets()
 - Registry 契约：[`scripts/validate_datasets_mining_alignment.py`](../scripts/validate_datasets_mining_alignment.py)  
 - 数据集 schema：[`dataaccess/config/datasets.yaml`](../../dataaccess/config/datasets.yaml)
 
+### 挖掘算子 allowlist 的 fail-closed evidence gate（R61-P0 #64）
+
+`mining_integration.get_mining_operators_from_manifest()`（FE-P0-035 生产/冷启动
+manifest 入口）在返回算子前先调 `evidence.gate.require_current_evidence()`：
+
+- `run_mode="production" | "cold_start"` → **fail-closed**：任何 stale/missing
+  `evidence/CURRENT.json` 都抛 `StaleAgentOperatorEvidence`（`allow_stale`
+  只放宽 manifest 指纹，**绝不绕过 evidence gate**）。
+- `run_mode="research"` → `require_current_evidence(allow_stale=True)`（只评估、
+  永不抛）。同语义也接入了 mining 层冷启动 sibling
+  `factor_engine.mining.direct_use.get_direct_use_mining_operators_from_manifest()`。
+- **测试逃生门（仅 legacy in-repo harness）**：`FACTOR_ENGINE_EVIDENCE_GATE=off`
+  关闭 raise（发 `warnings.warn`）；缺省/其它值一律 enforced。生产无
+  warn-and-proceed 路径。
+
 ---
 
 ## 6. 扩展新算子（维护者）
