@@ -155,13 +155,37 @@ Python 3.11、torch 2.4.0+cu121、gymnasium、stable-baselines3、sb3-contrib、
 torch-geometric、pyqlib、transformers 4.56、openai 1.55.1、sentence-transformers 3.3.1。
 LLM key 在 `.env`（禁止提交）。
 
+## V3.1 智能搜索（plan.md Phase 3 — search/ 与 research_space/）
+
+> 状态：Phase 3 持续收口中。以下范式调度 / 轨迹 credit 模块均为**独立纯逻辑**，
+> 主链（pipeline → orchestrator）只在其存在且显式开启时消费；全部有 ablation
+> 开关（Non-negotiable #30），未开启行为与 V3.1 之前一致。
+
+- **宏范式调度（plan Task 14）** — `search/paradigms.py` + `search/paradigm_scheduler.py`：
+  `Context → {CoE, ToT, EA, Schema, LogicExplore, TrajectoryRepair}`（F4）。六范式全集
+  + 每范式**上下文需求声明**（`PARADIGM_REQUIREMENTS`；无证据/不满足 = 不可选，#13/#27）。
+  资格（eligibility）与强度（bias）分离：EA 必须显式存在互补第二 parent（绝不合成假
+  parent）；TRAJECTORY_REPAIR 必须显式 critic 标记；COE 只对低停滞 lineage eligible。
+  历史 reward/cost 以 bandit 统计面注入（`ParadigmBanditStats`，缺省中性；reward 来自
+  评估闭环，#26）；选择 sampled/argmax 可配、同 seed 可复现。ActionScheduler 保持微层不动。
+- **轨迹 credit（plan Task 15）** — `search/trajectory.py` + `lineage/__init__.py`
+  （`LineageTrajectoryTracker` 接线）：`F1--a1-->F2--a2-->F3--a3-->F4` 每步记录
+  ΔFitness/ΔPool/novelty/complexity/cost/failure_reason；critic 隔离**坏边**（#28，不丢
+  成功前缀）；repair 只在停滞或显式 critic 条件后触发（非每 candidate）；重复失败 suffix
+  抬升**局部 action 饱和度**但不判 parent 死亡；兼容 fragment 在 action/schema 层组合成
+  `ComposePlan`（schema/domain 不兼容拒绝；组合 plan 不产公式——最终表达式仍由 FE AST
+  编译，契约在模块 docstring）。
+
 ## 测试
 
 ```bash
-cd ashare/alphaprobe-dev && PYTHONPATH=src pytest tests/ -q    # 9 个文件，约 40 个测试
+cd ashare/alphaprobe-dev && PYTHONPATH=src pytest tests/ -q    # 866 tests（V3.1 收口）
 ```
+
 覆盖：dedup_client / fe_adapter / funnel_admission / leakage_gates / memory /
-round_checkpoint / search_arms / survival / taskbook_units。
+round_checkpoint / search_arms / survival / taskbook_units + V3.1 文件（因子
+fitness / 检索统计 / attempt ledger / schema space / 多阶段生成 / logic
+library / **paradigm scheduler** / **trajectory credit** 等）。
 
 ## 相关仓库
 
