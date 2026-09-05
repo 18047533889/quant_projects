@@ -462,12 +462,18 @@ def evaluate_factor_batch(
     evaluated = {}
     backends = set()
     fallbacks = {}
+    unavailable = {}
     for offset in range(0, len(names), max(1, batch_size)):
         tile_names = names[offset:offset + max(1, batch_size)]
         matrices = [matrix_loader(name) for name in tile_names]
-        if any(matrix is None for matrix in matrices):
-            missing = [name for name, matrix in zip(tile_names, matrices) if matrix is None]
-            raise FileNotFoundError(f"factor matrices missing: {missing}")
+        missing = [name for name, matrix in zip(tile_names, matrices) if matrix is None]
+        for name in missing:
+            unavailable[name] = "verified full-window factor matrix unavailable"
+        available = [(name, matrix) for name, matrix in zip(tile_names, matrices) if matrix is not None]
+        if not available:
+            continue
+        tile_names = [name for name, _ in available]
+        matrices = [matrix for _, matrix in available]
         # DataAccess owns the report universe.  A sparse or newly-landed factor
         # must contribute NaNs on its missing cells; it must never truncate the
         # dates/assets (and therefore labels) of every other factor in a tile.
@@ -497,6 +503,7 @@ def evaluate_factor_batch(
         "factors": evaluated,
         "backend_used": backends,
         "fallbacks": fallbacks,
+        "unavailable": unavailable,
         "dates": pd.DatetimeIndex(vwap.index),
     }
 
@@ -564,6 +571,20 @@ def write_report_manifest(records, batch_evaluation, *, target=REPORT_MANIFEST_J
             entry["artifact"] = artifact.relative_to(target.parent).as_posix()
             entry["artifact_sha256"] = hashlib.sha256(artifact.read_bytes()).hexdigest()
         factors[name] = entry
+    for name, reason in batch_evaluation.get("unavailable", {}).items():
+        record = by_name[name]
+        raw_formula = str(record.get("fe_formula") or record.get("formula") or "")
+        factors[name] = {
+            "factor_name": record.get("factor_name", name),
+            "status": "unavailable",
+            "reason": reason,
+            "direction": None,
+            "is_flipped": None,
+            "raw_formula": raw_formula,
+            "effective_formula": None,
+            "matrix_path": "",
+            "metrics": {},
+        }
     payload = {
         "schema_version": 1,
         "price_convention": "adj_vwap_t1_to_t2",
