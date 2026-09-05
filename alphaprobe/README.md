@@ -36,7 +36,7 @@ ashare/alphaprobe-dev/
 │   ├── seen/                # fingerprint(LSH) / dedup_service / nearest / registry / subtree 等
 │   ├── search/              # arms(RefineArm/BranchArm) / orchestrator / structured_llm
 │   ├── fitness/             # MetricCalibrator / funnel(L0-L4) / D10 cliff / isotonic / HardGates
-│   ├── survival/            # dna / profile / regime
+│   ├── survival/            # dna / profile / regime / dna_stats / attribution(T18)
 │   ├── research_protocol/   # orientation / survival（L0-L4 sealed test 零读取）
 │   ├── export/gate.py       # §58 ExportDecision
 │   ├── pool/                # admission /（ActivePool+Pareto+QD）

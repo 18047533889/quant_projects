@@ -107,6 +107,7 @@ def survival_opportunity(
     prior: float = SURVIVAL_PRIOR,
     strength: float = SURVIVAL_STRENGTH,
     cap: float = SURVIVAL_CAP,
+    attribution_model: Any = None,
 ) -> float:
     """SurvivalOpportunity：只接受「cutoff 已可见」的 survival 记忆。
 
@@ -118,12 +119,16 @@ def survival_opportunity(
         - ``survival_rate`` / ``raw_survival_rate``：原始存活率；
         - ``shrunk_survival_rate``：已做置信收缩的存活率；
         - ``support_count`` / ``support``：支撑期数（用于收缩）。
+    attribution_model : optional
+        受控归因模型（survival.attribution.SurvivalAttributionModel）。给定
+        时用它的 ``effect_for_survival``（hierarchical shrinkage，effect 可
+        温和负向、capped），否则用内置公式（all-positive，兼容旧版）。
 
     Returns
     -------
     float
-        置信收缩后相对先验的增益，cap 到 [0, SURVIVAL_CAP]。sealed 段（调用方
-        未传可见数据）返回 0.0（中性，不给奖励）。
+        置信收缩后相对先验的增益，cap 到 [-SURVIVAL_CAP, SURVIVAL_CAP]。
+        sealed 段（调用方未传可见数据）返回 0.0（中性，不给奖励）。
     """
     if visible_survival is None or not visible_survival:
         return 0.0
@@ -136,6 +141,25 @@ def survival_opportunity(
     )
     if raw is None and shrunk is None:
         return 0.0
+    if attribution_model is not None and hasattr(attribution_model, "effect_for_survival"):
+        # 受控归因路径：hierarchical shrinkage + cap（Part G #29/#13）。
+        # 负向高置信 survival 温和降低机会；低 support → 效应向 0。
+        # 已给的 shrunk_survival_rate 是权威（不再收缩第二遍）；只有 raw 时
+        # 在模型内部做层级收缩。
+        if shrunk is not None:
+            sr = shrunk
+        else:
+            sr = raw
+        k = support if support is not None else 0
+        try:
+            eff = attribution_model.effect_for_survival(
+                float(sr), support_count=int(k), shrunk_survival_rate=(
+                    float(shrunk) if shrunk is not None else None
+                ),
+            )
+            return float(eff)
+        except (TypeError, ValueError):
+            return 0.0
     if shrunk is not None:
         try:
             shrunk_v = float(shrunk)
@@ -168,11 +192,17 @@ class SearchOpportunity:
     survival_source : Callable[[str], Mapping[str, Any] | None] | None
         返回该因子「cutoff 已可见」的 survival 记忆；None 或返回 None → 中性。
         sealed 段必须返回 None（由调用方保证，本类不访问任何未闸门数据）。
+    survival_model : optional
+        受控归因模型（survival.attribution.SurvivalAttributionModel）。给定后
+        ``survival_opportunity_of`` / ``compute`` 的 survival 维度用
+        ``attribution_model`` 的 hierarchical shrinkage 效应（可温和负向、
+        capped）；None = 内置公式（all-positive，兼容旧版）。
     """
 
     config: SearchOpportunityConfig = field(default_factory=SearchOpportunityConfig)
     cluster_fn: ClusterStatsFn | None = None
     survival_source: Callable[[str], Mapping[str, Any] | None] | None = None
+    survival_model: Any = None
     all_actions: tuple[str, ...] = DEFAULT_ACTION_FAMILIES
     _local_cluster_sizes: dict[str, float] = field(default_factory=dict)
 
@@ -310,13 +340,17 @@ class SearchOpportunity:
     ) -> float:
         """SurvivalOpportunity：优先用显式传入的可见记忆；否则走注入的 survival_source。
 
-        sealed 段：survival_source 返回 None（或未配置）→ 中性 0.0（不给奖励）。
+        survival_model（受控归因）已配置时，用 hierarchical shrinkage 效应
+        （可温和负向、capped）；否则内置公式（all-positive）。sealed 段：
+        survival_source 返回 None（或未配置）→ 中性 0.0（不给奖励）。
         """
         if visible_survival is not None:
-            return survival_opportunity(visible_survival)
+            return survival_opportunity(visible_survival, attribution_model=self.survival_model)
         if self.survival_source is not None:
             try:
-                return survival_opportunity(self.survival_source(factor_id))
+                return survival_opportunity(
+                    self.survival_source(factor_id), attribution_model=self.survival_model
+                )
             except Exception:  # noqa: BLE001 - 数据源异常按 sealed 中性处理
                 return 0.0
         return 0.0
