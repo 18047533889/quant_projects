@@ -180,6 +180,10 @@ class SchemaRegistry:
             if self.db_path != ":memory:":
                 Path(self.db_path).parent.mkdir(parents=True, exist_ok=True)
             self._conn = sqlite3.connect(self.db_path, check_same_thread=False)
+            # WAL + NORMAL：写吞吐优化，与 seen/store.py 同一套路（:memory: 跳过）。
+            if self.db_path != ":memory:":
+                self._conn.execute("PRAGMA journal_mode=WAL")
+                self._conn.execute("PRAGMA synchronous=NORMAL")
             self._conn.executescript(_SCHEMA)
             self._conn.commit()
         if self._lock is None:

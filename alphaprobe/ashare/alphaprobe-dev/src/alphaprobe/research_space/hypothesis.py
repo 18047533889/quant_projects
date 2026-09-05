@@ -374,6 +374,10 @@ class HypothesisRegistry:
         self._lock = threading.Lock()
         self._conn = sqlite3.connect(self.db_path, check_same_thread=False)
         with self._lock:
+            # WAL + NORMAL：写吞吐优化，与 seen/store.py 同一套路（:memory: 跳过）。
+            if self.db_path != ":memory:":
+                self._conn.execute("PRAGMA journal_mode=WAL")
+                self._conn.execute("PRAGMA synchronous=NORMAL")
             self._conn.executescript(_SCHEMA_SQL)
             self._conn.commit()
 

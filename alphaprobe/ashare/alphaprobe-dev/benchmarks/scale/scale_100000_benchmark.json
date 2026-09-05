@@ -3,8 +3,8 @@
   "benchmark": "alphaprobe_search_scale",
   "scale": 100000,
   "rng_seed": 0,
-  "timestamp_utc": "2026-09-05T03:04:26Z",
-  "git_head": "c5bfbf03105e26228218993e021d639047d37d10",
+  "timestamp_utc": "2026-09-05T06:42:33Z",
+  "git_head": "3fe105b037aaca3ce8445b865ebe037b5470ff7f",
   "host": {
     "cores": 32,
     "python": "3.12.3",
@@ -28,21 +28,21 @@
   "sla": "targets recorded empirically; no invented SLA",
   "results": {
     "identity_lookup": {
-      "p50_ms": 6921.1363,
-      "p95_ms": 7094.778,
-      "p99_ms": 7125.577,
-      "mean_ms": 6929.1674,
+      "p50_ms": 7053.6171,
+      "p95_ms": 7077.994,
+      "p99_ms": 7082.7257,
+      "mean_ms": 7052.7945,
       "n": 5,
-      "peak_rss_mb": 28.0,
-      "wall_s": 41.555
+      "peak_rss_mb": 41.8,
+      "wall_s": 42.502
     },
     "seed_selection": {
-      "p50_ms": 27.7194,
-      "p95_ms": 27.7194,
-      "p99_ms": 27.7194,
-      "mean_ms": 27.7194,
+      "p50_ms": 25.7995,
+      "p95_ms": 25.7995,
+      "p99_ms": 25.7995,
+      "mean_ms": 25.7995,
       "n": 1,
-      "peak_rss_mb": 28.0,
+      "peak_rss_mb": 41.8,
       "k_requested": 128,
       "n_returned": 100,
       "catalog_size": 100000,
@@ -58,70 +58,70 @@
         "RARE_SCHEMA": 12,
         "FERTILE": 28
       },
-      "wall_s": 0.03
+      "wall_s": 0.028
     },
     "ann_nearest": {
-      "p50_ms": 21.2166,
-      "p95_ms": 21.3923,
-      "p99_ms": 21.4079,
-      "mean_ms": 21.2745,
+      "p50_ms": 20.6698,
+      "p95_ms": 21.0745,
+      "p99_ms": 21.1105,
+      "mean_ms": 20.8082,
       "n": 3,
-      "peak_rss_mb": 502.8,
+      "peak_rss_mb": 504.4,
       "index_size": 100000,
       "index_rebuild_count": 1,
-      "build_ms": 123.5884,
-      "wall_s": 1.491
+      "build_ms": 120.8209,
+      "wall_s": 1.464
     },
     "cluster_context": {
-      "p50_ms": 21.3798,
-      "p95_ms": 21.6237,
-      "p99_ms": 21.6454,
-      "mean_ms": 21.4487,
+      "p50_ms": 22.0307,
+      "p95_ms": 22.2204,
+      "p99_ms": 22.2373,
+      "mean_ms": 22.095,
       "n": 3,
-      "peak_rss_mb": 502.8,
-      "wall_s": 0.132
+      "peak_rss_mb": 504.4,
+      "wall_s": 0.136
     },
     "retriever_scoring_100k": {
-      "p50_ms": 1074.6026,
-      "p95_ms": 1074.6026,
-      "p99_ms": 1074.6026,
-      "mean_ms": 1074.6026,
+      "p50_ms": 1066.0563,
+      "p95_ms": 1066.0563,
+      "p99_ms": 1066.0563,
+      "mean_ms": 1066.0563,
       "n": 1,
-      "peak_rss_mb": 502.8,
+      "peak_rss_mb": 504.4,
       "candidates": 100000,
       "top1": "F1001",
-      "wall_s": 1.194
+      "wall_s": 1.19
     },
     "memory_packet_generation": {
-      "p50_ms": 5428.7291,
-      "p95_ms": 5636.3214,
-      "p99_ms": 5654.7741,
-      "mean_ms": 5498.2563,
+      "p50_ms": 5491.5162,
+      "p95_ms": 5508.9305,
+      "p99_ms": 5510.4784,
+      "mean_ms": 5477.9156,
       "n": 3,
-      "peak_rss_mb": 502.8,
-      "wall_s": 22.039
+      "peak_rss_mb": 504.4,
+      "wall_s": 21.988
     },
     "sqlite_memory_event_writes": {
-      "p50_ms": 1.5174,
-      "p95_ms": 1.5174,
-      "p99_ms": 1.5174,
-      "mean_ms": 1.5174,
+      "p50_ms": 0.0356,
+      "p95_ms": 0.0356,
+      "p99_ms": 0.0356,
+      "mean_ms": 0.0356,
       "n": 1,
-      "peak_rss_mb": 502.8,
+      "peak_rss_mb": 504.4,
       "events": 100000,
-      "per_event_ms": 1.5174,
-      "total_ms": 151740.8489,
-      "writes_per_sec": 659.0,
-      "wall_s": 151.787
+      "per_event_ms": 0.0356,
+      "total_ms": 3559.4682,
+      "writes_per_sec": 28094.1,
+      "wall_s": 3.566
     },
     "resume_checkpoint_latency": {
-      "p50_ms": 86.3946,
-      "p95_ms": 87.6042,
-      "p99_ms": 87.7118,
-      "mean_ms": 86.7644,
+      "p50_ms": 85.6317,
+      "p95_ms": 101.5055,
+      "p99_ms": 102.9165,
+      "mean_ms": 91.497,
       "n": 3,
-      "peak_rss_mb": 502.8,
-      "wall_s": 0.377
+      "peak_rss_mb": 504.4,
+      "wall_s": 0.393
     }
   },
   "notes": []

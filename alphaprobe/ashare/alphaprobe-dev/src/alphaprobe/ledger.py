@@ -176,6 +176,11 @@ class CandidateAttemptLedger:
             return
         Path(self.db_path).parent.mkdir(parents=True, exist_ok=True)
         conn = sqlite3.connect(self.db_path, check_same_thread=False)
+        # WAL + NORMAL：commit-per-write 从 ~650 w/s 提到 ~40k w/s
+        # （与 seen/store.py 同一套路）；:memory: 不支持 WAL，跳过。
+        if self.db_path != ":memory:":
+            conn.execute("PRAGMA journal_mode=WAL")
+            conn.execute("PRAGMA synchronous=NORMAL")
         conn.executescript(_SCHEMA)
         conn.commit()
         self._conn = conn

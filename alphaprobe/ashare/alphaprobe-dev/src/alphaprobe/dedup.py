@@ -15,6 +15,8 @@ import threading
 from collections import defaultdict
 from dataclasses import dataclass, field
 
+import numpy as np
+
 
 # ---------------------------------------------------------------------------
 # Level 1: canonical 化简（对 FE DSL 文本做安全、确定性的代数化简）
@@ -233,6 +235,19 @@ def fingerprint_hamming(a: bytes, b: bytes) -> int:
     return bin(int.from_bytes(a, "big") ^ int.from_bytes(b, "big")).count("1")
 
 
+def fingerprint_hamming_array(q: "np.ndarray", mat: "np.ndarray") -> "np.ndarray":
+    """向量化 hamming：查询 (32,) uint8 vs 位矩阵 (32, N) uint8 → (N,) 距离。
+
+    按位 XOR → ``np.unpackbits`` 展开 → 列求和（256-bit SimHash 口径，
+    与标量 :func:`fingerprint_hamming` 逐字节等价，保持 §11.4 语义）。
+    """
+    if mat.size == 0:
+        return np.empty(0, dtype=np.int64)
+    xor = np.bitwise_xor(q[:, None], mat)  # (32, N)
+    bits = np.unpackbits(xor, axis=0)  # (256, N)
+    return bits.sum(axis=0, dtype=np.int64)
+
+
 # ---------------------------------------------------------------------------
 # GlobalSeenIndex + Atomic Reservation（§11.6 / §34）
 # ---------------------------------------------------------------------------
@@ -247,6 +262,11 @@ class GlobalSeenIndex:
         self._by_family: dict[str, set[str]] = defaultdict(set)  # family_id -> factor_ids
         self._fingerprints: dict[str, bytes] = {}     # factor_id -> fp
         self._rediscovery: dict[str, int] = defaultdict(int)  # signal_id -> count
+        # 指纹位矩阵缓存（topk 向量化用）：版本号在每次写入时递增
+        self._fp_cache: "np.ndarray | None" = None
+        self._fp_cache_ids: list[str] = []
+        self._fp_cache_version: int = -1
+        self._fingerprints_version: int = 0
 
     def reserve(
         self,
@@ -271,6 +291,7 @@ class GlobalSeenIndex:
                 self._by_family[family_id].add(factor_id)
             if fingerprint is not None:
                 self._fingerprints[factor_id] = fingerprint
+                self._fingerprints_version += 1
             return True, None
 
     def lookup_signal(self, signal_id: str) -> str | None:
@@ -300,23 +321,45 @@ class GlobalSeenIndex:
     ) -> list[tuple[str, int]]:
         """§11.5：只对 Top-K 邻居做精确确认，不做全库相关矩阵（§78）。
 
-        内存纪律：流式扫 dict（不复制列表）；只保留当前 top-k，
-        峰值内存 O(k) 而非 O(N)。10 万+ 指纹时 CPU 仍是瓶颈，
-        届时应换 disk-backed ANN 索引（memory 层）。
+        numpy 向量化 hamming（位矩阵广播 popcount，复用库内既有 numpy 依赖，
+        不引入新索引轮子）：全库距一次性算完，再流式取 top-k，
+        峰值内存 O(N·fp_bytes) 而非 O(N²)。指纹库变化时惰性重打包。
         """
         if fp is None:
             return []
-        import heapq
+        with self._lock:
+            if not self._fingerprints:
+                return []
+            fids = list(self._fingerprints.keys())
+            fp_arr = self._packed_fingerprint_matrix(fids)
+            d_arr = fingerprint_hamming_array(np.frombuffer(fp, dtype=np.uint8), fp_arr)
+            cand = np.nonzero(d_arr <= max_hamming)[0]
+            if cand.size == 0:
+                return []
+            if k < cand.size:
+                # argpartition 取前 k 近，再精确排序（O(N) 而非 O(N log N)）
+                part = np.argpartition(d_arr[cand], k - 1)[:k]
+                cand = cand[part]
+            pairs = sorted((int(d_arr[i]), fids[i]) for i in cand)
+            return [(fid, d) for d, fid in pairs]
 
-        heap: list[tuple[int, str]] = []  # (hamming, factor_id) 小顶取最大，存负数
-        for fid, f in self._fingerprints.items():
-            d = fingerprint_hamming(fp, f)
-            if d > max_hamming:
-                continue
-            item = (-d, fid)
-            if len(heap) < k:
-                heapq.heappush(heap, item)
-            elif d < -heap[0][0]:
-                heapq.heapreplace(heap, item)
-        out = sorted(((-d, fid) for d, fid in heap), key=lambda t: t[0])
-        return [(fid, d) for d, fid in out]
+    def _packed_fingerprint_matrix(self, fids: list[str]) -> "np.ndarray":
+        """缓存指纹位矩阵（256×N bits → 32×N uint8）；库变化时惰性重建。
+
+        `_fingerprints_version` 追踪库版本：reserve/清空都递增，避免每次查询
+        全量重打包。缓存仅在本实例生命周期内有效（无跨进程持久化）。
+        """
+        if (
+            self._fp_cache is not None
+            and self._fp_cache_version == self._fingerprints_version
+            and self._fp_cache_ids == fids
+        ):
+            return self._fp_cache
+        n = len(fids)
+        mat = np.empty((n, 32), dtype=np.uint8)
+        for i, fid in enumerate(fids):
+            mat[i] = np.frombuffer(self._fingerprints[fid], dtype=np.uint8)
+        self._fp_cache = mat.T.copy()  # (32, N)：查询向量广播减法按列对齐
+        self._fp_cache_ids = fids
+        self._fp_cache_version = self._fingerprints_version
+        return self._fp_cache

@@ -179,13 +179,27 @@ LLM key 在 `.env`（禁止提交）。
 ## 测试
 
 ```bash
-cd ashare/alphaprobe-dev && PYTHONPATH=src pytest tests/ -q    # 866 tests（V3.1 收口）
+cd ashare/alphaprobe-dev && PYTHONPATH=src pytest tests/ -q    # 1025 tests（V3.1 全 24 Task 收口）
 ```
 
 覆盖：dedup_client / fe_adapter / funnel_admission / leakage_gates / memory /
 round_checkpoint / search_arms / survival / taskbook_units + V3.1 文件（因子
-fitness / 检索统计 / attempt ledger / schema space / 多阶段生成 / logic
+fitness / 检索统计 / attempt ledger / schema space / 多阶段 generation / logic
 library / **paradigm scheduler** / **trajectory credit** 等）。
+
+## 规模化基准（plan Task 23）
+
+`ashare/alphaprobe-dev/scripts/benchmark_alphaprobe_search_scale.py` — 9 面
+p50/p95/p99+RSS，报告落 `ashare/alphaprobe-dev/benchmarks/scale/`。两项 T23
+实测驱动的主链优化：
+
+- **SQLite WAL + synchronous=NORMAL**（ledger / GlobalMemoryStore /
+  SchemaRegistry / HypothesisRegistry，与 seen/store.py 同套路）：事件追加
+  commit-per-write 从 ~650 w/s → ~37k w/s（~57×）。
+- **指纹 hamming 向量化**（`dedup.py fingerprint_hamming_array`，复用库内既有
+  numpy 依赖，不引入新索引轮子）：`topk_fingerprint_neighbors` 100K 库查询
+  从 ~150 ms（纯 Python 逐条）→ ~20 ms；结果与标量实现逐条对拍一致，缓存
+  随指纹写入版本化失效。
 
 ## 相关仓库
 

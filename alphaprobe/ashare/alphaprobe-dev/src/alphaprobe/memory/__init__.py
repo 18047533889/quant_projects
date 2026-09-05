@@ -323,6 +323,11 @@ class GlobalMemoryStore:
         Path(self.db_path).parent.mkdir(parents=True, exist_ok=True)
         self._lock = threading.Lock()
         self._conn = sqlite3.connect(self.db_path, check_same_thread=False)
+        # WAL + NORMAL：事件追加是 commit-per-write 热路径（T23 实测 ~650 w/s
+        # → ~40k w/s）；与 seen/store.py 同一套路；:memory: 不支持 WAL，跳过。
+        if self.db_path != ":memory:":
+            self._conn.execute("PRAGMA journal_mode=WAL")
+            self._conn.execute("PRAGMA synchronous=NORMAL")
         self._conn.executescript(SCHEMA)
         self._conn.commit()
 
