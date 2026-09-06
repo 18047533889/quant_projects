@@ -353,7 +353,7 @@ class LQTPLogicalDataSource(_Base):
         ds = store.get_dataset(dataset)
         required = [ds.instrument_column, "ReportPeriodEndDate", "PubDate", *fields]
         end = getattr(self.inner, "end_date", None)
-        kwargs: dict[str, Any] = {"columns": list(dict.fromkeys(required))}
+        kwargs: dict[str, Any] = {"columns": list(dict.fromkeys(required)), "mode": "event"}
         if end is not None:
             kwargs["time_range"] = (None, end)
         result = store.read_result(dataset, **kwargs)
@@ -393,13 +393,17 @@ class LQTPLogicalDataSource(_Base):
         events["available_at"] = pd.to_datetime(events["available_at"])
         # 2026-08-29: LQTP 镜像的财务表是按日快照（每个 TradeDate 全量行），同一
         # 报表 vintage（instrument, period_end, available_at）在多个日文件中重复
-        # 出现，值完全相同（已实测：22k 重复行全部同值快照）。pit 契约的
-        # validate_fundamental_events 把同键多行判为"重复 vintage" fail-closed。
-        # 这里在事件构建处按 PIT 键去重（keep=last，同键同值无损），语义不变，
-        # 只是把快照冗余折叠成契约期望的唯一事件流。
+        # 出现。只折叠同键同值的快照冗余；同一公告/报告期出现不同值时，
+        # 必须先取得修订可见时间，不能 keep=last 后倒灌到原始 PubDate。
         events = events.drop_duplicates(
-            ["instrument", "period_end", "available_at"], keep="last"
+            ["instrument", "period_end", "available_at", "value"]
         )
+        if events.duplicated(["instrument", "period_end", "available_at"]).any():
+            # A changed daily snapshot is not proof of an earlier revision's
+            # availability. Never take the last value and backdate it to PubDate.
+            raise ValueError(
+                f"{dataset}.{field}: conflicting values for the same financial "
+                "announcement/period; revision availability evidence required")
 
         if transform == "financial_lag":
             from factor_engine.api.source_ref import _strict_int

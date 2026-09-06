@@ -309,7 +309,10 @@ def plot_long_short_nav(decile_data, name):
 
 
 def plot_ic_distribution(ic_series, name):
-    s = ic_series[ic_series != 0].dropna()
+    # Zero IC is a valid observation. Filter only non-finite values, retaining
+    # the same sample used by the evaluator's mean/distribution statistics.
+    s = pd.Series(ic_series, dtype=float)
+    s = s[np.isfinite(s.to_numpy())]
     if len(s) < 5:
         return ""
     fig, ax = plt.subplots(figsize=(5, 2.5))
@@ -517,6 +520,8 @@ def build_html(page, note, dsl_text, dsl_note, req_cols, base, opt_meta, gate, r
 
     cluster_id = gate.get("cluster", "—")
     rep = gate.get("rep_factor", "")
+    if isinstance(rep, dict):
+        rep = rep.get("factor") or rep.get("page_name") or "—"
     is_rep = "是" if rep == page else "否"
     gate_status = gate.get("quality_gate", "—")
     gate_class = "badge-green" if gate_status == "pass" else "badge-red"
@@ -531,9 +536,9 @@ def build_html(page, note, dsl_text, dsl_note, req_cols, base, opt_meta, gate, r
     r26_chip = (
         f'<div class="rationale" style="background:linear-gradient(90deg,#f0fdfa,#eff6ff);'
         f'border-left-color:{st_color};margin:6px 0 10px;font-weight:600;color:var(--fg)">'
-        f'📉 2026 稳健性: {st_label} · 2026 RankIC {states.get("y26_ic", 0):.4f} · '
-        f'Q2RankIC {states.get("q2_ic", 0):.4f} · 2026 多空累计 {ls26.get("cumret", 0):+.1%} · '
-        f'最大回撤 {ls26.get("maxdd", 0):.1%} · 回撤{ls26.get("maxdd_dur_days", 0)}天</div>'
+        f'📉 2026 稳健性: {st_label} · 2026 RankIC {fmt_num(states.get("y26_ic"))} · '
+        f'Q2RankIC {fmt_num(states.get("q2_ic"))} · 2026 多空累计 {fmt_num(ls26.get("cumret"), pct=True)} · '
+        f'最大回撤 {fmt_num(ls26.get("maxdd"), pct=True)} · 回撤{esc(str(ls26.get("maxdd_dur_days", "—")))}天</div>'
     )
 
     if not rob:
@@ -599,6 +604,13 @@ def build_html(page, note, dsl_text, dsl_note, req_cols, base, opt_meta, gate, r
     steps_html = " → ".join(steps) if steps else "（无预处理）"
     dsl_ops_html = ", ".join(dsl_ops) if dsl_ops else "（无）"
     optimizer_audit = ""
+    objective_note = "旧结果：RankIC IR，待新口径重算"
+    if isinstance(m1.get("objective"), dict):
+        objective_names = {"max_drawdown": "最大回撤", "net_sharpe": "扣佣金后夏普",
+                           "worst_year": "最弱年度", "rankic_ir": "RankIC IR"}
+        objective_note = "、".join(
+            f"{objective_names.get(key, key)} {weight:.0%}"
+            for key, weight in m1["objective"].get("weights", {}).items())
     if m1.get("optimizer"):
         variant_rows = []
         for name, trial in (m1.get("variants") or {}).items():
@@ -613,17 +625,31 @@ def build_html(page, note, dsl_text, dsl_note, req_cols, base, opt_meta, gate, r
             f'<p>执行库：{esc(m1["optimizer"])} / {esc(m1.get("preprocess", ""))}</p>'
             f'<p>选优窗口：{esc(m1.get("selection_window", ""))}；'
             f'方向窗口：{esc(m1.get("direction_window", ""))}</p>'
-            f'<p>{esc(m1.get("test_note", ""))}。factor_preprocess.* 表达式表示预处理库调用，'
-            '不冒充已验证等价的 FactorEngine DSL。</p>'
+            f'<p>{esc(m1.get("test_note", ""))}。DSL 状态：{esc(m1.get("dsl_status", "未验证"))}。</p>'
             '<table class="meta-table"><thead><tr><th>变体</th><th>训练 IR</th>'
             '<th>验证 IR</th><th>验证 LS Sharpe</th><th>完整步骤表达式</th></tr></thead><tbody>'
             + ''.join(variant_rows) + '</tbody></table>')
+        comparison = m1.get("objective_comparison") or {}
+        labels = {"stability": "稳健优先（默认）", "balanced": "收益回撤平衡",
+                  "ic_stability": "IC 稳定", "low_cost": "低交易成本敏感性"}
+        comparison_rows = []
+        for profile, label in labels.items():
+            champion = (comparison.get("champions") or {}).get(profile, {})
+            comparison_rows.append(f'<tr><td>{esc(label)}</td><td>{esc(champion.get("variant", "无合格候选"))}</td>'
+                f'<td>{fmt_num(champion.get("score"))}</td><td><code>{esc(champion.get("expression", "—"))}</code></td></tr>')
+        if comparison:
+            optimizer_audit += ('<h3>多目标验证窗对比</h3><p>各分数只用于本方案内部排序；'
+                '非默认方案是验证窗候选，未经完整 DSL 重放不能直接部署。费用压力测试为单边佣金 '
+                + esc(str(m1.get("stress_commission_rate", "未记录"))) + '，其他成本仍未计入。</p>'
+                '<table class="meta-table"><tr><th>目标</th><th>候选变体</th><th>分数</th><th>完整 DSL</th></tr>'
+                + ''.join(comparison_rows) + '</table><p>Pareto 非支配候选：'
+                + esc(', '.join(comparison.get("pareto_frontier", [])) or '无') + '</p>')
 
     opt_block = f'''
 <div class="card">
   <h2>🧬 优化因子（预处理 + 择优）</h2>
   <p style="font-size:0.82rem;color:#64748b;margin:0 0 10px">
-    预处理候选与选择结果如下；新优化库仅按验证窗 RankIC IR 选优，不保证改善。
+    预处理候选与选择结果如下；选优目标以本次记录为准，不保证改善。
   </p>
   <table class="meta-table" style="margin-top:6px">
     <tbody>
@@ -637,6 +663,8 @@ def build_html(page, note, dsl_text, dsl_note, req_cols, base, opt_meta, gate, r
     </tbody>
   </table>
   {optimizer_audit}
+  <p>选优目标：{esc(objective_note)}</p>
+  <p>单边佣金：{esc(str(m1.get("commission_rate", "未记录")))}；未计成本：{esc(str(m1.get("excluded_costs", "未记录")))}</p>
   <div style="margin-top:10px">
 {opt_charts}
   </div>
@@ -707,6 +735,7 @@ img {{ border-radius:8px }}
 <div class="meta">{esc(note)} · 回测区间 {report_start} ~ {report_end} · 评估: quant_evaluator · 生成 {datetime.now().strftime("%Y-%m-%d %H:%M")}</div>
 </header>
 <main>
+<p class="zero-notice">{esc(base.get("cost_note", "此旧页面费用口径尚未核验，不能视作统一扣费结果。"))}</p>
 
 <!-- 核心指标 -->
 {grids_html}

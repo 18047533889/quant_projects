@@ -1,0 +1,21 @@
+{
+  "status": "PASS",
+  "roots": 4,
+  "rows_per_root": 32,
+  "workers": 2,
+  "wave_size": 4,
+  "seconds": 2.628847768995911,
+  "first_result_s": 2.482087034964934,
+  "baseline_rss_bytes": 394452992,
+  "peak_rss_bytes": 424763392,
+  "output_bytes": 1152,
+  "waves": [
+    {
+      "start": 0,
+      "stop": 4,
+      "seconds": 2.625756052089855,
+      "rss_bytes": 424804352
+    }
+  ],
+  "limitations": "Synthetic add/column expressions, tiny panel, research mode; not full operators, market history or production certification."
+}

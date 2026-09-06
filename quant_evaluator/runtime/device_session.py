@@ -74,12 +74,15 @@ class DeviceEvaluationSession:
         self._total_vram = float(total)
         self._vram_budget = self._free_vram * self.policy.max_vram_fraction
         # session-scoped memory pool with a soft cap
-        self._previous_allocator = cp.cuda.get_allocator()
         pool = cp.cuda.MemoryPool()
-        cp.cuda.set_allocator(pool.malloc)
+        pool.set_limit(size=int(self._vram_budget))
         self._pool = pool
         if self.policy.async_transfer:
             self._streams = [cp.cuda.Stream() for _ in range(3)]
+        # Process-global set_allocator races when independent evaluation
+        # workers overlap. CuPy's context is thread-local and nests safely.
+        self._allocator_scope = cp.cuda.using_allocator(pool.malloc)
+        self._allocator_scope.__enter__()
         logger.info(
             "DeviceEvaluationSession open: device=%s free_vram=%.1fGB budget=%.1fGB",
             dev_id, self._free_vram / 1e9, self._vram_budget / 1e9,
@@ -100,9 +103,13 @@ class DeviceEvaluationSession:
                 self._streams.clear()
                 self._pinned.clear()
                 self._pool.free_all_blocks()
-                self._cp.cuda.set_allocator(self._previous_allocator)
             except Exception:
                 pass
+            finally:
+                scope = getattr(self, "_allocator_scope", None)
+                if scope is not None:
+                    scope.__exit__(None, None, None)
+                    self._allocator_scope = None
         self._closed = True
 
     # -- staging -------------------------------------------------------
@@ -116,6 +123,13 @@ class DeviceEvaluationSession:
         self._staged_factors["__all__"] = dev
         self._h2d_bytes += dev.nbytes
         return dev
+
+    def release_factor_tile(self) -> None:
+        """Release only tile-owned allocations; labels stay resident."""
+        self._peak_vram = max(self._peak_vram, self._pool.total_bytes())
+        self._staged_factors.pop("__all__", None)
+        self._intermediates.clear()
+        self._pool.free_all_blocks()
 
     def stage_labels(self, values, target_id: str = "next_ret"):
         dev = self._cp.asarray(values)
@@ -144,13 +158,15 @@ class DeviceEvaluationSession:
         """Pick an initial factor tile from a candidate list (spec §7)."""
         if not hasattr(self, "_vram_budget") or self._vram_budget is None:
             self._open()  # ensure budget is computed (session may not be open yet)
-        for tile in (128, 64, 32, 16):
+        for tile in (128, 64, 32, 16, 8, 4, 2, 1):
             est = self._estimate_working_set(metric_plan, T, N, tile, dtype_bytes)
             if est <= self._vram_budget:
                 self._final_tile = tile
                 return tile
-        self._final_tile = 16
-        return 16
+        raise MemoryError(
+            "GPU memory budget cannot fit a single factor working set; "
+            "reduce the time/asset panel or increase max_vram_fraction"
+        )
 
     def _estimate_working_set(self, metric_plan, T, N, ftile, dtype_bytes) -> int:
         # Realistic working set for the Spearman rank family (spec §57),
@@ -189,5 +205,6 @@ class DeviceEvaluationSession:
             "h2d_bytes": self._h2d_bytes,
             "d2h_bytes": self._d2h_bytes,
             "peak_vram": self._peak_vram,
+            "vram_budget_bytes": getattr(self, "_vram_budget", None),
             "intermediate_reuse_count": len(self._intermediates),
         }

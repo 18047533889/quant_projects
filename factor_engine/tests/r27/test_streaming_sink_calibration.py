@@ -34,6 +34,8 @@ def test_bounded_queue_bytes_backpressure():
     assert q.put(ResultItem(name="b", value=object(), bytes=60), timeout=0.1) is False
     item = q.get()
     assert item.name == "a"
+    assert q.current_bytes == 60
+    q.release(item)
     assert q.put(ResultItem(name="b", value=object(), bytes=60), timeout=0.1) is True
     q.close()
 
@@ -42,7 +44,9 @@ def test_writer_backpressure_reduces_admission_signal():
     q = BoundedResultQueue(1000)
     q.put(ResultItem(name="x", value=object(), bytes=900))
     assert q.backpressure_ratio > 0.5
-    q.get()
+    item = q.get()
+    assert q.backpressure_ratio > 0.5
+    q.release(item)
     assert q.backpressure_ratio < 0.5
 
 

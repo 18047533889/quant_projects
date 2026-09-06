@@ -27,6 +27,26 @@ import traceback
 from pathlib import Path
 from types import SimpleNamespace
 from html import escape
+from datetime import datetime
+from zoneinfo import ZoneInfo
+from uuid import uuid4
+
+PIPELINE_SOURCE_SHA256 = hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
+
+
+def report_time():
+    return datetime.now(ZoneInfo("Asia/Shanghai")).isoformat(timespec="seconds")
+
+
+def evaluation_banner(document, provenance=None):
+    """Rendering time never substitutes for the persisted evaluation time."""
+    p = provenance or {}
+    text = (f"评估完成时间（北京时间）：{p.get('completed_at') or '未记录，旧结果待重测'} · "
+            f"运行编号：{p.get('run_id') or '未知'} · "
+            f"主链路源码 SHA256：{p.get('pipeline_source_sha256') or '未知'} · "
+            f"HTML 生成时间（北京时间）：{report_time()}")
+    banner = '<aside id="evaluation-version" style="padding:14px 24px;background:#fff3cd;color:#513c06;overflow-wrap:anywhere">' + escape(text) + '</aside>'
+    return document.replace('<body>', '<body>' + banner, 1)
 
 os.environ.setdefault("OMP_NUM_THREADS", "8")
 
@@ -54,6 +74,7 @@ STAGES = ["dedup_check", "landing", "eval", "cluster_assign", "optimize_lite",
 EVAL_START = "2016-01-04"
 EVAL_END = "2018-06-30"
 MIN_UNIVERSE = 30
+COMMISSION_RATE = 0.0001  # User-confirmed: one-way traded notional, 1 bp.
 
 # 渲染产物中禁止出现的算法名字符串（零出现）
 BANNED = ["cogalpha", "alphasage", "evoalpha", "factorminer", "qwen",
@@ -158,12 +179,48 @@ def load_pool():
     return json.loads(POOL_JSON.read_text())
 
 
+def resolve_weekly_daily_field(name):
+    """Use DataAccess's dataset-scoped authority; never guess units or market."""
+    from data_access import get_store
+    field = get_store().resolve_fields(
+        [name], dataset="ashare_stock_valuation_daily")[0]
+    if (field.dataset != "ashare_stock_valuation_daily"
+            or field.market != "ashare" or field.frequency != "daily"
+            or field.temporal_model != "panel" or field.join_policy != "exact"
+            or not field.mining_allowed):
+        raise ValueError(f"field requires a separate temporal adapter: {name}")
+    return f"valuation.{field.logical_name}"
+
+
+def resolve_weekly_field_expression(name):
+    """Bind registered fields through FE's maintained DataAccess/PIT adapters."""
+    from factor_engine.fields.market_registry import MULTI_MARKET_FIELD_REGISTRY
+    from factor_engine.api.source_ref import make_source_ref, encode_source_ref
+
+    field = MULTI_MARKET_FIELD_REGISTRY.resolve_field("ashare", name, strict=False)
+    if field is None or not field.mining_allowed:
+        # DataAccess also registers fields not yet in the FE catalog.
+        return f"col({resolve_weekly_daily_field(name)!r})"
+    if field.table == "StockValuationDaily" and field.temporal_model == "exact":
+        # The child DataAccessSource applies the registered canonical units.
+        return f"col({'valuation.' + field.name!r})"
+    if field.table in {"StockIncome", "StockBalance", "StockCashFlow", "StockIndicator"}:
+        if field.temporal_model != "financial_pit" or not field.strict_pit_allowed:
+            raise ValueError(f"uncertified financial availability contract: {name}")
+        spec = make_source_ref(field.table, field.source_name)
+        expression = f"col({encode_source_ref(spec)!r})"
+        # Financial SourceRefs read physical values before PIT row-bundle selection.
+        scale = float(field.scale_to_canonical)
+        return expression if scale == 1.0 else f"multiply({expression}, {scale!r})"
+    raise ValueError(f"registered field needs frequency/source adapter: {name} ({field.table})")
+
+
 def requested_dsl_records(path):
     """Normalize explicitly supplied daily formulas; keep unresolved fields visible."""
     import ast
     prices = {"close": "AdjClose", "open": "AdjOpen", "high": "AdjHigh",
               "low": "AdjLow", "pre_close": "AdjPreClose", "vwap": "AdjVwap",
-              "amount": "AdjAmount"}
+              "amount": "AdjAmount", "high_limit": "AdjHighLimit", "low_limit": "AdjLowLimit"}
     physical = set(prices.values()) | {"Volume", "Factor"}
     records, deferred, seen = [], [], set()
     for line_number, raw in enumerate(Path(path).read_text().splitlines(), 1):
@@ -178,6 +235,27 @@ def requested_dsl_records(path):
                 def visit_Call(self, node):
                     if not isinstance(node.func, ast.Name):
                         raise ValueError("only named DSL operators are supported")
+                    if node.func.id in {"intraday_activity_duration_curvature", "intra_close_participation", "intraday_bvc_imbalance"}:
+                        from factor_engine.api.source_ref import make_source_ref, encode_source_ref
+                        op = node.func.id
+                        params = {"bar_minutes": 1, "min_coverage": 1.0, "min_bars": 240,
+                                  "minute_dataset": "ashare_stock_minute", "timestamp_convention": "bar_end"}
+                        inputs = [a.id if isinstance(a, ast.Name) else None for a in node.args]
+                        kwargs = {k.arg: ast.literal_eval(k.value) for k in node.keywords}
+                        if op == "intraday_activity_duration_curvature" and inputs in [["minute_volume"], ["minute_amount"]]:
+                            if set(kwargs) - {"buckets"}: raise ValueError("unsupported activity parameters")
+                            params.update(feature="fe_activity_" + inputs[0][7:], buckets=kwargs.get("buckets", 10))
+                        elif op == "intra_close_participation" and inputs[0:1] == ["minute_volume"] and len(inputs) in {1, 2}:
+                            if set(kwargs) - {"tail_minutes"}: raise ValueError("unsupported participation parameters")
+                            if len(inputs) == 2 and kwargs: raise ValueError("duplicate tail_minutes")
+                            params.update(feature="fe_close_participation", tail_minutes=ast.literal_eval(node.args[1]) if len(inputs) == 2 else kwargs.get("tail_minutes", 30))
+                        elif op == "intraday_bvc_imbalance" and inputs == ["minute_close", "minute_volume"]:
+                            if set(kwargs) - {"scale_window"}: raise ValueError("unsupported BVC parameters")
+                            params.update(feature="fe_bvc_imbalance", scale_window=kwargs.get("scale_window", 20))
+                        else:
+                            raise ValueError(f"unsupported minute input signature: {op}")
+                        spec = make_source_ref("StockMinuteBar", "Close", transform="intraday_feature", transform_params=params)
+                        return ast.parse(f"col({encode_source_ref(spec)!r})", mode="eval").body
                     node.args = [self.visit(a) for a in node.args]
                     for kw in node.keywords:
                         kw.value = self.visit(kw.value)
@@ -190,7 +268,12 @@ def requested_dsl_records(path):
                     if node.id in prices:
                         return ast.copy_location(ast.Name(id=prices[node.id], ctx=ast.Load()), node)
                     if node.id not in physical:
-                        raise ValueError(f"requires multi-dataset field binding: {node.id}")
+                        try:
+                            expression = resolve_weekly_field_expression(node.id)
+                        except Exception as exc:
+                            raise ValueError(
+                                f"requires multi-dataset field binding: {node.id}; {exc}") from exc
+                        return ast.copy_location(ast.parse(expression, mode="eval").body, node)
                     return node
             tree = Fields().visit(tree)
             if any(isinstance(n, (ast.Attribute, ast.Subscript, ast.Lambda, ast.NamedExpr)) for n in ast.walk(tree)):
@@ -225,7 +308,21 @@ def reopen_failed_candidates(state, names):
         state["factors"][name] = dict(prior, status="retry_pending")
 
 
-def run_overnight_queue(formulas, output_dir, *, memory_gib=8, retry_names=()):
+def overnight_pending_waves(records, state, batch_size):
+    """Called under queue.lock; interrupted workers are resumable, not still running."""
+    if batch_size < 1:
+        raise ValueError("batch_size must be positive")
+    for entry in state["factors"].values():
+        if entry.get("status") == "running":
+            entry["status"] = "retry_pending"
+    pending = [r for r in records if state["factors"].get(r["page_name"], {}).get("status")
+               not in {"passed", "below_gate", "failed", "unavailable"}]
+    return [pending[i:i + batch_size] for i in range(0, len(pending), batch_size)]
+
+
+def run_overnight_queue(formulas, output_dir, *, memory_gib=8, retry_names=(), wait_for_lock=False,
+                        worker_threads=2, batch_size=4, fe_backend="pandas", qe_backend="auto",
+                        pool_retest=False):
     """Resume isolated mainline evaluations with host and process memory guards."""
     import subprocess
     import signal
@@ -233,14 +330,22 @@ def run_overnight_queue(formulas, output_dir, *, memory_gib=8, retry_names=()):
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     with (output_dir / "queue.lock").open("w") as lock:
-        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        records, deferred = requested_dsl_records(formulas)
+        fcntl.flock(lock, fcntl.LOCK_EX | (0 if wait_for_lock else fcntl.LOCK_NB))
+        if pool_retest:
+            records, deferred = load_pool(), []
+            # Formula provenance remains raw; training alone decides direction.
+            records = [dict(r, source_formula=r.get("source_formula") or r.get("fe_formula") or r.get("dsl", ""))
+                       for r in records]
+            records.sort(key=lambda r: r.get("page_name") != "intraday_overnight_gap_smoothed")
+        else:
+            records, deferred = requested_dsl_records(formulas)
         state_path = output_dir / "queue_state.json"
         state = json.loads(state_path.read_text()) if state_path.exists() else {"factors": {}}
         known = {record["page_name"] for record in records}
         if set(retry_names) - known:
             raise ValueError("retry candidates must be present in the supplied formulas")
         reopen_failed_candidates(state, retry_names)
+        waves = overnight_pending_waves(records, state, batch_size)
         state["deferred"] = deferred
         state["gate"] = {"rank_ic": .015, "rank_ic_ir": .15, "combine": "or",
                          "window": "full-window exploratory screening; not sealed OOS"}
@@ -249,33 +354,50 @@ def run_overnight_queue(formulas, output_dir, *, memory_gib=8, retry_names=()):
             tmp.write_text(json.dumps(state, ensure_ascii=False, indent=2, allow_nan=False))
             os.replace(tmp, state_path)
         save()
-        for record in records:
+        for wave in waves:
+            record = wave[0]
             name = record["page_name"]
-            if state["factors"].get(name, {}).get("status") in {"passed", "below_gate", "failed", "unavailable"}:
-                continue
             while True:
                 mem = dict(line.split(":", 1) for line in Path("/proc/meminfo").read_text().splitlines())
                 available_kib = int(mem["MemAvailable"].split()[0])
-                if available_kib >= (memory_gib + 4) * 1024**2:
+                if available_kib >= (min(memory_gib, 8) + 12) * 1024**2:
+                    task_memory_gib = min(memory_gib, available_kib / 1024**2 - 12)
                     break
                 state["status"] = "waiting_for_memory"
                 save()
                 time.sleep(30)
-            folder = output_dir / name
+            # Per-factor artifacts stay isolated for optimization and publication.
+            for item in wave:
+                item_folder = output_dir / item["page_name"]
+                item_folder.mkdir(exist_ok=True)
+                (item_folder / "candidate.json").write_text(json.dumps([item], ensure_ascii=False, indent=2))
+            wave_id = hashlib.sha256("|".join(r["page_name"] for r in wave).encode()).hexdigest()[:16]
+            folder = output_dir / ("wave_" + wave_id)
             folder.mkdir(exist_ok=True)
             candidate_path = folder / "candidate.json"
-            candidate_path.write_text(json.dumps([record], ensure_ascii=False, indent=2))
+            candidate_path.write_text(json.dumps(wave, ensure_ascii=False, indent=2))
             target = folder / "report_manifest.json"
             command = [sys.executable, str(Path(__file__).resolve()), "--manifest", str(candidate_path),
-                       "--batch-size", "1", "--fe-backend", "pandas", "--qe-backend", "cpu",
+                       "--batch-size", str(batch_size), "--fe-backend", fe_backend, "--qe-backend", qe_backend,
                        "--evaluate-only", "--output-manifest", str(target)]
+            if pool_retest or any(r["page_name"] in retry_names for r in wave):
+                command.append("--force-landing")
             state["status"] = "running"
-            state["factors"][name] = dict(status="running", formula=record["fe_formula"],
-                                           source_formula=record["source_formula"], folder=str(folder))
+            for item in wave:
+                state["factors"][item["page_name"]] = dict(
+                    status="running", formula=item.get("fe_formula", ""), source_formula=item["source_formula"],
+                    folder=str(output_dir / item["page_name"]), wave_log=str(folder / "run.log"))
             save()
             print(f"[overnight start] {name}", flush=True)
-            env = dict(os.environ, OMP_NUM_THREADS="2", OPENBLAS_NUM_THREADS="2",
-                       MKL_NUM_THREADS="2", POLARS_MAX_THREADS="2")
+            threads = str(max(1, worker_threads))
+            env = dict(os.environ, OMP_NUM_THREADS=threads, OPENBLAS_NUM_THREADS=threads,
+                       MKL_NUM_THREADS=threads, POLARS_MAX_THREADS=threads)
+            result_policy = {"process_memory_gib": task_memory_gib, "host_reserve_gib": 12,
+                             "worker_threads": int(threads), "batch_size": len(wave),
+                             "fe_backend": fe_backend, "qe_backend": qe_backend}
+            for item in wave:
+                state["factors"][item["page_name"]]["resource_policy"] = result_policy
+            save()
             reason = None
             with (folder / "run.log").open("a") as log:
                 child = subprocess.Popen(command, stdout=log, stderr=subprocess.STDOUT,
@@ -289,8 +411,11 @@ def run_overnight_queue(formulas, output_dir, *, memory_gib=8, retry_names=()):
                         peak_kib = max(peak_kib, rss)
                     except (FileNotFoundError, AttributeError):
                         rss = 0
-                    if rss > memory_gib * 1024**2 or time.monotonic() - started > 1800:
-                        reason = "process memory limit" if rss > memory_gib * 1024**2 else "30-minute time limit"
+                    mem_now = dict(line.split(":", 1) for line in Path("/proc/meminfo").read_text().splitlines())
+                    emergency = int(mem_now["MemAvailable"].split()[0]) < 4 * 1024**2
+                    if emergency or rss > task_memory_gib * 1024**2 or time.monotonic() - started > 1800:
+                        reason = ("host low-memory guard" if emergency else "process memory limit"
+                                  if rss > task_memory_gib * 1024**2 else "30-minute time limit")
                         os.killpg(child.pid, signal.SIGTERM)
                         try:
                             child.wait(timeout=15)
@@ -299,17 +424,25 @@ def run_overnight_queue(formulas, output_dir, *, memory_gib=8, retry_names=()):
                         break
                     time.sleep(2)
                 code = child.wait()
-            result = state["factors"][name]
-            result.update(exit_code=code, peak_rss_kib=peak_kib)
-            if code == 0 and target.exists():
-                entry = json.loads(target.read_text())["factors"][name]
-                result["status"] = "unavailable" if entry.get("status") == "unavailable" else (
-                    "passed" if passes_weekly_gate(entry["metrics"]) else "below_gate")
-                result["metrics"] = entry.get("metrics", {})
-                result["optimization_status"] = "pending_library_integration"
-            else:
-                result.update(status="failed", reason=reason or "see run.log")
-            print(f"[overnight done] {name}: {result['status']}", flush=True)
+            manifest = json.loads(target.read_text()) if code == 0 and target.exists() else None
+            for item in wave:
+                item_name = item["page_name"]
+                result = state["factors"][item_name]
+                result.update(exit_code=code, peak_rss_kib=peak_kib)
+                item_folder = output_dir / item_name
+                entry = manifest.get("factors", {}).get(item_name) if manifest else None
+                if entry is not None:
+                    isolated = dict(manifest, factors={item_name: entry})
+                    if entry.get("artifact"):
+                        isolated["factors"] = {item_name: dict(entry, artifact=str((target.parent / entry["artifact"]).resolve()))}
+                    (item_folder / "report_manifest.json").write_text(json.dumps(isolated, ensure_ascii=False, indent=2))
+                    result["status"] = "unavailable" if entry.get("status") == "unavailable" else (
+                        "passed" if passes_weekly_gate(entry["metrics"]) else "below_gate")
+                    result["metrics"] = entry.get("metrics", {})
+                    result["optimization_status"] = "pending_library_integration"
+                else:
+                    result.update(status="failed", reason=reason or "see wave_log")
+                print(f"[overnight done] {item_name}: {result['status']}", flush=True)
             save()
         state["status"] = "evaluation_finished_optimization_and_publication_pending"
         save()
@@ -342,10 +475,8 @@ def run_optimization_queue(output_dir):
             if entry["status"] != "passed":
                 continue
             folder = Path(entry["folder"])
-            if "requires full-history replay" in (folder / "run.log").read_text():
-                state[name] = {"status": "blocked_full_history"}
-                save()
-                continue
+            # Eligibility comes from this factor's verified manifest, never another
+            # factor's warning in a shared batch log.
             # Identity changes invalidate the successful-stage checkpoint.
             matrix = MATRICES_DIR / f"{name}.parquet"
             identity = hashlib.sha256((
@@ -463,6 +594,7 @@ def eval_matrix(mat, vwap=None):
     evaluated = evaluate_report_arrays(
         fv,
         fwd,
+        commission_rate=COMMISSION_RATE,
         n_quantiles=10,
         min_assets=MIN_UNIVERSE,
         min_ic_periods=20,
@@ -514,7 +646,7 @@ def stage_landing(factor):
     return {"landed": False, "error": "matrix missing"}
 
 
-def land_factor_batch(factors, *, engine, sink):
+def land_factor_batch(factors, *, engine, sink, workers=None):
     """Compile and land one incremental wave through FactorEngine ``run_many``.
 
     The sink boundary keeps factor matrices out of the aggregate result so a
@@ -528,7 +660,14 @@ def land_factor_batch(factors, *, engine, sink):
             raise ValueError(f"factor record requires page_name and fe_formula: {name or '<unnamed>'}")
         parsed.append(factor_from_record(record))
 
-    engine.run_many(
+    workers = int(os.environ.get("FACTOR_REPORT_ROOT_WORKERS", "1")) if workers is None else int(workers)
+    if not 1 <= workers <= 16:
+        raise ValueError("factor report root workers must be between 1 and 16")
+    workers = min(workers, max(1, len(parsed)))
+    runner = engine.run_many_parallel if workers > 1 else engine.run_many
+    parallel_options = {"n_jobs": workers} if workers > 1 else {"warmup_clusters": True}
+    print(f"[factor landing] factors={len(parsed)} root_workers={workers} streaming_sink=True", flush=True)
+    runner(
         parsed,
         enable_cse=True,
         auto_warmup=True,
@@ -536,7 +675,7 @@ def land_factor_batch(factors, *, engine, sink):
         input_dq_check=True,
         pit_enforce=True,
         pit_forbid_forward_fill=True,
-        warmup_clusters=True,
+        **parallel_options,
         result_policy="sink",
         sink=sink,
     )
@@ -604,21 +743,83 @@ def factor_from_record(record):
     return Factor(name=name, expr=build(node), source_expr=formula)
 
 
-def build_incremental_engine(*, start_date, end_date, backend_name="polars_long"):
+def ensure_local_minute_history(root=None, history_root=None):
+    """Incrementally expose existing local daily partitions; never copy/overwrite data."""
+    root = Path(root or Path.home() / "cos_data/StockMinuteBar")
+    history_root = Path(history_root or "/srv/quant/research/model/mining/users/zhangborui/data/a_share/lqtp_data/StockMinuteBar")
+    if not history_root.is_dir():
+        raise FileNotFoundError(f"registered minute history directory missing: {history_root}")
+    root.mkdir(parents=True, exist_ok=True)
+    added = 0
+    for original in history_root.glob("*.parquet"):
+        if not re.fullmatch(r"\d{4}-\d{2}-\d{2}\.parquet", original.name):
+            continue
+        destination = root / original.name
+        if destination.exists():
+            continue
+        if destination.is_symlink():
+            raise FileNotFoundError(f"broken minute history binding: {destination}")
+        try:
+            destination.symlink_to(original.resolve(strict=True))
+            added += 1
+        except FileExistsError:
+            pass  # Concurrent incremental writer owns this partition.
+    if added:
+        from data_access.read.manifest import bump_manifest_epoch
+        bump_manifest_epoch(root)
+    return added
+
+
+def build_incremental_engine(*, start_date, end_date, backend_name="polars_long", records=(), instrument_filter=None):
     """Build the mainline FactorEngine over its canonical DataAccess source."""
     os.environ.setdefault("ASHARE_PARQUET_ROOT", str(Path.home() / "cos_data"))
     os.environ.setdefault("DATA_ACCESS_SKIP_COS_MIRROR", "1")
+    import ast
+    from factor_engine.api.source_ref import decode_source_ref
+    for record in records:
+        try:
+            nodes = ast.walk(ast.parse(str(record.get("fe_formula", "")), mode="eval"))
+            refs = [decode_source_ref(n.value) for n in nodes
+                    if isinstance(n, ast.Constant) and isinstance(n.value, str)]
+        except SyntaxError:
+            refs = []
+        if any(ref and ref.table in {"StockMinuteBar", "MinuteBar"} for ref in refs):
+            added = ensure_local_minute_history(Path(os.environ["ASHARE_PARQUET_ROOT"]) / "StockMinuteBar")
+            if added: print(f"[minute history] bound {added} existing local daily partitions", flush=True)
+            break
     from factor_engine.backend.factory import build_backend
     from factor_engine.runtime.engine import FactorEngine
     from factor_engine.storage.factory import build_data_source
 
-    source = build_data_source({
+    daily = {
         "type": "data_access",
         "dataset": "ashare_stock_daily_adj",
         "start_date": start_date,
         "end_date": end_date,
         "read_auto": True,
-    })
+        **({"instrument_filter": instrument_filter} if instrument_filter is not None else {}),
+    }
+    config = {
+        "type": "composite", "anchor": "pv", "anchor_column": "AdjClose",
+        "sources": {"pv": daily, "valuation": {
+            "type": "data_access", "dataset": "ashare_stock_valuation_daily",
+            "start_date": start_date, "end_date": end_date, "read_auto": True,
+            **({"instrument_filter": instrument_filter} if instrument_filter is not None else {}),
+        }},
+        # A daily valuation panel must not be forward-filled across missing days.
+        "joins": {"valuation": "exact"},
+    }
+    needs_valuation = any("valuation." in str(r.get("fe_formula", "")) for r in records)
+    if needs_valuation:
+        # CompositeDataSource exposes Series; use FE's maintained long-table
+        # bridge for long backends instead of calling a missing scan method.
+        config = {"type": "long_table", "inner": config}
+    source = build_data_source(config if needs_valuation else daily)
+    # Logical SourceRef children inherit the enclosing read window even when
+    # the daily anchor is wrapped by a composite/long-table adapter.
+    source.start_date = start_date
+    source.end_date = end_date
+    source.instrument_filter = instrument_filter
     return FactorEngine(build_backend(backend_name), source, run_mode="research")
 
 
@@ -640,6 +841,24 @@ def matrix_sink(output_dir):
         os.replace(temporary, target)
 
     return write
+
+
+def admit_report_factors(records):
+    """One fail-closed DSL/history gate for landing, evaluation and auditing."""
+    from factor_engine.ir.analyzer import Analyzer
+    analyzer = Analyzer(production=False)
+    admitted, rejected = [], {}
+    for record in records:
+        name = record["page_name"]
+        try:
+            if not str(record.get("fe_formula") or "").strip():
+                raise ValueError("executable FactorEngine DSL missing; certified conversion required")
+            factor = factor_from_record(record)
+            require_bounded_history(analyzer.lower(factor.expr), name)
+            admitted.append(record)
+        except Exception as exc:
+            rejected[name] = f"{type(exc).__name__}: {exc}"
+    return admitted, rejected
 
 
 def require_bounded_history(analysis, name):
@@ -664,6 +883,7 @@ def land_factor_batch_windowed(
     end_date=FULL_WINDOW_END,
     window_years=1,
     warmup_days=550,
+    output_dir=None,
 ):
     """Land a factor wave in bounded date windows, then atomically merge.
 
@@ -695,6 +915,7 @@ def land_factor_batch_windowed(
                 start_date=str(load_start.date()),
                 end_date=str(window_end.date()),
                 backend_name=backend_name,
+                records=records,
             )
 
             def sink(name, value, *, _part=part, _start=cursor, _end=window_end):
@@ -716,16 +937,28 @@ def land_factor_batch_windowed(
                 raise RuntimeError(f"FactorEngine produced no window for {name}")
             matrix = pd.concat(pieces).sort_index()
             matrix = matrix[~matrix.index.duplicated(keep="last")]
-            target = MATRICES_DIR / f"{name}.parquet"
+            destination = Path(output_dir) if output_dir is not None else MATRICES_DIR
+            destination.mkdir(parents=True, exist_ok=True)
+            target = destination / f"{name}.parquet"
             temporary = target.with_suffix(".parquet.tmp")
             matrix.to_parquet(temporary)
             os.replace(temporary, target)
     return {"landed": names, "count": len(names), "date_windows": part}
 
 
-def land_missing_factors(factors, *, batch_size=8, backend_name="polars_long"):
+def landing_failure_reason(exc):
+    detail = f"{type(exc).__name__}: {exc}"
+    report = getattr(exc, "report", None)
+    if report is not None and callable(getattr(report, "to_dict", None)):
+        detail += "; diagnostics=" + json.dumps(report.to_dict(), ensure_ascii=False, default=str)
+    return detail
+
+
+def land_missing_factors(factors, *, batch_size=8, backend_name="polars_long", force=False):
     """Land missing executable DSL factors in bounded run_many waves."""
-    missing = [record for record in factors if matrix_path(record["page_name"]) is None]
+    missing = [record for record in factors
+               if force or matrix_path(record["page_name"]) is None
+               or not matrix_source(record["page_name"]).is_full_window]
     # Capability metadata is advisory and is absent on older/new-mining
     # manifests.  The formula itself is authoritative: always try FE first.
     pending = [record for record in missing if str(record.get("fe_formula") or "").strip()]
@@ -749,8 +982,8 @@ def land_missing_factors(factors, *, batch_size=8, backend_name="polars_long"):
                     landed.extend(result["landed"])
                 except Exception as factor_error:
                     errors[name] = (
-                        f"wave={type(wave_error).__name__}: {wave_error}; "
-                        f"factor={type(factor_error).__name__}: {factor_error}"
+                        f"wave={landing_failure_reason(wave_error)}; "
+                        f"factor={landing_failure_reason(factor_error)}"
                     )
     return {
         "landed": landed,
@@ -759,6 +992,15 @@ def land_missing_factors(factors, *, batch_size=8, backend_name="polars_long"):
         "python_fallback": unsupported,
         "factor_engine_errors": errors,
     }
+
+
+def evaluation_candidates_after_landing(records, landing):
+    """Failed refreshes cannot silently reuse old matrices or old stage state."""
+    failures = {name: f"FactorEngine landing failed; old matrix excluded: {cause}"
+                for name, cause in landing.get("factor_engine_errors", {}).items()}
+    for name in landing.get("python_fallback", []):
+        failures[name] = "executable DSL unavailable; old matrix excluded"
+    return [r for r in records if r["page_name"] not in failures], failures
 
 
 # --------------------------------------------------------------------------
@@ -788,7 +1030,13 @@ def evaluate_factor_batch(
     import numpy as np
     import pandas as pd
     from factor_engine.reporting.quant_evaluator_adapter import evaluate_report_batch
+    provenance = {"run_id": uuid4().hex, "started_at": report_time(),
+                  "pipeline_source_sha256": PIPELINE_SOURCE_SHA256}
 
+    if not factors:
+        return {"factors": {}, "backend_used": set(), "fallbacks": {},
+                "unavailable": {}, "dates": pd.DatetimeIndex([]),
+                "evaluation_provenance": dict(provenance, completed_at=report_time())}
     if evaluator is evaluate_report_arrays:
         evaluator = evaluate_report_batch
     vwap = load_vwap(
@@ -806,7 +1054,8 @@ def evaluate_factor_batch(
         matrices = [matrix_loader(name) for name in tile_names]
         missing = [name for name, matrix in zip(tile_names, matrices) if matrix is None]
         for name in missing:
-            unavailable[name] = "verified full-window factor matrix unavailable"
+            source = matrix_source(name)
+            unavailable[name] = source.reason or "verified full-window factor matrix unavailable"
         available = [(name, matrix) for name, matrix in zip(tile_names, matrices) if matrix is not None]
         if not available:
             continue
@@ -822,10 +1071,17 @@ def evaluate_factor_batch(
             matrix.reindex(index=dates, columns=columns).values.astype(np.float64)
             for matrix in matrices
         ], axis=-1)
+        # A zero-filled factor is not proof an asset existed at signal time.
+        # Use observed current-day adjusted prices, never future-return validity,
+        # for the causal universe before QE assigns cross-sectional quantiles.
+        signal_prices = vwap.reindex(index=dates, columns=columns).to_numpy(dtype=float)
+        signal_eligible = np.isfinite(signal_prices) & (signal_prices > 0)
+        values = np.where(signal_eligible[:, :, None], values, np.nan)
         train_periods = int((pd.DatetimeIndex(dates) <= pd.Timestamp(EVAL_END)).sum())
         result = evaluator(
             values,
             labels.values.astype(np.float64),
+            commission_rate=COMMISSION_RATE,
             factor_ids=tuple(tile_names),
             backend=backend,
             n_quantiles=10,
@@ -851,12 +1107,14 @@ def evaluate_factor_batch(
         "fallbacks": fallbacks,
         "unavailable": unavailable,
         "dates": pd.DatetimeIndex(vwap.index),
+        "evaluation_provenance": dict(provenance, completed_at=report_time()),
     }
 
 
 def report_evaluation_dict(evaluated):
     """Project the canonical QE result into the incremental manifest schema."""
     return {
+        "commission_rate": getattr(evaluated, "commission_rate", 0.0),
         "rank_ic": evaluated.mean_rank_ic,
         "ic_ir": evaluated.rank_ic_ir,
         "std": evaluated.rank_ic_std,
@@ -936,7 +1194,12 @@ def write_report_manifest(records, batch_evaluation, *, target=REPORT_MANIFEST_J
         }
     payload = {
         "schema_version": 1,
+        "evaluation_provenance": batch_evaluation.get("evaluation_provenance"),
         "price_convention": "adj_vwap_t1_to_t2",
+        "cost_model": {"one_way_commission_rate": COMMISSION_RATE,
+                       "turnover_model": "target_weights_half_L1_times_two; opening charged",
+                       "excluded_costs": ["stamp_duty", "slippage", "borrow_cost"],
+                       "label": "net of commission only; not all-in trading costs"},
         "training_window": [EVAL_START, EVAL_END],
         "backend_used": sorted(batch_evaluation["backend_used"]),
         "backend_fallbacks": batch_evaluation["fallbacks"],
@@ -989,6 +1252,7 @@ def _report_result_from_artifact(entry, artifact_path):
         raise ValueError(f"artifact {artifact_path.name} has inconsistent chart axes")
     metrics = dict(entry.get("metrics") or {})
     return SimpleNamespace(
+        commission_rate=metrics.get("commission_rate", 0.0),
         mean_rank_ic=metrics.get("rank_ic"),
         rank_ic_ir=metrics.get("ic_ir"),
         rank_ic_std=metrics.get("std"),
@@ -1053,7 +1317,7 @@ def _write_manifest_index(report_dir, factors):
     os.replace(temporary, output)
 
 
-def publish_report_from_manifest(manifest_path, *, report_dir=REPORTS_DIR):
+def publish_report_from_manifest(manifest_path, *, report_dir=REPORTS_DIR, update_homepage=True):
     """Publish all pages from one verified QE manifest; never recompute metrics."""
     manifest_path = Path(manifest_path)
     payload = json.loads(manifest_path.read_text(encoding="utf-8"))
@@ -1067,7 +1331,7 @@ def publish_report_from_manifest(manifest_path, *, report_dir=REPORTS_DIR):
         status = entry.get("status", "available")
         if status == "unavailable":
             (output_factors / f"factor_{page}.html").write_text(
-                _unavailable_report_page(page, entry), encoding="utf-8")
+                evaluation_banner(_unavailable_report_page(page, entry), payload.get("evaluation_provenance")), encoding="utf-8")
             unavailable += 1
             published += 1
             continue
@@ -1080,6 +1344,7 @@ def publish_report_from_manifest(manifest_path, *, report_dir=REPORTS_DIR):
             "factor_name": entry.get("factor_name", page),
             "fe_formula": entry.get("raw_formula", ""),
             "is_flipped": bool(entry.get("is_flipped")),
+            "evaluation_provenance": payload.get("evaluation_provenance"),
         }
         rendered = stage_page_inject(
             factor, report_evaluation_dict(result), report_result=result,
@@ -1089,7 +1354,10 @@ def publish_report_from_manifest(manifest_path, *, report_dir=REPORTS_DIR):
             raise RuntimeError(f"factor {page} did not render all charts: {rendered}")
         available += 1
         published += 1
-    _write_manifest_index(report_dir, payload["factors"])
+    if update_homepage:
+        _write_manifest_index(report_dir, payload["factors"])
+        index = report_dir / "index.html"
+        index.write_text(evaluation_banner(index.read_text(), payload.get("evaluation_provenance")), encoding="utf-8")
     return {"published": published, "available": available, "unavailable": unavailable}
 
 
@@ -1184,6 +1452,111 @@ def stage_cluster_assign(factor, eval_result):
 # --------------------------------------------------------------------------
 # stage: optimize_lite
 # --------------------------------------------------------------------------
+def stability_objective(metrics, worst_year_return):
+    """Versioned, explicit stability-first policy over QE net-of-commission metrics."""
+    import math
+    from factor_optimizer.search.desirability import desirability_for
+    values = [metrics.get(k) for k in ("ls_mdd", "ls_sharpe", "rankic_ir", "ls_annual")]
+    if any(v is None or not math.isfinite(v) for v in values + [worst_year_return]):
+        raise ValueError("stability selection requires finite QE net performance metrics")
+    if metrics["ls_annual"] <= 0 or metrics.get("mean_rankic", 0) <= 0:
+        raise ValueError("non-positive net return/IC cannot win by appearing flat")
+    components = {
+        "max_drawdown": desirability_for("decreasing", [(0.,1.),(.1,.8),(.3,.3),(.6,0.)], metrics["ls_mdd"]),
+        "net_sharpe": desirability_for("increasing", [(0.,0.),(1.,.5),(2.,.8),(3.,1.)], metrics["ls_sharpe"]),
+        "worst_year": desirability_for("increasing", [(-.3,0.),(0.,.5),(.2,1.)], worst_year_return),
+        "rankic_ir": desirability_for("increasing", [(0.,0.),(.15,.4),(.4,.8),(.8,1.)], metrics["rankic_ir"]),
+    }
+    weights = {"max_drawdown": .45, "net_sharpe": .25, "worst_year": .20, "rankic_ir": .10}
+    return {"policy": "net-stability-v1", "weights": weights, "components": components,
+            "score": sum(weights[k] * v for k,v in components.items())}
+
+
+OBJECTIVE_PROFILES = {
+    "stability": {"ls_mdd": .30, "drawdown_duration": .15, "worst_year": .20, "year_dispersion": .15, "ls_sharpe": .20},
+    "balanced": {"ls_annual": .30, "ls_sharpe": .25, "calmar": .25, "ls_mdd": .20},
+    "ic_stability": {"rankic_ir": .45, "rolling_ic_std": .25, "negative_ic_windows": .30},
+    "low_cost": {"fee_drag": .40, "stress_annual": .30, "ls_mdd": .15, "ls_sharpe": .15},
+}
+
+
+def diversified_objectives(metrics):
+    """Validation-only scores. Missing required measurements make a profile ineligible."""
+    import math
+    from factor_optimizer.search.desirability import desirability_for
+    ranges = {
+        "ls_mdd": (False, 0., .60), "drawdown_duration": (False, 0., 504.),
+        "worst_year": (True, -.30, .20), "year_dispersion": (False, 0., .50),
+        "ls_sharpe": (True, 0., 3.), "ls_annual": (True, 0., .40),
+        "calmar": (True, 0., 3.), "rankic_ir": (True, 0., .80),
+        "rolling_ic_std": (False, 0., .10), "negative_ic_windows": (False, 0., .50),
+        "fee_drag": (False, 0., .001), "stress_annual": (True, 0., .40),
+    }
+    finite = lambda x: isinstance(x, (int, float)) and math.isfinite(x)
+    common = all(finite(metrics.get(k)) and metrics[k] > 0 for k in ("mean_rankic", "ls_annual"))
+    out = {}
+    for profile, weights in OBJECTIVE_PROFILES.items():
+        missing = [k for k in weights if not finite(metrics.get(k))]
+        if not common or missing:
+            out[profile] = {"eligible": False, "score": None, "missing": missing,
+                            "reason": "missing metrics" if missing else "non-positive validation IC/net return"}
+            continue
+        components = {}
+        for key in weights:
+            increasing, lo, hi = ranges[key]
+            components[key] = desirability_for("increasing" if increasing else "decreasing",
+                [(lo, 0. if increasing else 1.), (hi, 1. if increasing else 0.)], metrics[key])
+        out[profile] = {"eligible": True, "policy": "multi-objective-v1", "weights": weights,
+                        "components": components, "score": sum(weights[k]*components[k] for k in weights)}
+    return out
+
+
+def objective_comparison(trials):
+    champions = {}
+    for profile in OBJECTIVE_PROFILES:
+        valid = [(n, r) for n, r in trials.items() if r.get("objectives", {}).get(profile, {}).get("eligible")]
+        if valid:
+            name, trial = max(valid, key=lambda pair: (pair[1]["objectives"][profile]["score"], pair[0] == "raw"))
+            champions[profile] = {"variant": name, "score": trial["objectives"][profile]["score"],
+                                  "expression": trial["expression"], "status": "validation_candidate"}
+    keys = ("ls_annual", "ls_sharpe", "ls_mdd", "fee_drag")
+    import math
+    valid = {n: r for n, r in trials.items()
+             if r.get("objective_metrics", {}).get("mean_rankic", 0) > 0
+             and r.get("objective_metrics", {}).get("ls_annual", 0) > 0
+             and all(r.get("objective_metrics", {}).get(k) is not None
+                     and math.isfinite(r["objective_metrics"][k]) for k in keys)}
+    vectors = {n: tuple(r["objective_metrics"][k] * (1 if i < 2 else -1) for i, k in enumerate(keys)) for n, r in valid.items()}
+    frontier = [n for n, v in vectors.items() if not any(
+        all(a >= b for a,b in zip(other,v)) and any(a > b for a,b in zip(other,v))
+        for m,other in vectors.items() if m != n)]
+    return {"policy": "multi-objective-v1", "default": "stability", "champions": champions,
+            "pareto_frontier": sorted(frontier), "pareto_dimensions": list(keys),
+            "scope": "validation only; alternatives require full DSL replay before deployment"}
+
+
+def optimizer_dsl(base, variant):
+    """FE spelling is deliberately not the FP Python API spelling."""
+    templates = {"raw": "{base}", "cs_rank": "rank_pct({base})",
+                 "cs_zscore": "c_zscore({base})",
+                 "winsor_1pct": "winsorize({base}, 0.01, 0.99)",
+                 "winsor_5pct": "winsorize({base}, 0.05, 0.95)"}
+    if variant not in templates:
+        raise ValueError(f"no certified DSL mapping for {variant}")
+    expression = templates[variant].format(base=base)
+    factor_from_record({"page_name": "optimizer_expression_check", "fe_formula": expression})
+    return expression
+
+
+def lock_optimizer_direction(values, labels, train, *, already_directed=False):
+    """Determine direction once BEFORE preprocessing, never per trial."""
+    initial = evaluate_report_arrays(values[train], labels[train], min_assets=MIN_UNIVERSE,
+                                    fixed_direction=1 if already_directed else None,
+                                    commission_rate=COMMISSION_RATE)
+    direction = 1 if already_directed else initial.direction
+    return values * direction, direction
+
+
 def stage_optimize_lite(factor, eval_result):
     """Bounded FO search over actual FP transforms, evaluated only by QE."""
     import numpy as np
@@ -1214,8 +1587,15 @@ def stage_optimize_lite(factor, eval_result):
     labels = vwap.pct_change(fill_method=None).shift(-2).to_numpy(dtype=float)
     dates = pd.DatetimeIndex(vwap.index)
     values = mat.to_numpy(dtype=float)
+    values = np.where(np.isfinite(vwap.to_numpy()) & (vwap.to_numpy() > 0), values, np.nan)
     train = np.asarray(dates <= pd.Timestamp(EVAL_END))
     train[np.flatnonzero(train)[-2:]] = False  # purge t+2 label boundary
+    values, input_direction = lock_optimizer_direction(
+        values, labels, train, already_directed=bool(factor.get("matrix_direction_applied", False)))
+    raw_base = _dsl_text(factor)
+    directed_base = f"neg({raw_base})" if input_direction < 0 else raw_base
+    directed_base = (f"where(is_finite(AdjVwap), where(gt(AdjVwap, 0.0), {directed_base}, "
+                     "safe_div_null(0.0, 0.0)), safe_div_null(0.0, 0.0))")
     validation = np.asarray((dates >= "2018-07-01") & (dates <= "2023-12-31"))
     validation[np.flatnonzero(validation)[-2:]] = False
     test = np.asarray(dates >= "2024-01-01")
@@ -1247,21 +1627,50 @@ def stage_optimize_lite(factor, eval_result):
         name = trial.trial_id
         treated = transform(name, search_values)
         training = evaluate_report_arrays(treated[search_train], search_labels[search_train],
-                                         min_assets=MIN_UNIVERSE)
+                                         min_assets=MIN_UNIVERSE, fixed_direction=1,
+                                         commission_rate=COMMISSION_RATE)
         valid = evaluate_report_arrays(treated[search_validation], search_labels[search_validation],
-                                       min_assets=MIN_UNIVERSE, fixed_direction=training.direction)
+                                       min_assets=MIN_UNIVERSE, fixed_direction=1,
+                                       commission_rate=COMMISSION_RATE)
         op, params = recipes[name]
         evidence = build_integrity_evidence(name, op or "raw", params,
                                             search_values, treated, expected_parameters=params)
         results[name] = dict(train=metrics(training), validation=metrics(valid),
-                             direction=training.direction, parameters=params,
+                             direction=1, parameters=params,
                              transform=op, integrity=evidence.to_dict())
         results[name]["execution_origin"] = "identity" if op is None else "FP_NATIVE_ARRAY"
-        expr = factor["fe_formula"]
-        if op:
-            expr = f"factor_preprocess.{op}({expr}, {', '.join(f'{k}={v!r}' for k,v in params.items())})"
-        results[name]["expression"] = f"neg({expr})" if training.direction < 0 else expr
-        return {"evaluation_id": f"{page}:{name}", "score": valid.rank_ic_ir, "cost": 1.,
+        results[name]["expression"] = optimizer_dsl(directed_base, name)
+        results[name]["direction_policy"] = "train-once-before-preprocessing-v1"
+        from quant_evaluator.metrics.probe_portfolio.sharpe import compute_portfolio_metrics
+        validation_dates = dates[validation]
+        yearly = {}
+        for year in sorted(set(validation_dates.year)):
+            observed = valid.long_short_returns[validation_dates.year == year]
+            observed = observed[np.isfinite(observed)]
+            if len(observed) >= 60:
+                yearly[str(year)] = compute_portfolio_metrics(observed, periods_per_year=252,
+                                                            min_periods=20)["annualized_return"]
+        stats = compute_portfolio_metrics(valid.long_short_returns, periods_per_year=252, min_periods=20)
+        from quant_evaluator.metrics.risk.drawdown_analysis import compute_drawdown_duration
+        duration = compute_drawdown_duration(valid.long_short_returns, min_periods=20)
+        ic_windows = pd.Series(valid.rank_ic_series).rolling(60, min_periods=40).mean().dropna()
+        stressed = evaluate_report_arrays(treated[search_validation], search_labels[search_validation],
+            min_assets=MIN_UNIVERSE, fixed_direction=1, commission_rate=COMMISSION_RATE * 5)
+        drag = np.asarray(valid.long_short_returns) - np.asarray(stressed.long_short_returns)
+        finite_drag = drag[np.isfinite(drag)]
+        objective_metrics = dict(metrics(valid),
+            worst_year=min(yearly.values()) if yearly else None,
+            year_dispersion=float(np.std(list(yearly.values()), ddof=1)) if len(yearly)>1 else None,
+            drawdown_duration=float(duration.get("max_drawdown_duration", np.nan)), calmar=stats.get("calmar"),
+            rolling_ic_std=float(ic_windows.std()) if len(ic_windows)>1 else None,
+            negative_ic_windows=float((ic_windows < 0).mean()) if len(ic_windows) else None,
+            fee_drag=float(finite_drag.mean()) if len(finite_drag) else None,
+            stress_annual=stressed.annualized_return)
+        objectives = diversified_objectives(objective_metrics)
+        objective = objectives["stability"]
+        results[name].update(objective=objective, objectives=objectives, objective_metrics=objective_metrics,
+                             validation_yearly_returns=yearly)
+        return {"evaluation_id": f"{page}:{name}", "score": objective["score"] if objective["eligible"] else -1., "cost": 1.,
                 "treatment_integrity_evidence": evidence}
     proposals = iter(Trial(trial_id=name, mutation_id=f"{page}:{name}",
                            status=TrialStatus.PROPOSED) for name in recipes)
@@ -1271,28 +1680,43 @@ def stage_optimize_lite(factor, eval_result):
     session = SearchRunner(config, lambda: next(proposals),
                            EvaluationProtocol(split, evaluate)).run(f"{page}:preprocess-v1")
     winner = session.best_trial_id
-    if winner is None:
+    if winner is None or not results[winner]["objective"]["eligible"]:
         raise ValueError(f"{page}: optimizer produced no valid winner: {session.to_dict()}")
     direction = results[winner]["direction"]
     selected = transform(winner, values)
+    expression = optimizer_dsl(directed_base, winner)
+    # Do not publish an FP result with a merely decorative DSL. Execute the
+    # complete expression through FE and require replay parity before saving.
+    with tempfile.TemporaryDirectory(prefix="optimizer_fe_replay_") as replay_dir:
+        land_factor_batch_windowed(
+            [dict(page_name=page, fe_formula=expression)], backend_name="pandas",
+            output_dir=replay_dir)
+        replay = pd.read_parquet(Path(replay_dir) / f"{page}.parquet").reindex(
+            index=mat.index, columns=mat.columns).to_numpy(dtype=float)
+        if not np.allclose(selected, replay, rtol=1e-4, atol=1e-6, equal_nan=True):
+            raise ValueError(f"{page}: optimized FE DSL replay differs from FP treatment; publication blocked")
+        selected = replay
     heldout = evaluate_report_arrays(selected[test], labels[test], min_assets=MIN_UNIVERSE,
-                                     fixed_direction=direction)
+                                     fixed_direction=direction, commission_rate=COMMISSION_RATE)
     baseline_heldout = evaluate_report_arrays(values[test], labels[test], min_assets=MIN_UNIVERSE,
-                                              fixed_direction=results["raw"]["direction"])
-    base = factor["fe_formula"]
+                                              fixed_direction=results["raw"]["direction"],
+                                              commission_rate=COMMISSION_RATE)
     op, params = recipes[winner]
-    # FP expressions are explicitly namespaced, not claimed as executable FE DSL.
-    expression = base if op is None else f"factor_preprocess.{op}({base}, {', '.join(f'{k}={v!r}' for k,v in params.items())})"
-    if direction < 0:
-        expression = f"neg({expression})"
+    expression = optimizer_dsl(directed_base, winner)
     record = dict(best=winner, best_mean_rankic=results[winner]["validation"]["mean_rankic"],
                   best_rankic_ir=results[winner]["validation"]["rankic_ir"],
                   steps=[] if op is None else [op], dsl_preproc_ops=[expression],
-                  effective_formula=expression, variants=results, is_flipped=direction < 0,
+                  effective_formula=expression, variants=results, is_flipped=input_direction < 0,
+                  input_direction=input_direction, matrix_direction_applied=True,
+                  direction_policy="train-once-before-preprocessing-v1",
+                  dsl_status="full-expression FE replay parity verified",
                   optimizer="factor_optimizer.SearchRunner", preprocess="factor_preprocess.registry",
                   selection_window="2018-07-01..2023-12-31; t+2 purged", direction_window=EVAL_START+".."+EVAL_END,
                   test_note="2024+ previously explored; not sealed OOS", heldout=metrics(heldout),
                   baseline_heldout=metrics(baseline_heldout),
+                  objective=results[winner]["objective"], objective_comparison=objective_comparison(results),
+                  stress_commission_rate=COMMISSION_RATE * 5, commission_rate=COMMISSION_RATE,
+                  excluded_costs=["stamp_duty", "slippage", "borrow_cost"],
                   session=session.to_dict())
     def clean(value):
         if isinstance(value, dict): return {k: clean(v) for k,v in value.items()}
@@ -1427,7 +1851,7 @@ def stage_page_inject(factor, eval_result, *, report_result=None, report_dates=N
         # 内联简版：无图单页
         html = _minimal_page(page, dsl_text, fe_formula_raw, is_flipped, eval_result)
         out = output_dir / f"factor_{page}.html"
-        out.write_text(html, encoding="utf-8")
+        out.write_text(evaluation_banner(html, factor.get("evaluation_provenance")), encoding="utf-8")
         return {"page": str(out), "mode": "minimal"}
 
     try:
@@ -1456,6 +1880,8 @@ def stage_page_inject(factor, eval_result, *, report_result=None, report_dates=N
             "LS": report_result.long_short_nav_aligned.tolist(),
         }
         base = {
+            "cost_note": (f"按单边成交额佣金 {getattr(report_result, 'commission_rate', 0.0) * 10000:g} bp 扣费；"
+                          "印花税、滑点及融券成本尚未计入。采用目标权重换手模型，非完整成交仿真。"),
             "report_start": str(dates.min().date()),
             "report_end": str(dates.max().date()),
             "mean_rankic": report_result.mean_rank_ic,
@@ -1486,8 +1912,12 @@ def stage_page_inject(factor, eval_result, *, report_result=None, report_dates=N
 
         dsl_note = "factor_engine DSL（本因子由增量管线落值）"
         req_cols = _required_columns(dsl_text)
+        optimization = opt_meta.get(page, {})
+        if (optimization.get("direction_policy") != "train-once-before-preprocessing-v1"
+                or optimization.get("dsl_status") != "full-expression FE replay parity verified"):
+            optimization = {}
         html = R.build_html(page, note, dsl_text, dsl_note, req_cols, base,
-                            opt_meta.get(page, {}), gate, {}, charts, opt_charts)
+                            optimization, gate, {}, charts, opt_charts)
 
         # 替换回测区间为我们的评估口径说明
         html = html.replace("本周新挖", "本周新挖（增量）")
@@ -1495,20 +1925,20 @@ def stage_page_inject(factor, eval_result, *, report_result=None, report_dates=N
                             f"全窗评估 {FULL_WINDOW_START.date()} ~ {FULL_WINDOW_END.date()}"
                             "（方向仅由 2016-01-04 ~ 2018-06-30 训练窗确定；vwap-to-vwap shift(-2)）")
         out = output_dir / f"factor_{page}.html"
-        out.write_text(html, encoding="utf-8")
+        out.write_text(evaluation_banner(html, factor.get("evaluation_provenance")), encoding="utf-8")
 
         banned = _check_banned(html, page=page)
         if banned:
             # 违规就降级为 minimal 无图页
             html2 = _minimal_page(page, dsl_text, fe_formula_raw, is_flipped, eval_result)
-            out.write_text(html2, encoding="utf-8")
+            out.write_text(evaluation_banner(html2, factor.get("evaluation_provenance")), encoding="utf-8")
             return {"page": str(out), "mode": "minimal", "banned_in_full": banned}
         return {"page": str(out), "mode": "full"}
     except Exception as exc:
         print(f"    [page_inject fallback] {type(exc).__name__}: {str(exc)[:120]}", flush=True)
         html = _minimal_page(page, dsl_text, fe_formula_raw, is_flipped, eval_result)
         out = output_dir / f"factor_{page}.html"
-        out.write_text(html, encoding="utf-8")
+        out.write_text(evaluation_banner(html, factor.get("evaluation_provenance")), encoding="utf-8")
         return {"page": str(out), "mode": "minimal"}
 
 
@@ -1562,12 +1992,19 @@ def _opt_compare_charts(page, raw_mat, opt_mat, is_flipped):
 
 def _minimal_page(page, dsl_text, fe_formula_raw, is_flipped, eval_result):
     """降级简版页面（无图，仅指标/公式/来源）。"""
+    import html
+    import math
     e = eval_result or {}
-    ic = e.get("rank_ic", 0.0)
-    ir = e.get("ic_ir", 0.0)
-    flip_badge = '<span class="badge badge-yellow">⚠ 已翻转（IC<0）</span>' if is_flipped else ""
-    ic_cls = "pos" if ic >= 0 else "neg"
-    ir_cls = "pos" if ir >= 0 else "neg"
+    def metric(key, precision):
+        value = e.get(key)
+        if not isinstance(value, (int, float)) or not math.isfinite(value):
+            return "—", ""
+        return f"{value:+.{precision}f}", "pos" if value >= 0 else "neg"
+    ic, ic_cls = metric("rank_ic", 4)
+    ir, ir_cls = metric("ic_ir", 3)
+    page = html.escape(str(page))
+    dsl_text = html.escape(str(dsl_text or "（无已验证 DSL）"))
+    flip_badge = '<span class="badge badge-yellow">⚠ 按训练窗方向翻转</span>' if is_flipped else ""
     return f"""<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -1607,9 +2044,9 @@ h2{{font-size:0.95rem;color:var(--primary);margin:0 0 12px;border-bottom:1px sol
 </header>
 <main>
 <div class="grid-4">
-<div class="metric"><b class="{ic_cls}">{ic:+.4f}</b><span>RankIC</span></div>
-<div class="metric"><b class="{ir_cls}">{ir:+.3f}</b><span>RankIC IR</span></div>
-<div class="metric"><b>{e.get("n_days", 0)}</b><span>评估交易日</span></div>
+<div class="metric"><b class="{ic_cls}">{ic}</b><span>RankIC</span></div>
+<div class="metric"><b class="{ir_cls}">{ir}</b><span>RankIC IR</span></div>
+<div class="metric"><b>{html.escape(str(e.get("n_days") or "—"))}</b><span>评估交易日</span></div>
 <div class="metric"><b>{"是" if is_flipped else "否"}</b><span>已翻正</span></div>
 </div>
 <div class="card">
@@ -1618,7 +2055,7 @@ h2{{font-size:0.95rem;color:var(--primary);margin:0 0 12px;border-bottom:1px sol
 </div>
 <div class="card">
 <h2>🧬 优化因子（预处理 + 择优）</h2>
-<p style="font-size:0.82rem;color:#64748b;margin:0">本因子已进入 weekly_backtest_output/optimized_factors/ 与 optimized_meta.json，最优变体与 IR 见汇总表。</p>
+<p style="font-size:0.82rem;color:#64748b;margin:0">本页为降级展示：完整图表生成未完成，优化结果未在本页验证。不能据此认定已完成优化；请通过主链路重新生成并验证报告。</p>
 </div>
 </main>
 </body>
@@ -1788,9 +2225,15 @@ def _new_mining_section(new_entries):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--overnight-formulas", type=Path)
+    ap.add_argument("--retest-pool", action="store_true",
+                    help="Force-land the existing report pool in resumable guarded batches; no automatic publication")
     ap.add_argument("--optimize-queue", type=Path,
                     help="Resume optimization of passed weekly candidates in this queue directory")
     ap.add_argument("--overnight-dir", type=Path, default=Path("/tmp/weekly_overnight_20260906"))
+    ap.add_argument("--worker-memory-gib", type=int, choices=range(1, 49), default=8)
+    ap.add_argument("--worker-threads", type=int, choices=range(1, 33), default=2)
+    ap.add_argument("--wait-for-queue", action="store_true",
+                    help="Wait for the current queue owner, then refresh formulas and resume")
     ap.add_argument("--overnight-retry-name", action="append", default=[],
                     help="Explicit failed/unavailable candidate to retry; repeatable")
     ap.add_argument("--manifest")
@@ -1801,6 +2244,8 @@ def main():
                     help="select a discovered candidate by its source name (repeatable)")
     ap.add_argument("--publish-from-manifest", type=Path,
                     help="render index/detail HTML only from a verified QE report manifest")
+    ap.add_argument("--publish-details-only", action="store_true",
+                    help="Publish selected detail pages without replacing the full homepage")
     ap.add_argument("--report-dir", type=Path, default=REPORTS_DIR,
                     help="target report directory for --publish-from-manifest")
     ap.add_argument("--limit", type=int, default=None)
@@ -1808,8 +2253,12 @@ def main():
     ap.add_argument("--fe-backend", default="polars_long")
     ap.add_argument("--qe-backend", choices=("auto", "cpu", "cuda", "cuda_strict"), default="auto")
     ap.add_argument("--skip-landing", action="store_true")
+    ap.add_argument("--force-landing", action="store_true",
+                    help="Recompute admitted DSL matrices, replacing each only after all windows succeed")
     ap.add_argument("--optimize-only", action="store_true",
                     help="Run FO/FP optimization on verified landed matrices; do not publish")
+    ap.add_argument("--audit-only", action="store_true",
+                    help="Audit executable DSL, history requirements and matrix coverage without computing")
     ap.add_argument("--evaluate-only", action="store_true",
                     help="evaluate and write the manifest, but do not mutate pages/pool/state")
     ap.add_argument("--output-manifest", type=Path, default=REPORT_MANIFEST_JSON)
@@ -1819,14 +2268,18 @@ def main():
         run_optimization_queue(args.optimize_queue)
         return
 
-    if args.overnight_formulas:
+    if args.overnight_formulas or args.retest_pool:
         run_overnight_queue(args.overnight_formulas, args.overnight_dir,
-                            retry_names=args.overnight_retry_name)
+                            retry_names=args.overnight_retry_name, wait_for_lock=args.wait_for_queue,
+                            memory_gib=args.worker_memory_gib, worker_threads=args.worker_threads,
+                            batch_size=args.batch_size, fe_backend=args.fe_backend, qe_backend=args.qe_backend,
+                            pool_retest=args.retest_pool)
         return
 
     if args.publish_from_manifest is not None:
         result = publish_report_from_manifest(
             args.publish_from_manifest, report_dir=args.report_dir,
+            update_homepage=not args.publish_details_only,
         )
         print(f"[publish] {json.dumps(result, ensure_ascii=False)}", flush=True)
         return
@@ -1848,32 +2301,54 @@ def main():
         manifest = load_manifest(args.manifest)
     if args.limit:
         manifest = manifest[:args.limit]
+    if args.candidate_name and not args.discover_root:
+        requested = set(args.candidate_name)
+        manifest = [r for r in manifest if r.get("page_name") in requested or r.get("factor_name") in requested]
+        if not manifest:
+            raise ValueError("no requested candidates found")
 
     if args.optimize_only:
         for factor in manifest:
             print(json.dumps(stage_optimize_lite(factor, None), ensure_ascii=False), flush=True)
         return
 
+    admitted, admission_errors = admit_report_factors(manifest)
+    if args.audit_only:
+        from dataclasses import asdict
+        audit = {}
+        for record in manifest:
+            name = record["page_name"]
+            source = matrix_source(name)
+            audit[name] = {"coverage": asdict(source),
+                           "dsl_history_error": admission_errors.get(name),
+                           "eligible": source.is_full_window and name not in admission_errors}
+            if len(audit) % 25 == 0:
+                print(f"[audit] {len(audit)}/{len(manifest)}", flush=True)
+        args.output_manifest.parent.mkdir(parents=True, exist_ok=True)
+        temporary = args.output_manifest.with_suffix(".json.tmp")
+        temporary.write_text(json.dumps(audit, ensure_ascii=False, indent=1, default=str))
+        os.replace(temporary, args.output_manifest)
+        print(f"[audit done] {len(audit)} factors; {args.output_manifest}", flush=True)
+        return
+
     landing = {}
     if not args.skip_landing:
         landing = land_missing_factors(
-            manifest,
+            admitted,
             batch_size=max(1, args.batch_size),
             backend_name=args.fe_backend,
+            force=args.force_landing,
         )
         print(f"[run_many] {json.dumps(landing, ensure_ascii=False)}", flush=True)
 
+    evaluable, landing_errors = evaluation_candidates_after_landing(admitted, landing)
     batch_evaluation = evaluate_factor_batch(
-        manifest,
+        evaluable,
         batch_size=max(1, args.batch_size),
         backend=args.qe_backend,
     )
-    # Keep the actual engine failure in the durable manifest, not only stdout.
-    # Only annotate unavailable evaluations: never replace a successful result
-    # or reinterpret a calculation failure as a screening failure.
-    for name, cause in landing.get("factor_engine_errors", {}).items():
-        if name in batch_evaluation.get("unavailable", {}):
-            batch_evaluation["unavailable"][name] += f"; FactorEngine landing failed: {cause}"
+    batch_evaluation["unavailable"].update(admission_errors)
+    batch_evaluation["unavailable"].update(landing_errors)
     written_manifest = write_report_manifest(
         manifest, batch_evaluation, target=args.output_manifest,
     )
@@ -1893,8 +2368,15 @@ def main():
     state = load_state()
     done = {}
     for factor in manifest:
+        factor["evaluation_provenance"] = batch_evaluation.get("evaluation_provenance")
         fname = factor["factor_name"]
         page = factor["page_name"]
+        if page in batch_evaluation["unavailable"]:
+            # Invalidate previously completed stages before any optimization or publication.
+            state.pop(fname, None)
+            save_state(state)
+            print(f"[blocked] {page}: {batch_evaluation['unavailable'][page]}", flush=True)
+            continue
         print(f"\n=== {page} ({fname}) ===", flush=True)
         if fname not in state:
             state[fname] = {"stage": "", "result": {}, "page": page}

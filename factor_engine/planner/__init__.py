@@ -5,6 +5,7 @@ from .lowerer import Lowerer
 from .optimizer import Optimizer
 from .physical_lowerer import (
     compile_many_chunked,
+    iter_compile_many_chunked,
     validate_expression_depth,
 )
 
@@ -26,6 +27,7 @@ __all__ = [
     "Lowerer",
     "Optimizer",
     "compile_many_chunked",
+    "iter_compile_many_chunked",
     "validate_expression_depth",
     "MAX_DAG_WIDTH",  # 延迟求值，自适应
     "MAX_EXPRESSION_DEPTH",  # 延迟求值，基于 sys.getrecursionlimit()

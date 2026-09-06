@@ -345,6 +345,25 @@ CREATE TABLE IF NOT EXISTS factor_watermark (
     end_date     TEXT NOT NULL,
     last_updated TEXT NOT NULL,
     row_count    INTEGER,
+    generation_id TEXT,
+    frequency TEXT,
+    committed_tip TEXT,
+    coverage_intervals_json TEXT,
+    universe_snapshot TEXT,
+    FOREIGN KEY (factor_id) REFERENCES factor_registry(factor_id)
+);
+
+CREATE TABLE IF NOT EXISTS factor_published_watermark (
+    factor_id    TEXT PRIMARY KEY,
+    start_date   TEXT NOT NULL,
+    end_date     TEXT NOT NULL,
+    last_updated TEXT NOT NULL,
+    row_count    INTEGER NOT NULL,
+    generation_id TEXT NOT NULL,
+    frequency TEXT NOT NULL,
+    committed_tip TEXT NOT NULL,
+    coverage_intervals_json TEXT NOT NULL,
+    universe_snapshot TEXT,
     FOREIGN KEY (factor_id) REFERENCES factor_registry(factor_id)
 );
 
@@ -661,6 +680,17 @@ class FactorCatalog:
             self._conn.execute(
                 "ALTER TABLE factor_run ADD COLUMN field_catalog_hash TEXT"
             )
+        watermark_cols = {
+            row[1] for row in self._conn.execute("PRAGMA table_info(factor_watermark)")
+        }
+        for name in (
+            "generation_id", "frequency", "committed_tip",
+            "coverage_intervals_json", "universe_snapshot",
+        ):
+            if name not in watermark_cols:
+                self._conn.execute(
+                    f"ALTER TABLE factor_watermark ADD COLUMN {name} TEXT"
+                )
         ck_cols = {
             row[1]
             for row in self._conn.execute(
@@ -1243,6 +1273,65 @@ class FactorCatalog:
             (factor_id, start_date, end_date, now, row_count),
         )
 
+    def update_published_watermark(
+        self,
+        *,
+        factor_id: str,
+        start_date: str,
+        end_date: str,
+        row_count: int,
+        generation_id: str,
+        frequency: str,
+        committed_tip: str,
+        coverage_intervals: list[dict[str, str]],
+        universe_snapshot: str | None,
+    ) -> dict:
+        """Persist generation-bound publication coverage in one SQLite commit."""
+        if not generation_id or not frequency or not committed_tip:
+            raise ValueError("published watermark requires generation, frequency, and committed_tip")
+        if not coverage_intervals:
+            raise ValueError("published watermark requires coverage intervals")
+        now = datetime.now(timezone.utc).isoformat()
+        coverage_json = json.dumps(
+            coverage_intervals, sort_keys=True, separators=(",", ":")
+        )
+        self._exec_commit(
+            "INSERT INTO factor_published_watermark "
+            "(factor_id,start_date,end_date,last_updated,row_count,generation_id,"
+            "frequency,committed_tip,coverage_intervals_json,universe_snapshot) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?) "
+            "ON CONFLICT(factor_id) DO UPDATE SET "
+            "start_date=excluded.start_date,end_date=excluded.end_date,"
+            "last_updated=excluded.last_updated,row_count=excluded.row_count,"
+            "generation_id=excluded.generation_id,frequency=excluded.frequency,"
+            "committed_tip=excluded.committed_tip,"
+            "coverage_intervals_json=excluded.coverage_intervals_json,"
+            "universe_snapshot=excluded.universe_snapshot",
+            (
+                factor_id, start_date, end_date, now, int(row_count),
+                generation_id, frequency, committed_tip, coverage_json,
+                universe_snapshot,
+            ),
+        )
+        result = self.get_published_watermark(factor_id)
+        if result is None:
+            raise RuntimeError("published watermark commit returned no row")
+        return result
+
+    def get_published_watermark(self, factor_id: str) -> dict | None:
+        """Return only certified published coverage; legacy rows are not promoted."""
+        row = self._conn.execute(
+            "SELECT * FROM factor_published_watermark WHERE factor_id = ?",
+            (factor_id,),
+        ).fetchone()
+        if row is None:
+            return None
+        result = dict(row)
+        result["coverage_intervals"] = json.loads(
+            result.get("coverage_intervals_json") or "[]"
+        )
+        return result
+
     # ------------------------------------------------------------------
     # 查询
     # ------------------------------------------------------------------
@@ -1327,6 +1416,9 @@ class FactorCatalog:
             )
             self._conn.execute(
                 "DELETE FROM factor_watermark WHERE factor_id = ?", (factor_id,)
+            )
+            self._conn.execute(
+                "DELETE FROM factor_published_watermark WHERE factor_id = ?", (factor_id,)
             )
             self._conn.execute(
                 "DELETE FROM factor_partition_stats WHERE factor_id = ?", (factor_id,)

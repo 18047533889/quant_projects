@@ -1,0 +1,76 @@
+schema: factor_engine.operator_backend_remediation.v1
+git_sha: f9e7237fafe4112391e62c8874caae7996ce0b11
+timestamp: '2026-09-06T17:59:05+08:00'
+scope: bounded synthetic operator audit and narrow backend corrections
+files:
+  - factor_engine/cleaned_operators/common/polars_auto.py
+  - factor_engine/cleaned_operators/common/polars_misc_utils.py
+  - factor_engine/cleaned_operators/common/polars_ops.py
+  - factor_engine/cleaned_operators/common/polars_daily_native.py
+  - factor_engine/scripts/audit_operator_differential_execution.py
+  - factor_engine/tests/operators/test_polars_nonfinite_reference_parity.py
+  - factor_engine/tests/operators/test_differential_audit_honesty.py
+fixes:
+  - sqrt_abs, log_abs, exp_neg now map non-finite results to null like their pandas reference.
+  - ts_pct now masks missing or zero lagged divisors, retaining canonical overflow behavior for other divisors.
+  - signed_log has a real Polars expression kernel matching sign(x)*log(abs(x)+1e-10), replacing the pandas delegate.
+  - Differential audit reads physical-kind authority and rejects failed, empty, unknown-kind or reference-mismatched certifications; nonzero exit on incomplete audit.
+inventory:
+  artifact: evidence/r2/20260906_operator_inventory.json
+  remediation_matrix: evidence/r2/20260906_operator_coverage_matrix.json
+  remediation_matrix_generator: evidence/r2/20260906_operator_coverage_matrix.py
+  source_binding: Each canonical records backend classes and resolved current source-file SHA256, measured oracle status, differential evidence and explicit blockers.
+  canonical_count: 1756
+  before_polars_physical_kinds:
+    polars_native: 10
+    polars_udf_pandas_delegate: 790
+    unsupported: 956
+  after_polars_physical_kinds:
+    polars_native: 11
+    polars_udf_pandas_delegate: 789
+    unsupported: 956
+  only_missing_polars_slot: arg
+  missing_slot_disposition: unsafe operator; intentionally not widened into production
+  note: Unsupported physical classification is not synonymous with absent code; includes missing explicit physical declarations. These are all registry canonicals, not a separately verified agent_available surface.
+tests:
+  targeted_pytest:
+    status: PASS
+    passed: 21
+    elapsed_seconds: 47.25
+    command: env PYTHONPATH=. OMP_NUM_THREADS=4 OPENBLAS_NUM_THREADS=4 POLARS_MAX_THREADS=4 NUMBA_NUM_THREADS=4 .venv/bin/python -m pytest -q factor_engine/tests/operators/test_polars_nonfinite_reference_parity.py factor_engine/tests/operators/test_differential_audit_honesty.py
+  selected_direct_probe:
+    status: RUN
+    entry: evidence/r2/20260906_operator_probe.py
+    selected_names: 18
+    passing_backend_parity: 14
+    absent_runtime_implementations: [expanding_mean, expanding_std, expanding_zscore, ts_count]
+    note: Historical names selected for diagnosis; absence does not prove these names belong to the current canonical inventory.
+  corrected_differential_audit:
+    status: RUN_INCOMPLETE
+    artifact: evidence/r2/20260906_operator_differential_corrected/operator_differential_execution.json
+    canonical_count: 29
+    fixtures_per_canonical: 18
+    native_parity_certified: 7
+    reference_fallback: 1
+    not_certified: 21
+    exit_code: 1
+    note: Local synthetic parity only, not production certification. Prior uncorrected audit artifact overstates native coverage and must not be used as certification.
+  independent_scoped_review:
+    status: PASS
+    reviewer: root coordinator
+    scope: Four operator kernel diffs and 21 regression tests; signed_log no-pandas, prefix, nonfinite oracle and ts_pct zero-divisor semantics reviewed.
+  full_compile_import: NOT_RUN
+  registry_duplicate_authority_full_gate: NOT_RUN
+  abi_placeholder_full_gate: NOT_RUN
+  full_backend_parity: NOT_RUN
+  full_pit_poison: NOT_RUN
+  q_null_time_runtime: NOT_RUN
+  ci: NOT_RUN
+  production_gate: NOT_RUN
+  all_1756_operator_math_oracles: NOT_RUN
+  real_data_and_100k_factor_run: NOT_RUN
+limitations:
+  - No production-safe flags were promoted and no GPU kernel was added in this scope.
+  - Remaining 1756-operator mathematical coverage and missing native implementations are not complete.
+  - Thread pools limited to four; all execution fixtures are small and synthetic.
+  - Existing unrelated dirty files retained; no commit or push.

@@ -1,0 +1,55 @@
+schema: factor_engine.field_catalog_hash_cache.v1
+git_sha: f9e7237fafe4112391e62c8874caae7996ce0b11
+timestamp: '2026-09-06T18:14:16+08:00'
+files:
+  - factor_engine/fields/registry.py
+  - factor_engine/tests/operators/test_field_catalog_hash_cache.py
+problem: structural_key recomputed full field catalog JSON and dataclass asdict on every lookup; supplied profile attributed 68.3 seconds to 3344 calls.
+change: Cache the exact existing SHA256 using exact frozen spec identity after deep-immutability proof, retained strong references, and recursive mutable metadata tokens. Registration invalidates cache; nested metadata changes are detected without changing the mutability contract. Unknown mutable types and spec subclasses bypass the cache. Float tokens distinguish signed zero and handle NaN/Inf. Empty metadata has a fast path; warm calls never rehash all dataclass attributes.
+tests:
+  regression:
+    status: PASS
+    count: 16
+    seconds: 20.79
+    path: factor_engine/tests/operators/test_field_catalog_hash_cache.py
+    coverage: [warm_no_export, register_replace_invalidation, direct_spec_replace, nested_metadata_mutation, unknown_metadata_bypass, unknown_mutable_field_bypass, signed_zero, infinities, nan, failed_registration]
+  identity_fastpath_extra_regression:
+    status: PASS
+    count: 2
+    seconds: 21.15
+    coverage: [no_dataclass_rehash, dynamic_subclass_bypasses_cache]
+  existing_registry_tests:
+    status: FAIL
+    passed: 62
+    failed: 1
+    seconds: 27.57
+    paths:
+      - factor_engine/tests/fields/test_field_catalog_v2.py
+      - factor_engine/tests/operators/test_r10_field_registry_2026_08.py
+      - factor_engine/tests/operators/test_field_catalog_alignment_2026.py
+    failure: test_experimental_families_excluded_from_production_mining expects intra_amihud allow_in_production=False but current operator policy returns True; not changed by this patch, baseline replay NOT_RUN.
+    followup: Diagnosed and fixed the stale R23 intraday certificate admission in a separate scoped patch. This previously failing test now passes; see 20260906_intraday_certificate_gate.yaml. The original combined 63-test suite was not rerun after that followup.
+  syntax_import: PASS via pytest import
+  git_diff_check: PASS
+  independent_review: PASS with coordinator signed-zero finding corrected and regression-tested
+  full_compile_import: NOT_RUN
+  full_registry_duplicate_authority_gate: NOT_RUN
+  abi_placeholder: NOT_RUN
+  full_backend_parity: NOT_RUN
+  full_pit_poison: NOT_RUN
+  q_null_time_runtime: NOT_RUN
+  ci: NOT_RUN
+  production_gate: NOT_RUN
+performance:
+  artifact: evidence/r2/20260906_field_catalog_hash_benchmark.json
+  generator: evidence/r2/20260906_field_catalog_hash_bench.py
+  iterations: 300
+  fields: 368
+  baseline_seconds: 2.40567560098134
+  cached_seconds: 0.04010789794847369
+  speedup: 59.98009678971191
+  exact_hash_parity: true
+limitations:
+  - Microbenchmark only; root coordinator owns end-to-end run_many validation.
+  - Metadata remains mutable; callers must not concurrently mutate metadata during catalog serialization, matching the existing serialization contract.
+  - No commit or push, and no unrelated dirty files touched.

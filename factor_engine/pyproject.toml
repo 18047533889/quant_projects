@@ -8,6 +8,8 @@ version = "0.3.1"
 description = "Factor engine: DSL parser, IR, planner, runtime, modeling, and service"
 requires-python = ">=3.10"
 dependencies = [
+    # Public execution uses the canonical DataAccess identity encoder.
+    "data-access>=0.10.2",
     "PyYAML>=6.0",
     "numpy>=1.24",
     "pandas>=2.0",
@@ -21,6 +23,9 @@ dependencies = [
     # gate).  It must be a hard dependency, not an optional extra.
     "polars>=0.20",
 ]
+
+[project.scripts]
+factor-engine-serve = "factor_engine.service.app:main"
 
 [project.optional-dependencies]
 service = ["fastapi>=0.110", "uvicorn[standard]>=0.27", "pydantic>=2.0"]
@@ -79,6 +84,7 @@ packages = [
     "factor_engine.factor_recipes",
     "factor_engine.fields",
     "factor_engine.ir",
+    "factor_engine.identity",
     "factor_engine.market",
     "factor_engine.mining",
     "factor_engine.planner",
@@ -112,6 +118,7 @@ packages = [
 # R55 wheel smoke: composite_evidence.py reads the composite verification
 # manifest at import time; ship the packaged copy inside the wheel.
 "factor_engine.backend" = ["_evidence/*.json"]
+"factor_engine.runtime.quality" = ["dq_profiles.yaml"]
 
 [tool.setuptools.exclude-package-data]
 "*" = [

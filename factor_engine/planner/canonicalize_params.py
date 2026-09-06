@@ -247,6 +247,29 @@ def canonicalize_parameter_values(
     return out
 
 
+def exact_parameter_values(attrs: Mapping[str, Any]) -> dict[str, Any]:
+    """Return values for an exact execution/CSE identity without approximation.
+
+    This deliberately does not apply significant-digit rounding or declared
+    search equivalences.  Containers are copied into deterministic immutable
+    shapes, while scalar types and values (including large integers and signed
+    zero) are preserved for the typed plan encoder.
+    """
+
+    def _exact(value: Any) -> Any:
+        if isinstance(value, Mapping):
+            if not all(isinstance(k, str) for k in value):
+                raise TypeError("exact parameter mappings require string keys")
+            return {k: _exact(value[k]) for k in sorted(value)}
+        if isinstance(value, Sequence) and not isinstance(value, (str, bytes)):
+            return tuple(_exact(v) for v in value)
+        return value
+
+    if not all(isinstance(k, str) for k in attrs):
+        raise TypeError("exact parameter attrs require string keys")
+    return {k: _exact(attrs[k]) for k in sorted(attrs)}
+
+
 def _round_sig(value: float, digits: int) -> float:
     import math
 
@@ -256,8 +279,13 @@ def _round_sig(value: float, digits: int) -> float:
         shift = digits - int(math.floor(math.log10(abs(value)))) - 1
     except (ValueError, OverflowError):
         return value
-    factor = 10.0 ** shift
-    return math.floor(value * factor + 0.5) / factor
+    try:
+        factor = 10.0 ** shift
+        return math.floor(value * factor + 0.5) / factor
+    except OverflowError:
+        # Only the scale construction for subnormal finite values takes this
+        # fallback. Normal values retain the legacy half-up behavior exactly.
+        return float(format(value, f".{digits}g"))
 
 
 class ParameterCanonicalizer:
@@ -292,7 +320,11 @@ class ParameterCanonicalizer:
         # hashable key: same params -> same key, different semantic params ->
         # different key, and the element order inside each pair is stable so the
         # tuple is order-invariant regardless of dict iteration order.
-        return (self.canonical or "", tuple(sorted((k, _freeze(v)) for k, v in canon.items())))
+        return (
+            "search-equivalence-v1",
+            self.canonical or "",
+            tuple(sorted((k, _freeze(v)) for k, v in canon.items())),
+        )
 
 
 def _freeze(value: Any) -> Any:

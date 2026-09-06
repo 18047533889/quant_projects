@@ -188,7 +188,29 @@ def panel_to_series(
     *,
     template: "pd.Series | pd.Index | None" = None,
 ) -> pd.Series:
-    stacked = panel.stack(future_stack=True)
+    # The common dense numeric root need not rebuild pandas' general stack
+    # machinery for every factor. Keep unusual axes/dtypes/metadata on that
+    # reference path, and copy values so a caller cannot mutate cached panels.
+    simple_columns = (
+        type(panel.columns) in (pd.Index, pd.RangeIndex)
+        and panel.columns.is_unique and not panel.columns.hasnans
+        and (panel.columns.dtype.kind in "iu" or (
+            panel.columns.dtype == np.dtype("object")
+            and all(type(column) is str for column in panel.columns)
+        ))
+    )
+    if (
+        type(panel) is pd.DataFrame and not panel.empty
+        and type(panel.index) is pd.DatetimeIndex
+        and panel.index.is_unique and not panel.index.hasnans
+        and simple_columns and not panel.attrs and panel.flags.allows_duplicate_labels
+        and all(dtype == np.dtype("float64") for dtype in panel.dtypes)
+    ):
+        axis = pd.MultiIndex.from_product([panel.index, panel.columns])
+        values = np.array(panel.to_numpy(copy=False), order="C", copy=True).reshape(-1)
+        stacked = pd.Series(values, index=axis)
+    else:
+        stacked = panel.stack(future_stack=True)
     stacked.index.names = [ctx.timestamp_col, ctx.instrument_col]
     if template is None:
         return stacked
@@ -359,15 +381,20 @@ def _estimate_row_count(evaluated: list[Any]) -> int | None:
     return max(estimates) if estimates else None
 
 
-def _record_uncertified(canonical: str, reason: str) -> None:
+def _record_uncertified(canonical: str, reason: str, *, ctx: ExecutionContext) -> None:
     """Best-effort telemetry for a research-mode certification degradation."""
     try:
-        from factor_engine.runtime.resource_telemetry import record_resource_telemetry
-
-        record_resource_telemetry({
-            "param_domain_membership_skipped": canonical,
-            "reason": reason,
-        })
+        # Resource snapshots belong to the run boundary/sampler, not every
+        # operator invocation. Keep the degradation observable in the root's
+        # own context; the old snapshot return value was discarded entirely.
+        if ctx.runtime_stats is None:
+            ctx.runtime_stats = {}
+        stats = ctx.runtime_stats
+        stats["param_domain_membership_skipped"] = canonical
+        stats["parameter_certification_degradation_reason"] = reason
+        stats["parameter_certification_degradation_count"] = int(
+            stats.get("parameter_certification_degradation_count", 0)
+        ) + 1
     except Exception:
         pass
 
@@ -907,6 +934,7 @@ def make_cleaned_kernel(eval_fn: Callable[[PlanNode, ExecutionContext], Any], op
                 _record_uncertified(
                     canonical,
                     f"no certified region for backend {backend!r} (research degradation)",
+                    ctx=ctx,
                 )
         except (ParameterDomainError, NoCertifiedParameterRegionError,
                 ParameterCertificationInfrastructureError):
@@ -918,7 +946,7 @@ def make_cleaned_kernel(eval_fn: Callable[[PlanNode, ExecutionContext], Any], op
             # production already hard-failed above (every production error path
             # raises a typed exception that the except clause above re-raises).
             _record_uncertified(
-                canonical, f"{type(exc).__name__}: {exc} (research degradation)"
+                canonical, f"{type(exc).__name__}: {exc} (research degradation)", ctx=ctx
             )
         result = _call_cleaned_operator(canonical, operator, call_args, kw)
         # Keep literal-only arithmetic scalar.  Promoting an intermediate such as

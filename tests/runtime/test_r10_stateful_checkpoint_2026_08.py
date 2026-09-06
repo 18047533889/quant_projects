@@ -15,20 +15,32 @@ import pytest
 from factor_engine.stateful_contract import StateCheckpoint, StatefulCheckpointRegistry, StatefulContractError
 
 
-def test_source_snapshot_scope_is_window_independent():
-    from factor_engine.runtime.stateful_incremental import _source_snapshot_scope
+def test_source_snapshot_scope_requires_trusted_identity():
+    from factor_engine.runtime.stateful_incremental import (
+        SourceSnapshotIdentityUnavailableError,
+        _source_snapshot_scope,
+    )
 
     class S:
-        def __init__(self, dataset, start, end):
-            self.dataset = dataset
+        def __init__(self, identity, start, end):
+            self.source_identity = identity
             self.start_date = start
             self.end_date = end
 
-    a = S("ashare_daily", "2024-01-01", "2024-03-01")
-    b = S("ashare_daily", "2024-02-01", "2024-04-01")  # different window, same data
+    a = S("ashare-snapshot-v1", "2024-01-01", "2024-03-01")
+    b = S("ashare-snapshot-v1", "2024-02-01", "2024-04-01")
     assert _source_snapshot_scope(a) == _source_snapshot_scope(b)
-    c = S("us_daily", "2024-01-01", "2024-03-01")  # different dataset
+    c = S("ashare-snapshot-v2", "2024-01-01", "2024-03-01")
     assert _source_snapshot_scope(a) != _source_snapshot_scope(c)
+
+    class Anonymous:
+        start_date = "2024-01-01"
+        end_date = "2024-03-01"
+
+    anonymous = Anonymous()
+    assert _source_snapshot_scope(anonymous) != _source_snapshot_scope(anonymous)
+    with pytest.raises(SourceSnapshotIdentityUnavailableError):
+        _source_snapshot_scope(anonymous, mode="production")
 
 
 def test_checkpoint_rejected_when_source_snapshot_changes():

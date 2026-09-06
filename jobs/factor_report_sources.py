@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Iterable
 
 import pandas as pd
+import numpy as np
 
 
 PROJECT = Path("/home/sunhaiwei/quant_projects")
@@ -61,10 +62,9 @@ def _coverage(path: Path) -> tuple[pd.Timestamp | None, pd.Timestamp | None,
     """
     frame = pd.read_parquet(path)
     index = pd.to_datetime(frame.index, errors="coerce")
-    index = index[~index.isna()]
-    if len(index) == 0:
+    if len(index) == 0 or index.isna().any() or index.has_duplicates:
         return None, None, None, None, 0
-    valid = frame.notna().sum(axis=1).to_numpy() >= 30
+    valid = np.isfinite(frame.to_numpy(dtype=float)).sum(axis=1) >= 30
     valid_index = index[valid]
     if len(valid_index) == 0:
         return index.min(), index.max(), None, None, 0
@@ -84,14 +84,19 @@ def resolve_raw_matrix(page: str) -> MatrixSource:
         # Allow only a brief warm-up before the first usable cross-section,
         # but require usable values through the last requested date.
         full = bool(valid_start is not None and valid_end is not None
-                    and valid_start <= FULL_WINDOW_START + pd.Timedelta(days=180)
+                    and start <= FULL_WINDOW_START
+                    and valid_start <= FULL_WINDOW_START
                     # The t+2 return convention makes the final two to three
                     # signal dates unusable by design; this is not a landing
                     # gap.  Anything older than one calendar week is.
                     and valid_end >= FULL_WINDOW_END - pd.Timedelta(days=7)
                     and valid_days >= 1800)
+        reason = None if full else (
+            f"requires usable history from {FULL_WINDOW_START.date()}; "
+            f"index={start}..{end}, usable={valid_start}..{valid_end}, "
+            f"usable_days={valid_days}")
         candidates.append(MatrixSource(page, path, directory, start, end,
-                                       valid_start, valid_end, valid_days, full))
+                                       valid_start, valid_end, valid_days, full, reason))
     if not candidates:
         return MatrixSource(page, None, None, None, None, None, None, 0, False, "raw matrix not found")
     # Prefer the most complete usable history; directory order is only a tie

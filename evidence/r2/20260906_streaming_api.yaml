@@ -1,0 +1,60 @@
+git_sha: f9e7237fafe4112391e62c8874caae7996ce0b11
+date: '2026-09-06'
+files:
+  - factor_engine/runtime/engine.py
+  - factor_engine/runtime/streaming_batch_service.py
+  - factor_engine/tests/runtime/test_run_many_stream.py
+  - evidence/r2/20260906_runmany_chunking.md
+public_api: FactorEngine.run_many_stream
+contract:
+  input: Iterable of globally uniquely named Factor definitions
+  output: compact counters and empty results; no accumulated DAGs, analyses or backend paths
+  execution: each wave delegates to existing run_many_parallel resource and production gates
+  sink: mandatory synchronous callable; serialized, rejects False, duplicate or unknown output names
+  failure: propagates original errors and stops consuming subsequent waves; prior writes remain
+  memory: one factor wave plus O(F) global name metadata; no cross-wave CSE or warmup union
+  legacy: existing run_many and run_many_parallel contracts unchanged
+tests:
+  public_stream_suite:
+    status: PASS
+    count: 18
+    independent_parent_run: '18 passed, 4 existing classification warnings, 21.82 seconds'
+    command: OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 POLARS_MAX_THREADS=2 .venv/bin/python -m pytest factor_engine/tests/runtime/test_run_many_stream.py -q --tb=short
+    cases:
+      - 100000-input generator consumption bound and released factor references using fake executor
+      - missing sink rejected before consuming input
+      - invalid wave sizes rejected and empty input does not compile
+      - globally duplicate names rejected before duplicate wave execution
+      - sink exception identity preserved and no subsequent wave consumed
+      - False, missing, duplicate and unknown output deliveries never report success
+      - concurrent callbacks serialized with exact completion accounting
+      - real public execution of seven numerical factors across three waves
+      - real production gate preserved through public stream entry
+  combined_latest:
+    status: PASS
+    passed: 46
+    warnings: 4
+    seconds: 22.72
+    command: OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 POLARS_MAX_THREADS=2 .venv/bin/python -m pytest factor_engine/tests/runtime/test_run_many_stream.py factor_engine/tests/runtime/test_run_many_sink_backpressure.py -q --tb=short
+    fixture_fix: Fixed only the two-inflight lease test's external resource signals to capacity two; actual broker token admission and lease/Future completion remain real. Five repeated lifecycle cases pass independently and after public stream initialization.
+  earlier_combined_timeout:
+    status: PARTIAL
+    passed: 41
+    failed: 1
+    command: OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 POLARS_MAX_THREADS=2 .venv/bin/python -m pytest factor_engine/tests/runtime/test_run_many_stream.py factor_engine/tests/runtime/test_run_many_sink_backpressure.py -q --tb=short
+    failure: Inflight lease fixture timed out waiting for two concurrent roots; live global autopilot can legitimately recommend only one. Timeout occurred in the test root's finish.wait before cleanup, not a lease-release deadlock. Preserved historical result; only test external signals were subsequently fixed.
+  syntax: PASS
+  full_compile_import: NOT_RUN
+  registry_duplicate_authority: NOT_RUN
+  ABI_placeholder: NOT_RUN
+  backend_parity: NOT_RUN
+  PIT_poison: NOT_RUN
+  Q_null_time_runtime: NOT_RUN
+  CI: NOT_RUN
+  production_gate_full: NOT_RUN
+review: PASS; parent independently reviewed final service, public API and tests, and reran all 18 stream tests.
+limitations:
+  - The 100000-item unit case tests orchestration using a fake executor, not numerical production throughput.
+  - Full single-call 100000-factor numerical and GPU benchmark is tracked separately by coordinator.
+  - Shared-context threads do not guarantee full CPU use for GIL-bound Python operators.
+  - Wave limits and memory admission do not prove all arbitrary panels/operators are OOM-free.

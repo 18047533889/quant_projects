@@ -873,14 +873,29 @@ def _quantized_normalized_hash(finite: np.ndarray) -> str:
 
 def _round_sig(value: float, digits: int) -> float:
     """Round ``value`` to ``digits`` significant digits (stable for log10)."""
+    # NumPy scalar round uses scaling internally and can return NaN here.
+    value = float(value)
     if value == 0.0 or not math.isfinite(value):
         return value
     try:
         shift = digits - int(math.floor(math.log10(abs(value)))) - 1
     except (ValueError, OverflowError):
         return value
-    factor = 10.0 ** shift
-    return math.floor(value * factor + 0.5) / factor
+    # Keep existing tie behavior wherever the original scaling is finite.
+    try:
+        factor = 10.0 ** shift
+        scaled = value * factor
+        if math.isfinite(scaled):
+            return math.floor(scaled + 0.5) / factor
+    except OverflowError:
+        pass
+    # Tiny finite values (including subnormals) overflow the scaling factor.
+    # round handles the decimal position without constructing that factor.
+    try:
+        return round(value, shift)
+    except OverflowError:
+        # Rounding near float max can itself exceed the representable range.
+        return value
 
 
 # ---------------------------------------------------------------------------

@@ -1,0 +1,44 @@
+schema: factor_engine.panel_dense_fastpath.v1
+git_sha: f9e7237fafe4112391e62c8874caae7996ce0b11
+timestamp: '2026-09-06T18:41:02+08:00'
+files:
+  - factor_engine/backend/cleaned_bridge.py
+  - factor_engine/tests/backend/test_panel_to_series_dense_fastpath.py
+  - benchmarks/bench_panel_fastpath.py
+change: panel_to_series uses copied C-order float64 values and a product index only for nonempty exact DataFrames with unique/no-NaT DatetimeIndex and simple unique/no-NaN integer or plain-string columns. Extension/mixed dtypes, categorical/duplicate/multilevel axes, attrs and nondefault flags retain pandas future_stack. Existing template reindex semantics remain unchanged.
+tests:
+  scoped_pytest:
+    status: PASS
+    count: 39
+    seconds: 0.29
+    paths:
+      - factor_engine/tests/backend/test_panel_to_series_dense_fastpath.py
+      - factor_engine/tests/runtime/test_r10_panel_multiindex.py
+    oracle: pandas stack(future_stack=True) with timezone, reversed axes, integer/string columns, NaN/Inf, template Series/Index/reordered/subset/missing entries, exact names, null values, and fallback behavior; copied outputs do not share memory with cached panels.
+  independent_review: PASS; root coordinator reviewed implementation and tests, then independently reran all 39 tests successfully.
+  additional_existing_bridge_tests:
+    status: FAIL
+    passed: 3
+    failed: 2
+    path: factor_engine/tests/backend/test_cleaned_bridge.py
+    reason: Two MagicMock operator fixtures synthesize metadata.total_positional_arity and trigger the existing bind_operator_call validation before their mocked kernel. Conversion patch does not change this call path; baseline replay NOT_RUN.
+  git_diff_check: PASS
+  full_compile_import: NOT_RUN
+  registry_duplicate_authority_gate: NOT_RUN
+  abi_placeholder: NOT_RUN
+  full_backend_parity: NOT_RUN
+  full_pit_poison: NOT_RUN
+  q_null_time_runtime: NOT_RUN
+  ci: NOT_RUN
+  production_gate: NOT_RUN
+performance:
+  artifact: evidence/r2/20260906_panel_fastpath_benchmark.json
+  iterations: 1000
+  panel_shape: [8, 32]
+  reference_seconds: 4.667156183044426
+  optimized_seconds: 0.29742517101112753
+  speedup: 15.691866855713481
+limitations:
+  - Homogeneous float64 microbenchmark only; coordinator owns the full 100k-factor acceptance run.
+  - An owned value copy remains intentional; zero-copy would allow sink consumers to mutate shared cached data.
+  - No further production source edits after coordinator requested source freeze for benchmarking.

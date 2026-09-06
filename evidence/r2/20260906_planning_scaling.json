@@ -1,0 +1,29 @@
+[
+  {
+    "roots": 100,
+    "compile_dag_seconds": 1.4996472959173843,
+    "physical_lower_seconds": 0.19616097502876073,
+    "native_fusion_plan_seconds": 9.08880028873682e-05,
+    "tasks": 201,
+    "fusion_groups": 0,
+    "rss_bytes": 388042752
+  },
+  {
+    "roots": 256,
+    "compile_dag_seconds": 3.7234087160322815,
+    "physical_lower_seconds": 0.3808132859412581,
+    "native_fusion_plan_seconds": 0.00019317399710416794,
+    "tasks": 513,
+    "fusion_groups": 0,
+    "rss_bytes": 388866048
+  },
+  {
+    "roots": 512,
+    "compile_dag_seconds": 7.376640998059884,
+    "physical_lower_seconds": 0.7613538600271568,
+    "native_fusion_plan_seconds": 0.00039553793612867594,
+    "tasks": 1025,
+    "fusion_groups": 0,
+    "rss_bytes": 392364032
+  }
+]

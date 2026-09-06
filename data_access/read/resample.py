@@ -98,8 +98,7 @@ def _relabel_window(ts_expr: Any, alias: str) -> Any:
 def _agg_exprs_polars(numeric_cols: list[str], other_cols: list[str]):
     """构造 polars 聚合表达式：数值列 mean（NaN→null），其余列 first。
 
-    顺序与 pandas ``df.groupby(...).agg(agg_dict)`` 的列序一致：数值列先
-    （按原表列序）、其余列后（按原表列序）。
+    此处按类型构造表达式；调用方在聚合后恢复原表的非键列顺序。
     """
     import polars as pl
 
@@ -107,12 +106,12 @@ def _agg_exprs_polars(numeric_cols: list[str], other_cols: list[str]):
     for col in numeric_cols:
         exprs.append(
             pl.col(col)
-            .replace(float("nan"), None)
+            .fill_nan(None)
             .mean()
             .alias(col)
         )
     for col in other_cols:
-        exprs.append(pl.col(col).first().alias(col))
+        exprs.append(pl.col(col).drop_nulls().first().alias(col))
     return exprs
 
 
@@ -141,9 +140,13 @@ def _apply_frequency_polars(
     group_by: list[Any] = []
     if instrument_column and instrument_column in pf.columns:
         group_by.append(instrument_column)
+    if not group_by:
+        # pandas materializes empty time buckets for ungrouped resampling;
+        # group_by_dynamic omits them. Preserve the reference semantics.
+        return None
 
     # 数值列（与 pandas select_dtypes(number) 一致：float/int，不含 bool/timedelta）。
-    # 顺序保持原表列序（pandas agg dict 列序 = 数值列先行、其余列后行）。
+    # pandas agg dict 保持原表非键列顺序，输出时恢复。
     numeric_cols: list[str] = []
     other_cols: list[str] = []
     for name in pf.columns:
@@ -155,7 +158,7 @@ def _apply_frequency_polars(
         else:
             other_cols.append(name)
 
-    lf = pf.lazy().sort(time_column)
+    lf = pf.lazy().sort(time_column, maintain_order=True)
     agg_exprs = _agg_exprs_polars(numeric_cols, other_cols)
     if not agg_exprs:
         # 退化：全表只有 time/instrument 列 → 等价 pandas ``.size()`` 去重
@@ -181,7 +184,11 @@ def _apply_frequency_polars(
     # 重标窗口标签到 pandas 桶标签。
     out = out.with_columns(_relabel_window(pl.col(time_column), alias).alias(time_column))
     # 行序与 pandas ``sort_values(time_column)`` 一致（仅按时间列排）。
-    out = out.sort(time_column).unique(subset=[time_column, *(group_by or [])], keep="first")
+    out = out.sort(time_column).unique(
+        subset=[time_column, *group_by], keep="first", maintain_order=True
+    )
+    value_cols = [name for name in pf.columns if name not in [time_column, *group_by]]
+    out = out.select([*group_by, time_column, *value_cols])
     return out.to_arrow()
 
 

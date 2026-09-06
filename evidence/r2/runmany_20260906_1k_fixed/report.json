@@ -1,0 +1,39 @@
+{
+  "status": "PASS",
+  "roots": 1000,
+  "rows_per_root": 32,
+  "workers": 4,
+  "wave_size": 256,
+  "seconds": 181.52793210500386,
+  "first_result_s": 45.4513327809982,
+  "baseline_rss_bytes": 379400192,
+  "peak_rss_bytes": 417550336,
+  "output_bytes": 256128,
+  "waves": [
+    {
+      "start": 0,
+      "stop": 256,
+      "seconds": 45.710293152951635,
+      "rss_bytes": 411930624
+    },
+    {
+      "start": 256,
+      "stop": 512,
+      "seconds": 46.541395451058634,
+      "rss_bytes": 416817152
+    },
+    {
+      "start": 512,
+      "stop": 768,
+      "seconds": 46.80688233603723,
+      "rss_bytes": 417382400
+    },
+    {
+      "start": 768,
+      "stop": 1000,
+      "seconds": 42.454023719066754,
+      "rss_bytes": 417533952
+    }
+  ],
+  "limitations": "Synthetic add/column expressions, tiny panel, research mode; not full operators, market history or production certification."
+}

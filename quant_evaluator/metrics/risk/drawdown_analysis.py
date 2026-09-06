@@ -36,8 +36,9 @@ def compute_drawdown_series(
     # Cumulative wealth curve
     cum_returns = np.cumprod(1.0 + returns_filled, axis=0)
 
-    # Running maximum
-    running_max = np.maximum.accumulate(cum_returns, axis=0)
+    # Initial capital is a high-water mark too: a loss on the first
+    # observation must count even before an observed wealth peak exists.
+    running_max = np.maximum(1.0, np.maximum.accumulate(cum_returns, axis=0))
 
     # Drawdown (negative values)
     # Total-wipeout guard: if a return <= -1 drives wealth (cum_returns) to <= 0,
@@ -164,7 +165,7 @@ def identify_drawdown_periods(
 
     Returns:
         List of drawdown periods, each with:
-            - peak_idx: Index of peak before drawdown
+            - peak_idx: Index of peak before drawdown (-1 for initial capital)
             - trough_idx: Index of trough (maximum drawdown)
             - recovery_idx: Index of recovery (NaN if not recovered)
             - duration: Duration from peak to recovery
@@ -184,7 +185,7 @@ def identify_drawdown_periods(
             # Check if entering drawdown
             if dd_series[t] < -threshold:
                 in_drawdown = True
-                peak_idx = t - 1 if t > 0 else 0
+                peak_idx = -1  # Initial capital unless an observed peak exists.
                 # Find actual peak by searching backward
                 for i in range(t - 1, -1, -1):
                     if cum_returns[i] >= running_max[t]:
@@ -196,7 +197,7 @@ def identify_drawdown_periods(
                 # Find trough in this period
                 trough_idx = peak_idx
                 max_dd_in_period = 0.0
-                for i in range(peak_idx, t + 1):
+                for i in range(max(0, peak_idx), t + 1):
                     if dd_series[i] < -max_dd_in_period:
                         max_dd_in_period = -dd_series[i]
                         trough_idx = i
@@ -218,7 +219,7 @@ def identify_drawdown_periods(
     if in_drawdown:
         trough_idx = peak_idx
         max_dd_in_period = 0.0
-        for i in range(peak_idx, len(dd_series)):
+        for i in range(max(0, peak_idx), len(dd_series)):
             if dd_series[i] < -max_dd_in_period:
                 max_dd_in_period = -dd_series[i]
                 trough_idx = i

@@ -1061,26 +1061,6 @@ def evaluate(
         raise UnsupportedMetricError("where slicing is not supported by public evaluate")
     if not isinstance(factor_batch, FactorBatch) or not isinstance(label_bundle, LabelBundle):
         raise TypeError("evaluate requires a FactorBatch and LabelBundle")
-    # GPU backend dispatch (spec §43): when backend is cuda/cuda_strict, route
-    # through the DeviceEvaluationSession + GPUExecutor.  The CPU path below
-    # is unchanged.
-    if backend is not None and str(backend).lower() in ("cuda", "cuda_strict"):
-        from quant_evaluator.runtime.device_session import DeviceEvaluationSession
-        from quant_evaluator.runtime.gpu_executor import GPUExecutor
-        from quant_evaluator.contracts.backend_policy import GPUExecutionPolicy
-
-        policy = gpu_policy or GPUExecutionPolicy()
-        with DeviceEvaluationSession(policy) as session:
-            # stage factors (T,N,F) -> (T,F,N) and labels once
-            session.stage_factors(factor_batch.values, factor_batch.factor_ids, layout="T,N,F")
-            session.stage_labels(label_bundle.values, label_bundle.target_id)
-            executor = GPUExecutor(session)
-            bundle = executor.run(
-                factor_batch.factor_ids,
-                metrics=metric_ids,
-                label_id=label_bundle.target_id,
-            )
-        return bundle
     # R21 Q5 sealed-test gate: fail closed when a requested split overlaps
     # the factor/label information boundary.  split_ref=None skips the check
     # entirely (backward compatible with all existing callers).
@@ -1109,6 +1089,22 @@ def evaluate(
             f"Label validity asset axis ({label_bundle.validity.shape[1]}) does not match "
             f"factor asset axis ({factor_batch.num_assets})"
         )
+
+    # Apply the same leakage and shape guards before either backend starts.
+    backend_name = getattr(backend, "value", backend)
+    if backend_name is not None and str(backend_name).lower() in ("cuda", "cuda_strict"):
+        from quant_evaluator.runtime.device_session import DeviceEvaluationSession
+        from quant_evaluator.runtime.gpu_executor import GPUExecutor
+        from quant_evaluator.contracts.backend_policy import GPUExecutionPolicy
+
+        if label_bundle.values.shape != (factor_batch.num_times, factor_batch.num_assets):
+            raise InvalidContractError("CUDA labels must match the factor time/asset panel")
+        if context is not None:
+            raise UnsupportedMetricError("CUDA evaluation context is not implemented")
+        policy = gpu_policy or GPUExecutionPolicy()
+        with DeviceEvaluationSession(policy) as session:
+            bundle = GPUExecutor(session).run_tiled(factor_batch, label_bundle, tuple(metric_ids))
+        return bundle
 
     metric_ids = tuple(metric_ids)
     runtime = evaluator or Evaluator()

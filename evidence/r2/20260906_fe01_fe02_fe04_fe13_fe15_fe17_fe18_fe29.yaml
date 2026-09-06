@@ -1,0 +1,55 @@
+issue_ids: [FE-01, FE-02, FE-04, FE-13, FE-15, FE-17, FE-18, FE-29]
+source_commit: f9e7237fafe4112391e62c8874caae7996ce0b11
+timestamp: '2026-09-06T19:56:26+08:00'
+reviewer_verdict: FIXED_PENDING_INTEGRATION
+paths_and_symbols:
+  - factor_engine/runtime/production_policy.py::resolve_run_mode
+  - factor_engine/storage/data_scope.py::compute_data_scope
+  - factor_engine/runtime/engine.py::assert_execution_scope_contract,FactorEngine._assert_precompiled_binding,FactorEngine.run,FactorEngine._make_context,FactorEngine.run_many_from_config,FactorEngine.run_incremental
+  - factor_engine/runtime/stateful_incremental.py::_boundary_timeline
+  - tests/audit_identity_sol/test_audit_execution_context.py
+trigger_and_affected_paths: >-
+  Ambient mode could disagree with the engine; anonymous and read-option-distinct
+  sources could share identities; identity failure reused the base cache;
+  filters impersonated historical membership; precompiled triples were freely
+  mixed; config groups could overwrite duplicate names; segmented incremental
+  omitted mode/context and could return before public run preflight; boundary
+  probing shallow-copied warmed source caches.
+regression_before_fix: >-
+  Audit report probes reproduced anonymous-source and read-option scope
+  collisions, ambient/instance mode disagreement, and warmed-boundary cache
+  leakage. Repository-level focused regressions were added with the patch;
+  a separate clean-checkout run was NOT_RUN.
+behavior_after_fix:
+  command: 'cd /home/sunhaiwei/quant_projects && PYTHONPATH=factor_engine .venv/bin/python -m pytest -q tests/audit_identity_sol/test_audit_execution_context.py'
+  result: '14 passed (second-batch focused); combined identity/scope suite later 39 passed'
+public_entrypoint_test: >-
+  FactorEngine.run precompiled binding is verified before source prefetch;
+  run_many_from_config rejects global duplicate names before grouping; focused
+  synthetic tests exercise both public/config behavior and context creation.
+source_snapshot_and_config_digest: 'synthetic anonymous/parquet-like sources; no production source'
+package_artifact_digest: NOT_RUN
+migration_or_invalidation: >-
+  Anonymous source caches are disabled per run; stable scopes now include source
+  type and max_files/recursive/snapshot/generation options, invalidating old
+  namespaces. Existing checkpoints lacking complete production context are not
+  resumed through the segmented shortcut. No old cache/checkpoint is deleted.
+related_regression:
+  - result: '94 passed, 2 UNRESOLVED failures'
+    scope: 'identity plus execution-scope suites'
+    failures: 'old FE-P0-031 tests expect instrument_filter to qualify as UniverseSnapshotIdentity; conflicts with FE-15 acceptance'
+  - result: '4 passed, 11 skipped'
+    scope: 'data scope and production policy suites; legacy production gate tests self-skipped'
+  - result: '74 passed, 2 UNRESOLVED failures'
+    scope: 'scope and stateful suites'
+    failures: 'legacy research tests expect anonymous sources to resume checkpoints across different objects; conflicts with FE-01/17 no-identity policy'
+not_run:
+  - clean frozen-checkout repository regression before patch
+  - production persistent-cache cold/hot end-to-end
+  - temporally-scoped UniverseSnapshot provider integration (current DA snapshot lacks membership interval and is rejected)
+  - production stateful checkpoint resume with complete immutable context (public API lacks fields; full replay is enforced)
+  - production data, cache, checkpoint migration, wheel, multi-backend, scale
+limitations: >-
+  The current public incremental API cannot supply the complete production
+  checkpoint context. It therefore fails closed to ordinary run/full replay
+  instead of claiming segmented production resume support.

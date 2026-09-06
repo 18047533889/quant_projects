@@ -1,0 +1,139 @@
+{
+  "changed_production_files": false,
+  "pandas_implementation": "<class 'factor_engine.cleaned_operators.common.cross_sectional.Zscore'>",
+  "polars_implementation": "<class 'factor_engine.cleaned_operators.common.cross_sectional.ZscorePolars'>",
+  "fixtures": [
+    {
+      "fixture": "inf",
+      "different_rows": [
+        1
+      ],
+      "input": [
+        [
+          Infinity,
+          -0.9916465549964624,
+          0.060143602597438485,
+          1.3402152455545335
+        ]
+      ],
+      "audit_finite_only_reference": [
+        [
+          NaN,
+          -0.9658263022884799,
+          -0.0651604436911812,
+          1.0309867459796611
+        ]
+      ],
+      "pandas_actual": [
+        [
+          NaN,
+          NaN,
+          NaN,
+          NaN
+        ]
+      ],
+      "polars_actual": [
+        [
+          NaN,
+          NaN,
+          NaN,
+          NaN
+        ]
+      ],
+      "backend_parity": true
+    },
+    {
+      "fixture": "neg_inf",
+      "different_rows": [
+        1
+      ],
+      "input": [
+        [
+          -Infinity,
+          -0.9916465549964624,
+          0.060143602597438485,
+          1.3402152455545335
+        ]
+      ],
+      "audit_finite_only_reference": [
+        [
+          NaN,
+          -0.9658263022884799,
+          -0.0651604436911812,
+          1.0309867459796611
+        ]
+      ],
+      "pandas_actual": [
+        [
+          NaN,
+          NaN,
+          NaN,
+          NaN
+        ]
+      ],
+      "polars_actual": [
+        [
+          NaN,
+          NaN,
+          NaN,
+          NaN
+        ]
+      ],
+      "backend_parity": true
+    }
+  ],
+  "minimal_input": [
+    [
+      1.0,
+      2.0,
+      Infinity
+    ],
+    [
+      1.0,
+      2.0,
+      NaN
+    ],
+    [
+      1.0,
+      2.0,
+      3.0
+    ]
+  ],
+  "minimal_pandas_actual": [
+    [
+      NaN,
+      NaN,
+      NaN
+    ],
+    [
+      -0.7071067811865475,
+      0.7071067811865475,
+      NaN
+    ],
+    [
+      -1.0,
+      0.0,
+      1.0
+    ]
+  ],
+  "minimal_audit_reference": [
+    [
+      -0.7071067811865475,
+      0.7071067811865475,
+      NaN
+    ],
+    [
+      -0.7071067811865475,
+      0.7071067811865475,
+      NaN
+    ],
+    [
+      -1.0,
+      0.0,
+      1.0
+    ]
+  ],
+  "cause": "Both backends use pandas mean/std(ddof=1) without prefiltering infinity; the audit reference first filters isfinite, so finite peers survive only in the audit oracle.",
+  "classification": "Reference/canonical nonfinite-policy mismatch, not backend-parity or ddof error. Canonical source implements pandas propagation; existing boundary test is too weak to distinguish the two policies.",
+  "recommendation": "Preserve current canonical pandas semantics and align the audit reference, unless an explicit semantic decision changes zscore to finite-only. Any finite-only change must update all backends and semantic evidence together; do not silently alter formula to satisfy this audit."
+}

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import os
 import sys
 import threading
@@ -284,6 +285,19 @@ class HistoricalCoverageContract:
             raise ValueError("coverage threshold must be in [0, 1]")
         problems: list[str] = []
 
+        def evidence_ratio(value: object, label: str) -> float | None:
+            try:
+                parsed = float(value)
+            except (TypeError, ValueError):
+                problems.append(f"{label} coverage is not numeric: {value!r}")
+                return None
+            if not math.isfinite(parsed) or not 0.0 <= parsed <= 1.0:
+                problems.append(
+                    f"{label} coverage {parsed!r} must be finite and in [0, 1]"
+                )
+                return None
+            return parsed
+
         window_requested = bool(start is not None or end is not None)
         req_full = (
             self.require_full_history_minimum
@@ -295,10 +309,12 @@ class HistoricalCoverageContract:
         # full-history minimum.  A poor 2010s full-history must not veto a
         # well-covered 2025-2026 window.
         if window_requested and not req_full and self.requested_window_coverage is not None:
-            ratio = float(self.requested_window_coverage)
+            ratio = evidence_ratio(
+                self.requested_window_coverage, "requested-window"
+            )
         else:
-            ratio = float(self.coverage_ratio)
-        if ratio < threshold:
+            ratio = evidence_ratio(self.coverage_ratio, "overall")
+        if ratio is not None and ratio < threshold:
             problems.append(f"overall coverage {ratio:.3f} < threshold {threshold:.3f}")
 
         year_start: int | None = None
@@ -334,8 +350,9 @@ class HistoricalCoverageContract:
                 continue
             if year_end is not None and int(year) > year_end:
                 continue
-            if float(year_ratio) < threshold:
-                problems.append(f"year {year} coverage {float(year_ratio):.3f} < {threshold:.3f}")
+            parsed_year_ratio = evidence_ratio(year_ratio, f"year {year}")
+            if parsed_year_ratio is not None and parsed_year_ratio < threshold:
+                problems.append(f"year {year} coverage {parsed_year_ratio:.3f} < {threshold:.3f}")
 
         # Per-date coverage restricted to the requested window (R9-P0-024).
         date_threshold = float(self.coverage_date_threshold)
@@ -354,8 +371,9 @@ class HistoricalCoverageContract:
                         continue
                 except (ValueError, TypeError):
                     continue
-            if float(date_ratio) < date_threshold:
-                problems.append(f"date {date} coverage {float(date_ratio):.3f} < {date_threshold:.3f}")
+            parsed_date_ratio = evidence_ratio(date_ratio, f"date {date}")
+            if parsed_date_ratio is not None and parsed_date_ratio < date_threshold:
+                problems.append(f"date {date} coverage {parsed_date_ratio:.3f} < {date_threshold:.3f}")
 
         # Per-stock quantile gate (R9-P0-024): at least ``min_stock_coverage_quantile``
         # of stocks must have per-stock coverage >= ``min_stock_coverage_threshold``.
@@ -363,9 +381,9 @@ class HistoricalCoverageContract:
         if universe_stocks is not None:
             # R24-073/074: coverage verdict is computed over the CURRENT
             # requested universe, never the contract's full stock list.
-            by_stock = {
-                k: v for k, v in by_stock.items() if k in universe_stocks
-            }
+            # Missing evidence remains in the full requested denominator and
+            # is UNKNOWN/not-covered; unrelated evidence is excluded.
+            by_stock = {stock: by_stock.get(stock) for stock in universe_stocks}
         if by_stock:
             stock_threshold = float(self.min_stock_coverage_threshold)
             quantile = float(self.min_stock_coverage_quantile)
@@ -373,9 +391,14 @@ class HistoricalCoverageContract:
                 raise ValueError("min_stock_coverage_threshold must be in [0, 1]")
             if not 0.0 <= quantile <= 1.0:
                 raise ValueError("min_stock_coverage_quantile must be in [0, 1]")
-            covered = sum(
-                1 for _ratio in by_stock.values() if float(_ratio) >= stock_threshold
-            )
+            covered = 0
+            for stock, stock_ratio in by_stock.items():
+                if stock_ratio is None:
+                    problems.append(f"stock {stock} coverage evidence is missing")
+                    continue
+                parsed_stock_ratio = evidence_ratio(stock_ratio, f"stock {stock}")
+                if parsed_stock_ratio is not None and parsed_stock_ratio >= stock_threshold:
+                    covered += 1
             total = len(by_stock)
             frac = covered / total if total else 1.0
             if frac < quantile:

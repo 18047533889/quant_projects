@@ -1024,6 +1024,27 @@ class ResourceBroker:
 
     # -- admission --
 
+    def request_minimum_cpu_width(self, task: TaskResourceContract, *, decision: Any) -> Any:
+        """Request an indivisible task width through the existing controller.
+
+        No lease is granted here. The unchanged real contract must still pass
+        try_reserve, including hard CPU, memory, IO and spill checks.
+        """
+        from dataclasses import replace
+        from factor_engine.runtime.resource_errors import CPUWidthUnavailable
+
+        with self._lock:
+            if self._running or self._cpu.in_use:
+                raise CPUWidthUnavailable("minimum CPU width requires an idle broker")
+            if task.cpu_tokens > self.hard_cpu_slots:
+                raise CPUWidthUnavailable("task CPU width exceeds hard CPU capacity; replan required")
+            if self.pressure_stage() not in {STAGE_NORMAL, STAGE_PRESSURE_1}:
+                raise CPUWidthUnavailable("minimum CPU width denied by current pressure policy")
+            # Probe all non-CPU dimensions without acquiring or changing them.
+            if not self.can_admit(replace(task, cpu_tokens=0)):
+                raise CPUWidthUnavailable("minimum CPU width task cannot fit memory/IO/spill budget")
+            return self._resource_controller().admit_minimum_cpu_width(task.cpu_tokens, decision)
+
     def can_admit(self, task: TaskResourceContract) -> bool:
         """R31-P0-009：**纯函数**——只判定，不获取任何 token（无副作用）。
 

@@ -29,7 +29,11 @@
 from __future__ import annotations
 
 import time
+import hashlib
+import json
+import math
 from dataclasses import dataclass, field
+from enum import Enum
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -55,16 +59,292 @@ class MaterializeItem:
     options: dict[str, Any] | None = None
 
 
+class WriteState(str, Enum):
+    CREATED = "CREATED"
+    STAGED = "STAGED"
+    COMMITTED = "COMMITTED"
+    PUBLISHED = "PUBLISHED"
+    FAILED = "FAILED"
+    IN_DOUBT = "IN_DOUBT"
+
+
+@dataclass(frozen=True)
+class WriteContext:
+    target: str
+    lake_root: str | None
+    staging_dataset: str
+    data_source_config: Any
+    storage_format: str
+    value_dtype: str
+    atomicity: str
+
+
+@dataclass
+class WriteItemReceipt:
+    name: str
+    state: WriteState = WriteState.CREATED
+    rows: int = 0
+    error: str | None = None
+    run_id: str | None = None
+    inventory_digest: str | None = None
+    inventory: list[dict[str, Any]] = field(default_factory=list)
+    coverage_proof: dict[str, Any] | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "name": self.name, "state": self.state.value, "rows": self.rows,
+            "error": self.error, "run_id": self.run_id,
+            "inventory_digest": self.inventory_digest,
+            "inventory": self.inventory,
+            "coverage_proof": self.coverage_proof,
+        }
+
+
+@dataclass
+class WriteReceipt:
+    generation_id: str | None
+    expected_items: tuple[str, ...]
+    items: dict[str, WriteItemReceipt]
+    manifest_digest: str | None = None
+    idempotency_key: str | None = None
+
+    @property
+    def state(self) -> WriteState:
+        states = {item.state for item in self.items.values()}
+        if WriteState.IN_DOUBT in states:
+            return WriteState.IN_DOUBT
+        if WriteState.FAILED in states:
+            return WriteState.FAILED
+        if states == {WriteState.PUBLISHED}:
+            return WriteState.PUBLISHED
+        if states == {WriteState.COMMITTED}:
+            return WriteState.COMMITTED
+        if states == {WriteState.STAGED}:
+            return WriteState.STAGED
+        return WriteState.CREATED
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "generation_id": self.generation_id,
+            "expected_items": list(self.expected_items),
+            "state": self.state.value,
+            "manifest_digest": self.manifest_digest,
+            "idempotency_key": self.idempotency_key,
+            "items": {name: item.to_dict() for name, item in self.items.items()},
+        }
+
+    def validate(self, expected_items: Iterable[str] | None = None) -> "WriteReceipt":
+        requested = self.expected_items if expected_items is None else expected_items
+        if isinstance(requested, (str, bytes)) or not isinstance(requested, (list, tuple)):
+            raise ValueError("WriteReceipt expected_items must be a list/tuple of strings")
+        if not all(isinstance(name, str) and name for name in requested):
+            raise ValueError("WriteReceipt expected_items must contain non-empty strings")
+        expected = tuple(requested)
+        if len(set(expected)) != len(expected):
+            raise ValueError("WriteReceipt expected_items contains duplicates")
+        if tuple(self.expected_items) != expected:
+            raise ValueError("WriteReceipt expected_items does not match request")
+        if set(self.items) != set(expected):
+            raise ValueError("WriteReceipt item keys do not exactly match expected_items")
+        if expected and (
+            not isinstance(self.generation_id, str) or not self.generation_id
+            or not isinstance(self.idempotency_key, str) or not self.idempotency_key
+        ):
+            raise ValueError("non-empty WriteReceipt requires generation and idempotency key")
+        if self.manifest_digest is not None and (
+            not isinstance(self.manifest_digest, str) or not self.manifest_digest
+        ):
+            raise ValueError("WriteReceipt manifest_digest must be a non-empty string")
+        for key, item in self.items.items():
+            if item.name != key:
+                raise ValueError("WriteReceipt item name/key mismatch")
+            if not isinstance(key, str) or not key:
+                raise ValueError("WriteReceipt item keys must be non-empty strings")
+            if not isinstance(item.state, WriteState):
+                raise ValueError(f"invalid WriteReceipt state for {key!r}")
+            if isinstance(item.rows, bool) or not isinstance(item.rows, int) or item.rows < 0:
+                raise ValueError(f"invalid WriteReceipt rows for {key!r}")
+            if item.state in {WriteState.COMMITTED, WriteState.PUBLISHED} and not self.manifest_digest:
+                raise ValueError("committed/published receipt requires manifest_digest")
+            if item.state in {WriteState.COMMITTED, WriteState.PUBLISHED}:
+                if not item.run_id or not item.inventory_digest or not item.inventory:
+                    raise ValueError(
+                        "committed/published item requires run_id and byte inventory"
+                    )
+                if not isinstance(item.run_id, str) or not isinstance(item.inventory_digest, str):
+                    raise ValueError("committed/published item evidence must be strings")
+                if not isinstance(item.inventory, list) or not all(
+                    isinstance(entry, dict) for entry in item.inventory
+                ):
+                    raise ValueError("committed/published item inventory must be a list of mappings")
+                required_inventory = {"path", "rows", "bytes", "sha256"}
+                for entry in item.inventory:
+                    if set(entry) != required_inventory:
+                        raise ValueError("inventory entries require path/rows/bytes/sha256 only")
+                    if (
+                        not isinstance(entry["path"], str) or not entry["path"]
+                        or Path(entry["path"]).is_absolute()
+                        or ".." in Path(entry["path"]).parts
+                    ):
+                        raise ValueError("inventory path must be a confined relative path")
+                    for field_name in ("rows", "bytes"):
+                        value = entry[field_name]
+                        if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+                            raise ValueError(f"inventory {field_name} must be a nonnegative integer")
+                    if (
+                        not isinstance(entry["sha256"], str)
+                        or len(entry["sha256"]) != 64
+                        or any(ch not in "0123456789abcdef" for ch in entry["sha256"])
+                    ):
+                        raise ValueError("inventory sha256 must be lowercase hexadecimal")
+                calculated_digest = hashlib.sha256(
+                    json.dumps(
+                        item.inventory, sort_keys=True, separators=(",", ":")
+                    ).encode()
+                ).hexdigest()
+                if item.inventory_digest != calculated_digest:
+                    raise ValueError("inventory_digest does not match inventory entries")
+            if item.coverage_proof is not None and not isinstance(item.coverage_proof, dict):
+                raise ValueError("item coverage_proof must be a mapping")
+        return self
+
+    @classmethod
+    def from_dict(
+        cls, payload: dict[str, Any], *, expected_items: Iterable[str] | None = None
+    ) -> "WriteReceipt":
+        if not isinstance(payload, dict) or not isinstance(payload.get("items"), dict):
+            raise ValueError("invalid WriteReceipt payload")
+        raw_expected = payload.get("expected_items")
+        if not isinstance(raw_expected, (list, tuple)) or not all(
+            isinstance(name, str) and name for name in raw_expected
+        ):
+            raise ValueError("invalid WriteReceipt expected_items")
+        items: dict[str, WriteItemReceipt] = {}
+        for key, raw in payload["items"].items():
+            if not isinstance(key, str) or not key or not isinstance(raw, dict):
+                raise ValueError(f"invalid WriteReceipt item {key!r}")
+            try:
+                state = WriteState(raw.get("state"))
+            except (TypeError, ValueError) as exc:
+                raise ValueError(f"invalid WriteReceipt state for {key!r}") from exc
+            rows = raw.get("rows", 0)
+            if not isinstance(raw.get("name"), str) or not raw["name"]:
+                raise ValueError(f"invalid WriteReceipt item name for {key!r}")
+            raw_inventory = raw.get("inventory", [])
+            if not isinstance(raw_inventory, list):
+                raise ValueError(f"invalid WriteReceipt inventory for {key!r}")
+            items[key] = WriteItemReceipt(
+                name=raw["name"],
+                state=state,
+                rows=rows,
+                error=None if raw.get("error") is None else str(raw["error"]),
+                run_id=raw.get("run_id"),
+                inventory_digest=(
+                    raw.get("inventory_digest")
+                ),
+                inventory=list(raw_inventory),
+                coverage_proof=raw.get("coverage_proof"),
+            )
+        receipt = cls(
+            generation_id=payload.get("generation_id"),
+            expected_items=tuple(raw_expected),
+            items=items,
+            manifest_digest=payload.get("manifest_digest"),
+            idempotency_key=payload.get("idempotency_key"),
+        )
+        return receipt.validate(expected_items)
+
+
 @dataclass
 class GenerationTransaction:
-    """批量 generation 记录：共享一个 generation_id，完成后原子 publish。"""
+    """In-process batch generation counter; carries no persistent publish authority.
+
+    ``publish()`` is a compatibility name that records storage-confirmed commit
+    counts only. Durable PUBLISHED state is established by the explicit lake
+    publication and certified-watermark path.
+    """
 
     generation_id: str
     started: float = field(default_factory=time.monotonic)
     published_items: int = 0
+    committed_items: int = 0
 
     def publish(self, count: int = 1) -> None:
-        self.published_items += int(count)
+        # Compatibility method: this in-process object has no authority to
+        # assert PUBLISHED.  Record only storage-confirmed commits.
+        self.committed_items += int(count)
+
+
+def _canonical_context_value(value: Any) -> Any:
+    if value is None:
+        return ("none",)
+    if isinstance(value, bool):
+        return ("bool", value)
+    if isinstance(value, int):
+        return ("int", value)
+    if isinstance(value, float):
+        if not math.isfinite(value):
+            raise ValueError("WriteContext contains non-finite float")
+        return ("float", value.hex())
+    if isinstance(value, str):
+        return ("str", value)
+    if isinstance(value, dict):
+        encoded = [
+            (_canonical_context_value(k), _canonical_context_value(v))
+            for k, v in value.items()
+        ]
+        return ("dict", tuple(sorted(encoded, key=repr)))
+    if isinstance(value, (list, tuple)):
+        return (
+            "list" if isinstance(value, list) else "tuple",
+            tuple(_canonical_context_value(v) for v in value),
+        )
+    if isinstance(value, (set, frozenset)):
+        encoded = [_canonical_context_value(v) for v in value]
+        return (
+            "set" if isinstance(value, set) else "frozenset",
+            tuple(sorted(encoded, key=repr)),
+        )
+    raise ValueError(
+        f"WriteContext contains unsupported mutable/opaque value {type(value).__name__}"
+    )
+
+
+def _resolve_batch_contexts(
+    items: list[MaterializeItem], shared_options: dict[str, Any] | None
+) -> tuple[dict[str, Any], list[dict[str, Any]], WriteContext]:
+    """Resolve and validate every physical write context before side effects."""
+    shared = dict(_DEFAULT_OPTS)
+    if items and items[0].options:
+        shared.update(items[0].options)
+    if shared_options:
+        shared.update(shared_options)
+    resolved = [_resolve_item_options(item, shared) for item in items]
+    contexts: list[WriteContext] = []
+    batch_explicit_target = "target" in (shared_options or {})
+    batch_explicit_write_target = "write_target" in (shared_options or {})
+    for item, opts in zip(items, resolved):
+        item_options = item.options or {}
+        if "target" in item_options or batch_explicit_target:
+            effective_target = opts.get("target")
+        elif "write_target" in item_options or batch_explicit_write_target:
+            effective_target = opts.get("write_target")
+        else:
+            effective_target = "local"
+        contexts.append(WriteContext(
+            target=str(effective_target or "local").lower(),
+            lake_root=str(opts["lake_root"]) if opts.get("lake_root") is not None else None,
+            staging_dataset=str(opts.get("staging_dataset") or "factor_lake_staging"),
+            data_source_config=_canonical_context_value(opts.get("data_source_config")),
+            storage_format=str(opts.get("storage_format") or "long"),
+            value_dtype=str(opts.get("value_dtype") or "float32"),
+            atomicity=str(opts.get("atomicity") or "factor"),
+        ))
+    if any(context != contexts[0] for context in contexts[1:]):
+        raise ValueError("heterogeneous WriteContext in one materialize batch; split before writing")
+    if contexts[0].atomicity not in {"factor", "batch"}:
+        raise ValueError(f"unsupported write atomicity {contexts[0].atomicity!r}")
+    return shared, resolved, contexts[0]
 
 
 @dataclass
@@ -410,7 +690,7 @@ def _record_shared_axes(preps: list[dict[str, Any]]) -> int:
     **不同**的共享 axis 构造一个 ``FactorBlockRef`` 并返回共享 axis 数（同一 index
     不重复计数）。逐因子 parquet 写路径保持原样——本观测/载体不改变写入文件。
     """
-    from factor_engine.runtime.factor_block_ref import build_factor_block, group_by_shared_axis
+    from factor_engine.runtime.factor_block_ref import group_by_shared_axis
 
     series_by_fid: dict[str, pd.Series] = {}
     for prep in preps:
@@ -419,16 +699,37 @@ def _record_shared_axes(preps: list[dict[str, Any]]) -> int:
             series_by_fid[prep["factor_id"]] = result
     if len(series_by_fid) < 2:
         return 0
-    dtype = str(preps[0].get("opts", {}).get("value_dtype") or "float32")
     groups = group_by_shared_axis(series_by_fid)
-    for axis_ref, fids in groups:
-        build_factor_block(
-            fids,
-            {fid: series_by_fid[fid] for fid in fids},
-            index=axis_ref.index,
-            dtype=dtype,
-        )
     return len(groups)
+
+
+def _written_inventory(
+    factor_id: str, *, materializer: Any, parquet_target: str
+) -> tuple[list[dict[str, Any]], str]:
+    from factor_engine.storage.materialize.lake_publish import (
+        _factor_inventory, _inventory_digest, _resolve_staging_factor_dir,
+    )
+    if "staging" in str(parquet_target).lower():
+        root = _resolve_staging_factor_dir(factor_id)
+    elif str(parquet_target).lower() == "local":
+        from factor_engine.security.factor_id import factor_dir_for
+        root = factor_dir_for(materializer.lake_root, factor_id)
+    else:
+        raise ValueError(
+            f"cannot prove parquet inventory for target={parquet_target!r}"
+        )
+    inventory = _factor_inventory(root)
+    return inventory, _inventory_digest(inventory)
+
+
+def _write_lock_root(factor_id: str, *, materializer: Any, parquet_target: str):
+    if "staging" in str(parquet_target).lower():
+        from factor_engine.storage.materialize.lake_publish import _resolve_staging_factor_dir
+        return _resolve_staging_factor_dir(factor_id)
+    if str(parquet_target).lower() == "local":
+        from factor_engine.security.factor_id import factor_dir_for
+        return factor_dir_for(materializer.lake_root, factor_id)
+    return None
 
 
 def execute_materialize_batch(
@@ -464,21 +765,26 @@ def execute_materialize_batch(
     items = list(items)
     counters = BatchMaterializeCounters(item_count=len(items))
     if not items:
+        receipt = WriteReceipt(
+            generation_id=None, expected_items=(), items={}, idempotency_key=None
+        )
         return {
             "materializations": {},
             "per_item": [],
             "counters": counters.to_dict(),
             "generation": None,
+            "receipt": receipt,
+            "write_receipt": receipt.to_dict(),
         }
+    item_names = [item.factor_id or item.factor.name for item in items]
+    if len(set(item_names)) != len(item_names):
+        raise ValueError("duplicate factor ids cannot share one WriteReceipt")
 
-    # --- hoisted shared context（一次） ---
-    shared = dict(_DEFAULT_OPTS)
-    if shared_options:
-        shared.update(shared_options)
-    if items[0].options:
-        first = dict(items[0].options)
-        for k, v in first.items():
-            shared.setdefault(k, v)
+    # Resolve every physical context before constructing a materializer or
+    # performing any write.
+    shared, resolved_options, write_context = _resolve_batch_contexts(
+        items, shared_options
+    )
     # 调用方只给 ``write_target`` 未给 ``target`` 时（如 ``execute_materialize``
     # 语义），让 ``target`` 跟随 ``write_target``（缺省 target="local" 不算显式）。
     if "target" not in (shared_options or {}) and not any(
@@ -487,9 +793,9 @@ def execute_materialize_batch(
         _wt = shared.get("write_target")
         if _wt:
             shared["target"] = str(_wt)
-    target = str(shared.get("target") or "local")
-    lake_root = shared.get("lake_root")
-    staging_dataset = shared.get("staging_dataset") or "factor_lake_staging"
+    target = write_context.target
+    lake_root = write_context.lake_root
+    staging_dataset = write_context.staging_dataset
     production = is_production_mode(engine.run_mode)
     parquet_target = resolve_parquet_write_target(target)
     effective_data_source_config = _effective_data_source_config(
@@ -508,12 +814,22 @@ def execute_materialize_batch(
 
         generation_id = f"batch-{new_run_id()}"
     run_generation = generation_id
+    receipt = WriteReceipt(
+        generation_id=generation_id,
+        expected_items=tuple(item.factor_id or item.factor.name for item in items),
+        items={
+            item.factor_id or item.factor.name: WriteItemReceipt(
+                item.factor_id or item.factor.name
+            )
+            for item in items
+        },
+        idempotency_key=generation_id,
+    )
     counters.hoisted_context = 1
 
     # --- per-item prepare（lineage/identity/scope 依赖单因子，无法向量化） ---
     preps: list[dict[str, Any]] = []
-    for item in items:
-        opts = _resolve_item_options(item, shared)
+    for item, opts in zip(items, resolved_options):
         prep = _prepare_one(
             engine,
             item,
@@ -533,17 +849,33 @@ def execute_materialize_batch(
     written_preps: list[dict[str, Any]] = []
     for prep in preps:
         try:
-            summary = _write_one(
-                engine,
-                materializer,
-                prep,
+            lock_root = _write_lock_root(
+                prep["factor_id"], materializer=materializer,
                 parquet_target=parquet_target,
-                production=production,
-                data_snapshot_id=data_snapshot_id,
-                run_generation=run_generation,
-                effective_data_source_config=effective_data_source_config,
-                counters=counters,
             )
+            if lock_root is None:
+                raise ValueError("cannot establish factor-root write lock")
+            from data_access.write.mutation_lock import mutation_lock
+            with mutation_lock(lock_root):
+                summary = _write_one(
+                    engine,
+                    materializer,
+                    prep,
+                    parquet_target=parquet_target,
+                    production=production,
+                    data_snapshot_id=data_snapshot_id,
+                    run_generation=run_generation,
+                    effective_data_source_config=effective_data_source_config,
+                    counters=counters,
+                )
+                if int(summary.get("rows_written") or 0) > 0:
+                    inventory, inventory_digest = _written_inventory(
+                        prep["factor_id"], materializer=materializer,
+                        parquet_target=parquet_target,
+                    )
+                    run_id = summary.get("run_id")
+                    if not run_id:
+                        raise ValueError("materializer returned no run_id")
         except Exception as exc:  # noqa: BLE001
             logger.warning(
                 "batch 单因子写失败 factor=%s: %s", prep["factor"].name, exc
@@ -551,38 +883,104 @@ def execute_materialize_batch(
             err = {"error": f"{type(exc).__name__}: {exc}"}
             summaries[prep["factor"].name] = err
             per_item.append(err)
+            item_receipt = receipt.items[prep["factor_id"]]
+            # A writer exception does not prove absence of physical side effects.
+            # Fail closed unless a future typed exception explicitly carries such proof.
+            item_receipt.state = WriteState.IN_DOUBT
+            item_receipt.error = "write outcome uncertain: " + err["error"]
             continue
         if int(summary.get("rows_written") or 0) == 0:
             counters.skipped_empty += 1
+            summaries[prep["factor"].name] = summary
+            per_item.append(summary)
+            # An empty current run must never bind pre-existing factor bytes to
+            # its new run/generation. Leave the receipt non-committable.
+            item_receipt = receipt.items[prep["factor_id"]]
+            item_receipt.state = WriteState.CREATED
+            item_receipt.rows = 0
+            continue
         summaries[prep["factor"].name] = summary
         per_item.append(summary)
         written_preps.append(prep)
+        item_receipt = receipt.items[prep["factor_id"]]
+        item_receipt.state = WriteState.STAGED
+        item_receipt.rows = int(summary.get("rows_written") or 0)
+        item_receipt.run_id = str(run_id)
+        item_receipt.inventory = inventory
+        item_receipt.inventory_digest = inventory_digest
 
+    written_preps = [
+        prep for prep in written_preps
+        if receipt.items[prep["factor_id"]].state == WriteState.STAGED
+    ]
     # --- R39-PERF-030: 同 axis 共享观测（不改变逐因子写入；同 index 不重复） ---
     counters.factor_block_shared_axis_count = _record_shared_axes(written_preps)
 
+    failed_items = [
+        item for item in receipt.items.values() if item.state == WriteState.FAILED
+    ]
+    uncertain_items = [
+        item for item in receipt.items.values() if item.state == WriteState.IN_DOUBT
+    ]
+    if (failed_items or uncertain_items) and write_context.atomicity == "batch":
+        for item in receipt.items.values():
+            if item.state == WriteState.STAGED:
+                item.state = WriteState.IN_DOUBT
+                item.error = "batch atomicity broken before catalog commit; reconciliation required"
+        if production:
+            from factor_engine.storage.exceptions import MaterializedButCatalogCommitFailed
+
+            raise MaterializedButCatalogCommitFailed(
+                "batch atomic materialize has partial physical writes "
+                "(IN_DOUBT; do not replay individual items)",
+                materialization={
+                    **summaries, "_write_receipt": receipt.to_dict()
+                },
+            )
+
     # --- batched catalog commit：依赖 manifest 单事务（Gate-03 核心） ---
-    if written_preps:
+    if written_preps and not (
+        (failed_items or uncertain_items) and write_context.atomicity == "batch"
+    ):
         payloads = _build_manifest_payloads(
             engine, written_preps, production=production, data_source=engine.data_source
         )
+        receipt.manifest_digest = hashlib.sha256(
+            json.dumps(
+                _canonical_context_value(payloads),
+                sort_keys=True, separators=(",", ":"),
+            ).encode()
+        ).hexdigest()
         from factor_engine.runtime.dependency_catalog import DependencyCatalog
 
         dep_catalog = DependencyCatalog(materializer.catalog)
         try:
             written = dep_catalog.record_factor_manifests_many(payloads)
+            if int(written) != len(payloads):
+                raise RuntimeError(
+                    "dependency manifest commit count mismatch: "
+                    f"expected={len(payloads)} written={written}"
+                )
             counters.batch_write_transaction_count += 1
             counters.manifest_writes += written
+            for prep in written_preps:
+                receipt.items[prep["factor_id"]].state = WriteState.COMMITTED
         except Exception as exc:  # noqa: BLE001
             # 与 execute_materialize 的 catalog 提交失败语义一致：production 下
             # 数据已落盘但目录未提交 → IN_DOUBT（fail-closed）；research 保留 warning。
+            for prep in written_preps:
+                item_receipt = receipt.items[prep["factor_id"]]
+                item_receipt.state = WriteState.IN_DOUBT
+                item_receipt.error = f"{type(exc).__name__}: {exc}"
             if production:
                 from factor_engine.storage.exceptions import MaterializedButCatalogCommitFailed
 
                 raise MaterializedButCatalogCommitFailed(
                     f"batch materialize: 因子数据已落盘但依赖/full-definition catalog "
                     f"批量提交失败（IN_DOUBT，需对账）: {exc}",
-                    materialization=summaries,
+                    materialization={
+                        **summaries, "_write_receipt": receipt.to_dict()
+                    },
                 ) from exc
             logger.warning(
                 "batch 依赖 manifest 目录提交失败（research，已记录待对账）: %s", exc
@@ -593,7 +991,9 @@ def execute_materialize_batch(
 
     # --- 单 generation publish ---
     if generation is not None:
-        generation.publish(len(items))
+        generation.publish(
+            sum(item.state == WriteState.COMMITTED for item in receipt.items.values())
+        )
 
     logger.info(
         "execute_materialize_batch items=%d batch_write_transactions=%d "
@@ -603,9 +1003,12 @@ def execute_materialize_batch(
         counters.manifest_writes,
         counters.physical_partition_write_rounds,
     )
+    receipt.validate()
     return {
         "materializations": summaries,
         "per_item": per_item,
         "counters": counters.to_dict(),
         "generation": generation_id,
+        "receipt": receipt,
+        "write_receipt": receipt.to_dict(),
     }

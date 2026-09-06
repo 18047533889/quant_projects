@@ -984,7 +984,7 @@ def validate_expression_depth(
 
 
 def compile_many_chunked(
-    dag_plans: list[Any],
+    dag_plans: Any,
     *,
     chunk_size: int | None = None,
     ctx: Any | None = None,
@@ -992,43 +992,97 @@ def compile_many_chunked(
     rows: int | None = None,
     instruments: int = 0,
     scan_cost_map: dict[str, Any] | None = None,
+    shared_nodes: dict[str, Any] | None = None,
 ) -> list[PhysicalFactorDAG]:
-    """大批量因子分块编译（避免内存峰值，支持海量因子编译）。
+    """Compatibility list API; use ``iter_compile_many_chunked`` for streaming.
 
-    压力测试证明编译是 **线性缩放** 的（0.25s/factor：20→4.9s，1280→339s），不存在
-    硬崩溃点。本函数的价值在于控制**内存峰值**和允许**渐进式提交**（分批调度/写入），
-    而非防止不存在的 MemoryError。
-
-    ``chunk_size`` 从 ``adaptive_config.compile_chunk_size`` 自适应读取，30GB 主机
-    → 500，500GB 主机 → 2000（平方根缩放）。
-
-    Args:
-        dag_plans: 因子计划列表。
-        chunk_size: 每批大小；``None`` 表示自适应（推荐）。
-        ctx / analyses / rows / instruments / scan_cost_map: 传给 ``lower_batch_dag``。
-
-    返回多个 PhysicalFactorDAG（调用方自行合并或分批执行）。
-
-    示例：
-        # 10,000 因子，自适应分块（30GB 主机 → 20 批，500GB 主机 → 5 批）
-        dags = compile_many_chunked(factor_plans)
-        for dag in dags:
-            scheduler.schedule(dag)
+    Pass a DAGPlan to preserve CSE definitions, or roots plus ``shared_nodes``.
+    Each returned physical DAG contains its complete reachable shared closure.
+    This list API retains all compiled chunks; it is not a bounded-output API.
     """
+    return list(iter_compile_many_chunked(
+        dag_plans, chunk_size=chunk_size, ctx=ctx, analyses=analyses,
+        rows=rows, instruments=instruments, scan_cost_map=scan_cost_map,
+        shared_nodes=shared_nodes,
+    ))
+
+
+def iter_compile_many_chunked(
+    dag_plans: Any,
+    *,
+    chunk_size: int | None = None,
+    ctx: Any | None = None,
+    analyses: dict[str, Any] | None = None,
+    rows: int | None = None,
+    instruments: int = 0,
+    scan_cost_map: dict[str, Any] | None = None,
+    shared_nodes: dict[str, Any] | None = None,
+):
+    """Yield one physical chunk at a time, preserving transitive CSE dependencies.
+
+    Input is a DAGPlan or a sequence of FactorPlan with explicit shared_nodes.
+    Consume and release each yielded DAG before requesting the next. Roots and
+    logical shared definitions remain caller-owned; no root-width gate is bypassed.
+    """
+    from operator import index
+    from factor_engine.planner.dag import DAGPlan, assert_unique_factor_names
+
+    roots = getattr(dag_plans, "roots", dag_plans)
+    inherited = getattr(dag_plans, "shared_nodes", None)
+    if inherited is not None and shared_nodes is not None and inherited is not shared_nodes:
+        raise ValueError("Pass either DAGPlan shared_nodes or explicit shared_nodes, not both")
+    definitions = inherited if inherited is not None else (shared_nodes or {})
+    max_width = _get_adaptive_dag_width_limit()
     if chunk_size is None:
-        chunk_size = _get_adaptive_chunk_size()
+        chunk_size = min(_get_adaptive_chunk_size(), max_width)
+    if isinstance(chunk_size, bool):
+        raise ValueError("chunk_size must be a positive integer")
+    try:
+        chunk_size = index(chunk_size)
+    except TypeError as exc:
+        raise ValueError("chunk_size must be a positive integer") from exc
+    if not 1 <= chunk_size <= max_width:
+        raise ValueError(f"chunk_size must be between 1 and host DAG width limit {max_width}")
+    assert_unique_factor_names([fp.factor_name for fp in roots])
 
-    results: list[PhysicalFactorDAG] = []
-    for i in range(0, len(dag_plans), chunk_size):
-        chunk = dag_plans[i : i + chunk_size]
-        # 构造临时 DAG 对象（假定 dag_plans 是 FactorPlan 列表，需按实际结构调整）
-        from dataclasses import dataclass
-        @dataclass
-        class ChunkedDAG:
-            roots: list[Any]
-            shared_nodes: dict[str, Any] | None = None
+    def references(root):
+        pending = [root]
+        visited = set()
+        found = set()
+        while pending:
+            node = pending.pop()
+            if id(node) in visited:
+                continue
+            visited.add(id(node))
+            if getattr(node, "op", None) == "plan_ref":
+                sid = str((getattr(node, "attrs", None) or {}).get("sid") or "")
+                if not sid or sid not in definitions:
+                    raise ValueError(f"Unresolved shared plan_ref sid={sid!r}")
+                found.add(sid)
+            else:
+                pending.extend(getattr(node, "inputs", ()) or ())
+        return found
 
-        chunked = ChunkedDAG(roots=chunk, shared_nodes=None)
+    for i in range(0, len(roots), chunk_size):
+        chunk = roots[i : i + chunk_size]
+        root_refs = {fp.factor_name: references(fp.root) for fp in chunk}
+        closure = {}
+        visiting = set()
+        pending = [(sid, False) for refs in root_refs.values() for sid in sorted(refs)]
+        while pending:
+            sid, expanded = pending.pop()
+            if expanded:
+                visiting.remove(sid)
+                closure[sid] = definitions[sid]
+                continue
+            if sid in closure:
+                continue
+            if sid in visiting:
+                raise ValueError(f"Cyclic shared plan_ref sid={sid!r}")
+            visiting.add(sid)
+            pending.append((sid, True))
+            pending.extend((child, False) for child in sorted(references(definitions[sid])))
+        chunked = DAGPlan(roots=list(chunk), shared_nodes=closure)
         physical = lower_batch_dag(
             chunked,
             analyses=analyses,
@@ -1037,9 +1091,22 @@ def compile_many_chunked(
             instruments=instruments,
             scan_cost_map=scan_cost_map,
         )
-        results.append(physical)
-
-    return results
+        # lower_batch_dag wires shared-to-shared edges; scheduler.plan normally
+        # adds root consumers. This lower-level public iterator must do so too.
+        for name, refs in root_refs.items():
+            rid = f"root:{name}"
+            task = physical.tasks[rid]
+            physical.tasks[rid] = rebase_task(
+                task, inputs=tuple(sorted(set(task.inputs) | {f"cse:{sid}" for sid in refs})),
+            )
+            for sid in refs:
+                cid = f"cse:{sid}"
+                task = physical.tasks[cid]
+                physical.tasks[cid] = rebase_task(
+                    task, consumers=tuple(sorted(set(task.consumers) | {rid})),
+                )
+        yield physical
+        del physical
 
 
 def _optimize_backend_partitioning(

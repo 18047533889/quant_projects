@@ -1,0 +1,55 @@
+schema_version: 1
+git_sha: f9e7237fafe4112391e62c8874caae7996ce0b11
+timestamp_utc: '2026-09-06T11:22:27Z'
+owner: many_runtime
+scope: [FE-23, FE-24, FE-25-sink-routing, FE-26]
+modified_runtime:
+  - factor_engine/runtime/streaming_result_sink.py
+  - factor_engine/runtime/adaptive_batch_scheduler.py
+  - factor_engine/runtime/resource_errors.py
+tests_added:
+  - factor_engine/tests/runtime/test_sink_ownership_audit.py
+tests_updated:
+  - factor_engine/tests/runtime/test_run_many_sink_backpressure.py
+  - factor_engine/tests/r27/test_streaming_sink_calibration.py
+  - factor_engine/tests/r38/test_dynamic_sink_and_service_lease.py
+  - factor_engine/tests/r33/test_r33_hard_gates_2026_08.py
+  - tests/r27/test_streaming_sink_calibration.py
+  - tests/r38/test_dynamic_sink_and_service_lease.py
+  - tests/r33/test_r33_hard_gates_2026_08.py
+reproduction:
+  status: FAIL_EXPECTED
+  command: OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 POLARS_MAX_THREADS=2 .venv/bin/python -m pytest factor_engine/tests/runtime/test_sink_ownership_audit.py -q --tb=short
+  result: '9 failed, 1 passed in 0.30s before implementation'
+  failures: [oversized-accepted, dequeue-released, unknown-size-zero, no-partition-idle-writers, ENOMEM, ENOSPC, EDQUOT, EACCES, slow-writer-unaccounted]
+verification:
+  initial_scoped: '56 passed, 4 warnings in 23.99s'
+  expanded_ownership: '21 passed in 0.59s'
+  intermediate_regression: '78 passed, 4 failed; old fixtures assumed unknown retries and zero-sized opaque object acceptance'
+  intermediate_regression_2: '98 passed, 3 failed; bytes objects also lack estimates in existing estimator; replaced fixture payloads with tiny numpy arrays'
+  final_command: OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 POLARS_MAX_THREADS=2 .venv/bin/python -m pytest factor_engine/tests/runtime/test_sink_ownership_audit.py factor_engine/tests/runtime/test_run_many_sink_backpressure.py factor_engine/tests/runtime/test_run_many_stream.py factor_engine/tests/r27/test_streaming_sink_calibration.py factor_engine/tests/r38/test_dynamic_sink_and_service_lease.py factor_engine/tests/r38/test_oom_replan.py factor_engine/tests/r33/test_r33_hard_gates_2026_08.py -q --tb=short
+  final_status: PASS
+  final_result: '101 passed, 4 pre-existing production classification warnings in 24.70s'
+  import_smoke: PASS
+  independent_review: PENDING_PARENT
+  parent_review_findings_addressed:
+    - Strong item reference plus original reservation size retained until release; release checks identity with is, preventing recycled-id acceptance.
+    - Duplicate producer identity rechecked after wait under the commit lock; deterministic two-waiter regression.
+    - Initial nonpositive global budget rejects and dynamic zero budget remains zero, never silently allocating one byte.
+  post_review_command: OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 POLARS_MAX_THREADS=2 .venv/bin/python -m pytest factor_engine/tests/runtime/test_sink_ownership_audit.py factor_engine/tests/runtime/test_run_many_sink_backpressure.py factor_engine/tests/r38/test_oom_replan.py -q --tb=short
+  post_review_result: '59 passed in 2.73s; includes 24 ownership tests plus bounded compute retries and OOM replanning'
+  timeout_followup: 'Shared typed classifier distinguishes query/compute timeouts from transient network timeouts for both writer and scheduler; 27 scoped tests passed before the parent review fixes'
+migration:
+  - Oversized empty-queue admission is deliberately removed. Typed ResultBudgetExceeded promptly requests split/spill or a larger broker lease; automatic split/spill is not implemented here.
+  - Queue get/drain now transfer ownership. Consumers must call release(item) only after dropping the payload; writers clear values before releasing, including terminal failure.
+  - current_bytes/backpressure include queued plus batching plus in-flight writes, including retry and timed-out active writer ownership.
+  - Unknown/nonpositive estimates fail closed with ResultSizeUnknown; opaque objects and bytes unsupported by current estimator need known-size payloads.
+  - Default no-partition sink still uses one writer. Explicit multiple writers without partition_key now reject rather than splitting budgets among idle writers.
+  - Explicit join_timeout is honored. Fatal leftovers are discarded/accounted, never manually replayed on the caller thread.
+  - Unknown compute errors now fail closed, not automatically retried; known transient microbatch transport failures retain bounded retries.
+limitations:
+  - Queue accounting is not a separate governor. Caller derives its budget from the broker; pre-submit compute allocations and writer temporary/copy memory remain caller resource-contract responsibilities.
+  - FE-19 typed WriteReceipt and IN_DOUBT reconciliation await parent integration. Legacy None callbacks still count success on return.
+  - No claim that all oversized results can execute, all server memory is usable, or process RSS cannot exceed this queue's budget.
+  - Mirrored tests under tests/ were migrated but final command ran canonical factor_engine/tests copies only.
+not_run: [full_compile_import, full_registry_audit, ABI_placeholder_audit, all_backend_parity, full_PIT_poison, Q_null_time_runtime, full_CI, production_gate, real_dataset, 100k_benchmark]

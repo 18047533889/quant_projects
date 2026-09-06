@@ -317,7 +317,7 @@ def compute_maximum_drawdown(
             NaN from the first nonpositive wealth onward (wipeout guard)
         peak_indices: Index of the PEAK (last index where the running
             maximum is attained at or before the maximum-drawdown trough),
-            shape () or (F,)
+            shape () or (F,); -1 denotes initial capital before the first return.
     """
     if missing_return_policy not in ("zero_fill", "fail"):
         raise ValueError(
@@ -346,8 +346,8 @@ def compute_maximum_drawdown(
     # Compute cumulative returns (wealth curve)
     cum_returns = np.cumprod(1.0 + returns_filled, axis=0)
 
-    # Compute running maximum
-    running_max = np.maximum.accumulate(cum_returns, axis=0)
+    # Include initial capital so an initial loss is part of the drawdown.
+    running_max = np.maximum(1.0, np.maximum.accumulate(cum_returns, axis=0))
 
     # Drawdown series with total-wipeout guard: from the first nonpositive
     # wealth onward, drawdown is NaN (forward-filled) — a negative wealth
@@ -398,7 +398,7 @@ def compute_maximum_drawdown(
             cum_returns[: trough_eff + 1, f], running_max[trough_eff, f]
         )
         if not np.any(at_max):
-            peak_indices[f] = 0
+            peak_indices[f] = -1
             continue
         # Last index where wealth equals the running max at the trough.
         peak_indices[f] = int(np.nonzero(at_max)[0][-1])

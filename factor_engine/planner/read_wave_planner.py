@@ -676,12 +676,25 @@ class ReadWavePlanner:
         best_idx = 0
         best_score = float("-inf")
         cm = self.cost_model
+        # The current wave is invariant while candidates are scored. Rewalking
+        # every accepted request twice per candidate makes wide shared-column
+        # batches cubic in request count. Preserve first-footprint-wins and
+        # max-axis semantics, but summarize the current wave only once.
+        current_footprints = self._union_footprints(current_reqs)
+        current_axis = max((r.axis_bytes for r in current_reqs), default=self.axis_bytes)
+        current_axis = max(self.axis_bytes, current_axis)
+        reserves = self.metadata_bytes + self.downstream_live_reserve + self.output_reserve
+        current_mem = (current_axis + union_footprint_bytes(
+            current_footprints, current_cols, per_column_fallback_bytes=self.per_column_bytes
+        ) + reserves) if current_reqs else 0
         for idx, req in enumerate(candidates):
             union_cols = current_cols | req.columns
-            union_mem = self._wave_memory_bytes(union_cols, current_reqs + [req])
-            current_mem = (
-                self._wave_memory_bytes(current_cols, current_reqs) if current_reqs else 0
-            )
+            footprints = dict(current_footprints)
+            for column, footprint in req.column_footprints.items():
+                footprints.setdefault(column, footprint)
+            union_mem = max(current_axis, req.axis_bytes) + union_footprint_bytes(
+                footprints, union_cols, per_column_fallback_bytes=self.per_column_bytes
+            ) + reserves
             incremental_live_bytes = max(0, union_mem - current_mem)
             cost = (
                 incremental_live_bytes

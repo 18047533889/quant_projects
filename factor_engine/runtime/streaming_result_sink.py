@@ -22,6 +22,24 @@ from collections import deque
 from dataclasses import dataclass, field
 from typing import Any, Callable, Iterable
 
+from factor_engine.runtime.resource_errors import ResourceBudgetExceeded, is_oom_error, typed_retry_kind
+
+
+class ResultSizeUnknown(ValueError):
+    """Result size must be known before admission."""
+
+
+class ResultBudgetExceeded(ResourceBudgetExceeded, ValueError):
+    """Split/spill the result or obtain a larger broker-derived budget."""
+
+
+class WriteReceiptError(RuntimeError):
+    """Write outcome is incomplete or unproven; reconciliation, not replay."""
+
+    def __init__(self, message: str, receipt: Any = None) -> None:
+        super().__init__(message)
+        self.write_receipt = receipt
+
 #: writer 状态机（R33-P0-049）
 WS_ACTIVE = "ACTIVE"
 WS_RETRYING = "RETRYING"
@@ -55,15 +73,25 @@ def _bytes_of(value: Any) -> int:
     try:
         from factor_engine.runtime.resource_governor import estimate_object_bytes
 
-        return estimate_object_bytes(value)
-    except Exception:
-        return 0
+        size = int(estimate_object_bytes(value))
+        if size <= 0:
+            raise ResultSizeUnknown("result size estimate must be positive")
+        return size
+    except ResultSizeUnknown:
+        raise
+    except Exception as exc:
+        raise ResultSizeUnknown("unable to estimate result size") from exc
 
 
 def _classify_write_error(exc: BaseException) -> str:
     """writer 错误分类：transient（可 retry）vs permanent（FAILED）。"""
     name = type(exc).__name__.lower()
     msg = str(exc).lower()
+    typed = typed_retry_kind(exc)
+    if typed is not None:
+        return typed
+    if is_oom_error(exc):
+        return "oom"
     if any(m in msg for m in _PERMANENT_MARKERS):
         return "permanent"
     if isinstance(exc, _RETRYABLE_EXC) or any(m in msg for m in _RETRY_MARKERS):
@@ -114,8 +142,10 @@ class BoundedResultQueue:
     """
 
     def __init__(self, max_bytes: int) -> None:
-        self.max_bytes = max(1, int(max_bytes))
+        self.max_bytes = max(0, int(max_bytes))
         self._items: deque[ResultItem] = deque()
+        self._inflight: dict[int, int] = {}
+        self._owned_ids: dict[int, tuple[ResultItem, int]] = {}
         self._current_bytes = 0
         self._lock = threading.Condition()
         self._closed = False
@@ -140,18 +170,28 @@ class BoundedResultQueue:
         """放入结果；队列满（bytes）时阻塞等待消费者（R27-106）。
 
         The timeout is one absolute budget, not a fresh budget after every
-        notification.  A single item larger than the configured queue is
-        admitted only when the queue is empty; otherwise it would be
-        impossible to make progress and callers would wait until timeout.
+        notification. Oversized items fail promptly: callers must split/spill
+        or acquire a larger broker budget. Dequeue transfers ownership only.
         """
         if item.bytes <= 0:
             item.bytes = _bytes_of(item.value)
-        item.bytes = max(0, int(item.bytes))
+        item.bytes = int(item.bytes)
+        if item.bytes <= 0:
+            raise ResultSizeUnknown("result size must be positive")
         deadline = time.monotonic() + max(0.0, float(timeout))
         with self._lock:
             if self._closed:
                 return False
-            while self._current_bytes + item.bytes > self.max_bytes:
+            if id(item) in self._owned_ids:
+                raise ValueError("result identity is already owned by this queue")
+            while True:
+                if item.bytes > self.max_bytes:
+                    raise ResultBudgetExceeded(
+                        f"result {item.name!r} size={item.bytes} exceeds budget={self.max_bytes}; "
+                        "split/spill result or replan with a larger broker lease"
+                    )
+                if self._current_bytes + item.bytes <= self.max_bytes:
+                    break
                 remaining = deadline - time.monotonic()
                 if remaining <= 0:
                     return False
@@ -160,7 +200,12 @@ class BoundedResultQueue:
                 self._write_backpressure_seconds += time.monotonic() - t0
                 if self._closed:
                     return False
+            # Waiting releases the condition lock. Another producer may have
+            # admitted this same object in the meantime.
+            if id(item) in self._owned_ids:
+                raise ValueError("result identity is already owned by this queue")
             self._items.append(item)
+            self._owned_ids[id(item)] = (item, item.bytes)
             self._current_bytes += item.bytes
             self._lock.notify()
             return True
@@ -177,9 +222,21 @@ class BoundedResultQueue:
             if not self._items:
                 return None
             item = self._items.popleft()
-            self._current_bytes = max(0, self._current_bytes - item.bytes)
-            self._lock.notify()
+            self._inflight[id(item)] = self._owned_ids[id(item)][1]
             return item
+
+    def release(self, item: ResultItem) -> None:
+        """Release a dequeued item's reservation exactly once, by identity."""
+        with self._lock:
+            owner = self._owned_ids.get(id(item))
+            if owner is None or owner[0] is not item:
+                raise ValueError("result is not owned in-flight by this queue")
+            size = self._inflight.pop(id(item), None)
+            if size is None:
+                raise ValueError("result is not owned in-flight by this queue")
+            self._current_bytes -= size
+            del self._owned_ids[id(item)]
+            self._lock.notify_all()
 
     def close(self) -> None:
         with self._lock:
@@ -193,7 +250,7 @@ class BoundedResultQueue:
         时阻塞等待消费降到新 target 以下；恢复后（target 变大）自动放宽。
         """
         with self._lock:
-            self.max_bytes = max(1, int(new_target))
+            self.max_bytes = max(0, int(new_target))
             self._lock.notify_all()
 
     def drain(self) -> list[ResultItem]:
@@ -201,7 +258,8 @@ class BoundedResultQueue:
         with self._lock:
             out = list(self._items)
             self._items.clear()
-            self._current_bytes = 0
+            for item in out:
+                self._inflight[id(item)] = self._owned_ids[id(item)][1]
         return out
 
     def summary(self) -> dict[str, Any]:
@@ -210,6 +268,7 @@ class BoundedResultQueue:
                 "max_bytes": self.max_bytes,
                 "current_bytes": self._current_bytes,
                 "queued_count": len(self._items),
+                "inflight_bytes": sum(self._inflight.values()),
                 "backpressure_ratio": round(self._current_bytes / self.max_bytes, 4) if self.max_bytes else 0.0,
                 "write_backpressure_seconds": round(self._write_backpressure_seconds, 3),
                 "closed": self._closed,
@@ -236,6 +295,8 @@ class _WriterWorker:
         on_fatal: Callable[[BaseException], None] | None = None,
         target_batch_bytes: int | None = None,
         max_batch_age_s: float | None = None,
+        require_write_receipt: bool = False,
+        receipt_item_key: Callable[[ResultItem], str] | None = None,
     ) -> None:
         self.worker_id = worker_id
         self._writer = writer
@@ -248,6 +309,8 @@ class _WriterWorker:
             float(max_batch_age_s) if max_batch_age_s is not None else None
         )
         self._partition_key = partition_key
+        self._require_write_receipt = require_write_receipt
+        self._receipt_item_key = receipt_item_key or (lambda item: item.name)
         # P0-023：worker fatal 时立即回调 sink（atomic set fatal + close queues），
         # 不等 finish()——否则 compute 还往死掉的 writer 队列塞结果，最后阻塞到
         # queue 满甚至等 600 秒。
@@ -256,6 +319,7 @@ class _WriterWorker:
         self.fatal_error: BaseException | None = None
         self.committed = 0
         self.failed = 0
+        self.in_doubt = 0
         self.retried = 0
         self._lock = threading.Lock()
         self._retry_map: dict[str, int] = {}
@@ -288,7 +352,14 @@ class _WriterWorker:
                     break
                 batch.append(nxt)
                 batch_bytes += max(0, nxt.bytes)
-            self._write_batch(batch)
+            try:
+                self._write_batch(batch)
+            finally:
+                for owned in batch:
+                    owned.value = None
+                    self._queue.release(owned)
+                batch.clear()
+                item = nxt = None
             if self.state == WS_FAILED:
                 # fatal：本 worker 停止取新任务（其余 worker 仍可继续）。
                 return
@@ -298,16 +369,17 @@ class _WriterWorker:
         while attempts < _MAX_RETRIES:
             attempts += 1
             try:
-                self._writer(batch)
-                with self._lock:
-                    self.committed += len(batch)
-                    self.state = WS_ACTIVE
-                return
+                output = self._writer(batch)
             except Exception as exc:  # noqa: BLE001
+                materialization = getattr(exc, "materialization", None)
+                receipt = getattr(exc, "write_receipt", None)
+                if receipt is None and isinstance(materialization, dict):
+                    receipt = materialization.get("_write_receipt")
+                if receipt is not None or self._require_write_receipt:
+                    self._complete_receipt(batch, receipt, cause=exc)
+                    return
                 kind = _classify_write_error(exc)
-                with self._lock:
-                    self.retried += 1
-                if kind.startswith("permanent") or attempts >= _MAX_RETRIES:
+                if kind != "transient" or attempts >= _MAX_RETRIES:
                     with self._lock:
                         self.state = WS_FAILED
                         self.fatal_error = exc
@@ -321,7 +393,60 @@ class _WriterWorker:
                             pass
                     return
                 # transient：指数退避后重试同一 batch。
+                with self._lock:
+                    self.retried += 1
+                    self.state = WS_RETRYING
                 time.sleep(min(0.05 * (2 ** attempts), 1.0))
+            else:
+                if not self._require_write_receipt and (output is None or output is True):
+                    with self._lock:
+                        self.committed += len(batch)
+                        self.state = WS_ACTIVE
+                else:
+                    self._complete_receipt(batch, output)
+                return
+
+    def _complete_receipt(self, batch: list[ResultItem], output: Any,
+                          *, cause: BaseException | None = None) -> None:
+        from factor_engine.runtime.materialize_batch import WriteReceipt, WriteState
+
+        receipt = None
+        committed = failed = 0
+        in_doubt = len(batch)
+        try:
+            if isinstance(output, dict) and "receipt" in output:
+                output = output["receipt"]
+            if isinstance(output, WriteReceipt):
+                output = output.to_dict()
+            expected = tuple(self._receipt_item_key(item) for item in batch)
+            receipt = WriteReceipt.from_dict(output, expected_items=expected)
+            committed = sum(item.state in {WriteState.COMMITTED, WriteState.PUBLISHED}
+                            for item in receipt.items.values())
+            failed = sum(item.state == WriteState.FAILED for item in receipt.items.values())
+            in_doubt = len(batch) - committed - failed
+            if committed != len(batch) or cause is not None:
+                raise WriteReceiptError(
+                    f"write receipt incomplete: committed={committed}, failed={failed}, "
+                    f"in_doubt={in_doubt}; do not replay, reconcile generation", receipt
+                )
+        except Exception as exc:
+            error = exc if isinstance(exc, WriteReceiptError) else WriteReceiptError(
+                f"invalid or missing write receipt: {exc}; reconcile before replay", receipt
+            )
+            if cause is not None:
+                error.__cause__ = cause
+            with self._lock:
+                self.committed += committed
+                self.failed += failed
+                self.in_doubt += in_doubt
+                self.state = WS_FAILED
+                self.fatal_error = error
+            if self._on_fatal is not None:
+                self._on_fatal(error)
+            return
+        with self._lock:
+            self.committed += committed
+            self.state = WS_ACTIVE
 
 
 class StreamingResultSink:
@@ -344,11 +469,17 @@ class StreamingResultSink:
         target_batch_bytes: int | None = None,
         max_batch_age_s: float | None = None,
         join_timeout: float | None = None,
+        require_write_receipt: bool = False,
+        receipt_item_key: Callable[[ResultItem], str] | None = None,
     ) -> None:
         self._writer = writer
+        self._require_write_receipt = bool(require_write_receipt)
+        self._receipt_item_key = receipt_item_key
         self._batch_size = max(1, batch_size)
         if queue_bytes is None:
             queue_bytes = 4 * 1024**3  # 绝对上限回退（调用方应传 broker 派生值）
+        if isinstance(queue_bytes, bool) or int(queue_bytes) <= 0:
+            raise ValueError("queue_bytes total budget must be positive")
         # R39-PERF-040+045 收口：batch_size 变大后单次 flush（一次 writer 调用）
         # 可远超旧 10s。join timeout 必须覆盖「当前 batch 写完」所需时间，否则
         # finish() 对活着的慢 writer 误判 fatal 丢弃全部工作。sink 设计保证
@@ -361,6 +492,7 @@ class StreamingResultSink:
             if join_timeout is not None
             else max(10.0, self._batch_size * _PER_ITEM_JOIN_BUDGET_S)
         )
+        self._explicit_join_timeout = join_timeout is not None
         self._target_batch_bytes = (
             max(1, int(target_batch_bytes)) if target_batch_bytes is not None else None
         )
@@ -377,6 +509,8 @@ class StreamingResultSink:
             else:
                 writer_threads = min(2, os.cpu_count() or 1)
         self._writer_threads = max(1, int(writer_threads))
+        if self._writer_threads > 1 and partition_key is None:
+            raise ValueError("multiple writers require an explicit partition_key conflict domain")
         self._threads: list[threading.Thread] = []
         # R33-P0-051：每 worker 一个独立队列（同 partition → 同 worker → 单 writer）。
         # Split one total memory budget deterministically; the remainder goes
@@ -384,6 +518,8 @@ class StreamingResultSink:
         # global budget.
         base, remainder = divmod(max(1, int(queue_bytes)), self._writer_threads)
         capacities = [base + (1 if i < remainder else 0) for i in range(self._writer_threads)]
+        if self._target_batch_bytes is None:
+            self._target_batch_bytes = max(1, min(capacities))
         self._writer_capacities = capacities
         self._worker_queues: list[BoundedResultQueue] = [
             BoundedResultQueue(capacity) for capacity in capacities
@@ -441,6 +577,8 @@ class StreamingResultSink:
                 on_fatal=self._set_fatal,
                 target_batch_bytes=self._target_batch_bytes,
                 max_batch_age_s=self._max_batch_age_s,
+                require_write_receipt=self._require_write_receipt,
+                receipt_item_key=self._receipt_item_key,
             )
             self._workers.append(worker)
             t = threading.Thread(target=worker._run, daemon=True, name=f"r27-writer-{i}")
@@ -466,7 +604,7 @@ class StreamingResultSink:
         ``total`` 是全部 worker 共享的总额（P0-044：不是每 worker 各拿 full
         budget）——按 worker 数均分到各队列。缩容不丢已有 items。
         """
-        total = max(1, int(total))
+        total = max(0, int(total))
         base, remainder = divmod(total, max(1, len(self._worker_queues)))
         for i, q in enumerate(self._worker_queues):
             q.set_target_bytes(base + (1 if i < remainder else 0))
@@ -491,6 +629,8 @@ class StreamingResultSink:
         consumer），join 必须在剩余 items × 每项预算内等到写完。worker 消耗是
         并发的，这里取 close 瞬间的队列深度做保守估计（多算不误杀，少算才危险）。
         """
+        if self._explicit_join_timeout:
+            return self._join_timeout
         remaining = sum(q.queued_count for q in self._worker_queues)
         return max(
             self._join_timeout,
@@ -540,19 +680,19 @@ class StreamingResultSink:
                 "generation aborted (R38-P0-045)"
             )
         # join 成功后队列中残留 item 由 main 补写（此时无并发 writer）。
-        remaining: list[ResultItem] = []
+        remaining: list[tuple[BoundedResultQueue, ResultItem]] = []
         for q in self._worker_queues:
-            remaining.extend(q.drain())
+            remaining.extend((q, item) for item in q.drain())
         if remaining:
-            try:
-                self._writer(remaining)
-                with self._lock:
-                    if self._workers:
-                        self._workers[0].committed += len(remaining)
-                    else:
-                        self._accepted = max(0, self._accepted - len(remaining))
-            except Exception as exc:  # noqa: BLE001
-                self._set_fatal(exc)
+            # A healthy started worker consumes its queue before terminating.
+            # Never replay leftovers after a fatal write (commit may be unknown).
+            self._set_fatal(RuntimeError("writer terminated with unprocessed results"))
+            for q, item in remaining:
+                item.value = None
+                q.release(item)
+            if self._workers:
+                self._workers[0].failed += len(remaining)
+            remaining.clear()
         self._drained = True
         # R33-P0-049/050：worker 级 FAILED（fatal_error）必须传播到 sink 级——
         # 任一 writer 死掉，整个 publish 失败（生产 run 不能谎报成功）。
@@ -606,6 +746,8 @@ class StreamingResultSink:
                 "accepted": self._accepted,
                 "committed": committed,
                 "failed": failed,
+                "in_doubt": sum(w.in_doubt for w in self._workers),
+                "require_write_receipt": self._require_write_receipt,
                 "retried": retried,
                 "writer_threads": self._writer_threads,
                 "batch_size": self._batch_size,

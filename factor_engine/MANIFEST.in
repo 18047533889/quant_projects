@@ -1,5 +1,6 @@
 global-exclude *.pyc
 global-exclude __pycache__
+include runtime/quality/dq_profiles.yaml
 prune tests
 prune benchmarks
 prune audit

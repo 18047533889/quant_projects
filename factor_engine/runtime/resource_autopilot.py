@@ -196,6 +196,21 @@ class ResourceController:
         job_memory_lease_bytes: int | None = None,
         sink_backpressure: float = 0.0,
     ) -> ResourceDecision:
+        # One lock orders background decisions, foreground width requests and
+        # real task reservation. Do not introduce a reverse controller lock order.
+        with self._broker._lock:
+            return self._tick_locked(signals, envelope,
+                job_memory_lease_bytes=job_memory_lease_bytes,
+                sink_backpressure=sink_backpressure)
+
+    def _tick_locked(
+        self,
+        signals: ResourceSignals,
+        envelope: HostResourceEnvelope,
+        *,
+        job_memory_lease_bytes: int | None = None,
+        sink_backpressure: float = 0.0,
+    ) -> ResourceDecision:
         """一个 control tick：读信号 → 分档 → AIMD → 派生 budgets → 返回决策。"""
         self._tick_count += 1
         reasons: list[str] = []
@@ -224,10 +239,11 @@ class ResourceController:
             stage = _escalate(stage)
             reasons.append(f"mem_slope={slope / 1024**2:.0f}MB/s<={_MEM_SLOPE_THROTTLE_BPS / 1024**2:.0f}MB/s")
 
-        # 4) 高 swap 活动（§154）：大量 swap-in/out 通常意味性能已恶化。
+        # Swap occupancy is not swap-in/out activity. Old cold swapped pages
+        # can remain indefinitely; do not repeatedly AIMD-throttle idle hosts.
+        # Actual memory/IO PSI and memory slope remain independent hard signals.
         if signals.swap_max and signals.swap_current and signals.swap_current > signals.swap_max * 0.5:
-            stage = _escalate(stage)
-            reasons.append("high_swap_activity")
+            reasons.append("high_swap_occupancy_observed")
 
         # 5) writer backpressure → 减少 compute（§40：>0.70 reduce，>0.90 stop）。
         if sink_backpressure > 0.90:
@@ -314,6 +330,30 @@ class ResourceController:
         return decision
 
     # -- AIMD 原语 --
+
+    def admit_minimum_cpu_width(self, width: int, decision: ResourceDecision) -> ResourceDecision:
+        """Broker-authorized single-work-item CPU floor, never a hard-limit bypass."""
+        with self._broker._lock:
+            return self._admit_minimum_cpu_width_locked(width, decision)
+
+    def _admit_minimum_cpu_width_locked(self, width: int, decision: ResourceDecision) -> ResourceDecision:
+        from dataclasses import replace
+        from factor_engine.runtime.resource_errors import CPUWidthUnavailable
+
+        latest = self._decision or decision
+        if any(snapshot.pressure_state not in {STAGE_NORMAL, STAGE_PRESSURE_1}
+               for snapshot in (decision, latest)):
+            raise CPUWidthUnavailable("minimum CPU width denied under elevated pressure")
+        if width < 1 or width > self._broker.hard_cpu_slots:
+            raise CPUWidthUnavailable("minimum CPU width exceeds hard CPU capacity")
+        self._apply_cpu_budget(width, "minimum_task_width", time.monotonic())
+        # The allocator may have been throttled since the controller's last
+        # decision; synchronize even when the controller target already equals width.
+        self._broker._cpu.set_soft_budget(width)
+        self._target_concurrency = 1
+        self._decision = replace(latest, target_cpu_tokens=width, target_concurrency=1,
+            reasons=(*latest.reasons, f"minimum_task_width_admission={width}"))
+        return self._decision
 
     def _fast_down(self, *, strong: bool, stage: str, now: float) -> None:
         before = self._target_cpu_tokens

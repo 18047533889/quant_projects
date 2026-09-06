@@ -1,0 +1,41 @@
+schema: factor_engine.read_wave_marginal_cache.v1
+git_sha: f9e7237fafe4112391e62c8874caae7996ce0b11
+timestamp: '2026-09-06T18:32:00+08:00'
+files:
+  - factor_engine/planner/read_wave_planner.py
+  - factor_engine/tests/r39/test_read_wave_marginal_cache.py
+  - benchmarks/bench_read_wave_marginal.py
+finding: _best_marginal recomputed current-wave footprints and memory for every candidate, walking the growing accepted request list twice. Shared-column batches therefore approached cubic planning work.
+change: Summarize current footprints, maximum axis, reserves, and current memory once per candidate-selection step. Candidate scoring merges only its own footprints, retaining first-footprint-wins, maximum-axis, memory budget, and stable tie order.
+tests:
+  scoped_pytest:
+    status: PASS
+    count: 41
+    seconds: 0.33
+    paths:
+      - factor_engine/tests/r39/test_read_wave_marginal_cache.py
+      - factor_engine/tests/r39/test_perf_read_wave_2026_08.py
+      - factor_engine/tests/r38/test_dynamic_read_wave.py
+    oracle: Eight seeded heterogeneous footprint fixtures compare every selected index and final full ReadWavePlan against the pre-change algorithm; includes missing/conflicting footprints, axis maxima, reserves, and budgets.
+  git_diff_check: PASS
+  independent_scoped_review: PASS; root coordinator reviewed the diff against the original memory formula and independently reran all 41 tests successfully.
+  full_compile_import: NOT_RUN
+  registry_duplicate_authority_gate: NOT_RUN
+  abi_placeholder: NOT_RUN
+  full_backend_parity: NOT_RUN
+  full_pit_poison: NOT_RUN
+  q_null_time_runtime: NOT_RUN
+  ci: NOT_RUN
+  production_gate: NOT_RUN
+performance:
+  artifact: evidence/r2/20260906_read_wave_marginal_benchmark.json
+  roots_256: {baseline_seconds: 0.9683810870628804, optimized_seconds: 0.05341317900456488, exact_plan_parity: true}
+  roots_512: {baseline_seconds: 7.369464054936543, optimized_seconds: 0.2090514759765938, exact_plan_parity: true}
+  roots_1024: {baseline: NOT_RUN, optimized_seconds: 0.819515845971182}
+diagnostic_artifacts:
+  - evidence/r2/20260906_planning_scaling.json
+  - evidence/r2/20260906_wave256_native.prof
+limitations:
+  - Synthetic shared-column scan planning only; coordinator owns full run_many acceptance.
+  - No memory gate or semantic check was disabled.
+  - No commit/push or unrelated changes.

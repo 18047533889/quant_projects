@@ -16,10 +16,16 @@ def _truthy_env(name: str) -> bool:
 
 
 def resolve_run_mode(mode: str | None = None) -> str:
-    if mode is not None and str(mode).strip():
-        return str(mode).lower()
+    supported={"research",PRODUCTION_MODE,"paper"}
+    if mode is not None:
+        resolved=str(mode).strip().lower()
+        if resolved not in supported:
+            raise ProductionPolicyViolation(f"unknown run mode {mode!r}")
+        return resolved
     factor_engine_mode = os.environ.get("FACTOR_ENGINE_RUN_MODE", "").strip().lower()
-    if factor_engine_mode in {"research", PRODUCTION_MODE}:
+    if factor_engine_mode:
+        if factor_engine_mode not in supported:
+            raise ProductionPolicyViolation(f"unknown FACTOR_ENGINE_RUN_MODE={factor_engine_mode!r}")
         return factor_engine_mode
     if _truthy_env("QUANT_PRODUCTION_MODE"):
         return PRODUCTION_MODE

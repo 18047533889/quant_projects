@@ -1,0 +1,76 @@
+change_id: QE-GPU-PUBLIC-TILING-20260906
+git_sha: f9e7237fafe4112391e62c8874caae7996ce0b11
+timestamp_utc: '2026-09-06T09:59:20Z'
+scope: public CUDA factor tiling, memory budget enforcement, validity and split guards
+owned_modified_files:
+  - quant_evaluator/runtime/device_session.py
+  - quant_evaluator/runtime/gpu_executor.py
+  - quant_evaluator/runtime/evaluator.py
+  - quant_evaluator/tests/test_gpu_batch_tile_oom.py
+  - quant_evaluator/tests/test_public_gpu_tiling.py
+  - quant_evaluator/docs/GPU_PUBLIC_TILING_20260906.yaml
+  - quant_evaluator/scripts/benchmark_public_gpu_100k.py
+  - evidence/r2/20260906_qe_gpu_100k/result.json
+environment:
+  python: /home/sunhaiwei/quant_projects/.venv/bin/python
+  cupy: 14.2.0
+  gpu: NVIDIA L20
+  memory_total_mib: 46068
+  other_environment: fe_pin_venv2 has no CuPy
+reproduction:
+  before: 5 new public API regression cases failed before runtime edits
+  findings:
+    - public CUDA API uploaded all factors and ignored the tile estimator
+    - estimator returned 16 even when no candidate fit the budget
+    - CUDA returned before the sealed-split guard and ignored validity masks
+verification:
+  public_gpu_and_existing_parity:
+    command: .venv/bin/python -m pytest -q quant_evaluator/tests/test_public_gpu_tiling.py quant_evaluator/tests/test_gpu_parity.py quant_evaluator/tests/test_gpu_batch_tile_oom.py --tb=short
+    status: PASS
+    passed: 24
+    seconds: 1.24
+  sealed_split_regressions:
+    command: .venv/bin/python -m pytest -q quant_evaluator/tests/test_sealed_split_overlap.py --tb=short
+    status: PASS
+    passed: 21
+    seconds: 0.04
+  syntax_smoke: PASS - py_compile for three modified runtime files
+  diff_whitespace: PASS - git diff --check -- quant_evaluator
+  independent_review: PASS - root reviewed runtime, allocator, guards, validity, stitching and eight new tests
+  synthetic_100k_acceptance:
+    status: PASS
+    command: .venv/bin/python -m quant_evaluator.scripts.benchmark_public_gpu_100k --output-dir evidence/r2/20260906_qe_gpu_100k
+    evidence: evidence/r2/20260906_qe_gpu_100k/result.json
+    shape_T_N_F: [8, 32, 100000]
+    cuda_seconds_after_warmup: 2.9101857549976557
+    total_seconds: 6.632158381980844
+    factor_tiles: 782
+    all_factor_times_checked: 800000
+    max_abs_error: 2.220446049250313e-16
+    quality_gate_nan_cases: 90
+    pool_peak_reserved_bytes: 7516160
+    process_peak_rss_bytes: 852783104
+    notes: First oracle draft omitted canonical CPU min-distinct-level floor; corrected oracle against metrics/ic.py before passing run. Runtime unchanged between these runs.
+evidence_details:
+  - Small real-GPU RankIC matches pandas/scipy independent CPU rank oracles including ties, NaN and explicit validity.
+  - 129 factors use natural 128+1 device tiles; output order and one label upload are asserted.
+  - Simulated OutOfMemoryError retries 4 to 2 only when policy allows, then completes on real CUDA.
+  - Two concurrent threads retain separate CuPy allocator pools and restore the original allocator.
+  - Memmap factor slices share storage; the public API does not copy all host factors.
+limitations:
+  - 100000-factor small synthetic panel acceptance passed, but no full real datasets. Host FactorBatch and requested result arrays still have total logical extent. Caller must stream batches or provide memmap inputs.
+  - Memory estimate is conservative and calibrated for rank-family working sets; insufficient single-factor budget fails closed.
+  - Label staging allocation failure is propagated, not retried. Per-session budgets do not reserve global memory across competing processes.
+  - Labels remain resident across factor tiles within one evaluation; evaluate_many still creates a session per label horizon.
+  - Context-aware CUDA metrics are explicitly unsupported rather than silently ignoring context.
+  - OOM recovery is tested using injected errors, not by exhausting GPU memory.
+not_run:
+  - full compile/import
+  - registry/duplicate-authority audit
+  - ABI/placeholder audit
+  - full backend parity and complete metric matrix
+  - full PIT poison gate
+  - Q null/time/runtime gates
+  - CI and production gates
+  - 100000-factor real workload and throughput certification
+  - commit and push

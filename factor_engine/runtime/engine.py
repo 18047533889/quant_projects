@@ -29,7 +29,7 @@ from __future__ import annotations
 
 import functools
 import time
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -400,7 +400,7 @@ def _resolve_hybrid_region(backend: Any, region_backend: Any) -> Any:
         # delegate — that would silently compute with a different engine while
         # telemetry claimed clickhouse ran.  A ClickHousePushdownBackend is the
         # only executor that may serve a CLICKHOUSE_SQL region.
-        if _sql_backend_is_clickhouse(backend._sql):
+        if _sql_backend_is_clickhouse(getattr(backend, "_sql", None)):
             return _assert_executor_identity(
                 backend._sql, region_backend, HybridBackend=True
             )
@@ -1090,6 +1090,55 @@ def _data_source_scoped(data_source: Any) -> bool:
     return False
 
 
+def _validated_universe_snapshot(data_source: Any, scope: FactorExecutionScope) -> bool:
+    """Whether the source carries an immutable historical membership identity."""
+    if data_source is None:
+        return False
+    snapshot = getattr(data_source, "universe_snapshot_identity", None) or getattr(
+        data_source, "universe_snapshot", None
+    )
+    if snapshot is not None:
+        from data_access.r30.universe_snapshot import UniverseSnapshot
+
+        if not isinstance(snapshot, UniverseSnapshot):
+            return False
+        rebuilt = UniverseSnapshot.build(
+            snapshot.universe_id,
+            snapshot.market,
+            snapshot.members,
+            snapshot.membership_policy_version,
+            snapshot.tradability_policy_version,
+            snapshot.source_snapshot,
+        )
+        if rebuilt.snapshot_id != snapshot.snapshot_id:
+            return False
+        if snapshot.universe_id.upper() != str(scope.universe_id or "").upper():
+            return False
+        if snapshot.market and str(snapshot.market).upper() != str(scope.market or "").upper():
+            return False
+        start = getattr(snapshot, "effective_start", None)
+        end = getattr(snapshot, "effective_end", None)
+        request_start = getattr(data_source, "start_date", None)
+        request_end = getattr(data_source, "end_date", None)
+        # The current DA UniverseSnapshot is set-valued and has no membership
+        # interval. It cannot certify a historical request until the provider
+        # supplies explicit effective bounds.
+        if start is None or end is None or request_start is None or request_end is None:
+            return False
+        if pd.Timestamp(start) > pd.Timestamp(request_start) or pd.Timestamp(end) < pd.Timestamp(request_end):
+            return False
+        source_members = getattr(data_source, "instrument_filter", None)
+        if source_members is None or set(map(str, source_members)) != set(snapshot.members):
+            return False
+        return True
+    inner = getattr(data_source, "inner", None)
+    return bool(
+        inner is not None
+        and inner is not data_source
+        and _validated_universe_snapshot(inner, scope)
+    )
+
+
 def _is_whole_market_universe(scope: FactorExecutionScope) -> bool:
     """universe 标签是否表示「整个市场」（而非 scoped 子集股票池）。
 
@@ -1150,6 +1199,7 @@ def assert_execution_scope_contract(
     *,
     factor_name: str,
     data_source: Any = None,
+    mode: str | None = None,
 ) -> None:
     """R9-P0-011 execution-contract gate：scoped-universe 因子不得在全源上算截面。
 
@@ -1180,7 +1230,7 @@ def assert_execution_scope_contract(
     # universe（如 "CSI300"）无法证明 membership snapshot / digest / effective
     # interval。在 DataAccess 供应真实 UniverseSnapshotIdentity 之前，production
     # cross-sectional 必须 fail-closed。
-    if is_production_mode() and _plan_has_cross_sectional_ops(plan):
+    if is_production_mode(mode) and _plan_has_cross_sectional_ops(plan):
         univ = str(scope.universe_id or "").strip()
         # 任何非空字符串 universe（包括 "CSI300"）都不是 validated snapshot identity
         if not univ or univ.upper() == "ALL":
@@ -1196,16 +1246,14 @@ def assert_execution_scope_contract(
         # 即使有字符串名字（如 "CSI300"），也不是 validated snapshot
         # TODO(FE-P0-031): 接入 DataAccess UniverseSnapshot.snapshot_id 后，
         # 改为检查 scope 是否携带 .universe_snapshot: UniverseSnapshot 属性
-        if not _data_source_scoped(data_source):
+        if not _validated_universe_snapshot(data_source, scope):
             raise ProductionPolicyViolation(
                 f"execution-scope contract violation: factor '{factor_name}' declares "
                 f"universe_id={scope.universe_id!r} but the plan computes cross-sectional "
                 f"operator(s) in production mode. FE-P0-031: a mere universe string "
                 f"(e.g. 'CSI300') cannot prove membership snapshot/digest/effective interval. "
-                f"Currently enforced through scoped data_source; until DataAccess supplies "
-                f"UniverseSnapshotIdentity, production cross-sectional must be backed by "
-                f"scoped data_source. Set explicit scoped data_source or wait for "
-                f"DataAccess integration."
+                f"An instrument_filter or universe label is not historical membership "
+                f"evidence. Supply digest/members/policy_version/effective_interval."
             )
 
     if _is_whole_market_universe(scope):
@@ -1385,6 +1433,40 @@ class FactorEngine:
             time.perf_counter() - started_at,
         )
         return optimized_plan, analysis
+
+    def _assert_precompiled_binding(
+        self,
+        factor: Factor,
+        plan: Any,
+        analysis: Any,
+        *,
+        pit_enforce: bool,
+        pit_forbid_forward_fill: bool,
+    ) -> None:
+        """Recompile before I/O and reject freely mixed factor/analysis/plan triples."""
+        from factor_engine.planner.plan_hash import structural_key
+        from factor_engine.storage.catalog import compute_ir_hash
+        expected_plan, expected_analysis = self.compile(
+            factor,
+            pit_enforce=pit_enforce,
+            pit_forbid_forward_fill=pit_forbid_forward_fill,
+        )
+        mismatches = []
+        if structural_key(plan) != structural_key(expected_plan):
+            mismatches.append("plan")
+        if compute_ir_hash(analysis.ir) != compute_ir_hash(expected_analysis.ir):
+            mismatches.append("analysis.ir")
+        if getattr(analysis, "lookback", None) != getattr(expected_analysis, "lookback", None):
+            mismatches.append("lookback")
+        actual_columns = tuple(sorted(getattr(analysis, "referenced_columns", ()) or ()))
+        expected_columns = tuple(
+            sorted(getattr(expected_analysis, "referenced_columns", ()) or ())
+        )
+        if actual_columns != expected_columns:
+            mismatches.append("referenced_columns")
+        if mismatches:
+            from factor_engine.runtime.production_policy import ProductionPolicyViolation
+            raise ProductionPolicyViolation(f"precompiled factor/analysis/plan binding mismatch: {mismatches}")
 
     def _dag_from_factors(
         self,
@@ -1817,6 +1899,7 @@ class FactorEngine:
             loaded.append((engine, factor, config, path))
         if not loaded:
             return {"results": {}, "runs": {}, "configs": {}}
+        assert_unique_factor_names([factor.name for _,factor,_,_ in loaded])
 
         groups: dict[str, list[tuple[FactorEngine, Factor, FactorEngineConfig, str | Path]]] = {}
         for item in loaded:
@@ -2266,19 +2349,36 @@ class FactorEngine:
         pit_enforce: bool,
         pit_forbid_forward_fill: bool,
         wave_memory_budget: int | None = None,
+        ctx: Any | None = None,
+        native_fusion: bool = True,
+        execution_policy: str | None = None,
+        _compiled: tuple[Any, dict[str, AnalysisResult]] | None = None,
     ) -> tuple[Any, Any, dict[str, AnalysisResult]]:
         """编译 → PhysicalFactorDAG 调度计划（R27-004..006/063）。"""
         from factor_engine.runtime.adaptive_batch_scheduler import AdaptiveBatchScheduler
 
-        dag, analyses = self._dag_from_factors(
+        _assert_backend_plan_authority(self.backend)
+        dag, analyses = _compiled or self._dag_from_factors(
             factors,
             enable_cse=enable_cse,
             perf=perf,
             pit_enforce=pit_enforce,
             pit_forbid_forward_fill=pit_forbid_forward_fill,
         )
-        scheduler = AdaptiveBatchScheduler(wave_memory_budget=wave_memory_budget)
-        plan = scheduler.plan(dag, analyses, enable_cse=enable_cse)
+        from factor_engine.planner.batch_data_request import build_batch_data_request
+
+        ctx = ctx or self._make_context(shared_result_cache={}, perf=perf or PerfConfig.from_env())
+        request = build_batch_data_request(self, analyses=analyses, dag=dag, ctx=ctx)
+        scheduler = AdaptiveBatchScheduler(
+            wave_memory_budget=wave_memory_budget, execution_policy=execution_policy,
+        )
+        plan = scheduler.plan(
+            dag, analyses, enable_cse=enable_cse, ctx=ctx,
+            scan_cost_map=request.scan_cost_map,
+            scope_scan_cost_map=request.scan_cost_map,
+            fusion_backend_capability=None if native_fusion else {},
+        )
+        plan.meta["batch_data_request"] = request.to_dict()
         return scheduler, plan, analyses
 
     def plan_many_fast(
@@ -2299,6 +2399,8 @@ class FactorEngine:
         """
         from factor_engine.runtime.production_policy import is_production_mode
 
+        if resource_profile != "balanced":
+            raise ValueError("plan_many_fast supports only resource_profile='balanced'")
         pit_enforce = bool(pit_enforce or is_production_mode(self.run_mode))
         if enable_cse is None:
             perf = perf or PerfConfig.from_env()
@@ -2412,10 +2514,25 @@ class FactorEngine:
         from factor_engine.runtime.production_policy import is_production_mode
         from factor_engine.runtime.resource_broker import ResourceBroker
         from factor_engine.runtime.streaming_result_sink import ResultItem, StreamingResultSink
+        from factor_engine.runtime.effective_execution_config import resolve_fast_execution_config
 
+        effective = resolve_fast_execution_config(
+            scheduler=scheduler, parallel=parallel, resource_profile=resource_profile,
+            auto_shard=auto_shard, native_fusion=native_fusion,
+            result_policy=result_policy, write_results=write_results,
+        )
+        _assert_backend_plan_authority(self.backend)
+        if is_production_mode(self.run_mode):
+            raise PhysicalPlanRequiredError(
+                "materialize_many_fast has no production PhysicalRegionPlan admission; "
+                "use the certified public run/materialize path"
+            )
+        assert_unique_factor_names([factor.name for factor in factors])
         ids = list(factor_ids) if factor_ids is not None else [f.name for f in factors]
         if len(ids) != len(factors):
             raise ValueError("factor_ids 长度必须与 factors 一致")
+        if any(not isinstance(fid, str) or not fid.strip() for fid in ids) or len(set(ids)) != len(ids):
+            raise ValueError("factor_ids must be unique non-empty strings")
         # R39-PERF-038: 预建 O(1) 查找表（自定义 factor_id != factor.name 时携带
         # 真实 factor_id）。
         factor_by_name: dict[str, Factor] = {f.name: f for f in factors}
@@ -2426,13 +2543,13 @@ class FactorEngine:
         if enable_cse is None:
             perf = PerfConfig.from_env()
             enable_cse = perf.enable_cse
-        scheduler, plan, analyses = self._scheduler_plan(
+        perf = PerfConfig.from_env()
+        initial_dag, analyses = self._dag_from_factors(
             factors,
             enable_cse=enable_cse,
-            perf=None,
+            perf=perf,
             pit_enforce=pit_enforce,
             pit_forbid_forward_fill=pit_forbid_forward_fill,
-            wave_memory_budget=wave_memory_budget,
         )
         # warmup / input_dq 与现有批跑一致。
         mk = dict(materialize_kwargs or {})
@@ -2442,7 +2559,14 @@ class FactorEngine:
             trim_warmup=bool(mk.get("trim_warmup", True)),
             market=mk.get("market"),
         )
-        ctx = engine_to_use._make_context(shared_result_cache={}, perf=PerfConfig.from_env())
+        ctx = engine_to_use._make_context(shared_result_cache={}, perf=perf)
+        scheduler, plan, analyses = engine_to_use._scheduler_plan(
+            factors, enable_cse=enable_cse, perf=perf,
+            pit_enforce=pit_enforce, pit_forbid_forward_fill=pit_forbid_forward_fill,
+            wave_memory_budget=wave_memory_budget, ctx=ctx,
+            native_fusion=effective.native_fusion, execution_policy=effective.parallel,
+            _compiled=(initial_dag, analyses) if engine_to_use is self else None,
+        )
         from factor_engine.backend.routing_env import routing_execution_scope
         from factor_engine.runtime.resource_telemetry import record_resource_telemetry
 
@@ -2489,18 +2613,24 @@ class FactorEngine:
 
         batch_generation = GenerationTransaction(generation_id=f"batch-{new_run_id()}")
 
-        def _writer(batch: list[ResultItem]) -> None:
+        def _writer(batch: list[ResultItem]) -> Any:
             nonlocal batch_write_transaction_count
             items_to_write: list[MaterializeItem] = []
             for item in batch:
                 # R39-PERF-038: O(1) 查找（无 list.index / next 线性扫描）。
                 factor = factor_by_name.get(item.name)
                 if factor is None:
-                    materializations[item.name] = {"error": "factor not found"}
-                    continue
+                    raise ValueError(f"Unknown sink factor: {item.name}")
+                from factor_engine.runtime.batch_service import _trim_batch_result, _batch_source_bars_per_day
+
+                value = _trim_batch_result(
+                    item.value, (per_windows or {}).get(item.name),
+                    bars_per_day=_batch_source_bars_per_day(engine_to_use),
+                )
                 if write_results is False:
-                    # 计算-only 模式（benchmark/dry-run）：不落盘，只收集结果。
-                    materializations[item.name] = {"result": item.value}
+                    # Only explicit return mode retains values; sink mode stays bounded.
+                    if effective.retain_results:
+                        materializations[item.name] = {"result": value}
                     continue
                 items_to_write.append(
                     MaterializeItem(
@@ -2508,7 +2638,7 @@ class FactorEngine:
                         output={
                             "factor": factor,
                             "analysis": analyses.get(item.name),
-                            "result": item.value,
+                            "result": value,
                         },
                         factor_id=factor_id_by_name.get(item.name, item.name),
                         options=dict(mm_args),
@@ -2526,42 +2656,42 @@ class FactorEngine:
                 batch_write_transaction_count += batch_out["counters"][
                     "batch_write_transaction_count"
                 ]
+                from factor_engine.runtime.materialize_batch import WriteReceipt
+
+                typed_receipt = batch_out["receipt"].validate()
                 for name, summary in batch_out["materializations"].items():
-                    materializations[name] = summary
+                    factor_id = factor_id_by_name[name]
+                    item_receipt = WriteReceipt(
+                        generation_id=typed_receipt.generation_id,
+                        expected_items=(factor_id,),
+                        items={factor_id: typed_receipt.items[factor_id]},
+                        manifest_digest=typed_receipt.manifest_digest,
+                        idempotency_key=typed_receipt.idempotency_key,
+                    ).validate()
+                    materializations[name] = {
+                        **summary, "write_receipt": item_receipt.to_dict(),
+                    }
                     if "error" in summary:
                         writer_errors.append(f"{name}: {summary['error']}")
+                return batch_out
             except Exception as exc:  # noqa: BLE001
-                # R27-205：写失败必须如实上报，不能静默吞掉（writer 重试循环会把
-                # 失败项无限重试）。batch 级失败 → 退回逐因子 execute_materialize
-                # 保留 per-item 错误隔离（isolate_partition_failures 语义）。
+                # A batch may already have durable writes. Preserve its receipt
+                # and never replay individual factors after an ambiguous commit.
                 writer_errors.append(
                     f"batch: {type(exc).__name__}: {exc}"
                 )
-                for mi in items_to_write:
-                    name = mi.factor.name
-                    try:
-                        out = execute_materialize(
-                            engine_to_use,
-                            mi.factor,
-                            mi.output,
-                            factor_id=mi.factor_id,
-                            **mm_args,
-                        )
-                        materializations[name] = out.get("materialization", out)
-                    except Exception as exc2:  # noqa: BLE001
-                        writer_errors.append(
-                            f"{name}: {type(exc2).__name__}: {exc2}"
-                        )
-                        materializations[name] = {"error": str(exc2)}
+                raise
 
         sink = StreamingResultSink(
             writer=_writer,
+            require_write_receipt=bool(write_results),
+            receipt_item_key=lambda item: factor_id_by_name[item.name],
             # P3/P4: ``writer_queue_bytes=None`` → 从 broker live headroom 派生
             # sink 预算（不再固定 4GiB）；broker 无法给出真实预算时回退绝对上限。
             queue_bytes=(
                 writer_queue_bytes
                 if writer_queue_bytes is not None
-                else scheduler.broker.current_sink_budget() or (4 * 1024**3)
+                else scheduler.broker.current_sink_budget()
             ),
             # R39-PERF-039/040：默认 count batch 64 —— 使 sink 真正攒批，writer 走
             # execute_materialize_batch 批量提交（batch_write_transaction_count <<
@@ -2572,13 +2702,36 @@ class FactorEngine:
             max_batch_age_s=max_batch_age_s,
         )
         sink.start()
-        with routing_execution_scope(PerfConfig.from_env()):
-            out = scheduler.run(
-                plan,
-                backend=engine_to_use.backend,
-                ctx=ctx,
-                sink=sink,
-            )
+        try:
+            input_dq_check = bool(mk.get("input_dq_check", False))
+            if input_dq_check and not any(wave.columns for wave in plan.read_waves.waves):
+                fields = set().union(*(a.referenced_columns for a in analyses.values()))
+                if fields:
+                    engine_to_use._prepare_batch_data(
+                        engine_to_use.data_source, fields, input_dq_check=True,
+                        input_dq_strict=bool(mk.get("input_dq_strict", True)),
+                        input_dq_thresholds=mk.get("input_dq_thresholds"),
+                    )
+            with routing_execution_scope(perf):
+                out = scheduler.run(
+                    plan, backend=engine_to_use.backend, ctx=ctx, sink=sink,
+                    input_dq_check=input_dq_check,
+                    input_dq_strict=bool(mk.get("input_dq_strict", True)),
+                    input_dq_thresholds=mk.get("input_dq_thresholds"),
+                )
+        except BaseException as exc:
+            try:
+                sink.finish()
+            except BaseException as cleanup_error:
+                add_note = getattr(exc, "add_note", None)
+                if callable(add_note):
+                    add_note(f"sink cleanup also failed: {cleanup_error}")
+                else:  # Python 3.10 has no BaseException.add_note.
+                    logger.warning("sink cleanup also failed: %s", cleanup_error)
+            raise
+        finally:
+            # This entry point owns the scheduler/executor, unlike generic run().
+            scheduler.executor.shutdown(wait=False)
         ctx.runtime_stats = record_resource_telemetry(ctx.runtime_stats, finalize=True)
         out["materializations"] = materializations
         out["writer_errors"] = writer_errors
@@ -2586,7 +2739,8 @@ class FactorEngine:
         out["storage_format"] = storage_format
         out["resource_telemetry"] = dict(ctx.runtime_stats.get("resource") or {})
         out["scheduler"] = "adaptive"
-        out["parallel"] = parallel
+        out["parallel"] = effective.parallel
+        out["effective_execution_config"] = effective.to_dict()
         out["resource_profile"] = resource_profile
         out["batch_write_transaction_count"] = batch_write_transaction_count
         out["shard_index"] = shard_index
@@ -2842,6 +2996,7 @@ class FactorEngine:
         shared_result_cache: dict[str, Any] | None = None,
         perf: PerfConfig | None = None,
         cache_scope: str | None = None,
+        cache_allowed: bool = True,
     ) -> ExecutionContext:
         """构造单次执行上下文，注入缓存会话与 query budget。
 
@@ -2865,7 +3020,18 @@ class FactorEngine:
         # R10-P0-001: a per-run execution cache scope re-scopes the plan cache
         # so two factors with different secondary SourceRef dependencies /
         # execution semantics never share cached subtrees.
-        plan_cache = self.cache
+        # Every entrypoint (batch/fast included) must refuse persistent/base
+        # cache reuse when the source has no stable identity; callers cannot
+        # accidentally bypass run()'s post-compile scope construction.
+        if cache_allowed and self.cache is not None:
+            from factor_engine.storage.data_scope import compute_data_scope
+            try:
+                cache_allowed=not compute_data_scope(self.data_source).startswith("ephemeral:")
+            except Exception:
+                if self.run_mode=="production":
+                    raise
+                cache_allowed=False
+        plan_cache = self.cache if cache_allowed else None
         if cache_scope is not None and plan_cache is not None:
             with_scope = getattr(plan_cache, "with_scope", None)
             if callable(with_scope):
@@ -3083,6 +3249,7 @@ class FactorEngine:
         except Exception:  # pragma: no cover - telemetry never breaks execution
             pass
         from factor_engine.runtime.production_policy import (
+            ProductionPolicyViolation,
             assert_no_stub_operators,
             assert_production_factors,
             assert_production_run_flags,
@@ -3102,16 +3269,25 @@ class FactorEngine:
                 pit_enforce=pit_enforce,
                 pit_forbid_forward_fill=pit_forbid_forward_fill,
             )
-        elif is_production_mode(self.run_mode):
+        else:
             # R10-P0-003: a PRE-COMPILED plan bypasses ``compile()`` — but the
             # PIT / production-operator / fast-path gates all live there.  In
             # production a research-compiled (or registry-stale) plan must be
             # re-certified, never executed because it was handed in precompiled.
-            _assert_production_plan_gates(
+            if is_production_mode(self.run_mode):
+                _assert_production_plan_gates(
+                    plan,
+                    analysis,
+                    run_mode=self.run_mode,
+                    context=f"run:{factor.name} (precompiled)",
+                    pit_forbid_forward_fill=pit_forbid_forward_fill,
+                )
+            # Binding is an exact-execution invariant in research/paper too.
+            self._assert_precompiled_binding(
+                factor,
                 plan,
                 analysis,
-                run_mode=self.run_mode,
-                context=f"run:{factor.name} (precompiled)",
+                pit_enforce=pit_enforce,
                 pit_forbid_forward_fill=pit_forbid_forward_fill,
             )
         # R9-P0-011: execution-contract gate —— 单因子执行路径与批跑同门，
@@ -3121,6 +3297,7 @@ class FactorEngine:
             plan,
             factor_name=factor.name,
             data_source=self.data_source,
+            mode=self.run_mode,
         )
         assert_production_run_flags(
             mode=self.run_mode,
@@ -3180,29 +3357,38 @@ class FactorEngine:
         # is lowered.  Two factors sharing an anchor source but with different
         # secondary deps / execution semantics get different cache scopes.
         cache_scope = None
+        cache_allowed = True
         if engine_to_use.cache is not None:
             try:
                 from factor_engine.planner.source_dependencies import source_dependency_hash
                 from factor_engine.storage.data_scope import (
                     DataExecutionScope,
+                    compute_data_scope,
                     compute_execution_cache_scope,
                 )
 
                 scope = _scope_from_factor(
                     factor, data_source=engine_to_use.data_source
                 )
-                cache_scope = compute_execution_cache_scope(
-                    engine_to_use.data_source,
-                    execution=DataExecutionScope(
-                        frequency=scope.frequency,
-                        decision_time_policy=scope.decision_time_policy,
-                    ),
-                    source_dependencies=(source_dependency_hash(plan),),
-                )
-            except Exception:  # pragma: no cover - scope failure must not block
-                logger.debug("execution cache scope construction failed; using base scope", exc_info=True)
+                anchor_scope = compute_data_scope(engine_to_use.data_source)
+                if anchor_scope.startswith("ephemeral:"):
+                    cache_allowed=False
+                else:
+                    cache_scope = compute_execution_cache_scope(
+                        engine_to_use.data_source,
+                        execution=DataExecutionScope(
+                            frequency=scope.frequency,
+                            decision_time_policy=scope.decision_time_policy,
+                        ),
+                        source_dependencies=(source_dependency_hash(plan),),
+                    )
+            except Exception as exc:
+                if is_production_mode(engine_to_use.run_mode):
+                    raise ProductionPolicyViolation("production execution cache identity unavailable") from exc
+                logger.warning("execution cache identity unavailable; cache disabled",exc_info=True)
+                cache_allowed = False
                 cache_scope = None
-        ctx = engine_to_use._make_context(cache_scope=cache_scope)
+        ctx = engine_to_use._make_context(cache_scope=cache_scope,cache_allowed=cache_allowed)
         from factor_engine.runtime.production_policy import record_production_fastpath_check
         from factor_engine.runtime.resource_telemetry import record_resource_telemetry
 
@@ -3784,6 +3970,47 @@ class FactorEngine:
             sink=sink,
         )
 
+    def run_many_stream(
+        self,
+        factors: Iterable[Factor],
+        *,
+        sink: Any,
+        wave_size: int | None = None,
+        n_jobs: int | None = None,
+        perf: PerfConfig | None = None,
+        enable_cse: bool | None = None,
+        auto_warmup: bool = False,
+        trim_warmup: bool = True,
+        market: str | None = None,
+        input_dq_check: bool = False,
+        input_dq_strict: bool = True,
+        input_dq_thresholds=None,
+        pit_enforce: bool = False,
+        pit_forbid_forward_fill: bool = False,
+    ) -> dict[str, Any]:
+        """Compute an arbitrarily long factor iterable in bounded input waves.
+
+        ``sink(name, result)`` is mandatory. Its explicit False return or exception
+        aborts execution; previously written waves remain written. Names must be
+        globally unique, including identical repeated definitions. Name metadata
+        costs O(number of factors); plans/results are bounded to one wave.
+
+        CSE and warmup unions are local to each wave. Every wave uses the existing
+        run_many_parallel admission and production gates. The returned compact
+        summary contains counters, not the full DAG/analyses/backend-path maps.
+        Existing run_many and run_many_parallel return contracts are unchanged.
+        """
+        from factor_engine.runtime.streaming_batch_service import execute_run_many_stream
+
+        _assert_backend_plan_authority(self.backend)
+        return execute_run_many_stream(
+            self, factors, sink=sink, wave_size=wave_size, n_jobs=n_jobs, perf=perf,
+            enable_cse=enable_cse, auto_warmup=auto_warmup, trim_warmup=trim_warmup,
+            market=market, input_dq_check=input_dq_check, input_dq_strict=input_dq_strict,
+            input_dq_thresholds=input_dq_thresholds, pit_enforce=pit_enforce,
+            pit_forbid_forward_fill=pit_forbid_forward_fill,
+        )
+
     def with_data_source(self, data_source, *, fresh_cache: bool = False) -> FactorEngine:
         """返回共享 backend 的新引擎实例，用于切换或窄化数据源。
 
@@ -3967,6 +4194,12 @@ class FactorEngine:
         )
 
         if segmented_eligible and not inc.is_full_run:
+            # The public incremental API does not yet carry the complete
+            # immutable checkpoint context required by production. Until it
+            # does, production must take the ordinary run/full-replay preflight.
+            if self.run_mode == "production":
+                segmented_eligible = False
+        if segmented_eligible and not inc.is_full_run:
             checkpoint_root = (
                 Path(str(lake_root)) / "stateful_checkpoints"
                 if lake_root is not None
@@ -3989,6 +4222,7 @@ class FactorEngine:
                 start=inc.output_start,
                 end=inc.output_end,
                 bootstrap=False,
+                mode=self.run_mode,
             )
             if stateful_output is None:
                 # (2) bootstrap the terminal checkpoint over the full causal
@@ -4009,6 +4243,7 @@ class FactorEngine:
                     start=inc.load_start,
                     end=inc.output_end,
                     bootstrap=True,
+                    mode=self.run_mode,
                 )
             if stateful_output is not None:
                 result_series, mode = stateful_output

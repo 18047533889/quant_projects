@@ -1,0 +1,44 @@
+{
+  "status": "PASS",
+  "git_sha": "f9e7237fafe4112391e62c8874caae7996ce0b11",
+  "timestamp_utc": "2026-09-06T09:59:20.720151+00:00",
+  "synthetic_only": true,
+  "shape_T_N_F": [
+    8,
+    32,
+    100000
+  ],
+  "dtype": "float64",
+  "input_memmap_bytes": 204800000,
+  "output_bytes": 6400000,
+  "cuda_seconds_after_warmup": 2.9101857549976557,
+  "independent_cpu_oracle_seconds": 2.9788616390433162,
+  "total_seconds_including_input_creation": 6.632158381980844,
+  "all_factor_times_checked": 800000,
+  "max_abs_error": 2.220446049250313e-16,
+  "quality_rejected_factor_times": 90,
+  "oracle": "SciPy average-tie rankdata plus NumPy pairwise-finite Pearson and canonical CPU min20/min10-distinct gates; all columns checked in bounded blocks",
+  "max_rss_before_cuda_bytes": 838823936,
+  "max_rss_process_bytes": 852783104,
+  "cupy_version": "14.2.0",
+  "metadata": {
+    "backend_requested": "cuda",
+    "backend_used": "cuda",
+    "gpu_device": 0,
+    "precision": "gpu_mixed",
+    "factor_tile_size": 128,
+    "oom_retries": 0,
+    "h2d_bytes": 204802048,
+    "d2h_bytes": 6400000,
+    "peak_vram": 7516160,
+    "vram_budget_bytes": 31571116032.0,
+    "intermediate_reuse_count": 0,
+    "factor_tiles_processed": 782
+  },
+  "limitations": [
+    "Small synthetic 8-time x 32-asset panel, not a real-data or production throughput certification",
+    "Only rank_ic_series requested; broader metric mixes and full production/PIT gates NOT_RUN",
+    "RSS is process high-water mark; mapped pages are included",
+    "peak_vram is session pool reserved-byte high-water observation, not whole-device occupancy"
+  ]
+}

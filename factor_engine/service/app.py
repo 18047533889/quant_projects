@@ -1529,7 +1529,7 @@ def main(argv: list[str] | None = None) -> int:
         raise SystemExit(
             "uvicorn missing. Install with: pip install 'factor-engine[service]'"
         ) from exc
-    uvicorn.run("service.app:create_app", factory=True, host=args.host, port=args.port, reload=args.reload)
+    uvicorn.run("factor_engine.service.app:create_app", factory=True, host=args.host, port=args.port, reload=args.reload)
     return 0
 
 

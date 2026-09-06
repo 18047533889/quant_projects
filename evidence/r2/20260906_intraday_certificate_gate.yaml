@@ -1,0 +1,44 @@
+schema: factor_engine.intraday_certificate_binding.v1
+git_sha: f9e7237fafe4112391e62c8874caae7996ce0b11
+timestamp: '2026-09-06T18:18:23+08:00'
+files:
+  - factor_engine/cleaned_operators/r23_cert_intraday.py
+  - factor_engine/tests/operators/test_intraday_certification_source_binding.py
+finding: The R23 overlay accepted stale minute parity status booleans without validating its existing source/test/helper hashes, and stamped production plus all semantic gates. Current implementation and oracle hashes differ from the stored certificate.
+fix: Require the exact artifact schema and all three current SHA256 bindings before using the parity status. Missing files/hashes and mismatched hashes fail closed; no PASS artifact regenerated.
+evidence: evidence/r2/20260906_intraday_stale_binding.json
+affected_canonicals:
+  - intra_amihud
+  - intra_bipower_variation
+  - intra_concentration
+  - intra_entropy
+  - intra_extreme_bar_return
+  - intra_jump_ratio
+  - intra_kyle_lambda_proxy
+  - intra_path_efficiency
+  - intra_realized_semivariance
+  - intra_realized_variance
+  - intra_segment_return
+  - intra_segment_volume_share
+  - intra_signed_imbalance_proxy
+  - intra_vwap_above_ratio
+current_admission: Fresh load confirms all 14 are now allow_in_production=false.
+tests:
+  scoped_regression:
+    status: PASS
+    count: 10
+    seconds: 21.65
+    coverage: [matching_fixture_binding_admitted, three_stale_bindings_rejected, missing_hashes_rejected, missing_schema_rejected, missing_file_rejected, previously_failing_experimental_family_gate]
+  independent_review: PASS; root coordinator reviewed schema/three-hash gate and nine new fixture tests plus the original production gate regression.
+  full_compile_import: NOT_RUN
+  registry_duplicate_authority_gate: NOT_RUN
+  abi_placeholder: NOT_RUN
+  full_backend_parity: NOT_RUN
+  full_pit_poison: NOT_RUN
+  q_null_time_runtime: NOT_RUN
+  ci: NOT_RUN
+  production_gate: NOT_RUN
+limitations:
+  - Full intraday parity recertification was not run. Restoring production admission requires current evidence, not editing stored hashes.
+  - This fixes the R23 minute-artifact entrypoint; it is not a complete audit of every certification overlay.
+  - No commit/push or unrelated changes.

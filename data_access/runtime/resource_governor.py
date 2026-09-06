@@ -364,11 +364,12 @@ class GlobalResourceGovernor:
                         f"{self._per_principal_active}。"
                     )
             # R32-P0-008：区分 HOST_ABSENT / HOST_CONFIGURED / HOST_BROKEN。
-            host_integration_configured = self._host_lease_request is not None
+            host_lease_request = self._host_lease_request
+            host_integration_configured = host_lease_request is not None
         # R32-P0-007：锁外调用 host coordinator。
         if host_integration_configured:
             try:
-                host_lease = self._host_lease_request(
+                host_lease = host_lease_request(
                     reservation.estimated_memory,
                     reservation.estimated_scan_bytes,
                 )
@@ -384,9 +385,23 @@ class GlobalResourceGovernor:
                 # research 允许 fallback。
                 host_lease = None
         # 锁内：原子 commit bookkeeping。
+        admission_error = None
         with self._lock:
+            # Another thread may have admitted while the host callback ran.
+            # Recheck local invariants in the same critical section as commit,
+            # including when the host callback returns None (local fallback).
+            if reservation.query_id in self._active:
+                admission_error = f"resource admission: query_id={reservation.query_id!r} 已存在"
+            elif len(self._active) >= self._max_active_queries:
+                admission_error = "resource admission: active queries 达到上限"
+            elif self._per_principal_active is not None and sum(
+                r.principal_id == reservation.principal_id for r in self._active.values()
+            ) >= self._per_principal_active:
+                admission_error = "resource admission: per-principal active queries 达到上限"
             # R32-P0-007：host lease 成功时作为权威，本地只做 bookkeeping。
-            if host_lease is not None:
+            if admission_error is not None:
+                pass  # Roll back the host lease outside the lock below.
+            elif host_lease is not None:
                 try:
                     reservation.host_lease = host_lease
                     self._active[reservation.query_id] = reservation
@@ -424,8 +439,10 @@ class GlobalResourceGovernor:
             except Exception:
                 pass
             raise ResourceAdmissionError(
-                "resource admission: host lease 成功但本地 bookkeeping 失败（R32-P0-007）"
+                admission_error or "resource admission: host lease 成功但本地 bookkeeping 失败（R32-P0-007）"
             )
+        if admission_error is not None:
+            raise ResourceAdmissionError(admission_error)
 
     # ---- R36 P0-017：由 HostResourceCoordinator 派生 envelope 上限 ----
 

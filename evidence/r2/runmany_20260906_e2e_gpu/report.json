@@ -1,0 +1,38 @@
+{
+  "status": "PASS",
+  "roots": 256,
+  "rows_per_root": 256,
+  "workers": 4,
+  "wave_size": 256,
+  "native_fusion": true,
+  "seconds": 19.78888608503621,
+  "first_result_s": 19.447889031027444,
+  "baseline_rss_bytes": 379813888,
+  "peak_rss_bytes": 415895552,
+  "output_bytes": 524416,
+  "waves": [
+    {
+      "start": 0,
+      "stop": 256,
+      "seconds": 19.782660714001395,
+      "rss_bytes": 415899648
+    }
+  ],
+  "limitations": "Synthetic add/column expressions, tiny panel, research mode; not full operators, market history or production certification.",
+  "gpu_seconds": 0.3924727380508557,
+  "gpu_metadata": {
+    "backend_requested": "cuda",
+    "backend_used": "cuda",
+    "gpu_device": 0,
+    "precision": "gpu_mixed",
+    "factor_tile_size": 128,
+    "oom_retries": 0,
+    "h2d_bytes": 526336,
+    "d2h_bytes": 16384,
+    "peak_vram": 9244672,
+    "vram_budget_bytes": 31572688896.0,
+    "intermediate_reuse_count": 0,
+    "factor_tiles_processed": 2
+  },
+  "gpu_oracle": "All factor and label ranks identical: RankIC=1, every output checked"
+}

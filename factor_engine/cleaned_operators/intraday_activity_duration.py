@@ -152,15 +152,19 @@ def _day_curvature(values: np.ndarray, buckets: int) -> float:
     b = int(buckets)
     if b < 3:
         raise ValueError("intraday_activity_duration_curvature requires buckets >= 3")
-    total = float(v.sum())
+    cum = np.cumsum(v)
+    # Use the same accumulation for total and bucket crossing. Pairwise sum
+    # can exceed cumsum[-1] by an ulp after adjustment, making the final bucket
+    # impossible to reach and turning a complete trading session into NaN.
+    total = float(cum[-1]) if v.size else 0.0
     if total <= _EPS or v.size < b:
         return np.nan
-    cum = np.cumsum(v)
     # completion bar index (original session position) for each fraction k/B
     D = np.full(b, np.nan)
     for k in range(1, b + 1):
         target = float(k) / b * total
-        pos = np.flatnonzero(cum >= target)
+        tolerance = 8 * np.finfo(float).eps * abs(total)
+        pos = np.flatnonzero(cum >= target - tolerance)
         if pos.size == 0:
             return np.nan
         D[k - 1] = float(pos[0])

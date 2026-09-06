@@ -1,0 +1,70 @@
+issue_ids: [FE-27, FE-28, FE-30, FE-32, FE-33]
+source_commit: f9e7237fafe4112391e62c8874caae7996ce0b11
+timestamp: '2026-09-06T19:22:50+08:00'
+reviewer_verdict: FIXED_PENDING_INTEGRATION
+paths_and_symbols:
+  - factor_engine/planner/canonicalize_params.py::exact_parameter_values,_round_sig,ParameterCanonicalizer.hash_key
+  - factor_engine/planner/plan_hash.py::_jsonable,_hash_canonical_attrs,structural_key
+  - factor_engine/api/dsl_parser.py::_ExprBuilder._visit_call,_ExprBuilder._visit_binop
+  - factor_engine/runtime/factor_block_ref.py::_sorted_bytes,axis_key_of,build_factor_block,share_axis_across
+  - tests/audit_identity_sol/
+trigger_and_affected_paths: >-
+  Exact CSE/cache structural identity previously consumed 12-significant-digit
+  research normalization; non-finite markers collided with ordinary strings;
+  ordered axis labels and row pairings were discarded; Series were loaded by
+  position; and DSL constant operations/duplicate bindings bypassed budgets.
+regression_before_fix:
+  command: >-
+    cd factor_engine && PYTHONPATH=. ../.venv/bin/python -m pytest -q
+    ../tests/audit_identity_sol
+  result: '12 failed, 3 passed; true checkout behavior before source edits'
+behavior_after_fix:
+  command: >-
+    cd /home/sunhaiwei/quant_projects && PYTHONPATH=factor_engine
+    .venv/bin/python -m pytest -q tests/audit_identity_sol
+    factor_engine/tests/planner/test_r13_optimizer_semantics_2026_08.py
+    factor_engine/tests/operators/test_dsl_parser.py
+  result: 'latest focused suite 21 passed, 2 warnings; prior combined suite 42 passed before review-hardening additions'
+public_entrypoint_test:
+  boundary: 'from factor_engine.planner import Optimizer, PlanNode'
+  route: 'Optimizer.optimize_with_pass_trace() and Optimizer.optimize() (serial)'
+  result: >-
+    literal 1+2 optimized to 3; legacy public optimize parity held; six pass
+    names/equivalence declarations were captured; all reported invariants
+    passed; nearby threshold plans had distinct exact keys and independent
+    comparison outcomes.
+source_snapshot_and_config_digest: 'synthetic deterministic in-memory fixtures; no external source snapshot'
+package_artifact_digest: NOT_RUN
+migration_or_invalidation: >-
+  structural_key now carries identity_schema=exact-execution-v2, so prior exact
+  cache/CSE identities are isolated rather than reinterpreted. Research-only
+  approximate ParameterCanonicalizer keys carry search-equivalence-v1 and may
+  not authorize result reuse. No old cache files or production results changed.
+related_regression:
+  - result: 'RESOLVED in a newly identified bounded scope; original 62/6 command and nodeids were not retained, so this is not represented as a baseline rerun'
+    scope: >-
+      Physical-region contract/validation, physical execution, and MB-P0-001-006:
+      61 passed. TransferEdge fixtures now name only supported real transforms;
+      the two formerly unrepresentable Polars-to-DuckDB structural fixtures use
+      a supported Polars-to-NumPy edge instead of inventing a conversion.
+  - result: 'PASS; 1 passed with 2 warnings'
+    scope: >-
+      MOM capability assertion now agrees with the evidence authority: MOM
+      lowers to ts_delta, but ts_delta is not in the current certified
+      dual-backend production set, so capability remains false.
+  - result: '29 passed, 2 deselected'
+    scope: 'factor block and axis identity tests; two long tests excluded after prior run exceeded bounded wait'
+  - result: PASS
+    scope: 'py_compile for all four modified source files; git diff --check'
+not_run:
+  - full repository pytest
+  - production persistent-cache cold/hot integration
+  - old cache migration or deletion
+  - wheel/package artifact tests
+  - non-Pandas backends
+  - real datasets, storage, concurrency, and scale tests
+  - two long factor-block tests that exceeded the bounded verification wait
+limitations: >-
+  Axis encoding is verified for pandas Index/MultiIndex synthetic cases in the
+  declared runtime; cross-pandas-version persisted axis digest compatibility is
+  not certified. No production-ready or all-backend claim is made.

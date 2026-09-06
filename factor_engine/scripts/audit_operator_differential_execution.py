@@ -221,9 +221,16 @@ def audit_one(canonical: str, reg, fixtures: dict[str, dict[str, Any]]) -> dict[
     ref_op = reg.get(canonical, "pandas_numpy")
     pol_op = reg.get(canonical, "polars")
 
-    # native / fallback 判定
-    native_used = pol_op is not None
-    fallback_used = (not native_used) and (ref_op is not None)
+    # A Polars registry slot may delegate to pandas. Use the physical-kind
+    # authority, never the backend name, as evidence of native execution.
+    from factor_engine.backend.polars_backend_kind import (
+        PolarsImplementationKind, canonical_polars_kind,
+    )
+    kind = canonical_polars_kind(canonical)
+    native_used = pol_op is not None and kind == PolarsImplementationKind.POLARS_NATIVE
+    fallback_used = (
+        pol_op is not None and kind == PolarsImplementationKind.POLARS_UDF_PANDAS_DELEGATE
+    ) or (pol_op is None and ref_op is not None)
     duckdb_available = False
     try:
         from factor_engine.backend.sql_pushdown.available import sql_lowering_available  # noqa: F401
@@ -232,9 +239,9 @@ def audit_one(canonical: str, reg, fixtures: dict[str, dict[str, Any]]) -> dict[
         duckdb_available = False
 
     rows: list[dict[str, Any]] = []
-    all_native_ok = True
-    all_fallback_ok = True
-    all_reference_ok = True
+    all_native_ok = bool(fixtures)
+    all_fallback_ok = bool(fixtures)
+    all_reference_ok = bool(fixtures)
 
     for fname, fx in fixtures.items():
         x = np.asarray(fx["x"], dtype=float)
@@ -262,6 +269,7 @@ def audit_one(canonical: str, reg, fixtures: dict[str, dict[str, Any]]) -> dict[
                                             min_periods=min_periods)
             except Exception as exc:  # noqa: BLE001
                 ref_out = None
+                all_reference_ok = False
                 rec["note"] += f"ref_err:{type(exc).__name__};"
         else:
             ref_out = None
@@ -273,6 +281,8 @@ def audit_one(canonical: str, reg, fixtures: dict[str, dict[str, Any]]) -> dict[
                 pandas_out = _invoke(ref_op, mode, x, y, backend="pandas_numpy",
                                      **({"window": window} if window else {}))
             except Exception as exc:  # noqa: BLE001
+                all_reference_ok = False
+                all_fallback_ok = False
                 rec["note"] += f"pandas_err:{type(exc).__name__};"
 
         # reference vs pandas（reference 优先，R19-116/§56）
@@ -284,7 +294,11 @@ def audit_one(canonical: str, reg, fixtures: dict[str, dict[str, Any]]) -> dict[
                 rec["note"] += "reference_mismatch;"
 
         # polars（native path）
-        if native_used and pol_op is not None:
+        if pol_op is not None:
+            pass_key = "native_pass" if native_used else "fallback_pass"
+            parity_class = "native_parity" if native_used else (
+                "fallback_parity" if fallback_used else "unclassified_parity"
+            )
             try:
                 pol_out = _invoke(pol_op, mode, x, y, backend="polars",
                                   **({"window": window} if window else {}))
@@ -294,27 +308,33 @@ def audit_one(canonical: str, reg, fixtures: dict[str, dict[str, Any]]) -> dict[
                     ok = _compare(ref_out, pol_out)
                 else:
                     ok = False
-                rec["native_pass"] = bool(ok)
+                rec[pass_key] = bool(ok)
                 all_native_ok = all_native_ok and ok
-                rec["parity_class"] = "native_parity"
+                all_fallback_ok = all_fallback_ok and ok
+                rec["parity_class"] = parity_class
                 if not ok:
                     rec["note"] += "native_mismatch;"
             except Exception as exc:  # noqa: BLE001
-                rec["native_pass"] = False
+                rec[pass_key] = False
                 all_native_ok = False
-                rec["parity_class"] = "native_parity"
+                all_fallback_ok = False
+                rec["parity_class"] = parity_class
                 rec["note"] += f"native_err:{type(exc).__name__};"
         else:
             rec["parity_class"] = "fallback_parity"
             rec["native_pass"] = None
             if pandas_out is not None:
-                rec["fallback_pass"] = True  # pandas 参考本身能跑
-                all_fallback_ok = all_fallback_ok and True
+                rec["fallback_pass"] = (rec["reference_pass"] is True) if ref_name else True
+                all_fallback_ok = all_fallback_ok and rec["fallback_pass"]
+            else:
+                rec["fallback_pass"] = False
+                all_fallback_ok = False
 
         rows.append(rec)
 
     return {
         "canonical": canonical,
+        "physical_kind": kind.value,
         "mode": mode,
         "native_used": bool(native_used),
         "fallback_used": bool(fallback_used),
@@ -323,9 +343,9 @@ def audit_one(canonical: str, reg, fixtures: dict[str, dict[str, Any]]) -> dict[
         "fallback_parity_all_pass": bool(all_fallback_ok) if fallback_used else None,
         "reference_all_pass": bool(all_reference_ok) if ref_name else None,
         "fixtures": rows,
-        "certification": ("native_certified" if native_used and all_native_ok
+        "certification": ("native_certified" if native_used and all_native_ok and all_reference_ok
                           else ("supported_via_reference_fallback"
-                                if (fallback_used or (native_used and not all_native_ok))
+                                if fallback_used and all_fallback_ok and all_reference_ok
                                 else "not_certified")),
     }
 
@@ -336,6 +356,7 @@ def main() -> int:
                     help="限定 canonical 列表（默认 MODE_TABLE 全部）")
     ap.add_argument("--out", default=str(OUT))
     args = ap.parse_args()
+    Path(args.out).mkdir(parents=True, exist_ok=True)
 
     reg, load_ok, load_error = load_registry()
     fixtures = build_hostile_fixtures(n_rows=12, n_cols=4, seed=7)
@@ -353,7 +374,7 @@ def main() -> int:
             json.dumps(payload, ensure_ascii=False, indent=1, default=str),
             encoding="utf-8")
         print(f"WARNING: registry unavailable — {load_error}", file=sys.stderr)
-        return 0
+        return 1
 
     results: list[dict[str, Any]] = []
     for canon in canonicals:
@@ -403,7 +424,11 @@ def main() -> int:
     print(f"R19 differential audit written to {out_dir}")
     print(f"  canonicals: {len(results)}")
     print(f"  meta: {payload['meta']}")
-    return 0
+    return int(not load_ok or any(
+        r.get("certification") not in {
+            "native_certified", "supported_via_reference_fallback"
+        } for r in results
+    ))
 
 
 if __name__ == "__main__":

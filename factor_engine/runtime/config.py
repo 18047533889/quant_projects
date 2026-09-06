@@ -28,7 +28,7 @@ class DataSourceConfig:
 
 @dataclass(frozen=True)
 class BackendConfig:
-    type: str = "auto"
+    type: str = "pandas"
 
 @dataclass(frozen=True)
 class EngineConfig:
@@ -550,7 +550,7 @@ def load_config(path: str|Path, *, profile: str|None=None) -> FactorEngineConfig
             {k:v for k,v in dsp.items() if k!="type"}
         ).to_dict(),
     )
-    backend_config=BackendConfig(type=str(bp.get("type","auto")))
+    backend_config=BackendConfig(type=str(bp.get("type","pandas")))
     engine_config=EngineConfig(enable_cache=_strict_bool(ep.get("enable_cache",True),name="engine.enable_cache"),plan_cache_dir=_resolve_optional_path(ep.get("plan_cache_dir"),base_dir=base_dir))
     materialization_config=None
     if mp is not None:

@@ -17,6 +17,283 @@ def load_intake():
     return module
 
 
+def test_diverse_objectives_missing_metrics_and_pareto():
+    m = load_intake()
+    # Load the local optimizer package just as the production entrypoint does.
+    import sys
+    sys.path.insert(0, str(m.ROOT / "factor_optimizer"))
+    metrics = dict(mean_rankic=.03, ls_annual=.2, ls_sharpe=2., ls_mdd=.1,
+        drawdown_duration=80., worst_year=.02, year_dispersion=.1, calmar=2., rankic_ir=.3,
+        rolling_ic_std=.02, negative_ic_windows=.1, fee_drag=.0001, stress_annual=.18)
+    scores = m.diversified_objectives(metrics)
+    assert all(v["eligible"] and 0 <= v["score"] <= 1 for v in scores.values())
+    missing = m.diversified_objectives(dict(metrics, fee_drag=None))
+    assert missing["stability"]["eligible"] and not missing["low_cost"]["eligible"]
+    assert missing["low_cost"]["score"] is None
+    assert not any(v["eligible"] for v in m.diversified_objectives(dict(metrics, ls_annual=-.1)).values())
+    worse = dict(metrics, ls_annual=.1, ls_sharpe=1., ls_mdd=.2, fee_drag=.0002)
+    comparison = m.objective_comparison({
+        "a": dict(objectives=scores, objective_metrics=metrics, expression="AdjClose"),
+        "b": dict(objectives=m.diversified_objectives(worse), objective_metrics=worse, expression="AdjOpen")})
+    assert comparison["pareto_frontier"] == ["a"]
+    assert comparison["champions"]["balanced"]["variant"] == "a"
+
+
+def test_optimizer_direction_locked_before_preprocessing(monkeypatch):
+    m = load_intake()
+    calls = []
+    def evaluate(values, labels, **kwargs):
+        calls.append((values.copy(), kwargs))
+        return SimpleNamespace(direction=-1)
+    monkeypatch.setattr(m, "evaluate_report_arrays", evaluate)
+    raw = np.array([[1., 2.], [3., 4.], [5., 6.]])
+    train = np.array([True, True, False])
+    directed, sign = m.lock_optimizer_direction(raw, raw, train)
+    assert sign == -1 and np.array_equal(directed, -raw)
+    assert calls[0][0].shape == (2, 2)
+    unchanged, sign = m.lock_optimizer_direction(directed, raw, train, already_directed=True)
+    assert sign == 1 and np.array_equal(unchanged, directed)
+    assert calls[-1][1]["fixed_direction"] == 1
+
+
+def test_optimizer_dsl_keeps_direction_inside_preprocessing():
+    m = load_intake()
+    for recipe in ["raw", "cs_rank", "cs_zscore", "winsor_1pct", "winsor_5pct"]:
+        formula = m.optimizer_dsl("neg(AdjClose)", recipe)
+        assert formula.count("neg(") == 1
+        assert "factor_preprocess." not in formula
+    assert m.optimizer_dsl("neg(AdjClose)", "cs_rank") == "rank_pct(neg(AdjClose))"
+
+
+def test_evaluation_version_banner_preserves_test_time(monkeypatch):
+    m = load_intake()
+    monkeypatch.setattr(m, "report_time", lambda: "2026-09-07T10:00:00+08:00")
+    p = {"completed_at": "2026-09-06T22:00:00+08:00", "run_id": "run-1",
+         "pipeline_source_sha256": "abc123"}
+    html = m.evaluation_banner("<html><body><h1>factor</h1></body></html>", p)
+    assert html.index("evaluation-version") < html.index("<h1>")
+    assert p["completed_at"] in html and "run-1" in html and "abc123" in html
+    assert "2026-09-07T10:00:00+08:00" in html
+    assert "未记录，旧结果待重测" in m.evaluation_banner("<body></body>")
+
+
+def test_overnight_waves_resume_without_stale_running():
+    m = load_intake()
+    state = {"factors": {"done": {"status": "passed"}, "old": {"status": "running"}}}
+    records = [{"page_name": name} for name in ["done", "old", "new", "last"]]
+    waves = m.overnight_pending_waves(records, state, 2)
+    assert [[r["page_name"] for r in w] for w in waves] == [["old", "new"], ["last"]]
+    assert state["factors"]["old"]["status"] == "retry_pending"
+    assert state["factors"]["done"]["status"] == "passed"
+
+
+def test_fallback_html_does_not_invent_metrics_or_optimization():
+    m = load_intake()
+    page = m._minimal_page("<name>", "where(x<0, x, 0)", "", False,
+                           {"rank_ic": float("nan"), "ic_ir": None})
+    assert "&lt;name&gt;" in page and "x&lt;0" in page
+    assert "优化结果未在本页验证" in page
+    assert "本因子已进入" not in page
+    assert ">nan<" not in page and ">+0.0000<" not in page
+
+
+def test_overnight_batch_keeps_per_factor_artifacts(tmp_path, monkeypatch):
+    import subprocess
+    m = load_intake()
+    records = [{"page_name": name, "fe_formula": "AdjClose", "source_formula": "close"}
+               for name in ["a", "b"]]
+    monkeypatch.setattr(m, "requested_dsl_records", lambda _: (records, []))
+    commands = []
+    class Child:
+        def __init__(self, command, **kwargs):
+            commands.append(command)
+            assert len(json.loads(Path(command[command.index("--manifest") + 1]).read_text())) == 2
+            target = Path(command[command.index("--output-manifest") + 1])
+            target.write_text(json.dumps({"factors": {
+                "a": {"metrics": {"rank_ic": .02, "rank_ic_ir": .2}},
+                "b": {"status": "unavailable", "metrics": {}}}}))
+        def poll(self):
+            return 0
+        def wait(self):
+            return 0
+    monkeypatch.setattr(subprocess, "Popen", Child)
+    state = m.run_overnight_queue(None, tmp_path, batch_size=2, fe_backend="pandas", qe_backend="auto")
+    assert len(commands) == 1
+    assert commands[0][commands[0].index("--qe-backend") + 1] == "auto"
+    for name in ["a", "b"]:
+        assert len(json.loads((tmp_path / name / "candidate.json").read_text())) == 1
+        assert list(json.loads((tmp_path / name / "report_manifest.json").read_text())["factors"]) == [name]
+        assert state["factors"][name]["resource_policy"]["batch_size"] == 2
+    assert state["factors"]["b"]["status"] == "unavailable"
+
+
+def test_failed_refresh_excludes_old_matrix_before_evaluation():
+    m = load_intake()
+    records = [{"page_name": "stale"}, {"page_name": "fresh"}]
+    admitted, failures = m.evaluation_candidates_after_landing(
+        records, {"factor_engine_errors": {"stale": "PIT failure"}})
+    assert admitted == [{"page_name": "fresh"}]
+    assert "PIT failure" in failures["stale"]
+    assert "old matrix excluded" in failures["stale"]
+    assert m.evaluation_candidates_after_landing(records, {}) == (records, {})
+
+
+def test_incomplete_existing_matrix_is_relanded(monkeypatch):
+    m = load_intake()
+    monkeypatch.setattr(m, "matrix_path", lambda name: Path("existing.parquet"))
+    monkeypatch.setattr(m, "matrix_source", lambda name: SimpleNamespace(is_full_window=name == "complete"))
+    waves = []
+    def land(records, **kwargs):
+        names = [r["page_name"] for r in records]
+        waves.append(names)
+        return {"landed": names}
+    monkeypatch.setattr(m, "land_factor_batch_windowed", land)
+    result = m.land_missing_factors([
+        {"page_name": "incomplete", "fe_formula": "AdjClose"},
+        {"page_name": "complete", "fe_formula": "AdjClose"}])
+    assert waves == [["incomplete"]]
+    assert result["landed"] == ["incomplete"]
+
+
+def test_requested_valuation_uses_catalog_and_exact_join(tmp_path):
+    m = load_intake()
+    path = tmp_path / "requested.txt"
+    path.write_text("rank(turnover_ratio)\nrank(market_cap)\nrank(roe)\n")
+    records, deferred = m.requested_dsl_records(path)
+    assert len(records) == 3
+    assert not deferred
+    assert {r["fe_formula"] for r in records if "valuation." in r["fe_formula"]} == {
+        "rank(col('valuation.turnover_ratio'))", "rank(col('valuation.market_cap'))"}
+    roe = next(r for r in records if r["source_formula"] == "rank(roe)")
+    assert "__fe_source_ref_v1__" in roe["fe_formula"]
+    assert "0.01" in roe["fe_formula"]
+    engine = m.build_incremental_engine(start_date="2016-01-04", end_date="2016-01-05", records=records)
+    # Construction must succeed using the existing FE composite/DataAccess adapter.
+    assert engine is not None
+
+
+def test_weekly_fields_use_ashare_contracts_and_keep_minute_gated(tmp_path):
+    m = load_intake()
+    path = tmp_path / "fields.txt"
+    path.write_text("rank(net_profit)\nrank(dividend_yield)\nrank(free_cap)\nrank(high_limit)\nrank(minute_volume)\n")
+    records, deferred = m.requested_dsl_records(path)
+    assert len(records) == 4
+    assert len(deferred) == 1
+    assert deferred[0]["source_formula"] == "rank(minute_volume)"
+    assert any("AdjHighLimit" in r["fe_formula"] for r in records)
+    assert any("valuation.dividend_yield" in r["fe_formula"] for r in records)
+
+
+def test_requested_minute_calls_bind_session_sources(tmp_path):
+    m = load_intake()
+    path = tmp_path / "minute.txt"
+    path.write_text("intraday_activity_duration_curvature(minute_volume, buckets=10)\n"
+                    "intra_close_participation(minute_volume, 30)\n"
+                    "intraday_bvc_imbalance(minute_close, minute_volume, scale_window=20)\n")
+    records, deferred = m.requested_dsl_records(path)
+    assert len(records) == 3 and not deferred
+    from factor_engine.api.source_ref import decode_source_ref
+    import ast
+    for record in records:
+        tree = ast.parse(record["fe_formula"], mode="eval")
+        ref = decode_source_ref(tree.body.args[0].value)
+        assert ref.table == "StockMinuteBar"
+        assert ref.transform_params_dict()["bar_minutes"] == 1
+        assert ref.transform_params_dict()["min_coverage"] == 1.0
+
+
+def test_minute_history_binding_is_incremental_and_preserves_existing(tmp_path):
+    m = load_intake()
+    history, mirror = tmp_path / "history", tmp_path / "mirror"
+    history.mkdir(); mirror.mkdir()
+    (history / "2016-01-04.parquet").touch()
+    (history / "2024-01-02.parquet").touch()
+    current = mirror / "2024-01-02.parquet"
+    current.write_bytes(b"existing-owner-data")
+    assert m.ensure_local_minute_history(mirror, history) == 1
+    assert (mirror / "2016-01-04.parquet").is_symlink()
+    assert current.read_bytes() == b"existing-owner-data"
+    assert m.ensure_local_minute_history(mirror, history) == 0
+
+
+def test_registered_minute_features_are_adjustment_invariant():
+    from factor_engine.storage.sources.intraday_feature_runtime_v2 import (
+        _compute_registered_session_feature, _session_calendar)
+    index = pd.date_range("2016-01-05 09:31", periods=120, freq="min").append(
+        pd.date_range("2016-01-05 13:01", periods=120, freq="min"))
+    t = np.arange(240)
+    bars = pd.DataFrame({"timestamp": index, "close": 10 + np.sin(t / 8) / 10,
+                         "volume": 100 + t, "amount": (100 + t) * 10})
+    calendar = _session_calendar("ashare_stock_minute", "09:30", "15:00", "bar_end")
+    for feature in ["fe_activity_volume", "fe_activity_amount", "fe_close_participation", "fe_bvc_imbalance"]:
+        raw = _compute_registered_session_feature(feature, bars, {}, calendar, 1.)
+        adjusted = _compute_registered_session_feature(feature, bars, {}, calendar, 1.733271)
+        assert np.isfinite(raw), feature
+        np.testing.assert_allclose(raw, adjusted, atol=1e-12)
+
+
+def test_utc_minute_labels_are_filtered_in_exchange_time():
+    from factor_engine.storage.sources.intraday_feature_runtime_v2 import _session_local_minute_frame
+    frame = pd.DataFrame({"timestamp": pd.to_datetime(["2016-01-06 01:31:00Z", "2016-01-06 07:00:00Z"])})
+    out = _session_local_minute_frame(frame, "ashare_stock_minute")
+    assert out.timestamp.dt.strftime("%H:%M").tolist() == ["09:31", "15:00"]
+    frame["timestamp"] = frame.timestamp.dt.tz_convert(None)
+    pd.testing.assert_frame_equal(out, _session_local_minute_frame(frame, "ashare_stock_minute", naive_utc=True))
+    pd.testing.assert_frame_equal(out, _session_local_minute_frame(out, "ashare_stock_minute"))
+
+
+def test_financial_conflicting_vintage_cannot_be_backdated():
+    from factor_engine.storage.sources.lqtp_logical_source_v2 import LQTPLogicalDataSource
+    source = LQTPLogicalDataSource(SimpleNamespace())
+    raw = pd.DataFrame({"Symbol": ["A", "A"], "ReportPeriodEndDate": ["2015-09-30"] * 2,
+                        "PubDate": ["2015-10-20"] * 2, "Roe": [10., 20.]})
+    import pytest
+    with pytest.raises(ValueError, match="conflicting values"):
+        source._financial_from_raw("ashare_stock_indicator", "Roe", raw, transform=None, params={})
+
+
+def test_optimized_comparison_does_not_flip_saved_values_twice(monkeypatch):
+    load_intake()
+    import render_optimized_pages as renderer
+    dates = pd.date_range("2016-01-04", periods=40)
+    raw = pd.DataFrame(np.arange(120).reshape(40, 3), index=dates)
+    opt = -raw
+    observed = []
+    def evaluate(mat, prices, *, flip=False):
+        directed = -mat if flip else mat
+        observed.append(directed.to_numpy())
+        return dates, SimpleNamespace(quantile_nav=np.ones((40, 10)),
+                                      long_short_nav_aligned=np.ones(40))
+    monkeypatch.setattr(renderer, "_comparison_result", evaluate)
+    monkeypatch.setattr(renderer, "fig_to_b64", lambda fig: "chart")
+    renderer.plot_decile_compare(raw, opt, raw, "sample", page_flipped=True)
+    renderer.plot_ls_compare(raw, opt, raw, "sample", page_flipped=True)
+    for result in observed:
+        np.testing.assert_array_equal(result, opt.to_numpy())
+
+
+def test_distribution_keeps_zero_and_filters_nonfinite(monkeypatch):
+    load_intake()
+    import render_evoalpha14_pages as renderer
+    means = []
+    def inspect(fig):
+        means.append(fig.axes[0].lines[0].get_xdata()[0])
+        return "chart"
+    monkeypatch.setattr(renderer, "fig_to_b64", inspect)
+    renderer.plot_ic_distribution(pd.Series([0., 0., 0., .1, .2, np.nan, np.inf]), "sample")
+    np.testing.assert_allclose(means, [.06])
+
+
+def test_one_way_commission_charges_opening_and_both_ls_legs():
+    from factor_engine.reporting.quant_evaluator_adapter import evaluate_report_arrays
+    values = np.tile(np.arange(40, dtype=float), (30, 1))
+    result = evaluate_report_arrays(values, np.zeros_like(values), min_assets=1,
+                                    commission_rate=.0001, fixed_direction=1)
+    np.testing.assert_allclose(result.quantile_returns[0], -.0001)
+    np.testing.assert_allclose(result.long_short_returns[0], -.0002)
+    np.testing.assert_allclose(result.long_short_returns[1:], 0.)
+
+
 def test_qe_validation_keeps_training_direction():
     from factor_engine.reporting.quant_evaluator_adapter import evaluate_report_arrays
     rng = np.random.default_rng(12)
@@ -31,17 +308,50 @@ def test_optimizer_runs_actual_libraries_on_small_panel(tmp_path, monkeypatch):
     rng = np.random.default_rng(77)
     dates = pd.bdate_range("2016-01-04", "2026-08-27")
     prices = pd.DataFrame(100 * np.exp(np.cumsum(rng.normal(0, .01, (len(dates), 40)), axis=0)), index=dates)
-    values = pd.DataFrame(rng.normal(size=prices.shape), index=dates)
+    # Deliberately predictive synthetic fixture, not a production feature.
+    values = prices.pct_change(fill_method=None).shift(-2).fillna(0) + rng.normal(0, .01, prices.shape)
     monkeypatch.setattr(intake, "load_matrix", lambda *a, **k: values)
     monkeypatch.setattr(intake, "load_vwap", lambda **k: prices)
     monkeypatch.setattr(intake, "OPT_DIR", tmp_path / "matrices")
     monkeypatch.setattr(intake, "OPT_META_JSON", tmp_path / "meta.json")
+    monkeypatch.setattr(intake, "MIN_UNIVERSE", 2)  # 40 assets / 10 groups in this small fixture
+    replay_calls = []
+    def replay_fixture(records, *, output_dir, **kwargs):
+        # Synthetic source fixture: never read production data in a unit test.
+        from factor_engine.cleaned_operators.common.cross_sectional import RankPct, CrossSectionalZscore
+        from factor_engine.cleaned_operators.common.elementwise import Winsorize
+        expression = records[0]["fe_formula"]
+        replay_calls.append(expression)
+        if expression.startswith("rank_pct("):
+            result = RankPct()._calculate_series(values)
+        elif expression.startswith("c_zscore("):
+            result = CrossSectionalZscore()._calculate_series(values)
+        elif expression.startswith("winsorize("):
+            lower = .01 if expression.endswith("0.01, 0.99)") else .05
+            result = Winsorize()._calculate_series(values, lower=lower, upper=1-lower)
+        else:
+            result = values
+        result.to_parquet(Path(output_dir) / "smoke.parquet")
+    monkeypatch.setattr(intake, "land_factor_batch_windowed", replay_fixture)
     result = intake.stage_optimize_lite({"page_name": "smoke", "fe_formula": "ts_return(AdjClose,20)"}, None)
     meta = json.loads((tmp_path / "meta.json").read_text())["smoke"]
     assert meta["optimizer"] == "factor_optimizer.SearchRunner"
     assert len(meta["variants"]) == 5
     assert Path(result["path"]).exists()
     assert meta["dsl_preproc_ops"]
+    assert len(replay_calls) == 1
+    assert meta["matrix_direction_applied"]
+    assert meta["direction_policy"] == "train-once-before-preprocessing-v1"
+    assert meta["objective_comparison"]["default"] == "stability"
+    assert {"stability", "ic_stability", "low_cost"} <= set(meta["objective_comparison"]["champions"])
+    # This highly predictive fixture can have zero drawdown: undefined Calmar
+    # must remain missing, not become an infinite winning balanced score.
+    for name, trial in meta["variants"].items():
+        assert set(trial["objectives"]) == set(intake.OBJECTIVE_PROFILES)
+        if trial["objective_metrics"]["calmar"] is None:
+            assert not trial["objectives"]["balanced"]["eligible"]
+    assert meta["stress_commission_rate"] == intake.COMMISSION_RATE * 5
+    assert all(r["direction"] == 1 for r in meta["variants"].values())
 
 
 def test_windowed_landing_rejects_full_history_before_reading_data():
@@ -124,6 +434,25 @@ def test_detail_template_uses_artifact_dates_and_does_not_invent_metrics():
     assert "0.00%</b><span>Top10%" not in html
     assert "优化后 RankIC</td><td>0.0000" not in html
     assert "2026 RankIC 0.0000" not in html
+
+
+def test_landing_parallel_preserves_dq_pit_and_streaming_sink():
+    m = load_intake()
+    calls = []
+    class Engine:
+        def run_many_parallel(self, factors, **kwargs):
+            calls.append(kwargs)
+            for factor in factors:
+                kwargs["sink"](factor.name, factor.name)
+    output = {}
+    m.land_factor_batch([{"page_name": n, "fe_formula": "rank(close)"} for n in ["a", "b"]],
+                        engine=Engine(), sink=lambda k, v: output.setdefault(k, v), workers=4)
+    assert set(output) == {"a", "b"}
+    assert calls[0]["n_jobs"] == 2
+    assert calls[0]["pit_enforce"] and calls[0]["input_dq_check"]
+    assert calls[0]["pit_forbid_forward_fill"] and calls[0]["enable_cse"]
+    assert calls[0]["result_policy"] == "sink"
+    assert "warmup_clusters" not in calls[0]
 
 
 def test_landing_many_uses_one_streaming_run_many_call():

@@ -14,6 +14,7 @@ import threading
 import time
 
 import pytest
+import numpy as np
 
 from factor_engine.runtime.streaming_result_sink import BoundedResultQueue, StreamingResultSink
 
@@ -30,17 +31,13 @@ def test_elastic_queue_shrink_keeps_items_blocks_producer():
     # 消费后队列下降。
     got = q.get()
     assert got.name == "a"
+    assert q.current_bytes == 40
+    q.release(got)
     assert q.current_bytes == 0
     # 缩容到 10 后 20B 的 item 放不下 → put 返回 False（producer 阻塞超时，
     # 绝不静默 drop）。
-    result = {}
-    import threading
-
-    t = threading.Thread(
-        target=lambda: result.setdefault("ok", q.put(ResultItem("b", b"y" * 20, bytes=20), timeout=0.1))
-    )
-    t.start(); t.join()
-    assert result.get("ok") is False
+    with pytest.raises(ValueError, match="budget"):
+        q.put(ResultItem("b", b"y" * 20, bytes=20), timeout=0.1)
     assert q.queued_count == 0
 
 
@@ -48,14 +45,20 @@ def test_writer_alive_after_join_is_fatal():
     import time as _time
 
     # writer 永不退出 → join(timeout) 后线程 alive → finish 必须 fatal。
+    done = threading.Event()
     def _stuck(_batch):
-        _time.sleep(30)
+        done.wait(2)
 
-    sink = StreamingResultSink(writer=_stuck, queue_bytes=1024, batch_size=1)
+    sink = StreamingResultSink(writer=_stuck, queue_bytes=1024, batch_size=1, join_timeout=0.01)
     sink.start()
-    sink.submit("f", object())
-    with pytest.raises(RuntimeError, match="writer thread alive after join|alive after join"):
-        sink.finish()
+    sink.submit("f", np.array([1.0]))
+    try:
+        with pytest.raises(RuntimeError, match="writer thread alive after join|alive after join"):
+            sink.finish()
+    finally:
+        done.set()
+        for thread in sink._threads:
+            thread.join(2)
 
 
 def test_sink_submit_false_after_writer_fatal():
@@ -64,7 +67,7 @@ def test_sink_submit_false_after_writer_fatal():
 
     sink = StreamingResultSink(writer=_boom, queue_bytes=1024, batch_size=1)
     sink.start()
-    sink.submit("f1", object())
+    sink.submit("f1", np.array([1.0]))
     # writer 首次提交即 permanent 失败 → fatal；后续 submit 返回 False。
     sink.finish_async_mark_fatal() if hasattr(sink, "finish_async_mark_fatal") else None
     # 直接验证：writer FAILED 后 submit 拒绝。

@@ -347,9 +347,13 @@ class TSPctPolars(SeriesOperator):
 
         periods = strict_integer(d, "d", minimum=1)
         cols = _numeric_cols(x)
-        return x.with_columns([
-            (pl.col(c) / pl.col(c).shift(periods) - 1.0).alias(c) for c in cols
-        ])
+        exprs = []
+        for c in cols:
+            previous = pl.col(c).shift(periods)
+            result = pl.col(c) / previous - 1.0
+            exprs.append(pl.when(previous.is_not_null() & (previous != 0))
+                         .then(result).otherwise(None).alias(c))
+        return x.with_columns(exprs)
 
 
 @register_operator(name="log_returns", category="financial", business_category="price_volume", canonical="log_returns", source="factor_dsl_polars")

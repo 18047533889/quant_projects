@@ -6,6 +6,7 @@ import os
 
 import pandas as pd
 import pytest
+from dataclasses import replace
 
 from factor_engine.api import rank, ts_mean, ts_std
 from factor_engine.api.columns import col
@@ -13,6 +14,15 @@ from factor_engine.api.factor import Factor
 from factor_engine.backend.pandas_backend import PandasBackend
 from factor_engine.runtime.engine import FactorEngine
 from tests.helpers import InMemorySeriesSource
+
+
+@pytest.fixture(autouse=True)
+def quiet_external_pressure(monkeypatch):
+    from factor_engine.runtime.resource_broker import ResourceBroker
+    original = ResourceBroker._signals_from_snapshot
+    monkeypatch.setattr(ResourceBroker, "_signals_from_snapshot", lambda self, snap:
+        replace(original(self, snap), memory_psi_some=0, memory_psi_full=0,
+                cpu_psi_some=0, io_psi_some=0, mem_available_slope=0))
 
 
 @pytest.fixture(scope="module")
@@ -57,12 +67,12 @@ def test_materialize_many_fast_matches_serial(engine):
     os.environ["FACTOR_ENGINE_HYBRID_FORCE"] = "thread"
     try:
         fast = engine.materialize_many_fast(
-            factors, result_policy="sink", storage_format="long",
+            factors, write_results=False, result_policy="return", native_fusion=False, storage_format="long",
             writer_queue_bytes=1 << 20,
         )
     finally:
         os.environ.pop("FACTOR_ENGINE_HYBRID_FORCE", None)
-    res = fast["results"]
+    res = {name: item["result"] for name, item in fast["materializations"].items()}
     assert set(res.keys()) == set(ref.keys())
     for name in ref:
         a = ref[name]
@@ -72,3 +82,27 @@ def test_materialize_many_fast_matches_serial(engine):
         assert a.fillna(0.0).equals(b.fillna(0.0)), f"{name} value mismatch"
     assert fast["done"] >= 3
     assert fast["explanations"], "R27-143: scheduler must explain decisions"
+
+
+def test_fast_compute_only_sink_discards_results(engine):
+    result = engine.materialize_many_fast([Factor(name="simple", expr=col("close") + 1)],
+        write_results=False, native_fusion=False, result_policy="sink")
+    assert result["results"] == {}
+    assert all("result" not in item for item in result["materializations"].values())
+    assert result["effective_execution_config"]["parallel"] == "thread"
+
+
+@pytest.mark.parametrize("kwargs", [dict(scheduler="unknown"), dict(parallel="process"),
+    dict(resource_profile="max"), dict(auto_shard=False), dict(result_policy="yield")])
+def test_fast_unsupported_config_rejected(engine, kwargs):
+    with pytest.raises(ValueError):
+        engine.materialize_many_fast([], **kwargs)
+
+
+def test_auto_fast_still_rejected(engine):
+    from factor_engine.backend.factory import build_backend
+    from factor_engine.runtime.engine import PhysicalPlanRequiredError
+    auto = FactorEngine(backend=build_backend("auto"), data_source=engine.data_source)
+    for method in (auto.plan_many_fast, auto.materialize_many_fast):
+        with pytest.raises(PhysicalPlanRequiredError):
+            method([Factor(name="simple", expr=col("close"))])

@@ -1348,12 +1348,18 @@ class ExecutionResourceScope:
                     "CPU 配额请用 worker 进程隔离"
                 )
             os.environ["POLARS_MAX_THREADS"] = str(max(1, self.plan.polars_threads))
-            os.environ["DUCKDB_MEMORY_LIMIT"] = str(self.plan.duckdb_budget_bytes)
+            os.environ["DUCKDB_MEMORY_LIMIT"] = f"{self.plan.duckdb_budget_bytes}B"
             os.environ["DUCKDB_TEMP_DIRECTORY"] = self.plan.spill_dir
             if self.plan.spill_budget_bytes > 0:
-                os.environ["DUCKDB_MAX_TEMP_DIRECTORY_SIZE"] = str(self.plan.spill_budget_bytes)
+                os.environ["DUCKDB_MAX_TEMP_DIRECTORY_SIZE"] = f"{self.plan.spill_budget_bytes}B"
             self.effective_threads = int(threads)
-            self._apply_live_pragma(threads)
+            try:
+                self._apply_live_pragma(threads)
+            except BaseException:
+                # A failed __enter__ is not followed by __exit__ by Python.
+                # Restore process-global settings even when strict apply fails.
+                self.__exit__(*sys.exc_info())
+                raise
         with _ACTIVE_SCOPE_LOCK:
             _ACTIVE_SCOPE_THREADS.add(threading.get_ident())
         return self

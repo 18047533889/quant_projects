@@ -134,19 +134,21 @@ class FactorBlockRef:
         return path
 
 
-def _sorted_bytes(values: Any) -> bytes:
-    """轴 level 值的顺序无关字节摘要（label 集合相等 -> 摘要相等）。"""
-    vals = np.asarray(values)
-    if vals.dtype.kind in "mM":  # datetime / timedelta
-        return np.sort(vals.astype("datetime64[ns]").view("int64")).tobytes()
-    if vals.dtype.kind in "USO":  # object / str / bytes
-        codes, _ = pd.factorize(np.asarray(values, dtype=object), sort=True)
-        return np.sort(np.asarray(codes, dtype=np.int64)).tobytes()
-    try:
-        return np.sort(vals).tobytes()
-    except TypeError:  # pragma: no cover - 混合类型兜底
-        codes, _ = pd.factorize(np.asarray(values, dtype=object), sort=True)
-        return np.sort(np.asarray(codes, dtype=np.int64)).tobytes()
+def _ordered_typed_bytes(values: Any) -> bytes:
+    """Length-delimited, order-preserving encoding of complete axis labels."""
+    from data_access.core.identity_encoder import CanonicalIdentityEncoder
+
+    encoder=CanonicalIdentityEncoder(strict=True)
+    payload=bytearray()
+    for value in values:
+        scalar=value.item() if isinstance(value,np.generic) else value
+        if isinstance(scalar,(pd.Timestamp,)) and scalar.tzinfo is None:
+            scalar={"axis_naive_timestamp":scalar.isoformat()}
+        typed={"label_type":f"{type(value).__module__}.{type(value).__qualname__}","value":scalar}
+        encoded=encoder.encode(typed).encode("utf-8")
+        payload.extend(len(encoded).to_bytes(8,"big"))
+        payload.extend(encoded)
+    return bytes(payload)
 
 
 def axis_key_of(index: pd.Index) -> str:
@@ -155,19 +157,19 @@ def axis_key_of(index: pd.Index) -> str:
     label 相等的轴（即使对象身份不同）产生相同 key，供 ``share_axis_across`` /
     ``group_by_shared_axis`` 证明 axis 不重复。
     """
-    h = hashlib.blake2b(digest_size=8)
+    h = hashlib.blake2b(digest_size=32)
     h.update(str(len(index)).encode("ascii"))
     h.update(str(getattr(index, "nlevels", 1)).encode("ascii"))
-    names = tuple(str(n) for n in getattr(index, "names", [index.name]))
-    h.update(repr(names).encode("utf-8"))
+    names = tuple(getattr(index, "names", [index.name]))
+    h.update(_ordered_typed_bytes(names))
     if isinstance(index, pd.MultiIndex):
         for lvl in range(index.nlevels):
             values = index.get_level_values(lvl)
             h.update(str(values.dtype).encode("ascii"))
-            h.update(_sorted_bytes(values))
+            h.update(_ordered_typed_bytes(values))
     else:
         h.update(str(index.dtype).encode("ascii"))
-        h.update(_sorted_bytes(index))
+        h.update(_ordered_typed_bytes(index))
     return h.hexdigest()
 
 
@@ -197,9 +199,14 @@ def build_factor_block(
     dtype = str(dtype or "float64")
     np_dtype = np.dtype(dtype)
     if isinstance(values_2d_or_dict, dict):
-        arrays = [
-            np.asarray(values_2d_or_dict[f], dtype=np_dtype) for f in fids
-        ]
+        arrays = []
+        for f in fids:
+            source=values_2d_or_dict[f]
+            if isinstance(source,pd.Series) and not source.index.equals(index):
+                raise ValueError(
+                    f"build_factor_block: factor {f!r} Series.index does not exactly match the declared index"
+                )
+            arrays.append(np.asarray(source,dtype=np_dtype))
         values = np.column_stack(arrays)
     else:
         values = np.asarray(values_2d_or_dict, dtype=np_dtype)
@@ -267,6 +274,7 @@ def share_axis_across(refs: Sequence[FactorBlockRef]) -> bool:
     return all(
         r.axis_ref.axis_key == first.axis_ref.axis_key
         and r.axis_ref.row_count == first.axis_ref.row_count
+        and r.axis_ref.index.equals(first.axis_ref.index)
         for r in refs[1:]
     )
 

@@ -33,16 +33,19 @@ def _replan_duckdb_threads(plan, gov) -> Any:
     保持 ``workers × duckdb_threads <= cpu_budget`` 不变量（与
     ``ExecutionResourcePlan.auto`` 的 oversubscription 约束一致）。
     """
-    from dataclasses import replace
+    from dataclasses import fields, replace
 
     budget = gov.cpu_budget
     duckdb_threads = max(1, min(plan.duckdb_threads, budget // gov.workers))
-    return replace(
-        plan,
-        max_workers=gov.workers,
-        duckdb_threads=duckdb_threads,
-        polars_threads=duckdb_threads,
-    )
+    names = {field.name for field in fields(plan)}
+    updates = {
+        "n_jobs" if "n_jobs" in names else "max_workers": gov.workers,
+        "duckdb_threads": duckdb_threads,
+        "polars_threads": duckdb_threads,
+    }
+    if "total_runnable" in names:
+        updates["total_runnable"] = gov.workers * duckdb_threads
+    return replace(plan, **updates)
 
 #: R39 Gate-01：adaptive-scheduler 主路径不允许发生 legacy full-union batch
 #: prefetch（``engine._prepare_batch_data``）。该计数由 ``_maybe_prepare_batch_data``
@@ -462,6 +465,9 @@ def validate_cse_refcount_integrity(dag: Any, ctx: Any) -> dict[str, Any]:
 #:   (shared read-only); any per-run override must be scoped inside
 #:   ``routing_execution_scope`` / ``ExecutionResourceScope``.
 _ROOT_LOCAL_TELEMETRY_KEYS = (
+    "param_domain_membership_skipped",
+    "parameter_certification_degradation_reason",
+    "parameter_certification_degradation_count",
     "plan_backend_route",
     "polars_long_shared_sid",
     "used_polars_long_path",
@@ -699,6 +705,44 @@ def _cluster_factors_by_cost(
     return clusters
 
 
+def _validate_result_policy(policy: str, sink: Any) -> None:
+    if policy not in {"return", "sink", "yield", "materialize"}:
+        raise ValueError(f"Unknown result_policy: {policy!r}")
+    if policy == "sink" and not callable(sink):
+        raise ValueError("result_policy='sink' requires a callable sink(name, result)")
+
+
+def _consume_bounded_roots(items, execute, consume, *, max_workers: int) -> None:
+    """Keep at most one future per worker, including results awaiting the sink."""
+    from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
+
+    iterator = iter(items)
+    with ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix="r27-root") as pool:
+        pending = set()
+
+        def refill():
+            while len(pending) < max_workers:
+                item = next(iterator, None)
+                if item is None:
+                    break
+                pending.add(pool.submit(execute, item))
+
+        try:
+            refill()
+            while pending:
+                done, pending = wait(pending, return_when=FIRST_COMPLETED)
+                while done:
+                    future = done.pop()
+                    value = future.result()
+                    consume(*value)
+                    # Futures own their results. Drop both before admitting more work.
+                    del value, future
+                refill()
+        finally:
+            for future in pending:
+                future.cancel()
+
+
 def _handle_result(
     policy: str,
     sink: Any,
@@ -714,8 +758,10 @@ def _handle_result(
     - ``sink``：立即交给 ``sink(name, result)``（通常落盘/DQ），**不**驻留
     - ``yield``/``materialize``：与 ``return`` 相同累积（生成器形态由 run_many_iter 提供）
     """
-    if policy == "sink" and sink is not None:
-        sink(name, result)
+    _validate_result_policy(policy, sink)
+    if policy == "sink":
+        if sink(name, result) is False:
+            raise RuntimeError(f"sink rejected result for {name}")
         backend_paths[name] = path
         return
     out[name] = result
@@ -1037,8 +1083,19 @@ def _execute_run_many_scheduler(
     ctx = engine_to_use._make_context(shared_result_cache={}, perf=perf)
     ctx.runtime_stats = record_resource_telemetry(ctx.runtime_stats)
     scheduler = AdaptiveBatchScheduler(
-        max_concurrency=max_concurrency,
+        max_concurrency=max_concurrency if max_concurrency is not None else perf.max_workers,
     )
+    # This entry point dispatches closures over one shared context/cache. Its
+    # payload is not process-serializable, and CSE mutations must stay visible
+    # to every root. Generic schedulers may still use worker-local process jobs.
+    if scheduler._execution_policy == "process" or os.environ.get(
+        "FACTOR_ENGINE_HYBRID_FORCE", ""
+    ).strip().lower() == "process":
+        raise ValueError(
+            "run_many shared-context execution requires threads; process execution "
+            "requires a worker-local serializable runtime"
+        )
+    scheduler._execution_policy = "thread"
     # R36 P0-016/017（§54/56）：FE batch run 是唯一资源权威——把 Safe Envelope
     # 应用到 DA governor（max_total_reserved_memory / scan inflight），DA 不再
     # 独立决定全局内存（no double admission）。
@@ -1265,7 +1322,10 @@ def _execute_run_many_scheduler(
                     ]
                 )
     finally:
-        peak = run_peak_sampler.stop()
+        try:
+            scheduler.executor.shutdown(wait=True)
+        finally:
+            peak = run_peak_sampler.stop()
         ctx.runtime_stats = record_resource_telemetry(
             ctx.runtime_stats, finalize=True, run_peak=peak
         )
@@ -1384,6 +1444,8 @@ def execute_run_many(
         ``input_dq``、``backend_paths`` 等的字典。
     """
     from factor_engine.runtime.production_policy import is_production_mode
+
+    _validate_result_policy(result_policy, sink)
 
     # P0#6: input canonicalization — dedupe structurally identical factors so
     # run_many compiles/executes each unique root exactly once (formula-level
@@ -1780,6 +1842,8 @@ def execute_run_many_parallel(
     """
     from factor_engine.runtime.production_policy import is_production_mode
 
+    _validate_result_policy(result_policy, sink)
+
     # P0#6: run_many_parallel is also a batch entry — canonicalize like the rest.
     factors = _canonicalize_batch_factors(engine, factors, context="execute_run_many_parallel")
 
@@ -1989,17 +2053,14 @@ def execute_run_many_parallel(
                 else:
                     # R27-166/249：as_completed → 立即 sink/release，不再等整层
                     # raw list 形成（避免 layer result burst memory，R27-103）。
-                    from concurrent.futures import ThreadPoolExecutor, as_completed
+                    def _consume(name, result, path):
+                        _handle_result(
+                            result_policy, sink, results, name, result, path, backend_paths
+                        )
 
-                    with ThreadPoolExecutor(
-                        max_workers=workers, thread_name_prefix="r27-root"
-                    ) as pool:
-                        futures = {pool.submit(_one, fp): fp for fp in fps}
-                        for future in as_completed(futures):
-                            name, result, path = future.result()
-                            _handle_result(
-                                result_policy, sink, results, name, result, path, backend_paths
-                            )
+                    _consume_bounded_roots(
+                        fps, _one, _consume, max_workers=workers or 1
+                    )
                 # Phase 5 R5：本层完成，引用计数归零的共享子树立即释放
                 for fp in fps:
                     _release_consumed_sids(ctx, fp.root)

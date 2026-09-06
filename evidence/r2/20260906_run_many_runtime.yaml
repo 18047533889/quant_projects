@@ -1,0 +1,99 @@
+git_sha: f9e7237fafe4112391e62c8874caae7996ce0b11
+timestamp_utc: '2026-09-06T09:56:35Z'
+scope: run_many streaming ownership, bounded submission, runtime worker dispatch
+files:
+  - factor_engine/runtime/batch_service.py
+  - factor_engine/runtime/adaptive_batch_scheduler.py
+  - factor_engine/runtime/engine.py
+  - factor_engine/runtime/streaming_result_sink.py
+  - factor_engine/runtime/resource_governor.py
+  - factor_engine/backend/cleaned_bridge.py
+  - factor_engine/backend/path_summary.py
+  - benchmarks/profile_warm_run_many.py
+  - factor_engine/tests/runtime/test_run_many_sink_backpressure.py
+fixes:
+  - Reject missing/noncallable sink and unknown result policies before compilation.
+  - Bound legacy parallel submissions and release consumed future result references.
+  - Do not retain adaptive normal, fusion, microbatch, or serial sink outputs.
+  - Abort serial execution when sink rejects a result.
+  - Restore documented single oversize item admission into an empty writer queue.
+  - Resolve absent HybridBackend SQL delegate as typed unsupported rather than AttributeError.
+  - Replan legacy ResourcePlan using n_jobs and recompute total_runnable.
+  - Match executor pool capacity to scheduler concurrency.
+  - Dispatch shared-context batch closures as threads; reject explicit process request.
+  - Shut down owned batch executor on success and failure.
+  - Bound microbatch Future-level transport failure retries using existing error policy.
+  - Add byte units to DuckDB memory and temporary-directory budgets.
+  - Restore process-global environment when strict resource scope entry fails.
+  - Release completed leases on sink failure and defer in-flight lease release until completion.
+  - Release reserved leases if executor submission raises.
+  - Treat explicit False from callable sinks as failure; preserve None-return callbacks.
+  - Replace discarded per-operator process-memory telemetry with root-local degradation counters surfaced in backend paths.
+warm_synthetic_profile:
+  roots: 64
+  rows_per_root: 32
+  numerical_oracle: all outputs exactly equal source plus factor offset
+  before_total_seconds: 8.0273
+  after_total_seconds: 2.6238
+  before_scheduler_run_seconds: 4.0072
+  after_scheduler_run_seconds: 0.6848
+  before_compile_seconds: 2.7318
+  after_compile_seconds: 0.8387
+  profiles:
+    - evidence/r2/runmany_20260906_warm64_before.prof
+    - evidence/r2/runmany_20260906_warm64.prof
+  caveats:
+    - Compile improvement includes concurrent field-catalog cache changes by another agent.
+    - These are instrumented wall-clock synthetic timings, not large-panel production throughput.
+    - Profiler caller attribution contains cross-thread artifacts; stage perf_counter timing is primary evidence.
+tests:
+  focused_new:
+    status: PASS
+    count: 28
+    command: OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 POLARS_MAX_THREADS=2 .venv/bin/python -m pytest factor_engine/tests/runtime/test_run_many_sink_backpressure.py -q --tb=short
+  related_regression:
+    status: PASS
+    passed: 56
+    command: OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 POLARS_MAX_THREADS=2 .venv/bin/python -m pytest factor_engine/tests/runtime/test_run_many_sink_backpressure.py factor_engine/tests/r27/test_dag_scheduler_shard_fusion.py factor_engine/tests/runtime/test_physical_region_execution.py factor_engine/tests/r39/test_perf_scheduler_2026_08.py -q --tb=short
+  deterministic_lease_fixture_followup:
+    status: PASS
+    isolated_repetitions_passed: 5
+    combined_stream_runtime_passed: 46
+    combined_seconds: 22.72
+    note: Only test resource signals fixed to capacity two; real broker admission, leases and completion callbacks retained. Prior 41-pass/1-timeout result is preserved in 20260906_streaming_api.yaml.
+  earlier_duckdb_regression:
+    status: PASS
+    passed: 65
+    warnings: 2
+    command: OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 POLARS_MAX_THREADS=2 .venv/bin/python -m pytest factor_engine/tests/runtime/test_run_many_sink_backpressure.py factor_engine/tests/r27/test_dag_scheduler_shard_fusion.py factor_engine/tests/runtime/test_physical_region_execution.py factor_engine/tests/r39/test_perf_scheduler_2026_08.py factor_engine/tests/r39/test_perf_duckdb_scan_2026_08.py -q --tb=short
+  earlier_cache_regression:
+    status: PARTIAL
+    passed: 53
+    failed: 1
+    command: OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 POLARS_MAX_THREADS=2 .venv/bin/python -m pytest factor_engine/tests/runtime/test_run_many_sink_backpressure.py factor_engine/tests/r27/test_dag_scheduler_shard_fusion.py factor_engine/tests/runtime/test_physical_region_execution.py factor_engine/tests/r39/test_perf_scheduler_2026_08.py factor_engine/tests/r42/test_r42_sink_cache_051_059.py -q --tb=short
+    failure: Existing test_cache_release_reconciles_before_clear_and_records_outcome expects absent ExecutionCacheSession._estimate_cache_values; cache module unmodified.
+  telemetry_bridge_regression:
+    status: PARTIAL
+    passed: 44
+    failed: 2
+    command: OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 POLARS_MAX_THREADS=2 .venv/bin/python -m pytest factor_engine/tests/runtime/test_run_many_sink_backpressure.py factor_engine/tests/backend/test_cleaned_bridge.py factor_engine/tests/runtime/test_physical_region_execution.py -q --tb=short
+    failure: Existing canonical-parameters and unrelated-TypeError tests pass MagicMock without concrete metadata/input_arity; unchanged validate_operator_call rejects before invoking the mock. Certification validation was not relaxed.
+  import_smoke: PASS
+  full_compile_import: NOT_RUN
+  registry_duplicate_authority: NOT_RUN
+  ABI_placeholder: NOT_RUN
+  backend_parity: NOT_RUN
+  PIT_poison: NOT_RUN
+  Q_null_time_runtime: NOT_RUN
+  CI: NOT_RUN
+  production_gate: NOT_RUN
+review:
+  reviewer: parent coordinator
+  initial_result: Approved core ownership changes; fixed reviewer-identified not_done future reference retention.
+  final_additions: APPROVED by parent coordinator; reviewed pool lifecycle, ResourcePlan fields, byte units and failed-entry restoration, oversize queue contract, completed/queued/in-flight lease cleanup.
+limitations:
+  - Not a proof of OOM-free production execution or optimal server throughput.
+  - 100k real API synthetic benchmark coordinated separately; not claimed here.
+  - Process execution of shared mutable context requires worker-local serializable payload architecture.
+  - Single oversize queue item may exceed queue target; compute peak still requires admission/sharding.
+  - No commits or pushes; existing unrelated working-tree changes preserved.

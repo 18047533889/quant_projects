@@ -1,0 +1,13 @@
+{
+  "git_sha": "f9e7237fafe4112391e62c8874caae7996ce0b11",
+  "timestamp": "2026-09-06T10:14:16.785719+00:00",
+  "fields": 368,
+  "iterations": 300,
+  "seconds": {
+    "full_export_baseline": 2.40567560098134,
+    "content_fingerprint_cache": 0.04010789794847369
+  },
+  "same_hash": true,
+  "speedup": 59.98009678971191,
+  "limitation": "single-process catalog hash microbenchmark, not end-to-end run_many throughput"
+}

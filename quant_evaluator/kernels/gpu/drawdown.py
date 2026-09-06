@@ -157,7 +157,8 @@ def compute_max_drawdown_batch(returns):
         ret = ret[:, None]
     filled = cp.where(cp.isfinite(ret), ret, 0.0)
     cum = cp.cumprod(1.0 + filled, axis=0)  # (T, F)
-    running_max = _running_max(cum, axis=0)
+    # Match the CPU high-water mark, including capital before the first return.
+    running_max = cp.maximum(1.0, _running_max(cum, axis=0))
     invalid = _running_max((cum <= 0).astype(cp.float64), axis=0) > 0.0
     dd = cp.where(
         ~invalid,

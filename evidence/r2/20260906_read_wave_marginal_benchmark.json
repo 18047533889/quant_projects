@@ -1,0 +1,22 @@
+[
+  {
+    "roots": 256,
+    "optimized_seconds": 0.05341317900456488,
+    "waves": 1,
+    "baseline_seconds": 0.9683810870628804,
+    "exact_plan_parity": true
+  },
+  {
+    "roots": 512,
+    "optimized_seconds": 0.2090514759765938,
+    "waves": 1,
+    "baseline_seconds": 7.369464054936543,
+    "exact_plan_parity": true
+  },
+  {
+    "roots": 1024,
+    "optimized_seconds": 0.819515845971182,
+    "waves": 1,
+    "baseline_status": "NOT_RUN; bounded baseline at 256 and 512"
+  }
+]

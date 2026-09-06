@@ -1,0 +1,58 @@
+timestamp: '2026-09-06'
+base_git_sha: f9e7237fafe4112391e62c8874caae7996ce0b11
+repository: 'qs-server-c:/home/sunhaiwei/quant_projects'
+status: SCOPED_INTEGRATION_PASS_NOT_FULL_PRODUCTION_CERTIFICATION
+modified_files_manifest: 'Per-issue evidence/r2/20260906_*.yaml records owned files; existing dirty changes preserved.'
+final_engine_sha256: 57a893ff305478dc5241decb1da4caebe1e0859ba6032ae70389158908d59374
+regression:
+  passed: 238
+  failed: 0
+  skipped: 0
+  warnings: 17
+  seconds: 28.97
+  junit: /tmp/fe-audit-v2-release.xml
+  log: /tmp/fe-audit-v2-release.log
+  junit_nonvacuous_guard: PASS
+  git_diff_check: PASS
+  scope: 'Identity, DSL, PIT, local publication, public API, sink ownership and receipts, CPU admission, streaming, packaging, planner contracts, QE scales; not full repository.'
+streaming_scale:
+  artifact: evidence/r2/runmany_audit_v2_20260906_100k_final
+  factors: 100000
+  waves: 391
+  panel: '8 timestamps x 32 assets, synthetic close + i'
+  workers: 32
+  fe_seconds: 1081.909978883
+  gpu_seconds: 3.453540988
+  total_seconds: 1085.456625279
+  fe_peak_rss_bytes: 658374656
+  total_peak_rss_bytes: 1048727552
+  output_bytes: 204800128
+  exact_values_checked: 25600000
+  independent_readback: 'All values reread in 333-factor chunks with independent formula oracle: PASS'
+  rankic_values_checked: 800000
+  cuda_tiles: 782
+  gpu_oom_retries: 0
+  boundary: 'Other narrow hardening continued during this run; not an immutable final-whole-tree or real-market certification.'
+package:
+  path: /tmp/fe-audit-package-ZQSxL0/release
+  build: 'Default python -m build: sdist then wheel in fresh extraction'
+  source_matching_python_yaml_files: 1083
+  isolated_python: '3.12, no system site packages, outside checkout with python -I'
+  public_exact_value_oracle: PASS
+  cli_help: PASS
+  wheel_sha256: 52556f1c5258be8df7b27290e7a69317c0fb7deb6da8d186284dbd8257434657
+  sdist_sha256: b74dd79ee0ab4924be3738b753dd9a1b3f9fb64faea39595b4126bd7f4fab0f6
+reviews:
+  pit_sweep: 'Independent runtime-agent scoped review and repeated oracle PASS'
+  integration: 'Root inspected and corrected public binding, fast receipt, CPU stale-pressure race, remote storage preflight and packaging issues; regression above passed.'
+not_completed_or_not_run:
+  - All 1756 operators mathematical and backend certification
+  - Full repository regression, ABI, registry and Q production gates
+  - Real-market 100K workload and globally optimal throughput
+  - Auto physical execution and production fast admission
+  - Historical production universe interval provider and safe segmented checkpoint context
+  - COS expected-inventory CAS, recovery consumer and legacy publication caller migration
+  - GitHub Actions and branch protection
+  - Minimum dependency and Python 3.10 execution matrices
+  - Production data migration and generation publication
+side_effects: 'No git commit/push or production publication. DataAccess build metadata change preserved.'

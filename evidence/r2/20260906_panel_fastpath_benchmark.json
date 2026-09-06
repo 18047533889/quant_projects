@@ -1,0 +1,14 @@
+{
+  "iterations": 1000,
+  "panel_shape": [
+    8,
+    32
+  ],
+  "seconds": {
+    "reference_stack": 4.667156183044426,
+    "production_fastpath": 0.29742517101112753
+  },
+  "oracle_parity": true,
+  "speedup": 15.691866855713481,
+  "note": "microbenchmark; no end-to-end claim"
+}

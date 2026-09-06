@@ -1,0 +1,8 @@
+{"completed_sink_outputs": 128, "seconds": 1.8732199320802465, "rss_bytes": 417939456}
+{"completed_sink_outputs": 256, "seconds": 3.267648707027547, "rss_bytes": 420605952}
+{"completed_sink_outputs": 384, "seconds": 4.846393395098858, "rss_bytes": 421548032}
+{"completed_sink_outputs": 512, "seconds": 6.251881407108158, "rss_bytes": 421834752}
+{"completed_sink_outputs": 640, "seconds": 7.687370754079893, "rss_bytes": 422100992}
+{"completed_sink_outputs": 768, "seconds": 9.194098494015634, "rss_bytes": 422367232}
+{"completed_sink_outputs": 896, "seconds": 10.558100586058572, "rss_bytes": 422682624}
+{"completed_sink_outputs": 1000, "seconds": 11.739734395057894, "rss_bytes": 422752256}

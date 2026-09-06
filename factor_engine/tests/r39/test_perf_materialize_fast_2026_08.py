@@ -14,12 +14,16 @@
 from __future__ import annotations
 
 import inspect
+import hashlib
+import json
 import os
 import threading
 import time
 
 import pandas as pd
+import numpy as np
 import pytest
+from dataclasses import replace
 
 from factor_engine.api import rank, ts_mean, ts_std
 from factor_engine.api.columns import col
@@ -27,6 +31,25 @@ from factor_engine.api.factor import Factor
 from factor_engine.backend.pandas_backend import PandasBackend
 from factor_engine.runtime.engine import FactorEngine
 from tests.helpers import InMemorySeriesSource
+
+
+def _fixture_inventory():
+    payload = b"fixture"
+    inventory = [{"path": "fixture.parquet", "rows": 1, "bytes": len(payload),
+                  "sha256": hashlib.sha256(payload).hexdigest()}]
+    digest = hashlib.sha256(json.dumps(inventory, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+    return {"run_id": "test-run", "inventory_digest": digest, "inventory": inventory}
+
+
+@pytest.fixture(autouse=True)
+def quiet_external_pressure(monkeypatch):
+    # These numerical/receipt tests are not host-pressure stress tests. Keep
+    # real broker leases and hard limits, but isolate transient external PSI.
+    from factor_engine.runtime.resource_broker import ResourceBroker
+    original = ResourceBroker._signals_from_snapshot
+    monkeypatch.setattr(ResourceBroker, "_signals_from_snapshot", lambda self, snap:
+        replace(original(self, snap), memory_psi_some=0, memory_psi_full=0,
+                cpu_psi_some=0, io_psi_some=0, mem_available_slope=0))
 
 
 def _engine(dates: int = 8):
@@ -79,6 +102,60 @@ def test_gate02_static_no_oN2_lookup_in_writer():
     assert "factor_id_by_name" in src
 
 
+@pytest.mark.parametrize("second_state", ["FAILED", "IN_DOUBT"])
+def test_public_fast_partial_receipt_custom_ids_never_replayed(engine, monkeypatch, second_state):
+    from factor_engine.runtime import materialize_batch as mb
+    from factor_engine.runtime import streaming_result_sink as sink_module
+    from factor_engine.runtime.adaptive_batch_scheduler import AdaptiveBatchScheduler
+    original_preshard = AdaptiveBatchScheduler._maybe_preshard_oversized
+    rounds = []
+    def bounded_preshard(scheduler, dag, remaining):
+        rounds.append(1)
+        if len(rounds) > 40:
+            raise AssertionError(f"ADMISSION_DIAGNOSTIC broker={scheduler.broker.summary()} "
+                f"remaining={[(key, dag.tasks[key].resource_contract) for key in remaining]} "
+                f"explain={scheduler._explanations[-10:]} sink={[s.summary() for s in captured_sinks]}")
+        return original_preshard(scheduler, dag, remaining)
+    monkeypatch.setattr(AdaptiveBatchScheduler, "_maybe_preshard_oversized", bounded_preshard)
+    captured_sinks = []
+    original_sink = sink_module.StreamingResultSink
+    def capture_sink(**kwargs):
+        sink = original_sink(**kwargs)
+        # Hold worker startup until both real computed results are queued;
+        # this test requires a partial two-item receipt, not a timing race.
+        original_start, original_submit = sink.start, sink.submit
+        sink.start = lambda: None
+        accepted = []
+        def submit(*args, **meta):
+            result = original_submit(*args, **meta)
+            if result:
+                accepted.append(args[0])
+                if len(accepted) == 2:
+                    original_start()
+            return result
+        sink.submit = submit
+        captured_sinks.append(sink)
+        return sink
+    monkeypatch.setattr(sink_module, "StreamingResultSink", capture_sink)
+    calls = []
+    def partial(engine_, items, generation=None, **kwargs):
+        calls.append(tuple(item.factor_id for item in items))
+        receipt = mb.WriteReceipt(generation.generation_id, tuple(item.factor_id for item in items),
+            {item.factor_id: mb.WriteItemReceipt(item.factor_id,
+                mb.WriteState.COMMITTED if item.factor_id == "custom_a" else mb.WriteState(second_state), rows=1,
+                **_fixture_inventory())
+             for item in items}, manifest_digest="confirmed", idempotency_key="test-key")
+        return {"receipt": receipt, "materializations": {}, "counters": {"batch_write_transaction_count": 1}}
+    monkeypatch.setattr(mb, "execute_materialize_batch", partial)
+    with pytest.raises(RuntimeError, match="fatal"):
+        engine.materialize_many_fast(_factors()[:2], factor_ids=["custom_a", "custom_b"],
+            native_fusion=False, writer_threads=1, materialize_kwargs={"writer_batch_size": 2})
+    assert sorted(fid for batch in calls for fid in batch) == ["custom_a", "custom_b"]
+    assert captured_sinks[0].summary()["committed"] == 1
+    assert captured_sinks[0].summary()["retried"] == 0
+    assert not any(thread.is_alive() for thread in captured_sinks[0]._threads)
+
+
 def test_gate02_custom_factor_id_mapping_dynamic(tmp_path, engine, monkeypatch):
     """PERF-038 动态：writer 用 ``factor_id_by_name`` dict 携带真实 factor_id——
     ``factor_id != factor.name`` 时写入侧拿到的必须是自定义 ID。
@@ -98,6 +175,13 @@ def test_gate02_custom_factor_id_mapping_dynamic(tmp_path, engine, monkeypatch):
                 for i in items
             },
             "counters": {"batch_write_transaction_count": 1},
+            "receipt": materialize_batch.WriteReceipt(
+                generation.generation_id, tuple(i.factor_id for i in items),
+                {i.factor_id: materialize_batch.WriteItemReceipt(
+                    i.factor_id, materialize_batch.WriteState.COMMITTED, rows=1,
+                    **_fixture_inventory()) for i in items},
+                manifest_digest="test-confirmed", idempotency_key=generation.generation_id,
+            ),
         }
 
     monkeypatch.setattr(materialize_batch, "execute_materialize_batch", _recorder)
@@ -106,6 +190,7 @@ def test_gate02_custom_factor_id_mapping_dynamic(tmp_path, engine, monkeypatch):
     try:
         out = engine.materialize_many_fast(
             _factors(),
+            native_fusion=False,
             factor_ids=custom_ids,
             write_results=True,
             materialize_kwargs={
@@ -284,14 +369,27 @@ def test_batch_transaction_count_lt_item_count(tmp_path, engine):
     assert counters["batch_write_transaction_count"] == 1
     assert counters["batch_write_transaction_count"] < counters["item_count"]
     assert counters["manifest_writes"] == 3
-    assert gen.published_items == 3
+    assert gen.committed_items == 3
+    assert gen.published_items == 0
     # 输出带 generation
     assert out["generation"] == "gen-batch-txn-test"
 
 
-def test_materialize_many_fast_batch_transaction_count_lt_items(tmp_path):
-    """Gate-03 主路径：materialize_many_fast 默认 count-batch 64 → writer 攒批，
-    batch_write_transaction_count < factor_count。"""
+def test_materialize_many_fast_batch_transaction_count_lt_items(tmp_path, monkeypatch):
+    """A deliberately queued three-item batch uses one real catalog transaction.
+
+    Default age-based streaming does not guarantee coalescing slow producers.
+    """
+    from factor_engine.runtime import streaming_result_sink as sink_module
+    class FullBatchSink(sink_module.StreamingResultSink):
+        def start(self):
+            pass
+        def submit(self, *args, **kwargs):
+            accepted = super().submit(*args, **kwargs)
+            if accepted and self._accepted == 3:
+                super().start()
+            return accepted
+    monkeypatch.setattr(sink_module, "StreamingResultSink", FullBatchSink)
     eng = _engine(dates=6)
     os.environ["FACTOR_ENGINE_HYBRID_FORCE"] = "thread"
     try:
@@ -350,11 +448,11 @@ def test_sink_flushes_by_bytes():
         target_batch_bytes=50,
         writer_threads=1,
     )
-    sink.start()
     # 连续提交两个 30B item；worker 内层 0.05s 收集窗口内必能拿到 b → 60B>=50B
     # 触发 bytes flush，写成一个 2-item batch。
-    sink.submit("a", b"x" * 30, bytes=30)
-    sink.submit("b", b"y" * 30, bytes=30)
+    sink.submit("a", np.zeros(30, dtype=np.uint8))
+    sink.submit("b", np.zeros(30, dtype=np.uint8))
+    sink.start()
     sink.finish()
     with lock:
         names = [n for b in batches for n in b]
@@ -373,8 +471,8 @@ def test_sink_default_stays_count_only():
     # 默认（target_batch_bytes=None, max_batch_age_s=None）→ batch_size=1 逐条写
     sink = StreamingResultSink(writer=writer, batch_size=1, writer_threads=1)
     sink.start()
-    sink.submit("a", object())
-    sink.submit("b", object())
+    sink.submit("a", np.array([1.0]))
+    sink.submit("b", np.array([2.0]))
     sink.finish()
     assert sorted(batches) == [1, 1]
 
@@ -416,8 +514,8 @@ def test_auto_writer_threads_backcompat():
     sink = StreamingResultSink(writer=lambda b: None)
     assert sink._writer_threads == 1
     # 显式覆盖
-    sink2 = StreamingResultSink(writer=lambda b: None, writer_threads=3)
-    assert sink2._writer_threads == 3
+    with pytest.raises(ValueError, match="partition"):
+        StreamingResultSink(writer=lambda b: None, writer_threads=3)
     # partition-aware → min(2, cpu) >= 1
     sink3 = StreamingResultSink(
         writer=lambda b: None, partition_key=lambda i: i.meta["p"]

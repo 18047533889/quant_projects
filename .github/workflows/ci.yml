@@ -31,8 +31,8 @@ name: CI
 #   CI_BOOTSTRAP / SUPPLY_CHAIN / PACKAGE_BUILD / IMPORT
 #   UNIT / DETERMINISM / SEMANTIC / PIT_LEAKAGE / CROSS_PACKAGE_CONTRACTS /
 #   BACKEND_PARITY
-#   1K_SCALE / 10K_SCALE   (100K_SCALE NOT required: manual/scheduled, will
-#                           show NOT_RUN/skipped honestly, never a fake pass)
+#   FE_EXECUTE_PERSIST_SYNTHETIC_1K / QE_CROSS_ROW_SCALE_1K_10K_100K
+#   Manual 100K jobs are optional and report NOT_RUN when not requested.
 # =============================================================================
 
 on:
@@ -40,6 +40,11 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
+    inputs:
+      run_100k:
+        description: "Run explicit FE synthetic execution/persistence and QE 100K gates"
+        type: boolean
+        default: false
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -127,7 +132,9 @@ jobs:
           mkdir -p "$dist"
           for pkg in factor_engine data_access quant_evaluator factor_optimizer factor_assets factor_preprocess; do
             echo "==> building $pkg"
-            (cd "$pkg" && python3 -m pip wheel --no-deps --no-build-isolation -w "$dist" .)
+            # Default build creates an sdist, then builds the wheel from its
+            # fresh extraction; stale build/lib modules cannot enter the wheel.
+            (cd "$pkg" && python3 -m build --outdir "$dist")
           done
           ls -la "$dist"
       - name: 'Validate NOT-empty wheels (fail-closed: 0-byte/0-module wheel is a FAIL)'
@@ -135,7 +142,7 @@ jobs:
           set -euo pipefail
           total=0
           for whl in "$RUNNER_TEMP"/wheels/*.whl; do
-            mods=$(python3 -c 'import zipfile,sys; z=zipfile.ZipFile("$whl"); print(sum(1 for n in z.namelist() if n.endswith(".py")))')
+            mods=$(python3 -c 'import zipfile,sys; z=zipfile.ZipFile(sys.argv[1]); print(sum(1 for n in z.namelist() if n.endswith(".py")))' "$whl")
             echo "$(basename "$whl"): py-modules=$mods size=$(stat -c%s "$whl")"
             total=$((total + mods))
             if [ "$mods" -eq 0 ]; then
@@ -144,6 +151,12 @@ jobs:
             fi
           done
           echo "PACKAGE_BUILD: all wheels non-vacuous (total py-modules=$total)"
+          (cd "$RUNNER_TEMP/wheels" && sha256sum -- *.whl > SHA256SUMS)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: canonical-wheels-${{ github.sha }}
+          path: ${{ runner.temp }}/wheels/
+          if-no-files-found: error
 
   # -- Tier 3 ------------------------------------------------------------
   IMPORT:
@@ -156,6 +169,12 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: canonical-wheels-${{ github.sha }}
+          path: ${{ runner.temp }}/wheels/
+      - name: Verify exact build artifacts
+        run: cd "$RUNNER_TEMP/wheels" && sha256sum --check --strict SHA256SUMS
       - name: Clean venv; install wheels + hashed lock deps; import from wheels
         run: |
           set -euo pipefail
@@ -170,14 +189,24 @@ jobs:
             { print }
           ' requirements-production.lock > "$RUNNER_TEMP/thirdparty.txt"
           "$RUNNER_TEMP/venv/bin/python" -m pip install -q --require-hashes -r "$RUNNER_TEMP/thirdparty.txt"
-          cd /tmp && "$RUNNER_TEMP/venv/bin/python" - <<'PY'
+          cd "$RUNNER_TEMP" && env -u PYTHONPATH "$RUNNER_TEMP/venv/bin/python" -I - <<'PY'
           import factor_engine
           import data_access
+          import sys
+          from pathlib import Path
+          from factor_engine.identity import get_factor_identity
+          from factor_engine.runtime.quality.dq_profiles import resolve_input_dq_thresholds
+          assert resolve_input_dq_thresholds("us_equity_daily_prod") is not None
+          for module in (factor_engine, data_access):
+              path = Path(module.__file__).resolve()
+              assert path.is_relative_to(Path(sys.prefix).resolve()), path
+              print(f"WHEEL_IMPORT: {module.__name__} {path}")
           from factor_engine.cleaned_operators.registry import OperatorRegistry
           import data_access.core.engine  # noqa
           print("IMPORT: factor_engine OK  data_access OK")
           print("IMPORT_RESULT: PASS")
           PY
+          env -u PYTHONPATH "$RUNNER_TEMP/venv/bin/factor-engine-serve" --help
         shell: bash -e {0}
 
   # -- Tier 4 ------------------------------------------------------------
@@ -312,18 +341,10 @@ jobs:
 
   # -- Tier 8: scale gates -------------------------------------------------
   scale:
-    name: ${{ matrix.gate }}
+    name: QE_CROSS_ROW_SCALE_1K_10K_100K
     runs-on: ubuntu-latest
     timeout-minutes: 40
     needs: [SUPPLY_CHAIN]
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - gate: 1K_SCALE
-          - gate: 10K_SCALE
-          - gate: 100K_SCALE
-            run_mode: MANUAL
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -332,19 +353,107 @@ jobs:
       - name: Install lock deps + pytest
         run: bash scripts/ci_smoke.sh && python3 -m pip install -q pytest
         shell: bash -e {0}
-      - name: Run ${{ matrix.gate }}
+      - name: Run all six QE row-scale correctness tests, not FE factor-count scale
         run: |
-          if [ -n "${RUN_MODE:-}" ]; then
-            echo "==> [${{ matrix.gate }}] RUN_MODE=$RUN_MODE — manual/scheduled gated"
-            echo "==> [${{ matrix.gate }}] status=NOT_RUN (honest; manual/scheduled gated) — no fake PASS"
-            exit 0
+          python3 -m pytest quant_evaluator/tests/test_scale_gates.py -q \
+            -p no:cacheprovider --junitxml="$RUNNER_TEMP/qe-scale.xml"
+          python3 scripts/verify_junit_execution.py "$RUNNER_TEMP/qe-scale.xml"
+
+  SCALE_EXECUTION_STATUS:
+    if: always()
+    needs: [scale, FE_EXECUTE_PERSIST_SYNTHETIC, manual_100k]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Record actual execution state, not production certification
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+          SOURCE_SHA: ${{ github.sha }}
+        run: |
+          python3 - <<'PY'
+          import json, os
+          states = {"success": "PASS", "failure": "FAIL", "cancelled": "NOT_RUN", "skipped": "NOT_RUN"}
+          needs = json.loads(os.environ["RESULTS"])
+          payload = {"source_sha": os.environ["SOURCE_SHA"], "production_certification": "NOT_RUN",
+                     "jobs": {k: {"status": states[v["result"]], "job_result": v["result"]} for k, v in needs.items()}}
+          with open("scale-execution-status.json", "w") as stream:
+              json.dump(payload, stream, indent=2)
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: scale-execution-status-${{ github.sha }}
+          path: scale-execution-status.json
+          if-no-files-found: error
+
+  FE_EXECUTE_PERSIST_SYNTHETIC:
+    name: FE_EXECUTE_PERSIST_SYNTHETIC_1K
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    needs: [SUPPLY_CHAIN]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - run: bash scripts/ci_smoke.sh
+      - name: Actual unique factor execution, sink and exact disk oracle (not lake publication certification)
+        env:
+          PYTHONPATH: .
+          POLARS_MAX_THREADS: "2"
+          OPENBLAS_NUM_THREADS: "1"
+          OMP_NUM_THREADS: "1"
+        run: >-
+          python3 benchmarks/benchmark_run_many_streaming_20260906.py
+          --roots 1000 --wave-size 128 --workers 2 --assets 32 --stream-api
+          --output "$RUNNER_TEMP/fe-scale-1k"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fe-execute-persist-1k-${{ github.sha }}
+          path: ${{ runner.temp }}/fe-scale-1k/*.json*
+          if-no-files-found: error
+
+  manual_100k:
+    name: MANUAL_${{ matrix.component }}_100K
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.run_100k }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    needs: [SUPPLY_CHAIN]
+    strategy:
+      fail-fast: false
+      matrix:
+        component: [FE_EXECUTE_PERSIST_SYNTHETIC, QE_EVALUATE]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - run: bash scripts/ci_smoke.sh && python3 -m pip install -q pytest
+      - name: Run selected component; no QE result certifies FE
+        env:
+          COMPONENT: ${{ matrix.component }}
+          PYTHONPATH: .
+          POLARS_MAX_THREADS: "2"
+          OPENBLAS_NUM_THREADS: "1"
+          OMP_NUM_THREADS: "1"
+        run: |
+          if [ "$COMPONENT" = FE_EXECUTE_PERSIST_SYNTHETIC ]; then
+            python3 benchmarks/benchmark_run_many_streaming_20260906.py \
+              --roots 100000 --wave-size 128 --workers 2 --assets 32 --stream-api \
+              --output "$RUNNER_TEMP/fe-scale-100k"
+          else
+            python3 -m pytest \
+              quant_evaluator/tests/test_scale_gates.py::test_100k_runs_without_error \
+              quant_evaluator/tests/test_scale_gates.py::test_rank_turnover_reference_parity_at_100k \
+              -q --junitxml="$RUNNER_TEMP/qe-scale.xml"
+            python3 scripts/verify_junit_execution.py "$RUNNER_TEMP/qe-scale.xml"
           fi
-          case "${{ matrix.gate }}" in
-            1K_SCALE)  python3 -m pytest quant_evaluator/tests/test_scale_gates.py -q -p no:cacheprovider -k "1k or 1K or scale_1k" ;;
-            10K_SCALE) python3 -m pytest quant_evaluator/tests/test_scale_gates.py -q -p no:cacheprovider -k "10k or 10K or scale_10k" ;;
-            100K_SCALE) python3 -m pytest quant_evaluator/tests/test_scale_gates.py -q -p no:cacheprovider -k "100k or 100K or scale_100k" ;;
-            *) echo "FATAL: unknown scale gate ${{ matrix.gate }}"; exit 1 ;;
-          esac
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: manual-${{ matrix.component }}-100k-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/fe-scale-100k/*.json*
+            ${{ runner.temp }}/qe-scale.xml
+          if-no-files-found: error
 
   # -- Optional A-share ----------------------------------------------------
   # ASHARE_REAL_DATA_SHADOW requires real data (repo variable); when NOT set the

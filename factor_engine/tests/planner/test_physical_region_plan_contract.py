@@ -10,6 +10,7 @@ from factor_engine.planner.backend_region import (
     Representation,
     StateContract,
     TransferEdge,
+    TransferTransform,
 )
 
 
@@ -28,6 +29,17 @@ def _region(region_id: str, backend: PhysicalBackend, representation: Representa
 
 
 def _edge(producer: BackendRegion, consumer: BackendRegion) -> TransferEdge:
+    if producer.backend == consumer.backend and producer.representation == consumer.representation:
+        transform = TransferTransform.SAME_BACKEND_NATIVE
+    elif (
+        producer.representation is Representation.PANDAS_LONG
+        and consumer.representation is Representation.POLARS_LAZY_LONG
+    ):
+        transform = TransferTransform.PANDAS_TO_POLARS
+    elif producer.backend is PhysicalBackend.DUCKDB_SQL:
+        transform = TransferTransform.DUCKDB_TO_ARROW
+    else:
+        raise AssertionError("fixture requires an explicit supported transfer transform")
     return TransferEdge(
         edge_id="edge",
         producer_region=producer.region_id,
@@ -36,6 +48,7 @@ def _edge(producer: BackendRegion, consumer: BackendRegion) -> TransferEdge:
         target_backend=consumer.backend,
         source_representation=producer.representation,
         target_representation=consumer.representation,
+        transform=transform,
         estimated_rows=1,
         estimated_bytes=8,
         estimated_transfer_ms=1.0,

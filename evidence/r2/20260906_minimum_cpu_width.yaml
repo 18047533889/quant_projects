@@ -1,0 +1,35 @@
+git_sha: f9e7237fafe4112391e62c8874caae7996ce0b11
+timestamp: '2026-09-06'
+owner: many_runtime
+scope: 'Second fast call admission livelock; existing resource authority only'
+files:
+  - factor_engine/runtime/resource_broker.py
+  - factor_engine/runtime/resource_autopilot.py
+  - factor_engine/runtime/resource_errors.py
+  - factor_engine/runtime/adaptive_batch_scheduler.py
+  - factor_engine/tests/runtime/test_minimum_cpu_width.py
+reproduction:
+  status: FAIL_EXPECTED
+  details: 'First fast run finished; second spent >100s in admission loop. A bounded 40-round diagnostic captured CPU target 1 vs remaining real task cpu_tokens/backend_threads 2, with running_tasks=0, CPU in_use=0, active_memory_leases=0, NORMAL broker memory pressure and about 63GB headroom. Sink held 833B of a 2GB budget.'
+  cpu_defer_reason: '0+2 > target_cpu_tokens=1, before try_reserve'
+  observed_hot_stack: 'scheduler._maybe_preshard_oversized -> broker.resource_envelope -> process-family RSS -> psutil.children'
+  causal_policy_error: 'Controller called 96% static swap occupancy high_swap_activity and repeatedly multiplicatively reduced CPU target to one, despite no swap-rate evidence.'
+fix:
+  - 'Static swap occupancy is observation only. Memory/CPU/IO PSI and memory slope continue to drive pressure.'
+  - 'Idle broker can request indivisible CPU width from its existing ResourceController under NORMAL/PRESSURE_1 only, within hard CPU and actual non-CPU admission limits.'
+  - 'Controller records minimum_task_width_admission and sets concurrency one. Unchanged real task contract still acquires all tokens with try_reserve.'
+  - 'Running work, hard CPU excess, non-CPU budget denial or elevated pressure raise typed CPUWidthUnavailable instead of an impossible hot loop.'
+  - 'No psutil caching, no fake reduced backend_threads, no new resource governor.'
+  - 'Follow-up stale-decision reproduction: caller NORMAL could overwrite a newer controller PRESSURE_2; deterministic test failed before fix. Controller tick and width admission now share broker RLock, check caller plus latest pressure, and preserve latest decision budgets.'
+tests:
+  minimum_width: '7 passed in 0.22s; two consecutive shrink-to-one/admit-two cycles, no leaked lease; hard memory/CPU/running and elevated-pressure refusal; static swap 20 ticks and actual PSI escalation'
+  public_fast_and_minimum_width: '29 passed, 9 existing warnings in 25.44s'
+  fixed_cadence_and_autopilot_signals: '11 passed in 2.93s'
+  stale_followup_regression: '32 passed in 2.94s: CPU8, sink receipt13, fixed-cadence/signal11; concurrent tick lock test added for final integrated run'
+  final_integrated: '44 passed, 9 existing warnings in 25.15s: CPU9 including background tick serialization, strict sink13, r39 and r27 fast22'
+  public_fixture_scope: 'External PSI/slope made quiet only; actual value computation, hard budgets, real leases, writer, receipt parsing retained.'
+  real_host_run: '17 passed / 5 failed in 26.64s, no multi-minute livelock. Three failures were safe typed elevated-pressure refusal, two were migrated legacy expectations (idle multiwriters/default batch timing). No real-host throughput certification.'
+review: PENDING_ROOT
+limitations:
+  - 'Guaranteed progress does not mean every task is admissible under severe pressure; those requests now fail promptly and require caller replan/retry when conditions change.'
+  - 'No real-market 100k corpus, GPU runtime or full production certification run in this subtask.'

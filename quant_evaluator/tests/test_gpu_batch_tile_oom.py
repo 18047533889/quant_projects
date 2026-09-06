@@ -81,12 +81,17 @@ def test_oom_retile():
     T, N, F = 20, 300, 64
     x = rng.normal(size=(T, N, F)).astype(np.float32)
     y = rng.normal(size=(T, N))
-    # force a tiny budget so estimate_tile picks the smallest (16)
+    # An unfitting budget must fail closed rather than forcing 16 factors.
     policy = GPUExecutionPolicy(max_vram_fraction=0.01)
     session = DeviceEvaluationSession(policy)
     session._open()
+    session._vram_budget = 1
+    with pytest.raises(MemoryError, match="single factor"):
+        session.estimate_tile("spearman", T, N, dtype_bytes=4)
+    # Deterministic estimator budget, independent of other GPU processes.
+    session._vram_budget = session._estimate_working_set("spearman", T, N, 16, 4)
     tile = session.estimate_tile("spearman", T, N, dtype_bytes=4)
-    assert tile == 16  # smallest candidate under tiny budget
+    assert tile == 16
     # retile on OOM: 16 -> 8 -> 4 -> 2 -> 1
     t = 16
     while t > 1:

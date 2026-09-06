@@ -1,0 +1,27 @@
+issue: FE-16
+git_sha: f9e7237fafe4112391e62c8874caae7996ce0b11
+timestamp: '2026-09-06'
+status: SCOPED_ORACLE_AND_INDEPENDENT_REVIEW_PASS
+independent_review: 'many_runtime reviewed the scoped diff and repeated the oracle successfully; final root concentrated regression also passed.'
+owned_files:
+  - factor_engine/pit_contract.py
+  - benchmarks/verify_pit_sweep_20260906.py
+finding: 'Initial sweep still scanned all events per instrument and max(period_state) at every decision.'
+fix: 'Group event rows once; update latest_period only when a visible event arrives.'
+oracle:
+  randomized_events: 600
+  randomized_decisions: 400
+  assets: 'A, B, C, plus missing asset decisions'
+  pointwise_canonical_comparison: PASS
+  future_poison_prefix_invariance: PASS
+scaling_seconds:
+  events_1000_decisions_4000: {before: 0.156320329, after: 0.038411083}
+  events_4000_decisions_16000: {before: 1.918249269, after: 0.122788889}
+peak_rss_kib: 131428
+source_sha256: 45f70db36120887898f842d761b7e035c5ae0c540ec089cd8dc63a2319a146a3
+limitations:
+  - Timings are single-run synthetic diagnostics, not production throughput guarantees.
+  - Same-day declared timestamp policy used for scaling; next-session tie-break has separate regression.
+not_run:
+  - Real market datasets, memory-bound large-universe stress and production gate
+  - Full backend parity, ABI, registry and Q execution

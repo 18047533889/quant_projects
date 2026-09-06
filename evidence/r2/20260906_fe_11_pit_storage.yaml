@@ -1,0 +1,19 @@
+issue_id: FE-11
+source_commit: f9e7237fafe4112391e62c8874caae7996ce0b11
+paths_and_symbols:
+  - factor_engine/pit_contract.py
+  - factor_engine/storage/sources/data_access_source.py
+  - factor_engine/storage/sources/parquet_source.py
+  - factor_engine/storage/sources/financial.py
+  - factor_engine/tests/audit/test_pit_storage_audit_regressions.py
+trigger_and_affected_paths: "See dedicated test(s) named for FE-11; scope is the PIT/storage source public contract."
+regression_before_fix: ".venv/bin/python -m pytest -q factor_engine/tests/audit/test_pit_storage_audit_regressions.py => 10 failed, 2 passed"
+behavior_after_fix: "Dedicated suite => 14 passed; related suite => 58 passed, 4 skipped."
+public_entrypoint_test: "factor_engine/tests/audit/test_pit_storage_audit_regressions.py"
+source_snapshot_and_config_digest: "synthetic in-memory fixture; git=f9e7237fafe4112391e62c8874caae7996ce0b11"
+package_artifact_digest: NOT_RUN
+migration_or_invalidation: "No production data/cache mutation performed; changed results must use a new source/execution snapshot namespace when integrated."
+not_run:
+  - real object-store corruption injection: NOT_RUN
+reviewer_verdict: FIXED_PENDING_INTEGRATION
+

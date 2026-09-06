@@ -155,7 +155,6 @@ ERROR_OOM = "oom"
 
 _TRANSIENT_EXC_TYPES: tuple[type[BaseException], ...] = (
     ConnectionError,
-    OSError,
 )
 #: 明确「重跑也白跑」的错误标记（PIT/语义/参数/不支持算子/schema）。
 _PERMANENT_MARKERS = (
@@ -193,10 +192,17 @@ def classify_error(exc: BaseException) -> str:
       schema mismatch / deterministic numeric / DQ error → permanent
     - OOM（MemoryError / DuckDB OutOfMemory / Arrow / …）→ ``ERROR_OOM``：
       进入 smaller-shape replan 路径（same shape 禁止重试，R38-P0-005）。
-    - 其余 → unknown（保守单次 retry）
+    - 其余 → unknown（失败关闭，不重放未知失败）
     """
     name = type(exc).__name__.lower()
     msg = str(exc).lower()
+    from factor_engine.runtime.resource_errors import typed_retry_kind
+
+    typed = typed_retry_kind(exc)
+    if typed is not None:
+        return typed
+    if _is_oom(exc):
+        return ERROR_OOM
     if any(m in msg for m in _PERMANENT_MARKERS):
         return ERROR_PERMANENT
     # P0-FIX: Distinguish permanent vs transient timeouts
@@ -204,8 +210,6 @@ def classify_error(exc: BaseException) -> str:
         return ERROR_TRANSIENT if _is_transient_timeout(exc) else ERROR_PERMANENT
     if isinstance(exc, _TRANSIENT_EXC_TYPES) or "transient" in msg:
         return ERROR_TRANSIENT
-    if _is_oom(exc):
-        return ERROR_OOM
     return ERROR_UNKNOWN
 
 
@@ -305,7 +309,10 @@ class AdaptiveBatchScheduler:
         # 不再固定 4GiB。broker 不可用时由 ``_dynamic_wave_budget`` 回退绝对上限。
         wave_memory_budget: int | None = None,
         max_concurrency: int | None = None,
+        execution_policy: str | None = None,
     ) -> None:
+        if execution_policy not in {None, "thread", "process"}:
+            raise ValueError("execution_policy must be thread, process, or None")
         if broker is None:
             # R31-P1-039 + R36 P0-016：优先用 service ContextVar 里的共享 broker
             # （job admission + task admission 统一）；没有则用进程级唯一
@@ -332,17 +339,22 @@ class AdaptiveBatchScheduler:
             raise_on_missing=True,
             run_mode=os.environ.get("FACTOR_ENGINE_RUN_MODE", "").strip().lower() or None,
         )
-        self.executor = executor or HybridExecutor(broker=self.broker)
+        self.executor = executor or HybridExecutor(
+            broker=self.broker,
+            max_thread_workers=max_concurrency,
+            max_process_workers=max_concurrency,
+        )
         # P0#8（100k GO §11）：scheduler 强制 thread 与 HybridExecutor classifier
         # 冲突的单一权威。默认 ``None`` → 交给 HybridExecutor 的 backend classifier
         # （pandas/GIL-bound → process，native → thread）。仅当运维显式设置
         # ``FACTOR_ENGINE_SCHEDULER=thread|process`` 时，scheduler 才强制覆盖
         # classifier（env 权威）。scheduler 不再无条件覆盖 executor classifier。
-        self._execution_policy = _resolve_execution_policy()
+        self._execution_policy = (execution_policy if execution_policy is not None
+                                  else _resolve_execution_policy())
         if self._execution_policy is not None:
             _logger.info(
                 "scheduler execution policy override active: %s "
-                "(FACTOR_ENGINE_SCHEDULER env authoritative)",
+                "(explicit constructor policy takes precedence over environment)",
                 self._execution_policy,
             )
         self.sink = sink
@@ -533,7 +545,8 @@ class AdaptiveBatchScheduler:
 
         fusion_groups = []
         if enable_cse and root_tasks:
-            capability = fusion_backend_capability or native_fusion_capability_map(ctx)
+            capability = (fusion_backend_capability if fusion_backend_capability is not None
+                          else native_fusion_capability_map(ctx))
             fusion_groups = plan_native_fusion_groups(
                 root_tasks,
                 backend_capability=capability,
@@ -779,6 +792,7 @@ class AdaptiveBatchScheduler:
             )
         except Exception:
             self._task_started_at.pop(task.task_id, None)
+            _release_lease(lease)
             raise
         return future, lease
 
@@ -1082,6 +1096,55 @@ class AdaptiveBatchScheduler:
         input_dq_strict: bool = True,
         input_dq_thresholds: Any = None,
     ) -> dict[str, Any]:
+        """Run with exception-safe leases; running jobs keep reservations until done."""
+        self._cleanup_leases = {}
+        self._processing_lease = None
+        failure: BaseException | None = None
+        try:
+            return self._run_impl(
+                plan, backend=backend, ctx=ctx, execute_root=execute_root,
+                materialize_shared=materialize_shared, sink=sink,
+                result_handler=result_handler, input_dq_check=input_dq_check,
+                input_dq_strict=input_dq_strict, input_dq_thresholds=input_dq_thresholds,
+            )
+        except BaseException as exc:
+            failure = exc
+            raise
+        finally:
+            # The current result's future has completed, even if its sink failed.
+            _release_lease(self._processing_lease)
+            self._processing_lease = None
+            for future, lease in tuple(self._cleanup_leases.items()):
+                # cancel() affects queued jobs only. Running jobs retain their
+                # reservation until the completion callback, including failures.
+                future.add_done_callback(lambda done, lease=lease: _release_lease(lease))
+                future.cancel()
+            self._cleanup_leases.clear()
+            if failure is not None:
+                target_sink = sink if sink is not None else self.sink
+                if target_sink is not None:
+                    try:
+                        # Finish only already accepted results; no new compute
+                        # admission or replay of failed receipts is permitted.
+                        target_sink.finish()
+                    except BaseException as cleanup_error:
+                        if hasattr(failure, "add_note"):
+                            failure.add_note(f"sink cleanup failed: {cleanup_error}")
+
+    def _run_impl(
+        self,
+        plan: SchedulerPlan,
+        *,
+        backend: Any,
+        ctx: Any,
+        execute_root: Callable[[PhysicalFactorTask], Any] | None = None,
+        materialize_shared: Callable[[str, Any], Any] | None = None,
+        sink: StreamingResultSink | None = None,
+        result_handler: Callable[[str, Any], None] | None = None,
+        input_dq_check: bool = False,
+        input_dq_strict: bool = True,
+        input_dq_thresholds: Any = None,
+    ) -> dict[str, Any]:
         """执行 DAG：read waves + ready queue + admission + FIRST_COMPLETED。
 
         R33 升级：
@@ -1122,6 +1185,7 @@ class AdaptiveBatchScheduler:
         # R31-005: future → task_id / lease 双向绑定（失败/取消也能知道归属并释放）。
         future_to_task_id: dict[Future, str] = {}
         future_leases: dict[Future, ReservationLease] = {}
+        self._cleanup_leases = future_leases
         # R31-P0-022：fusion group 登记（root task_id → group）。
         fusion_groups = list(getattr(plan, "fusion_groups", []) or [])
         group_by_root: dict[str, Any] = {}
@@ -1255,11 +1319,15 @@ class AdaptiveBatchScheduler:
                     for lease in leases:
                         lease.release()
                     continue
-                future = self.executor.submit(
-                    group.backend,
-                    _dispatch_fusion, group, dag.tasks, backend, ctx, execute_root,
-                    prefer=self._execution_policy,
-                )
+                try:
+                    future = self.executor.submit(
+                        group.backend,
+                        _dispatch_fusion, group, dag.tasks, backend, ctx, execute_root,
+                        prefer=self._execution_policy,
+                    )
+                except BaseException:
+                    _release_lease(leases)
+                    raise
                 futures[gkey] = future
                 future_to_task_id[future] = gkey
                 future_leases[future] = leases
@@ -1353,10 +1421,14 @@ class AdaptiveBatchScheduler:
 
                         for tid in mb.roots:
                             self._task_started_at[tid] = time.monotonic() * 1000.0
-                        future = self.executor.submit(
-                            mb.backend, dispatch_micro_batch, mb.roots, dag.tasks,
-                            execute_root, prefer=self._execution_policy,
-                        )
+                        try:
+                            future = self.executor.submit(
+                                mb.backend, dispatch_micro_batch, mb.roots, dag.tasks,
+                                execute_root, prefer=self._execution_policy,
+                            )
+                        except BaseException:
+                            _release_lease(lease)
+                            raise
                         futures[mb_key] = future
                         future_to_task_id[future] = mb_key
                         future_micro_batch_roots[future] = mb.roots
@@ -1390,11 +1462,19 @@ class AdaptiveBatchScheduler:
                         futures, dag, micro_batch_contracts
                     )
                     if running_tokens + token_cost > cpu_token_budget:
-                        self._explain(
-                            f"task={tid}: deferred (cpu_tokens {running_tokens}+"
-                            f"{token_cost} > target_cpu_tokens={cpu_token_budget})"
-                        )
-                        continue
+                        if not futures and running_tokens == 0:
+                            decision = self.broker.request_minimum_cpu_width(
+                                task.resource_contract, decision=self._last_decision)
+                            self._last_decision = decision
+                            cpu_token_budget = int(decision.target_cpu_tokens)
+                            concurrency_limit = 1
+                            self._explain(f"task={tid}: broker minimum CPU width admitted={cpu_token_budget}")
+                        else:
+                            self._explain(
+                                f"task={tid}: deferred (cpu_tokens {running_tokens}+"
+                                f"{token_cost} > target_cpu_tokens={cpu_token_budget})"
+                            )
+                            continue
                 future, lease = self._admit_and_run(
                     task,
                     backend=backend,
@@ -1425,6 +1505,7 @@ class AdaptiveBatchScheduler:
                 if key is None:
                     continue
                 lease = future_leases.pop(future, None)
+                self._processing_lease = lease
                 futures.pop(key, None)
                 # R39-PERF-018：micro-batch future 完成 → 逐 root 处理（结果 /
                 # 失败按 root 独立；成功 root 照常提交，失败 root 走原有 retry/raise）。
@@ -1437,8 +1518,19 @@ class AdaptiveBatchScheduler:
                         results_by_root, failures_by_root = future.result(timeout=1.0)
                     except Exception as exc:  # noqa: BLE001
                         _release_lease(lease)
+                        kind = classify_error(exc)
                         for _tid in mb_roots:
                             micro_batched.discard(_tid)
+                            if _tid not in dag.tasks:
+                                continue
+                            if kind == ERROR_OOM:
+                                if self._handle_oom(_tid, exc, dag, remaining):
+                                    continue
+                                raise
+                            retries = self._retries_remaining.get(_tid, 1)
+                            if kind != ERROR_TRANSIENT or retries <= 0:
+                                raise
+                            self._retries_remaining[_tid] = retries - 1
                             remaining.add(_tid)
                         self._explain(
                             f"microbatch {key}: FUTURE_FAILED "
@@ -1463,9 +1555,7 @@ class AdaptiveBatchScheduler:
                                 )
                                 raise _exc
                             _retries = self._retries_remaining.get(_tid, 1)
-                            if _retries > 0 and _kind in {
-                                ERROR_TRANSIENT, ERROR_UNKNOWN,
-                            }:
+                            if _retries > 0 and _kind == ERROR_TRANSIENT:
                                 self._retries_remaining[_tid] = _retries - 1
                                 self._explain(
                                     f"task={_tid}: FAILED {type(_exc).__name__}: "
@@ -1505,7 +1595,7 @@ class AdaptiveBatchScheduler:
                                 result_handler(
                                     dag.tasks[_tid].factor_name, results_by_root[_tid]
                                 )
-                            else:
+                            elif sink is None:
                                 self._results[dag.tasks[_tid].factor_name] = (
                                     results_by_root[_tid]
                                 )
@@ -1535,7 +1625,7 @@ class AdaptiveBatchScheduler:
                     retries = self._retries_remaining.get(key, 1)
                     # R31-006：只有 transient（或未知=保守单次）自动 retry；
                     # permanent（PIT/semantic/参数/不支持算子/确定性错误）不重跑。
-                    if retries > 0 and kind in {ERROR_TRANSIENT, ERROR_UNKNOWN}:
+                    if retries > 0 and kind == ERROR_TRANSIENT:
                         self._retries_remaining[key] = retries - 1
                         self._explain(
                             f"task={key}: FAILED {type(exc).__name__}: {exc} "
@@ -1586,7 +1676,7 @@ class AdaptiveBatchScheduler:
                                     )
                             if result_handler is not None:
                                 result_handler(dag.tasks[_tid].factor_name, _res)
-                            else:
+                            elif sink is None:
                                 self._results[dag.tasks[_tid].factor_name] = _res
                         self._release_consumed(dag, _tid, ctx)
                     continue
@@ -1630,7 +1720,7 @@ class AdaptiveBatchScheduler:
                             )
                     if result_handler is not None:
                         result_handler(dag.tasks[key].factor_name, result)
-                    else:
+                    elif sink is None:
                         self._results[dag.tasks[key].factor_name] = result
                 # 释放已消费的 CSE sid（引用计数归零立即释放）。
                 if task_type in (TASK_ROOT, TASK_MERGE):
@@ -1780,10 +1870,13 @@ class AdaptiveBatchScheduler:
                 self._record_timing(tid, task)
                 self._record_task_calibration(tid, task, result)
                 if sink is not None:
-                    sink.submit(task.factor_name, result)
+                    if not sink.submit(task.factor_name, result):
+                        raise RuntimeError(
+                            f"sink.submit returned False for {task.factor_name}"
+                        )
                 if result_handler is not None:
                     result_handler(task.factor_name, result)
-                else:
+                elif sink is None:
                     self._results[task.factor_name] = result
                 self._release_consumed(dag, tid, ctx)
                 continue

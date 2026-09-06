@@ -22,6 +22,9 @@ from quant_evaluator.metrics.portfolio_stats import (
 )
 from quant_evaluator.metrics.probe_portfolio.sharpe import compute_portfolio_metrics
 from quant_evaluator.metrics.quantile import compute_quantile_returns
+from quant_evaluator.metrics.quantile import assign_quantiles_batch
+from quant_evaluator.metrics.turnover import compute_turnover_series
+from quant_evaluator.metrics.portfolio_stats import apply_long_short_costs
 
 
 @dataclass(frozen=True)
@@ -45,6 +48,7 @@ class ReportEvaluation:
     max_drawdown: float
     win_rate: float
     valid_return_periods: int
+    commission_rate: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -127,14 +131,23 @@ def evaluate_report_batch(
     direction_training_periods: int | None = None,
     periods_per_year: int = 252,
     fixed_directions: tuple[int, ...] | None = None,
+    commission_rate: float = 0.0,
 ) -> ReportBatchEvaluation:
     """Evaluate a bounded factor tile with shared QE IC/quantile intermediates."""
     if backend not in {"cpu", "auto", "cuda", "cuda_strict"}:
         raise ValueError("backend must be cpu, auto, cuda, or cuda_strict")
+    if not np.isfinite(commission_rate) or commission_rate < 0:
+        raise ValueError("commission_rate must be a finite non-negative one-way fraction")
     fb, lb = _batch_contracts(factors, forward_returns, factor_ids)
     fallback_reason = None
     backend_used = "cpu"
     use_cuda = backend in {"auto", "cuda", "cuda_strict"}
+    if use_cuda and n_quantiles != 10:
+        message = "QE CUDA quantile returns currently has canonical n_quantiles=10"
+        if backend == "cuda_strict":
+            raise ValueError(message)
+        fallback_reason = message
+        use_cuda = False
     if use_cuda and min_assets != 20:
         message = "QE CUDA rank_ic currently has canonical min_assets=20"
         if backend == "cuda_strict":
@@ -178,10 +191,29 @@ def evaluate_report_batch(
 
     factor_results = {}
     for index, factor_id in enumerate(factor_ids):
-        factor_quantiles = quantile[:, :, index]
+        factor_quantiles = quantile[:, :, index].copy()
         if directions[index] < 0:
             factor_quantiles = factor_quantiles[:, ::-1]
         ls = factor_quantiles[:, -1] - factor_quantiles[:, 0]
+        if commission_rate:
+            # Use the SAME QE tie/assignment policy as quantile returns. No
+            # future-label mask enters target holdings. This is a documented
+            # target-weight turnover model, not a drift-aware execution simulator.
+            assignments = assign_quantiles_batch(fb.values[:, :, index], n_quantiles=n_quantiles)
+            turnover = np.zeros_like(factor_quantiles)
+            for group in range(n_quantiles):
+                raw_group = n_quantiles - 1 - group if directions[index] < 0 else group
+                members = assignments == raw_group
+                counts = members.sum(axis=1, keepdims=True)
+                weights = np.divide(members, counts, out=np.zeros(members.shape, dtype=float), where=counts > 0)
+                # QE reports half-L1 turnover. One-way traded notional is 2x;
+                # prepend cash so opening positions are charged as well.
+                turnover[:, group] = 2 * compute_turnover_series(
+                    np.vstack([np.zeros((1, weights.shape[1])), weights]))[1:]
+            ls = apply_long_short_costs(factor_quantiles[:, -1], factor_quantiles[:, 0],
+                                       long_turnover=turnover[:, -1], short_turnover=turnover[:, 0],
+                                       cost_rate=commission_rate)
+            factor_quantiles = factor_quantiles - commission_rate * turnover
         clean_ls = ls[np.isfinite(ls)]
         performance = compute_portfolio_metrics(
             clean_ls,
@@ -227,6 +259,7 @@ def evaluate_report_batch(
             max_drawdown=float(performance["max_drawdown"]),
             win_rate=float(performance["win_rate"]),
             valid_return_periods=int(clean_ls.size),
+            commission_rate=float(commission_rate),
         )
     return ReportBatchEvaluation(
         factors=factor_results,
@@ -245,6 +278,7 @@ def evaluate_report_arrays(
     direction_training_periods: int | None = None,
     periods_per_year: int = 252,
     fixed_direction: int | None = None,
+    commission_rate: float = 0.0,
 ) -> ReportEvaluation:
     """Evaluate one factor through the same bounded batch authority."""
     values = np.asarray(factors, dtype=np.float64)
@@ -261,5 +295,6 @@ def evaluate_report_arrays(
         direction_training_periods=direction_training_periods,
         periods_per_year=periods_per_year,
         fixed_directions=None if fixed_direction is None else (fixed_direction,),
+        commission_rate=commission_rate,
     )
     return batch.factors["report_factor"]

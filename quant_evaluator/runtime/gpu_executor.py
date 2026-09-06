@@ -34,6 +34,55 @@ class GPUExecutor:
     def __init__(self, session: DeviceEvaluationSession):
         self.session = session
 
+    def run_tiled(self, factor_batch, label_bundle, metrics) -> BatchEvaluationBundle:
+        """Upload bounded factor slices, retaining labels across the slices.
+
+        Host results are preallocated once, so stitching does not retain a
+        list of all tile bundles or allocate a second complete result array.
+        """
+        cp = _import_cp()
+        values = factor_batch.values
+        T, N, F = values.shape
+        tile = min(F, self.session.estimate_tile(metrics, T, N, values.dtype.itemsize))
+        labels = label_bundle.values
+        if label_bundle.validity is not None:
+            labels = np.where(label_bundle.validity, labels, np.nan)
+        self.session.stage_labels(labels, label_bundle.target_id)
+        out = BatchEvaluationBundle(tuple(factor_batch.factor_ids), label_bundle.target_id)
+        start = 0
+        count = 0
+        while start < F:
+            stop = min(start + tile, F)
+            ids = factor_batch.factor_ids[start:stop]
+            self.session._final_tile = tile
+            try:
+                chunk = values[:, :, start:stop]
+                if factor_batch.validity is not None:
+                    chunk = np.where(factor_batch.validity[:, :, start:stop], chunk, np.nan)
+                self.session.stage_factors(chunk, ids, layout="T,N,F")
+                result = self.run(ids, metrics, label_bundle.target_id)
+            except cp.cuda.memory.OutOfMemoryError:
+                if not self.session.policy.oom_retile or stop - start <= 1:
+                    raise
+                tile = self.session.retile_on_oom(stop - start)
+                continue
+            finally:
+                self.session.release_factor_tile()
+            for field in ("scalar_metrics", "series_metrics", "vector_metrics"):
+                destination = getattr(out, field)
+                for name, arr in getattr(result, field).items():
+                    if arr.ndim == 0 or arr.shape[-1] != stop - start:
+                        raise ValueError(f"GPU metric {name!r} has no trailing factor axis")
+                    if name not in destination:
+                        destination[name] = np.empty((*arr.shape[:-1], F), dtype=arr.dtype)
+                    destination[name][..., start:stop] = arr
+                    self.session._d2h_bytes += arr.nbytes
+            start = stop
+            count += 1
+        out.metadata = self.session.metadata()
+        out.metadata["factor_tiles_processed"] = count
+        return out
+
     def run(
         self,
         factor_ids: Sequence[str],

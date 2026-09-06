@@ -1,0 +1,62 @@
+change_id: FE-QE-STREAM100K-ACCEPTANCE-20260906
+git_sha: f9e7237fafe4112391e62c8874caae7996ce0b11
+timestamp_utc: '2026-09-06T11:06:04Z'
+status: PASS
+scope: Synthetic small-panel single-call run_many_stream to disk to CUDA RankIC acceptance
+owned_modified_files:
+  - evidence/r2/runmany_20260906_stream100k_w32_control/run.sh
+  - evidence/r2/runmany_20260906_stream100k_w32_control/source_freeze.json
+  - evidence/r2/runmany_20260906_stream100k_w32_control/ACCEPTANCE.yaml
+  - evidence/r2/runmany_20260906_stream1k_worker_comparison.json
+generated_evidence:
+  - evidence/r2/runmany_20260906_stream100k_w32/report.json
+  - evidence/r2/runmany_20260906_stream100k_w32/progress.jsonl
+  - evidence/r2/runmany_20260906_stream100k_w32/values.npy
+  - evidence/r2/runmany_20260906_stream100k_w32_control/run.log
+  - evidence/r2/runmany_20260906_stream100k_w32_control/exit_code
+configuration:
+  public_entry: run_many_stream
+  call_count: 1
+  roots: 100000
+  rows_per_root: 256
+  wave_size: 256
+  workers_requested: 32
+  memory_budget_bytes: 4294967296
+  native_fusion: true
+  gpu_evaluate: true
+  data: synthetic add/column expressions on 8 times x 32 assets
+verification:
+  durable_exit_code: 0
+  completed_waves: 391
+  sink_retained_results: false
+  full_disk_exact_values: 25600000
+  all_gpu_rank_ic_values_checked: 800000
+  gpu_oracle: PASS - identical ranks imply RankIC=1 for every output
+  parent_independent_disk_oracle: PASS - root separately reread the entire values.npy in 512-factor blocks and checked arange(F)+arange(256), 25600000 exact values, verification exited 0
+  source_freeze: PASS - all ten scoped hashes at end match start snapshot; expanded snapshot was taken within first approximately 76 seconds, original four before launch
+performance:
+  fe_seconds: 1089.7942983870162
+  first_result_seconds: 2.782546740025282
+  gpu_seconds: 3.960669866995886
+  total_seconds_including_gpu: 1093.8450666100252
+  fe_peak_rss_bytes: 650309632
+  total_peak_rss_bytes: 1042632704
+  gpu_pool_peak_reserved_bytes: 9244672
+  gpu_factor_tiles: 782
+  oom_retries: 0
+  disk_bytes: 204800128
+limitations:
+  - Synthetic small-panel acceptance only; not real-market history, full operator coverage or production certification.
+  - Workers32 was only 1.67 percent faster than workers4 in one 1k comparison; no robust optimality claim.
+  - CSE is per wave, not a global 100000-root materialization.
+  - RSS includes file-mapped output pages; observed swap was zero at sampled points, not a continuous whole-system guarantee.
+  - Earlier failed and incomplete attempts are separately marked and not reused as results.
+not_run:
+  - full compile/import gate
+  - full registry/duplicate-authority audit
+  - ABI/placeholder gate
+  - complete backend parity metric matrix
+  - full PIT poison gate
+  - Q null/time/runtime gates
+  - CI and production gates
+  - commit and push

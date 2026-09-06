@@ -201,8 +201,16 @@ class _ExprBuilder:
             func=self._allowed[name]
         else:func=self._visit(node.func)
         args=[self._visit(arg) for arg in node.args];kwargs={}
+        seen_keywords:set[str]=set()
+        aliases,param_names=_call_parameter_binding(name) if isinstance(node.func,ast.Name) and node.keywords else ({},())
+        bound_canonical=set(param_names[:len(node.args)])
         for kw in node.keywords:
             if kw.arg is None:raise DSLParseError("Keyword-only **kwargs are not supported.")
+            canonical_kw=aliases.get(kw.arg,kw.arg)
+            if kw.arg in seen_keywords or canonical_kw in bound_canonical:
+                raise DSLParseError(f"Duplicate parameter {canonical_kw!r} is not allowed.")
+            seen_keywords.add(kw.arg)
+            bound_canonical.add(canonical_kw)
             kwargs[kw.arg]=self._visit(kw.value)
         if not callable(func):raise DSLParseError("Call target is not callable.")
         if isinstance(node.func,ast.Name):
@@ -223,6 +231,8 @@ class _ExprBuilder:
         raise DSLParseError(f"Unsupported comparison: {type(op).__name__}")
     def _visit_binop(self,node:ast.BinOp)->Any:
         left,right=self._visit(node.left),self._visit(node.right)
+        if isinstance(left,(str,int,float)) and not isinstance(left,bool) and isinstance(right,(str,int,float)) and not isinstance(right,bool):
+            return self._bounded_constant_binop(node.op,left,right)
         if isinstance(node.op,ast.Add):return left+right
         if isinstance(node.op,ast.Sub):return left-right
         if isinstance(node.op,ast.Mult):return left*right
@@ -239,6 +249,41 @@ class _ExprBuilder:
             from factor_engine.api.cleaned_ops import make_cleaned_call_factory
             return make_cleaned_call_factory("or_")(left,right)
         raise DSLParseError(f"Unsupported binary operator: {type(node.op).__name__}")
+
+    def _bounded_constant_binop(self,op:ast.operator,left:Any,right:Any)->Any:
+        """Evaluate a scalar constant operation only after pre-allocation checks."""
+        if isinstance(left,str) or isinstance(right,str):
+            if isinstance(op,ast.Add) and isinstance(left,str) and isinstance(right,str):
+                size=len(left.encode("utf-8"))+len(right.encode("utf-8"))
+            elif isinstance(op,ast.Mult) and isinstance(left,str) and isinstance(right,int):
+                if right < 0:
+                    size=0
+                else:
+                    unit=len(left.encode("utf-8"))
+                    limit=self._budget.max_string_literal_bytes
+                    if unit and right > limit // unit:
+                        raise DSLParseError("constant string result exceeds ComplexityBudget.max_string_literal_bytes")
+                    size=unit*right
+            elif isinstance(op,ast.Mult) and isinstance(right,str) and isinstance(left,int):
+                return self._bounded_constant_binop(op,right,left)
+            else:
+                raise DSLParseError("Unsupported string arithmetic in factor DSL.")
+            if size>self._budget.max_string_literal_bytes:
+                raise DSLParseError("constant string result exceeds ComplexityBudget.max_string_literal_bytes")
+            return left+right if isinstance(op,ast.Add) else left*right
+        try:
+            if isinstance(op,ast.Add):result=left+right
+            elif isinstance(op,ast.Sub):result=left-right
+            elif isinstance(op,ast.Mult):result=left*right
+            elif isinstance(op,ast.Div):result=left/right
+            else:raise DSLParseError(f"Unsupported constant operator: {type(op).__name__}")
+        except (ArithmeticError,OverflowError) as exc:
+            raise DSLParseError(f"Invalid constant arithmetic: {exc}") from exc
+        if isinstance(result,float) and not math.isfinite(result):
+            raise DSLParseError("constant arithmetic produced a non-finite value")
+        if abs(float(result))>self._budget.max_literal_magnitude:
+            raise DSLParseError("constant result exceeds ComplexityBudget.max_literal_magnitude")
+        return result
 
 def _coerce_call_literals(name:str,args:tuple,kwargs:dict):
     """Round-11 #16: contract-driven numeric-string conversion at a call site.
@@ -288,6 +333,26 @@ def _coerce_call_literals(name:str,args:tuple,kwargs:dict):
         if isinstance(v,str):
             new_kwargs[k]=_coerce_declared_numeric_string(v,k,types.get(k),specs.get(k))
     return tuple(new_args),new_kwargs
+
+
+def _call_parameter_binding(name:str)->tuple[dict[str,str],tuple[str,...]]:
+    """Resolve canonical parameter names from the existing metadata authority."""
+    try:
+        from factor_engine.backend.parameter_aliases import _effective_alias_map
+        from factor_engine.cleaned_operators.registry import OperatorRegistry
+    except ImportError as exc:
+        raise DSLParseError(f"Parameter binding authority unavailable for {name!r}: {exc}") from exc
+    try:
+        canonical=OperatorRegistry.resolve_canonical(name)
+        op=OperatorRegistry.get(canonical,mode="any")
+    except (KeyError,ValueError,RuntimeError) as exc:
+        raise DSLParseError(f"Operator metadata resolution failed for {name!r}: {exc}") from exc
+    if op is None:
+        return {},()
+    meta=getattr(op,"metadata",None)
+    if meta is None:
+        raise DSLParseError(f"Operator metadata unavailable for {name!r}; cannot verify parameter binding.")
+    return dict(_effective_alias_map(canonical)),tuple(getattr(meta,"param_names",None) or ())
 
 
 def _is_field_identifier(name:str)->bool:return bool(name) and not name[0].isdigit() and all(c.isalnum() or c=="_" for c in name)

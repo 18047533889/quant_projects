@@ -194,9 +194,9 @@ class ParquetSource(DataSource):
                     - name 若在 self.fields 里有映射，则读实际列但输出用 name
                     - 已缓存的列命中 cache；未缓存的列合并成一次查询
         
-                容错：
-                    首选「一次性读所有文件」的批量路径；若失败（如有个别坏 parquet），
-                    自动降级到逐文件 + 跳过坏文件的模式，只要不是所有文件都坏就能返回。
+                完整性：
+                    所选 manifest 中任一文件不可读即失败；不得把幸存分区返回为
+                    普通完整结果并写入缓存。
         """
         # 分离已缓存 / 需要查询的列
         needed: list[str] = []
@@ -232,9 +232,11 @@ class ParquetSource(DataSource):
                 selected_files, ts_col, inst_col, dedup_actual,
             )
         except Exception as exc:
-            # 批量失败：退回到逐文件 + 跳过坏文件，保留旧行为
+            # A batch-engine failure does not prove a corrupt partition.  Retry
+            # every selected file individually, but that path is itself
+            # fail-closed if even one manifest member cannot be read.
             logger.warning(
-                "批量读失败（%s），降级到逐文件读取（跳过坏文件模式）",
+                "batch parquet read failed (%s); verifying every selected file",
                 exc,
             )
             frame = self._duckdb_read_per_file(
@@ -384,6 +386,12 @@ class ParquetSource(DataSource):
                 logger.warning("读取 parquet 失败: %s - %s", path, exc)
             progress.advance(detail=path.name)
 
+        if errors:
+            preview = "\n".join(errors[:5])
+            raise RuntimeError(
+                f"parquet manifest is incomplete: root={self.root}; "
+                f"failed={len(errors)}/{len(files)}\n{preview}"
+            )
         if not frames:
             preview = "\n".join(errors[:5])
             raise RuntimeError(
@@ -421,6 +429,12 @@ class ParquetSource(DataSource):
                 errors.append(f"{path}: {exc}")
                 logger.warning("读取 parquet 失败: %s - %s", path, exc)
 
+        if errors:
+            preview = "\n".join(errors[:5])
+            raise RuntimeError(
+                f"parquet manifest is incomplete: root={self.root}; "
+                f"failed={len(errors)}/{len(files)}\n{preview}"
+            )
         if not frames:
             preview = "\n".join(errors[:5])
             raise RuntimeError(
@@ -472,7 +486,29 @@ class ParquetSource(DataSource):
         if self.end_date is not None:
             sub = sub[sub["timestamp"] <= self.end_date]
 
-        sub = sub.drop_duplicates(subset=["timestamp", "instrument"], keep="last")
+        key_columns = ["timestamp", "instrument"]
+        duplicated = sub.duplicated(subset=key_columns, keep=False)
+        if duplicated.any():
+            # Byte-for-byte/equality-identical repeats are harmless, but two
+            # values for one logical key have no authoritative revision order.
+            unique_rows = sub.loc[duplicated].drop_duplicates(
+                subset=[*key_columns, *needed], keep="first"
+            )
+            if unique_rows.duplicated(subset=key_columns, keep=False).any():
+                conflicts = (
+                    unique_rows.loc[
+                        unique_rows.duplicated(subset=key_columns, keep=False),
+                        key_columns,
+                    ]
+                    .drop_duplicates()
+                    .head(5)
+                    .to_dict("records")
+                )
+                raise ValueError(
+                    "conflicting duplicate parquet keys without an authoritative "
+                    f"revision order: {conflicts}"
+                )
+        sub = sub.drop_duplicates(subset=key_columns, keep="first")
         indexed = sub.set_index(["timestamp", "instrument"]).sort_index()
 
         result: dict[str, Any] = {}

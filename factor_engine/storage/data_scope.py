@@ -137,11 +137,13 @@ def _jsonable(value: Any) -> Any:
     if isinstance(value, (list, tuple)):
         return [_jsonable(v) for v in value]
     if isinstance(value, (set, frozenset)):
-        return sorted((_jsonable(v) for v in value), key=lambda v: json.dumps(v, sort_keys=True, default=str))
+        return sorted((_jsonable(v) for v in value), key=lambda v: json.dumps(v, sort_keys=True))
     if isinstance(value, Mapping):
+        if not all(isinstance(k,str) for k in value):
+            raise TypeError("data_scope mapping keys must be strings")
         return {
-            str(k): _jsonable(v)
-            for k, v in sorted(value.items(), key=lambda item: str(item[0]))
+            k: _jsonable(v)
+            for k, v in sorted(value.items())
         }
     raise TypeError(
         f"unsupported data_scope value type: {type(value).__module__}.{type(value).__qualname__}"
@@ -160,7 +162,8 @@ def compute_data_scope(
     （``DataExecutionScope``）与二级 SourceRef 依赖清单（``source_dependencies``）
     纳入指纹。两者都不传时行为与旧版完全一致（向后兼容）。
     """
-    payload: dict[str, Any] = {}
+    payload: dict[str, Any] = {"source_type":f"{type(data_source).__module__}.{type(data_source).__qualname__}"}
+    has_stable_identity=False
     for attr in (
         "dataset",
         "start_date",
@@ -187,10 +190,19 @@ def compute_data_scope(
         # PIT fail-closed vs research 放行），两个仅差 pit_enforce 的 source 不得
         # 共享缓存 namespace。
         "pit_enforce",
+        "max_files",
+        "recursive",
+        "snapshot_id",
+        "generation_id",
+        "source_hash",
+        "content_hash",
+        "source_identity",
     ):
         val = getattr(data_source, attr, None)
         if val is not None and (not isinstance(val, str) or val.strip()):
             payload[attr] = _jsonable(val)
+            if attr in {"dataset","root","data_snapshot_id","snapshot_id","generation_id","source_hash","content_hash","source_identity"}:
+                has_stable_identity=True
 
     if execution is not None:
         payload["execution"] = _jsonable(asdict(execution))
@@ -219,7 +231,7 @@ def compute_data_scope(
         payload["instrument_filter_kind"] = "LIST"
         payload["instrument_filter"] = _jsonable(sorted(instrument_filter))
 
-    if not payload:
+    if not has_stable_identity:
         # 没有任何可描述字段的数据源无法跨实例安全复用缓存，只在当前对象生命周期内稳定。
         return f"ephemeral:{id(data_source)}"
 

@@ -10,6 +10,7 @@ from factor_engine.planner.backend_region import (
     Representation,
     StateContract,
     TransferEdge,
+    TransferTransform,
 )
 
 
@@ -28,6 +29,20 @@ def _region(region_id: str, backend: PhysicalBackend, representation: Representa
 
 
 def _edge(edge_id: str, producer: BackendRegion, consumer: BackendRegion) -> TransferEdge:
+    if producer.backend == consumer.backend and producer.representation == consumer.representation:
+        transform = TransferTransform.SAME_BACKEND_NATIVE
+    elif (
+        producer.representation is Representation.PANDAS_LONG
+        and consumer.representation is Representation.POLARS_LAZY_LONG
+    ):
+        transform = TransferTransform.PANDAS_TO_POLARS
+    elif (
+        producer.representation is Representation.POLARS_LAZY_LONG
+        and consumer.representation is Representation.NUMPY_PANEL
+    ):
+        transform = TransferTransform.POLARS_TO_NUMPY
+    else:
+        raise AssertionError("fixture requires an explicit supported transfer transform")
     return TransferEdge(
         edge_id=edge_id,
         producer_region=producer.region_id,
@@ -36,6 +51,7 @@ def _edge(edge_id: str, producer: BackendRegion, consumer: BackendRegion) -> Tra
         target_backend=consumer.backend,
         source_representation=producer.representation,
         target_representation=consumer.representation,
+        transform=transform,
         estimated_rows=1,
         estimated_bytes=8,
         estimated_transfer_ms=1.0,
@@ -89,7 +105,7 @@ class TestUniqueEdgeIDs:
         """Multiple edges with unique IDs are allowed."""
         p1 = _region("p1", PhysicalBackend.PANDAS_NUMPY, Representation.PANDAS_LONG)
         p2 = _region("p2", PhysicalBackend.POLARS_LONG, Representation.POLARS_LAZY_LONG)
-        p3 = _region("p3", PhysicalBackend.DUCKDB_SQL, Representation.DUCKDB_RELATION)
+        p3 = _region("p3", PhysicalBackend.PANDAS_NUMPY, Representation.NUMPY_PANEL)
         edge1 = _edge("edge1", p1, p2)
         edge2 = _edge("edge2", p2, p3)
 
@@ -201,6 +217,7 @@ class TestEdgeRegionReferences:
             target_backend=consumer.backend,
             source_representation=Representation.PANDAS_LONG,
             target_representation=consumer.representation,
+            transform=TransferTransform.PANDAS_TO_POLARS,
             estimated_rows=1,
             estimated_bytes=8,
             estimated_transfer_ms=1.0,
@@ -219,6 +236,7 @@ class TestEdgeRegionReferences:
             target_backend=PhysicalBackend.POLARS_LONG,
             source_representation=producer.representation,
             target_representation=Representation.POLARS_LAZY_LONG,
+            transform=TransferTransform.PANDAS_TO_POLARS,
             estimated_rows=1,
             estimated_bytes=8,
             estimated_transfer_ms=1.0,
@@ -237,6 +255,7 @@ class TestEdgeRegionReferences:
             target_backend=region.backend,
             source_representation=region.representation,
             target_representation=region.representation,
+            transform=TransferTransform.SAME_BACKEND_NATIVE,
             estimated_rows=1,
             estimated_bytes=8,
             estimated_transfer_ms=1.0,
@@ -268,6 +287,7 @@ class TestEdgeResidencyMatch:
             target_backend=consumer.backend,
             source_representation=producer.representation,
             target_representation=consumer.representation,
+            transform=TransferTransform.PANDAS_TO_POLARS,
             estimated_rows=1,
             estimated_bytes=8,
             estimated_transfer_ms=1.0,
@@ -287,6 +307,7 @@ class TestEdgeResidencyMatch:
             target_backend=PhysicalBackend.DUCKDB_SQL,  # Wrong: should be POLARS_LONG
             source_representation=producer.representation,
             target_representation=consumer.representation,
+            transform=TransferTransform.PANDAS_TO_POLARS,
             estimated_rows=1,
             estimated_bytes=8,
             estimated_transfer_ms=1.0,
@@ -306,6 +327,7 @@ class TestEdgeResidencyMatch:
             target_backend=consumer.backend,
             source_representation=producer.representation,
             target_representation=Representation.POLARS_WIDE,  # Wrong
+            transform=TransferTransform.PANDAS_TO_POLARS,
             estimated_rows=1,
             estimated_bytes=8,
             estimated_transfer_ms=1.0,
@@ -326,6 +348,7 @@ class TestEdgeResidencyMatch:
             target_backend=consumer.backend,
             source_representation=Representation.ARROW_TABLE,  # Boundary form
             target_representation=consumer.representation,
+            transform=TransferTransform.DUCKDB_TO_ARROW,
             estimated_rows=1,
             estimated_bytes=8,
             estimated_transfer_ms=1.0,
@@ -387,7 +410,7 @@ class TestBackendSwitchCount:
     def test_counts_multiple_backend_switches(self) -> None:
         p1 = _region("p1", PhysicalBackend.PANDAS_NUMPY, Representation.PANDAS_LONG)
         p2 = _region("p2", PhysicalBackend.POLARS_LONG, Representation.POLARS_LAZY_LONG)
-        p3 = _region("p3", PhysicalBackend.DUCKDB_SQL, Representation.DUCKDB_RELATION)
+        p3 = _region("p3", PhysicalBackend.PANDAS_NUMPY, Representation.NUMPY_PANEL)
 
         e1 = _edge("e1", p1, p2)
         e2 = _edge("e2", p2, p3)

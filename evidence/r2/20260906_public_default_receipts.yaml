@@ -1,0 +1,49 @@
+schema_version: 1
+git_sha: f9e7237fafe4112391e62c8874caae7996ce0b11
+timestamp_utc: '2026-09-06T11:49:54Z'
+owner: many_runtime
+scope: [FE-10-safe-default-only, FE-19-sink-receipt-consumer, FE-25-effective-config-helper]
+modified_runtime:
+  - factor_engine/backend/factory.py
+  - factor_engine/runtime/config.py
+  - factor_engine/runtime/streaming_result_sink.py
+  - factor_engine/runtime/effective_execution_config.py
+  - factor_engine/runtime/adaptive_batch_scheduler.py
+modified_docs: [factor_engine/README.md]
+tests:
+  - factor_engine/tests/runtime/test_public_backend_default.py
+  - factor_engine/tests/runtime/test_sink_write_receipt.py
+  - factor_engine/tests/runtime/test_effective_execution_config.py
+  - factor_engine/tests/r39/test_perf_materialize_fast_2026_08.py
+  - factor_engine/tests/r27/test_fast_api_end_to_end.py
+reproductions:
+  - 'Receipt interface: 13 FAIL before implementation (missing strict API); underlying ignored-return bug already identified in audit.'
+  - 'Default backend: 7 FAIL / 5 PASS before change; auto five public modes correctly rejected.'
+  - 'Attempted Polars default: 5 FAIL / 7 PASS; load-column-only Source lacks scan_polars_long behind logical wrapper. Did not weaken source contract. Selected explicit Pandas reference default instead.'
+verification:
+  public_default_and_receipts: '26 passed, 6 existing warnings in 22.82s'
+  public_oracle: 'Actual run/run_many/run_many_iter/run_many_parallel/run_many_stream: 3 tiny factors each, every pandas Series value/index compared. Explicit auto typed-rejected in all five paths. Production gate still rejects.'
+  config_parser: 'Missing backend becomes pandas; explicit auto preserved, never silently replaced.'
+  combined_runtime_command: OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 POLARS_MAX_THREADS=2 .venv/bin/python -m pytest factor_engine/tests/runtime/test_effective_execution_config.py factor_engine/tests/runtime/test_sink_write_receipt.py factor_engine/tests/runtime/test_sink_ownership_audit.py factor_engine/tests/runtime/test_run_many_sink_backpressure.py -q --tb=line --show-capture=no
+  combined_runtime_result: '81 passed in 2.81s'
+  independent_receipt_review: 'PASS by audit_pit_sol; strict paths validated. Legacy arbitrary summary dict is deliberately no longer treated as success.'
+  fast_public_tests: '29 passed, 9 existing warnings in 25.44s: r39 materialize, r27 fast API, minimum CPU width tests'
+  latest_receipt_schema_regression: '81 passed in 2.95s after per-item run_id/inventory evidence became required'
+  final_inventory_fixture_update: 'Synthetic receipt fixtures now include confined path, rows, bytes, SHA256 of fixture bytes, and canonical JSON SHA256 inventory digest. Production validation not weakened.'
+  final_integrated: '44 passed, 9 existing warnings in 25.15s including strict inventory receipts and real fast integration'
+contract:
+  - 'require_write_receipt=True required for formal fast writes. receipt_item_key maps ResultItem.name to custom factor ID.'
+  - 'Only validated COMMITTED/PUBLISHED items increment committed; FAILED remains failed; all unknown/unproven states are in_doubt and fatal. No retry of receipt-bearing partial writes or strict missing-receipt exceptions.'
+  - 'Legacy compatibility limited to callback None/True with require_write_receipt=False.'
+  - 'EffectiveExecutionConfig explicitly resolves hybrid/auto parallel requests to thread; constructor execution_policy takes precedence over environment. No resource authority added.'
+  - 'auto_shard=False and unsupported scheduler/profile/result policies reject. native_fusion=False is applied via an empty explicit capability map, not a falsey fallback to defaults.'
+  - 'On scheduler failure, active Future leases retain callback ownership; already accepted sink outputs are finished, cleanup errors annotate but do not replace the original exception. Caller-owned executors are not shut down.'
+limitations:
+  - 'FE-10 is a safe-default/documentation fix, not auto physical execution implementation. Production certification remains fail-closed.'
+  - 'Pandas default prioritizes existing column-source compatibility; it is not a claim of best backend performance. Explicit Polars requires its native source contract.'
+  - 'Full server capacity, 100k real factor corpus and GPU coverage were not tested in this subtask.'
+  - 'Initial public partial fixture incorrectly relied on batch order/timing; changed to identity-based states and controlled startup of the real writer until both computed items are queued.'
+  - 'Fast numerical/receipt integration fixtures normalize external PSI and memory slope only; real broker hard limits and lease acquisition remain. Separate real-host run returned typed pressure refusal and does not certify throughput.'
+  - 'Explicitly buffered three-item fast batch proves one transaction. Default age flushing does not promise transaction_count < factor_count for every arrival pattern.'
+  - 'Intermediate r39 combined run interrupted: 1 failed, 2 passed, 8 deselected; failure was fixture receiving failed ID before committed ID, not silent receipt replay.'
+not_run: [full_registry_audit, all_backend_parity, full_PIT_poison, Q_null_time_runtime, full_CI, production_certification, real_dataset, 100k_benchmark]

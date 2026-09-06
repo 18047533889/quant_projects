@@ -115,6 +115,7 @@ def load_financial_row_bundle(
     events: pd.DataFrame,
     fields: Iterable[str],
     *,
+    market: str | None = None,
     selector: PeriodSelector = "latest_visible_period",
     decision_time: str = "decision_timestamp",
     columns: PITColumns = PITColumns(),
@@ -152,9 +153,23 @@ def load_financial_row_bundle(
     # tighten a field's registered contract (annual_only ⊂ latest_visible_period).
     from factor_engine.pit_contract import selector_compatible
 
+    normalized_market = str(market).strip().lower() if market is not None else None
+    if production and not normalized_market:
+        raise ValueError(
+            "production financial row bundles require an explicit non-empty market"
+        )
     for name in field_names:
-        contract = FUNDAMENTAL_FIELD_CONTRACTS.get(name)
+        contract = (
+            get_fundamental_contract(normalized_market, name)
+            if normalized_market is not None
+            else FUNDAMENTAL_FIELD_CONTRACTS.get(name)
+        )
         if contract is None:
+            if production:
+                raise ValueError(
+                    "unknown financial field contract in production: "
+                    f"market={normalized_market!r}, field={name!r}"
+                )
             continue
         required = contract.period_selector
         if not selector_compatible(required, selector):

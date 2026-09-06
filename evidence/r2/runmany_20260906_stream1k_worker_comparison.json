@@ -1,0 +1,50 @@
+{
+  "status": "PASS",
+  "scope": "Single public run_many_stream call, synthetic 1000 roots x 8 times x 32 assets; full disk-value and GPU RankIC checks",
+  "common": {"roots": 1000, "wave_size": 256, "assets": 32, "native_fusion": true, "gpu_evaluate": true, "stream_api": true},
+  "source_sha256": {
+    "benchmarks/benchmark_run_many_streaming_20260906.py": "2bbd5b15dd04b985d4c41489115079c8a7e7375d21d7d2f80a71f60b7e5edff5",
+    "factor_engine/runtime/batch_service.py": "4566c6eb8e502d47061a27ff6f1239a1adcb56baebb723b443f3a760bedf0c63",
+    "factor_engine/runtime/engine.py": "7ecb48712ff79cb7bedbd28e0e515552ddc1de8c57d8f8e6671c1b7e4e0da6e7",
+    "factor_engine/planner/read_wave_planner.py": "0e2ca2497a155c9718ea54cd080ffee74b240968dd6f5840983a5f7d782fae79"
+  },
+  "runs": [
+    {"workers_requested": 4, "fe_seconds": 10.97455238609109, "total_seconds_including_gpu": 11.465834764065221, "first_result_seconds": 2.8746841930551454, "peak_rss_including_gpu_bytes": 812544000, "governance_log": "clamped to 3 workers x 8 threads", "report": "evidence/r2/runmany_20260906_stream1k_w4/report.json", "exit_code": 0},
+    {"workers_requested": 16, "fe_seconds": 10.850768723059446, "total_seconds_including_gpu": 11.341352891060524, "first_result_seconds": 2.922159212990664, "peak_rss_including_gpu_bytes": 812208128, "governance_log": "clamped to 15 workers x 2 threads", "report": "evidence/r2/runmany_20260906_stream1k_w16/report.json", "exit_code": 0},
+    {"workers_requested": 32, "fe_seconds": 10.79182390391361, "total_seconds_including_gpu": 11.288441137992777, "first_result_seconds": 2.9222183969104663, "peak_rss_including_gpu_bytes": 813117440, "governance_log": "No clamp warning observed; requested workers alone do not prove actual concurrency", "report": "evidence/r2/runmany_20260906_stream1k_w32/report.json", "exit_code": 0}
+  ],
+  "observed_fastest_workers_requested": 32,
+  "selected_100k_acceptance": {
+    "status": "PASS",
+    "exit_code": 0,
+    "public_entry": "run_many_stream",
+    "roots": 100000,
+    "rows_per_root": 256,
+    "workers_requested": 32,
+    "wave_size": 256,
+    "completed_waves": 391,
+    "fe_seconds": 1089.7942983870162,
+    "gpu_seconds": 3.960669866995886,
+    "total_seconds_including_gpu": 1093.8450666100252,
+    "first_result_seconds": 2.782546740025282,
+    "disk_values_checked": 25600000,
+    "gpu_rank_ic_values_checked": 800000,
+    "gpu_oracle": "All factor and label ranks identical: RankIC=1 for every output",
+    "output_file_bytes": 204800128,
+    "peak_fe_rss_bytes": 650309632,
+    "peak_rss_including_gpu_bytes": 1042632704,
+    "gpu_pool_peak_reserved_bytes": 9244672,
+    "gpu_tiles": 782,
+    "oom_retries": 0,
+    "report": "evidence/r2/runmany_20260906_stream100k_w32/report.json",
+    "source_freeze": "evidence/r2/runmany_20260906_stream100k_w32_control/source_freeze.json",
+    "rss_observations_kib": [
+      {"completed_sink_outputs": 47616, "rss": 516428, "pss_anon": 256164, "pss_file": 154014, "swap": 0},
+      {"completed_sink_outputs": 66048, "rss": 557488, "pss_anon": 260448, "pss_file": 190557, "swap": 0},
+      {"completed_sink_outputs": 89088, "rss": 611732, "pss_anon": 268612, "pss_file": 237454, "swap": 0}
+    ]
+  },
+  "interpretation": "Only one serial run per setting. The fastest is approximately 1.67% faster than workers=4 in FE time, which does not establish a repeatable advantage.",
+  "wave_size_assessment": "Keep the validated 256 for the next large run. Wave1024 has approximately one-quarter as many waves but is unmeasured on this source version and has larger planner working sets; no throughput benefit is asserted.",
+  "limitations": ["No production certification", "No full operator or real-market dataset coverage", "100000-root single-call acceptance covers a small synthetic add/column panel only", "Requested worker counts are subject to governance"]
+}

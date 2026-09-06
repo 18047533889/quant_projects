@@ -1,0 +1,19 @@
+{
+  "status": "INCOMPLETE",
+  "completed": false,
+  "roots_requested": 100000,
+  "wave_size": 1024,
+  "pid": 3907990,
+  "process_alive_at_last_check": false,
+  "remote_exit_code": null,
+  "remote_exit_reason": "UNKNOWN: original SSH output connection was lost, and later process inspection found PID 3907990 absent. No remote traceback or final report was available.",
+  "ssh_transport_error": "Read from remote host: Can't assign requested address; client_loop: send disconnect: Broken pipe; SSH client exited 255",
+  "last_complete_stdout_wave": {"start": 4096, "stop": 5120, "seconds": 73.27693562209606, "rss_bytes": 442191872},
+  "last_observed_live_rss_bytes": 448417792,
+  "last_observed_live_child_process_count": 0,
+  "later_endpoint_sample": {"rows_with_expected_endpoints": 8192, "contiguous_prefix": 8192},
+  "validation_warning": "The 8192 count is only a first/last-value progress sample of the memmap, not an independent all-value verification. No final all-factor disk verification or QE GPU evaluation completed with a report.",
+  "values_npy_warning": "values.npy is a partially populated preallocated output. It is not a verified factor lake; do not use it as completed results.",
+  "report_json_present": false,
+  "automatic_restart": false
+}

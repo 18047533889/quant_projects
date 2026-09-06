@@ -1,0 +1,46 @@
+issues: [FE-34, FE-35, FE-36]
+git_sha: f9e7237fafe4112391e62c8874caae7996ce0b11
+timestamp: '2026-09-06'
+status: SCOPED_FINAL_ARTIFACT_PASS
+owned_files:
+  - .github/workflows/ci.yml
+  - factor_engine/pyproject.toml
+  - factor_engine/MANIFEST.in
+  - factor_engine/runtime/quality/dq_profiles.py
+  - factor_engine/service/app.py
+  - factor_engine/tests/test_audit_package_delivery.py
+  - scripts/verify_junit_execution.py
+before:
+  wheel: /tmp/fe-audit-package-ZQSxL0/before/factor_engine-0.3.1-py3-none-any.whl
+  confirmed_missing: [factor_engine/identity/__init__.py, dq_profiles.yaml, entry_points.txt]
+  public_execution_failure: 'ModuleNotFoundError: data_access; direct dependency added'
+after:
+  package_tests: '8 passed; independent runtime-agent review and root combined rerun'
+  qe_scale_tests: '6 passed in 0.32s; full test_scale_gates.py, no -k filter'
+  junit_execution_guard: 'collected=6 passed=6 failed=0 skipped=0'
+  wheel_import: 'Clean virtualenv without system site packages, outside checkout, python -I'
+  public_oracle: 'FactorEngine(PandasBackend, synthetic Source).run(close + 2), exact Series comparison PASS'
+  resources: 'identity import, us_equity_daily_prod YAML profile and factor-engine-serve --help PASS'
+  sdist_rebuild: 'Rebuilt wheel matches direct wheel identity module, YAML and entry_points.txt bytes'
+  final_build: 'python -m build without explicit format flags builds wheel from a fresh sdist extraction'
+  stale_build_reproduction: 'Direct source wheel contained 21 stale build/lib scripts missing from current source; that artifact is not accepted'
+  final_source_comparison: 'All 1083 packaged Python/YAML files exactly match current source; stale scripts absent'
+  final_clean_install: 'release wheel force-installed in isolated virtualenv; outside-checkout python -I public exact-value run and CLI --help PASS'
+  wheel_sha256: 52556f1c5258be8df7b27290e7a69317c0fb7deb6da8d186284dbd8257434657
+  sdist_sha256: b74dd79ee0ab4924be3738b753dd9a1b3f9fb64faea39595b4126bd7f4fab0f6
+environment:
+  venv: /tmp/fe-audit-package-ZQSxL0/clean-venv
+  python: '3.12'
+  pandas: '2.3.3'
+  numpy: '2.2.6'
+  data_access: '0.10.2 (locally built wheel installed with dependencies)'
+artifact_boundary: 'Only /tmp/fe-audit-package-ZQSxL0/release artifacts are accepted. Earlier before/after/final/clean-final artifacts remain diagnostic or superseded, not release certificates.'
+scale_boundary: 'QE scales rows, not number of FE factors. FE execution/persistence uses a separate exact-oracle synthetic benchmark; neither certifies generation publication.'
+migration: 'Declare data-access>=0.10.2; required profile absence now raises, never silently disables DQ. No production data migration performed.'
+not_run:
+  - GitHub Actions execution and branch protection configuration
+  - Minimum dependency version matrix
+  - Python 3.10 minimum supported interpreter matrix; add_note fallback inspected but not executed on Python 3.10
+  - Entire frozen-tree FE 100K certification (scoped synthetic 100K passed while unrelated final hardening continued)
+  - Production generation publication certification
+  - Full registry, backend parity, ABI, Q runtime and production gates

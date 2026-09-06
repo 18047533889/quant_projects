@@ -17,6 +17,7 @@ except ImportError:  # pragma: no cover
 
 from factor_engine.cleaned_operators.base_polars import OperatorMetadata, SeriesOperator, register_operator
 from factor_engine.cleaned_operators.base import ParamRole, ParamSpec
+from factor_engine.backend.contracts import ExecutionKind, PhysicalImplementationSpec
 
 _SKIP = frozenset({"date", "stock_code"})
 _SRC = "factor_dsl_polars_native"
@@ -101,6 +102,37 @@ def _group_long_transform(
 # ---------------------------------------------------------------------------
 # Elementwise / time-series (column-wise expressions)
 # ---------------------------------------------------------------------------
+
+
+@register_operator(
+    name="signed_log", category="signal", business_category="technical_signal",
+    canonical="signed_log", source=_SRC, backend="polars",
+)
+class SignedLogNative(SeriesOperator):
+    """Canonical signed logarithm without a pandas materialization round-trip."""
+
+    _physical_spec = PhysicalImplementationSpec(
+        canonical="signed_log", backend="polars",
+        execution_kind=ExecutionKind.POLARS_NATIVE_EXPR,
+        materializes_full_panel=True,
+        supports_nulls=True, supports_nan=True, supports_inf=True,
+        implementation_source_hash="common.polars_daily_native:SignedLogNative:v1",
+        emitter_identity="polars.sign_abs_add_log_multiply:v1",
+        parameter_domain_hash="signed_log:x:float_panel:v1",
+        semantic_contract_hash="sign(x)*log(abs(x)+1e-10):v1",
+        notes="Eager panel API; no lazy/streaming or production parity certification claimed.",
+    )
+    metadata = OperatorMetadata(
+        name="signed_log", category="signal",
+        description="sign(x) * log(abs(x) + 1e-10)",
+        param_names=["x"], return_type="series", tags=["signal", "polars", "native"],
+    )
+
+    def _calculate_series(self, x: pl.DataFrame, **kwargs) -> pl.DataFrame:
+        return x.with_columns([
+            (pl.col(c).sign() * (pl.col(c).abs() + 1e-10).log()).alias(c)
+            for c in _numeric_cols(x)
+        ])
 
 
 @register_operator(

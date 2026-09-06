@@ -243,6 +243,9 @@ def snapshot_backend_path(runtime: dict[str, Any] | None) -> dict[str, Any]:
         "polars_long_other_ops",
         "polars_long_columns",
         "sql_subtrees",
+        "param_domain_membership_skipped",
+        "parameter_certification_degradation_reason",
+        "parameter_certification_degradation_count",
     ):
         val = r.get(key)
         if val:

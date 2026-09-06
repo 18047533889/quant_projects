@@ -45,11 +45,19 @@ source = build_data_source({
     "start_date": "2024-01-01",
     "end_date": "2024-03-31",
 })
-engine = FactorEngine(backend=build_backend("auto"), data_source=source)
+engine = FactorEngine(backend=build_backend("pandas"), data_source=source, run_mode="research")
 factor = Factor(name="mom20_rank", expr=rank(ts_mean(col("close"), 20)))
 out = engine.run(factor)
 print(out["result"].head())   # MultiIndex Series (TradeDate, Symbol)
 ```
+
+公共入口和配置的默认后端为 `pandas` 参考路径，数据源须支持列读取契约。
+需要原生性能时可显式选择 `polars`，但数据源必须满足其长表扫描契约；
+仅提供 `load_column` 的数据源不可假定兼容 Polars。
+这只修复默认入口的可用性，不代表全部算子已认证，也不改变 production 的
+PIT、DQ、物理计划及后端认证门禁。显式 `auto`/`hybrid` 不会静默 fallback：
+当前公共 `run`、`run_many`、`run_many_iter`、`run_many_parallel`、
+`run_many_stream` 尚未接通 auto 物理执行，会抛 `PhysicalPlanRequiredError`。
 
 或 YAML 一键跑：`FactorEngine.run_from_config("examples/config_driven_factor.yaml")`。
 或 HTTP 服务：`pip install -e ".[service]"` 后 `factor-engine-serve --port 8088`。
@@ -84,7 +92,7 @@ print(out["result"].head())   # MultiIndex Series (TradeDate, Symbol)
 ```
 Factor(expr) → expr AST → ir.Analyzer → planner（Lowerer + Optimizer + CSE）
     → planning（多后端物理 region 切分）→ backend.execute
-    （auto：SQL 下推 → Polars → Pandas）→ 因子值 → materialize → factor_lake
+    （已准入区域按固定后端执行；公共默认 Pandas 参考路径）→ 因子值 → materialize → factor_lake
 ```
 
 | 层 | 目录 | 作用 |
@@ -119,7 +127,7 @@ Factor(expr) → expr AST → ir.Analyzer → planner（Lowerer + Optimizer + CS
 | `auto_long` / `hybrid_long` | `HybridLongBackend` | DuckDB long 物化 + 原生 Polars long |
 | `duckdb_sql` / `sql_pushdown` / `duckdb_pushdown` / `sql` | `DuckDBPushdownBackend` | SQL 子树下推 |
 | `clickhouse_sql` / `ch_sql` / `clickhouse_pushdown` | `ClickHousePushdownBackend` | 同上 CH 方言 |
-| `auto` / `hybrid` | `HybridBackend` | SQL 可编译子树 + Polars/Pandas fallback（默认） |
+| `auto` / `hybrid` | `HybridBackend` | physical-only：仅供已准入 PhysicalRegionPlan 集成；公共 run 系列尚不支持，非默认 |
 | `debug` | `DebugBackend` | 只打印计划不读数据 |
 | `q_kdb` / `q` | `QBackend` | Q/KDB 物理执行 |
 

@@ -39,6 +39,7 @@ into the bootstrap sequence in ``cleaned_operators/__init__.py``.
 from __future__ import annotations
 
 import json
+import hashlib
 import re
 from pathlib import Path
 
@@ -92,7 +93,8 @@ def _minute_shape_from_artifact() -> frozenset[str]:
 
     A canonical is admitted when its artifact record has status ``"certified"``
     (i.e. ``polars is True`` AND ``duckdb_sql is True``).  A missing / corrupt
-    artifact yields an empty set (no fabricated evidence).
+    artifact yields an empty set (no fabricated evidence). The implementation,
+    parity test, and fixture helper hashes must match their current files.
     """
     path = FE_ROOT.parent / "evidence" / "intraday_minute_parity.json"
     if not path.is_file():
@@ -101,6 +103,22 @@ def _minute_shape_from_artifact() -> frozenset[str]:
         data = json.loads(path.read_text(encoding="utf-8"))
     except (json.JSONDecodeError, OSError):
         return frozenset()
+    if not isinstance(data, dict) or data.get("schema_version") != "intraday_minute_parity.v1":
+        return frozenset()
+    # These bindings are emitted by certify_intraday_parity.py. A historical
+    # green result is not evidence for a changed implementation or test oracle.
+    bindings = {
+        "operator_source_hash": FE_ROOT / "cleaned_operators/microstructure/intraday_agg.py",
+        "test_file_hash": FE_ROOT / "tests/backend_parity/test_intraday_minute_parity.py",
+        "helper_file_hash": FE_ROOT / "tests/backend_parity/intraday_minute_parity.py",
+    }
+    for key, source in bindings.items():
+        try:
+            actual = hashlib.sha256(source.read_bytes()).hexdigest()
+        except OSError:
+            return frozenset()
+        if data.get(key) != actual:
+            return frozenset()
     backends = data.get("backends")
     if not isinstance(backends, dict):
         return frozenset()

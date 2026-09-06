@@ -1,0 +1,17 @@
+issue_id: FE-19
+source_commit: f9e7237fafe4112391e62c8874caae7996ce0b11
+paths_and_symbols:
+  - factor_engine/runtime/materialize_batch.py
+  - factor_engine/storage/materialize/lake_publish.py
+  - factor_engine/storage/catalog.py
+  - factor_engine/tests/audit/test_materialize_publish_receipts.py
+trigger_and_affected_paths: "Batch materialization or staging-to-published promotion under FE-19 conditions."
+regression_before_fix: ".venv/bin/python -m pytest -q factor_engine/tests/audit/test_materialize_publish_receipts.py => 6 failed"
+behavior_after_fix: "Dedicated receipt/publish suite => 37 passed; combined PIT plus receipt/publish audit suites => 54 passed. COMMITTED/PUBLISHED receipts require typed run and byte-inventory evidence, validate every inventory member, and recompute the inventory digest; malformed/coercible receipt IDs and keys fail closed. Writer exceptions are IN_DOUBT unless absence of side effects is explicitly provable, write plus inventory capture share the factor-root mutation lock, and zero-row runs cannot relabel pre-existing bytes as a new commit."
+public_entrypoint_test: "Public receipt/context/publish-watermark functions in factor_engine/tests/audit/test_materialize_publish_receipts.py"
+source_snapshot_and_config_digest: "git=f9e7237fafe4112391e62c8874caae7996ce0b11; synthetic temporary filesystem only"
+package_artifact_digest: NOT_RUN
+migration_or_invalidation: "Legacy unbound staging must not publish. Catalog migration adds nullable generation-aware fields without rewriting historical rows; legacy rows remain readable but are not reinterpreted as complete publication evidence."
+not_run:
+  - broader r39 suite: UNRESOLVED scheduler admission hang/failure outside owned publication paths
+reviewer_verdict: FIXED_PENDING_INTEGRATION

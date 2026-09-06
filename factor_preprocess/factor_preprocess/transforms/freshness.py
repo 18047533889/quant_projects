@@ -46,31 +46,14 @@ def days_since_update(
     if not values.groupby(asset_col, sort=False)[time_col].is_monotonic_increasing.all():
         raise ValueError("DataFrame must be sorted by [asset_col, time_col]")
 
-    def compute_days_since(group: pd.DataFrame) -> pd.Series:
-        """Compute days since last update for a single asset."""
-        dates = group[time_col].values
-        vals = group[value_col].values
-
-        # Find last valid date for each observation
-        result = np.full(len(group), np.nan, dtype=np.float64)
-        current_valid_date = None
-
-        for i in range(len(group)):
-            if pd.notna(vals[i]):
-                current_valid_date = dates[i]
-                result[i] = 0.0
-            else:
-                if current_valid_date is not None:
-                    days_diff = (dates[i] - current_valid_date) / np.timedelta64(1, 'D')
-                    result[i] = float(days_diff)
-                else:
-                    result[i] = np.nan
-
-        return pd.Series(result, index=group.index)
-
-    result = values.groupby(asset_col, sort=False, group_keys=False)[value_col].transform(
-        lambda x: compute_days_since(values.loc[x.index])
-    )
+    # Group the observation timestamps directly. Looking up a group's index
+    # with .loc can pull rows from other assets when labels are duplicated.
+    dates = pd.to_datetime(values[time_col])
+    last_valid = dates.where(values[value_col].notna()).groupby(
+        values[asset_col], sort=False
+    ).ffill()
+    result = (dates - last_valid) / pd.Timedelta(days=1)
+    result.name = value_col
     return result
 
 

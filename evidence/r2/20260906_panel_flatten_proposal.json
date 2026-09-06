@@ -1,0 +1,17 @@
+{
+  "fixtures": 12,
+  "parity": true,
+  "shared_memory": false,
+  "iterations": 1000,
+  "seconds": {
+    "pandas_future_stack": 4.739317828905769,
+    "float64_flatten_copy": 0.2690425260225311
+  },
+  "scope": "prototype only; no production file edited",
+  "guards_required": [
+    "float64 homogeneous",
+    "nonempty",
+    "single-level unique index/columns"
+  ],
+  "limitations": "MultiIndex axes, duplicate axes, extension/mixed dtypes remain on pandas stack. No zero-copy because returned results must not alias cached panels."
+}

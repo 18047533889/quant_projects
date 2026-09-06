@@ -16,6 +16,8 @@ DataAccess 侧异常通过 :func:`is_data_access_governance_failure` 映射进�
 """
 from __future__ import annotations
 
+import errno
+
 
 class ResourceGovernanceError(RuntimeError):
     """资源/执行治理失败基类：默认 fail-closed，不允许跨后端 fallback。"""
@@ -37,6 +39,10 @@ class CompilationUnsupported(ResourceGovernanceError):
 
 class ResourceBudgetExceeded(ResourceGovernanceError):
     """内存 / CPU / 结果字节预算超限。禁止 fallback。"""
+
+
+class CPUWidthUnavailable(ResourceBudgetExceeded):
+    """The indivisible CPU width cannot run under current broker policy."""
 
 
 class ResourceContractApplyError(ResourceGovernanceError):
@@ -104,10 +110,42 @@ def is_oom_error(exc: BaseException) -> bool:
     重试（R38-P0-006）。
     """
     name = type(exc).__name__.lower()
-    if name == "memoryerror" or isinstance(exc, MemoryError):
+    if isinstance(exc, (MemoryError, OutOfMemory)) or (
+        isinstance(exc, OSError) and exc.errno == errno.ENOMEM
+    ):
         return True
     msg = str(exc).lower()
     return any(m in msg for m in OOM_MARKERS)
+
+
+def typed_retry_kind(exc: BaseException) -> str | None:
+    """Shared typed/errno precedence for compute and writer retry policy.
+
+    None means no typed determination, not permission to replay a write.
+    """
+    from factor_engine.runtime import exceptions as legacy
+
+    if isinstance(exc, (MemoryError, OutOfMemory, legacy.ResourceUnderpredictionError)):
+        return "oom"
+    if isinstance(exc, OSError) and exc.errno is not None:
+        if exc.errno == errno.ENOMEM:
+            return "oom"
+        if exc.errno in {errno.ECONNRESET, errno.ECONNABORTED, errno.ECONNREFUSED,
+                         errno.ETIMEDOUT, errno.EHOSTUNREACH, errno.ENETUNREACH,
+                         errno.EAGAIN, errno.EINTR}:
+            return "transient"
+        # Unknown OS errors are not known transient errors.
+        return "permanent"
+    if isinstance(exc, (TransientIOError, legacy.TransientIOError)):
+        return "transient"
+    if isinstance(exc, (ResourceGovernanceError, legacy.FactorEngineError)):
+        return "permanent"
+    if isinstance(exc, TimeoutError):
+        msg = str(exc).lower()
+        if any(marker in msg for marker in ("query", "execution", "compute", "complexity")):
+            return "permanent"
+        return "transient"
+    return None
 
 
 def to_oom_replan_required(

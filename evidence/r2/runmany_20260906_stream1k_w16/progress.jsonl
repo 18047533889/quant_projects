@@ -1,0 +1,4 @@
+{"completed_sink_outputs": 256, "seconds": 3.0169114799937233, "rss_bytes": 417427456}
+{"completed_sink_outputs": 512, "seconds": 5.77045056107454, "rss_bytes": 419745792}
+{"completed_sink_outputs": 768, "seconds": 8.379464364028536, "rss_bytes": 420339712}
+{"completed_sink_outputs": 1000, "seconds": 10.797805717098527, "rss_bytes": 420708352}

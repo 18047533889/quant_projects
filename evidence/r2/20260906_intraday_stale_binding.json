@@ -1,0 +1,81 @@
+{
+  "timestamp": "2026-09-06T10:18:23.064962+00:00",
+  "git_sha": "f9e7237fafe4112391e62c8874caae7996ce0b11",
+  "bindings": {
+    "operator_source_hash": {
+      "path": "factor_engine/cleaned_operators/microstructure/intraday_agg.py",
+      "recorded": "149f7b4069f1dcb99ec5bf75cf099a92ac402c3d3f86ceb774367cc1758c8e7c",
+      "current": "99b23e4646f6891deb3fa412d988fdff37c072ae490fd6d08b2da67558e55d07"
+    },
+    "test_file_hash": {
+      "path": "factor_engine/tests/backend_parity/test_intraday_minute_parity.py",
+      "recorded": "3f7c5b5db7cda19c024fe616ac6c06604e793d6af084402d9ac708a6f7738770",
+      "current": "1839f48552cf96690f79850701d7c082eaff11850d2ceaa6a752cde2b1e93711"
+    },
+    "helper_file_hash": {
+      "path": "factor_engine/tests/backend_parity/intraday_minute_parity.py",
+      "recorded": "cc5ef52d02eaec5fc3499998efbe74c356bd6383b494b1eface5d1188f2d7f4b",
+      "current": "cc5ef52d02eaec5fc3499998efbe74c356bd6383b494b1eface5d1188f2d7f4b"
+    }
+  },
+  "minute_shape_admitted": [],
+  "affected": [
+    {
+      "canonical": "intra_amihud",
+      "allow_in_production": false
+    },
+    {
+      "canonical": "intra_bipower_variation",
+      "allow_in_production": false
+    },
+    {
+      "canonical": "intra_concentration",
+      "allow_in_production": false
+    },
+    {
+      "canonical": "intra_entropy",
+      "allow_in_production": false
+    },
+    {
+      "canonical": "intra_extreme_bar_return",
+      "allow_in_production": false
+    },
+    {
+      "canonical": "intra_jump_ratio",
+      "allow_in_production": false
+    },
+    {
+      "canonical": "intra_kyle_lambda_proxy",
+      "allow_in_production": false
+    },
+    {
+      "canonical": "intra_path_efficiency",
+      "allow_in_production": false
+    },
+    {
+      "canonical": "intra_realized_semivariance",
+      "allow_in_production": false
+    },
+    {
+      "canonical": "intra_realized_variance",
+      "allow_in_production": false
+    },
+    {
+      "canonical": "intra_segment_return",
+      "allow_in_production": false
+    },
+    {
+      "canonical": "intra_segment_volume_share",
+      "allow_in_production": false
+    },
+    {
+      "canonical": "intra_signed_imbalance_proxy",
+      "allow_in_production": false
+    },
+    {
+      "canonical": "intra_vwap_above_ratio",
+      "allow_in_production": false
+    }
+  ],
+  "note": "No old artifact was rewritten or recertified."
+}

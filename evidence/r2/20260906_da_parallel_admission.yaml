@@ -1,0 +1,29 @@
+git_sha: f9e7237fafe4112391e62c8874caae7996ce0b11
+timestamp: '2026-09-06T10:00:00Z'
+files:
+  - data_access/runtime/resource_governor.py
+  - data_access/tests/unit/test_governor_parallel_admission.py
+fix: Recheck admission invariants after unlocked host lease callback, under commit lock.
+reproduction: All six deterministic barrier tests failed before the change (two admissions instead of one).
+tests:
+  targeted_and_related:
+    status: PASS
+    count: 26
+    command: .venv/bin/python -m pytest -q data_access/tests/unit/test_governor_parallel_admission.py data_access/tests/unit/test_r38_da_bridge_2026_08.py data_access/tests/unit/test_r32_p0_001_020_fixes.py
+  coverage:
+    - Duplicate query ids cannot overwrite reservations concurrently.
+    - Global active-query and per-principal limits hold at concurrent commit.
+    - Rejected host leases are released outside the governor lock.
+    - Host None/local fallback honors the same checks.
+  independent_review: PASS (many_runtime agent)
+  full_compile_import: NOT_RUN
+  registry_duplicate_authority: NOT_RUN
+  abi_placeholder: NOT_RUN
+  full_backend_parity: NOT_RUN
+  pit_poison: NOT_RUN
+  q_null_time_runtime: NOT_RUN
+  ci: NOT_RUN
+  production_gate: NOT_RUN
+limitations:
+  - Process-level race fix, not a replacement for host-wide memory coordination.
+  - No real-data workload or production OOM-free guarantee claimed.

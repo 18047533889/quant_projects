@@ -41,6 +41,11 @@ def _unary_calc(expr_fn: Callable):
     return calc
 
 
+def _finite_result(expr: pl.Expr) -> pl.Expr:
+    """Match reference operators that replace non-finite results with NaN."""
+    return pl.when(expr.is_finite()).then(expr).otherwise(None)
+
+
 def _register_unary(
     canonical: str,
     *,
@@ -134,8 +139,8 @@ _UNARY: list[tuple[str, str, Callable]] = [
     ("sinh", "sinh", lambda c: c.sinh()),
     ("tan", "tan", lambda c: c.tan()),
     ("log2", "log2", lambda c: c.log(2.0)),
-    ("log_abs", "log_abs", lambda c: c.abs().log()),
-    ("exp_neg", "exp_neg", lambda c: (-c).exp()),
+    ("log_abs", "log_abs", lambda c: _finite_result(c.abs().log())),
+    ("exp_neg", "exp_neg", lambda c: _finite_result((-c).exp())),
     ("reciprocal", "reciprocal", lambda c: 1.0 / c),
     ("cube", "cube", lambda c: c.pow(3)),
     ("identity", "identity", lambda c: c),

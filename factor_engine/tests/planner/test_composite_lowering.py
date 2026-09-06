@@ -87,7 +87,10 @@ def test_composite_dual_backend_capable_mom():
     from factor_engine.cleaned_operators import load_all
 
     load_all()
-    assert composite_dual_backend_capable("MOM") is True
+    # MOM lowers to ts_delta, but capability is evidence-backed: the current
+    # primitive evidence does not certify ts_delta for both production backends.
+    assert lowered_primitives("MOM") == ("ts_delta",)
+    assert composite_dual_backend_capable("MOM") is False
 
 
 def test_collect_plan_ops_after_lowering():

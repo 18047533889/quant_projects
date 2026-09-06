@@ -1,0 +1,56 @@
+{
+  "status": "PASS",
+  "roots": 1000,
+  "rows_per_root": 256,
+  "workers": 4,
+  "wave_size": 256,
+  "native_fusion": true,
+  "seconds": 17.101168697001413,
+  "first_result_s": 4.444444391992874,
+  "baseline_rss_bytes": 379445248,
+  "peak_rss_bytes": 420253696,
+  "output_bytes": 2048128,
+  "waves": [
+    {
+      "start": 0,
+      "stop": 256,
+      "seconds": 4.590770513983443,
+      "rss_bytes": 415764480
+    },
+    {
+      "start": 256,
+      "stop": 512,
+      "seconds": 4.332113946089521,
+      "rss_bytes": 418004992
+    },
+    {
+      "start": 512,
+      "stop": 768,
+      "seconds": 4.105404503992759,
+      "rss_bytes": 419770368
+    },
+    {
+      "start": 768,
+      "stop": 1000,
+      "seconds": 4.056390940910205,
+      "rss_bytes": 420229120
+    }
+  ],
+  "limitations": "Synthetic add/column expressions, tiny panel, research mode; not full operators, market history or production certification.",
+  "gpu_seconds": 0.40523208398371935,
+  "gpu_metadata": {
+    "backend_requested": "cuda",
+    "backend_used": "cuda",
+    "gpu_device": 0,
+    "precision": "gpu_mixed",
+    "factor_tile_size": 128,
+    "oom_retries": 0,
+    "h2d_bytes": 2050048,
+    "d2h_bytes": 64000,
+    "peak_vram": 9244672,
+    "vram_budget_bytes": 31572688896.0,
+    "intermediate_reuse_count": 0,
+    "factor_tiles_processed": 8
+  },
+  "gpu_oracle": "All factor and label ranks identical: RankIC=1, every output checked"
+}

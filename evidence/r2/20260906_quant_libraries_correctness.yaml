@@ -1,0 +1,52 @@
+scope: quant_evaluator_factor_optimizer_factor_preprocess_factor_assets
+host: qs-server-c
+repository: /home/sunhaiwei/quant_projects
+git_sha: f9e7237fafe4112391e62c8874caae7996ce0b11
+date: '2026-09-06'
+working_tree: pre-existing uncommitted changes preserved; no commit or push
+source_files:
+  - quant_evaluator/metrics/portfolio_stats.py
+  - quant_evaluator/metrics/risk/drawdown_analysis.py
+  - quant_evaluator/kernels/gpu/drawdown.py
+  - factor_optimizer/factor_optimizer/search/pareto.py
+  - factor_preprocess/factor_preprocess/transforms/freshness.py
+  - factor_assets/library/promotion_gate.py
+regression_tests:
+  - quant_evaluator/tests/test_review_regressions.py
+  - factor_optimizer/tests/search/test_review_regressions.py
+  - factor_preprocess/tests/transforms/test_review_regressions.py
+  - factor_assets/tests/test_review_regressions.py
+fixes:
+  - CPU and GPU drawdown high-water marks include initial unit capital.
+  - Drawdown peak index -1 identifies initial capital; period scans never index from -1.
+  - Pareto dominance queries compare actual objectives without an ID-only cache.
+  - Pareto archive snapshots deep-copy points, nested metadata and objective names.
+  - Freshness uses asset-grouped timestamp forward filling, preserving duplicate row indices.
+  - Soft duplicate REVIEW cannot override hard promotion rejection reasons.
+  - Candidate mapping deserialization validates maturity without truthiness coercion.
+  - Explicit invalid return-basis values are not replaced by a valid default.
+reproduction:
+  initial_regressions: 17 failed and 2 passed before source changes
+  drawdown_period_followup: 2 failed before period-index fix
+  gpu_parity_followup: existing GPU parity test failed after CPU correction, exposing the same GPU bug
+verification:
+  package_command: 'cd <package> && OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 POLARS_MAX_THREADS=2 ../.venv/bin/python -m pytest tests -q -m "not slow and not benchmark and not integration" --tb=short'
+  factor_optimizer: 779 passed
+  factor_optimizer_final_pareto_followup: 33 passed after removing unused cache
+  factor_preprocess: 269 passed; 1 expected failure
+  factor_assets: 1263 passed; 43 skipped
+  quant_evaluator: 638 passed; 2 skipped
+  quant_evaluator_gpu_and_regressions: 18 passed
+  cross_package: 37 passed
+  cross_package_command: '.venv/bin/python -m pytest integration_tests/test_contract_roundtrip_xpkg.py integration_tests/test_a_share_pit_unit_contract.py -q --tb=short'
+  diff_check: PASS
+  syntax_compile_six_modified_modules: PASS
+  uploaded_source_sha256_match: PASS
+  total_package_and_cross_package_passes: 2986
+  new_regression_cases: 22
+limitations:
+  - Combined four-package collection had 57 import-path errors; package suites were run through their independent supported entrypoints.
+  - Real/full datasets, production acceptance and 100k-factor benchmarks NOT_RUN.
+  - Wheel build/reinstallation and external CI NOT_RUN; edits apply to the source working tree.
+  - Existing skipped and expected-failure tests are not counted as passing.
+  - This bounded audit does not certify the libraries as free of all defects.

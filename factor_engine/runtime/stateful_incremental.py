@@ -169,7 +169,16 @@ def _source_snapshot_scope(source: Any, *, mode: str = "research") -> str:
         probe = copy.copy(source)
         probe.start_date = None
         probe.end_date = None
-        return compute_data_scope(probe)
+        scope = compute_data_scope(probe)
+        if scope.startswith("ephemeral:"):
+            if str(mode).strip().lower() == "production":
+                raise SourceSnapshotIdentityUnavailableError(
+                    "production source has no stable snapshot identity"
+                )
+            # The temporary probe dies after this call; its id can immediately
+            # be reused. Anonymous sources must never reuse a checkpoint scope.
+            return f"ephemeral:{uuid.uuid4().hex}"
+        return scope
     except Exception as exc:
         if str(mode).strip().lower() == "production":
             raise SourceSnapshotIdentityUnavailableError(
@@ -199,13 +208,18 @@ def _boundary_timeline(
       返回 ``[]`` 让审计只看 as_of 检查就放行，这正是 #245 要堵的洞）。
     """
     try:
-        import copy
-
-        probe = copy.copy(source)
-        if hasattr(probe, "start_date"):
-            probe.start_date = since
-        if hasattr(probe, "end_date"):
-            probe.end_date = start
+        execution_spec=getattr(source,"execution_spec",None)
+        if callable(execution_spec):
+            from factor_engine.storage.factory import build_data_source
+            spec=dict(execution_spec())
+            spec["start_date"]=str(since)
+            spec["end_date"]=str(start)
+            probe=build_data_source(spec)
+        else:
+            # Wrapping or shallow-copying the current source cannot widen an
+            # existing window and may retain warmed column caches. Without a
+            # canonical rebuild contract the boundary is unprovable.
+            raise RuntimeError("source has no canonical execution_spec for a fresh boundary session")
         series = probe.load_column(column_name)
         idx = series.index
         if isinstance(idx, pd.MultiIndex):

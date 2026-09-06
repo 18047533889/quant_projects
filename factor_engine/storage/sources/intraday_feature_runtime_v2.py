@@ -328,6 +328,23 @@ def _session_gate_report(source: Any) -> Any:  # noqa: ANN201
     return None
 
 
+def _session_local_minute_frame(frame, dataset, *, naive_utc=False):
+    """Apply the registered exchange timezone before wall-clock filtering."""
+    from data_access.read.session_calendar import get_market_session
+    frame = frame.copy()
+    timestamps = pd.to_datetime(frame["timestamp"])
+    if timestamps.dt.tz is None and naive_utc:
+        timestamps = timestamps.dt.tz_localize("UTC")
+    if timestamps.dt.tz is not None:
+        market = "ashare" if dataset == "ashare_stock_minute" else dataset.split("_", 1)[0]
+        session = get_market_session(market)
+        if session is None:
+            raise ValueError(f"exchange timezone contract missing for {dataset}")
+        timestamps = timestamps.dt.tz_convert(session.timezone).dt.tz_localize(None)
+    frame["timestamp"] = timestamps
+    return frame
+
+
 def _grouped_bars(
     source: Any,
     dataset: str,
@@ -365,7 +382,15 @@ def _grouped_bars(
         # base._wide_frame does ONE physical multi-column scan for the whole
         # wide frame (R61 P0 #61) — never a per-column load_column loop.
         frame_cache[frame_key] = base._wide_frame(source_child)
-    frame = frame_cache[frame_key].copy()
+    # Arrow's FE adapter intentionally strips tz-aware timestamps with
+    # tz_convert(None): its naive output is UTC, not exchange-local time.
+    from .data_access_source import DataAccessSource, _get_store
+    naive_utc = False
+    if isinstance(source_child, DataAccessSource):
+        contract = _get_store().get_dataset(dataset)
+        naive_utc = str(contract.schema.get(contract.time_column, "")).lower() in {
+            "timestamptz", "timestamp with time zone"}
+    frame = _session_local_minute_frame(frame_cache[frame_key], dataset, naive_utc=naive_utc)
     frame = base._hhmm_filter(frame, session_open, cutoff)
     frame["date"] = frame["timestamp"].dt.normalize()
 
@@ -467,10 +492,67 @@ def load_intraday_feature(source: Any, params: dict[str, Any]):
     feature = str(params.get("feature") or "").strip()
     if not feature:
         raise ValueError("intraday_feature requires feature")
+    if feature in _FE_OPERATOR_FEATURES:
+        # These operators are strictly session-local. Bound minute memory to
+        # seven calendar days even when a daily factor requests years of warmup.
+        from .data_access_source import DataAccessSource
+        anchor = source._anchor_index()
+        dates = pd.DatetimeIndex(anchor.get_level_values(0))
+        if not len(dates):
+            return pd.Series(dtype=float, index=anchor)
+        pieces = []
+        cursor, end = dates.min().normalize(), dates.max().normalize()
+        while cursor <= end:
+            stop = min(end, cursor + pd.Timedelta(days=6))
+            inner = DataAccessSource(dataset="ashare_stock_daily_adj",
+                                     start_date=str(cursor.date()), end_date=str(stop.date()),
+                                     instrument_filter=getattr(source.inner, "instrument_filter", None),
+                                     run_mode=getattr(source.inner, "run_mode", None),
+                                     production=getattr(source.inner, "production", None),
+                                     strict_unknown_fields=getattr(source.inner, "strict_unknown_fields", None),
+                                     enforce_mining_gate=bool(getattr(source.inner, "enforce_mining_gate", False)),
+                                     pit_enforce=bool(getattr(source.inner, "pit_enforce", False)))
+            child = type(source)(inner)
+            pieces.append(compute_many(child, [feature], params)[feature])
+            for dependency in child.collect_source_dependencies():
+                row = dict(dependency)
+                key = row.pop("key")
+                source._record_dependency(f"{key}:{cursor.date()}", **row)
+            cursor = stop + pd.Timedelta(days=1)
+        return pd.concat(pieces).reindex(anchor)
     # P0#5: single-feature path delegates to the single-scan compute_many so
     # both entry points share one grouped-bars pass and one shared-intermediate
     # computation.  Numerically identical to the previous per-feature loop.
     return compute_many(source, [feature], params)[feature]
+
+
+_FE_OPERATOR_FEATURES = {"fe_activity_volume", "fe_activity_amount",
+                         "fe_close_participation", "fe_bvc_imbalance"}
+
+
+def _compute_registered_session_feature(feature, bars, params, calendar, adjustment):
+    """Delegate arithmetic to existing FE operators on adjusted 1-minute bars."""
+    if not np.isfinite(adjustment) or adjustment <= 0:
+        return np.nan
+    index = pd.DatetimeIndex(bars["timestamp"])
+    def panel(name):
+        values = bars[name].to_numpy(dtype=float)
+        if name in {"open", "high", "low", "close"}: values = values * adjustment
+        elif name == "volume": values = values / adjustment
+        return pd.DataFrame({"asset": values}, index=index)
+    if feature.startswith("fe_activity_"):
+        from factor_engine.cleaned_operators.intraday_activity_duration import IntradayActivityDurationCurvature
+        result = IntradayActivityDurationCurvature()._calculate_series(
+            panel(feature.removeprefix("fe_activity_")), buckets=params.get("buckets", 10), calendar=calendar)
+    elif feature == "fe_close_participation":
+        from factor_engine.cleaned_operators.intraday.time_structure_v2 import IntraCloseParticipation
+        result = IntraCloseParticipation()._calculate_series(panel("volume"), tail_minutes=params.get("tail_minutes", 30))
+    elif feature == "fe_bvc_imbalance":
+        from factor_engine.cleaned_operators.microstructure.flow_impact import IntradayBvcImbalance
+        result = IntradayBvcImbalance()._calculate_series(panel("close"), panel("volume"), scale_window=params.get("scale_window", 20))
+    else:
+        raise ValueError(f"unknown registered session feature: {feature}")
+    return float(result.iloc[0, 0]) if len(result) else np.nan
 
 
 def compute_many(
@@ -553,6 +635,9 @@ def compute_many(
             out[f] = base._profile_scores(grouped, f, history_days)
 
     if non_profile:
+        registered = any(f in _FE_OPERATOR_FEATURES for f in non_profile)
+        adjustments = source.inner.load_column("Factor") if registered else None
+        calendar = _session_calendar(dataset, session_open, session_close, convention)
         previous_close: dict[str, float] = {}
         for date, instrument, bars in grouped:
             shared = base._calc_shared(bars)
@@ -563,6 +648,11 @@ def compute_many(
             }
             prev = previous_close.get(instrument, np.nan)
             for f in non_profile:
+                if f in _FE_OPERATOR_FEATURES:
+                    adjustment = adjustments.get((date, instrument), np.nan)
+                    out[f][(date, instrument)] = _compute_registered_session_feature(
+                        f, bars, params, calendar, adjustment)
+                    continue
                 out[f][(date, instrument)] = base._calc_from_shared(
                     f, shared, bars, calculation_params, prev_close=prev
                 )

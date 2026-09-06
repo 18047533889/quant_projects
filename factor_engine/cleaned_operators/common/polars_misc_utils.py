@@ -59,7 +59,8 @@ def _safe_div(num: pl.Expr, den: pl.Expr) -> pl.Expr:
 def sqrt_abs(x):
     values = {}
     for c in _cols(x):
-        values[c] = _one(x, c, pl.col(c).abs().sqrt())
+        result = pl.col(c).abs().sqrt()
+        values[c] = _one(x, c, pl.when(result.is_finite()).then(result).otherwise(None))
     return _result(x, values)
 
 

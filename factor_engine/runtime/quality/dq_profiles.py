@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 from functools import lru_cache
-from pathlib import Path
+from importlib.resources import files
 from typing import Any
 
 import yaml
@@ -12,16 +12,14 @@ import yaml
 from factor_engine.runtime.quality.dq_gates import DQThresholds
 from factor_engine.runtime.quality.input_dq import InputDQThresholds
 
-_PROFILES_PATH = Path(__file__).resolve().parent / "dq_profiles.yaml"
-
-
 @lru_cache(maxsize=1)
 def _load_profiles_payload() -> dict[str, Any]:
-    if not _PROFILES_PATH.is_file():
-        return {"profiles": {}}
-    payload = yaml.safe_load(_PROFILES_PATH.read_text(encoding="utf-8")) or {}
+    resource = files("factor_engine.runtime.quality").joinpath("dq_profiles.yaml")
+    if not resource.is_file():
+        raise RuntimeError("Required packaged DQ profiles resource is missing: dq_profiles.yaml")
+    payload = yaml.safe_load(resource.read_text(encoding="utf-8")) or {}
     if not isinstance(payload, dict):
-        raise ValueError(f"DQ profiles 必须是 mapping: {_PROFILES_PATH}")
+        raise ValueError(f"DQ profiles 必须是 mapping: {resource}")
     return payload
 
 

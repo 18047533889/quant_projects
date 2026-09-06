@@ -229,7 +229,7 @@ class TestStreamingSink:
 
         sink = StreamingResultSink(writer=bad, writer_threads=1)
         sink.start()
-        sink.submit("f1", object())
+        sink.submit("f1", np.array([1.0]))
         with pytest.raises(RuntimeError):
             sink.finish()
 

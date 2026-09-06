@@ -191,9 +191,9 @@ class CandidateEvaluationRef:
         return cls(
             candidate_ref=str(data["candidate_ref"]),
             rank_ic=data.get("rank_ic"),
-            label_maturity=bool(data.get("label_maturity", True)),
+            label_maturity=data.get("label_maturity", True),
             evidence_status=_optional_str("evidence_status"),
-            return_basis=str(data.get("return_basis") or VWAP_TO_VWAP_BASIS),
+            return_basis=data.get("return_basis", VWAP_TO_VWAP_BASIS),
             evidence_ref=_optional_str("evidence_ref"),
             evaluation_ref=_optional_str("evaluation_ref"),
             treatment_optimization_ref=_optional_str("treatment_optimization_ref"),
@@ -571,7 +571,7 @@ class PromotionGate:
                 reject_codes.append(
                     PromotionReasonCode.DUPLICATE_OF_EXISTING_MEMBER
                 )
-            else:
+            elif not reject_codes:
                 return self._artifact(
                     PromotionDecision.REVIEW,
                     (PromotionReasonCode.MERGE_SUGGESTED,),

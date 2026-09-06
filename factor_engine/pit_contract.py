@@ -197,7 +197,10 @@ def _market_visible_shift(
     if cal.tz is not None:
         cal_local = cal.tz_convert(market_timezone).tz_localize(None)
     else:
-        cal_local = cal.tz_localize("UTC").tz_convert(market_timezone).tz_localize(None)
+        # A naive exchange calendar contains local session labels, not UTC
+        # instants.  Keep that type distinction until the selected local
+        # midnight is localized below.
+        cal_local = cal
     cal_dates = np.unique(cal_local.normalize().astype("int64").to_numpy())
     km = (
         k.dt.tz_convert(market_timezone)
@@ -213,8 +216,11 @@ def _market_visible_shift(
     # ints (which are never NaN).
     ok = (idx < cal_dates.size) & ~pd.isna(k).to_numpy()
     if ok.any():
-        out.iloc[ok] = pd.Index([pd.Timestamp(cal_dates[i]) for i in idx[ok]])
-    return out.dt.tz_localize("UTC")
+        local_midnights = pd.DatetimeIndex(
+            [pd.Timestamp(cal_dates[i]) for i in idx[ok]]
+        ).tz_localize(market_timezone, ambiguous="raise", nonexistent="raise")
+        out.iloc[ok] = local_midnights.tz_localize(None)
+    return out.dt.tz_localize(market_timezone).dt.tz_convert("UTC")
 
 
 def validate_fundamental_events(events: pd.DataFrame, columns: PITColumns = PITColumns()) -> None:
@@ -256,6 +262,12 @@ def _same_day_precision_check(
     """
     precision = AvailabilityPrecision(precision) if precision is not None else AvailabilityPrecision.UNKNOWN
     if precision == AvailabilityPrecision.UNKNOWN:
+        if production:
+            raise ValueError(
+                f"same_day PIT on {dataset!r} requires a DECLARED "
+                "timestamp AvailabilityPrecision; UNKNOWN cannot be inferred "
+                "from the shape of production data."
+            )
         # No declared precision.  Backward-compatible research fallback: use a
         # TIMESTAMP only if EVERY value carries a real time-of-day.
         avail = pd.to_datetime(available, errors="coerce", utc=True)
@@ -263,13 +275,6 @@ def _same_day_precision_check(
         non_null = avail[avail.notna()]
         looks_timestamp = non_null.empty or bool((non_null.dt.time != midnight).all())
         inferred = AvailabilityPrecision.TIMESTAMP_NANOSECOND if looks_timestamp else AvailabilityPrecision.DATE
-        if not looks_timestamp and production:
-            raise ValueError(
-                f"same_day PIT on {dataset!r} requires a DECLARED "
-                "AvailabilityPrecision (R24-046..048); the availability values "
-                "look date-only and precision was not declared. Provide "
-                "source metadata precision or use next_trading_day."
-            )
         logger.warning(
             "same_day PIT on %r has no DECLARED availability precision; "
             "inferred %s from data values (research-only fallback).",
@@ -539,7 +544,7 @@ def _period_mask(
     if fiscal_quarter is not None and selector == "quarterly_only":
         # fiscal_quarter in {1,2,3,4} marks a quarterly statement; annual has NaN.
         fq = pd.to_numeric(fiscal_quarter, errors="coerce")
-        return fq.notna() & (fq.astype(int) >= 1) & (fq.astype(int) <= 4)
+        return fq.isin([1, 2, 3, 4])
     dates = pd.to_datetime(period_end, errors="coerce")
     if selector == "annual_only":
         return (dates.dt.month == 12) & (dates.dt.day == 31)
@@ -608,6 +613,18 @@ def select_visible_row_bundles(
     left = decisions.copy()
     left["__pit_row_order__"] = range(len(left))
     left[decision_time] = pd.to_datetime(left[decision_time], errors="raise", utc=True)
+    if left.empty:
+        # A zero-row decision request is a valid empty result, not malformed
+        # PIT data.  Preserve the public output schema deterministically.
+        event_columns = [
+            c for c in events.columns if c != columns.instrument and c not in left.columns
+        ]
+        for name in ("knowledge_at", "market_visible_at"):
+            if name not in event_columns and name not in left.columns:
+                event_columns.append(name)
+        return left.drop(columns="__pit_row_order__").reindex(
+            columns=[*decisions.columns, *event_columns]
+        )
     filtered[columns.available_at] = pd.to_datetime(
         filtered[columns.available_at], errors="raise", utc=True
     )
@@ -639,27 +656,67 @@ def select_visible_row_bundles(
     else:
         filtered["market_visible_at"] = filtered[columns.available_at]
 
-    selected_rows: list[dict[str, object]] = []
+    selected_rows: list[dict[str, object] | None] = [None] * len(left)
     event_columns = [c for c in filtered.columns if c != columns.instrument]
-    for decision in left.to_dict("records"):
-        visible = filtered.loc[
-            (filtered[columns.instrument] == decision[columns.instrument])
-            & (filtered["market_visible_at"] <= decision[decision_time])
-        ]
-        if visible.empty:
-            selected_rows.append({**decision, **{column: pd.NA for column in event_columns}})
-            continue
-        latest_period = visible[columns.period_end].max()
-        candidates = visible.loc[visible[columns.period_end] == latest_period]
-        # R10 #45: deterministic total order — newest period_end already selected
-        # above; within the latest period the newest revision wins, ties broken
-        # by available_at (later announcement), never by original row order.
-        sort_columns = [columns.available_at]
-        if columns.revision_id in candidates.columns:
-            sort_columns.append(columns.revision_id)
-        chosen = candidates.sort_values(sort_columns, kind="stable").iloc[-1].to_dict()
-        chosen.pop(columns.instrument, None)
-        selected_rows.append({**decision, **chosen})
+    # FE-16: one monotone visibility sweep per instrument.  State is keyed by
+    # fiscal period, so an old-period restatement updates that period's vintage
+    # without replacing the latest visible fiscal period.
+    empty_values = {column: pd.NA for column in event_columns}
+    decision_records = left.to_dict("records")
+    decision_positions: dict[object, list[int]] = {}
+    for position, decision in enumerate(decision_records):
+        decision_positions.setdefault(decision[columns.instrument], []).append(position)
+
+    events_by_instrument = {
+        instrument: group
+        for instrument, group in filtered.groupby(columns.instrument, sort=False)
+    }
+    for instrument, positions in decision_positions.items():
+        instrument_events = events_by_instrument.get(instrument, filtered.iloc[:0])
+        # The canonical next-session path replaces available_at with
+        # market_visible_at before selection.  Preserve its exact tie-break:
+        # same-session candidates are ordered by revision, not original
+        # knowledge time.
+        event_sort = ["market_visible_at", columns.period_end]
+        if columns.revision_id in instrument_events.columns:
+            event_sort.append(columns.revision_id)
+        instrument_events = instrument_events.sort_values(event_sort, kind="stable")
+        event_records = instrument_events.to_dict("records")
+        valid_positions: list[int] = []
+        for position in positions:
+            if pd.isna(decision_records[position][decision_time]):
+                selected_rows[position] = {
+                    **decision_records[position], **empty_values
+                }
+            else:
+                valid_positions.append(position)
+        ordered_positions = sorted(
+            valid_positions, key=lambda pos: decision_records[pos][decision_time]
+        )
+        period_state: dict[object, dict[str, object]] = {}
+        latest_period = None
+        event_pos = 0
+        for position in ordered_positions:
+            decision = decision_records[position]
+            decision_at = decision[decision_time]
+            while (
+                event_pos < len(event_records)
+                and event_records[event_pos]["market_visible_at"] <= decision_at
+            ):
+                event = event_records[event_pos]
+                # Event order is (visibility, period, revision);
+                # overwrite therefore matches the reference's latest
+                # available_at then latest revision tie-break for each period.
+                period_state[event[columns.period_end]] = event
+                if latest_period is None or event[columns.period_end] > latest_period:
+                    latest_period = event[columns.period_end]
+                event_pos += 1
+            if not period_state:
+                selected_rows[position] = {**decision, **empty_values}
+                continue
+            chosen = dict(period_state[latest_period])
+            chosen.pop(columns.instrument, None)
+            selected_rows[position] = {**decision, **chosen}
     return (
         pd.DataFrame(selected_rows)
         .sort_values("__pit_row_order__")

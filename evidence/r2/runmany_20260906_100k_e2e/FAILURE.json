@@ -1,0 +1,14 @@
+{
+  "status": "FAILED",
+  "completed": false,
+  "roots_requested": 100000,
+  "wave_size": 2048,
+  "completed_waves": 0,
+  "exit_code": 1,
+  "error_type": "ValueError",
+  "error": "Cannot compile 2048 factors at once. Adaptive limit is 1754 factors for this host (92.3GB RAM). Use compile_many_chunked() for large batches, or set MAX_DAG_WIDTH env var.",
+  "source": "factor_engine/planner/physical_lowerer.py:738",
+  "values_npy_warning": "values.npy is a preallocated output file from a failed run, not a verified factor lake. No completed wave or GPU evaluation was observed; do not use these values as results.",
+  "safety_gate": "The adaptive DAG width safety limit was not raised or bypassed.",
+  "retry_directory": "evidence/r2/runmany_20260906_100k_e2e_1024"
+}

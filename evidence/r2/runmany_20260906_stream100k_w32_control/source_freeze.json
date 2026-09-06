@@ -1,0 +1,32 @@
+{
+  "status": "PASS",
+  "snapshot_utc": "2026-09-06T10:48:12Z",
+  "snapshot_timing": "Original four files were checked before launch. Expanded ten-file snapshot was requested and read during the first approximately 76 seconds of the run, not retroactively claimed as a prelaunch snapshot.",
+  "source_sha256_start": {
+    "factor_engine/runtime/streaming_batch_service.py": "52d9a12e3db14b27376725f3162684fabb01d7deec9b6dde0aaf681fdce48b9d",
+    "factor_engine/backend/cleaned_bridge.py": "e4146eee57840e42f120ec82047353922e7a15ba91c270aad2711e51d81be405",
+    "factor_engine/planner/read_wave_planner.py": "0e2ca2497a155c9718ea54cd080ffee74b240968dd6f5840983a5f7d782fae79",
+    "factor_engine/fields/registry.py": "14fa6d9eddce3504833da1f42492c2b62554acbea1530bc83890d6e91d13f219",
+    "quant_evaluator/runtime/evaluator.py": "1fc523d6b767db77c5f2ee094394b20f12d806675933471f8a3484025a42dd3d",
+    "quant_evaluator/runtime/device_session.py": "cef08e4bbae307c583c8c5d110aefe09c032fdf4f92e3d8666da89388670abeb",
+    "quant_evaluator/runtime/gpu_executor.py": "1549462fbe87f6ed58a4eb75637b74b297a9497ec5e0ab7cd88ff99dbeea9294",
+    "benchmarks/benchmark_run_many_streaming_20260906.py": "2bbd5b15dd04b985d4c41489115079c8a7e7375d21d7d2f80a71f60b7e5edff5",
+    "factor_engine/runtime/engine.py": "7ecb48712ff79cb7bedbd28e0e515552ddc1de8c57d8f8e6671c1b7e4e0da6e7",
+    "factor_engine/runtime/batch_service.py": "4566c6eb8e502d47061a27ff6f1239a1adcb56baebb723b443f3a760bedf0c63"
+  },
+  "end_snapshot_utc": "2026-09-06T11:06:04Z",
+  "source_sha256_end": {
+    "factor_engine/runtime/streaming_batch_service.py": "52d9a12e3db14b27376725f3162684fabb01d7deec9b6dde0aaf681fdce48b9d",
+    "factor_engine/backend/cleaned_bridge.py": "e4146eee57840e42f120ec82047353922e7a15ba91c270aad2711e51d81be405",
+    "factor_engine/planner/read_wave_planner.py": "0e2ca2497a155c9718ea54cd080ffee74b240968dd6f5840983a5f7d782fae79",
+    "factor_engine/fields/registry.py": "14fa6d9eddce3504833da1f42492c2b62554acbea1530bc83890d6e91d13f219",
+    "quant_evaluator/runtime/evaluator.py": "1fc523d6b767db77c5f2ee094394b20f12d806675933471f8a3484025a42dd3d",
+    "quant_evaluator/runtime/device_session.py": "cef08e4bbae307c583c8c5d110aefe09c032fdf4f92e3d8666da89388670abeb",
+    "quant_evaluator/runtime/gpu_executor.py": "1549462fbe87f6ed58a4eb75637b74b297a9497ec5e0ab7cd88ff99dbeea9294",
+    "benchmarks/benchmark_run_many_streaming_20260906.py": "2bbd5b15dd04b985d4c41489115079c8a7e7375d21d7d2f80a71f60b7e5edff5",
+    "factor_engine/runtime/engine.py": "7ecb48712ff79cb7bedbd28e0e515552ddc1de8c57d8f8e6671c1b7e4e0da6e7",
+    "factor_engine/runtime/batch_service.py": "4566c6eb8e502d47061a27ff6f1239a1adcb56baebb723b443f3a760bedf0c63"
+  },
+  "end_matches_start": true,
+  "one_k_comparison_limit": "The 1k worker comparison recorded benchmark, engine, batch_service and read_wave_planner hashes only. It did not snapshot all ten files."
+}

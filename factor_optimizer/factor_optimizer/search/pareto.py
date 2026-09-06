@@ -1,6 +1,7 @@
 """Pareto frontier tracking for multi-objective optimization."""
 
 from dataclasses import dataclass, field
+from copy import deepcopy
 import math
 from typing import Any, Dict, List, Optional, Set, Tuple
 
@@ -76,7 +77,6 @@ class ParetoFrontier:
         """
         self.points: List[ParetoPoint] = []
         self.objective_names = objective_names
-        self._dominated_cache: Set[str] = set()
 
     @property
     def num_dimensions(self) -> int:
@@ -139,7 +139,6 @@ class ParetoFrontier:
         # Check if new point is dominated by existing frontier
         for existing in self.points:
             if existing.dominates(point):
-                self._dominated_cache.add(point.trial_id)
                 return False
 
         # Remove points dominated by the new point
@@ -148,22 +147,16 @@ class ParetoFrontier:
             if not point.dominates(p)
         ]
 
-        # A trial ID may be retried with improved objectives.  Do not let a
-        # prior dominated result poison the replacement's domination query.
-        self._dominated_cache.discard(point.trial_id)
-
         # Add new point
         self.points.append(point)
         return True
 
     def is_dominated(self, point: ParetoPoint) -> bool:
         """Check if a point is dominated by the frontier."""
-        if point.trial_id in self._dominated_cache:
-            return True
-
+        # A trial can be queried again with different objectives, and public
+        # frontier points are mutable. An ID-only cache is not authoritative.
         for existing in self.points:
             if existing.dominates(point):
-                self._dominated_cache.add(point.trial_id)
                 return True
 
         return False
@@ -349,9 +342,9 @@ class ParetoArchive:
             iteration: Search iteration number
         """
         # Create a copy of current frontier
-        snapshot = ParetoFrontier(self.objective_names)
+        snapshot = ParetoFrontier(deepcopy(self.objective_names))
         for point in self.current_frontier.points:
-            snapshot.add_point(point)
+            snapshot.add_point(deepcopy(point))
 
         self.frontiers.append((iteration, snapshot))
 

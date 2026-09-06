@@ -9,6 +9,49 @@ from dataclasses import dataclass
 from .spec import FIELD_CATALOG_SCHEMA_VERSION, FieldSpec, TableSpec
 
 
+_UNCACHEABLE = object()
+
+
+def _immutable_field_value(value):
+    return type(value) in (str, int, float, bool, type(None)) or (
+        type(value) is tuple and all(_immutable_field_value(v) for v in value)
+    )
+
+
+def _metadata_token(value):
+    """Cheap content identity for JSON-like mutable metadata, without asdict.
+
+    Unknown objects deliberately disable caching: their deepcopy/default=str
+    serialization need not be stable or reflect their mutable state.
+    """
+    kind = type(value)
+    if kind is dict:
+        # Empty metadata is the common case. Avoid sorting and generator
+        # allocation for it; insertion-order changes may conservatively miss
+        # the cache but cannot change the canonical sorted-JSON digest.
+        if not value:
+            return (dict, ())
+        parts = []
+        for key, item in value.items():
+            if type(key) is not str:
+                return _UNCACHEABLE
+            token = _metadata_token(item)
+            if token is _UNCACHEABLE:
+                return _UNCACHEABLE
+            parts.append((key, token))
+        return (dict, tuple(parts))
+    if kind is float:
+        # JSON distinguishes -0.0 from +0.0 although Python equality does not.
+        # repr also gives stable tokens for NaN and infinities.
+        return (float, repr(value))
+    if kind in (str, int, bool, type(None)):
+        return (kind, value)
+    if kind in (list, tuple):
+        parts = tuple(_metadata_token(v) for v in value)
+        return _UNCACHEABLE if any(v is _UNCACHEABLE for v in parts) else (kind, parts)
+    return _UNCACHEABLE
+
+
 # R10-P0-017: tri-state field resolution.  ``get(..., strict=False)`` used to
 # collapse "does not exist" and "ambiguous alias" into the same ``None`` — but
 # their production meaning is opposite: an UNKNOWN field may be allowed as a
@@ -38,6 +81,8 @@ class FieldRegistry:
         self._tables: dict[str, TableSpec] = {}
         self._field_aliases: dict[str, set[str]] = {}
         self._table_aliases: dict[str, str] = {}
+        self._catalog_hash_cache = None
+        self._catalog_hash_shapes = {}
         for table in tables:
             self.register_table(table)
         for spec in fields:
@@ -86,6 +131,8 @@ class FieldRegistry:
                 if self._table_aliases.get(alias_key) == key:
                     del self._table_aliases[alias_key]
         self._tables[key] = spec
+        self._catalog_hash_cache = None
+        self._catalog_hash_shapes.clear()
         for alias in aliases:
             self._table_aliases[self._key(alias)] = key
         return spec
@@ -140,6 +187,8 @@ class FieldRegistry:
                 if not owners:
                     del self._field_aliases[alias_key]
         self._fields[identity] = spec
+        self._catalog_hash_cache = None
+        self._catalog_hash_shapes.clear()
         for alias in self._field_alias_set(spec):
             self._field_aliases.setdefault(self._key(alias), set()).add(identity)
         return spec
@@ -263,11 +312,48 @@ class FieldRegistry:
         }
 
     def catalog_hash(self) -> str:
+        # FieldSpec/TableSpec are frozen, but metadata intentionally remains
+        # mutable and is excluded from their dataclass hash. Include its actual
+        # nested contents on every lookup; never assume registration is the
+        # only way catalog semantics can change.
+        try:
+            parts = []
+            for catalog in (self._tables, self._fields):
+                for key, spec in catalog.items():
+                    # Dataclass freezing is shallow. Unusual values supplied
+                    # in nominally scalar/tuple fields must not make the cache
+                    # blind to mutations either. Cache only this type-shape
+                    # proof, retaining the object to prevent id reuse.
+                    shape = self._catalog_hash_shapes.get(id(spec))
+                    if shape is None:
+                        safe = type(spec) in (FieldSpec, TableSpec) and all(_immutable_field_value(value)
+                                   for name, value in vars(spec).items() if name != "metadata")
+                        shape = (spec, safe)
+                        self._catalog_hash_shapes[id(spec)] = shape
+                    if not shape[1]:
+                        raise TypeError("field contains mutable semantic attributes")
+                    metadata = _metadata_token(spec.metadata)
+                    if metadata is _UNCACHEABLE:
+                        raise TypeError("metadata cannot be safely fingerprinted")
+                    # Exact frozen spec types passed the deep-immutability
+                    # proof above. Identity is sufficient for their non-metadata
+                    # attributes; the shape cache retains a strong reference,
+                    # so ids cannot be recycled beneath a cached fingerprint.
+                    parts.append((key, id(spec), metadata))
+            fingerprint = (FIELD_CATALOG_SCHEMA_VERSION, tuple(parts))
+        except (TypeError, ValueError, RecursionError):
+            fingerprint = None
+        cached = self._catalog_hash_cache
+        if fingerprint is not None and cached is not None and cached[0] == fingerprint:
+            return cached[1]
         payload = json.dumps(
             self.export_catalog(), sort_keys=True, separators=(",", ":"),
             ensure_ascii=True, default=str,
         ).encode("utf-8")
-        return hashlib.sha256(payload).hexdigest()
+        digest = hashlib.sha256(payload).hexdigest()
+        if fingerprint is not None:
+            self._catalog_hash_cache = (fingerprint, digest)
+        return digest
 
 
 __all__ = [

@@ -7,7 +7,7 @@ from .pandas_backend import PandasBackend
 from .polars_backend import PolarsBackend
 
 
-def build_backend(backend_type: str):
+def build_backend(backend_type: str = "pandas"):
     """根据配置字符串构建执行后端。
 
     参数：
@@ -22,14 +22,15 @@ def build_backend(backend_type: str):
     - ``polars`` / ``polars_lazy``：Polars 宽表或 Lazy 路径
     - ``polars_long`` / ``auto_long``：长表 Polars 编译（见 polars_long_backend）
     - ``duckdb_sql`` / ``clickhouse_sql``：SQL 子树下推
-    - ``auto`` / ``hybrid``：SQL + Polars；数据源有 ``scan_polars_long`` 时自动走
-      ``hybrid_long``（DuckDB long 物化 + 原生 Polars long），否则宽表 hybrid
+    - ``auto`` / ``hybrid``：仅供已准入 PhysicalRegionPlan 的物理执行集成；
+      公共 FactorEngine run/run_many 系列尚未接通，显式请求会类型化拒绝。
+    - 缺省为 ``pandas`` 参考路径；不会把显式 ``auto`` 静默改为另一个后端。
     - ``debug``：只打印计划，不读数据
     - ``q_kdb`` / ``q``：Q/KDB 物理执行后端（R21-Q-FACTORY-INTEGRATION）
 
     示例：
-        >>> build_backend("auto")
-        >>> build_backend(os.environ.get("FACTOR_ENGINE_OPERATOR_BACKEND", "auto"))
+        >>> build_backend("pandas")
+        >>> build_backend(os.environ.get("FACTOR_ENGINE_OPERATOR_BACKEND", "pandas"))
     """
     normalized = backend_type.strip().lower()
 

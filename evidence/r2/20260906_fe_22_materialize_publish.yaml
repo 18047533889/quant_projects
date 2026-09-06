@@ -1,0 +1,18 @@
+issue_id: FE-22
+source_commit: f9e7237fafe4112391e62c8874caae7996ce0b11
+paths_and_symbols:
+  - factor_engine/runtime/materialize_batch.py
+  - factor_engine/storage/materialize/lake_publish.py
+  - factor_engine/storage/catalog.py
+  - factor_engine/tests/audit/test_materialize_publish_receipts.py
+trigger_and_affected_paths: "Batch materialization or staging-to-published promotion under FE-22 conditions."
+regression_before_fix: ".venv/bin/python -m pytest -q factor_engine/tests/audit/test_materialize_publish_receipts.py => 6 failed"
+behavior_after_fix: "Dedicated receipt/publish suite => 37 passed; combined PIT plus receipt/publish audit suites => 54 passed. The public publish entrypoint resolves the true DataAccess StorageBackend before any sync or catalog side effect, rejects COS/object storage until CAS is wired, consumes a real materialize_many_fast single-factor receipt, and streams parquet key projections plus the expected-key iterator through isolated SQLite uniqueness checks. Certified publication state is isolated in factor_published_watermark, so later draft materialization cannot contaminate it and newer generations replace rather than merge old tails."
+public_entrypoint_test: "Public receipt/context/publish-watermark functions in factor_engine/tests/audit/test_materialize_publish_receipts.py"
+source_snapshot_and_config_digest: "git=f9e7237fafe4112391e62c8874caae7996ce0b11; synthetic temporary filesystem only"
+package_artifact_digest: NOT_RUN
+migration_or_invalidation: "Legacy unbound staging must not publish. Catalog migration adds nullable generation-aware fields without rewriting historical rows; legacy rows remain readable but are not reinterpreted as complete publication evidence."
+not_run:
+  - migration against a copy of a real production catalog: NOT_RUN
+  - remote published-store corruption: NOT_RUN
+reviewer_verdict: FIXED_PENDING_INTEGRATION

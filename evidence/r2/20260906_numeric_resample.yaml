@@ -1,0 +1,49 @@
+git_sha: f9e7237fafe4112391e62c8874caae7996ce0b11
+timestamp: '2026-09-06T08:18:09Z'
+scope: FactorEngine parameter signatures and DataAccess frequency resampling
+files:
+  - factor_engine/parameter_canonicalizer.py
+  - factor_engine/tests/operators/test_parameter_signature_float_range.py
+  - data_access/read/resample.py
+  - data_access/tests/test_resample_backend_parity.py
+  - evidence/r2/20260906_numeric_resample.yaml
+reproduction:
+  - Tiny finite input 1e-300 raises OverflowError in original _round_sig.
+  - Polars first keeps null while pandas first skips null.
+  - Numeric-first aggregation changes original value column order.
+  - Unordered unique destroys chronological output order.
+  - Ungrouped Polars resampling omits empty pandas time buckets.
+  - Integer replace with NaN raises Polars InvalidOperationError.
+tests:
+  interpreter: /home/sunhaiwei/fe_pin_venv2/bin/python
+  factor_engine:
+    status: PASS
+    count: 53
+    paths:
+      - factor_engine/tests/operators/test_parameter_signature_float_range.py
+      - factor_engine/tests/operators/test_r10_paramspec.py
+      - factor_engine/tests/operators/test_r9_canonicalizer_2026_08.py
+  data_access:
+    status: PASS
+    count: 3
+    paths:
+      - data_access/tests/test_resample_backend_parity.py
+  syntax_changed_modules: PASS
+  import_changed_modules: PASS
+  git_diff_check: PASS
+  full_compile_import: NOT_RUN
+  registry_duplicate_authority: NOT_RUN
+  abi_placeholder: NOT_RUN
+  full_backend_parity: NOT_RUN
+  pit_poison: NOT_RUN
+  q_null_time_runtime: NOT_RUN
+  ci: NOT_RUN
+  production_gate: NOT_RUN
+review:
+  independent_agent: inspect_data
+  status: Scoped review completed; normal rounding ties preserved.
+limitations:
+  - Synthetic targeted tests only; no full or real dataset runs.
+  - Ungrouped resampling uses pandas to preserve empty buckets; performance not benchmarked.
+  - Full DST, dtype, multi-instrument and backend parity not certified.
+  - Changes remain uncommitted in the remote working tree.

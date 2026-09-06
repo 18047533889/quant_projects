@@ -1,0 +1,47 @@
+git_sha: f9e7237fafe4112391e62c8874caae7996ce0b11
+date: '2026-09-06'
+files:
+  - factor_engine/planner/physical_lowerer.py
+  - factor_engine/planner/__init__.py
+  - benchmarks/verify_chunked_physical_20260906.py
+fixes:
+  - Keep compile_many_chunked list return contract; add public iter_compile_many_chunked for lazy physical output.
+  - Accept complete DAGPlan or roots plus explicit shared definitions.
+  - Include only each chunk's transitive shared closure, with shared and root dependency/consumer edges.
+  - Reject missing or empty shared IDs, shared cycles, duplicate factor names, and invalid chunk sizes.
+  - Retain host DAG width guard; default chunk size is bounded by that guard.
+tests:
+  serial_public_planner_verification:
+    status: PASS
+    working_directory: factor_engine
+    command: PYTHONPATH=.:.. OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 POLARS_MAX_THREADS=2 ../.venv/bin/python ../benchmarks/verify_chunked_physical_20260906.py
+    cases:
+      - transitive CSE closure and exclusion of unrelated shared definitions
+      - dependency and consumer edges preserve topological order
+      - actual scheduler executes two independent chunks producing a=3 and b=3
+      - iterator performs no lowering before first next and one chunk per next
+      - reject zero/negative/float/bool/string/above-host-limit chunk sizes
+      - reject missing/empty/transitively missing/cyclic plan references
+      - empty and legacy list-plus-shared-nodes inputs
+      - public Optimizer.optimize_with_pass_trace yields literal 3 from add(1,2)
+      - all six pass names, equivalence declarations, and 18 invariant results captured
+      - legacy optimize_with_trace tuple contract
+      - invariant violation and production numeric-policy violation fail closed
+  required_Optimizer_compile:
+    status: NOT_AVAILABLE
+    detail: This checkout exposes optimize/optimize_with_pass_trace/optimize_with_trace, not Optimizer.compile. No fabricated alias or claimed pass.
+  pytest: NOT_RUN_verify_skill_requires_serial_non_pytest_verification
+  full_compile_import: NOT_RUN
+  registry_duplicate_authority: NOT_RUN
+  ABI_placeholder: NOT_RUN
+  backend_parity: NOT_RUN
+  PIT_poison: NOT_RUN
+  Q_null_time_runtime: NOT_RUN
+  CI: NOT_RUN
+  production_gate: NOT_RUN
+review: PASS; parent independently reviewed the chunk diff and reran the serial verification successfully.
+limitations:
+  - Logical root input remains caller-owned; only physical DAG output is lazy.
+  - Compatibility compile_many_chunked still accumulates all chunks by design.
+  - Low-level physical chunks require normal scheduler/context/backend and write lifecycle setup.
+  - Full production certification is not established by the synthetic shared-reference oracle.

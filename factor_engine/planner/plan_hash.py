@@ -60,30 +60,36 @@ def _jsonable(v: Any) -> Any:
     +/-Inf 不是可复现的标量字面量，跨进程/跨 JSON 运行时会得到不同表示，从而
     污染 CSE 与持久化缓存键。int 也做防御性溢出检查（保持 64 位有符号范围内）。
 
-    R2-2026-08-29：``where(cond, x, nan)`` 的平台语义需要一个 NaN 分支字面量。
-    这类字面量进入 CSE/plan 键时必须稳定：NaN 的稳定表示就是保留 ``math.nan``
-    本身（IEEE 754 的 NaN 规范位型 ``0x7ff8...`` 不跨 JSON，但按值比较的
-    ``math.nan != math.nan`` 让 dict 键不可靠）。这里把 NaN 字面量规范化为
-    **稳定的规范标记** ``"__nan__"``（字符串），CSE/持久化键按字符串参与排序
-    ——不同来源的 NaN 字面量在计划键中坍缩为同一标记，语义上它们都是「缺失
-    分支」，不会互相污染（NaN 字面量从不携带额外参数）。执行侧仍取原始 NaN。
+    R2-2026-08-29：``where(cond, x, nan)`` 需要稳定的 NaN 身份。所有值都进入
+    不可混淆的 typed envelope，并由 DataAccess strict identity encoder 处理特殊
+    float；普通用户 dict/string 无法冒充 NaN/Inf 标记。执行侧仍保留原值。
     """
+    from data_access.core.identity_encoder import CanonicalIdentityEncoder
+
+    encoder = CanonicalIdentityEncoder(strict=True)
+    if v is None:
+        return {"type": "none"}
+    if isinstance(v, bool):
+        return {"type": "bool", "value": v}
     if isinstance(v, float):
-        if not math.isfinite(v):
-            if math.isnan(v):
-                return "__nan__"
-            return f"__inf__" if v > 0 else "__ninf__"
+        return {"type": "float", "value": json.loads(encoder.encode(v))}
     if isinstance(v, int) and not isinstance(v, bool):
         if not (-(2**63) <= v < 2**63):
             raise ValueError(
                 f"plan int literal {v} exceeds signed 64-bit range; cannot produce a stable plan key"
             )
-    if isinstance(v, (str, int, float, bool)) or v is None:
-        return v
+    if isinstance(v, int) and not isinstance(v, bool):
+        return {"type": "int", "value": v}
+    if isinstance(v, str):
+        return {"type": "string", "value": v}
+    if isinstance(v, bytes):
+        return {"type": "bytes", "value": json.loads(encoder.encode(v))}
     if isinstance(v, (list, tuple)):
-        return [_jsonable(x) for x in v]
+        return {"type": type(v).__name__, "items": [_jsonable(x) for x in v]}
     if isinstance(v, dict):
-        return {str(k): _jsonable(val) for k, val in sorted(v.items())}
+        items=[(_jsonable(k),_jsonable(val)) for k,val in v.items()]
+        items.sort(key=lambda pair:json.dumps(pair[0],sort_keys=True,separators=(",",":")))
+        return {"type":"dict","items":[list(pair) for pair in items]}
     raise TypeError(f"unsupported plan attribute type: {type(v).__name__}")
 
 
@@ -150,24 +156,15 @@ def contract_is_resolved(node: PlanNode, memo: dict[int, bool] | None = None) ->
 
 
 def _hash_canonical_attrs(node: PlanNode) -> dict[str, Any]:
-    """Hash-side parameter canonicalization (R13 NEW-P0-17/18).
-
-    Only the HASH payload canonicalizes values (float-noise rounding + declared
-    ``equivalence="positive_scale"`` weight normalization).  Execution plans keep
-    user values verbatim — see ``planner.canonicalize_params``.  Literals/columns
-    are never touched: an explicit constant must hash by its true value.
-    """
+    """Exact execution/CSE attrs; research equivalence is never consumed here."""
     if node.op in {"column", "literal", "plan_ref", "materialized_series"}:
         return dict(node.attrs)
-    from factor_engine.planner.canonicalize_params import canonicalize_parameter_values
+    from factor_engine.planner.canonicalize_params import exact_parameter_values
 
-    try:
-        from factor_engine.cleaned_operators.registry import OperatorRegistry
-
-        canonical = OperatorRegistry._aliases.get(str(node.op), str(node.op))
-    except Exception:  # pragma: no cover - bootstrap
-        canonical = str(node.op)
-    return canonicalize_parameter_values(node.attrs, canonical=canonical)
+    # Exact execution/CSE identity must never consume research-only rounding or
+    # scale equivalences. Operator semantics are bound separately below by the
+    # existing authoritative operator contract.
+    return exact_parameter_values(node.attrs)
 
 
 def _typed_semantic_value(v: Any) -> Any:
@@ -266,6 +263,7 @@ def structural_key(node: PlanNode, memo: dict[int, str] | None = None) -> str:
         return memo[nid]
     child_keys = [structural_key(c, memo) for c in node.inputs]
     payload = {
+        "identity_schema": "exact-execution-v2",
         "op": node.op,
         "attrs": {
             k: _jsonable(v)
