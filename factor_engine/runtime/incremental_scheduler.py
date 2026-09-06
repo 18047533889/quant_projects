@@ -1041,6 +1041,7 @@ def _verify_factor_semantic_identity(
     full_def: dict[str, Any],
     *,
     production: bool = False,
+    market: str | None = None,
 ) -> None:
     """Verify a rebuilt factor matches the catalog identity — FAIL-CLOSED (P0-17).
 
@@ -1050,6 +1051,12 @@ def _verify_factor_semantic_identity(
     surface / dialect / dialect_version / decision policy / calendar / PIT mode.
     """
     fid = full_def.get("factor_id") or "?"
+    factor_market = _market_of_factor(factor)
+    if factor_market and market and factor_market.casefold() != market.casefold():
+        raise FactorSemanticIdentityMismatch(
+            f"因子 {fid!r} 显式 market 与事件执行 market 冲突: "
+            f"{factor_market!r} != {market!r}"
+        )
     catalog_expr = full_def.get("expression")
     if catalog_expr and str(catalog_expr).strip():
         actual_expr = str(getattr(factor, "source_expr", "") or "").strip()
@@ -1075,8 +1082,8 @@ def _verify_factor_semantic_identity(
 
             # R40 #174：production 下 Analyzer 必须带显式 market（从 factor 解析，
             # 解析不到 → ProductionMarketContextRequiredError，fail-closed）。
-            market = _market_of_factor(factor)
-            ir_node = Analyzer(production=production, market=market).lower(
+            identity_market = factor_market or market
+            ir_node = Analyzer(production=production, market=identity_market).lower(
                 factor.expr
             ).ir
             actual_hash = compute_ir_hash(ir_node)
@@ -1848,7 +1855,7 @@ def execute_incremental_updates_from_event(
                     engine_factory=engine_factory,
                 )
                 _verify_factor_semantic_identity(
-                    factor, info, production=production
+                    factor, info, production=production, market=market
                 )
             else:
                 # Legacy rows carry no source config — fall back to the caller's
@@ -1914,13 +1921,46 @@ def execute_incremental_updates_from_event(
         publish_failures: list[dict[str, str]] = []
         for plan in plans:
             try:
-                publish_factor_lake(
+                staged = out["materializations"].get(plan.factor_id) or {}
+                staging_summary = staged.get("staging") or {}
+                identity = (
+                    staged.get("identity")
+                    or staged.get("staging_identity")
+                    or staging_summary.get("identity")
+                    or {}
+                )
+                publish_info = dep_catalog.full_factor_definition(plan.factor_id) or {}
+                expected = {
+                    "generation_id": identity.get("generation_id"),
+                    "manifest_digest": identity.get("manifest_digest"),
+                    "run_id": identity.get("run_id"),
+                }
+                if any(not isinstance(value, str) or not value.strip() for value in expected.values()):
+                    raise ValueError("staged identity is missing a non-empty publication receipt")
+                publish_result = publish_factor_lake(
                     factor_id=plan.factor_id,
                     lake_root=lake_root,
                     approve=True,
                     sync_from_local=False,
                     reconcile=False,
+                    expected_staging_generation=identity.get("generation_id"),
+                    expected_manifest_digest=identity.get("manifest_digest"),
+                    expected_run_id=identity.get("run_id"),
+                    frequency=publish_info.get("frequency"),
                 )
+                if not isinstance(publish_result, dict):
+                    raise ValueError("publish returned no verifiable completion receipt")
+                if (
+                    publish_result.get("factor_id") != plan.factor_id
+                    or publish_result.get("approved") is not True
+                    or any(
+                        publish_result.get(key) != value
+                        for key, value in expected.items()
+                    )
+                ):
+                    raise ValueError(
+                        "publish completion receipt does not match staged identity"
+                    )
                 published.append(plan.factor_id)
             except Exception as exc:
                 publish_failures.append(

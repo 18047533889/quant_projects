@@ -258,7 +258,12 @@ class TestLongShortReturnsOracle:
         short_cut = np.quantile(fv0, 0.2)
         long_mean = ret0[fv0 >= long_cut].mean()
         short_mean = ret0[fv0 <= short_cut].mean()
-        assert ls_r[0] == pytest.approx(long_mean - short_mean, rel=1e-12)
+        # Funded portfolio: equal absolute amount per name, 100% gross.
+        # Leg means remain standalone bucket returns, not account contributions.
+        n_long = np.count_nonzero(fv0 >= long_cut)
+        n_short = np.count_nonzero(fv0 <= short_cut)
+        expected = (n_long * long_mean - n_short * short_mean) / (n_long + n_short)
+        assert ls_r[0] == pytest.approx(expected, rel=1e-12)
         assert long_r[0] == pytest.approx(long_mean, rel=1e-12)
         assert short_r[0] == pytest.approx(short_mean, rel=1e-12)
 

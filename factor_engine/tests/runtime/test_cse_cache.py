@@ -13,7 +13,7 @@ Covers:
        never silently breaks the hard limit.
     5. LIRS (not implemented) fails closed with UnsupportedEvictionPolicy —
        never silently falls back to LRU.
-    6. Production mode (production_mode=True or FACTOR_ENGINE_PRODUCTION_MODE):
+    6. Production mode (run_mode="production" or FACTOR_ENGINE_RUN_MODE):
        any correctness-critical CSECacheKey field empty → ValueError fail-closed;
        bare str key → TypeError; full 8-dim key works; unknown size still rejected.
 
@@ -74,6 +74,7 @@ def test_same_node_id_different_semantic_dimension_do_not_reuse():
 
     # 每个维度单独变化 → 必须 miss（不能复用）
     for field in [
+        "logical_node",
         "bound_params",
         "data_source",
         "universe",
@@ -186,6 +187,8 @@ def test_all_pinned_over_capacity_raises():
     # 新条目使总量超上限，但唯一可逐出项（全部 pinned）不可逐出 → fail-closed
     with pytest.raises(CacheCapacityExceeded):
         cache.put(_key(logical_node="c"), "c", size_bytes=300)
+    assert cache.get(_key(logical_node="c")) is None
+    assert cache.metrics().total_size_bytes <= cache.max_cache_bytes
 
 
 def test_all_pinned_memory_pressure_evict_raises():
@@ -216,6 +219,20 @@ def test_unpin_allows_eviction_again():
     cache.put(_key(logical_node="c"), "c", size_bytes=300)  # 不再抛
 
 
+def test_failed_oversized_update_restores_previous_entry():
+    cache = CSECacheOptimizer(max_cache_bytes=500)
+    key = _key(logical_node="a")
+    cache.put(key, "old", size_bytes=200)
+    cache.pin(key)
+
+    with pytest.raises(CacheCapacityExceeded):
+        cache.put(key, "oversized", size_bytes=600)
+
+    assert cache.get(key) == "old"
+    assert cache.metrics().total_size_bytes == 200
+    assert cache.summary()["pinned_entries"] == 1
+
+
 # ---------------------------------------------------------------------------
 # 5. LIRS not implemented -> fail closed, never LRU fallback
 # ---------------------------------------------------------------------------
@@ -239,14 +256,14 @@ def test_lru_and_lfu_still_valid():
 # ---------------------------------------------------------------------------
 def test_production_full_key_ok():
     """production 模式完整 8 维 key 正常工作。"""
-    cache = CSECacheOptimizer(max_cache_bytes=1024, production_mode=True)
+    cache = CSECacheOptimizer(max_cache_bytes=1024, run_mode="production")
     cache.put(_key(), "v", size_bytes=100)
     assert cache.get(_key()) == "v"
 
 
 def test_production_bare_cse_cache_key_rejected():
     """production 下 `CSECacheKey(logical_node="abc")` 裸 key → ValueError。"""
-    cache = CSECacheOptimizer(max_cache_bytes=1024, production_mode=True)
+    cache = CSECacheOptimizer(max_cache_bytes=1024, run_mode="production")
     with pytest.raises(ValueError):
         cache.put(CSECacheKey(logical_node="abc"), "v", size_bytes=100)
     with pytest.raises(ValueError):
@@ -268,19 +285,34 @@ def test_production_each_missing_field_rejected():
         "physical_impl",
         "semantic_contract",
     ]:
-        cache = CSECacheOptimizer(max_cache_bytes=1024, production_mode=True)
-        bare = CSECacheKey(**{field: ""})
+        cache = CSECacheOptimizer(max_cache_bytes=1024, run_mode="production")
+        values = dict(_key().__dict__)
+        values[field] = ""
+        bare = CSECacheKey(**values)
         with pytest.raises(ValueError):
             cache.put(bare, "v", size_bytes=100)
-        # logical_node 也不能空
-        cache2 = CSECacheOptimizer(max_cache_bytes=1024, production_mode=True)
-        with pytest.raises(ValueError):
-            cache2.put(CSECacheKey(logical_node=""), "v", size_bytes=100)
+
+
+def test_production_whitespace_identity_rejected():
+    cache = CSECacheOptimizer(max_cache_bytes=1024, run_mode="production")
+    values = dict(_key().__dict__)
+    values["semantic_contract"] = "   "
+    with pytest.raises(ValueError):
+        cache.put(CSECacheKey(**values), "v", size_bytes=100)
+
+
+def test_summary_does_not_expose_cache_keys_or_values():
+    cache = CSECacheOptimizer(max_cache_bytes=1024, run_mode="production")
+    cache.put(_key(bound_params="api_token=secret"), "secret-result", size_bytes=100)
+
+    summary = repr(cache.summary())
+    assert "api_token" not in summary
+    assert "secret-result" not in summary
 
 
 def test_production_str_key_rejected():
     """production 下 str 裸 key → TypeError。"""
-    cache = CSECacheOptimizer(max_cache_bytes=1024, production_mode=True)
+    cache = CSECacheOptimizer(max_cache_bytes=1024, run_mode="production")
     with pytest.raises(TypeError):
         cache.put("abc", "v", size_bytes=100)
     with pytest.raises(TypeError):
@@ -289,7 +321,7 @@ def test_production_str_key_rejected():
 
 def test_production_unknown_size_rejected():
     """production 下 size 未知/<=0 依然 fail-closed。"""
-    cache = CSECacheOptimizer(max_cache_bytes=1024, production_mode=True)
+    cache = CSECacheOptimizer(max_cache_bytes=1024, run_mode="production")
     with pytest.raises(CacheCapacityExceeded):
         cache.put(_key(), "v", size_bytes=0)
     with pytest.raises(CacheCapacityExceeded):
@@ -297,10 +329,10 @@ def test_production_unknown_size_rejected():
 
 
 def test_production_env_var_gate(monkeypatch):
-    """FACTOR_ENGINE_PRODUCTION_MODE=1 等价 production_mode=True。"""
-    monkeypatch.setenv("FACTOR_ENGINE_PRODUCTION_MODE", "1")
-    cache = CSECacheOptimizer(max_cache_bytes=1024)  # 默认 production_mode=None
-    assert cache.summary()["production_mode"] is True
+    """FACTOR_ENGINE_RUN_MODE=production 使用统一 run-mode 权威。"""
+    monkeypatch.setenv("FACTOR_ENGINE_RUN_MODE", "production")
+    cache = CSECacheOptimizer(max_cache_bytes=1024)
+    assert cache.summary()["run_mode"] == "production"
     with pytest.raises(TypeError):
         cache.put("bare_str", "v", size_bytes=100)
     with pytest.raises(ValueError):
@@ -312,6 +344,29 @@ def test_production_env_var_gate(monkeypatch):
 
 def test_research_mode_bare_str_still_compatible():
     """research（非 production）模式 str 裸 key 保持向后兼容。"""
-    cache = CSECacheOptimizer(max_cache_bytes=1024, production_mode=False)
+    cache = CSECacheOptimizer(max_cache_bytes=1024, run_mode="research")
     cache.put("node_x", "v", size_bytes=100)
     assert cache.get("node_x") == "v"
+
+
+def test_explicit_opposite_run_modes_do_not_follow_shared_process_env(monkeypatch):
+    monkeypatch.setenv("FACTOR_ENGINE_RUN_MODE", "research")
+    production = CSECacheOptimizer(max_cache_bytes=1024, run_mode="production")
+    research = CSECacheOptimizer(max_cache_bytes=1024, run_mode="research")
+
+    with pytest.raises(TypeError):
+        production.put("bare", "v", size_bytes=100)
+    research.put("bare", "v", size_bytes=100)
+    assert research.get("bare") == "v"
+
+
+def test_global_cache_refuses_cross_mode_reuse_without_second_budget():
+    import factor_engine.runtime.multibackend.cse_cache_optimizer as module
+
+    module._global_cse_cache = None
+    research = module.get_global_cse_cache_optimizer(run_mode="research")
+
+    assert research.run_mode == "research"
+    with pytest.raises(ValueError, match="cross-mode cache reuse"):
+        module.get_global_cse_cache_optimizer(run_mode="production")
+    assert module._global_cse_cache is research

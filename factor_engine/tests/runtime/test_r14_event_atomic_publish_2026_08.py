@@ -37,6 +37,30 @@ from factor_engine.runtime.incremental_scheduler import (
     execute_incremental_updates_from_event,
 )
 from factor_engine.storage.materializer import ParquetMaterializer
+from factor_engine.storage.trading_calendar import (
+    TradingCalendar,
+    clear_trading_calendar_cache,
+    register_trading_calendar,
+)
+
+
+@pytest.fixture(autouse=True)
+def _production_calendar():
+    """Install a deterministic, explicitly sourced A-share calendar for R14."""
+    clear_trading_calendar_cache()
+    register_trading_calendar(
+        "ashare",
+        TradingCalendar(
+            list(pd.bdate_range("2026-07-01", "2026-09-30")),
+            anchor_policy="previous_trade_day",
+            source="explicit_test_fixture",
+            snapshot="r14-2026-08",
+            version="1",
+            timezone="Asia/Shanghai",
+        ),
+    )
+    yield
+    clear_trading_calendar_cache()
 
 
 def _ser() -> pd.Series:
@@ -72,6 +96,28 @@ class _FakeStore:
         return {"rows": 1}
 
 
+def _install_fake_publish(monkeypatch, store: _FakeStore) -> None:
+    def _publish(*, factor_id, expected_staging_generation=None,
+                 expected_manifest_digest=None, expected_run_id=None,
+                 frequency=None, **kwargs):
+        assert expected_staging_generation == f"gen-{factor_id}"
+        assert expected_manifest_digest == f"digest-{factor_id}"
+        assert expected_run_id == f"run-{factor_id}"
+        assert frequency == "1d"
+        store.publish_from_staging(factor_id=factor_id)
+        return {
+            "factor_id": factor_id,
+            "approved": True,
+            "generation_id": expected_staging_generation,
+            "manifest_digest": expected_manifest_digest,
+            "run_id": expected_run_id,
+        }
+
+    monkeypatch.setattr(
+        "factor_engine.storage.materialize.lake_publish.publish_factor_lake", _publish
+    )
+
+
 def _setup_lake(tmp_path, *, fail_stage_on: str | None = None) -> tuple:
     """注册 2 个因子（f_a / f_b）依赖 ``shared_ds.close``；返回 (lake, control)。
 
@@ -83,7 +129,7 @@ def _setup_lake(tmp_path, *, fail_stage_on: str | None = None) -> tuple:
     from factor_engine.ir.analyzer import Analyzer
     from factor_engine.storage.catalog import compute_ir_hash
 
-    _ir = Analyzer(production=True).lower(
+    _ir = Analyzer(production=True, market="ashare").lower(
         parse_factor('field("close")').expr
     ).ir
     ast_hash = compute_ir_hash(_ir)
@@ -132,6 +178,11 @@ def _setup_lake(tmp_path, *, fail_stage_on: str | None = None) -> tuple:
                     "factor_id": factor_id,
                     "rows_written": 1,
                     "staging": {"dataset": "factor_lake_staging"},
+                    "identity": {
+                        "generation_id": f"gen-{factor_id}",
+                        "manifest_digest": f"digest-{factor_id}",
+                        "run_id": f"run-{factor_id}",
+                    },
                 }
             }
 
@@ -169,9 +220,10 @@ def test_r14_production_event_stage_all_then_publish_all(tmp_path, monkeypatch):
     lake, control, factory = _setup_lake(tmp_path)
     store = _FakeStore()
     monkeypatch.setattr("data_access.get_store", lambda: store)
+    _install_fake_publish(monkeypatch, store)
 
     out = execute_incremental_updates_from_event(
-        None, _prod_event(), lake_root=lake, engine_factory=factory
+        None, _prod_event(), lake_root=lake, market="ashare", engine_factory=factory
     )
     # 两阶段：全部 stage → 全部 publish → commit 一次
     assert sorted(control["staged"]) == ["f_a", "f_b"]
@@ -188,10 +240,11 @@ def test_r14_production_event_stage_failure_no_publish(tmp_path, monkeypatch):
     lake, control, factory = _setup_lake(tmp_path, fail_stage_on="f_b")
     store = _FakeStore()
     monkeypatch.setattr("data_access.get_store", lambda: store)
+    _install_fake_publish(monkeypatch, store)
 
     with pytest.raises(PartialIncrementalFailureError):
         execute_incremental_updates_from_event(
-            None, _prod_event(), lake_root=lake, engine_factory=factory
+            None, _prod_event(), lake_root=lake, market="ashare", engine_factory=factory
         )
     # f_a 已 stage（暂存区），但**没有任何 publish** → published 湖完全未动
     assert "f_a" in control["staged"]
@@ -208,15 +261,16 @@ def test_r14_production_event_retry_converges_once(tmp_path, monkeypatch):
     lake, control, factory = _setup_lake(tmp_path, fail_stage_on="f_b")
     store = _FakeStore()
     monkeypatch.setattr("data_access.get_store", lambda: store)
+    _install_fake_publish(monkeypatch, store)
 
     with pytest.raises(PartialIncrementalFailureError):
         execute_incremental_updates_from_event(
-            None, _prod_event(), lake_root=lake, engine_factory=factory
+            None, _prod_event(), lake_root=lake, market="ashare", engine_factory=factory
         )
     # 修复 f_b 后重跑
     control["fail_stage_on"] = None
     out = execute_incremental_updates_from_event(
-        None, _prod_event(), lake_root=lake, engine_factory=factory
+        None, _prod_event(), lake_root=lake, market="ashare", engine_factory=factory
     )
     assert out["ledger_status"] == "committed"
     assert sorted(store.published) == ["f_a", "f_b"]
@@ -238,10 +292,11 @@ def test_r14_production_optin_publish_failure_rejects_and_raises(tmp_path, monke
     lake, control, factory = _setup_lake(tmp_path)
     store = _FakeStore(fail_publish_on="f_b")
     monkeypatch.setattr("data_access.get_store", lambda: store)
+    _install_fake_publish(monkeypatch, store)
 
     with pytest.raises(PartialIncrementalFailureError):
         execute_incremental_updates_from_event(
-            None, _prod_event(), lake_root=lake, engine_factory=factory
+            None, _prod_event(), lake_root=lake, market="ashare", engine_factory=factory
         )
     # f_a 已发布但事件整体 rejected（opt-in 已知限制）→ 重试按同一 event_id 收敛
     assert "f_a" in store.published
@@ -250,7 +305,7 @@ def test_r14_production_optin_publish_failure_rejects_and_raises(tmp_path, monke
     store._fail_publish_on = None
     control["staged"] = []
     out = execute_incremental_updates_from_event(
-        None, _prod_event(), lake_root=lake, engine_factory=factory
+        None, _prod_event(), lake_root=lake, market="ashare", engine_factory=factory
     )
     assert out["ledger_status"] == "committed"
 
@@ -267,9 +322,10 @@ def test_r14_production_disabled_by_default_rejects_no_publish(tmp_path, monkeyp
     lake, control, factory = _setup_lake(tmp_path)
     store = _FakeStore()
     monkeypatch.setattr("data_access.get_store", lambda: store)
+    _install_fake_publish(monkeypatch, store)
 
     out = execute_incremental_updates_from_event(
-        None, _prod_event(), lake_root=lake, engine_factory=factory
+        None, _prod_event(), lake_root=lake, market="ashare", engine_factory=factory
     )
     # 默认即原子两阶段：全部 stage → 全部 publish，ledger committed
     assert out["ledger_status"] == "committed"
@@ -290,7 +346,7 @@ def test_r14_production_gate_applies_without_event_id(tmp_path, monkeypatch):
     )
     with pytest.raises(ProductionEventAutoPublishDisabled):
         execute_incremental_updates_from_event(
-            None, ev, lake_root=str(tmp_path / "lake")
+            None, ev, lake_root=str(tmp_path / "lake"), market="ashare"
         )
 
 
@@ -303,14 +359,96 @@ def test_r14_production_forces_staging_target(tmp_path, monkeypatch):
     lake, control, factory = _setup_lake(tmp_path)
     store = _FakeStore()
     monkeypatch.setattr("data_access.get_store", lambda: store)
+    _install_fake_publish(monkeypatch, store)
 
     out = execute_incremental_updates_from_event(
         None,
         _prod_event(),
         lake_root=lake,
+        market="ashare",
         engine_factory=factory,
         materialize_kwargs={"write_target": "clickhouse"},
     )
     # fake engine 的 _mi 已断言收到 write_target == "staging"（否则本测试即失败）
     assert out["ledger_status"] == "committed"
     assert sorted(store.published) == ["f_a", "f_b"]
+
+
+@pytest.mark.parametrize(
+    "publish_result",
+    [
+        None,
+        {},
+        {
+            "factor_id": "wrong-factor",
+            "approved": True,
+            "generation_id": "gen-f_a",
+            "manifest_digest": "digest-f_a",
+            "run_id": "run-f_a",
+        },
+        {
+            "factor_id": "f_a",
+            "approved": False,
+            "generation_id": "gen-f_a",
+            "manifest_digest": "digest-f_a",
+            "run_id": "run-f_a",
+        },
+        {
+            "factor_id": "f_a",
+            "approved": True,
+            "generation_id": "stale",
+            "manifest_digest": "stale",
+            "run_id": "stale",
+        },
+    ],
+)
+def test_r14_unproven_publish_completion_is_not_visible(
+    tmp_path, monkeypatch, publish_result
+):
+    """None or stale completion cannot close the event or enter published[]."""
+    _force_production(monkeypatch)
+    _enable_auto_publish(monkeypatch)
+    lake, _control, factory = _setup_lake(tmp_path)
+    monkeypatch.setattr(
+        "factor_engine.storage.materialize.lake_publish.publish_factor_lake",
+        lambda **kwargs: publish_result,
+    )
+
+    with pytest.raises(PartialIncrementalFailureError, match="publish failed"):
+        execute_incremental_updates_from_event(
+            None, _prod_event(), lake_root=lake, market="ashare", engine_factory=factory
+        )
+    raw = (lake / ".event_ledger.jsonl").read_text()
+    assert "ev_atomic" in raw and "rejected" in raw
+
+
+def test_r14_missing_staged_identity_blocks_publish_call(tmp_path, monkeypatch):
+    """A stage summary without bound identity must fail before publisher mutation."""
+    _force_production(monkeypatch)
+    _enable_auto_publish(monkeypatch)
+    lake, _control, factory = _setup_lake(tmp_path)
+
+    def missing_identity_factory(*args, **kwargs):
+        engine = factory(*args, **kwargs)
+        original = engine.materialize_incremental.side_effect
+
+        def _materialize(*call_args, **call_kwargs):
+            result = original(*call_args, **call_kwargs)
+            result["materialization"].pop("identity")
+            return result
+
+        engine.materialize_incremental.side_effect = _materialize
+        return engine
+
+    monkeypatch.setattr(
+        "factor_engine.storage.materialize.lake_publish.publish_factor_lake",
+        lambda **kwargs: pytest.fail("publisher must not run without staged identity"),
+    )
+    with pytest.raises(PartialIncrementalFailureError, match="publish failed"):
+        execute_incremental_updates_from_event(
+            None,
+            _prod_event(),
+            lake_root=lake,
+            market="ashare",
+            engine_factory=missing_identity_factory,
+        )

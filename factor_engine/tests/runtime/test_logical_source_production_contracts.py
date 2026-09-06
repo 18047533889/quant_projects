@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import numpy as np
 import pandas as pd
+import pytest
 
 from factor_engine.storage.sources.lqtp_logical_source_v2 import LQTPLogicalDataSource
 
@@ -43,11 +44,13 @@ def test_benchmark_daily_broadcast_normalizes_intraday_anchor_date() -> None:
     assert out.tolist() == [0.012, 0.012]
 
 
-def test_minute_sessions_never_collide_across_lunch_boundary() -> None:
+@pytest.mark.parametrize("convention,afternoon", [("bar_start", "13:00:00"), ("bar_end", "13:01:00")])
+def test_minute_sessions_never_collide_across_lunch_boundary(monkeypatch, convention, afternoon) -> None:
+    monkeypatch.setattr(LQTPLogicalDataSource, "_session_timestamp_convention", classmethod(lambda cls: convention))
     frame = pd.DataFrame(
         {
             "timestamp": pd.to_datetime(
-                ["2026-07-31 11:29:00", "2026-07-31 13:00:00"]
+                ["2026-07-31 11:29:00", f"2026-07-31 {afternoon}"]
             ),
             "instrument": ["A", "A"],
             "value": [1.0, 2.0],

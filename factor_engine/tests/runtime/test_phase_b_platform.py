@@ -57,8 +57,8 @@ def test_estimate_column_null_ratios(tmp_path):
     path = tmp_path / "sample.parquet"
     pq.write_table(table, path)
     ratios = estimate_column_null_ratios([path])
-    assert ratios["a"] == pytest.approx(2 / 3)
-    assert ratios["b"] == pytest.approx(1.0)
+    assert ratios["a"] == pytest.approx(1 / 3)
+    assert ratios["b"] == pytest.approx(0.0)
 
 
 def test_adjust_input_dq_thresholds_from_stats():
@@ -74,7 +74,7 @@ def test_adjust_input_dq_thresholds_from_stats():
         stats,
         ["close"],
     )
-    assert th.min_non_null_ratio >= 0.8 * 0.95
+    assert th.min_non_null_ratio == pytest.approx((1.0 - 0.8) * 0.95)
 
 
 def test_run_many_parallel_layers_metadata():

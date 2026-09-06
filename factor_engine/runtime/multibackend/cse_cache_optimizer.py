@@ -168,6 +168,7 @@ class CSECacheOptimizer:
         # 4GiB）。本优化器只做账目，不自行探测内存。
         max_cache_bytes: int | None = None,
         eviction_policy: str = "lru",
+        run_mode: str | None = None,
     ) -> None:
         """
         Args:
@@ -175,6 +176,7 @@ class CSECacheOptimizer:
                 但单权威由 ResourceBroker 的 ``current_cse_budget()`` 提供）
             eviction_policy: Eviction 策略（"lru" | "lfu"）。"lirs" 未实现，
                 fail-closed 抛 ``UnsupportedEvictionPolicy``，绝不静默回退 LRU。
+            run_mode: 显式运行模式；缺省使用 production_policy 单权威解析。
         """
         if eviction_policy not in {"lru", "lfu"}:
             raise UnsupportedEvictionPolicy(
@@ -186,6 +188,9 @@ class CSECacheOptimizer:
             max_cache_bytes = 4 * 1024**3  # 绝对上限回退（单权威在 broker）
         self.max_cache_bytes = max_cache_bytes
         self.eviction_policy = eviction_policy
+        from factor_engine.runtime.production_policy import resolve_run_mode
+
+        self.run_mode = resolve_run_mode(run_mode)
 
         self._cache: dict[CSECacheKey, CacheEntry] = {}
         self._lru_order: list[CSECacheKey] = []  # LRU eviction queue
@@ -199,8 +204,25 @@ class CSECacheOptimizer:
         语义维度为空；生产应传完整 ``CSECacheKey``。
         """
         if isinstance(key, CSECacheKey):
-            return key
+            ckey = key
+            if self.run_mode == "production":
+                missing = [
+                    name
+                    for name, value in asdict(ckey).items()
+                    if not isinstance(value, str) or not value.strip()
+                ]
+                if missing:
+                    raise ValueError(
+                        "production CSE cache key requires all semantic identity "
+                        f"fields; missing={','.join(missing)}"
+                    )
+            return ckey
         if isinstance(key, str):
+            if self.run_mode == "production":
+                raise TypeError(
+                    "production CSE cache requires a complete CSECacheKey; "
+                    "bare string keys are forbidden"
+                )
             return CSECacheKey(logical_node=key)
         raise TypeError(
             f"cache key must be CSECacheKey or str, got {type(key).__module__}."
@@ -262,10 +284,12 @@ class CSECacheOptimizer:
                 )
 
             # 已存在：更新 —— 先扣除旧 size，并从 _lru_order 移除旧位置，避免重复。
-            if ckey in self._cache:
-                old_entry = self._cache[ckey]
+            old_entry = self._cache.get(ckey)
+            old_lru_index: int | None = None
+            if old_entry is not None:
                 self._metrics.total_size_bytes -= old_entry.size_bytes
                 if ckey in self._lru_order:
+                    old_lru_index = self._lru_order.index(ckey)
                     self._lru_order.remove(ckey)
 
             # 新建 entry
@@ -286,16 +310,29 @@ class CSECacheOptimizer:
             # 就必须 fail-closed，绝不静默 break 突破硬上限。刚插入的 ``ckey`` 不
             # 作 evict 候选：把一个放不下的条目立刻逐出来"满足"容量是静默丢弃，
             # 不是治理。
-            while self._metrics.total_size_bytes > self.max_cache_bytes:
-                evicted = self._evict_one(protected=ckey)
-                if not evicted:
-                    raise CacheCapacityExceeded(
-                        f"CSE cache capacity exceeded: current={self._metrics.total_size_bytes}"
-                        f" bytes, max={self.max_cache_bytes} bytes, and no evictable "
-                        f"(unpinned, pre-existing) entry available. All existing entries "
-                        f"may be pinned, or the new entry alone exceeds the cap. "
-                        f"Apply backpressure / spill."
-                    )
+            try:
+                while self._metrics.total_size_bytes > self.max_cache_bytes:
+                    evicted = self._evict_one(protected=ckey)
+                    if not evicted:
+                        raise CacheCapacityExceeded(
+                            f"CSE cache capacity exceeded: current={self._metrics.total_size_bytes}"
+                            f" bytes, max={self.max_cache_bytes} bytes, and no evictable "
+                            f"(unpinned, pre-existing) entry available. All existing entries "
+                            f"may be pinned, or the new entry alone exceeds the cap. "
+                            f"Apply backpressure / spill."
+                        )
+            except CacheCapacityExceeded:
+                rejected = self._cache.pop(ckey, None)
+                if rejected is not None:
+                    self._metrics.total_size_bytes -= rejected.size_bytes
+                if ckey in self._lru_order:
+                    self._lru_order.remove(ckey)
+                if old_entry is not None:
+                    self._cache[ckey] = old_entry
+                    self._metrics.total_size_bytes += old_entry.size_bytes
+                    index = old_lru_index if old_lru_index is not None else len(self._lru_order)
+                    self._lru_order.insert(min(index, len(self._lru_order)), ckey)
+                raise
 
     def pin(self, key: Any) -> None:
         """Pin cache entry（消费期内不可 evict）。
@@ -453,6 +490,7 @@ class CSECacheOptimizer:
                 "pinned_entries": pinned_count,
                 "max_cache_bytes": self.max_cache_bytes,
                 "eviction_policy": self.eviction_policy,
+                "run_mode": self.run_mode,
                 "metrics": metrics,
             }
 
@@ -462,16 +500,21 @@ _global_cse_cache: CSECacheOptimizer | None = None
 _global_lock = threading.Lock()
 
 
-def get_global_cse_cache_optimizer() -> CSECacheOptimizer:
+def get_global_cse_cache_optimizer(*, run_mode: str | None = None) -> CSECacheOptimizer:
     """返回全局 CSECacheOptimizer（进程级单例）。
 
     P3/P4: 从 ResourceBroker（单权威）的 ``current_cse_budget()`` 派生 cache 预算，
     不再固定 4GiB；broker 无法给出真实预算时回退绝对上限。
     """
+    from factor_engine.runtime.production_policy import resolve_run_mode
+
+    resolved_mode = resolve_run_mode(run_mode)
     global _global_cse_cache
-    if _global_cse_cache is None:
+    cache = _global_cse_cache
+    if cache is None:
         with _global_lock:
-            if _global_cse_cache is None:
+            cache = _global_cse_cache
+            if cache is None:
                 max_cache = None
                 try:
                     from factor_engine.runtime.resource_broker import ResourceBroker
@@ -482,5 +525,15 @@ def get_global_cse_cache_optimizer() -> CSECacheOptimizer:
                     max_cache = None
                 if not max_cache:
                     max_cache = 4 * 1024**3
-                _global_cse_cache = CSECacheOptimizer(max_cache_bytes=max_cache)
-    return _global_cse_cache
+                cache = CSECacheOptimizer(
+                    max_cache_bytes=max_cache,
+                    run_mode=resolved_mode,
+                )
+                _global_cse_cache = cache
+    if cache.run_mode != resolved_mode:
+        raise ValueError(
+            "global CSE cache is already bound to run_mode="
+            f"{cache.run_mode!r}; refusing cross-mode cache reuse for "
+            f"run_mode={resolved_mode!r}"
+        )
+    return cache

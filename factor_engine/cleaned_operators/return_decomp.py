@@ -87,6 +87,20 @@ def _price_basis_of_column(name: str) -> str | None:
     return None
 
 
+def _normalize_price_basis(price_basis: str | None) -> str | None:
+    """Validate a concrete price basis using the field authority's vocabulary."""
+    from factor_engine.fields.concepts import PriceBasis
+
+    if price_basis is None:
+        return None
+    if not isinstance(price_basis, str):
+        raise ValueError("price_basis must name a concrete price basis")
+    basis = price_basis.strip().upper()
+    if basis not in PriceBasis._KNOWN or basis in {PriceBasis.RETURN, PriceBasis.EITHER}:
+        raise ValueError(f"price_basis={price_basis!r} must name a concrete price basis")
+    return basis
+
+
 def _assert_shared_price_basis(*frames: pd.DataFrame, price_basis: str | None = None) -> None:
     """R11 #164 + P0-60: reject a mixed — or *unverifiable* — price basis.
 
@@ -104,6 +118,7 @@ def _assert_shared_price_basis(*frames: pd.DataFrame, price_basis: str | None = 
     — a return decomposition requires every price column to positively resolve
     to a single shared PriceBasis, otherwise the basis cannot be verified.
     """
+    price_basis = _normalize_price_basis(price_basis)
     resolved: set[str] = set()
     unverifiable = False
     for frame in frames:
@@ -190,7 +205,7 @@ def _safe_ratio(numerator: pd.DataFrame, denominator: pd.DataFrame, *, strict: b
                 "zero/negative price (P0-61 PositivePrice gate)"
             )
         # error type not importable -> documented NaN fallback (fall through)
-    out[bad] = np.nan
+    out[bad | ~np.isfinite(num) | ~np.isfinite(den)] = np.nan
     out[~np.isfinite(out)] = np.nan
     if isinstance(numerator, pd.DataFrame):
         return pd.DataFrame(out, index=numerator.index, columns=numerator.columns)

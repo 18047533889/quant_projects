@@ -1178,22 +1178,16 @@ def _execute_run_many_scheduler(
             physical_by_factor = {
                 name: physical_optimization for name in root_plans
             }
-            from factor_engine.runtime.engine import (
-                _physical_backend_for_region,
-                _physical_plan_telemetry,
-            )
+            from factor_engine.runtime.engine import _physical_plan_telemetry
 
-            admitted_region = physical_optimization.physical_plan.regions[0]
-            execution_backend = _physical_backend_for_region(
-                engine_to_use.backend, admitted_region.backend
-            )
-            physical_plan_meta = _physical_plan_telemetry(
-                physical_optimization,
-                actual_backend=str(
-                    getattr(execution_backend, "runtime_backend_label", "")
-                    or admitted_region.backend.value
-                ),
-            )
+            # Keep Hybrid as the physical-backend container. Each factor root
+            # is resolved from its declared root region by the physical
+            # executor; choosing regions[0] here breaks valid multi-root plans.
+            execution_backend = engine_to_use.backend
+            physical_plan_meta = _physical_plan_telemetry(physical_optimization)
+            # Execution has not happened yet. Per-root path telemetry records
+            # the actual backend after the physical executor runs.
+            physical_plan_meta.pop("actual_backend", None)
             runtime = dict(ctx.runtime_stats or {})
             runtime["physical_plan"] = physical_plan_meta
             ctx.runtime_stats = runtime

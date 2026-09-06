@@ -313,6 +313,13 @@ def compute_long_short_equal_weighted(
             np.nan
         )
 
+    from quant_evaluator.metrics.portfolio_stats import equal_gross_long_short_returns
+    if long_pos.ndim == 2:
+        long_short_returns = equal_gross_long_short_returns(long_pos, short_pos, forward_returns)
+    else:
+        long_short_returns = np.column_stack([
+            equal_gross_long_short_returns(long_pos[:, :, f], short_pos[:, :, f], forward_returns)
+            for f in range(long_pos.shape[2])])
     return long_returns, short_returns, long_short_returns
 
 

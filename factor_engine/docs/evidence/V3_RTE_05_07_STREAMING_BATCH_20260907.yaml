@@ -1,0 +1,58 @@
+schema_version: "1"
+change_id: V3-RTE-05-07
+git_sha: 2db45f4e446309003381a51a5e03071d31859502
+timestamp: "2026-09-07T01:55:00+08:00"
+owned_modified_files:
+  - factor_engine/runtime/streaming_batch_service.py
+  - factor_engine/runtime/performance_run_summary.py
+  - factor_engine/tests/runtime/test_run_many_stream.py
+  - factor_engine/tests/runtime/test_public_backend_default.py
+  - factor_engine/tests/r39/test_perf_telemetry_2026_08.py
+  - benchmarks/benchmark_run_many_streaming_20260906.py
+  - factor_engine/README.md
+  - factor_engine/docs/evidence/V3_RTE_05_07_STREAMING_BATCH_20260907.yaml
+tests:
+  - command: ".venv/bin/python -m pytest -q factor_engine/tests/runtime/test_run_many_stream.py"
+    result: PASS
+    summary: "27 passed, 4 existing backend-classification warnings"
+  - command: ".venv/bin/python -m pytest -q factor_engine/tests/runtime/test_run_many_stream.py factor_engine/tests/runtime/test_public_backend_default.py"
+    result: PASS
+    summary: "40 passed, 8 existing backend-classification warnings; public sink_queue_bytes forwarding asserted"
+  - command: ".venv/bin/python -m pytest -q tests/unit/test_run_many_streaming.py factor_engine/tests/r38/test_dynamic_sink_and_service_lease.py factor_engine/tests/runtime/test_sink_ownership_audit.py factor_engine/tests/runtime/test_sink_write_receipt.py"
+    result: PASS
+    summary: "46 passed, 2 existing backend-classification warnings"
+  - command: ".venv/bin/python -m py_compile factor_engine/runtime/performance_run_summary.py benchmarks/benchmark_run_many_streaming_20260906.py"
+    result: PASS
+    summary: "Telemetry summary and benchmark metadata compile successfully"
+  - command: ".venv/bin/python -m pytest -q factor_engine/tests/r39/test_perf_telemetry_2026_08.py"
+    result: PASS
+    summary: "24 passed, 2 existing backend-classification warnings after invalid-value regressions"
+benchmarks:
+  fixture: "1000 synthetic real Factor expressions, 16 rows/root, every result checked and read back, 0.2ms synthetic sink delay"
+  external_waves:
+    status: PASS
+    wall_seconds: 13.448375034029596
+    first_result_seconds: 2.1662104870192707
+    peak_rss_bytes: 421212160
+  bounded_stream:
+    status: PASS
+    sink_queue_bytes: 8388608
+    wall_seconds: 12.69808112992905
+    first_result_seconds: 2.0799507499905303
+    peak_rss_bytes: 421175296
+    completed_factors: 1000
+    sink_committed: 1000
+  interpretation: "One small synthetic observation only; bounded stream was 5.6% lower wall time. No fixed speedup or production throughput claim."
+telemetry_contract:
+  schema: "r39_performance_run_summary/v1"
+  compatibility: "Existing numeric fields remain present and retain zero defaults for v1 consumers."
+  missing_metric_rule: "Missing, boolean/string, NaN/Inf, negative, or non-integral byte/count inputs produce metric_availability=false and metric_provenance=unavailable_default; numeric zero must not be interpreted as a measurement without the availability flag."
+  measured_zero_rule: "metric_availability=true with counter_snapshot or timing_input provenance."
+  derived_metric_rule: "amplification_availability is true only when both source metrics are available and the denominator is positive."
+  benchmark_scale_metadata: "F, T, N, valid rate, formula family, max lookback, backend, and cache-state limitations are emitted; unique-subgraph ratio is explicitly NOT_MEASURED."
+limitations:
+  - "CSE remains per-wave; no global CSE or cross-wave panel cache is claimed."
+  - "Result ownership is bounded by an explicit sink_queue_bytes (or explicit perf.result_budget_bytes); input definitions remain wave-bounded. No fixed speedup is claimed."
+  - "Name de-duplication metadata grows with total factor count; only entry count and UTF-8 payload bytes are reported, not Python set overhead."
+  - "Metrics distinguish wave execution wall, submit wall, finish wait, and end-to-end wall; exact queue-only wait is reported unavailable rather than inferred. They are not kernel-only timings."
+  - "Full repository suite, CI, backend parity, PIT poison, ABI/placeholder, and production gate: NOT_RUN."

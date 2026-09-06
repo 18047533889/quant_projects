@@ -218,6 +218,11 @@ relation 4、shareholder 4、index_listing 3、valuation 3。
   auto_warmup=False, trim_warmup=True, market=None, pit_enforce=False, ...) -> dict`
 - `run_many(factors, *, perf=None, enable_cse=None, result_policy="return", sink=None,
   warmup_clusters=False, ...)` — 先算共享子树再各因子根（CSE）
+- `run_many_stream(factors, *, sink, wave_size=None, sink_queue_bytes=None, perf=None, ...)`
+  — 有界波次计算与异步结果交付。调用方必须显式提供 `sink_queue_bytes`，或在
+  `PerfConfig.result_budget_bytes` 中提供同一内存预算；该预算必须计入任务总资源租约。
+  不再为未声明预算隐式分配队列。用户 sink 缺少写回执/幂等保证时，任何异常
+  都不会自动重放；中途失败仍需由目标端以 manifest/提交协议证明完整性。
 - `materialize(factor, *, lake_root=None, factor_id=None, author=None, frequency=None,
   value_dtype="float32", write_target="local", staging_dataset="factor_lake_staging",
   storage_format="long", resume_materialize=False, ...)` — 还有 `materialize_from_config`、

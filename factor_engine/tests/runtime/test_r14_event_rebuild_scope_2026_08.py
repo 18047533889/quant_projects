@@ -107,3 +107,13 @@ def test_r14_verify_production_rejects_wrong_market():
     )
     with pytest.raises(FactorSemanticIdentityMismatch, match="market"):
         _verify_factor_semantic_identity(factor, full_def, production=True)
+
+
+def test_r14_verify_rejects_factor_market_conflicting_with_event_market():
+    """Caller market is fallback context, never authority to override factor scope."""
+    full_def = _full_def(market="us")
+    factor = factor_from_catalog_info(full_def)
+    with pytest.raises(FactorSemanticIdentityMismatch, match="market.*冲突"):
+        _verify_factor_semantic_identity(
+            factor, full_def, production=True, market="ashare"
+        )

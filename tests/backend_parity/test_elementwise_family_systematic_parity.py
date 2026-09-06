@@ -107,13 +107,17 @@ def _seed_duckdb(root: Path, source: InMemorySeriesSource) -> None:
             {
                 "TradeDate": timestamp.date(),
                 "Symbol": instrument,
-                "X": float(x_val) if pd.notna(x_val) and np.isfinite(x_val) else None,
-                "Y": float(y_val) if pd.notna(y_val) and np.isfinite(y_val) else None,
+                # SQL must receive the SAME Inf fixture as in-memory backends.
+                "X": float(x_val) if pd.notna(x_val) else None,
+                "Y": float(y_val) if pd.notna(y_val) else None,
                 "Flag": float(source.data["flag"].loc[(timestamp, instrument)]),
                 "Constant": float(source.data["constant"].loc[(timestamp, instrument)]),
             }
         )
     pd.DataFrame(rows).to_parquet(root / "panel.parquet")
+    persisted = pd.read_parquet(root / "panel.parquet")
+    np.testing.assert_equal(persisted["X"].to_numpy(), source.data["x"].to_numpy())
+    np.testing.assert_equal(persisted["Y"].to_numpy(), source.data["y"].to_numpy())
 
 
 @pytest.fixture

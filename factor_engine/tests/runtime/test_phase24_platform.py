@@ -90,10 +90,10 @@ def test_data_access_source_read_auto_flag():
     mock_store.get_dataset.return_value = mock_ds
     mock_store.describe_dataset.return_value = MagicMock(snapshot_id="snap_test")
 
-    mock_result = MagicMock()
-    mock_result.table = table
-    mock_result.snapshot = MagicMock(snapshot_id="snap_test")
-    mock_store.read_result.return_value = mock_result
+    mock_handle = MagicMock()
+    mock_handle.snapshot = MagicMock(snapshot_id="snap_test")
+    mock_handle.to_arrow.return_value = table
+    mock_store.read.return_value = mock_handle
 
     idx = pd.MultiIndex.from_product(
         [pd.to_datetime(["2024-01-01", "2024-01-02"]), ["A"]],
@@ -113,7 +113,9 @@ def test_data_access_source_read_auto_flag():
                 got = src.load_columns(["close"])
 
     assert "close" in got
-    mock_store.read_result.assert_called_once()
+    pd.testing.assert_series_equal(got["close"], expected)
+    mock_store.read.assert_called_once()
+    mock_handle.to_arrow.assert_called_once_with()
     mock_store.read_auto.assert_not_called()
 
 

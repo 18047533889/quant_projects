@@ -59,12 +59,13 @@ from tests.helpers import FE_ROOT
 def _run_cli(*args: str) -> dict:
     script_path = FE_ROOT / "run_pipeline.py"
     completed = subprocess.run(
-        [sys.executable, str(script_path), *args],
-        check=True,
+        [sys.executable, "-m", "factor_engine.run_pipeline", *args],
+        check=False,
         capture_output=True,
         text=True,
-        cwd=str(script_path.parent),
+        cwd=str(script_path.parent.parent),
     )
+    assert completed.returncode == 0, completed.stderr
     return json.loads(completed.stdout)
 
 

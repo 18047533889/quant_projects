@@ -1,0 +1,35 @@
+schema: factor_engine.runtime_operator_snapshot.evidence.v1
+timestamp: '2026-09-07T03:03:22.969870+08:00'
+git_sha: 2db45f4e446309003381a51a5e03071d31859502
+owned_files:
+  - factor_engine/runtime/operator_snapshot.py
+  - factor_engine/scripts/generate_runtime_operator_snapshot.py
+  - tests/operators/test_runtime_operator_snapshot_v3.py
+tests:
+  - command: .venv/bin/python -m pytest -q tests/operators/test_runtime_operator_snapshot_v3.py
+    status: PASS
+    result: 12 passed
+  - command: .venv/bin/python -m pytest -q tests/backend_parity/test_fin_component_score_backends.py tests/backend_parity/test_numba_parity_inf_fix.py::TestRegistryDedup
+    status: PASS
+    result: 8 passed
+runtime_export:
+  command: PYTHONPATH=. .venv/bin/python factor_engine/scripts/generate_runtime_operator_snapshot.py --output evidence/v3/runtime_operator_snapshot_v3.json --profile all --evidence evidence/r2/20260906_intraday_stale_binding.json
+  status: PASS
+  canonical_count: 1756
+  alias_count: 287
+  runtime_binding_count: 3931
+  evidence_statuses:
+    NOT_RUN: 3903
+    STALE: 28
+    PASS: 0
+    FAIL: 0
+    UNSUPPORTED: 0
+  catalog_digest: 1e5cef2e19678812338a18b218a0c8219600d106c1f77da5564b21076aebfdce
+  cache_timing_seconds:
+    cold: 25.431
+    hot: 0.285
+limitations:
+  - No mathematical oracle suite was run; no runtime binding is certified PASS.
+  - The 14 stale intraday canonicals remain non-production and expand to 28 backend-specific STALE ledger rows.
+  - Full compile/import, backend parity, PIT poison, clean-wheel, CI, and production gates are NOT_RUN.
+reconciliation_artifact: evidence/v3/operator_count_reconciliation_1737_1756.json

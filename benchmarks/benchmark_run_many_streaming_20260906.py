@@ -47,12 +47,20 @@ def main():
     parser.add_argument('--native-fusion', action='store_true')
     parser.add_argument('--stream-api', action='store_true',
                         help='Use a single public run_many_stream call with a factor generator')
+    parser.add_argument('--sink-queue-mib', type=int,
+                        help='Explicit result queue budget in MiB; required with --stream-api')
+    parser.add_argument('--sink-delay-ms', type=float, default=0.0,
+                        help='Synthetic per-result sink delay for backpressure measurements')
     parser.add_argument('--output', type=Path, required=True)
     args = parser.parse_args()
     if min(args.roots, args.wave_size, args.workers, args.assets) < 1:
         parser.error('roots, wave-size, workers and assets must be positive')
     if args.gpu_evaluate and args.assets < 20:
         parser.error('CUDA RankIC requires at least 20 assets')
+    if args.stream_api and (args.sink_queue_mib is None or args.sink_queue_mib < 1):
+        parser.error('--stream-api requires --sink-queue-mib >= 1')
+    if args.sink_delay_ms < 0:
+        parser.error('--sink-delay-ms must be non-negative')
     args.output.mkdir(parents=True, exist_ok=False)
     index = pd.MultiIndex.from_product(
         [pd.date_range('2024-01-01', periods=8), [f'A{i:03}' for i in range(args.assets)]],
@@ -91,6 +99,8 @@ def main():
 
     def write_result(name, result):
         nonlocal first_result_s, completed_outputs
+        if args.sink_delay_ms:
+            time.sleep(args.sink_delay_ms / 1000.0)
         position = int(name[1:])
         if seen[position]:
             raise AssertionError(f'duplicate output {name}')
@@ -122,6 +132,7 @@ def main():
                  for i in range(args.roots)),
                 wave_size=args.wave_size, n_jobs=args.workers, perf=perf,
                 enable_cse=True, sink=sink,
+                sink_queue_bytes=args.sink_queue_mib * 1024**2,
             )
             if streaming_summary['results']:
                 raise AssertionError('stream API retained root outputs')
@@ -157,7 +168,22 @@ def main():
             np.testing.assert_array_equal(disk_values[start:stop], expected)
         report = {
             'status': 'PASS', 'roots': args.roots, 'rows_per_root': len(index),
+            'scale_dimensions': {
+                'F_factor_count': args.roots,
+                'T_timestamps': 8,
+                'N_assets': args.assets,
+                'input_valid_rate': 1.0,
+                'formula_family': 'column_plus_distinct_scalar',
+                'max_lookback': 0,
+                'unique_subgraph_ratio': None,
+                'unique_subgraph_ratio_status': 'NOT_MEASURED',
+                'backend': 'pandas',
+                'cache_state': 'fresh_engine; process/library warm state not controlled',
+            },
             'workers': args.workers, 'wave_size': args.wave_size,
+            'sink_queue_bytes': (args.sink_queue_mib * 1024**2
+                                 if args.stream_api else None),
+            'sink_delay_ms': args.sink_delay_ms,
             'native_fusion': args.native_fusion,
             'public_entry': 'run_many_stream' if args.stream_api else 'run_many_parallel_external_waves',
             'streaming_summary': streaming_summary,

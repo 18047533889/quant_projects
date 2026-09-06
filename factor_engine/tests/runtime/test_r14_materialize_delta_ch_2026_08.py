@@ -53,11 +53,11 @@ def _fake_ch_target(captured: dict):
 
 
 def test_r14_execute_materialize_delta_tombstones_reach_ch(tmp_path, monkeypatch):
-    import factor_engine.storage.write_targets
+    import factor_engine.storage.write_targets as write_targets
 
     captured: dict = {}
     monkeypatch.setattr(
-        storage.write_targets, "ClickHouseWriteTarget", _fake_ch_target(captured)
+        write_targets, "ClickHouseWriteTarget", _fake_ch_target(captured)
     )
     eng = FactorEngine(
         backend=PandasBackend(), data_source=InMemorySeriesSource(data=_data())
@@ -92,11 +92,11 @@ def test_r14_execute_materialize_delta_parity_parquet_and_ch(tmp_path, monkeypat
     ``semantic_identity_digest`` 派生显示版本——若 orchestrator 没把 digest 塞进
     delta（仍只传 ``factor_version``），CH 侧可能与 catalog 的权威版本失配。
     """
-    import factor_engine.storage.write_targets
+    import factor_engine.storage.write_targets as write_targets
 
     captured: dict = {}
     monkeypatch.setattr(
-        storage.write_targets, "ClickHouseWriteTarget", _fake_ch_target(captured)
+        write_targets, "ClickHouseWriteTarget", _fake_ch_target(captured)
     )
     eng = FactorEngine(
         backend=PandasBackend(), data_source=InMemorySeriesSource(data=_data())

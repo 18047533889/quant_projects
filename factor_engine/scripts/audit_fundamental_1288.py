@@ -18,7 +18,7 @@ from factor_engine.fundamental_cold_start import EXPECTED_FILENAME, load_cold_st
 def audit_row(row: dict[str, str]) -> dict[str, object]:
     from factor_engine.api.dsl_parser import parse_expr
     from factor_engine.ir.analyzer import Analyzer
-from factor_engine.fundamental_rewrites import rewrite_for
+    from factor_engine.fundamental_rewrites import rewrite_for
     from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     factor_id = row["factor_id"]

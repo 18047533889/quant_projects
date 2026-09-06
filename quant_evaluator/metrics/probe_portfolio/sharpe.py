@@ -23,6 +23,7 @@ from quant_evaluator.metrics.portfolio_stats import (
     compute_calmar_ratio,
     compute_maximum_drawdown,
     compute_win_rate,
+    compute_compound_annualized_return,
 )
 from quant_evaluator.metrics.risk.drawdown_analysis import (
     compute_drawdown_statistics,
@@ -135,16 +136,7 @@ def compute_annualized_return(
     periods_per_year: int = 252,
 ) -> float:
     """年化复利收益（基于真实日频 PnL 序列）。"""
-    returns = _as_1d(returns)
-    valid = np.isfinite(returns)
-    if np.sum(valid) < 2:
-        return np.nan
-    ret = returns[valid]
-    n = ret.shape[0]
-    total = float(np.prod(1.0 + ret))
-    if total <= 0:
-        return np.nan
-    return float(total ** (periods_per_year / n) - 1.0)
+    return compute_compound_annualized_return(_as_1d(returns), periods_per_year)
 
 
 def compute_annualized_volatility(

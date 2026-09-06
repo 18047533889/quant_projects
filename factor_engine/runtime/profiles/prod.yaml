@@ -1,0 +1,34 @@
+# Legacy US-equity preset, not a production capability certificate.
+# Override market/calendar/DQ together for other markets. Auto remains subject
+# to physical-plan admission; this profile does not enable any backend gate.
+backend:
+  type: auto
+run:
+  mode: production
+  auto_warmup: true
+  trim_warmup: true
+  market: us
+  calendar: NYSE
+pipeline:
+  batched_engine: true
+dq:
+  profile: us_equity_daily_prod
+  strict: true
+  input_strict: true
+pit:
+  enforce: true
+  forbid_forward_fill: true
+engine:
+  enable_cache: true
+  plan_cache_dir: ../data/factors/plan_cache
+data_access:
+  read_auto: true
+materialization:
+  lake_root: ../data/factors/lake
+  target: staging_clickhouse
+  preserve_invalid_rows: true
+  value_dtype: float32
+  isolate_partition_failures: true
+  clickhouse_table: factor_values
+  incremental:
+    lookback_extra: 5

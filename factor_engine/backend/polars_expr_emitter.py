@@ -87,7 +87,12 @@ _PANDAS_ROLLING_DROP_INF_OPS: frozenset[str] = frozenset(
         "ts_corr",
         "ts_cov",
         "ts_beta",
+        "ts_ema",
+        "ema",
         "ts_ewm_mean",
+        "MACD_line",
+        "MACD_signal",
+        "MACD_hist",
         "ts_ewm_std",
         "ts_rank",
         "ts_pct_rank",
@@ -1195,7 +1200,9 @@ def _try_binary_from_base_columns(
 
         expr = min_horizontal_polars(lcol, rcol)
     elif op == "protected_div":
-        expr = _protected_div_expr(lcol, rcol, node)
+        safe_l = pl.when(lcol.is_finite()).then(lcol).otherwise(None)
+        safe_r = pl.when(rcol.is_finite()).then(rcol).otherwise(None)
+        expr = _protected_div_expr(safe_l, safe_r, node)
     elif op == "div_or_default":
         expr = _div_or_default_expr(lcol, rcol, node)
     elif op in {"safe_div_null", "safe_div"}:
@@ -2018,7 +2025,13 @@ def _compile_polars_impl(
             return None
         alpha = _ewm_alpha(node)
         if op in {"ts_ema", "ema"}:
-            expr = pl.col(_VAL).ewm_mean(alpha=alpha, adjust=False)
+            # pandas EWM excludes +/-Inf like a missing observation while
+            # retaining its position in the recursive weight calculation.
+            # The child sanitizer converts it to NULL; ignore_nulls=False is
+            # therefore required for exact post-gap values.
+            expr = pl.col(_VAL).ewm_mean(
+                alpha=alpha, adjust=False, ignore_nulls=False
+            )
         elif op in {"ewm_std", "ts_ewm_std"}:
             raw = pl.col(_VAL).ewm_std(
                 alpha=alpha,

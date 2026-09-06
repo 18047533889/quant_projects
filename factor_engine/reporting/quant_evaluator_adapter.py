@@ -24,7 +24,7 @@ from quant_evaluator.metrics.probe_portfolio.sharpe import compute_portfolio_met
 from quant_evaluator.metrics.quantile import compute_quantile_returns
 from quant_evaluator.metrics.quantile import assign_quantiles_batch
 from quant_evaluator.metrics.turnover import compute_turnover_series
-from quant_evaluator.metrics.portfolio_stats import apply_long_short_costs
+from quant_evaluator.metrics.portfolio_stats import apply_long_short_costs, equal_gross_long_short_returns
 
 
 @dataclass(frozen=True)
@@ -194,7 +194,12 @@ def evaluate_report_batch(
         factor_quantiles = quantile[:, :, index].copy()
         if directions[index] < 0:
             factor_quantiles = factor_quantiles[:, ::-1]
-        ls = factor_quantiles[:, -1] - factor_quantiles[:, 0]
+        assignments = assign_quantiles_batch(fb.values[:, :, index], n_quantiles=n_quantiles)
+        long_group, short_group = ((n_quantiles-1, 0) if directions[index] > 0 else (0, n_quantiles-1))
+        ls = equal_gross_long_short_returns(
+            assignments == long_group, assignments == short_group, np.asarray(forward_returns),
+            cost_rate=commission_rate, missing_return_policy="drop")
+        ls[~(np.isfinite(factor_quantiles[:, -1]) & np.isfinite(factor_quantiles[:, 0]))] = np.nan
         if commission_rate:
             # Use the SAME QE tie/assignment policy as quantile returns. No
             # future-label mask enters target holdings. This is a documented
@@ -210,9 +215,6 @@ def evaluate_report_batch(
                 # prepend cash so opening positions are charged as well.
                 turnover[:, group] = 2 * compute_turnover_series(
                     np.vstack([np.zeros((1, weights.shape[1])), weights]))[1:]
-            ls = apply_long_short_costs(factor_quantiles[:, -1], factor_quantiles[:, 0],
-                                       long_turnover=turnover[:, -1], short_turnover=turnover[:, 0],
-                                       cost_rate=commission_rate)
             factor_quantiles = factor_quantiles - commission_rate * turnover
         clean_ls = ls[np.isfinite(ls)]
         performance = compute_portfolio_metrics(

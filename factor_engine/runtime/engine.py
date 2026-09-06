@@ -3976,6 +3976,7 @@ class FactorEngine:
         *,
         sink: Any,
         wave_size: int | None = None,
+        sink_queue_bytes: int | None = None,
         n_jobs: int | None = None,
         perf: PerfConfig | None = None,
         enable_cse: bool | None = None,
@@ -3993,7 +3994,9 @@ class FactorEngine:
         ``sink(name, result)`` is mandatory. Its explicit False return or exception
         aborts execution; previously written waves remain written. Names must be
         globally unique, including identical repeated definitions. Name metadata
-        costs O(number of factors); plans/results are bounded to one wave.
+        costs O(number of factors); plans are bounded to one wave and queued
+        results to an explicit ``sink_queue_bytes`` (or ``perf.result_budget_bytes``)
+        budget. The caller must include this queue budget in its total allocation.
 
         CSE and warmup unions are local to each wave. Every wave uses the existing
         run_many_parallel admission and production gates. The returned compact
@@ -4005,6 +4008,7 @@ class FactorEngine:
         _assert_backend_plan_authority(self.backend)
         return execute_run_many_stream(
             self, factors, sink=sink, wave_size=wave_size, n_jobs=n_jobs, perf=perf,
+            sink_queue_bytes=sink_queue_bytes,
             enable_cse=enable_cse, auto_warmup=auto_warmup, trim_warmup=trim_warmup,
             market=market, input_dq_check=input_dq_check, input_dq_strict=input_dq_strict,
             input_dq_thresholds=input_dq_thresholds, pit_enforce=pit_enforce,

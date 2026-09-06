@@ -27,6 +27,7 @@ os.environ.setdefault("FACTOR_ENGINE_NUMBA_THREADS", "1")
 from factor_engine.backend.numba_kernel_registry import (  # noqa: E402
     NUMBA_AVAILABLE,
     DuplicateKernelRegistrationError,
+    DuplicateSpecMismatchError,
     NumbaKernel,
     NumbaKernelRegistry,
     NumbaKernelSpec,
@@ -302,7 +303,7 @@ class TestRegistryDedup:
 
         NumbaKernelRegistry._kernels["_dedup_test_kernel"] = kernel_a
         try:
-            with pytest.raises(DuplicateKernelRegistrationError, match="_dedup_test_kernel"):
+            with pytest.raises(DuplicateSpecMismatchError, match="_dedup_test_kernel"):
                 NumbaKernelRegistry.register(
                     "kalman", "_dedup_test_kernel", _trivial_ref, _trivial_numba,
                     semantic_version="2.0",
@@ -317,9 +318,11 @@ class TestRegistryDedup:
             kernel_name="_dedup_idempotent",
             semantic_version="1.0",
         )
-        kernel_a = NumbaKernel(spec=k, reference_fn=_trivial_ref)
-        NumbaKernelRegistry._kernels["_dedup_idempotent"] = kernel_a
         try:
+            NumbaKernelRegistry.register(
+                "kalman", "_dedup_idempotent", _trivial_ref, _trivial_numba,
+                semantic_version="1.0",
+            )
             NumbaKernelRegistry.register(
                 "kalman", "_dedup_idempotent", _trivial_ref, _trivial_numba,
                 semantic_version="1.0",

@@ -73,9 +73,6 @@ def _safe_ratio_1d(num: np.ndarray, den: np.ndarray) -> np.ndarray:
 # ---------------------------------------------------------------------------
 
 
-_LEGAL_PRICE_BASIS = frozenset({"raw", "adjusted", "pre_close", "factor_adjusted", "none", None})
-
-
 def _validate_price_basis(**kwargs) -> None:
     """R16-060: backend-independent price_basis domain gate.
 
@@ -83,42 +80,45 @@ def _validate_price_basis(**kwargs) -> None:
     Polars path must enforce the SAME gate so an illegal basis cannot bypass the
     typed-IR contract on this backend.
     """
-    basis = kwargs.get("price_basis")
-    if isinstance(basis, str):
-        if basis.strip().lower() not in _LEGAL_PRICE_BASIS:
-            raise ValueError(
-                f"price_basis={basis!r} is not a legal basis {sorted(_LEGAL_PRICE_BASIS - {None})} "
-                "(R16-060 — domain gate is backend-independent)"
-            )
+    from factor_engine.cleaned_operators.return_decomp import _normalize_price_basis
+
+    _normalize_price_basis(kwargs.get("price_basis"))
 
 
-def _ratio_op(a, b, name):
+def _ratio_op(a, b, name, *, price_basis=None):
+    from factor_engine.cleaned_operators.return_decomp import _assert_shared_price_basis
+
+    _assert_shared_price_basis(a, b, price_basis=price_basis)
     cols = _cols(a, b)
     rows = a.height
     out = np.full((rows, len(cols)), np.nan, dtype=float)
     for i, c in enumerate(cols):
-        out[:, i] = _safe_ratio_1d(a[c].to_numpy(), b[c].to_numpy()) - 1.0
+        numerator, denominator = a[c].to_numpy(), b[c].to_numpy()
+        value = _safe_ratio_1d(numerator, denominator) - 1.0
+        valid = np.isfinite(numerator) & np.isfinite(denominator) & (numerator > 0) & (denominator > 0)
+        value[~valid] = np.nan
+        out[:, i] = value
     return _make(a, cols, out)
 
 
 def open_close_return(open_px, close, **kwargs):
     _validate_price_basis(**kwargs)
-    return _ratio_op(close, open_px, "open_close_return")
+    return _ratio_op(close, open_px, "open_close_return", price_basis=kwargs.get("price_basis"))
 
 
 def open_to_vwap_return(open_px, vwap, **kwargs):
     _validate_price_basis(**kwargs)
-    return _ratio_op(vwap, open_px, "open_to_vwap_return")
+    return _ratio_op(vwap, open_px, "open_to_vwap_return", price_basis=kwargs.get("price_basis"))
 
 
 def overnight_return(open_px, pre_close, **kwargs):
     _validate_price_basis(**kwargs)
-    return _ratio_op(open_px, pre_close, "overnight_return")
+    return _ratio_op(open_px, pre_close, "overnight_return", price_basis=kwargs.get("price_basis"))
 
 
 def vwap_to_close_return(vwap, close, **kwargs):
     _validate_price_basis(**kwargs)
-    return _ratio_op(close, vwap, "vwap_to_close_return")
+    return _ratio_op(close, vwap, "vwap_to_close_return", price_basis=kwargs.get("price_basis"))
 
 
 # ---------------------------------------------------------------------------

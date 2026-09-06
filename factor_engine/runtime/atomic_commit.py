@@ -23,6 +23,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import os
 import shutil
 import uuid
@@ -81,6 +82,10 @@ class WatermarkViolation(RuntimeError):
 
     production 下抛此异常强制 fail-closed；research 下由调用方转成 ``False``。
     """
+
+
+class IncrementalCommitInDoubtError(RuntimeError):
+    """CURRENT names a generation whose complete bytes cannot be proven."""
 
 
 def _violation(reason: str) -> WatermarkViolation:
@@ -308,6 +313,51 @@ def _current_file(root: Path) -> Path:
     return root / _CURRENT
 
 
+def _validated_part_names(factor_parts: Any, state_parts: Any) -> tuple[str, ...]:
+    if not isinstance(factor_parts, list) or not isinstance(state_parts, list):
+        raise ValueError("generation part inventories must be lists")
+    names = factor_parts + state_parts
+    if not all(isinstance(name, str) and name for name in names):
+        raise ValueError("generation part names must be non-empty strings")
+    if len(names) != len(set(names)):
+        raise ValueError("generation contains duplicate part names")
+    for name in names:
+        path = Path(name)
+        if path.is_absolute() or path.name != name or name in {_MANIFEST, _CURRENT}:
+            raise ValueError(f"unsafe generation part name: {name!r}")
+    return tuple(names)
+
+
+def _manifest_and_parts_valid(root: Path, generation: str, expected: dict | None = None) -> bool:
+    gen_dir = _gen_dir(root, generation)
+    manifest_path = gen_dir / _MANIFEST
+    try:
+        payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+        if not isinstance(payload, dict):
+            return False
+        if payload.get("generation") != generation:
+            return False
+        if expected is not None and payload != expected:
+            return False
+        names = _validated_part_names(payload.get("factor_parts"), payload.get("state_parts"))
+        digests = payload.get("part_sha256")
+        if digests is not None:
+            if not isinstance(digests, dict) or set(digests) != set(names):
+                return False
+        for name in names:
+            part = gen_dir / name
+            if part.is_symlink() or not part.is_file():
+                return False
+            if digests is not None:
+                with part.open("rb") as stream:
+                    actual = hashlib.file_digest(stream, "sha256").hexdigest()
+                if not isinstance(digests[name], str) or actual != digests[name]:
+                    return False
+        return True
+    except (OSError, ValueError, TypeError, AttributeError, json.JSONDecodeError):
+        return False
+
+
 class IncrementalCommitTransaction:
     """单 generation 的 staged atomic commit 事务。
 
@@ -315,14 +365,17 @@ class IncrementalCommitTransaction:
     ``generation=<G>/`` 下的 staging 子目录（temp 名，**不发布**）；``commit()``
     1) 重新认证三水位线证书，2) 最后写 ``manifest.json``（temp+``os.replace``），
     3) 原子翻转 ``CURRENT`` 指针（temp+``os.replace``）。此后读者要么看到旧的
-    完整世代、要么看到新的完整世代，绝不混合。任何异常 → 删除 staged temp 目录、
-    保留旧世代与 CURRENT 指针不变、重抛。
+    完整世代、要么看到新的完整世代，绝不混合。CURRENT 翻转前失败时，本事务的
+    已移动与未移动字节一起转入不可发现的 quarantine；翻转回执不确定时，
+    只有 CURRENT、精确 manifest、声明 parts 及全部内容摘要读回一致才确认成功，
+    否则标记 IN_DOUBT 并保留字节供对账。
     """
 
     def __init__(self, generation_root: str | Path) -> None:
         self.root = Path(generation_root)
         self.root.mkdir(parents=True, exist_ok=True)
         self._staged: dict[str, Path] = {}  # part name -> staged temp path
+        self._part_sha256: dict[str, str] = {}
         self._factor_parts: list[str] = []
         self._state_parts: list[str] = []
         self._watermarks: WatermarkSet | None = None
@@ -408,6 +461,7 @@ class IncrementalCommitTransaction:
                 f"同一 part 名同时注册为 factor 与 state（跨命名空间同名冲突）: "
                 f"{sorted(conflict)}"
             )
+        _validated_part_names(list(factor_parts), list(state_parts))
         staging = self._staging_dir()
         staging.mkdir(parents=True, exist_ok=True)
         try:
@@ -416,12 +470,14 @@ class IncrementalCommitTransaction:
                 tmp = staging / f"{name}.factor.part.tmp"
                 tmp.write_bytes(payload)
                 self._staged[name] = tmp
+                self._part_sha256[name] = hashlib.sha256(payload).hexdigest()
                 self._factor_parts.append(name)
             for name, value in state_parts.items():
                 payload = _coerce_bytes_or_path(value)
                 tmp = staging / f"{name}.state.part.tmp"
                 tmp.write_bytes(payload)
                 self._staged[name] = tmp
+                self._part_sha256[name] = hashlib.sha256(payload).hexdigest()
                 self._state_parts.append(name)
         except Exception:
             shutil.rmtree(staging, ignore_errors=True)
@@ -486,6 +542,7 @@ class IncrementalCommitTransaction:
             # 2) 把 staging parts 移入正式世代目录（temp 名 → 正式名）。
             gen_dir.mkdir(parents=True, exist_ok=True)
             manifest = self._build_generation().to_manifest()
+            manifest["part_sha256"] = dict(sorted(self._part_sha256.items()))
             manifest_tmp = gen_dir / f".{_MANIFEST}.{uuid.uuid4().hex[:8]}.tmp"
             with open(str(manifest_tmp), "w", encoding="utf-8") as fh:
                 json.dump(manifest, fh, sort_keys=True, ensure_ascii=False)
@@ -505,10 +562,40 @@ class IncrementalCommitTransaction:
             if staging.exists():
                 shutil.rmtree(staging, ignore_errors=True)
             self._committed = True
-        except Exception:
-            # 任何异常：删除 staged temp 目录，保留旧世代与 CURRENT 指针不变。
-            if staging.exists():
-                shutil.rmtree(staging, ignore_errors=True)
+        except Exception as original_error:
+            # Before CURRENT flips, preserve partial bytes for diagnosis but
+            # move them out of the discoverable generation namespace.  If the
+            # pointer already names this generation, do not move/replay it:
+            # the local atomic switch may have committed and must be reconciled.
+            try:
+                published_generation = current_generation(self.root)
+            except Exception as pointer_error:
+                raise IncrementalCommitInDoubtError(
+                    f"cannot read CURRENT after commit failure: {pointer_error}"
+                ) from original_error
+            if published_generation == self._generation:
+                if _manifest_and_parts_valid(self.root, self._generation, manifest):
+                    if staging.exists():
+                        shutil.rmtree(staging, ignore_errors=True)
+                    self._committed = True
+                    return self._build_generation()
+                raise IncrementalCommitInDoubtError(
+                    f"CURRENT points to {self._generation} but generation completeness is unproven"
+                )
+            if gen_dir.exists():
+                quarantine = self.root / ".quarantine"
+                quarantine.mkdir(parents=True, exist_ok=True)
+                destination = quarantine / f"incomplete-{self._generation}-{uuid.uuid4().hex[:8]}"
+                destination.mkdir()
+                shutil.move(str(gen_dir), str(destination / "generation"))
+                if staging.exists():
+                    shutil.move(str(staging), str(destination / "staging"))
+            elif staging.exists():
+                quarantine = self.root / ".quarantine"
+                quarantine.mkdir(parents=True, exist_ok=True)
+                destination = quarantine / f"incomplete-{self._generation}-{uuid.uuid4().hex[:8]}"
+                destination.mkdir()
+                shutil.move(str(staging), str(destination / "staging"))
             raise
         return self._build_generation()
 
@@ -577,7 +664,9 @@ def list_generations(generation_root: str | Path) -> list[str]:
     out: list[str] = []
     for d in root.iterdir():
         if d.is_dir() and d.name.startswith(_GEN_PREFIX):
-            out.append(d.name[len(_GEN_PREFIX):])
+            generation = d.name[len(_GEN_PREFIX):]
+            if _manifest_and_parts_valid(root, generation):
+                out.append(generation)
     return sorted(out)
 
 

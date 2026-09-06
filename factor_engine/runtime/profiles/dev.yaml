@@ -1,0 +1,9 @@
+# Research preset recovered from the pre-R49 built-in profile.
+# Override the example date range for actual work; loading performs no reads.
+data_source:
+  start_date: "2024-01-02"
+  end_date: "2024-03-31"
+engine:
+  enable_cache: true
+materialization:
+  lake_root: ../data/factors/lake_dev

@@ -10,21 +10,26 @@ import pytest
 
 from factor_engine.runtime.dual_write_reconcile import list_open_dual_write_failures, reconcile_dual_write_state
 from factor_engine.runtime.incremental import build_incremental_plan
+from factor_engine.runtime.session_calendar import SessionCalendar
 from factor_engine.storage.catalog import FactorCatalog
 from factor_engine.storage.time_window import resolve_incremental_window_for_bar_freq
 
 
-def test_resolve_incremental_window_intraday_uses_tick_precise_mode():
+def test_resolve_incremental_window_intraday_uses_session_clock():
     window = resolve_incremental_window_for_bar_freq(
-        watermark_end="2024-06-01",
+        watermark_end="2024-05-31",
         lookback_bars=20 * 78,
         recompute_tail_bars=5,
         bar_freq="5m",
     )
-    assert window["window_mode"] == "intraday_tick_precise"
-    assert window["load_start"] is not None
+    assert window["window_mode"] == "intraday_session_clock"
+    calendar = SessionCalendar(
+        market="US", bar_freq="5m", timestamp_convention="bar_end"
+    )
+    end_anchor = calendar.bar_slots(pd.Timestamp("2024-05-31"))[-1]
+    assert window["load_start"] == calendar.offset_bars(end_anchor, -(20 * 78))
     approx = resolve_incremental_window_for_bar_freq(
-        watermark_end="2024-06-01",
+        watermark_end="2024-05-31",
         lookback_bars=20 * 78,
         recompute_tail_bars=5,
         bar_freq="5m",
@@ -38,13 +43,18 @@ def test_build_incremental_plan_intraday_window_mode():
     plan = build_incremental_plan(
         factor_id="intraday_f",
         analysis_lookback=20,
-        watermark={"end_date": "2024-06-01"},
+        watermark={"end_date": "2024-05-31"},
         factor_freq="1d",
         source_bar_freq="5m",
         lookback_extra=0,
     )
-    assert plan.window_mode == "intraday_tick_precise"
+    assert plan.window_mode == "intraday_session_clock"
     assert plan.lookback_bars >= 20 * 78
+    calendar = SessionCalendar(
+        market="US", bar_freq="5m", timestamp_convention="bar_end"
+    )
+    end_anchor = calendar.bar_slots(pd.Timestamp("2024-05-31"))[-1]
+    assert plan.load_start == calendar.offset_bars(end_anchor, -plan.lookback_bars)
 
 
 def test_reconcile_dual_write_state_no_failures(tmp_path):
@@ -63,6 +73,7 @@ def test_reconcile_dual_write_state_no_failures(tmp_path):
 
 def test_list_dual_write_failures_from_catalog(tmp_path):
     cat = FactorCatalog(tmp_path / "_catalog.sqlite")
+    cat.register(factor_id="f2", author="test", frequency="1d", ast_hash="h")
     cat.record_run(
         {
             "run_id": "run_bad",
@@ -89,6 +100,7 @@ def test_list_dual_write_failures_from_catalog(tmp_path):
 
 def test_dual_write_closed_after_repair(tmp_path):
     cat = FactorCatalog(tmp_path / "_catalog.sqlite")
+    cat.register(factor_id="f3", author="test", frequency="1d", ast_hash="h")
     cat.record_run(
         {
             "run_id": "bad",

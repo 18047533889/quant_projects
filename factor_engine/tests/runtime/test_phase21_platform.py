@@ -146,10 +146,29 @@ def test_materialize_sharded_selects_subset(tmp_path, monkeypatch):
     # 写路径是 execute_materialize_batch（不再逐因子 execute_materialize）。
     # 测试 patch 批量写入口，记录本 shard 实际写到的 factor_ids。
     def _fake_batch(engine, items, generation=None, shared_options=None):
+        from factor_engine.runtime import materialize_batch as mb
+        from factor_engine.storage.materialize import lake_publish as lp
+
         for it in items:
             written.append(it.factor_id)
+        inventory = [{"path": "fixture.parquet", "rows": 6, "bytes": 1, "sha256": "0" * 64}]
+        receipt = mb.WriteReceipt(
+            generation_id=generation.generation_id,
+            expected_items=tuple(it.factor_id for it in items),
+            items={
+                it.factor_id: mb.WriteItemReceipt(
+                    it.factor_id, state=mb.WriteState.COMMITTED, rows=6,
+                    run_id="fixture-run", inventory=inventory,
+                    inventory_digest=lp._inventory_digest(inventory),
+                )
+                for it in items
+            },
+            manifest_digest="fixture-manifest",
+            idempotency_key=generation.generation_id,
+        )
         return {
             "counters": {"batch_write_transaction_count": 1},
+            "receipt": receipt,
             "materializations": {
                 it.factor.name: {"factor_id": it.factor_id, "rows_written": 6}
                 for it in items

@@ -1,0 +1,24 @@
+schema_version: "1"
+change_id: V3-API-03-06
+git_sha: 2db45f4e446309003381a51a5e03071d31859502
+timestamp: "2026-09-07T01:41:53+08:00"
+owned_modified_files:
+  - data_access/service/app.py
+  - data_access/service/config.py
+  - data_access/service/http_resource_management.py
+  - data_access/tests/r32/test_v3_api_stream_contract.py
+  - data_access/docs/evidence/V3_API_03_06_STREAM_SERVICE_20260907.yaml
+tests:
+  - command: ".venv/bin/python -m py_compile data_access/service/app.py data_access/service/config.py data_access/service/http_resource_management.py data_access/tests/r32/test_v3_api_stream_contract.py"
+    result: PASS
+  - command: ".venv/bin/python -m pytest -q data_access/tests/r32/test_v3_api_stream_contract.py data_access/tests/r32/test_r32_http_stream_control.py data_access/tests/unit/test_read_service.py"
+    result: PASS
+    summary: "36 passed, 1 deprecation warning"
+  - command: ".venv/bin/python -m pytest -q tests/r40/test_r40_service.py tests/r40/test_r40_service_version.py tests/service/test_r21_service_hardening.py tests/service/test_service_security.py"
+    result: FAIL
+    summary: "35 passed, 6 failed; failures are in pre-existing FactorEngine service behavior outside this DataAccess-owned change"
+limitations:
+  - "Admission remains process-local; production multi-worker startup is rejected. No distributed limiter guarantee is claimed."
+  - "Arrow completion is proven by the Arrow IPC EOS marker. A mid-stream failure aborts the body; it cannot become a new HTTP error after headers."
+  - "JSON is a bounded preview after the backend table exists; it avoids pandas/string/json copy cascades but is not a source streaming path."
+  - "Full repository test suite, CI, backend parity, PIT poison, ABI/placeholder, registry/duplicate-authority, and production gate: NOT_RUN."

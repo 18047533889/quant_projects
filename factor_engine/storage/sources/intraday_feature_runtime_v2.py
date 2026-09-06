@@ -488,6 +488,17 @@ def _grouped_bars(
     return grouped_cache[key]
 
 
+def intraday_session_windows(dates):
+    """Use actual daily-anchor sessions for both ends; never request weekend-only partitions."""
+    sessions = pd.DatetimeIndex(dates).normalize().unique().sort_values()
+    position = 0
+    while position < len(sessions):
+        start = sessions[position]
+        next_position = sessions.searchsorted(start + pd.Timedelta(days=6), side="right")
+        yield start, sessions[next_position - 1]
+        position = next_position
+
+
 def load_intraday_feature(source: Any, params: dict[str, Any]):
     feature = str(params.get("feature") or "").strip()
     if not feature:
@@ -501,9 +512,7 @@ def load_intraday_feature(source: Any, params: dict[str, Any]):
         if not len(dates):
             return pd.Series(dtype=float, index=anchor)
         pieces = []
-        cursor, end = dates.min().normalize(), dates.max().normalize()
-        while cursor <= end:
-            stop = min(end, cursor + pd.Timedelta(days=6))
+        for cursor, stop in intraday_session_windows(dates):
             inner = DataAccessSource(dataset="ashare_stock_daily_adj",
                                      start_date=str(cursor.date()), end_date=str(stop.date()),
                                      instrument_filter=getattr(source.inner, "instrument_filter", None),
@@ -518,7 +527,6 @@ def load_intraday_feature(source: Any, params: dict[str, Any]):
                 row = dict(dependency)
                 key = row.pop("key")
                 source._record_dependency(f"{key}:{cursor.date()}", **row)
-            cursor = stop + pd.Timedelta(days=1)
         return pd.concat(pieces).reindex(anchor)
     # P0#5: single-feature path delegates to the single-scan compute_many so
     # both entry points share one grouped-bars pass and one shared-intermediate

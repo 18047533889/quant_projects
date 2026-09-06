@@ -97,7 +97,7 @@ def test_fin_component_score_scores_per_instrument_not_cross_sectional():
     comp = _panel({"A": [1.0, 2.0], "B": [-3.0, -4.0]})  # single component
     out = FinComponentScore()._calculate_series(comp)
     assert out["A"].iloc[0] == 1.0, "instrument A score must be 1 (its own value)"
-    assert np.isnan(out["B"].iloc[0]), "instrument B fails the up condition -> NaN (no signal)"
+    assert out["B"].iloc[0] == 0.0, "finite FALSE is a zero contribution, not missing"
 
 
 def test_fin_component_score_polars_backend_registered():

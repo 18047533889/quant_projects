@@ -22,15 +22,21 @@ def _cols(frame: pl.DataFrame) -> list[str]:
 
 
 def _score_component(component: np.ndarray, direction: str) -> np.ndarray:
+    finite = np.isfinite(component)
+    out = np.zeros_like(component, dtype=float)
     if direction == "pos":
-        return np.where(np.isfinite(component) & (component != 0), 1.0, np.nan)
-    if direction == "neg":
-        return np.where(np.isfinite(component) & (component != 0), -1.0, np.nan)
-    if direction == "up":
-        return np.where(np.isfinite(component) & (component > 0), 1.0, np.nan)
-    if direction == "down":
-        return np.where(np.isfinite(component) & (component < 0), 1.0, np.nan)
-    raise ValueError(f"unknown component direction: {direction!r}")
+        condition, value = component != 0, 1.0
+    elif direction == "neg":
+        condition, value = component != 0, -1.0
+    elif direction == "up":
+        condition, value = component > 0, 1.0
+    elif direction == "down":
+        condition, value = component < 0, 1.0
+    else:
+        raise ValueError(f"unknown component direction: {direction!r}")
+    out[finite & condition] = value
+    out[~finite] = np.nan
+    return out
 
 
 def fin_component_score(*panels, component_directions=None, score_weights=None, missing_policy="score_available"):

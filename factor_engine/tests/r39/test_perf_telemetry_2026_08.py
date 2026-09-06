@@ -295,6 +295,96 @@ def test_run_summary_from_counters_defaults_missing():
     assert s.factor_count == 0
     assert s.total_ttdc_ms == 0.0
     assert s.scan_bytes == 0
+    payload = s.to_dict(environment={})
+    assert payload["metric_availability"]["scan_ms"] is False
+    assert payload["metric_provenance"]["scan_ms"] == "unavailable_default"
+    assert payload["amplification_availability"]["scan_amplification"] is False
+
+
+def test_run_summary_distinguishes_measured_zero_from_missing():
+    from factor_engine.runtime.performance_run_summary import PerformanceRunSummary
+
+    missing = PerformanceRunSummary.from_counters(None, {})
+    measured_zero = PerformanceRunSummary.from_counters(
+        None,
+        {"scan_ms": 0.0, "scan_bytes": 0},
+    )
+
+    assert missing.scan_ms == measured_zero.scan_ms == 0.0
+    assert missing.scan_bytes == measured_zero.scan_bytes == 0
+    assert missing.metric_availability["scan_ms"] is False
+    assert measured_zero.metric_availability["scan_ms"] is True
+    assert measured_zero.metric_provenance["scan_ms"] == "timing_input"
+    assert measured_zero.metric_availability["scan_bytes"] is True
+
+
+def test_run_summary_marks_invalid_metric_unavailable():
+    from factor_engine.runtime.performance_run_summary import PerformanceRunSummary
+
+    s = PerformanceRunSummary.from_counters(None, {"scan_ms": "not-a-number"})
+
+    assert s.scan_ms == 0.0
+    assert s.metric_availability["scan_ms"] is False
+    assert s.metric_provenance["scan_ms"] == "unavailable_default"
+
+
+@pytest.mark.parametrize("invalid", [float("nan"), float("inf"), -1.0, ""])
+def test_run_summary_rejects_non_finite_negative_or_empty_metrics(invalid):
+    from factor_engine.runtime.performance_run_summary import PerformanceRunSummary
+
+    s = PerformanceRunSummary.from_counters(
+        None,
+        {"scan_ms": invalid, "scan_bytes": invalid},
+    )
+
+    assert s.scan_ms == 0.0
+    assert s.scan_bytes == 0
+    assert s.metric_availability["scan_ms"] is False
+    assert s.metric_availability["scan_bytes"] is False
+
+
+@pytest.mark.parametrize("invalid", [float("nan"), float("inf"), -1, ""])
+def test_run_summary_rejects_invalid_counter_snapshot_values(invalid):
+    from factor_engine.runtime.performance_run_summary import PerformanceRunSummary
+
+    class InvalidCounters:
+        def snapshot(self):
+            return {"factor_count": invalid}
+
+    s = PerformanceRunSummary.from_counters(InvalidCounters(), {})
+
+    assert s.factor_count == 0
+    assert s.metric_availability["factor_count"] is False
+    assert s.metric_provenance["factor_count"] == "unavailable_default"
+
+
+def test_run_summary_zero_denominator_makes_ratio_unavailable():
+    from factor_engine.runtime.performance_run_summary import PerformanceRunSummary
+
+    s = PerformanceRunSummary.from_counters(
+        None,
+        {"scan_bytes": 0, "minimum_required_scan_bytes": 0},
+    )
+    payload = s.to_dict(environment={})
+
+    assert payload["amplification"]["scan_amplification"] == 0.0
+    assert payload["amplification_availability"]["scan_amplification"] is False
+
+
+def test_run_summary_direct_constructor_marks_numeric_fields_available():
+    from factor_engine.runtime.performance_run_summary import PerformanceRunSummary
+
+    required = {
+        name: 0.0 if name.endswith("_ms") else 0
+        for name in PerformanceRunSummary.__dataclass_fields__
+        if name not in {"metric_availability", "metric_provenance"}
+    }
+    s = PerformanceRunSummary(**required)
+    payload = s.to_dict(environment={})
+
+    assert payload["scan_ms"] == 0.0
+    assert payload["metric_availability"]["scan_ms"] is True
+    assert payload["metric_provenance"]["scan_ms"] == "direct_constructor"
 
 
 # ---------------------------------------------------------------------------

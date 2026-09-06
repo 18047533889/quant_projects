@@ -59,6 +59,14 @@ def classify_exception(exc: BaseException) -> ErrorClass:
     """#P1-4 把异常分类；DuckDB 的包装 hierarchy 也覆盖。"""
     import duckdb
 
+    # Check deterministic errors before broad OSError / DuckDB IO handling.
+    if isinstance(exc, FileNotFoundError) or "no files found that match the pattern" in str(exc).lower():
+        return ErrorClass.INVALID_QUERY
+    if isinstance(exc, PermissionError):
+        return ErrorClass.AUTH
+    if isinstance(exc, TimeoutError):
+        return ErrorClass.DEADLINE
+
     if isinstance(exc, (OSError, IOError)):
         text = str(exc).lower()
         if any(t in text for t in ("timed out", "timeout", "reset", "broken pipe",

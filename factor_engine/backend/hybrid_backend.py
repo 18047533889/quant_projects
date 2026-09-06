@@ -44,47 +44,25 @@ class HybridBackend(Backend):
         return self._long
 
     def execute(self, plan: PlanNode, ctx: ExecutionContext) -> Any:
-        from factor_engine.backend.plan_cost_router import choose_plan_route, record_plan_route
+        from factor_engine.backend.plan_cost_router import choose_plan_route, record_plan_route, plan_requires_data_source
 
         route = choose_plan_route(plan, ctx)
-        if route.backend == "pandas_numpy" and not route.ops and not _supports_load_column(ctx):
-            from dataclasses import replace
+        # Data-plane eligibility is part of selection, before certificates are
+        # built. Never relabel an already certified route in the executor.
+        if (plan_requires_data_source(plan) and route.backend in {"pandas_numpy", "polars_panel"} and not _supports_load_column(ctx)) or (
+            route.backend == "polars_long" and not _supports_polars_long_scan(ctx)
+        ):
+            raise RuntimeError("selected route no longer matches source capabilities; replan required")
+        certificate = route.certificate
+        if certificate is not None and certificate.requested_backend != route.backend:
+            raise RuntimeError("selected route differs from execution certificate")
+        if certificate is not None:
+            from factor_engine.planner.plan_hash import structural_key
 
-            if _supports_polars_long_scan(ctx):
-                route = replace(
-                    route,
-                    backend="polars_long",
-                    routing_basis="estimated",
-                    reason="pandas candidate removed: data source lacks load_column; long scan available",
-                )
-            else:
-                route = replace(
-                    route,
-                    backend="hybrid",
-                    routing_basis="estimated",
-                    reason="pandas candidate removed: data source lacks load_column; using certified hybrid",
-                )
-        if route.backend == "polars_long" and not _supports_polars_long_scan(ctx):
-            from dataclasses import replace
-
-            remaining = tuple((k, v) for k, v in route.candidate_costs if k != "polars_long")
-            if remaining:
-                chosen = min(remaining, key=lambda item: (item[1], item[0]))
-                route = replace(
-                    route,
-                    backend=chosen[0],
-                    estimated_cost=chosen[1],
-                    candidate_costs=remaining,
-                    routing_basis="estimated",
-                    reason="polars_long candidate removed: data source lacks scan_polars_long",
-                )
-            else:
-                route = replace(
-                    route,
-                    backend="hybrid",
-                    routing_basis="estimated",
-                    reason="polars_long unavailable on data plane; using certified hybrid",
-                )
+            if certificate.certificate_hash != certificate.recompute_hash() or certificate.structural_hash != structural_key(plan):
+                raise RuntimeError("execution certificate integrity or plan binding mismatch")
+        if str(getattr(ctx, "run_mode", "research")) == "production" and certificate is None:
+            raise RuntimeError("production route requires an execution certificate")
 
         record_plan_route(ctx, route)
         # R21-P022: stamp selected_backend on the context so per-operator

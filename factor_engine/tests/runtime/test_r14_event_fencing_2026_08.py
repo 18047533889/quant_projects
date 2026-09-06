@@ -20,6 +20,7 @@ from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
+import pandas as pd
 
 from factor_engine.runtime.incremental_scheduler import (
     DataEvent,
@@ -29,6 +30,30 @@ from factor_engine.runtime.incremental_scheduler import (
     execute_incremental_updates_from_event,
 )
 from factor_engine.storage.materializer import ParquetMaterializer
+from factor_engine.storage.trading_calendar import (
+    TradingCalendar,
+    clear_trading_calendar_cache,
+    register_trading_calendar,
+)
+
+
+@pytest.fixture(autouse=True)
+def _production_calendar():
+    """Install a deterministic, explicitly sourced A-share calendar for R14."""
+    clear_trading_calendar_cache()
+    register_trading_calendar(
+        "ashare",
+        TradingCalendar(
+            list(pd.bdate_range("2026-07-01", "2026-09-30")),
+            anchor_policy="previous_trade_day",
+            source="explicit_test_fixture",
+            snapshot="r14-2026-08",
+            version="1",
+            timezone="Asia/Shanghai",
+        ),
+    )
+    yield
+    clear_trading_calendar_cache()
 
 
 def _ev(
@@ -247,7 +272,9 @@ def test_r14_execute_flow_stale_worker_publish_gate(tmp_path, monkeypatch):
     _force_production(monkeypatch)
     monkeypatch.setenv("DATA_EVENT_PRODUCTION_AUTO_PUBLISH", "1")
 
-    ir = Analyzer(production=True).lower(parse_factor('field("close")').expr).ir
+    ir = Analyzer(production=True, market="ashare").lower(
+        parse_factor('field("close")').expr
+    ).ir
     ast_hash = compute_ir_hash(ir)
     lake = tmp_path / "lake"
     catalog = ParquetMaterializer(lake_root=lake).catalog
@@ -297,7 +324,7 @@ def test_r14_execute_flow_stale_worker_publish_gate(tmp_path, monkeypatch):
     )
     with pytest.raises(DataEventLeaseLostError, match="接管|失效"):
         execute_incremental_updates_from_event(
-            None, ev, lake_root=lake, engine_factory=fake_engine_factory
+            None, ev, lake_root=lake, market="ashare", engine_factory=fake_engine_factory
         )
     # A 未 publish 任何因子（stage 后被 fencing 门拦下）→ 读者看到 ZERO 新因子
     assert control["staged"] == ["f_a"]

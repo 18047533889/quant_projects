@@ -67,7 +67,10 @@ class TestOperatorPolicy:
         assert p.pit_safe
 
     def test_lead_policy(self):
-        assert OperatorRegistry.get("Lead") is None
+        from factor_engine.cleaned_operators.tombstones import RemovedOperatorError
+
+        with pytest.raises(RemovedOperatorError, match="future_reference"):
+            OperatorRegistry.get("Lead")
 
     def test_rank_is_cross_section(self):
         op = OperatorRegistry.get("rank")

@@ -11,6 +11,73 @@ import pytest
 pd = pytest.importorskip("pandas")
 
 
+def test_real_staging_materialization_binds_and_publishes_exact_identity(
+    tmp_path, monkeypatch
+):
+    """Real local staging bytes carry the receipt consumed by publication."""
+    from data_access import get_store, reset_store
+    from factor_engine.storage.materialize.lake_publish import publish_factor_lake
+    from factor_engine.storage.materializer import ParquetMaterializer
+
+    monkeypatch.setenv(
+        "QUANTSOCIETY_WORKSPACE_DATA_ROOT", str(tmp_path / "data_access_workspace")
+    )
+    monkeypatch.setenv("RUN_NAMESPACE", "real_staging_receipt")
+    monkeypatch.setenv("QUANT_RUN_NAMESPACE", "real_staging_receipt")
+    reset_store()
+    try:
+        idx = pd.MultiIndex.from_product(
+            [pd.to_datetime(["2026-08-07"]), ["A"]],
+            names=["timestamp", "instrument"],
+        )
+        materializer = ParquetMaterializer(lake_root=tmp_path / "lake")
+        summary = materializer.materialize(
+            factor_id="receipt_factor",
+            result=pd.Series([1.0], index=idx),
+            ast_hash="receipt-hash",
+            frequency="1d",
+            write_target="staging",
+            defer_watermark=True,
+            run_lineage={"run_id": "receipt-run"},
+        )
+        identity = summary["staging"]["identity"]
+        assert identity["run_id"] == "receipt-run"
+        assert identity["inventory"]
+        identity_path = (
+            get_store()
+            .resolve_dataset_path("factor_lake_staging", factor_id="receipt_factor")
+            / ".fe_staging_identity.json"
+        )
+        assert identity_path.is_file()
+
+        # The packaged published target is an absolute production path; keep this
+        # test temp-only while exercising the real publisher's identity checks.
+        store = get_store()
+        monkeypatch.setattr(
+            store,
+            "publish_from_staging",
+            lambda *args, **kwargs: {"rows": 1},
+        )
+        published = publish_factor_lake(
+            factor_id="receipt_factor",
+            lake_root=tmp_path / "lake",
+            approve=True,
+            sync_from_local=False,
+            reconcile=False,
+            expected_staging_generation=identity["generation_id"],
+            expected_manifest_digest=identity["manifest_digest"],
+            expected_run_id=identity["run_id"],
+            frequency="1d",
+        )
+        assert published["factor_id"] == "receipt_factor"
+        assert published["approved"] is True
+        assert published["generation_id"] == identity["generation_id"]
+        assert published["manifest_digest"] == identity["manifest_digest"]
+        assert published["run_id"] == identity["run_id"]
+    finally:
+        reset_store()
+
+
 def test_delete_staging_rows_after_watermark(tmp_path, monkeypatch):
     staging_root = tmp_path / "staging" / "ns" / "factor_lake" / "factors" / "f1"
     part = staging_root / "year=2024"
@@ -37,12 +104,7 @@ def test_delete_staging_rows_after_watermark(tmp_path, monkeypatch):
                 k: v for k, v in kwargs.items() if k in ("start", "end", "after")
             })
 
-    import sys
-    from types import ModuleType
-
-    fake_mod = ModuleType("data_access")
-    fake_mod.get_store = lambda: FakeStore()  # type: ignore[attr-defined]
-    monkeypatch.setitem(sys.modules, "data_access", fake_mod)
+    monkeypatch.setattr("data_access.get_store", lambda: FakeStore())
 
     from factor_engine.storage.staging_loader import delete_staging_rows
 

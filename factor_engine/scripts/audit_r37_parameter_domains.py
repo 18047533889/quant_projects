@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import csv
 import json
+import subprocess
 import sys
 from pathlib import Path
 
@@ -40,7 +41,6 @@ from factor_engine.runtime.parameter_domain_store import (  # noqa: E402
 )
 
 E = Path("evidence/factor_engine/r37")
-E.mkdir(parents=True, exist_ok=True)
 
 N_STK, N_DAY = 50, 300
 WINDOWS = (1, 2, 5, 20, 60, 120, 252)
@@ -294,6 +294,86 @@ _LAG_VALUES: list[tuple[object, bool]] = [
 ]
 
 
+def _require_clean_worktree(
+    *, cwd: Path | None = None, runner=subprocess.run,
+) -> tuple[Path, str]:
+    """Return clean repository root and HEAD for later write-boundary recheck."""
+    base = Path.cwd() if cwd is None else Path(cwd)
+    try:
+        root_result = runner(
+            ["git", "rev-parse", "--show-toplevel"], cwd=base,
+            check=True, capture_output=True, text=True,
+        )
+        root_text = root_result.stdout.strip()
+        if not root_text:
+            raise RuntimeError("cannot verify clean git worktree: empty repository root")
+        root = Path(root_text)
+        head_result = runner(
+            ["git", "rev-parse", "HEAD"], cwd=root,
+            check=True, capture_output=True, text=True,
+        )
+        status = runner(
+            ["git", "status", "--porcelain", "--untracked-files=normal"], cwd=root,
+            check=True, capture_output=True, text=True,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise RuntimeError(f"cannot verify clean git worktree: {exc}") from exc
+    head = head_result.stdout.strip()
+    if not head:
+        raise RuntimeError("cannot verify clean git worktree: empty HEAD")
+    if status.stdout.strip():
+        raise RuntimeError(
+            "refusing SHA-bound R37 certification from a dirty worktree; "
+            "reconcile the working tree externally before certification"
+        )
+    return root, head
+
+
+def _recheck_clean_worktree(
+    initial: tuple[Path, str], *, runner=subprocess.run,
+) -> None:
+    """Refuse writes if the repository changed while oracle cases executed."""
+    root, head = initial
+    current_root, current_head = _require_clean_worktree(cwd=root, runner=runner)
+    if current_root.resolve() != root.resolve():
+        raise RuntimeError("repository root changed while R37 audit was running")
+    if current_head != head:
+        raise RuntimeError("HEAD changed while R37 audit was running")
+
+
+def _expected_case_keys() -> set[tuple[str, str]]:
+    expected: set[tuple[str, str]] = set()
+    for canonical, kind in _REF_BY_CANON.items():
+        if kind == "window":
+            expected.update((canonical, f"window={value}") for value, _ in _WINDOW_VALUES)
+        elif kind == "window_lag":
+            expected.update((canonical, f"lag={value}") for value, _ in _LAG_VALUES)
+        else:
+            expected.add((canonical, "default"))
+    return expected
+
+
+def _audit_case_failures(
+    rows: list[dict], *, expected: set[tuple[str, str]] | None = None,
+) -> list[str]:
+    """List failed, missing, duplicate, or non-executed certification cases."""
+    expected = _expected_case_keys() if expected is None else set(expected)
+    seen: dict[tuple[str, str], list[dict]] = {}
+    failures: list[str] = []
+    for row in rows:
+        key = (str(row.get("canonical", "")), str(row.get("param", "")))
+        seen.setdefault(key, []).append(row)
+        if row.get("pass") is not True:
+            reason = str(row.get("reason") or "case not executed successfully")
+            failures.append(f"{key[0]} {key[1]}: {reason}")
+    for key in sorted(expected - set(seen)):
+        failures.append(f"{key[0]} {key[1]}: missing/non-executed case")
+    for key, duplicates in sorted(seen.items()):
+        if key in expected and len(duplicates) != 1:
+            failures.append(f"{key[0]} {key[1]}: executed {len(duplicates)} times")
+    return failures
+
+
 def _panel() -> np.ndarray:
     rng = np.random.default_rng(7)
     a = rng.normal(size=(N_DAY, N_STK))
@@ -487,6 +567,12 @@ def _certify_panel(canonical: str, store: ParameterDomainCertificationStore) -> 
 
 
 def main() -> int:
+    try:
+        initial_git_state = _require_clean_worktree()
+    except RuntimeError as exc:
+        print(f"[r37-param] REFUSED: {exc}", file=sys.stderr)
+        return 2
+
     ensure_cleaned_loaded()
     store = ParameterDomainCertificationStore()
 
@@ -500,7 +586,20 @@ def main() -> int:
         else:
             rows.extend(_certify_panel(canon, store))
 
+    case_failures = _audit_case_failures(rows)
+    if case_failures:
+        print("[r37-param] FAILED: certification cases are incomplete or invalid", file=sys.stderr)
+        for failure in case_failures:
+            print(f"  {failure}", file=sys.stderr)
+        return 1
+
     # ---- 落盘 ledger ----
+    try:
+        _recheck_clean_worktree(initial_git_state)
+    except RuntimeError as exc:
+        print(f"[r37-param] REFUSED: {exc}", file=sys.stderr)
+        return 2
+    E.mkdir(parents=True, exist_ok=True)
     try:
         import polars as pl  # type: ignore
 

@@ -441,7 +441,9 @@ def check_production_fastpath_formula_ops(
     for node in ast.walk(tree):
         if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
             name = node.func.id
-            if name == "col":
+            # DSL column constructors are validated/lowered by Analyzer and
+            # are not runtime operators subject to backend certification.
+            if name in {"col", "field"}:
                 continue
             canon = OperatorRegistry._aliases.get(name, name)
             if canon not in _SKIP_OPS:

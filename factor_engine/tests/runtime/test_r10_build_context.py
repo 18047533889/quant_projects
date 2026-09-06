@@ -100,6 +100,7 @@ def test_composite_children_inherit_production_context():
                     "source": {"type": "data_access", "dataset": "test_valuation"},
                 },
             },
+            "joins": {"fund": {"method": "asof_backward"}},
         },
         build_context=_ctx(run_mode="production", enforce_mining_gate=True),
     )

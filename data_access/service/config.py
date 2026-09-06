@@ -41,6 +41,8 @@ class ServiceSettings:
     allow_open: bool = False
     max_rows: int = 500_000
     max_bytes: int = 512_000_000
+    json_preview_max_rows: int = 10_000
+    json_preview_max_bytes: int = 8_000_000
     max_concurrency: int = 8
     request_id_header: str = "X-Request-ID"
 
@@ -57,9 +59,26 @@ class ServiceSettings:
             allow_open=_env_flag("DATA_ACCESS_API_ALLOW_OPEN"),
             max_rows=_env_int("DATA_ACCESS_API_MAX_ROWS", 500_000),
             max_bytes=_env_int("DATA_ACCESS_API_MAX_BYTES", 512_000_000),
+            json_preview_max_rows=_env_int("DATA_ACCESS_API_JSON_PREVIEW_MAX_ROWS", 10_000),
+            json_preview_max_bytes=_env_int("DATA_ACCESS_API_JSON_PREVIEW_MAX_BYTES", 8_000_000),
             max_concurrency=_env_int("DATA_ACCESS_API_MAX_CONCURRENCY", 8),
         )
 
     @property
     def auth_required(self) -> bool:
         return bool(self.api_key) or (self.production_mode and not self.allow_open)
+
+    def validate_resource_boundary(self) -> None:
+        """Fail closed when process-local admission is deployed as multi-worker."""
+        workers_raw = os.environ.get("DATA_ACCESS_WORKERS", "1").strip()
+        try:
+            workers = int(workers_raw)
+        except ValueError as exc:
+            raise ValueError("DATA_ACCESS_WORKERS must be a positive integer") from exc
+        if workers <= 0:
+            raise ValueError("DATA_ACCESS_WORKERS must be a positive integer")
+        if self.production_mode and workers != 1:
+            raise RuntimeError(
+                "data_access service admission is process-local; production requires "
+                "DATA_ACCESS_WORKERS=1"
+            )

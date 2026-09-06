@@ -577,9 +577,23 @@ def build_html(page, note, dsl_text, dsl_note, req_cols, base, opt_meta, gate, r
     if req_cols:
         rows = ""
         for f in [c.strip() for c in req_cols.split(",") if c.strip()]:
-            label, desc = FIELD_DOC.get(f, (f, "（未在 dataaccess 标准字段中 — 可能为自定义）"))
+            if f.lower() in {"open", "high", "low", "close", "volume", "amount", "vwap",
+                              "adjopen", "adjhigh", "adjlow", "adjclose", "adjvolume", "adjamount", "adjvwap"}:
+                continue
+            if f == "Factor":
+                label, desc = "复权因子（不是模型因子输出）", "物理列 Factor；当前数据适配器以 Volume / Factor 生成复权成交量。不可把该列当成待评估的因子值。"
+            elif f == "valuation.free_cap":
+                label, desc = "自由流通股本", "StockValuationDaily.FreeCap，单位：股；按证券和交易日精确对齐，不是自由流通市值。"
+            else:
+                from factor_engine.fields.market_registry import MULTI_MARKET_FIELD_REGISTRY
+                spec = MULTI_MARKET_FIELD_REGISTRY.resolve_field("ashare", f.removeprefix("valuation."), strict=False)
+                if spec is not None:
+                    label = spec.description or spec.name
+                    desc = f"来源：{spec.table}.{spec.source_name}；单位：{spec.unit}；时间绑定：{spec.temporal_model}。"
+                else:
+                    label, desc = FIELD_DOC.get(f, (f, "未核验的字段/中间变量：须追溯定义并展开为注册字段与算子，不能据此声称DSL可复现。"))
             color = "#0e7490" if f in FIELD_DOC else "#94a3b8"
-            rows += f'<tr><td><code style="color:{color}">{f}</code></td><td><b>{label}</b></td><td style="color:#475569">{desc}</td></tr>'
+            rows += f'<tr><td><code style="color:{color}">{esc(f)}</code></td><td><b>{esc(label)}</b></td><td style="color:#475569">{esc(desc)}</td></tr>'
         fields_html = (
             '<div class="card">\n'
             '<h2>📊 输入字段释义 (dataaccess 标准列)</h2>\n'
@@ -592,10 +606,13 @@ def build_html(page, note, dsl_text, dsl_note, req_cols, base, opt_meta, gate, r
     used = []
     for m in re.finditer(r"\b([a-zA-Z_][a-zA-Z_0-9]*)\s*\(", dsl_text):
         op = m.group(1)
-        if op in OP_DOC and op not in used:
+        if op not in used:
             used.append(op)
     if used:
-        lis = "".join(f'<li><code style="color:#7c3aed">{op}</code> — <span style="color:#475569">{OP_DOC[op]}</span></li>' for op in used)
+        explanations = dict(OP_DOC, neg="neg(x)：逐元素取负；方向处理必须只执行一次。",
+            col="col(name)：读取明确指定的数据列，字段来源与单位见上表。",
+            safe_div_null="safe_div_null(a,b)：安全除法；无效分母按该算子空值策略处理，不能当作零收益。")
+        lis = "".join(f'<li><code style="color:#7c3aed">{esc(op)}</code> — <span style="color:#475569">{esc(explanations.get(op, "算子详细释义尚待注册表/实现核验，不推测参数和空值语义。"))}</span></li>' for op in used)
         op_rows = f'<ol style="padding-left:18px;margin:8px 0">{lis}</ol>'
     formula_steps_html = (
         '<div class="card">\n<h2>🔍 公式逐行拆解（算子释义）</h2>\n' + op_rows + '</div>\n'
@@ -612,16 +629,28 @@ def build_html(page, note, dsl_text, dsl_note, req_cols, base, opt_meta, gate, r
             f"{objective_names.get(key, key)} {weight:.0%}"
             for key, weight in m1["objective"].get("weights", {}).items())
     if m1.get("optimizer"):
+        descriptions = {
+            "raw": "不追加预处理；保留训练窗已确定的方向和原始公式",
+            "cs_rank": "每天截面按因子值转为百分位排名；通常保留股票顺序",
+            "cs_zscore": "每天截面减均值、除标准差；通常保留股票顺序",
+            "winsor_1pct": "每天把低于1%及高于99%分位的值压到边界（不是删除股票）",
+            "winsor_5pct": "每天把低于5%及高于95%分位的值压到边界（可能增加并列值）",
+        }
         variant_rows = []
         for name, trial in (m1.get("variants") or {}).items():
             train_metrics = trial.get("train") or {}
             validation_metrics = trial.get("validation") or {}
             variant_rows.append(
-                f'<tr><td>{esc(name)}</td><td>{fmt_num(train_metrics.get("rankic_ir"))}</td>'
+                f'<tr><td>{esc(name)} — {"最终采用" if name == m1.get("best") else "已评估候选，未采用"}'
+                f'<br>{esc(descriptions.get(name, "详见完整表达式"))}</td><td>{fmt_num(train_metrics.get("rankic_ir"))}</td>'
                 f'<td>{fmt_num(validation_metrics.get("rankic_ir"))}</td>'
                 f'<td>{fmt_num(validation_metrics.get("ls_sharpe"))}</td>'
                 f'<td><code>{esc(trial.get("expression", "—"))}</code></td></tr>')
         optimizer_audit = (
+            '<p><strong>这些是分别测试的备选方案，不是依次执行的五个步骤。</strong>'
+            '最终仅采用“最优变体”。当前候选未包含行业/市值中性化，也不是多步骤组合搜索。</p>'
+            '<p>为什么数值相同？RankIC 和按排名分层主要取决于股票顺序；排名和标准化通常不改变顺序，'
+            '因此指标和曲线可能重合。去极值可能只改变尾部并列值。显示精度也可能掩盖微小差异；相同不代表没有执行。</p>'
             f'<p>执行库：{esc(m1["optimizer"])} / {esc(m1.get("preprocess", ""))}</p>'
             f'<p>选优窗口：{esc(m1.get("selection_window", ""))}；'
             f'方向窗口：{esc(m1.get("direction_window", ""))}</p>'
@@ -643,7 +672,9 @@ def build_html(page, note, dsl_text, dsl_note, req_cols, base, opt_meta, gate, r
                 + esc(str(m1.get("stress_commission_rate", "未记录"))) + '，其他成本仍未计入。</p>'
                 '<table class="meta-table"><tr><th>目标</th><th>候选变体</th><th>分数</th><th>完整 DSL</th></tr>'
                 + ''.join(comparison_rows) + '</table><p>Pareto 非支配候选：'
-                + esc(', '.join(comparison.get("pareto_frontier", [])) or '无') + '</p>')
+                + esc(', '.join(comparison.get("pareto_frontier", [])) or '无')
+                + '。意思是没有另一个候选在所有比较指标上都不差、且至少一项更好；'
+                '并列方案可同时保留。这不表示全部部署，也不表示每个都改善了因子。</p>')
 
     opt_block = f'''
 <div class="card">

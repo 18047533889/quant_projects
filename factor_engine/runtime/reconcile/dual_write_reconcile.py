@@ -178,7 +178,7 @@ def repair_dual_write_clickhouse(
     clickhouse_table: str = "factor_values",
     commit_watermark: bool = True,
     prefer_source: LoadSource | None = None,
-    compensate_staging: bool = True,
+    compensate_staging: bool = False,
     compensate_after: str | None = None,
     ch_host: str | None = None,
     ch_port: int | None = None,
@@ -195,18 +195,6 @@ def repair_dual_write_clickhouse(
         raise FactorNotFoundError(f"Factor not registered: {factor_id}")
 
     staging_compensation: dict[str, Any] | None = None
-    if compensate_staging:
-        from factor_engine.storage.staging_loader import delete_staging_rows
-
-        watermark = cat.get_watermark(factor_id)
-        after = compensate_after
-        if after is None and watermark and watermark.get("end_date"):
-            after = str(watermark["end_date"])
-        staging_compensation = delete_staging_rows(
-            factor_id,
-            after=after,
-        )
-
     try:
         series, load_source = _load_series_for_repair(
             factor_id,
@@ -246,17 +234,31 @@ def repair_dual_write_clickhouse(
         factor_version=ast_hash[:16],
         ensure_table=True,
     )
+    rows_written = getattr(ch_summary, "rows_written", None)
+    repair_status = (
+        "WRITE_RESULT_UNPROVEN" if ch_summary is None else "SUBMITTED_UNVERIFIED"
+    )
 
     watermark = cat.get_watermark(factor_id)
+    # No current ClickHouse API returns a generation/content-scoped durable
+    # receipt. A global factor_id row count can be satisfied by old rows and is
+    # not proof for this repair. Therefore staging is retained even when legacy
+    # callers request compensation.
+    if compensate_staging:
+        staging_compensation = {
+            "ok": False,
+            "skipped": True,
+            "factor_id": factor_id,
+            "rows_deleted": 0,
+            "reason": "retained_for_reconciliation_unverified",
+        }
+
+    watermark_commit = None
     if commit_watermark:
-        start, end, rows = _merge_watermark_range(watermark, series)
-        cat.update_watermark(
-            factor_id=factor_id,
-            start_date=start,
-            end_date=end,
-            row_count=rows,
-        )
-        watermark = cat.get_watermark(factor_id)
+        watermark_commit = {
+            "committed": False,
+            "reason": "retained_until_scoped_clickhouse_receipt",
+        }
 
     from factor_engine.runtime.lineage import new_run_id
 
@@ -272,23 +274,28 @@ def repair_dual_write_clickhouse(
             "dq_passed": True,
             "row_count": len(series),
             "extra": {
-                "dual_write_repaired": True,
-                "clickhouse_rows": ch_summary.rows_written,
+                "dual_write_repair_attempted": True,
+                "dual_write_repair_status": repair_status,
+                "clickhouse_rows": rows_written,
                 "repair_source": load_source,
             },
         }
     )
 
     return {
-        "ok": True,
+        "ok": False,
+        "status": repair_status,
         "factor_id": factor_id,
         "load_source": load_source,
         "staging_compensation": staging_compensation,
         "clickhouse": {
-            "table": ch_summary.table,
-            "rows_written": ch_summary.rows_written,
-            "database": ch_summary.database,
+            "table": getattr(ch_summary, "table", clickhouse_table),
+            "rows_written": rows_written,
+            "database": getattr(ch_summary, "database", None),
         },
         "watermark": watermark,
-        "rows_repaired": len(series),
+        "watermark_commit": watermark_commit,
+        "rows_submitted": len(series),
+        "staging_retained": True,
+        "limitation": "no generation/content-scoped ClickHouse receipt is available",
     }

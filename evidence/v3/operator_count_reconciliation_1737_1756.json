@@ -1,0 +1,29 @@
+{
+  "schema_version": "factor_engine.operator_count_reconciliation.v1",
+  "git_sha": "2db45f4e446309003381a51a5e03071d31859502",
+  "report_canonical_count": 1737,
+  "runtime_canonical_count": 1756,
+  "report_only": [],
+  "runtime_only": [
+    {"canonical": "avg2", "status": "experimental", "origin": "factor_dsl_np"},
+    {"canonical": "fillna", "status": "experimental", "origin": "factor_dsl_np"},
+    {"canonical": "intra_ts_amount_weighted_mean", "status": "experimental", "origin": "intraday.sufficient_stats_ops"},
+    {"canonical": "intra_ts_argmax", "status": "experimental", "origin": "intraday.sufficient_stats_ops"},
+    {"canonical": "intra_ts_argmin", "status": "experimental", "origin": "intraday.sufficient_stats_ops"},
+    {"canonical": "intra_ts_first", "status": "experimental", "origin": "intraday.sufficient_stats_ops"},
+    {"canonical": "intra_ts_last", "status": "experimental", "origin": "intraday.sufficient_stats_ops"},
+    {"canonical": "intra_ts_last_value", "status": "experimental", "origin": "intraday.sufficient_stats_ops"},
+    {"canonical": "intra_ts_max", "status": "experimental", "origin": "intraday.sufficient_stats_ops"},
+    {"canonical": "intra_ts_mean", "status": "experimental", "origin": "intraday.sufficient_stats_ops"},
+    {"canonical": "intra_ts_min", "status": "experimental", "origin": "intraday.sufficient_stats_ops"},
+    {"canonical": "intra_ts_realized_covariance", "status": "experimental", "origin": "intraday.sufficient_stats_ops"},
+    {"canonical": "intra_ts_realized_variance", "status": "experimental", "origin": "intraday.sufficient_stats_ops"},
+    {"canonical": "intra_ts_std", "status": "experimental", "origin": "intraday.sufficient_stats_ops"},
+    {"canonical": "intra_ts_sum", "status": "experimental", "origin": "intraday.sufficient_stats_ops"},
+    {"canonical": "intra_ts_variance", "status": "experimental", "origin": "intraday.sufficient_stats_ops"},
+    {"canonical": "intra_ts_volume_weighted_return", "status": "experimental", "origin": "intraday.sufficient_stats_ops"},
+    {"canonical": "intra_ts_vwap", "status": "experimental", "origin": "intraday.sufficient_stats_ops"},
+    {"canonical": "ts_positive_streak", "status": "experimental", "origin": "factor_dsl_np"}
+  ],
+  "conclusion": "The 1,737 report set is a strict subset of the loaded all-profile registry. The difference is 19 named experimental registrations, not missing implementations or aliases."
+}

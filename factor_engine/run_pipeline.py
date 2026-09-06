@@ -6,14 +6,9 @@ from __future__ import annotations
 
 import argparse
 import json
-import sys
 from pathlib import Path
 
-_PROJECT_ROOT = str(Path(__file__).resolve().parent)
-if _PROJECT_ROOT not in sys.path:
-    sys.path.insert(0, _PROJECT_ROOT)
-
-from logging_utils import configure_logging, get_logger
+from factor_engine.util.logging_utils import configure_logging, get_logger
 from factor_engine.pipeline import run_config_directory, run_from_config
 
 logger = get_logger("run_pipeline")
@@ -231,22 +226,25 @@ def parse_args() -> argparse.Namespace:
     )
     _add_common_options(config_dir_parser)
 
-    reconcile_parser = subparsers.add_parser("reconcile", help="对账与双写修复")
+    reconcile_parser = subparsers.add_parser("reconcile", help="对账与提交双写修复请求")
     reconcile_sub = reconcile_parser.add_subparsers(dest="reconcile_command", required=True)
 
     dw_parser = reconcile_sub.add_parser("dual-write", help="检查 staging+ClickHouse 双写失败")
     dw_parser.add_argument("--lake-root", type=Path, required=True, help="因子湖根目录")
     dw_parser.add_argument("--factor-id", default=None, help="单个因子 ID；省略则扫描全部失败")
-    dw_parser.add_argument("--repair", action="store_true", help="从 local/staging 补写 ClickHouse")
+    dw_parser.add_argument(
+        "--repair", action="store_true",
+        help="从 local/staging 提交 ClickHouse 补写；返回状态可能为 SUBMITTED_UNVERIFIED",
+    )
     dw_parser.add_argument(
         "--no-compensate-staging",
         action="store_true",
-        help="repair 时不删除 staging 中 watermark 之后的脏行（默认会补偿删除）",
+        help="兼容选项；缺少 scoped receipt 时 staging 始终保留，不承诺补偿删除",
     )
     dw_parser.add_argument(
         "--compensate-after",
         default=None,
-        help="staging 行级删除下界（默认 watermark end_date）",
+        help="请求的 staging 补偿下界；缺少 scoped receipt 时不会据此删除",
     )
     dw_parser.add_argument(
         "--prefer-source",

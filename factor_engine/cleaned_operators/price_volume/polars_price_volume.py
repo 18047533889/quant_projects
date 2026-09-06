@@ -20,8 +20,40 @@ except ImportError:
 
 from factor_engine.cleaned_operators.base_polars import OperatorMetadata, SeriesOperator, register_operator
 from factor_engine.cleaned_operators.base import ParamRole, ParamSpec
+from factor_engine.backend.operator_errors import OperatorParameterError
+from factor_engine.backend.contracts import ExecutionKind, PhysicalImplementationSpec
 
 _SKIP = frozenset({"date", "stock_code"})
+
+
+def _reject_beta_compat_kwargs(kwargs: dict, *, canonical: str) -> None:
+    if "min_stop" in kwargs:
+        raise OperatorParameterError(
+            f"{canonical}: min_stop is not a supported parameter; use min_periods"
+        )
+    if kwargs:
+        unknown = ", ".join(sorted(kwargs))
+        raise OperatorParameterError(f"{canonical}: unknown parameter(s): {unknown}")
+
+
+def _beta_delegate_spec(canonical: str) -> PhysicalImplementationSpec:
+    return PhysicalImplementationSpec(
+        canonical=canonical,
+        backend="polars",
+        execution_kind=ExecutionKind.POLARS_PANDAS_DELEGATE,
+        supports_lazy=False,
+        supports_streaming=False,
+        materializes_full_panel=True,
+        requires_sorted=True,
+        supports_nulls=True,
+        supports_nan=True,
+        supports_inf=True,
+        implementation_source_hash=f"price_volume.polars_price_volume:{canonical}:v3",
+        emitter_identity="pandas.rolling_beta",
+        parameter_domain_hash=f"{canonical}:strict_window_min_periods:v3",
+        semantic_contract_hash=f"{canonical}:paired_finite_date_aligned_ols:v3",
+        notes="Date-key-aligned full-panel delegate to the canonical pandas rolling-beta kernel.",
+    )
 
 
 def _numeric_cols(df: pl.DataFrame) -> list[str]:
@@ -33,6 +65,52 @@ def _align_cols(*dfs: pl.DataFrame) -> list[str]:
     for df in dfs[1:]:
         cols = [c for c in cols if c in df.columns]
     return cols
+
+
+def _rolling_beta_polars(
+    y: pl.DataFrame,
+    x: pl.DataFrame,
+    *,
+    window: int,
+    min_periods: int,
+) -> pl.DataFrame:
+    """Shared paired-finite beta authority for all Polars beta aliases."""
+    from factor_engine.cleaned_operators.price_volume.beta_helpers import compute_rolling_beta
+    from factor_engine.cleaned_operators.base_polars import panel_pandas_bridge
+
+    y_pd, x_pd = _aligned_beta_pandas(y, x)
+    return panel_pandas_bridge(
+        y,
+        lambda _: compute_rolling_beta(
+            y_pd, x_pd, window, min_periods=min_periods
+        ),
+    )
+
+
+def _aligned_beta_pandas(
+    y: pl.DataFrame,
+    x: pl.DataFrame,
+):
+    """Validate row keys and align a benchmark to the dependent panel."""
+    has_y_date = "date" in y.columns
+    has_x_date = "date" in x.columns
+    if has_y_date != has_x_date:
+        raise OperatorParameterError("beta inputs must both carry date keys or neither")
+    y_pd = y.select(_numeric_cols(y)).to_pandas()
+    x_pd = x.select(_numeric_cols(x)).to_pandas()
+    if has_y_date:
+        y_idx = y["date"].to_pandas()
+        x_idx = x["date"].to_pandas()
+        if y_idx.duplicated().any() or x_idx.duplicated().any():
+            raise OperatorParameterError("beta inputs require unique date keys")
+        if set(y_idx) != set(x_idx):
+            raise OperatorParameterError("beta inputs must have identical date key sets")
+        y_pd.index = y_idx
+        x_pd.index = x_idx
+        x_pd = x_pd.reindex(y_pd.index)
+    elif len(y_pd) != len(x_pd):
+        raise OperatorParameterError("beta inputs without date keys must have equal row counts")
+    return y_pd, x_pd
 
 
 @register_operator(name="cumulative_returns", category="financial", business_category="price_volume", canonical="cumulative_returns", source="factor_dsl_polars")
@@ -133,6 +211,7 @@ class VWAPPolars(SeriesOperator):
 )
 class TSBetaPolars(SeriesOperator):
     """Polars 滚动 Beta"""
+    _physical_spec = _beta_delegate_spec("ts_beta")
     metadata = OperatorMetadata(
         name="m_beta", category="time_series", description="滚动 Beta",
         param_names=["y", "x", "window", "min_periods"], return_type="series", tags=["time_series", "polars"],
@@ -158,22 +237,16 @@ class TSBetaPolars(SeriesOperator):
         # mask).  Delegate to the SINGLE reference kernel (rolling_beta) through
         # the pandas bridge — the same exact-parity pattern as ts_sum_decay and
         # ts_kurt — so the polars backend cannot diverge from pandas.
-        from factor_engine.cleaned_operators._rolling_fast import rolling_beta
-        from factor_engine.cleaned_operators.base_polars import panel_pandas_bridge
-
-        w = strict_int(kwargs.get("d", window), "window", minimum=2)
+        _reject_beta_compat_kwargs(kwargs, canonical="ts_beta")
+        w = strict_int(window, "window", minimum=2)
         # Same UNTAXED-default resolution as pandas MovingBeta: min(5, w).
         if min_periods is None:
             mp = min(5, w)
         else:
             mp = strict_int(min_periods, "min_periods", minimum=2)
             if mp > w:
-                from factor_engine.backend.operator_errors import OperatorParameterError
                 raise OperatorParameterError("min_periods must be <= window")
-        cols = _align_cols(y, x)
-        y_pd = y.select(cols).to_pandas()
-        x_pd = x.select(cols).to_pandas()
-        return panel_pandas_bridge(y, lambda pdf: rolling_beta(y_pd, x_pd, window=w, min_periods=mp))
+        return _rolling_beta_polars(y, x, window=w, min_periods=mp)
 
 
 @register_operator(name="sharpe_ratio", category="financial", business_category="price_volume", canonical="sharpe_ratio", source="factor_dsl_polars")
@@ -248,22 +321,13 @@ class MaxDrawdownPolars(SeriesOperator):
 
 def _conditional_beta(ret: np.ndarray, mkt: np.ndarray, window: int, *, mode: str, q: float = 0.05) -> np.ndarray:
     """滚动条件 Beta：downside 仅市场收益<0；tail 取市场收益最差 q 分位。"""
-    result = np.full_like(ret, np.nan, dtype=float)
-    w = max(int(window), 1)
-    for i in range(w - 1, len(ret)):
-        r = ret[i - w + 1 : i + 1]
-        m = mkt[i - w + 1 : i + 1]
-        valid = ~(np.isnan(r) | np.isnan(m))
-        if mode == "downside":
-            mask = valid & (m < 0)
-        else:
-            threshold = np.nanpercentile(m[valid], q * 100) if valid.any() else 0.0
-            mask = valid & (m <= threshold)
-        if mask.sum() >= 3:
-            cov = np.cov(r[mask], m[mask])[0, 1]
-            var = np.var(m[mask])
-            result[i] = cov / var if var > 0 else np.nan
-    return result
+    from factor_engine.cleaned_operators import _numpy_kernels as kernels
+
+    if mode == "downside":
+        return kernels.downside_beta_(ret, mkt, window)
+    if mode == "tail":
+        return kernels.tail_beta_(ret, mkt, window, q=q)
+    raise ValueError(f"unknown conditional beta mode: {mode!r}")
 
 
 @register_operator(name="downside_beta", category="price_volume", business_category="price_volume", canonical="downside_beta", source="factor_dsl_polars")
@@ -272,15 +336,26 @@ class DownsideBetaPolars(SeriesOperator):
     metadata = OperatorMetadata(
         name="downside_beta", category="price_volume", description="下行 Beta",
         param_names=["ret", "benchmark_ret", "window"], return_type="series", tags=["price_volume", "polars"],
+        param_aliases={"d": "window"},
     )
 
     def _calculate_series(self, ret: pl.DataFrame, benchmark_ret: pl.DataFrame, window: int = 60, **kwargs) -> pl.DataFrame:
-        w = int(kwargs.get("d", window))
-        cols = _align_cols(ret, benchmark_ret)
+        from factor_engine.cleaned_operators.common.strict_params import strict_int
+
+        _reject_beta_compat_kwargs(kwargs, canonical="downside_beta")
+        w = strict_int(window, "window", minimum=1)
+        ret_pd, benchmark_pd = _aligned_beta_pandas(ret, benchmark_ret)
+        cols = list(ret_pd.columns)
+        if len(benchmark_pd.columns) == 1:
+            benchmark_pd = benchmark_pd.rename(columns={benchmark_pd.columns[0]: cols[0]})
+            for c in cols[1:]:
+                benchmark_pd[c] = benchmark_pd.iloc[:, 0]
+        else:
+            benchmark_pd = benchmark_pd.reindex(columns=cols)
         out: dict[str, np.ndarray] = {}
         for c in cols:
             out[c] = _conditional_beta(
-                ret[c].to_numpy(), benchmark_ret[c].to_numpy(), w, mode="downside"
+                ret_pd[c].to_numpy(), benchmark_pd[c].to_numpy(), w, mode="downside"
             )
         result = pl.DataFrame(out)
         if "date" in ret.columns:
@@ -294,16 +369,29 @@ class TailBetaPolars(SeriesOperator):
     metadata = OperatorMetadata(
         name="tail_beta", category="price_volume", description="尾部 Beta",
         param_names=["ret", "benchmark_ret", "window", "q"], return_type="series", tags=["price_volume", "polars"],
+        param_aliases={"d": "window"},
     )
 
     def _calculate_series(self, ret: pl.DataFrame, benchmark_ret: pl.DataFrame, window: int = 60, q: float = 0.05, **kwargs) -> pl.DataFrame:
-        w = int(kwargs.get("d", window))
-        q = float(kwargs.get("q", q))
-        cols = _align_cols(ret, benchmark_ret)
+        from factor_engine.cleaned_operators.common.strict_params import strict_float, strict_int
+
+        _reject_beta_compat_kwargs(kwargs, canonical="tail_beta")
+        w = strict_int(window, "window", minimum=1)
+        q = strict_float(q, "q", minimum=0.0, maximum=1.0)
+        if not 0.0 < q < 1.0:
+            raise OperatorParameterError("q must be strictly between 0 and 1")
+        ret_pd, benchmark_pd = _aligned_beta_pandas(ret, benchmark_ret)
+        cols = list(ret_pd.columns)
+        if len(benchmark_pd.columns) == 1:
+            benchmark_pd = benchmark_pd.rename(columns={benchmark_pd.columns[0]: cols[0]})
+            for c in cols[1:]:
+                benchmark_pd[c] = benchmark_pd.iloc[:, 0]
+        else:
+            benchmark_pd = benchmark_pd.reindex(columns=cols)
         out: dict[str, np.ndarray] = {}
         for c in cols:
             out[c] = _conditional_beta(
-                ret[c].to_numpy(), benchmark_ret[c].to_numpy(), w, mode="tail", q=q
+                ret_pd[c].to_numpy(), benchmark_pd[c].to_numpy(), w, mode="tail", q=q
             )
         result = pl.DataFrame(out)
         if "date" in ret.columns:
@@ -320,6 +408,7 @@ class TailBetaPolars(SeriesOperator):
 )
 class RollingBetaToMarketPolars(TSBetaPolars):
     """Polars 滚动市场 Beta"""
+    _physical_spec = _beta_delegate_spec("rolling_beta_to_market")
     metadata = OperatorMetadata(
         name="rolling_beta_to_market",
         category="price_volume",
@@ -348,30 +437,15 @@ class RollingBetaToMarketPolars(TSBetaPolars):
             )
         window = kwargs.pop("window", 60)
         min_periods = kwargs.pop("min_periods", None)
-        w = strict_int(kwargs.pop("d", window), "window", minimum=2)
+        _reject_beta_compat_kwargs(kwargs, canonical="rolling_beta_to_market")
+        w = strict_int(window, "window", minimum=2)
         # match the pandas reference ``compute_rolling_beta``: default
         # min_periods = max(2, window // 3)
         mp = w // 3 if min_periods is None else strict_int(min_periods, "min_periods", minimum=2)
         mp = max(2, mp)
         if mp > w:
-            from factor_engine.backend.operator_errors import OperatorParameterError
             raise OperatorParameterError("min_periods must be <= window")
-        cols = _align_cols(ret, benchmark_ret)
-        merged = ret
-        x_cols: list[str] = []
-        for c in cols:
-            xname = f"__x_{c}"
-            x_cols.append(xname)
-            merged = merged.with_columns(benchmark_ret.select(pl.col(c).alias(xname)))
-        exprs = []
-        for c in cols:
-            xn = f"__x_{c}"
-            cov = pl.rolling_cov(pl.col(c), pl.col(xn), window_size=w, min_samples=mp, ddof=1)
-            var = pl.col(xn).rolling_var(window_size=w, min_samples=mp, ddof=1)
-            # Constant benchmark within a window (var == 0) -> NaN, matching the
-            # pandas reference ``var.replace(0, np.nan)`` (beta undefined).
-            exprs.append((pl.when(var == 0).then(pl.lit(None)).otherwise(cov / var)).alias(c))
-        return merged.with_columns(exprs).drop(x_cols)
+        return _rolling_beta_polars(ret, benchmark_ret, window=w, min_periods=mp)
 
 
 @register_operator(
@@ -383,6 +457,7 @@ class RollingBetaToMarketPolars(TSBetaPolars):
 )
 class RollingBetaPolars(SeriesOperator):
     """Polars 滚动 Beta：Cov(ret, benchmark_ret) / Var(benchmark_ret)"""
+    _physical_spec = _beta_delegate_spec("rolling_beta")
     metadata = OperatorMetadata(
         name="rolling_beta",
         category="price_volume",
@@ -400,22 +475,18 @@ class RollingBetaPolars(SeriesOperator):
         min_periods: int | None = None,
         **kwargs,
     ) -> pl.DataFrame:
-        w = max(2, int(window))
-        mp = max(2, int(min_periods)) if min_periods is not None else max(2, w // 3)
-        cols = _align_cols(ret, benchmark_ret)
-        merged = ret
-        y_cols: list[str] = []
-        for c in cols:
-            yname = f"__bench_{c}"
-            y_cols.append(yname)
-            merged = merged.with_columns(benchmark_ret[c].alias(yname))
-        exprs = []
-        for c in cols:
-            yn = f"__bench_{c}"
-            cov = pl.rolling_cov(pl.col(c), pl.col(yn), window_size=w, min_samples=mp)
-            var = pl.col(yn).rolling_var(window_size=w, min_samples=mp)
-            exprs.append((cov / var).alias(c))
-        return merged.with_columns(exprs).drop(y_cols)
+        from factor_engine.cleaned_operators.common.strict_params import strict_int
+
+        _reject_beta_compat_kwargs(kwargs, canonical="rolling_beta")
+        w = strict_int(window, "window", minimum=2)
+        mp = (
+            max(2, w // 3)
+            if min_periods is None
+            else strict_int(min_periods, "min_periods", minimum=2)
+        )
+        if mp > w:
+            raise OperatorParameterError("min_periods must be <= window")
+        return _rolling_beta_polars(ret, benchmark_ret, window=w, min_periods=mp)
 
 
 @register_operator(

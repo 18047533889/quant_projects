@@ -65,6 +65,7 @@ class ExecutionRegion:
     estimated_cost_ms: float
     memory_requirement_bytes: int
     deadline_ms: float | None = None  # R45：region 绝对 deadline（monotonic ms）
+    cpu_tokens: int = 1
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -74,6 +75,7 @@ class ExecutionRegion:
             "dependencies": self.dependencies,
             "estimated_cost_ms": round(self.estimated_cost_ms, 2),
             "memory_requirement_bytes": self.memory_requirement_bytes,
+            "cpu_tokens": self.cpu_tokens,
             "deadline_ms": self.deadline_ms,
         }
 
@@ -324,14 +326,27 @@ class ParallelRegionScheduler:
         # R45: 每个 admitted region 的 deadline（monotonic ms）。
         deadlines: dict[str, float] = {}
         admitted: set[str] = set()
+        # Logically timed-out threads that Python cannot physically cancel.
+        # They no longer produce results, but remain resource-active until done.
+        draining: dict[str, Any] = {}
 
         def _build_contract(region: ExecutionRegion) -> Any:
             """把 region 映射为 TaskResourceContract（供 broker admission）。"""
             from factor_engine.runtime.task_resource_contract import TaskResourceContract
 
+            cpu_tokens = region.cpu_tokens
+            if (
+                isinstance(cpu_tokens, bool)
+                or not isinstance(cpu_tokens, int)
+                or cpu_tokens <= 0
+            ):
+                raise ValueError(
+                    "ExecutionRegion.cpu_tokens must be a positive integer, "
+                    f"got {cpu_tokens!r}"
+                )
             return TaskResourceContract(
                 predicted_elapsed_ms=region.estimated_cost_ms,
-                cpu_tokens=1,
+                cpu_tokens=cpu_tokens,
                 io_tokens=1,
                 peak_memory_bytes=region.memory_requirement_bytes,
                 backend=region.backend,
@@ -339,7 +354,8 @@ class ParallelRegionScheduler:
             )
 
         def _release_lease(rid: str) -> None:
-            lease = leases.pop(rid, None)
+            with self._lock:
+                lease = leases.pop(rid, None)
             if lease is not None:
                 try:
                     lease.release()
@@ -383,8 +399,17 @@ class ParallelRegionScheduler:
                         rejected_any = True
                         continue  # 资源不足：本轮不提交，留待后续
                     leases[rid] = lease
-                future = self._executor.submit(execute_fn, region)
+                try:
+                    future = self._executor.submit(execute_fn, region)
+                except BaseException:
+                    _release_lease(rid)
+                    raise
                 running[rid] = future
+                # The physical worker owns its lease until it truly exits.
+                # Normal result processing may release first; release is idempotent.
+                future.add_done_callback(
+                    lambda _future, region_id=rid: _release_lease(region_id)
+                )
                 admitted.add(rid)
                 admitted_this_round.append(rid)
                 # R45: 记录 deadline（region 显式 > 默认）。
@@ -401,6 +426,7 @@ class ParallelRegionScheduler:
                 and rejected_any
                 and not admitted_this_round
                 and not running
+                and not draining
             ):
                 raise ResourceAdmissionError(
                     "ResourceBroker rejected every ready region and no region is "
@@ -452,9 +478,19 @@ class ParallelRegionScheduler:
             ]
             for rid in expired:
                 future = running.get(rid)
+                cancelled = False
                 if future is not None:
-                    future.cancel()
-                _release_lease(rid)
+                    cancelled = future.cancel()
+                if cancelled or future is None:
+                    _release_lease(rid)
+                else:
+                    # Python cannot stop a running thread. Keep its resource
+                    # lease until the worker truly exits; releasing on the
+                    # logical timeout would permit real oversubscription.
+                    future.add_done_callback(
+                        lambda _future, region_id=rid: _release_lease(region_id)
+                    )
+                    draining[rid] = future
                 running.pop(rid, None)
                 deadline_was = deadlines.pop(rid, None)
                 results[rid] = RegionExecutionResult(
@@ -476,6 +512,18 @@ class ParallelRegionScheduler:
         while ready_queue or running:
             _admit_from_queue()
             if not running:
+                if ready_queue and draining:
+                    done_draining, _ = wait(
+                        list(draining.values()),
+                        timeout=0.1,
+                        return_when=FIRST_COMPLETED,
+                    )
+                    for future in done_draining:
+                        for rid, pending in list(draining.items()):
+                            if pending is future:
+                                draining.pop(rid, None)
+                                break
+                    continue
                 break
             # 等待任意一个完成（事件驱动，非轮询）
             done_set, _ = wait(

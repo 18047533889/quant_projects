@@ -58,7 +58,7 @@ class TestProductionPolicy:
         r = client.post(
             "/factor-engine/production/compute",
             headers=AUTH,
-            json={"formula": "ts_mean(close, 2)", "sync": False},
+            json={"formula": "ts_mean(close, 2)", "market": "ashare", "sync": False},
         )
         assert r.status_code == 422
         assert r.json()["detail"]["error_code"] == "UNAPPROVED_REMOTE_SOURCE"

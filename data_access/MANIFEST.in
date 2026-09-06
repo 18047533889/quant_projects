@@ -1,0 +1,9 @@
+# Build the wheel from this clean sdist; exclude colocated tests as well as
+# package-data (exclude-package-data does not exclude Python modules).
+global-exclude *.pyc
+global-exclude __pycache__
+global-exclude test_*.py
+global-exclude *_test.py
+global-exclude conftest.py
+prune tests
+prune benchmarks

@@ -692,6 +692,15 @@ class MovingBeta(SeriesOperator):
         **kwargs,
     ) -> pd.DataFrame:
         from factor_engine.cleaned_operators.common.strict_params import strict_int
+        from factor_engine.backend.operator_errors import OperatorParameterError
+
+        if "min_stop" in kwargs:
+            raise OperatorParameterError(
+                "ts_beta: min_stop is not supported; use min_periods"
+            )
+        if kwargs:
+            unknown = ", ".join(sorted(kwargs))
+            raise OperatorParameterError(f"ts_beta: unknown parameter(s): {unknown}")
 
         w = strict_int(window, "window", minimum=2)
         # R19-033: the reviewed production default ``5`` (2-sample slopes are

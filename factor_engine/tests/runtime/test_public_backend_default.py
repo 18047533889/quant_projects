@@ -24,8 +24,9 @@ def exercise(mode, backend, run_mode="research"):
     elif mode == "stream":
         results = {}
         out = engine.run_many_stream(iter(factors), sink=lambda name, value: results.__setitem__(name, value),
-                                     wave_size=2, n_jobs=2, perf=perf)
+                                     wave_size=2, sink_queue_bytes=4096, n_jobs=2, perf=perf)
         assert out["completed_factors"] == 3
+        assert out["cost_ledger"]["sink_queue_capacity_bytes"] == 4096
     elif mode == "parallel":
         results = engine.run_many_parallel(factors, n_jobs=2, perf=perf)["results"]
     else:

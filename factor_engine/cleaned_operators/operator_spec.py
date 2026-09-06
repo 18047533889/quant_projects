@@ -1090,7 +1090,11 @@ def check_production_formula_ops(formula: str) -> list[str]:
     for node in ast.walk(tree):
         if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
             name = node.func.id
-            if name == "col":
+            # ``col`` and ``field`` are DSL column constructors.  The
+            # production Analyzer validates their field/catalog semantics and
+            # lowers both to IR ``column`` leaves; neither is a runtime
+            # operator that should require an OperatorSpec.
+            if name in {"col", "field"}:
                 continue
             canon = OperatorRegistry._aliases.get(name, name)
             if canon not in allowed:

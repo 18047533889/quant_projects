@@ -29,7 +29,7 @@ import threading
 import traceback
 import uuid
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Literal, Optional
@@ -395,6 +395,8 @@ def validate_spec(payload: Dict[str, Any]) -> Dict[str, Any]:
     run_mode = str(payload.get("run_mode") or "research").lower()
     if run_mode not in {"research", "production"}:
         errors.append("run_mode must be 'research' or 'production'")
+    if run_mode == "production" and not payload.get("market"):
+        errors.append("production requests require an explicit market")
 
     budget = size_budget()
     formula = (
@@ -416,8 +418,9 @@ def validate_spec(payload: Dict[str, Any]) -> Dict[str, Any]:
             if run_mode == "production":
                 # R40 #85: production 校验必须带真实 market —— US 公式绝不能用
                 # 默认 A-share registry 校验（R24-159）。
-                resolved_market = str(payload.get("market") or "ashare").strip().lower() or "ashare"
-                ok, msg = validator(formula, market=resolved_market)
+                resolved_market = str(payload.get("market") or "").strip().lower()
+                ok, msg = (validator(formula, market=resolved_market) if resolved_market
+                           else (False, "production requests require an explicit market"))
             else:
                 ok, msg = validator(formula, surface=surface)
             checked["dsl"] = {"ok": bool(ok), "message": msg, "formula": formula}
@@ -438,7 +441,13 @@ def validate_spec(payload: Dict[str, Any]) -> Dict[str, Any]:
     else:
         warnings.append("no formula/dsl/factor.expr provided")
 
-    for key in ("data_source", "backend", "engine"):
+    backend = payload.get("backend")
+    if backend is not None:
+        if not isinstance(backend, str) or backend.strip().lower() != "pandas":
+            errors.append("inline compute supports backend='pandas'; other routes require physical-plan admission")
+        else:
+            checked["backend"] = {"ok": True, "resolved": "pandas"}
+    for key in ("data_source", "engine"):
         if key in payload and not isinstance(payload[key], dict):
             errors.append(f"{key} must be an object")
         elif key in payload:
@@ -587,6 +596,14 @@ def _validate_and_build_request(
     except Exception as exc:
         raise ServiceError("MALFORMED_REQUEST", f"request validation failed: {sanitize_message(exc)}", status=422) from exc
 
+    # Public inline execution currently admits explicit Pandas only. Do not
+    # enqueue HybridBackend work that the physical-plan authority will reject.
+    resolved_backend = model.backend or "pandas"
+    if not model.config_path and resolved_backend != "pandas":
+        raise ServiceError("UNSUPPORTED_ENDPOINT_BACKEND", "inline compute supports pandas; other routes require physical-plan admission", status=422)
+    if endpoint_policy.is_production and not model.market:
+        raise ServiceError("MALFORMED_REQUEST", "production requests require an explicit market", status=422)
+    model = model.model_copy(update={"backend": resolved_backend})
     formula = model.formula_text()
     budget = size_budget()
     # R21-037..039
@@ -611,6 +628,10 @@ def _validate_and_build_request(
     else:
         source_binding_cfg = model.data_source
     source_binding = _source_profile_binding(model, source_binding_cfg)
+    if isinstance(source_binding_cfg, dict):
+        for key, expected in (("market", model.market), ("calendar_id", model.calendar), ("calendar", model.calendar)):
+            if source_binding_cfg.get(key) is not None and source_binding_cfg[key] != expected:
+                raise ServiceError("MALFORMED_REQUEST", f"source {key} conflicts with request context", status=422)
 
     # R40 #149: catalog generations 多元组（op/field/market/calendar/source-profile/
     # backend-evidence/compiler-build）。
@@ -630,8 +651,8 @@ def _validate_and_build_request(
         catalog_generations=catalog_generations,
         complexity_budget=str(budget["max_ast_nodes"]) if "max_ast_nodes" in budget else "default",
         source_profile=model.approved_source_profile_id,
-        backend=model.backend or "auto",
-        resolved_backend_policy=model.backend or "auto",
+        backend=resolved_backend,
+        resolved_backend_policy=resolved_backend,
         source_profile_version=source_binding["source_profile_version"],
         source_contract_hash=source_binding["source_contract_hash"],
         dataset_contract=source_binding["dataset_contract"],
@@ -661,7 +682,7 @@ def _validate_and_build_request(
     execution = {
         "validated": vr.to_payload(),
         "run_mode": run_mode,
-        "backend": model.backend or "auto",
+        "backend": resolved_backend,
         "config_path": model.config_path,
         "formula_schema_version": model.formula_schema_version,
         # R40 #92: execution dict 必须带 factor name —— 否则 _execute_inline 里
@@ -686,14 +707,7 @@ def _validate_and_build_request(
     # build_data_source(..., build_context=ctx)。
     from factor_engine.storage.factory import DataSourceBuildContext
 
-    build_context = DataSourceBuildContext(
-        run_mode=run_mode,
-        market=model.market,
-        calendar_id=model.calendar,
-        pit_enforce=endpoint_policy.is_production,
-        snapshot_policy=source_binding["snapshot_policy"],
-        coverage_policy=None,
-    )
+    build_context = _bound_source_context(vr, run_mode=run_mode)
     execution["build_context"] = {
         "run_mode": build_context.run_mode,
         "market": build_context.market,
@@ -715,6 +729,17 @@ def _validate_and_build_request(
         run_mode=run_mode,
     ).to_dict()
     return execution, vr.digest()
+
+
+def _bound_source_context(vr: ValidatedFactorRequest, *, run_mode: str):
+    """Project the same immutable validated context used by the Factor."""
+    from factor_engine.storage.factory import DataSourceBuildContext
+
+    return DataSourceBuildContext(
+        run_mode=run_mode, market=vr.market, calendar_id=vr.calendar,
+        pit_enforce=vr.production_policy == "production",
+        snapshot_policy=vr.snapshot_policy,
+    )
 
 
 def _production_source_config(model: ComputeRequest) -> dict[str, Any]:
@@ -814,14 +839,22 @@ def _execute_inline(job: JobRecord, execution: dict[str, Any]) -> dict[str, Any]
     #（run_mode/market/calendar/timezone/PIT/snapshot_policy/coverage_policy 流入源）。
     from factor_engine.storage.factory import DataSourceBuildContext
 
-    build_ctx_raw = execution.get("build_context")
-    build_context = (
-        DataSourceBuildContext(**build_ctx_raw)
-        if isinstance(build_ctx_raw, dict)
-        else None
-    )
+    run_mode = execution.get("run_mode") or ("production" if production else "research")
+    if vr.production_policy != job.endpoint_policy or (production and run_mode != "production"):
+        raise ServiceError("INTERNAL_CONTRACT_VIOLATION", "endpoint execution policy changed after validation", status=500)
+    build_context = _bound_source_context(vr, run_mode=run_mode)
+    if execution.get("build_context") != asdict(build_context):
+        raise ServiceError("INTERNAL_CONTRACT_VIOLATION", "source context changed after validation", status=500)
+    if execution.get("backend") != vr.backend or vr.backend != "pandas":
+        raise ServiceError("INTERNAL_CONTRACT_VIOLATION", "backend changed or is not admitted for inline execution", status=500)
+    source_hash = _stable_hex("source", json.dumps(source_cfg, sort_keys=True, default=str))
+    if source_hash != vr.source_contract_hash:
+        raise ServiceError("INTERNAL_CONTRACT_VIOLATION", "source config changed after validation", status=500)
+    for key, expected in (("market", vr.market), ("calendar_id", vr.calendar), ("calendar", vr.calendar)):
+        if key in source_cfg and source_cfg[key] is not None and source_cfg[key] != expected:
+            raise ServiceError("INTERNAL_CONTRACT_VIOLATION", f"source {key} conflicts with validated context", status=500)
     source = build_data_source(source_cfg, build_context=build_context)
-    backend = build_backend(str(execution.get("backend") or "auto"))
+    backend = build_backend(vr.backend)
     engine = FactorEngine(
         backend=backend,
         data_source=source,
@@ -836,6 +869,13 @@ def _execute_inline(job: JobRecord, execution: dict[str, Any]) -> dict[str, Any]
         dialect=vr.dialect,
         dialect_version=vr.dialect_version,
     )
+    from factor_engine.api.factor import FactorExecutionScopeHint
+
+    factor = replace(factor, semantic_identity=FactorExecutionScopeHint(
+        market=vr.market, frequency=vr.frequency or "1d",
+        calendar_id=vr.calendar, decision_time_policy=vr.decision_time_policy,
+        source_scope_hash=vr.source_contract_hash,
+    ))
     out = engine.run(
         factor,
         input_dq_check=production,
@@ -1356,6 +1396,48 @@ def create_app():
         _auth_http(request, policy=EndpointExecutionPolicy.RESEARCH, role="READ")
         return list_operators()
 
+    @app.get("/factor-engine/capabilities")
+    def capabilities(request: Request) -> dict[str, Any]:
+        _auth_http(request, policy=EndpointExecutionPolicy.RESEARCH, role="READ")
+        from factor_engine.runtime.operator_snapshot import get_cached_runtime_operator_snapshot
+
+        snapshot = get_cached_runtime_operator_snapshot()
+        return {
+            "version": _VERSION,
+            "catalog_digest": snapshot["catalog_digest"],
+            "operator_counts": snapshot["counts"],
+            "inline_compute": {"default_backend": "pandas", "backends": ["pandas"],
+                               "requires_operator_and_source_admission": True},
+            "auto": {"supported": False, "reason": "public PhysicalRegionPlan consumer not connected"},
+            "production_fast": {"supported": False, "reason": "PhysicalRegionPlan admission required"},
+            "production_segmented_checkpoint": {"supported": False, "reason": "immutable historical checkpoint context required"},
+            "resource_scope": "single service process; not a distributed tenant quota",
+        }
+
+    @app.get("/factor-engine/operator-descriptions")
+    def operator_descriptions(
+        request: Request, capability: str = "discoverable", backend: str | None = None,
+        market: str | None = None, frequency: str | None = None,
+        data_capability: str | None = None, budget_class: str | None = None,
+        offset: int = 0, limit: int = 50,
+    ) -> dict[str, Any]:
+        _auth_http(request, policy=EndpointExecutionPolicy.RESEARCH, role="READ")
+        from factor_engine.runtime.operator_snapshot import (
+            get_cached_runtime_operator_snapshot, query_runtime_operator_snapshot,
+        )
+
+        if offset < 0 or not 1 <= limit <= 100:
+            raise HTTPException(status_code=422, detail="offset >= 0 and 1 <= limit <= 100 required")
+        try:
+            return query_runtime_operator_snapshot(
+                get_cached_runtime_operator_snapshot(), actor=capability,
+                backend=backend, market=market, frequency=frequency,
+                data_capability=data_capability, budget_class=budget_class,
+                offset=offset, limit=limit,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=sanitize_message(exc)) from exc
+
     @app.post("/factor-engine/validate-spec")
     async def validate(request: Request) -> dict[str, Any]:
         _auth_http(request, policy=EndpointExecutionPolicy.RESEARCH, role="COMPUTE")
@@ -1510,7 +1592,9 @@ def list_operators() -> Dict[str, Any]:
     from factor_engine.api.operator_registry import build_dsl_allowlist
 
     names = sorted(build_dsl_allowlist().keys())
-    return {"count": len(names), "operators": names}
+    return {"count": len(names), "operators": names,
+            "scope": "DSL discovery names including aliases; not an execution allowlist",
+            "descriptions_url": "/factor-engine/operator-descriptions"}
 
 
 def main(argv: list[str] | None = None) -> int:

@@ -1199,6 +1199,14 @@ class ParquetMaterializer:
             production=production,
         )
 
+        from factor_engine.runtime.lineage import new_run_id
+
+        checkpoint_run_id = (
+            str(run_lineage.get("run_id"))
+            if run_lineage and run_lineage.get("run_id")
+            else new_run_id()
+        )
+
         staging_result = None
         policy = PartitionPolicy.from_config(
             partition_columns=partition_columns,
@@ -1206,7 +1214,11 @@ class ParquetMaterializer:
         )
         if write_staging:
             staging_result = self._upsert_to_data_access_staging(
-                factor_id, df, policy=policy
+                factor_id,
+                df,
+                policy=policy,
+                run_id=checkpoint_run_id,
+                frequency=frequency,
             )
 
         partitions_written: list[int] = []
@@ -1215,14 +1227,6 @@ class ParquetMaterializer:
         partition_keys_written: list[str] = []
         partition_keys_failed: list[str] = []
         partition_keys_skipped: list[str] = []
-
-        from factor_engine.runtime.lineage import new_run_id
-
-        checkpoint_run_id = (
-            str(run_lineage.get("run_id"))
-            if run_lineage and run_lineage.get("run_id")
-            else new_run_id()
-        )
 
         from factor_engine.security.factor_id import factor_dir_for
 
@@ -1910,6 +1914,8 @@ class ParquetMaterializer:
         df: pd.DataFrame,
         *,
         policy: PartitionPolicy | None = None,
+        run_id: str,
+        frequency: str,
     ) -> dict:
         """经 data_access 幂等 upsert 到 staging 数据集（生产发布前暂存区）。
         
@@ -1926,19 +1932,106 @@ class ParquetMaterializer:
         policy = policy or PartitionPolicy.from_config()
         out = attach_partition_columns(df, policy)
         target = resolve_write_target("staging", staging_dataset=self._staging_dataset)
-        result = target.write_factor_frame(
-            factor_id,
-            out,
-            upsert_on=["datetime", "asset"],
-            partition_by=list(policy.columns),
+        from data_access import get_store
+        from data_access.core.storage import StorageBackend, resolve_storage_for_dataset
+        from data_access.write.mutation_lock import mutation_lock
+        from factor_engine.runtime.materialize_batch import (
+            WriteItemReceipt,
+            WriteReceipt,
+            WriteState,
         )
+        from factor_engine.storage.materialize.lake_publish import (
+            _factor_inventory,
+            _inventory_digest,
+            write_staging_identity,
+        )
+
+        store = get_store()
+        if not callable(getattr(store, "get_dataset", None)):
+            return target.write_factor_frame(
+                factor_id,
+                out,
+                upsert_on=["datetime", "asset"],
+                partition_by=list(policy.columns),
+            )
+        dataset = store.get_dataset(self._staging_dataset)
+        storage = resolve_storage_for_dataset(dataset)
+        try:
+            backend = StorageBackend(storage.type)
+        except ValueError:
+            backend = None
+        if backend is not StorageBackend.LOCAL or self._staging_dataset != "factor_lake_staging":
+            return target.write_factor_frame(
+                factor_id,
+                out,
+                upsert_on=["datetime", "asset"],
+                partition_by=list(policy.columns),
+            )
+        staging_dir = store.resolve_dataset_path(
+            self._staging_dataset, factor_id=factor_id
+        )
+        with mutation_lock(staging_dir):
+            result = target.write_factor_frame(
+                factor_id,
+                out,
+                upsert_on=["datetime", "asset"],
+                partition_by=list(policy.columns),
+            )
+            if not isinstance(result, dict):
+                raise ValueError("staging write returned no structured completion result")
+            rows_upserted = result.get("rows")
+            result_path = result.get("path")
+            result_partitions = result.get("partitions")
+            if (
+                result.get("factor_id") != factor_id
+                or result.get("dataset") != self._staging_dataset
+                or result.get("target") != "staging"
+                or isinstance(rows_upserted, bool)
+                or not isinstance(rows_upserted, int)
+                or rows_upserted <= 0
+                or not isinstance(result_path, str)
+                or not result_path
+                or Path(result_path).resolve() != staging_dir.resolve()
+                or not isinstance(result_partitions, list)
+                or not result_partitions
+            ):
+                raise ValueError("staging write completion result is invalid or unbound")
+            inventory = _factor_inventory(staging_dir)
+            if not inventory:
+                raise ValueError("staging write produced no committed parquet inventory")
+            inventory_digest = _inventory_digest(inventory)
+            receipt = WriteReceipt(
+                generation_id=run_id,
+                expected_items=(factor_id,),
+                items={
+                    factor_id: WriteItemReceipt(
+                        name=factor_id,
+                        state=WriteState.COMMITTED,
+                        rows=sum(int(entry["rows"]) for entry in inventory),
+                        run_id=run_id,
+                        inventory_digest=inventory_digest,
+                        inventory=inventory,
+                    )
+                },
+                manifest_digest=inventory_digest,
+                idempotency_key=run_id,
+            ).validate()
+            if get_store().resolve_dataset_path(
+                "factor_lake_staging", factor_id=factor_id
+            ).resolve() != staging_dir.resolve():
+                raise ValueError("staging identity path does not match the locked factor root")
+            identity = write_staging_identity(
+                factor_id=factor_id,
+                materialization_receipt=receipt.to_dict(),
+                frequency=frequency,
+            )
         logger.info(
             "因子 '%s' 已 upsert 到 %s: %s",
             factor_id,
             self._staging_dataset,
             result,
         )
-        return result
+        return {**result, "identity": identity}
 
     # ------------------------------------------------------------------
     # 内部：分区 Upsert + 原子写入

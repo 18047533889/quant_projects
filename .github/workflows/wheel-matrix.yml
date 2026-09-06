@@ -123,7 +123,12 @@ jobs:
           out="$RUNNER_TEMP/wheels/${{ matrix.dist }}"
           mkdir -p "$out"
           cd "${{ github.workspace }}/${{ matrix.dir }}"
-          python3 -m build --wheel --outdir "$out" .
+          if [[ "${{ matrix.pkg }}" == "factor_engine" || "${{ matrix.pkg }}" == "data_access" ]]; then
+            # Build from a fresh sdist extraction, not stale build/lib.
+            python3 -m build --outdir "$out" .
+          else
+            python3 -m build --wheel --outdir "$out" .
+          fi
           ls -la "$out"
         shell: bash -e {0}
 
@@ -131,6 +136,12 @@ jobs:
         if: env.NOT_BUILT == '0'
         run: |
           set -euo pipefail
+          if [[ "${{ matrix.pkg }}" == "factor_engine" || "${{ matrix.pkg }}" == "data_access" ]]; then
+            wheels=("$RUNNER_TEMP/wheels/${{ matrix.dist }}"/*.whl)
+            test "${#wheels[@]}" -eq 1
+            python3 scripts/verify_wheel_payload.py "${{ matrix.dir }}" "${wheels[0]}"
+            exit 0
+          fi
           python3 - "${{ github.workspace }}/${{ matrix.dir }}" \
                     "${{ matrix.pkg }}" \
                     "${{ matrix.src }}" \

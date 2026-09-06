@@ -15,6 +15,92 @@ from data_access.core.exceptions import ValidationError
 from data_access.read.query_budget import QueryBudget
 
 
+class StreamResourceLifecycle:
+    """Idempotently close a reader and release its admission lease.
+
+    The lock makes disconnect/background cleanup and iterator-finally safe when
+    they race on different Starlette worker threads.
+    """
+
+    def __init__(self, reader: Any, release_slot: Any) -> None:
+        self._reader = reader
+        self._release_slot = release_slot
+        self._lock = threading.Lock()
+        self._closed = False
+
+    @property
+    def closed(self) -> bool:
+        with self._lock:
+            return self._closed
+
+    def close(self) -> None:
+        with self._lock:
+            if self._closed:
+                return
+            self._closed = True
+        try:
+            close = getattr(self._reader, "close", None)
+            if callable(close):
+                close()
+        finally:
+            self._release_slot()
+
+
+class ExecutionScopedIterator:
+    """Enter execution scope for each ``next`` on the executing thread.
+
+    ContextVar tokens are deliberately not retained across a yield because an
+    ASGI response iterator may resume on a different worker thread.
+    """
+
+    def __init__(self, iterator: Any, execution_context: Any) -> None:
+        self._source = iterator
+        self._iterator: Any = None
+        self._execution_context = execution_context
+        self._lock = threading.Lock()
+        self._closed = False
+
+    def __iter__(self) -> "ExecutionScopedIterator":
+        return self
+
+    def __next__(self) -> Any:
+        from data_access.security.execution_context import execution_scope
+
+        with self._lock:
+            if self._closed:
+                raise StopIteration
+            with execution_scope(self._execution_context):
+                if self._iterator is None:
+                    self._iterator = iter(self._source)
+                return next(self._iterator)
+
+    def close(self) -> None:
+        """Close the actual iterator and source under the bound context."""
+        from data_access.security.execution_context import execution_scope
+
+        with self._lock:
+            if self._closed:
+                return
+            self._closed = True
+            targets = (self._iterator, self._source)
+            seen: set[int] = set()
+            first_error: BaseException | None = None
+            with execution_scope(self._execution_context):
+                for target in targets:
+                    if target is None or id(target) in seen:
+                        continue
+                    seen.add(id(target))
+                    close = getattr(target, "close", None)
+                    if callable(close):
+                        try:
+                            close()
+                        except BaseException as exc:
+                            if first_error is None:
+                                first_error = exc
+            if first_error is not None:
+                raise first_error
+
+
 @dataclass(frozen=True)
 class HttpQuerySlotLease:
     """HTTP query slot with exactly-once release guarantee.

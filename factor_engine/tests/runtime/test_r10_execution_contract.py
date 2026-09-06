@@ -32,7 +32,7 @@ def test_production_lookup_failure_raises(monkeypatch):
     def _boom(*a, **k):
         raise RuntimeError("checkpoint registry corrupt")
 
-    import factor_engine.stateful_contract
+    import factor_engine.stateful_contract as stateful_contract
 
     monkeypatch.setattr(stateful_contract.StatefulCheckpointRegistry, "get", _boom)
     with pytest.raises(ExecutionContractResolutionError):
@@ -46,7 +46,7 @@ def test_research_lookup_failure_marks_unknown_not_stateless(monkeypatch):
     def _boom(*a, **k):
         raise RuntimeError("checkpoint registry corrupt")
 
-    import factor_engine.stateful_contract
+    import factor_engine.stateful_contract as stateful_contract
 
     monkeypatch.setattr(stateful_contract.StatefulCheckpointRegistry, "get", _boom)
     c = execution_contract("nonsense_operator_xyz")  # research default
@@ -61,7 +61,7 @@ def test_history_requirement_production_raises(monkeypatch):
     def _boom(*a, **k):
         raise RuntimeError("checkpoint registry corrupt")
 
-    import factor_engine.stateful_contract
+    import factor_engine.stateful_contract as stateful_contract
 
     monkeypatch.setattr(stateful_contract.StatefulCheckpointRegistry, "get", _boom)
     with pytest.raises(ExecutionContractResolutionError):
@@ -72,7 +72,7 @@ def test_history_requirement_research_unknown_is_full_history(monkeypatch):
     def _boom(*a, **k):
         raise RuntimeError("checkpoint registry corrupt")
 
-    import factor_engine.stateful_contract
+    import factor_engine.stateful_contract as stateful_contract
 
     monkeypatch.setattr(stateful_contract.StatefulCheckpointRegistry, "get", _boom)
     req = history_requirement("nonsense_operator_xyz", {"window": 20})

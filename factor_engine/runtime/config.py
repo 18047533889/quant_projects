@@ -8,7 +8,7 @@ from typing import Any
 import yaml
 from factor_engine.util.workspace_paths import default_factor_lake_root, resolve_path
 
-_PROFILES_DIR = Path(__file__).resolve().parent.parent / "examples" / "profiles"
+_PROFILES_DIR = Path(__file__).resolve().parent / "profiles"
 
 @dataclass(frozen=True)
 class FactorDefinitionConfig:
@@ -344,6 +344,8 @@ def _deep_merge(base: dict[str,Any], override: dict[str,Any]) -> dict[str,Any]:
 def _resolve_profile_path(profile: str) -> Path:
     name=str(profile).strip()
     if not name: raise ValueError("profile name must be non-empty")
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]*", name):
+        raise ValueError("profile must be a built-in profile name, not a path")
     path=_PROFILES_DIR/f"{name}.yaml"
     if not path.is_file(): raise FileNotFoundError(f"Unknown profile '{name}': {path}")
     return path

@@ -1,0 +1,47 @@
+schema: factor_engine.catalog_thread_safety.evidence.v1
+timestamp: '2026-09-07T03:38:27+08:00'
+git_sha: 2db45f4e446309003381a51a5e03071d31859502
+scope:
+  implementation: factor_engine/storage/catalog.py
+  regression_test: factor_engine/tests/runtime/test_r20_materialization_incremental.py
+observed_failure:
+  source: /tmp/v3-runtime-accepted.log
+  test: factor_engine/tests/runtime/test_r20_materialization_incremental.py::test_catalog_thread_safety
+  error: factor register intermittently returned no materialized row
+  independent_reproduction: failed on iteration 12 of 30 repeated focused pytest runs
+cause:
+  - The shared SQLite connection locked execute() but released the lock before cursor stepping.
+  - Write execute and commit were separate critical sections, allowing shared-connection transaction and cursor interleaving.
+fix:
+  - Registration performs write, readback, and commit under one connection lock and transaction.
+  - Commit or readback failure rolls back without masking the primary SQLite error.
+  - SQLITE_BUSY retry occurs only after rollback, so a committed write is not blindly replayed.
+  - Runtime/public catalog reads use helpers that hold the lock through fetchone/fetchall cursor stepping.
+  - Initialization-only migration reads remain direct because the instance is not yet published to worker threads.
+verification:
+  - command: .venv/bin/python -m pytest -q factor_engine/tests/runtime/test_r20_materialization_incremental.py factor_engine/tests/r40/test_r40_catalog.py
+    status: PASS
+    result: 35 passed
+  - command: deterministic in-process stress, 500 fresh catalogs, 8 threads, 10 registrations per thread
+    status: PASS
+    result: 500 rounds and 40000 registrations; every catalog contained all 80 rows
+  - check: commit failure invokes rollback and preserves the primary exception
+    status: PASS
+  - check: competing thread reaches the connection lock but cannot execute until the first cursor fetch releases it
+    status: PASS
+  - command: .venv/bin/python -m py_compile factor_engine/storage/catalog.py
+    status: PASS
+  - command: git diff --check
+    status: PASS
+independent_review:
+  reviewer: root main agent
+  result: APPROVED_SCOPED
+  notes:
+    - Public query shapes and returned values are preserved.
+    - Registration readback occurs before commit under the same lock.
+    - Commit failures roll back while preserving the primary error.
+    - No post-commit blind write replay remains.
+limitations:
+  - This evidence covers one-process multi-thread sharing of a FactorCatalog connection.
+  - SQLite busy_timeout and bounded retry remain the separate multi-process contention mechanism.
+  - The full runtime suite had not yet been rerun after this fix when this record was written.

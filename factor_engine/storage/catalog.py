@@ -479,6 +479,62 @@ class _ThreadSafeConnection:
         with self._lock:
             return self._conn.execute(*args, **kwargs)
 
+    def execute_commit(self, sql: str, params: tuple = ()) -> None:
+        """Execute and commit one statement in a single connection critical section."""
+        with self._lock:
+            try:
+                self._conn.execute(sql, params)
+                self._conn.commit()
+            except Exception as exc:
+                try:
+                    self._conn.rollback()
+                except sqlite3.Error as rollback_exc:
+                    import logging
+                    logging.getLogger(__name__).error(
+                        "catalog rollback failed after %s: %s",
+                        type(exc).__name__, rollback_exc,
+                    )
+                raise
+            else:
+                self.commit_count += 1
+
+    def fetchone(self, sql: str, params: tuple = ()) -> sqlite3.Row | None:
+        """Execute and step a one-row cursor without exposing it across threads."""
+        with self._lock:
+            return self._conn.execute(sql, params).fetchone()
+
+    def fetchall(self, sql: str, params: tuple = ()) -> list[sqlite3.Row]:
+        """Execute and fully step a result cursor in one connection critical section."""
+        with self._lock:
+            return self._conn.execute(sql, params).fetchall()
+
+    def execute_commit_fetchone(
+        self,
+        sql: str,
+        params: tuple,
+        read_sql: str,
+        read_params: tuple,
+    ) -> sqlite3.Row | None:
+        """Write/read in one transaction, then commit under the same connection lock."""
+        with self._lock:
+            try:
+                self._conn.execute(sql, params)
+                row = self._conn.execute(read_sql, read_params).fetchone()
+                self._conn.commit()
+            except Exception as exc:
+                try:
+                    self._conn.rollback()
+                except sqlite3.Error as rollback_exc:
+                    import logging
+                    logging.getLogger(__name__).error(
+                        "catalog rollback failed after %s: %s",
+                        type(exc).__name__, rollback_exc,
+                    )
+                raise
+            else:
+                self.commit_count += 1
+                return row
+
     def executemany(self, *args: Any, **kwargs: Any) -> sqlite3.Cursor:
         with self._lock:
             return self._conn.executemany(*args, **kwargs)
@@ -619,9 +675,27 @@ class FactorCatalog:
         last_error: Exception | None = None
         for attempt in range(6):
             try:
-                self._conn.execute(sql, params)
-                self._conn.commit()
+                self._conn.execute_commit(sql, params)
                 return
+            except sqlite3.OperationalError as exc:
+                if "locked" not in str(exc).lower():
+                    raise
+                last_error = exc
+                time.sleep(0.05 * (attempt + 1))
+        raise last_error  # type: ignore[misc]
+
+    def _exec_commit_fetchone(
+        self, sql: str, params: tuple, read_sql: str, read_params: tuple
+    ) -> sqlite3.Row | None:
+        """Atomic write/commit/readback with the catalog's bounded busy retry."""
+        import time
+
+        last_error: Exception | None = None
+        for attempt in range(6):
+            try:
+                return self._conn.execute_commit_fetchone(
+                    sql, params, read_sql, read_params
+                )
             except sqlite3.OperationalError as exc:
                 if "locked" not in str(exc).lower():
                     raise
@@ -887,15 +961,15 @@ class FactorCatalog:
         返回 ``{"quick_check": "ok"|..., "foreign_key_check": [...], "version": N,
         "foreign_keys_enabled": bool}``。
         """
-        quick = self._conn.execute("PRAGMA quick_check;").fetchone()
+        quick = self._conn.fetchone("PRAGMA quick_check;")
         fk_violations = [
             dict(r)
-            for r in self._conn.execute("PRAGMA foreign_key_check;").fetchall()
+            for r in self._conn.fetchall("PRAGMA foreign_key_check;")
         ]
-        version_row = self._conn.execute(
+        version_row = self._conn.fetchone(
             "SELECT COALESCE(MAX(version), 0) FROM catalog_schema_version"
-        ).fetchone()
-        fk_enabled = self._conn.execute("PRAGMA foreign_keys;").fetchone()
+        )
+        fk_enabled = self._conn.fetchone("PRAGMA foreign_keys;")
         return {
             "quick_check": str(quick[0]) if quick else "error",
             "foreign_key_check": fk_violations,
@@ -1037,18 +1111,18 @@ class FactorCatalog:
 
     def get_partition_stats(self, factor_id: str, partition_key: str) -> dict | None:
         """Return one partition's stored aggregate stats, or ``None``."""
-        row = self._conn.execute(
+        row = self._conn.fetchone(
             "SELECT * FROM factor_partition_stats WHERE factor_id = ? AND partition_key = ?",
             (factor_id, partition_key),
-        ).fetchone()
+        )
         return dict(row) if row else None
 
     def get_partition_stats_all(self, factor_id: str) -> dict[str, dict]:
         """Return ``{partition_key: stats_row}`` for a factor."""
-        rows = self._conn.execute(
+        rows = self._conn.fetchall(
             "SELECT * FROM factor_partition_stats WHERE factor_id = ?",
             (factor_id,),
-        ).fetchall()
+        )
         return {str(r["partition_key"]): dict(r) for r in rows}
 
     def clear_partition_stats(self, factor_id: str) -> None:
@@ -1163,7 +1237,7 @@ class FactorCatalog:
         # and crash on ``UNIQUE constraint failed``.  The hash-conflict verdict
         # is taken against the row that actually won the insert.
         now = datetime.now(timezone.utc).isoformat()
-        self._exec_commit(
+        existing_row = self._exec_commit_fetchone(
             "INSERT OR IGNORE INTO factor_registry "
             "(factor_id, author, frequency, description, ast_hash, expression, "
             "data_source_json, factor_version, created_at) "
@@ -1172,9 +1246,11 @@ class FactorCatalog:
                 factor_id, author, frequency, description, ast_hash, expression,
                 ds_json, new_version, now,
             ),
+            "SELECT * FROM factor_registry WHERE factor_id = ?",
+            (factor_id,),
         )
 
-        existing = self.get_factor_info(factor_id)
+        existing = dict(existing_row) if existing_row else None
         if existing is None:  # pragma: no cover - insert above must have created it
             raise RuntimeError(f"factor '{factor_id}' register did not materialize a row")
         if existing["ast_hash"] != ast_hash:
@@ -1239,9 +1315,9 @@ class FactorCatalog:
         
         未找到返回 ``None``。
         """
-        row = self._conn.execute(
+        row = self._conn.fetchone(
             "SELECT * FROM factor_watermark WHERE factor_id = ?", (factor_id,)
-        ).fetchone()
+        )
         return dict(row) if row else None
 
     def update_watermark(
@@ -1320,10 +1396,10 @@ class FactorCatalog:
 
     def get_published_watermark(self, factor_id: str) -> dict | None:
         """Return only certified published coverage; legacy rows are not promoted."""
-        row = self._conn.execute(
+        row = self._conn.fetchone(
             "SELECT * FROM factor_published_watermark WHERE factor_id = ?",
             (factor_id,),
-        ).fetchone()
+        )
         if row is None:
             return None
         result = dict(row)
@@ -1345,9 +1421,9 @@ class FactorCatalog:
         返回:
             dict | None
         """
-        row = self._conn.execute(
+        row = self._conn.fetchone(
             "SELECT * FROM factor_registry WHERE factor_id = ?", (factor_id,)
-        ).fetchone()
+        )
         return dict(row) if row else None
 
     def list_factors(self) -> list[dict]:
@@ -1359,12 +1435,12 @@ class FactorCatalog:
         返回:
             list[dict]
         """
-        rows = self._conn.execute(
+        rows = self._conn.fetchall(
             "SELECT r.*, w.start_date, w.end_date, w.last_updated, w.row_count "
             "FROM factor_registry r "
             "LEFT JOIN factor_watermark w ON r.factor_id = w.factor_id "
             "ORDER BY r.factor_id"
-        ).fetchall()
+        )
         return [dict(r) for r in rows]
 
     def delete_factor(self, factor_id: str, *, retire: bool = True) -> None:
@@ -1440,9 +1516,9 @@ class FactorCatalog:
 
     def _get_retired(self, factor_id: str) -> dict | None:
         """返回 ``factor_retired`` 墓碑记录（None 表示未退役）。"""
-        row = self._conn.execute(
+        row = self._conn.fetchone(
             "SELECT * FROM factor_retired WHERE factor_id = ?", (factor_id,)
-        ).fetchone()
+        )
         return dict(row) if row else None
 
     def is_factor_retired(self, factor_id: str) -> bool:
@@ -1501,10 +1577,10 @@ class FactorCatalog:
         返回:
             list[dict]
         """
-        rows = self._conn.execute(
+        rows = self._conn.fetchall(
             "SELECT * FROM factor_run WHERE factor_id = ? ORDER BY created_at DESC LIMIT ?",
             (factor_id, limit),
-        ).fetchall()
+        )
         return [dict(r) for r in rows]
 
     def list_dual_write_failures(
@@ -1545,10 +1621,10 @@ class FactorCatalog:
         返回:
             list[dict]
         """
-        rows = self._conn.execute(
+        rows = self._conn.fetchall(
             "SELECT * FROM factor_run ORDER BY created_at DESC LIMIT ?",
             (limit,),
-        ).fetchall()
+        )
         return [dict(r) for r in rows]
 
     # ------------------------------------------------------------------
@@ -1605,11 +1681,11 @@ class FactorCatalog:
         返回:
             dict | None
         """
-        row = self._conn.execute(
+        row = self._conn.fetchone(
             "SELECT * FROM factor_materialize_checkpoint "
             "WHERE factor_id = ? AND partition_year = ?",
             (factor_id, int(partition_year)),
-        ).fetchone()
+        )
         return dict(row) if row else None
 
     def get_partition_checkpoint_by_key(
@@ -1626,11 +1702,11 @@ class FactorCatalog:
         返回:
             dict | None
         """
-        row = self._conn.execute(
+        row = self._conn.fetchone(
             "SELECT * FROM factor_materialize_checkpoint "
             "WHERE factor_id = ? AND partition_key = ?",
             (factor_id, partition_key),
-        ).fetchone()
+        )
         return dict(row) if row else None
 
     def list_partition_checkpoints(
@@ -1649,17 +1725,17 @@ class FactorCatalog:
             list[dict]
         """
         if status is None:
-            rows = self._conn.execute(
+            rows = self._conn.fetchall(
                 "SELECT * FROM factor_materialize_checkpoint "
                 "WHERE factor_id = ? ORDER BY partition_year",
                 (factor_id,),
-            ).fetchall()
+            )
         else:
-            rows = self._conn.execute(
+            rows = self._conn.fetchall(
                 "SELECT * FROM factor_materialize_checkpoint "
                 "WHERE factor_id = ? AND status = ? ORDER BY partition_year",
                 (factor_id, status),
-            ).fetchall()
+            )
         return [dict(r) for r in rows]
 
     def clear_partition_checkpoints(self, factor_id: str) -> None:
@@ -1741,10 +1817,10 @@ class FactorCatalog:
         返回:
             dict | None
         """
-        row = self._conn.execute(
+        row = self._conn.fetchone(
             "SELECT * FROM factor_dependency WHERE factor_id = ?",
             (factor_id,),
-        ).fetchone()
+        )
         if row is None:
             return None
         out = dict(row)
@@ -1760,12 +1836,12 @@ class FactorCatalog:
         返回:
             list[dict]
         """
-        rows = self._conn.execute(
+        rows = self._conn.fetchall(
             "SELECT d.* FROM factor_dependency d "
             "JOIN factor_column_dep c ON d.factor_id = c.factor_id "
             "WHERE c.column_name = ? ORDER BY d.factor_id",
             (str(column_name),),
-        ).fetchall()
+        )
         out: list[dict] = []
         for row in rows:
             item = dict(row)
@@ -1784,10 +1860,10 @@ class FactorCatalog:
         返回:
             list[dict]
         """
-        rows = self._conn.execute(
+        rows = self._conn.fetchall(
             "SELECT * FROM factor_dependency WHERE source_dataset = ? ORDER BY factor_id",
             (str(dataset),),
-        ).fetchall()
+        )
         out: list[dict] = []
         for row in rows:
             item = dict(row)
@@ -1806,9 +1882,9 @@ class FactorCatalog:
         返回:
             list[str]
         """
-        rows = self._conn.execute(
+        rows = self._conn.fetchall(
             "SELECT DISTINCT column_name FROM factor_column_dep ORDER BY column_name"
-        ).fetchall()
+        )
         return [str(r[0]) for r in rows]
 
     def get_factor_dependencies_batch(self, factor_ids: Iterable[str]) -> dict[str, dict]:
@@ -1837,10 +1913,10 @@ class FactorCatalog:
         for i in range(0, len(id_list), chunk_size):
             chunk = id_list[i:i + chunk_size]
             placeholders = ",".join("?" * len(chunk))
-            rows = self._conn.execute(
+            rows = self._conn.fetchall(
                 f"SELECT * FROM factor_dependency WHERE factor_id IN ({placeholders})",
                 chunk,
-            ).fetchall()
+            )
             for row in rows:
                 item = dict(row)
                 item["referenced_columns"] = json.loads(item.pop("referenced_columns_json", "[]"))

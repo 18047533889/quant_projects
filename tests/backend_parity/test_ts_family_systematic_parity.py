@@ -104,13 +104,16 @@ def _seed_duckdb(root: Path, source: InMemorySeriesSource) -> None:
             {
                 "TradeDate": timestamp.date(),
                 "Symbol": instrument,
-                "Close": float(close_val) if pd.notna(close_val) and np.isfinite(close_val) else None,
-                "Open": float(open_val) if pd.notna(open_val) and np.isfinite(open_val) else None,
+                "Close": float(close_val) if pd.notna(close_val) else None,
+                "Open": float(open_val) if pd.notna(open_val) else None,
                 "Volume": float(source.data["volume"].loc[(timestamp, instrument)]),
                 "Ret": float(source.data["ret"].loc[(timestamp, instrument)]),
             }
         )
     pd.DataFrame(rows).to_parquet(root / "panel.parquet")
+    persisted = pd.read_parquet(root / "panel.parquet")
+    np.testing.assert_equal(persisted["Close"].to_numpy(), source.data["close"].to_numpy())
+    np.testing.assert_equal(persisted["Open"].to_numpy(), source.data["open"].to_numpy())
 
 
 @pytest.fixture

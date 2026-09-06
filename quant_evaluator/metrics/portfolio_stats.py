@@ -17,6 +17,32 @@ import numpy as np
 _MISSING_RETURN_POLICIES = ("zero_fill", "drop", "fail")
 
 
+def compute_compound_annualized_return(returns, periods_per_year=252, *, min_periods=2,
+                                      missing_return_policy="drop"):
+    """CAGR authority, with absorbing total loss and explicit observation policy.
+
+    Periods are equally spaced observations, not inferred calendar days.
+    `drop` annualizes observed periods; callers must separately audit coverage.
+    """
+    values = np.asarray(returns, dtype=float)
+    if values.ndim != 1:
+        raise ValueError("returns must be one-dimensional")
+    if not np.isfinite(periods_per_year) or periods_per_year <= 0 or min_periods < 1:
+        raise ValueError("annualization frequency and minimum periods must be positive")
+    _validate_missing_return_policy(missing_return_policy)
+    finite = np.isfinite(values)
+    if missing_return_policy == "fail" and not finite.all():
+        raise ValueError("returns contains non-finite values")
+    values = values[finite] if missing_return_policy == "drop" else np.where(finite, values, 0.)
+    if len(values) < min_periods:
+        return float("nan")
+    if np.any(values <= -1):
+        return -1.0
+    with np.errstate(over="ignore", invalid="ignore"):
+        result = np.expm1(np.log1p(values).sum() * periods_per_year / len(values))
+    return float(result) if np.isfinite(result) else float("nan")
+
+
 def compute_wealth_curve(
     returns: np.ndarray,
     missing_return_policy: str = "drop",
@@ -38,7 +64,9 @@ def compute_wealth_curve(
         values = values[np.isfinite(values)]
     else:
         values = np.where(np.isfinite(values), values, 0.0)
-    return np.cumprod(1.0 + values)
+    wealth = np.cumprod(1.0 + values)
+    # Equity cannot recover after exhaustion without an explicit capital injection.
+    return np.where(np.maximum.accumulate(wealth <= 0.0), 0.0, wealth)
 
 
 def compute_aligned_wealth_curve(returns: np.ndarray) -> np.ndarray:
@@ -57,10 +85,49 @@ def compute_aligned_wealth_curve(returns: np.ndarray) -> np.ndarray:
         if not np.isfinite(value):
             continue
         wealth *= 1.0 + float(value)
-        if wealth <= 0.0:
-            break
+        wealth = max(0.0, wealth)
         out[index] = wealth
     return out
+
+
+def equal_gross_weights(long_members, short_members):
+    """Equal absolute weight per selected stock; 100% gross including full short margin.
+
+    Masks must be signal-time decisions. No forward-return filter is used.
+    Both legs are required; otherwise the portfolio remains in cash.
+    """
+    long_members, short_members = np.asarray(long_members, bool), np.asarray(short_members, bool)
+    if long_members.shape != short_members.shape or long_members.ndim != 2:
+        raise ValueError("membership masks must have matching (time, asset) shapes")
+    if np.any(long_members & short_members):
+        raise ValueError("an asset cannot be both long and short")
+    total = (long_members.sum(axis=1) + short_members.sum(axis=1))[:, None]
+    active = (long_members.any(axis=1) & short_members.any(axis=1))[:, None]
+    return np.divide(long_members.astype(float)-short_members, total,
+                     out=np.zeros(long_members.shape, float), where=active & (total > 0))
+
+
+def equal_gross_long_short_returns(long_members, short_members, forward_returns, *, cost_rate=0.0,
+                                  missing_return_policy="drop"):
+    """100% gross target-weight portfolio; full-notional turnover including entry.
+
+    A missing selected return invalidates the day under 'drop', not membership.
+    'zero_fill' is an explicit flat-mark assumption, never a reweighting rule.
+    """
+    weights = equal_gross_weights(long_members, short_members)
+    returns = np.asarray(forward_returns, float)
+    if returns.shape != weights.shape or not np.isfinite(cost_rate) or cost_rate < 0:
+        raise ValueError("invalid returns shape or commission")
+    _validate_missing_return_policy(missing_return_policy)
+    missing = ((weights != 0) & ~np.isfinite(returns)).any(axis=1)
+    if missing_return_policy == "fail" and missing.any():
+        raise ValueError("missing return on a selected position")
+    pnl = (weights * np.where(np.isfinite(returns), returns, 0.)).sum(axis=1)
+    turnover = np.abs(np.diff(np.vstack([np.zeros((1, weights.shape[1])), weights]), axis=0)).sum(axis=1)
+    pnl -= cost_rate * turnover
+    if missing_return_policy == "drop":
+        pnl[missing] = np.nan
+    return pnl
 
 
 def apply_long_short_costs(
@@ -81,7 +148,9 @@ def apply_long_short_costs(
     if cost_rate < 0 or not np.isfinite(cost_rate):
         raise ValueError("cost_rate must be a finite non-negative fraction")
     long_ret, short_ret, long_to, short_to = arrays
-    return long_ret - short_ret - cost_rate * (long_to + short_to)
+    # Aggregate leg API assumes equal capital per leg (50% + 50%). For
+    # unequal membership counts use equal_gross_long_short_returns instead.
+    return .5 * (long_ret - short_ret - cost_rate * (long_to + short_to))
 
 
 def _validate_missing_return_policy(policy: str) -> str:
@@ -158,6 +227,15 @@ def compute_long_short_returns(
             "missing_return_policy='fail'"
         )
 
+    factor_values, forward_returns = np.asarray(factor_values), np.asarray(forward_returns)
+    if factor_values.ndim not in (2, 3) or forward_returns.shape != factor_values.shape[:2]:
+        raise ValueError("factor and label axes must match (T,N[,F]) and (T,N)")
+    if not 0 <= short_threshold < long_threshold <= 1:
+        raise ValueError("require 0 <= short_threshold < long_threshold <= 1")
+    if validity_mask is not None:
+        validity_mask = np.asarray(validity_mask)
+        if validity_mask.dtype != np.bool_ or validity_mask.shape not in (factor_values.shape[:2], factor_values.shape):
+            raise ValueError("validity_mask must be boolean (T,N) or match factor axes")
     # Handle 3D factor values
     if factor_values.ndim == 3:
         T, N, F = factor_values.shape
@@ -167,7 +245,7 @@ def compute_long_short_returns(
 
         for f in range(F):
             fv = factor_values[:, :, f]
-            vm = validity_mask[:, :, f] if validity_mask is not None else None
+            vm = (validity_mask if validity_mask.ndim == 2 else validity_mask[:, :, f]) if validity_mask is not None else None
             long_rets[:, f], short_rets[:, f], ls_rets[:, f] = compute_long_short_returns(
                 fv, forward_returns, long_threshold, short_threshold, vm,
                 missing_return_policy=missing_return_policy,
@@ -194,9 +272,7 @@ def compute_long_short_returns(
         #   forward returns contribute 0 to the bucket mean (documented).
         # - "drop": assets with non-finite returns are excluded entirely.
         finite_mask = np.isfinite(factor_t)
-        if missing_return_policy == "drop":
-            finite_mask = finite_mask & np.isfinite(ret_t)
-        elif missing_return_policy == "zero_fill":
+        if missing_return_policy == "zero_fill":
             ret_t = np.where(np.isfinite(ret_t), ret_t, 0.0)
 
         if np.sum(finite_mask) < 2:
@@ -216,6 +292,8 @@ def compute_long_short_returns(
         # Select long/short positions
         long_mask = factor_valid >= long_cutoff
         short_mask = factor_valid <= short_cutoff
+        if np.any(long_mask & short_mask):
+            continue
 
         if np.sum(long_mask) > 0:
             long_returns[t] = np.mean(ret_valid[long_mask])
@@ -224,7 +302,9 @@ def compute_long_short_returns(
             short_returns[t] = np.mean(ret_valid[short_mask])
 
         if np.sum(long_mask) > 0 and np.sum(short_mask) > 0:
-            long_short_returns[t] = long_returns[t] - short_returns[t]
+            long_short_returns[t] = equal_gross_long_short_returns(
+                long_mask[None, :], short_mask[None, :], ret_valid[None, :],
+                missing_return_policy=missing_return_policy)[0]
 
     return long_returns, short_returns, long_short_returns
 
@@ -256,11 +336,7 @@ def compute_sharpe_ratio(
     T, F = returns.shape
 
     if T == 0:
-        max_dd = np.full(F, np.nan, dtype=np.float64)
-        peaks = np.zeros(F, dtype=np.int64)
-        if squeeze:
-            return float("nan"), np.empty(0, dtype=np.float64), int(0)
-        return max_dd, np.empty((0, F), dtype=np.float64), peaks
+        return float("nan") if squeeze else np.full(F, np.nan, dtype=np.float64)
     sharpe = np.full(F, np.nan)
 
     for f in range(F):
@@ -314,7 +390,7 @@ def compute_maximum_drawdown(
         (max_drawdown, drawdown_series, peak_indices)
         max_drawdown: Maximum drawdown magnitude (positive), shape () or (F,)
         drawdown_series: Drawdown at each time step, shape (T,) or (T, F);
-            NaN from the first nonpositive wealth onward (wipeout guard)
+            -1 from the first nonpositive wealth onward (absorbing total loss)
         peak_indices: Index of the PEAK (last index where the running
             maximum is attained at or before the maximum-drawdown trough),
             shape () or (F,); -1 denotes initial capital before the first return.
@@ -350,7 +426,7 @@ def compute_maximum_drawdown(
     running_max = np.maximum(1.0, np.maximum.accumulate(cum_returns, axis=0))
 
     # Drawdown series with total-wipeout guard: from the first nonpositive
-    # wealth onward, drawdown is NaN (forward-filled) — a negative wealth
+    # wealth onward, drawdown is -1 (total loss) — a negative wealth
     # times (1 + r) can flip positive again and fabricate a fake recovery.
     invalid = np.maximum.accumulate(cum_returns <= 0, axis=0)
     drawdown_series = np.full(cum_returns.shape, np.nan)
@@ -360,6 +436,7 @@ def compute_maximum_drawdown(
         out=drawdown_series,
         where=~invalid,
     )
+    drawdown_series[invalid] = -1.0
 
     # Maximum drawdown per factor (most negative, converted to positive).
     with np.errstate(invalid="ignore"):
@@ -367,7 +444,7 @@ def compute_maximum_drawdown(
     max_dd = np.where(np.isfinite(max_dd), max_dd, np.nan)
 
     # Trough index per factor: first occurrence of the minimum drawdown,
-    # NaN-safe (an all-NaN column — wipeout from the very start — has no
+    # NaN-safe (an all-NaN column has no
     # defined trough; np.nanargmin would raise on it).
     trough_indices = np.empty(F, dtype=np.int64)
     for f in range(F):
@@ -389,7 +466,7 @@ def compute_maximum_drawdown(
         col = drawdown_series[: trough + 1, f]
         finite_idx = np.nonzero(np.isfinite(col))[0]
         if finite_idx.size == 0:
-            # Entire prefix invalid (wipeout from the start): peak undefined,
+            # Entire prefix nonfinite: peak undefined,
             # use index 0.
             peak_indices[f] = 0
             continue
@@ -445,8 +522,7 @@ def compute_calmar_ratio(
         ret_valid = ret_f[valid]
 
         # Annualized return
-        mean_ret = np.mean(ret_valid)
-        ann_ret = mean_ret * periods_per_year
+        ann_ret = compute_compound_annualized_return(ret_valid, periods_per_year, min_periods=min_periods)
 
         # Maximum drawdown
         max_dd, _, _ = compute_maximum_drawdown(ret_valid)

@@ -21,14 +21,17 @@
 from __future__ import annotations
 
 import hmac
+import base64
 import io
-import json
+import math
 import os
 import threading
 import time
 import uuid
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
+from datetime import date, datetime, time as datetime_time
+from decimal import Decimal
 from contextvars import ContextVar
 from typing import Any
 
@@ -63,6 +66,7 @@ from data_access.security.principal import (
 )
 
 from .config import ServiceSettings
+from .http_resource_management import ExecutionScopedIterator, StreamResourceLifecycle
 from .models import (
     DatasetInfo,
     FactorReadRequest,
@@ -143,6 +147,8 @@ def create_app(settings: ServiceSettings | None = None) -> FastAPI:
     async def lifespan(app: FastAPI):
         """ASGI lifespan: startup gate runs before accepting requests."""
         from data_access.runtime.startup_gate import run_startup_gate
+
+        settings.validate_resource_boundary()
 
         # R32-P0-021: Run startup gate during lifespan startup and publish the
         # resulting certificate for /ready.  Do not derive production mode from
@@ -316,7 +322,7 @@ def create_app(settings: ServiceSettings | None = None) -> FastAPI:
         }
 
     @app.get("/version")
-    def version() -> dict[str, str]:
+    def version() -> dict[str, Any]:
         # R29-P0 #207：build SHA 进 /version——两台机器版本号相同但代码不同时，
         # build_sha 一眼可辨（可复现）。
         build = getattr(data_access, "__build_sha__", None)
@@ -325,6 +331,11 @@ def create_app(settings: ServiceSettings | None = None) -> FastAPI:
             "version": data_access.__version__,
             "build_sha": build,
             "api": "v1",
+            "resource_boundary": {
+                "admission_scope": "process",
+                "max_concurrent_http_queries_per_process": settings.max_concurrency,
+                "distributed_admission": False,
+            },
         }
 
     @app.get("/v1/metrics", dependencies=[Depends(require_api_key)])
@@ -427,90 +438,110 @@ def create_app(settings: ServiceSettings | None = None) -> FastAPI:
             except DataAccessError as exc:
                 raise HTTPException(status_code=422, detail=str(exc)) from exc
 
+            # Establish cleanup as soon as the reader exists.  Every path below
+            # (empty, first/middle failure, completion, cancellation/disconnect)
+            # converges on this idempotent lifecycle.
+            def _release_slot() -> None:
+                nonlocal slot_held
+                if slot_held:
+                    query_slots.release()
+                    slot_held = False
+
             # R32 P0-115：HTTP buffer limit 防 OOM（StreamingResponse
             # 默认无界缓冲，单 batch > 可用内存则 OOM）。sink 每次 write
             # 清空（sink.truncate(0)），不累积跨 batch。
             _MAX_BUFFER_BYTES = 128 * 1024 * 1024  # 128 MiB
 
-            # R28-16：创建生成器（prepare_read 立即执行）在 request-scoped 执行上下文内。
-            with execution_scope(exec_ctx):
-                # 不能用包装生成器（会导致 "generator already executing"）——
-                # 直接用原始 batches，在 first/body 时消费。
-                it = batches
+            # Actual lazy reads each enter/exit scope on their execution thread;
+            # no ContextVar token is retained across a response yield.
+            it = ExecutionScopedIterator(batches, exec_ctx)
+            lifecycle = StreamResourceLifecycle(it, _release_slot)
             try:
                 first = next(it)
             except StopIteration:
-                query_slots.release()
-                slot_held = False
+                lifecycle.close()
                 return Response(status_code=204)
             except AccessDeniedError:
+                lifecycle.close()
                 raise HTTPException(status_code=403, detail="resource is not authorized")
             except ValidationError as exc:
+                lifecycle.close()
                 raise HTTPException(status_code=400, detail=str(exc)) from exc
             except DataAccessError as exc:
+                lifecycle.close()
                 raise HTTPException(status_code=422, detail=str(exc)) from exc
+            except Exception:
+                lifecycle.close()
+                raise
 
-            # R32 P0-113：disconnect_cleanup：client 断开时（generator
-            # 未耗尽就退出 body()）回调确保 batches.close() +
-            # query_slots.release() 只跑一次。
-            cleanup_done = False
-
-            def _disconnect_cleanup():
-                nonlocal cleanup_done, slot_held
-                if cleanup_done:
-                    return
-                cleanup_done = True
-                close = getattr(batches, "close", None)
-                if callable(close):
-                    try:
-                        close()
-                    except Exception:
-                        pass
-                if slot_held:
-                    query_slots.release()
-                    slot_held = False
+            # Encode the first chunk before response headers are committed.
+            sink = io.BytesIO()
+            writer = None
+            try:
+                writer = ipc.new_stream(sink, first.schema)
+                writer.write_batch(first)
+                first_chunk = sink.getvalue()
+                first = None
+                if len(first_chunk) > _MAX_BUFFER_BYTES:
+                    raise HTTPException(
+                        status_code=413,
+                        detail="first Arrow IPC chunk exceeds stream buffer limit",
+                    )
+                sink.seek(0)
+                sink.truncate(0)
+            except Exception:
+                try:
+                    if writer is not None:
+                        writer.close()
+                finally:
+                    lifecycle.close()
+                raise
 
             def body():
-                nonlocal cleanup_done, slot_held
+                nonlocal first_chunk
+                stream_writer = writer
                 try:
-                    sink = io.BytesIO()
-                    with ipc.new_stream(sink, first.schema) as writer:
-                        writer.write_batch(first)
+                    yield first_chunk
+                    first_chunk = b""
+                    for batch in it:
+                        stream_writer.write_batch(batch)
                         chunk = sink.getvalue()
-                        # R32 P0-115：单 batch 超限 fail-closed（不静默截断）。
                         if len(chunk) > _MAX_BUFFER_BYTES:
-                            raise HTTPException(
-                                status_code=413,
-                                detail=f"单批次超 {_MAX_BUFFER_BYTES} 字节（{len(chunk)} bytes），"
-                                "需缩小 batch_size 或增大 buffer limit"
+                            # Headers are committed: abort the stream.  Clients
+                            # must reject a body without the Arrow IPC EOS marker.
+                            raise RuntimeError(
+                                "Arrow stream aborted: a later chunk exceeded the buffer contract"
                             )
                         yield chunk
                         sink.seek(0)
                         sink.truncate(0)
-                        for batch in it:
-                            writer.write_batch(batch)
-                            chunk = sink.getvalue()
-                            if len(chunk) > _MAX_BUFFER_BYTES:
-                                raise HTTPException(
-                                    status_code=413,
-                                    detail=f"单批次超 {_MAX_BUFFER_BYTES} 字节"
-                                )
-                            yield chunk
-                            sink.seek(0)
-                            sink.truncate(0)
+                    stream_writer.close()
+                    stream_writer = None
+                    eos = sink.getvalue()
+                    if eos:
+                        yield eos
                 finally:
-                    _disconnect_cleanup()
+                    if stream_writer is not None:
+                        try:
+                            stream_writer.close()
+                        except Exception:
+                            pass
+                    lifecycle.close()
 
             # R32 P0-114：StreamingResponse background callback 注册
             # disconnect 清理（client 断开时 FastAPI 调 background task）。
             from fastapi import BackgroundTasks
             bg_tasks = BackgroundTasks()
-            bg_tasks.add_task(_disconnect_cleanup)
+            bg_tasks.add_task(lifecycle.close)
 
             return StreamingResponse(
                 body(),
                 media_type="application/vnd.apache.arrow.stream",
-                headers={"X-Query-Mode": "stream", "X-Arrow-Stream-Version": "1"},
+                headers={
+                    "X-Query-Mode": "stream",
+                    "X-Arrow-Stream-Version": "1",
+                    "X-Stream-Completion-Contract": "arrow-ipc-eos",
+                },
                 background=bg_tasks,
             )
         except Exception:
@@ -576,14 +607,12 @@ def create_app(settings: ServiceSettings | None = None) -> FastAPI:
             "X-Elapsed-Ms": f"{result.stats.elapsed_ms:.2f}",
         }
         if request.format == "json":
-            if table.num_rows > (budget.max_rows or settings.max_rows):
-                raise HTTPException(status_code=413, detail="结果超过服务端行数上限")
+            _enforce_json_preview_budget(table, settings)
             columns = list(table.column_names)
-            df = table.to_pandas(self_destruct=False)
             payload: dict[str, Any] = {
                 "meta": meta.model_dump(),
                 "columns": columns,
-                "data": json.loads(df.to_json(orient="records", date_format="iso", default_handler=str)),
+                "data": _json_preview_rows(table),
             }
             return JSONResponse(content=payload, headers=headers)
         if request.format == "arrow_ipc":
@@ -597,6 +626,34 @@ def create_app(settings: ServiceSettings | None = None) -> FastAPI:
         buf.seek(0)
         return StreamingResponse(buf, media_type="application/vnd.apache.parquet", headers=headers)
 
+    def _enforce_json_preview_budget(table: pa.Table, settings: ServiceSettings) -> None:
+        """Reject JSON before object materialization using preview-only limits."""
+        if table.num_rows > settings.json_preview_max_rows:
+            raise HTTPException(status_code=413, detail="JSON preview exceeds row limit; use Arrow or Parquet")
+        if table.nbytes > settings.json_preview_max_bytes:
+            raise HTTPException(status_code=413, detail="JSON preview exceeds byte estimate; use Arrow or Parquet")
+
+    def _json_preview_rows(table: pa.Table) -> list[dict[str, Any]]:
+        """Convert Arrow preview scalars without pandas/string/JSON copies."""
+        def safe(value: Any) -> Any:
+            if value is None or isinstance(value, (str, bool, int)):
+                return value
+            if isinstance(value, float):
+                return value if math.isfinite(value) else None
+            if isinstance(value, (datetime, date, datetime_time)):
+                return value.isoformat()
+            if isinstance(value, Decimal):
+                return str(value)
+            if isinstance(value, (bytes, bytearray, memoryview)):
+                return "base64:" + base64.b64encode(bytes(value)).decode("ascii")
+            if isinstance(value, dict):
+                return {str(key): safe(item) for key, item in value.items()}
+            if isinstance(value, (list, tuple)):
+                return [safe(item) for item in value]
+            return str(value)
+
+        return [safe(row) for row in table.to_pylist()]
+
     def _serialize(table: pa.Table, meta: ReadResponseMeta, fmt: str) -> Response:
         headers = {
             "X-Data-Snapshot-Id": meta.snapshot_id,
@@ -605,14 +662,11 @@ def create_app(settings: ServiceSettings | None = None) -> FastAPI:
             "X-Elapsed-Ms": f"{meta.elapsed_ms:.2f}",
         }
         if fmt == "json":
+            _enforce_json_preview_budget(table, settings)
             payload: dict[str, Any] = {
                 "meta": meta.model_dump(),
                 "columns": list(table.column_names),
-                "data": json.loads(
-                    table.to_pandas(self_destruct=False).to_json(
-                        orient="records", date_format="iso", default_handler=str
-                    )
-                ),
+                "data": _json_preview_rows(table),
             }
             return JSONResponse(content=payload, headers=headers)
         if fmt == "arrow_ipc":

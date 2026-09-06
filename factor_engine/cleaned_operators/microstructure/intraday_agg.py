@@ -986,13 +986,15 @@ def _entropy(panel: SessionPanel, normalize: bool = True) -> float:
         return np.nan
     finite = v[np.isfinite(v)]
     total = float(finite.sum())
-    n = int(np.count_nonzero(finite))
-    if total <= _EPS or n < 2:
+    if total <= _EPS:
         return np.nan
     w = finite / total
     w = w[w > 0]
     entropy = -float(np.sum(w * np.log(w)))
     if normalize:
+        if len(w) == 1:
+            return 0.0
+        n = len(w)
         return entropy / math.log(n)
     return entropy
 
@@ -1295,6 +1297,35 @@ def _broadcast_daily_limits(panel: SessionPanel, limit_series: pd.Series | None)
     return np.full(panel.n_slots, value)
 
 
+def _daily_limit_agg(frame, limits, fn, *, side: str) -> pd.DataFrame:
+    """Bind daily security limits by label, never by the first panel column.
+
+    A Series explicitly denotes a common daily limit; a DataFrame denotes
+    security-specific limits and absent securities remain unknown.
+    """
+    if side not in {"up", "down"}:
+        raise ValueError("side must be 'up' or 'down'")
+    frame = _as_panel(frame)
+    limit_frame = _as_panel(limits) if limits is not None else None
+    if not frame.columns.is_unique or (limit_frame is not None and (
+        not limit_frame.columns.is_unique or not limit_frame.index.is_unique
+    )):
+        raise ValueError("daily limits require unique instrument and date labels")
+    out = {}
+    for inst in frame.columns:
+        limit_series = None
+        if isinstance(limits, pd.Series):
+            limit_series = limits
+        elif limit_frame is not None and inst in limit_frame.columns:
+            limit_series = limit_frame[inst]
+
+        def apply_limit(pc: SessionPanel) -> float:
+            return fn(pc, np.asarray(_broadcast_daily_limits(pc, limit_series), dtype=float))
+
+        out[inst] = _daily_agg(frame[[inst]], apply_limit)[inst]
+    return pd.DataFrame(out).sort_index()
+
+
 def _limit_touch_mask(
     pc: SessionPanel, limit_v: np.ndarray, side: str
 ) -> tuple[bool, np.ndarray, np.ndarray]:
@@ -1364,13 +1395,8 @@ class IntraLimitFirstHitTime(SeriesOperator):
             raise ValueError("side must be 'up' or 'down'")
         touch = high if (side == "up" and high is not None) else (low if (side == "down" and low is not None) else close)
         limit_panel = high_limit if side == "up" else low_limit
-        lim_series = _as_panel(limit_panel).iloc[:, 0] if limit_panel is not None else None
-
-        def _fn(pc: SessionPanel) -> float:
-            limit_v = _broadcast_daily_limits(pc, lim_series)
-            return _limit_first_hit_time(pc, np.asarray(limit_v, dtype=float), side)
-
-        return _daily_agg(touch, _fn)
+        return _daily_limit_agg(touch, limit_panel,
+                               lambda pc, limit: _limit_first_hit_time(pc, limit, side), side=side)
 
 
 def _limit_duration(pc: SessionPanel, limit_v: np.ndarray, side: str) -> float:
@@ -1404,13 +1430,8 @@ class IntraLimitDuration(SeriesOperator):
 
     def _calculate_series(self, close, high_limit=None, low_limit=None, side="up", **_):
         limit_panel = high_limit if side == "up" else low_limit
-        lim_series = _as_panel(limit_panel).iloc[:, 0] if limit_panel is not None else None
-
-        def _fn(pc: SessionPanel) -> float:
-            limit_v = _broadcast_daily_limits(pc, lim_series)
-            return _limit_duration(pc, np.asarray(limit_v, dtype=float), side)
-
-        return _daily_agg(close, _fn)
+        return _daily_limit_agg(close, limit_panel,
+                               lambda pc, limit: _limit_duration(pc, limit, side), side=side)
 
 
 def _limit_reopen_count(pc: SessionPanel, limit_v: np.ndarray, side: str, transition: str) -> float:
@@ -1450,14 +1471,11 @@ class IntraLimitReopenCount(SeriesOperator):
 
     def _calculate_series(self, close, high_limit=None, low_limit=None, side="up",
                           transition="open", **_):
+        if transition not in {"open", "reseal"}:
+            raise ValueError("transition must be 'open' or 'reseal'")
         limit_panel = high_limit if side == "up" else low_limit
-        lim_series = _as_panel(limit_panel).iloc[:, 0] if limit_panel is not None else None
-
-        def _fn(pc: SessionPanel) -> float:
-            limit_v = _broadcast_daily_limits(pc, lim_series)
-            return _limit_reopen_count(pc, np.asarray(limit_v, dtype=float), side, transition)
-
-        return _daily_agg(close, _fn)
+        return _daily_limit_agg(close, limit_panel,
+                               lambda pc, limit: _limit_reopen_count(pc, limit, side, transition), side=side)
 
 
 # ---------------------------------------------------------------------------

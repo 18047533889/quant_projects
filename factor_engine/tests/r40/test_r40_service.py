@@ -79,7 +79,7 @@ def test_validate_spec_passes_market_to_production_validator(monkeypatch):
     assert captured["market"] == "us"
 
 
-def test_validate_spec_production_defaults_market_to_ashare(monkeypatch):
+def test_validate_spec_production_requires_explicit_market(monkeypatch):
     captured: dict[str, object] = {}
 
     def fake_validate_production_dsl(formula, *, market=None):
@@ -95,8 +95,10 @@ def test_validate_spec_production_defaults_market_to_ashare(monkeypatch):
     )
     from factor_engine.service.app import validate_spec
 
-    validate_spec({"formula": "close", "run_mode": "production"})
-    assert captured["market"] == "ashare"
+    result = validate_spec({"formula": "close", "run_mode": "production"})
+    assert not result["ok"]
+    assert "explicit market" in " ".join(result["errors"])
+    assert captured == {}
 
 
 # ---------------------------------------------------------------------------
@@ -130,7 +132,8 @@ def test_execute_inline_passes_build_context(monkeypatch):
     monkeypatch.setattr("factor_engine.storage.factory.build_data_source", fake_bds)
     monkeypatch.setattr("factor_engine.backend.factory.build_backend", lambda *a, **k: object())
     monkeypatch.setattr("factor_engine.runtime.engine.FactorEngine", FakeEngine)
-    monkeypatch.setattr("factor_engine.api.dsl_parser.parse_factor", lambda *a, **k: object())
+    from factor_engine.api.factor import Factor
+    monkeypatch.setattr("factor_engine.api.dsl_parser.parse_factor", lambda *a, **k: Factor(name=k["name"], expr=None))
 
     job = JobRecord(run_id="bc_job", request={"execution": execution}, request_digest=digest)
     _execute_inline(job, execution)
@@ -167,7 +170,8 @@ def test_execute_inline_parse_factor_gets_name(monkeypatch):
 
     def fake_parse_factor(formula, *, name, **kwargs):
         captured["name"] = name
-        return object()
+        from factor_engine.api.factor import Factor
+        return Factor(name=name, expr=None)
 
     monkeypatch.setattr("factor_engine.storage.factory.build_data_source", lambda *a, **k: object())
     monkeypatch.setattr("factor_engine.backend.factory.build_backend", lambda *a, **k: object())
@@ -195,13 +199,13 @@ def test_import_service_app_has_no_side_effects():
     code = (
         "import os, threading\n"
         'os.environ["FACTOR_ENGINE_SERVICE_ROOT"] = "/tmp/r40_import_side_effect"\n'
-        "import service.app\n"
+        "import factor_engine.service.app\n"
         "bad = [t.name for t in threading.enumerate()\n"
         "       if t.name.startswith(('fe-job-worker', 'fe-heartbeat', 'factor-engine-job'))]\n"
         "print('THREADS', bad)\n"
         "print('DIR', os.path.exists('/tmp/r40_import_side_effect'))\n"
     )
-    repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+    repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
     out = subprocess.run(
         [sys.executable, "-c", code],
         capture_output=True,
@@ -279,9 +283,13 @@ def test_catalog_generations_includes_all_dimensions():
 
 def test_catalog_generations_backend_change_changes_digest():
     exec_a, dig_a = _build({"formula": "close", "backend": "pandas"})
-    exec_b, dig_b = _build({"formula": "close", "backend": "polars"})
-    assert gens(exec_a) != gens(exec_b)
-    assert dig_a != dig_b
+    from dataclasses import replace
+    from factor_engine.service.models import ValidatedFactorRequest
+    from factor_engine.service.errors import ServiceError
+    bound = ValidatedFactorRequest(**exec_a["validated"])
+    assert dig_a != replace(bound, backend="polars", resolved_backend_policy="polars").digest()
+    with pytest.raises(ServiceError, match="physical-plan admission"):
+        _build({"formula": "close", "backend": "polars"})
 
 
 def gens(execution):

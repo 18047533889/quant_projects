@@ -67,17 +67,22 @@ def test_lazy_bundle_materialize_uses_single_collect():
         timestamp_unit=None,
     )
     calls = {"n": 0}
-    original_collect = pl.LazyFrame.collect
+    from factor_engine.backend import polars_lazy
 
-    def counted_collect(self, *args, **kwargs):
+    # Count the governed terminal collection boundary. The implementation may
+    # collect through DataAccess budgeting rather than LazyFrame.collect(), so
+    # patching Polars' eager method no longer measures this contract.
+    original_collect = polars_lazy._collect_arrow_table
+
+    def counted_collect(*args, **kwargs):
         calls["n"] += 1
-        return original_collect(self, *args, **kwargs)
+        return original_collect(*args, **kwargs)
 
     idx = pd.MultiIndex.from_tuples(
         [(1, "A"), (2, "A"), (3, "B")],
         names=["timestamp", "instrument"],
     )
-    with patch.object(pl.LazyFrame, "collect", counted_collect):
+    with patch.object(polars_lazy, "_collect_arrow_table", counted_collect):
         with patch(
             "data_access.read.adapters.arrow_table_to_multiindex_columns",
             return_value={

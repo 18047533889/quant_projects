@@ -210,8 +210,8 @@ def _sanitize_uri_value(value: str) -> str:
 def _redact_config_value(key: str, value: Any) -> Any:
     """Review-8 #452 + R32-P0-037/038: redact secrets before hashing.
 
-    - 键名命中 secret 片段：str 值走 URI sanitizer（保留 scheme/host/db，只去
-      credential）；非 str 值整体 ``<redacted>``（无结构可拆）；
+    - 键名命中 secret 片段：完整脱敏；只有结构化 DSN 保留 endpoint，
+      通过 URI sanitizer 去除 credential；
     - 普通字符串值也经 ``_canonicalize_config_value`` 的 URI 检查（P0-038：
       credential 藏在普通 url 值里时按值识别）。
     """
@@ -219,8 +219,18 @@ def _redact_config_value(key: str, value: Any) -> Any:
     if value is None:
         return value
     if any(frag in lowered for frag in _SECRET_KEY_FRAGMENTS):
-        if isinstance(value, str):
-            return _sanitize_uri_value(value)
+        # Only a structured DSN has non-secret endpoint identity to preserve.
+        # A plain password/token is not a URI; the URI helper intentionally
+        # returns such strings unchanged and must not handle this branch.
+        if "dsn" in lowered and isinstance(value, str):
+            from urllib.parse import urlsplit
+
+            try:
+                parts = urlsplit(value)
+            except ValueError:
+                return "<redacted>"
+            if parts.scheme and (parts.netloc or parts.path.startswith("/")):
+                return _sanitize_uri_value(value)
         return "<redacted>"
     return value
 

@@ -1,0 +1,27 @@
+schema_version: "1"
+change_id: V3-REL04-WP8
+git_sha: 2db45f4e446309003381a51a5e03071d31859502
+timestamp: "2026-09-07T02:20:00+08:00"
+owned_modified_files:
+  - factor_engine/runtime/atomic_commit.py
+  - factor_engine/tests/audit/test_v3_publication_faults.py
+  - factor_engine/docs/evidence/V3_REL04_PUBLICATION_FAULTS_20260907.yaml
+tests:
+  - command: ".venv/bin/python -m pytest -q factor_engine/tests/audit/test_v3_publication_faults.py factor_engine/tests/r44/test_r44_atomic_commit.py factor_engine/tests/runtime/test_sink_write_receipt.py factor_engine/tests/audit/test_materialize_publish_receipts.py"
+    result: PASS
+    summary: "82 passed, 2 existing backend-classification warnings"
+fault_injection:
+  - "first part rename failure: old CURRENT retained; partial bytes quarantined; incomplete generation undiscoverable"
+  - "middle part rename failure: old CURRENT retained; partial bytes quarantined; incomplete generation undiscoverable"
+  - "exception after successful CURRENT flip: manifest and all declared parts verified, commit recognized without replay"
+  - "lost acknowledgement plus post-flip part truncation: typed IN_DOUBT, bytes preserved, generation undiscoverable"
+  - "unreadable CURRENT after failure: typed IN_DOUBT with moved and staged transaction bytes preserved in place"
+  - "generation hashes verified with bounded streaming reads; whole-part read_bytes is prohibited by regression"
+  - "non-mapping manifests and symlink parts are excluded from committed-generation discovery"
+  - "mismatched/stale manifest generation excluded from committed-generation inventory"
+  - "partial COMMITTED/IN_DOUBT receipt and unproven writer return never reported complete or replayed"
+limitations:
+  - "Temporary local directories only; no production data or production mutation."
+  - "COS publication remains explicitly unsupported because expected-inventory/CAS and reconciliation authority are absent; no remote guarantee was added."
+  - "Local os.replace permits read-back reconciliation. Object-store acknowledgement uncertainty requires its own generation-store contract."
+  - "Full repository suite, installed wheel, CI, backend parity, and production gate: NOT_RUN by this subtask."

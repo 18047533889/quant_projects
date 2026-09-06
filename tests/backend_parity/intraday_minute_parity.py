@@ -91,7 +91,7 @@ def build_long(panels: dict[str, pd.DataFrame], *, session_tz: str | None = None
 def _to_wide(long_out) -> pd.DataFrame:
     """Long (date, inst, value) -> wide daily panel matching the pandas shape."""
     pdf = long_out.select(["date", "inst", "value"]).to_pandas()
-    wide = pdf.pivot_table(index="date", columns="inst", values="value").sort_index()
+    wide = pdf.pivot(index="date", columns="inst", values="value").sort_index()
     wide.index = pd.DatetimeIndex(wide.index)
     wide.columns.name = None
     return wide
@@ -508,26 +508,32 @@ def pl_concentration(df, name: str = "volume"):
 
 def pl_entropy(df, name: str = "volume", normalize: bool = True):
     pl = _pl()
-    d = df.with_columns(_col(name).fill_null(0.0).abs().alias("_abs"))
+    d = df.with_columns(
+        pl.when(_col(name).is_finite()).then(_col(name)).otherwise(0.0).alias("_value"),
+        _col(name).is_finite().fill_null(False).alias("_valid"),
+    )
     daily = d.group_by(["date", "inst"]).agg(
-        _col("_abs").sum().alias("_tot"),
-        (_col("_abs") > 0).sum().alias("_n"),
+        _col("_value").sum().alias("_tot"),
+        (_col("_valid") & (_col("_value") > 0)).sum().alias("_n"),
+        (_col("_valid") & (_col("_value") < 0)).any().alias("_negative"),
         _col(name).is_not_null().any().alias("_any"),
     )
     joined = d.join(daily.select(["date", "inst", "_tot"]), on=["date", "inst"])
     res = (
-        joined.with_columns((_col("_abs") / _col("_tot")).alias("_w"))
+        joined.with_columns((_col("_value") / _col("_tot")).alias("_w"))
         .filter(_col("_w") > 0)
         .group_by(["date", "inst"])
         .agg((_col("_w") * _col("_w").log()).sum().neg().alias("_entropy"))
         .join(
-            daily.select(["date", "inst", "_tot", "_n", "_any"]),
+            daily.select(["date", "inst", "_tot", "_n", "_negative", "_any"]),
             on=["date", "inst"],
-            how="left",
+            how="right",
         )
         .with_columns(
-            pl.when((_col("_tot") <= _EPS) | (_col("_n") < 2))
+            pl.when(_col("_negative") | (_col("_tot") <= _EPS) | (_col("_n") < 1))
             .then(None)
+            .when(normalize & (_col("_n") == 1))
+            .then(0.0)
             .when(normalize)
             .then(_col("_entropy") / _col("_n").log())
             .otherwise(_col("_entropy"))
@@ -789,7 +795,7 @@ def _sql_wide(sql_result: pd.DataFrame) -> pd.DataFrame:
     out = sql_result
     if "ts" in out.columns:
         out = out.rename(columns={"ts": "date"})
-    wide = out.pivot_table(index="date", columns="inst", values="value").sort_index()
+    wide = out.pivot(index="date", columns="inst", values="value").sort_index()
     wide.index = pd.DatetimeIndex(wide.index)
     wide.columns.name = None
     return wide
@@ -854,24 +860,12 @@ def sql_jump_ratio(con, table: str):
 
 
 def sql_path_efficiency(con, table: str):
-    q = f"""
-    SELECT date, inst,
-           CASE WHEN COUNT(close) < 2 THEN NULL
-                WHEN SUM(ABS(d) <= 1e-12 THEN 0.0
-                ELSE ABS(MAX(close) - MIN(close)) / SUM(ABS(d)) END AS value
-    FROM (
-      SELECT date, inst, close,
-             close - LAG(close) OVER (PARTITION BY date, inst ORDER BY ts) AS d
-      FROM (SELECT date, inst, ts, close FROM {table} WHERE close IS NOT NULL) f
-    ) t
-    GROUP BY date, inst
-    """
     # path efficiency uses first/last *finite* bar, not max/min.
     q = f"""
     SELECT date, inst,
            CASE WHEN COUNT(*) < 2 THEN NULL
-                WHEN SUM(ABS(d) <= 1e-12 THEN 0.0
-                ELSE ABS(LAST(close) - FIRST(close)) / SUM(ABS(d)) END AS value
+                WHEN SUM(ABS(d)) <= 1e-12 THEN 0.0
+                ELSE ABS(LAST(close ORDER BY ts) - FIRST(close ORDER BY ts)) / SUM(ABS(d)) END AS value
     FROM (
       SELECT date, inst, ts, close,
              close - LAG(close) OVER (PARTITION BY date, inst ORDER BY ts) AS d
@@ -925,20 +919,24 @@ def sql_concentration(con, table: str, name: str = "volume"):
 
 def sql_entropy(con, table: str, name: str = "volume", normalize: bool = True):
     q = f"""
-    SELECT date, inst,
-           CASE WHEN COUNT(*) = 0 THEN NULL
-                WHEN SUM(ab) <= 1e-12 THEN NULL
-                ELSE -SUM(w * LN(w)) / CASE WHEN {1 if normalize else 0} = 1
-                                            THEN LN(COUNT(*)) ELSE 1.0 END
+    WITH groups AS (
+      SELECT date, inst, SUM(CASE WHEN ISFINITE({name}) THEN {name} ELSE 0 END) AS total,
+             COUNT(CASE WHEN ISFINITE({name}) AND {name} > 0 THEN 1 END) AS n,
+             BOOL_OR(ISFINITE({name}) AND {name} < 0) AS has_negative
+      FROM {table} GROUP BY date, inst
+    ), entropy AS (
+      SELECT t.date, t.inst, -SUM((t.{name}/g.total) * LN(t.{name}/g.total)) AS h
+      FROM {table} t JOIN groups g USING (date, inst)
+      WHERE ISFINITE(t.{name}) AND t.{name} > 0
+      GROUP BY t.date, t.inst
+    )
+    SELECT g.date, g.inst,
+           CASE WHEN g.has_negative OR g.total <= 1e-12 OR g.n < 1 THEN NULL
+                WHEN {1 if normalize else 0} = 1 AND g.n = 1 THEN 0.0
+                ELSE e.h / CASE WHEN {1 if normalize else 0} = 1
+                                THEN LN(g.n) ELSE 1.0 END
            END AS value
-    FROM (
-      SELECT date, inst,
-             ABS(COALESCE({name},0)) AS ab,
-             ABS(COALESCE({name},0)) / NULLIF(SUM(ABS(COALESCE({name},0))) OVER (PARTITION BY date, inst), 0) AS w
-      FROM {table}
-    ) t
-    WHERE w > 0
-    GROUP BY date, inst
+    FROM groups g LEFT JOIN entropy e USING (date, inst)
     """
     return _sql_wide(_sql(con, table, q))
 
@@ -951,7 +949,7 @@ def sql_signed_imbalance_proxy(con, table: str, name: str = "volume"):
       FROM {table} WHERE close IS NOT NULL
     )
     SELECT date, inst,
-           CASE WHEN SUM(COALESCE({name},0) <= 1e-12 THEN NULL
+           CASE WHEN SUM(COALESCE({name},0)) <= 1e-12 THEN NULL
                 ELSE SUM(CASE WHEN r IS NOT NULL THEN SIGN(r)*COALESCE({name},0) ELSE 0.0 END)
                      / SUM(COALESCE({name},0))
            END AS value

@@ -341,7 +341,94 @@ def test_catalog_thread_safety(tmp_path):
         t.join()
     assert errors == []
     assert cat.get_factor_info("base") is not None
+    for i in range(8):
+        for j in range(5):
+            assert cat.get_factor_info(f"f_t{i}_{j}") is not None
     cat.close()
+
+
+def test_catalog_connection_write_rollback_and_cursor_step_are_locked():
+    import sqlite3
+
+    from factor_engine.storage.catalog import _ThreadSafeConnection
+
+    class _Cursor:
+        def __init__(self, owner):
+            self.owner = owner
+
+        def fetchone(self):
+            self.owner.fetch_entered.set()
+            self.owner.release_fetch.wait(timeout=2)
+            return (1,)
+
+    class _FakeConnection:
+        def __init__(self):
+            self.execute_count = 0
+            self.rollback_count = 0
+            self.fail_commit = False
+            self.fetch_entered = threading.Event()
+            self.release_fetch = threading.Event()
+
+        def execute(self, *_args, **_kwargs):
+            self.execute_count += 1
+            return _Cursor(self)
+
+        def commit(self):
+            if self.fail_commit:
+                raise sqlite3.OperationalError("commit failed")
+
+        def rollback(self):
+            self.rollback_count += 1
+
+    fake = _FakeConnection()
+    conn = _ThreadSafeConnection(fake)
+    fake.fail_commit = True
+    with pytest.raises(sqlite3.OperationalError, match="commit failed"):
+        conn.execute_commit("INSERT", ())
+    assert fake.rollback_count == 1
+
+    fake.fail_commit = False
+    class _ObservedLock:
+        def __init__(self):
+            self.inner = threading.RLock()
+            self.owner = None
+            self.competing_attempt = threading.Event()
+
+        def __enter__(self):
+            ident = threading.get_ident()
+            if self.owner is not None and self.owner != ident:
+                self.competing_attempt.set()
+            self.inner.acquire()
+            self.owner = ident
+
+        def __exit__(self, *_args):
+            self.owner = None
+            self.inner.release()
+
+    observed_lock = _ObservedLock()
+    conn._lock = observed_lock
+    thread_errors = []
+
+    def fetch(sql):
+        try:
+            conn.fetchone(sql)
+        except Exception as exc:  # noqa: BLE001
+            thread_errors.append(exc)
+
+    first = threading.Thread(target=fetch, args=("SELECT 1",))
+    second = threading.Thread(target=fetch, args=("SELECT 2",))
+    first.start()
+    assert fake.fetch_entered.wait(timeout=2)
+    second.start()
+    assert observed_lock.competing_attempt.wait(timeout=2)
+    # The second execute cannot start while the first cursor is being stepped.
+    assert fake.execute_count == 2  # one prior INSERT + the first SELECT
+    fake.release_fetch.set()
+    first.join(timeout=2)
+    second.join(timeout=2)
+    assert not first.is_alive() and not second.is_alive()
+    assert thread_errors == []
+    assert fake.execute_count == 3
 
 
 # ---------------------------------------------------------------------------

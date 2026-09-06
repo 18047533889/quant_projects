@@ -37,7 +37,8 @@ def test_map_groups_blocked_in_production(loaded, monkeypatch):
 def test_fastpath_gate_opt_in(loaded, monkeypatch):
     monkeypatch.setenv("FACTOR_ENGINE_PRODUCTION_REQUIRE_FASTPATH", "1")
     plan = minimal_plan("ts_mean")
-    assert_production_fastpath_plan(plan, mode="production")  # should pass
+    with pytest.raises(ProductionPolicyViolation, match="dual-backend|双后端"):
+        assert_production_fastpath_plan(plan, mode="production")
 
 
 def test_fastpath_gate_rejects_deferred(loaded, monkeypatch):

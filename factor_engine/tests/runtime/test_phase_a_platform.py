@@ -6,8 +6,8 @@ import pandas as pd
 import pytest
 
 from factor_engine.api import rank, ts_mean, ts_std, ts_std_dev
-from factor_engine.api.columns import col
-from factor_engine.api.factor import Factor
+from factor_engine.api.columns import col, field
+from factor_engine.api.factor import Factor, FactorExecutionScopeHint
 from factor_engine.backend.pandas_backend import PandasBackend
 from factor_engine.ir.analyzer import Analyzer
 from factor_engine.planner.cse import apply_cse
@@ -17,7 +17,11 @@ from factor_engine.planner.optimizer import Optimizer
 from factor_engine.planner.rolling_cse import apply_rolling_cse, rolling_semantic_key
 from factor_engine.runtime.config import PipelineConfig
 from factor_engine.runtime.engine import FactorEngine
-from factor_engine.runtime.production_policy import ProductionPolicyViolation, assert_columns_explicit
+from factor_engine.runtime.production_policy import (
+    ProductionPolicyViolation,
+    assert_columns_explicit,
+    assert_production_run_flags,
+)
 from tests.helpers import InMemorySeriesSource
 
 
@@ -41,7 +45,7 @@ def _plan(expr):
 def test_rolling_cse_merges_std_and_std_dev():
     col_node = PlanNode(op="column", attrs={"name": "close"}, inputs=[])
     win = PlanNode(op="literal", attrs={"value": 20}, inputs=[])
-    std = PlanNode(op="ts_std", attrs={"window": 20}, inputs=[col_node, win])
+    std = PlanNode(op="ts_std", attrs={"window": 20, "min_periods": 1}, inputs=[col_node, win])
     std_dev = PlanNode(op="ts_std_dev", attrs={"window": 20, "min_periods": 1}, inputs=[col_node, win])
     assert rolling_semantic_key(std) == rolling_semantic_key(std_dev)
     new_roots, rolling_shared = apply_rolling_cse([std, std_dev], existing_shared={})
@@ -59,7 +63,19 @@ def test_rolling_cse_shared_across_factors():
     assert len(shared2) >= len(shared)
 
 
-def test_production_run_requires_all_flags(monkeypatch):
+def test_production_run_requires_all_flags():
+    with pytest.raises(ProductionPolicyViolation):
+        assert_production_run_flags(
+            mode="production", input_dq_check=True,
+            auto_warmup=False, pit_enforce=False,
+        )
+    assert_production_run_flags(
+        mode="production", input_dq_check=True,
+        auto_warmup=True, pit_enforce=True,
+    )
+
+
+def test_production_run_fails_closed_on_stale_parameter_evidence(monkeypatch):
     monkeypatch.setenv("FACTOR_ENGINE_RUN_MODE", "production")
     eng = FactorEngine(
         backend=PandasBackend(),
@@ -68,19 +84,21 @@ def test_production_run_requires_all_flags(monkeypatch):
     )
     f = Factor(
         name="m",
-        expr=rank(ts_mean(col("close"), 2)),
-        source_expr="rank(ts_mean(close, 2))",
+        expr=rank(ts_mean(field("close"), 2)),
+        source_expr='rank(ts_mean(field("close"), 2))',
+        semantic_identity=FactorExecutionScopeHint(market="ashare"),
     )
-    with pytest.raises(ProductionPolicyViolation):
-        eng.run(f, input_dq_check=True, auto_warmup=False, pit_enforce=False)
-    out = eng.run(
-        f,
-        input_dq_check=True,
-        auto_warmup=True,
-        pit_enforce=True,
-    )
-    assert "result" in out
-    assert out["analysis"].referenced_columns
+    from factor_engine.runtime.exceptions import ParameterDomainError
+
+    # Current repository evidence predates HEAD. Production must fail closed;
+    # never hand-edit that evidence into an apparent approval.
+    with pytest.raises(ParameterDomainError, match="evidence|证据"):
+        eng.run(
+            f,
+            input_dq_check=True,
+            auto_warmup=True,
+            pit_enforce=True,
+        )
 
 
 def test_pipeline_config_batched_engine():
@@ -88,7 +106,7 @@ def test_pipeline_config_batched_engine():
 
 
 def test_store_production_requires_columns(monkeypatch):
-    monkeypatch.setenv("FACTOR_ENGINE_RUN_MODE", "production")
+    monkeypatch.setenv("QUANT_PRODUCTION_MODE", "1")
     from data_access.read.query_budget import resolve_query_budget, validate_query_request
 
     budget = resolve_query_budget(None)

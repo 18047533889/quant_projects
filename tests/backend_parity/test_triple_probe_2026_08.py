@@ -273,7 +273,8 @@ _BAR_CASES = [
     ("typical_price", lambda: F("typical_price")(col("high"), col("low"), col("close"))),
     ("median_price", lambda: F("median_price")(col("high"), col("low"))),
     ("high_low_range", lambda: F("high_low_range")(col("high"), col("low"))),
-    ("overnight_return", lambda: F("overnight_return")(col("open"), col("pre_close"))),
+    # Synthetic pre_close is derived from the same continuous close series.
+    ("overnight_return", lambda: F("overnight_return")(col("open"), col("pre_close"), price_basis="CONTINUOUS")),
     ("open_close_return", lambda: F("open_close_return")(col("open"), col("close"))),
     ("candle_body", lambda: F("candle_body")(col("open"), col("close"))),
     ("candle_upper_shadow", lambda: F("candle_upper_shadow")(col("open"), col("high"), col("close"))),
@@ -297,8 +298,30 @@ _BAR_CASES = [
     ("cs_kurt", lambda: F("cs_kurt")(col("close"))),
     ("cs_range", lambda: F("cs_range")(col("close"))),
     ("cs_demean", lambda: F("cs_demean")(col("close"))),
-    ("cs_robust_resid", lambda: F("cs_robust_resid")(col("close"))),
+    ("cs_robust_resid", lambda: F("cs_robust_resid")(col("close"), col("open"))),
 ]
+
+# These legacy names are deliberately absent from the active canonical surface.
+# Keep testing their fail-closed contract, but do not pretend they have three
+# executable backends and then count the expected KeyError as a parity failure.
+_REMOVED_CASE_NAMES = {
+    "expanding_mean", "expanding_std", "cum_delta", "cumsum", "cs_min",
+    "cs_max", "group_median", "protected_log", "ts_returns", "RSI",
+    "bollinger_mid", "bollinger_upper", "bollinger_lower", "vwap", "VWAP",
+    "atr", "pct_rank_ts", "avg_true_range_pct", "typical_price",
+    "median_price", "high_low_range", "candle_real_body", "hilo_pct",
+    "ts_drawdown", "volume_ratio", "amount_weighted_price", "price_pct_chg",
+    "ts_pct_rank", "ts_rank_mean", "ts_rank_std", "ts_linear_reg_slope",
+    "ts_linear_reg_residual", "cs_skew", "cs_kurt", "cs_range",
+}
+_REMOVED_CASES = [case for case in _BAR_CASES if case[0] in _REMOVED_CASE_NAMES]
+_BAR_CASES = [case for case in _BAR_CASES if case[0] not in _REMOVED_CASE_NAMES]
+
+
+@pytest.mark.parametrize("name,expr_builder", _REMOVED_CASES)
+def test_removed_probe_names_fail_closed(name, expr_builder, probe_source):
+    with pytest.raises(KeyError, match="unknown operator canonical"):
+        _run(probe_source, expr_builder(), "pandas")
 
 
 @pytest.mark.parametrize("name,expr_builder", _BAR_CASES)
@@ -313,11 +336,14 @@ def test_triple_bar_parity(probe_source, duckdb_probe_source, name, expr_builder
 
 # Single-instrument panel — polars group-by / duckdb cross-section edge cases.
 def test_triple_single_instrument(probe_source, duckdb_probe_source):
-    single = pd.Series(
+    single_values = pd.Series(
         probe_source.data["close"].xs("A", level="instrument"),
         name="close",
     )
-    single.index = single.index.rename("timestamp")
+    single_values.index = single_values.index.rename("timestamp")
+    single = pd.concat({"A": single_values}, names=["instrument"]).swaplevel()
+    single.index = single.index.set_names(["timestamp", "instrument"])
+    single = single.sort_index()
     from tests.helpers import InMemorySeriesSource as _IMS
     src = _IMS(data={"close": single, "open": single - 0.5, "volume": single * 2, "group_id": pd.Series(1.0, index=single.index)})
     for name, expr_builder in [
@@ -330,3 +356,23 @@ def test_triple_single_instrument(probe_source, duckdb_probe_source):
         pd_out = _run(src, expr_builder(), "pandas")["result"].sort_index()
         long_out = _run(src, expr_builder(), "polars_long")["result"].sort_index()
         _compare(pd_out, long_out, f"single:{name}", "polars_long")
+
+
+def test_true_range_polars_native_null_matches_pandas():
+    """A native Polars NULL in high/low must not fall through a NULL predicate."""
+    import polars as pl
+
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
+
+    high_pd = pd.DataFrame({"A": [3.0, np.nan, 5.0]})
+    low_pd = pd.DataFrame({"A": [1.0, 2.0, 3.0]})
+    close_pd = pd.DataFrame({"A": [2.0, 2.0, 4.0]})
+    high_pl = pl.DataFrame({"A": [3.0, None, 5.0]})
+    low_pl = pl.DataFrame({"A": [1.0, 2.0, 3.0]})
+    close_pl = pl.DataFrame({"A": [2.0, 2.0, 4.0]})
+
+    pandas_op = OperatorRegistry.get("true_range", "pandas_numpy")
+    polars_op = OperatorRegistry.get("true_range", "polars")
+    expected = pandas_op.calculate(high_pd, low_pd, close_pd)["A"]
+    actual = pd.Series(polars_op.calculate(high_pl, low_pl, close_pl)["A"].to_list())
+    pd.testing.assert_series_equal(expected, actual, check_names=False)

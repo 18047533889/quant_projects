@@ -113,6 +113,7 @@ packages = [
 "factor_engine" = "."
 
 [tool.setuptools.package-data]
+"factor_engine.runtime" = ["profiles/*.yaml"]
 "factor_engine.cleaned_operators" = ["docs/*"]
 "factor_engine.docs" = ["*.json", "*.yaml", "*.md", "*.txt"]
 # R55 wheel smoke: composite_evidence.py reads the composite verification

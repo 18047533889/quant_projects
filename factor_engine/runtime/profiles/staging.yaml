@@ -1,0 +1,27 @@
+# US-equity staging preset. Production-mode PIT checks remain enforced.
+run:
+  mode: production
+  auto_warmup: true
+  trim_warmup: true
+  market: us
+  calendar: NYSE
+dq:
+  profile: us_equity_daily_prod
+  strict: true
+  input_strict: true
+pit:
+  enforce: true
+  forbid_forward_fill: true
+data_source:
+  start_date: "2023-01-01"
+  end_date: "2023-12-31"
+engine:
+  enable_cache: true
+  plan_cache_dir: ../data/factors/plan_cache_staging
+materialization:
+  lake_root: ../data/factors/lake_staging
+  target: staging
+  preserve_invalid_rows: true
+  value_dtype: float32
+  incremental:
+    lookback_extra: 5

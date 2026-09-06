@@ -183,9 +183,13 @@ def register_polars_bridge(canonical: str) -> None:
             pandas_op = _Reg.get(canonical, "pandas_numpy")
             if pandas_op is None:
                 raise RuntimeError(f"pandas_numpy reference missing for {canonical}")
-            pdfs = [_pl_to_pd(f) for f in frames]
-            out = pandas_op.calculate(*pdfs, **params)
-            return _pl_rebuild(frames[0], out)
+            converted = [
+                _pl_to_pd(value) if _is_panel_like(value) else value
+                for value in frames
+            ]
+            panel_frames = [value for value in frames if _is_panel_like(value)]
+            out = pandas_op.calculate(*converted, **params)
+            return _pl_rebuild(panel_frames[0], out)
 
     # Check if there's already a polars backend registered
     existing = OperatorRegistry.get(canonical, "polars")
@@ -273,9 +277,13 @@ def register_polars_udf(canonical: str) -> None:
             pandas_op = _Reg.get(canonical, "pandas_numpy")
             if pandas_op is None:
                 raise RuntimeError(f"pandas_numpy reference missing for {canonical}")
-            pdfs = [_pl_to_pd(f) for f in frames]
-            out = pandas_op.calculate(*pdfs, **params)
-            return _pl_rebuild(frames[0], out)
+            converted = [
+                _pl_to_pd(value) if _is_panel_like(value) else value
+                for value in frames
+            ]
+            panel_frames = [value for value in frames if _is_panel_like(value)]
+            out = pandas_op.calculate(*converted, **params)
+            return _pl_rebuild(panel_frames[0], out)
 
     # R20: Attach param_specs from the pandas_numpy reference so the polars bridge
     # carries the same contract.  The registry backfills param_names but NOT

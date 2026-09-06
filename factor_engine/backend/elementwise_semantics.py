@@ -306,7 +306,7 @@ def protected_div_polars(numer: "pl.Expr", denom: "pl.Expr", *, eps: float, defa
 
     raw = numer / denom
     return (
-        pl.when(numer.is_null() | denom.is_null())
+        pl.when(numer.is_null() | denom.is_null() | numer.is_nan() | denom.is_nan())
         .then(None)
         .when(denom.abs() <= eps)
         .then(default)

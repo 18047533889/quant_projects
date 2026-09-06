@@ -1,0 +1,132 @@
+id: V3-NUM-01-05
+git_sha: 2db45f4e446309003381a51a5e03071d31859502
+timestamp: "2026-09-07T01:51:07+08:00"
+status: PASS_SCOPED
+files:
+  - factor_engine/cleaned_operators/price_volume/polars_price_volume.py
+  - factor_engine/cleaned_operators/common/time_series.py
+  - factor_engine/cleaned_operators/microstructure/intraday_agg.py
+  - factor_engine/cleaned_operators/intraday/polars_intraday_full.py
+  - factor_engine/backend/elementwise_semantics.py
+  - factor_engine/backend/polars_expr_emitter.py
+  - factor_engine/backend/sql_pushdown/emitter.py
+  - factor_engine/cleaned_operators/common/polars_state_event.py
+  - factor_engine/cleaned_operators/layer_cos_fundamental.py
+  - factor_engine/cleaned_operators/return_decomp.py
+  - factor_engine/cleaned_operators/rolling_pack.py
+  - tests/operators/test_v3_beta_numerics.py
+  - tests/backend_parity/intraday_minute_parity.py
+  - tests/backend_parity/test_v3_intraday_entropy_edges.py
+  - tests/backend_parity/test_triple_probe_2026_08.py
+  - tests/operators/test_v3_return_basis.py
+  - tests/operators/test_v3_rolling_delegate_params.py
+tests:
+  - command: "PYTHONPATH=. .venv/bin/python -m pytest -q tests/operators/test_v3_beta_numerics.py tests/backend_parity/test_v3_intraday_entropy_edges.py tests/operators/test_r19_math_kernels.py"
+    status: PASS
+    result: "44 passed"
+  - command: "PYTHONPATH=. .venv/bin/python -m pytest -q tests/operators/test_v3_beta_numerics.py tests/backend_parity/test_v3_intraday_entropy_edges.py tests/operators/test_r19_math_kernels.py tests/backend_parity/test_intraday_minute_parity.py::test_minute_parity_polars_matches_pandas"
+    status: PASS
+    result: "43 passed before the final date-key alignment regression; equivalent final scoped run is recorded above"
+  - command: "PYTHONPATH=. .venv/bin/python -m pytest -q tests/operators/test_v3_beta_numerics.py tests/backend_parity/test_v3_intraday_entropy_edges.py tests/operators/test_r19_math_kernels.py tests/backend_parity/test_intraday_minute_parity.py"
+    status: FAIL_BASELINE_MATCH
+    result: "47 passed, 2 failed; both node IDs also fail at frozen HEAD"
+  - command: "PYTHONPATH=. .venv/bin/python -m pytest -q tests/backend_parity"
+    status: FAIL_BASELINE_MATCH
+    result: "943 passed, 340 skipped, 80 failed in 282.07s; log=/tmp/v3-current-backend-parity.log, junit=/tmp/v3-current-backend-parity.xml; isolated frozen HEAD has the exact same 80 failing node IDs (937 passed, 340 skipped, 80 failed); the six additional passes are the new entropy edge tests"
+  - command: "git archive HEAD to /tmp/fe-v3-baseline-8pdnMr; PYTHONPATH=/tmp/fe-v3-baseline-8pdnMr /home/sunhaiwei/quant_projects/.venv/bin/python -m pytest -q tests/backend_parity"
+    status: BASELINE_CAPTURED
+    result: "937 passed, 340 skipped, 80 failed; failing node-ID set matches current exactly"
+  - command: "PYTHONPATH=. .venv/bin/python -m pytest -q tests/backend_parity/test_triple_probe_2026_08.py"
+    status: PASS
+    result: "109 passed, 6 warnings in 60.48s; 74 executable parity/edge tests plus 35 explicit fail-closed removed-name cases (34 distinct removed names); log=/tmp/v3-triple-probe-final.log"
+  - command: "PYTHONPATH=. .venv/bin/python -m pytest -q tests/operators/test_v3_beta_numerics.py tests/backend_parity/test_v3_intraday_entropy_edges.py tests/operators/test_r19_math_kernels.py tests/operators/test_v3_rolling_delegate_params.py tests/backend_parity/test_triple_probe_2026_08.py"
+    status: PASS
+    result: "155 passed, 6 warnings in 59.96s; log=/tmp/v3-final-scoped.log"
+  - command: "PYTHONPATH=. .venv/bin/python -m pytest -q tests/backend_parity"
+    status: PASS_BEFORE_FINAL_TRUE_RANGE_NULL_FIX
+    result: "1023 passed, 340 skipped, 35 warnings in 272.76s; junit=/tmp/v3-backend-parity-final.xml; followed by one narrow true_range native-NULL correction and regression"
+  - command: "PYTHONPATH=. .venv/bin/python -m pytest -q tests/backend_parity/test_triple_probe_2026_08.py"
+    status: PASS
+    result: "110 passed, 6 warnings in 60.08s after native-Polars-NULL true_range regression; 75 executable parity/edge tests plus 35 explicit fail-closed removed-name cases; log=/tmp/v3-triple-probe-final2.log"
+checks:
+  conditional_beta_independent_oracle: PASS
+  paired_finite_rolling_beta_aliases: PASS
+  shuffled_date_alignment_and_duplicate_rejection: PASS
+  strict_parameter_rejection: PASS
+  min_stop_explicit_migration_error: PASS
+  all_zero_entropy_group_preservation: PASS
+  single_positive_entropy_zero: PASS
+  negative_weight_entropy_nan: PASS
+  implementation_hash_changed_by_source_edit: PASS
+  triple_backend_ewm_macd_nonfinite_gap_parity: PASS
+  triple_backend_cs_ts_quantile_parity: PASS
+  triple_backend_group_percentile_inf_parity: PASS
+  triple_backend_protected_div_nonfinite_parity: PASS
+  triple_backend_true_range_first_row_and_nonfinite_parity: PASS
+  true_range_native_polars_null_parity: PASS
+  return_price_basis_and_finite_positive_input_contract: PASS
+  removed_name_fail_closed_inventory:
+    distinct_names: 34
+    parameterized_cases: 35
+    status: PASS_POLICY_NOT_NUMERIC
+    runtime_evidence: "after load_all(), resolution remained unchanged; each name was absent from catalog/operators and had no pandas_numpy, polars, or sql backend"
+    duplicated_canonical_case: "ts_pct_rank is exercised by both the pct_rank_ts and ts_pct_rank case labels"
+    names:
+      - expanding_mean
+      - expanding_std
+      - cum_delta
+      - cumsum
+      - cs_min
+      - cs_max
+      - group_median
+      - protected_log
+      - ts_returns
+      - RSI
+      - bollinger_mid
+      - bollinger_upper
+      - bollinger_lower
+      - vwap
+      - VWAP
+      - atr
+      - ts_pct_rank
+      - avg_true_range_pct
+      - typical_price
+      - median_price
+      - high_low_range
+      - candle_real_body
+      - hilo_pct
+      - ts_drawdown
+      - volume_ratio
+      - amount_weighted_price
+      - price_pct_chg
+      - ts_rank_mean
+      - ts_rank_std
+      - ts_linear_reg_slope
+      - ts_linear_reg_residual
+      - cs_skew
+      - cs_kurt
+      - cs_range
+  registry_or_global_schema_changed: false
+  semantic_versions_coordinated:
+    ts_kurt: 2
+    cs_quantile: 2
+    ts_quantile: 2
+    group_percentile: 3
+    true_range: 2
+    ts_ema: 2
+    MACD_line: 2
+    MACD_signal: 2
+    MACD_hist: 2
+    ts_max_drawdown: 2
+    overnight_return: 2
+    open_close_return: 2
+    open_to_vwap_return: 2
+    vwap_to_close_return: 2
+  semantic_alias_inheritance: "c_percentile -> cs_quantile; EMA/ema/ewm/ewm_mean/ts_ewm_mean -> ts_ema"
+  protected_div_version_note: "implementation parity corrected, but protected_div is currently unregistered; no new reachable semantic-version row"
+  production_gate_widened: false
+limitations:
+  - The full backend parity suite passed before the final narrow true_range native-NULL fix; the final full-suite rerun is tracked separately by the root audit.
+  - 340 backend-parity skips remain NOT_RUN; full CI, production workloads, materialization replay, Q backend parity, and registry duplicate-authority audit were NOT_RUN.
+  - Reachable output-changing canonicals were bumped in operator_semantic_version.py by the catalog workstream; aliases inherit canonical versions.
+  - Existing user modification in factor_engine/storage/sources/intraday_feature_runtime_v2.py was inspected and left untouched.

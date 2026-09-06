@@ -48,6 +48,8 @@ def compute_drawdown_series(
     # a negative wealth times (1 + r) can flip positive again, which would
     # fabricate a fake recovery, so forward-fill the invalid mask.
     invalid = np.maximum.accumulate(cum_returns <= 0, axis=0)
+    cum_returns[invalid] = 0.0
+    running_max = np.maximum(1.0, np.maximum.accumulate(cum_returns, axis=0))
     drawdown_series = np.full(cum_returns.shape, np.nan)
     np.divide(
         cum_returns - running_max,
@@ -55,6 +57,7 @@ def compute_drawdown_series(
         out=drawdown_series,
         where=~invalid,
     )
+    drawdown_series[invalid] = -1.0
 
     if squeeze:
         return drawdown_series[:, 0], cum_returns[:, 0], running_max[:, 0]

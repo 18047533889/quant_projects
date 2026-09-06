@@ -83,16 +83,21 @@ def test_persistent_plan_cache_survives_engine_restart(tmp_path):
     root = tmp_path / "plan_cache"
     scope = "fixed_scope"
 
+    source1 = InMemorySeriesSource(data=data)
+    source1.source_identity = "stable-test-panel-v1"
+
     eng1 = FactorEngine(
         backend=PandasBackend(),
-        data_source=InMemorySeriesSource(data=data),
+        data_source=source1,
         cache=PersistentPlanCache(root, data_scope=scope),
     )
     r1 = eng1.run(factor)["result"]
 
+    source2 = InMemorySeriesSource(data=data)
+    source2.source_identity = "stable-test-panel-v1"
     eng2 = FactorEngine(
         backend=PandasBackend(),
-        data_source=InMemorySeriesSource(data=data),
+        data_source=source2,
         cache=PersistentPlanCache(root, data_scope=scope),
     )
     r2 = eng2.run(factor)["result"]

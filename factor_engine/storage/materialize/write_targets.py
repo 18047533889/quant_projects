@@ -99,19 +99,14 @@ class LocalParquetWriteTarget:
         无恢复。production 必须走 ``staging`` 写目标 + ``publish_factor_lake``
         审批发布。research 保留（legacy 快速落盘路径）。
         """
-        try:
-            from factor_engine.runtime.production_policy import is_production_mode
+        from factor_engine.runtime.production_policy import is_production_mode
 
-            if is_production_mode():
-                raise ValueError(
-                    f"factor_id={factor_id!r}: production 禁止 direct-local "
-                    "factor-lake write（绕过 DataAccess staging→publish 原子发布/"
-                    "snapshot manifest）。请用 staging 写目标 + publish_factor_lake。"
-                )
-        except ValueError:
-            raise
-        except Exception:
-            pass
+        if is_production_mode():
+            raise ValueError(
+                f"factor_id={factor_id!r}: production 禁止 direct-local "
+                "factor-lake write（绕过 DataAccess staging→publish 原子发布/"
+                "snapshot manifest）。请用 staging 写目标 + publish_factor_lake。"
+            )
         del upsert_on, params
         from factor_engine.storage.partition_policy import PartitionPolicy, attach_partition_columns, iter_partition_groups
 

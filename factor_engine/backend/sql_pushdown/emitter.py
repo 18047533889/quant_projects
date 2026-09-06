@@ -694,6 +694,10 @@ def _ewm_adjust_false_sql(
     _a = repr(float(alpha))
     _d = repr(float(decay))
     _mp = int(min_periods)
+    # DuckDB preserves IEEE NaN/Inf as numeric values.  pandas EWM treats all
+    # three as missing observations, so normalize before the recursive state
+    # sees them; otherwise a single Inf permanently poisons y.
+    _safe_v = f"CASE WHEN {value_col} IS NULL OR isnan({value_col}) OR isinf({value_col}) THEN NULL ELSE {value_col} END"
     # pandas ewm 是**等距位置**递归（绝对位置衰减），与 ts 实际日期间隔无关
     # （周末缺口仍按 1 个位置步进）。故递归按 ROW_NUMBER 位置推进：
     #   gap = n.rn - e.last_valid_rn （位置差），decay^gap 绝对位置衰减。
@@ -703,7 +707,7 @@ def _ewm_adjust_false_sql(
         f"CASE WHEN t._v IS NULL THEN NULL ELSE t._v END AS y, 0, "
         f"CASE WHEN t._v IS NULL THEN 0 ELSE 1 END AS cnt "
         f"FROM ("
-        f"SELECT ts, inst, {value_col} AS _v, "
+        f"SELECT ts, inst, {_safe_v} AS _v, "
         f"ROW_NUMBER() OVER (PARTITION BY inst ORDER BY ts) - 1 AS rn "
         f"FROM ({inner_sql})"
         f") t WHERE t.rn = 0 "
@@ -717,7 +721,7 @@ def _ewm_adjust_false_sql(
         f"CASE WHEN n._v IS NULL THEN e.last_valid_rn ELSE n.rn END, "
         f"e.cnt + CASE WHEN n._v IS NULL THEN 0 ELSE 1 END "
         f"FROM e JOIN ("
-        f"SELECT ts, inst, {value_col} AS _v, "
+        f"SELECT ts, inst, {_safe_v} AS _v, "
         f"ROW_NUMBER() OVER (PARTITION BY inst ORDER BY ts) - 1 AS rn "
         f"FROM ({inner_sql})"
         f") n ON n.rn = e.rn + 1 AND n.inst = e.inst"
@@ -2110,6 +2114,14 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         default = _float_attr(node, "default", default=protected_div_default())
         abs_fn = _dialect_fn(dialect, "abs")
         expr = protected_div_sql("l._v", "r._v", eps=eps, default=default, abs_fn=abs_fn)
+        isnan_fn = "isNaN" if dialect == SqlDialect.CLICKHOUSE else "isnan"
+        isinf_fn = "isInfinite" if dialect == SqlDialect.CLICKHOUSE else "isinf"
+        expr = (
+            f"CASE WHEN l._v IS NULL OR r._v IS NULL "
+            f"OR {isnan_fn}(l._v) OR {isnan_fn}(r._v) "
+            f"OR {isinf_fn}(l._v) OR {isinf_fn}(r._v) THEN NULL "
+            f"ELSE {expr} END"
+        )
         return _Layer(
             f"SELECT l.ts, l.inst, {expr} AS _v "
             f"FROM ({left.sql}) l LEFT JOIN ({right.sql}) r USING (ts, inst)",
@@ -3608,7 +3620,10 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         pos_p = _literal_positional(node, 0)
         if pos_p is not None:
             p = pos_p
-        qexpr = _quantile_over(dialect, "_v", p, "PARTITION BY ts")
+        isnan_fn = "isNaN" if dialect == SqlDialect.CLICKHOUSE else "isnan"
+        isinf_fn = "isInfinite" if dialect == SqlDialect.CLICKHOUSE else "isinf"
+        safe = f"CASE WHEN _v IS NULL OR {isnan_fn}(_v) OR {isinf_fn}(_v) THEN NULL ELSE _v END"
+        qexpr = _quantile_over(dialect, safe, p, "PARTITION BY ts")
         return _Layer(
             f"SELECT ts, inst, {qexpr} AS _v FROM ({inner.sql}) t",
             has_inst_window=inner.has_inst_window,
@@ -6218,10 +6233,16 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         num, den = "a._v", "b._v"
         if op in {"open_close_return", "open_to_vwap_return", "vwap_to_close_return"}:
             num, den = "b._v", "a._v"
+        isnan_fn = "isNaN" if dialect == SqlDialect.CLICKHOUSE else "isnan"
+        isinf_fn = "isInfinite" if dialect == SqlDialect.CLICKHOUSE else "isinf"
+        ratio = f"({num} / {den} - 1.0)"
         return _Layer(
             f"SELECT a.ts, a.inst, "
-            f"CASE WHEN {num} IS NULL OR {den} IS NULL OR {den} = 0 THEN NULL "
-            f"ELSE {num} / {den} - 1.0 END AS _v "
+            f"CASE WHEN {num} IS NULL OR {den} IS NULL OR {den} <= 0 OR {num} <= 0 "
+            f"OR {isnan_fn}({num}) OR {isnan_fn}({den}) "
+            f"OR {isinf_fn}({num}) OR {isinf_fn}({den}) "
+            f"OR {isnan_fn}({ratio}) OR {isinf_fn}({ratio}) THEN NULL "
+            f"ELSE {ratio} END AS _v "
             f"FROM ({a.sql}) a LEFT JOIN ({b.sql}) b USING (ts, inst)",
             has_inst_window=a.has_inst_window or b.has_inst_window,
             has_ts_partition=a.has_ts_partition or b.has_ts_partition,
@@ -6257,8 +6278,14 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         if h is None or l is None or c is None:
             return None
         lag_close = "LAG(c._v, 1) OVER (PARTITION BY h.inst ORDER BY h.ts)"
+        isnan_fn = "isNaN" if dialect == SqlDialect.CLICKHOUSE else "isnan"
+        isinf_fn = "isInfinite" if dialect == SqlDialect.CLICKHOUSE else "isinf"
         tr_expr = (
-            f"CASE WHEN {lag_close} IS NULL THEN NULL "
+            f"CASE WHEN h._v IS NULL OR l._v IS NULL "
+            f"OR {isnan_fn}(h._v) OR {isnan_fn}(l._v) "
+            f"OR {isinf_fn}(h._v) OR {isinf_fn}(l._v) THEN NULL "
+            f"WHEN {lag_close} IS NULL OR {isnan_fn}({lag_close}) OR {isinf_fn}({lag_close}) "
+            f"THEN h._v - l._v "
             f"ELSE {_g}(h._v - l._v, {_abs_fn}(h._v - {lag_close}), {_abs_fn}(l._v - {lag_close})) END"
         )
         return _Layer(
@@ -7104,6 +7131,7 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
             row_alias="b",
             dialect=dialect,
             descending=side == "top",
+            exclude_nan=False,
         )
         expr = (
             f"CASE WHEN b._oval IS NULL THEN NULL "
@@ -7636,7 +7664,10 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         over = (
             f"PARTITION BY inst ORDER BY ts ROWS BETWEEN {w - 1} PRECEDING AND CURRENT ROW"
         )
-        qexpr = _quantile_over(dialect, "_v", p, over)
+        isnan_fn = "isNaN" if dialect == SqlDialect.CLICKHOUSE else "isnan"
+        isinf_fn = "isInfinite" if dialect == SqlDialect.CLICKHOUSE else "isinf"
+        safe = f"CASE WHEN _v IS NULL OR {isnan_fn}(_v) OR {isinf_fn}(_v) THEN NULL ELSE _v END"
+        qexpr = _quantile_over(dialect, safe, p, over)
         return _Layer(
             f"SELECT ts, inst, {qexpr} AS _v FROM ({inner.sql}) t",
             has_inst_window=True,
@@ -9656,8 +9687,7 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         # finite count).  The algebraic identities give the finite-window
         # central moments from the finite-only windowed sums.
         w = int(spec.size)
-        mp = int(spec.min_periods)
-        eff_min = max(mp, 4)
+        eff_min = w
         over = f"PARTITION BY inst ORDER BY ts ROWS BETWEEN {w - 1} PRECEDING AND CURRENT ROW"
         cnt = f"COUNT(_v) OVER ({over})"
         m = f"AVG(_v) OVER ({over})"
@@ -9681,8 +9711,8 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         )
         return _Layer(
             f"SELECT ts, inst, "
-            f"CASE WHEN _n < {eff_min} THEN NULL "
-            f"WHEN _m2 <= 0 THEN -3.0 ELSE {kurt} END AS _v "
+            f"CASE WHEN _v IS NULL OR _n < {eff_min} THEN NULL "
+            f"WHEN _m2 <= 0 THEN NULL ELSE {kurt} END AS _v "
             f"FROM ({win2}) w",
             has_inst_window=True,
         )

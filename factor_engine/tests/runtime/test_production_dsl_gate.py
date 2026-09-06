@@ -8,7 +8,7 @@ import os
 import pytest
 
 from factor_engine.api.cleaned_ops import make_cleaned_call_factory
-from factor_engine.api.columns import col
+from factor_engine.api.columns import col, field
 from factor_engine.api.factor import Factor, FactorExecutionScopeHint
 from factor_engine.backend.factory import build_backend
 from factor_engine.cleaned_operators.operator_policy import normalize_bars_market
@@ -61,7 +61,9 @@ def test_production_compile_blocks_shuffle():
     try:
         eng = FactorEngine(backend=build_backend("pandas"), data_source=source, run_mode="production")
         factor = _prod_factor("bad", shuffle(col("close"), 1), "shuffle(close, 1)")
-        with pytest.raises(KeyError, match="unknown operator canonical"):
+        from factor_engine.cleaned_operators.tombstones import RemovedOperatorError
+
+        with pytest.raises(RemovedOperatorError, match="was removed"):
             eng.compile(factor)
     finally:
         os.environ.pop("QUANT_PRODUCTION_MODE", None)
@@ -84,7 +86,9 @@ def test_production_run_many_validates_source_expr():
         bad = _prod_factor("bad", shuffle(col("close"), 1), "shuffle(close, 1)")
         with pytest.raises(ProductionPolicyViolation, match="DSL 语法/兼容校验失败"):
             assert_production_factors([bad], mode="production", context="run_many")
-        good = _prod_factor("ok", ts_mean(col("close"), 2), "ts_mean(close, 2)")
+        good = _prod_factor(
+            "ok", ts_mean(field("close"), 2), 'ts_mean(field("close"), 2)'
+        )
         assert_production_factors([good], mode="production", context="run_many")
     finally:
         os.environ.pop("QUANT_PRODUCTION_MODE", None)
@@ -93,7 +97,9 @@ def test_production_run_many_validates_source_expr():
 def test_production_rejects_source_expr_mismatch():
     from factor_engine.api import ts_mean
 
-    factor = _prod_factor("mismatch", ts_mean(col("close"), 2), "ts_mean(close, 3)")
+    factor = _prod_factor(
+        "mismatch", ts_mean(field("close"), 2), 'ts_mean(field("close"), 3)'
+    )
     with pytest.raises(ProductionPolicyViolation, match="does not match"):
         assert_production_factors([factor], mode="production")
 

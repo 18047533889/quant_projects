@@ -1029,6 +1029,28 @@ def predict_ttdc(shape: Any, backend: str) -> TtdcEstimate:
     )
 
 
+def plan_requires_data_source(plan: PlanNode) -> bool:
+    """Source-free literals/materialized terminals need no reader capability.
+
+    Unknown and plan-ref terminals remain conservative: they may resolve to a
+    read. This predicate does not grant operator or production eligibility.
+    """
+    pending = [plan]
+    seen: set[int] = set()
+    while pending:
+        node = pending.pop()
+        if id(node) in seen:
+            continue
+        seen.add(id(node))
+        children = tuple(getattr(node, "inputs", ()) or ())
+        if node.op in {"column", "source_ref"} or (
+            not children and node.op not in {"literal", "materialized_series"}
+        ):
+            return True
+        pending.extend(children)
+    return False
+
+
 def choose_plan_route(plan: PlanNode, ctx: Any) -> PlanRoute:
     from factor_engine.backend.operator_capability import supports_pandas, supports_polars, supports_sql
     from factor_engine.backend.polars_long_production import is_polars_long_native_production_safe
@@ -1046,6 +1068,11 @@ def choose_plan_route(plan: PlanNode, ctx: Any) -> PlanRoute:
     # R33-P0-062/§11.3：SourceRef 已可 lower 为 DA source relation → 不毒死 native。
     source_lowered = source_ref and source_refs_lowerable(plan)
     data_kind = _data_source_kind(ctx)
+    source = getattr(ctx, "data_source", None)
+    source = getattr(source, "inner", source)
+    needs_source = plan_requires_data_source(plan)
+    can_load = not needs_source or callable(getattr(source, "load_column", None))
+    can_scan_long = callable(getattr(source, "scan_polars_long", None))
     candidates: dict[str, float] = {}
     mem_budget = _execution_memory_budget(ctx)
     # R13 P1-65: ops whose only "polars" slot is a pandas-delegating UDF must be
@@ -1071,7 +1098,7 @@ def choose_plan_route(plan: PlanNode, ctx: Any) -> PlanRoute:
         return total
 
     pandas_ok = all(supports_pandas(op, mode=mode) for op in ops)
-    if pandas_ok and _within_budget("pandas_numpy", rows):
+    if pandas_ok and can_load and _within_budget("pandas_numpy", rows):
         # R31-P0-016：conversion 只计一次（Pandas 零转换）。
         candidates["pandas_numpy"] = _plan_op_cost("pandas_numpy") + _one_conversion_penalty(
             "pandas_numpy", rows
@@ -1082,11 +1109,11 @@ def choose_plan_route(plan: PlanNode, ctx: Any) -> PlanRoute:
     polars_panel_ok = bool(ops) and (not source_ref or source_lowered) and all(
         supports_polars(op, mode=mode) for op in ops
     )
-    if polars_panel_ok and _within_budget("polars_panel", rows):
+    if polars_panel_ok and can_load and _within_budget("polars_panel", rows):
         cost = _plan_op_cost("polars_panel") + _one_conversion_penalty("polars_panel", rows)
         candidates["polars_panel"] = cost
 
-    polars_long_ok = bool(ops) and (not source_ref or source_lowered) and all(
+    polars_long_ok = can_scan_long and (not source_ref or source_lowered) and all(
         is_polars_long_native_production_safe(op) if production else supports_polars(op, mode=mode)
         for op in ops
     )

@@ -578,30 +578,43 @@ _mk("intra_concentration", "日内成交集中度 sum((value/sum)^2)（Polars）
 
 
 def _entropy(value: pl.DataFrame, normalize: bool) -> pl.DataFrame:
-    long = _with_date(_melt(value, "value")).with_columns(pl.col("value").fill_nan(0.0).abs())
-    long = long.filter(pl.col("value") > 0.0)
-    total = long.group_by(["date", "instrument"]).agg(
-        pl.col("value").sum().alias("total"),
-        pl.col("value").count().alias("n"),
+    long = _with_date(_melt(value, "value"))
+    valid = pl.col("value").is_finite().fill_null(False)
+    groups = long.group_by(["date", "instrument"]).agg(
+        pl.when(valid).then(pl.col("value")).otherwise(0.0).sum().alias("total"),
+        (valid & (pl.col("value") > 0.0)).sum().alias("n"),
+        (valid & (pl.col("value") < 0.0)).any().alias("has_negative"),
     )
-    long = long.join(total, on=["date", "instrument"]).with_columns(
+    positive = long.filter(valid & (pl.col("value") > 0.0)).join(
+        groups.select(["date", "instrument", "total"]),
+        on=["date", "instrument"],
+    ).with_columns(
         (pl.col("value") / pl.col("total")).alias("w")
     )
-    e = long.group_by(["date", "instrument"]).agg(
+    e = positive.group_by(["date", "instrument"]).agg(
         (-(pl.col("w") * pl.col("w").log())).sum().alias("H"),
-        pl.col("total").first().alias("total"),
-        pl.col("n").first().alias("n"),
+    )
+    e = groups.join(e, on=["date", "instrument"], how="left")
+    supported = (
+        (~pl.col("has_negative"))
+        & (pl.col("n") >= 1)
+        & (pl.col("total") > _EPS)
+        & pl.col("H").is_not_null()
     )
     if normalize:
         e = e.with_columns(
-            pl.when((pl.col("n") >= 2) & (pl.col("total") > _EPS))
-            .then(pl.col("H") / pl.col("n").cast(pl.Float64).log())
+            pl.when(supported)
+            .then(
+                pl.when(pl.col("n") == 1)
+                .then(0.0)
+                .otherwise(pl.col("H") / pl.col("n").cast(pl.Float64).log())
+            )
             .otherwise(None)
             .alias("v")
         )
     else:
         e = e.with_columns(
-            pl.when((pl.col("n") >= 2) & (pl.col("total") > _EPS))
+            pl.when(supported)
             .then(pl.col("H"))
             .otherwise(None)
             .alias("v")

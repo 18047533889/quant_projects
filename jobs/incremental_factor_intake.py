@@ -32,6 +32,18 @@ from zoneinfo import ZoneInfo
 from uuid import uuid4
 
 PIPELINE_SOURCE_SHA256 = hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
+EVALUATION_CONVENTION_VERSION = "equal-amount-gross100-cagr-absorbing-v2-20260907"
+
+
+def invalidate_old_evaluations(state):
+    """Run under queue lock; preserve prior receipts, never relabel old results."""
+    for name, entry in state.get("factors", {}).items():
+        if entry.get("evaluation_version") == EVALUATION_CONVENTION_VERSION:
+            continue
+        state.setdefault("evaluation_history", {}).setdefault(name, []).append(dict(entry))
+        state["factors"][name] = dict(entry, status="retry_pending",
+                                      evaluation_version=EVALUATION_CONVENTION_VERSION,
+                                      optimization_status="requires_reevaluation")
 
 
 def report_time():
@@ -322,7 +334,7 @@ def overnight_pending_waves(records, state, batch_size):
 
 def run_overnight_queue(formulas, output_dir, *, memory_gib=8, retry_names=(), wait_for_lock=False,
                         worker_threads=2, batch_size=4, fe_backend="pandas", qe_backend="auto",
-                        pool_retest=False):
+                        pool_retest=False, reuse_landed=False, auto_finalize=False):
     """Resume isolated mainline evaluations with host and process memory guards."""
     import subprocess
     import signal
@@ -345,6 +357,7 @@ def run_overnight_queue(formulas, output_dir, *, memory_gib=8, retry_names=(), w
         if set(retry_names) - known:
             raise ValueError("retry candidates must be present in the supplied formulas")
         reopen_failed_candidates(state, retry_names)
+        invalidate_old_evaluations(state)
         waves = overnight_pending_waves(records, state, batch_size)
         state["deferred"] = deferred
         state["gate"] = {"rank_ic": .015, "rank_ic_ir": .15, "combine": "or",
@@ -380,12 +393,13 @@ def run_overnight_queue(formulas, output_dir, *, memory_gib=8, retry_names=(), w
             command = [sys.executable, str(Path(__file__).resolve()), "--manifest", str(candidate_path),
                        "--batch-size", str(batch_size), "--fe-backend", fe_backend, "--qe-backend", qe_backend,
                        "--evaluate-only", "--output-manifest", str(target)]
-            if pool_retest or any(r["page_name"] in retry_names for r in wave):
+            if not reuse_landed and (pool_retest or any(r["page_name"] in retry_names for r in wave)):
                 command.append("--force-landing")
             state["status"] = "running"
             for item in wave:
                 state["factors"][item["page_name"]] = dict(
-                    status="running", formula=item.get("fe_formula", ""), source_formula=item["source_formula"],
+                    status="running", evaluation_version=EVALUATION_CONVENTION_VERSION,
+                    formula=item.get("fe_formula", ""), source_formula=item["source_formula"],
                     folder=str(output_dir / item["page_name"]), wave_log=str(folder / "run.log"))
             save()
             print(f"[overnight start] {name}", flush=True)
@@ -413,9 +427,10 @@ def run_overnight_queue(formulas, output_dir, *, memory_gib=8, retry_names=(), w
                         rss = 0
                     mem_now = dict(line.split(":", 1) for line in Path("/proc/meminfo").read_text().splitlines())
                     emergency = int(mem_now["MemAvailable"].split()[0]) < 4 * 1024**2
-                    if emergency or rss > task_memory_gib * 1024**2 or time.monotonic() - started > 1800:
+                    timeout_seconds = min(7200, max(1800, len(wave) * 900))
+                    if emergency or rss > task_memory_gib * 1024**2 or time.monotonic() - started > timeout_seconds:
                         reason = ("host low-memory guard" if emergency else "process memory limit"
-                                  if rss > task_memory_gib * 1024**2 else "30-minute time limit")
+                                  if rss > task_memory_gib * 1024**2 else f"{timeout_seconds // 60}-minute batch time limit")
                         os.killpg(child.pid, signal.SIGTERM)
                         try:
                             child.wait(timeout=15)
@@ -444,12 +459,27 @@ def run_overnight_queue(formulas, output_dir, *, memory_gib=8, retry_names=(), w
                     result.update(status="failed", reason=reason or "see wave_log")
                 print(f"[overnight done] {item_name}: {result['status']}", flush=True)
             save()
+            if auto_finalize:
+                # Publish verified raw results first, even if optimization fails.
+                for stage, action in (("publish", publish_completed_queue),
+                                      ("optimize", lambda directory: run_optimization_queue(
+                                          directory, names={r["page_name"] for r in wave})),
+                                      ("publish_optimized", publish_completed_queue)):
+                    try:
+                        action(output_dir)
+                    except Exception as exc:
+                        state.setdefault("finalization_errors", []).append(
+                            dict(stage=stage, time=report_time(), error=str(exc)))
+                        save()
+                        print(f"[finalize error] {stage}: {exc}", flush=True)
         state["status"] = "evaluation_finished_optimization_and_publication_pending"
+        if auto_finalize:
+            state["status"] = "evaluation_finished_finalize_attempted"
         save()
     return state
 
 
-def run_optimization_queue(output_dir):
+def run_optimization_queue(output_dir, *, names=None):
     """Resume eligible weekly optimizations serially in isolated child processes."""
     import fcntl
     import subprocess
@@ -472,7 +502,10 @@ def run_optimization_queue(output_dir):
             tmp.write_text(json.dumps(state, ensure_ascii=False, indent=1, allow_nan=False))
             os.replace(tmp, target)
         for name, entry in intake["factors"].items():
-            if entry["status"] != "passed":
+            if names is not None and name not in names:
+                continue
+            if (entry["status"] != "passed" or
+                    entry.get("evaluation_version") != EVALUATION_CONVENTION_VERSION):
                 continue
             folder = Path(entry["folder"])
             # Eligibility comes from this factor's verified manifest, never another
@@ -483,7 +516,8 @@ def run_optimization_queue(output_dir):
                 (folder / "candidate.json").read_text() + str(matrix.stat().st_mtime_ns)
                 + library_identity
             ).encode()).hexdigest()
-            if state.get(name, {}).get("status") == "optimized" and state[name].get("identity") == identity:
+            if (state.get(name, {}).get("status") in {"optimized", "failed", "timeout"}
+                    and state[name].get("identity") == identity):
                 continue
             while True:
                 memory = dict(line.split(":", 1) for line in Path("/proc/meminfo").read_text().splitlines())
@@ -540,6 +574,7 @@ def load_vwap(*, source=None, start_date=EVAL_START, end_date=EVAL_END):
     if source is None and uses_default_window and _HAS_VWAP is not None:
         return _HAS_VWAP
     import pandas as pd
+    managed_source = source is None
     if source is None:
         os.environ.setdefault("ASHARE_PARQUET_ROOT", str(Path.home() / "cos_data"))
         os.environ.setdefault("DATA_ACCESS_SKIP_COS_MIRROR", "1")
@@ -551,7 +586,29 @@ def load_vwap(*, source=None, start_date=EVAL_START, end_date=EVAL_END):
             "start_date": start_date,
             "end_date": end_date,
         })
-    values = source.load_column("AdjVwap")
+    try:
+        values = source.load_column("AdjVwap")
+    except Exception as exc:
+        from data_access.core.exceptions import ResourceAdmissionError
+        start, end = pd.Timestamp(start_date), pd.Timestamp(end_date)
+        if not isinstance(exc, ResourceAdmissionError) or not managed_source or (end-start).days <= 366:
+            raise
+        # Full-history scan can itself exceed admission, even without contention.
+        # Keep DataAccess governance; reduce each request instead of disabling it.
+        print("[vwap] scan admission exceeded; reading disjoint calendar years", flush=True)
+        parts = []
+        cursor = start
+        while cursor <= end:
+            stop = min(end, pd.Timestamp(year=cursor.year, month=12, day=31))
+            parts.append(load_vwap(start_date=cursor.strftime("%Y-%m-%d"),
+                                   end_date=stop.strftime("%Y-%m-%d")))
+            cursor = stop + pd.Timedelta(days=1)
+        panel = pd.concat(parts).sort_index()
+        if panel.index.has_duplicates:
+            raise ValueError("duplicate dates in chunked VWAP")
+        if uses_default_window:
+            _HAS_VWAP = panel
+        return panel
     if not isinstance(values.index, pd.MultiIndex) or values.index.nlevels != 2:
         raise ValueError("DataAccess AdjVwap must use timestamp × instrument MultiIndex")
     panel = values.unstack(level=-1).sort_index().astype("float64")
@@ -967,24 +1024,22 @@ def land_missing_factors(factors, *, batch_size=8, backend_name="polars_long", f
         return {"landed": [], "count": 0, "pending": len(missing), "python_fallback": unsupported}
     landed = []
     errors = {}
-    for offset in range(0, len(pending), batch_size):
-        wave = pending[offset:offset + batch_size]
+    def land_partition(wave):
         try:
             result = land_factor_batch_windowed(wave, backend_name=backend_name)
             landed.extend(result["landed"])
         except Exception as wave_error:
-            # Isolate a bad formula without discarding valid peers from the
-            # bounded wave. Every failure remains explicit in provenance.
-            for record in wave:
-                name = record["page_name"]
-                try:
-                    result = land_factor_batch_windowed([record], backend_name=backend_name)
-                    landed.extend(result["landed"])
-                except Exception as factor_error:
-                    errors[name] = (
-                        f"wave={landing_failure_reason(wave_error)}; "
-                        f"factor={landing_failure_reason(factor_error)}"
-                    )
+            if len(wave) == 1:
+                errors[wave[0]["page_name"]] = landing_failure_reason(wave_error)
+                return
+            # Bisect only failed partitions; healthy siblings retain shared
+            # reads/CSE and parallel root execution. Do not retry a singleton twice.
+            middle = len(wave) // 2
+            print(f"[landing split] failed={len(wave)} left={middle} right={len(wave)-middle}", flush=True)
+            land_partition(wave[:middle])
+            land_partition(wave[middle:])
+    for offset in range(0, len(pending), batch_size):
+        land_partition(pending[offset:offset + batch_size])
     return {
         "landed": landed,
         "count": len(landed),
@@ -1194,6 +1249,10 @@ def write_report_manifest(records, batch_evaluation, *, target=REPORT_MANIFEST_J
         }
     payload = {
         "schema_version": 1,
+        "evaluation_version": EVALUATION_CONVENTION_VERSION,
+        "portfolio_convention": {"policy": "equal-stock-gross-100-v1", "gross_exposure": 1.0,
+                                 "short_margin_ratio": 1.0, "weighting": "equal absolute weight across both legs",
+                                 "missing_selected_return": "invalidate day; do not reselect stocks"},
         "evaluation_provenance": batch_evaluation.get("evaluation_provenance"),
         "price_convention": "adj_vwap_t1_to_t2",
         "cost_model": {"one_way_commission_rate": COMMISSION_RATE,
@@ -1292,13 +1351,14 @@ def _write_manifest_index(report_dir, factors):
         metrics = entry.get("metrics") or {}
         status = entry.get("status", "available")
         if status == "unavailable":
-            cells = ("—", "—", "—", "数据待补齐")
+            cells = ("—", "—", "—", "暂不可用（详情见原因）")
         else:
             cells = (
                 formatted(metrics.get('rank_ic'), '+.4f'),
                 formatted(metrics.get('ic_ir'), '+.3f'),
                 formatted(metrics.get('ls_sharpe'), '+.2f'),
-                "已翻正" if entry.get("is_flipped") else "原方向",
+                ("已翻正" if entry.get("is_flipped") else "原方向") +
+                {"passed": " · 通过筛选", "below_gate": " · 未达筛选门槛"}.get(entry.get("screening_status"), ""),
             )
         rows.append(
             f"<tr><td>{number}</td><td><a href=\"factors/factor_{escape(page)}.html\"><code>{escape(page)}</code></a></td>"
@@ -1317,6 +1377,122 @@ def _write_manifest_index(report_dir, factors):
     os.replace(temporary, output)
 
 
+def html_eligible(entry):
+    # Legacy intermediate aliases have conflicting definitions and no certified expansion.
+    if re.search(r"\b(EWMA_up_vol|EWMA_down_vol)\b", entry.get("raw_formula", "")):
+        return False
+    return entry.get("status", "available") == "available" and passes_weekly_gate(entry.get("metrics", {}))
+
+
+def withdraw_factor_html(report_dir, name):
+    """Recoverable removal from the served site; evaluation evidence stays intact."""
+    if not re.fullmatch(r"[A-Za-z0-9_.-]+", name):
+        raise ValueError("unsafe factor page name")
+    source = Path(report_dir) / "factors" / f"factor_{name}.html"
+    if not source.exists():
+        return False
+    archive = ROOT / "weekly_backtest_output" / "unpublished_html"
+    archive.mkdir(parents=True, exist_ok=True)
+    import shutil
+    shutil.move(str(source), str(archive / f"{name}_{uuid4().hex}.html"))
+    return True
+
+
+def publish_completed_queue(queue_dir, report_dir=REPORTS_DIR):
+    """Incrementally publish completed artifacts; preserve the rich homepage."""
+    import fcntl
+    queue_dir, report_dir = Path(queue_dir), Path(report_dir)
+    state = json.loads((queue_dir / "queue_state.json").read_text())
+    cache_path = report_dir / "published_evaluations.json"
+    with (report_dir / "publication.lock").open("a") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        cache = json.loads(cache_path.read_text()) if cache_path.exists() else {}
+        errors, published, withdrawn = {}, 0, 0
+        excluded = {name for name, receipt in cache.items()
+                    if receipt.get("screening") != "passed" or not html_eligible(receipt.get("entry", {}))}
+        excluded.update(name for name, item in state["factors"].items()
+                        if item.get("status") in {"below_gate", "unavailable", "failed"})
+        for name in excluded:
+            withdrawn += withdraw_factor_html(report_dir, name)
+        for name, item in state["factors"].items():
+            if item.get("status") != "passed":
+                continue
+            path = Path(item["folder"]) / "report_manifest.json"
+            if not path.exists():
+                continue
+            payload = json.loads(path.read_text())
+            if payload.get("evaluation_version") != EVALUATION_CONVENTION_VERSION:
+                errors[name] = "stale evaluation convention; reevaluation required"
+                continue
+            entry = payload.get("factors", {}).get(name)
+            if entry is None:
+                continue
+            entry = dict(entry)
+            if not html_eligible(entry):
+                excluded.add(name)
+                withdrawn += withdraw_factor_html(report_dir, name)
+                continue
+            excluded.discard(name)
+            if entry.get("artifact"):
+                artifact = path.parent / entry["artifact"]
+                if not artifact.exists() and item.get("wave_log"):
+                    artifact = Path(item["wave_log"]).parent / entry["artifact"]
+                entry["artifact"] = str(artifact.resolve())
+            provenance = payload.get("evaluation_provenance")
+            optimization = load_opt_meta().get(name, {}) if OPT_META_JSON.exists() else {}
+            receipt = dict(entry=entry, provenance=provenance, screening=item["status"],
+                           evaluation_version=EVALUATION_CONVENTION_VERSION,
+                           optimization_sha256=hashlib.sha256(json.dumps(
+                               optimization, sort_keys=True).encode()).hexdigest())
+            if cache.get(name) == receipt and (report_dir / "factors" / f"factor_{name}.html").exists():
+                continue
+            try:
+                with tempfile.TemporaryDirectory(prefix="report_publish_") as staging:
+                    staging = Path(staging)
+                    source = staging / "manifest.json"
+                    source.write_text(json.dumps(dict(payload, factors={name: entry})))
+                    publish_report_from_manifest(source, report_dir=staging, update_homepage=False)
+                    (report_dir / "factors").mkdir(exist_ok=True)
+                    target = report_dir / "factors" / f"factor_{name}.html"
+                    temporary = target.with_suffix(".html.tmp")
+                    temporary.write_bytes((staging / "factors" / target.name).read_bytes())
+                    os.replace(temporary, target)
+                cache[name] = receipt
+                published += 1
+                print(f"[published] {name}: {item['status']}", flush=True)
+            except Exception as exc:
+                errors[name] = str(exc)
+        # Reuse the canonical table renderer without replacing the full homepage.
+        with tempfile.TemporaryDirectory(prefix="report_index_") as staging:
+            _write_manifest_index(staging, {
+                n: dict(r["entry"], screening_status=r["screening"])
+                for n, r in cache.items()
+                if r.get("evaluation_version") == EVALUATION_CONVENTION_VERSION
+                and r.get("screening") == "passed" and html_eligible(r["entry"]) and n not in excluded})
+            table = Path(staging, "index.html").read_text()
+            content = table.split("<main>", 1)[1].split("</main>", 1)[0]
+        section = ('<section id="latest-evaluations"><h2>最新已完成重测</h2><p>同步时间（北京时间）：'
+                   + escape(report_time()) + '。仅展示 RankIC ≥ 0.015 或 RankIC IR ≥ 0.15 的可用因子；仅详情页标注的评估时间代表重测时间。'
+                   '其他旧报告区块尚未全量重测。</p>' + content + '</section>')
+        index = report_dir / "index.html"
+        document = index.read_text()
+        document = re.sub(r'<section id="latest-evaluations">.*?</section>', '', document, flags=re.S)
+        def remove_stale_row(match):
+            names = re.findall(r'href="factors/factor_([^"<>]+)\.html"', match.group(0))
+            return '' if any(n in cache or n in excluded for n in names) else match.group(0)
+        document = re.sub(r'<tr\b[^>]*>.*?</tr>', remove_stale_row, document, flags=re.S)
+        def remove_excluded_highlight(match):
+            names = re.findall(r'href="factors/factor_([^"<>]+)\.html"', match.group(0))
+            return '' if any(n in excluded for n in names) else match.group(0)
+        document = re.sub(r'<li\b[^>]*>.*?</li>', remove_excluded_highlight, document, flags=re.S)
+        document = document.replace('<main>', '<main>' + section, 1) if '<main>' in document else document.replace('<body>', '<body>' + section, 1)
+        for target, text in [(index, document), (cache_path, json.dumps(cache, ensure_ascii=False, indent=1))]:
+            temporary = target.with_suffix(target.suffix + ".tmp")
+            temporary.write_text(text, encoding="utf-8")
+            os.replace(temporary, target)
+        return {"published_now": published, "withdrawn": withdrawn, "errors": errors}
+
+
 def publish_report_from_manifest(manifest_path, *, report_dir=REPORTS_DIR, update_homepage=True):
     """Publish all pages from one verified QE manifest; never recompute metrics."""
     manifest_path = Path(manifest_path)
@@ -1328,6 +1504,9 @@ def publish_report_from_manifest(manifest_path, *, report_dir=REPORTS_DIR, updat
     output_factors.mkdir(parents=True, exist_ok=True)
     published = available = unavailable = 0
     for page, entry in payload["factors"].items():
+        if not html_eligible(entry):
+            withdraw_factor_html(report_dir, page)
+            continue
         status = entry.get("status", "available")
         if status == "unavailable":
             (output_factors / f"factor_{page}.html").write_text(
@@ -1355,7 +1534,7 @@ def publish_report_from_manifest(manifest_path, *, report_dir=REPORTS_DIR, updat
         available += 1
         published += 1
     if update_homepage:
-        _write_manifest_index(report_dir, payload["factors"])
+        _write_manifest_index(report_dir, {n: e for n, e in payload["factors"].items() if html_eligible(e)})
         index = report_dir / "index.html"
         index.write_text(evaluation_banner(index.read_text(), payload.get("evaluation_provenance")), encoding="utf-8")
     return {"published": published, "available": available, "unavailable": unavailable}
@@ -1703,7 +1882,19 @@ def stage_optimize_lite(factor, eval_result):
                                               commission_rate=COMMISSION_RATE)
     op, params = recipes[winner]
     expression = optimizer_dsl(directed_base, winner)
-    record = dict(best=winner, best_mean_rankic=results[winner]["validation"]["mean_rankic"],
+    # Persist actual winner evaluation; rendering must not evaluate or borrow raw charts.
+    full_result = evaluate_report_arrays(selected, labels, min_assets=MIN_UNIVERSE,
+                                        fixed_direction=1, commission_rate=COMMISSION_RATE)
+    chart_manifest = OPT_DIR / page / "report_manifest.json"
+    write_report_manifest(
+        [dict(page_name=page, fe_formula=expression)],
+        dict(factors={page: full_result}, dates=mat.index, backend_used={"cpu"},
+             fallbacks=[], evaluation_provenance={"evaluated_at": report_time(),
+             "pipeline_source_sha256": PIPELINE_SOURCE_SHA256}), target=chart_manifest)
+    record = dict(evaluation_version=EVALUATION_CONVENTION_VERSION,
+                  chart_manifest=str(chart_manifest),
+                  chart_manifest_sha256=hashlib.sha256(chart_manifest.read_bytes()).hexdigest(),
+                  best=winner, best_mean_rankic=results[winner]["validation"]["mean_rankic"],
                   best_rankic_ir=results[winner]["validation"]["rankic_ir"],
                   steps=[] if op is None else [op], dsl_preproc_ops=[expression],
                   effective_formula=expression, variants=results, is_flipped=input_direction < 0,
@@ -1913,9 +2104,37 @@ def stage_page_inject(factor, eval_result, *, report_result=None, report_dates=N
         dsl_note = "factor_engine DSL（本因子由增量管线落值）"
         req_cols = _required_columns(dsl_text)
         optimization = opt_meta.get(page, {})
-        if (optimization.get("direction_policy") != "train-once-before-preprocessing-v1"
+        if (optimization.get("evaluation_version") != EVALUATION_CONVENTION_VERSION
+                or optimization.get("direction_policy") != "train-once-before-preprocessing-v1"
                 or optimization.get("dsl_status") != "full-expression FE replay parity verified"):
             optimization = {}
+        if optimization.get("chart_manifest"):
+            try:
+                opt_path = Path(optimization["chart_manifest"])
+                if hashlib.sha256(opt_path.read_bytes()).hexdigest() != optimization.get("chart_manifest_sha256"):
+                    raise ValueError("optimized manifest checksum mismatch")
+                opt_payload = json.loads(opt_path.read_text())
+                opt_entry = opt_payload["factors"][page]
+                if opt_entry["raw_formula"] != optimization["effective_formula"]:
+                    raise ValueError("optimized formula mismatch")
+                opt_result, opt_dates = _report_result_from_artifact(
+                    opt_entry, opt_path.parent / opt_entry["artifact"])
+                opt_ic = pd.Series(opt_result.rank_ic_series, index=opt_dates)
+                opt_navs = dict(dates=opt_dates.tolist(), LS=opt_result.long_short_nav_aligned.tolist(),
+                    **{f"G{i+1}": opt_result.quantile_nav[:, i].tolist()
+                       for i in range(opt_result.quantile_nav.shape[1])})
+                opt_charts = '<h3>最优变体全窗评估图（不是验证窗择优分数）</h3>'
+                opt_charts += R.plot_ic_timeseries_svg(opt_ic, page + " optimized")
+                for title, picture in (
+                    ("优化后月度 RankIC", R.plot_ic_monthly_heatmap(opt_ic, page)),
+                    ("优化后十分层净值", R.plot_decile_nav(opt_navs, page)),
+                    ("优化后多空净值（扣佣金）", R.plot_long_short_nav(opt_navs, page)),
+                    ("优化后 RankIC 分布", R.plot_ic_distribution(opt_ic, page))):
+                    opt_charts += '<h4>' + title + '</h4>' + R.chart_img_or_notice(picture, "数据不足")
+            except Exception as exc:
+                opt_charts = '<p>优化图表校验未通过：' + escape(str(exc)) + '</p>'
+        elif optimization:
+            opt_charts = '<p>该优化记录尚无独立全窗图表产物，待主优化链路重算；不复用原始图冒充优化图。</p>'
         html = R.build_html(page, note, dsl_text, dsl_note, req_cols, base,
                             optimization, gate, {}, charts, opt_charts)
 
@@ -1943,14 +2162,18 @@ def stage_page_inject(factor, eval_result, *, report_result=None, report_dates=N
 
 
 def _required_columns(dsl_text):
-    import re as _re
-    fields = ["AdjClose", "AdjOpen", "AdjHigh", "AdjLow", "AdjVwap", "AdjPreClose",
-              "Volume", "AdjAmount", "Return", "close_price", "vwap", "amount"]
-    used = []
-    for f in fields:
-        if f in dsl_text:
-            used.append(f)
-    return ", ".join(dict.fromkeys(used))
+    import ast
+    tree = ast.parse(dsl_text, mode="eval")
+    functions = {id(n.func) for n in ast.walk(tree) if isinstance(n, ast.Call)}
+    used = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Name) and id(node) not in functions:
+            used.add(node.id)
+        if (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+                and node.func.id == "col" and node.args
+                and isinstance(node.args[0], ast.Constant) and isinstance(node.args[0].value, str)):
+            used.add(node.args[0].value)
+    return ", ".join(sorted(used))
 
 
 def _opt_compare_charts(page, raw_mat, opt_mat, is_flipped):
@@ -2225,8 +2448,13 @@ def _new_mining_section(new_entries):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--overnight-formulas", type=Path)
+    ap.add_argument("--publish-queue", type=Path, help="Publish completed queue entries and incrementally synchronize the rich homepage")
     ap.add_argument("--retest-pool", action="store_true",
                     help="Force-land the existing report pool in resumable guarded batches; no automatic publication")
+    ap.add_argument("--reuse-landed", action="store_true",
+                    help="Reuse validated matrices; still land missing/invalid coverage through mainline")
+    ap.add_argument("--auto-finalize", action="store_true",
+                    help="Publish each evaluated wave, run eligible optimization, then refresh publication")
     ap.add_argument("--optimize-queue", type=Path,
                     help="Resume optimization of passed weekly candidates in this queue directory")
     ap.add_argument("--overnight-dir", type=Path, default=Path("/tmp/weekly_overnight_20260906"))
@@ -2263,6 +2491,9 @@ def main():
                     help="evaluate and write the manifest, but do not mutate pages/pool/state")
     ap.add_argument("--output-manifest", type=Path, default=REPORT_MANIFEST_JSON)
     args = ap.parse_args()
+    if args.publish_queue:
+        print(json.dumps(publish_completed_queue(args.publish_queue, args.report_dir), ensure_ascii=False))
+        return
 
     if args.optimize_queue:
         run_optimization_queue(args.optimize_queue)
@@ -2273,7 +2504,8 @@ def main():
                             retry_names=args.overnight_retry_name, wait_for_lock=args.wait_for_queue,
                             memory_gib=args.worker_memory_gib, worker_threads=args.worker_threads,
                             batch_size=args.batch_size, fe_backend=args.fe_backend, qe_backend=args.qe_backend,
-                            pool_retest=args.retest_pool)
+                            pool_retest=args.retest_pool, reuse_landed=args.reuse_landed,
+                            auto_finalize=args.auto_finalize)
         return
 
     if args.publish_from_manifest is not None:

@@ -17,6 +17,51 @@ def load_intake():
     return module
 
 
+def test_convention_change_invalidates_old_results_once():
+    m = load_intake()
+    state = {"factors": {"old": {"status": "passed", "metrics": {"rank_ic": .1}},
+                         "new": {"status": "passed", "evaluation_version": m.EVALUATION_CONVENTION_VERSION}}}
+    m.invalidate_old_evaluations(state)
+    assert state["factors"]["old"]["status"] == "retry_pending"
+    assert state["factors"]["new"]["status"] == "passed"
+    assert state["evaluation_history"]["old"][0]["status"] == "passed"
+    m.invalidate_old_evaluations(state)
+    assert len(state["evaluation_history"]["old"]) == 1
+
+
+def test_failed_batch_bisects_and_keeps_healthy_batches(monkeypatch):
+    m = load_intake()
+    calls = []
+    def land(records, **kwargs):
+        names = [r["page_name"] for r in records]
+        calls.append(names)
+        if "bad" in names:
+            raise ValueError("unsupported formula")
+        return {"landed": names}
+    monkeypatch.setattr(m, "land_factor_batch_windowed", land)
+    names = ["bad"] + [f"ok{i}" for i in range(7)]
+    result = m.land_missing_factors([dict(page_name=n, fe_formula="AdjClose") for n in names], force=True)
+    assert set(result["landed"]) == set(names[1:])
+    assert set(result["factor_engine_errors"]) == {"bad"}
+    assert [len(c) for c in calls] == [8, 4, 2, 1, 1, 2, 4]
+
+
+def test_nontrading_day_chunk_boundaries_use_daily_anchor():
+    from factor_engine.storage.sources.intraday_feature_runtime_v2 import intraday_session_windows
+    dates = pd.to_datetime(["2016-01-04", "2016-01-05", "2016-01-08", "2016-01-11", "2016-01-15"])
+    windows = list(intraday_session_windows(dates))
+    assert windows == [(dates[0], dates[2]), (dates[3], dates[4])]
+    assert list(intraday_session_windows([])) == []
+
+
+def test_missing_partition_is_not_transient_io():
+    import duckdb
+    from data_access.core.retry import classify_exception, ErrorClass
+    assert classify_exception(duckdb.IOException('IO Error: No files found that match the pattern "2016-01-09.parquet"')) == ErrorClass.INVALID_QUERY
+    assert classify_exception(FileNotFoundError("missing")) == ErrorClass.INVALID_QUERY
+    assert classify_exception(TimeoutError("timeout")) == ErrorClass.DEADLINE
+
+
 def test_diverse_objectives_missing_metrics_and_pareto():
     m = load_intake()
     # Load the local optimizer package just as the production entrypoint does.
@@ -290,7 +335,8 @@ def test_one_way_commission_charges_opening_and_both_ls_legs():
     result = evaluate_report_arrays(values, np.zeros_like(values), min_assets=1,
                                     commission_rate=.0001, fixed_direction=1)
     np.testing.assert_allclose(result.quantile_returns[0], -.0001)
-    np.testing.assert_allclose(result.long_short_returns[0], -.0002)
+    # 100% gross entry: 50% long + 50% short collateral, total traded amount 1x.
+    np.testing.assert_allclose(result.long_short_returns[0], -.0001)
     np.testing.assert_allclose(result.long_short_returns[1:], 0.)
 
 
@@ -791,10 +837,19 @@ def test_publish_from_manifest_uses_verified_artifact_without_re_evaluation(tmp_
     report_dir = tmp_path / "report"
     result = intake.publish_report_from_manifest(manifest_path, report_dir=report_dir)
 
-    assert result == {"published": 2, "available": 1, "unavailable": 1}
+    assert result == {"published": 1, "available": 1, "unavailable": 0}
     assert len(calls) == 1
     assert calls[0][0]["page_name"] == "factor_a"
     assert calls[0][1].quantile_nav.shape == (2, 10)
     assert calls[0][2].tolist() == pd.bdate_range("2016-01-04", periods=2).tolist()
     assert "factor_a" in (report_dir / "index.html").read_text(encoding="utf-8")
-    assert (report_dir / "factors" / "factor_missing.html").exists()
+    assert not (report_dir / "factors" / "factor_missing.html").exists()
+
+
+def test_html_gate_requires_available_and_either_threshold():
+    m = load_intake()
+    assert m.html_eligible({"metrics": {"rank_ic": .015}})
+    assert m.html_eligible({"metrics": {"ic_ir": .15}})
+    assert not m.html_eligible({"metrics": {"rank_ic": .014, "ic_ir": .149}})
+    assert not m.html_eligible({"status": "unavailable", "metrics": {"rank_ic": .1}})
+    assert not m.html_eligible({"metrics": {"rank_ic": float("nan")}})

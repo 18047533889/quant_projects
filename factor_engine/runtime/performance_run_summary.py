@@ -23,10 +23,11 @@ fed from the new structured counters (R39-P1-PERF-081).
 from __future__ import annotations
 
 import json
+import math
 import os
 import platform
 import sys
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -99,6 +100,8 @@ class PerformanceRunSummary:
     sqlite_transaction_count: int
     full_factor_rescan_count: int
     watchdog_thread_created_count: int
+    metric_availability: dict[str, bool] = field(default_factory=dict)
+    metric_provenance: dict[str, str] = field(default_factory=dict)
 
     # ------------------------------------------------------------------
     # builders
@@ -118,26 +121,56 @@ class PerformanceRunSummary:
         snapshot = counts.snapshot() if counts is not None else {}
         timing = dict(timing or {})
 
-        def _c(slot: str) -> int:
+        availability: dict[str, bool] = {}
+        provenance: dict[str, str] = {}
+
+        def _c(slot: str, output_field: str) -> int:
             try:
-                return int(snapshot.get(slot, 0) or 0)
-            except (TypeError, ValueError):
-                return 0
+                available = counts is not None and slot in snapshot and snapshot[slot] is not None
+                raw = snapshot.get(slot, 0)
+                if isinstance(raw, (bool, str)) or not math.isfinite(float(raw)):
+                    raise ValueError("counter must be a finite number")
+                value = int(raw)
+                if value < 0 or float(value) != float(raw):
+                    raise ValueError("counter must be a non-negative integer")
+            except (TypeError, ValueError, OverflowError):
+                available, value = False, 0
+            availability[output_field] = available
+            provenance[output_field] = "counter_snapshot" if available else "unavailable_default"
+            return value
 
         def _f(key: str) -> float:
             try:
-                return float(timing.get(key, 0.0) or 0.0)
-            except (TypeError, ValueError):
-                return 0.0
+                available = key in timing and timing[key] is not None
+                raw = timing.get(key, 0.0)
+                if isinstance(raw, (bool, str)):
+                    raise ValueError("timing must be a numeric value")
+                value = float(raw)
+                if not math.isfinite(value) or value < 0:
+                    raise ValueError("timing must be finite and non-negative")
+            except (TypeError, ValueError, OverflowError):
+                available, value = False, 0.0
+            availability[key] = available
+            provenance[key] = "timing_input" if available else "unavailable_default"
+            return value
 
         def _b(key: str) -> int:
             try:
-                return int(timing.get(key, 0) or 0)
-            except (TypeError, ValueError):
-                return 0
+                available = key in timing and timing[key] is not None
+                raw = timing.get(key, 0)
+                if isinstance(raw, (bool, str)) or not math.isfinite(float(raw)):
+                    raise ValueError("byte count must be a finite number")
+                value = int(raw)
+                if value < 0 or float(value) != float(raw):
+                    raise ValueError("byte count must be a non-negative integer")
+            except (TypeError, ValueError, OverflowError):
+                available, value = False, 0
+            availability[key] = available
+            provenance[key] = "timing_input" if available else "unavailable_default"
+            return value
 
         kwargs: dict[str, Any] = {
-            "factor_count": _c("factor_count"),
+            "factor_count": _c("factor_count", "factor_count"),
             "compile_ms": _f("compile_ms"),
             "planning_ms": _f("planning_ms"),
             "scan_ms": _f("scan_ms"),
@@ -157,7 +190,11 @@ class PerformanceRunSummary:
             "metadata_scan_bytes": _b("metadata_scan_bytes"),
         }
         for slot, field in _COUNTER_FIELD_MAP:
-            kwargs[field] = _c(slot)
+            if field == "factor_count":
+                continue
+            kwargs[field] = _c(slot, field)
+        kwargs["metric_availability"] = availability
+        kwargs["metric_provenance"] = provenance
         return cls(**kwargs)
 
     # ------------------------------------------------------------------
@@ -202,7 +239,20 @@ class PerformanceRunSummary:
         is self-contained.
         """
         data: dict[str, Any] = asdict(self)
+        metric_fields = set(_TIMING_KEYS) | {field for _slot, field in _COUNTER_FIELD_MAP}
+        if not self.metric_availability:
+            data["metric_availability"] = {key: True for key in sorted(metric_fields)}
+            data["metric_provenance"] = {key: "direct_constructor" for key in sorted(metric_fields)}
         data["amplification"] = self.amplification()
+        available = data["metric_availability"]
+        data["amplification_availability"] = {
+            "scan_amplification": bool(available.get("scan_bytes") and available.get("minimum_required_scan_bytes") and self.minimum_required_scan_bytes > 0),
+            "conversion_amplification": bool(available.get("conversion_bytes") and available.get("output_bytes") and self.output_bytes > 0),
+            "write_amplification": bool(available.get("write_bytes") and available.get("output_bytes") and self.output_bytes > 0),
+            "rewrite_amplification": bool(available.get("rewrite_bytes") and available.get("output_bytes") and self.output_bytes > 0),
+            "metadata_amplification": bool(available.get("metadata_scan_bytes") and available.get("output_bytes") and self.output_bytes > 0),
+            "physical_queries_per_factor": bool(available.get("physical_query_count") and available.get("factor_count") and self.factor_count > 0),
+        }
         env = dict(environment or capture_environment())
         data["environment"] = env
         data["schema"] = "r39_performance_run_summary/v1"

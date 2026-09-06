@@ -1,0 +1,54 @@
+schema_version: "1"
+change_id: V3-ROOT-INTEGRATION
+git_sha: 2db45f4e446309003381a51a5e03071d31859502
+timestamp: "2026-09-07"
+files:
+  - factor_engine/service/app.py
+  - factor_engine/backend/plan_cost_router.py
+  - factor_engine/backend/hybrid_backend.py
+  - factor_engine/cleaned_operators/microstructure/intraday_agg.py
+  - tests/operators/test_v3_intraday_limit_identity.py
+  - tests/backend_parity/intraday_minute_parity.py
+  - tests/backend_parity/test_elementwise_family_systematic_parity.py
+  - tests/backend_parity/test_cs_family_systematic_parity.py
+  - tests/backend_parity/test_ts_family_systematic_parity.py
+  - .github/workflows/wheel-matrix.yml
+  - scripts/verify_wheel_payload.py
+  - data_access/MANIFEST.in
+tests:
+  service_related:
+    result: PASS
+    count: 78
+    artifact: /tmp/fe-v3-service-pass.log
+  http_and_catalog:
+    result: PASS
+    count: 13
+    artifact: /tmp/fe-v3-http-catalog.log
+  systematic_backend_families:
+    result: PASS
+    count: 61
+    artifact: /tmp/v3-systematic-parity.xml
+    oracle: unchanged backend output comparisons plus exact persisted input readback
+  intraday_limits_and_helper:
+    result: PASS
+    count: 12
+    artifact: /tmp/v3-limit-after3.log
+    reproduction: /tmp/v3-limit-before.log
+    oracle: "240 official slots; two instruments with limits 100/200; two touches yield duration 2/240, first hit 1/240, reopen 1; missing instrument limit remains NaN"
+  public_planner_route:
+    result: PASS
+    command: "cd factor_engine && PYTHONPATH=/home/sunhaiwei/quant_projects:/home/sunhaiwei/quant_projects/factor_engine POLARS_MAX_THREADS=2 OPENBLAS_NUM_THREADS=1 ../.venv/bin/python /tmp/fe-v3-verify-route.py"
+    oracle: candidate backend and certificate agree; unreadable source rejected; source-free literals accepted
+  final_installed_wheel:
+    result: NOT_RUN
+    note: diagnostic source-exact build and isolated smoke passed before later edits; final freeze pending
+review:
+  reviewer: v3_catalog_sol
+  scopes: [service_binding, source_filter_and_certificate, wheel_payload_verifier, intraday_limit_identity, systematic_input_equality]
+  result: scoped_review_completed
+limitations:
+  - Counts overlap; do not sum as distinct operator coverage.
+  - Full backend parity still has active failures under remediation; no all-pass claim.
+  - Public auto physical consumer, production fast/checkpoint and real production workload remain unverified.
+  - Public planner has no Optimizer.compile export; serial probe uses actual public PlanNode and route API, not an invented call.
+  - GPU production throughput, COS publication, CI required checks and all-operator mathematical certification are NOT_RUN.

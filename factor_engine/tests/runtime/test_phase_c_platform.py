@@ -147,9 +147,9 @@ def test_scan_dataset_columns_mock():
             "close": [1.0, 2.0],
         }
     )
-    mock_lf = MagicMock()
-    mock_lf.select.return_value = mock_lf
-    mock_lf.collect.return_value.to_arrow.return_value = table
+    import polars as pl
+
+    mock_lf = pl.from_arrow(table).lazy()
     store = MagicMock()
     store.scan = None  # 走 scan_polars 回退路径
     store.scan_polars.return_value = mock_lf

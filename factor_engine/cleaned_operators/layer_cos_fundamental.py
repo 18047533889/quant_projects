@@ -37,12 +37,17 @@ def pl_true_range(high, low, close, **_):
         # previous close therefore does NOT blank the row (the three-term max
         # skips it).  The old ``max_horizontal`` propagated the NaN previous close
         # and blanked rows after every gap — matching the oracle now.
-        pl.when((high[c].cast(pl.Float64, strict=False).is_null() | high[c].cast(pl.Float64, strict=False).is_nan()) | (low[c].cast(pl.Float64, strict=False).is_null() | low[c].cast(pl.Float64, strict=False).is_nan())).then(None)
+        pl.when(
+            high[c].cast(pl.Float64, strict=False).is_null()
+            | ~high[c].cast(pl.Float64, strict=False).is_finite()
+            | low[c].cast(pl.Float64, strict=False).is_null()
+            | ~low[c].cast(pl.Float64, strict=False).is_finite()
+        ).then(None)
         .otherwise(
             pl.max_horizontal(
                 high[c].cast(pl.Float64, strict=False) - low[c].cast(pl.Float64, strict=False),
-                (high[c].cast(pl.Float64, strict=False) - close[c].cast(pl.Float64, strict=False).shift(1)).abs().fill_null(float("-inf")).fill_nan(float("-inf")),
-                (low[c].cast(pl.Float64, strict=False) - close[c].cast(pl.Float64, strict=False).shift(1)).abs().fill_null(float("-inf")).fill_nan(float("-inf")),
+                pl.when(close[c].cast(pl.Float64, strict=False).shift(1).is_finite()).then((high[c].cast(pl.Float64, strict=False) - close[c].cast(pl.Float64, strict=False).shift(1)).abs()).otherwise(float("-inf")),
+                pl.when(close[c].cast(pl.Float64, strict=False).shift(1).is_finite()).then((low[c].cast(pl.Float64, strict=False) - close[c].cast(pl.Float64, strict=False).shift(1)).abs()).otherwise(float("-inf")),
             )
         ).alias(c)
         for c in cols
