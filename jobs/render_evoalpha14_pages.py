@@ -194,7 +194,7 @@ def chart_img_or_notice(payload, notice: str) -> str:
 
 # ---------------- 图表 ----------------
 def plot_ic_timeseries_svg(ic_series, name):
-    s = ic_series.astype(float).replace([np.inf, -np.inf], np.nan).fillna(0)
+    s = ic_series.astype(float).replace([np.inf, -np.inf], np.nan)
     if len(s) < 2:
         return ""
     W, H = 700, 180
@@ -406,6 +406,8 @@ def fmt_num(v, pct=False, signed=False):
 
 
 def pcls(v):
+    if v is None or not np.isfinite(v):
+        return ""
     return "pos" if v >= 0 else "neg"
 
 
@@ -505,10 +507,12 @@ def compute_all_metrics(raw_mat, opt_mat, vwap):
 # ---------------- HTML 构建 ----------------
 def build_html(page, note, dsl_text, dsl_note, req_cols, base, opt_meta, gate, rob,
                charts, opt_charts):
+    report_start = esc(str(base.get("report_start") or START))
+    report_end = esc(str(base.get("report_end") or END))
     m1 = opt_meta or {}
     steps = m1.get("steps", []) or []
-    best_ir = m1.get("best_rankic_ir", 0)
-    best_mean = m1.get("best_mean_rankic", 0)
+    best_ir = m1.get("best_rankic_ir")
+    best_mean = m1.get("best_mean_rankic")
     dsl_ops = m1.get("dsl_preproc_ops", []) or []
 
     cluster_id = gate.get("cluster", "—")
@@ -532,6 +536,9 @@ def build_html(page, note, dsl_text, dsl_note, req_cols, base, opt_meta, gate, r
         f'最大回撤 {ls26.get("maxdd", 0):.1%} · 回撤{ls26.get("maxdd_dur_days", 0)}天</div>'
     )
 
+    if not rob:
+        r26_chip = '<div class="zero-notice">2026 独立检验尚未提供；此处不展示估算指标。</div>'
+
     # 核心指标 grid
     grid = []
     grid.append(f'<div class="metric"><b class="{pcls(base["mean_rankic"])}">{fmt_num(base["mean_rankic"], signed=True)}</b><span>Mean RankIC</span></div>')
@@ -541,7 +548,7 @@ def build_html(page, note, dsl_text, dsl_note, req_cols, base, opt_meta, gate, r
     grid.append(f'<div class="metric"><b class="{pcls(base["ls_cum"])}">{fmt_num(base["ls_cum"], pct=True, signed=True)}</b><span>LS 累计收益</span></div>')
     grid.append(f'<div class="metric"><b class="{pcls(base["ls_mdd"])}">{fmt_num(base["ls_mdd"], pct=True, signed=True)}</b><span>LS 最大回撤</span></div>')
     grid.append(f'<div class="metric"><b class="{pcls(base["ls_winrate"])}">{fmt_num(base["ls_winrate"], pct=True, signed=True)}</b><span>LS 日胜率</span></div>')
-    grid.append(f'<div class="metric"><b class="{pcls(0)}">0.00%</b><span>Top10% 换手率</span></div>')
+    grid.append(f'<div class="metric"><b>{fmt_num(base.get("top_quantile_turnover"), pct=True)}</b><span>Top10% 换手率</span></div>')
     grid.append(f'<div class="metric"><b class="{pcls(base["g10_annual"])}">{fmt_num(base["g10_annual"], pct=True, signed=True)}</b><span>G10 (多头) 年化</span></div>')
     grid.append(f'<div class="metric"><b class="{pcls(base["g1_annual"])}">{fmt_num(base["g1_annual"], pct=True, signed=True)}</b><span>G1 (空头) 年化</span></div>')
     grid.append(f'<div class="metric"><b class="{pcls(base["rankic_winrate"])}">{fmt_num(base["rankic_winrate"], pct=True, signed=True)}</b><span>RankIC 胜率</span></div>')
@@ -591,24 +598,45 @@ def build_html(page, note, dsl_text, dsl_note, req_cols, base, opt_meta, gate, r
 
     steps_html = " → ".join(steps) if steps else "（无预处理）"
     dsl_ops_html = ", ".join(dsl_ops) if dsl_ops else "（无）"
+    optimizer_audit = ""
+    if m1.get("optimizer"):
+        variant_rows = []
+        for name, trial in (m1.get("variants") or {}).items():
+            train_metrics = trial.get("train") or {}
+            validation_metrics = trial.get("validation") or {}
+            variant_rows.append(
+                f'<tr><td>{esc(name)}</td><td>{fmt_num(train_metrics.get("rankic_ir"))}</td>'
+                f'<td>{fmt_num(validation_metrics.get("rankic_ir"))}</td>'
+                f'<td>{fmt_num(validation_metrics.get("ls_sharpe"))}</td>'
+                f'<td><code>{esc(trial.get("expression", "—"))}</code></td></tr>')
+        optimizer_audit = (
+            f'<p>执行库：{esc(m1["optimizer"])} / {esc(m1.get("preprocess", ""))}</p>'
+            f'<p>选优窗口：{esc(m1.get("selection_window", ""))}；'
+            f'方向窗口：{esc(m1.get("direction_window", ""))}</p>'
+            f'<p>{esc(m1.get("test_note", ""))}。factor_preprocess.* 表达式表示预处理库调用，'
+            '不冒充已验证等价的 FactorEngine DSL。</p>'
+            '<table class="meta-table"><thead><tr><th>变体</th><th>训练 IR</th>'
+            '<th>验证 IR</th><th>验证 LS Sharpe</th><th>完整步骤表达式</th></tr></thead><tbody>'
+            + ''.join(variant_rows) + '</tbody></table>')
 
     opt_block = f'''
 <div class="card">
   <h2>🧬 优化因子（预处理 + 择优）</h2>
   <p style="font-size:0.82rem;color:#64748b;margin:0 0 10px">
-    对原始因子做按需预处理（检测 DSL 已含算子避免重复），多方案择优选 RankIC IR 最高者。
+    预处理候选与选择结果如下；新优化库仅按验证窗 RankIC IR 选优，不保证改善。
   </p>
   <table class="meta-table" style="margin-top:6px">
     <tbody>
       <tr><td>预处理步骤</td><td><code>{esc(steps_html)}</code></td></tr>
-      <tr><td>DSL 已含预处理算子</td><td><code>{esc(dsl_ops_html)}</code></td></tr>
+      <tr><td>有效公式及预处理表达式</td><td><code>{esc(dsl_ops_html)}</code></td></tr>
       <tr><td>最优变体</td><td>{esc(m1.get("best", "—"))}</td></tr>
-      <tr><td>优化后 RankIC</td><td>{best_mean:.4f}</td></tr>
-      <tr><td>优化后 RankIC IR</td><td>{best_ir:.3f}</td></tr>
+      <tr><td>优化后 RankIC</td><td>{fmt_num(best_mean)}</td></tr>
+      <tr><td>优化后 RankIC IR</td><td>{fmt_num(best_ir)}</td></tr>
       <tr><td>因子族</td><td>{esc(cluster_id)}（代表因子: {esc(rep)}，本因子是代表: {is_rep}）</td></tr>
       <tr><td>质量门槛</td><td><span class="badge {gate_class}">{esc(gate_status)}</span></td></tr>
     </tbody>
   </table>
+  {optimizer_audit}
   <div style="margin-top:10px">
 {opt_charts}
   </div>
@@ -676,7 +704,7 @@ img {{ border-radius:8px }}
 <header>
 <a class="back" href="../index.html">&#8592; 返回汇总</a>
 <h1><code>{esc(page)}</code><span class="badge badge-blue" style="background:#dbeafe;color:#1e40af">🧬 优化因子</span><span class="qe-info">⚡ quant_evaluator</span></h1>
-<div class="meta">{esc(note)} · 回测区间 {START} ~ {END} · 评估: quant_evaluator · 生成 {datetime.now().strftime("%Y-%m-%d %H:%M")}</div>
+<div class="meta">{esc(note)} · 回测区间 {report_start} ~ {report_end} · 评估: quant_evaluator · 生成 {datetime.now().strftime("%Y-%m-%d %H:%M")}</div>
 </header>
 <main>
 
@@ -731,7 +759,7 @@ img {{ border-radius:8px }}
 <thead><tr><th>指标</th><th>值</th></tr></thead>
 <tbody>
 <tr><td>因子名称</td><td><code>{esc(page)}</code></td></tr>
-<tr><td>回测区间</td><td>{START} ~ {END}</td></tr>
+<tr><td>回测区间</td><td>{report_start} ~ {report_end}</td></tr>
 <tr><td>回测交易日</td><td>{base["n_periods"]} 天</td></tr>
 <tr><td>已翻转</td><td>否</td></tr>
 <tr><td>评估库</td><td><code>quant_evaluator</code></td></tr>

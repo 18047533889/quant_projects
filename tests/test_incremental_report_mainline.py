@@ -17,6 +17,115 @@ def load_intake():
     return module
 
 
+def test_qe_validation_keeps_training_direction():
+    from factor_engine.reporting.quant_evaluator_adapter import evaluate_report_arrays
+    rng = np.random.default_rng(12)
+    values = rng.normal(size=(30, 40))
+    result = evaluate_report_arrays(values, -values * .001, fixed_direction=1)
+    assert result.direction == 1
+    assert result.mean_rank_ic < -.99
+
+
+def test_optimizer_runs_actual_libraries_on_small_panel(tmp_path, monkeypatch):
+    intake = load_intake()
+    rng = np.random.default_rng(77)
+    dates = pd.bdate_range("2016-01-04", "2026-08-27")
+    prices = pd.DataFrame(100 * np.exp(np.cumsum(rng.normal(0, .01, (len(dates), 40)), axis=0)), index=dates)
+    values = pd.DataFrame(rng.normal(size=prices.shape), index=dates)
+    monkeypatch.setattr(intake, "load_matrix", lambda *a, **k: values)
+    monkeypatch.setattr(intake, "load_vwap", lambda **k: prices)
+    monkeypatch.setattr(intake, "OPT_DIR", tmp_path / "matrices")
+    monkeypatch.setattr(intake, "OPT_META_JSON", tmp_path / "meta.json")
+    result = intake.stage_optimize_lite({"page_name": "smoke", "fe_formula": "ts_return(AdjClose,20)"}, None)
+    meta = json.loads((tmp_path / "meta.json").read_text())["smoke"]
+    assert meta["optimizer"] == "factor_optimizer.SearchRunner"
+    assert len(meta["variants"]) == 5
+    assert Path(result["path"]).exists()
+    assert meta["dsl_preproc_ops"]
+
+
+def test_windowed_landing_rejects_full_history_before_reading_data():
+    import pytest
+    intake = load_intake()
+    intake.require_bounded_history(SimpleNamespace(lookback=20, ir=None), "bounded")
+    with pytest.raises(ValueError, match="state continuity"):
+        intake.require_bounded_history(
+            SimpleNamespace(lookback=20, ir=None, requires_full_history=True), "stateful")
+
+
+def test_retry_is_explicit_atomic_and_preserves_success_and_failure_history():
+    import pytest
+    intake = load_intake()
+    state = {"factors": {"bad": {"status": "unavailable", "reason": "volume"},
+                          "good": {"status": "passed"}}}
+    before = json.loads(json.dumps(state))
+    with pytest.raises(ValueError):
+        intake.reopen_failed_candidates(state, ["bad", "good"])
+    assert state == before
+    intake.reopen_failed_candidates(state, ["bad", "bad"])
+    assert state["factors"]["bad"]["status"] == "retry_pending"
+    assert state["factors"]["good"]["status"] == "passed"
+    assert state["retry_history"]["bad"] == [before["factors"]["bad"]]
+
+
+def test_python_metadata_is_converted_to_dsl_without_executing_source(tmp_path, monkeypatch):
+    intake = load_intake()
+    monkeypatch.setattr(intake, "factor_from_record", lambda record: record)
+    folder = tmp_path / "miner" / "20260901"
+    folder.mkdir(parents=True)
+    source = 'def factor_sample(df):\n    return df["close"].rolling(20).mean()'
+    (folder / "metadata.json").write_text(json.dumps({
+        "meta": {"market": "ashare"}, "factors": [{
+            "factor_name": "python_mean", "expression_type": "python",
+            "factor_expression": source,
+        }]}))
+    candidates, rejected = intake.discover_price_dsl_candidates(tmp_path, [], since="20260901")
+    assert not rejected
+    assert len(candidates) == 1
+    assert candidates[0]["source_formula"] == source
+    assert candidates[0]["source_language"] == "python"
+    assert "safe_div_null(ts_mean(AdjClose, 20)" in candidates[0]["fe_formula"]
+    assert "o[" not in candidates[0]["fe_formula"]
+
+
+def test_automatic_python_conversion_rejects_uncertified_round():
+    import pytest
+    load_intake()
+    from fe_code_transpiler import transpile_native_dsl
+    with pytest.raises(ValueError, match="round"):
+        transpile_native_dsl('def factor_sample(df):\n    return df["close"].round(2)')
+
+
+def test_homepage_retry_does_not_duplicate_factor_or_weekly_section(tmp_path, monkeypatch):
+    intake = load_intake()
+    target = tmp_path / "index.html"
+    target.write_text('<h2 id="all-factors">全部 1 个因子</h2>'
+                      '<table><tbody></tbody></table>'
+                      '<section id="robustness-2026"></section>')
+    monkeypatch.setattr(intake, "INDEX_HTML", target)
+    monkeypatch.setattr(intake, "load_pool", lambda: [{"page_name": "sample"}])
+    records = [{"page_name": "sample", "rank_ic": .1, "ic_ir": .2}]
+    intake.update_index(records)
+    intake.update_index(records)
+    html = target.read_text()
+    assert html.count('id="new-mining"') == 1
+    assert html.count('href="factors/factor_sample.html"') == 2
+
+
+def test_detail_template_uses_artifact_dates_and_does_not_invent_metrics():
+    from collections import defaultdict
+    load_intake()
+    import render_evoalpha14_pages as renderer
+    base = defaultdict(float, report_start="2016-01-04", report_end="2026-08-27")
+    charts = dict(svg_ts="", monthly="", decile="", ls="", dist="")
+    html = renderer.build_html("sample", "", "rank(AdjClose)", "", "",
+                               base, {}, {}, {}, charts, "")
+    assert html.count("2016-01-04 ~ 2026-08-27") == 2
+    assert "0.00%</b><span>Top10%" not in html
+    assert "优化后 RankIC</td><td>0.0000" not in html
+    assert "2026 RankIC 0.0000" not in html
+
+
 def test_landing_many_uses_one_streaming_run_many_call():
     intake = load_intake()
     calls = []
@@ -185,6 +294,20 @@ def test_update_index_derives_counts_from_current_pool(tmp_path, monkeypatch):
     assert result["n_new"] == 1
     assert "全部 3 个因子" in html
     assert "本周新挖增量因子（1）" in html
+
+
+def test_physical_volume_dsl_is_bound_once_and_persisted():
+    intake = load_intake()
+    record = {"page_name": "volume_binding", "fe_formula": "safe_div_null(Volume, Factor)",
+              "source_formula": "volume"}
+    factor = intake.factor_from_record(record)
+    assert [node.name for node in factor.expr.args] == ["Volume", "Factor"]
+    assert "col('Volume')" in record["fe_formula"]
+    assert "col('Factor')" in record["fe_formula"]
+    assert record["source_formula"] == "volume"
+    assert intake.factor_from_record(record).expr == factor.expr
+    logical = intake.factor_from_record({"page_name": "logical", "fe_formula": "volume"})
+    assert logical.expr.name == "volume"
 
 
 def test_landing_many_accepts_canonical_json_expression():

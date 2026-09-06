@@ -126,6 +126,7 @@ def evaluate_report_batch(
     min_ic_periods: int = 20,
     direction_training_periods: int | None = None,
     periods_per_year: int = 252,
+    fixed_directions: tuple[int, ...] | None = None,
 ) -> ReportBatchEvaluation:
     """Evaluate a bounded factor tile with shared QE IC/quantile intermediates."""
     if backend not in {"cpu", "auto", "cuda", "cuda_strict"}:
@@ -167,6 +168,12 @@ def evaluate_report_batch(
     train = raw_ic[:direction_training_periods] if direction_training_periods else raw_ic
     train_mean, _ = compute_mean_ic(train, min_periods=min_ic_periods)
     directions = np.where(np.isfinite(train_mean) & (train_mean < 0), -1, 1)
+    if fixed_directions is not None:
+        if len(fixed_directions) != len(factor_ids) or any(
+            isinstance(value, bool) or value not in (-1, 1) for value in fixed_directions
+        ):
+            raise ValueError("fixed_directions must contain one +/-1 per factor")
+        directions = np.asarray(fixed_directions, dtype=int)
     directed_ic = raw_ic * directions[None, :]
 
     factor_results = {}
@@ -237,6 +244,7 @@ def evaluate_report_arrays(
     min_ic_periods: int = 20,
     direction_training_periods: int | None = None,
     periods_per_year: int = 252,
+    fixed_direction: int | None = None,
 ) -> ReportEvaluation:
     """Evaluate one factor through the same bounded batch authority."""
     values = np.asarray(factors, dtype=np.float64)
@@ -252,5 +260,6 @@ def evaluate_report_arrays(
         min_ic_periods=min_ic_periods,
         direction_training_periods=direction_training_periods,
         periods_per_year=periods_per_year,
+        fixed_directions=None if fixed_direction is None else (fixed_direction,),
     )
     return batch.factors["report_factor"]

@@ -85,8 +85,298 @@ def load_manifest(path):
     return json.loads(Path(path).read_text())
 
 
+def discover_price_dsl_candidates(root, existing_records, *, since=None):
+    """Import explicit DSL metadata, never candidate matrices or Python code.
+
+    Initial supported surface is price-only native DSL. Return/volume units
+    and foreign DSL dialects require their own validated translation contract.
+    """
+    import ast
+    from datetime import datetime, timedelta
+    if since is None:
+        today = datetime.now().date()
+        since = (today - timedelta(days=today.weekday())).strftime("%Y%m%d")
+    fields = {"close": "AdjClose", "open": "AdjOpen", "high": "AdjHigh",
+              "low": "AdjLow", "pre_close": "AdjPreClose", "vwap": "AdjVwap",
+              "high_limit": "AdjHighLimit", "low_limit": "AdjLowLimit"}
+    known = set(fields.values())
+    seen_names = {r.get("page_name") for r in existing_records}
+    seen_formulas = {re.sub(r"\s+", "", str(r.get("fe_formula") or "")) for r in existing_records}
+    candidates, rejected = [], []
+    for path in sorted(Path(root).glob("*/*/metadata*.json")):
+        if path.parent.name[:8] < since:
+            continue
+        payload = json.loads(path.read_text())
+        if payload.get("meta", {}).get("market") != "ashare":
+            continue
+        for record in payload.get("factors", []):
+            if record.get("expression_type") not in {"dsl", "python"}:
+                continue
+            name = str(record.get("factor_name") or record.get("factor_id") or "")
+            formula = record.get("formula") or record.get("factor_expression")
+            if not name or name in seen_names or not isinstance(formula, str):
+                continue
+            try:
+                original_formula = formula
+                if record.get("expression_type") == "python":
+                    from fe_code_transpiler import transpile_native_dsl
+                    formula = transpile_native_dsl(formula)
+                tree = ast.parse(formula, mode="eval")
+                call_names = set()
+                for node in ast.walk(tree):
+                    if isinstance(node, ast.Call):
+                        if not isinstance(node.func, ast.Name):
+                            raise ValueError("only named DSL operators are accepted")
+                        call_names.add(id(node.func))
+                    if isinstance(node, (ast.Attribute, ast.Subscript, ast.Lambda, ast.NamedExpr)):
+                        raise ValueError("not a native arithmetic DSL expression")
+                for node in ast.walk(tree):
+                    if isinstance(node, ast.Name) and id(node) not in call_names:
+                        if node.id in fields:
+                            node.id = fields[node.id]
+                        elif node.id not in known:
+                            raise ValueError(f"field requires a verified unit mapping: {node.id}")
+                translated = ast.unparse(tree)
+                key = re.sub(r"\s+", "", translated)
+                if key in seen_formulas:
+                    continue
+                entry = dict(page_name=name, factor_name=name, fe_formula=translated,
+                             source_formula=original_formula, source_metadata=str(path),
+                             source_language=record.get("expression_type"),
+                             campaign=path.parent.name, intake_since=since,
+                             is_unlisted_miner=True, can_use_factor_engine=True)
+                factor_from_record(entry)
+                candidates.append(entry)
+                seen_formulas.add(key)
+                seen_names.add(name)
+            except (ValueError, SyntaxError, TypeError) as exc:
+                rejected.append(dict(factor_name=name, reason=str(exc), source=str(path)))
+    return candidates, rejected
+
+
 def load_pool():
     return json.loads(POOL_JSON.read_text())
+
+
+def requested_dsl_records(path):
+    """Normalize explicitly supplied daily formulas; keep unresolved fields visible."""
+    import ast
+    prices = {"close": "AdjClose", "open": "AdjOpen", "high": "AdjHigh",
+              "low": "AdjLow", "pre_close": "AdjPreClose", "vwap": "AdjVwap",
+              "amount": "AdjAmount"}
+    physical = set(prices.values()) | {"Volume", "Factor"}
+    records, deferred, seen = [], [], set()
+    for line_number, raw in enumerate(Path(path).read_text().splitlines(), 1):
+        raw = raw.strip()
+        if not raw or raw in seen:
+            continue
+        seen.add(raw)
+        name = "weekly_" + hashlib.sha256(raw.encode()).hexdigest()[:16]
+        try:
+            tree = ast.parse(raw, mode="eval")
+            class Fields(ast.NodeTransformer):
+                def visit_Call(self, node):
+                    if not isinstance(node.func, ast.Name):
+                        raise ValueError("only named DSL operators are supported")
+                    node.args = [self.visit(a) for a in node.args]
+                    for kw in node.keywords:
+                        kw.value = self.visit(kw.value)
+                    return node
+                def visit_Name(self, node):
+                    if node.id == "ret":
+                        return ast.parse("subtract(safe_div_null(AdjClose, AdjPreClose), 1.0)", mode="eval").body
+                    if node.id == "volume":
+                        return ast.parse("safe_div_null(Volume, Factor)", mode="eval").body
+                    if node.id in prices:
+                        return ast.copy_location(ast.Name(id=prices[node.id], ctx=ast.Load()), node)
+                    if node.id not in physical:
+                        raise ValueError(f"requires multi-dataset field binding: {node.id}")
+                    return node
+            tree = Fields().visit(tree)
+            if any(isinstance(n, (ast.Attribute, ast.Subscript, ast.Lambda, ast.NamedExpr)) for n in ast.walk(tree)):
+                raise ValueError("not arithmetic DSL")
+            formula = ast.unparse(ast.fix_missing_locations(tree))
+            records.append(dict(page_name=name, factor_name=name, fe_formula=formula,
+                                source_formula=raw, source_metadata=str(path), source_line=line_number,
+                                is_unlisted_miner=True, can_use_factor_engine=True))
+        except (ValueError, SyntaxError) as exc:
+            deferred.append(dict(page_name=name, source_formula=raw, source_line=line_number,
+                                 reason=str(exc), status="requires_adapter"))
+    return sorted(records, key=lambda r: len(r["fe_formula"])), deferred
+
+
+def passes_weekly_gate(metrics):
+    import math
+    return any(value is not None and math.isfinite(value) and value >= threshold
+               for value, threshold in ((metrics.get("rank_ic"), .015),
+                                        (metrics.get("ic_ir"), .15)))
+
+
+def reopen_failed_candidates(state, names):
+    """Explicitly retry failures only, retaining each earlier result for audit."""
+    names = list(dict.fromkeys(names))
+    for name in names:
+        prior = state.get("factors", {}).get(name)
+        if prior is None or prior.get("status") not in {"failed", "unavailable"}:
+            raise ValueError(f"retry requires a failed/unavailable candidate: {name}")
+    for name in names:
+        prior = state["factors"][name]
+        state.setdefault("retry_history", {}).setdefault(name, []).append(dict(prior))
+        state["factors"][name] = dict(prior, status="retry_pending")
+
+
+def run_overnight_queue(formulas, output_dir, *, memory_gib=8, retry_names=()):
+    """Resume isolated mainline evaluations with host and process memory guards."""
+    import subprocess
+    import signal
+    import fcntl
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    with (output_dir / "queue.lock").open("w") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        records, deferred = requested_dsl_records(formulas)
+        state_path = output_dir / "queue_state.json"
+        state = json.loads(state_path.read_text()) if state_path.exists() else {"factors": {}}
+        known = {record["page_name"] for record in records}
+        if set(retry_names) - known:
+            raise ValueError("retry candidates must be present in the supplied formulas")
+        reopen_failed_candidates(state, retry_names)
+        state["deferred"] = deferred
+        state["gate"] = {"rank_ic": .015, "rank_ic_ir": .15, "combine": "or",
+                         "window": "full-window exploratory screening; not sealed OOS"}
+        def save():
+            tmp = state_path.with_suffix(".tmp")
+            tmp.write_text(json.dumps(state, ensure_ascii=False, indent=2, allow_nan=False))
+            os.replace(tmp, state_path)
+        save()
+        for record in records:
+            name = record["page_name"]
+            if state["factors"].get(name, {}).get("status") in {"passed", "below_gate", "failed", "unavailable"}:
+                continue
+            while True:
+                mem = dict(line.split(":", 1) for line in Path("/proc/meminfo").read_text().splitlines())
+                available_kib = int(mem["MemAvailable"].split()[0])
+                if available_kib >= (memory_gib + 4) * 1024**2:
+                    break
+                state["status"] = "waiting_for_memory"
+                save()
+                time.sleep(30)
+            folder = output_dir / name
+            folder.mkdir(exist_ok=True)
+            candidate_path = folder / "candidate.json"
+            candidate_path.write_text(json.dumps([record], ensure_ascii=False, indent=2))
+            target = folder / "report_manifest.json"
+            command = [sys.executable, str(Path(__file__).resolve()), "--manifest", str(candidate_path),
+                       "--batch-size", "1", "--fe-backend", "pandas", "--qe-backend", "cpu",
+                       "--evaluate-only", "--output-manifest", str(target)]
+            state["status"] = "running"
+            state["factors"][name] = dict(status="running", formula=record["fe_formula"],
+                                           source_formula=record["source_formula"], folder=str(folder))
+            save()
+            print(f"[overnight start] {name}", flush=True)
+            env = dict(os.environ, OMP_NUM_THREADS="2", OPENBLAS_NUM_THREADS="2",
+                       MKL_NUM_THREADS="2", POLARS_MAX_THREADS="2")
+            reason = None
+            with (folder / "run.log").open("a") as log:
+                child = subprocess.Popen(command, stdout=log, stderr=subprocess.STDOUT,
+                                         env=env, start_new_session=True)
+                started = time.monotonic()
+                peak_kib = 0
+                while child.poll() is None:
+                    try:
+                        status = Path(f"/proc/{child.pid}/status").read_text()
+                        rss = int(re.search(r"VmRSS:\s+(\d+)", status).group(1))
+                        peak_kib = max(peak_kib, rss)
+                    except (FileNotFoundError, AttributeError):
+                        rss = 0
+                    if rss > memory_gib * 1024**2 or time.monotonic() - started > 1800:
+                        reason = "process memory limit" if rss > memory_gib * 1024**2 else "30-minute time limit"
+                        os.killpg(child.pid, signal.SIGTERM)
+                        try:
+                            child.wait(timeout=15)
+                        except subprocess.TimeoutExpired:
+                            os.killpg(child.pid, signal.SIGKILL)
+                        break
+                    time.sleep(2)
+                code = child.wait()
+            result = state["factors"][name]
+            result.update(exit_code=code, peak_rss_kib=peak_kib)
+            if code == 0 and target.exists():
+                entry = json.loads(target.read_text())["factors"][name]
+                result["status"] = "unavailable" if entry.get("status") == "unavailable" else (
+                    "passed" if passes_weekly_gate(entry["metrics"]) else "below_gate")
+                result["metrics"] = entry.get("metrics", {})
+                result["optimization_status"] = "pending_library_integration"
+            else:
+                result.update(status="failed", reason=reason or "see run.log")
+            print(f"[overnight done] {name}: {result['status']}", flush=True)
+            save()
+        state["status"] = "evaluation_finished_optimization_and_publication_pending"
+        save()
+    return state
+
+
+def run_optimization_queue(output_dir):
+    """Resume eligible weekly optimizations serially in isolated child processes."""
+    import fcntl
+    import subprocess
+    output_dir = Path(output_dir)
+    with (output_dir / "optimizer.lock").open("a") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        intake = json.loads((output_dir / "queue_state.json").read_text())
+        code_digest = hashlib.sha256(Path(__file__).read_bytes())
+        for library_dir in (ROOT / "factor_optimizer/factor_optimizer",
+                            ROOT / "factor_preprocess/factor_preprocess",
+                            ROOT / "factor_engine/reporting", ROOT / "quant_evaluator"):
+            for source in sorted(library_dir.rglob("*.py")):
+                code_digest.update(str(source.relative_to(ROOT)).encode())
+                code_digest.update(source.read_bytes())
+        library_identity = code_digest.hexdigest()
+        target = output_dir / "optimizer_state.json"
+        state = json.loads(target.read_text()) if target.exists() else {}
+        def save():
+            tmp = target.with_suffix(".json.tmp")
+            tmp.write_text(json.dumps(state, ensure_ascii=False, indent=1, allow_nan=False))
+            os.replace(tmp, target)
+        for name, entry in intake["factors"].items():
+            if entry["status"] != "passed":
+                continue
+            folder = Path(entry["folder"])
+            if "requires full-history replay" in (folder / "run.log").read_text():
+                state[name] = {"status": "blocked_full_history"}
+                save()
+                continue
+            # Identity changes invalidate the successful-stage checkpoint.
+            matrix = MATRICES_DIR / f"{name}.parquet"
+            identity = hashlib.sha256((
+                (folder / "candidate.json").read_text() + str(matrix.stat().st_mtime_ns)
+                + library_identity
+            ).encode()).hexdigest()
+            if state.get(name, {}).get("status") == "optimized" and state[name].get("identity") == identity:
+                continue
+            while True:
+                memory = dict(line.split(":", 1) for line in Path("/proc/meminfo").read_text().splitlines())
+                if int(memory["MemAvailable"].split()[0]) >= 12 * 1024**2:
+                    break
+                state[name] = dict(status="waiting_for_memory", identity=identity)
+                save()
+                time.sleep(30)
+            state[name] = dict(status="running", identity=identity)
+            save()
+            print(f"[optimizer start] {name}", flush=True)
+            command = [sys.executable, str(Path(__file__).resolve()), "--manifest",
+                       str(folder / "candidate.json"), "--optimize-only"]
+            with (folder / "optimizer.log").open("a") as log:
+                try:
+                    result = subprocess.run(command, stdout=log, stderr=subprocess.STDOUT,
+                                            timeout=2700, check=False)
+                    status = "optimized" if result.returncode == 0 else "failed"
+                except subprocess.TimeoutExpired:
+                    status = "timeout"
+            state[name] = dict(status=status, identity=identity, log=str(folder / "optimizer.log"),
+                               publication="pending_validation")
+            save()
+            print(f"[optimizer done] {name}: {status}", flush=True)
 
 
 def load_clusters():
@@ -263,6 +553,30 @@ def factor_from_record(record):
     try:
         node = json.loads(formula)
     except json.JSONDecodeError:
+        if "o[" in formula:
+            from fe_code_transpiler import native_dsl_from_expression
+            formula = native_dsl_from_expression(formula)
+        # Native DSL bare identifiers resolve through the semantic catalog.
+        # Volume resolves to adjusted logical `volume`; an explicit /Factor
+        # would then adjust twice (or fail derived-field projection). Bind only
+        # these explicitly spelled physical inputs via FE's existing col API.
+        # Lowercase logical fields retain their catalog semantics.
+        import ast
+
+        class PhysicalInputs(ast.NodeTransformer):
+            def visit_Name(self, node):
+                if node.id in {"Volume", "Factor"}:
+                    return ast.copy_location(ast.Call(
+                        func=ast.Name(id="col", ctx=ast.Load()),
+                        args=[ast.Constant(value=node.id)], keywords=[]), node)
+                return node
+
+        tree = ast.parse(formula, mode="eval")
+        bound = PhysicalInputs().visit(tree)
+        formula = ast.unparse(ast.fix_missing_locations(bound))
+        # Persist the executable formula so reports and future retries use the
+        # same explicit physical bindings; source_formula remains untouched.
+        record["fe_formula"] = formula
         return parse_factor(formula, name=name)
     if not isinstance(node, dict) or "kind" not in node:
         return parse_factor(formula, name=name)
@@ -328,6 +642,20 @@ def matrix_sink(output_dir):
     return write
 
 
+def require_bounded_history(analysis, name):
+    """Do not approximate stateful full-history operators with a finite overlap."""
+    from factor_engine.runtime.execution_contract import (
+        factor_history_requirement, is_full_history_lookback,
+    )
+    requirement = factor_history_requirement(getattr(analysis, "ir", None))
+    if (getattr(analysis, "requires_full_history", False)
+            or is_full_history_lookback(getattr(analysis, "lookback", 0))
+            or requirement.is_full_history):
+        raise ValueError(
+            f"{name}: full-history replay/state continuity required; yearly "
+            "windowed landing with finite overlap is not certified")
+
+
 def land_factor_batch_windowed(
     records,
     *,
@@ -344,6 +672,14 @@ def land_factor_batch_windowed(
     overlap supplies rolling/EMA history and is trimmed before persistence.
     """
     import pandas as pd
+    from factor_engine.ir.analyzer import Analyzer
+
+    # Use the engine's execution-contract authority, not operator-name guesses.
+    # Run before any source reads or partial output writes.
+    analyzer = Analyzer(production=False)
+    for record in records:
+        factor = factor_from_record(record)
+        require_bounded_history(analyzer.lower(factor.expr), factor.name)
 
     start = pd.Timestamp(start_date)
     end = pd.Timestamp(end_date)
@@ -497,7 +833,15 @@ def evaluate_factor_batch(
             min_ic_periods=20,
             direction_training_periods=train_periods,
         )
-        evaluated.update(result.factors)
+        for name, factor_result in result.factors.items():
+            ic = getattr(factor_result, "rank_ic_series", None)
+            if ic is not None and not np.isfinite(ic).any():
+                unavailable[name] = (
+                    "全窗矩阵未产生任何有效 RankIC；需审计横截面常数、"
+                    "有效股票数和标签对齐，不能作为已完成评估发布"
+                )
+                continue
+            evaluated[name] = factor_result
         backends.add(result.backend_used)
         if result.backend_fallback_reason:
             fallbacks[",".join(tile_names)] = result.backend_fallback_reason
@@ -547,6 +891,9 @@ def write_report_manifest(records, batch_evaluation, *, target=REPORT_MANIFEST_J
         direction = metrics.pop("direction")
         entry = {
             "factor_name": record.get("factor_name", name),
+            "source_formula": record.get("source_formula"),
+            "source_metadata": record.get("source_metadata"),
+            "campaign": record.get("campaign"),
             "direction": direction,
             "is_flipped": metrics.pop("is_flipped"),
             "raw_formula": raw_formula,
@@ -674,6 +1021,9 @@ def _unavailable_report_page(page, entry):
 def _write_manifest_index(report_dir, factors):
     """Render the home page directly from the canonical manifest entries."""
     rows = []
+    def formatted(value, spec):
+        import math
+        return format(value, spec) if value is not None and math.isfinite(value) else "—"
     for number, (page, entry) in enumerate(sorted(factors.items()), start=1):
         metrics = entry.get("metrics") or {}
         status = entry.get("status", "available")
@@ -681,9 +1031,9 @@ def _write_manifest_index(report_dir, factors):
             cells = ("—", "—", "—", "数据待补齐")
         else:
             cells = (
-                f"{metrics.get('rank_ic', float('nan')):+.4f}",
-                f"{metrics.get('ic_ir', float('nan')):+.3f}",
-                f"{metrics.get('ls_sharpe', float('nan')):+.2f}",
+                formatted(metrics.get('rank_ic'), '+.4f'),
+                formatted(metrics.get('ic_ir'), '+.3f'),
+                formatted(metrics.get('ls_sharpe'), '+.2f'),
                 "已翻正" if entry.get("is_flipped") else "原方向",
             )
         rows.append(
@@ -731,10 +1081,12 @@ def publish_report_from_manifest(manifest_path, *, report_dir=REPORTS_DIR):
             "fe_formula": entry.get("raw_formula", ""),
             "is_flipped": bool(entry.get("is_flipped")),
         }
-        stage_page_inject(
+        rendered = stage_page_inject(
             factor, report_evaluation_dict(result), report_result=result,
             report_dates=dates, out_dir=output_factors,
         )
+        if rendered.get("mode") != "full":
+            raise RuntimeError(f"factor {page} did not render all charts: {rendered}")
         available += 1
         published += 1
     _write_manifest_index(report_dir, payload["factors"])
@@ -805,9 +1157,13 @@ def stage_cluster_assign(factor, eval_result):
         res = {"assigned": best["cluster_id"], "rho": best["rho"], "new": False,
                "representative": reps[best["cluster_id"]].get("factor")}
     else:
-        new_id = f"new_{len(cm) + 1:02d}"
         # 追加新簇：cluster_members + representatives + page_to_cluster（不改旧键）
         cm = clusters.setdefault("cluster_members", {})
+        suffix = len(cm) + 1
+        new_id = f"new_{suffix:02d}"
+        while new_id in cm or new_id in reps:
+            suffix += 1
+            new_id = f"new_{suffix:02d}"
         cm[new_id] = [page]
         clusters.setdefault("representatives", {})[new_id] = {
             "factor": page, "best_rankic_ir": 0.0, "best_mean_rankic": 0.0,
@@ -829,54 +1185,134 @@ def stage_cluster_assign(factor, eval_result):
 # stage: optimize_lite
 # --------------------------------------------------------------------------
 def stage_optimize_lite(factor, eval_result):
-    """3 变体（原值/cs_rank/cs_zscore）同口径评估择优，追加 optimized_meta + 矩阵。"""
-    page = factor["page_name"]
-    is_flipped = bool(factor.get("is_flipped", False))
+    """Bounded FO search over actual FP transforms, evaluated only by QE."""
+    import numpy as np
     import pandas as pd
+    import fcntl
+    # These libraries use src-style project directories alongside this job;
+    # select the current checkout rather than an older installed distribution.
+    for library in ("factor_optimizer", "factor_preprocess"):
+        sys.path.insert(0, str(ROOT / library))
+    from factor_preprocess.registry.transforms import get_default_registry
+    from factor_optimizer.search.runner import SearchConfig, SearchRunner
+    from factor_optimizer.contracts.search_budget import SearchBudget
+    from factor_optimizer.contracts.splits import SplitPlan, EvaluationProtocol
+    from factor_optimizer.contracts.trial import Trial, TrialStatus
+    from factor_optimizer.contracts.treatment_integrity import build_integrity_evidence
+
+    page = factor["page_name"]
+    # Existing full-history matrices are not certified by yearly overlap.
+    from factor_engine.ir.analyzer import Analyzer
+    parsed = factor_from_record(factor)
+    require_bounded_history(Analyzer(production=False).lower(parsed.expr), page)
     mat = load_matrix(page, flip=False)
     if mat is None:
-        return {"error": "matrix missing"}
-    vwap = load_vwap()
-
-    variants = {
-        "raw": mat,
-        "cs_rank": mat.rank(axis=1, pct=True),
-        "cs_zscore": (mat - mat.mean(axis=1)).div(mat.std(axis=1) + 1e-9),
-    }
-    best = None
+        raise ValueError(f"{page}: verified full-window matrix unavailable")
+    vwap = load_vwap(start_date=str(FULL_WINDOW_START.date()),
+                     end_date=str(FULL_WINDOW_END.date()))
+    mat = mat.reindex(index=vwap.index, columns=vwap.columns)
+    labels = vwap.pct_change(fill_method=None).shift(-2).to_numpy(dtype=float)
+    dates = pd.DatetimeIndex(vwap.index)
+    values = mat.to_numpy(dtype=float)
+    train = np.asarray(dates <= pd.Timestamp(EVAL_END))
+    train[np.flatnonzero(train)[-2:]] = False  # purge t+2 label boundary
+    validation = np.asarray((dates >= "2018-07-01") & (dates <= "2023-12-31"))
+    validation[np.flatnonzero(validation)[-2:]] = False
+    test = np.asarray(dates >= "2024-01-01")
+    split = SplitPlan("weekly-treatment-v1", train.tolist(), validation.tolist(), test.tolist(),
+                      {"test_note": "previously explored; not sealed OOS"},
+                      time_index=tuple(dates), label_horizon=2)
+    registry = get_default_registry()
+    recipes = {"raw": (None, {}),
+               "cs_rank": ("cs_rank", {"axis": 1, "pct": True}),
+               "cs_zscore": ("cs_zscore", {"axis": 1, "ddof": 1}),
+               "winsor_1pct": ("cs_winsor", {"axis": 1, "lower": .01, "upper": .99}),
+               "winsor_5pct": ("cs_winsor", {"axis": 1, "lower": .05, "upper": .95})}
     results = {}
-    for vname, vmat in variants.items():
-        vm = -vmat if is_flipped else vmat
-        res = eval_matrix(vm, vwap)
-        results[vname] = res
-        if best is None or res["rank_ic"] > best["rank_ic"]:
-            best = dict(res, variant=vname)
-    if best is None:
-        return {"error": "no variant"}
-
-    meta = load_opt_meta()
-    meta[page] = {
-        "best": best["variant"],
-        "best_mean_rankic": best["rank_ic"],
-        "best_rankic_ir": best["ic_ir"],
-        "steps": {"raw": [], "cs_rank": ["cs_rank"],
-                  "cs_zscore": ["cs_zscore"]}[best["variant"]],
-        "dsl_preproc_ops": [],
-        "variants": {k: {"mean_rankic": v["rank_ic"], "rankic_ir": v["ic_ir"],
-                         "n": v["n_days"]} for k, v in results.items()},
-        "is_flipped": is_flipped,
-    }
-    OPT_META_JSON.write_text(json.dumps(meta, ensure_ascii=False, indent=1))
-
-    # 落最优变体矩阵
+    def transform(name, data):
+        op, params = recipes[name]
+        # This report adapter owns wide NumPy panels. get_execution's current
+        # FE bridge expects a long DataFrame; use the library's registered
+        # native array implementation explicitly, without a silent format fallback.
+        return data.copy() if op is None else registry.get_function(op)(data, **params)
+    def metrics(result):
+        return {"mean_rankic": result.mean_rank_ic, "rankic_ir": result.rank_ic_ir,
+                "ls_sharpe": result.sharpe, "ls_annual": result.annualized_return,
+                "ls_mdd": result.max_drawdown, "n": result.valid_return_periods}
+    # Evaluator receives search arrays only, never test observations.
+    search_mask = train | validation
+    search_values, search_labels = values[search_mask], labels[search_mask]
+    search_train, search_validation = train[search_mask], validation[search_mask]
+    def evaluate(trial, fidelity):
+        name = trial.trial_id
+        treated = transform(name, search_values)
+        training = evaluate_report_arrays(treated[search_train], search_labels[search_train],
+                                         min_assets=MIN_UNIVERSE)
+        valid = evaluate_report_arrays(treated[search_validation], search_labels[search_validation],
+                                       min_assets=MIN_UNIVERSE, fixed_direction=training.direction)
+        op, params = recipes[name]
+        evidence = build_integrity_evidence(name, op or "raw", params,
+                                            search_values, treated, expected_parameters=params)
+        results[name] = dict(train=metrics(training), validation=metrics(valid),
+                             direction=training.direction, parameters=params,
+                             transform=op, integrity=evidence.to_dict())
+        results[name]["execution_origin"] = "identity" if op is None else "FP_NATIVE_ARRAY"
+        expr = factor["fe_formula"]
+        if op:
+            expr = f"factor_preprocess.{op}({expr}, {', '.join(f'{k}={v!r}' for k,v in params.items())})"
+        results[name]["expression"] = f"neg({expr})" if training.direction < 0 else expr
+        return {"evaluation_id": f"{page}:{name}", "score": valid.rank_ic_ir, "cost": 1.,
+                "treatment_integrity_evidence": evidence}
+    proposals = iter(Trial(trial_id=name, mutation_id=f"{page}:{name}",
+                           status=TrialStatus.PROPOSED) for name in recipes)
+    config = SearchConfig(budget=SearchBudget(max_trials=len(recipes),
+                          max_evaluations=len(recipes), max_cost_units=len(recipes)),
+                          enable_multifidelity=False, plateau_window=len(recipes)+1)
+    session = SearchRunner(config, lambda: next(proposals),
+                           EvaluationProtocol(split, evaluate)).run(f"{page}:preprocess-v1")
+    winner = session.best_trial_id
+    if winner is None:
+        raise ValueError(f"{page}: optimizer produced no valid winner: {session.to_dict()}")
+    direction = results[winner]["direction"]
+    selected = transform(winner, values)
+    heldout = evaluate_report_arrays(selected[test], labels[test], min_assets=MIN_UNIVERSE,
+                                     fixed_direction=direction)
+    baseline_heldout = evaluate_report_arrays(values[test], labels[test], min_assets=MIN_UNIVERSE,
+                                              fixed_direction=results["raw"]["direction"])
+    base = factor["fe_formula"]
+    op, params = recipes[winner]
+    # FP expressions are explicitly namespaced, not claimed as executable FE DSL.
+    expression = base if op is None else f"factor_preprocess.{op}({base}, {', '.join(f'{k}={v!r}' for k,v in params.items())})"
+    if direction < 0:
+        expression = f"neg({expression})"
+    record = dict(best=winner, best_mean_rankic=results[winner]["validation"]["mean_rankic"],
+                  best_rankic_ir=results[winner]["validation"]["rankic_ir"],
+                  steps=[] if op is None else [op], dsl_preproc_ops=[expression],
+                  effective_formula=expression, variants=results, is_flipped=direction < 0,
+                  optimizer="factor_optimizer.SearchRunner", preprocess="factor_preprocess.registry",
+                  selection_window="2018-07-01..2023-12-31; t+2 purged", direction_window=EVAL_START+".."+EVAL_END,
+                  test_note="2024+ previously explored; not sealed OOS", heldout=metrics(heldout),
+                  baseline_heldout=metrics(baseline_heldout),
+                  session=session.to_dict())
+    def clean(value):
+        if isinstance(value, dict): return {k: clean(v) for k,v in value.items()}
+        if isinstance(value, (list, tuple)): return [clean(v) for v in value]
+        if isinstance(value, float) and not np.isfinite(value): return None
+        return value
     OPT_DIR.mkdir(parents=True, exist_ok=True)
-    best_mat = variants[best["variant"]]
-    if is_flipped:
-        best_mat = -best_mat
     out = OPT_DIR / f"{page}.parquet"
-    best_mat.to_parquet(out)
-    best["path"] = str(out)
-    return best
+    temporary = out.with_suffix(".parquet.tmp")
+    pd.DataFrame(selected * direction, index=mat.index, columns=mat.columns).to_parquet(temporary)
+    os.replace(temporary, out)
+    with OPT_META_JSON.with_suffix(".lock").open("a") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        meta = load_opt_meta() if OPT_META_JSON.exists() else {}
+        meta[page] = clean(record)
+        temporary = OPT_META_JSON.with_suffix(".json.tmp")
+        temporary.write_text(json.dumps(meta, ensure_ascii=False, indent=1, allow_nan=False))
+        os.replace(temporary, OPT_META_JSON)
+    return dict(variant=winner, path=str(out), direction=direction,
+                rank_ic=record["best_mean_rankic"], ic_ir=record["best_rankic_ir"])
 
 
 # --------------------------------------------------------------------------
@@ -925,10 +1361,10 @@ def _dsl_text(factor):
             if txt and len(txt) > 5:
                 return txt
         except Exception:
-            pass
+            return str(fe)
     lf = factor.get("local_formula", "")
     if lf:
-        return lf.split(",")[0]
+        return lf
     return ""
 
 
@@ -1020,6 +1456,8 @@ def stage_page_inject(factor, eval_result, *, report_result=None, report_dates=N
             "LS": report_result.long_short_nav_aligned.tolist(),
         }
         base = {
+            "report_start": str(dates.min().date()),
+            "report_end": str(dates.max().date()),
             "mean_rankic": report_result.mean_rank_ic,
             "std_rankic": report_result.rank_ic_std,
             "rankic_ir": report_result.rank_ic_ir,
@@ -1196,7 +1634,7 @@ def stage_json_writeback(factor, eval_result, cluster_result):
     page = factor["page_name"]
     fname = factor.get("factor_name") or f"factor_{page}"
     fe_formula = factor.get("fe_formula", "")
-    is_flipped = bool(factor.get("is_flipped", False))
+    is_flipped = bool(eval_result.get("is_flipped", factor.get("is_flipped", False)))
     dsl_text = _dsl_text(factor)
     lqtp_formula = factor.get("local_formula", "") or dsl_text
 
@@ -1219,6 +1657,9 @@ def stage_json_writeback(factor, eval_result, cluster_result):
         "note": "本周新挖增量因子（incremental_intake）",
         "is_unlisted_miner": True,
     }
+    for key in ("source_formula", "source_metadata", "campaign", "intake_since"):
+        if key in factor:
+            entry[key] = factor[key]
     pool.append(entry)
     POOL_JSON.write_text(json.dumps(pool, ensure_ascii=False, indent=1))
 
@@ -1239,6 +1680,16 @@ def update_index(new_entries):
     3) 在 robustness 前插入「本周新挖」区块（列出 26 条）
     """
     html = INDEX_HTML.read_text(encoding="utf-8")
+    new_entries = list({str(entry["page_name"]): entry for entry in new_entries}.values())
+    # Replace the previous weekly section and matching table rows on retries.
+    html = re.sub(r'<section\b[^>]*\bid="new-mining"[^>]*>.*?</section>',
+                  '', html, flags=re.DOTALL)
+    pages_to_replace = {str(entry["page_name"]) for entry in new_entries}
+    def keep_other_row(match):
+        row = match.group(0)
+        links = re.findall(r'href="factors/factor_([^"<>]+)\.html"', row)
+        return '' if pages_to_replace.intersection(links) else row
+    html = re.sub(r'<tr\b[^>]*>.*?</tr>', keep_other_row, html, flags=re.DOTALL)
     pool_pages = {str(record.get("page_name")) for record in load_pool() if record.get("page_name")}
     total = len(pool_pages)
     n_new = len({str(entry["page_name"]) for entry in new_entries})
@@ -1268,7 +1719,9 @@ def update_index(new_entries):
             f'<td><a href="factors/factor_{page}.html"><code>{page}</code></a>{new_tag}{flip_tag}</td>'
             f'<td class="{ic_cls}">{ic:.4f}</td>'
             f'<td>{ir:.3f}</td>'
-            f'<td class="neg">—</td><td>—</td><td>—</td><td>—</td><td>—</td></tr>'
+            + ''.join(f'<td>{_homepage_metric(en.get(key), percent)}</td>' for key, percent in
+                    (("ls_sharpe", False), ("ls_annual", True), ("ls_mdd", True),
+                     ("ls_winrate", True), ("g10_annual", True))) + '</tr>'
         )
     # 插入到 </tbody></table> 之后第一个 </table> 之前? all-factors 表是第一个 table。
     # 直接在 all-factors 的 </table> 后追加新挖区块
@@ -1277,6 +1730,8 @@ def update_index(new_entries):
     # 替换 all-factors 表的结尾：在其 </tbody></table> 前插入新行
     idx_tbl = html.find('id="all-factors"')
     idx_tbody_end = html.find('</tbody>', idx_tbl)
+    if idx_tbl < 0 or idx_tbody_end < 0:
+        raise ValueError("homepage is missing the all-factors table; refusing an invalid insertion")
     html = html[:idx_tbody_end] + '\n' + '\n'.join(rows) + '\n' + html[idx_tbody_end:]
 
     # 3) 「本周新挖」区块（放 robustness 前）
@@ -1288,6 +1743,13 @@ def update_index(new_entries):
     banned = _check_banned(new_section, page="")
     return {"total": total, "n_new": n_new, "rows_added": len(rows),
             "banned_in_new_section": banned}
+
+
+def _homepage_metric(value, percent=False):
+    import math
+    if value is None or not math.isfinite(value):
+        return "—"
+    return f"{value:.1%}" if percent else f"{value:.2f}"
 
 
 def _new_mining_section(new_entries):
@@ -1325,7 +1787,18 @@ def _new_mining_section(new_entries):
 # --------------------------------------------------------------------------
 def main():
     ap = argparse.ArgumentParser()
+    ap.add_argument("--overnight-formulas", type=Path)
+    ap.add_argument("--optimize-queue", type=Path,
+                    help="Resume optimization of passed weekly candidates in this queue directory")
+    ap.add_argument("--overnight-dir", type=Path, default=Path("/tmp/weekly_overnight_20260906"))
+    ap.add_argument("--overnight-retry-name", action="append", default=[],
+                    help="Explicit failed/unavailable candidate to retry; repeatable")
     ap.add_argument("--manifest")
+    ap.add_argument("--discover-root", type=Path,
+                    help="discover new explicit DSL metadata from shared mining outputs")
+    ap.add_argument("--since", help="minimum campaign date YYYYMMDD; defaults to this Monday")
+    ap.add_argument("--candidate-name", action="append", default=[],
+                    help="select a discovered candidate by its source name (repeatable)")
     ap.add_argument("--publish-from-manifest", type=Path,
                     help="render index/detail HTML only from a verified QE report manifest")
     ap.add_argument("--report-dir", type=Path, default=REPORTS_DIR,
@@ -1335,10 +1808,21 @@ def main():
     ap.add_argument("--fe-backend", default="polars_long")
     ap.add_argument("--qe-backend", choices=("auto", "cpu", "cuda", "cuda_strict"), default="auto")
     ap.add_argument("--skip-landing", action="store_true")
+    ap.add_argument("--optimize-only", action="store_true",
+                    help="Run FO/FP optimization on verified landed matrices; do not publish")
     ap.add_argument("--evaluate-only", action="store_true",
                     help="evaluate and write the manifest, but do not mutate pages/pool/state")
     ap.add_argument("--output-manifest", type=Path, default=REPORT_MANIFEST_JSON)
     args = ap.parse_args()
+
+    if args.optimize_queue:
+        run_optimization_queue(args.optimize_queue)
+        return
+
+    if args.overnight_formulas:
+        run_overnight_queue(args.overnight_formulas, args.overnight_dir,
+                            retry_names=args.overnight_retry_name)
+        return
 
     if args.publish_from_manifest is not None:
         result = publish_report_from_manifest(
@@ -1346,13 +1830,31 @@ def main():
         )
         print(f"[publish] {json.dumps(result, ensure_ascii=False)}", flush=True)
         return
-    if not args.manifest:
+    if not args.manifest and not args.discover_root:
         ap.error("--manifest is required unless --publish-from-manifest is used")
 
-    manifest = load_manifest(args.manifest)
+    if args.discover_root:
+        manifest, rejected = discover_price_dsl_candidates(args.discover_root, load_pool(), since=args.since)
+        if args.candidate_name:
+            selected = set(args.candidate_name)
+            manifest = [r for r in manifest if r["page_name"] in selected]
+            if selected.difference(r["page_name"] for r in manifest):
+                ap.error("requested candidates are absent, duplicate, or unsupported")
+        args.output_manifest.parent.mkdir(parents=True, exist_ok=True)
+        (args.output_manifest.parent / "intake_sources.json").write_text(
+            json.dumps(dict(candidates=manifest, rejected=rejected), ensure_ascii=False, indent=2))
+        print(f"[discover DSL] candidates={len(manifest)} rejected={len(rejected)}", flush=True)
+    else:
+        manifest = load_manifest(args.manifest)
     if args.limit:
         manifest = manifest[:args.limit]
 
+    if args.optimize_only:
+        for factor in manifest:
+            print(json.dumps(stage_optimize_lite(factor, None), ensure_ascii=False), flush=True)
+        return
+
+    landing = {}
     if not args.skip_landing:
         landing = land_missing_factors(
             manifest,
@@ -1366,6 +1868,12 @@ def main():
         batch_size=max(1, args.batch_size),
         backend=args.qe_backend,
     )
+    # Keep the actual engine failure in the durable manifest, not only stdout.
+    # Only annotate unavailable evaluations: never replace a successful result
+    # or reinterpret a calculation failure as a screening failure.
+    for name, cause in landing.get("factor_engine_errors", {}).items():
+        if name in batch_evaluation.get("unavailable", {}):
+            batch_evaluation["unavailable"][name] += f"; FactorEngine landing failed: {cause}"
     written_manifest = write_report_manifest(
         manifest, batch_evaluation, target=args.output_manifest,
     )

@@ -1,0 +1,62 @@
+{
+ "schema_version": 1,
+ "price_convention": "adj_vwap_t1_to_t2",
+ "training_window": [
+  "2016-01-04",
+  "2018-06-30"
+ ],
+ "backend_used": [
+  "cuda"
+ ],
+ "backend_fallbacks": {},
+ "factors": {
+  "alphasage_20260901013746_2af1a0fc": {
+   "factor_name": "alphasage_20260901013746_2af1a0fc",
+   "direction": -1,
+   "is_flipped": true,
+   "raw_formula": "ts_skew(AdjClose, 20)",
+   "effective_formula": "neg(ts_skew(AdjClose, 20))",
+   "matrix_path": "/home/sunhaiwei/quant_projects/weekly_backtest_output/factor_matrices_all/alphasage_20260901013746_2af1a0fc.parquet",
+   "metrics": {
+    "rank_ic": 0.019875946080443695,
+    "ic_ir": 0.2519470170469302,
+    "std": 0.07888938838573906,
+    "n_days": 2584,
+    "ls_sharpe": 2.5785372255506283,
+    "ls_annual": 0.2634132426513647,
+    "ls_cumulative": 9.996223572927008,
+    "ls_mdd": 0.1488506677424801,
+    "ls_winrate": 0.5824303405572755,
+    "rank_ic_winrate": 0.6277089783281734,
+    "g10_annual": 0.016012578741780636,
+    "g1_annual": -0.19967445495901381
+   },
+   "artifact": "artifacts/alphasage_20260901013746_2af1a0fc.npz",
+   "artifact_sha256": "39b6c0397bbdd4f3cfe3f62a482c687b4b8a8f2d8b27073c2ac394d302dc2aa3"
+  },
+  "alphasage_20260901013746_403762ce": {
+   "factor_name": "alphasage_20260901013746_403762ce",
+   "direction": -1,
+   "is_flipped": true,
+   "raw_formula": "ts_std(rank(AdjOpen), 20)",
+   "effective_formula": "neg(ts_std(rank(AdjOpen), 20))",
+   "matrix_path": "/home/sunhaiwei/quant_projects/weekly_backtest_output/factor_matrices_all/alphasage_20260901013746_403762ce.parquet",
+   "metrics": {
+    "rank_ic": 0.032857275027970645,
+    "ic_ir": 0.3354146861595749,
+    "std": 0.09796015614038635,
+    "n_days": 2585,
+    "ls_sharpe": 1.2913990233789447,
+    "ls_annual": 0.18107931787082587,
+    "ls_cumulative": 4.513584756261533,
+    "ls_mdd": 0.4958575215442456,
+    "ls_winrate": 0.5164410058027079,
+    "rank_ic_winrate": 0.6297872340425532,
+    "g10_annual": 0.06626046110065653,
+    "g1_annual": -0.1200960267238338
+   },
+   "artifact": "artifacts/alphasage_20260901013746_403762ce.npz",
+   "artifact_sha256": "c7e91800ca4e7802e4303b810125fe56eb627a16fc220ec22533731d0579fd5f"
+  }
+ }
+}

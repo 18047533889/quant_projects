@@ -464,7 +464,19 @@ class CodeToExpr:
                 for _kw in func.value.keywords:
                     if _kw.arg == "window" and isinstance(_kw.value, ast.Constant):
                         n = int(_kw.value.value)
-            return f"o['ts_mean']({series}, {n})"
+            # pandas rolling defaults to a complete finite window. FE ts_mean
+            # declares min_observations=1, so preserve support explicitly.
+            minimum = n
+            for kw in func.value.keywords:
+                if kw.arg == "min_periods":
+                    if not isinstance(kw.value, ast.Constant) or not isinstance(kw.value.value, int):
+                        raise ValueError("rolling mean min_periods must be a literal integer")
+                    minimum = kw.value.value
+            if not 1 <= minimum <= n:
+                raise ValueError("rolling mean requires 1 <= min_periods <= window")
+            finite = f"o['where'](o['is_nan']({series}), 0.0, o['where'](o['is_inf']({series}), 0.0, 1.0))"
+            support = f"o['where'](o['ge'](o['ts_sum']({finite}, {n}), {minimum}), 1.0, 0.0)"
+            return f"o['safe_div_null'](o['ts_mean']({series}, {n}), {support})"
         if isinstance(func, ast.Attribute) and func.attr == "std" \
            and isinstance(func.value, ast.Call) and isinstance(func.value.func, ast.Attribute) \
            and func.value.func.attr == "rolling":
@@ -773,7 +785,7 @@ class CodeToExpr:
                     return f"o['ts_rank']({b2}, {n})"
                 return f"o['rank']({base})"
             if name == "round":
-                return base
+                raise ValueError("round requires verified decimals and tie-breaking semantics")
             if name == "min":
                 return f"o['ts_min']({base}, 20)"
             if name == "idxmax" or name == "idxmin" or name == "astype" or name == "rename":
@@ -1010,6 +1022,57 @@ def transpile_code(code: str) -> str:
     expr = c.convert()
     expr = FE._wrap_bare_ops(expr)
     return expr
+
+
+def native_dsl_from_expression(expression: str) -> str:
+    """Convert legacy factory-call syntax to DSL through AST, without exec."""
+    class NativeCalls(ast.NodeTransformer):
+        def visit_Call(self, node):
+            node = self.generic_visit(node)
+            func = node.func
+            if isinstance(func, ast.Subscript) and isinstance(func.value, ast.Name) and func.value.id == "o":
+                if not isinstance(func.slice, ast.Constant) or not isinstance(func.slice.value, str):
+                    raise ValueError("operator name must be a literal")
+                node.func = ast.Name(id=func.slice.value, ctx=ast.Load())
+            if isinstance(node.func, ast.Name) and node.func.id == "col":
+                if len(node.args) != 1 or node.keywords or not isinstance(node.args[0], ast.Constant):
+                    raise ValueError("column must be a single literal name")
+                name = node.args[0].value
+                if not isinstance(name, str) or not name.isidentifier():
+                    raise ValueError("column is not a valid DSL identifier")
+                return ast.copy_location(ast.Name(id=name, ctx=ast.Load()), node)
+            if not isinstance(node.func, ast.Name) or not node.func.id.isidentifier():
+                raise ValueError("only named DSL operators are supported")
+            return node
+    tree = NativeCalls().visit(ast.parse(expression, mode="eval"))
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.Attribute, ast.Subscript, ast.Lambda, ast.NamedExpr,
+                             ast.ListComp, ast.DictComp, ast.GeneratorExp)):
+            raise ValueError("unsupported executable syntax in generated DSL")
+    return ast.unparse(ast.fix_missing_locations(tree))
+
+
+def transpile_native_dsl(code: str) -> str:
+    """Translate Python source to the native DSL consumed by run_many."""
+    tree = ast.parse(code)
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.If, ast.For, ast.While, ast.Try, ast.With,
+                             ast.AsyncFunctionDef, ast.AugAssign)):
+            raise ValueError("control flow or mutation requires an exact conversion contract")
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
+            method = node.func.attr
+            if method not in {"copy", "rolling", "mean"}:
+                raise ValueError(f"{method} is not yet certified for automatic Python-to-DSL intake")
+            if method in {"round", "idxmax", "idxmin", "astype", "rsub", "ewm"}:
+                raise ValueError(f"{method} requires a verified semantic mapping")
+            if any(k.arg in {"min_periods", "center", "closed", "axis", "fill_value", "ddof"}
+                   for k in node.keywords):
+                raise ValueError(f"{method} keyword semantics are not preserved by the legacy converter")
+            if method == "pct_change" and not any(
+                    k.arg == "fill_method" and isinstance(k.value, ast.Constant) and k.value.value is None
+                    for k in node.keywords):
+                raise ValueError("pct_change requires explicit fill_method=None")
+    return native_dsl_from_expression(transpile_code(code))
 
 
 # =====================================================================

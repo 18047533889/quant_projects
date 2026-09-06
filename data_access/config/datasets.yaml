@@ -102,6 +102,13 @@ ashare_stock_minute:
   glob: "**/*.parquet"
   time_column: QuoteTime
   instrument_column: Symbol
+  # LQTP minute files are daily partitions; prune before resource admission.
+  partitioning:
+    time:
+      source: filename
+      field: QuoteTime
+      frequency: daily
+      pattern: "{date}.parquet"
   # 读路径 bucket 剪枝（物理迁移至 year/month/bucket 后取消下行注释）
   # partition_columns: [year, month, bucket]
   layout_policy:
@@ -113,7 +120,7 @@ ashare_stock_minute:
     max_rows: 20_000_000
   schema:
     TradeDate: date
-    QuoteTime: timestamp
+    QuoteTime: timestamptz
     Symbol: string
     Open: double
     High: double

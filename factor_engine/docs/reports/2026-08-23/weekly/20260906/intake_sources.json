@@ -1,0 +1,188 @@
+{
+  "candidates": [
+    {
+      "page_name": "alphasage_20260901013746_2af1a0fc",
+      "factor_name": "alphasage_20260901013746_2af1a0fc",
+      "fe_formula": "ts_skew(AdjClose, 20)",
+      "source_formula": "ts_skew(close, 20)",
+      "source_metadata": "/srv/quant/research/model/mining/shared/mining_outputs/alphasage/20260901T013746Z/metadata.json",
+      "campaign": "20260901T013746Z",
+      "intake_since": "20260901",
+      "is_unlisted_miner": true,
+      "can_use_factor_engine": true
+    },
+    {
+      "page_name": "alphasage_20260901013746_403762ce",
+      "factor_name": "alphasage_20260901013746_403762ce",
+      "fe_formula": "ts_std(rank(AdjOpen), 20)",
+      "source_formula": "ts_std(rank(open), 20)",
+      "source_metadata": "/srv/quant/research/model/mining/shared/mining_outputs/alphasage/20260901T013746Z/metadata.json",
+      "campaign": "20260901T013746Z",
+      "intake_since": "20260901",
+      "is_unlisted_miner": true,
+      "can_use_factor_engine": true
+    }
+  ],
+  "rejected": [
+    {
+      "factor_name": "alphasage_20260901013746_06f83fea",
+      "reason": "field requires a verified unit mapping: amount",
+      "source": "/srv/quant/research/model/mining/shared/mining_outputs/alphasage/20260901T013746Z/metadata.json"
+    },
+    {
+      "factor_name": "alphasage_20260901013746_0d402113",
+      "reason": "field requires a verified unit mapping: ret",
+      "source": "/srv/quant/research/model/mining/shared/mining_outputs/alphasage/20260901T013746Z/metadata.json"
+    },
+    {
+      "factor_name": "alphasage_20260901013746_3c9d1371",
+      "reason": "field requires a verified unit mapping: ret",
+      "source": "/srv/quant/research/model/mining/shared/mining_outputs/alphasage/20260901T013746Z/metadata.json"
+    },
+    {
+      "factor_name": "alphasage_20260901013746_4764bdfc",
+      "reason": "field requires a verified unit mapping: amount",
+      "source": "/srv/quant/research/model/mining/shared/mining_outputs/alphasage/20260901T013746Z/metadata.json"
+    },
+    {
+      "factor_name": "alphasage_20260901013746_74a7d2da",
+      "reason": "field requires a verified unit mapping: ret",
+      "source": "/srv/quant/research/model/mining/shared/mining_outputs/alphasage/20260901T013746Z/metadata.json"
+    },
+    {
+      "factor_name": "alphasage_20260901013746_a601c040",
+      "reason": "field requires a verified unit mapping: ret",
+      "source": "/srv/quant/research/model/mining/shared/mining_outputs/alphasage/20260901T013746Z/metadata.json"
+    },
+    {
+      "factor_name": "alphasage_20260901013746_a692375a",
+      "reason": "field requires a verified unit mapping: amount",
+      "source": "/srv/quant/research/model/mining/shared/mining_outputs/alphasage/20260901T013746Z/metadata.json"
+    },
+    {
+      "factor_name": "alphasage_20260901013746_b39acd94",
+      "reason": "field requires a verified unit mapping: amount",
+      "source": "/srv/quant/research/model/mining/shared/mining_outputs/alphasage/20260901T013746Z/metadata.json"
+    },
+    {
+      "factor_name": "alphasage_20260901013746_cfec0751",
+      "reason": "field requires a verified unit mapping: amount",
+      "source": "/srv/quant/research/model/mining/shared/mining_outputs/alphasage/20260901T013746Z/metadata.json"
+    },
+    {
+      "factor_name": "alphasage_20260901013800_05adbfcd",
+      "reason": "field requires a verified unit mapping: ret",
+      "source": "/srv/quant/research/model/mining/shared/mining_outputs/alphasage/20260901T013800Z/metadata.json"
+    },
+    {
+      "factor_name": "alphasage_20260901013800_1de67761",
+      "reason": "field requires a verified unit mapping: volume",
+      "source": "/srv/quant/research/model/mining/shared/mining_outputs/alphasage/20260901T013800Z/metadata.json"
+    },
+    {
+      "factor_name": "alphasage_20260901013800_507da2e8",
+      "reason": "field requires a verified unit mapping: ret",
+      "source": "/srv/quant/research/model/mining/shared/mining_outputs/alphasage/20260901T013800Z/metadata.json"
+    },
+    {
+      "factor_name": "alphasage_20260901013800_545a363a",
+      "reason": "field requires a verified unit mapping: amount",
+      "source": "/srv/quant/research/model/mining/shared/mining_outputs/alphasage/20260901T013800Z/metadata.json"
+    },
+    {
+      "factor_name": "alphasage_20260901013800_55ecae2a",
+      "reason": "field requires a verified unit mapping: ret",
+      "source": "/srv/quant/research/model/mining/shared/mining_outputs/alphasage/20260901T013800Z/metadata.json"
+    },
+    {
+      "factor_name": "alphasage_20260901013800_7610c0ba",
+      "reason": "field requires a verified unit mapping: volume",
+      "source": "/srv/quant/research/model/mining/shared/mining_outputs/alphasage/20260901T013800Z/metadata.json"
+    },
+    {
+      "factor_name": "alphasage_20260901013800_975ceadb",
+      "reason": "field requires a verified unit mapping: ret",
+      "source": "/srv/quant/research/model/mining/shared/mining_outputs/alphasage/20260901T013800Z/metadata.json"
+    },
+    {
+      "factor_name": "alphasage_20260901013800_a5a25164",
+      "reason": "field requires a verified unit mapping: ret",
+      "source": "/srv/quant/research/model/mining/shared/mining_outputs/alphasage/20260901T013800Z/metadata.json"
+    },
+    {
+      "factor_name": "alphasage_20260901013800_bea2333a",
+      "reason": "field requires a verified unit mapping: volume",
+      "source": "/srv/quant/research/model/mining/shared/mining_outputs/alphasage/20260901T013800Z/metadata.json"
+    },
+    {
+      "factor_name": "alphasage_20260901013800_e9b5cdbf",
+      "reason": "field requires a verified unit mapping: volume",
+      "source": "/srv/quant/research/model/mining/shared/mining_outputs/alphasage/20260901T013800Z/metadata.json"
+    },
+    {
+      "factor_name": "alphasage_20260901013800_fce1fffe",
+      "reason": "field requires a verified unit mapping: volume",
+      "source": "/srv/quant/research/model/mining/shared/mining_outputs/alphasage/20260901T013800Z/metadata.json"
+    },
+    {
+      "factor_name": "alphasage_20260902195206_1b61f53a",
+      "reason": "field requires a verified unit mapping: ret",
+      "source": "/srv/quant/research/model/mining/shared/mining_outputs/alphasage/20260902T195206Z/metadata.json"
+    },
+    {
+      "factor_name": "alphasage_20260902195206_81add1f0",
+      "reason": "field requires a verified unit mapping: ret",
+      "source": "/srv/quant/research/model/mining/shared/mining_outputs/alphasage/20260902T195206Z/metadata.json"
+    },
+    {
+      "factor_name": "alphasage_20260902195206_83510220",
+      "reason": "field requires a verified unit mapping: amount",
+      "source": "/srv/quant/research/model/mining/shared/mining_outputs/alphasage/20260902T195206Z/metadata.json"
+    },
+    {
+      "factor_name": "alphasage_20260902195206_cf9443d2",
+      "reason": "field requires a verified unit mapping: ret",
+      "source": "/srv/quant/research/model/mining/shared/mining_outputs/alphasage/20260902T195206Z/metadata.json"
+    },
+    {
+      "factor_name": "alphasage_20260902195206_fec4121e",
+      "reason": "field requires a verified unit mapping: ret",
+      "source": "/srv/quant/research/model/mining/shared/mining_outputs/alphasage/20260902T195206Z/metadata.json"
+    },
+    {
+      "factor_name": "alphasage_20260902195300_5d46cd6a",
+      "reason": "field requires a verified unit mapping: ret",
+      "source": "/srv/quant/research/model/mining/shared/mining_outputs/alphasage/20260902T195300Z/metadata.json"
+    },
+    {
+      "factor_name": "alphasage_20260902195300_792beb68",
+      "reason": "field requires a verified unit mapping: volume",
+      "source": "/srv/quant/research/model/mining/shared/mining_outputs/alphasage/20260902T195300Z/metadata.json"
+    },
+    {
+      "factor_name": "ret_range_cov_20d",
+      "reason": "invalid syntax (<unknown>, line 1)",
+      "source": "/srv/quant/research/model/mining/shared/mining_outputs/factorminer/20260906_r4_verify_dedup/metadata_20260904T055836Z.json"
+    },
+    {
+      "factor_name": "return_range_10d",
+      "reason": "invalid syntax (<unknown>, line 1)",
+      "source": "/srv/quant/research/model/mining/shared/mining_outputs/factorminer/20260906_r4_verify_dedup/metadata_20260904T055836Z.json"
+    },
+    {
+      "factor_name": "return_volume_confirmation",
+      "reason": "invalid syntax (<unknown>, line 1)",
+      "source": "/srv/quant/research/model/mining/shared/mining_outputs/factorminer/20260906_r4_verify_dedup/metadata_20260904T055836Z.json"
+    },
+    {
+      "factor_name": "range_vol_decay_shock",
+      "reason": "invalid syntax (<unknown>, line 1)",
+      "source": "/srv/quant/research/model/mining/shared/mining_outputs/factorminer/20260906_r4_verify_dedup/metadata_20260904T055836Z.json"
+    },
+    {
+      "factor_name": "asymmetric_return_decay",
+      "reason": "invalid syntax (<unknown>, line 1)",
+      "source": "/srv/quant/research/model/mining/shared/mining_outputs/factorminer/20260906_r4_verify_dedup/metadata_20260904T055836Z.json"
+    }
+  ]
+}
