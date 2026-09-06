@@ -32,7 +32,41 @@ from zoneinfo import ZoneInfo
 from uuid import uuid4
 
 PIPELINE_SOURCE_SHA256 = hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
-EVALUATION_CONVENTION_VERSION = "equal-amount-gross100-cagr-absorbing-v2-20260907"
+EVALUATION_CONVENTION_VERSION = "equal-amount-gross100-actual-volume-v3-20260907"
+
+
+def canonical_actual_volume_dsl(formula):
+    """Explicit user contract: adj-table prices, actual Volume, no Factor usage."""
+    import ast
+    def column(node):
+        if isinstance(node, ast.Name):
+            return node.id
+        if (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+                and node.func.id == "col" and len(node.args) == 1
+                and isinstance(node.args[0], ast.Constant)):
+            return node.args[0].value
+        return None
+    def volume():
+        return ast.Call(func=ast.Name(id="col", ctx=ast.Load()), args=[ast.Constant("Volume")], keywords=[])
+    class Normalize(ast.NodeTransformer):
+        def visit_BinOp(self, node):
+            if isinstance(node.op, ast.Div) and column(node.left) in {"Volume", "volume"} and column(node.right) == "Factor":
+                return volume()
+            return self.generic_visit(node)
+        def visit_Call(self, node):
+            if (isinstance(node.func, ast.Name) and node.func.id in {"safe_div", "safe_div_null", "divide"}
+                    and len(node.args) == 2 and column(node.args[0]) in {"Volume", "volume"}
+                    and column(node.args[1]) == "Factor"):
+                return volume()
+            if column(node) in {"volume", "Volume"}:
+                return volume()
+            return self.generic_visit(node)
+        def visit_Name(self, node):
+            return volume() if node.id in {"volume", "Volume"} else node
+    tree = Normalize().visit(ast.parse(formula, mode="eval"))
+    if any(column(n) == "Factor" for n in ast.walk(tree)):
+        raise ValueError("Factor forbidden: explicit source-based expansion required; do not erase arbitrary Factor arithmetic")
+    return ast.unparse(ast.fix_missing_locations(tree))
 
 
 def invalidate_old_evaluations(state):
@@ -276,7 +310,7 @@ def requested_dsl_records(path):
                     if node.id == "ret":
                         return ast.parse("subtract(safe_div_null(AdjClose, AdjPreClose), 1.0)", mode="eval").body
                     if node.id == "volume":
-                        return ast.parse("safe_div_null(Volume, Factor)", mode="eval").body
+                        return ast.parse("col('Volume')", mode="eval").body
                     if node.id in prices:
                         return ast.copy_location(ast.Name(id=prices[node.id], ctx=ast.Load()), node)
                     if node.id not in physical:
@@ -767,6 +801,7 @@ def factor_from_record(record):
                         args=[ast.Constant(value=node.id)], keywords=[]), node)
                 return node
 
+        formula = canonical_actual_volume_dsl(formula)
         tree = ast.parse(formula, mode="eval")
         bound = PhysicalInputs().visit(tree)
         formula = ast.unparse(ast.fix_missing_locations(bound))
@@ -776,6 +811,8 @@ def factor_from_record(record):
         return parse_factor(formula, name=name)
     if not isinstance(node, dict) or "kind" not in node:
         return parse_factor(formula, name=name)
+    if '"Factor"' in formula:
+        raise ValueError("Factor forbidden in JSON DSL; convert to certified actual-volume expression")
 
     from factor_engine.api.cleaned_ops import make_cleaned_call_factory
     from factor_engine.api.columns import col
@@ -787,7 +824,7 @@ def factor_from_record(record):
     def build(current):
         kind = current.get("kind")
         if kind == "column":
-            return col(str(current["name"]))
+            return col("Volume" if str(current["name"]) in {"Volume", "volume"} else str(current["name"]))
         if kind == "literal":
             return current.get("value")
         if kind != "call":
@@ -1013,8 +1050,15 @@ def landing_failure_reason(exc):
 
 def land_missing_factors(factors, *, batch_size=8, backend_name="polars_long", force=False):
     """Land missing executable DSL factors in bounded run_many waves."""
+    receipts = ROOT / "weekly_backtest_output" / "actual_volume_landing_receipts"
+    def needs_refresh(record):
+        formula = str(record.get("fe_formula", ""))
+        if not re.search(r"\b(?:Volume|volume|Factor)\b", formula):
+            return False
+        receipt = receipts / (hashlib.sha256(record["page_name"].encode()).hexdigest() + ".json")
+        return not receipt.exists() or json.loads(receipt.read_text()).get("formula") != formula
     missing = [record for record in factors
-               if force or matrix_path(record["page_name"]) is None
+               if force or needs_refresh(record) or matrix_path(record["page_name"]) is None
                or not matrix_source(record["page_name"]).is_full_window]
     # Capability metadata is advisory and is absent on older/new-mining
     # manifests.  The formula itself is authoritative: always try FE first.
@@ -1028,6 +1072,13 @@ def land_missing_factors(factors, *, batch_size=8, backend_name="polars_long", f
         try:
             result = land_factor_batch_windowed(wave, backend_name=backend_name)
             landed.extend(result["landed"])
+            receipts.mkdir(parents=True, exist_ok=True)
+            for record in wave:
+                if record["page_name"] in result["landed"]:
+                    receipt = receipts / (hashlib.sha256(record["page_name"].encode()).hexdigest() + ".json")
+                    temporary = receipt.with_suffix(".tmp")
+                    temporary.write_text(json.dumps({"formula": record["fe_formula"], "version": EVALUATION_CONVENTION_VERSION}))
+                    os.replace(temporary, receipt)
         except Exception as wave_error:
             if len(wave) == 1:
                 errors[wave[0]["page_name"]] = landing_failure_reason(wave_error)
@@ -1379,7 +1430,7 @@ def _write_manifest_index(report_dir, factors):
 
 def html_eligible(entry):
     # Legacy intermediate aliases have conflicting definitions and no certified expansion.
-    if re.search(r"\b(EWMA_up_vol|EWMA_down_vol)\b", entry.get("raw_formula", "")):
+    if re.search(r"\b(EWMA_up_vol|EWMA_down_vol|Factor)\b", entry.get("raw_formula", "")):
         return False
     return entry.get("status", "available") == "available" and passes_weekly_gate(entry.get("metrics", {}))
 

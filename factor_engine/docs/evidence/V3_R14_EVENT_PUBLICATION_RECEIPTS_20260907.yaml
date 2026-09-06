@@ -1,0 +1,44 @@
+schema_version: "1"
+change_id: V3-R14-EVENT-PUBLICATION-RECEIPTS
+git_sha: 96f2e625e9bee772e4ce7f52db7b116bce72c7df
+timestamp: "2026-09-07T03:55:00+08:00"
+modified_paths:
+  - factor_engine/runtime/incremental_scheduler.py
+  - factor_engine/storage/materialize/materializer.py
+  - factor_engine/tests/runtime/test_r14_event_atomic_publish_2026_08.py
+  - factor_engine/tests/runtime/test_r14_event_fencing_2026_08.py
+  - factor_engine/tests/runtime/test_r14_event_rebuild_scope_2026_08.py
+  - factor_engine/tests/runtime/test_staging_and_prefetch.py
+  - factor_engine/tests/runtime/test_run_pipeline_reconcile.py
+  - tests/runtime/test_run_pipeline_reconcile.py
+  - factor_engine/docs/evidence/V3_R14_EVENT_PUBLICATION_RECEIPTS_20260907.yaml
+tests:
+  - command: ".venv/bin/python -m pytest -q --import-mode=importlib factor_engine/tests/runtime/test_r14_event_atomic_publish_2026_08.py factor_engine/tests/runtime/test_run_pipeline_reconcile.py tests/runtime/test_run_pipeline_reconcile.py"
+    log: /tmp/v3-r14-cli-receipt-20260907.log
+    result: PASS
+    summary: "37 passed, 2 existing backend-classification warnings"
+  - command: ".venv/bin/python -m pytest -q --import-mode=importlib factor_engine/tests/runtime/test_staging_and_prefetch.py::test_real_staging_materialization_binds_and_publishes_exact_identity factor_engine/tests/runtime/test_r14_event_atomic_publish_2026_08.py"
+    result: PASS
+    summary: "14 passed, 2 existing backend-classification warnings"
+  - command: ".venv/bin/python -m pytest -q --import-mode=importlib factor_engine/tests/runtime/test_staging_and_prefetch.py factor_engine/tests/runtime/test_r14_event_atomic_publish_2026_08.py factor_engine/tests/runtime/test_r14_event_fencing_2026_08.py factor_engine/tests/runtime/test_r14_event_rebuild_scope_2026_08.py factor_engine/tests/runtime/test_run_pipeline_reconcile.py tests/runtime/test_run_pipeline_reconcile.py factor_engine/tests/runtime/test_r10_factor_identity.py factor_engine/tests/storage/test_enterprise_materialize_paths.py"
+    log: /tmp/v3-r14-real-staging-final-20260907.log
+    result: PASS
+    summary: "93 passed, 2 existing backend-classification warnings"
+verified_contracts:
+  - "Production event planning uses an explicitly registered market calendar; unavailable calendars remain fail-closed."
+  - "Caller market is only a fallback identity context; an explicit factor/caller market conflict is rejected."
+  - "Local default staging holds the DataAccess factor-root mutation lock across atomic upsert, full parquet inventory hashing, and staging-identity write."
+  - "The staged identity binds non-empty generation_id, manifest_digest, run_id, exact factor inventory, and frequency."
+  - "The event scheduler projects the real nested materialization.staging.identity receipt and forwards it to publication."
+  - "Published status is appended only after exact factor_id, approved=true, generation_id, manifest_digest, and run_id completion readback."
+  - "None, empty, stale, wrong-factor, unapproved, and missing-staged-identity returns remain rejected and uncommitted."
+  - "Production event materialization selects the canonical production precision default (value_dtype=None -> float64), matching the published double schema without a publish-time cast."
+  - "The real temp-only local path materializes staging parquet, writes and rereads its identity, performs real DataAccess publication, and reads back the exact timestamp/asset/value."
+  - "coverage_complete=false does not advance the authoritative published watermark."
+  - "CLI reconciliation is invoked as factor_engine.run_pipeline and passes from repository-root and package-directory working directories."
+limitations:
+  - "Temporary local datasets only; no production data, production path, network publication, commit, or push was performed by this subtask."
+  - "Non-LOCAL, custom-dataset, or capability-incomplete staging may retain its historical staging-only write behavior but emits no publication identity; the event scheduler therefore refuses publication."
+  - "COS/URI publication remains unsupported because local mutation-lock, expected-inventory, and CAS authority are absent."
+  - "This receipt proves local staged factor-lake publication completion only. It does not prove generation/content-scoped ClickHouse durability; dual-write repair remains SUBMITTED_UNVERIFIED without a stronger durable receipt."
+  - "coverage_complete=false intentionally leaves watermark advancement unavailable; typed axis, universe, calendar, and coverage proof are required before advancement."

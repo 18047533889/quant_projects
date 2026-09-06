@@ -2944,7 +2944,7 @@
   },
   "screening": "passed",
   "evaluation_version": "equal-amount-gross100-cagr-absorbing-v2-20260907",
-  "optimization_sha256": "73c05519bb9842942262080370263c7b69b873a1093db5ca3e11c46d5c08a200"
+  "optimization_sha256": "6bebbea936321ff9ccfd8507ce9fb69d17e5d45f0458b421729126faad0b741f"
  },
  "weekly_c83002810f9e5643": {
   "entry": {
@@ -3014,7 +3014,7 @@
   },
   "screening": "passed",
   "evaluation_version": "equal-amount-gross100-cagr-absorbing-v2-20260907",
-  "optimization_sha256": "44eb09d8e86d65cf96c518998fdc0d0d51c0d4db73c1d430e07f3189a6f38f96"
+  "optimization_sha256": "3d19404cfdca9ac41171d17410de78c8a533471d1f9413d70849851149346df5"
  },
  "weekly_b402738555916aa3": {
   "entry": {
@@ -4397,19 +4397,19 @@
     "ls_winrate": 0.5808983863933711,
     "rank_ic_winrate": 0.5442940038684719,
     "g10_annual": 0.3582491437068109,
-    "g1_annual": 0.004736739007862479
+    "g1_annual": 0.004736739007862471
    },
-   "artifact": "/tmp/weekly_overnight_20260906/wave_87590a4278ab8d84/artifacts/weekly_e477657aa3c989a1.npz",
-   "artifact_sha256": "b7125630879491eff0632cf52acef8e131e8620629f81eb8d4694293a066c922"
+   "artifact": "/tmp/weekly_overnight_20260906/wave_0b8e2715f04ad2e1/artifacts/weekly_e477657aa3c989a1.npz",
+   "artifact_sha256": "1ecc9615bf82bf5c0f1230ba09114204efbd708e15252d7c828355f4b611e2b1"
   },
   "provenance": {
-   "run_id": "a401072bd58c459e8a6d95fc4449ffa3",
-   "started_at": "2026-09-07T01:33:44+08:00",
-   "pipeline_source_sha256": "76ec1e87267c96ed6a73d5f8cbf9f1a23e36a2692fea4dc081ed9fe492d43c74",
-   "completed_at": "2026-09-07T01:34:10+08:00"
+   "run_id": "a4a4b804d99f432bbdbf91def5b48a58",
+   "started_at": "2026-09-07T03:50:31+08:00",
+   "pipeline_source_sha256": "d832e616e6862e5a66b3a8a8d190ae43b208a108e116a6a2b9fc01fc01ddf8ae",
+   "completed_at": "2026-09-07T03:50:57+08:00"
   },
   "screening": "passed",
-  "evaluation_version": "equal-amount-gross100-cagr-absorbing-v2-20260907",
+  "evaluation_version": "equal-amount-gross100-actual-volume-v3-20260907",
   "optimization_sha256": "e0796835f5007dfe5d3894acf9afeeefffbc640ff014d515258c16136b377744"
  },
  "weekly_db5616cd85a477b3": {
@@ -4460,17 +4460,17 @@
     "g10_annual": 0.07759379228765573,
     "g1_annual": -0.09464441350941245
    },
-   "artifact": "/tmp/weekly_overnight_20260906/wave_87590a4278ab8d84/artifacts/weekly_44735edcd6cc5087.npz",
-   "artifact_sha256": "1914f91018a4863bcffd2c37d7552bcc62917044009f59a26b8330d97bf1c9f0"
+   "artifact": "/tmp/weekly_overnight_20260906/wave_0b8e2715f04ad2e1/artifacts/weekly_44735edcd6cc5087.npz",
+   "artifact_sha256": "f20764f198af28bfe98001312c431a92a45f5c82ace56987517b06e36e79fd07"
   },
   "provenance": {
-   "run_id": "a401072bd58c459e8a6d95fc4449ffa3",
-   "started_at": "2026-09-07T01:33:44+08:00",
-   "pipeline_source_sha256": "76ec1e87267c96ed6a73d5f8cbf9f1a23e36a2692fea4dc081ed9fe492d43c74",
-   "completed_at": "2026-09-07T01:34:10+08:00"
+   "run_id": "a4a4b804d99f432bbdbf91def5b48a58",
+   "started_at": "2026-09-07T03:50:31+08:00",
+   "pipeline_source_sha256": "d832e616e6862e5a66b3a8a8d190ae43b208a108e116a6a2b9fc01fc01ddf8ae",
+   "completed_at": "2026-09-07T03:50:57+08:00"
   },
   "screening": "passed",
-  "evaluation_version": "equal-amount-gross100-cagr-absorbing-v2-20260907",
+  "evaluation_version": "equal-amount-gross100-actual-volume-v3-20260907",
   "optimization_sha256": "9b4d6e73eb696ef7aada6a17b99fa0467cd909cf8ff1fc9dfd5391b7b338d7d9"
  },
  "weekly_e97950907c29ee8a": {

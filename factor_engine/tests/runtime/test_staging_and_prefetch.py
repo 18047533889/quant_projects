@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+import dataclasses
+import json
 from pathlib import Path
 
 import pandas as pd
@@ -16,6 +18,8 @@ def test_real_staging_materialization_binds_and_publishes_exact_identity(
 ):
     """Real local staging bytes carry the receipt consumed by publication."""
     from data_access import get_store, reset_store
+    from data_access.registry.loader import DatasetRegistry
+    from data_access.store import DataAccessStore, get_shared_engine
     from factor_engine.storage.materialize.lake_publish import publish_factor_lake
     from factor_engine.storage.materializer import ParquetMaterializer
 
@@ -26,6 +30,39 @@ def test_real_staging_materialization_binds_and_publishes_exact_identity(
     monkeypatch.setenv("QUANT_RUN_NAMESPACE", "real_staging_receipt")
     reset_store()
     try:
+        configured = get_store()
+        staging_ds = dataclasses.replace(
+            configured.get_dataset("factor_lake_staging"),
+            root_template=str(
+                tmp_path
+                / "data_access_workspace"
+                / "staging"
+                / "${RUN_NAMESPACE}"
+                / "factor_lake"
+                / "factors"
+                / "{factor_id}"
+            ),
+            authorized_root=tmp_path / "data_access_workspace" / "staging",
+        )
+        published_ds = dataclasses.replace(
+            configured.get_dataset("factor_lake"),
+            root_template=str(
+                tmp_path
+                / "data_access_workspace"
+                / "published"
+                / "factor_lake"
+                / "factors"
+                / "{factor_id}"
+            ),
+            authorized_root=tmp_path / "data_access_workspace" / "published",
+        )
+        store = DataAccessStore(
+            registry=DatasetRegistry(
+                {"factor_lake_staging": staging_ds, "factor_lake": published_ds}
+            ),
+            engine=get_shared_engine(),
+        )
+        monkeypatch.setattr("data_access.get_store", lambda: store)
         idx = pd.MultiIndex.from_product(
             [pd.to_datetime(["2026-08-07"]), ["A"]],
             names=["timestamp", "instrument"],
@@ -39,25 +76,20 @@ def test_real_staging_materialization_binds_and_publishes_exact_identity(
             write_target="staging",
             defer_watermark=True,
             run_lineage={"run_id": "receipt-run"},
+            value_dtype="float64",
         )
         identity = summary["staging"]["identity"]
         assert identity["run_id"] == "receipt-run"
         assert identity["inventory"]
         identity_path = (
-            get_store()
-            .resolve_dataset_path("factor_lake_staging", factor_id="receipt_factor")
+                store.resolve_dataset_path(
+                    "factor_lake_staging", factor_id="receipt_factor"
+                )
             / ".fe_staging_identity.json"
         )
         assert identity_path.is_file()
+        assert json.loads(identity_path.read_text()) == identity
 
-        # The packaged published target is an absolute production path; keep this
-        # test temp-only while exercising the real publisher's identity checks.
-        store = get_store()
-        monkeypatch.setattr(
-            store,
-            "publish_from_staging",
-            lambda *args, **kwargs: {"rows": 1},
-        )
         published = publish_factor_lake(
             factor_id="receipt_factor",
             lake_root=tmp_path / "lake",
@@ -74,6 +106,18 @@ def test_real_staging_materialization_binds_and_publishes_exact_identity(
         assert published["generation_id"] == identity["generation_id"]
         assert published["manifest_digest"] == identity["manifest_digest"]
         assert published["run_id"] == identity["run_id"]
+        assert published["watermark"] is None
+        assert materializer.catalog.get_watermark("receipt_factor") is None
+        published_root = store.resolve_dataset_path(
+            "factor_lake", factor_id="receipt_factor"
+        )
+        frame = pd.concat(
+            [pd.read_parquet(path) for path in published_root.rglob("*.parquet")],
+            ignore_index=True,
+        )
+        assert frame[["datetime", "asset", "value"]].to_dict("records") == [
+            {"datetime": pd.Timestamp("2026-08-07"), "asset": "A", "value": 1.0}
+        ]
     finally:
         reset_store()
 

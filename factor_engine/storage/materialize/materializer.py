@@ -1927,10 +1927,10 @@ class ParquetMaterializer:
         返回:
             dict
         """
-        from factor_engine.storage.write_targets import resolve_write_target
-
         policy = policy or PartitionPolicy.from_config()
         out = attach_partition_columns(df, policy)
+        from factor_engine.storage.write_targets import resolve_write_target
+
         target = resolve_write_target("staging", staging_dataset=self._staging_dataset)
         from data_access import get_store
         from data_access.core.storage import StorageBackend, resolve_storage_for_dataset
@@ -1947,7 +1947,10 @@ class ParquetMaterializer:
         )
 
         store = get_store()
-        if not callable(getattr(store, "get_dataset", None)):
+        if (
+            self._staging_dataset != "factor_lake_staging"
+            or not callable(getattr(store, "get_dataset", None))
+        ):
             return target.write_factor_frame(
                 factor_id,
                 out,
@@ -1960,13 +1963,17 @@ class ParquetMaterializer:
             backend = StorageBackend(storage.type)
         except ValueError:
             backend = None
-        if backend is not StorageBackend.LOCAL or self._staging_dataset != "factor_lake_staging":
+        if backend is not StorageBackend.LOCAL:
             return target.write_factor_frame(
                 factor_id,
                 out,
                 upsert_on=["datetime", "asset"],
                 partition_by=list(policy.columns),
             )
+        if not isinstance(run_id, str) or not run_id.strip():
+            raise ValueError("local staging publication requires a non-empty run_id")
+        if not isinstance(frequency, str) or not frequency.strip():
+            raise ValueError("local staging publication requires a non-empty frequency")
         staging_dir = store.resolve_dataset_path(
             self._staging_dataset, factor_id=factor_id
         )
@@ -2016,7 +2023,7 @@ class ParquetMaterializer:
                 manifest_digest=inventory_digest,
                 idempotency_key=run_id,
             ).validate()
-            if get_store().resolve_dataset_path(
+            if store.resolve_dataset_path(
                 "factor_lake_staging", factor_id=factor_id
             ).resolve() != staging_dir.resolve():
                 raise ValueError("staging identity path does not match the locked factor root")

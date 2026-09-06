@@ -171,17 +171,20 @@ def _setup_lake(tmp_path, *, fail_stage_on: str | None = None) -> tuple:
                 "production 事件必须写 staging，收到 write_target="
                 f"{kw.get('write_target')!r}"
             )
+            assert kw.get("value_dtype") is None
             if control["fail_stage_on"] == factor_id:
                 raise RuntimeError(f"stage failed for {factor_id}")
             return {
                 "materialization": {
                     "factor_id": factor_id,
                     "rows_written": 1,
-                    "staging": {"dataset": "factor_lake_staging"},
-                    "identity": {
-                        "generation_id": f"gen-{factor_id}",
-                        "manifest_digest": f"digest-{factor_id}",
-                        "run_id": f"run-{factor_id}",
+                    "staging": {
+                        "dataset": "factor_lake_staging",
+                        "identity": {
+                            "generation_id": f"gen-{factor_id}",
+                            "manifest_digest": f"digest-{factor_id}",
+                            "run_id": f"run-{factor_id}",
+                        },
                     },
                 }
             }
@@ -434,7 +437,7 @@ def test_r14_missing_staged_identity_blocks_publish_call(tmp_path, monkeypatch):
 
         def _materialize(*call_args, **call_kwargs):
             result = original(*call_args, **call_kwargs)
-            result["materialization"].pop("identity")
+            result["materialization"]["staging"].pop("identity")
             return result
 
         engine.materialize_incremental.side_effect = _materialize

@@ -1,6 +1,8 @@
 schema_version: "1"
 change_id: V3-ROOT-INTEGRATION
 git_sha: 2db45f4e446309003381a51a5e03071d31859502
+current_head: 96f2e625e9bee772e4ce7f52db7b116bce72c7df
+head_change_note: external operation committed shared worktree during integration; no commit/push/reset by this agent team; earlier tests bind pre-commit working files, final builds bind current source bytes
 timestamp: "2026-09-07"
 files:
   - factor_engine/service/app.py
@@ -15,7 +17,15 @@ files:
   - .github/workflows/wheel-matrix.yml
   - scripts/verify_wheel_payload.py
   - data_access/MANIFEST.in
+  - factor_engine/storage/materialize/write_targets.py
+  - factor_engine/tests/storage/test_v3_write_target_policy.py
 tests:
+  local_write_authority_fail_closed:
+    result: PASS
+    passed: 4
+    reproduction: /tmp/v3-write-target-before.log
+    artifact: /tmp/v3-write-target-policy.xml
+    oracle: authority ImportError/RuntimeError propagate before frame access; production refuses; research empty write unchanged
   service_related:
     result: PASS
     count: 78
@@ -40,15 +50,68 @@ tests:
     command: "cd factor_engine && PYTHONPATH=/home/sunhaiwei/quant_projects:/home/sunhaiwei/quant_projects/factor_engine POLARS_MAX_THREADS=2 OPENBLAS_NUM_THREADS=1 ../.venv/bin/python /tmp/fe-v3-verify-route.py"
     oracle: candidate backend and certificate agree; unreadable source rejected; source-free literals accepted
   final_installed_wheel:
-    result: NOT_RUN
-    note: diagnostic source-exact build and isolated smoke passed before later edits; final freeze pending
+    result: PASS
+    artifact_directory: /tmp/fe-v3-final-wheels-DPCbe0
+    factor_engine_python_files: 1082
+    factor_engine_resources: 186
+    factor_engine_wheel_sha256: e39f79bae93da5bfebaf115896a3c33bb9bc032ea80c26d1f2d5591f8a3381c3
+    data_access_python_files: 199
+    data_access_resources: 3
+    data_access_wheel_sha256: 057ceb5804e4c8ab8028ceec823031c14c1298200defd437642d73ad21dfbb9e
+    note: actual sdist-to-wheel build; exact declared files/resources/source bytes; isolated installation outside checkout with python -I; real single/batch/stream numeric oracle, resource profiles, catalog1756, service construction and CLI help; not a production deployment
+  final_runtime:
+    result: PASS_WITH_SKIP
+    passed: 879
+    skipped: 1
+    failed: 0
+    warnings: 46
+    artifact: /tmp/v3-runtime-final.xml
+  full_package_tree_compile:
+    result: PASS
+    artifact: /tmp/v3-compileall-final-stable.log
+    note: rerun after build finished; transient concurrent sdist removal caused earlier scan failure; full module import NOT_RUN
+  final_publication_related:
+    result: PASS
+    passed: 93
+    artifact: /tmp/v3-r14-real-staging-final-20260907.log
+    note: real local materializer-to-publication numeric readback; scheduler forwarding separately verified; not one fully real event-engine-publication run
+  backend_parity_frozen:
+    result: PASS_WITH_SKIPS
+    passed: 1024
+    skipped: 340
+    failed: 0
+    artifact: /tmp/v3-backend-parity-frozen.xml
+  audit_api_integration:
+    result: PASS
+    passed: 149
+    artifact: /tmp/v3-integration-accepted.xml
+  proof_tooling:
+    result: PASS
+    passed: 12
+    artifact: /tmp/v3-audit-tools-accepted.xml
+    note: control/syntax/import/help tests only; real evidence generators NOT_RUN
+  synthetic_100k_disk_qe_cuda:
+    result: PASS
+    factor_count: 100000
+    timestamps: 8
+    assets: 32
+    compute_seconds: 1168.7978822420118
+    compute_peak_rss_bytes: 662872064
+    artifact: /tmp/fe-v3-stream-gpu-100k-20260907/report.json
+    note: synthetic addition research workload; other audit files changed during run; not a final whole-source performance freeze
 review:
   reviewer: v3_catalog_sol
-  scopes: [service_binding, source_filter_and_certificate, wheel_payload_verifier, intraday_limit_identity, systematic_input_equality]
+  scopes: [service_binding, source_filter_and_certificate, wheel_payload_verifier, intraday_limit_identity, systematic_input_equality, local_write_policy]
   result: scoped_review_completed
+  publication_reviewer: v3_numerics_sol
+  catalog_reviewer: root
 limitations:
   - Counts overlap; do not sum as distinct operator coverage.
-  - Full backend parity still has active failures under remediation; no all-pass claim.
+  - Backend parity has 340 skips, not counted as passed operators or production certification.
+  - Runtime has one obsolete-contract module skip; all-operator backend parity has 340 skips, not certification.
+  - Local materializer/publication and event forwarding are compositionally verified; one fully real production DataEvent-engine-publication workload NOT_RUN.
+  - Snapshot bindings retain 3903 NOT_RUN and 28 STALE; zero binding-level mathematical certification PASS.
+  - Existing user edits preserved; no commit/push and no regenerated R37 production certificate on dirty tree.
   - Public auto physical consumer, production fast/checkpoint and real production workload remain unverified.
   - Public planner has no Optimizer.compile export; serial probe uses actual public PlanNode and route API, not an invented call.
   - GPU production throughput, COS publication, CI required checks and all-operator mathematical certification are NOT_RUN.

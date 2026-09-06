@@ -1827,6 +1827,11 @@ def execute_incremental_updates_from_event(
         # 阶段就产生 published / ClickHouse side effect → 后续 factor 失败 → CH
         # mixed）。research 仍尊重调用方覆盖。
         mat_kwargs["write_target"] = "staging"
+        # The published factor-lake schema is double.  ``None`` delegates to the
+        # materializer's production precision policy (float64); inheriting the
+        # engine's legacy float32 default would stage bytes that the no-cast
+        # publication gate must reject.
+        mat_kwargs.setdefault("value_dtype", None)
 
     failures: list[dict[str, str]] = []
     for plan in plans:

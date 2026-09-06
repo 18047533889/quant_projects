@@ -676,13 +676,24 @@ def test_physical_volume_dsl_is_bound_once_and_persisted():
     record = {"page_name": "volume_binding", "fe_formula": "safe_div_null(Volume, Factor)",
               "source_formula": "volume"}
     factor = intake.factor_from_record(record)
-    assert [node.name for node in factor.expr.args] == ["Volume", "Factor"]
+    assert factor.expr.name == "Volume"
     assert "col('Volume')" in record["fe_formula"]
-    assert "col('Factor')" in record["fe_formula"]
+    assert "Factor" not in record["fe_formula"]
     assert record["source_formula"] == "volume"
     assert intake.factor_from_record(record).expr == factor.expr
     logical = intake.factor_from_record({"page_name": "logical", "fe_formula": "volume"})
-    assert logical.expr.name == "volume"
+    assert logical.expr.name == "Volume"
+
+
+def test_actual_volume_rewrite_is_idempotent_and_rejects_unknown_factor_math():
+    import pytest
+    m = load_intake()
+    text = "neg(safe_div(safe_div_null(col('Volume'), col('Factor')), col('valuation.free_cap')))"
+    result = m.canonical_actual_volume_dsl(text)
+    assert result == "neg(safe_div(col('Volume'), col('valuation.free_cap')))"
+    assert m.canonical_actual_volume_dsl(result) == result
+    with pytest.raises(ValueError, match="Factor forbidden"):
+        m.canonical_actual_volume_dsl("AdjClose * Factor")
 
 
 def test_landing_many_accepts_canonical_json_expression():
