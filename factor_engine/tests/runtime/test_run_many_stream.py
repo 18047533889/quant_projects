@@ -264,6 +264,34 @@ def test_compute_failure_is_not_masked_by_sink_finish():
     assert caught.value is error
 
 
+def test_compute_failure_is_not_masked_by_concurrent_sink_failure():
+    import threading
+
+    writer_started = threading.Event()
+    release_writer = threading.Event()
+    compute_error = LookupError("compute failed")
+    sink_error = OSError("disk full")
+
+    def failing_sink(*args):
+        writer_started.set()
+        assert release_writer.wait(2)
+        raise sink_error
+
+    class Engine:
+        def run_many_parallel(self, factors, *, sink, **kwargs):
+            sink(factors[0].name, b"result")
+            assert writer_started.wait(2)
+            release_writer.set()
+            raise compute_error
+
+    with pytest.raises(LookupError) as caught:
+        execute_run_many_stream(
+            Engine(), [SimpleNamespace(name="a")], sink=failing_sink,
+            sink_queue_bytes=1024,
+        )
+    assert caught.value is compute_error
+
+
 def test_input_generator_is_closed_on_compute_failure():
     closed = False
 

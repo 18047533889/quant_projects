@@ -261,14 +261,20 @@ def test_ts08b_secure_temp_not_predictable(tmp_path, monkeypatch):
     dest = tmp_path / "f.parquet"
     from data_access.cos.mirror import _sync_cos_file
 
-    def fake_cp(args):
+    def fake_cp(args, *, dest=None):
         # fake clean-cos-ro 写文件到最后一个 arg（tmp 路径）
+        assert dest is None
         target = Path(args[-1])
+        assert target.parent == tmp_path
+        assert target.name.startswith(".cosdl-") and target.name.endswith(".tmp")
+        assert target.is_file() and not target.is_symlink()
+        assert target.stat().st_mode & 0o077 == 0
         target.write_bytes(b"\x00\x01parquet")
 
     monkeypatch.setattr("data_access.cos.mirror._run_cos_cli", fake_cp)
     _sync_cos_file("cos://b/k/f.parquet", dest)
     assert dest.exists()
+    assert dest.read_bytes() == b"\x00\x01parquet"
     # 随机 O_EXCL tmp 用完即清理，不残留可预测 .tmp
     assert not list(tmp_path.glob("*.tmp"))
 

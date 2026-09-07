@@ -1,0 +1,78 @@
+change_id: V4_DA_READ_BUFFER_FAILURE_LIFECYCLE_20260907
+git_sha: 7d075009a50d08e6d763e44afd927ec7ffe9e8ad
+timestamp_utc: "2026-09-06T20:24:21Z"
+scope: data_access read handle buffered-stream failure lifecycle
+reproduction:
+  status: REPRODUCED
+  command: >-
+    POLARS_MAX_THREADS=2 OPENBLAS_NUM_THREADS=1 .venv/bin/python synthetic
+    BrokenStream probe
+  observed_before:
+    source_closed: 0
+    cleanup_count: 0
+    state: OPEN
+  reviewer_followup:
+    status: REPRODUCED_AND_FIXED
+    issue: >-
+      Replacing _source with the canonical Table before terminal cleanup lost
+      ownership of the original closable iterator on successful buffering and
+      normalization failure.
+  terminal_state_followup:
+    status: REPRODUCED_AND_FIXED
+    observed_before:
+      failed_to_arrow_state: OPEN
+      second_terminal_retried_source: true
+      buffered_deadline_checks: 0
+    shared_collector_fix: >-
+      stream to_arrow and buffer=True now use one per-batch deadline/accounting
+      collector, preventing terminal-specific governance drift.
+files:
+  modified:
+    - data_access/read/read_handle.py
+    - data_access/tests/unit/test_r39_da_read_2026_08.py
+  evidence:
+    - data_access/docs/evidence/V4_DA_READ_BUFFER_FAILURE_LIFECYCLE_20260907.yaml
+tests:
+  run:
+    - command: >-
+        POLARS_MAX_THREADS=2 OPENBLAS_NUM_THREADS=1 .venv/bin/python -m pytest -q
+        data_access/tests/unit/test_r39_da_read_2026_08.py
+        data_access/tests/unit/test_final_closure_round5.py
+      result: PASS
+      detail: 55 read-handle tests included in broader validation
+    - command: >-
+        POLARS_MAX_THREADS=2 OPENBLAS_NUM_THREADS=1 .venv/bin/python -m pytest -q
+        data_access/tests/unit/test_r39_da_read_2026_08.py
+        data_access/tests/unit/test_final_closure_round5.py
+        data_access/tests/unit/test_v4_contract_partitioning.py
+        data_access/tests/unit/test_r24_security_2026_08.py
+      result: PASS
+      detail: 72 passed, 1 deprecation warning in 1.39s
+  not_run:
+    - full data_access suite
+    - production datasets
+    - CI
+limitations:
+  - Validation used only synthetic in-memory Arrow batches and a failing iterator.
+  - No full-dataset or remote object-store execution was performed.
+review:
+  diff_inspected: true
+  checks:
+    immediate_failure_cleanup: PASS
+    source_close_exactly_once: PASS
+    original_source_closed_after_successful_buffering: PASS
+    original_source_closed_after_normalize_failure: PASS
+    original_source_closed_after_to_arrow_materialization: PASS
+    keyboard_interrupt_cleanup: PASS
+    failed_stream_to_arrow_stable_failed: PASS
+    failed_lazy_to_arrow_stable_failed: PASS
+    buffered_stream_deadline_enforcement: PASS
+    to_arrow_stream_deadline_enforcement: PASS
+  independent_root_change_review:
+    contract_partitioning_typed_serialization: APPROVED
+    contract_partitioning_invalid_key_fail_closed: APPROVED
+    secure_temp_mock_and_oracles: APPROVED
+    flags: []
+    failed_handle_reuse_rejected: PASS
+    successful_buffer_reuse_regression: PASS
+  production_ready: NOT_CLAIMED

@@ -102,6 +102,11 @@ class ReadHandle:
             self._source = None
             self._kind = "none"
             self._state = STATE_OPEN
+        # Keep resource ownership separate from the canonical materialized
+        # result.  Buffering/materialization replaces ``_source`` with a Table;
+        # terminal cleanup must still close the original iterator/lazy source.
+        self._owned_source = self._source
+        self._source_closed = False
         # ---- R39 P0 #42 stats 累计器（初始值来自传入 stats）----
         self._stats_rows = getattr(stats, "rows", 0) or 0
         self._stats_bytes = getattr(stats, "bytes", 0) or 0
@@ -151,6 +156,15 @@ class ReadHandle:
             b = int(est()) if callable(est) else 0
         self._stats_bytes += int(b or 0)
 
+    def _collect_stream_batches(self) -> list[Any]:
+        """Collect the owned stream with the same per-batch governance as stream()."""
+        batches: list[Any] = []
+        for batch in self._source:
+            self._deadline_check()
+            self._acc_batch(batch)
+            batches.append(batch)
+        return batches
+
     def _finalize_stats(self) -> None:
         """terminal 消费后把累计值写回 ``self.stats``（#42）。"""
         if self._consume_started is not None:
@@ -197,7 +211,11 @@ class ReadHandle:
 
     def _close_source(self) -> None:
         """关闭底层 source（stream/generator/reader）。#39/#41。"""
-        src = self._source
+        if self._source_closed:
+            return
+        self._source_closed = True
+        src = self._owned_source
+        self._owned_source = None
         if src is None:
             return
         close = getattr(src, "close", None)
@@ -301,14 +319,15 @@ class ReadHandle:
                 self._kind = "table"
                 self._state = STATE_MATERIALIZED
                 return table
+            except BaseException:
+                self._state = STATE_FAILED
+                raise
             finally:
                 self._terminal_finalize()
         if self._kind == "stream":
             # OPEN 流一次性物化（_ensure_open 已拒绝 CONSUMING/CLOSED/FAILED）。
             try:
-                batches = list(self._source)
-                for b in batches:
-                    self._acc_batch(b)
+                batches = self._collect_stream_batches()
                 self._source = (
                     pa.Table.from_batches(batches) if batches else pa.table({})
                 )
@@ -317,6 +336,9 @@ class ReadHandle:
                 self._kind = "table"
                 self._state = STATE_MATERIALIZED
                 return self._source
+            except BaseException:
+                self._state = STATE_FAILED
+                raise
             finally:
                 self._terminal_finalize()
         raise RuntimeError("ReadHandle 没有可读数据")
@@ -414,16 +436,19 @@ class ReadHandle:
         self._start_consume()
         if self._kind == "stream":
             if buffer:
-                batches = list(self._source)
-                for b in batches:
-                    self._acc_batch(b)
-                self._source = (
-                    pa.Table.from_batches(batches) if batches else pa.table({})
-                )
-                if self._normalize is not None:
-                    self._source = self._normalize(self._source)
-                self._kind = "table"
-                self._state = STATE_MATERIALIZED
+                try:
+                    batches = self._collect_stream_batches()
+                    self._source = (
+                        pa.Table.from_batches(batches) if batches else pa.table({})
+                    )
+                    if self._normalize is not None:
+                        self._source = self._normalize(self._source)
+                    self._kind = "table"
+                    self._state = STATE_MATERIALIZED
+                except BaseException:
+                    self._state = STATE_FAILED
+                    self._terminal_finalize()
+                    raise
                 self._terminal_finalize()
                 for batch in self._source.to_batches(max_chunksize=bs):
                     yield batch

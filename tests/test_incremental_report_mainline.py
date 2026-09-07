@@ -17,6 +17,83 @@ def load_intake():
     return module
 
 
+def test_report_scan_budget_changes_only_scan_limit(monkeypatch):
+    import data_access.runtime.resource_governor as governor
+    m = load_intake()
+    calls = []
+    monkeypatch.setattr(governor, "get_global_governor", lambda: SimpleNamespace(
+        set_max_total_scan_bytes_inflight=lambda value: calls.append(value)))
+    monkeypatch.setenv("FACTOR_REPORT_SCAN_INFLIGHT_GIB", "64")
+    m.configure_report_scan_budget()
+    assert calls == [64 * 1024**3]
+
+
+def test_full_history_landing_uses_one_unbounded_read_and_trims_output(monkeypatch, tmp_path):
+    import factor_engine.ir.analyzer as analyzer
+    m = load_intake()
+    monkeypatch.setattr(m, "factor_from_record", lambda r: SimpleNamespace(name=r["page_name"], expr=None))
+    monkeypatch.setattr(analyzer.Analyzer, "lower", lambda self, e: SimpleNamespace(requires_full_history=True, ir=None))
+    reads = []
+    monkeypatch.setattr(m, "build_incremental_engine", lambda **kw: reads.append(kw))
+    def land(records, **kw):
+        assert kw["full_history"] is True and kw["workers"] == 1
+        index = pd.MultiIndex.from_product([pd.to_datetime(["2015-12-31", "2016-01-04", "2017-01-04"]), ["A"]])
+        kw["sink"]("stateful", pd.Series([1., 2., 3.], index=index))
+    monkeypatch.setattr(m, "land_factor_batch", land)
+    m.land_factor_batch_windowed([{"page_name": "stateful"}], start_date="2016-01-04",
+                                end_date="2017-01-04", output_dir=tmp_path)
+    assert len(reads) == 1 and reads[0]["start_date"] is None
+    result = pd.read_parquet(tmp_path / "stateful.parquet")
+    assert result.index.min() == pd.Timestamp("2016-01-04")
+    assert result["A"].tolist() == [2., 3.]
+
+
+def test_missing_long_scan_interface_falls_back_without_losing_source(monkeypatch, tmp_path):
+    m = load_intake()
+    monkeypatch.setattr(m, "ROOT", tmp_path)
+    calls = []
+    def land(records, backend_name):
+        calls.append(backend_name)
+        if backend_name != "pandas":
+            raise AttributeError("'WindowedDataSource' object has no attribute 'scan_polars_long'")
+        return {"landed": [records[0]["page_name"]]}
+    monkeypatch.setattr(m, "land_factor_batch_windowed", land)
+    record = {"page_name": "test_scan", "fe_formula": "AdjClose", "code": "original source"}
+    result = m.land_missing_factors([record], backend_name="auto", force=True)
+    assert result["landed"] == ["test_scan"]
+    assert calls == ["auto", "polars_long", "duckdb_sql", "pandas"]
+    assert record["code"] == "original source"
+
+
+def test_formula_source_survives_canonicalization_and_is_escaped():
+    m = load_intake()
+    r = {"code": "x = '<script>alert(1)</script>'", "dsl": "Volume / Factor",
+         "fe_formula": "Volume / Factor"}
+    original = dict(r)
+    m.preserve_formula_source(r)
+    r["fe_formula"] = "col('Volume')"
+    p = m.formula_provenance(r)
+    assert p["formula_source"] == original
+    assert m.formula_provenance(r)["formula_source_sha256"] == p["formula_source_sha256"]
+    assert "<script>" not in m.formula_source_html(r)
+    assert "&lt;script&gt;" in m.formula_source_html(r)
+
+
+def test_unavailable_manifest_retains_python_and_dsl(tmp_path):
+    m = load_intake()
+    record = {"page_name": "source_test", "code": "result = close", "dsl": "AdjClose"}
+    m.write_report_manifest([record], {"factors": {}, "unavailable": {"source_test": "data missing"},
+                            "backend_used": [], "fallbacks": []}, target=tmp_path / "manifest.json")
+    entry = json.loads((tmp_path / "manifest.json").read_text())["factors"]["source_test"]
+    assert entry["code"] == record["code"]
+    assert entry["formula_source"]["dsl"] == "AdjClose"
+
+
+def test_shorthand_is_not_displayed_as_executable_dsl():
+    m = load_intake()
+    assert m._dsl_text({"local_formula": "return something.rolling(20).mean()"}) == ""
+
+
 def test_convention_change_invalidates_old_results_once():
     m = load_intake()
     state = {"factors": {"old": {"status": "passed", "metrics": {"rank_ic": .1}},
@@ -859,8 +936,9 @@ def test_publish_from_manifest_uses_verified_artifact_without_re_evaluation(tmp_
 
 def test_html_gate_requires_available_and_either_threshold():
     m = load_intake()
-    assert m.html_eligible({"metrics": {"rank_ic": .015}})
-    assert m.html_eligible({"metrics": {"ic_ir": .15}})
+    assert m.html_eligible({"raw_formula": "AdjClose", "metrics": {"rank_ic": .015}})
+    assert m.html_eligible({"raw_formula": "AdjClose", "metrics": {"ic_ir": .15}})
+    assert not m.html_eligible({"raw_formula": "  ", "metrics": {"rank_ic": .1}})
     assert not m.html_eligible({"metrics": {"rank_ic": .014, "ic_ir": .149}})
     assert not m.html_eligible({"status": "unavailable", "metrics": {"rank_ic": .1}})
     assert not m.html_eligible({"metrics": {"rank_ic": float("nan")}})

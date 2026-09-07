@@ -429,6 +429,30 @@ class WindowedDataSource(DataSource):
         self._end = self._coerce_bound(end_date)
         self._column_cache: dict[str, Any] = {}
 
+    def scan_polars_long(self, columns: list[str]):
+        """Preserve lazy scans while enforcing the same inclusive time bounds."""
+        import polars as pl
+        scan = getattr(self._inner, 'scan_polars_long', None)
+        if not callable(scan):
+            raise NotImplementedError('inner source does not support lazy long scans')
+        frame = scan(columns)
+        schema = frame.collect_schema()
+        temporal = [name for name, dtype in schema.items()
+                    if name not in columns and (dtype == pl.Date or isinstance(dtype, pl.Datetime))]
+        if len(temporal) != 1:
+            raise NotImplementedError('windowed lazy scan requires one unambiguous temporal axis')
+        axis = temporal[0]
+        dtype = schema[axis]
+        zone = getattr(dtype, 'time_zone', None)
+        for bound, is_start in ((self._start, True), (self._end, False)):
+            normalized = _normalize_bound_for_index(bound, zone)
+            if normalized is not None:
+                # Keep timestamp precision even when the source uses Date.
+                literal = pl.lit(normalized.to_pydatetime())
+                predicate = pl.col(axis) >= literal if is_start else pl.col(axis) <= literal
+                frame = frame.filter(predicate)
+        return frame
+
     def _coerce_bound(self, value: str | pd.Timestamp | None) -> pd.Timestamp | None:
         """_coerce_bound。
         

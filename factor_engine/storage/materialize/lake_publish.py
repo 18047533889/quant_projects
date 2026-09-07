@@ -17,6 +17,27 @@ from factor_engine.storage.exceptions import FactorNotFoundError
 _STAGING_IDENTITY = ".fe_staging_identity.json"
 
 
+def _require_local_publication_storage(dataset_name: str) -> Any:
+    """Return the configured store only when the dataset is authoritatively local."""
+    from data_access import get_store
+    from data_access.core.storage import StorageBackend, resolve_storage_for_dataset
+
+    store = get_store()
+    dataset = store.get_dataset(dataset_name)
+    storage = resolve_storage_for_dataset(dataset)
+    try:
+        backend = StorageBackend(storage.type)
+    except ValueError as exc:
+        raise ValueError(
+            f"unsupported publication storage backend {storage.type!r}"
+        ) from exc
+    if backend is not StorageBackend.LOCAL:
+        raise ValueError(
+            f"{backend.value} publication lacks expected-inventory/CAS wiring; rejected"
+        )
+    return store
+
+
 def _factor_inventory(root: Path) -> list[dict[str, Any]]:
     """Content-addressed inventory; unreadable parquet fails closed."""
     import pyarrow.parquet as pq
@@ -228,7 +249,7 @@ def produce_coverage_receipt(
     return receipt.to_dict()
 
 
-def write_staging_identity(
+def _write_staging_identity_locked(
     *,
     factor_id: str,
     materialization_receipt: dict[str, Any],
@@ -236,7 +257,7 @@ def write_staging_identity(
     coverage_complete: bool = False,
     frequency: str | None = None,
 ) -> dict[str, Any]:
-    """Bind staged bytes to the exact run/generation before publication."""
+    """Write identity while the caller holds the staging mutation lock."""
     staging_dir = _resolve_staging_factor_dir(factor_id)
     from factor_engine.runtime.materialize_batch import WriteReceipt, WriteState
 
@@ -278,6 +299,29 @@ def write_staging_identity(
         json.dumps(payload, sort_keys=True, indent=2),
     )
     return payload
+
+
+def write_staging_identity(
+    *,
+    factor_id: str,
+    materialization_receipt: dict[str, Any],
+    coverage_intervals: list[dict[str, Any]] | None = None,
+    coverage_complete: bool = False,
+    frequency: str | None = None,
+) -> dict[str, Any]:
+    """Bind staged bytes to the exact run/generation before publication."""
+    _require_local_publication_storage("factor_lake_staging")
+    staging_dir = _resolve_staging_factor_dir(factor_id)
+    from data_access.write.mutation_lock import mutation_lock
+
+    with mutation_lock(staging_dir):
+        return _write_staging_identity_locked(
+            factor_id=factor_id,
+            materialization_receipt=materialization_receipt,
+            coverage_intervals=coverage_intervals,
+            coverage_complete=coverage_complete,
+            frequency=frequency,
+        )
 
 
 def _read_verified_staging_identity(factor_id: str) -> dict[str, Any]:
@@ -397,6 +441,7 @@ def sync_local_factor_to_staging(
     from factor_engine.security.factor_id import factor_dir_for, validate_factor_id
 
     factor_id = validate_factor_id(factor_id)
+    _require_local_publication_storage("factor_lake_staging")
     source = factor_dir_for(lake_root, factor_id)
     if not source.exists():
         raise FileNotFoundError(f"本地因子目录不存在: {source}")
@@ -455,6 +500,14 @@ def sync_local_factor_to_staging(
                         raise ValueError(
                             "copied staging bytes do not match materialization receipt"
                         )
+                    identity = _write_staging_identity_locked(
+                        factor_id=factor_id,
+                        materialization_receipt=materialization_receipt,
+                        coverage_intervals=coverage_intervals,
+                        coverage_complete=coverage_complete,
+                        frequency=frequency,
+                    )
+                rows = _count_parquet_rows(staging_dir)
                 shutil.rmtree(backup_dir, ignore_errors=True)
             except Exception:
                 for child in list(staging_dir.iterdir()):
@@ -476,15 +529,10 @@ def sync_local_factor_to_staging(
         "factor_id": factor_id,
         "source_dir": str(source),
         "staging_dir": str(staging_dir),
-        "rows": _count_parquet_rows(staging_dir),
+        "rows": rows,
     }
     if materialization_receipt is not None:
-        result["identity"] = write_staging_identity(
-            factor_id=factor_id, materialization_receipt=materialization_receipt,
-            coverage_intervals=coverage_intervals,
-            coverage_complete=coverage_complete,
-            frequency=frequency,
-        )
+        result["identity"] = identity
     return result
 
 
@@ -702,23 +750,9 @@ def publish_factor_lake(
     # ``resolve_dataset_path`` is not a capability check: URI-backed datasets
     # are also represented as Path objects by DataAccess. Resolve the declared
     # storage backend before catalog creation, sync, or any other side effect.
-    from data_access import get_store
-    from data_access.core.storage import StorageBackend, resolve_storage_for_dataset
-
-    store = get_store()
+    store = _require_local_publication_storage("factor_lake")
     for dataset_name in ("factor_lake", "factor_lake_staging"):
-        dataset = store.get_dataset(dataset_name)
-        storage = resolve_storage_for_dataset(dataset)
-        try:
-            backend = StorageBackend(storage.type)
-        except ValueError as exc:
-            raise ValueError(
-                f"unsupported publication storage backend {storage.type!r}"
-            ) from exc
-        if backend is not StorageBackend.LOCAL:
-            raise ValueError(
-                f"{backend.value} publication lacks expected-inventory/CAS wiring; rejected"
-            )
+        _require_local_publication_storage(dataset_name)
     from factor_engine.runtime.snapshot_reconcile import reconcile_data_snapshot
     from factor_engine.storage.catalog import FactorCatalog
     from factor_engine.util.workspace_paths import default_factor_lake_root

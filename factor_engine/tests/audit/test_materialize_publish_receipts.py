@@ -258,6 +258,104 @@ def test_sync_keeps_staging_lock_effective_during_child_replacement(tmp_path, mo
     assert competing == ["blocked"]
 
 
+def test_sync_writes_identity_before_releasing_staging_lock(tmp_path, monkeypatch):
+    from data_access.core import atomic
+    from data_access.core.exceptions import ValidationError
+    from data_access.write.mutation_lock import mutation_lock
+
+    source = tmp_path / "lake" / "factors" / "f"
+    staging = tmp_path / "staging"
+    _write_parquet(source, 1.0)
+    receipt = _receipt(root=source)
+    monkeypatch.setattr(lp, "_resolve_staging_factor_dir", lambda _fid: staging)
+    original_atomic_write = atomic.atomic_write_text
+    competing = []
+
+    def atomic_write_with_competitor(path, content, *args, **kwargs):
+        def contend():
+            try:
+                with mutation_lock(staging, timeout=0.1, poll=0.01):
+                    competing.append("acquired")
+            except ValidationError:
+                competing.append("blocked")
+
+        thread = threading.Thread(target=contend)
+        thread.start()
+        thread.join(timeout=2)
+        assert not thread.is_alive()
+        return original_atomic_write(path, content, *args, **kwargs)
+
+    monkeypatch.setattr(atomic, "atomic_write_text", atomic_write_with_competitor)
+    result = lp.sync_local_factor_to_staging(
+        factor_id="f", lake_root=tmp_path / "lake",
+        materialization_receipt=receipt,
+    )
+
+    assert competing == ["blocked"]
+    assert result["identity"] == lp._read_verified_staging_identity("f")
+
+
+def test_sync_restores_previous_generation_when_identity_write_fails(tmp_path, monkeypatch):
+    from data_access.core import atomic
+
+    source = tmp_path / "lake" / "factors" / "f"
+    staging = tmp_path / "staging"
+    _write_parquet(source, 1.0)
+    _write_parquet(staging, 9.0)
+    old_identity = '{"generation_id": "old"}'
+    (staging / lp._STAGING_IDENTITY).write_text(old_identity, encoding="utf-8")
+    before = lp._factor_inventory(staging)
+    monkeypatch.setattr(lp, "_resolve_staging_factor_dir", lambda _fid: staging)
+    monkeypatch.setattr(
+        atomic, "atomic_write_text",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(OSError("identity write failed")),
+    )
+
+    with pytest.raises(OSError, match="identity write failed"):
+        lp.sync_local_factor_to_staging(
+            factor_id="f", lake_root=tmp_path / "lake",
+            materialization_receipt=_receipt(root=source),
+        )
+
+    assert lp._factor_inventory(staging) == before
+    assert (staging / lp._STAGING_IDENTITY).read_text(encoding="utf-8") == old_identity
+
+
+@pytest.mark.parametrize("operation", ["identity", "sync"])
+def test_local_helpers_reject_cos_before_path_or_lock(operation, tmp_path, monkeypatch):
+    import importlib
+    import data_access
+    lock_module = importlib.import_module("data_access.write.mutation_lock")
+
+    dataset = SimpleNamespace(
+        name="factor_lake_staging",
+        storage={"type": "cos", "uri": "cos://bucket/staging"},
+    )
+    store = SimpleNamespace(
+        get_dataset=lambda _name: dataset,
+        resolve_dataset_path=lambda *_a, **_k: pytest.fail("path resolution must not run"),
+    )
+    monkeypatch.setattr(data_access, "get_store", lambda: store)
+    monkeypatch.setattr(
+        lock_module, "mutation_lock", lambda *_a, **_k: pytest.fail("lock must not run")
+    )
+    monkeypatch.setattr(
+        lp, "_resolve_staging_factor_dir",
+        lambda _fid: pytest.fail("staging path resolution must not run"),
+    )
+
+    with pytest.raises(ValueError, match="cos publication"):
+        if operation == "identity":
+            lp.write_staging_identity(
+                factor_id="f", materialization_receipt=_receipt()
+            )
+        else:
+            lp.sync_local_factor_to_staging(
+                factor_id="f", lake_root=tmp_path,
+                materialization_receipt=_receipt(),
+            )
+
+
 @pytest.mark.parametrize("expected, message", [
     ([], "differs from expected"),
     ([(pd.Timestamp("2025-01-01 09:30Z"), "A"),

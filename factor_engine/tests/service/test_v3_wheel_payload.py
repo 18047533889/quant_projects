@@ -1,9 +1,14 @@
 from pathlib import Path
+import runpy
 from zipfile import ZipFile
 
 import pytest
 
-from scripts.verify_wheel_payload import verify
+# Resolve the actual repository tool, not an unrelated installed ``scripts``
+# namespace or a package whose meaning changes with the test working directory.
+verify = runpy.run_path(
+    str(Path(__file__).resolve().parents[3] / "scripts" / "verify_wheel_payload.py")
+)["verify"]
 
 
 @pytest.mark.parametrize("mutation", [None, "missing", "extra", "wrong_bytes", "resource", "duplicate"])

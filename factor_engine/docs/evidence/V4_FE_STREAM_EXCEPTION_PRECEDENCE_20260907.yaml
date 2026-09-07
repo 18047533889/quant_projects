@@ -1,0 +1,31 @@
+schema_version: "1"
+change_id: V4-FE-STREAM-EXCEPTION-PRECEDENCE
+git_sha: 7d075009a50d08e6d763e44afd927ec7ffe9e8ad
+timestamp: "2026-09-07T04:25:10+08:00"
+owned_modified_files:
+  - factor_engine/runtime/streaming_batch_service.py
+  - factor_engine/tests/runtime/test_run_many_stream.py
+  - factor_engine/docs/evidence/V4_FE_STREAM_EXCEPTION_PRECEDENCE_20260907.yaml
+reproduction:
+  result: PASS
+  before_fix: "A deterministic concurrent compute LookupError and user-sink OSError surfaced the OSError, proving sink finalization masked the primary compute failure."
+  oracle: "After the fix the exact compute exception object is raised; producer wake-up caused by sink failure still unwraps and raises the exact user sink exception."
+tests:
+  - command: "POLARS_MAX_THREADS=2 OPENBLAS_NUM_THREADS=1 .venv/bin/python -m pytest -q factor_engine/tests/runtime/test_run_many_stream.py"
+    result: PASS
+    summary: "28 passed, including deterministic concurrent compute/sink failure regression; 4 existing backend-classification warnings."
+  - command: "POLARS_MAX_THREADS=2 OPENBLAS_NUM_THREADS=1 .venv/bin/python -m pytest -q tests/unit/test_run_many_streaming.py factor_engine/tests/r38/test_dynamic_sink_and_service_lease.py factor_engine/tests/runtime/test_sink_ownership_audit.py factor_engine/tests/runtime/test_sink_write_receipt.py"
+    result: PASS
+    summary: "46 passed; 2 existing backend-classification warnings."
+  - command: "POLARS_MAX_THREADS=2 OPENBLAS_NUM_THREADS=1 .venv/bin/python -m py_compile factor_engine/runtime/streaming_batch_service.py factor_engine/runtime/streaming_result_sink.py factor_engine/runtime/adaptive_batch_scheduler.py factor_engine/tests/runtime/test_run_many_stream.py"
+    result: PASS
+    summary: "Owned runtime path and regression test compile successfully."
+review:
+  result: APPROVED
+  checks:
+    - "Scoped diff preserves original user sink exception for sink-caused producer refusal."
+    - "All finalization still closes and joins the bounded sink before exception selection."
+    - "No result retention, queue budget, retry taxonomy, scheduling, PIT, or numeric semantics changed."
+limitations:
+  - "Full repository suite, CI, backend parity, PIT poison, ABI/placeholder, and production gate: NOT_RUN."
+  - "No throughput or memory-performance claim; this is an exception precedence and cleanup correction."

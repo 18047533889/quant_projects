@@ -221,6 +221,41 @@ def discover_price_dsl_candidates(root, existing_records, *, since=None):
     return candidates, rejected
 
 
+SOURCE_FIELDS = ("code", "python_code", "python_formula", "source_code", "source_formula",
+                 "dsl", "lqtp_formula", "local_formula", "source_metadata", "campaign")
+
+
+def preserve_formula_source(record):
+    """Capture input evidence before canonicalization; never replace it with DSL."""
+    if "formula_source" not in record:
+        snapshot = {key: record[key] for key in (*SOURCE_FIELDS, "fe_formula") if key in record}
+        record["formula_source"] = json.loads(json.dumps(snapshot, ensure_ascii=False))
+    return record["formula_source"]
+
+
+def formula_provenance(record):
+    source = preserve_formula_source(record)
+    return {**{key: record[key] for key in SOURCE_FIELDS if key in record},
+            "formula_source": source,
+            "formula_source_sha256": hashlib.sha256(
+                json.dumps(source, ensure_ascii=False, sort_keys=True).encode()).hexdigest()}
+
+
+def formula_source_html(record):
+    from html import escape
+    source = record.get("formula_source") or {k: record[k] for k in SOURCE_FIELDS if k in record}
+    blocks = []
+    for key, value in source.items():
+        if value and key not in {"source_metadata", "campaign"}:
+            blocks.append(f'<h4>{escape(key)}</h4><pre>{escape(str(value))}</pre>')
+    return ('<section id="formula-source"><h2>原始公式与 Python 来源（转换前）</h2>'
+            '<p>以下为保留的输入证据，不代表可执行 DSL；实际落值使用上方公式。'
+            '未提供的 Python 不从 DSL 反向编造。</p>'
+            + ('<p>来源由当前因子库补回；旧评估未记录原始源码快照，不能证明当时源码版本。</p>'
+               if record.get("formula_source_backfilled") else '')
+            + ''.join(blocks) + '</section>')
+
+
 def load_pool():
     return json.loads(POOL_JSON.read_text())
 
@@ -367,7 +402,7 @@ def overnight_pending_waves(records, state, batch_size):
 
 
 def run_overnight_queue(formulas, output_dir, *, memory_gib=8, retry_names=(), wait_for_lock=False,
-                        worker_threads=2, batch_size=4, fe_backend="pandas", qe_backend="auto",
+                        worker_threads=2, batch_size=4, fe_backend="auto", qe_backend="auto",
                         pool_retest=False, reuse_landed=False, auto_finalize=False):
     """Resume isolated mainline evaluations with host and process memory guards."""
     import subprocess
@@ -407,8 +442,8 @@ def run_overnight_queue(formulas, output_dir, *, memory_gib=8, retry_names=(), w
             while True:
                 mem = dict(line.split(":", 1) for line in Path("/proc/meminfo").read_text().splitlines())
                 available_kib = int(mem["MemAvailable"].split()[0])
-                if available_kib >= (min(memory_gib, 8) + 12) * 1024**2:
-                    task_memory_gib = min(memory_gib, available_kib / 1024**2 - 12)
+                if available_kib >= (min(memory_gib, 8) + 10) * 1024**2:
+                    task_memory_gib = min(memory_gib, available_kib / 1024**2 - 10)
                     break
                 state["status"] = "waiting_for_memory"
                 save()
@@ -438,9 +473,10 @@ def run_overnight_queue(formulas, output_dir, *, memory_gib=8, retry_names=(), w
             save()
             print(f"[overnight start] {name}", flush=True)
             threads = str(max(1, worker_threads))
-            env = dict(os.environ, OMP_NUM_THREADS=threads, OPENBLAS_NUM_THREADS=threads,
-                       MKL_NUM_THREADS=threads, POLARS_MAX_THREADS=threads)
-            result_policy = {"process_memory_gib": task_memory_gib, "host_reserve_gib": 12,
+            env = dict(os.environ, DUCKDB_MAX_THREADS=threads, OMP_NUM_THREADS=threads, OPENBLAS_NUM_THREADS=threads,
+                       MKL_NUM_THREADS=threads, POLARS_MAX_THREADS=threads,
+                       FACTOR_REPORT_FE_BACKEND=fe_backend)
+            result_policy = {"process_memory_gib": task_memory_gib, "host_reserve_gib": 10,
                              "worker_threads": int(threads), "batch_size": len(wave),
                              "fe_backend": fe_backend, "qe_backend": qe_backend}
             for item in wave:
@@ -460,7 +496,7 @@ def run_overnight_queue(formulas, output_dir, *, memory_gib=8, retry_names=(), w
                     except (FileNotFoundError, AttributeError):
                         rss = 0
                     mem_now = dict(line.split(":", 1) for line in Path("/proc/meminfo").read_text().splitlines())
-                    emergency = int(mem_now["MemAvailable"].split()[0]) < 4 * 1024**2
+                    emergency = int(mem_now["MemAvailable"].split()[0]) < 10 * 1024**2
                     timeout_seconds = min(7200, max(1800, len(wave) * 900))
                     if emergency or rss > task_memory_gib * 1024**2 or time.monotonic() - started > timeout_seconds:
                         reason = ("host low-memory guard" if emergency else "process memory limit"
@@ -499,6 +535,8 @@ def run_overnight_queue(formulas, output_dir, *, memory_gib=8, retry_names=(), w
                                       ("optimize", lambda directory: run_optimization_queue(
                                           directory, names={r["page_name"] for r in wave})),
                                       ("publish_optimized", publish_completed_queue)):
+                    if os.environ.get("FACTOR_REPORT_LANDING_FIRST", "1") != "0" and stage != "publish":
+                        continue
                     try:
                         action(output_dir)
                     except Exception as exc:
@@ -510,6 +548,18 @@ def run_overnight_queue(formulas, output_dir, *, memory_gib=8, retry_names=(), w
         if auto_finalize:
             state["status"] = "evaluation_finished_finalize_attempted"
         save()
+        if auto_finalize and os.environ.get("FACTOR_REPORT_LANDING_FIRST", "1") != "0":
+            state["status"] = "landing_evaluation_finished_optimizing"
+            save()
+            try:
+                run_optimization_queue(output_dir)
+                publish_completed_queue(output_dir)
+                state["status"] = "evaluation_finished_finalize_attempted"
+            except Exception as exc:
+                state.setdefault("finalization_errors", []).append(
+                    dict(stage="deferred_optimization", time=report_time(), error=str(exc)))
+                state["status"] = "evaluation_finished_optimization_needs_attention"
+            save()
     return state
 
 
@@ -610,6 +660,7 @@ def load_vwap(*, source=None, start_date=EVAL_START, end_date=EVAL_END):
     import pandas as pd
     managed_source = source is None
     if source is None:
+        configure_report_scan_budget()
         os.environ.setdefault("ASHARE_PARQUET_ROOT", str(Path.home() / "cos_data"))
         os.environ.setdefault("DATA_ACCESS_SKIP_COS_MIRROR", "1")
         from factor_engine.storage.factory import build_data_source
@@ -737,7 +788,7 @@ def stage_landing(factor):
     return {"landed": False, "error": "matrix missing"}
 
 
-def land_factor_batch(factors, *, engine, sink, workers=None):
+def land_factor_batch(factors, *, engine, sink, workers=None, full_history=False):
     """Compile and land one incremental wave through FactorEngine ``run_many``.
 
     The sink boundary keeps factor matrices out of the aggregate result so a
@@ -761,8 +812,8 @@ def land_factor_batch(factors, *, engine, sink, workers=None):
     runner(
         parsed,
         enable_cse=True,
-        auto_warmup=True,
-        trim_warmup=True,
+        auto_warmup=not full_history,
+        trim_warmup=not full_history,
         input_dq_check=True,
         pit_enforce=True,
         pit_forbid_forward_fill=True,
@@ -778,8 +829,16 @@ def factor_from_record(record):
     from factor_engine.api.dsl_parser import parse_factor
     from factor_engine.api.factor import Factor
 
+    preserve_formula_source(record)
     name = str(record.get("page_name") or record.get("factor_name") or "").strip()
-    formula = str(record.get("fe_formula") or "").strip()
+    formula = str(record.get("fe_formula") or record.get("dsl") or "").strip()
+    if not formula or re.fullmatch(r"MYDSL\([^()]*\)", formula):
+        code = next((record[k] for k in ("code", "python_code", "python_formula", "source_code")
+                     if record.get(k)), None)
+        if not code:
+            raise ValueError("No executable DSL or original Python source supplied")
+        from fe_code_transpiler import transpile_native_dsl
+        formula = transpile_native_dsl(code)
     try:
         node = json.loads(formula)
     except json.JSONDecodeError:
@@ -811,6 +870,7 @@ def factor_from_record(record):
         return parse_factor(formula, name=name)
     if not isinstance(node, dict) or "kind" not in node:
         return parse_factor(formula, name=name)
+    record["fe_formula"] = formula
     if '"Factor"' in formula:
         raise ValueError("Factor forbidden in JSON DSL; convert to certified actual-volume expression")
 
@@ -864,8 +924,18 @@ def ensure_local_minute_history(root=None, history_root=None):
     return added
 
 
+def configure_report_scan_budget():
+    """Scan I/O bytes are not resident memory; keep DA's memory gate intact."""
+    from data_access.runtime.resource_governor import get_global_governor
+    limit = int(os.environ.get("FACTOR_REPORT_SCAN_INFLIGHT_GIB", "64"))
+    if not 1 <= limit <= 128:
+        raise ValueError("report scan-inflight budget must be 1..128 GiB")
+    get_global_governor().set_max_total_scan_bytes_inflight(limit * 1024**3)
+
+
 def build_incremental_engine(*, start_date, end_date, backend_name="polars_long", records=(), instrument_filter=None):
     """Build the mainline FactorEngine over its canonical DataAccess source."""
+    configure_report_scan_budget()
     os.environ.setdefault("ASHARE_PARQUET_ROOT", str(Path.home() / "cos_data"))
     os.environ.setdefault("DATA_ACCESS_SKIP_COS_MIRROR", "1")
     import ast
@@ -888,7 +958,7 @@ def build_incremental_engine(*, start_date, end_date, backend_name="polars_long"
     daily = {
         "type": "data_access",
         "dataset": "ashare_stock_daily_adj",
-        "start_date": start_date,
+        **({"start_date": start_date} if start_date is not None else {}),
         "end_date": end_date,
         "read_auto": True,
         **({"instrument_filter": instrument_filter} if instrument_filter is not None else {}),
@@ -897,7 +967,8 @@ def build_incremental_engine(*, start_date, end_date, backend_name="polars_long"
         "type": "composite", "anchor": "pv", "anchor_column": "AdjClose",
         "sources": {"pv": daily, "valuation": {
             "type": "data_access", "dataset": "ashare_stock_valuation_daily",
-            "start_date": start_date, "end_date": end_date, "read_auto": True,
+            **({"start_date": start_date} if start_date is not None else {}),
+            "end_date": end_date, "read_auto": True,
             **({"instrument_filter": instrument_filter} if instrument_filter is not None else {}),
         }},
         # A daily valuation panel must not be forward-filled across missing days.
@@ -914,7 +985,11 @@ def build_incremental_engine(*, start_date, end_date, backend_name="polars_long"
     source.start_date = start_date
     source.end_date = end_date
     source.instrument_filter = instrument_filter
-    return FactorEngine(build_backend(backend_name), source, run_mode="research")
+    # Public HybridBackend 'auto' is not yet wired to run_many. The report's
+    # explicit auto policy uses the supported SQL + Polars long-table backend.
+    resolved_backend = "auto_long" if backend_name == "auto" else backend_name
+    print(f"[FE route] requested={backend_name} resolved={resolved_backend}", flush=True)
+    return FactorEngine(build_backend(resolved_backend), source, run_mode="research")
 
 
 def matrix_sink(output_dir):
@@ -945,25 +1020,29 @@ def admit_report_factors(records):
     for record in records:
         name = record["page_name"]
         try:
-            if not str(record.get("fe_formula") or "").strip():
-                raise ValueError("executable FactorEngine DSL missing; certified conversion required")
             factor = factor_from_record(record)
-            require_bounded_history(analyzer.lower(factor.expr), name)
+            analysis = analyzer.lower(factor.expr)
+            record["history_mode"] = ("continuous-source-history" if needs_full_history(analysis)
+                                      else "bounded-overlap")
             admitted.append(record)
         except Exception as exc:
             rejected[name] = f"{type(exc).__name__}: {exc}"
     return admitted, rejected
 
 
-def require_bounded_history(analysis, name):
-    """Do not approximate stateful full-history operators with a finite overlap."""
+def needs_full_history(analysis):
     from factor_engine.runtime.execution_contract import (
         factor_history_requirement, is_full_history_lookback,
     )
     requirement = factor_history_requirement(getattr(analysis, "ir", None))
-    if (getattr(analysis, "requires_full_history", False)
+    return bool(getattr(analysis, "requires_full_history", False)
             or is_full_history_lookback(getattr(analysis, "lookback", 0))
-            or requirement.is_full_history):
+            or requirement.is_full_history)
+
+
+def require_bounded_history(analysis, name):
+    """Guard retained for consumers that cannot replay continuous history."""
+    if needs_full_history(analysis):
         raise ValueError(
             f"{name}: full-history replay/state continuity required; yearly "
             "windowed landing with finite overlap is not certified")
@@ -991,9 +1070,24 @@ def land_factor_batch_windowed(
     # Use the engine's execution-contract authority, not operator-name guesses.
     # Run before any source reads or partial output writes.
     analyzer = Analyzer(production=False)
+    full_history = False
     for record in records:
         factor = factor_from_record(record)
-        require_bounded_history(analyzer.lower(factor.expr), factor.name)
+        full_history = full_history or needs_full_history(analyzer.lower(factor.expr))
+
+    history_batch = int(os.environ.get("FACTOR_REPORT_HISTORY_BATCH", "1"))
+    if not 1 <= history_batch <= 4:
+        raise ValueError("continuous-history batch must be 1..4")
+    if full_history and len(records) > history_batch:
+        # A full-source replay must not hold many ten-year panels in memory.
+        landed = []
+        for offset in range(0, len(records), history_batch):
+            result = land_factor_batch_windowed(
+                records[offset:offset + history_batch], backend_name=backend_name, start_date=start_date,
+                end_date=end_date, window_years=window_years,
+                warmup_days=warmup_days, output_dir=output_dir)
+            landed.extend(result["landed"])
+        return {"landed": landed, "count": len(landed), "history_mode": "continuous-source-history"}
 
     start = pd.Timestamp(start_date)
     end = pd.Timestamp(end_date)
@@ -1003,10 +1097,10 @@ def land_factor_batch_windowed(
         cursor = start
         part = 0
         while cursor <= end:
-            window_end = min(end, cursor + pd.DateOffset(years=window_years) - pd.Timedelta(days=1))
+            window_end = end if full_history else min(end, cursor + pd.DateOffset(years=window_years) - pd.Timedelta(days=1))
             load_start = cursor - pd.Timedelta(days=warmup_days)
             engine = build_incremental_engine(
-                start_date=str(load_start.date()),
+                start_date=None if full_history else str(load_start.date()),
                 end_date=str(window_end.date()),
                 backend_name=backend_name,
                 records=records,
@@ -1021,7 +1115,11 @@ def land_factor_batch_windowed(
                 matrix = selected.unstack(level=-1).sort_index().astype("float32")
                 matrix.to_parquet(temp_dir / f"{name}.{_part:03d}.parquet")
 
-            land_factor_batch(records, engine=engine, sink=sink)
+            if full_history:
+                print(f"[factor landing] continuous source history; no annual state reset; roots={len(records)}", flush=True)
+                land_factor_batch(records, engine=engine, sink=sink, workers=len(records), full_history=True)
+            else:
+                land_factor_batch(records, engine=engine, sink=sink)
             cursor = window_end + pd.Timedelta(days=1)
             part += 1
 
@@ -1068,29 +1166,49 @@ def land_missing_factors(factors, *, batch_size=8, backend_name="polars_long", f
         return {"landed": [], "count": 0, "pending": len(missing), "python_fallback": unsupported}
     landed = []
     errors = {}
-    def land_partition(wave):
+    backend_chain = ["auto", "polars_long", "duckdb_sql", "pandas"] if backend_name == "auto" else [backend_name]
+    def land_partition(wave, backend_index=0):
         try:
-            result = land_factor_batch_windowed(wave, backend_name=backend_name)
+            selected_backend = backend_chain[backend_index]
+            result = land_factor_batch_windowed(wave, backend_name=selected_backend)
             landed.extend(result["landed"])
             receipts.mkdir(parents=True, exist_ok=True)
             for record in wave:
                 if record["page_name"] in result["landed"]:
+                    record["landing_backend"] = "auto_long" if selected_backend == "auto" else selected_backend
                     receipt = receipts / (hashlib.sha256(record["page_name"].encode()).hexdigest() + ".json")
                     temporary = receipt.with_suffix(".tmp")
                     temporary.write_text(json.dumps({"formula": record["fe_formula"], "version": EVALUATION_CONVENTION_VERSION}))
                     os.replace(temporary, receipt)
         except Exception as wave_error:
             if len(wave) == 1:
+                detail = landing_failure_reason(wave_error)
+                capability_error = (isinstance(wave_error, NotImplementedError)
+                    or (isinstance(wave_error, AttributeError)
+                        and "has no attribute 'scan_polars_long'" in detail)) or any(
+                    word in detail.lower() for word in ("unsupported", "not supported", "not implemented", "emitter", "capability"))
+                if capability_error and backend_index + 1 < len(backend_chain):
+                    wave[0].setdefault("landing_backend_fallbacks", []).append(
+                        {"backend": backend_chain[backend_index], "reason": detail})
+                    print(f"[FE fallback] {wave[0]['page_name']}: {backend_chain[backend_index]} -> {backend_chain[backend_index+1]}: {detail}", flush=True)
+                    land_partition(wave, backend_index + 1)
+                    return
                 errors[wave[0]["page_name"]] = landing_failure_reason(wave_error)
                 return
             # Bisect only failed partitions; healthy siblings retain shared
             # reads/CSE and parallel root execution. Do not retry a singleton twice.
             middle = len(wave) // 2
             print(f"[landing split] failed={len(wave)} left={middle} right={len(wave)-middle}", flush=True)
-            land_partition(wave[:middle])
-            land_partition(wave[middle:])
-    for offset in range(0, len(pending), batch_size):
-        land_partition(pending[offset:offset + batch_size])
+            land_partition(wave[:middle], backend_index)
+            land_partition(wave[middle:], backend_index)
+    history_batch = int(os.environ.get("FACTOR_REPORT_HISTORY_BATCH", "1"))
+    if not 1 <= history_batch <= 4:
+        raise ValueError("continuous-history batch must be 1..4")
+    continuous = [r for r in pending if r.get("history_mode") == "continuous-source-history"]
+    bounded = [r for r in pending if r.get("history_mode") != "continuous-source-history"]
+    for group, size in ((bounded, batch_size), (continuous, history_batch)):
+        for offset in range(0, len(group), size):
+            land_partition(group[offset:offset + size])
     return {
         "landed": landed,
         "count": len(landed),
@@ -1254,8 +1372,11 @@ def write_report_manifest(records, batch_evaluation, *, target=REPORT_MANIFEST_J
         raw_formula = str(record.get("fe_formula") or record.get("formula") or "")
         direction = metrics.pop("direction")
         entry = {
+            **formula_provenance(record),
             "factor_name": record.get("factor_name", name),
             "source_formula": record.get("source_formula"),
+            "landing_backend": record.get("landing_backend"),
+            "landing_backend_fallbacks": record.get("landing_backend_fallbacks", []),
             "source_metadata": record.get("source_metadata"),
             "campaign": record.get("campaign"),
             "direction": direction,
@@ -1288,6 +1409,7 @@ def write_report_manifest(records, batch_evaluation, *, target=REPORT_MANIFEST_J
         record = by_name[name]
         raw_formula = str(record.get("fe_formula") or record.get("formula") or "")
         factors[name] = {
+            **formula_provenance(record),
             "factor_name": record.get("factor_name", name),
             "status": "unavailable",
             "reason": reason,
@@ -1429,6 +1551,8 @@ def _write_manifest_index(report_dir, factors):
 
 
 def html_eligible(entry):
+    if not str(entry.get("raw_formula") or "").strip():
+        return False
     # Legacy intermediate aliases have conflicting definitions and no certified expansion.
     if re.search(r"\b(EWMA_up_vol|EWMA_down_vol|Factor)\b", entry.get("raw_formula", "")):
         return False
@@ -1454,6 +1578,7 @@ def publish_completed_queue(queue_dir, report_dir=REPORTS_DIR):
     import fcntl
     queue_dir, report_dir = Path(queue_dir), Path(report_dir)
     state = json.loads((queue_dir / "queue_state.json").read_text())
+    source_records = {r["page_name"]: r for r in load_pool()} if POOL_JSON.exists() else {}
     cache_path = report_dir / "published_evaluations.json"
     with (report_dir / "publication.lock").open("a") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
@@ -1463,6 +1588,13 @@ def publish_completed_queue(queue_dir, report_dir=REPORTS_DIR):
                     if receipt.get("screening") != "passed" or not html_eligible(receipt.get("entry", {}))}
         excluded.update(name for name, item in state["factors"].items()
                         if item.get("status") in {"below_gate", "unavailable", "failed"})
+        # Old pages may predate the publication manifest entirely. Audit their
+        # formula header too, not only entries already tracked in the cache.
+        for legacy in (report_dir / "factors").glob("factor_*.html"):
+            with legacy.open(encoding="utf-8") as stream:
+                header = stream.read(131072)
+            if re.search(r'<div\b[^>]*class="formula-wrap"[^>]*>\s*</div>', header):
+                excluded.add(legacy.stem.removeprefix("factor_"))
         for name in excluded:
             withdrawn += withdraw_factor_html(report_dir, name)
         for name, item in state["factors"].items():
@@ -1479,6 +1611,13 @@ def publish_completed_queue(queue_dir, report_dir=REPORTS_DIR):
             if entry is None:
                 continue
             entry = dict(entry)
+            if not entry.get("formula_source") and name in source_records:
+                # Recover source evidence only. Never substitute a newer DSL for
+                # the expression associated with an already evaluated artifact.
+                for key, value in formula_provenance(source_records[name]).items():
+                    if not entry.get(key):
+                        entry[key] = value
+                entry["formula_source_backfilled"] = True
             if not html_eligible(entry):
                 excluded.add(name)
                 withdrawn += withdraw_factor_html(report_dir, name)
@@ -1492,6 +1631,7 @@ def publish_completed_queue(queue_dir, report_dir=REPORTS_DIR):
             provenance = payload.get("evaluation_provenance")
             optimization = load_opt_meta().get(name, {}) if OPT_META_JSON.exists() else {}
             receipt = dict(entry=entry, provenance=provenance, screening=item["status"],
+                           formula_render_version="preserved-source-v1",
                            evaluation_version=EVALUATION_CONVENTION_VERSION,
                            optimization_sha256=hashlib.sha256(json.dumps(
                                optimization, sort_keys=True).encode()).hexdigest())
@@ -1541,7 +1681,17 @@ def publish_completed_queue(queue_dir, report_dir=REPORTS_DIR):
             temporary = target.with_suffix(target.suffix + ".tmp")
             temporary.write_text(text, encoding="utf-8")
             os.replace(temporary, target)
-        return {"published_now": published, "withdrawn": withdrawn, "errors": errors}
+        publication_result = {"published_now": published, "withdrawn": withdrawn, "errors": errors}
+    # Refresh the established all-factor 2026 page after releasing its shared
+    # publication lock. The report only reads completed QE artifacts.
+    if report_dir.resolve() == REPORTS_DIR.resolve() and published:
+        import subprocess
+        try:
+            subprocess.run([sys.executable, str(ROOT / "jobs/analyze_2026_robustness.py"),
+                            "--mode", "completed"], cwd=ROOT, check=True, timeout=120)
+        except Exception as exc:
+            publication_result["robustness_refresh_error"] = str(exc)
+    return publication_result
 
 
 def publish_report_from_manifest(manifest_path, *, report_dir=REPORTS_DIR, update_homepage=True):
@@ -1570,6 +1720,7 @@ def publish_report_from_manifest(manifest_path, *, report_dir=REPORTS_DIR, updat
             raise ValueError(f"available factor {page} has no chart artifact")
         result, dates = _report_result_from_artifact(entry, manifest_path.parent / artifact_ref)
         factor = {
+            **{key: entry[key] for key in (*SOURCE_FIELDS, "formula_source", "formula_source_sha256", "formula_source_backfilled") if key in entry},
             "page_name": page,
             "factor_name": entry.get("factor_name", page),
             "fe_formula": entry.get("raw_formula", ""),
@@ -1919,7 +2070,8 @@ def stage_optimize_lite(factor, eval_result):
     # complete expression through FE and require replay parity before saving.
     with tempfile.TemporaryDirectory(prefix="optimizer_fe_replay_") as replay_dir:
         land_factor_batch_windowed(
-            [dict(page_name=page, fe_formula=expression)], backend_name="pandas",
+            [dict(page_name=page, fe_formula=expression)],
+            backend_name=os.environ.get("FACTOR_REPORT_FE_BACKEND", "auto"),
             output_dir=replay_dir)
         replay = pd.read_parquet(Path(replay_dir) / f"{page}.parquet").reindex(
             index=mat.index, columns=mat.columns).to_numpy(dtype=float)
@@ -2028,9 +2180,11 @@ def _dsl_text(factor):
                 return txt
         except Exception:
             return str(fe)
-    lf = factor.get("local_formula", "")
-    if lf:
-        return lf
+    # A source shorthand or Python body is not an executable DSL fallback.
+    if factor.get("dsl"):
+        candidate = dict(factor)
+        factor_from_record(candidate)  # parser/binding validation, preserving input
+        return candidate.get("fe_formula", "")
     return ""
 
 
@@ -2076,6 +2230,8 @@ def stage_page_inject(factor, eval_result, *, report_result=None, report_dates=N
     output_dir.mkdir(parents=True, exist_ok=True)
     is_flipped = bool((eval_result or {}).get("is_flipped", factor.get("is_flipped", False)))
     dsl_text = _dsl_text(factor)
+    if not str(dsl_text or "").strip():
+        raise ValueError("Cannot publish factor metrics without an executable DSL")
     fe_formula_raw = factor.get("fe_formula", "")
     if is_flipped:
         dsl_text = f"neg({dsl_text})" if dsl_text else dsl_text
@@ -2175,6 +2331,9 @@ def stage_page_inject(factor, eval_result, *, report_result=None, report_dates=N
                     **{f"G{i+1}": opt_result.quantile_nav[:, i].tolist()
                        for i in range(opt_result.quantile_nav.shape[1])})
                 opt_charts = '<h3>最优变体全窗评估图（不是验证窗择优分数）</h3>'
+                opt_charts += '<h4>优化前后同图对比</h4>' + R.chart_img_or_notice(
+                    R.plot_optimization_comparison(decile_navs, opt_navs, page), "对比数据不足")
+                opt_charts += '<p>G1/G10 是各分组满仓买入的参考净值，G1 不是空头账户净值。多空按所有入选股票等金额、总绝对敞口100%配置；两侧人数相等时各占50%。因此多空可以低于满仓G10；不能将两条分组累计净值相减。原始方案获选或排序未变时，前后曲线可能重合。</p>'
                 opt_charts += R.plot_ic_timeseries_svg(opt_ic, page + " optimized")
                 for title, picture in (
                     ("优化后月度 RankIC", R.plot_ic_monthly_heatmap(opt_ic, page)),
@@ -2203,6 +2362,9 @@ def stage_page_inject(factor, eval_result, *, report_result=None, report_dates=N
             html2 = _minimal_page(page, dsl_text, fe_formula_raw, is_flipped, eval_result)
             out.write_text(evaluation_banner(html2, factor.get("evaluation_provenance")), encoding="utf-8")
             return {"page": str(out), "mode": "minimal", "banned_in_full": banned}
+        # Preserve source verbatim (HTML escaped), outside presentation-name filters.
+        html = html.replace("</body>", formula_source_html(factor) + "</body>")
+        out.write_text(evaluation_banner(html, factor.get("evaluation_provenance")), encoding="utf-8")
         return {"page": str(out), "mode": "full"}
     except Exception as exc:
         print(f"    [page_inject fallback] {type(exc).__name__}: {str(exc)[:120]}", flush=True)
@@ -2362,13 +2524,14 @@ def stage_json_writeback(factor, eval_result, cluster_result):
         "dsl": dsl_text,
         "lqtp_formula": lqtp_formula,
         "fe_formula": fe_formula,
-        "code": "",
+        "code": factor.get("code", ""),
         "is_flipped": is_flipped,
         "can_use_factor_engine": True,
         "note": "本周新挖增量因子（incremental_intake）",
         "is_unlisted_miner": True,
     }
-    for key in ("source_formula", "source_metadata", "campaign", "intake_since"):
+    entry.update(formula_provenance(factor))
+    for key in ("intake_since",):
         if key in factor:
             entry[key] = factor[key]
     pool.append(entry)
@@ -2529,7 +2692,8 @@ def main():
                     help="target report directory for --publish-from-manifest")
     ap.add_argument("--limit", type=int, default=None)
     ap.add_argument("--batch-size", type=int, default=8)
-    ap.add_argument("--fe-backend", default="polars_long")
+    ap.add_argument("--fe-backend", default="auto",
+                    help="Report auto policy resolves to auto_long (SQL pushdown + Polars long); explicit backends remain supported")
     ap.add_argument("--qe-backend", choices=("auto", "cpu", "cuda", "cuda_strict"), default="auto")
     ap.add_argument("--skip-landing", action="store_true")
     ap.add_argument("--force-landing", action="store_true",
@@ -2603,6 +2767,8 @@ def main():
             name = record["page_name"]
             source = matrix_source(name)
             audit[name] = {"coverage": asdict(source),
+                           **formula_provenance(record),
+                           "executable_dsl": record.get("fe_formula"),
                            "dsl_history_error": admission_errors.get(name),
                            "eligible": source.is_full_window and name not in admission_errors}
             if len(audit) % 25 == 0:

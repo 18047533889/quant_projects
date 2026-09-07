@@ -270,7 +270,7 @@ def plot_decile_nav(decile_data, name):
         lw = 1.3 if k == 10 else 0.9
         ax.plot(dates, g, color=colors[k - 1], linewidth=lw, label=f"G{k}", alpha=0.85)
     if "LS" in decile_data and len(decile_data["LS"]) == len(dates):
-        ax.plot(dates, decile_data["LS"], color="#7c3aed", linewidth=2.0, label="多空 (G10-G1)")
+        ax.plot(dates, decile_data["LS"], color="#7c3aed", linewidth=2.0, label="多空（总敞口100%）")
     ax.axhline(1.0, color="gray", linewidth=0.7, linestyle="--", alpha=0.7)
     ax.set_title(f"{name} — 十分层净值曲线 (G1~G10)", fontsize=10, color=FG)
     ax.set_xlabel("日期"); ax.set_ylabel("净值")
@@ -289,13 +289,13 @@ def plot_long_short_nav(decile_data, name):
     if len(ls) != len(dates):
         return ""
     fig, ax = plt.subplots(figsize=(9, 3.5))
-    ax.plot(dates, ls, color="#7c3aed", linewidth=1.5, label="多空 (G10-G1)")
+    ax.plot(dates, ls, color="#7c3aed", linewidth=1.5, label="多空（总敞口100%）")
     g10 = decile_data.get("G10", [])
     g1 = decile_data.get("G1", [])
     if len(g10) == len(dates):
-        ax.plot(dates, g10, color="#16a34a", linewidth=1, label="G10 (多头)", alpha=0.7)
+        ax.plot(dates, g10, color="#16a34a", linewidth=1, label="G10（满仓买入参考）", alpha=0.7)
     if len(g1) == len(dates):
-        ax.plot(dates, g1, color="#dc2626", linewidth=1, label="G1 (空头)", alpha=0.7)
+        ax.plot(dates, g1, color="#dc2626", linewidth=1, label="G1（满仓买入参考，非做空收益）", alpha=0.7)
     ax.axhline(1.0, color="gray", linewidth=0.8, linestyle="--")
     ax.set_title(f"{name} — 多空净值曲线", fontsize=9, color=FG)
     ax.set_ylabel("净值")
@@ -306,6 +306,29 @@ def plot_long_short_nav(decile_data, name):
     plt.tight_layout()
     b64 = fig_to_b64(fig); plt.close(fig)
     return b64
+
+
+def plot_optimization_comparison(raw, optimized, name):
+    """Same dates, same account definitions, original initial capital; no rebasing."""
+    dates = pd.to_datetime(raw["dates"])
+    if not dates.equals(pd.DatetimeIndex(optimized["dates"])):
+        raise ValueError("优化前后日期轴不同，不能直接对比")
+    fig, axes = plt.subplots(3, 1, figsize=(10, 8), sharex=True)
+    for ax, key, title in zip(axes, ["LS", "G10", "G1"],
+            ["多空（总敞口100%）", "G10（满仓买入参考）", "G1（满仓买入参考，非做空收益）"]):
+        ax.plot(dates, raw[key], color="#555555", linestyle="--", linewidth=1.7, label="优化前")
+        ax.plot(dates, optimized[key], color="#1768ac", linewidth=1.2, label="优化后")
+        ax.set_title(title, fontsize=10)
+        ax.set_ylabel("净值")
+        ax.axhline(1, color="#aaaaaa", linewidth=.6)
+        ax.legend(fontsize=8)
+        ax.grid(alpha=.2)
+    axes[-1].xaxis.set_major_formatter(mdates.DateFormatter('%Y'))
+    fig.suptitle(name + " — 优化前后同口径对比（扣佣金；缺失保留断点）", fontsize=10)
+    fig.tight_layout(rect=(0, 0, 1, .97))
+    result = fig_to_b64(fig)
+    plt.close(fig)
+    return result
 
 
 def plot_ic_distribution(ic_series, name):
@@ -555,7 +578,7 @@ def build_html(page, note, dsl_text, dsl_note, req_cols, base, opt_meta, gate, r
     grid.append(f'<div class="metric"><b class="{pcls(base["ls_winrate"])}">{fmt_num(base["ls_winrate"], pct=True, signed=True)}</b><span>LS 日胜率</span></div>')
     grid.append(f'<div class="metric"><b>{fmt_num(base.get("top_quantile_turnover"), pct=True)}</b><span>Top10% 换手率</span></div>')
     grid.append(f'<div class="metric"><b class="{pcls(base["g10_annual"])}">{fmt_num(base["g10_annual"], pct=True, signed=True)}</b><span>G10 (多头) 年化</span></div>')
-    grid.append(f'<div class="metric"><b class="{pcls(base["g1_annual"])}">{fmt_num(base["g1_annual"], pct=True, signed=True)}</b><span>G1 (空头) 年化</span></div>')
+    grid.append(f'<div class="metric"><b class="{pcls(base["g1_annual"])}">{fmt_num(base["g1_annual"], pct=True, signed=True)}</b><span>G1（满仓买入参考）年化</span></div>')
     grid.append(f'<div class="metric"><b class="{pcls(base["rankic_winrate"])}">{fmt_num(base["rankic_winrate"], pct=True, signed=True)}</b><span>RankIC 胜率</span></div>')
     grid.append(f'<div class="metric"><b>{base["n_periods"]}</b><span>回测交易日</span></div>')
     grids_html = (
@@ -802,7 +825,7 @@ img {{ border-radius:8px }}
 
 <!-- 多空净值 -->
 <div class="card">
-<h2>多空净值曲线 (G10 - G1)</h2>
+<h2>多空净值曲线（总敞口100%）</h2>
 {ls_img}
 </div>
 
@@ -833,7 +856,7 @@ img {{ border-radius:8px }}
 <tr><td>LS 最大回撤</td><td class="{pcls(base["ls_mdd"])}">{fmt_num(base["ls_mdd"], pct=True, signed=True)}</td></tr>
 <tr><td>LS 日胜率</td><td class="{pcls(base["ls_winrate"])}">{fmt_num(base["ls_winrate"], pct=True, signed=True)}</td></tr>
 <tr><td>G10 (多头) 年化</td><td class="{pcls(base["g10_annual"])}">{fmt_num(base["g10_annual"], pct=True, signed=True)}</td></tr>
-<tr><td>G1 (空头) 年化</td><td class="{pcls(base["g1_annual"])}">{fmt_num(base["g1_annual"], pct=True, signed=True)}</td></tr>
+<tr><td>G1（满仓买入参考）年化</td><td class="{pcls(base["g1_annual"])}">{fmt_num(base["g1_annual"], pct=True, signed=True)}</td></tr>
 </tbody></table>
 </div>
 

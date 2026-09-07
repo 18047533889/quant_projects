@@ -114,6 +114,9 @@ _JOB_TIMEOUT_DEFAULT = float(os.environ.get("FACTOR_ENGINE_SERVICE_JOB_TIMEOUT",
 
 _RUNTIME_LOCK = threading.RLock()
 _RUNTIME_CONSTRUCTED = False
+_RUNTIME_ACTIVE = False
+_RUNTIME_OWNED: frozenset[str] = frozenset()
+_RUNTIME_START_FAILURE: BaseException | None = None
 #: R40 #95: policy 版本 —— reload_policies() 刷新时 bump；在途 job 保留旧快照。
 _POLICY_VERSION = 0
 
@@ -144,29 +147,107 @@ def _ensure_runtime(*, start: bool = True) -> None:
       保留被替换的 STORE（非代理），QUEUE 用它作为持久化后端启动。
     """
     global STORE, EXECUTOR, QUEUE, FEATURE_POLICY, SOURCE_POLICY
-    global _POLICY_VERSION, _RUNTIME_CONSTRUCTED
+    global _POLICY_VERSION, _RUNTIME_CONSTRUCTED, _RUNTIME_OWNED, _RUNTIME_START_FAILURE
+    from contextlib import ExitStack
+
+    def rollback(callback, *args, **kwargs) -> None:
+        try:
+            callback(*args, **kwargs)
+        except BaseException as exc:  # preserve the construction failure
+            warning(
+                "factor_engine.service.runtime.rollback_failed",
+                error_type=type(exc).__name__,
+            )
+
     with _RUNTIME_LOCK:
+        if _RUNTIME_START_FAILURE is not None:
+            raise RuntimeError("service runtime startup previously failed") from _RUNTIME_START_FAILURE
         if _RUNTIME_CONSTRUCTED:
+            # Construction (policy reload uses start=False) is not worker startup.
+            if start and isinstance(QUEUE, BoundedJobQueue) and not QUEUE._started:
+                try:
+                    QUEUE.start(STORE)
+                except BaseException as exc:
+                    # A start=False construction may defer the only failing
+                    # operation. Discard only resources created by this module;
+                    # injected partial runtimes remain caller-owned and are
+                    # permanently fail-closed until explicitly replaced.
+                    owned = _RUNTIME_OWNED
+                    for name, callback, args, kwargs in (
+                        ("QUEUE", getattr(QUEUE, "stop", None), (), {}),
+                        ("EXECUTOR", getattr(EXECUTOR, "shutdown", None), (), {"wait": True}),
+                        ("STORE", getattr(STORE, "close", None), (), {}),
+                    ):
+                        if name in owned and callable(callback):
+                            rollback(callback, *args, **kwargs)
+                    if owned:
+                        if "STORE" in owned:
+                            STORE = _LazyRuntimeProxy("STORE")
+                        if "EXECUTOR" in owned:
+                            EXECUTOR = _LazyRuntimeProxy("EXECUTOR")
+                        if "QUEUE" in owned:
+                            QUEUE = _LazyRuntimeProxy("QUEUE")
+                        if "FEATURE_POLICY" in owned:
+                            FEATURE_POLICY = _LazyRuntimeProxy("FEATURE_POLICY")
+                        if "SOURCE_POLICY" in owned:
+                            SOURCE_POLICY = _LazyRuntimeProxy("SOURCE_POLICY")
+                        _RUNTIME_CONSTRUCTED = False
+                        _RUNTIME_OWNED = frozenset()
+                    if "QUEUE" not in owned:
+                        _RUNTIME_START_FAILURE = exc
+                    raise
             return
-        _RUNTIME_CONSTRUCTED = True
-        if isinstance(STORE, _LazyRuntimeProxy):
-            STORE = JobStore()
-        if isinstance(EXECUTOR, _LazyRuntimeProxy):
-            EXECUTOR = ThreadPoolExecutor(
-                max_workers=_EXECUTOR_MAX_WORKERS,
-                thread_name_prefix="factor-engine-job",
-            )
-        if isinstance(QUEUE, _LazyRuntimeProxy):
-            QUEUE = BoundedJobQueue(
-                max_running=_EXECUTOR_MAX_WORKERS,
-                timeout_default=_JOB_TIMEOUT_DEFAULT,
-            )
-        if start and isinstance(QUEUE, BoundedJobQueue) and not getattr(QUEUE, "_started", False):
-            QUEUE.start(STORE)
+        # Resolve configuration before allocating resources or starting workers.
+        owned: set[str] = set()
+        feature_policy = (
+            RuntimeFeaturePolicy.from_env()
+            if isinstance(FEATURE_POLICY, _LazyRuntimeProxy) else FEATURE_POLICY
+        )
         if isinstance(FEATURE_POLICY, _LazyRuntimeProxy):
-            FEATURE_POLICY = RuntimeFeaturePolicy.from_env()
+            owned.add("FEATURE_POLICY")
+        source_policy = (
+            ApprovedSourcePolicy.from_env()
+            if isinstance(SOURCE_POLICY, _LazyRuntimeProxy) else SOURCE_POLICY
+        )
         if isinstance(SOURCE_POLICY, _LazyRuntimeProxy):
-            SOURCE_POLICY = ApprovedSourcePolicy.from_env()
+            owned.add("SOURCE_POLICY")
+        # Publish globals only after construction succeeds. A failed attempt
+        # releases just its own resources, leaving injected objects untouched.
+        with ExitStack() as cleanup:
+            store = STORE
+            if isinstance(store, _LazyRuntimeProxy):
+                store = JobStore()
+                owned.add("STORE")
+                cleanup.callback(rollback, store.close)
+            executor = EXECUTOR
+            if isinstance(executor, _LazyRuntimeProxy):
+                executor = ThreadPoolExecutor(
+                    max_workers=_EXECUTOR_MAX_WORKERS,
+                    thread_name_prefix="factor-engine-job",
+                )
+                owned.add("EXECUTOR")
+                cleanup.callback(rollback, executor.shutdown, wait=True)
+            queue = QUEUE
+            if isinstance(queue, _LazyRuntimeProxy):
+                queue = BoundedJobQueue(
+                    max_running=_EXECUTOR_MAX_WORKERS,
+                    timeout_default=_JOB_TIMEOUT_DEFAULT,
+                )
+                owned.add("QUEUE")
+                cleanup.callback(rollback, queue.stop)
+            if start and isinstance(queue, BoundedJobQueue) and not queue._started:
+                try:
+                    queue.start(store)
+                except BaseException as exc:
+                    if "QUEUE" not in owned:
+                        _RUNTIME_START_FAILURE = exc
+                    raise
+            STORE, EXECUTOR, QUEUE = store, executor, queue
+            FEATURE_POLICY, SOURCE_POLICY = feature_policy, source_policy
+            _RUNTIME_CONSTRUCTED = True
+            _RUNTIME_OWNED = frozenset(owned)
+            _RUNTIME_START_FAILURE = None
+            cleanup.pop_all()
 
 
 def reload_policies() -> dict[str, Any]:
@@ -1321,9 +1402,10 @@ def create_app():
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
+        global STORE, EXECUTOR, QUEUE, FEATURE_POLICY, SOURCE_POLICY
+        global _RUNTIME_CONSTRUCTED, _RUNTIME_ACTIVE, _RUNTIME_OWNED, _RUNTIME_START_FAILURE
         # R40 #94: 运行时（STORE/EXECUTOR/QUEUE/policies）在 lifespan 启动时构造并
         # start —— ``import service.app`` 无副作用（无线程/无目录）。
-        _ensure_runtime(start=True)
         # R21-264..266: one-shot production preflight before ready.
         PREFLIGHT.update(production_preflight())
         try:
@@ -1336,13 +1418,42 @@ def create_app():
         if not PREFLIGHT["ok"] and is_production_deploy:
             info("factor_engine.service.preflight.blocked")
             raise RuntimeError("production preflight failed; refusing to serve")
-        yield
-        # R21-080..082: graceful shutdown — drain queued, cancel running, close.
-        info("factor_engine.service.shutdown.start")
-        QUEUE.drain(timeout=float(os.environ.get("FACTOR_ENGINE_SERVICE_DRAIN_TIMEOUT", "30")))
-        EXECUTOR.shutdown(wait=True)
-        STORE.close()
-        info("factor_engine.service.shutdown.done")
+        with _RUNTIME_LOCK:
+            if _RUNTIME_ACTIVE:
+                raise RuntimeError("service runtime already has an active lifespan")
+            _ensure_runtime(start=True)
+            _RUNTIME_ACTIVE = True
+            store, executor, queue = STORE, EXECUTOR, QUEUE
+        try:
+            yield
+        finally:
+            # Run every cleanup even if the lifespan body or a cleanup raises.
+            from contextlib import ExitStack
+
+            try:
+                info("factor_engine.service.shutdown.start")
+                with ExitStack() as cleanup:
+                    cleanup.callback(store.close)
+                    cleanup.callback(executor.shutdown, wait=True)
+                    cleanup.callback(
+                        queue.drain,
+                        timeout=float(os.environ.get("FACTOR_ENGINE_SERVICE_DRAIN_TIMEOUT", "30")),
+                    )
+                info("factor_engine.service.shutdown.done")
+            finally:
+                with _RUNTIME_LOCK:
+                    # Reset only the runtime this lifespan activated. External
+                    # replacement under the lock is not ours to discard.
+                    if STORE is store and EXECUTOR is executor and QUEUE is queue:
+                        STORE = _LazyRuntimeProxy("STORE")
+                        EXECUTOR = _LazyRuntimeProxy("EXECUTOR")
+                        QUEUE = _LazyRuntimeProxy("QUEUE")
+                        FEATURE_POLICY = _LazyRuntimeProxy("FEATURE_POLICY")
+                        SOURCE_POLICY = _LazyRuntimeProxy("SOURCE_POLICY")
+                        _RUNTIME_CONSTRUCTED = False
+                        _RUNTIME_OWNED = frozenset()
+                        _RUNTIME_START_FAILURE = None
+                    _RUNTIME_ACTIVE = False
 
     app = FastAPI(
         title="Factor Engine Service",

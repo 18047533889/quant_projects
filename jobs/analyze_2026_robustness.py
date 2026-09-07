@@ -782,12 +782,480 @@ def compute_operator_stats(rob, formula_map):
     return dict(op_counts=op_counts, op_stable_ratio=op_stable_ratio, logic_stats=logic_stats)
 
 # ----------------------------------------------------------------------------- 主流程
+def reevaluate_existing_values(batch_size=4):
+    """Resume report-only QE reassessment of existing raw values; never reland."""
+    import tempfile, fcntl, hashlib
+    from pathlib import Path
+    import incremental_factor_intake as intake
+    from factor_report_sources import resolve_raw_matrix, RAW_MATRIX_DIRS
+    root = Path(MB)/'robustness_existing_values'
+    root.mkdir(exist_ok=True)
+    with (root/'run.lock').open('a') as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        state_path = root/'queue_state.json'
+        state = json.loads(state_path.read_text()) if state_path.exists() else {'factors':{}}
+        def save():
+            with tempfile.NamedTemporaryFile(mode='w', dir=root, delete=False) as f:
+                json.dump(state, f, ensure_ascii=False); temp=f.name
+            os.replace(temp,state_path)
+        records={r['page_name']:dict(r) for r in intake.load_pool()}
+        requested=Path('/tmp/weekly_requested_formulas_20260906.txt')
+        if requested.exists():
+            for r in intake.requested_dsl_records(requested)[0]:records.setdefault(r['page_name'],dict(r))
+        # Include landed names even when their formula registration is missing.
+        for directory in RAW_MATRIX_DIRS:
+            for p in (Path(MB)/directory).glob('*.parquet'):
+                name=p.stem
+                if name.startswith('factor_') and name[7:] in records:name=name[7:]
+                records.setdefault(name,{'page_name':name})
+        pending=[]
+        for name,r in records.items():
+            old=state['factors'].get(name,{})
+            if old.get('status')=='passed' and old.get('evaluation_version')==intake.EVALUATION_CONVENTION_VERSION:continue
+            pending.append(r)
+            state['factors'][name]={'status':'pending_existing_values'}
+        save()
+        vwap=intake.load_vwap(start_date='2016-01-04',end_date='2026-08-27')
+        for offset in range(0,len(pending),batch_size):
+            tile=pending[offset:offset+batch_size]
+            # Per-factor isolation means one malformed cache never loses a tile.
+            for record in tile:
+                name=record['page_name']
+                try:
+                    source=resolve_raw_matrix(name)
+                    if source.path is None:raise ValueError('no existing raw value file')
+                    before=source.path.stat()
+                    matrix=pd.read_parquet(source.path)
+                    matrix.index=pd.to_datetime(matrix.index)
+                    if matrix.index.has_duplicates or matrix.columns.has_duplicates:raise ValueError('duplicate matrix axes')
+                    matrix=matrix.sort_index()
+                    if before.st_mtime_ns!=source.path.stat().st_mtime_ns:raise ValueError('matrix changed during read; retry later')
+                    # Historical matrices are intentionally reused as requested.
+                    # Do not claim replay parity with today's registered DSL.
+                    formula=record.get('fe_formula') or record.get('dsl') or record.get('formula') or ''
+                    record['fe_formula']=formula
+                    folder=root/name
+                    folder.mkdir(exist_ok=True)
+                    batch=intake.evaluate_factor_batch([record],vwap=vwap,matrix_loader=lambda _:matrix,batch_size=1,backend='auto')
+                    intake.write_report_manifest([record],batch,target=folder/'report_manifest.json')
+                    if name not in batch['factors']:raise ValueError(batch['unavailable'].get(name,'no valid QE result'))
+                    state['factors'][name]={'status':'passed','folder':str(folder),
+                        'evaluation_version':intake.EVALUATION_CONVENTION_VERSION,
+                        'value_source':str(source.path),'value_mtime_ns':before.st_mtime_ns,
+                        'value_size':before.st_size,'value_provenance':'historical raw cache; DSL replay not reverified',
+                        'completed_at':intake.report_time()}
+                    del matrix,batch
+                except Exception as exc:
+                    state['factors'][name]={'status':'unavailable','reason':f'{type(exc).__name__}: {exc}'}
+                save()
+            print('existing-value reassessment',offset+len(tile),'/',len(pending),dict(Counter(r['status'] for r in state['factors'].values())),flush=True)
+            completed_snapshot_report()
+
+
+def existing_summary_report():
+    """User-selected all-pool readout of saved historical statistics, no QE run."""
+    import ast, itertools, hashlib, tempfile, fcntl
+    from pathlib import Path
+    from html import escape
+    import incremental_factor_intake as intake
+    output=Path(OUT_PAGE_DIR); output.mkdir(parents=True,exist_ok=True)
+    raw=Path(OUT_JSON).read_bytes()
+    saved=json.loads(raw)
+    if isinstance(saved,dict):saved=list(saved.values())
+    historical={r['page']:r for r in saved}
+    current_snapshot=completed_snapshot_report(return_data=True)
+    current={r['name']:r for r in current_snapshot['factors']}
+    registry={r['page_name']:r for r in intake.load_pool()}
+    names=sorted(set(registry)|set(historical)|set(current))
+    rows=[]
+    def number(v):
+        try:return float(v) if math.isfinite(float(v)) else None
+        except (ValueError,TypeError):return None
+    for name in names:
+        old=historical.get(name,{})
+        meta=registry.get(name,{})
+        formula=meta.get('fe_formula') or meta.get('dsl') or ''
+        ops=[]
+        try:
+            tree=ast.parse(formula,mode='eval')
+            ops=sorted({n.func.id for n in ast.walk(tree) if isinstance(n,ast.Call) and isinstance(n.func,ast.Name)}-{'col','neg','is_finite'})
+        except (SyntaxError,TypeError):pass
+        base=number((old.get('rankIC_full') or {}).get('ic'))
+        recent=number((old.get('rankIC_2026') or {}).get('ic'))
+        rows.append(dict(name=name,has_saved=name in historical,baseline_ic=base,ic_2026=recent,
+            delta=recent-base if recent is not None and base is not None else None,
+            n_full=(old.get('rankIC_full') or {}).get('n'),n_2026=(old.get('rankIC_2026') or {}).get('n'),
+            icir_2026=number((old.get('rankIC_2026') or {}).get('icir')),
+            status=old.get('status','missing'),formula=formula,operators=ops,
+            source=old.get('src','未记录'),last_date=(old.get('ls2026') or {}).get('last_d'),
+            formula_provenance='current registry; historical execution expression not reverified'))
+        row=rows[-1]
+        row['result_source']='历史结果'
+        row['original_status']=row['status']
+        if name in current:
+            new=current[name]
+            row.update(has_saved=True,baseline_ic=new['baseline_ic'],ic_2026=new['ic_2026'],
+                delta=new['delta'],n_full=new.get('n_baseline'),n_2026=new['n_2026'],
+                icir_2026=new['ir_2026'],formula=new['formula'],operators=new['operators'],
+                result_source='新版评估',source=new.get('value_provenance','current pipeline artifact'),
+                original_status='current evaluation',formula_provenance=new.get('value_provenance'),
+                last_date='2026-08-27')
+        # One descriptive numeric rule across both sources, NOT a claim of
+        # comparable source windows or measurement implementations.
+        b,y=row['baseline_ic'],row['ic_2026']
+        row['status']=('missing' if y is None else 'unclassified' if b is None or b<.005
+                       else 'stable' if y>=.8*b else 'decay')
+    groups=[]
+    for size in (1,2,3):
+        members=defaultdict(list)
+        for r in rows:
+            if r['has_saved']:
+                for pattern in itertools.combinations(r['operators'],size):members[pattern].append(r)
+        for pattern,rs in members.items():
+            classified=[r for r in rs if r['status'] in {'stable','decay','failed'}]
+            ics=[r['ic_2026'] for r in rs if r['ic_2026'] is not None]
+            groups.append(dict(size=size,pattern=' + '.join(pattern),n=len(rs),
+                classified_n=len(classified),stable=sum(r['status']=='stable' for r in classified),
+                stable_rate=sum(r['status']=='stable' for r in classified)/len(classified) if classified else None,
+                positive=sum(v>0 for v in ics),valid_ic_n=len(ics),median_ic=float(np.median(ics)) if ics else None,
+                members=[r['name'] for r in rs]))
+    now=intake.report_time()
+    source_counts=Counter(r['result_source'] for r in rows if r['has_saved'])
+    payload=dict(generated_at=now,mode='mixed-summary',source=OUT_JSON,source_sha256=hashlib.sha256(raw).hexdigest(),
+        universe_count=len(names),historical_count=len(historical),factors=rows,combinations=groups,
+        source_counts=dict(source_counts),current_sources=current_snapshot['sources'],
+        convention='Current comparable result preferred per factor name, historical fallback; heterogeneous windows/metrics; shared descriptive 80% rule')
+    def atomic(path,text):
+        with tempfile.NamedTemporaryFile(mode='w',dir=path.parent,delete=False) as f:f.write(text);temp=f.name
+        os.replace(temp,path)
+    def table(rs,cols):
+        def fmt(v,k):
+            if v is None:return '—'
+            if isinstance(v,bool):return '是' if v else '否'
+            if k=='status':return {'stable':'保留≥80%','decay':'保留不足80%','unclassified':'参考值不足，不算比例','missing':'无有效结果'}.get(v,v)
+            if k=='stable_rate':return f'{v:.1%}'
+            if isinstance(v,float):return f'{v:.4f}'
+            if isinstance(v,list):return '、'.join(v)
+            return str(v)
+        return '<div class="scroll"><table><tr>'+''.join('<th>'+escape(label)+'</th>' for k,label in cols)+'</tr>'+''.join('<tr>'+''.join('<td>'+escape(fmt(r.get(k),k))+'</td>' for k,label in cols)+'</tr>' for r in rs)+'</table></div>'
+    counts=Counter(r['status'] for r in rows if r['has_saved'])
+    denominator=counts['stable']+counts['decay']
+    stability=f'{counts["stable"]/denominator:.1%}' if denominator else '—'
+    parts=[f'<h1>2026 因子稳定率与算子组合</h1><p>更新（北京时间）：{now} · 已有结果 {sum(r["has_saved"] for r in rows)} 个因子</p>'
+        f'<section style="background:#eef6ff;border-left:5px solid #2864b0;padding:20px"><h2 style="margin-top:0">整体稳定率：<strong style="font-size:36px">{stability}</strong></h2>'
+        f'<p><b>{counts["stable"]} 个稳定 ÷ {denominator} 个可计算衰减比例的因子</b>；其中 {counts["decay"]} 个衰减。另有 {counts["unclassified"]} 个参考值不足，不进入稳定率分母。</p>'
+        '<p>稳定＝参考指标≥0.005，且2026指标至少保留参考指标的80%。这是描述性稳定率；来源窗口及算法有差异，不能当作严格同口径回测的稳定概率。</p></section>',
+        '<p>下方分别展示单算子、双算子、三算子的稳定率，按稳定率从高到低排列；请同时看样本数，小样本高比例不代表可靠优势。</p>'
+        '<details><summary>展开计算口径与来源说明</summary>'
+        f'<p>新版结果 {source_counts["新版评估"]} 个、历史补充 {source_counts["历史结果"]} 个，同名只计一次。</p>',
+        '<h2>本次汇报口径</h2><p>新结果来自当前已完成且通过核验的评估；无新结果者复用 robustness_2026.json 的历史指标。仅重新汇总，不等待重新落值或评估、不再翻转。按因子名称计数，不按相同公式去重；近似变体可能重复贡献。</p>'
+        '<p>旧脚本名义全期为 2019-01-02 至 2026-08-24，2026 段为 2026-01-01 至 2026-08-24；部分来源覆盖不同，实际有效天数见明细。全期包含 2026，不能称独立参考窗或密封样本外。旧字段名虽为 RankIC，其计算实现未按新版 Spearman 口径重新验收，不能与新版指标混排。</p>'
+        '<p>新版参考窗为 2018-07-01 至 2023-12-31，目标窗为 2026-01-01 至 2026-08-27；旧版参考窗包含2026，且旧指标实现未统一。这是明确保留来源差异的合并表，不代表二者可直接比较或排名。每组列出新旧数量，来源构成会影响结论。</p>'
+        '<p>不混用旧稳定标签与新稳定标签。统一描述规则：参考指标≥0.005者进入分母，2026指标≥参考指标×80%者进入分子；其余不计算保留比例。此规则不消除新旧测量差异，也不是显著性检验。旧多空存在已识别的敞口／缺失值口径问题，因此不将旧多空收益、回撤用于本页绩效结论。</p>'
+        '<p>算子从当前登记公式语法树提取，仅统计函数调用名，排除 col、neg、is_finite；公式未解析者仍进入整体统计，不进入组合。历史执行公式与当前登记公式尚未逐项验证一致，组合结果为登记结构的探索性关联，不代表因果。</p></details>']
+    for g in groups:
+        by_source=Counter(r['result_source'] for r in rows if r['name'] in g['members'])
+        g.update(new_n=by_source['新版评估'],old_n=by_source['历史结果'])
+    cols=[('pattern','算子组合'),('stable_rate','稳定率'),('stable','稳定因子数'),('classified_n','稳定率分母'),('n','全部样本数'),('positive','2026指标为正数'),('median_ic','2026指标中位数')]
+    for size in (1,2,3):
+        gs=[g for g in groups if g['size']==size]
+        ranked=sorted([g for g in gs if g['n']>=5],key=lambda g:(g['stable_rate'] or 0,g['n']),reverse=True)
+        parts.append(f'<h2>{ {1:"单",2:"双",3:"三"}[size]}算子统计</h2><p>识别 {len(gs)} 种结构，{len(ranked)} 种覆盖至少5个因子。下表显示前20组；“+”表示共现，不是加法或执行顺序。组合之间样本重叠，不可将数量相加。</p>')
+        parts.append(table(ranked[:20],cols))
+        parts.append('<details><summary>全部组合及成员（含小样本，不作推荐榜）</summary>'+table(gs,cols+[('members','成员')])+'</details>')
+    parts.append('<h2>全部因子明细</h2>'+table(rows,[('name','因子'),('result_source','结果版本'),('has_saved','有结果'),('status','描述性保留状态'),('baseline_ic','各自参考指标'),('ic_2026','2026指标'),('icir_2026','2026 IR'),('n_full','参考有效日'),('n_2026','2026有效日'),('source','来源标记')]))
+    parts.append('<p><a href="existing_summary.json">全部统计及来源哈希 JSON</a> · <a href="existing_summary_factors.csv">全部因子 CSV</a></p>')
+    html='<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>2026 全量历史结果分析</title><style>body{font:16px/1.7 system-ui;margin:24px;color:#243447}h2{margin-top:32px}.scroll{overflow:auto}table{border-collapse:collapse;font-size:13px;width:100%}td,th{padding:8px;border-bottom:1px solid #ddd;text-align:left;max-width:600px;overflow-wrap:anywhere}th{background:#eef2f7}</style><main>'+''.join(parts)+'</main></html>'
+    atomic(output/'existing_summary.json',json.dumps(payload,ensure_ascii=False,allow_nan=False))
+    pd.DataFrame(rows).to_csv(output/'existing_summary_factors.csv',index=False)
+    atomic(output/'robustness_2026.html',html)
+    with (Path(REPORT_DIR)/'publication.lock').open('a') as lock:
+        fcntl.flock(lock,fcntl.LOCK_EX)
+        doc=Path(INDEX).read_text()
+        section=f'<section id="robustness-2026"><h2>2026 新旧结果合并分析</h2><p>{now} · 新版 {source_counts["新版评估"]} 个、历史补充 {source_counts["历史结果"]} 个；同名优先新版，不重复计数，保留口径差异说明。</p><a href="robustness_2026/robustness_2026.html">打开2026整体及单／双／三算子分析</a></section>'
+        doc=re.sub(r'<section[^>]*id="robustness-2026"[^>]*>.*?</section>',lambda _:section,doc,flags=re.S)
+        atomic(Path(INDEX),doc)
+    print(json.dumps(dict(report=str(output/'robustness_2026.html'),count=len(historical),scope=len(names),states=dict(counts)),ensure_ascii=False),flush=True)
+
+
+def completed_snapshot_report(*, return_data=False):
+    """Incremental 2026 readout from verified QE artifacts, never legacy metrics."""
+    import ast, hashlib, itertools, base64, io, tempfile, fcntl
+    from pathlib import Path
+    if not return_data and (Path(OUT_PAGE_DIR)/'use_existing_summary').exists():
+        return existing_summary_report()
+    from html import escape
+    import incremental_factor_intake as intake
+    from quant_evaluator.metrics.ic_summary import compute_icir
+    from quant_evaluator.metrics.portfolio_stats import compute_sharpe_ratio, compute_maximum_drawdown
+    rows, exclusions, seen = [], [], set()
+    universe = {r['page_name']: dict(name=r['page_name'], scope='存量因子', state='待统一评估')
+                for r in intake.load_pool()}
+    historical = {r['page']: r for r in json.loads(Path(OUT_JSON).read_text())} if Path(OUT_JSON).exists() else {}
+    requested_path = Path('/tmp/weekly_requested_formulas_20260906.txt')
+    deferred_requested = []
+    if requested_path.exists():
+        requested, deferred_requested = intake.requested_dsl_records(requested_path)
+        for record in requested:
+            universe.setdefault(record['page_name'], dict(name=record['page_name'], scope='本周新增', state='尚未运行'))
+    queue_counts = {}
+    sources = []
+    cluster_data = intake.load_clusters() if intake.CLUSTERS_JSON.exists() else {}
+    clusters = cluster_data.get("page_to_cluster", {})
+    for queue in (Path('/tmp/weekly_overnight_20260906'), Path('/tmp/report_fullpool_retest_20260906'), Path(MB)/'robustness_existing_values'):
+        if not (queue/'queue_state.json').exists():continue
+        state = json.loads((queue / 'queue_state.json').read_text())
+        for name, item in state['factors'].items():
+            universe.setdefault(name, dict(name=name, scope='已有落值'))['state'] = item.get('status', '待评估')
+        queue_counts[queue.name] = dict(Counter(v.get('status') for v in state['factors'].values()))
+        for name, status in state['factors'].items():
+            if any(r['name']==name for r in rows):continue
+            if status.get('status') not in {'passed', 'below_gate'}:
+                continue
+            path = Path(status['folder']) / 'report_manifest.json'
+            try:
+                content = path.read_bytes()
+                manifest = json.loads(content)
+                if manifest.get('evaluation_version') != intake.EVALUATION_CONVENTION_VERSION:
+                    raise ValueError('old evaluation convention')
+                entry = manifest['factors'][name]
+                formula = entry.get('effective_formula')
+                if entry.get('direction') not in (-1, 1):
+                    raise ValueError('missing fixed direction')
+                try:tree = ast.parse(formula, mode='eval') if formula else ast.parse('0', mode='eval')
+                except (SyntaxError,TypeError):tree=ast.parse('0',mode='eval')
+                formula_known=bool(formula) and bool(list(ast.walk(tree))[1:]) and not isinstance(tree.body,ast.Constant)
+                identity = ast.dump(tree, include_attributes=False) if formula_known else 'missing-formula:'+name
+                if identity in seen and not return_data:
+                    exclusions.append({'factor': name, 'reason': 'duplicate effective DSL'})
+                    continue
+                artifact = Path(entry['artifact'])
+                if not artifact.is_absolute(): artifact = path.parent / artifact
+                raw = artifact.read_bytes()
+                if hashlib.sha256(raw).hexdigest() != entry['artifact_sha256']:
+                    raise ValueError('artifact hash mismatch')
+                with np.load(io.BytesIO(raw), allow_pickle=False) as saved:
+                    dates = pd.DatetimeIndex(saved['dates'])
+                    ic = saved['rank_ic_series'].copy()
+                    returns = saved['long_short_returns'].copy()
+                if ic.shape != (len(dates),) or returns.shape != ic.shape or dates.has_duplicates or not dates.is_monotonic_increasing:
+                    raise ValueError('artifact alignment invalid')
+                reference = (dates >= '2018-07-01') & (dates <= '2023-12-31')
+                recent = (dates >= '2026-01-01') & (dates <= '2026-08-27')
+                base, y26 = ic[reference], ic[recent]
+                if np.isfinite(base).sum() < 200 or np.isfinite(y26).sum() < 60:
+                    raise ValueError('insufficient comparable IC observations')
+                ops = sorted({n.func.id for n in ast.walk(tree) if isinstance(n, ast.Call)
+                              and isinstance(n.func, ast.Name)} - {'col', 'neg', 'is_finite'})
+                edges = set()
+                for node in ast.walk(tree):
+                    if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id in ops:
+                        for child in node.args:
+                            if isinstance(child, ast.Call) and isinstance(child.func, ast.Name) and child.func.id in ops:
+                                edges.add(node.func.id + ' → ' + child.func.id)
+                mean_base, mean26 = float(np.nanmean(base)), float(np.nanmean(y26))
+                monthly = {str(month): float(np.nanmean(ic[(dates.to_period('M') == month) & recent]))
+                           for month in dates[recent].to_period('M').unique()
+                           if np.isfinite(ic[(dates.to_period('M') == month) & recent]).sum() >= 5}
+                rr = returns[recent]
+                finite_rr = rr[np.isfinite(rr)]
+                row = dict(name=name, formula=formula, operators=ops, edges=sorted(edges),
+                           value_provenance=status.get('value_provenance','current pipeline artifact'),
+                           formula_known=formula_known,
+                           family=clusters.get(name), screening=status['status'],
+                           baseline_ic=mean_base, ic_2026=mean26, delta=mean26-mean_base,
+                           baseline_ir=float(compute_icir(base[:, None])[0]),
+                           ir_2026=float(compute_icir(y26[:, None])[0]),
+                           n_baseline=int(np.isfinite(base).sum()), n_2026=int(np.isfinite(y26).sum()),
+                           positive=mean26 > 0,
+                           comparable=mean_base >= .005,
+                           stable=bool(mean_base >= .005 and mean26 >= .8 * mean_base),
+                           monthly=monthly, return_days_2026=int(len(finite_rr)),
+                           ls_sharpe_2026=float(compute_sharpe_ratio(rr[:, None])[0]),
+                           ls_mdd_2026=float(compute_maximum_drawdown(finite_rr, missing_return_policy='fail')[0]) if len(finite_rr) else None)
+                rows.append(row); seen.add(identity)
+                sources.append(dict(factor=name, manifest=str(path), sha256=hashlib.sha256(content).hexdigest(),
+                                    artifact=str(artifact), artifact_sha256=entry['artifact_sha256']))
+            except Exception as exc:
+                exclusions.append(dict(factor=name, reason=str(exc)))
+    if not rows:
+        raise ValueError('No current, hash-verified comparable artifacts; report not fabricated')
+    groups = []
+    for size in (1, 2, 3):
+        combinations = defaultdict(list)
+        for r in rows:
+            for combo in itertools.combinations(r['operators'], size): combinations[combo].append(r)
+        for combo, members in combinations.items():
+            comparable = [r for r in members if r['comparable']]
+            monthly_groups = []
+            for month in sorted({m for r in members for m in r['monthly']}):
+                monthly_members = [r for r in members if month in r['monthly']]
+                eligible = [r for r in monthly_members if r['comparable']]
+                monthly_groups.append(dict(month=month, n=len(monthly_members),
+                    median_ic=float(np.median([r['monthly'][month] for r in monthly_members])),
+                    comparable_n=len(eligible), stable_n=sum(r['monthly'][month] >= .8*r['baseline_ic'] for r in eligible),
+                    median_delta=float(np.median([r['monthly'][month]-r['baseline_ic'] for r in monthly_members]))))
+            groups.append(dict(size=size, pattern=' + '.join(combo), n=len(members),
+                               sufficient_support=len(members) >= 5,
+                               members=sorted(r['name'] for r in members), monthly=monthly_groups,
+                               comparable_n=len(comparable), stable_n=sum(r['stable'] for r in comparable),
+                               positive_rate=float(np.mean([r['positive'] for r in members])),
+                               median_ic=float(np.median([r['ic_2026'] for r in members])),
+                               median_delta=float(np.median([r['delta'] for r in members])),
+                               stable_rate=float(np.mean([r['stable'] for r in comparable])) if comparable else None,
+                               known_families=len({r['family'] for r in members if r['family'] is not None}),
+                               unassigned=sum(r['family'] is None for r in members)))
+    edges = defaultdict(list)
+    for r in rows:
+        for edge in r['edges']: edges[edge].append(r)
+    edge_rows = [dict(pattern=e, n=len(rs), median_ic=float(np.median([r['ic_2026'] for r in rs])),
+                      median_delta=float(np.median([r['delta'] for r in rs]))) for e, rs in edges.items() if len(rs) >= 5]
+    comparable = [r for r in rows if r['comparable']]
+    summary = dict(total=len(rows), positive=sum(r['positive'] for r in rows), comparable=len(comparable),
+                   stable=sum(r['stable'] for r in comparable),
+                   median_baseline=float(np.median([r['baseline_ic'] for r in rows])),
+                   median_2026=float(np.median([r['ic_2026'] for r in rows])),
+                   median_delta=float(np.median([r['delta'] for r in rows])))
+    result = dict(generated_at=intake.report_time(), evaluation_version=intake.EVALUATION_CONVENTION_VERSION,
+                  summary=summary, factors=rows, combinations=groups, nested_patterns=edge_rows,
+                  exclusions=exclusions, queue_counts=queue_counts, sources=sources,
+                  interpretation='Exploratory completed-sample snapshot; not sealed OOS or causal evidence',
+                  baseline='2018-07-01..2023-12-31', direction_window='2016-01-04..2018-06-30',
+                  target='2026-01-01..2026-08-27', dedupe='exact effective DSL only; incomplete family mapping')
+    current = {r['name']: r for r in rows}
+    for name, item in universe.items():
+        item['included_current'] = name in current
+        item['historical_record'] = name in historical
+        item['current_2026_ic'] = current.get(name, {}).get('ic_2026')
+        item['historical_2026_ic_unverified'] = (historical.get(name, {}).get('rankIC_2026') or {}).get('ic')
+    result['universe'] = list(universe.values())
+    result['universe_count'] = len(universe)
+    result['historical_count'] = len(historical)
+    result['deferred_requested'] = deferred_requested
+    if return_data:
+        return result
+    output = Path(OUT_PAGE_DIR); output.mkdir(parents=True, exist_ok=True)
+    def atomic(path, data):
+        with tempfile.NamedTemporaryFile(dir=path.parent, delete=False) as f:
+            f.write(data); temp = f.name
+        os.replace(temp, path)
+    def clean(x):
+        if isinstance(x, float) and not math.isfinite(x): return None
+        if isinstance(x, dict): return {k: clean(v) for k,v in x.items()}
+        if isinstance(x, list): return [clean(v) for v in x]
+        return x
+    atomic(output / 'completed_snapshot.json', json.dumps(clean(result), ensure_ascii=False, indent=1, allow_nan=False).encode())
+    pd.DataFrame([{k:v for k,v in r.items() if k not in {'monthly','operators','edges'}} for r in rows]).to_csv(output/'completed_factors.csv', index=False)
+    import matplotlib
+    matplotlib.use('Agg')
+    import matplotlib.pyplot as plt
+    fig, ax = plt.subplots(figsize=(9, 5))
+    ax.scatter([r['baseline_ic'] for r in rows], [r['ic_2026'] for r in rows], color='#426b9b', alpha=.75)
+    bounds = [min(min(r['baseline_ic'],r['ic_2026']) for r in rows)-.005,
+              max(max(r['baseline_ic'],r['ic_2026']) for r in rows)+.005]
+    ax.plot(bounds,bounds,'--',color='#777777',label='Unchanged IC')
+    ax.axhline(0,color='#999999',lw=.6); ax.axvline(0,color='#999999',lw=.6)
+    ax.set(xlabel='Reference RankIC (Jul 2018–Dec 2023)', ylabel='2026 RankIC', title=f'RankIC comparison · {len(rows)} completed factors')
+    ax.legend(); fig.tight_layout(); stream=io.BytesIO();fig.savefig(stream,format='png',dpi=140);plt.close(fig)
+    chart='data:image/png;base64,'+base64.b64encode(stream.getvalue()).decode()
+    def table(items, columns):
+        def fmt(v, key):
+            if v is None:return '—'
+            if isinstance(v, bool):return '是' if v else '否'
+            if key == 'state':
+                return {'passed':'筛选通过（非2026稳定判定）', 'below_gate':'已评估，未达入池门槛',
+                        'running':'落值／评估中', 'retry_pending':'等待重试',
+                        'unavailable':'暂未取得合格评估（非因子失效）', 'failed':'执行失败（非质量结论）'}.get(v, str(v))
+            if key in {'stable_rate', 'ls_mdd_2026'}:return f'{v:.2%}'
+            if isinstance(v,float):return f'{v:.4f}'
+            return str(v)
+        return '<div class="table-scroll"><table><thead><tr>'+''.join('<th>'+escape(label)+'</th>' for key,label in columns)+'</tr></thead><tbody>'+''.join('<tr>'+''.join('<td>'+escape(fmt(r.get(key), key))+'</td>' for key,label in columns)+'</tr>' for r in items)+'</tbody></table></div>'
+    parts=[f'<h1>2026 因子稳定性分析 · 汇报快照</h1><h2>Executive Summary｜汇报要点</h2><ul>'
+           f'<li>当前可核验、去除完全相同 DSL 后有 <b>{len(rows)}</b> 个可比因子，2026 RankIC 为正的有 <b>{summary["positive"]}</b> 个。不是全部因子重测结论。</li>'
+           f'<li>RankIC 中位数：参考窗 <b>{summary["median_baseline"]:.4f}</b>，2026 年 <b>{summary["median_2026"]:.4f}</b>；逐因子变化量中位数 <b>{summary["median_delta"]:+.4f}</b>。</li>'
+           f'<li>参考窗 RankIC ≥ 0.005 的 {len(comparable)} 个因子中，{summary["stable"]} 个在 2026 保留至少 80% 的 RankIC。算子组合仅供探索，不能证明组合导致抗衰减。</li></ul>'
+           f'<p>快照时间（北京时间）：{escape(result["generated_at"])}；评估版本：<code>{escape(result["evaluation_version"])}</code>。本页读取已完成评估，包含筛选通过及未达标但有效的记录，以减少只看通过者的偏差。生成本页不会重新落值或覆盖评估；落值和复评由后台主链路另行执行，快照不代表后台实时状态。</p>',
+           '<h2>比较口径：固定方向，不用 2026 反向择优</h2><p>方向仅由 2016 年 1 月 4 日至 2018 年 6 月 30 日确定；参考窗为 2018 年 7 月至 2023 年底，目标窗为 2026 年初至 8 月 27 日。两个比较窗口不重叠。IR 为日度 IC 均值／样本标准差，不年化。2026 已被探索过，不是密封样本外。</p>',
+           '<h3>数据、收益与统计定义</h3><ul>'
+           '<li>市场为 A 股，日期按北京时间解释。主评估历史起点为 2016-01-04；上面的参考窗用于比较，不表示重新将历史起点改为 2018 年。达到本页有效日数要求不等于逐日全历史完整。</li>'
+           '<li>数据口径使用 StockDailyBarAdj 的复权价格和表内实际 Volume，不再乘除 Factor。收益按 t 日信号、t+1 的 AdjVwap 买入／建仓、t+2 的 AdjVwap 卖出／平仓对齐；本页复用评估产物，不重新拼接价格。</li>'
+           '<li>RankIC 为逐日横截面秩相关的时间均值；ICIR 为日度 IC 均值除以样本标准差（ddof=1），不年化。变化量为每个因子的 2026 IC 减参考 IC，再取中位数；不等于两组中位数相减。</li>'
+           '<li>多空按所选股票的相等绝对成交金额配置，总绝对敞口 100%，空头按 100% 保证金计；不是等股数，也不是两条独立 G10、G1 净值直接相减。</li>'
+           '<li>夏普与最大回撤调用 QuantEvaluator：夏普按 252 个交易日年化、无风险收益为 0；最大回撤以收益累计净值相对历史峰值的最大跌幅表示，正百分数越小越好。已存多空收益扣单边佣金 1 bp（0.01%），本页不重复扣费；印花税、滑点、融券成本未计入，不能称全部成本后收益。</li>'
+           '<li>参考窗至少 200 个、2026 窗至少 60 个有限 IC 观测才纳入。收益缺失日不补零；回撤只按有限收益序列计算，不代表缺口期间损益已知。有效 IC 日与收益日分别列出，不同因子覆盖日可能不同，比较收益指标需同时查看覆盖情况。</li>'
+           '<li>复用所有可找到的已有原始因子矩阵，以当前 QuantEvaluator 重新评估；不要求重新落值。历史缓存的原始字段／公式重放一致性未重新验证，与新落值产物在 JSON 的 value_provenance 区分。仅接收当前评估版本、固定方向、产物哈希一致、日期唯一且排序、IC 与收益日期形状一致的记录。已定向序列不再翻转。缺少可解析公式者可进入整体指标统计，但不进入算子组合；有公式者按登记有效 DSL 的完全相同语法树去重，不等于因子族独立或历史值与该公式已验证一致。</li></ul>'
+           '<h3>入池筛选 ≠ 2026 抗衰减</h3><p>入池门槛为 RankIC ≥ 0.015 或 RankIC IR ≥ 0.15，沿用主评估记录的筛选结果，并非用本页 2026 指标重新筛选。抗衰减统计另定义为：仅在参考 IC ≥ 0.005 的因子中，2026 IC ≥ 参考 IC × 80% 者计入分子；参考 IC 接近零或为负者不进入这个比例的分母。2026 IC 为正的数量则在全部本页可比样本中计算。这些阈值是描述性研究规则，不是显著性检验或未来有效性保证。</p>',
+           f'<h2>整体变化：同时看正负与相对衰减</h2><p>横轴是参考窗 RankIC，纵轴是 2026 RankIC；虚线上方表示 IC 提高，下方表示下降。参考窗接近零或负值时，不使用衰减比率，避免把负负相除误判为稳定。</p><img alt="参考窗与2026 RankIC散点图" src="{chart}">']
+    for size in (1,2,3):
+        all_groups=sorted([g for g in groups if g['size']==size], key=lambda g:(g['median_delta'],g['n']),reverse=True)
+        supported=[g for g in all_groups if g['sufficient_support']]
+        selected=supported[:12]
+        parts.append(f'<h2>{ {1:"单算子",2:"双算子",3:"三算子"}[size]}共现：哪些结构值得进一步验证</h2><p>每种组合至少覆盖 5 个本页可比因子，按逐因子 IC 变化量的中位数降序展示前 12 组。每个算子在一个因子中只计一次；“+”仅表示共现，不是 DSL 加法或执行顺序。按语法树函数名统计，排除 col、neg、is_finite，尚未统一全部算子别名；普通代数算子仍包含在内。抗衰减比例仅以组内参考 IC ≥ 0.005 的样本为分母。组合样本可重叠，并非独立实验；缺少完整因子族映射，近似变体可能重复贡献。</p>')
+        parts.append(f'<p>本次共识别 {len(all_groups)} 种结构，其中 {len(supported)} 种达到 5 个因子的展示门槛；其余仅作结构清单，不作为抗衰减证据。每次生成均从当前全部合格评估重新聚合，不沿用旧页统计数。</p>')
+        parts.append(table(selected,[('pattern','算子组合'),('n','样本数'),('median_ic','2026 IC中位数'),('median_delta','IC变化中位数'),('comparable_n','抗衰减分母'),('stable_n','保留≥80%数量'),('stable_rate','抗衰减比例'),('unassigned','未归族数量')]) if selected else '<p>没有满足最低样本数的组合，不展示小样本排行榜。</p>')
+        parts.append('<details><summary>展开全部结构与成员（包括小样本，不是推荐榜）</summary>')
+        parts.append(table([dict(pattern=g['pattern'], n=g['n'], sufficient_support=g['sufficient_support'], members='、'.join(g['members'])) for g in all_groups], [('pattern','结构'),('n','因子数'),('sufficient_support','达到5个样本'),('members','全部成员')]))
+        parts.append('</details>')
+        if supported:
+            parts.append('<details><summary>展开所有达标结构的逐月对比</summary><p>月份按北京时间划分；每个因子当月至少 5 个有限 IC 日才计入月度均值。表中先求各因子的月均 IC，再对组内因子取中位数；月度保留数量与该因子固定参考窗比较。月份覆盖及分母可变，2026 年 8 月仅截至 27 日，不能将不同月份样本差异视为市场场景效应。</p>')
+            parts.append(table([dict(pattern=g['pattern'], **m) for g in supported for m in g['monthly']], [('pattern','结构'),('month','月份'),('n','当月有效因子'),('median_ic','月IC中位数'),('median_delta','相对参考IC变化'),('comparable_n','当月抗衰减分母'),('stable_n','当月保留≥80%数量')]))
+            parts.append('</details>')
+    parts += ['<h2>嵌套关系：区别于简单共现</h2><p>箭头表示外层算子直接使用内层算子的结果；目前识别位置参数中的直接函数调用，不代表全部深层结构或关键字参数关系。至少覆盖 5 个因子，按 IC 变化中位数展示前 12 组；仍为观察性统计，不能解释为确定的经济机制。</p>', table(sorted(edge_rows,key=lambda r:r['median_delta'],reverse=True)[:12],[('pattern','外层 → 内层'),('n','样本数'),('median_ic','2026 IC中位数'),('median_delta','IC变化中位数')]),
+              '<h2>可直接核对的因子明细（展示前 25 个）</h2><p>按 2026 RankIC 排序，仅用于汇报举例；本页统计使用全部合格样本，不只这 25 个，不因此重新选择方向或加入正式因子池。完整明细见 <a href="completed_factors.csv">CSV</a>，公式、来源哈希和排除原因见 <a href="completed_snapshot.json">JSON</a>。收益指标均取 2026 窗，费用与缺失日处理见上方口径。</p>',
+              table(sorted(rows,key=lambda r:r['ic_2026'],reverse=True)[:25],[('name','因子'),('baseline_ic','参考IC'),('ic_2026','2026 IC'),('delta','变化'),('ir_2026','2026 IR'),('n_2026','有效IC日'),('return_days_2026','有效收益日'),('ls_sharpe_2026','佣金后LS夏普'),('ls_mdd_2026','LS回撤')]),
+              '<h2>汇报建议与仍需回答的问题</h2><p>把本页定位为已完成样本的阶段性发现，不宣称发现了普适的抗衰减算子。下一步优先验证组合在不同因子族、月份与市场涨跌／波动场景中是否重复出现；当前尚未完成市场场景归因与因子族独立性检验。</p>',
+              f'<h2>限制与假设</h2><p>结果受已完成任务的覆盖偏差影响，不能代表全部存量与新增因子；组合数量多且互相重叠，尚未做多重检验校正。历史报告的 {len(historical)} 条记录不混入当前统计；旧版方向、窗口或算法可能不同，不可与新版直接合并排名。本次排除 {len(exclusions)} 条已检查记录（含重复 DSL 或未通过核验），具体原因见 JSON；排除不等于因子失效，也不补造未完成结果。未登记／未成功解析的提交项不应视作已评估；登记情况见 JSON 的 deferred_requested。</p>']
+    html='<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>2026 因子稳定性分析 · 汇报快照</title><style>body{font:16px/1.75 system-ui,sans-serif;color:#243447;background:#f5f7fa;margin:0}main{max-width:1180px;margin:auto;padding:32px;background:white}h1{font-size:30px}h2{margin-top:36px;font-size:22px}img{max-width:100%;height:auto}table{border-collapse:collapse;width:100%;font-size:13px}td,th{border-bottom:1px solid #ddd;padding:9px;text-align:left;overflow-wrap:anywhere}th{background:#eef2f7}.table-scroll{overflow-x:auto}code{overflow-wrap:anywhere}@media print{main{padding:0}h2{break-after:avoid}tr{break-inside:avoid}}</style><body><main>'+''.join(parts)+'</main></body></html>'
+    # Keep the former entry point usable without maintaining a second report.
+    atomic(output/'completed_snapshot.html', ('<!doctype html><html lang="zh-CN"><meta charset="utf-8">'
+        '<meta http-equiv="refresh" content="0;url=robustness_2026.html"><title>2026 分析已统一</title>'
+        '<a href="robustness_2026.html">全部 2026 分析已统一至正式报告</a></html>').encode())
+    # The established all-factor page remains the canonical URL. Preserve the
+    # legacy report once; inventory and pending factors must not disappear just
+    # because only a subset has a verified current artifact.
+    canonical = output/'robustness_2026.html'
+    archive = output/'robustness_2026_before_unified.html'
+    if canonical.exists() and not archive.exists():
+        atomic(archive, canonical.read_bytes())
+    coverage = (f'<h1>2026 因子全量汇总</h1><p>存量因子 {sum(x["scope"] == "存量因子" for x in universe.values())} 个；'
+                f'加已登记新增因子，当前跟踪共 {len(universe)} 个。历史报告保留 {len(historical)} 个因子记录。'
+                f'本次统一口径可比统计纳入 {len(rows)} 个，其他因子仍在复评或待处理，不能宣称全量重测完成。</p>'
+                '<p><a href="robustness_2026_before_unified.html">查看保留的历史全量报告（旧口径，未经本次验收）</a></p>'
+                '<details><summary>展开全量覆盖明细：未完成的也列出</summary><p>跟踪数量按因子登记名称计数，不是独立因子族数量。已完成记录仍须通过版本、哈希、观测数及 DSL 去重核验，才计入“本次纳入”。暂不可用或执行失败是任务／产物状态，不等于因子质量不合格，更不能直接推断没有源数据。旧版 IC 仅作历史记录查询，不与新版合并统计，不用于判定当前抗衰减。</p>'
+                + table(list(universe.values()), [('name','因子'),('scope','范围'),('state','队列状态'),
+                    ('included_current','本次纳入'),('current_2026_ic','新版2026 IC'),
+                    ('historical_record','有旧记录'),('historical_2026_ic_unverified','旧版IC·未验收')])+'</details>')
+    canonical_html = html.replace('<h1>2026 因子稳定性分析 · 汇报快照</h1>', '<h2>统一口径统计：以下为当前已完成部分</h2>').replace('<main>', '<main>'+coverage, 1).replace('<title>2026 因子稳定性分析 · 汇报快照</title>', '<title>2026 因子全量汇总</title>')
+    atomic(canonical, canonical_html.encode())
+    section='<section id="robustness-2026"><h2>2026 因子全量汇总</h2><p>'+escape(result['generated_at'])+f' · 跟踪 {len(universe)} 个；统一口径可比 {len(rows)} 个，复评持续补齐。</p><a href="robustness_2026/robustness_2026.html">打开正式全量汇总：覆盖情况、算子组合及因子明细</a></section>'
+    with (Path(REPORT_DIR)/'publication.lock').open('a') as lock:
+        fcntl.flock(lock,fcntl.LOCK_EX)
+        document=Path(INDEX).read_text()
+        if re.search(r'<section[^>]*id="robustness-2026"',document):
+            document=re.sub(r'<section[^>]*id="robustness-2026"[^>]*>.*?</section>',lambda m:section,document,flags=re.S)
+        else:document=document.replace('<body>','<body>'+section,1)
+        atomic(Path(INDEX),document.encode())
+    print(json.dumps(dict(summary=summary,report=str(canonical),excluded=len(exclusions)),ensure_ascii=False),flush=True)
+
+
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--mode", default="smoke", choices=["smoke", "full", "report-only"])
+    ap.add_argument("--mode", default="completed", choices=["completed", "existing-summary", "reuse-existing", "smoke", "full", "report-only"])
     ap.add_argument("--limit", type=int, default=0)
     ap.add_argument("--skip-report", action="store_true")
     args = ap.parse_args()
+    if args.mode == 'existing-summary':
+        from pathlib import Path
+        Path(OUT_PAGE_DIR).mkdir(parents=True,exist_ok=True)
+        (Path(OUT_PAGE_DIR)/'use_existing_summary').touch()
+        existing_summary_report()
+        return
+    if args.mode == 'reuse-existing':
+        reevaluate_existing_values()
+        return
+    if args.mode == 'completed':
+        completed_snapshot_report()
+        return
 
     plog("=" * 60)
     plog(f"[main] mode={args.mode} limit={args.limit} t={time.strftime('%H:%M:%S')}")

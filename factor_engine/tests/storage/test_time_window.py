@@ -24,6 +24,30 @@ def _panel(values: list[float], dates: list[str] | None = None) -> pd.Series:
     return pd.Series(values, index=idx)
 
 
+@pytest.mark.parametrize('zone', [None, 'Asia/Shanghai'])
+def test_windowed_lazy_scan_matches_pandas_boundaries(zone):
+    pl = pytest.importorskip('polars')
+    dates = pd.date_range('2024-01-01', periods=5, tz=zone)
+    values = pd.Series(range(5), index=pd.MultiIndex.from_product([dates, ['A']], names=['timestamp', 'instrument']))
+    class Source:
+        def load_column(self, name):return values
+        def scan_polars_long(self, columns):
+            return pl.from_pandas(values.rename('close').reset_index()).lazy()
+    wrapped = WindowedDataSource(Source(), start_date='2024-01-02', end_date='2024-01-04')
+    lazy = wrapped.scan_polars_long(['close'])
+    assert isinstance(lazy, pl.LazyFrame)
+    assert lazy.collect()['close'].to_list() == wrapped.load_column('close').tolist() == [1,2,3]
+
+
+def test_windowed_lazy_scan_refuses_ambiguous_axis():
+    pl = pytest.importorskip('polars')
+    class Source:
+        def scan_polars_long(self, columns):
+            return pl.DataFrame({'a':[pd.Timestamp('2024-01-01')], 'b':[pd.Timestamp('2024-01-01')], 'close':[1]}).lazy()
+    with pytest.raises(NotImplementedError, match='unambiguous'):
+        WindowedDataSource(Source(), start_date='2024-01-02').scan_polars_long(['close'])
+
+
 def test_business_day_offset_forward_and_backward():
     assert business_day_offset("2024-01-05", 1) == pd.Timestamp("2024-01-08")
     assert business_day_offset("2024-01-08", -1) == pd.Timestamp("2024-01-05")

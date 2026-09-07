@@ -1,0 +1,63 @@
+schema_version: '1'
+change_id: V4_ROOT_INTEGRATION
+git_sha: 7d075009a50d08e6d763e44afd927ec7ffe9e8ad
+timestamp: '2026-09-07'
+working_tree: dirty_preserved_user_changes_no_commit_or_push
+subagent_model: gpt-5.6-sol
+files:
+  - data_access/read/contract_ir.py
+  - data_access/read/read_handle.py
+  - factor_engine/runtime/streaming_batch_service.py
+  - factor_engine/service/app.py
+  - factor_engine/service/preflight.py
+  - factor_engine/storage/materialize/lake_publish.py
+  - data_access/tests/unit/test_v4_contract_partitioning.py
+  - data_access/tests/unit/test_r24_security_2026_08.py
+  - data_access/tests/unit/test_r39_da_read_2026_08.py
+  - factor_engine/tests/service/test_v4_runtime_initialization.py
+  - factor_engine/tests/service/test_v3_wheel_payload.py
+  - factor_engine/tests/runtime/test_run_many_stream.py
+  - factor_engine/tests/audit/test_materialize_publish_receipts.py
+tests:
+  data_access_unit:
+    status: PASS
+    passed: 1706
+    failed: 0
+    artifact: /tmp/v4-da-unit-final.xml
+  factor_engine_runtime_audit:
+    status: PASS_WITH_SKIP
+    passed: 957
+    skipped: 1
+    failed: 0
+    artifact: /tmp/v4-fe-runtime-audit.xml
+  factor_engine_service:
+    status: PASS
+    passed: 88
+    failed: 0
+    artifact: /tmp/v4-service-final.xml
+  syntax:
+    status: PASS
+    artifact: /tmp/v4-compileall.log
+  final_wheels:
+    status: PASS
+    directory: /tmp/fe-v4-final-wheels-hfpsCK
+    fe_sha256: 0b183bc64c48defd42c1173d0a554c6eb5d12936829306cc1e117b2c03ec5dde
+    da_sha256: aa8dcee3981a12dcd407787da9b816638816b9d1816d3223417ccb133eff660c
+    oracle: exact declared Python and resource payload bytes; isolated installed numeric single/batch/stream; actual sequential service lifespans with worker shutdown
+reproductions:
+  - /tmp/v4-service-before.log
+  - /tmp/v4-lifespan-before.log
+  - /tmp/v4-da-unit.log
+  - /tmp/v4-contract-before.log
+review:
+  contract_and_security_fixture: v4_da_memory_sol_APPROVED
+  service: root_and_v4_fe_stream_sol_scoped_review_and_installed_restart
+  read_handle: root_review_flags_resolved_with_owner_failed_deadline_oracles
+  stream_exception: root_APPROVED
+  publication: root_APPROVED_after_local_guard_lock_and_rollback_regressions
+limitations:
+  - No full repository import, all-operator numerical recertification, production workload, remote COS publication, ClickHouse durability, CI or deployment run.
+  - One removed RegionOutputBundle legacy module remains skipped; warnings retained.
+  - Test scopes overlap; counts do not represent distinct operator coverage.
+  - No new throughput benchmark; prior 100k CUDA evidence is not a benchmark of these final wheels.
+  - Existing unrelated report/job edits preserved and excluded from owned fixes.

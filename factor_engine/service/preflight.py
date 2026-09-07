@@ -9,6 +9,7 @@ ready — never wait for the first live job to discover a misconfigured deploy.
 from __future__ import annotations
 
 import os
+from pathlib import Path
 from typing import Any
 
 from factor_engine.service.observability import info
@@ -61,9 +62,26 @@ def production_preflight() -> dict[str, Any]:
     import shutil
 
     try:
-        free_mb = int(shutil.disk_usage(os.environ.get("FACTOR_ENGINE_SERVICE_ROOT", ".")).free / (1024 * 1024))
+        configured_root = Path(os.environ.get("FACTOR_ENGINE_SERVICE_ROOT", ".")).expanduser()
+        if configured_root.exists() and not configured_root.is_dir():
+            raise OSError(f"configured service root is not a directory: {configured_root}")
+        probe_root = configured_root
+        while not probe_root.exists():
+            parent = probe_root.parent
+            if parent == probe_root:
+                raise OSError(f"service root has no existing ancestor: {configured_root}")
+            probe_root = parent
+        if not probe_root.is_dir():
+            raise OSError(f"service root ancestor is not a directory: {probe_root}")
+        free_mb = int(shutil.disk_usage(probe_root).free / (1024 * 1024))
         min_free_mb = int(os.environ.get("FACTOR_ENGINE_MIN_FREE_DISK_MB", "1024"))
-        checks["disk_space"] = {"ok": free_mb >= min_free_mb, "free_mb": free_mb, "min_mb": min_free_mb}
+        checks["disk_space"] = {
+            "ok": free_mb >= min_free_mb,
+            "free_mb": free_mb,
+            "min_mb": min_free_mb,
+            "configured_root": str(configured_root),
+            "probe_root": str(probe_root),
+        }
     except OSError as exc:
         checks["disk_space"] = {"ok": False, "error": str(exc)}
 

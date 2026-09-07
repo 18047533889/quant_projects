@@ -26,6 +26,10 @@ class _PermanentSinkFailure(RuntimeError):
         self.cause = cause
 
 
+class _SinkDeliveryRefused(RuntimeError):
+    """Internal wake-up after the writer has already failed."""
+
+
 def _transfer_result(value: Any) -> _QueuedResult:
     """Attach a conservative queue charge without weakening sink fail-closed rules."""
     from factor_engine.runtime.resource_governor import estimate_object_bytes
@@ -132,7 +136,7 @@ def execute_run_many_stream(
             if accepted:
                 completed += 1
         if not accepted:
-            raise RuntimeError(f"bounded streaming sink refused factor {name!r}")
+            raise _SinkDeliveryRefused(f"bounded streaming sink refused factor {name!r}")
         return True
 
     primary_error: BaseException | None = None
@@ -177,6 +181,13 @@ def execute_run_many_stream(
             delivery.finish()
         except Exception:
             fatal = delivery.fatal_error
+            # Finalization must not replace an exception that already aborted
+            # computation.  The sink is still fully closed/joined above, but
+            # its concurrent failure is secondary to a genuine compute failure.
+            # A delivery-refused error is only the producer wake-up caused by
+            # that sink failure, so preserve the original user exception there.
+            if primary_error is not None and not isinstance(primary_error, _SinkDeliveryRefused):
+                raise primary_error
             if isinstance(fatal, _PermanentSinkFailure):
                 raise fatal.cause
             if primary_error is not None:

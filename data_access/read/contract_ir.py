@@ -249,6 +249,7 @@ def build_contract_ir(
       （如 COS remote 才可见的表）
     """
     from data_access.cos_contract import COS_DATASET_CONTRACTS
+    from data_access.read.partition_planner import parse_partitioning
 
     contracts = contracts if contracts is not None else COS_DATASET_CONTRACTS
     external = set(external_contract_datasets or ())
@@ -319,7 +320,11 @@ def build_contract_ir(
             entry.storage_timezone = contract.storage_timezone
             entry.semantic_timezone = contract.semantic_timezone
         if reg_ds is not None:
-            entry.partitioning = dict(getattr(reg_ds, "partitioning", None) or {})
+            partition_spec = parse_partitioning(
+                getattr(reg_ds, "partitioning", None),
+                context=f"{name}.partitioning",
+            )
+            entry.partitioning = asdict(partition_spec) if partition_spec is not None else {}
             entry.storage_backend, entry.storage_layout, entry.file_format = (
                 _storage_of(reg_ds)
             )

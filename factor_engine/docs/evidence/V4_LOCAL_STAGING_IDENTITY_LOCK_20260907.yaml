@@ -1,0 +1,40 @@
+schema_version: 1
+title: "V4 local staging identity mutation-lock closure"
+git_sha: "7d075009a50d08e6d763e44afd927ec7ffe9e8ad"
+timestamp: "2026-09-07T04:25:52+08:00"
+scope: "FactorEngine local staging publication only"
+files:
+  modified:
+    - "factor_engine/storage/materialize/lake_publish.py"
+    - "factor_engine/tests/audit/test_materialize_publish_receipts.py"
+  evidence:
+    - "factor_engine/docs/evidence/V4_LOCAL_STAGING_IDENTITY_LOCK_20260907.yaml"
+reproduction:
+  prior_state: >-
+    sync_local_factor_to_staging released the staging dataset mutation lock after
+    replacing parquet children, then called write_staging_identity without a lock.
+    Therefore another writer could acquire the root while identity was being bound.
+  oracle: >-
+    test_sync_writes_identity_before_releasing_staging_lock starts a competing
+    mutation_lock acquisition from inside atomic_write_text; it must time out, and
+    the returned identity must verify against the staged parquet inventory.
+fix: >-
+  Identity inventory verification and atomic identity write now always run under
+  the staging mutation lock. Sync writes identity and counts rows inside the same
+  lock transaction as parquet replacement. Public local helpers reject a declared
+  non-local staging backend before resolving paths or acquiring mutation locks;
+  identity-write failure rolls the full prior staged generation back.
+tests:
+  - command: ".venv/bin/python -m pytest factor_engine/tests/audit/test_materialize_publish_receipts.py -q"
+    result: "PASS: 41 passed; 2 pre-existing operator-classification warnings"
+  - command: ".venv/bin/python -m py_compile factor_engine/storage/materialize/lake_publish.py factor_engine/tests/audit/test_materialize_publish_receipts.py"
+    result: "PASS"
+  - command: "git diff --check"
+    result: "PASS"
+not_run:
+  - "Full repository test suite"
+  - "Remote/COS publication (unsupported path remains fail-closed)"
+  - "Production datasets or published directories"
+limitations:
+  - "Validation used temporary local parquet datasets only."
+  - "Independent scoped review is requested from the root coordinator."

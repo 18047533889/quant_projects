@@ -1,0 +1,38 @@
+schema_version: "1"
+change_id: V4-FE-SERVICE-RUNTIME-LIFECYCLE
+git_sha: 7d075009a50d08e6d763e44afd927ec7ffe9e8ad
+timestamp: "2026-09-07T04:40:00+08:00"
+owned_modified_files:
+  - factor_engine/service/app.py
+  - factor_engine/service/preflight.py
+  - factor_engine/tests/service/test_v4_runtime_initialization.py
+  - factor_engine/docs/evidence/V4_FE_SERVICE_RUNTIME_LIFECYCLE_20260907.yaml
+reproductions:
+  - issue: "Preflight rejected a configured service root that JobStore would validly create."
+    oracle: "Disk capacity is checked on the nearest existing ancestor without creating the configured root; an existing regular file is rejected."
+  - issue: "A second app lifespan reused a stopped queue, closed executor, and closed store because runtime construction state remained true."
+    oracle: "Sequential lifespans receive distinct started runtime objects; overlapping lifespans fail closed."
+  - issue: "A rollback callback failure could replace a queue-start failure."
+    oracle: "The exact queue-start failure remains primary and owned partially constructed resources are discarded."
+  - issue: "A delayed queue start after start=False could poison constructed state and make later startup silently reuse a partial queue."
+    oracle: "Owned delayed-start resources are discarded and a retry constructs fresh objects; injected partial-start state remains explicitly fail-closed."
+tests:
+  - command: "POLARS_MAX_THREADS=2 OPENBLAS_NUM_THREADS=1 .venv/bin/python -m pytest -q factor_engine/tests/service/test_v4_runtime_initialization.py"
+    result: PASS
+    summary: "12 passed."
+  - command: "POLARS_MAX_THREADS=2 OPENBLAS_NUM_THREADS=1 .venv/bin/python -m pytest -q factor_engine/tests/service/test_r21_job_lifecycle.py factor_engine/tests/service/test_r21_service_hardening.py factor_engine/tests/service/test_r21_source_policy.py factor_engine/tests/service/test_service_security.py factor_engine/tests/service/test_v3_execution_binding.py factor_engine/tests/service/test_v4_runtime_initialization.py"
+    result: PASS
+    summary: "67 passed, 4 existing deprecation/backend-classification warnings."
+  - command: "POLARS_MAX_THREADS=2 OPENBLAS_NUM_THREADS=1 .venv/bin/python -m py_compile factor_engine/service/app.py factor_engine/service/preflight.py factor_engine/tests/service/test_v4_runtime_initialization.py"
+    result: PASS
+  - command: ".venv/bin/python -m pytest -q factor_engine/tests/service"
+    result: NOT_RUN
+    summary: "Collection blocked by pre-existing ModuleNotFoundError: scripts.verify_wheel_payload in test_v3_wheel_payload.py; all other service modules were run explicitly."
+review:
+  result: APPROVED
+  checks:
+    - "Preflight remains side-effect free and production fail-closed."
+    - "Cleanup order remains queue drain, executor shutdown, store close; runtime reset occurs even if cleanup raises."
+    - "Only objects allocated by a failed construction attempt are rolled back; injected resources remain caller-owned."
+limitations:
+  - "Full repository suite, CI, multi-process server lifecycle, and production deployment smoke: NOT_RUN."

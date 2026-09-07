@@ -336,6 +336,263 @@ def test_read_handle_buffer_reuse_after_materialize():
     assert sum(b.num_rows for b in h.stream()) == 4
 
 
+def test_read_handle_buffering_failure_closes_source_and_cleanup_once():
+    """buffer=True 的物化异常必须进入 FAILED 并释放全部流资源。"""
+    from data_access.read.read_handle import ReadHandle, STATE_FAILED
+
+    closed = 0
+    cleanups = 0
+
+    class BrokenStream:
+        def __iter__(self):
+            return self
+
+        def __next__(self):
+            raise RuntimeError("mid-buffer failure")
+
+        def close(self):
+            nonlocal closed
+            closed += 1
+
+    def cleanup():
+        nonlocal cleanups
+        cleanups += 1
+
+    h = ReadHandle(stream=BrokenStream(), _cleanup_callbacks=[cleanup])
+    with pytest.raises(RuntimeError, match="mid-buffer failure"):
+        list(h.stream(buffer=True))
+
+    assert h.state == STATE_FAILED
+    assert closed == 1
+    assert cleanups == 1
+    with pytest.raises(RuntimeError, match="FAILED"):
+        h.to_arrow()
+    h.close()
+    assert closed == 1
+    assert cleanups == 1
+
+
+def test_read_handle_buffer_success_closes_original_and_keeps_table_reusable():
+    """成功固化后关闭原 iterator，但 canonical Table 仍可重复读取。"""
+    from data_access.read.read_handle import ReadHandle
+
+    closed = 0
+
+    class ClosableStream:
+        def __init__(self):
+            self._batches = iter(_two_batches())
+
+        def __iter__(self):
+            return self
+
+        def __next__(self):
+            return next(self._batches)
+
+        def close(self):
+            nonlocal closed
+            closed += 1
+
+    h = ReadHandle(stream=ClosableStream())
+    assert sum(b.num_rows for b in h.stream(buffer=True)) == 4
+    assert closed == 1
+    assert h.to_arrow().num_rows == 4
+    assert sum(b.num_rows for b in h.stream()) == 4
+    h.close()
+    assert closed == 1
+
+
+def test_read_handle_to_arrow_closes_original_before_canonical_reuse():
+    """to_arrow materialization 同样不能因替换 _source 而遗失 owner。"""
+    from data_access.read.read_handle import ReadHandle
+
+    closed = 0
+
+    class ClosableStream:
+        def __iter__(self):
+            return iter(_two_batches())
+
+        def close(self):
+            nonlocal closed
+            closed += 1
+
+    h = ReadHandle(stream=ClosableStream())
+    assert h.to_arrow().num_rows == 4
+    assert closed == 1
+    assert h.to_arrow().num_rows == 4
+    h.close()
+    assert closed == 1
+
+
+def test_read_handle_failed_to_arrow_is_stable_failed_terminal():
+    """首次物化失败后，第二终点不得重试已关闭的一次性流。"""
+    from data_access.read.read_handle import ReadHandle, STATE_FAILED
+
+    attempts = 0
+    closed = 0
+
+    class BrokenStream:
+        def __iter__(self):
+            return self
+
+        def __next__(self):
+            nonlocal attempts
+            attempts += 1
+            raise RuntimeError("read failed")
+
+        def close(self):
+            nonlocal closed
+            closed += 1
+
+    h = ReadHandle(stream=BrokenStream())
+    with pytest.raises(RuntimeError, match="read failed"):
+        h.to_arrow()
+    assert h.state == STATE_FAILED
+    assert attempts == 1
+    assert closed == 1
+
+    with pytest.raises(RuntimeError, match="FAILED"):
+        h.to_arrow()
+    assert attempts == 1
+    assert closed == 1
+
+
+def test_read_handle_failed_lazy_collect_is_stable_failed_terminal():
+    """LazyFrame collect 失败也必须成为不可重试的 FAILED 终态。"""
+    from data_access.read.read_handle import ReadHandle, STATE_FAILED
+
+    attempts = 0
+
+    class BrokenLazy:
+        def collect(self):
+            nonlocal attempts
+            attempts += 1
+            raise RuntimeError("collect failed")
+
+    h = ReadHandle(lazy=BrokenLazy())
+    with pytest.raises(RuntimeError, match="collect failed"):
+        h.to_arrow()
+    assert h.state == STATE_FAILED
+    with pytest.raises(RuntimeError, match="FAILED"):
+        h.to_arrow()
+    assert attempts == 1
+
+
+def test_read_handle_buffer_checks_deadline_before_accepting_each_batch():
+    """buffer=True 不得绕过普通 stream 路径的逐 batch deadline。"""
+    from data_access.read.read_handle import ReadHandle, STATE_FAILED
+
+    checks = 0
+    closed = 0
+
+    class ExpiredDeadline:
+        def check(self, **_kwargs):
+            nonlocal checks
+            checks += 1
+            raise TimeoutError("expired")
+
+    class ClosableStream:
+        def __iter__(self):
+            return iter([pa.record_batch([[1]], names=["value"])])
+
+        def close(self):
+            nonlocal closed
+            closed += 1
+
+    h = ReadHandle(stream=ClosableStream(), _deadline=ExpiredDeadline())
+    with pytest.raises(TimeoutError, match="expired"):
+        list(h.stream(buffer=True))
+    assert h.state == STATE_FAILED
+    assert checks == 1
+    assert closed == 1
+    with pytest.raises(RuntimeError, match="FAILED"):
+        h.to_arrow()
+
+
+def test_read_handle_to_arrow_checks_deadline_before_accepting_each_batch():
+    """to_arrow 必须复用 buffer=True 的逐 batch deadline collector。"""
+    from data_access.read.read_handle import ReadHandle, STATE_FAILED
+
+    checks = 0
+    closed = 0
+
+    class ExpiredDeadline:
+        def check(self, **_kwargs):
+            nonlocal checks
+            checks += 1
+            raise TimeoutError("expired")
+
+    class ClosableStream:
+        def __iter__(self):
+            return iter([pa.record_batch([[1]], names=["value"])])
+
+        def close(self):
+            nonlocal closed
+            closed += 1
+
+    h = ReadHandle(stream=ClosableStream(), _deadline=ExpiredDeadline())
+    with pytest.raises(TimeoutError, match="expired"):
+        h.to_arrow()
+    assert h.state == STATE_FAILED
+    assert checks == 1
+    assert closed == 1
+    with pytest.raises(RuntimeError, match="FAILED"):
+        h.to_arrow()
+
+
+def test_read_handle_buffer_normalize_failure_closes_original_source():
+    """normalize 在 Table 创建后失败也必须关闭被替换前的 iterator。"""
+    from data_access.read.read_handle import ReadHandle, STATE_FAILED
+
+    closed = 0
+
+    class ClosableStream:
+        def __iter__(self):
+            return iter([pa.record_batch([[1]], names=["value"])])
+
+        def close(self):
+            nonlocal closed
+            closed += 1
+
+    def fail_normalize(_table):
+        raise ValueError("normalize failed")
+
+    h = ReadHandle(stream=ClosableStream(), normalize=fail_normalize)
+    with pytest.raises(ValueError, match="normalize failed"):
+        list(h.stream(buffer=True))
+    assert h.state == STATE_FAILED
+    assert closed == 1
+
+
+def test_read_handle_buffer_keyboard_interrupt_closes_source_and_cleanup():
+    """取消类 BaseException 不能绕过 terminal cleanup。"""
+    from data_access.read.read_handle import ReadHandle, STATE_FAILED
+
+    closed = 0
+    cleaned = 0
+
+    class InterruptedStream:
+        def __iter__(self):
+            return self
+
+        def __next__(self):
+            raise KeyboardInterrupt
+
+        def close(self):
+            nonlocal closed
+            closed += 1
+
+    def cleanup():
+        nonlocal cleaned
+        cleaned += 1
+
+    h = ReadHandle(stream=InterruptedStream(), _cleanup_callbacks=[cleanup])
+    with pytest.raises(KeyboardInterrupt):
+        list(h.stream(buffer=True))
+    assert h.state == STATE_FAILED
+    assert closed == 1
+    assert cleaned == 1
+
+
 # ===========================================================================
 # 34/35 —— 非零内存 admission
 # ===========================================================================
