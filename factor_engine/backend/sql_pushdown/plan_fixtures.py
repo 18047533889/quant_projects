@@ -320,6 +320,35 @@ def _minimal_plan_raw(op: str) -> PlanNode:
     if op == "group_feature_valid_member_count":
         # wave3e: f1 / f2 / f3 / group 四输入。
         return PlanNode(op=op, inputs=[close, volume, high, industry], attrs={})
+    # wave3c vol/valuation window family (2026-09-08): OHLC 3-4 输入 + 窗口
+    # literal / 单输入 trailing 窗口 + min_periods；确保 capability 探测的
+    # minimal plan 可被 emitter 编译（mp<=w 的语义合法参数化）。
+    if op == "vr1_parkinson_close_scale":
+        return PlanNode(op=op, inputs=[high, low, close, literal(20.0), literal(5.0)], attrs={"window": 20, "min_periods": 5})
+    if op in {"vr1_range_to_close_eff", "vr1_range_everage"}:
+        return PlanNode(op=op, inputs=[open_, high, low, close, literal(20.0), literal(5.0)], attrs={"window": 20, "min_periods": 5})
+    if op in {"vr1_garman_klass_ext", "vr1_rogers_satchell"}:
+        return PlanNode(op=op, inputs=[open_, high, low, close, literal(20.0), literal(5.0)], attrs={"window": 20, "min_periods": 5})
+    if op == "vr1_ewma_range_vol":
+        return PlanNode(op=op, inputs=[open_, high, low, close, literal(20.0)], attrs={"decay_scale": 20.0})
+    if op == "vv1_dispersion_vol":
+        return PlanNode(op=op, inputs=[close, literal(10.0), literal(3.0)], attrs={"vol_window": 10, "min_breadth": 3})
+    if op in {"vv1_vol_level_score", "vv1_fractional_share", "val1_valuations_lag_component"}:
+        # (value, a, b, min_periods) 形态：level_score=(sw,hw,mp)、
+        # fractional=(sw,lw,mp)、lag_component=(fw,sw,mp)。
+        return PlanNode(op=op, inputs=[close, literal(5.0), literal(30.0), literal(5.0)], attrs={"min_periods": 5})
+    if op == "vv1_regime_change_ratio":
+        # (ret, sw, lw, band, min_periods)。
+        return PlanNode(op=op, inputs=[close, literal(5.0), literal(30.0), literal(0.5), literal(5.0)], attrs={"min_periods": 5})
+    if op in {"vv1_vol_of_vol", "vv1_downside_vol_share", "vv1_vol_acceleration",
+              "val1_valuation_z_own",
+              "val1_valuation_percentile_own", "val1_earnings_yield_ma_diff",
+              "val1_earnings_yield_slope",
+              "vax_liquidity_penalty_exposure", "vax_ret_per_liquidity_unit"}:
+        return PlanNode(op=op, inputs=[close, literal(20.0), literal(5.0)], attrs={"window": 20, "min_periods": 5})
+    if op in {"vv1_long_short_vol_beta"}:
+        # (ret, sw, lw, min_periods) —— compressed-list 语义形态。
+        return PlanNode(op=op, inputs=[close, literal(5.0), literal(30.0), literal(15.0)], attrs={"min_periods": 15})
     if op.startswith("group_"):
         return PlanNode(op=op, inputs=[close, industry], attrs={"d": 3, "window": 3, "p": 0.5})
     if op in {"where", "if_else", "coalesce"}:

@@ -2252,6 +2252,23 @@ _VOLVAL_SQL_WINDOW_OPS: frozenset[str] = frozenset({
     "val1_valuation_percentile_own",
     "val1_earnings_yield_ma_diff",
     "vax_liquidity_penalty_exposure",
+    "vv1_vol_acceleration",
+    "vr1_ewma_range_vol",
+    "vv1_fractional_share",
+    "vv1_long_short_vol_beta",
+    "val1_valuations_lag_component",
+    "val1_earnings_yield_slope",
+    "vr1_parkinson_close_scale",
+    "vr1_garman_klass_ext",
+    "vr1_rogers_satchell",
+    "vr1_range_to_close_eff",
+    "vr1_range_everage",
+    "vax_ret_per_liquidity_unit",
+})
+
+# 截面广播（vv1_dispersion_vol）走独立两级子查询分支
+_VOLVAL_SQL_CS_OPS: frozenset[str] = frozenset({
+    "vv1_dispersion_vol",
 })
 
 _FLOWMOM_DEFAULT_MIN_PERIODS: dict[str, int] = {
@@ -12544,7 +12561,7 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
     # DuckDB-only (ROWS window frames + STDDEV_SAMP/quantile lists).
     # 三方 parity 见 tests/backend_parity/test_volval_wave3_parity.py.
     # ------------------------------------------------------------------
-    if op in _VOLVAL_SQL_WINDOW_OPS:
+    if op in (_VOLVAL_SQL_WINDOW_OPS | _VOLVAL_SQL_CS_OPS):
         if len(node.inputs) < 1:
             return None
         inner = _compile_layer(node.inputs[0], dialect=dialect)
@@ -12561,7 +12578,11 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
             return _int_attr(node, key, default=default)
 
         def _vv_over(w: int, *, end: str = "CURRENT ROW", start_off: int = 0) -> str:
-            lo = max(w, 1) - 1 + start_off
+            # inclusive-of-current: w-1 PRECEDING..CURRENT ROW (w rows);
+            # exclusive-of-current (1 PRECEDING end): w PRECEDING..1 PRECEDING
+            # (w rows ending at row-1).
+            extra = 1 if end != "CURRENT ROW" else 0
+            lo = max(w, 1) - 1 + extra + start_off
             end_txt = "CURRENT ROW" if end == "CURRENT ROW" else "1 PRECEDING"
             return f"PARTITION BY inst ORDER BY ts ROWS BETWEEN {lo} PRECEDING AND {end_txt}"
 
@@ -12719,6 +12740,356 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
                 f"SELECT ts, inst, CASE WHEN {cnt} < {mp} THEN NULL "
                 f"ELSE AVG(CASE WHEN {valid} AND t._v >= 0 THEN t._v END) OVER ({over}) END AS _v "
                 f"FROM ({clean}) t",
+                has_inst_window=True,
+            )
+
+        # ---- multi-input / compressed-list / cross-sectional ops ----------
+        def _vv_multi(n_inputs: int, names: list[str]):
+            """Join n operand layers; returns (base_sql, alias_cols)."""
+            layers = []
+            for i in range(n_inputs):
+                layer = _compile_layer(node.inputs[i], dialect=dialect)
+                if layer is None:
+                    return None, None
+                layers.append(layer)
+            frm = f"FROM ({layers[0].sql}) x0"
+            for i in range(1, n_inputs):
+                frm += f" LEFT JOIN ({layers[i].sql}) x{i} USING (ts, inst)"
+            base_sql = f"SELECT x0.ts, x0.inst, {', '.join(f'x{i}._v AS {names[i]}' for i in range(n_inputs))} {frm}"
+            return base_sql, [f"x{i}" for i in range(n_inputs)]
+
+        if op in {"vv1_vol_acceleration", "vr1_ewma_range_vol", "vv1_fractional_share",
+                  "vv1_long_short_vol_beta", "val1_valuations_lag_component",
+                  "val1_earnings_yield_slope"}:
+            # single-VALUE ops whose window value needs sanitising first.
+            if op == "vv1_vol_acceleration":
+                # pandas trend stays 0.0 forever -> diffv = vol / 1e-12 == vol*1e12.
+                vw = _vv_int("vol_window", 0, 10)
+                mp = _vv_int("min_periods", 2, 4)
+                if mp > vw:
+                    return None
+                over = _vv_over(vw)
+                cnt = f"SUM(CASE WHEN {valid} THEN 1 ELSE 0 END) OVER ({over})"
+                vol = f"STDDEV_SAMP(CASE WHEN {valid} THEN t._v END) OVER ({over})"
+                return _Layer(
+                    f"SELECT ts, inst, CASE WHEN {cnt} < {mp} OR {vol} IS NULL THEN NULL "
+                    f"ELSE {vol} * 1e12 END AS _v "
+                    f"FROM ({inner.sql}) t",
+                    has_inst_window=True,
+                )
+            if op == "vr1_ewma_range_vol":
+                if len(node.inputs) < 4:
+                    return None
+                base_sql, aliases = _vv_multi(4, ["_o", "_h", "_l", "_c"])
+                if base_sql is None:
+                    return None
+                ds_raw = _literal_positional(node, 3)
+                ds = float(ds_raw) if ds_raw is not None else _float_attr(node, "decay_scale", default=20.0)
+                if ds < 1.0:
+                    return None
+                finite = lambda col: (f"({col} IS NOT NULL AND NOT isnan({col}) AND NOT isinf({col}))")
+                ok = f"({finite('t._o')} AND {finite('t._h')} AND {finite('t._l')} AND {finite('t._c')} AND t._c > 0)"
+                rng = f"CASE WHEN {ok} THEN (t._h - t._l) / t._c ELSE 0.0 END"
+                # t = 1-based row index within instrument; coef^t * Σ rng*coef^-t
+                stage1 = (
+                    f"SELECT ts, inst, {rng} AS _rng, "
+                    f"ROW_NUMBER() OVER (PARTITION BY inst ORDER BY ts) AS _t, "
+                    f"CASE WHEN {ok} THEN 1 ELSE 0 END AS _ok "
+                    f"FROM ({base_sql}) t"
+                )
+                coef = float(math.exp(-1.0 / ds))
+                acc = (
+                    f"POWER({coef!r}, _t) * SUM(_rng * POWER({coef!r}, -_t)) "
+                    f"OVER (PARTITION BY inst ORDER BY ts ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)"
+                )
+                first_valid = (
+                    f"MAX(_ok) OVER (PARTITION BY inst ORDER BY ts ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)"
+                )
+                return _Layer(
+                    f"SELECT ts, inst, CASE WHEN {first_valid} > 0 THEN {acc} END AS _v "
+                    f"FROM ({stage1}) t",
+                    has_inst_window=True,
+                )
+            if op in {"vv1_fractional_share", "vv1_long_short_vol_beta",
+                      "val1_valuations_lag_component", "val1_earnings_yield_slope"}:
+                if op == "val1_valuations_lag_component":
+                    fw = _vv_int("fast_window", 0, 5)
+                    sw = _vv_int("slow_window", 1, 20)
+                    mp = _vv_int("min_periods", 2, 4)
+                    if fw >= sw:
+                        return None
+                    unbounded = True
+                    win = sw
+                else:
+                    sw_or_w = {
+                        "vv1_fractional_share": _vv_int("long_window", 1, 60),
+                        "vv1_long_short_vol_beta": _vv_int("long_window", 1, 60),
+                        "val1_earnings_yield_slope": _window_int(node, default=12) if _literal_positional(node, 1) is None else int(_literal_positional(node, 0)),
+                    }
+                    win = sw_or_w[op]
+                    unbounded = False
+                # compressed finite-value list over the window
+                stage1 = (
+                    f"SELECT ts, inst, t._v AS _v, "
+                    f"list_filter(list(CASE WHEN {valid} THEN t._v END) OVER ("
+                    f"PARTITION BY inst ORDER BY ts ROWS BETWEEN "
+                    f"{'UNBOUNDED PRECEDING AND CURRENT ROW' if unbounded else f'{max(win, 1) - 1} PRECEDING AND CURRENT ROW'}"
+                    f"), y -> y IS NOT NULL) AS _lst "
+                    f"FROM ({inner.sql}) t"
+                )
+                if op == "vv1_fractional_share":
+                    sw = _vv_int("short_window", 0, 5)
+                    lw = _vv_int("long_window", 1, 60)
+                    mp = _vv_int("min_periods", 2, 15)
+                    if sw >= lw:
+                        return None
+                    lst = "t._lst"
+                    n = f"len({lst})"
+                    full = f"list_aggregate({lst}, 'stddev_samp')"
+                    head = f"list_slice({lst}, 1, {sw})"
+                    s_vol = f"list_aggregate({head}, 'stddev_samp')"
+                    hlen = f"len({head})"
+                    rlen = f"len(list_slice({lst}, {sw} + 1, {n}))"
+                    ratio = f"({s_vol} * {s_vol} / ({full} * {full}))"
+                    clipped = f"CASE WHEN {ratio} > 1.0 THEN 1.0 WHEN {ratio} < 0.0 THEN 0.0 ELSE {ratio} END"
+                    return _Layer(
+                        f"SELECT ts, inst, CASE WHEN {n} < {mp} OR {hlen} < 2 OR {rlen} < 2 "
+                        f"OR {full} IS NULL OR {full} <= 1e-12 OR {s_vol} IS NULL THEN NULL "
+                        f"ELSE 1.0 - {clipped} END AS _v FROM ({stage1}) t",
+                        has_inst_window=True,
+                    )
+                if op == "vv1_long_short_vol_beta":
+                    sw = _vv_int("short_window", 0, 5)
+                    lw = _vv_int("long_window", 1, 60)
+                    mp = _vv_int("min_periods", 2, 15)
+                    if sw >= lw:
+                        return None
+                    lst = "t._lst"
+                    n = f"len({lst})"
+                    lv_full = f"list_aggregate({lst}, 'stddev_samp')"
+                    # sv_i for i in [sw, n): trailing-sw std over the COMPRESSED list
+                    svs = (
+                        f"list_filter(list_transform({lst}, (y, i) -> "
+                        f"CASE WHEN i >= {sw} THEN list_aggregate("
+                        f"list_slice({lst}, i - {sw} + 2, i + 1), 'stddev_samp') END), "
+                        f"z -> z IS NOT NULL)"
+                    )
+                    mean_sv = f"list_aggregate({svs}, 'avg')"
+                    return _Layer(
+                        f"SELECT ts, inst, CASE WHEN {n} < {mp} OR {n} < {sw} + 2 "
+                        f"OR {lv_full} IS NULL OR {lv_full} <= 1e-12 "
+                        f"OR {mean_sv} IS NULL THEN NULL "
+                        f"ELSE 1e-12 * ({mean_sv} / {lv_full}) END AS _v "
+                        f"FROM ({stage1}) t",
+                        has_inst_window=True,
+                    )
+                if op == "val1_valuations_lag_component":
+                    # hist = last sw FINITE values over the expanding cache.
+                    hist = f"list_slice(t._lst, -{sw}, -1)"
+                    n = f"len(t._lst)"
+                    slow_m = f"list_aggregate({hist}, 'avg')"
+                    fast_m = f"list_aggregate(list_slice({hist}, -{fw}, -1), 'avg')"
+                    s = f"list_aggregate({hist}, 'stddev_samp')"
+                    return _Layer(
+                        f"SELECT ts, inst, CASE WHEN {n} < {sw} OR {n} < {mp} THEN NULL "
+                        f"WHEN {s} IS NULL OR {s} <= 1e-12 THEN 0.0 "
+                        f"ELSE ({fast_m} - {slow_m}) / {s} END AS _v "
+                        f"FROM ({stage1}) t",
+                        has_inst_window=True,
+                    )
+                # val1_earnings_yield_slope
+                mp = _vv_int("min_periods", 1, 5)
+                lst = "t._lst"
+                n = f"len({lst})"
+                sum_ty = f"list_sum(list_transform({lst}, (y, i) -> (i - 1) * y))"
+                mean_y = f"list_aggregate({lst}, 'avg')"
+                t_mean = f"(({n} - 1.0) / 2.0)"
+                den = f"({n} * ({n} * {n} - 1.0) / 12.0)"
+                slope = f"CASE WHEN {den} IS NULL OR {den} <= 1e-12 THEN NULL ELSE ({sum_ty} - {n} * {t_mean} * {mean_y}) / {den} END"
+                return _Layer(
+                    f"SELECT ts, inst, CASE WHEN NOT ({valid}) THEN NULL "
+                    f"WHEN {n} < {mp} THEN NULL ELSE {slope} * SQRT({n}) END AS _v "
+                    f"FROM ({stage1}) t",
+                    has_inst_window=True,
+                )
+
+        if op == "vv1_dispersion_vol":
+            if len(node.inputs) < 1:
+                return None
+            inner = _compile_layer(node.inputs[0], dialect=dialect)
+            if inner is None:
+                return None
+            if dialect != SqlDialect.DUCKDB:
+                return None
+            vw = _vv_int("vol_window", 0, 10)
+            mb = _vv_int("min_breadth", 1, 10)
+            over = _vv_over(vw)
+            stage1 = (
+                f"SELECT ts, inst, CASE WHEN SUM(CASE WHEN {valid} THEN 1 ELSE 0 END) "
+                f"OVER ({over}) >= 3 THEN STDDEV_SAMP(CASE WHEN {valid} THEN t._v END) "
+                f"OVER ({over}) END AS _vol FROM ({inner.sql}) t"
+            )
+            # cross-sectional std(ddof=0) of the per-instrument vols, broadcast.
+            stage2 = (
+                f"SELECT ts, inst, _vol, "
+                f"AVG(_vol) OVER (PARTITION BY ts) AS _m, "
+                f"COUNT(_vol) OVER (PARTITION BY ts) AS _n "
+                f"FROM ({stage1}) t"
+            )
+            return _Layer(
+                f"SELECT ts, inst, CASE WHEN _n < {mb} OR _m IS NULL THEN NULL "
+                f"ELSE SQRT(AVG(POWER(_vol - _m, 2)) OVER (PARTITION BY ts)) END AS _v "
+                f"FROM ({stage2}) t",
+                has_inst_window=True,
+            )
+
+        if op in {"vr1_parkinson_close_scale", "vr1_garman_klass_ext", "vr1_rogers_satchell",
+                  "vr1_range_to_close_eff", "vr1_range_everage", "vax_ret_per_liquidity_unit"}:
+            input_cnt = {
+                "vr1_parkinson_close_scale": 3,
+                "vr1_garman_klass_ext": 4,
+                "vr1_rogers_satchell": 4,
+                "vr1_range_to_close_eff": 4,
+                "vr1_range_everage": 4,
+                "vax_ret_per_liquidity_unit": 2,
+            }[op]
+            names = ["_v0", "_v1", "_v2", "_v3"][:input_cnt]
+            base_sql, aliases = _vv_multi(input_cnt, names)
+            if base_sql is None:
+                return None
+            fin = lambda col: (f"({col} IS NOT NULL AND NOT isnan({col}) AND NOT isinf({col}))")
+
+            def _wint(key: str, pos: int, default: int) -> int:
+                return _vv_int(key, pos, default)
+
+            if op == "vr1_parkinson_close_scale":
+                w = _window_int(node, default=20)
+                mp = _wint("min_periods", 1, 5)
+                if mp > w:
+                    return None
+                ok = f"({fin('_v0')} AND {fin('_v1')} AND {fin('_v2')} AND _v2 > 0)"
+                over = _vv_over(w)
+                # park = sqrt(mean((h/l ratio)^2)); cc_ret std over compressed closes.
+                stage1 = (
+                    f"SELECT ts, inst, CASE WHEN {ok} THEN (_v0 - _v1) / _v2 END AS _pr, "
+                    f"CASE WHEN {ok} THEN _v2 END AS _cc, "
+                    f"SUM(CASE WHEN {ok} THEN 1 ELSE 0 END) OVER ({over}) AS _cnt "
+                    f"FROM ({base_sql}) t"
+                )
+                stage2 = (
+                    f"SELECT ts, inst, _cnt, _pr, "
+                    f"SQRT(AVG(_pr * _pr) OVER ({over})) AS _park, "
+                    f"list_filter(list(_cc) OVER ({over}), y -> y IS NOT NULL) AS _ccl "
+                    f"FROM ({stage1}) t"
+                )
+                cc_ret_std = (
+                    "list_aggregate(list_filter(list_transform(_ccl, (y, i) -> "
+                    "CASE WHEN i >= 2 THEN (y - _ccl[i - 1]) / _ccl[i - 1] END), "
+                    "z -> z IS NOT NULL), 'stddev_samp')"
+                )
+                return _Layer(
+                    f"SELECT ts, inst, CASE WHEN _cnt < {mp} THEN NULL "
+                    f"WHEN _park IS NULL THEN NULL "
+                    f"WHEN COALESCE(len(_ccl), 0) < 2 THEN NULL "
+                    f"WHEN {cc_ret_std} IS NULL OR {cc_ret_std} <= 1e-12 THEN NULL "
+                    f"ELSE _park / {cc_ret_std} END AS _v "
+                    f"FROM ({stage2}) t",
+                    has_inst_window=True,
+                )
+            if op == "vr1_garman_klass_ext":
+                w = _window_int(node, default=20)
+                mp = _wint("min_periods", 1, 5)
+                if mp > w:
+                    return None
+                ok = f"({fin('_v0')} AND {fin('_v1')} AND {fin('_v2')} AND {fin('_v3')} AND _v0 > 0 AND _v3 > 0 AND _v1 > 0 AND _v2 > 0)"
+                v = f"(0.5 * POWER(LN(_v1 / _v2), 2) - {2.0 * math.log(2.0) - 1.0} * POWER(LN(_v3 / _v0), 2))"
+                over = _vv_over(w)
+                return _Layer(
+                    f"WITH daily AS (SELECT ts, inst, CASE WHEN {ok} THEN {v} END AS _d FROM ({base_sql}) t) "
+                    f"SELECT ts, inst, CASE WHEN COUNT(_d) OVER ({over}) < {mp} THEN NULL "
+                    f"WHEN AVG(_d) OVER ({over}) < 0 THEN 0.0 "
+                    f"ELSE SQRT(AVG(_d) OVER ({over})) END AS _v FROM daily t",
+                    has_inst_window=True,
+                )
+            if op == "vr1_rogers_satchell":
+                w = _window_int(node, default=20)
+                mp = _wint("min_periods", 1, 5)
+                if mp > w:
+                    return None
+                ok = f"({fin('_v0')} AND {fin('_v1')} AND {fin('_v2')} AND {fin('_v3')} AND _v0 > 0 AND _v3 > 0 AND _v1 > 0 AND _v2 > 0)"
+                v = f"(LN(_v1 / _v3) * LN(_v1 / _v0) + LN(_v2 / _v3) * LN(_v2 / _v0))"
+                over = _vv_over(w)
+                return _Layer(
+                    f"WITH daily AS (SELECT ts, inst, CASE WHEN {ok} THEN {v} END AS _d FROM ({base_sql}) t) "
+                    f"SELECT ts, inst, CASE WHEN COUNT(_d) OVER ({over}) < {mp} THEN NULL "
+                    f"WHEN AVG(_d) OVER ({over}) < 0 THEN 0.0 "
+                    f"ELSE SQRT(AVG(_d) OVER ({over})) END AS _v FROM daily t",
+                    has_inst_window=True,
+                )
+            if op == "vr1_range_to_close_eff":
+                w = _window_int(node, default=20)
+                mp = _wint("min_periods", 1, 5)
+                if mp > w:
+                    return None
+                ok = f"({fin('_v0')} AND {fin('_v1')} AND {fin('_v2')} AND {fin('_v3')})"
+                hl = f"(_v1 - _v2)"
+                over = _vv_over(w)
+                stage1 = (
+                    f"SELECT ts, inst, CASE WHEN {ok} THEN {hl} END AS _hl, "
+                    f"CASE WHEN {ok} AND {hl} > 0 THEN ABS(_v3 - _v0) / {hl} END AS _eff, "
+                    f"SUM(CASE WHEN {ok} AND {hl} <= 0 THEN 1 ELSE 0 END) OVER ({over}) AS _bad, "
+                    f"SUM(CASE WHEN {ok} THEN 1 ELSE 0 END) OVER ({over}) AS _cnt "
+                    f"FROM ({base_sql}) t"
+                )
+                return _Layer(
+                    f"SELECT ts, inst, CASE WHEN _cnt < {mp} OR _bad > 0 THEN NULL "
+                    f"ELSE AVG(_eff) OVER ({over}) END AS _v "
+                    f"FROM ({stage1}) t",
+                    has_inst_window=True,
+                )
+            if op == "vr1_range_everage":
+                w = _window_int(node, default=20)
+                mp = _wint("min_periods", 1, 5)
+                if mp > w:
+                    return None
+                ok = f"({fin('_v0')} AND {fin('_v1')} AND {fin('_v2')} AND {fin('_v3')} AND ABS(_v2) > 0)"
+                over = _vv_over(w)
+                return _Layer(
+                    f"WITH daily AS (SELECT ts, inst, "
+                    f"CASE WHEN {ok} THEN ABS(_v0 - _v1) / _v2 END AS _m, "
+                    f"CASE WHEN {ok} THEN _v3 END AS _r FROM ({base_sql}) t) "
+                    f"SELECT ts, inst, CASE WHEN COUNT(_r) OVER ({over}) < {mp} THEN NULL "
+                    f"WHEN COUNT(_m) OVER ({over}) < 2 OR STDDEV_SAMP(_r) OVER ({over}) IS NULL "
+                    f"OR STDDEV_SAMP(_r) OVER ({over}) <= 1e-12 THEN NULL "
+                    f"ELSE AVG(_m) OVER ({over}) / STDDEV_SAMP(_r) OVER ({over}) END AS _v "
+                    f"FROM daily t",
+                    has_inst_window=True,
+                )
+            # vax_ret_per_liquidity_unit (ret, amount, window, min_periods)
+            w = _window_int(node, default=20)
+            mp = _wint("min_periods", 1, 10)
+            if mp > w:
+                return None
+            pair = f"({fin('_v0')} AND {fin('_v1')} AND _v1 > 0)"
+            over = _vv_over(w)
+            base2 = (
+                f"SELECT ts, inst, CASE WHEN {pair} THEN _v0 END AS _r, "
+                f"CASE WHEN {pair} THEN _v1 END AS _a, "
+                f"SUM(CASE WHEN {pair} THEN 1 ELSE 0 END) OVER ({over}) AS _cnt "
+                f"FROM ({base_sql}) t"
+            )
+            stage1 = (
+                f"SELECT ts, inst, _cnt, _a, "
+                f"list_filter(list(_r) OVER ({over}), y -> y IS NOT NULL) AS _rl "
+                f"FROM ({base2}) t"
+            )
+            log_prod = f"list_sum(list_transform(_rl, y -> LN(1.0 + y)))"
+            prod = f"CASE WHEN {log_prod} IS NULL THEN NULL ELSE EXP({log_prod}) - 1.0 END"
+            am = f"AVG(_a) OVER ({over})"
+            return _Layer(
+                f"SELECT ts, inst, CASE WHEN _cnt < {mp} OR {am} IS NULL OR {am} <= 0 "
+                f"OR {prod} IS NULL THEN NULL ELSE {prod} / {am} END AS _v "
+                f"FROM ({stage1}) t",
                 has_inst_window=True,
             )
 
