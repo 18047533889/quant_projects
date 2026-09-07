@@ -2782,6 +2782,78 @@ def _compile_polars_impl(
         )
         return joined.with_columns(expr.alias(_VAL)).select(_TS, _INST, _VAL)
 
+    # ------------------------------------------------------------------
+    # overnight/intraday return decomposition family (intraday/overnight.py):
+    # overnight = open/pre_close - 1, intraday = close/open - 1 (both derived
+    # from three daily-panel inputs), then per-op trailing statistics.  Safe
+    # division replicates _safe_ret (denominator 0/NaN/inf -> NaN); pair
+    # rolling stats mask non-finite pairs exactly like pandas rolling.cov.
+    # ------------------------------------------------------------------
+
+    if op in {"ts_overnight_intraday_cov", "ts_overnight_intraday_spread",
+              "ts_overnight_intraday_sign_agreement", "ts_opening_mispricing_score"}:
+        if len(node.inputs) < 3:
+            return None
+        close_in = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
+        open_in = _compile_child(node, 1, base, parent_op=op, ctx=ctx, memo=memo)
+        pre_in = _compile_child(node, 2, base, parent_op=op, ctx=ctx, memo=memo)
+        if close_in is None or open_in is None or pre_in is None:
+            return None
+        joined = _join_triple(open_in, pre_in, close_in)
+        o_c = pl.col(_VAL)
+        pc = pl.col("_ym")
+        c_c = pl.col("_y")
+        w = _window_int(node, default=60)
+
+        def _safe_ret_expr(num: pl.Expr, den: pl.Expr) -> pl.Expr:
+            d = pl.when(den.is_nan() | den.is_infinite()).then(None).otherwise(den)
+            num_ok = pl.when(num.is_nan() | num.is_infinite()).then(None).otherwise(num)
+            r = num_ok / d
+            return pl.when(d.is_null() | (d == 0) | r.is_null() | r.is_infinite()).then(None).otherwise(r)
+
+        overnight = _safe_ret_expr(o_c, pc)
+        intraday = _safe_ret_expr(c_c, o_c)
+        if op == "ts_overnight_intraday_cov":
+            ov = pl.when(overnight.is_not_null() & intraday.is_not_null()).then(overnight)
+            iv = pl.when(overnight.is_not_null() & intraday.is_not_null()).then(intraday)
+            cnt = (overnight.is_not_null() & intraday.is_not_null()).cast(pl.Float64).rolling_sum(window_size=w, min_samples=1).over(_INST, order_by=_TS)
+            cov = pl.rolling_cov(ov, iv, window_size=w, min_samples=5, ddof=1).over(_INST, order_by=_TS)
+            expr = pl.when(cnt < 5).then(None).otherwise(cov)
+            return joined.with_columns(expr.alias(_VAL)).select(_TS, _INST, _VAL)
+        if op == "ts_overnight_intraday_spread":
+            # pandas: o.rolling(w).mean() - i.rolling(w).mean() — default
+            # min_periods == window (NaN until w valid rows).
+            expr = overnight.rolling_mean(window_size=w, min_samples=w).over(_INST, order_by=_TS) - intraday.rolling_mean(window_size=w, min_samples=w).over(_INST, order_by=_TS)
+            return joined.with_columns(expr.alias(_VAL)).select(_TS, _INST, _VAL)
+        if op == "ts_overnight_intraday_sign_agreement":
+            # pandas: (np.sign(o) == np.sign(i)).astype(float) — NaN sign is
+            # NaN and NaN==NaN is False, so a NaN pair row contributes 0.0
+            # (a *valid* zero) to the window mean.  polars null==null yields
+            # null, so map null/NaN operand pairs explicitly to 0.0.
+            o_s = pl.when(overnight.is_null() | overnight.is_nan()).then(None).otherwise(overnight.sign())
+            i_s = pl.when(intraday.is_null() | intraday.is_nan()).then(None).otherwise(intraday.sign())
+            agree = pl.when(
+                overnight.is_null() | overnight.is_nan() | intraday.is_null() | intraday.is_nan()
+            ).then(0.0).otherwise((o_s == i_s).cast(pl.Float64))
+            expr = agree.rolling_mean(window_size=w, min_samples=w).over(_INST, order_by=_TS)
+            return joined.with_columns(expr.alias(_VAL)).select(_TS, _INST, _VAL)
+        # ts_opening_mispricing_score: beta = cov(ov,iv)/var(ov) over the
+        # window (pandas: np.cov / np.var over finite pairs, min 6 valid),
+        # output = ov_t - beta * ov_t (expected intraday response to gap).
+        ov = overnight
+        iv = intraday
+        mp = max(6, w // 5)
+        pair_ok = ov.is_not_null() & iv.is_not_null()
+        pair_cnt = pair_ok.cast(pl.Float64).rolling_sum(window_size=w, min_samples=1).over(_INST, order_by=_TS)
+        cov_w = pl.rolling_cov(ov, iv, window_size=w, min_samples=1, ddof=1).over(_INST, order_by=_TS)
+        var_w = (
+            pl.when(pair_ok).then(ov)
+            .rolling_var(window_size=w, min_samples=1, ddof=1).over(_INST, order_by=_TS)
+        )
+        beta = pl.when(pair_cnt < mp).then(None).otherwise(cov_w / pl.when(var_w.is_null() | (var_w <= 1e-12)).then(None).otherwise(var_w))
+        expr = pl.when(ov.is_null() | beta.is_null()).then(None).otherwise(ov - beta * ov)
+        return joined.with_columns(expr.alias(_VAL)).select(_TS, _INST, _VAL)
+
     if op == "cs_mad":
         inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
         if inner is None:
