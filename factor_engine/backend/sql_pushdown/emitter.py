@@ -2231,6 +2231,21 @@ _FLOWMOM_DEFAULT_WINDOW: dict[str, int] = {
     "aq1_working_capital_accrual": 8,
 }
 
+# wave3c vol/valuation window statistics family (2026-09-08): trailing-window
+# statistics over the wave1_volregime / wave1_valuation / wave1_cs_momentum
+# pandas references.  DuckDB-only branches live in _compile_layer_impl
+# (the ``_VOLVAL_SQL_WINDOW_OPS`` block).
+_VOLVAL_SQL_WINDOW_OPS: frozenset[str] = frozenset({
+    "vv1_vol_of_vol",
+    "vv1_downside_vol_share",
+    "vv1_vol_level_score",
+    "vv1_regime_change_ratio",
+    "val1_valuation_z_own",
+    "val1_valuation_percentile_own",
+    "val1_earnings_yield_ma_diff",
+    "vax_liquidity_penalty_exposure",
+})
+
 _FLOWMOM_DEFAULT_MIN_PERIODS: dict[str, int] = {
     "ofi_volume_imbalance": 5,
     "ofi_abs_imbalance_trend": 3,
@@ -11653,20 +11668,28 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
             )
 
         if op == "ofi_imbalance_persistence":
-            # lag-1 Pearson corr over the finite slice; std==0 side -> NULL
-            # (CORR with a constant series returns NULL in DuckDB anyway).
-            # pandas kernel gates on the CURRENT row being finite too.
-            lag1 = f"LAG(CASE WHEN {valid} THEN t._v END) OVER (PARTITION BY inst ORDER BY ts)"
-            pair = f"({valid} AND {lag1} IS NOT NULL)"
-            pair_cnt = f"SUM(CASE WHEN {pair} THEN 1 ELSE 0 END) OVER ({over})"
+            # lag-1 Pearson corr over the COMPACTED finite slice (x = vals[:-1],
+            # y = vals[1:]); either side std == 0 -> NULL; the pandas kernel
+            # also gates on the CURRENT row being finite.  Stage the pair so
+            # no window call nests inside another.
             curr = f"CASE WHEN {valid} THEN t._v END"
+            lag1 = f"LAG({curr}) OVER (PARTITION BY inst ORDER BY ts)"
+            stage1 = (
+                f"SELECT ts, inst, {curr} AS _cv, {lag1} AS _lv, ({gate}) AS _gate "
+                f"FROM ({inner.sql}) t"
+            )
+            stage2 = (
+                f"SELECT ts, inst, _cv, _lv, _gate, "
+                f"SUM(CASE WHEN _cv IS NOT NULL AND _lv IS NOT NULL THEN 1 ELSE 0 END) OVER ({over}) AS _pc "
+                f"FROM ({stage1}) s1"
+            )
             return _Layer(
-                f"SELECT ts, inst, CASE WHEN NOT ({valid}) THEN NULL "
-                f"WHEN {gate} OR {pair_cnt} < 2 THEN NULL "
-                f"WHEN STDDEV_SAMP({curr}) OVER ({over}) = 0 "
-                f"OR STDDEV_SAMP({lag1}) OVER ({over}) = 0 THEN NULL "
-                f"ELSE CORR({curr}, {lag1}) OVER ({over}) END AS _v "
-                f"FROM ({inner.sql}) t",
+                f"SELECT ts, inst, CASE WHEN _cv IS NULL THEN NULL "
+                f"WHEN _gate OR _pc < 2 THEN NULL "
+                f"WHEN STDDEV_SAMP(_cv) OVER ({over}) = 0 "
+                f"OR STDDEV_SAMP(_lv) OVER ({over}) = 0 THEN NULL "
+                f"ELSE CORR(_cv, _lv) OVER ({over}) END AS _v "
+                f"FROM ({stage2}) s2",
                 has_inst_window=True,
             )
 
@@ -11739,6 +11762,7 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
             # relative to the consuming window start (pairs can span NaN
             # gaps), so stage the pairing and drop, per consuming window, the
             # boundary pair whose partner row lies before the window start.
+            sgn = f"CASE WHEN {valid} THEN SIGN(t._v) END"
             ri = "ROW_NUMBER() OVER (PARTITION BY inst ORDER BY ts)"
             stage1 = (
                 f"SELECT ts, inst, {sgn} AS _sgn, {ri} AS _ri, ({gate}) AS _gate "
@@ -11922,62 +11946,52 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
                 f"AND _e IS NOT NULL AND NOT isnan(_e) AND NOT isinf(_e) "
                 f"AND ABS(_e) > 1e-12)"
             )
-            # stage 1: ok flag + valid mask; the trailing gate is evaluated on
-            # the ok count inside the joined frame (both operands in scope).
+            # stage 1: ok flag (finite pair + non-zero earnings).
             stage1 = (
                 f"SELECT ts, inst, _wc, _e, CASE WHEN {ok} THEN 1 ELSE 0 END AS _ok "
                 f"FROM ({joined_sql}) j"
             )
+            # COMPACTED pairing: dw between ADJACENT OK rows (np.diff over the
+            # ok-filtered slice), so the partner is the LAST OK row — carry
+            # the last-ok wc/|e| via LAST_VALUE IGNORE NULLS.
             stage2 = (
                 f"SELECT ts, inst, _wc, _e, _ok, "
-                f"SUM(_ok) OVER ({over}) AS _ok_cnt "
-                f"FROM ({stage1}) s1"
-            )
-            ok_cnt = "_ok_cnt"
-            # pairs over the COMPACTED ok slice: dw between adjacent OK rows.
-            prev_ok = f"(LAG(_ok) OVER (PARTITION BY inst ORDER BY ts) = 1)"
-            prev_wc = f"LAG(_wc) OVER (PARTITION BY inst ORDER BY ts)"
-            prev_e = f"LAG(_e) OVER (PARTITION BY inst ORDER BY ts)"
-            # COMPACTED pairing: partner = last OK row before current. Use
-            # LAST_VALUE IGNORE NULLS over the ok-masked columns.
-            stage3 = (
-                f"SELECT ts, inst, _wc, _e, _ok, {ok_cnt} AS _okc, "
+                f"SUM(_ok) OVER ({over}) AS _okc, "
                 f"CASE WHEN _ok = 1 THEN _wc END AS _wc_ok, "
                 f"CASE WHEN _ok = 1 THEN ABS(_e) END AS _e_ok "
-                f"FROM ({stage2}) s2"
+                f"FROM ({stage1}) s1"
             )
-            stage4 = (
+            stage3 = (
                 f"SELECT ts, inst, _wc, _e, _ok, _okc, _wc_ok, _e_ok, "
                 f"LAST_VALUE(_wc_ok IGNORE NULLS) OVER (PARTITION BY inst ORDER BY ts ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS _pwc, "
                 f"LAST_VALUE(_e_ok IGNORE NULLS) OVER (PARTITION BY inst ORDER BY ts ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS _pe "
+                f"FROM ({stage2}) s2"
+            )
+            stage4 = (
+                f"SELECT ts, inst, _ok, _okc, "
+                f"CASE WHEN _ok = 1 AND _pwc IS NOT NULL THEN _wc - _pwc END AS _dw, "
+                f"CASE WHEN _ok = 1 AND _pe IS NOT NULL THEN _pe END AS _pe2 "
                 f"FROM ({stage3}) s3"
             )
-            stage5 = (
-                f"SELECT ts, inst, _ok, _okc, _wc, _e, "
-                f"CASE WHEN _ok = 1 AND _pwc IS NOT NULL THEN _wc - _pwc END AS _dw, "
-                f"CASE WHEN _ok = 1 AND _pe IS NOT NULL THEN _pe END AS _pe, "
-                f"CASE WHEN _ok = 1 AND LAST_VALUE(CASE WHEN _ok = 1 THEN 1 END IGNORE NULLS) OVER (PARTITION BY inst ORDER BY ts ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) = 1 AND _wc IS NOT NULL THEN 1 ELSE 0 END AS _pair "
-                f"FROM ({stage4}) s4"
-            )
-            pair = "(_pair = 1)"
-            pair_cnt = f"SUM(_pair) OVER ({over})"
-            ratio = f"(_dw / (_pe + 1e-12))"
+            pair = "(_ok = 1 AND _dw IS NOT NULL AND _pe2 IS NOT NULL)"
+            pair_cnt = f"SUM(CASE WHEN {pair} THEN 1 ELSE 0 END) OVER ({over})"
+            ratio = f"(_dw / (_pe2 + 1e-12))"
             rmean = f"AVG(CASE WHEN {pair} THEN {ratio} END) OVER ({over})"
             rstd = f"STDDEV_SAMP(CASE WHEN {pair} THEN {ratio} END) OVER ({over})"
             abs_rstd = f"STDDEV_SAMP(CASE WHEN {pair} THEN ABS({ratio}) END) OVER ({over})"
             if op == "aq1_accrual_stability":
                 body = (
-                    f"CASE WHEN {ok_cnt} < {mp} OR {pair_cnt} < 2 THEN NULL "
+                    f"CASE WHEN _okc < {mp} OR {pair_cnt} < 2 THEN NULL "
                     f"WHEN {rmean} IS NULL OR ABS({rmean}) <= 1e-12 THEN 0.0 "
                     f"ELSE -({rstd}) / ABS({rmean}) END"
                 )
             else:
                 body = (
-                    f"CASE WHEN {ok_cnt} < {mp} OR {pair_cnt} < 2 THEN NULL "
+                    f"CASE WHEN _okc < {mp} OR {pair_cnt} < 2 THEN NULL "
                     f"ELSE {abs_rstd} END"
                 )
             return _Layer(
-                f"SELECT ts, inst, {body} AS _v FROM ({stage5}) s5",
+                f"SELECT ts, inst, {body} AS _v FROM ({stage4}) s4",
                 has_inst_window=True,
             )
 

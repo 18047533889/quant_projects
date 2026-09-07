@@ -854,6 +854,34 @@ SQL_IMPLEMENTED_CANONICALS = SQL_IMPLEMENTED_CANONICALS | frozenset({
     "ts_industry_liquidity_beta",
 })
 
+# 2026-09-08 wave3c vol/valuation family — 波动率 regime 统计（vv1_*）、
+# OHLC 高频估计量（vr1_*）、估值 trailing 统计（val1_*）与流动性暴露（vax_*）
+# 的 trailing 窗口族（polars native 分支 + DuckDB SQL 分支；
+# tests/backend_parity/test_volval_wave3_parity.py）。
+SQL_IMPLEMENTED_CANONICALS = SQL_IMPLEMENTED_CANONICALS | frozenset({
+    "vv1_vol_of_vol",
+    "vv1_downside_vol_share",
+    "vv1_fractional_share",
+    "vv1_long_short_vol_beta",
+    "vv1_vol_acceleration",
+    "vv1_dispersion_vol",
+    "vv1_regime_change_ratio",
+    "vv1_vol_level_score",
+    "vr1_parkinson_close_scale",
+    "vr1_garman_klass_ext",
+    "vr1_rogers_satchell",
+    "vr1_range_to_close_eff",
+    "vr1_range_everage",
+    "vr1_ewma_range_vol",
+    "val1_valuation_z_own",
+    "val1_valuation_percentile_own",
+    "val1_earnings_yield_ma_diff",
+    "val1_valuations_lag_component",
+    "val1_earnings_yield_slope",
+    "vax_liquidity_penalty_exposure",
+    "vax_ret_per_liquidity_unit",
+})
+
 # DuckDB 分层
 DUCKDB_SQL_PARITY_VERIFIED: frozenset[str] = frozenset()
 DUCKDB_SQL_PRODUCTION_SAFE: frozenset[str] = frozenset()

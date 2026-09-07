@@ -237,6 +237,32 @@ POLARS_LONG_NATIVE: frozenset[str] = frozenset(
         'ashare_limit_touch_count',
         'ashare_failed_limit_count',
         'ashare_limit_asymmetry',
+        # wave3c vol/valuation window family (2026-09-08): 波动率 regime 统计
+        # (vv1_*) / OHLC 高频估计量 (vr1_*) / 估值 trailing 统计 (val1_*) /
+        # 流动性暴露 (vax_*) — polars native branches in
+        # backend/polars_expr_emitter.py (wave3c block), 三方 parity 见
+        # tests/backend_parity/test_volval_wave3_parity.py.
+        'vv1_vol_of_vol',
+        'vv1_downside_vol_share',
+        'vv1_fractional_share',
+        'vv1_long_short_vol_beta',
+        'vv1_vol_acceleration',
+        'vv1_dispersion_vol',
+        'vv1_regime_change_ratio',
+        'vv1_vol_level_score',
+        'vr1_parkinson_close_scale',
+        'vr1_garman_klass_ext',
+        'vr1_rogers_satchell',
+        'vr1_range_to_close_eff',
+        'vr1_range_everage',
+        'vr1_ewma_range_vol',
+        'val1_valuation_z_own',
+        'val1_valuation_percentile_own',
+        'val1_earnings_yield_ma_diff',
+        'val1_valuations_lag_component',
+        'val1_earnings_yield_slope',
+        'vax_liquidity_penalty_exposure',
+        'vax_ret_per_liquidity_unit',
         'ashare_limit_event_density',
         'ashare_limit_up_volume_ratio',
         'ashare_limit_down_volume_ratio',
