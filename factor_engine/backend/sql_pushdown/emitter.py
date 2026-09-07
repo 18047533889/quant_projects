@@ -1858,6 +1858,12 @@ def _sql_fin_ratio_burn(a): return _sql_fin_neg_ocf_ratio(a[0], a[1])
 
 
 _FIN_SQL_ELEMENTWISE: dict[str, tuple[int, Callable[[list[str]], str]]] = {
+    # wave2 fin/valuation (2026-09-07): 纯元素级比值（NumpyKernels/ops_v2 参考）。
+    "free_float_turnover": (2, _sql_fin_ratio2),
+    "real_turnover_rate": (2, _sql_fin_ratio2),
+    "true_turnover_rate": (2, _sql_fin_ratio2),
+    # log|x| - log|y| == log(|x|/|y|)；分母 0/NaN → NULL。
+    "market_cap_free_cap_gap": (2, lambda a: _sql_fin_ratio(f"abs({a[0]})", f"abs({a[1]})")),
     "fin_common_size": (2, _sql_fin_ratio2),
     "fin_cash_conversion": (2, _sql_fin_ratio2),
     "fin_acquisition_cash_intensity": (2, _sql_fin_ratio2),
@@ -4092,6 +4098,31 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         "c_std": _dialect_fn(dialect, "stddev"),
         "cs_std": _dialect_fn(dialect, "stddev"),
     }
+    if op == "cs_universe_coverage":
+        # cs_state_ops._cs_universe_coverage: finite-x fraction over the
+        # DECLARED universe (universe non-null and nonzero), per date,
+        # broadcast to ALL cells; empty universe -> NULL.
+        if len(node.inputs) < 2:
+            return None
+        inner = _compile_layer(node.inputs[0], dialect=dialect)
+        uni = _compile_layer(node.inputs[1], dialect=dialect)
+        if inner is None or uni is None:
+            return None
+        from factor_engine.backend.stat_valid import row_stat_invalid_sql
+
+        x_inv = row_stat_invalid_sql("x._v", dialect=dialect, exclude_nan=True)
+        u_inv = row_stat_invalid_sql("u._v", dialect=dialect, exclude_nan=True)
+        in_univ = f"(u._v IS NOT NULL AND NOT ({u_inv}) AND u._v != 0)"
+        return _Layer(
+            f"SELECT x.ts, x.inst, "
+            f"CASE WHEN COUNT(CASE WHEN NOT ({u_inv}) AND u._v != 0 THEN 1 END) OVER (PARTITION BY x.ts) = 0 THEN NULL "
+            f"ELSE CAST(COUNT(CASE WHEN NOT ({u_inv}) AND u._v != 0 AND NOT ({x_inv}) THEN 1 END) OVER (PARTITION BY x.ts) AS DOUBLE) "
+            f"/ CAST(COUNT(CASE WHEN NOT ({u_inv}) AND u._v != 0 THEN 1 END) OVER (PARTITION BY x.ts) AS DOUBLE) "
+            f"END AS _v "
+            f"FROM ({inner.sql}) x LEFT JOIN ({uni.sql}) u USING (ts, inst)",
+            has_inst_window=inner.has_inst_window,
+            has_ts_partition=True,
+        )
     if op in cs_aggregates:
         inner = _compile_layer(node.inputs[0], dialect=dialect)
         if inner is None:
@@ -11141,6 +11172,104 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
             f"SELECT ts, inst, "
             f"MEDIAN(_v) OVER ({over}) AS _v "
             f"FROM ({inner.sql}) t",
+            has_inst_window=True,
+        )
+
+    if op == "price_spread_deviation":
+        # NumpyKernels.price_spread_deviation_: x_t / trailing-finite-mean(x,d) - 1;
+        # zero/NaN mean -> NULL (np errstate NaN propagates).
+        inner = _compile_layer(node.inputs[0], dialect=dialect)
+        if inner is None:
+            return None
+        w = _window_int(node, default=20)
+        if dialect != SqlDialect.DUCKDB:
+            return None
+        from factor_engine.backend.stat_valid import stat_valid_sql
+
+        ok = stat_valid_sql("_v", dialect=dialect, exclude_nan=True)
+        over = f"PARTITION BY inst ORDER BY ts ROWS BETWEEN {w - 1} PRECEDING AND CURRENT ROW"
+        return _Layer(
+            f"SELECT ts, inst, "
+            f"CASE WHEN NOT ({ok}) THEN NULL "
+            f"WHEN AVG(CASE WHEN {ok} THEN _v END) OVER ({over}) = 0 "
+            f"OR AVG(CASE WHEN {ok} THEN _v END) OVER ({over}) IS NULL THEN NULL "
+            f"ELSE _v / AVG(CASE WHEN {ok} THEN _v END) OVER ({over}) - 1.0 END AS _v "
+            f"FROM ({inner.sql}) t",
+            has_inst_window=True,
+        )
+
+    # ------------------------------------------------------------------
+    # overnight/intraday decomposition family — three daily inputs, two safe
+    # ratio returns, then a trailing-window statistic.  Same contract as the
+    # polars branch (intraday/overnight.py reference).
+    # ------------------------------------------------------------------
+    if op in {"ts_overnight_intraday_cov", "ts_overnight_intraday_spread",
+              "ts_overnight_intraday_sign_agreement", "ts_opening_mispricing_score"}:
+        if len(node.inputs) < 3:
+            return None
+        close_l = _compile_layer(node.inputs[0], dialect=dialect)
+        open_l = _compile_layer(node.inputs[1], dialect=dialect)
+        pre_l = _compile_layer(node.inputs[2], dialect=dialect)
+        if close_l is None or open_l is None or pre_l is None:
+            return None
+        isnan_fn = "isNaN" if dialect == SqlDialect.CLICKHOUSE else "isnan"
+        isinf_fn = "isInfinite" if dialect == SqlDialect.CLICKHOUSE else "isinf"
+
+        def _safe_ret_sql(num: str, den: str) -> str:
+            r = f"({num} / NULLIF({den}, 0) - 1.0)"
+            return (
+                f"CASE WHEN {num} IS NULL OR {den} IS NULL "
+                f"OR {isnan_fn}({num}) OR {isnan_fn}({den}) "
+                f"OR {isinf_fn}({num}) OR {isinf_fn}({den}) THEN NULL "
+                f"WHEN {isnan_fn}({r}) OR {isinf_fn}({r}) THEN NULL ELSE {r} END"
+            )
+
+        w = _window_int(node, default=60)
+        if dialect != SqlDialect.DUCKDB:
+            return None
+        over = f"PARTITION BY inst ORDER BY ts ROWS BETWEEN {w - 1} PRECEDING AND CURRENT ROW"
+        base_sql = (
+            f"SELECT o.ts, o.inst, {_safe_ret_sql('o._v', 'p._v')} AS _ov, "
+            f"{_safe_ret_sql('c._v', 'o._v')} AS _iv "
+            f"FROM ({open_l.sql}) o LEFT JOIN ({pre_l.sql}) p USING (ts, inst) "
+            f"LEFT JOIN ({close_l.sql}) c USING (ts, inst)"
+        )
+        pair = "(_ov IS NOT NULL AND _iv IS NOT NULL)"
+        if op == "ts_overnight_intraday_cov":
+            # pandas: rolling(w, min_periods=5).cov(ddof=1)
+            return _Layer(
+                f"SELECT ts, inst, "
+                f"CASE WHEN COUNT(CASE WHEN _ov IS NOT NULL AND _iv IS NOT NULL THEN 1 END) OVER ({over}) < 5 THEN NULL "
+                f"ELSE COVAR_SAMP(_ov, _iv) OVER ({over}) END AS _v FROM ({base_sql}) t",
+                has_inst_window=True,
+            )
+        if op == "ts_overnight_intraday_spread":
+            # pandas: rolling(w).mean() default min_periods=w
+            return _Layer(
+                f"SELECT ts, inst, "
+                f"AVG(_ov) OVER ({over}) - AVG(_iv) OVER ({over}) AS _v FROM ({base_sql}) t",
+                has_inst_window=True,
+            )
+        if op == "ts_overnight_intraday_sign_agreement":
+            # NaN sign == NaN sign is False in pandas → the pair row counts as
+            # an explicit 0.0 inside the window mean.
+            return _Layer(
+                f"SELECT ts, inst, AVG(CASE WHEN _ov IS NULL OR _iv IS NULL THEN 0.0 "
+                f"ELSE CASE WHEN SIGN(_ov) = SIGN(_iv) THEN 1.0 ELSE 0.0 END END) OVER ({over}) AS _v "
+                f"FROM ({base_sql}) t",
+                has_inst_window=True,
+            )
+        # ts_opening_mispricing_score: beta = COVAR_SAMP / VAR_POP over the
+        # finite-pair window (pandas np.cov ddof=1 / np.var ddof=0), min 6
+        # pairs; output = ov_t - beta * ov_t.
+        mp = max(6, w // 5)
+        return _Layer(
+            f"SELECT ts, inst, "
+            f"CASE WHEN _ov IS NULL THEN NULL "
+            f"WHEN COUNT(CASE WHEN _ov IS NOT NULL AND _iv IS NOT NULL THEN 1 END) OVER ({over}) < {mp} THEN NULL "
+            f"WHEN VAR_POP(_ov) OVER ({over}) IS NULL OR VAR_POP(_ov) OVER ({over}) <= 1e-12 THEN NULL "
+            f"ELSE _ov - (COVAR_SAMP(_ov, _iv) OVER ({over}) / VAR_POP(_ov) OVER ({over})) * _ov END AS _v "
+            f"FROM ({base_sql}) t",
             has_inst_window=True,
         )
 

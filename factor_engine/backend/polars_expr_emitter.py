@@ -988,6 +988,21 @@ def _fin_ratio7(a): return _fin_ratio_expr(a[0] + a[1] + a[2] + a[3] + a[4] - a[
 def _fin_ratio_cap(a): return _fin_ratio_expr(a[0], a[0] + a[1])
 def _fin_ratio_disp(a): return _fin_ratio_expr(a[0].abs(), a[1].abs())
 def _fin_ratio_dsc(a): return _fin_ratio_expr(a[0], a[1] + a[2].abs())
+
+
+def _fin_log_ratio(a):
+    # log|x| - log|y| == log(|x|/|y|); denominator 0 / NaN / Inf -> NaN
+    # (valuation/ops_v2._log_abs: log(x.abs().replace(0, nan))).
+    q = a[0].abs() / a[1].abs()
+    return (
+        pl.when(a[1].is_null() | (a[1] == 0) | a[0].is_null())
+        .then(None)
+        .otherwise(
+            pl.when(q.is_infinite() | q.is_nan() | (q <= 0))
+            .then(None)
+            .otherwise(q.log())
+        )
+    )
 def _fin_ratio_burn(a): return _fin_neg_ocf_ratio_expr(a[0], a[1])
 
 
@@ -1029,6 +1044,14 @@ _FIN_ELEMENTWISE_OPS: dict[str, tuple[int, Callable[[list], pl.Expr]]] = {
     "fin_financing_gap": (5, _fin_ratio5),
     "fin_core_earnings_ratio": (6, _fin_ratio6),
     "fin_noncore_income_ratio": (7, _fin_ratio7),
+    # wave2 fin/valuation (2026-09-07): 纯元素级比值（NumpyKernels 参考，
+    # 分母 ≤0/NaN → NaN；分母 abs 形态见 _fin_ratio_disp/_fin_ratio_dsc）。
+    "free_float_turnover": (2, _fin_ratio2),
+    "real_turnover_rate": (2, _fin_ratio2),
+    "true_turnover_rate": (2, _fin_ratio2),
+    # log|x| - log|y| == log(|x|/|y|)（_log_abs 参考：log(x.abs().replace(0,nan))，
+    # 分母 0 → NaN）。
+    "market_cap_free_cap_gap": (2, _fin_log_ratio),
 }
 
 
@@ -2806,9 +2829,11 @@ def _compile_polars_impl(
         w = _window_int(node, default=60)
 
         def _safe_ret_expr(num: pl.Expr, den: pl.Expr) -> pl.Expr:
-            d = pl.when(den.is_nan() | den.is_infinite()).then(None).otherwise(den)
+            # pandas _safe_ret: a/b.replace(0, nan) - 1.0 — the "- 1" is part
+            # of the return definition, not optional.
             num_ok = pl.when(num.is_nan() | num.is_infinite()).then(None).otherwise(num)
-            r = num_ok / d
+            d = pl.when(den.is_nan() | den.is_infinite()).then(None).otherwise(den)
+            r = num_ok / d - 1.0
             return pl.when(d.is_null() | (d == 0) | r.is_null() | r.is_infinite()).then(None).otherwise(r)
 
         overnight = _safe_ret_expr(o_c, pc)
@@ -2846,9 +2871,11 @@ def _compile_polars_impl(
         pair_ok = ov.is_not_null() & iv.is_not_null()
         pair_cnt = pair_ok.cast(pl.Float64).rolling_sum(window_size=w, min_samples=1).over(_INST, order_by=_TS)
         cov_w = pl.rolling_cov(ov, iv, window_size=w, min_samples=1, ddof=1).over(_INST, order_by=_TS)
+        # pandas reference: beta = np.cov(a,b)[0,1] (ddof=1) / np.var(a)
+        # (ddof=0, biased) over finite pairs — mixed ddof is intentional there.
         var_w = (
             pl.when(pair_ok).then(ov)
-            .rolling_var(window_size=w, min_samples=1, ddof=1).over(_INST, order_by=_TS)
+            .rolling_var(window_size=w, min_samples=1, ddof=0).over(_INST, order_by=_TS)
         )
         beta = pl.when(pair_cnt < mp).then(None).otherwise(cov_w / pl.when(var_w.is_null() | (var_w <= 1e-12)).then(None).otherwise(var_w))
         expr = pl.when(ov.is_null() | beta.is_null()).then(None).otherwise(ov - beta * ov)
@@ -3035,6 +3062,67 @@ def _compile_polars_impl(
         return inner.with_columns(
             pl.when(cnt_total > 0).then(cnt_finite / cnt_total).otherwise(None).alias(_VAL)
         )
+
+    if op == "cs_universe_coverage":
+        # cs_state_ops._cs_universe_coverage: finite-x fraction over the
+        # DECLARED universe (universe non-null and nonzero), per date,
+        # broadcast to ALL cells; empty universe -> NaN.
+        if len(node.inputs) < 2:
+            return None
+        inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
+        if inner is None:
+            return None
+        uni = _compile_child(node, 1, base, parent_op=op, ctx=ctx, memo=memo)
+        if uni is None:
+            return None
+        joined = inner.join(uni.rename({_VAL: "_u"}), on=[_TS, _INST], how="left")
+        from factor_engine.backend.stat_valid import polars_rank_input
+
+        u = pl.col("_u")
+        in_universe = u.is_not_null() & ~u.is_nan() & (u != 0)
+        # A physically-present row with a null x still occupies a universe
+        # slot (u is present); the NaN-cell broadcast rows (missing from the
+        # panel) never appear in the long frame, matching the reference
+        # denominator of "in-universe names present in the panel".
+        cnt_univ = (
+            pl.when(u.is_not_null() & ~u.is_nan() & (u != 0)).then(1)
+            .otherwise(0)
+            .sum()
+            .over(_TS, order_by=_INST)
+            .cast(pl.Float64)
+        )
+        xv = polars_rank_input(_VAL, exclude_nan=True)
+        # Finite count restricted to in-universe rows (reference:
+        # np.isfinite(xa[r])[u_mask].sum()).
+        cnt_finite_in = (
+            pl.when(in_universe & xv.is_not_null()).then(1)
+            .otherwise(0)
+            .sum()
+            .over(_TS, order_by=_INST)
+        )
+        return joined.with_columns(
+            pl.when(cnt_univ > 0).then(cnt_finite_in / cnt_univ).otherwise(None).alias(_VAL)
+        )
+
+    if op == "price_spread_deviation":
+        # NumpyKernels.price_spread_deviation_: x_t / trailing-mean(x, d) - 1
+        # where the trailing mean is over FINITE values (nanmean), and a
+        # zero/NaN mean -> NaN (np errstate → the raw NaN propagates).
+        inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
+        if inner is None:
+            return None
+        d = _window_int(node, default=20)
+        xv = pl.when(pl.col(_VAL).is_nan() | pl.col(_VAL).is_infinite()).then(None).otherwise(pl.col(_VAL))
+        m = (
+            pl.when(pl.col(_VAL).is_nan() | pl.col(_VAL).is_infinite()).then(None).otherwise(pl.col(_VAL))
+            .rolling_mean(window_size=d, min_samples=1)
+            .over(_INST, order_by=_TS)
+        )
+        denom = pl.when(m.is_null() | (m == 0)).then(None).otherwise(m)
+        expr = pl.when(pl.col(_VAL).is_null() | pl.col(_VAL).is_nan()).then(None).otherwise(
+            pl.when(denom.is_null() | (denom == 0)).then(None).otherwise(pl.col(_VAL) / denom - 1.0)
+        )
+        return inner.with_columns(expr.alias(_VAL))
 
     if op == "volatility":
         inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
@@ -3809,6 +3897,26 @@ def _compile_polars_impl(
         if inner is None:
             return None
         expr = pl.col(_VAL).rolling_median(window_size=3, min_samples=1).over(_INST, order_by=_TS)
+        return inner.with_columns(expr.alias(_VAL))
+
+    if op == "price_spread_deviation":
+        # NumpyKernels.price_spread_deviation_: x_t / trailing-mean(x, d) - 1
+        # where the trailing mean is over FINITE values (nanmean), and a
+        # zero/NaN mean -> NaN (np errstate → the raw NaN propagates).
+        inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
+        if inner is None:
+            return None
+        d = _window_int(node, default=20)
+        xv = pl.when(pl.col(_VAL).is_nan() | pl.col(_VAL).is_infinite()).then(None).otherwise(pl.col(_VAL))
+        m = (
+            pl.when(pl.col(_VAL).is_nan() | pl.col(_VAL).is_infinite()).then(None).otherwise(pl.col(_VAL))
+            .rolling_mean(window_size=d, min_samples=1)
+            .over(_INST, order_by=_TS)
+        )
+        denom = pl.when(m.is_null() | (m == 0)).then(None).otherwise(m)
+        expr = pl.when(pl.col(_VAL).is_null() | pl.col(_VAL).is_nan()).then(None).otherwise(
+            pl.when(denom.is_null() | (denom == 0)).then(None).otherwise(pl.col(_VAL) / denom - 1.0)
+        )
         return inner.with_columns(expr.alias(_VAL))
 
     if op == "ts_rolling_median_causal":

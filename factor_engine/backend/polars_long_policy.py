@@ -172,6 +172,21 @@ POLARS_LONG_NATIVE: frozenset[str] = frozenset(
         # 三方 parity 见 tests/backend_parity/test_csg_wave2_parity.py.
         'cs_shrink_to_group_mean',
         'group_weighted_zscore',
+        # wave2 fin/valuation (2026-09-07): 纯元素级比值（_FIN_ELEMENTWISE_OPS
+        # 表复用，NumpyKernels/ops_v2 参考）。
+        'free_float_turnover',
+        'real_turnover_rate',
+        'true_turnover_rate',
+        'market_cap_free_cap_gap',
+        'price_spread_deviation',
+        # wave2 ts (2026-09-07): overnight/intraday decomposition family —
+        # polars native branches (safe_ret decomp + trailing stats),
+        # 三方 parity 见 tests/backend_parity/test_ts_wave2_parity.py.
+        'ts_overnight_intraday_cov',
+        'ts_overnight_intraday_spread',
+        'ts_overnight_intraday_sign_agreement',
+        'ts_opening_mispricing_score',
+        'cs_universe_coverage',
         # Tech / candle / misc family (2026-09 native branches in
         # backend/polars_expr_emitter.py — pure rolling/ewm shifted-window,
         # no Python UDF).  Sequential-recursion kernels (FisherTransform / QQE /

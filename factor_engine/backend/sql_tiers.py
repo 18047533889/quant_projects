@@ -700,6 +700,12 @@ SQL_IMPLEMENTED_CANONICALS = SQL_IMPLEMENTED_CANONICALS | frozenset({
     "fin_financing_gap",
     "fin_core_earnings_ratio",
     "fin_noncore_income_ratio",
+    # wave2 fin/valuation (2026-09-07): 纯元素级比值表条目（_FIN_ELEMENTWISE_OPS /
+    # _FIN_SQL_ELEMENTWISE 双表复用）。
+    "free_float_turnover",
+    "real_turnover_rate",
+    "true_turnover_rate",
+    "market_cap_free_cap_gap",
 })
 
 # 2026-09-07 wave2 csg: cs_shrink_to_group_mean / group_weighted_zscore —
@@ -708,6 +714,37 @@ SQL_IMPLEMENTED_CANONICALS = SQL_IMPLEMENTED_CANONICALS | frozenset({
 SQL_IMPLEMENTED_CANONICALS = SQL_IMPLEMENTED_CANONICALS | frozenset({
     "cs_shrink_to_group_mean",
     "group_weighted_zscore",
+})
+
+# 2026-09-07 wave2 ts: overnight/intraday decomposition family — polars native
+# + DuckDB SQL（trailing 窗口协方差/均值/同号占比/滚动 beta mispricing；
+# tests/backend_parity/test_ts_wave2_parity.py）。
+SQL_IMPLEMENTED_CANONICALS = SQL_IMPLEMENTED_CANONICALS | frozenset({
+    "ts_overnight_intraday_cov",
+    "ts_overnight_intraday_spread",
+    "ts_overnight_intraday_sign_agreement",
+    "ts_opening_mispricing_score",
+})
+
+# 2026-09-07 wave2 csg: cs_universe_coverage — finite-x fraction over the
+# declared universe (polars native + DuckDB SQL, tests/backend_parity/).
+SQL_IMPLEMENTED_CANONICALS = SQL_IMPLEMENTED_CANONICALS | frozenset({
+    "cs_universe_coverage",
+})
+
+# 2026-09-07 wave2 fin/valuation: 纯元素级比值表条目（_FIN_ELEMENTWISE_OPS /
+# _FIN_SQL_ELEMENTWISE 双表复用，tests/backend_parity/）。
+SQL_IMPLEMENTED_CANONICALS = SQL_IMPLEMENTED_CANONICALS | frozenset({
+    "free_float_turnover",
+    "real_turnover_rate",
+    "true_turnover_rate",
+    "market_cap_free_cap_gap",
+})
+
+# 2026-09-07 wave2 misc: price_spread_deviation — x/trailing-finite-mean - 1
+# （polars native + DuckDB SQL）。
+SQL_IMPLEMENTED_CANONICALS = SQL_IMPLEMENTED_CANONICALS | frozenset({
+    "price_spread_deviation",
 })
 
 # DuckDB 分层
