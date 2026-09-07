@@ -79,6 +79,17 @@ def _minimal_plan_raw(op: str) -> PlanNode:
         return PlanNode(op=op, inputs=[close, literal(20.0), literal(1.0), literal(1.0)], attrs={"window": 20, "normalize": 1, "min_periods": 1})
     if op in {"ts_downside_deviation", "ts_upside_deviation"}:
         return PlanNode(op=op, inputs=[close, literal(20.0), literal(0.0), literal(2.0)], attrs={"window": 20, "target": 0.0, "min_periods": 2})
+    if op in {"ts_mean_abs_deviation", "ts_median_abs_deviation"}:
+        return PlanNode(op=op, inputs=[close, literal(20.0)], attrs={"window": 20})
+    if op in {"ts_time_under_water", "ts_current_drawdown_duration", "ts_monotonicity",
+              "ts_turning_point_ratio", "ts_endpoint_deviation", "ts_vol_shift_score",
+              "ts_recovery_fraction"}:
+        return PlanNode(op=op, inputs=[close, literal(20.0)], attrs={"window": 20})
+    if op == "ts_robust_zscore_inclusive":
+        # scale="std"（SQL emitter 精确支持的组合；scale="mad" 需要窗口广播 center，
+        # DuckDB 禁嵌套窗口 → emitter 返回 None 诚实回退，不能作为 minimal 编译样例）。
+        return PlanNode(op=op, inputs=[close, literal(20.0), literal("median"), literal("std")],
+                        attrs={"window": 20, "center": "median", "scale": "std"})
     if op == "ts_impulse_return":
         return PlanNode(op=op, inputs=[close, literal(20.0)], attrs={"window": 20})
     if op == "ts_impulse_strength":
@@ -88,6 +99,12 @@ def _minimal_plan_raw(op: str) -> PlanNode:
     if op in {"ts_prev_high", "ts_prev_low", "ts_distance_to_high", "ts_distance_to_low",
               "ts_breakout_high", "ts_breakdown_low", "ts_channel_position", "ts_new_high", "ts_new_low"}:
         return PlanNode(op=op, inputs=[close, literal(20.0)], attrs={"window": 20})
+    if op == "ts_range_expansion":
+        return PlanNode(op=op, inputs=[high, low, literal(20.0)], attrs={"window": 20})
+    if op == "ts_consolidation_width":
+        return PlanNode(op=op, inputs=[high, low, literal(20.0)], attrs={"window": 20})
+    if op in {"ts_market_liquidity_beta", "ts_industry_liquidity_beta"}:
+        return PlanNode(op=op, inputs=[close, volume, literal(60.0)], attrs={"window": 60})
     if op in {"ts_argmax_age", "ts_argmin_age", "ts_argmax_index_from_oldest", "ts_argmin_index_from_oldest"}:
         return PlanNode(op=op, inputs=[close, literal(20.0), literal(1.0)], attrs={"window": 20, "min_periods": 1})
     if op == "ts_staleness":
@@ -297,6 +314,12 @@ def _minimal_plan_raw(op: str) -> PlanNode:
         return PlanNode(op=op, inputs=[close, volume, industry], attrs={"k": 3, "exclude_self": True})
     if op == "group_weighted_mean":
         return PlanNode(op=op, inputs=[close, industry, volume], attrs={})
+    if op == "group_ex_self_weighted_mean":
+        # wave3e: x / weight / group 三输入。
+        return PlanNode(op=op, inputs=[close, volume, industry], attrs={})
+    if op == "group_feature_valid_member_count":
+        # wave3e: f1 / f2 / f3 / group 四输入。
+        return PlanNode(op=op, inputs=[close, volume, high, industry], attrs={})
     if op.startswith("group_"):
         return PlanNode(op=op, inputs=[close, industry], attrs={"d": 3, "window": 3, "p": 0.5})
     if op in {"where", "if_else", "coalesce"}:
@@ -333,6 +356,24 @@ def _minimal_plan_raw(op: str) -> PlanNode:
         # fin_turnover: flow/balance 双序列比率；minimal_plan 不能喂 1 输入
         # 占位（emitter 分支要求 ≥2 输入，否则编译 None）。
         return PlanNode(op=op, inputs=[close, volume], attrs={})
+    if op == "cs_bucket_fixed":
+        # wave3e: 固定边界分桶需要 breaks literal（列表），emitter 分支按
+        # 第 2 输入 literal 解析；单输入占位会编译 None。
+        return PlanNode(op=op, inputs=[close, literal([1.0, 5.0])], attrs={})
+    if op == "cs_empirical_bayes_shrinkage":
+        # wave3e: EB 收缩需要 estimate / std_err 双输入（+ 可选 lambda）。
+        return PlanNode(op=op, inputs=[close, volume, literal(1.0)], attrs={})
+    if op == "group_ex_self_weighted_mean":
+        # wave3e: x / weight / group 三输入。
+        return PlanNode(op=op, inputs=[close, volume, industry], attrs={})
+    if op == "group_feature_valid_member_count":
+        # wave3e: f1 / f2 / f3 / group 四输入。
+        return PlanNode(op=op, inputs=[close, volume, high, industry], attrs={})
+    if op == "group_peer_deviation_index":
+        # wave3e: d1..d5 五输入（无 group 参数，参考签名如此）。
+        return PlanNode(
+            op=op, inputs=[close, volume, high, low, open_], attrs={}
+        )
     if op == "rank_corr":
         # rank_corr: 双序列 Spearman 秩相关（window 从 attrs / 尾部 literal）。
         return PlanNode(op=op, inputs=[close, volume, literal(20.0)], attrs={"window": 20})

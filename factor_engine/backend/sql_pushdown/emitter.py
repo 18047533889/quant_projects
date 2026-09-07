@@ -1857,13 +1857,91 @@ def _sql_fin_ratio_dsc(a): return _sql_fin_ratio(a[0], f"({a[1]} + abs({a[2]}))"
 def _sql_fin_ratio_burn(a): return _sql_fin_neg_ocf_ratio(a[0], a[1])
 
 
+def _sql_fin_bounded_ratio(a):
+    # shareholder/churn_network._bounded_ratio（R11 #130，权威）：num >= 0,
+    # den > 0, ratio <= 1.0，违反 → NULL（fail-closed，非 0% / >100% 真比率）。
+    num, den = a[0], a[1]
+    return (
+        f"CASE WHEN {num} IS NULL OR {num} < 0 OR {den} IS NULL OR {den} <= 0 "
+        f"OR isnan({num} / {den}) OR isinf({num} / {den}) OR {num} / {den} > 1 "
+        f"THEN NULL ELSE {num} / {den} END"
+    )
+
+
+def _sql_fin_sub2(a):
+    # x - y 元素级差（churn_network._float_concentration_gap /
+    # wave1_valuation.val1_relative_valuation_gap 参考）：任侧 NULL/NaN → NULL。
+    x, y = a[0], a[1]
+    return (
+        f"CASE WHEN {x} IS NULL OR {y} IS NULL OR isnan({x}) OR isnan({y}) "
+        f"THEN NULL ELSE {x} - {y} END"
+    )
+
+
+def _sql_fin_signed_log(x: str) -> str:
+    # valuation/ops_v2._signed_log: sign(x) * log1p(|x|)（log1p(z) = ln(1+z)）。
+    return (
+        f"CASE WHEN {x} IS NULL OR isnan({x}) THEN NULL "
+        f"ELSE sign({x}) * ln(abs({x}) + 1.0) END"
+    )
+
+
+def _sql_fin_signed_log_gap(a):
+    # sign(x)*log1p|x| - sign(y)*log1p|y|：任侧 NULL/NaN → NULL。
+    lhs = _sql_fin_signed_log(a[0])
+    rhs = _sql_fin_signed_log(a[1])
+    x, y = a[0], a[1]
+    return (
+        f"CASE WHEN {x} IS NULL OR isnan({x}) OR {y} IS NULL OR isnan({y}) "
+        f"THEN NULL ELSE ({lhs}) - ({rhs}) END"
+    )
+
+
+def _sql_fin_positive_log_gap(a):
+    # valuation/ops_v2._positive_log_gap: log(x) - log(y) 仅当 x>0 且 y>0；
+    # 任一 ≤0 / NULL / NaN → NULL（亏损侧 NaN）。
+    x, y = a[0], a[1]
+    return (
+        f"CASE WHEN {x} IS NULL OR {y} IS NULL OR isnan({x}) OR isnan({y}) "
+        f"OR {x} <= 0 OR {y} <= 0 THEN NULL ELSE ln({x}) - ln({y}) END"
+    )
+
+
+def _sql_fin_log_ratio(a):
+    # log|x| - log|y| == log(|x|/|y|)（valuation/ops_v2._log_abs 参考：
+    # log(x.abs().replace(0, nan))，x==0 / 分母 0 → NULL；DuckDB 向量化
+    # CASE 不保证短路，必须先挡掉 ln(0) 再求值）。
+    return (
+        f"CASE WHEN {a[0]} IS NULL OR {a[1]} IS NULL "
+        f"OR abs({a[0]}) = 0 OR abs({a[1]}) = 0 THEN NULL "
+        f"WHEN NOT isnan(ln(abs({a[0]}) / abs({a[1]}))) "
+        f"AND NOT isinf(ln(abs({a[0]}) / abs({a[1]}))) "
+        f"THEN ln(abs({a[0]}) / abs({a[1]})) ELSE NULL END"
+    )
+
+
 _FIN_SQL_ELEMENTWISE: dict[str, tuple[int, Callable[[list[str]], str]]] = {
     # wave2 fin/valuation (2026-09-07): 纯元素级比值（NumpyKernels/ops_v2 参考）。
     "free_float_turnover": (2, _sql_fin_ratio2),
     "real_turnover_rate": (2, _sql_fin_ratio2),
     "true_turnover_rate": (2, _sql_fin_ratio2),
     # log|x| - log|y| == log(|x|/|y|)；分母 0/NaN → NULL。
-    "market_cap_free_cap_gap": (2, lambda a: _sql_fin_ratio(f"abs({a[0]})", f"abs({a[1]})")),
+    "market_cap_free_cap_gap": (2, _sql_fin_log_ratio),
+    # wave3 valuation/shareholder (2026-09-08)：纯元素级族（NumpyKernels /
+    # valuation::ops_v2 / shareholder::churn_network / wave1_valuation 参考）。
+    "a_share_cap_ratio": (2, _sql_fin_ratio2),
+    "free_float_ratio": (2, _sql_fin_ratio2),
+    "holder_pledge_ratio": (2, _sql_fin_bounded_ratio),
+    "holder_freeze_ratio": (2, _sql_fin_bounded_ratio),
+    "holder_locked_share_ratio": (2, _sql_fin_bounded_ratio),
+    "holder_float_concentration_gap": (2, _sql_fin_sub2),
+    "val1_relative_valuation_gap": (2, _sql_fin_sub2),
+    "valuation_pe_ttm_lyr_gap": (2, _sql_fin_log_ratio),
+    "valuation_pcf_definition_gap": (2, _sql_fin_log_ratio),
+    "valuation_pe_gap_signed_log": (2, _sql_fin_signed_log_gap),
+    "valuation_pcf_gap_signed_log": (2, _sql_fin_signed_log_gap),
+    "valuation_pe_gap_positive": (2, _sql_fin_positive_log_gap),
+    "valuation_pcf_gap_positive": (2, _sql_fin_positive_log_gap),
     "fin_common_size": (2, _sql_fin_ratio2),
     "fin_cash_conversion": (2, _sql_fin_ratio2),
     "fin_acquisition_cash_intensity": (2, _sql_fin_ratio2),
@@ -2098,6 +2176,90 @@ _SQL_FALLBACK_CANONICALS: frozenset[str] = frozenset({
     "ts_time_slope", "ts_upside_deviation", "ts_weighted_standardized_moment",
     "ts_abdi_ranaldo_spread", "ts_value_at_argextreme",
 })
+
+# wave3 flow/momentum/quality window family (2026-09-08): trailing-window
+# statistics over the wave1_orderflow / wave1_cs_momentum / wave1_earnings
+# pandas references.  DuckDB SQL branches live at the end of
+# _compile_layer_impl; the pandas registry operator is the authority.
+_FLOWMOM_SQL_WINDOW_OPS: frozenset[str] = frozenset({
+    "ofi_volume_imbalance",
+    "ofi_abs_imbalance_trend",
+    "ofi_dominant_direction",
+    "ofi_imbalance_agreement",
+    "ofi_imbalance_cv",
+    "ofi_imbalance_persistence",
+    "ofi_reversal_rate",
+    "ofi_volume_flow_regime",
+    "ofi_zero_flow_balance",
+    "m1_momentum_strength",
+    "m1_momentum_stability",
+    "m1_momentum_speed_change",
+    "m1_volume_adjusted_momentum",
+    "sv_net_flow_direction",
+    "sv_own_flow_fraction",
+    "sv_signed_volume_volatility",
+    "sv_self_relative_change",
+    "aq1_cash_flow_volatility",
+    "aq1_accrual_stability",
+    "aq1_cash_conversion_strength",
+    "aq1_accrual_ratio_dispersion",
+    "aq1_working_capital_accrual",
+})
+
+_FLOWMOM_DEFAULT_WINDOW: dict[str, int] = {
+    "ofi_volume_imbalance": 20,
+    "ofi_abs_imbalance_trend": 20,
+    "ofi_dominant_direction": 20,
+    "ofi_imbalance_agreement": 20,
+    "ofi_imbalance_cv": 20,
+    "ofi_imbalance_persistence": 30,
+    "ofi_reversal_rate": 20,
+    "ofi_volume_flow_regime": 20,
+    "ofi_zero_flow_balance": 20,
+    "m1_momentum_strength": 20,
+    "m1_momentum_stability": 20,
+    "m1_momentum_speed_change": 20,
+    "m1_volume_adjusted_momentum": 20,
+    "sv_net_flow_direction": 20,
+    "sv_own_flow_fraction": 20,
+    "sv_signed_volume_volatility": 20,
+    "sv_self_relative_change": 10,
+    "aq1_cash_flow_volatility": 8,
+    "aq1_accrual_stability": 8,
+    "aq1_cash_conversion_strength": 8,
+    "aq1_accrual_ratio_dispersion": 8,
+    "aq1_working_capital_accrual": 8,
+}
+
+_FLOWMOM_DEFAULT_MIN_PERIODS: dict[str, int] = {
+    "ofi_volume_imbalance": 5,
+    "ofi_abs_imbalance_trend": 3,
+    "ofi_dominant_direction": 5,
+    "ofi_imbalance_agreement": 5,
+    "ofi_imbalance_cv": 3,
+    "ofi_imbalance_persistence": 3,
+    "ofi_reversal_rate": 3,
+    "ofi_volume_flow_regime": 5,
+    "ofi_zero_flow_balance": 5,
+    "m1_momentum_strength": 4,
+    "m1_momentum_stability": 4,
+    "m1_momentum_speed_change": 2,
+    "m1_volume_adjusted_momentum": 2,
+    "sv_net_flow_direction": 5,
+    "sv_own_flow_fraction": 5,
+    "sv_signed_volume_volatility": 3,
+    "sv_self_relative_change": 1,
+    "aq1_cash_flow_volatility": 2,
+    "aq1_accrual_stability": 2,
+    "aq1_cash_conversion_strength": 2,
+    "aq1_accrual_ratio_dispersion": 2,
+    "aq1_working_capital_accrual": 2,
+}
+
+_FLOWMOM_DEFAULT_THRESHOLD: dict[str, float] = {
+    "ofi_dominant_direction": 0.25,
+    "ofi_volume_flow_regime": 0.3,
+}
 
 
 def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None:
@@ -7526,6 +7688,91 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
             has_inst_window=True,
         )
 
+    # ------------------------------------------------------------------
+    # wave3 ts MAD pair (2026-09-08): ts_median_abs_deviation /
+    # ts_mean_abs_deviation — HONESTLY DEFERRED.  The pandas kernel computes
+    # every window deviation against the SINGLE center of the current window
+    # (mean|v_u - c_t| where c_t depends on t).  A two-level window pass only
+    # yields each row's OWN center, which is a different (biased) statistic;
+    # broadcasting c_t across the window needs nested windows that DuckDB
+    # forbids.  No SQL branch is emitted — these canonicals stay OFF
+    # SQL_IMPLEMENTED_CANONICALS and fall back to the exact polars path.
+    # ------------------------------------------------------------------
+
+    # ------------------------------------------------------------------
+    # wave3 ts robust z-score (2026-09-08): ts_robust_zscore_inclusive —
+    # (x_t - center_t) / scale_t over the trailing window.  Both center and
+    # scale are consumed ONLY by the current row, so a two-level window pass
+    # is exact for scale="std" (STDDEV_POP = np.std ddof=0) with either
+    # center.  scale="mad" requires broadcasting center_t into every window
+    # row (median(|v_u - center_t|)), which DuckDB's no-nested-window rule
+    # cannot express — that combination returns None (honest fallback to the
+    # exact polars kernel) instead of emitting an approximation.  Invalid
+    # enums still raise (fail-loud, matching the pandas kernel).
+    # ------------------------------------------------------------------
+    if op == "ts_robust_zscore_inclusive":
+        inner = _compile_layer(node.inputs[0], dialect=dialect)
+        if inner is None:
+            return None
+        if dialect != SqlDialect.DUCKDB:
+            return None
+        center_name = str(node.attrs.get("center") or "median").lower()
+        scale_name = str(node.attrs.get("scale") or "mad").lower()
+        if center_name not in ("median", "mean"):
+            raise ValueError("center must be 'median' or 'mean'")
+        if scale_name not in ("mad", "std"):
+            raise ValueError("scale must be 'mad' or 'std'")
+        if scale_name == "mad":
+            # center_t cannot be broadcast across the window in DuckDB SQL.
+            return None
+        clip_raw = node.attrs.get("clip")
+        bound = None
+        if clip_raw is not None:
+            import math as _math
+
+            bound = float(clip_raw)
+            if not _math.isfinite(bound) or bound <= 0.0:
+                raise ValueError("clip must be None or > 0")
+        w = max(_window_int(node, default=20), 2)
+        over = f"PARTITION BY inst ORDER BY ts ROWS BETWEEN {w - 1} PRECEDING AND CURRENT ROW"
+        masked = (
+            f"SELECT ts, inst, "
+            f"CASE WHEN _v IS NOT NULL AND NOT isnan(_v) AND NOT isinf(_v) THEN _v END AS _v "
+            f"FROM ({inner.sql}) t"
+        )
+        center_expr = (
+            f"MEDIAN(_v) OVER ({over})" if center_name == "median" else f"AVG(_v) OVER ({over})"
+        )
+        centered = (
+            f"SELECT ts, inst, _v, {center_expr} AS _ctr FROM ({masked}) t2"
+        )
+        scale_expr = f"STDDEV_POP(_v) OVER ({over})"
+        dev = f"(_v - _ctr) / NULLIF({scale_expr}, 0.0)"
+        if bound is not None:
+            dev = f"LEAST(GREATEST({dev}, {-bound!r}), {bound!r})"
+        return _Layer(
+            f"SELECT ts, inst, "
+            f"CASE WHEN _v IS NULL THEN NULL "
+            f"WHEN {scale_expr} IS NULL OR {scale_expr} <= 0.0 THEN NULL "
+            f"ELSE {dev} END AS _v "
+            f"FROM ({centered}) t3",
+            has_inst_window=True,
+        )
+
+    # ------------------------------------------------------------------
+    # wave3 ts drawdown pair (2026-09-08): ts_time_under_water /
+    # ts_current_drawdown_duration — HONESTLY DEFERRED.  The pandas kernel
+    # computes each window row's under-water flag against that row's own
+    # running peak, whose baseline starts at max(segment start, window
+    # start).  A gap-group partition fixes the RESET semantics, but a
+    # segment that straddles the window start makes every flag depend on the
+    # OUTPUT row t (peak start = t-w+1), which DuckDB's one-window-per-pass
+    # rule cannot materialize — the naive two-level version is exact only in
+    # gapless windows and silently over-counts once a NaN hole exists.
+    # No SQL branch is emitted; these canonicals stay OFF
+    # SQL_IMPLEMENTED_CANONICALS and fall back to the exact polars path.
+    # ------------------------------------------------------------------
+
     if op == "winsorize":
         inner = _compile_layer(node.inputs[0], dialect=dialect)
         if inner is None:
@@ -11198,6 +11445,55 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
             has_inst_window=True,
         )
 
+    if op == "holder_pledge_change":
+        # shareholder/churn_network._pledge_change: pledge_ratio - shift(lag)
+        # （lag 是第 2 位置参数 / "lag" attr，>=1）。任侧 NULL/NaN → NULL。
+        if not node.inputs:
+            return None
+        inner = _compile_layer(node.inputs[0], dialect=dialect)
+        if inner is None:
+            return None
+        if dialect != SqlDialect.DUCKDB:
+            return None
+        lag_val = _literal_positional(node, 1)
+        if lag_val is not None:
+            lag = max(int(lag_val), 1)
+        else:
+            lag = max(_int_attr(node, "lag", default=1), 1)
+        return _Layer(
+            f"SELECT ts, inst, "
+            f"CASE WHEN NOT ({_duckdb_valid('_v')}) OR "
+            f"LAG(_v, {lag}) OVER (PARTITION BY inst ORDER BY ts) IS NULL OR "
+            f"NOT ({_duckdb_valid(f'LAG(_v, {lag}) OVER (PARTITION BY inst ORDER BY ts)')}) "
+            f"THEN NULL ELSE _v - LAG(_v, {lag}) OVER (PARTITION BY inst ORDER BY ts) END AS _v "
+            f"FROM ({inner.sql}) t",
+            has_inst_window=True,
+        )
+
+    if op == "circulating_cap_ratio_change":
+        # valuation/ops_v2.circulating_cap_ratio_change:
+        #   safe_div(cc, tc) - shift(1)（先比值、后日间差分；shift 作用在比值上）。
+        if len(node.inputs) < 2:
+            return None
+        cc_l = _compile_layer(node.inputs[0], dialect=dialect)
+        tc_l = _compile_layer(node.inputs[1], dialect=dialect)
+        if cc_l is None or tc_l is None:
+            return None
+        if dialect != SqlDialect.DUCKDB:
+            return None
+        ratio_sql = _sql_fin_ratio("x._v", "y._v")
+        return _Layer(
+            f"SELECT ts, inst, "
+            f"CASE WHEN ratio IS NULL OR lag_ratio IS NULL THEN NULL "
+            f"ELSE ratio - lag_ratio END AS _v "
+            f"FROM ("
+            f"SELECT x.ts, x.inst, x._v, y._v, ({ratio_sql}) AS ratio, "
+            f"LAG({ratio_sql}) OVER (PARTITION BY x.inst ORDER BY x.ts) AS lag_ratio "
+            f"FROM ({cc_l.sql}) x LEFT JOIN ({tc_l.sql}) y USING (ts, inst)"
+            f") r",
+            has_inst_window=True,
+        )
+
     # ------------------------------------------------------------------
     # overnight/intraday decomposition family — three daily inputs, two safe
     # ratio returns, then a trailing-window statistic.  Same contract as the
@@ -11287,6 +11583,1260 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
             f"FROM ({inner.sql}) t",
             has_inst_window=True,
         )
+
+    # ------------------------------------------------------------------
+    # wave3 flow/momentum/quality window family (2026-09-08) — trailing
+    # window statistics over the wave1_orderflow / wave1_cs_momentum /
+    # wave1_earnings pandas references.  DuckDB-only (needs window frames +
+    # CORR/STDDEV over ROWS frames + NaN/Inf masks).  三方 parity 见
+    # tests/backend_parity/test_flowmom_wave3_parity.py.
+    # ------------------------------------------------------------------
+    if op in _FLOWMOM_SQL_WINDOW_OPS:
+        if len(node.inputs) < 1:
+            return None
+        inner = _compile_layer(node.inputs[0], dialect=dialect)
+        if inner is None:
+            return None
+        if dialect != SqlDialect.DUCKDB:
+            return None
+        w = _window_int(node, default=_FLOWMOM_DEFAULT_WINDOW[op])
+        mp = _int_attr(node, "min_periods", default=_FLOWMOM_DEFAULT_MIN_PERIODS[op])
+        mp = min(mp, w)
+        over = f"PARTITION BY inst ORDER BY ts ROWS BETWEEN {max(w, 1) - 1} PRECEDING AND CURRENT ROW"
+        valid = _duckdb_valid("t._v")
+        # pandas rolling counts only finite samples.
+        cnt = f"SUM(CASE WHEN {valid} THEN 1 ELSE 0 END) OVER ({over})"
+        gate = f"({cnt} IS NULL OR {cnt} < {mp})"
+
+        if op == "ofi_volume_imbalance":
+            buy = f"CASE WHEN {valid} AND t._v > 0 THEN t._v ELSE 0.0 END"
+            sell = f"CASE WHEN {valid} AND t._v < 0 THEN -t._v ELSE 0.0 END"
+            bsum = f"SUM({buy}) OVER ({over})"
+            ssum = f"SUM({sell}) OVER ({over})"
+            den = f"({bsum} + {ssum})"
+            return _Layer(
+                f"SELECT ts, inst, CASE WHEN NOT ({valid}) THEN NULL "
+                f"WHEN {gate} THEN NULL "
+                f"WHEN {den} <= 0 THEN NULL "
+                f"ELSE ({bsum} - {ssum}) / {den} END AS _v "
+                f"FROM ({inner.sql}) t",
+                has_inst_window=True,
+            )
+
+        if op in {"ofi_dominant_direction", "ofi_volume_flow_regime"}:
+            th = _float_attr(node, "threshold", "th", default=_FLOWMOM_DEFAULT_THRESHOLD[op])
+            if not (0.0 <= th <= 1.0):
+                from factor_engine.backend.plan_params import PlanParamError
+
+                raise PlanParamError(f"{op}.threshold must be in [0, 1]")
+            buy = f"CASE WHEN {valid} AND t._v > 0 THEN t._v ELSE 0.0 END"
+            sell = f"CASE WHEN {valid} AND t._v < 0 THEN -t._v ELSE 0.0 END"
+            bsum = f"SUM({buy}) OVER ({over})"
+            ssum = f"SUM({sell}) OVER ({over})"
+            den = f"({bsum} + {ssum})"
+            if op == "ofi_dominant_direction":
+                inner_expr = (
+                    f"CASE WHEN {bsum} / {den} > {th} THEN 1.0 "
+                    f"WHEN {bsum} / {den} < (1.0 - {th}) THEN -1.0 ELSE 0.0 END"
+                )
+            else:
+                net = f"({bsum} - {ssum}) / {den}"
+                inner_expr = (
+                    f"CASE WHEN {net} > {th} THEN 1.0 "
+                    f"WHEN {net} < -({th}) THEN -1.0 ELSE 0.0 END"
+                )
+            return _Layer(
+                f"SELECT ts, inst, CASE WHEN {gate} OR {den} <= 0 THEN NULL "
+                f"ELSE {inner_expr} END AS _v "
+                f"FROM ({inner.sql}) t",
+                has_inst_window=True,
+            )
+
+        if op == "ofi_imbalance_persistence":
+            # lag-1 Pearson corr over the finite slice; std==0 side -> NULL
+            # (CORR with a constant series returns NULL in DuckDB anyway).
+            # pandas kernel gates on the CURRENT row being finite too.
+            lag1 = f"LAG(CASE WHEN {valid} THEN t._v END) OVER (PARTITION BY inst ORDER BY ts)"
+            pair = f"({valid} AND {lag1} IS NOT NULL)"
+            pair_cnt = f"SUM(CASE WHEN {pair} THEN 1 ELSE 0 END) OVER ({over})"
+            curr = f"CASE WHEN {valid} THEN t._v END"
+            return _Layer(
+                f"SELECT ts, inst, CASE WHEN NOT ({valid}) THEN NULL "
+                f"WHEN {gate} OR {pair_cnt} < 2 THEN NULL "
+                f"WHEN STDDEV_SAMP({curr}) OVER ({over}) = 0 "
+                f"OR STDDEV_SAMP({lag1}) OVER ({over}) = 0 THEN NULL "
+                f"ELSE CORR({curr}, {lag1}) OVER ({over}) END AS _v "
+                f"FROM ({inner.sql}) t",
+                has_inst_window=True,
+            )
+
+        if op == "ofi_abs_imbalance_trend":
+            # OLS slope of seq = sign*|v|/(|v|+1e-12) on COMPACTED finite-row
+            # positions 0..n-1, times sqrt(n).  Windowed ranks are an affine
+            # transform of compacted positions (per-window constant offset),
+            # so the slope is unchanged; compute from raw moments against the
+            # window-end means via staged subqueries (DuckDB forbids nesting
+            # window calls in one expression).
+            seq = f"CASE WHEN {valid} THEN SIGN(t._v) * ABS(t._v) / (ABS(t._v) + 1e-12) END"
+            rank = (
+                f"SUM(CASE WHEN {valid} THEN 1 ELSE 0 END) OVER "
+                f"(PARTITION BY inst ORDER BY ts ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)"
+            )
+            stage1 = (
+                f"SELECT ts, inst, {seq} AS _seq, "
+                f"CASE WHEN {valid} THEN {rank} END AS _rank, "
+                f"({gate}) AS _gate "
+                f"FROM ({inner.sql}) t"
+            )
+            stage2 = (
+                f"SELECT ts, inst, _seq, _rank, _gate, "
+                f"AVG(_seq) OVER ({over}) AS _seq_m, "
+                f"AVG(_rank) OVER ({over}) AS _rank_m, "
+                f"SUM(CASE WHEN _rank IS NOT NULL THEN 1 ELSE 0 END) OVER ({over}) AS _n "
+                f"FROM ({stage1}) s1"
+            )
+            num = f"SUM((_rank - _rank_m) * (_seq - _seq_m)) OVER ({over})"
+            den = f"SUM((_rank - _rank_m) * (_rank - _rank_m)) OVER ({over})"
+            return _Layer(
+                f"SELECT ts, inst, CASE WHEN _gate OR {den} IS NULL OR {den} <= 0 "
+                f"THEN NULL ELSE ({num} / {den}) * SQRT(_n) END AS _v "
+                f"FROM ({stage2}) s2",
+                has_inst_window=True,
+            )
+
+        if op == "ofi_imbalance_cv":
+            asum = f"SUM(CASE WHEN {valid} THEN t._v END) OVER ({over})"
+            abs_sum = f"SUM(CASE WHEN {valid} THEN ABS(t._v) END) OVER ({over})"
+            return _Layer(
+                f"SELECT ts, inst, CASE WHEN {gate} OR {abs_sum} IS NULL OR {abs_sum} <= 0 "
+                f"THEN NULL ELSE ABS({asum}) / ({abs_sum} + 1e-12) "
+                f"* (CASE WHEN {asum} >= 0 THEN 1.0 ELSE -1.0 END) END AS _v "
+                f"FROM ({inner.sql}) t",
+                has_inst_window=True,
+            )
+
+        if op == "ofi_imbalance_agreement":
+            sgn = f"CASE WHEN {valid} THEN SIGN(t._v) END"
+            return _Layer(
+                f"SELECT ts, inst, CASE WHEN {gate} THEN NULL "
+                f"ELSE ABS(AVG({sgn}) OVER ({over})) END AS _v "
+                f"FROM ({inner.sql}) t",
+                has_inst_window=True,
+            )
+
+        if op == "ofi_zero_flow_balance":
+            zero = f"CASE WHEN {valid} THEN CASE WHEN t._v = 0 THEN 1.0 ELSE 0.0 END END"
+            return _Layer(
+                f"SELECT ts, inst, CASE WHEN {gate} THEN NULL "
+                f"ELSE AVG({zero}) OVER ({over}) END AS _v "
+                f"FROM ({inner.sql}) t",
+                has_inst_window=True,
+            )
+
+        if op == "ofi_reversal_rate":
+            # mean(sign[t] != sign[t-1]) over the COMPACTED finite slice: a
+            # pair's window membership depends on the partner row's position
+            # relative to the consuming window start (pairs can span NaN
+            # gaps), so stage the pairing and drop, per consuming window, the
+            # boundary pair whose partner row lies before the window start.
+            ri = "ROW_NUMBER() OVER (PARTITION BY inst ORDER BY ts)"
+            stage1 = (
+                f"SELECT ts, inst, {sgn} AS _sgn, {ri} AS _ri, ({gate}) AS _gate "
+                f"FROM ({inner.sql}) t"
+            )
+            stage2 = (
+                f"SELECT ts, inst, _sgn, _ri, _gate, "
+                f"CASE WHEN _sgn IS NOT NULL THEN _ri END AS _frow, "
+                f"LAG(_sgn) OVER (PARTITION BY inst ORDER BY ts) AS _psgn, "
+                f"LAG(CASE WHEN _sgn IS NOT NULL THEN _ri END) OVER (PARTITION BY inst ORDER BY ts) AS _prow "
+                f"FROM ({stage1}) s1"
+            )
+            stage3 = (
+                f"SELECT ts, inst, _sgn, _ri, _gate, "
+                f"LAST_VALUE(_psgn IGNORE NULLS) OVER "
+                f"(PARTITION BY inst ORDER BY ts ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS _asgn, "
+                f"LAST_VALUE(_frow IGNORE NULLS) OVER "
+                f"(PARTITION BY inst ORDER BY ts ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS _arow "
+                f"FROM ({stage2}) s2"
+            )
+            stage4 = (
+                f"SELECT ts, inst, flip, _arow, _ri, _gate FROM ("
+                f"SELECT ts, inst, _sgn, _asgn, _arow, _ri, _gate, "
+                f"CASE WHEN _sgn IS NOT NULL AND _asgn IS NOT NULL THEN "
+                f"CASE WHEN _sgn <> _asgn THEN 1.0 ELSE 0.0 END END AS flip "
+                f"FROM ({stage3}) s3"
+                f") s4"
+            )
+            fs = f"SUM(flip) OVER ({over})"
+            pc = f"COUNT(flip) OVER ({over})"
+            drop = f"(_arow IS NOT NULL AND _arow < _ri - {w - 1})"
+            fs_in = f"({fs} - CASE WHEN {drop} THEN flip ELSE 0.0 END)"
+            pc_in = f"({pc} - CASE WHEN {drop} THEN 1 ELSE 0 END)"
+            return _Layer(
+                f"SELECT ts, inst, CASE WHEN _gate OR {pc_in} < 1 THEN NULL "
+                f"ELSE {fs_in} / {pc_in} END AS _v "
+                f"FROM ({stage4}) s5",
+                has_inst_window=True,
+            )
+
+        if op == "sv_net_flow_direction":
+            # mean(sign(sv) * |sv|/mean|sv|) == Σ(s_i*|v_i|) / Σ|v_i| (mean|sv|
+            # is a per-window constant); Σ|v| <= 1e-12 -> 0.0 via the mabs guard.
+            ssum = f"SUM(CASE WHEN {valid} THEN SIGN(t._v) * ABS(t._v) END) OVER ({over})"
+            abs_sum = f"SUM(CASE WHEN {valid} THEN ABS(t._v) END) OVER ({over})"
+            return _Layer(
+                f"SELECT ts, inst, CASE WHEN {gate} OR {abs_sum} IS NULL THEN NULL "
+                f"WHEN {abs_sum} <= 1e-12 THEN 0.0 "
+                f"ELSE {ssum} / {abs_sum} END AS _v "
+                f"FROM ({inner.sql}) t",
+                has_inst_window=True,
+            )
+
+        if op == "sv_own_flow_fraction":
+            pos_v = f"CASE WHEN {valid} AND t._v > 0 THEN t._v END"
+            total = f"SUM({pos_v}) OVER ({over})"
+            return _Layer(
+                f"SELECT ts, inst, CASE WHEN NOT ({valid}) THEN NULL "
+                f"WHEN {gate} OR {total} IS NULL OR {total} <= 0 THEN NULL "
+                f"ELSE t._v / {total} END AS _v "
+                f"FROM ({inner.sql}) t",
+                has_inst_window=True,
+            )
+
+        if op == "sv_signed_volume_volatility":
+            # std(vals / std(|vals|)) with the SAME window std(|vals|) for
+            # every element — std(x/c) == std(x)/c, so the output is the
+            # population-std(vals) / population-std(|vals|) ratio over the
+            # window.  std(|v|) <= 1e-12 -> NULL.
+            std_signed = f"STDDEV_POP(CASE WHEN {valid} THEN t._v END) OVER ({over})"
+            std_abs = f"STDDEV_POP(CASE WHEN {valid} THEN ABS(t._v) END) OVER ({over})"
+            return _Layer(
+                f"SELECT ts, inst, CASE WHEN {gate} OR {std_abs} IS NULL OR {std_abs} <= 1e-12 "
+                f"THEN NULL ELSE {std_signed} / {std_abs} END AS _v "
+                f"FROM ({inner.sql}) t",
+                has_inst_window=True,
+            )
+
+        if op == "m1_momentum_strength":
+            prod = f"EXP(SUM(LN(1.0 + t._v)) OVER ({over}))"
+            rstd = f"STDDEV_SAMP(CASE WHEN {valid} THEN t._v END) OVER ({over})"
+            return _Layer(
+                f"SELECT ts, inst, CASE WHEN NOT ({valid}) THEN NULL "
+                f"WHEN {gate} OR {rstd} IS NULL OR {rstd} <= 1e-12 THEN "
+                f"CASE WHEN ({prod} - 1.0) = 0.0 THEN 0.0 ELSE NULL END "
+                f"ELSE ABS({prod} - 1.0) / {rstd} END AS _v "
+                f"FROM ({inner.sql}) t",
+                has_inst_window=True,
+            )
+
+        if op == "m1_momentum_stability":
+            pos_v = f"CASE WHEN {valid} THEN CASE WHEN t._v > 0 THEN 1.0 ELSE 0.0 END END"
+            return _Layer(
+                f"SELECT ts, inst, CASE WHEN {gate} THEN NULL "
+                f"ELSE AVG({pos_v}) OVER ({over}) END AS _v "
+                f"FROM ({inner.sql}) t",
+                has_inst_window=True,
+            )
+
+        if op == "m1_momentum_speed_change":
+            fw = _int_attr(node, "fast_window", default=5)
+            sw = _int_attr(node, "slow_window", default=20)
+            if fw >= sw:
+                from factor_engine.backend.plan_params import PlanParamError
+
+                raise PlanParamError(
+                    "m1_momentum_speed_change: fast_window must be < slow_window"
+                )
+            over_s = f"PARTITION BY inst ORDER BY ts ROWS BETWEEN {max(sw, 1) - 1} PRECEDING AND CURRENT ROW"
+            over_f = f"PARTITION BY inst ORDER BY ts ROWS BETWEEN {max(fw, 1) - 1} PRECEDING AND CURRENT ROW"
+            prod_slow = f"EXP(SUM(LN(1.0 + t._v)) OVER ({over_s}))"
+            prod_fast = f"EXP(SUM(LN(1.0 + t._v)) OVER ({over_f}))"
+            cnt_slow = f"SUM(CASE WHEN {valid} THEN 1 ELSE 0 END) OVER ({over_s})"
+            cnt_fast = f"SUM(CASE WHEN {valid} THEN 1 ELSE 0 END) OVER ({over_f})"
+            return _Layer(
+                f"SELECT ts, inst, CASE WHEN NOT ({valid}) THEN NULL "
+                f"WHEN {cnt_slow} < {mp} OR {cnt_fast} < 2 THEN NULL "
+                f"ELSE {prod_fast} - {prod_slow} END AS _v "
+                f"FROM ({inner.sql}) t",
+                has_inst_window=True,
+            )
+
+        if op == "m1_volume_adjusted_momentum":
+            if len(node.inputs) < 2:
+                return None
+            t_l = _compile_layer(node.inputs[1], dialect=dialect)
+            if t_l is None:
+                return None
+            base_sql = (
+                f"SELECT r.ts, r.inst, r._v AS _r, x._v AS _t "
+                f"FROM ({inner.sql}) r LEFT JOIN ({t_l.sql}) x USING (ts, inst)"
+            )
+            pair = f"(_r IS NOT NULL AND NOT isnan(_r) AND NOT isinf(_r) AND _t IS NOT NULL AND NOT isnan(_t) AND NOT isinf(_t) AND _t > 0)"
+            pair_cnt = f"SUM(CASE WHEN {pair} THEN 1 ELSE 0 END) OVER ({over})"
+            num = f"SUM(CASE WHEN {pair} THEN _r * _t END) OVER ({over})"
+            den = f"SUM(CASE WHEN {pair} THEN _t END) OVER ({over})"
+            return _Layer(
+                f"SELECT ts, inst, CASE WHEN {pair_cnt} IS NULL OR {pair_cnt} < {mp} THEN NULL "
+                f"WHEN {den} IS NULL OR {den} <= 0 THEN NULL "
+                f"ELSE {num} / {den} END AS _v "
+                f"FROM ({base_sql}) t",
+                has_inst_window=True,
+            )
+
+        if op == "sv_self_relative_change":
+            # prior-w window EXCLUDING the current row.
+            over_p = f"PARTITION BY inst ORDER BY ts ROWS BETWEEN {max(w, 1)} PRECEDING AND 1 PRECEDING"
+            pos_v = f"CASE WHEN {valid} AND t._v > 0 THEN t._v END"
+            bmean = f"AVG({pos_v}) OVER ({over_p})"
+            return _Layer(
+                f"SELECT ts, inst, CASE WHEN NOT ({valid}) THEN NULL "
+                f"WHEN {bmean} IS NULL OR {bmean} <= 0 THEN NULL "
+                f"ELSE (t._v - {bmean}) / {bmean} END AS _v "
+                f"FROM ({inner.sql}) t",
+                has_inst_window=True,
+            )
+
+        if op == "aq1_cash_flow_volatility":
+            cmean = f"AVG(CASE WHEN {valid} THEN t._v END) OVER ({over})"
+            cstd = f"STDDEV_SAMP(CASE WHEN {valid} THEN t._v END) OVER ({over})"
+            return _Layer(
+                f"SELECT ts, inst, CASE WHEN {gate} OR {cmean} IS NULL THEN NULL "
+                f"WHEN ABS({cmean}) <= 1e-12 THEN 0.0 "
+                f"ELSE {cstd} / ABS({cmean}) END AS _v "
+                f"FROM ({inner.sql}) t",
+                has_inst_window=True,
+            )
+
+        if op in {"aq1_accrual_stability", "aq1_accrual_ratio_dispersion"}:
+            if len(node.inputs) < 2:
+                return None
+            e_l = _compile_layer(node.inputs[1], dialect=dialect)
+            if e_l is None:
+                return None
+            joined_sql = (
+                f"SELECT r.ts, r.inst, r._v AS _wc, x._v AS _e "
+                f"FROM ({inner.sql}) r LEFT JOIN ({e_l.sql}) x USING (ts, inst)"
+            )
+            ok = (
+                f"(_wc IS NOT NULL AND NOT isnan(_wc) AND NOT isinf(_wc) "
+                f"AND _e IS NOT NULL AND NOT isnan(_e) AND NOT isinf(_e) "
+                f"AND ABS(_e) > 1e-12)"
+            )
+            # stage 1: ok flag + valid mask; the trailing gate is evaluated on
+            # the ok count inside the joined frame (both operands in scope).
+            stage1 = (
+                f"SELECT ts, inst, _wc, _e, CASE WHEN {ok} THEN 1 ELSE 0 END AS _ok "
+                f"FROM ({joined_sql}) j"
+            )
+            stage2 = (
+                f"SELECT ts, inst, _wc, _e, _ok, "
+                f"SUM(_ok) OVER ({over}) AS _ok_cnt "
+                f"FROM ({stage1}) s1"
+            )
+            ok_cnt = "_ok_cnt"
+            # pairs over the COMPACTED ok slice: dw between adjacent OK rows.
+            prev_ok = f"(LAG(_ok) OVER (PARTITION BY inst ORDER BY ts) = 1)"
+            prev_wc = f"LAG(_wc) OVER (PARTITION BY inst ORDER BY ts)"
+            prev_e = f"LAG(_e) OVER (PARTITION BY inst ORDER BY ts)"
+            # COMPACTED pairing: partner = last OK row before current. Use
+            # LAST_VALUE IGNORE NULLS over the ok-masked columns.
+            stage3 = (
+                f"SELECT ts, inst, _wc, _e, _ok, {ok_cnt} AS _okc, "
+                f"CASE WHEN _ok = 1 THEN _wc END AS _wc_ok, "
+                f"CASE WHEN _ok = 1 THEN ABS(_e) END AS _e_ok "
+                f"FROM ({stage2}) s2"
+            )
+            stage4 = (
+                f"SELECT ts, inst, _wc, _e, _ok, _okc, _wc_ok, _e_ok, "
+                f"LAST_VALUE(_wc_ok IGNORE NULLS) OVER (PARTITION BY inst ORDER BY ts ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS _pwc, "
+                f"LAST_VALUE(_e_ok IGNORE NULLS) OVER (PARTITION BY inst ORDER BY ts ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS _pe "
+                f"FROM ({stage3}) s3"
+            )
+            stage5 = (
+                f"SELECT ts, inst, _ok, _okc, _wc, _e, "
+                f"CASE WHEN _ok = 1 AND _pwc IS NOT NULL THEN _wc - _pwc END AS _dw, "
+                f"CASE WHEN _ok = 1 AND _pe IS NOT NULL THEN _pe END AS _pe, "
+                f"CASE WHEN _ok = 1 AND LAST_VALUE(CASE WHEN _ok = 1 THEN 1 END IGNORE NULLS) OVER (PARTITION BY inst ORDER BY ts ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) = 1 AND _wc IS NOT NULL THEN 1 ELSE 0 END AS _pair "
+                f"FROM ({stage4}) s4"
+            )
+            pair = "(_pair = 1)"
+            pair_cnt = f"SUM(_pair) OVER ({over})"
+            ratio = f"(_dw / (_pe + 1e-12))"
+            rmean = f"AVG(CASE WHEN {pair} THEN {ratio} END) OVER ({over})"
+            rstd = f"STDDEV_SAMP(CASE WHEN {pair} THEN {ratio} END) OVER ({over})"
+            abs_rstd = f"STDDEV_SAMP(CASE WHEN {pair} THEN ABS({ratio}) END) OVER ({over})"
+            if op == "aq1_accrual_stability":
+                body = (
+                    f"CASE WHEN {ok_cnt} < {mp} OR {pair_cnt} < 2 THEN NULL "
+                    f"WHEN {rmean} IS NULL OR ABS({rmean}) <= 1e-12 THEN 0.0 "
+                    f"ELSE -({rstd}) / ABS({rmean}) END"
+                )
+            else:
+                body = (
+                    f"CASE WHEN {ok_cnt} < {mp} OR {pair_cnt} < 2 THEN NULL "
+                    f"ELSE {abs_rstd} END"
+                )
+            return _Layer(
+                f"SELECT ts, inst, {body} AS _v FROM ({stage5}) s5",
+                has_inst_window=True,
+            )
+
+        if op == "aq1_cash_conversion_strength":
+            if len(node.inputs) < 2:
+                return None
+            e_l = _compile_layer(node.inputs[1], dialect=dialect)
+            if e_l is None:
+                return None
+            base_sql = (
+                f"SELECT r.ts, r.inst, r._v AS _c, x._v AS _e "
+                f"FROM ({inner.sql}) r LEFT JOIN ({e_l.sql}) x USING (ts, inst)"
+            )
+            ok = f"(_c IS NOT NULL AND NOT isnan(_c) AND NOT isinf(_c) AND _e IS NOT NULL AND NOT isnan(_e) AND NOT isinf(_e) AND ABS(_e) > 1e-12)"
+            ok_cnt = f"SUM(CASE WHEN {ok} THEN 1 ELSE 0 END) OVER ({over})"
+            rmean = f"AVG(CASE WHEN {ok} THEN _c / _e END) OVER ({over})"
+            return _Layer(
+                f"SELECT ts, inst, CASE WHEN {ok_cnt} IS NULL OR {ok_cnt} < {mp} THEN NULL "
+                f"WHEN {rmean} IS NULL THEN NULL ELSE {rmean} END AS _v "
+                f"FROM ({base_sql}) t",
+                has_inst_window=True,
+            )
+
+        if op == "aq1_working_capital_accrual":
+            if len(node.inputs) < 2:
+                return None
+            e_l = _compile_layer(node.inputs[1], dialect=dialect)
+            if e_l is None:
+                return None
+            base_sql = (
+                f"SELECT r.ts, r.inst, r._v AS _wc, x._v AS _e "
+                f"FROM ({inner.sql}) r LEFT JOIN ({e_l.sql}) x USING (ts, inst)"
+            )
+            both = f"(_wc IS NOT NULL AND NOT isnan(_wc) AND NOT isinf(_wc) AND _e IS NOT NULL AND NOT isnan(_e) AND NOT isinf(_e))"
+            prev_ok = f"({both} AND LAG({both}) OVER (PARTITION BY inst ORDER BY ts))"
+            prev_wc = f"LAG(_wc) OVER (PARTITION BY inst ORDER BY ts)"
+            prev_e = f"LAG(_e) OVER (PARTITION BY inst ORDER BY ts)"
+            return _Layer(
+                f"SELECT ts, inst, CASE WHEN {both} THEN "
+                f"CASE WHEN {prev_ok} AND ABS(_e) > 1e-12 "
+                f"THEN (_wc - {prev_wc}) / ABS(_e) ELSE NULL END "
+                f"ELSE NULL END AS _v "
+                f"FROM ({base_sql}) t",
+                has_inst_window=True,
+            )
+
+        return None
+
+    # ------------------------------------------------------------------
+    # wave3e cs/group family (2026-09-08): elementwise bucketing, EB
+    # shrinkage, group-axis aggregation and multi-frame peer deviation.
+    # pandas registry operators are the authority (cs_batch1 / group_ext /
+    # group_spectrum / overhaul.daily / cross_section.peer_ops);
+    # 三方 parity 见 tests/backend_parity/test_csgrp_wave3_parity.py.
+    # ------------------------------------------------------------------
+
+    if op == "cs_bucket_fixed":
+        # overhaul.daily.pd_cs_bucket_fixed: searchsorted(breaks, x,
+        # side="right") + 1 = 1 + count(b_i < x); non-finite x -> NULL;
+        # invalid breaks -> None (falls back to the audited bridge).
+        if not node.inputs:
+            return None
+        inner = _compile_layer(node.inputs[0], dialect=dialect)
+        if inner is None:
+            return None
+        if dialect != SqlDialect.DUCKDB:
+            return None
+        breaks = None
+        raw = None
+        if len(node.inputs) >= 2 and node.inputs[1].op == "literal":
+            raw = node.inputs[1].attrs.get("value")
+        if raw is None and "breaks" in (node.attrs or {}):
+            raw = node.attrs["breaks"]
+        if isinstance(raw, (list, tuple)) and raw:
+            breaks = raw
+        if breaks is None:
+            return None
+        try:
+            bvals = sorted(float(b) for b in breaks)
+        except (TypeError, ValueError):
+            return None
+        if any(b2 <= b1 for b1, b2 in zip(bvals, bvals[1:])):
+            return None
+        terms = " + ".join(
+            f"CASE WHEN x._v >= {repr(b)} THEN 1 ELSE 0 END" for b in bvals
+        )
+        ok = "(x._v IS NOT NULL AND NOT isnan(x._v) AND NOT isinf(x._v))"
+        return _Layer(
+            f"SELECT x.ts, x.inst, "
+            f"CASE WHEN NOT ({ok}) THEN NULL "
+            f"ELSE 1.0 + CAST({terms} AS DOUBLE) END AS _v "
+            f"FROM ({inner.sql}) x",
+            has_inst_window=inner.has_inst_window,
+            has_ts_partition=True,
+        )
+
+    if op == "cs_empirical_bayes_shrinkage":
+        # cs_batch1.CsEmpiricalBayesShrinkage._empirical_bayes_row:
+        # valid = finite(est) & finite(se) & se > 0; breadth < 10 -> NULL;
+        # lambda < 0 -> fail-closed NULL; cs_var (ddof=1) <= 0 -> shrink to
+        # the cross-sectional mean; else
+        # mean + (x - mean) * clip(1 / (1 + lambda * se^2 / cs_var), 0, 1).
+        if len(node.inputs) < 2:
+            return None
+        est_l = _compile_layer(node.inputs[0], dialect=dialect)
+        se_l = _compile_layer(node.inputs[1], dialect=dialect)
+        if est_l is None or se_l is None:
+            return None
+        if dialect != SqlDialect.DUCKDB:
+            return None
+        lam_l = _literal_positional(node, 1)
+        if lam_l is not None:
+            lam = float(lam_l)
+        else:
+            lam = float(_float_attr(node, "shrinkage_factor", "lambda", default=1.0))
+        if lam < 0:
+            return _Layer(
+                f"SELECT x.ts, x.inst, NULL::DOUBLE AS _v "
+                f"FROM ({est_l.sql}) x LEFT JOIN ({se_l.sql}) s USING (ts, inst)",
+                has_inst_window=est_l.has_inst_window,
+                has_ts_partition=True,
+            )
+        ok_e = "(x._v IS NOT NULL AND NOT isnan(x._v) AND NOT isinf(x._v))"
+        ok_s = "(s._v IS NOT NULL AND NOT isnan(s._v) AND NOT isinf(s._v) AND s._v > 0)"
+        valid = f"({ok_e} AND {ok_s})"
+        cnt = f"COUNT(CASE WHEN {valid} THEN 1 END) OVER (PARTITION BY x.ts)"
+        cs_mean = f"AVG(CASE WHEN {valid} THEN x._v END) OVER (PARTITION BY x.ts)"
+        # VAR_SAMP == ddof=1 over the pairwise-valid samples.
+        cs_var = f"VAR_SAMP(CASE WHEN {valid} THEN x._v END) OVER (PARTITION BY x.ts)"
+        var_ratio = f"CASE WHEN {cs_var} IS NULL OR {cs_var} <= 0 THEN NULL ELSE (s._v * s._v) / {cs_var} END"
+        w_raw = f"CASE WHEN {var_ratio} IS NULL THEN NULL ELSE 1.0 / (1.0 + {repr(lam)} * {var_ratio}) END"
+        w = f"GREATEST(0.0, LEAST(1.0, {w_raw}))"
+        shrunk = (
+            f"CASE WHEN {cs_var} IS NULL OR {cs_var} <= 0 THEN {cs_mean} "
+            f"ELSE {cs_mean} + (x._v - {cs_mean}) * {w} END"
+        )
+        return _Layer(
+            f"SELECT x.ts, x.inst, "
+            f"CASE WHEN {cnt} < 10 THEN NULL "
+            f"WHEN NOT ({valid}) THEN NULL "
+            f"ELSE {shrunk} END AS _v "
+            f"FROM ({est_l.sql}) x LEFT JOIN ({se_l.sql}) s USING (ts, inst)",
+            has_inst_window=est_l.has_inst_window or se_l.has_inst_window,
+            has_ts_partition=True,
+        )
+
+    if op == "group_ex_self_weighted_mean":
+        # group_ext.GroupExSelfWeightedMean: (Σw·x - w_j·x_j) / (Σw - w_j)
+        # per (ts, group) over members with finite(x) & finite(w) & w >= 0;
+        # group-constant sums make it a pure window expression.  Invalid
+        # self cell, non-positive total weight or non-positive denominator
+        # -> NULL.
+        if len(node.inputs) < 3:
+            return None
+        x_l = _compile_layer(node.inputs[0], dialect=dialect)
+        w_l = _compile_layer(node.inputs[1], dialect=dialect)
+        g_l = _compile_layer(node.inputs[2], dialect=dialect)
+        if x_l is None or w_l is None or g_l is None:
+            return None
+        if dialect != SqlDialect.DUCKDB:
+            return None
+        ok_x = "(x._v IS NOT NULL AND NOT isnan(x._v) AND NOT isinf(x._v))"
+        ok_w = "(w._v IS NOT NULL AND NOT isnan(w._v) AND NOT isinf(w._v) AND w._v >= 0)"
+        ok_g = "(g._v IS NOT NULL)"
+        valid = f"({ok_x} AND {ok_w} AND {ok_g})"
+        part = "PARTITION BY x.ts, g._v"
+        sw = f"SUM(CASE WHEN {valid} THEN w._v ELSE 0 END) OVER ({part})"
+        swx = f"SUM(CASE WHEN {valid} THEN x._v * w._v ELSE 0 END) OVER ({part})"
+        return _Layer(
+            f"SELECT x.ts, x.inst, "
+            f"CASE WHEN NOT ({valid}) THEN NULL "
+            f"WHEN {sw} <= 0 THEN NULL "
+            f"WHEN ({sw} - w._v) <= 0 THEN NULL "
+            f"ELSE ({swx} - w._v * x._v) / ({sw} - w._v) END AS _v "
+            f"FROM ({x_l.sql}) x JOIN ({w_l.sql}) w USING (ts, inst) "
+            f"LEFT JOIN ({g_l.sql}) g USING (ts, inst)",
+            has_inst_window=x_l.has_inst_window,
+            has_ts_partition=True,
+        )
+
+    if op == "group_feature_valid_member_count":
+        # group_spectrum.GroupFeatureValidMemberCount: per (ts, group) the
+        # count of members whose ALL THREE features are finite, broadcast to
+        # every group member; invalid group label -> NULL.
+        if len(node.inputs) < 4:
+            return None
+        layers = []
+        for i in range(4):
+            layer = _compile_layer(node.inputs[i], dialect=dialect)
+            if layer is None:
+                return None
+            layers.append(layer)
+        if dialect != SqlDialect.DUCKDB:
+            return None
+        f1, f2, f3, g = layers
+        ok = (
+            "(f1._v IS NOT NULL AND NOT isnan(f1._v) AND NOT isinf(f1._v) "
+            "AND f2._v IS NOT NULL AND NOT isnan(f2._v) AND NOT isinf(f2._v) "
+            "AND f3._v IS NOT NULL AND NOT isnan(f3._v) AND NOT isinf(f3._v) "
+            "AND g._v IS NOT NULL)"
+        )
+        part = "PARTITION BY f1.ts, g._v"
+        cnt = f"SUM(CASE WHEN {ok} THEN 1 ELSE 0 END) OVER ({part})"
+        return _Layer(
+            f"SELECT f1.ts, f1.inst, "
+            f"CASE WHEN g._v IS NULL THEN NULL ELSE {cnt} END AS _v "
+            f"FROM ({f1.sql}) f1 JOIN ({f2.sql}) f2 USING (ts, inst) "
+            f"JOIN ({f3.sql}) f3 USING (ts, inst) "
+            f"LEFT JOIN ({g.sql}) g USING (ts, inst)",
+            has_inst_window=f1.has_inst_window,
+            has_ts_partition=True,
+        )
+
+    if op == "group_peer_deviation_index":
+        # cross_section.peer_ops._peer_deviation_index: per-frame cross-
+        # sectional z-scores over the whole ts partition (no group input),
+        # each frame with its own finite mask; frames with < 2 finite values
+        # or STDDEV_POP <= 1e-12 are skipped; cells missing from every
+        # contributing frame stay NULL (never manufactured 0).
+        if len(node.inputs) < 2:
+            return None
+        if dialect != SqlDialect.DUCKDB:
+            return None
+        layers = []
+        for i in range(len(node.inputs)):
+            layer = _compile_layer(node.inputs[i], dialect=dialect)
+            if layer is None:
+                return None
+            layers.append(layer)
+        aliases = ["a", "b", "c", "d", "e", "f", "g"][: len(layers)]
+        from_sql = f"SELECT {aliases[0]}.ts AS ts, {aliases[0]}.inst AS inst"
+        for i in range(len(layers)):
+            from_sql += f", {aliases[i]}._v AS _z{i}"
+        from_sql += f" FROM ({layers[0].sql}) {aliases[0]}"
+        for i in range(1, len(layers)):
+            from_sql += f" LEFT JOIN ({layers[i].sql}) {aliases[i]} USING (ts, inst)"
+        z_terms = []
+        valid_terms = []
+        for i in range(len(layers)):
+            v = f"_z{i}"
+            ok = f"({v} IS NOT NULL AND NOT isnan({v}) AND NOT isinf({v}))"
+            valid_terms.append(f"CASE WHEN {ok} THEN 1 ELSE 0 END")
+            z_terms.append(
+                f"COALESCE("
+                f"CASE WHEN COUNT({v}) OVER (PARTITION BY ts) < 2 "
+                f"OR STDDEV_POP({v}) OVER (PARTITION BY ts) IS NULL "
+                f"OR STDDEV_POP({v}) OVER (PARTITION BY ts) <= 1e-12 THEN NULL "
+                f"ELSE ({v} - AVG({v}) OVER (PARTITION BY ts)) "
+                f"/ STDDEV_POP({v}) OVER (PARTITION BY ts) END, 0.0)"
+            )
+        any_finite = " + ".join(valid_terms)
+        z_sum = " + ".join(z_terms)
+        return _Layer(
+            f"SELECT ts, inst, "
+            f"CASE WHEN ({any_finite}) = 0 THEN NULL ELSE ({z_sum}) END AS _v "
+            f"FROM ({from_sql})",
+            has_inst_window=any(l.has_inst_window for l in layers),
+            has_ts_partition=True,
+        )
+
+        return None
+
+    # ------------------------------------------------------------------
+    # wave3d ashare limit family (2026-09-08) — elementwise touch/failed
+    # booleans (absolute tick tolerance, ``ashare/limit_ops.py`` reference)
+    # and trailing-window counts / density / volume-ratio / run-length streak
+    # (relative tolerance + strict known-gates, ``ashare/state_machine.py``
+    # reference).  DuckDB-only (window frames + NaN/Inf masks).  三方 parity
+    # 见 tests/backend_parity/test_ashare_wave3_parity.py.
+    # ------------------------------------------------------------------
+
+    def _ashare_finite_sql(v: str) -> str:
+        return f"({v} IS NOT NULL AND NOT isnan({v}) AND NOT isinf({v}))"
+
+    def _ashare_bool_sql(valid: str, cond: str) -> str:
+        return f"CASE WHEN {valid} THEN CASE WHEN {cond} THEN 1.0 ELSE 0.0 END ELSE NULL END"
+
+    def _ashare_tol_sql() -> float:
+        raw = None
+        if "tick_tolerance" in (node.attrs or {}) and node.attrs["tick_tolerance"] is not None:
+            raw = node.attrs["tick_tolerance"]
+        if raw is None:
+            for child in reversed(node.inputs[1:]):
+                value = child.attrs.get("value") if child.op == "literal" else None
+                if isinstance(value, (int, float)) and not isinstance(value, bool):
+                    raw = value
+                    break
+        tol = float(raw) if raw is not None else 0.005
+        if tol < 0.0:
+            return None
+        return tol
+
+    def _ashare_side_sql() -> str | None:
+        raw = None
+        if "side" in (node.attrs or {}) and node.attrs["side"] is not None:
+            raw = node.attrs["side"]
+        if raw is None:
+            for child in node.inputs[1:]:
+                if child.op == "literal" and isinstance(child.attrs.get("value"), str):
+                    raw = child.attrs["value"]
+                    break
+        kind = str(raw or "up").lower()
+        return kind if kind in {"up", "down"} else None
+
+    if op in {"ashare_limit_up_touch", "ashare_limit_down_touch",
+              "ashare_open_at_upper_limit", "ashare_limit_failed",
+              "ashare_limit_open_failed"}:
+        tol = _ashare_tol_sql()
+        if tol is None:
+            return None
+        # input layout: [price, (close,)?, limit, tick_tolerance-literal?]
+        n_lim = 2 if op in {"ashare_limit_up_touch", "ashare_limit_down_touch",
+                            "ashare_open_at_upper_limit"} else 3
+        layers = []
+        for i in range(n_lim):
+            layer = _compile_layer(node.inputs[i], dialect=dialect)
+            if layer is None:
+                return None
+            layers.append(layer)
+        tol_idx = n_lim
+        raw_tol = _raw_literal(node, tol_idx, None)
+        if raw_tol is None:
+            raw_tol = node.attrs.get("tick_tolerance")
+        if raw_tol is None:
+            raw_tol = 0.005
+        try:
+            tol_val = float(raw_tol)
+        except (TypeError, ValueError):
+            return None
+        if tol_val < 0.0:
+            return None
+        tol_expr = _sql_literal(tol_val)
+        if op in {"ashare_limit_up_touch", "ashare_open_at_upper_limit"}:
+            base_sql = (
+                f"SELECT a.ts, a.inst, a._v AS _p, b._v AS _lim, {tol_expr} AS _tol "
+                f"FROM ({layers[0].sql}) a LEFT JOIN ({layers[1].sql}) b USING (ts, inst)"
+            )
+        elif op == "ashare_limit_down_touch":
+            base_sql = (
+                f"SELECT a.ts, a.inst, a._v AS _p, b._v AS _lim, {tol_expr} AS _tol "
+                f"FROM ({layers[0].sql}) a LEFT JOIN ({layers[1].sql}) b USING (ts, inst)"
+            )
+        else:  # ashare_limit_failed / ashare_limit_open_failed: [price, close, limit]
+            base_sql = (
+                f"SELECT a.ts, a.inst, a._v AS _p, b._v AS _q, c._v AS _lim, {tol_expr} AS _tol "
+                f"FROM ({layers[0].sql}) a LEFT JOIN ({layers[1].sql}) b USING (ts, inst) "
+                f"LEFT JOIN ({layers[2].sql}) c USING (ts, inst)"
+            )
+        if op in {"ashare_limit_up_touch", "ashare_open_at_upper_limit"}:
+            valid = f"({_ashare_finite_sql('_p')} AND {_ashare_finite_sql('_lim')})"
+            cond = "(_p >= _lim - _tol)"
+            out = _ashare_bool_sql(valid, cond)
+        elif op == "ashare_limit_down_touch":
+            valid = f"({_ashare_finite_sql('_p')} AND {_ashare_finite_sql('_lim')})"
+            cond = "(_p <= _lim + _tol)"
+            out = _ashare_bool_sql(valid, cond)
+        else:  # ashare_limit_failed / ashare_limit_open_failed
+            valid = f"({_ashare_finite_sql('_p')} AND {_ashare_finite_sql('_q')} AND {_ashare_finite_sql('_lim')})"
+            cond = "((_p >= _lim - _tol) AND (_q < _lim - _tol))"
+            out = _ashare_bool_sql(valid, cond)
+        return _Layer(
+            f"SELECT ts, inst, {out} AS _v FROM ({base_sql}) t",
+            has_inst_window=False,
+        )
+
+    if op in {"ashare_limit_touch_count", "ashare_failed_limit_count"}:
+        tol = _ashare_tol_sql()
+        side_kind = _ashare_side_sql()
+        if tol is None or side_kind is None:
+            return None
+        w = _window_int(node, default=20)
+        n_panels = 4 if op == "ashare_limit_touch_count" else 5
+        if len(node.inputs) < n_panels:
+            return None
+        layers = []
+        for i in range(n_panels):
+            layer = _compile_layer(node.inputs[i], dialect=dialect)
+            if layer is None:
+                return None
+            layers.append(layer)
+        alias_names = ["a", "b", "c", "d", "e"]
+        # pandas kernel arg order — touch_count: (high, low, high_limit,
+        # low_limit, ...); failed_limit_count: (high, low, close, high_limit,
+        # low_limit, ...).  side=up reads price/limit = (high, high_limit);
+        # side=down reads (low, low_limit).
+        if op == "ashare_limit_touch_count":
+            p_i, lim_i = (0, 2) if side_kind == "up" else (1, 3)
+            sql = f"SELECT {alias_names[0]}.ts, {alias_names[0]}.inst, {alias_names[p_i]}._v AS _p, {alias_names[lim_i]}._v AS _lim"
+        else:
+            p_i, lim_i = (0, 3) if side_kind == "up" else (1, 4)
+            sql = f"SELECT {alias_names[0]}.ts, {alias_names[0]}.inst, {alias_names[p_i]}._v AS _p, {alias_names[2]}._v AS _cl, {alias_names[lim_i]}._v AS _lim"
+        sql += f", {tol} AS _tol FROM ({layers[0].sql}) a"
+        for i in range(1, n_panels):
+            sql += f" LEFT JOIN ({layers[i].sql}) {alias_names[i]} USING (ts, inst)"
+        over = f"PARTITION BY inst ORDER BY ts ROWS BETWEEN {max(w, 1) - 1} PRECEDING AND CURRENT ROW"
+        if op == "ashare_limit_touch_count":
+            valid = f"({_ashare_finite_sql('_p')} AND {_ashare_finite_sql('_lim')})"
+            cond = "(_p >= _lim * (1.0 - _tol))" if side_kind == "up" else "(_p <= _lim * (1.0 + _tol))"
+        else:
+            valid = f"({_ashare_finite_sql('_p')} AND {_ashare_finite_sql('_cl')} AND {_ashare_finite_sql('_lim')})"
+            cond = "((_p >= _lim * (1.0 - _tol)) AND (_cl < _lim * (1.0 - _tol)))" if side_kind == "up" else "((_p <= _lim * (1.0 + _tol)) AND (_cl > _lim * (1.0 + _tol)))"
+        base_sql = f"SELECT ts, inst, CASE WHEN {valid} THEN CASE WHEN {cond} THEN 1.0 ELSE 0.0 END END AS _hit, CASE WHEN {valid} THEN 1.0 ELSE NULL END AS _known FROM ({sql}) t"
+        cnt_known = f"SUM(_known) OVER ({over})"
+        cnt_hits = f"SUM(CASE WHEN _known IS NOT NULL THEN _hit ELSE NULL END) OVER ({over})"
+        return _Layer(
+            f"SELECT ts, inst, CASE WHEN _known IS NULL THEN NULL "
+            f"WHEN {cnt_known} IS NULL OR {cnt_known} <= 0 THEN NULL "
+            f"ELSE {cnt_hits} END AS _v FROM ({base_sql}) t",
+            has_inst_window=True,
+        )
+
+    if op == "ashare_limit_asymmetry":
+        if len(node.inputs) < 2:
+            return None
+        up_l = _compile_layer(node.inputs[0], dialect=dialect)
+        dn_l = _compile_layer(node.inputs[1], dialect=dialect)
+        if up_l is None or dn_l is None:
+            return None
+        w = _window_int(node, default=20)
+        over = f"PARTITION BY inst ORDER BY ts ROWS BETWEEN {max(w, 1) - 1} PRECEDING AND CURRENT ROW"
+        base_sql = (
+            f"SELECT u.ts, u.inst, u._v AS _u, d._v AS _d, "
+            f"CASE WHEN {_ashare_finite_sql('u._v')} OR {_ashare_finite_sql('d._v')} THEN 1.0 ELSE NULL END AS _known "
+            f"FROM ({up_l.sql}) u LEFT JOIN ({dn_l.sql}) d USING (ts, inst)"
+        )
+        up_sum = f"SUM(CASE WHEN _known IS NOT NULL AND _u IS NOT NULL AND NOT isnan(_u) AND NOT isinf(_u) AND _u <> 0 THEN _u ELSE 0.0 END) OVER ({over})"
+        dn_sum = f"SUM(CASE WHEN _known IS NOT NULL AND _d IS NOT NULL AND NOT isnan(_d) AND NOT isinf(_d) AND _d <> 0 THEN _d ELSE 0.0 END) OVER ({over})"
+        known_cnt = f"SUM(_known) OVER ({over})"
+        return _Layer(
+            f"SELECT ts, inst, CASE WHEN {known_cnt} IS NULL OR {known_cnt} <= 0 THEN NULL "
+            f"ELSE ({up_sum} - {dn_sum}) / {known_cnt} END AS _v FROM ({base_sql}) t",
+            has_inst_window=True,
+        )
+
+    if op in {"ashare_limit_up_volume_ratio", "ashare_limit_down_volume_ratio"}:
+        if len(node.inputs) < 2:
+            return None
+        vol_l = _compile_layer(node.inputs[0], dialect=dialect)
+        ev_l = _compile_layer(node.inputs[1], dialect=dialect)
+        if vol_l is None or ev_l is None:
+            return None
+        w = _window_int(node, default=20)
+        over = f"PARTITION BY inst ORDER BY ts ROWS BETWEEN {max(w, 1) - 1} PRECEDING AND CURRENT ROW"
+        base_sql = (
+            f"SELECT v.ts, v.inst, v._v AS _vol, e._v AS _ev, "
+            f"CASE WHEN {_ashare_finite_sql('v._v')} THEN 1.0 ELSE NULL END AS _vk "
+            f"FROM ({vol_l.sql}) v LEFT JOIN ({ev_l.sql}) e USING (ts, inst)"
+        )
+        event_day = f"(_vk = 1.0 AND _ev IS NOT NULL AND NOT isnan(_ev) AND NOT isinf(_ev) AND _ev <> 0)"
+        ev_sum = f"SUM(CASE WHEN {event_day} THEN _vol END) OVER ({over})"
+        ev_cnt = f"SUM(CASE WHEN {event_day} THEN 1.0 ELSE 0.0 END) OVER ({over})"
+        vol_sum = f"SUM(CASE WHEN _vk = 1.0 THEN _vol END) OVER ({over})"
+        vol_cnt = f"SUM(_vk) OVER ({over})"
+        event_vol = f"CASE WHEN {ev_cnt} IS NULL OR {ev_cnt} <= 0 THEN NULL ELSE {ev_sum} / {ev_cnt} END"
+        base_vol = f"CASE WHEN {vol_cnt} IS NULL OR {vol_cnt} <= 0 THEN NULL ELSE {vol_sum} / {vol_cnt} END"
+        return _Layer(
+            f"SELECT ts, inst, CASE WHEN {event_vol} IS NULL OR {base_vol} IS NULL OR {base_vol} <= 0.0 THEN NULL "
+            f"ELSE {event_vol} / {base_vol} END AS _v FROM ({base_sql}) t",
+            has_inst_window=True,
+        )
+
+    if op == "ashare_limit_event_density":
+        non_literal_idx = [i for i, ch in enumerate(node.inputs) if ch.op not in {"literal"}]
+        if not non_literal_idx:
+            return None
+        ev_l = _compile_layer(node.inputs[non_literal_idx[0]], dialect=dialect)
+        if ev_l is None:
+            return None
+        has_ks = len(non_literal_idx) >= 2
+        ks_l = _compile_layer(node.inputs[non_literal_idx[1]], dialect=dialect) if has_ks else None
+        if has_ks and ks_l is None:
+            return None
+        w = _window_int(node, default=20)
+        over = f"PARTITION BY inst ORDER BY ts ROWS BETWEEN {max(w, 1) - 1} PRECEDING AND CURRENT ROW"
+        if has_ks:
+            base_sql = (
+                f"SELECT e.ts, e.inst, e._v AS _ev, k._v AS _ks, "
+                f"CASE WHEN {_ashare_finite_sql('k._v')} THEN 1.0 ELSE NULL END AS _cur, "
+                # pandas kv[chunk] != 0 — a NaN known_status still counts as
+                # known inside the window (NaN != 0 is True in NumPy); only the
+                # CURRENT row's NaN ks gates the output to NaN (_cur IS NULL).
+                f"CASE WHEN {_ashare_finite_sql('e._v')} AND (k._v IS NULL OR k._v <> 0.0) THEN 1.0 ELSE NULL END AS _known "
+                f"FROM ({ev_l.sql}) e LEFT JOIN ({ks_l.sql}) k USING (ts, inst)"
+            )
+            cur_gate = "(_cur IS NOT NULL)"
+        else:
+            base_sql = (
+                f"SELECT e.ts, e.inst, e._v AS _ev, 1.0 AS _cur, "
+                f"CASE WHEN {_ashare_finite_sql('e._v')} THEN 1.0 ELSE NULL END AS _known "
+                f"FROM ({ev_l.sql}) e"
+            )
+            cur_gate = "TRUE"
+        ev_sum = f"SUM(CASE WHEN _known = 1.0 THEN CASE WHEN _ev IS NOT NULL AND NOT isnan(_ev) AND NOT isinf(_ev) THEN _ev ELSE 0.0 END ELSE 0.0 END) OVER ({over})"
+        known_cnt = f"SUM(_known) OVER ({over})"
+        return _Layer(
+            f"SELECT ts, inst, CASE WHEN NOT {cur_gate} THEN NULL "
+            f"WHEN {known_cnt} IS NULL OR {known_cnt} <= 0 THEN NULL "
+            f"ELSE {ev_sum} / {known_cnt} END AS _v FROM ({base_sql}) t",
+            has_inst_window=True,
+        )
+
+    if op == "ashare_limit_up_streak":
+        if len(node.inputs) < 2:
+            return None
+        tol = _ashare_tol_sql()
+        if tol is None:
+            return None
+        close_l = _compile_layer(node.inputs[0], dialect=dialect)
+        limit_l = _compile_layer(node.inputs[1], dialect=dialect)
+        if close_l is None or limit_l is None:
+            return None
+        non_literal_idx = [i for i, ch in enumerate(node.inputs) if ch.op not in {"literal"}]
+        has_vt = len(non_literal_idx) >= 3
+        vt_l = _compile_layer(node.inputs[non_literal_idx[2]], dialect=dialect) if has_vt else None
+        if has_vt and vt_l is None:
+            return None
+        if has_vt:
+            base_sql = (
+                f"SELECT c.ts, c.inst, c._v AS _c, l._v AS _lim, v._v AS _vt, {tol} AS _tol "
+                f"FROM ({close_l.sql}) c LEFT JOIN ({limit_l.sql}) l USING (ts, inst) "
+                f"LEFT JOIN ({vt_l.sql}) v USING (ts, inst)"
+            )
+            tradeable = f"({_ashare_finite_sql('_vt')} AND _vt = 1.0)"
+        else:
+            base_sql = (
+                f"SELECT c.ts, c.inst, c._v AS _c, l._v AS _lim, {tol} AS _tol "
+                f"FROM ({close_l.sql}) c LEFT JOIN ({limit_l.sql}) l USING (ts, inst)"
+            )
+            tradeable = "TRUE"
+        ok_expr = f"({_ashare_finite_sql('_c')} AND {_ashare_finite_sql('_lim')} AND _c >= _lim * (1.0 - _tol))"
+        broken_expr = f"(NOT {tradeable} OR NOT ({_ashare_finite_sql('_c')} AND {_ashare_finite_sql('_lim')}))"
+        grp_sql = (
+            f"SELECT ts, inst, CASE WHEN {ok_expr} THEN 1.0 ELSE 0.0 END AS _hit, "
+            f"CASE WHEN {broken_expr} THEN 1 ELSE 0 END AS _brk FROM ({base_sql}) t"
+        )
+        # run block restarts at every non-hit row (cumulative non-hit count);
+        # broken rows output NaN.
+        grp2_sql = (
+            f"SELECT ts, inst, _hit, _brk, "
+            f"SUM(_brk) OVER (PARTITION BY inst ORDER BY ts ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) + "
+            f"SUM(CASE WHEN _hit = 0.0 THEN 1 ELSE 0 END) OVER (PARTITION BY inst ORDER BY ts ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS _blk "
+            f"FROM ({grp_sql}) g"
+        )
+        over_blk = "PARTITION BY inst, _blk ORDER BY ts ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW"
+        streak = f"SUM(_hit) OVER ({over_blk})"
+        return _Layer(
+            f"SELECT ts, inst, CASE WHEN _brk = 1 THEN NULL ELSE {streak} END AS _v FROM ({grp2_sql}) t",
+            has_inst_window=True,
+        )
+
+    # ------------------------------------------------------------------
+    # wave3f ts2 (2026-09-08): range / consolidation / liquidity-beta
+    # family.  Pandas authorities = technical_extensions._ts_range_expansion,
+    # structure_patterns_v2.ts_consolidation_width (window INCLUDES the
+    # current bar), peer_ops._liquidity_beta (regress y on liquidity.diff(1),
+    # pairwise-finite mask, population cov/var, mp = max(3, w // 5)).
+    # The prior-extreme family + days_since already have branches above.
+    # ------------------------------------------------------------------
+
+    if op == "ts_range_expansion":
+        # current = high - low; baseline = current.shift(1).rolling(w, mp=w).mean();
+        # result = current / baseline - 1 (0 / NULL baseline -> NULL).
+        if len(node.inputs) < 2:
+            return None
+        h_l = _compile_layer(node.inputs[0], dialect=dialect)
+        l_l = _compile_layer(node.inputs[1], dialect=dialect)
+        if h_l is None or l_l is None:
+            return None
+        if dialect != SqlDialect.DUCKDB:
+            return None
+        w = _window_int(node, default=20)
+        isnan_fn = "isnan"
+        isinf_fn = "isinf"
+        base_sql = (
+            f"SELECT h.ts, h.inst, "
+            f"CASE WHEN h._v IS NOT NULL AND NOT {isnan_fn}(h._v) AND NOT {isinf_fn}(h._v) "
+            f"AND l._v IS NOT NULL AND NOT {isnan_fn}(l._v) AND NOT {isinf_fn}(l._v) "
+            f"THEN h._v - l._v END AS _cur "
+            f"FROM ({h_l.sql}) h LEFT JOIN ({l_l.sql}) l USING (ts, inst)"
+        )
+        # pandas: baseline = current.shift(1).rolling(w, mp=w).mean() — the
+        # numerator stays the RAW current range at t (only the baseline is
+        # shifted), so keep both the raw and the lagged column.
+        shifted_sql = (
+            f"SELECT ts, inst, _cur, "
+            f"LAG(_cur, 1) OVER (PARTITION BY inst ORDER BY ts) AS _cur_lag "
+            f"FROM ({base_sql}) _t"
+        )
+        over = f"PARTITION BY inst ORDER BY ts ROWS BETWEEN {w - 1} PRECEDING AND CURRENT ROW"
+        cnt = f"COUNT(_cur_lag) OVER ({over})"
+        avg = f"AVG(_cur_lag) OVER ({over})"
+        return _Layer(
+            f"SELECT ts, inst, "
+            f"CASE WHEN {cnt} < {w} THEN NULL ELSE _cur / NULLIF({avg}, 0) - 1.0 END AS _v "
+            f"FROM ({shifted_sql}) _s",
+            has_inst_window=True,
+        )
+
+    if op == "ts_consolidation_width":
+        # high.rolling(w, mp=w).max() - low.rolling(w, mp=w).min() — the
+        # window INCLUDES the current bar (NO shift).
+        if len(node.inputs) < 2:
+            return None
+        h_l = _compile_layer(node.inputs[0], dialect=dialect)
+        l_l = _compile_layer(node.inputs[1], dialect=dialect)
+        if h_l is None or l_l is None:
+            return None
+        if dialect != SqlDialect.DUCKDB:
+            return None
+        w = _window_int(node, default=20)
+        isnan_fn = "isnan"
+        isinf_fn = "isinf"
+        h_safe = (
+            f"SELECT ts, inst, CASE WHEN _v IS NOT NULL AND NOT {isnan_fn}(_v) "
+            f"AND NOT {isinf_fn}(_v) THEN _v END AS _v FROM ({h_l.sql}) t"
+        )
+        l_safe = (
+            f"SELECT ts, inst, CASE WHEN _v IS NOT NULL AND NOT {isnan_fn}(_v) "
+            f"AND NOT {isinf_fn}(_v) THEN _v END AS _v FROM ({l_l.sql}) t"
+        )
+        hmax = _inst_window(dialect, w, "MAX", h_safe, min_periods=w)
+        lmin = _inst_window(dialect, w, "MIN", l_safe, min_periods=w)
+        return _Layer(
+            f"SELECT x.ts, x.inst, "
+            f"CASE WHEN x._v IS NULL OR l._v IS NULL THEN NULL ELSE x._v - l._v END AS _v "
+            f"FROM ({hmax}) x LEFT JOIN ({lmin}) l USING (ts, inst)",
+            has_inst_window=True,
+        )
+
+    if op in {"ts_market_liquidity_beta", "ts_industry_liquidity_beta"}:
+        # beta = pop_cov(y, diff(liquidity)) / pop_var(diff(liquidity)) over
+        # the pairwise-finite window; mp = max(3, w // 5); n > 1 and
+        # var > 0 guards (peer_ops._rolling_regression fail-closed).
+        if len(node.inputs) < 2:
+            return None
+        y_l = _compile_layer(node.inputs[0], dialect=dialect)
+        x_l = _compile_layer(node.inputs[1], dialect=dialect)
+        if y_l is None or x_l is None:
+            return None
+        if dialect != SqlDialect.DUCKDB:
+            return None
+        w = _window_int(node, default=60)
+        mp = max(3, w // 5)
+        isnan_fn = "isnan"
+        isinf_fn = "isinf"
+        joined = (
+            f"SELECT y.ts, y.inst, "
+            f"CASE WHEN y._v IS NOT NULL AND NOT {isnan_fn}(y._v) AND NOT {isinf_fn}(y._v) THEN y._v END AS _yv, "
+            # pandas diff(1) FIRST (raw LAG, NaN rows break the diff), mask AFTER.
+            f"x._v - LAG(x._v) OVER (PARTITION BY y.inst ORDER BY y.ts) AS _xd "
+            f"FROM ({y_l.sql}) y LEFT JOIN ({x_l.sql}) x USING (ts, inst)"
+        )
+        masked = (
+            f"SELECT ts, inst, _yv, "
+            f"CASE WHEN _xd IS NOT NULL AND NOT {isnan_fn}(_xd) AND NOT {isinf_fn}(_xd) THEN _xd END AS _xv "
+            f"FROM ({joined}) t"
+        )
+        over = f"PARTITION BY inst ORDER BY ts ROWS BETWEEN {w - 1} PRECEDING AND CURRENT ROW"
+        pair = "(_yv IS NOT NULL AND _xv IS NOT NULL)"
+        pair_y = f"CASE WHEN {pair} THEN _yv END"
+        pair_x = f"CASE WHEN {pair} THEN _xv END"
+        n = f"COUNT(CASE WHEN {pair} THEN 1 END) OVER ({over})"
+        # population moments via the AVG identity (pairwise rows share the
+        # same mask, so E[xy] - E[x]E[y] / (E[x^2] - E[x]^2) is ddof=0/0).
+        mean_ab = f"AVG({pair_y} * {pair_x}) OVER ({over})"
+        mean_a = f"AVG({pair_y}) OVER ({over})"
+        mean_b = f"AVG({pair_x}) OVER ({over})"
+        mean_b2 = f"AVG({pair_x} * {pair_x}) OVER ({over})"
+        cov = f"({mean_ab} - {mean_a} * {mean_b})"
+        var = f"({mean_b2} - {mean_b} * {mean_b})"
+        return _Layer(
+            f"SELECT ts, inst, "
+            f"CASE WHEN {n} < {mp} OR {var} IS NULL OR {var} <= 1e-12 THEN NULL "
+            f"ELSE {cov} / {var} END AS _v "
+            f"FROM ({masked}) t",
+            has_inst_window=True,
+        )
+
+    # ------------------------------------------------------------------
+    # wave3c vol/valuation window statistics family (2026-09-08) — trailing
+    # window statistics over the wave1_volregime / wave1_valuation /
+    # wave1_cs_momentum pandas references (vv1_* / vr1_* / val1_* / vax_*).
+    # DuckDB-only (ROWS window frames + STDDEV_SAMP/quantile lists).
+    # 三方 parity 见 tests/backend_parity/test_volval_wave3_parity.py.
+    # ------------------------------------------------------------------
+    if op in _VOLVAL_SQL_WINDOW_OPS:
+        if len(node.inputs) < 1:
+            return None
+        inner = _compile_layer(node.inputs[0], dialect=dialect)
+        if inner is None:
+            return None
+        if dialect != SqlDialect.DUCKDB:
+            return None
+        valid = _duckdb_valid("t._v")
+
+        def _vv_int(key: str, pos: int, default: int) -> int:
+            v = _literal_positional(node, pos)
+            if v is not None:
+                return int(v)
+            return _int_attr(node, key, default=default)
+
+        def _vv_over(w: int, *, end: str = "CURRENT ROW", start_off: int = 0) -> str:
+            lo = max(w, 1) - 1 + start_off
+            end_txt = "CURRENT ROW" if end == "CURRENT ROW" else "1 PRECEDING"
+            return f"PARTITION BY inst ORDER BY ts ROWS BETWEEN {lo} PRECEDING AND {end_txt}"
+
+        # ---- single-input positional windows -----------------------------
+        if op in {"vv1_vol_of_vol", "vv1_downside_vol_share", "vv1_vol_level_score",
+                  "vv1_regime_change_ratio", "val1_valuation_z_own",
+                  "val1_valuation_percentile_own", "val1_earnings_yield_ma_diff",
+                  "vax_liquidity_penalty_exposure"}:
+            # clean the window value once: ±NaN/Inf rows never contribute.
+            clean = (
+                f"SELECT ts, inst, CASE WHEN {valid} THEN t._v END AS _s, t._v AS _raw "
+                f"FROM ({inner.sql}) t"
+            )
+            if op == "vv1_vol_of_vol":
+                w = _window_int(node, default=20)
+                mp = _vv_int("min_periods", 1, 5)
+                if mp > w:
+                    return None
+                over = _vv_over(w)
+                cnt = f"SUM(CASE WHEN {valid} THEN 1 ELSE 0 END) OVER ({over})"
+                return _Layer(
+                    f"SELECT ts, inst, CASE WHEN {cnt} < {mp} THEN NULL "
+                    f"ELSE STDDEV_SAMP(ABS(CASE WHEN {valid} THEN t._v END)) OVER ({over}) END AS _v "
+                    f"FROM ({clean}) t",
+                    has_inst_window=True,
+                )
+            if op == "vv1_downside_vol_share":
+                w = _window_int(node, default=40)
+                mp = _vv_int("min_periods", 1, 10)
+                if mp > w:
+                    return None
+                over = _vv_over(w)
+                cnt = f"SUM(CASE WHEN {valid} THEN 1 ELSE 0 END) OVER ({over})"
+                sd = f"STDDEV_SAMP(CASE WHEN {valid} AND t._v < 0 THEN t._v END) OVER ({over})"
+                su = f"STDDEV_SAMP(CASE WHEN {valid} AND t._v > 0 THEN t._v END) OVER ({over})"
+                return _Layer(
+                    f"SELECT ts, inst, CASE WHEN {cnt} < {mp} OR {sd} IS NULL OR {su} IS NULL THEN NULL "
+                    f"WHEN {sd} + {su} <= 1e-12 THEN NULL "
+                    f"ELSE {sd} / ({sd} + {su}) END AS _v "
+                    f"FROM ({clean}) t",
+                    has_inst_window=True,
+                )
+            if op == "vv1_vol_level_score":
+                sw = _vv_int("short_window", 1, 5)
+                hw = _vv_int("history_window", 2, 120)
+                mp = _vv_int("min_periods", 3, 20)
+                if sw >= hw or mp > hw:
+                    return None
+                over_cur = _vv_over(sw)
+                over_hist = _vv_over(sw, end="1 PRECEDING")
+                cur = f"STDDEV_SAMP(CASE WHEN {valid} THEN t._v END) OVER ({over_cur})"
+                cnt_h = f"SUM(CASE WHEN {valid} THEN 1 ELSE 0 END) OVER ({over_hist})"
+                hist = f"AVG(ABS(CASE WHEN {valid} THEN t._v END)) OVER ({over_hist})"
+                return _Layer(
+                    f"SELECT ts, inst, CASE WHEN NOT ({valid}) THEN NULL "
+                    f"WHEN {cur} IS NULL OR {hist} IS NULL OR {hist} <= 0 THEN NULL "
+                    f"WHEN {cnt_h} < {mp} THEN NULL "
+                    f"ELSE 1.0 / (1.0 + EXP(-({cur} / {hist} - 1.0) * 3.0)) END AS _v "
+                    f"FROM ({clean}) t",
+                    has_inst_window=True,
+                )
+            if op == "vv1_regime_change_ratio":
+                sw = _vv_int("short_window", 1, 5)
+                lw = _vv_int("long_window", 2, 60)
+                mp = _vv_int("min_periods", 4, 4)
+                if sw >= lw or mp > lw:
+                    return None
+                bnd = _float_attr(node, "band", default=0.5)
+                if bnd <= 0:
+                    return None
+                over_l = _vv_over(lw)
+                over_s = _vv_over(sw)
+                cnt_l = f"SUM(CASE WHEN {valid} THEN 1 ELSE 0 END) OVER ({over_l})"
+                cnt_s = f"SUM(CASE WHEN {valid} THEN 1 ELSE 0 END) OVER ({over_s})"
+                s_long = f"STDDEV_SAMP(CASE WHEN {valid} THEN t._v END) OVER ({over_l})"
+                s_short = f"STDDEV_SAMP(CASE WHEN {valid} THEN t._v END) OVER ({over_s})"
+                ratio = f"({s_short} / {s_long})"
+                return _Layer(
+                    f"SELECT ts, inst, CASE WHEN {cnt_l} < {mp} OR {cnt_s} < 2 THEN NULL "
+                    f"WHEN {s_long} IS NULL OR {s_long} <= 1e-12 OR {s_short} IS NULL THEN NULL "
+                    f"WHEN {ratio} > {1.0 + bnd} OR {ratio} < {1.0 - bnd} "
+                    f"THEN ABS({ratio} - 1.0) / {bnd} ELSE 0.0 END AS _v "
+                    f"FROM ({clean}) t",
+                    has_inst_window=True,
+                )
+            if op == "val1_valuation_z_own":
+                hw = _window_int(node, default=60) if _literal_positional(node, 1) is None else int(_literal_positional(node, 1))
+                mp = _vv_int("min_periods", 2, 10)
+                if mp > hw:
+                    return None
+                hist_w = max(hw - 1, 1)
+                over_h = _vv_over(hist_w, end="1 PRECEDING")
+                cur_ok = valid
+                cnt = f"SUM(CASE WHEN {valid} THEN 1 ELSE 0 END) OVER ({over_h})"
+                sm = f"SUM(CASE WHEN {valid} THEN t._v END) OVER ({over_h})"
+                sh = f"SUM(CASE WHEN {valid} THEN t._v * t._v END) OVER ({over_h})"
+                # combine hist + current: m = (S + x)/n; var = (S2 + x^2 - m*(S+x))/(n-1)
+                n = f"({cnt} + 1.0)"
+                m = f"(({sm} + t._v) / {n})"
+                varr = f"(({sh} + t._v * t._v - {m} * ({sm} + t._v)) / ({n} - 1.0))"
+                return _Layer(
+                    f"SELECT ts, inst, CASE WHEN NOT ({cur_ok}) THEN NULL "
+                    f"WHEN {cnt} < {mp} THEN NULL "
+                    f"WHEN {varr} IS NULL OR {varr} <= 1e-12 THEN 0.0 "
+                    f"ELSE (t._v - {m}) / SQRT({varr}) END AS _v "
+                    f"FROM ({clean}) t",
+                    has_inst_window=True,
+                )
+            if op == "val1_valuation_percentile_own":
+                hw = _window_int(node, default=60) if _literal_positional(node, 1) is None else int(_literal_positional(node, 1))
+                mp = _vv_int("min_periods", 2, 10)
+                if mp > hw:
+                    return None
+                hist_w = max(hw - 1, 1)
+                over_h = _vv_over(hist_w, end="1 PRECEDING")
+                lst = (
+                    f"list_filter(list(t._s) OVER ({over_h}), "
+                    f"y -> y IS NOT NULL AND NOT isnan(y) AND NOT isinf(y))"
+                )
+                return _Layer(
+                    f"SELECT ts, inst, CASE WHEN NOT ({valid}) THEN NULL "
+                    f"WHEN COALESCE(len({lst}), 0) < {mp} THEN NULL "
+                    f"ELSE (len(list_filter({lst}, y -> y < t._v)) "
+                    f"+ 0.5 * len(list_filter({lst}, y -> y = t._v))) "
+                    f"/ len({lst}) END AS _v "
+                    f"FROM ({clean}) t",
+                    has_inst_window=True,
+                )
+            if op == "val1_earnings_yield_ma_diff":
+                w = _vv_int("baseline_window", 1, 12)
+                mp = _vv_int("min_periods", 2, 4)
+                if mp > w:
+                    return None
+                over_h = _vv_over(w, end="1 PRECEDING")
+                cnt = f"SUM(CASE WHEN {valid} THEN 1 ELSE 0 END) OVER ({over_h})"
+                base = f"AVG(CASE WHEN {valid} THEN t._v END) OVER ({over_h})"
+                return _Layer(
+                    f"SELECT ts, inst, CASE WHEN NOT ({valid}) THEN NULL "
+                    f"WHEN {cnt} < {mp} OR {base} IS NULL THEN NULL "
+                    f"ELSE t._v - {base} END AS _v "
+                    f"FROM ({clean}) t",
+                    has_inst_window=True,
+                )
+            # vax_liquidity_penalty_exposure
+            w = _window_int(node, default=20)
+            mp = _vv_int("min_periods", 1, 5)
+            if mp > w:
+                return None
+            over = _vv_over(w)
+            cnt = f"SUM(CASE WHEN {valid} AND t._v >= 0 THEN 1 ELSE 0 END) OVER ({over})"
+            return _Layer(
+                f"SELECT ts, inst, CASE WHEN {cnt} < {mp} THEN NULL "
+                f"ELSE AVG(CASE WHEN {valid} AND t._v >= 0 THEN t._v END) OVER ({over}) END AS _v "
+                f"FROM ({clean}) t",
+                has_inst_window=True,
+            )
 
     return None
 

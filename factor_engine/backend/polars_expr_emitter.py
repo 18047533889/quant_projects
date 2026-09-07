@@ -495,6 +495,7 @@ def _rolling_mean_abs_dev_expr(w: int) -> pl.Expr:
     """Mean Absolute Deviation：mean(|x_i - mean(window)|)。"""
 
     def _fn(arr: np.ndarray) -> float:
+        arr = np.asarray(arr, dtype=np.float64)
         valid = arr[np.isfinite(arr)]
         if valid.size == 0:
             return np.nan
@@ -563,6 +564,235 @@ def _rolling_quantile_expr(w: int, p: float) -> pl.Expr:
         if s.count() == 0:
             return np.nan
         return float(s.quantile(p))
+
+    return pl.col(_VAL).rolling_map(_fn, window_size=w, min_samples=1).over(_INST, order_by=_TS)
+
+
+def _trailing_contiguous_np(chunk: np.ndarray) -> np.ndarray:
+    """窗口内从尾部往前的连续有限段（遇 NaN/Inf 断开，绝不跨缺口重连）。
+
+    与 pandas 参考 ``_trailing_contiguous``（alpha_language_shape / regression_models
+    / stateful.drawdown_path）逐点一致：当前行缺失 → 空段 → 调用方输出 NaN。
+    """
+    chunk = np.asarray(chunk, dtype=np.float64)
+    n = chunk.size
+    if n == 0 or not np.isfinite(chunk[-1]):
+        return chunk[:0]
+    end = n
+    while end > 0 and np.isfinite(chunk[end - 1]):
+        end -= 1
+    return chunk[end:]
+
+
+def _rolling_monotonicity_expr(w: int, *, min_periods: int) -> pl.Expr:
+    """Kendall 式单调性 (C-D)/(C+D)：窗口内有限值两两方向一致比例。
+
+    pandas 参考 ``TsMonotonicity``：``_finite`` 压缩（跳过 NaN 后两两配对），
+    值差为 0 的对跳过；n < min_periods 或 C+D == 0 → NaN。
+    """
+
+    def _fn(arr: np.ndarray) -> float:
+        v = np.asarray(arr, dtype=np.float64)
+        v = v[np.isfinite(v)]
+        n = v.size
+        if n < min_periods:
+            return np.nan
+        c = 0
+        d = 0
+        for i in range(n):
+            for j in range(i + 1, n):
+                val_diff = v[j] - v[i]
+                if val_diff == 0.0:
+                    continue
+                if (val_diff > 0) == (j > i):
+                    c += 1
+                else:
+                    d += 1
+        total = c + d
+        if total == 0:
+            return np.nan
+        return float((c - d) / total)
+
+    return pl.col(_VAL).rolling_map(_fn, window_size=w, min_samples=1).over(_INST, order_by=_TS)
+
+
+def _rolling_turning_point_ratio_expr(w: int) -> pl.Expr:
+    """方向反转比例：尾部连续有限段 diff 的符号反转次数 / (len(diff)-1)。
+
+    pandas 参考 ``ts_model.complexity._turning_point_ratio``（P1-91 物理时间轴，
+    trailing-contiguous，不压缩缺口）；len(finite) < 4 → NaN。
+    """
+
+    def _fn(arr: np.ndarray) -> float:
+        seg = _trailing_contiguous_np(arr)
+        if seg.size < 4:
+            return np.nan
+        d = np.diff(seg)
+        turns = 0
+        for i in range(1, d.size):
+            if d[i] * d[i - 1] < 0:
+                turns += 1
+        return float(turns / (d.size - 1))
+
+    return pl.col(_VAL).rolling_map(_fn, window_size=w, min_samples=1).over(_INST, order_by=_TS)
+
+
+def _ols_fit_np(y: np.ndarray) -> tuple[float, float, float]:
+    """(slope, intercept, 残差 std ddof=0)，y ~ a + b*j（与 pandas 参考一致）。"""
+    n = y.size
+    x = np.arange(n, dtype=float)
+    sx = float(x.sum())
+    sy = float(y.sum())
+    denom = n * float((x * x).sum()) - sx * sx
+    b = (n * float((x * y).sum()) - sx * sy) / denom
+    a = (sy - b * sx) / n
+    resid = y - (a + b * x)
+    return float(b), float(a), float(np.std(resid))
+
+
+_EPS_TINY = 1e-12
+
+
+def _rolling_endpoint_deviation_expr(w: int, *, min_periods: int) -> pl.Expr:
+    """端点偏离：(x_t - OLS 预测) / 残差 std（尾部连续段，不压缩缺口）。
+
+    pandas 参考 ``TsEndpointDeviation``（P1-I-131）；sigma < eps → 0/NaN 二分。
+    """
+
+    def _fn(arr: np.ndarray) -> float:
+        v = _trailing_contiguous_np(arr)
+        n = v.size
+        if n < min_periods:
+            return np.nan
+        b, a, sigma = _ols_fit_np(v)
+        x_hat_last = a + b * float(n - 1)
+        num = float(v[-1]) - x_hat_last
+        if sigma < _EPS_TINY:
+            return 0.0 if abs(num) < _EPS_TINY else np.nan
+        return num / sigma
+
+    return pl.col(_VAL).rolling_map(_fn, window_size=w, min_samples=1).over(_INST, order_by=_TS)
+
+
+def _trailing_run_halves_np(segment: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """按 WINDOW 物理中点切分尾部连续段（pandas 参考逐点一致）。
+
+    ``first`` 为落在窗口前物理半段内的行，``second`` 为其余；空半段表示该
+    侧状态不可观测，调用方输出 NaN（fail-closed）。
+    """
+    vals = _trailing_contiguous_np(segment)
+    if vals.size == 0:
+        return vals[:0], vals[:0]
+    n = segment.shape[0]
+    gap = n - vals.size
+    mid = n // 2
+    first_len = max(0, min(mid, n) - gap)
+    first_len = min(first_len, vals.size)
+    return vals[:first_len], vals[first_len:]
+
+
+def _rolling_vol_shift_score_expr(w: int, *, min_periods: int) -> pl.Expr:
+    """波动率位移得分：log(后半 std / 前半 std)（物理中点切分，无压缩）。
+
+    pandas 参考 ``TsVolShiftScore``；任一半 < 2 个观测或任一 std <= 0 → NaN。
+    """
+
+    def _fn(arr: np.ndarray) -> float:
+        segment = np.asarray(arr, dtype=np.float64)
+        vals = _trailing_contiguous_np(segment)
+        if vals.size < min_periods:
+            return np.nan
+        first, second = _trailing_run_halves_np(segment)
+        if first.size < 2 or second.size < 2:
+            return np.nan
+        sd1 = float(np.std(first))
+        sd2 = float(np.std(second))
+        if sd1 <= 0.0 or sd2 <= 0.0:
+            return np.nan
+        return float(np.log(sd2 / sd1))
+
+    return pl.col(_VAL).rolling_map(_fn, window_size=w, min_samples=1).over(_INST, order_by=_TS)
+
+
+def _running_peak_no_carry_np(chunk: np.ndarray) -> np.ndarray:
+    """窗口 running peak：在每个缺失行处重置为 -inf（P1-07/#160 缺口策略）。"""
+    chunk = np.asarray(chunk, dtype=np.float64)
+    running_peak = np.full(chunk.size, np.nan)
+    peak = -np.inf
+    for k in range(chunk.size):
+        if not np.isfinite(chunk[k]):
+            peak = -np.inf
+            continue
+        if chunk[k] > peak:
+            peak = chunk[k]
+        running_peak[k] = peak
+    return running_peak
+
+
+def _rolling_time_under_water_expr(w: int) -> pl.Expr:
+    """低于此前运行最高价的行比例（当前行缺失 → NaN；峰值不跨缺口）。
+
+    pandas 参考 ``TsTimeUnderWater``（R5 P1-36(b) / R11 #160）。
+    """
+
+    def _fn(arr: np.ndarray) -> float:
+        chunk = np.asarray(arr, dtype=np.float64)
+        valid_mask = np.isfinite(chunk)
+        if not valid_mask.any() or not valid_mask[-1]:
+            return np.nan
+        running_peak = _running_peak_no_carry_np(chunk)
+        under = int(np.sum((chunk < running_peak) & valid_mask))
+        return float(under) / float(valid_mask.sum())
+
+    return pl.col(_VAL).rolling_map(_fn, window_size=w, min_samples=1).over(_INST, order_by=_TS)
+
+
+def _rolling_drawdown_duration_expr(w: int) -> pl.Expr:
+    """当前连续低于窗口运行最高价的行数（当前行缺失 → NaN；NaN 硬断界）。
+
+    pandas 参考 ``TsCurrentDrawdownDuration``（R5 P1-36(a) / P1-07 / P0）。
+    """
+
+    def _fn(arr: np.ndarray) -> float:
+        chunk = np.asarray(arr, dtype=np.float64)
+        valid_mask = np.isfinite(chunk)
+        if not valid_mask.any() or not valid_mask[-1]:
+            return np.nan
+        running_peak = _running_peak_no_carry_np(chunk)
+        streak = 0
+        for back in range(chunk.size - 1, -1, -1):
+            if not valid_mask[back]:
+                break
+            if chunk[back] < running_peak[back]:
+                streak += 1
+            else:
+                break
+        return float(streak)
+
+    return pl.col(_VAL).rolling_map(_fn, window_size=w, min_samples=1).over(_INST, order_by=_TS)
+
+
+def _rolling_recovery_fraction_expr(w: int) -> pl.Expr:
+    """峰谷修复进度 clip((x_t - T)/(P - T + eps), 0, 1)（尾部连续段）。
+
+    pandas 参考 ``TsRecoveryFraction``（P0-006/007、P1-26 非正价格断路、
+    P1-79 最近峰值锚定）；段内任一值 <= 0 或段长 < 2 → NaN。
+    """
+
+    def _fn(arr: np.ndarray) -> float:
+        seg = _trailing_contiguous_np(arr)
+        if seg.size < 2 or not np.all(seg > 0.0):
+            return np.nan
+        vals = seg
+        p = float(np.max(vals))
+        # P1-79: reverse-argmax picks the MOST RECENT peak occurrence.
+        p_pos = int(vals[::-1].argmax())
+        p_pos = vals.size - 1 - p_pos
+        t = float(np.min(vals[p_pos:]))
+        if p - t <= _EPS_TINY:
+            return 1.0
+        rf = (float(vals[-1]) - t) / (p - t + _EPS_TINY)
+        return float(min(max(rf, 0.0), 1.0))
 
     return pl.col(_VAL).rolling_map(_fn, window_size=w, min_samples=1).over(_INST, order_by=_TS)
 
@@ -1006,6 +1236,127 @@ def _fin_log_ratio(a):
 def _fin_ratio_burn(a): return _fin_neg_ocf_ratio_expr(a[0], a[1])
 
 
+def _fin_bounded_ratio(a):
+    # shareholder/churn_network._bounded_ratio（R11 #130，权威）：share-count
+    # ratio with domain enforcement — num >= 0, den > 0, ratio <= 1.0；任何
+    # 违反都是数据错误，fail-closed 到 NaN（不是 0% 或 >100% 的真比率）。
+    q = a[0] / a[1]
+    return (
+        pl.when(
+            a[0].is_null()
+            | a[1].is_null()
+            | (a[0] < 0)
+            | (a[1] <= 0)
+            | (q > 1.0)
+            | q.is_nan()
+            | q.is_infinite()
+        )
+        .then(None)
+        .otherwise(q)
+    )
+
+
+def _fin_sub2(a):
+    # x - y 元素级差（churn_network._float_concentration_gap /
+    # wave1_valuation.val1_relative_valuation_gap 参考）：任一侧 NULL/NaN
+    # → NaN（finite 双方才有效）。
+    d = a[0] - a[1]
+    return (
+        pl.when(a[0].is_null() | a[1].is_null() | a[0].is_nan() | a[1].is_nan())
+        .then(None)
+        .otherwise(d)
+    )
+
+
+def _fin_signed_log(x: pl.Expr) -> pl.Expr:
+    # valuation/ops_v2._signed_log: sign(x) * log1p(|x|)（0 → 0*0 = 0）。
+    s = pl.when(x.is_null() | x.is_nan()).then(None).otherwise(x)
+    return pl.when(s.is_null()).then(None).otherwise(s.sign() * (s.abs() + 1.0).log())
+
+
+def _fin_signed_log_gap(a):
+    # sign(x)*log1p|x| - sign(y)*log1p|y|（valuation_pe_gap_signed_log /
+    # valuation_pcf_gap_signed_log 参考）：任侧 NULL/NaN → NaN。
+    lhs = _fin_signed_log(a[0])
+    rhs = _fin_signed_log(a[1])
+    return pl.when(lhs.is_null() | rhs.is_null()).then(None).otherwise(lhs - rhs)
+
+
+def _fin_positive_log_gap(a):
+    # valuation/ops_v2._positive_log_gap: log(x) - log(y)，仅 x>0 且 y>0；
+    # 任一 ≤0 / NULL / NaN → NaN（亏损侧 NaN）。
+    lx = pl.when(a[0].is_null() | a[0].is_nan() | (a[0] <= 0)).then(None).otherwise(a[0].log())
+    ly = pl.when(a[1].is_null() | a[1].is_nan() | (a[1] <= 0)).then(None).otherwise(a[1].log())
+    return pl.when(lx.is_null() | ly.is_null()).then(None).otherwise(lx - ly)
+
+
+# ---------------------------------------------------------------------------
+# wave3d ashare limit elementwise family (2026-09-08).  Pandas authority =
+# cleaned_operators/ashare/limit_ops.py: an ABSOLUTE tick tolerance compares
+# the price against ``limit ± tolerance``, valid requires ALL operands finite
+# (non-null, non-NaN, non-Inf), and the output is {1.0, 0.0, NaN}.
+# ---------------------------------------------------------------------------
+
+def _ashare_finite_nonnull(x: pl.Expr) -> pl.Expr:
+    return x.is_not_null() & ~x.is_nan() & ~x.is_infinite()
+
+
+def _ashare_limit_bool_expr(valid: pl.Expr, cond: pl.Expr) -> pl.Expr:
+    return pl.when(valid).then(pl.when(cond).then(1.0).otherwise(0.0)).otherwise(None)
+
+
+def _ashare_limit_up_touch(a):
+    # limit_ops.AshareLimitUpTouch: high >= upper_limit - tol (absolute tol).
+    p, lim, tol = a[0], a[1], a[2]
+    valid = (
+        _ashare_finite_nonnull(p) & _ashare_finite_nonnull(lim)
+        & _ashare_finite_nonnull(tol)
+    )
+    return _ashare_limit_bool_expr(valid, p >= lim - tol)
+
+
+def _ashare_limit_down_touch(a):
+    # limit_ops.AshareLimitDownTouch: low <= lower_limit + tol.
+    p, lim, tol = a[0], a[1], a[2]
+    valid = (
+        _ashare_finite_nonnull(p) & _ashare_finite_nonnull(lim)
+        & _ashare_finite_nonnull(tol)
+    )
+    return _ashare_limit_bool_expr(valid, p <= lim + tol)
+
+
+def _ashare_open_at_upper_limit(a):
+    # limit_ops.AshareOpenAtUpperLimit: open >= upper_limit - tol.
+    p, lim, tol = a[0], a[1], a[2]
+    valid = (
+        _ashare_finite_nonnull(p) & _ashare_finite_nonnull(lim)
+        & _ashare_finite_nonnull(tol)
+    )
+    return _ashare_limit_bool_expr(valid, p >= lim - tol)
+
+
+def _ashare_limit_failed(a):
+    # limit_ops.AshareLimitFailed: touched (high >= lim - tol) but failed to
+    # hold at close (close < lim - tol); valid = all four operands finite.
+    h, c, lim, tol = a[0], a[1], a[2], a[3]
+    valid = (
+        _ashare_finite_nonnull(h) & _ashare_finite_nonnull(c)
+        & _ashare_finite_nonnull(lim) & _ashare_finite_nonnull(tol)
+    )
+    return _ashare_limit_bool_expr(valid, (h >= lim - tol) & (c < lim - tol))
+
+
+def _ashare_limit_open_failed(a):
+    # limit_ops.AshareLimitOpenFailed: opened at limit (open >= lim - tol) and
+    # broke intraday (low < lim - tol); valid = all four operands finite.
+    o, lo, lim, tol = a[0], a[1], a[2], a[3]
+    valid = (
+        _ashare_finite_nonnull(o) & _ashare_finite_nonnull(lo)
+        & _ashare_finite_nonnull(lim) & _ashare_finite_nonnull(tol)
+    )
+    return _ashare_limit_bool_expr(valid, (o >= lim - tol) & (lo < lim - tol))
+
+
 # op -> (n_operands, formula(cols) -> pl.Expr)
 _FIN_ELEMENTWISE_OPS: dict[str, tuple[int, Callable[[list], pl.Expr]]] = {
     "fin_common_size": (2, _fin_ratio2),
@@ -1052,6 +1403,113 @@ _FIN_ELEMENTWISE_OPS: dict[str, tuple[int, Callable[[list], pl.Expr]]] = {
     # log|x| - log|y| == log(|x|/|y|)（_log_abs 参考：log(x.abs().replace(0,nan))，
     # 分母 0 → NaN）。
     "market_cap_free_cap_gap": (2, _fin_log_ratio),
+    # wave3 valuation/shareholder (2026-09-08)：纯元素级族（NumpyKernels /
+    # valuation::ops_v2 / shareholder::churn_network / wave1_valuation 参考）。
+    "a_share_cap_ratio": (2, _fin_ratio2),
+    "free_float_ratio": (2, _fin_ratio2),
+    "holder_pledge_ratio": (2, _fin_bounded_ratio),
+    "holder_freeze_ratio": (2, _fin_bounded_ratio),
+    "holder_locked_share_ratio": (2, _fin_bounded_ratio),
+    "holder_float_concentration_gap": (2, _fin_sub2),
+    "val1_relative_valuation_gap": (2, _fin_sub2),
+    "valuation_pe_ttm_lyr_gap": (2, _fin_log_ratio),
+    "valuation_pcf_definition_gap": (2, _fin_log_ratio),
+    "valuation_pe_gap_signed_log": (2, _fin_signed_log_gap),
+    "valuation_pcf_gap_signed_log": (2, _fin_signed_log_gap),
+    "valuation_pe_gap_positive": (2, _fin_positive_log_gap),
+    "valuation_pcf_gap_positive": (2, _fin_positive_log_gap),
+    # wave3d ashare limit elementwise (2026-09-08)：涨跌停触碰 / 炸板 / 开板
+    # 布尔族（cleaned_operators/ashare/limit_ops.py 参考，绝对 tick 容差，
+    # 全操作数 finite 才有效，输出 {1,0,NaN}）。
+    "ashare_limit_up_touch": (3, _ashare_limit_up_touch),
+    "ashare_limit_down_touch": (3, _ashare_limit_down_touch),
+    "ashare_open_at_upper_limit": (3, _ashare_open_at_upper_limit),
+    "ashare_limit_failed": (4, _ashare_limit_failed),
+    "ashare_limit_open_failed": (4, _ashare_limit_open_failed),
+}
+
+# wave3 flow/momentum/quality window family (2026-09-08): trailing-window
+# statistics over the wave1_orderflow / wave1_cs_momentum / wave1_earnings
+# pandas references.  Native polars branches live in _compile_polars_impl
+# (``_FLOWMOM_WINDOW_OPS`` block); DuckDB SQL branches in the SQL emitter.
+_FLOWMOM_WINDOW_OPS: frozenset[str] = frozenset({
+    "ofi_volume_imbalance",
+    "ofi_abs_imbalance_trend",
+    "ofi_dominant_direction",
+    "ofi_imbalance_agreement",
+    "ofi_imbalance_cv",
+    "ofi_imbalance_persistence",
+    "ofi_reversal_rate",
+    "ofi_volume_flow_regime",
+    "ofi_zero_flow_balance",
+    "m1_momentum_strength",
+    "m1_momentum_stability",
+    "m1_momentum_speed_change",
+    "m1_volume_adjusted_momentum",
+    "sv_net_flow_direction",
+    "sv_own_flow_fraction",
+    "sv_signed_volume_volatility",
+    "sv_self_relative_change",
+    "aq1_cash_flow_volatility",
+    "aq1_accrual_stability",
+    "aq1_cash_conversion_strength",
+    "aq1_accrual_ratio_dispersion",
+    "aq1_working_capital_accrual",
+})
+
+_FLOWMOM_DEFAULT_WINDOW: dict[str, int] = {
+    "ofi_volume_imbalance": 20,
+    "ofi_abs_imbalance_trend": 20,
+    "ofi_dominant_direction": 20,
+    "ofi_imbalance_agreement": 20,
+    "ofi_imbalance_cv": 20,
+    "ofi_imbalance_persistence": 30,
+    "ofi_reversal_rate": 20,
+    "ofi_volume_flow_regime": 20,
+    "ofi_zero_flow_balance": 20,
+    "m1_momentum_strength": 20,
+    "m1_momentum_stability": 20,
+    "m1_momentum_speed_change": 20,
+    "m1_volume_adjusted_momentum": 20,
+    "sv_net_flow_direction": 20,
+    "sv_own_flow_fraction": 20,
+    "sv_signed_volume_volatility": 20,
+    "sv_self_relative_change": 10,
+    "aq1_cash_flow_volatility": 8,
+    "aq1_accrual_stability": 8,
+    "aq1_cash_conversion_strength": 8,
+    "aq1_accrual_ratio_dispersion": 8,
+    "aq1_working_capital_accrual": 8,
+}
+
+_FLOWMOM_DEFAULT_MIN_PERIODS: dict[str, int] = {
+    "ofi_volume_imbalance": 5,
+    "ofi_abs_imbalance_trend": 3,
+    "ofi_dominant_direction": 5,
+    "ofi_imbalance_agreement": 5,
+    "ofi_imbalance_cv": 3,
+    "ofi_imbalance_persistence": 3,
+    "ofi_reversal_rate": 3,
+    "ofi_volume_flow_regime": 5,
+    "ofi_zero_flow_balance": 5,
+    "m1_momentum_strength": 4,
+    "m1_momentum_stability": 4,
+    "m1_momentum_speed_change": 2,
+    "m1_volume_adjusted_momentum": 2,
+    "sv_net_flow_direction": 5,
+    "sv_own_flow_fraction": 5,
+    "sv_signed_volume_volatility": 3,
+    "sv_self_relative_change": 1,
+    "aq1_cash_flow_volatility": 2,
+    "aq1_accrual_stability": 2,
+    "aq1_cash_conversion_strength": 2,
+    "aq1_accrual_ratio_dispersion": 2,
+    "aq1_working_capital_accrual": 2,
+}
+
+_FLOWMOM_DEFAULT_THRESHOLD: dict[str, float] = {
+    "ofi_dominant_direction": 0.25,
+    "ofi_volume_flow_regime": 0.3,
 }
 
 
@@ -3124,6 +3582,266 @@ def _compile_polars_impl(
         )
         return inner.with_columns(expr.alias(_VAL))
 
+    if op == "holder_pledge_change":
+        # shareholder/churn_network._pledge_change: pledge_ratio - shift(lag)
+        # （lag 是第 2 位置参数 / "lag" attr，>=1）。NULL 不参与：任侧 NULL
+        # → NULL（P1-135 语义——缺失期不得静默补 0）。
+        if not node.inputs:
+            return None
+        inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
+        if inner is None:
+            return None
+        lag = _int_attr(node, "lag", input_index=1, default=1)
+        lag = max(int(lag), 1)
+        cur = pl.when(pl.col(_VAL).is_nan() | pl.col(_VAL).is_infinite()).then(None).otherwise(pl.col(_VAL))
+        prev = cur.shift(lag).over(_INST, order_by=_TS)
+        expr = pl.when(cur.is_null() | prev.is_null()).then(None).otherwise(cur - prev)
+        return inner.with_columns(expr.alias(_VAL))
+
+    if op == "circulating_cap_ratio_change":
+        # valuation/ops_v2.circulating_cap_ratio_change:
+        #   safe_div(cc, tc) - shift(1)（先比值、后日间差分；shift 作用在比值上）。
+        if len(node.inputs) < 2:
+            return None
+        cc = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
+        if cc is None:
+            return None
+        tc = _compile_child(node, 1, base, parent_op=op, ctx=ctx, memo=memo)
+        if tc is None:
+            return None
+        joined = cc.join(tc.rename({_VAL: "_t"}), on=[_TS, _INST], how="left")
+        ratio = _fin_ratio_expr(pl.col(_VAL), pl.col("_t"))
+        prev = ratio.shift(1).over(_INST, order_by=_TS)
+        expr = pl.when(ratio.is_null() | prev.is_null()).then(None).otherwise(ratio - prev)
+        return joined.with_columns(expr.alias(_VAL)).select(_TS, _INST, _VAL)
+
+    # ------------------------------------------------------------------
+    # wave3e cs/group family (2026-09-08): elementwise / cross-section /
+    # group-axis native branches.  pandas registry operators are the
+    # authority (cs_batch1 / group_ext / group_spectrum / overhaul.daily /
+    # cross_section.peer_ops); 三方 parity 见
+    # tests/backend_parity/test_csgrp_wave3_parity.py.
+    # ------------------------------------------------------------------
+
+    if op == "cs_bucket_fixed":
+        # overhaul.daily.pd_cs_bucket_fixed: np.searchsorted(breaks, x,
+        # side="right") + 1 — x <= b[0] -> 1, (b[i], b[i+1]] -> i+2,
+        # x > b[-1] -> len(breaks)+1.  Non-finite x (NaN/±Inf) -> NaN;
+        # non-strictly-increasing breaks raise in the reference -> the
+        # branch returns None and falls back to the audited bridge.
+        if not node.inputs:
+            return None
+        inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
+        if inner is None:
+            return None
+        breaks = _float_attr(node, "breaks", "thresholds", default=None)
+        if breaks is None:
+            pos = _literal_value(node, 0)
+            if isinstance(pos, (int, float)) and not isinstance(pos, bool):
+                return None  # single scalar is not a breaks list
+            raw = None
+            if len(node.inputs) >= 2 and node.inputs[1].op == "literal":
+                raw = node.inputs[1].attrs.get("value")
+            if raw is None and "breaks" in (node.attrs or {}):
+                raw = node.attrs["breaks"]
+            if not isinstance(raw, (list, tuple)) or not raw:
+                return None
+            breaks = raw
+        try:
+            bvals = sorted(float(b) for b in breaks)
+        except (TypeError, ValueError):
+            return None
+        if not bvals or any(b2 <= b1 for b1, b2 in zip(bvals, bvals[1:])):
+            return None
+        bucket = pl.lit(1.0)
+        for b in bvals:
+            # searchsorted(side="right"): number of breaks <= x.
+            bucket = bucket + pl.when(pl.col(_VAL) >= b).then(pl.lit(1.0)).otherwise(pl.lit(0.0))
+        expr = pl.when(
+            pl.col(_VAL).is_null() | pl.col(_VAL).is_nan() | pl.col(_VAL).is_infinite()
+        ).then(None).otherwise(bucket)
+        return inner.with_columns(expr.alias(_VAL))
+
+    if op == "cs_empirical_bayes_shrinkage":
+        # cs_batch1.CsEmpiricalBayesShrinkage._empirical_bayes_row:
+        # valid = finite(estimate) & finite(std_err) & std_err > 0;
+        # cross-section breadth < _MIN_BREADTH (10) -> whole row NaN;
+        # shrinkage_factor < 0 -> fail-closed all-NaN;
+        # cs_mean = mean(valid), cs_var = var(valid, ddof=1);
+        # cs_var <= 0 -> shrink every valid cell to cs_mean;
+        # w = clip(1 / (1 + lambda * se^2 / cs_var), 0, 1);
+        # shrunk = cs_mean + (estimate - cs_mean) * w (valid cells only).
+        if len(node.inputs) < 2:
+            return None
+        est = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
+        if est is None:
+            return None
+        se = _compile_child(node, 1, base, parent_op=op, ctx=ctx, memo=memo)
+        if se is None:
+            return None
+        joined = est.join(se.rename({_VAL: "_se"}), on=[_TS, _INST], how="left")
+        lam = _literal_value(node, 1)
+        if lam is None:
+            lam = _float_attr(node, "shrinkage_factor", "lambda", default=1.0)
+        if lam is not None and lam < 0:
+            # Invalid shrinkage factor -> fail-closed whole panel NaN.
+            return joined.with_columns(pl.lit(None, dtype=pl.Float64).alias(_VAL)).select(_TS, _INST, _VAL)
+        if lam is None:
+            lam = 1.0
+        e = pl.col(_VAL)
+        s = pl.col("_se")
+        valid = e.is_not_null() & s.is_not_null() & (s > 0)
+        vv = pl.when(valid).then(e)
+        sv = pl.when(valid).then(s)
+        cnt = vv.count().over(_TS, order_by=_INST)
+        cs_mean = vv.mean().over(_TS, order_by=_INST)
+        cs_var = vv.var(ddof=1).over(_TS, order_by=_INST)
+        var_ratio = pl.when(cs_var.is_null() | (cs_var <= 0)).then(None).otherwise(sv ** 2 / cs_var)
+        w_raw = pl.when(var_ratio.is_null()).then(None).otherwise(1.0 / (1.0 + float(lam) * var_ratio))
+        w = pl.when(w_raw.is_null()).then(None).otherwise(w_raw.clip(0.0, 1.0))
+        shrunk = pl.when(cs_var.is_null() | (cs_var <= 0)).then(cs_mean).otherwise(
+            cs_mean + (vv - cs_mean) * w
+        )
+        expr = (
+            pl.when(cnt.cast(pl.Float64) < 10.0)
+            .then(None)
+            .when(~valid)
+            .then(None)
+            .otherwise(shrunk)
+        )
+        return joined.with_columns(expr.alias(_VAL)).select(_TS, _INST, _VAL)
+
+    if op == "group_ex_self_weighted_mean":
+        # group_ext.GroupExSelfWeightedMean: (Σw·x - w_j·x_j) / (Σw - w_j)
+        # per (ts, group) over members with finite(x) & finite(w) & w >= 0;
+        # total_w non-finite or <= 0 -> group stays NaN; denominator <= 0
+        # -> NaN; invalid self cell -> NaN.  The group-constant sums make
+        # this a pure over expression (no self-join).
+        if len(node.inputs) < 3:
+            return None
+        x = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
+        if x is None:
+            return None
+        wgt = _compile_child(node, 1, base, parent_op=op, ctx=ctx, memo=memo)
+        if wgt is None:
+            return None
+        grp = _compile_child(node, 2, base, parent_op=op, ctx=ctx, memo=memo)
+        if grp is None:
+            return None
+        joined = (
+            x.join(wgt.rename({_VAL: "_w"}), on=[_TS, _INST], how="left")
+            .join(grp.rename({_VAL: _GRP}), on=[_TS, _INST], how="left")
+        )
+        xv = pl.col(_VAL)
+        wv = pl.col("_w")
+        gv = pl.col(_GRP)
+        over_keys = (_TS, _GRP)
+        valid = (
+            xv.is_not_null() & ~xv.is_nan() & ~xv.is_infinite()
+            & wv.is_not_null() & ~wv.is_nan() & ~wv.is_infinite() & (wv >= 0)
+            & gv.is_not_null()
+        )
+        vv = pl.when(valid).then(xv)
+        ww = pl.when(valid).then(wv)
+        sw = ww.sum().over(*over_keys, order_by=_INST)
+        swx = (vv * ww).sum().over(*over_keys, order_by=_INST)
+        denom = sw - wv
+        numer = swx - wv * xv
+        expr = (
+            pl.when(gv.is_null())
+            .then(None)
+            .when(~valid)
+            .then(None)
+            .when(sw.is_null() | (sw <= 0))
+            .then(None)
+            .when(denom.is_null() | (denom <= 0))
+            .then(None)
+            .otherwise(numer / denom)
+        )
+        return joined.with_columns(expr.alias(_VAL)).select(_TS, _INST, _VAL)
+
+    if op == "group_feature_valid_member_count":
+        # group_spectrum.GroupFeatureValidMemberCount: per (ts, group) the
+        # number of members whose ALL THREE features are finite; the count
+        # is broadcast to EVERY member of the group (including members with
+        # missing features).  Invalid (NaN/±Inf/None/empty) group labels are
+        # not memberships -> NaN.
+        if len(node.inputs) < 4:
+            return None
+        f1 = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
+        if f1 is None:
+            return None
+        f2 = _compile_child(node, 1, base, parent_op=op, ctx=ctx, memo=memo)
+        if f2 is None:
+            return None
+        f3 = _compile_child(node, 2, base, parent_op=op, ctx=ctx, memo=memo)
+        if f3 is None:
+            return None
+        grp = _compile_child(node, 3, base, parent_op=op, ctx=ctx, memo=memo)
+        if grp is None:
+            return None
+        joined = (
+            f1.join(f2.rename({_VAL: "_f2"}), on=[_TS, _INST], how="left")
+            .join(f3.rename({_VAL: "_f3"}), on=[_TS, _INST], how="left")
+            .join(grp.rename({_VAL: _GRP}), on=[_TS, _INST], how="left")
+        )
+        gv = pl.col(_GRP)
+        over_keys = (_TS, _GRP)
+        member_ok = (
+            pl.col(_VAL).is_not_null() & ~pl.col(_VAL).is_nan() & ~pl.col(_VAL).is_infinite()
+            & pl.col("_f2").is_not_null() & ~pl.col("_f2").is_nan() & ~pl.col("_f2").is_infinite()
+            & pl.col("_f3").is_not_null() & ~pl.col("_f3").is_nan() & ~pl.col("_f3").is_infinite()
+            & gv.is_not_null()
+        )
+        cnt = (
+            pl.when(member_ok).then(1.0).otherwise(0.0)
+            .sum().over(*over_keys, order_by=_INST)
+        )
+        expr = pl.when(gv.is_null()).then(None).otherwise(cnt)
+        return joined.with_columns(expr.alias(_VAL)).select(_TS, _INST, _VAL)
+
+    if op == "group_peer_deviation_index":
+        # cross_section.peer_ops._peer_deviation_index: sum of per-frame
+        # cross-sectional z-scores (over the whole ts partition — the
+        # signature has no group input), each frame using ITS OWN finite
+        # mask; frames with < 2 finite values or sd <= 1e-12 are skipped;
+        # NaN-first accumulation means cells missing from every contributing
+        # frame stay NaN (never manufactured 0).  Because every contributing
+        # z is finite, NaN-first equals a null-skipping sum.
+        if len(node.inputs) < 2:
+            return None
+        layers = []
+        for i in range(len(node.inputs)):
+            child = _compile_child(node, i, base, parent_op=op, ctx=ctx, memo=memo)
+            if child is None:
+                return None
+            layers.append(child)
+        names = [_VAL, "_y", "_z", "_w", "_u", "_t", "_s"]
+        joined = _join_multi(layers)
+        z_exprs = []
+        for name in names[: len(layers)]:
+            v = pl.col(name)
+            vv = pl.when(v.is_null() | v.is_nan() | v.is_infinite()).then(None).otherwise(v)
+            cnt = vv.count().over(_TS, order_by=_INST)
+            m = vv.mean().over(_TS, order_by=_INST)
+            sd = vv.std(ddof=0).over(_TS, order_by=_INST)
+            z = (
+                pl.when(cnt < 2)
+                .then(None)
+                .when(sd.is_null() | (sd <= 1e-12))
+                .then(None)
+                .otherwise((vv - m) / sd)
+            )
+            z_exprs.append(z)
+        # NaN-first accumulation: cells missing from every contributing frame
+        # stay NULL; otherwise the value is the sum of the finite z-scores
+        # (polars null-skipping sum == the reference's NaN-first sum).
+        any_finite = pl.sum_horizontal(
+            [z.is_not_null().cast(pl.UInt8) for z in z_exprs]
+        )
+        acc = pl.when(any_finite == 0).then(None).otherwise(pl.sum_horizontal(z_exprs))
+        return joined.with_columns(acc.alias(_VAL)).select(_TS, _INST, _VAL)
+
     if op == "volatility":
         inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
         if inner is None:
@@ -3928,6 +4646,1674 @@ def _compile_polars_impl(
         # (default min_periods == window on the clean series).
         expr = pl.col(_VAL).rolling_median(window_size=w, min_samples=w).over(_INST, order_by=_TS)
         return inner.with_columns(expr.alias(_VAL))
+
+    # =====================================================================
+    # wave3 ts path/risk family (2026-09-08) — rolling_map branches over the
+    # certified pandas kernels (alpha_language_shape / ts_model.complexity /
+    # regression_models / downside_risk / stateful.drawdown_path / robust_stats).
+    # These kernels are trailing-run / pairwise loops that a pure over-expression
+    # cannot replicate exactly, so they use the audited ``rolling_map`` helper
+    # (python_rolling tier, NOT native) and DuckDB windows cannot express them
+    # either (nested rank/trailing-run) — those stay OFF sql_tiers.  三方 parity
+    # 见 tests/backend_parity/test_ts_wave3_parity.py.
+    # =====================================================================
+
+    if op == "ts_monotonicity":
+        inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
+        if inner is None:
+            return None
+        w = _window_int(node, default=20)
+        mp = _int_attr(node, "min_periods", input_index=1, default=3)
+        return inner.with_columns(
+            _rolling_monotonicity_expr(w, min_periods=max(3, mp)).alias(_VAL)
+        )
+
+    if op == "ts_turning_point_ratio":
+        inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
+        if inner is None:
+            return None
+        w = _window_int(node, default=60)
+        return inner.with_columns(
+            _rolling_turning_point_ratio_expr(w).alias(_VAL)
+        )
+
+    if op == "ts_endpoint_deviation":
+        inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
+        if inner is None:
+            return None
+        w = _window_int(node, default=20)
+        mp = _int_attr(node, "min_periods", input_index=1, default=3)
+        return inner.with_columns(
+            _rolling_endpoint_deviation_expr(w, min_periods=max(3, mp)).alias(_VAL)
+        )
+
+    if op == "ts_vol_shift_score":
+        inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
+        if inner is None:
+            return None
+        w = _window_int(node, default=20)
+        mp = _int_attr(node, "min_periods", input_index=1, default=5)
+        return inner.with_columns(
+            _rolling_vol_shift_score_expr(w, min_periods=max(4, mp)).alias(_VAL)
+        )
+
+    if op == "ts_time_under_water":
+        inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
+        if inner is None:
+            return None
+        w = max(_window_int(node, default=20), 2)
+        return inner.with_columns(
+            _rolling_time_under_water_expr(w).alias(_VAL)
+        )
+
+    if op == "ts_current_drawdown_duration":
+        inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
+        if inner is None:
+            return None
+        w = max(_window_int(node, default=20), 2)
+        return inner.with_columns(
+            _rolling_drawdown_duration_expr(w).alias(_VAL)
+        )
+
+    if op == "ts_recovery_fraction":
+        inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
+        if inner is None:
+            return None
+        w = max(_window_int(node, default=60), 2)
+        return inner.with_columns(
+            _rolling_recovery_fraction_expr(w).alias(_VAL)
+        )
+
+    # =====================================================================
+    # wave3 flow/momentum/quality window family (2026-09-08) — pure native
+    # polars Expr branches for the wave1_orderflow / wave1_cs_momentum /
+    # wave1_earnings pandas references.  All trailing windows are bounded by
+    # ``.over(_INST, order_by=_TS)`` and skip non-finite window rows exactly
+    # like the pandas kernels (a NaN input row neither counts toward
+    # min_periods nor contributes a sample).  三方 parity 见
+    # tests/backend_parity/test_flowmom_wave3_parity.py.
+    # =====================================================================
+
+    if op in _FLOWMOM_WINDOW_OPS:
+        if len(node.inputs) < 1:
+            return None
+        inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
+        if inner is None:
+            return None
+        w = _window_int(node, default=_FLOWMOM_DEFAULT_WINDOW[op])
+        mp = _int_attr(node, "min_periods", input_index=1, default=_FLOWMOM_DEFAULT_MIN_PERIODS[op])
+        if mp > w:
+            mp = w
+        # window membership count of FINITE rows (pandas rolling counts only
+        # finite samples; NaN rows never contribute).
+        v_finite = pl.when(pl.col(_VAL).is_finite()).then(pl.col(_VAL)).otherwise(None)
+        cnt = v_finite.is_not_null().cast(pl.Float64).rolling_sum(window_size=w, min_samples=1).over(_INST, order_by=_TS)
+        gate = pl.when(cnt.is_null() | (cnt < mp)).then(None)
+
+        if op == "ofi_volume_imbalance":
+            # (Σbuy - Σsell) / (Σbuy + Σsell) over the FINITE window slice;
+            # buy = vol where sv>0, sell = vol where sv<0 (0 = neutral).
+            buy = pl.when(pl.col(_VAL).is_finite() & (pl.col(_VAL) > 0)).then(pl.col(_VAL)).otherwise(0.0)
+            sell = pl.when(pl.col(_VAL).is_finite() & (pl.col(_VAL) < 0)).then(-pl.col(_VAL)).otherwise(0.0)
+            bsum = buy.rolling_sum(window_size=w, min_samples=1).over(_INST, order_by=_TS)
+            ssum = sell.rolling_sum(window_size=w, min_samples=1).over(_INST, order_by=_TS)
+            den = bsum + ssum
+            expr = gate.when(den.is_null() | (den <= 0)).then(None).otherwise((bsum - ssum) / den)
+            # pandas reference additionally requires the CURRENT row finite.
+            expr = pl.when(v_finite.is_null()).then(None).otherwise(expr)
+            return inner.with_columns(expr.alias(_VAL)).select(_TS, _INST, _VAL)
+
+        if op in {"ofi_dominant_direction", "ofi_volume_flow_regime"}:
+            th = _float_attr(node, "threshold", "th", default=_FLOWMOM_DEFAULT_THRESHOLD[op])
+            if not (0.0 <= th <= 1.0):
+                from factor_engine.backend.plan_params import PlanParamError
+
+                raise PlanParamError(f"{op}.threshold must be in [0, 1]")
+            buy = pl.when(pl.col(_VAL).is_finite() & (pl.col(_VAL) > 0)).then(pl.col(_VAL)).otherwise(0.0)
+            sell = pl.when(pl.col(_VAL).is_finite() & (pl.col(_VAL) < 0)).then(-pl.col(_VAL)).otherwise(0.0)
+            bsum = buy.rolling_sum(window_size=w, min_samples=1).over(_INST, order_by=_TS)
+            ssum = sell.rolling_sum(window_size=w, min_samples=1).over(_INST, order_by=_TS)
+            den = bsum + ssum
+            if op == "ofi_dominant_direction":
+                # buy_share > th => 1; buy_share < (1 - th) => -1; else 0
+                inner_expr = (
+                    pl.when(bsum / den > th).then(1.0)
+                    .when(bsum / den < (1.0 - th)).then(-1.0)
+                    .otherwise(0.0)
+                )
+            else:
+                # net = (buy - sell)/(buy + sell); > th => 1; < -th => -1; else 0
+                net = (bsum - ssum) / den
+                inner_expr = (
+                    pl.when(net > th).then(1.0)
+                    .when(net < -th).then(-1.0)
+                    .otherwise(0.0)
+                )
+            expr = gate.when(den.is_null() | (den <= 0)).then(None).otherwise(inner_expr)
+            return inner.with_columns(expr.alias(_VAL)).select(_TS, _INST, _VAL)
+
+        if op == "ofi_imbalance_persistence":
+            # lag-1 Pearson correlation of the COMPACTED finite slice
+            # (x = vals[:-1], y = vals[1:] after dropping non-finite rows).
+            # NaN rows shift the pairing (compacted), which rolling_corr over
+            # raw rows cannot express — use rolling_map (python_rolling tier).
+            def _persistence_fn(arr: np.ndarray) -> float:
+                arr = np.asarray(arr, dtype=np.float64)
+                vals = arr[np.isfinite(arr)]
+                if vals.size < mp or vals.size < 3:
+                    # pandas: x=vals[:-1], y=vals[1:] need >= 2 points each;
+                    # with mp >= 3 the mp gate already covers size < 3, but a
+                    # zero-size window still fails closed here.
+                    return np.nan
+                x = vals[:-1]
+                y = vals[1:]
+                sx = float(np.std(x))
+                sy = float(np.std(y))
+                if sx <= 0 or sy <= 0:
+                    return np.nan
+                return float(np.corrcoef(x, y)[0, 1])
+
+            # pandas kernel also gates on the CURRENT row being finite.
+            expr = (
+                pl.when(v_finite.is_null())
+                .then(None)
+                .otherwise(
+                    pl.col(_VAL)
+                    .rolling_map(_persistence_fn, window_size=w, min_samples=mp)
+                    .over(_INST, order_by=_TS)
+                )
+            )
+            return inner.with_columns(expr.alias(_VAL)).select(_TS, _INST, _VAL)
+
+        if op == "ofi_abs_imbalance_trend":
+            # sign(sv)*|sv|/(|sv|+1e-12) regressed on the COMPACTED finite-slice
+            # time index 0..n-1; slope * sqrt(n) with n = FINITE window rows.
+            # Windowed ranks are an affine transform of compacted positions
+            # within each window (offset constant per window), so the OLS slope
+            # is unchanged; compute it from raw window moments against the
+            # window-end means (NaN rows drop out of every aggregate).
+            seq = pl.when(pl.col(_VAL).is_finite()).then(
+                pl.col(_VAL).sign() * pl.col(_VAL).abs() / (pl.col(_VAL).abs() + 1e-12)
+            ).otherwise(None)
+            rank = v_finite.is_not_null().cast(pl.Float64).cum_sum().over(_INST, order_by=_TS)
+            rank_w = pl.when(v_finite.is_not_null()).then(rank).otherwise(None)
+            rank_mean = rank_w.rolling_mean(window_size=w, min_samples=1).over(_INST, order_by=_TS)
+            seq_mean = seq.rolling_mean(window_size=w, min_samples=1).over(_INST, order_by=_TS)
+            num = (
+                (rank_w * seq).rolling_sum(window_size=w, min_samples=1).over(_INST, order_by=_TS)
+                - cnt * rank_mean * seq_mean
+            )
+            den = (
+                (rank_w * rank_w).rolling_sum(window_size=w, min_samples=1).over(_INST, order_by=_TS)
+                - cnt * rank_mean * rank_mean
+            )
+            slope = pl.when(den.is_null() | (den <= 0)).then(None).otherwise(num / den)
+            expr = gate.when(slope.is_null()).then(None).otherwise(slope * cnt.sqrt())
+            return inner.with_columns(expr.alias(_VAL)).select(_TS, _INST, _VAL)
+
+        if op == "ofi_imbalance_cv":
+            # im = |Σ(sv)| / Σ|sv| (zero total -> 0 by the +1e-12 eps contract);
+            # output carries the NET SIGN: im * (1 if Σ(sv) >= 0 else -1).
+            asum = v_finite.rolling_sum(window_size=w, min_samples=1).over(_INST, order_by=_TS)
+            abs_v = pl.when(pl.col(_VAL).is_finite()).then(pl.col(_VAL).abs()).otherwise(None)
+            abs_sum = abs_v.rolling_sum(window_size=w, min_samples=1).over(_INST, order_by=_TS)
+            im = pl.when(abs_sum.is_null() | (abs_sum <= 0)).then(None).otherwise(asum.abs() / (abs_sum + 1e-12))
+            expr = gate.when(im.is_null()).then(None).otherwise(
+                im * pl.when(asum >= 0).then(1.0).otherwise(-1.0)
+            )
+            return inner.with_columns(expr.alias(_VAL)).select(_TS, _INST, _VAL)
+
+        if op == "ofi_imbalance_agreement":
+            # |mean(sign(sv))| over the finite slice; sign(0) = 0 counts as a
+            # sample (pandas np.sign(0) == 0 participates in the mean).
+            sgn = pl.when(pl.col(_VAL).is_finite()).then(pl.col(_VAL).sign()).otherwise(None)
+            smean = sgn.rolling_mean(window_size=w, min_samples=1).over(_INST, order_by=_TS)
+            expr = gate.when(smean.is_null()).then(None).otherwise(smean.abs())
+            return inner.with_columns(expr.alias(_VAL)).select(_TS, _INST, _VAL)
+
+        if op == "ofi_zero_flow_balance":
+            # mean(sv == 0) over the finite slice (zeros ARE samples here).
+            zero = pl.when(pl.col(_VAL).is_finite()).then(
+                (pl.col(_VAL) == 0).cast(pl.Float64)
+            ).otherwise(None)
+            zmean = zero.rolling_mean(window_size=w, min_samples=1).over(_INST, order_by=_TS)
+            expr = gate.when(zmean.is_null()).then(None).otherwise(zmean)
+            return inner.with_columns(expr.alias(_VAL)).select(_TS, _INST, _VAL)
+
+        if op == "ofi_reversal_rate":
+            # mean(sign[t] != sign[t-1]) over the COMPACTED finite slice
+            # pairs.  A pair's window membership depends on the partner row's
+            # position relative to the CONSUMING window start (pairs may span
+            # NaN gaps), so a pure per-row rolling flag cannot express it
+            # exactly — use rolling_map over the window slice (same tier as
+            # ts_product / WMA: POLARS_LONG_PYTHON_ROLLING, not native).
+            def _reversal_fn(arr: np.ndarray) -> float:
+                arr = np.asarray(arr, dtype=np.float64)
+                valid = arr[np.isfinite(arr)]
+                if valid.size < 2:
+                    return np.nan
+                signs = np.sign(valid)
+                return float(np.mean(signs[1:] != signs[:-1]))
+
+            expr = (
+                pl.col(_VAL)
+                .rolling_map(_reversal_fn, window_size=w, min_samples=mp)
+                .over(_INST, order_by=_TS)
+            )
+            return inner.with_columns(expr.alias(_VAL)).select(_TS, _INST, _VAL)
+
+        if op == "sv_net_flow_direction":
+            # mean(sign(sv) * |sv|/mean|sv|).  mean|sv| is a per-window
+            # constant, so mean(s_i*|v_i|/mabs) == Σ(s_i*|v_i|) / Σ|v_i| —
+            # compute the ratio from the two window sums (the naive nested
+            # form would mix per-row mabs from shifted windows).  Σ|v| <=
+            # 1e-12 (mean|v| <= 1e-12/n) -> 0.0 via the pandas mabs guard.
+            signed_v = pl.when(pl.col(_VAL).is_finite()).then(
+                pl.col(_VAL).sign() * pl.col(_VAL).abs()
+            ).otherwise(None)
+            abs_sum = pl.when(pl.col(_VAL).is_finite()).then(pl.col(_VAL).abs()).otherwise(None).rolling_sum(
+                window_size=w, min_samples=1
+            ).over(_INST, order_by=_TS)
+            ssum = signed_v.rolling_sum(window_size=w, min_samples=1).over(_INST, order_by=_TS)
+            expr = gate.when(abs_sum.is_null()).then(None).otherwise(
+                pl.when(abs_sum <= 1e-12).then(0.0).otherwise(ssum / abs_sum)
+            )
+            return inner.with_columns(expr.alias(_VAL)).select(_TS, _INST, _VAL)
+
+        if op == "sv_own_flow_fraction":
+            # amount_t / Σ(amount over finite AND > 0 rows); min_periods
+            # counts POSITIVE rows (pandas: ok = isfinite & v > 0), and the
+            # current row must be finite (a <= 0 numerator is emitted as a
+            # negative/small fraction, matching the reference).
+            pos = pl.when(pl.col(_VAL).is_finite() & (pl.col(_VAL) > 0)).then(pl.col(_VAL)).otherwise(None)
+            pos_cnt = pos.is_not_null().cast(pl.Float64).rolling_sum(window_size=w, min_samples=1).over(_INST, order_by=_TS)
+            total = pos.rolling_sum(window_size=w, min_samples=1).over(_INST, order_by=_TS)
+            expr = (
+                pl.when(pos_cnt.is_null() | (pos_cnt < mp)).then(None)
+                .when(total.is_null() | (total <= 0)).then(None)
+                .when(v_finite.is_null()).then(None)
+                .otherwise(v_finite / total)
+            )
+            return inner.with_columns(expr.alias(_VAL)).select(_TS, _INST, _VAL)
+
+        if op == "sv_signed_volume_volatility":
+            # std(vals / std(|vals|)) with the SAME window std(|vals|) for
+            # every element — std(x/c) == std(x)/c, so the output is the
+            # population-std(vals) / population-std(|vals|) ratio over the
+            # window (the naive nested form would mix per-row stds).  std(|v|)
+            # <= 1e-12 -> NaN.
+            av = pl.when(pl.col(_VAL).is_finite()).then(pl.col(_VAL).abs()).otherwise(None)
+            std_signed = v_finite.rolling_std(window_size=w, min_samples=1, ddof=0).over(_INST, order_by=_TS)
+            std_abs = av.rolling_std(window_size=w, min_samples=1, ddof=0).over(_INST, order_by=_TS)
+            expr = gate.when(std_abs.is_null() | (std_abs <= 1e-12)).then(None).otherwise(
+                std_signed / std_abs
+            )
+            return inner.with_columns(expr.alias(_VAL)).select(_TS, _INST, _VAL)
+
+        def _compound_total(arr: np.ndarray) -> float:
+            arr = np.asarray(arr, dtype=np.float64)
+            vals = arr[np.isfinite(arr)]
+            if vals.size == 0:
+                return np.nan
+            return float(np.prod(1.0 + vals) - 1.0)
+
+        if op == "m1_momentum_strength":
+            # |Π(1+r) - 1| / std(r, ddof=1) over the COMPACTED finite slice.
+            # Π(1+r) can go NEGATIVE (r < -1), so log-space summation is not
+            # exact — use rolling_map (python_rolling tier).  std <= 1e-12:
+            # total == 0 -> 0.0, else NaN (pandas contract).
+            total = (
+                pl.col(_VAL)
+                .rolling_map(_compound_total, window_size=w, min_samples=1)
+                .over(_INST, order_by=_TS)
+            )
+            rstd = v_finite.rolling_std(window_size=w, min_samples=1, ddof=1).over(_INST, order_by=_TS)
+            expr = gate.when(rstd.is_null() | (rstd <= 1e-12)).then(None).otherwise(
+                total.abs() / rstd
+            )
+            # pandas: std <= 1e-12 emits 0.0 only when total == 0 exactly.
+            expr = pl.when(rstd.is_null() | (rstd <= 1e-12)).then(
+                pl.when((total == 0.0) & (cnt >= mp)).then(0.0).otherwise(None)
+            ).otherwise(expr)
+            expr = pl.when(v_finite.is_null()).then(None).otherwise(expr)
+            return inner.with_columns(expr.alias(_VAL)).select(_TS, _INST, _VAL)
+
+        if op == "m1_momentum_stability":
+            # mean(r > 0) over the finite slice (zeros count as non-positive).
+            pos = pl.when(pl.col(_VAL).is_finite()).then((pl.col(_VAL) > 0).cast(pl.Float64)).otherwise(None)
+            pmean = pos.rolling_mean(window_size=w, min_samples=1).over(_INST, order_by=_TS)
+            expr = gate.when(pmean.is_null()).then(None).otherwise(pmean)
+            return inner.with_columns(expr.alias(_VAL)).select(_TS, _INST, _VAL)
+
+        if op == "m1_momentum_speed_change":
+            # mom(fast) - mom(slow), mom = Π(1+r) - 1 over each own window;
+            # slow requires >= mp finite rows, fast requires >= 2; current row
+            # finite.  fast_window/slow_window arrive as ATTRS (analyzer
+            # normalizes the positional args into named params).
+            fw = _int_attr(node, "fast_window", input_index=1, default=5)
+            sw = _int_attr(node, "slow_window", input_index=2, default=20)
+            if fw >= sw:
+                from factor_engine.backend.plan_params import PlanParamError
+
+                raise PlanParamError(
+                    "m1_momentum_speed_change: fast_window must be < slow_window"
+                )
+            total_slow = (
+                pl.col(_VAL)
+                .rolling_map(_compound_total, window_size=sw, min_samples=1)
+                .over(_INST, order_by=_TS)
+            )
+            cnt_slow = v_finite.is_not_null().cast(pl.Float64).rolling_sum(window_size=sw, min_samples=1).over(_INST, order_by=_TS)
+            total_fast = (
+                pl.col(_VAL)
+                .rolling_map(_compound_total, window_size=fw, min_samples=1)
+                .over(_INST, order_by=_TS)
+            )
+            cnt_fast = v_finite.is_not_null().cast(pl.Float64).rolling_sum(window_size=fw, min_samples=1).over(_INST, order_by=_TS)
+            expr = (
+                pl.when(v_finite.is_null()).then(None)
+                .when(cnt_slow.is_null() | (cnt_slow < mp)).then(None)
+                .when(cnt_fast.is_null() | (cnt_fast < 2)).then(None)
+                .otherwise(total_fast - total_slow)
+            )
+            return inner.with_columns(expr.alias(_VAL)).select(_TS, _INST, _VAL)
+
+        if op == "m1_volume_adjusted_momentum":
+            if len(node.inputs) < 2:
+                return None
+            t_in = _compile_child(node, 1, base, parent_op=op, ctx=ctx, memo=memo)
+            if t_in is None:
+                return None
+            joined = _join_binary(inner, t_in)
+            pair = pl.col(_VAL).is_finite() & pl.col("_y").is_finite() & (pl.col("_y") > 0)
+            pair_cnt = pair.cast(pl.Float64).rolling_sum(window_size=w, min_samples=1).over(_INST, order_by=_TS)
+            r_v = pl.when(pair).then(pl.col(_VAL)).otherwise(None)
+            t_v = pl.when(pair).then(pl.col("_y")).otherwise(None)
+            num = (r_v * t_v).rolling_sum(window_size=w, min_samples=1).over(_INST, order_by=_TS)
+            den = t_v.rolling_sum(window_size=w, min_samples=1).over(_INST, order_by=_TS)
+            expr = (
+                pl.when(pair_cnt.is_null() | (pair_cnt < mp)).then(None)
+                .when(den.is_null() | (den <= 0)).then(None)
+                .otherwise(num / den)
+            )
+            return joined.with_columns(expr.alias(_VAL)).select(_TS, _INST, _VAL)
+
+        if op == "sv_self_relative_change":
+            # (amount_t - mean(prior w rows, finite AND > 0)) / mean;
+            # base window EXCLUDES the current row, needs >= 1 valid base row.
+            base_v = pl.when(pl.col(_VAL).is_finite() & (pl.col(_VAL) > 0)).then(pl.col(_VAL)).otherwise(None)
+            prior = base_v.shift(1).over(_INST, order_by=_TS)
+            bmean = prior.rolling_mean(window_size=w, min_samples=1).over(_INST, order_by=_TS)
+            expr = (
+                pl.when(v_finite.is_null()).then(None)
+                .when(bmean.is_null() | (bmean <= 0)).then(None)
+                .otherwise((v_finite - bmean) / bmean)
+            )
+            return inner.with_columns(expr.alias(_VAL)).select(_TS, _INST, _VAL)
+
+        if op == "aq1_cash_flow_volatility":
+            # std(ocf, ddof=1) / |mean(ocf)|; |mean| <= 1e-12 -> 0.0.
+            cmean = v_finite.rolling_mean(window_size=w, min_samples=1).over(_INST, order_by=_TS)
+            cstd = v_finite.rolling_std(window_size=w, min_samples=1, ddof=1).over(_INST, order_by=_TS)
+            expr = gate.when(cmean.is_null()).then(None).otherwise(
+                pl.when(cmean.abs() <= 1e-12).then(0.0).otherwise(cstd / cmean.abs())
+            )
+            return inner.with_columns(expr.alias(_VAL)).select(_TS, _INST, _VAL)
+
+        if op in {"aq1_accrual_stability", "aq1_accrual_ratio_dispersion"}:
+            # Accrual ratio r_i = ΔWC_i / (|E_i| + 1e-12) over the COMPACTED
+            # ok slice: ΔWC is np.diff over the ok-filtered window rows, so a
+            # pair spans any run of non-ok rows (adjacent-OK pairing, not
+            # adjacent-row).  Pair membership depends on the consuming window
+            # start — not expressible as per-row rolling flags, so compute
+            # per inst with a trailing-window numpy walk (map_groups tier).
+            if len(node.inputs) < 2:
+                return None
+            e_in = _compile_child(node, 1, base, parent_op=op, ctx=ctx, memo=memo)
+            if e_in is None:
+                return None
+            joined = _join_binary(inner, e_in)
+
+            def _accrual_pair(g: pl.DataFrame) -> pl.DataFrame:
+                wc_arr = g[_VAL].to_numpy()
+                e_arr = g["_y"].to_numpy()
+                rows = wc_arr.size
+                out = np.full(rows, np.nan, dtype=np.float64)
+                for r in range(rows):
+                    # pandas reference skips rows where either input is
+                    # non-finite at the CURRENT row (fail-closed).
+                    if not (np.isfinite(wc_arr[r]) and np.isfinite(e_arr[r])):
+                        continue
+                    lo = max(0, r - w + 1)
+                    w_win = wc_arr[lo : r + 1]
+                    e_win = e_arr[lo : r + 1]
+                    ok = (
+                        np.isfinite(w_win) & np.isfinite(e_win)
+                        & (np.abs(e_win) > 1e-12)
+                    )
+                    if ok.sum() < mp:
+                        continue
+                    dw = np.diff(w_win[ok])
+                    e_ = np.abs(e_win[ok][1:])
+                    if dw.size < 2:
+                        continue
+                    ratio = dw / (e_ + 1e-12)
+                    if op == "aq1_accrual_stability":
+                        m = float(np.mean(ratio))
+                        s = float(np.std(ratio, ddof=1))
+                        out[r] = 0.0 if m <= 1e-12 else -s / abs(m)
+                    else:
+                        out[r] = float(np.std(np.abs(ratio), ddof=1))
+                return g.select(
+                    pl.col(_TS),
+                    pl.col(_INST),
+                    pl.Series(_VAL, out),
+                )
+
+            schema = joined.collect_schema()
+            return joined.group_by(_INST, maintain_order=True).map_groups(
+                _accrual_pair,
+                schema={_TS: schema[_TS], _INST: schema[_INST], _VAL: pl.Float64},
+            )
+
+        if op == "aq1_cash_conversion_strength":
+            if len(node.inputs) < 2:
+                return None
+            e_in = _compile_child(node, 1, base, parent_op=op, ctx=ctx, memo=memo)
+            if e_in is None:
+                return None
+            joined = _join_binary(inner, e_in)
+            ok = pl.col(_VAL).is_finite() & pl.col("_y").is_finite() & (pl.col("_y").abs() > 1e-12)
+            ok_cnt = ok.cast(pl.Float64).rolling_sum(window_size=w, min_samples=1).over(_INST, order_by=_TS)
+            ratio = pl.when(ok).then(pl.col(_VAL) / pl.col("_y")).otherwise(None)
+            rmean = ratio.rolling_mean(window_size=w, min_samples=1).over(_INST, order_by=_TS)
+            expr = (
+                pl.when(ok_cnt.is_null() | (ok_cnt < mp)).then(None)
+                .when(rmean.is_null()).then(None)
+                .otherwise(rmean)
+            )
+            return joined.with_columns(expr.alias(_VAL)).select(_TS, _INST, _VAL)
+
+        if op == "aq1_working_capital_accrual":
+            if len(node.inputs) < 2:
+                return None
+            e_in = _compile_child(node, 1, base, parent_op=op, ctx=ctx, memo=memo)
+            if e_in is None:
+                return None
+            joined = _join_binary(inner, e_in)
+            both_finite = pl.col(_VAL).is_finite() & pl.col("_y").is_finite()
+            # prev_* resets to None on any non-finite row (pandas resets
+            # prev_wc/prev_e when either input is NaN at a row).
+            prev_ok = both_finite.shift(1).fill_null(False).over(_INST, order_by=_TS) & both_finite
+            prev_wc = pl.when(prev_ok).then(pl.col(_VAL).shift(1).over(_INST, order_by=_TS)).otherwise(None)
+            dw = pl.col(_VAL) - prev_wc
+            expr = (
+                pl.when(both_finite).then(
+                    pl.when(prev_ok).then(
+                        pl.when(pl.col("_y").abs() > 1e-12).then(dw / pl.col("_y").abs()).otherwise(None)
+                    ).otherwise(None)
+                ).otherwise(None)
+            )
+            return joined.with_columns(expr.alias(_VAL)).select(_TS, _INST, _VAL)
+
+        return None
+
+    # ------------------------------------------------------------------
+    # wave3d ashare limit rolling family (2026-09-08).  Pandas authority =
+    # cleaned_operators/ashare/state_machine.py: a RELATIVE tick tolerance
+    # (limit * (1 ± tol)), per-cell "known" gates (an unknown/NaN row → NaN
+    # output, never a 0), trailing-window counts and a run-length streak
+    # that is broken (NaN) by missing/unknown/suspended rows.  All windows
+    # are trailing inclusive (.over(_INST, order_by=_TS)).
+    # ------------------------------------------------------------------
+
+    def _ashare_tol(node_: PlanNode, default: float = 0.005) -> float:
+        from factor_engine.backend.plan_params import PlanParamError
+
+        raw = None
+        if "tick_tolerance" in (node_.attrs or {}) and node_.attrs["tick_tolerance"] is not None:
+            raw = node_.attrs["tick_tolerance"]
+        if raw is None:
+            # positional literal: tick_tolerance is the LAST numeric literal
+            # (the window also arrives as a numeric literal, earlier)
+            for child in reversed(node_.inputs[1:]):
+                value = child.attrs.get("value") if child.op == "literal" else None
+                if isinstance(value, (int, float)) and not isinstance(value, bool):
+                    raw = value
+                    break
+        tol = float(raw) if raw is not None else default
+        if tol < 0.0:
+            raise PlanParamError("tick_tolerance must be non-negative")
+        return tol
+
+    def _ashare_side(node_: PlanNode) -> str:
+        from factor_engine.backend.plan_params import PlanParamError
+
+        raw = None
+        if "side" in (node_.attrs or {}) and node_.attrs["side"] is not None:
+            raw = node_.attrs["side"]
+        if raw is None:
+            for child in node_.inputs[1:]:
+                if child.op == "literal" and isinstance(child.attrs.get("value"), str):
+                    raw = child.attrs["value"]
+                    break
+        kind = str(raw or "up").lower()
+        if kind not in {"up", "down"}:
+            raise PlanParamError("side must be 'up' or 'down'")
+        return kind
+
+    def _ashare_finite(e: "pl.Expr") -> "pl.Expr":
+        return e.is_not_null() & ~e.is_nan() & ~e.is_infinite()
+
+    if op in {"ashare_limit_touch_count", "ashare_failed_limit_count"}:
+        # state_machine: touch_count condition = high >= high_limit*(1-tol)
+        # (up) / low <= low_limit*(1+tol) (down); failed_limit_count condition
+        # = touched but failed to hold at close.  known = the compared
+        # operands all finite; a window with zero known rows → NaN and an
+        # unknown CURRENT row → NaN (pandas ``_rolling_count`` gate).
+        if op == "ashare_limit_touch_count":
+            if len(node.inputs) < 4:
+                return None
+            side_kind = _ashare_side(node)
+            p_in, lim_in = (0, 2) if side_kind != "down" else (1, 3)
+            price = _compile_child(node, p_in, base, parent_op=op, ctx=ctx, memo=memo)
+            limit = _compile_child(node, lim_in, base, parent_op=op, ctx=ctx, memo=memo)
+            if price is None or limit is None:
+                return None
+            joined = price.join(limit.rename({_VAL: "_lim"}), on=[_TS, _INST], how="left")
+        else:
+            if len(node.inputs) < 5:
+                return None
+            side_kind = _ashare_side(node)
+            p_in, close_in, lim_in = (0, 2, 3) if side_kind != "down" else (1, 2, 4)
+            price = _compile_child(node, p_in, base, parent_op=op, ctx=ctx, memo=memo)
+            close_l = _compile_child(node, close_in, base, parent_op=op, ctx=ctx, memo=memo)
+            limit = _compile_child(node, lim_in, base, parent_op=op, ctx=ctx, memo=memo)
+            if price is None or close_l is None or limit is None:
+                return None
+            joined = (
+                price.join(close_l.rename({_VAL: "_close"}), on=[_TS, _INST], how="left")
+                .join(limit.rename({_VAL: "_lim"}), on=[_TS, _INST], how="left")
+            )
+        side_kind = _ashare_side(node)
+        w = _window_int(node, default=20)
+        tol = _ashare_tol(node)
+        p = pl.col(_VAL)
+        lim = pl.col("_lim")
+        if op == "ashare_limit_touch_count":
+            bound = lim * (1.0 - tol) if side_kind == "up" else lim * (1.0 + tol)
+            cond = (p >= bound) if side_kind == "up" else (p <= bound)
+            known = _ashare_finite(p) & _ashare_finite(lim)
+        else:
+            cl = pl.col("_close")
+            if side_kind == "up":
+                bound = lim * (1.0 - tol)
+                cond = (p >= bound) & (cl < bound)
+            else:
+                bound = lim * (1.0 + tol)
+                cond = (p <= bound) & (cl > bound)
+            known = _ashare_finite(p) & _ashare_finite(cl) & _ashare_finite(lim)
+        cnt_known = known.cast(pl.Float64).rolling_sum(window_size=w, min_samples=1).over(_INST, order_by=_TS)
+        cnt_hits = (known & cond).cast(pl.Float64).rolling_sum(window_size=w, min_samples=1).over(_INST, order_by=_TS)
+        expr = pl.when(known).then(
+            pl.when(cnt_known.is_null() | (cnt_known <= 0)).then(None).otherwise(cnt_hits)
+        ).otherwise(None)
+        return joined.with_columns(expr.alias(_VAL)).select(_TS, _INST, _VAL)
+
+    if op == "ashare_limit_asymmetry":
+        # state_machine.AshareLimitAsymmetry: (Σup_event - Σdown_event) /
+        # known_count over the trailing window, where known = up|down finite
+        # (either side carrying a known status makes the day count); a window
+        # with zero known rows → NaN.  A NaN event inside a known day
+        # contributes 0 (pandas np.nansum of the where-masked chunk).
+        if len(node.inputs) < 2:
+            return None
+        up_l = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
+        dn_l = _compile_child(node, 1, base, parent_op=op, ctx=ctx, memo=memo)
+        if up_l is None or dn_l is None:
+            return None
+        joined = up_l.join(dn_l.rename({_VAL: "_dn"}), on=[_TS, _INST], how="left")
+        w = _window_int(node, default=20)
+        u = pl.col(_VAL)
+        d = pl.col("_dn")
+        known = _ashare_finite(u) | _ashare_finite(d)
+        known_cnt = known.cast(pl.Float64).rolling_sum(window_size=w, min_samples=1).over(_INST, order_by=_TS)
+        up_sum = (
+            pl.when(known & (u != 0)).then(pl.when(_ashare_finite(u)).then(u).otherwise(0.0)).otherwise(0.0)
+            .rolling_sum(window_size=w, min_samples=1).over(_INST, order_by=_TS)
+        )
+        dn_sum = (
+            pl.when(known & (d != 0)).then(pl.when(_ashare_finite(d)).then(d).otherwise(0.0)).otherwise(0.0)
+            .rolling_sum(window_size=w, min_samples=1).over(_INST, order_by=_TS)
+        )
+        expr = pl.when(known_cnt.is_null() | (known_cnt <= 0)).then(None).otherwise((up_sum - dn_sum) / known_cnt)
+        return joined.with_columns(expr.alias(_VAL)).select(_TS, _INST, _VAL)
+
+    if op in {"ashare_limit_up_volume_ratio", "ashare_limit_down_volume_ratio"}:
+        # state_machine._event_volume_ratio: mean(volume on event days) /
+        # mean(volume on volume-known days) over the trailing window, where an
+        # event day requires BOTH the volume and the event to be finite and
+        # the event != 0; no event day, no volume-known day, or a non-positive
+        # base volume → NaN.
+        if len(node.inputs) < 2:
+            return None
+        vol_l = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
+        ev_l = _compile_child(node, 1, base, parent_op=op, ctx=ctx, memo=memo)
+        if vol_l is None or ev_l is None:
+            return None
+        joined = vol_l.join(ev_l.rename({_VAL: "_ev"}), on=[_TS, _INST], how="left")
+        w = _window_int(node, default=20)
+        v = pl.col(_VAL)
+        e = pl.col("_ev")
+        vol_known = _ashare_finite(v)
+        event_day = vol_known & _ashare_finite(e) & (e != 0)
+        ev_sum = pl.when(event_day).then(v).rolling_sum(window_size=w, min_samples=1).over(_INST, order_by=_TS)
+        ev_cnt = event_day.cast(pl.Float64).rolling_sum(window_size=w, min_samples=1).over(_INST, order_by=_TS)
+        vol_sum = pl.when(vol_known).then(v).rolling_sum(window_size=w, min_samples=1).over(_INST, order_by=_TS)
+        vol_cnt = vol_known.cast(pl.Float64).rolling_sum(window_size=w, min_samples=1).over(_INST, order_by=_TS)
+        event_vol = pl.when(ev_cnt.is_null() | (ev_cnt <= 0)).then(None).otherwise(ev_sum / ev_cnt)
+        base_vol = pl.when(vol_cnt.is_null() | (vol_cnt <= 0)).then(None).otherwise(vol_sum / vol_cnt)
+        expr = pl.when(
+            event_vol.is_null() | base_vol.is_null() | (base_vol <= 0.0)
+        ).then(None).otherwise(event_vol / base_vol)
+        return joined.with_columns(expr.alias(_VAL)).select(_TS, _INST, _VAL)
+
+    if op == "ashare_limit_event_density":
+        # state_machine.AshareLimitEventDensity: rolling Σevent / known_count,
+        # where known = (known_status != 0) & event finite; the CURRENT row's
+        # unknown known_status → NaN; zero known rows in the window → NaN;
+        # known_status missing/None → all-ones mask.  The window literal may
+        # arrive as the 2nd or the 3rd input, so the known_status column is
+        # whichever input is NOT a literal.
+        non_literal_idx = [
+            i for i, child in enumerate(node.inputs)
+            if child.op not in {"literal"}
+        ]
+        if not non_literal_idx:
+            return None
+        ev_l = _compile_child(node, non_literal_idx[0], base, parent_op=op, ctx=ctx, memo=memo)
+        if ev_l is None:
+            return None
+        has_known_col = len(non_literal_idx) >= 2
+        if has_known_col:
+            known_mask = _compile_child(node, non_literal_idx[1], base, parent_op=op, ctx=ctx, memo=memo)
+            if known_mask is None:
+                return None
+            ev_l = ev_l.join(known_mask.rename({_VAL: "_ks"}), on=[_TS, _INST], how="left")
+        w = _window_int(node, default=20)
+        ev = pl.col(_VAL)
+        ev_known = _ashare_finite(ev)
+        if has_known_col:
+            ks = pl.col("_ks")
+            current_known = _ashare_finite(ks)
+            # pandas: kv[chunk] != 0 — a NaN known_status inside the window
+            # still compares != 0 (True in NumPy), so it counts as known; only
+            # the CURRENT row's NaN ks gates the output to NaN.
+            known = ev_known & ~((ks == 0.0) & _ashare_finite(ks))
+        else:
+            # no known_status column: the mask is all-ones — every current row
+            # outputs (even one whose event is NaN, which just counts as 0),
+            # and a window day counts as known only when its event is finite.
+            current_known = pl.lit(True)
+            known = ev_known
+        ev_sum = (
+            pl.when(known).then(pl.when(ev_known).then(ev).otherwise(0.0))
+            .rolling_sum(window_size=w, min_samples=1).over(_INST, order_by=_TS)
+        )
+        known_cnt = known.cast(pl.Float64).rolling_sum(window_size=w, min_samples=1).over(_INST, order_by=_TS)
+        expr = pl.when(~current_known).then(None).when(
+            known_cnt.is_null() | (known_cnt <= 0)
+        ).then(None).otherwise(ev_sum / known_cnt)
+        return ev_l.with_columns(expr.alias(_VAL)).select(_TS, _INST, _VAL)
+
+    if op == "ashare_limit_up_streak":
+        # state_machine.AshareLimitUpStreak: consecutive close-at-limit days
+        # (close >= high_limit*(1-tol), RELATIVE tolerance) ending at the
+        # current row.  valid_trade is the strict {0,1,NaN} TradableBool: a
+        # NaN/unknown/suspended (0) row BREAKS the run and outputs NaN; a
+        # valid non-limit day outputs 0.  Run-length = cumulative hits within
+        # the current run block (block id = cumulative break count).
+        if len(node.inputs) < 2:
+            return None
+        close_l = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
+        limit_l = _compile_child(node, 1, base, parent_op=op, ctx=ctx, memo=memo)
+        valid_l = _compile_child(node, 2, base, parent_op=op, ctx=ctx, memo=memo) if len(node.inputs) >= 3 and node.inputs[2].op not in {"literal"} else None
+        if close_l is None or limit_l is None:
+            return None
+        if valid_l is not None:
+            joined = (
+                close_l.join(limit_l.rename({_VAL: "_lim"}), on=[_TS, _INST], how="left")
+                .join(valid_l.rename({_VAL: "_vt"}), on=[_TS, _INST], how="left")
+            )
+        else:
+            joined = close_l.join(limit_l.rename({_VAL: "_lim"}), on=[_TS, _INST], how="left")
+        tol = _ashare_tol(node)
+        c = pl.col(_VAL)
+        lim = pl.col("_lim")
+        price_known = _ashare_finite(c) & _ashare_finite(lim)
+        if valid_l is not None:
+            vt = pl.col("_vt")
+            # pandas _tradeable: strictly {0,1,NaN} — 1 = tradeable; 0 = a
+            # suspended day (breaks the run, output NaN); NaN = unknown break.
+            tradeable = _ashare_finite(vt) & (vt == 1.0)
+            # A row BREAKS the run only when it is non-tradeable or its price
+            # inputs are missing (pandas ``_consecutive_streak``).  A VALID
+            # non-limit day stays inside the block contributing 0 — it is not
+            # a break, so the streak resets to 0 instead of NaN.
+            broken = (~tradeable) | (~price_known)
+            ok = tradeable & price_known & (c >= lim * (1.0 - tol))
+        else:
+            broken = ~price_known
+            ok = price_known & (c >= lim * (1.0 - tol))
+        block = (~ok).cast(pl.Int64).cum_sum().over(_INST, order_by=_TS)
+        streak = ok.cast(pl.Float64).cum_sum().over(_INST, block, order_by=_TS)
+        expr = pl.when(broken).then(None).otherwise(streak)
+        return joined.with_columns(expr.alias(_VAL)).select(_TS, _INST, _VAL)
+
+    # =====================================================================
+    # wave3c vol/valuation window statistics family (2026-09-08) — pure
+    # native polars Expr branches for the wave1_volregime / wave1_valuation /
+    # wave1_cs_momentum pandas references (vv1_* / vr1_* / val1_* / vax_*).
+    # Every trailing window is bounded by ``.over(_INST, order_by=_TS)`` and
+    # skips non-finite window rows exactly like the pandas kernels (a NaN row
+    # neither counts toward min_periods nor contributes a sample).  Std is
+    # ddof=1 (pandas rolling default); compressed-finite-sequence semantics
+    # (fractional_share / long_short_vol_beta / vol_of_vol-of-compressed) use
+    # trailing-list + list.eval — still pure Expr, no Python UDF.  三方 parity
+    # 见 tests/backend_parity/test_volval_wave3_parity.py.
+    # =====================================================================
+
+    def _vv_int_param(node_: PlanNode, key: str, pos: int, default: int) -> int:
+        # positional literal wins over attrs (the DSL passes ints positionally),
+        # then attrs, then the pandas reference default.
+        v = _literal_value(node_, pos)
+        if v is not None:
+            return int(v)
+        return _int_attr(node_, key, default=default)
+
+    def _vv_finite_col() -> pl.Expr:
+        return pl.when(pl.col(_VAL).is_finite()).then(pl.col(_VAL)).otherwise(None)
+
+    # ---- helper: compressed finite trailing list (period = w rows) --------
+    def _vv_trailing_list(inner_lf: "pl.LazyFrame", col: str, w: int, *, unbounded: bool = False) -> "pl.LazyFrame":
+        """给 inner_lf 追加 ``col`` 的 trailing/unbounded 行列表列 ``_vv_lst``。"""
+        period = f"{max(2 ** 40, w)}i" if unbounded else f"{w}i"
+        return inner_lf.with_columns(
+            pl.col(col).implode()
+            .rolling(index_column="_vv_i", period=period, closed="right")
+            .over(_INST)
+            .alias("_vv_lst")
+        )
+
+    def _vv_in_list_std(w: int) -> pl.Expr:
+        """Trailing-w std(ddof=1) INSIDE a compressed finite list (per position)."""
+        x = pl.element()
+        cs = x.cum_sum()
+        cs2 = (x * x).cum_sum()
+        s = cs - cs.shift(w).fill_null(0.0)
+        s2 = cs2 - cs2.shift(w).fill_null(0.0)
+        cnt = x.is_not_null().cast(pl.Int64).cum_sum() - x.is_not_null().cast(pl.Int64).cum_sum().shift(w).fill_null(0)
+        n = cnt.cast(pl.Float64)
+        var = (s2 - s * s / n) / (n - 1.0)
+        return pl.when(cnt < w).then(None).otherwise(var.sqrt())
+
+    def _vv_list_std_of(col_expr: pl.Expr) -> pl.Expr:
+        """std(ddof=1) of a whole compressed list (single value)."""
+        return col_expr.list.eval(pl.element().std()).list.first()
+
+    def _vv_list_len(col_expr: pl.Expr) -> pl.Expr:
+        return col_expr.list.len()
+
+    if op == "vv1_vol_of_vol":
+        # wave1_volregime: std(|return|) over the trailing window, ddof=1,
+        # finite count >= min_periods (mp > w is rejected by the reference —
+        # the branch mirrors that with a fail-closed gate).
+        inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
+        if inner is None:
+            return None
+        w = _window_int(node, default=20)
+        mp = _vv_int_param(node, "min_periods", 1, 5)
+        if mp > w:
+            return None
+        r = _vv_finite_col().abs()
+        expr = r.rolling_std(window_size=w, min_samples=mp, ddof=1).over(_INST, order_by=_TS)
+        return inner.with_columns(expr.alias(_VAL))
+
+    if op == "vv1_downside_vol_share":
+        # std(negative ret) / (std(neg) + std(pos)) over the trailing window;
+        # both sides need >= 3 finite samples; den <= 1e-12 -> NaN.
+        inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
+        if inner is None:
+            return None
+        w = _window_int(node, default=40)
+        mp = _vv_int_param(node, "min_periods", 1, 10)
+        if mp > w:
+            return None
+        v = _vv_finite_col()
+        dn = pl.when(v < 0).then(v).otherwise(None)
+        up = pl.when(v > 0).then(v).otherwise(None)
+        sd = dn.rolling_std(window_size=w, min_samples=3, ddof=1).over(_INST, order_by=_TS)
+        su = up.rolling_std(window_size=w, min_samples=3, ddof=1).over(_INST, order_by=_TS)
+        cnt_finite = v.is_not_null().cast(pl.Float64).rolling_sum(window_size=w, min_samples=1).over(_INST, order_by=_TS)
+        den = sd + su
+        expr = pl.when(cnt_finite.is_null() | (cnt_finite < mp)).then(None).otherwise(
+            pl.when(den.is_null() | (den <= 1e-12)).then(None).otherwise(sd / den)
+        )
+        return inner.with_columns(expr.alias(_VAL))
+
+    if op == "vv1_fractional_share":
+        # 1 - min(1, (std(first-sw finite)^2 / std(all finite)^2)) over the
+        # trailing long window — COMPRESSED finite positions (list semantics).
+        inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
+        if inner is None:
+            return None
+        sw = _vv_int_param(node, "short_window", 1, 5)
+        lw = _vv_int_param(node, "long_window", 2, 60)
+        mp = _vv_int_param(node, "min_periods", 3, 15)
+        if sw >= lw:
+            return None
+        inner = inner.with_columns(
+            pl.when(pl.col(_VAL).is_finite()).then(pl.col(_VAL)).otherwise(None).alias("_vv_san"),
+            pl.int_range(pl.len()).over(_INST, order_by=_TS).alias("_vv_i"),
+        )
+        comp = (
+            _vv_trailing_list(inner, "_vv_san", lw)
+            .select(_TS, _INST, "_vv_lst")
+            .with_columns(pl.col("_vv_lst").list.drop_nulls())
+        )
+        lst_col = pl.col("_vv_lst")
+        n = lst_col.list.len()
+        full = lst_col.list.eval(pl.element().std()).list.first()
+        s_vol = lst_col.list.eval(pl.element().head(sw).std()).list.first()
+        first_len = lst_col.list.eval(pl.element().head(sw).len()).list.first()
+        rest_len = lst_col.list.eval(pl.element().slice(sw).len()).list.first()
+        raw = 1.0 - pl.when(full.is_null() | (full <= 1e-12)).then(None).otherwise(
+            pl.when(s_vol.is_null()).then(None).otherwise(
+                (s_vol * s_vol / (full * full)).clip(0.0, 1.0)
+            )
+        )
+        expr = (
+            pl.when(n.is_null() | (n < mp)).then(None)
+            .when(first_len.is_null() | (first_len < 2) | rest_len.is_null() | (rest_len < 2))
+            .then(None)
+            .otherwise(raw)
+        )
+        return comp.with_columns(expr.alias(_VAL)).select(_TS, _INST, _VAL)
+
+    if op == "vv1_long_short_vol_beta":
+        # b = cov(sv, lv)/var(sv) with lv CONSTANT (all-rows long std) -> cov=0
+        # -> b = 1e-12; out = 1e-12 * mean(trailing-sw std of compressed vals)
+        # / std(all compressed vals).  sv positions i in [sw, n) (0-based).
+        inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
+        if inner is None:
+            return None
+        sw = _vv_int_param(node, "short_window", 1, 5)
+        lw = _vv_int_param(node, "long_window", 2, 60)
+        mp = _vv_int_param(node, "min_periods", 3, 15)
+        if sw >= lw:
+            return None
+        inner = inner.with_columns(
+            pl.when(pl.col(_VAL).is_finite()).then(pl.col(_VAL)).otherwise(None).alias("_vv_san"),
+            pl.int_range(pl.len()).over(_INST, order_by=_TS).alias("_vv_i"),
+        )
+        comp_lf = (
+            _vv_trailing_list(inner, "_vv_san", lw)
+            .select(_TS, _INST, "_vv_lst")
+            .with_columns(pl.col("_vv_lst").list.drop_nulls())
+        )
+        lst_col = pl.col("_vv_lst")
+        n = lst_col.list.len()
+        lv_full = lst_col.list.eval(pl.element().std()).list.first()
+        svs = lst_col.list.eval(_vv_in_list_std(sw)).list.drop_nulls()
+        # pandas: s_vols built for i in [sw, n) -> the FIRST compressed
+        # position (i = 0) is excluded by the n<sw gate; drop_nulls also
+        # removes partial-window positions.
+        mean_sv = svs.list.eval(pl.element().mean()).list.first()
+        expr = (
+            pl.when(n.is_null() | (n < mp) | (n < sw + 2)).then(None)
+            .when(lv_full.is_null() | (lv_full <= 1e-12)).then(None)
+            .when(mean_sv.is_null()).then(None)
+            .otherwise(1e-12 * (mean_sv / lv_full))
+        )
+        return comp_lf.with_columns(expr.alias(_VAL)).select(_TS, _INST, _VAL)
+
+    if op == "vv1_vol_acceleration":
+        # pandas reference: trend starts 0.0 and the update line keeps it at
+        # 0.0 forever (``trend if isfinite(trend) else ...`` — 0.0 IS finite),
+        # so diffv = (vol - 0)/(|0| + 1e-12) == vol * 1e12.  vol = trailing
+        # vol_window std(ddof=1) with >= min_periods finite samples.
+        inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
+        if inner is None:
+            return None
+        vw = _vv_int_param(node, "vol_window", 1, 10)
+        mp = _vv_int_param(node, "min_periods", 3, 4)
+        v = _vv_finite_col()
+        vol = v.rolling_std(window_size=vw, min_samples=mp, ddof=1).over(_INST, order_by=_TS)
+        expr = pl.when(vol.is_null()).then(None).otherwise(vol * 1e12)
+        return inner.with_columns(expr.alias(_VAL))
+
+    if op == "vv1_dispersion_vol":
+        # cross-sectional std(ddof=0) of per-instrument trailing vol_window
+        # std(ddof=1) (>= 3 finite per instrument); needs >= min_breadth
+        # instrument vols; broadcast to every cell of the row.
+        inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
+        if inner is None:
+            return None
+        vw = _vv_int_param(node, "vol_window", 1, 10)
+        mb = _vv_int_param(node, "min_breadth", 2, 10)
+        v = _vv_finite_col()
+        vol = v.rolling_std(window_size=vw, min_samples=3, ddof=1).over(_INST, order_by=_TS)
+        mid = inner.with_columns(vol.alias("_vv_vol"))
+        disp = pl.col("_vv_vol").std(ddof=0).over(_TS, order_by=_INST)
+        cnt = pl.col("_vv_vol").is_not_null().sum().over(_TS, order_by=_INST)
+        expr = pl.when(cnt.is_null() | (cnt < mb)).then(None).otherwise(disp)
+        return mid.with_columns(expr.alias(_VAL)).select(_TS, _INST, _VAL)
+
+    if op == "vv1_regime_change_ratio":
+        # std(short)/std(long); outside [1-band, 1+band] -> |ratio-1|/band,
+        # else 0.0; long std needs >= mp finite, short std >= 2 finite.
+        inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
+        if inner is None:
+            return None
+        sw = _vv_int_param(node, "short_window", 1, 5)
+        lw = _vv_int_param(node, "long_window", 2, 60)
+        mp = _vv_int_param(node, "min_periods", 4, 4)
+        if sw >= lw:
+            return None
+        if mp > lw:
+            return None
+        bnd = _float_attr(node, "band", default=0.5)
+        if bnd <= 0:
+            return None
+        v = _vv_finite_col()
+        s_long = v.rolling_std(window_size=lw, min_samples=mp, ddof=1).over(_INST, order_by=_TS)
+        s_short = v.rolling_std(window_size=sw, min_samples=2, ddof=1).over(_INST, order_by=_TS)
+        ratio = pl.when(s_long.is_null() | (s_long <= 1e-12)).then(None).otherwise(s_short / s_long)
+        expr = pl.when(ratio.is_null()).then(None).otherwise(
+            pl.when((ratio > 1.0 + bnd) | (ratio < 1.0 - bnd))
+            .then((ratio - 1.0).abs() / bnd)
+            .otherwise(0.0)
+        )
+        return inner.with_columns(expr.alias(_VAL))
+
+    if op == "vv1_vol_level_score":
+        # sigmoid(3 * (cur/hmean - 1)): cur = trailing short-window std
+        # (>= 2 finite) of raw positions; hmean = mean(|finite|) over the
+        # short_window-1 rows ENDING AT row-1 (exclusive of current), needs
+        # >= min_periods finite and hmean > 0.  The pandas reference requires
+        # mp finite INSIDE a (sw-1)-row slice — when mp > sw-1 the output is
+        # always NaN, mirrored by the explicit cnt gate below.
+        inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
+        if inner is None:
+            return None
+        sw = _vv_int_param(node, "short_window", 1, 5)
+        hw = _vv_int_param(node, "history_window", 2, 120)
+        mp = _vv_int_param(node, "min_periods", 3, 20)
+        if sw >= hw:
+            return None
+        if mp > hw:
+            return None
+        v = _vv_finite_col()
+        cur = v.rolling_std(window_size=sw, min_samples=2, ddof=1).over(_INST, order_by=_TS)
+        # pandas hist_slice = rv[row - sw : row] → exactly sw rows ending at
+        # row-1 (exclusive of current), finite count >= mp, mean of |x|.
+        hist_w = sw
+        hist = (
+            v.abs().rolling_mean(
+                window_size=hist_w, min_samples=min(mp, hist_w)
+            ).over(_INST, order_by=_TS).shift(1)
+            .over(_INST, order_by=_TS)
+        )
+        cnt_h = (
+            v.is_not_null().cast(pl.Float64).rolling_sum(
+                window_size=hist_w, min_samples=1
+            ).over(_INST, order_by=_TS).shift(1)
+            .over(_INST, order_by=_TS)
+        )
+        expr = pl.when(cur.is_null() | hist.is_null() | (hist <= 0)).then(None).otherwise(
+            pl.when(cnt_h.is_null() | (cnt_h < mp)).then(None).otherwise(
+                1.0 / (1.0 + (-((cur / hist) - 1.0) * 3.0).exp())
+            )
+        )
+        return inner.with_columns(expr.alias(_VAL))
+
+    if op == "vr1_range_everage":
+        # mean(|high-low|/close) / std(close_return) over the joint-finite
+        # window (|close| > 0); close std needs >= 2 samples (ddof=1) and
+        # s <= 1e-12 -> NaN; finite rows >= mp.
+        if len(node.inputs) < 4:
+            return None
+        h_l = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
+        l_l = _compile_child(node, 1, base, parent_op=op, ctx=ctx, memo=memo)
+        c_l = _compile_child(node, 2, base, parent_op=op, ctx=ctx, memo=memo)
+        r_l = _compile_child(node, 3, base, parent_op=op, ctx=ctx, memo=memo)
+        if h_l is None or l_l is None or c_l is None or r_l is None:
+            return None
+        w = _window_int(node, default=20)
+        mp = _vv_int_param(node, "min_periods", 1, 5)
+        if mp > w:
+            return None
+        joined = (
+            h_l.join(l_l.rename({_VAL: "_lo"}), on=[_TS, _INST], how="left")
+            .join(c_l.rename({_VAL: "_cl"}), on=[_TS, _INST], how="left")
+            .join(r_l.rename({_VAL: "_rr"}), on=[_TS, _INST], how="left")
+        )
+        h, lo, cl, rr = pl.col(_VAL), pl.col("_lo"), pl.col("_cl"), pl.col("_rr")
+        ok = h.is_finite() & lo.is_finite() & cl.is_finite() & rr.is_finite() & (cl.abs() > 0)
+        range_v = pl.when(ok).then((h - lo).abs() / cl).otherwise(None)
+        ret_v = pl.when(ok).then(rr).otherwise(None)
+        m = range_v.rolling_mean(window_size=w, min_samples=mp).over(_INST, order_by=_TS)
+        s = ret_v.rolling_std(window_size=w, min_samples=2, ddof=1).over(_INST, order_by=_TS)
+        cnt = ok.cast(pl.Float64).rolling_sum(window_size=w, min_samples=1).over(_INST, order_by=_TS)
+        expr = (
+            pl.when(cnt.is_null() | (cnt < mp)).then(None)
+            .when(s.is_null() | (s <= 1e-12)).then(None)
+            .otherwise(m / s)
+        )
+        return joined.with_columns(expr.alias(_VAL)).select(_TS, _INST, _VAL)
+
+    if op == "vr1_parkinson_close_scale":
+        # sqrt(mean((high-low)/close)^2) / std(1-period close return) over the
+        # joint-finite (close > 0) window; the close return set is the COMPRESSED
+        # diff of the compressed finite closes (pandas cc_ret = diff(cc[ok])).
+        if len(node.inputs) < 3:
+            return None
+        h_l = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
+        l_l = _compile_child(node, 1, base, parent_op=op, ctx=ctx, memo=memo)
+        c_l = _compile_child(node, 2, base, parent_op=op, ctx=ctx, memo=memo)
+        if h_l is None or l_l is None or c_l is None:
+            return None
+        w = _window_int(node, default=20)
+        mp = _vv_int_param(node, "min_periods", 1, 5)
+        if mp > w:
+            return None
+        joined = (
+            h_l.join(l_l.rename({_VAL: "_lo"}), on=[_TS, _INST], how="left")
+            .join(c_l.rename({_VAL: "_cl"}), on=[_TS, _INST], how="left")
+        )
+        h, lo, cl = pl.col(_VAL), pl.col("_lo"), pl.col("_cl")
+        ok = h.is_finite() & lo.is_finite() & cl.is_finite() & (cl > 0)
+        park_row = pl.when(ok).then((h - lo) / cl).otherwise(None)
+        park = (
+            (park_row * park_row).rolling_mean(window_size=w, min_samples=1).over(_INST, order_by=_TS)
+        ).sqrt()
+        cc = pl.when(ok).then(cl).otherwise(None)
+        # compressed closes -> 1-period returns -> std over the compressed list
+        base2 = joined.with_columns(
+            cc.alias("_vv_san"),
+            pl.int_range(pl.len()).over(_INST, order_by=_TS).alias("_vv_i"),
+        )
+        cc_ret_std = (
+            _vv_trailing_list(base2, "_vv_san", w)
+            .select(_TS, _INST, "_vv_lst")
+            .with_columns(pl.col("_vv_lst").list.drop_nulls())
+            .with_columns(
+                # pandas cc_ret = diff(cc[ok]) / cc[ok][:-1] (relative returns
+                # between consecutive COMPRESSED closes).
+                pl.col("_vv_lst").list.eval(
+                    (
+                        pl.element().diff().drop_nulls()
+                        / pl.element().shift(1).drop_nulls()
+                    ).std()
+                ).list.first().alias("_rr_std")
+            )
+        )
+        cnt = ok.cast(pl.Float64).rolling_sum(window_size=w, min_samples=1).over(_INST, order_by=_TS)
+        out_lf = base2.with_columns(cnt.alias("_vv_cnt")).join(
+            cc_ret_std.select(_TS, _INST, "_rr_std"), on=[_TS, _INST], how="left"
+        )
+        park_val = (
+            (park_row * park_row).rolling_mean(window_size=w, min_samples=1).over(_INST, order_by=_TS)
+        ).sqrt()
+        expr = (
+            pl.when(pl.col("_vv_cnt").is_null() | (pl.col("_vv_cnt") < mp)).then(None)
+            .when(park_val.is_null()).then(None)
+            .when(pl.col("_rr_std").is_null() | (pl.col("_rr_std") <= 1e-12)).then(None)
+            .otherwise(park_val / pl.col("_rr_std"))
+        )
+        return out_lf.with_columns(expr.alias(_VAL)).select(_TS, _INST, _VAL)
+
+    if op == "vr1_rogers_satchell":
+        # sqrt(mean(max(ln(H/C)ln(H/O) + ln(L/C)ln(L/O), 0))) — pandas clamps
+        # the MEAN at 0 before the sqrt; joint finite (o>0, c>0) window.
+        if len(node.inputs) < 4:
+            return None
+        o_l = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
+        h_l = _compile_child(node, 1, base, parent_op=op, ctx=ctx, memo=memo)
+        l_l = _compile_child(node, 2, base, parent_op=op, ctx=ctx, memo=memo)
+        c_l = _compile_child(node, 3, base, parent_op=op, ctx=ctx, memo=memo)
+        if o_l is None or h_l is None or l_l is None or c_l is None:
+            return None
+        w = _window_int(node, default=20)
+        mp = _vv_int_param(node, "min_periods", 1, 5)
+        if mp > w:
+            return None
+        joined = (
+            o_l.join(h_l.rename({_VAL: "_hi"}), on=[_TS, _INST], how="left")
+            .join(l_l.rename({_VAL: "_lo"}), on=[_TS, _INST], how="left")
+            .join(c_l.rename({_VAL: "_cl"}), on=[_TS, _INST], how="left")
+        )
+        o, h, lo, cl = pl.col(_VAL), pl.col("_hi"), pl.col("_lo"), pl.col("_cl")
+        ok = o.is_finite() & h.is_finite() & lo.is_finite() & cl.is_finite() & (o > 0) & (cl > 0)
+        pos_ok = ok & (h > 0) & (lo > 0)
+        terms = (
+            pl.when(pos_ok).then(
+                (h / cl).log() * (h / o).log() + (lo / cl).log() * (lo / o).log()
+            ).otherwise(None)
+        )
+        mean_t = terms.rolling_mean(window_size=w, min_samples=mp).over(_INST, order_by=_TS)
+        expr = pl.when(mean_t.is_null()).then(None).otherwise(
+            pl.when(mean_t < 0).then(0.0).otherwise(mean_t.sqrt())
+        )
+        return joined.with_columns(expr.alias(_VAL)).select(_TS, _INST, _VAL)
+
+    if op == "vr1_garman_klass_ext":
+        # sqrt(mean(0.5 ln(H/L)^2 - (2ln2-1) ln(C/O)^2)) with a mean>=0 clamp;
+        # joint finite (o>0, c>0) window.
+        if len(node.inputs) < 4:
+            return None
+        o_l = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
+        h_l = _compile_child(node, 1, base, parent_op=op, ctx=ctx, memo=memo)
+        l_l = _compile_child(node, 2, base, parent_op=op, ctx=ctx, memo=memo)
+        c_l = _compile_child(node, 3, base, parent_op=op, ctx=ctx, memo=memo)
+        if o_l is None or h_l is None or l_l is None or c_l is None:
+            return None
+        w = _window_int(node, default=20)
+        mp = _vv_int_param(node, "min_periods", 1, 5)
+        if mp > w:
+            return None
+        joined = (
+            o_l.join(h_l.rename({_VAL: "_hi"}), on=[_TS, _INST], how="left")
+            .join(l_l.rename({_VAL: "_lo"}), on=[_TS, _INST], how="left")
+            .join(c_l.rename({_VAL: "_cl"}), on=[_TS, _INST], how="left")
+        )
+        o, h, lo, cl = pl.col(_VAL), pl.col("_hi"), pl.col("_lo"), pl.col("_cl")
+        ok = o.is_finite() & h.is_finite() & lo.is_finite() & cl.is_finite() & (o > 0) & (cl > 0)
+        pos_ok = ok & (h > 0) & (lo > 0)
+        v = pl.when(pos_ok).then(
+            0.5 * ((h / lo).log() ** 2) - (2.0 * np.log(2.0) - 1.0) * ((cl / o).log() ** 2)
+        ).otherwise(None)
+        m = v.rolling_mean(window_size=w, min_samples=mp).over(_INST, order_by=_TS)
+        expr = pl.when(m.is_null()).then(None).otherwise(
+            pl.when(m < 0).then(0.0).otherwise(m.sqrt())
+        )
+        return joined.with_columns(expr.alias(_VAL)).select(_TS, _INST, _VAL)
+
+    if op == "vr1_range_to_close_eff":
+        # mean(|close-open|/(high-low)) over rows where the range is > 0 —
+        # pandas skips the WHOLE window if ANY range <= 0 (np.any gate).
+        if len(node.inputs) < 4:
+            return None
+        o_l = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
+        h_l = _compile_child(node, 1, base, parent_op=op, ctx=ctx, memo=memo)
+        l_l = _compile_child(node, 2, base, parent_op=op, ctx=ctx, memo=memo)
+        c_l = _compile_child(node, 3, base, parent_op=op, ctx=ctx, memo=memo)
+        if o_l is None or h_l is None or l_l is None or c_l is None:
+            return None
+        w = _window_int(node, default=20)
+        mp = _vv_int_param(node, "min_periods", 1, 5)
+        if mp > w:
+            return None
+        joined = (
+            o_l.join(h_l.rename({_VAL: "_hi"}), on=[_TS, _INST], how="left")
+            .join(l_l.rename({_VAL: "_lo"}), on=[_TS, _INST], how="left")
+            .join(c_l.rename({_VAL: "_cl"}), on=[_TS, _INST], how="left")
+        )
+        o, h, lo, cl = pl.col(_VAL), pl.col("_hi"), pl.col("_lo"), pl.col("_cl")
+        ok = o.is_finite() & h.is_finite() & lo.is_finite() & cl.is_finite()
+        hl = pl.when(ok).then(h - lo).otherwise(None)
+        bad_range = (hl <= 0).fill_null(False)
+        any_bad = bad_range.cast(pl.Float64).rolling_sum(window_size=w, min_samples=1).over(_INST, order_by=_TS)
+        eff = pl.when(ok & (hl > 0)).then((cl - o).abs() / hl).otherwise(None)
+        m = eff.rolling_mean(window_size=w, min_samples=mp).over(_INST, order_by=_TS)
+        cnt_ok = ok.cast(pl.Float64).rolling_sum(window_size=w, min_samples=1).over(_INST, order_by=_TS)
+        expr = (
+            pl.when(cnt_ok.is_null() | (cnt_ok < mp)).then(None)
+            .when(any_bad > 0).then(None)
+            .otherwise(m)
+        )
+        return joined.with_columns(expr.alias(_VAL)).select(_TS, _INST, _VAL)
+
+    if op == "vr1_ewma_range_vol":
+        # acc_{t} = coef * acc_{t-1} + rng_t for valid rows, coef * acc_{t-1}
+        # for invalid rows (after the first valid row) — a full-history decay
+        # with NO window.  Closed form: acc_t = coef^t * Σ_{k<=t} rng_k *
+        # coef^-k (rng=0 at invalid rows), NaN before the first valid row.
+        if len(node.inputs) < 4:
+            return None
+        o_l = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
+        h_l = _compile_child(node, 1, base, parent_op=op, ctx=ctx, memo=memo)
+        l_l = _compile_child(node, 2, base, parent_op=op, ctx=ctx, memo=memo)
+        c_l = _compile_child(node, 3, base, parent_op=op, ctx=ctx, memo=memo)
+        if o_l is None or h_l is None or l_l is None or c_l is None:
+            return None
+        ds_raw = _literal_value(node, 3)
+        ds = float(ds_raw) if ds_raw is not None else _float_attr(node, "decay_scale", default=20.0)
+        if ds < 1.0:
+            return None
+        joined = (
+            o_l.join(h_l.rename({_VAL: "_hi"}), on=[_TS, _INST], how="left")
+            .join(l_l.rename({_VAL: "_lo"}), on=[_TS, _INST], how="left")
+            .join(c_l.rename({_VAL: "_cl"}), on=[_TS, _INST], how="left")
+        )
+        o, h, lo, cl = pl.col(_VAL), pl.col("_hi"), pl.col("_lo"), pl.col("_cl")
+        ok = o.is_finite() & h.is_finite() & lo.is_finite() & cl.is_finite() & (cl > 0)
+        rng = pl.when(ok).then((h - lo) / cl).otherwise(0.0)
+        t = pl.int_range(pl.len()).over(_INST, order_by=_TS).cast(pl.Float64)
+        ln_c = -1.0 / float(ds)
+        acc = (ln_c * t).exp() * (rng * (-ln_c * t).exp()).cum_sum().over(_INST, order_by=_TS)
+        first_valid = ok.fill_null(False).cast(pl.Float64).cum_max().over(_INST, order_by=_TS)
+        expr = pl.when(first_valid > 0).then(acc).otherwise(None)
+        return joined.with_columns(expr.alias(_VAL)).select(_TS, _INST, _VAL)
+
+    if op == "val1_valuation_z_own":
+        # (cur - mean(hist+[cur])) / std(hist+[cur]) over the trailing
+        # history_window frame (hist = hw-1 rows EXCLUDING current + cur);
+        # ddof=1, std <= 1e-12 -> 0.0, hist finite >= mp, cur finite.
+        inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
+        if inner is None:
+            return None
+        hw = _vv_int_param(node, "history_window", 1, 60)
+        mp = _vv_int_param(node, "min_periods", 2, 10)
+        if mp > hw:
+            return None
+        v = _vv_finite_col()
+        hist_w = max(hw - 1, 1)
+        hist_ok = v.is_not_null().cast(pl.Float64)
+        # pandas hist = the hw-1 rows ENDING AT row-1 (exclusive of current);
+        # the current value is added back exactly once below.
+        sh = ((v * v).rolling_sum(window_size=hist_w, min_samples=1).over(_INST, order_by=_TS).shift(1)
+              .over(_INST, order_by=_TS))
+        sm = (v.rolling_sum(window_size=hist_w, min_samples=1).over(_INST, order_by=_TS).shift(1)
+              .over(_INST, order_by=_TS))
+        cnt = (hist_ok.rolling_sum(window_size=hist_w, min_samples=1).over(_INST, order_by=_TS).shift(1)
+               .over(_INST, order_by=_TS))
+        cur = pl.col(_VAL)
+        cur_ok = pl.col(_VAL).is_finite()
+        n = cnt + 1.0
+        m = (sm + cur) / n
+        var = (sh + cur * cur - m * (sm + cur)) / (n - 1.0)
+        std = pl.when(var >= 0).then(var.sqrt()).otherwise(None)
+        expr = (
+            pl.when(cur_ok).then(
+                pl.when(cnt.is_null() | (cnt < mp)).then(None)
+                .when(std.is_null() | (std <= 1e-12)).then(0.0)
+                .otherwise((cur - m) / std)
+            ).otherwise(None)
+        )
+        return inner.with_columns(expr.alias(_VAL))
+
+    if op == "val1_valuation_percentile_own":
+        # (#[hist < cur] + 0.5 * #[hist == cur]) / #hist over the trailing
+        # history_window-1 rows EXCLUDING current; hist finite >= mp, cur finite.
+        inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
+        if inner is None:
+            return None
+        hw = _vv_int_param(node, "history_window", 1, 60)
+        mp = _vv_int_param(node, "min_periods", 2, 10)
+        if mp > hw:
+            return None
+        inner = inner.with_columns(
+            pl.when(pl.col(_VAL).is_finite()).then(pl.col(_VAL)).otherwise(None).alias("_vv_san"),
+            pl.col(_VAL).alias("_vv_cur"),
+            pl.int_range(pl.len()).over(_INST, order_by=_TS).alias("_vv_i"),
+        )
+        prev_lf = (
+            _vv_trailing_list(inner, "_vv_san", max(hw - 1, 1))
+            .select(_TS, _INST, "_vv_lst", "_vv_cur")
+            .with_columns(pl.col("_vv_lst").shift(1).over(_INST, order_by=_TS).alias("_vv_lst"))
+            .with_columns(pl.col("_vv_lst").list.drop_nulls())
+        )
+        cur = pl.col("_vv_cur")
+        n = pl.col("_vv_lst").list.len()
+        # list.eval cannot reference outer columns — count comparisons on the
+        # exploded long form instead (still pure native polars).
+        hist_long = prev_lf.explode("_vv_lst")
+        agg = hist_long.group_by([_TS, _INST]).agg(
+            (pl.col("_vv_lst") < pl.col("_vv_cur")).sum().alias("_vv_less"),
+            (pl.col("_vv_lst") == pl.col("_vv_cur")).sum().alias("_vv_eq"),
+            pl.col("_vv_lst").is_not_null().sum().alias("_vv_n"),
+        )
+        out_lf = prev_lf.join(agg, on=[_TS, _INST], how="left")
+        less = pl.col("_vv_less")
+        eq = pl.col("_vv_eq")
+        n = pl.col("_vv_n")
+        expr = (
+            pl.when(cur.is_finite()).then(
+                pl.when(n.is_null() | (n < mp)).then(None).otherwise((less + 0.5 * eq) / n.cast(pl.Float64))
+            ).otherwise(None)
+        )
+        return out_lf.with_columns(expr.alias(_VAL)).select(_TS, _INST, _VAL)
+
+    if op == "val1_earnings_yield_ma_diff":
+        # cur - mean(past baseline_window rows EXCLUDING current, finite >= mp);
+        # cur finite.
+        inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
+        if inner is None:
+            return None
+        w = _vv_int_param(node, "baseline_window", 1, 12)
+        mp = _vv_int_param(node, "min_periods", 2, 4)
+        if mp > w:
+            return None
+        v = _vv_finite_col()
+        base = (
+            v.rolling_mean(window_size=w, min_samples=mp).over(_INST, order_by=_TS).shift(1)
+            .over(_INST, order_by=_TS)
+        )
+        cur = pl.col(_VAL)
+        expr = pl.when(cur.is_finite()).then(
+            pl.when(base.is_null()).then(None).otherwise(cur - base)
+        ).otherwise(None)
+        return inner.with_columns(expr.alias(_VAL))
+
+    if op == "val1_valuations_lag_component":
+        # (mean(last fw finite) - mean(last sw finite)) / std(last sw finite)
+        # over the EXPANDING finite-value cache (compressed: NaN rows are never
+        # appended but still output); std <= 1e-12 -> 0.0; len(cache) >= sw.
+        inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
+        if inner is None:
+            return None
+        fw = _vv_int_param(node, "fast_window", 1, 5)
+        sw = _vv_int_param(node, "slow_window", 2, 20)
+        mp = _vv_int_param(node, "min_periods", 3, 4)
+        if fw >= sw:
+            return None
+        inner = inner.with_columns(
+            pl.when(pl.col(_VAL).is_finite()).then(pl.col(_VAL)).otherwise(None).alias("_vv_san"),
+            pl.int_range(pl.len()).over(_INST, order_by=_TS).alias("_vv_i"),
+        )
+        comp_lf = (
+            _vv_trailing_list(inner, "_vv_san", sw, unbounded=True)
+            .select(_TS, _INST, "_vv_lst")
+            .with_columns(pl.col("_vv_lst").list.drop_nulls())
+        )
+        lst_col = pl.col("_vv_lst")
+        n = lst_col.list.len()
+        slow_m = lst_col.list.eval(pl.element().tail(sw).mean()).list.first()
+        fast_m = lst_col.list.eval(pl.element().tail(fw).mean()).list.first()
+        s = lst_col.list.eval(pl.element().tail(sw).std()).list.first()
+        expr = (
+            pl.when(n.is_null() | (n < sw) | (n < mp)).then(None)
+            .when(s.is_null() | (s <= 1e-12)).then(0.0)
+            .otherwise((fast_m - slow_m) / s)
+        )
+        return comp_lf.with_columns(expr.alias(_VAL)).select(_TS, _INST, _VAL)
+
+    if op == "val1_earnings_yield_slope":
+        # OLS slope of the COMPRESSED finite values on t=0..n-1, * sqrt(n);
+        # n >= mp; t-spread den <= 1e-12 -> NaN; the CURRENT row must be
+        # finite (the pandas reference gates on ``np.isfinite(yv[row])``).
+        inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
+        if inner is None:
+            return None
+        w = _window_int(node, default=12)
+        mp = _vv_int_param(node, "min_periods", 1, 5)
+        if mp > w:
+            return None
+        inner = inner.with_columns(
+            pl.when(pl.col(_VAL).is_finite()).then(pl.col(_VAL)).otherwise(None).alias("_vv_san"),
+            pl.col(_VAL).is_finite().alias("_vv_cur_ok"),
+            pl.int_range(pl.len()).over(_INST, order_by=_TS).alias("_vv_i"),
+        )
+        comp_lf = (
+            _vv_trailing_list(inner, "_vv_san", w)
+            .select(_TS, _INST, "_vv_lst", "_vv_cur_ok")
+            .with_columns(pl.col("_vv_lst").list.drop_nulls())
+        )
+        lst_col = pl.col("_vv_lst")
+        n = lst_col.list.len().cast(pl.Float64)
+        # Σ t*y via in-list index transform; t = int_range over the list.
+        sum_ty = lst_col.list.eval(
+            (pl.element() * pl.int_range(pl.len()).cast(pl.Float64)).sum()
+        ).list.first()
+        mean_y = lst_col.list.eval(pl.element().mean()).list.first()
+        t_mean = (n - 1.0) / 2.0
+        den = n * (n * n - 1.0) / 12.0
+        slope = pl.when(den.is_null() | (den <= 1e-12)).then(None).otherwise(
+            (sum_ty - n * t_mean * mean_y) / den
+        )
+        expr = (
+            pl.when(pl.col("_vv_cur_ok").fill_null(False)).then(
+                pl.when(n.is_null() | (n < mp)).then(None).otherwise(slope * n.sqrt())
+            ).otherwise(None)
+        )
+        return comp_lf.with_columns(expr.alias(_VAL)).select(_TS, _INST, _VAL)
+
+    if op == "vax_liquidity_penalty_exposure":
+        # mean(amihud) over the trailing window (finite AND >= 0 rows only);
+        # count >= mp.
+        inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
+        if inner is None:
+            return None
+        w = _window_int(node, default=20)
+        mp = _vv_int_param(node, "min_periods", 1, 5)
+        if mp > w:
+            return None
+        a = pl.when(pl.col(_VAL).is_finite() & (pl.col(_VAL) >= 0)).then(pl.col(_VAL)).otherwise(None)
+        m = a.rolling_mean(window_size=w, min_samples=mp).over(_INST, order_by=_TS)
+        return inner.with_columns(m.alias(_VAL))
+
+    if op == "vax_ret_per_liquidity_unit":
+        # (Π(1+r) - 1) / mean(amount) over rows where BOTH ret and amount are
+        # finite and amount > 0; pairs >= mp; mean(amount) > 0.
+        if len(node.inputs) < 2:
+            return None
+        r_l = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
+        a_l = _compile_child(node, 1, base, parent_op=op, ctx=ctx, memo=memo)
+        if r_l is None or a_l is None:
+            return None
+        w = _window_int(node, default=20)
+        mp = _vv_int_param(node, "min_periods", 1, 10)
+        if mp > w:
+            return None
+        joined = r_l.join(a_l.rename({_VAL: "_amt"}), on=[_TS, _INST], how="left")
+        r, amt = pl.col(_VAL), pl.col("_amt")
+        ok = r.is_finite() & amt.is_finite() & (amt > 0)
+        # Π(1+r) over COMPRESSED valid pairs (pandas: r[ok]); guarded ln.
+        base2 = joined.with_columns(
+            pl.when(ok).then(r).otherwise(None).alias("_vv_san"),
+            pl.int_range(pl.len()).over(_INST, order_by=_TS).alias("_vv_i"),
+        )
+        prod_lf = (
+            _vv_trailing_list(base2, "_vv_san", w)
+            .select(_TS, _INST, "_vv_lst")
+            .with_columns(pl.col("_vv_lst").list.drop_nulls())
+            .with_columns(
+                pl.col("_vv_lst").list.eval(
+                    (1.0 + pl.element()).log().sum()
+                ).list.first().alias("_vv_logprod")
+            )
+        )
+        log_prod = pl.col("_vv_logprod")
+        prod = pl.when(log_prod.is_null()).then(None).otherwise(log_prod.exp() - 1.0)
+        am = pl.when(ok).then(amt).otherwise(None).rolling_mean(window_size=w, min_samples=mp).over(_INST, order_by=_TS)
+        cnt = ok.cast(pl.Float64).rolling_sum(window_size=w, min_samples=1).over(_INST, order_by=_TS)
+        out_lf = base2.with_columns(
+            am.alias("_vv_am"),
+            cnt.alias("_vv_cnt"),
+        ).join(prod_lf.select(_TS, _INST, "_vv_logprod"), on=[_TS, _INST], how="left")
+        expr = (
+            pl.when(pl.col("_vv_cnt").is_null() | (pl.col("_vv_cnt") < mp)).then(None)
+            .when(pl.col("_vv_am").is_null() | (pl.col("_vv_am") <= 0)).then(None)
+            .otherwise(prod / pl.col("_vv_am"))
+        )
+        return out_lf.with_columns(expr.alias(_VAL)).select(_TS, _INST, _VAL)
+
+    # ------------------------------------------------------------------
+    # wave3f ts2: prior-extreme / range / consolidation / liquidity-beta
+    # family (2026-09-08).  Pandas authorities:
+    #   * price_volume/technical_extensions.py (prev_high family,
+    #     ts_days_since_extreme, ts_range_expansion)
+    #   * price_volume/structure_patterns_v2.py L301 (ts_consolidation_width)
+    #   * cross_section/peer_ops.py _rolling_regression +
+    #     ts_model/polars_regression.py _pairwise_rolling (liquidity betas)
+    # All trailing windows REPLACE ±Inf with NULL before the window: the
+    # pandas rolling machinery (aggregations AND .apply) silently treats Inf
+    # as missing and excludes it from the min_periods count.
+    # ------------------------------------------------------------------
+
+    if op in {
+        "ts_prev_high",
+        "ts_prev_low",
+        "ts_distance_to_high",
+        "ts_distance_to_low",
+        "ts_breakout_high",
+        "ts_breakdown_low",
+        "ts_new_high",
+        "ts_new_low",
+        "ts_channel_position",
+    }:
+        if len(node.inputs) < 1:
+            return None
+        inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
+        if inner is None:
+            return None
+        w = _window_int(node, default=20)
+        # pandas rolling: ±Inf is missing → drop to NULL before the window.
+        x_fin = pl.when(pl.col(_VAL).is_nan() | pl.col(_VAL).is_infinite()).then(None).otherwise(pl.col(_VAL))
+        inner = inner.with_columns(x_fin.alias("_x_fin"))
+        shifted = pl.col("_x_fin").shift(1).over(_INST, order_by=_TS)
+        prev_hi = shifted.rolling_max(window_size=w, min_samples=w).over(_INST, order_by=_TS)
+        prev_lo = shifted.rolling_min(window_size=w, min_samples=w).over(_INST, order_by=_TS)
+
+        def _safe_div_ratio(num: pl.Expr, den: pl.Expr) -> pl.Expr:
+            # pandas _safe_div: num / den.replace(0, NaN) → 0/NaN denom → NaN.
+            return pl.when(
+                num.is_null() | den.is_null() | (den == 0)
+            ).then(None).otherwise(num / den)
+
+        if op == "ts_prev_high":
+            expr = prev_hi
+        elif op == "ts_prev_low":
+            expr = prev_lo
+        elif op == "ts_distance_to_high":
+            expr = _safe_div_ratio(pl.col("_x_fin"), prev_hi) - 1.0
+        elif op == "ts_distance_to_low":
+            expr = _safe_div_ratio(pl.col("_x_fin"), prev_lo) - 1.0
+        elif op == "ts_breakout_high":
+            expr = _safe_div_ratio(pl.col("_x_fin"), prev_hi) - 1.0
+            expr = pl.when(expr.is_null()).then(None).otherwise(expr.clip(lower_bound=0.0))
+        elif op == "ts_breakdown_low":
+            expr = _safe_div_ratio(prev_lo, pl.col("_x_fin")) - 1.0
+            expr = pl.when(expr.is_null()).then(None).otherwise(expr.clip(lower_bound=0.0))
+        elif op in {"ts_new_high", "ts_new_low"}:
+            # pandas: x.gt(prev).astype(float).where(x.notna() & prev.notna())
+            # — a missing current value or baseline emits NaN, never 0
+            # (review P0-07).
+            cur_known = pl.col("_x_fin").is_not_null()
+            base_known = prev_hi.is_not_null() if op == "ts_new_high" else prev_lo.is_not_null()
+            base = prev_hi if op == "ts_new_high" else prev_lo
+            if op == "ts_new_high":
+                hit = pl.col("_x_fin") > base
+            else:
+                hit = pl.col("_x_fin") < base
+            expr = pl.when(cur_known & base_known).then(pl.when(hit).then(1.0).otherwise(0.0)).otherwise(None)
+        else:  # ts_channel_position
+            # pandas: _safe_div(x - lo, hi - lo) — NO 0..1 clamp; a zero
+            # channel width (hi == lo) → NaN.
+            rng = prev_hi - prev_lo
+            num = pl.col("_x_fin") - prev_lo
+            expr = pl.when(
+                num.is_null() | rng.is_null() | (rng == 0)
+            ).then(None).otherwise(num / rng)
+        return inner.with_columns(expr.alias(_VAL)).select(_TS, _INST, _VAL)
+
+    if op in {"ts_days_since_high", "ts_days_since_low"}:
+        # DEFER (wave3f ts2): the pandas reference is an argmax-POSITION
+        # semantic over the prior window (``nanargmax`` of the REVERSED
+        # window, ties → most recent hit).  A faithful lowering needs the
+        # latest in-window row attaining the CURRENT row's window extreme —
+        # the hit predicate depends on the OUTPUT row T, so it cannot be
+        # precomputed per historical row and rolled up with ``rolling_max``
+        # (a windowed aggregate of a T-dependent predicate is not expressible
+        # as a pure ``over`` chain).  Keep this operator on the registry
+        # bridge (per-inst ``rolling_map`` path, polars_misc_v2._days_since)
+        # which reproduces the pandas kernel exactly; the DuckDB SQL emitter
+        # has its own exact subquery-chain implementation (R16-061).
+        # NOTE: returning None here is the intended hand-off — the caller of
+        # ``_compile_polars_impl`` catches the compile failure for
+        # registry-tier plans and retries via ``compile_registry_op``
+        # (strict-fallback policy); see ``compile_polars_long_lazy``.
+        from .polars_registry_bridge import compile_registry_op
+
+        bridge = compile_registry_op(node, base, lambda n, b: _compile_polars(n, b, ctx=ctx, memo=memo))
+        if bridge is not None:
+            return bridge
+        return None
+
+    if op == "ts_range_expansion":
+        # technical_extensions._ts_range_expansion:
+        # current = high - low; baseline = current.shift(1).rolling(w, mp=w).mean()
+        # result = _safe_div(current, baseline) - 1.0.
+        if len(node.inputs) < 2:
+            return None
+        h_in = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
+        l_in = _compile_child(node, 1, base, parent_op=op, ctx=ctx, memo=memo)
+        if h_in is None or l_in is None:
+            return None
+        joined = _join_binary(h_in, l_in)
+        w = _window_int(node, default=20)
+        h_fin = pl.when(pl.col(_VAL).is_nan() | pl.col(_VAL).is_infinite()).then(None).otherwise(pl.col(_VAL))
+        l_fin = pl.when(pl.col("_y").is_nan() | pl.col("_y").is_infinite()).then(None).otherwise(pl.col("_y"))
+        current = h_fin - l_fin
+        baseline = current.shift(1).over(_INST, order_by=_TS).rolling_mean(window_size=w, min_samples=w).over(_INST, order_by=_TS)
+        expr = pl.when(
+            current.is_null() | baseline.is_null() | (baseline == 0)
+        ).then(None).otherwise(current / baseline - 1.0)
+        return joined.with_columns(expr.alias(_VAL)).select(_TS, _INST, _VAL)
+
+    if op == "ts_consolidation_width":
+        # structure_patterns_v2.ts_consolidation_width (NO shift — the window
+        # INCLUDES the current bar): high.rolling(w, mp=w).max()
+        # - low.rolling(w, mp=w).min().
+        if len(node.inputs) < 2:
+            return None
+        h_in = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
+        l_in = _compile_child(node, 1, base, parent_op=op, ctx=ctx, memo=memo)
+        if h_in is None or l_in is None:
+            return None
+        joined = _join_binary(h_in, l_in)
+        w = _window_int(node, default=20)
+        h_fin = pl.when(pl.col(_VAL).is_nan() | pl.col(_VAL).is_infinite()).then(None).otherwise(pl.col(_VAL))
+        l_fin = pl.when(pl.col("_y").is_nan() | pl.col("_y").is_infinite()).then(None).otherwise(pl.col("_y"))
+        hmax = h_fin.rolling_max(window_size=w, min_samples=w).over(_INST, order_by=_TS)
+        lmin = l_fin.rolling_min(window_size=w, min_samples=w).over(_INST, order_by=_TS)
+        expr = pl.when(hmax.is_null() | lmin.is_null()).then(None).otherwise(hmax - lmin)
+        return joined.with_columns(expr.alias(_VAL)).select(_TS, _INST, _VAL)
+
+    if op in {"ts_market_liquidity_beta", "ts_industry_liquidity_beta"}:
+        # peer_ops._liquidity_beta: regress own_return on liquidity.diff(1)
+        # with w = window, mp = max(3, window // 5); pairwise-finite mask;
+        # population cov / population var (ddof=0 identity, R35-P0-M12);
+        # n > 1 and var > 0 guards (peer_ops var <= _EPS → NaN).
+        if len(node.inputs) < 2:
+            return None
+        y_in = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
+        x_in = _compile_child(node, 1, base, parent_op=op, ctx=ctx, memo=memo)
+        if y_in is None or x_in is None:
+            return None
+        joined = _join_binary(y_in, x_in)
+        w = _window_int(node, default=60)
+        mp = max(3, w // 5)
+        y_fin = pl.when(pl.col(_VAL).is_nan() | pl.col(_VAL).is_infinite()).then(None).otherwise(pl.col(_VAL))
+        x_raw = pl.when(pl.col("_y").is_nan() | pl.col("_y").is_infinite()).then(None).otherwise(pl.col("_y"))
+        x_fin = x_raw.diff().over(_INST, order_by=_TS)
+        # PAIRWISE mask FIRST (both sides share the same valid rows) —
+        # per-series masks would let the moments drift onto different rows.
+        pair = y_fin.is_not_null() & x_fin.is_not_null()
+        ym = pl.when(pair).then(y_fin).otherwise(None)
+        xm = pl.when(pair).then(x_fin).otherwise(None)
+        mean_ab = (ym * xm).rolling_mean(window_size=w, min_samples=mp).over(_INST, order_by=_TS)
+        mean_a = ym.rolling_mean(window_size=w, min_samples=mp).over(_INST, order_by=_TS)
+        mean_b = xm.rolling_mean(window_size=w, min_samples=mp).over(_INST, order_by=_TS)
+        mean_b2 = (xm * xm).rolling_mean(window_size=w, min_samples=mp).over(_INST, order_by=_TS)
+        n = ym.is_not_null().cast(pl.Float64).rolling_sum(window_size=w, min_samples=mp).over(_INST, order_by=_TS)
+        pop_cov = mean_ab - mean_a * mean_b
+        pop_var = mean_b2 - mean_b * mean_b
+        expr = pl.when(
+            n.is_null() | (n <= 1) | pop_var.is_null() | (pop_var <= 1e-12)
+        ).then(None).otherwise(pop_cov / pop_var)
+        return joined.with_columns(expr.alias(_VAL)).select(_TS, _INST, _VAL)
 
     from .polars_registry_bridge import compile_registry_op
 

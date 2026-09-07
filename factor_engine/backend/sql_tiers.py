@@ -747,6 +747,113 @@ SQL_IMPLEMENTED_CANONICALS = SQL_IMPLEMENTED_CANONICALS | frozenset({
     "price_spread_deviation",
 })
 
+# 2026-09-08 wave3 valuation/shareholder: 股本比值 / 集中度差 / log gap 族
+# （polars native 表条目 + holder_pledge_change / circulating_cap_ratio_change
+# 独立分支，DuckDB SQL；tests/backend_parity/test_valuation_wave3_parity.py）。
+SQL_IMPLEMENTED_CANONICALS = SQL_IMPLEMENTED_CANONICALS | frozenset({
+    "a_share_cap_ratio",
+    "free_float_ratio",
+    "holder_pledge_ratio",
+    "holder_freeze_ratio",
+    "holder_locked_share_ratio",
+    "holder_float_concentration_gap",
+    "holder_pledge_change",
+    "val1_relative_valuation_gap",
+    "valuation_pe_ttm_lyr_gap",
+    "valuation_pcf_definition_gap",
+    "valuation_pe_gap_signed_log",
+    "valuation_pcf_gap_signed_log",
+    "valuation_pe_gap_positive",
+    "valuation_pcf_gap_positive",
+    "circulating_cap_ratio_change",
+})
+
+# 2026-09-08 wave3 flow/momentum/quality window family — trailing-window
+# statistics over the wave1_orderflow / wave1_cs_momentum / wave1_earnings
+# pandas references (polars native + DuckDB SQL, 三方 parity 见
+# tests/backend_parity/test_flowmom_wave3_parity.py)。
+SQL_IMPLEMENTED_CANONICALS = SQL_IMPLEMENTED_CANONICALS | frozenset({
+    "ofi_volume_imbalance",
+    "ofi_abs_imbalance_trend",
+    "ofi_dominant_direction",
+    "ofi_imbalance_agreement",
+    "ofi_imbalance_cv",
+    "ofi_imbalance_persistence",
+    "ofi_reversal_rate",
+    "ofi_volume_flow_regime",
+    "ofi_zero_flow_balance",
+    "m1_momentum_strength",
+    "m1_momentum_stability",
+    "m1_momentum_speed_change",
+    "m1_volume_adjusted_momentum",
+    "sv_net_flow_direction",
+    "sv_own_flow_fraction",
+    "sv_signed_volume_volatility",
+    "sv_self_relative_change",
+    "aq1_cash_flow_volatility",
+    "aq1_accrual_stability",
+    "aq1_cash_conversion_strength",
+    "aq1_accrual_ratio_dispersion",
+    "aq1_working_capital_accrual",
+})
+
+# 2026-09-08 wave3e cs/group: cs_bucket_fixed（固定边界分桶）/ EB 收缩 /
+# group_ex_self_weighted_mean（组内 ex-self 加权均值）/ 诊断计数 / 多帧偏离
+# 指数 — polars native + DuckDB SQL 双后端（cs_quantile_resid 分位回归残差
+# 需 LP 迭代求解，双后端均不可忠实表达，保持 DEFER）；三方 parity 见
+# tests/backend_parity/test_csgrp_wave3_parity.py。
+SQL_IMPLEMENTED_CANONICALS = SQL_IMPLEMENTED_CANONICALS | frozenset({
+    "cs_bucket_fixed",
+    "cs_empirical_bayes_shrinkage",
+    "group_ex_self_weighted_mean",
+    "group_feature_valid_member_count",
+    "group_peer_deviation_index",
+})
+
+# 2026-09-08 wave3 ts: ts_robust_zscore_inclusive（scale="std" 组合：center/scale
+# 只被当前行消费，两遍窗口精确；scale="mad" 组合需要把 center_t 广播进窗口每一行，
+# DuckDB 禁嵌套窗口 → SQL 返回 None 诚实回退 polars 精确内核）。  polars 侧走
+# registry polars 内核；三方 parity 见 tests/backend_parity/test_ts_wave3_parity.py。
+# 其余 wave3 ts 算子（ts_mean/median_abs_deviation 的「单中心」偏差、
+# ts_monotonicity 两两 O(n²)、ts_turning_point_ratio / ts_endpoint_deviation /
+# ts_vol_shift_score / ts_recovery_fraction 需「窗口内尾部连续段 + 再排序」、
+# ts_time_under_water / ts_current_drawdown_duration 的 running peak 基线起点
+# 依赖输出行（跨窗口起点的段不可一次物化），DuckDB 禁嵌套窗口均不可精确表达）
+# 诚实保持 SQL fallback，不登记 tiers。
+SQL_IMPLEMENTED_CANONICALS = SQL_IMPLEMENTED_CANONICALS | frozenset({
+    "ts_robust_zscore_inclusive",
+})
+
+# 2026-09-08 wave3d ashare limit family — 涨跌停触碰/炸板/开板布尔 + 触碰/
+# 炸板滚动计数 + 不对称度/事件密度 + 涨跌停量比 + 连板长度（polars native
+# 分支 + DuckDB SQL 分支；tests/backend_parity/test_ashare_wave3_parity.py）。
+SQL_IMPLEMENTED_CANONICALS = SQL_IMPLEMENTED_CANONICALS | frozenset({
+    "ashare_limit_up_touch",
+    "ashare_limit_down_touch",
+    "ashare_open_at_upper_limit",
+    "ashare_limit_failed",
+    "ashare_limit_open_failed",
+    "ashare_limit_touch_count",
+    "ashare_failed_limit_count",
+    "ashare_limit_asymmetry",
+    "ashare_limit_event_density",
+    "ashare_limit_up_volume_ratio",
+    "ashare_limit_down_volume_ratio",
+    "ashare_limit_up_streak",
+})
+
+# 2026-09-08 wave3f ts2: range / consolidation / liquidity-beta family —
+# polars native + DuckDB SQL 双后端（trailing 窗口极值族与 days_since 的 SQL
+# 分支此前已登记；本块补 ts_range_expansion / ts_consolidation_width /
+# ts_market_liquidity_beta / ts_industry_liquidity_beta；三方 parity 见
+# tests/backend_parity/test_ts2_wave3_parity.py）。
+SQL_IMPLEMENTED_CANONICALS = SQL_IMPLEMENTED_CANONICALS | frozenset({
+    "ts_range_expansion",
+    "ts_consolidation_width",
+    "ts_market_liquidity_beta",
+    "ts_industry_liquidity_beta",
+})
+
 # DuckDB 分层
 DUCKDB_SQL_PARITY_VERIFIED: frozenset[str] = frozenset()
 DUCKDB_SQL_PRODUCTION_SAFE: frozenset[str] = frozenset()
