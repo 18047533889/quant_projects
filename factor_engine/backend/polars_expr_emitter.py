@@ -4975,7 +4975,6 @@ def _compile_polars_impl(
             expr = pl.when(rstd.is_null() | (rstd <= 1e-12)).then(
                 pl.when((total == 0.0) & (cnt >= mp)).then(0.0).otherwise(None)
             ).otherwise(expr)
-            expr = pl.when(v_finite.is_null()).then(None).otherwise(expr)
             return inner.with_columns(expr.alias(_VAL)).select(_TS, _INST, _VAL)
 
         if op == "m1_momentum_stability":
@@ -5507,9 +5506,9 @@ def _compile_polars_impl(
         inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
         if inner is None:
             return None
-        sw = _vv_int_param(node, "short_window", 1, 5)
-        lw = _vv_int_param(node, "long_window", 2, 60)
-        mp = _vv_int_param(node, "min_periods", 3, 15)
+        sw = _vv_int_param(node, "short_window", 0, 5)
+        lw = _vv_int_param(node, "long_window", 1, 60)
+        mp = _vv_int_param(node, "min_periods", 2, 15)
         if sw >= lw:
             return None
         inner = inner.with_columns(
@@ -5547,9 +5546,9 @@ def _compile_polars_impl(
         inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
         if inner is None:
             return None
-        sw = _vv_int_param(node, "short_window", 1, 5)
-        lw = _vv_int_param(node, "long_window", 2, 60)
-        mp = _vv_int_param(node, "min_periods", 3, 15)
+        sw = _vv_int_param(node, "short_window", 0, 5)
+        lw = _vv_int_param(node, "long_window", 1, 60)
+        mp = _vv_int_param(node, "min_periods", 2, 15)
         if sw >= lw:
             return None
         inner = inner.with_columns(
@@ -5585,8 +5584,8 @@ def _compile_polars_impl(
         inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
         if inner is None:
             return None
-        vw = _vv_int_param(node, "vol_window", 1, 10)
-        mp = _vv_int_param(node, "min_periods", 3, 4)
+        vw = _vv_int_param(node, "vol_window", 0, 10)
+        mp = _vv_int_param(node, "min_periods", 2, 4)
         v = _vv_finite_col()
         vol = v.rolling_std(window_size=vw, min_samples=mp, ddof=1).over(_INST, order_by=_TS)
         expr = pl.when(vol.is_null()).then(None).otherwise(vol * 1e12)
@@ -5599,8 +5598,8 @@ def _compile_polars_impl(
         inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
         if inner is None:
             return None
-        vw = _vv_int_param(node, "vol_window", 1, 10)
-        mb = _vv_int_param(node, "min_breadth", 2, 10)
+        vw = _vv_int_param(node, "vol_window", 0, 10)
+        mb = _vv_int_param(node, "min_breadth", 1, 10)
         v = _vv_finite_col()
         vol = v.rolling_std(window_size=vw, min_samples=3, ddof=1).over(_INST, order_by=_TS)
         mid = inner.with_columns(vol.alias("_vv_vol"))
@@ -5615,14 +5614,15 @@ def _compile_polars_impl(
         inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
         if inner is None:
             return None
-        sw = _vv_int_param(node, "short_window", 1, 5)
-        lw = _vv_int_param(node, "long_window", 2, 60)
-        mp = _vv_int_param(node, "min_periods", 4, 4)
+        sw = _vv_int_param(node, "short_window", 0, 5)
+        lw = _vv_int_param(node, "long_window", 1, 60)
+        mp = _vv_int_param(node, "min_periods", 3, 4)
         if sw >= lw:
             return None
         if mp > lw:
             return None
-        bnd = _float_attr(node, "band", default=0.5)
+        bnd_raw = _literal_value(node, 2)
+        bnd = float(bnd_raw) if bnd_raw is not None else _float_attr(node, "band", default=0.5)
         if bnd <= 0:
             return None
         v = _vv_finite_col()
@@ -5646,9 +5646,9 @@ def _compile_polars_impl(
         inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
         if inner is None:
             return None
-        sw = _vv_int_param(node, "short_window", 1, 5)
-        hw = _vv_int_param(node, "history_window", 2, 120)
-        mp = _vv_int_param(node, "min_periods", 3, 20)
+        sw = _vv_int_param(node, "short_window", 0, 5)
+        hw = _vv_int_param(node, "history_window", 1, 120)
+        mp = _vv_int_param(node, "min_periods", 2, 20)
         if sw >= hw:
             return None
         if mp > hw:
@@ -5913,8 +5913,8 @@ def _compile_polars_impl(
         inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
         if inner is None:
             return None
-        hw = _vv_int_param(node, "history_window", 1, 60)
-        mp = _vv_int_param(node, "min_periods", 2, 10)
+        hw = _vv_int_param(node, "history_window", 0, 60)
+        mp = _vv_int_param(node, "min_periods", 1, 10)
         if mp > hw:
             return None
         v = _vv_finite_col()
@@ -5949,8 +5949,8 @@ def _compile_polars_impl(
         inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
         if inner is None:
             return None
-        hw = _vv_int_param(node, "history_window", 1, 60)
-        mp = _vv_int_param(node, "min_periods", 2, 10)
+        hw = _vv_int_param(node, "history_window", 0, 60)
+        mp = _vv_int_param(node, "min_periods", 1, 10)
         if mp > hw:
             return None
         inner = inner.with_columns(
@@ -5991,8 +5991,8 @@ def _compile_polars_impl(
         inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
         if inner is None:
             return None
-        w = _vv_int_param(node, "baseline_window", 1, 12)
-        mp = _vv_int_param(node, "min_periods", 2, 4)
+        w = _vv_int_param(node, "baseline_window", 0, 12)
+        mp = _vv_int_param(node, "min_periods", 1, 4)
         if mp > w:
             return None
         v = _vv_finite_col()
@@ -6013,9 +6013,9 @@ def _compile_polars_impl(
         inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
         if inner is None:
             return None
-        fw = _vv_int_param(node, "fast_window", 1, 5)
-        sw = _vv_int_param(node, "slow_window", 2, 20)
-        mp = _vv_int_param(node, "min_periods", 3, 4)
+        fw = _vv_int_param(node, "fast_window", 0, 5)
+        sw = _vv_int_param(node, "slow_window", 1, 20)
+        mp = _vv_int_param(node, "min_periods", 2, 4)
         if fw >= sw:
             return None
         inner = inner.with_columns(
@@ -6169,15 +6169,20 @@ def _compile_polars_impl(
         if inner is None:
             return None
         w = _window_int(node, default=20)
-        # pandas rolling: ±Inf is missing → drop to NULL before the window.
-        x_fin = pl.when(pl.col(_VAL).is_nan() | pl.col(_VAL).is_infinite()).then(None).otherwise(pl.col(_VAL))
-        inner = inner.with_columns(x_fin.alias("_x_fin"))
-        shifted = pl.col("_x_fin").shift(1).over(_INST, order_by=_TS)
+        # The WINDOW side (prev_hi/prev_lo baselines) drops ±Inf like the
+        # pandas rolling machinery.  The CURRENT bar keeps ±Inf as a real
+        # value (pandas: x.notna() is False only for NaN, and x / prev with
+        # x = ±Inf yields ±Inf / a clipped 0) — only NaN maps to NULL.
+        cur = pl.when(pl.col(_VAL).is_nan()).then(None).otherwise(pl.col(_VAL))
+        x_win = pl.when(pl.col(_VAL).is_nan() | pl.col(_VAL).is_infinite()).then(None).otherwise(pl.col(_VAL))
+        inner = inner.with_columns(cur.alias("_x_cur"), x_win.alias("_x_win"))
+        shifted = pl.col("_x_win").shift(1).over(_INST, order_by=_TS)
         prev_hi = shifted.rolling_max(window_size=w, min_samples=w).over(_INST, order_by=_TS)
         prev_lo = shifted.rolling_min(window_size=w, min_samples=w).over(_INST, order_by=_TS)
 
         def _safe_div_ratio(num: pl.Expr, den: pl.Expr) -> pl.Expr:
             # pandas _safe_div: num / den.replace(0, NaN) → 0/NaN denom → NaN.
+            # num.is_null() only for NaN current; num = ±Inf flows through.
             return pl.when(
                 num.is_null() | den.is_null() | (den == 0)
             ).then(None).otherwise(num / den)
@@ -6187,32 +6192,32 @@ def _compile_polars_impl(
         elif op == "ts_prev_low":
             expr = prev_lo
         elif op == "ts_distance_to_high":
-            expr = _safe_div_ratio(pl.col("_x_fin"), prev_hi) - 1.0
+            expr = _safe_div_ratio(pl.col("_x_cur"), prev_hi) - 1.0
         elif op == "ts_distance_to_low":
-            expr = _safe_div_ratio(pl.col("_x_fin"), prev_lo) - 1.0
+            expr = _safe_div_ratio(pl.col("_x_cur"), prev_lo) - 1.0
         elif op == "ts_breakout_high":
-            expr = _safe_div_ratio(pl.col("_x_fin"), prev_hi) - 1.0
+            expr = _safe_div_ratio(pl.col("_x_cur"), prev_hi) - 1.0
             expr = pl.when(expr.is_null()).then(None).otherwise(expr.clip(lower_bound=0.0))
         elif op == "ts_breakdown_low":
-            expr = _safe_div_ratio(prev_lo, pl.col("_x_fin")) - 1.0
+            expr = _safe_div_ratio(prev_lo, pl.col("_x_cur")) - 1.0
             expr = pl.when(expr.is_null()).then(None).otherwise(expr.clip(lower_bound=0.0))
         elif op in {"ts_new_high", "ts_new_low"}:
             # pandas: x.gt(prev).astype(float).where(x.notna() & prev.notna())
-            # — a missing current value or baseline emits NaN, never 0
-            # (review P0-07).
-            cur_known = pl.col("_x_fin").is_not_null()
+            # — a missing (NaN) current value or baseline emits NaN, never 0
+            # (review P0-07); a ±Inf current value IS known and compares.
+            cur_known = pl.col("_x_cur").is_not_null()
             base_known = prev_hi.is_not_null() if op == "ts_new_high" else prev_lo.is_not_null()
             base = prev_hi if op == "ts_new_high" else prev_lo
             if op == "ts_new_high":
-                hit = pl.col("_x_fin") > base
+                hit = pl.col("_x_cur") > base
             else:
-                hit = pl.col("_x_fin") < base
+                hit = pl.col("_x_cur") < base
             expr = pl.when(cur_known & base_known).then(pl.when(hit).then(1.0).otherwise(0.0)).otherwise(None)
         else:  # ts_channel_position
             # pandas: _safe_div(x - lo, hi - lo) — NO 0..1 clamp; a zero
             # channel width (hi == lo) → NaN.
             rng = prev_hi - prev_lo
-            num = pl.col("_x_fin") - prev_lo
+            num = pl.col("_x_cur") - prev_lo
             expr = pl.when(
                 num.is_null() | rng.is_null() | (rng == 0)
             ).then(None).otherwise(num / rng)

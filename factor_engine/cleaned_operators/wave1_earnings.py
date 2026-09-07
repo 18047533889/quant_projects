@@ -398,13 +398,13 @@ class Aq1AccrualStability(SeriesOperator):
                 if not np.isfinite(wv[row, col]) or not np.isfinite(ev[row, col]):
                     continue
                 lo = max(0, row - w + 1)
-                w = wv[lo:row + 1, col]
-                e = ev[lo:row + 1, col]
-                ok = np.isfinite(w) & np.isfinite(e) & (np.abs(e) > 1e-12)
+                w_win = wv[lo:row + 1, col]
+                e_win = ev[lo:row + 1, col]
+                ok = np.isfinite(w_win) & np.isfinite(e_win) & (np.abs(e_win) > 1e-12)
                 if ok.sum() < mp:
                     continue
-                dw = np.diff(w[ok])
-                e_ = np.abs(e[ok][1:])
+                dw = np.diff(w_win[ok])
+                e_ = np.abs(e_win[ok][1:])
                 if dw.size < 2:
                     continue
                 ratio = dw / (e_ + 1e-12)
@@ -550,13 +550,13 @@ class Aq1AccrualRatioDispersion(SeriesOperator):
                 if not np.isfinite(wv[row, col]) or not np.isfinite(ev[row, col]):
                     continue
                 lo = max(0, row - w + 1)
-                w = wv[lo:row + 1, col]
-                e = ev[lo:row + 1, col]
-                ok = np.isfinite(w) & np.isfinite(e) & (np.abs(e) > 1e-12)
+                w_win = wv[lo:row + 1, col]
+                e_win = ev[lo:row + 1, col]
+                ok = np.isfinite(w_win) & np.isfinite(e_win) & (np.abs(e_win) > 1e-12)
                 if ok.sum() < mp:
                     continue
-                dw = np.diff(w[ok])
-                e_ = np.abs(e[ok][1:])
+                dw = np.diff(w_win[ok])
+                e_ = np.abs(e_win[ok][1:])
                 if dw.size < 2:
                     continue
                 ratio = dw / (e_ + 1e-12)

@@ -2175,6 +2175,14 @@ _SQL_FALLBACK_CANONICALS: frozenset[str] = frozenset({
     "cdl_hammer", "cdl_hanging_man",
     "ts_time_slope", "ts_upside_deviation", "ts_weighted_standardized_moment",
     "ts_abdi_ranaldo_spread", "ts_value_at_argextreme",
+    # wave3 flowmom (2026-09-08): COMPACTED finite-slice kernels — pairs span
+    # NaN gaps and pair membership depends on the consuming window start /
+    # per-window partner positions, which ROWS-frame window sums cannot
+    # express exactly.  DuckDB falls back to the polars long path (which
+    # matches pandas bit-for-bit via rolling_map / map_groups).
+    "ofi_imbalance_persistence", "ofi_reversal_rate",
+    "ofi_abs_imbalance_trend",
+    "aq1_accrual_stability", "aq1_accrual_ratio_dispersion",
 })
 
 # wave3 flow/momentum/quality window family (2026-09-08): trailing-window
@@ -6528,16 +6536,21 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         if op == "ts_prev_low":
             return _Layer(lo, has_inst_window=True)
         if op == "ts_new_high":
+            # pandas (review P0-07): a missing current value or baseline
+            # emits NaN — never 0.  NULL comparisons in SQL fall to ELSE,
+            # so both sides need explicit NULL guards.
             return _Layer(
                 f"SELECT x.ts, x.inst, "
-                f"CASE WHEN x._v > h._v THEN 1.0 ELSE 0.0 END AS _v "
+                f"CASE WHEN x._v IS NULL OR h._v IS NULL THEN NULL "
+                f"WHEN x._v > h._v THEN 1.0 ELSE 0.0 END AS _v "
                 f"FROM ({x_l.sql}) x LEFT JOIN ({hi}) h USING (ts, inst)",
                 has_inst_window=True,
             )
         if op == "ts_new_low":
             return _Layer(
                 f"SELECT x.ts, x.inst, "
-                f"CASE WHEN x._v < l._v THEN 1.0 ELSE 0.0 END AS _v "
+                f"CASE WHEN x._v IS NULL OR l._v IS NULL THEN NULL "
+                f"WHEN x._v < l._v THEN 1.0 ELSE 0.0 END AS _v "
                 f"FROM ({x_l.sql}) x LEFT JOIN ({lo}) l USING (ts, inst)",
                 has_inst_window=True,
             )
@@ -6550,9 +6563,12 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
                 has_inst_window=True,
             )
         if op == "ts_breakout_high":
+            # GREATEST(NULL, 0.0) = 0.0 in DuckDB — a NaN current bar (NULL
+            # after registration) would clip to 0.0 instead of NaN; pandas
+            # _safe_div propagates NaN, so guard x._v explicitly.
             return _Layer(
                 f"SELECT x.ts, x.inst, "
-                f"CASE WHEN h._v IS NULL THEN NULL WHEN h._v = 0 THEN NULL "
+                f"CASE WHEN x._v IS NULL THEN NULL WHEN h._v IS NULL THEN NULL WHEN h._v = 0 THEN NULL "
                 f"ELSE {_g}(x._v / h._v - 1.0, 0.0) END AS _v "
                 f"FROM ({x_l.sql}) x LEFT JOIN ({hi}) h USING (ts, inst)",
                 has_inst_window=True,
@@ -6560,7 +6576,7 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         if op == "ts_breakdown_low":
             return _Layer(
                 f"SELECT x.ts, x.inst, "
-                f"CASE WHEN l._v IS NULL THEN NULL WHEN x._v = 0 THEN NULL "
+                f"CASE WHEN x._v IS NULL THEN NULL WHEN l._v IS NULL THEN NULL WHEN x._v = 0 THEN NULL "
                 f"ELSE {_g}(l._v / x._v - 1.0, 0.0) END AS _v "
                 f"FROM ({x_l.sql}) x LEFT JOIN ({lo}) l USING (ts, inst)",
                 has_inst_window=True,
@@ -11667,66 +11683,6 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
                 has_inst_window=True,
             )
 
-        if op == "ofi_imbalance_persistence":
-            # lag-1 Pearson corr over the COMPACTED finite slice (x = vals[:-1],
-            # y = vals[1:]); either side std == 0 -> NULL; the pandas kernel
-            # also gates on the CURRENT row being finite.  Stage the pair so
-            # no window call nests inside another.
-            curr = f"CASE WHEN {valid} THEN t._v END"
-            lag1 = f"LAG({curr}) OVER (PARTITION BY inst ORDER BY ts)"
-            stage1 = (
-                f"SELECT ts, inst, {curr} AS _cv, {lag1} AS _lv, ({gate}) AS _gate "
-                f"FROM ({inner.sql}) t"
-            )
-            stage2 = (
-                f"SELECT ts, inst, _cv, _lv, _gate, "
-                f"SUM(CASE WHEN _cv IS NOT NULL AND _lv IS NOT NULL THEN 1 ELSE 0 END) OVER ({over}) AS _pc "
-                f"FROM ({stage1}) s1"
-            )
-            return _Layer(
-                f"SELECT ts, inst, CASE WHEN _cv IS NULL THEN NULL "
-                f"WHEN _gate OR _pc < 2 THEN NULL "
-                f"WHEN STDDEV_SAMP(_cv) OVER ({over}) = 0 "
-                f"OR STDDEV_SAMP(_lv) OVER ({over}) = 0 THEN NULL "
-                f"ELSE CORR(_cv, _lv) OVER ({over}) END AS _v "
-                f"FROM ({stage2}) s2",
-                has_inst_window=True,
-            )
-
-        if op == "ofi_abs_imbalance_trend":
-            # OLS slope of seq = sign*|v|/(|v|+1e-12) on COMPACTED finite-row
-            # positions 0..n-1, times sqrt(n).  Windowed ranks are an affine
-            # transform of compacted positions (per-window constant offset),
-            # so the slope is unchanged; compute from raw moments against the
-            # window-end means via staged subqueries (DuckDB forbids nesting
-            # window calls in one expression).
-            seq = f"CASE WHEN {valid} THEN SIGN(t._v) * ABS(t._v) / (ABS(t._v) + 1e-12) END"
-            rank = (
-                f"SUM(CASE WHEN {valid} THEN 1 ELSE 0 END) OVER "
-                f"(PARTITION BY inst ORDER BY ts ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)"
-            )
-            stage1 = (
-                f"SELECT ts, inst, {seq} AS _seq, "
-                f"CASE WHEN {valid} THEN {rank} END AS _rank, "
-                f"({gate}) AS _gate "
-                f"FROM ({inner.sql}) t"
-            )
-            stage2 = (
-                f"SELECT ts, inst, _seq, _rank, _gate, "
-                f"AVG(_seq) OVER ({over}) AS _seq_m, "
-                f"AVG(_rank) OVER ({over}) AS _rank_m, "
-                f"SUM(CASE WHEN _rank IS NOT NULL THEN 1 ELSE 0 END) OVER ({over}) AS _n "
-                f"FROM ({stage1}) s1"
-            )
-            num = f"SUM((_rank - _rank_m) * (_seq - _seq_m)) OVER ({over})"
-            den = f"SUM((_rank - _rank_m) * (_rank - _rank_m)) OVER ({over})"
-            return _Layer(
-                f"SELECT ts, inst, CASE WHEN _gate OR {den} IS NULL OR {den} <= 0 "
-                f"THEN NULL ELSE ({num} / {den}) * SQRT(_n) END AS _v "
-                f"FROM ({stage2}) s2",
-                has_inst_window=True,
-            )
-
         if op == "ofi_imbalance_cv":
             asum = f"SUM(CASE WHEN {valid} THEN t._v END) OVER ({over})"
             abs_sum = f"SUM(CASE WHEN {valid} THEN ABS(t._v) END) OVER ({over})"
@@ -11756,53 +11712,6 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
                 has_inst_window=True,
             )
 
-        if op == "ofi_reversal_rate":
-            # mean(sign[t] != sign[t-1]) over the COMPACTED finite slice: a
-            # pair's window membership depends on the partner row's position
-            # relative to the consuming window start (pairs can span NaN
-            # gaps), so stage the pairing and drop, per consuming window, the
-            # boundary pair whose partner row lies before the window start.
-            sgn = f"CASE WHEN {valid} THEN SIGN(t._v) END"
-            ri = "ROW_NUMBER() OVER (PARTITION BY inst ORDER BY ts)"
-            stage1 = (
-                f"SELECT ts, inst, {sgn} AS _sgn, {ri} AS _ri, ({gate}) AS _gate "
-                f"FROM ({inner.sql}) t"
-            )
-            stage2 = (
-                f"SELECT ts, inst, _sgn, _ri, _gate, "
-                f"CASE WHEN _sgn IS NOT NULL THEN _ri END AS _frow, "
-                f"LAG(_sgn) OVER (PARTITION BY inst ORDER BY ts) AS _psgn, "
-                f"LAG(CASE WHEN _sgn IS NOT NULL THEN _ri END) OVER (PARTITION BY inst ORDER BY ts) AS _prow "
-                f"FROM ({stage1}) s1"
-            )
-            stage3 = (
-                f"SELECT ts, inst, _sgn, _ri, _gate, "
-                f"LAST_VALUE(_psgn IGNORE NULLS) OVER "
-                f"(PARTITION BY inst ORDER BY ts ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS _asgn, "
-                f"LAST_VALUE(_frow IGNORE NULLS) OVER "
-                f"(PARTITION BY inst ORDER BY ts ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS _arow "
-                f"FROM ({stage2}) s2"
-            )
-            stage4 = (
-                f"SELECT ts, inst, flip, _arow, _ri, _gate FROM ("
-                f"SELECT ts, inst, _sgn, _asgn, _arow, _ri, _gate, "
-                f"CASE WHEN _sgn IS NOT NULL AND _asgn IS NOT NULL THEN "
-                f"CASE WHEN _sgn <> _asgn THEN 1.0 ELSE 0.0 END END AS flip "
-                f"FROM ({stage3}) s3"
-                f") s4"
-            )
-            fs = f"SUM(flip) OVER ({over})"
-            pc = f"COUNT(flip) OVER ({over})"
-            drop = f"(_arow IS NOT NULL AND _arow < _ri - {w - 1})"
-            fs_in = f"({fs} - CASE WHEN {drop} THEN flip ELSE 0.0 END)"
-            pc_in = f"({pc} - CASE WHEN {drop} THEN 1 ELSE 0 END)"
-            return _Layer(
-                f"SELECT ts, inst, CASE WHEN _gate OR {pc_in} < 1 THEN NULL "
-                f"ELSE {fs_in} / {pc_in} END AS _v "
-                f"FROM ({stage4}) s5",
-                has_inst_window=True,
-            )
-
         if op == "sv_net_flow_direction":
             # mean(sign(sv) * |sv|/mean|sv|) == Σ(s_i*|v_i|) / Σ|v_i| (mean|sv|
             # is a per-window constant); Σ|v| <= 1e-12 -> 0.0 via the mabs guard.
@@ -11817,11 +11726,14 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
             )
 
         if op == "sv_own_flow_fraction":
+            # min_periods counts POSITIVE rows (pandas: ok = finite AND v>0).
             pos_v = f"CASE WHEN {valid} AND t._v > 0 THEN t._v END"
+            pos_cnt = f"SUM(CASE WHEN {valid} AND t._v > 0 THEN 1 ELSE 0 END) OVER ({over})"
             total = f"SUM({pos_v}) OVER ({over})"
             return _Layer(
                 f"SELECT ts, inst, CASE WHEN NOT ({valid}) THEN NULL "
-                f"WHEN {gate} OR {total} IS NULL OR {total} <= 0 THEN NULL "
+                f"WHEN {pos_cnt} IS NULL OR {pos_cnt} < {mp} THEN NULL "
+                f"WHEN {total} IS NULL OR {total} <= 0 THEN NULL "
                 f"ELSE t._v / {total} END AS _v "
                 f"FROM ({inner.sql}) t",
                 has_inst_window=True,
@@ -11842,14 +11754,33 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
             )
 
         if op == "m1_momentum_strength":
-            prod = f"EXP(SUM(LN(1.0 + t._v)) OVER ({over}))"
-            rstd = f"STDDEV_SAMP(CASE WHEN {valid} THEN t._v END) OVER ({over})"
+            # |Π(1+r) - 1| / std(r, ddof=1) over the COMPACTED finite slice.
+            # LN(1+r) breaks for r <= -1 (the product can go NEGATIVE), so
+            # accumulate the compound product as sign * log|1+r| with an
+            # explicit zero-product flag; rows with 1+r == 0 zero the window.
+            sl = f"CASE WHEN {valid} AND t._v > -1.0 THEN LN(ABS(1.0 + t._v)) ELSE NULL END"
+            neg = f"CASE WHEN {valid} AND t._v < -1.0 THEN 1 ELSE 0 END"
+            zero = f"CASE WHEN {valid} AND t._v = -1.0 THEN 1 ELSE 0 END"
+            stage1 = (
+                f"SELECT ts, inst, t._v AS _rv, "
+                f"SUM({sl}) OVER ({over}) AS _ls, "
+                f"SUM({neg}) OVER ({over}) AS _nn, "
+                f"SUM({zero}) OVER ({over}) AS _zr, "
+                f"SUM(CASE WHEN {valid} THEN 1 ELSE 0 END) OVER ({over}) AS _n, "
+                f"STDDEV_SAMP(CASE WHEN {valid} THEN t._v END) OVER ({over}) AS _rs "
+                f"FROM ({inner.sql}) t"
+            )
+            prod = (
+                f"CASE WHEN _zr > 0 THEN 0.0 "
+                f"WHEN _ls IS NULL THEN NULL "
+                f"ELSE (CASE WHEN _nn % 2 = 1 THEN -1.0 ELSE 1.0 END) * EXP(_ls) END"
+            )
             return _Layer(
-                f"SELECT ts, inst, CASE WHEN NOT ({valid}) THEN NULL "
-                f"WHEN {gate} OR {rstd} IS NULL OR {rstd} <= 1e-12 THEN "
-                f"CASE WHEN ({prod} - 1.0) = 0.0 THEN 0.0 ELSE NULL END "
-                f"ELSE ABS({prod} - 1.0) / {rstd} END AS _v "
-                f"FROM ({inner.sql}) t",
+                f"SELECT ts, inst, CASE WHEN _n < {mp} THEN NULL "
+                f"WHEN _rs IS NULL OR _rs <= 1e-12 THEN "
+                f"CASE WHEN {prod} = 0.0 THEN 0.0 ELSE NULL END "
+                f"ELSE ABS({prod} - 1.0) / _rs END AS _v "
+                f"FROM ({stage1}) s1",
                 has_inst_window=True,
             )
 
@@ -11928,70 +11859,6 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
                 f"WHEN ABS({cmean}) <= 1e-12 THEN 0.0 "
                 f"ELSE {cstd} / ABS({cmean}) END AS _v "
                 f"FROM ({inner.sql}) t",
-                has_inst_window=True,
-            )
-
-        if op in {"aq1_accrual_stability", "aq1_accrual_ratio_dispersion"}:
-            if len(node.inputs) < 2:
-                return None
-            e_l = _compile_layer(node.inputs[1], dialect=dialect)
-            if e_l is None:
-                return None
-            joined_sql = (
-                f"SELECT r.ts, r.inst, r._v AS _wc, x._v AS _e "
-                f"FROM ({inner.sql}) r LEFT JOIN ({e_l.sql}) x USING (ts, inst)"
-            )
-            ok = (
-                f"(_wc IS NOT NULL AND NOT isnan(_wc) AND NOT isinf(_wc) "
-                f"AND _e IS NOT NULL AND NOT isnan(_e) AND NOT isinf(_e) "
-                f"AND ABS(_e) > 1e-12)"
-            )
-            # stage 1: ok flag (finite pair + non-zero earnings).
-            stage1 = (
-                f"SELECT ts, inst, _wc, _e, CASE WHEN {ok} THEN 1 ELSE 0 END AS _ok "
-                f"FROM ({joined_sql}) j"
-            )
-            # COMPACTED pairing: dw between ADJACENT OK rows (np.diff over the
-            # ok-filtered slice), so the partner is the LAST OK row — carry
-            # the last-ok wc/|e| via LAST_VALUE IGNORE NULLS.
-            stage2 = (
-                f"SELECT ts, inst, _wc, _e, _ok, "
-                f"SUM(_ok) OVER ({over}) AS _okc, "
-                f"CASE WHEN _ok = 1 THEN _wc END AS _wc_ok, "
-                f"CASE WHEN _ok = 1 THEN ABS(_e) END AS _e_ok "
-                f"FROM ({stage1}) s1"
-            )
-            stage3 = (
-                f"SELECT ts, inst, _wc, _e, _ok, _okc, _wc_ok, _e_ok, "
-                f"LAST_VALUE(_wc_ok IGNORE NULLS) OVER (PARTITION BY inst ORDER BY ts ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS _pwc, "
-                f"LAST_VALUE(_e_ok IGNORE NULLS) OVER (PARTITION BY inst ORDER BY ts ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS _pe "
-                f"FROM ({stage2}) s2"
-            )
-            stage4 = (
-                f"SELECT ts, inst, _ok, _okc, "
-                f"CASE WHEN _ok = 1 AND _pwc IS NOT NULL THEN _wc - _pwc END AS _dw, "
-                f"CASE WHEN _ok = 1 AND _pe IS NOT NULL THEN _pe END AS _pe2 "
-                f"FROM ({stage3}) s3"
-            )
-            pair = "(_ok = 1 AND _dw IS NOT NULL AND _pe2 IS NOT NULL)"
-            pair_cnt = f"SUM(CASE WHEN {pair} THEN 1 ELSE 0 END) OVER ({over})"
-            ratio = f"(_dw / (_pe2 + 1e-12))"
-            rmean = f"AVG(CASE WHEN {pair} THEN {ratio} END) OVER ({over})"
-            rstd = f"STDDEV_SAMP(CASE WHEN {pair} THEN {ratio} END) OVER ({over})"
-            abs_rstd = f"STDDEV_SAMP(CASE WHEN {pair} THEN ABS({ratio}) END) OVER ({over})"
-            if op == "aq1_accrual_stability":
-                body = (
-                    f"CASE WHEN _okc < {mp} OR {pair_cnt} < 2 THEN NULL "
-                    f"WHEN {rmean} IS NULL OR ABS({rmean}) <= 1e-12 THEN 0.0 "
-                    f"ELSE -({rstd}) / ABS({rmean}) END"
-                )
-            else:
-                body = (
-                    f"CASE WHEN _okc < {mp} OR {pair_cnt} < 2 THEN NULL "
-                    f"ELSE {abs_rstd} END"
-                )
-            return _Layer(
-                f"SELECT ts, inst, {body} AS _v FROM ({stage4}) s4",
                 has_inst_window=True,
             )
 
@@ -12704,8 +12571,10 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
                   "val1_valuation_percentile_own", "val1_earnings_yield_ma_diff",
                   "vax_liquidity_penalty_exposure"}:
             # clean the window value once: ±NaN/Inf rows never contribute.
+            # ``_s`` = sanitized value (NaN/Inf -> NULL) for window aggregates;
+            # ``_v`` = the raw passthrough value for current-row gates.
             clean = (
-                f"SELECT ts, inst, CASE WHEN {valid} THEN t._v END AS _s, t._v AS _raw "
+                f"SELECT ts, inst, CASE WHEN {valid} THEN t._v END AS _s, t._v AS _v "
                 f"FROM ({inner.sql}) t"
             )
             if op == "vv1_vol_of_vol":
@@ -12738,9 +12607,9 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
                     has_inst_window=True,
                 )
             if op == "vv1_vol_level_score":
-                sw = _vv_int("short_window", 1, 5)
-                hw = _vv_int("history_window", 2, 120)
-                mp = _vv_int("min_periods", 3, 20)
+                sw = _vv_int("short_window", 0, 5)
+                hw = _vv_int("history_window", 1, 120)
+                mp = _vv_int("min_periods", 2, 20)
                 if sw >= hw or mp > hw:
                     return None
                 over_cur = _vv_over(sw)
@@ -12757,12 +12626,13 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
                     has_inst_window=True,
                 )
             if op == "vv1_regime_change_ratio":
-                sw = _vv_int("short_window", 1, 5)
-                lw = _vv_int("long_window", 2, 60)
-                mp = _vv_int("min_periods", 4, 4)
+                sw = _vv_int("short_window", 0, 5)
+                lw = _vv_int("long_window", 1, 60)
+                mp = _vv_int("min_periods", 3, 4)
                 if sw >= lw or mp > lw:
                     return None
-                bnd = _float_attr(node, "band", default=0.5)
+                bnd_raw = _literal_positional(node, 2)
+                bnd = float(bnd_raw) if bnd_raw is not None else _float_attr(node, "band", default=0.5)
                 if bnd <= 0:
                     return None
                 over_l = _vv_over(lw)
@@ -12781,8 +12651,8 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
                     has_inst_window=True,
                 )
             if op == "val1_valuation_z_own":
-                hw = _window_int(node, default=60) if _literal_positional(node, 1) is None else int(_literal_positional(node, 1))
-                mp = _vv_int("min_periods", 2, 10)
+                hw = _vv_int("history_window", 0, 60)
+                mp = _vv_int("min_periods", 1, 10)
                 if mp > hw:
                     return None
                 hist_w = max(hw - 1, 1)
@@ -12804,8 +12674,8 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
                     has_inst_window=True,
                 )
             if op == "val1_valuation_percentile_own":
-                hw = _window_int(node, default=60) if _literal_positional(node, 1) is None else int(_literal_positional(node, 1))
-                mp = _vv_int("min_periods", 2, 10)
+                hw = _vv_int("history_window", 0, 60)
+                mp = _vv_int("min_periods", 1, 10)
                 if mp > hw:
                     return None
                 hist_w = max(hw - 1, 1)
@@ -12824,8 +12694,8 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
                     has_inst_window=True,
                 )
             if op == "val1_earnings_yield_ma_diff":
-                w = _vv_int("baseline_window", 1, 12)
-                mp = _vv_int("min_periods", 2, 4)
+                w = _vv_int("baseline_window", 0, 12)
+                mp = _vv_int("min_periods", 1, 4)
                 if mp > w:
                     return None
                 over_h = _vv_over(w, end="1 PRECEDING")
