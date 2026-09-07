@@ -594,12 +594,27 @@ class GroupPercentile(SeriesOperator):
             "group_percentile(ROE, industry_code, 0.5)",
             "group_percentile(PE, get('industry_sw'), 0.3)"
         ],
-        param_names=["x", "group", "p"],
+        param_names=["x", "group", "p", "fallback_policy"],
+        param_specs={
+            "fallback_policy": ParamSpec(
+                dtype=str,
+                choices=("nan", "error", "global", "keep_original"),
+                default="global",
+                searchable=False,
+            )
+        },
         return_type="series",
         tags=["cross_sectional", "percentile", "group", "filter"]
     )
 
-    def _calculate_series(self, x: pd.DataFrame, group: pd.DataFrame = None, p: float = 0.5, **kwargs) -> pd.DataFrame:
+    def _calculate_series(
+        self,
+        x: pd.DataFrame,
+        group: pd.DataFrame = None,
+        p: float = 0.5,
+        fallback_policy: str = "global",
+        **kwargs,
+    ) -> pd.DataFrame:
         """
         参数:
             x: 待判断的因子值DataFrame
@@ -608,6 +623,13 @@ class GroupPercentile(SeriesOperator):
         返回:
             布尔值DataFrame，表示是否在指定分位内
         """
+        validate_fallback_policy(fallback_policy, operator=type(self).__name__)
+        if isinstance(p, bool) or not isinstance(p, (int, float)) or not np.isfinite(p):
+            raise ValueError("GroupPercentile p must be a finite number in [0, 1]")
+        p = float(p)
+        if not 0.0 <= p <= 1.0:
+            raise ValueError("GroupPercentile p must be in [0, 1]")
+        x, group = strict_group_align(x, group)
         result = pd.DataFrame(np.nan, index=x.index, columns=x.columns)
 
         for date in x.index:
@@ -619,6 +641,8 @@ class GroupPercentile(SeriesOperator):
                 group_slice = None
 
             if group_slice is None or group_slice.isna().all():
+                if fallback_policy == "error":
+                    raise ValueError(f"GroupPercentile missing group at {date!r}")
                 if fallback_policy == "nan":
                     continue
                 if fallback_policy == "keep_original":

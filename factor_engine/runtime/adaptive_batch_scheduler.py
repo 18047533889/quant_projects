@@ -20,8 +20,11 @@ from __future__ import annotations
 import logging
 import os
 import threading
+import weakref
+from contextlib import contextmanager
+from contextvars import ContextVar
 from concurrent.futures import FIRST_COMPLETED, Future, wait
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any, Callable, Sequence
 
 from factor_engine.planner.dag_cost_model import task_priority
@@ -53,6 +56,61 @@ from factor_engine.runtime.resource_broker import (
 from factor_engine.runtime.streaming_result_sink import ResultItem, StreamingResultSink
 
 _logger = logging.getLogger(__name__)
+
+_V2_DISABLE_INNER_RETRIES: ContextVar[bool] = ContextVar(
+    "factor_engine_v2_disable_inner_retries", default=False
+)
+
+
+@contextmanager
+def disable_inner_retries_for_v2():
+    token = _V2_DISABLE_INNER_RETRIES.set(True)
+    try:
+        yield
+    finally:
+        _V2_DISABLE_INNER_RETRIES.reset(token)
+
+
+def _inner_retry_default() -> int:
+    return 0 if _V2_DISABLE_INNER_RETRIES.get() else 1
+
+
+def _retain_wave_lease(ref: Any, lease: Any) -> None:
+    """Release a read-wave lease only after every physical buffer owner dies."""
+    from factor_engine.storage.sources.data_access_source import DataAccessSource
+
+    mapping = (getattr(ref, "meta", None) or {}).get("loaded_columns")
+    owners: list[Any] = [ref]
+    seen = {id(ref)}
+    if isinstance(mapping, dict):
+        for value in mapping.values():
+            physical = DataAccessSource._physical_cache_owners(value)
+            if not physical:
+                # Ownership is unknown: retain conservatively for process lifetime.
+                return
+            for owner in physical:
+                if id(owner) not in seen:
+                    seen.add(id(owner))
+                    owners.append(owner)
+    elif mapping:
+        return
+    native_buffer = (getattr(ref, "meta", None) or {}).get("native_buffer")
+    if native_buffer is not None:
+        # Polars derivations retain Rust Arc owners rather than the originating
+        # Python wrapper. Until descendants propagate a lease token, retain
+        # native admission conservatively instead of releasing it early.
+        return
+    state = {"remaining": len(owners), "lease": lease, "lock": threading.Lock()}
+
+    def release_owner(owner_state=state):
+        with owner_state["lock"]:
+            owner_state["remaining"] -= 1
+            if owner_state["remaining"] == 0:
+                owner_state["lease"].release()
+                owner_state["lease"] = None
+
+    for owner in owners:
+        weakref.finalize(owner, release_owner)
 
 
 def _resolve_execution_policy() -> str | None:
@@ -376,6 +434,8 @@ class AdaptiveBatchScheduler:
         # R33-P0-016：read wave 执行器（跨循环持久，幂等）+ BufferRef 结果表。
         self._wave_executor: Any | None = None
         self._wave_refs: dict[int, Any] = {}
+        self._wave_pending_consumers: dict[int, set[str]] = {}
+        self._wave_source_tasks: dict[int, tuple[str, ...]] = {}
         self._wave_summary: dict[str, Any] = {"waves_planned": 0, "waves_executed": 0, "events": []}
         self._input_dq_reports: list[Any] = []
         # R33-P0-009：SOURCE_SCAN task 的 BufferRef 输出（独立命名空间，不污染
@@ -921,6 +981,7 @@ class AdaptiveBatchScheduler:
         input_dq_check: bool = False,
         input_dq_strict: bool = True,
         input_dq_thresholds: Any = None,
+        defer_on_pressure: bool = False,
     ) -> int:
         """R33-P0-016：把 read wave 真正接进 scheduler 主路径。
 
@@ -928,8 +989,8 @@ class AdaptiveBatchScheduler:
         时执行一次 scan（``SourceWaveExecutor.execute_wave`` → prefetch union 列
         → 共享列缓存），并把 SOURCE_SCAN task 标记 committed（其 IO 已在 wave
         中完成），BufferRef 写入结果表。executor / refs 为实例状态（幂等：同一
-        wave_id 只执行一次）。wave 失败仍记录 event + committed（root 执行会按需
-        load 并如实抛错）——不静默。返回本次提交的 SOURCE_SCAN task 数。
+        wave_id 只执行一次）。wave 失败记录 event 并向上传播；失败的
+        SOURCE_SCAN 不会标记 committed。返回本次提交的 SOURCE_SCAN task 数。
         """
         waves = list(getattr(plan, "read_waves", ReadWavePlan()).waves or [])
         if not waves:
@@ -953,13 +1014,95 @@ class AdaptiveBatchScheduler:
             ]
             if not tids:
                 continue
+            if all(t in committed for t in tids):
+                continue
             if any(
                 not all(p in committed for p in dag.tasks[t].inputs)
                 for t in tids
             ):
                 continue
-            ref = executor.execute_wave(wave, consumer_ids=tids)
+            from factor_engine.runtime.auto_memory_budget import MemoryLeaseKind
+            from factor_engine.runtime.resource_errors import ResourceBudgetExceeded
+            wave_bytes = int(getattr(wave, "estimated_memory_bytes", 0) or 0)
+            wave_lease = self.broker.acquire_memory(
+                MemoryLeaseKind.READ_WAVE, wave_bytes,
+                lease_id=f"read-wave:{id(self)}:{wid}",
+            )
+            if wave_lease is None:
+                capacity_fn = getattr(self.broker, "execution_budget", None)
+                current_capacity = (
+                    int(capacity_fn()) if callable(capacity_fn) else wave_bytes
+                )
+                # Current execution budget can recover as host pressure falls;
+                # only the configured hard limit proves an atomic wave can
+                # never fit. Planner admission already rejects waves above its
+                # own calibrated budget.
+                hard_capacity = int(
+                    getattr(self.broker, "hard_memory_limit", current_capacity)
+                    or current_capacity
+                )
+                if wave_bytes > hard_capacity:
+                    raise ResourceBudgetExceeded(
+                        f"read wave {wid} requires {wave_bytes} bytes; "
+                        f"atomic broker capacity is {hard_capacity}"
+                    )
+                if defer_on_pressure:
+                    # Existing waves/tasks can complete and return residency.
+                    # The outer scheduler has a finite stuck/deadline policy.
+                    self._wave_summary["events"].append(
+                        f"deferred:{wid}:{wave_bytes}@{current_capacity}"
+                    )
+                    return committed_count
+                raise ResourceBudgetExceeded(
+                    f"read wave {wid} requires {wave_bytes} bytes; "
+                    "broker admission denied: temporarily busy and no concurrent consumer can release it"
+                )
+            try:
+                ref = executor.execute_wave(wave, consumer_ids=tids)
+            except BaseException:
+                wave_lease.release()
+                raise
+            # Charge until every reachable pandas/NumPy physical owner dies;
+            # mappings and zero-copy views can outlive the BufferRef wrapper.
+            _retain_wave_lease(ref, wave_lease)
             refs[wid] = ref
+            pending_consumers = set(getattr(wave, "consumer_tasks", ()) or ())
+            # Keep the physical buffer through every reachable terminal. Planner
+            # consumer annotations may omit a root separated by planning views.
+            queue = list(tids)
+            reachable: set[str] = set()
+            while queue:
+                predecessor = queue.pop()
+                for consumer in getattr(dag.tasks[predecessor], "consumers", ()) or ():
+                    if consumer in reachable or consumer not in dag.tasks:
+                        continue
+                    reachable.add(consumer)
+                    queue.append(consumer)
+            reachable_terminals = {
+                task_id for task_id in reachable
+                if dag.tasks[task_id].task_type in (TASK_ROOT, TASK_MERGE)
+            }
+            pending_consumers.update(reachable_terminals)
+            overlapping_wave = any(
+                other.wave_id != wid
+                and bool(set(getattr(other, "columns", ()) or ()) & set(wave.columns))
+                for other in waves
+            )
+            if overlapping_wave:
+                pending_consumers.update(
+                    task_id for task_id, candidate in dag.tasks.items()
+                    if candidate.task_type in (TASK_ROOT, TASK_MERGE)
+                )
+            if not reachable_terminals:
+                # Missing consumer annotations must extend, never shorten,
+                # physical residency. Conservatively retain through all
+                # terminal tasks in this physical DAG.
+                pending_consumers.update(
+                    task_id for task_id, candidate in dag.tasks.items()
+                    if candidate.task_type in (TASK_ROOT, TASK_MERGE)
+                )
+            self._wave_pending_consumers[wid] = pending_consumers
+            self._wave_source_tasks[wid] = tuple(tids)
             # R33-P0-017：input DQ 按 wave 在 scan 后做（一次 scan 同时产生 data
             # buffer + DQ stats，不另扫一遍）。
             if input_dq_check and ref is not None and wave.columns:
@@ -977,6 +1120,7 @@ class AdaptiveBatchScheduler:
                     report = assert_input_dq(
                         source,
                         list(wave.columns),
+                        prefetched=(ref.meta or {}).get("loaded_columns"),
                         raise_on_fail=input_dq_strict,
                         thresholds=thresholds,
                     )
@@ -1287,6 +1431,7 @@ class AdaptiveBatchScheduler:
                 input_dq_check=input_dq_check,
                 input_dq_strict=input_dq_strict,
                 input_dq_thresholds=input_dq_thresholds,
+                defer_on_pressure=True,
             )
             # 0.5) barrier 规划视图自动提交（R33-P0-008，不占 lease）。
             virtual_done += self._admit_virtual(dag, remaining, committed, futures)
@@ -1527,7 +1672,7 @@ class AdaptiveBatchScheduler:
                                 if self._handle_oom(_tid, exc, dag, remaining):
                                     continue
                                 raise
-                            retries = self._retries_remaining.get(_tid, 1)
+                            retries = self._retries_remaining.get(_tid, _inner_retry_default())
                             if kind != ERROR_TRANSIENT or retries <= 0:
                                 raise
                             self._retries_remaining[_tid] = retries - 1
@@ -1554,7 +1699,7 @@ class AdaptiveBatchScheduler:
                                     f"{type(_exc).__name__}: {_exc}"
                                 )
                                 raise _exc
-                            _retries = self._retries_remaining.get(_tid, 1)
+                            _retries = self._retries_remaining.get(_tid, _inner_retry_default())
                             if _retries > 0 and _kind == ERROR_TRANSIENT:
                                 self._retries_remaining[_tid] = _retries - 1
                                 self._explain(
@@ -1622,7 +1767,7 @@ class AdaptiveBatchScheduler:
                             f"task={key}: OOM_NOT_REPLANNABLE {type(exc).__name__}: {exc}"
                         )
                         raise
-                    retries = self._retries_remaining.get(key, 1)
+                    retries = self._retries_remaining.get(key, _inner_retry_default())
                     # R31-006：只有 transient（或未知=保守单次）自动 retry；
                     # permanent（PIT/semantic/参数/不支持算子/确定性错误）不重跑。
                     if retries > 0 and kind == ERROR_TRANSIENT:
@@ -1837,52 +1982,76 @@ class AdaptiveBatchScheduler:
         dag = getattr(plan, "physical_dag", plan)
         committed: set[str] = set()
         remaining = set(dag.topological_order())
-        # 1) read waves（真实 scan 一次）。
-        self._execute_read_waves(
-            plan,
-            dag,
-            committed,
-            remaining,
-            ctx,
-            input_dq_check=input_dq_check,
-            input_dq_strict=input_dq_strict,
-            input_dq_thresholds=input_dq_thresholds,
-        )
-        # 2) 串行按拓扑序执行（shared 先物化，root 后执行）。
-        for tid in dag.topological_order():
-            if tid in committed:
-                continue
-            task = dag.tasks.get(tid)
-            if task is None:
-                continue
-            if task.task_type == TASK_SOURCE_SCAN:
+        # Interleave one admitted wave with every consumer it makes ready.
+        # A small pool can then reclaim wave residency before admitting the next
+        # wave; source tasks are never virtually committed without a real read.
+        while remaining:
+            self._execute_read_waves(
+                plan,
+                dag,
+                committed,
+                remaining,
+                ctx,
+                input_dq_check=input_dq_check,
+                input_dq_strict=input_dq_strict,
+                input_dq_thresholds=input_dq_thresholds,
+                defer_on_pressure=True,
+            )
+            progressed = False
+            for tid in dag.topological_order():
+                if tid in committed or tid not in remaining:
+                    continue
+                task = dag.tasks.get(tid)
+                if task is None or not all(parent in committed for parent in task.inputs):
+                    continue
+                if task.task_type == TASK_SOURCE_SCAN:
+                    # Only _execute_read_waves may commit a physical scan.
+                    continue
+                if task.task_type == TASK_CSE_SHARED:
+                    sid = task.task_id.split(":", 1)[1]
+                    materialize_shared(sid, task.node_ref)
+                    committed.add(tid)
+                    remaining.discard(tid)
+                    self._record_timing(tid, task)
+                    progressed = True
+                    continue
+                if task.task_type == TASK_ROOT:
+                    result = execute_root(task)
+                    committed.add(tid)
+                    remaining.discard(tid)
+                    self._record_timing(tid, task)
+                    self._record_task_calibration(tid, task, result)
+                    if sink is not None:
+                        if not sink.submit(task.factor_name, result):
+                            raise RuntimeError(
+                                f"sink.submit returned False for {task.factor_name}"
+                            )
+                    if result_handler is not None:
+                        result_handler(task.factor_name, result)
+                    elif sink is None:
+                        self._results[task.factor_name] = result
+                    self._release_consumed(dag, tid, ctx)
+                    progressed = True
+                    continue
+                # Planning views are committed only after their predecessors.
                 committed.add(tid)
-                continue
-            if task.task_type == TASK_CSE_SHARED:
-                sid = task.task_id.split(":", 1)[1]
-                materialize_shared(sid, task.node_ref)
-                committed.add(tid)
+                remaining.discard(tid)
                 self._record_timing(tid, task)
-                continue
-            if task.task_type == TASK_ROOT:
-                result = execute_root(task)
-                committed.add(tid)
-                self._record_timing(tid, task)
-                self._record_task_calibration(tid, task, result)
-                if sink is not None:
-                    if not sink.submit(task.factor_name, result):
-                        raise RuntimeError(
-                            f"sink.submit returned False for {task.factor_name}"
-                        )
-                if result_handler is not None:
-                    result_handler(task.factor_name, result)
-                elif sink is None:
-                    self._results[task.factor_name] = result
-                self._release_consumed(dag, tid, ctx)
-                continue
-            # planning view：直接跳过（不占资源）。
-            committed.add(tid)
-            self._record_timing(tid, task)
+                progressed = True
+            if not progressed and remaining:
+                # No consumer can return admission. Re-run without deferral to
+                # produce the bounded typed denial instead of spinning.
+                self._execute_read_waves(
+                    plan,
+                    dag,
+                    committed,
+                    remaining,
+                    ctx,
+                    input_dq_check=input_dq_check,
+                    input_dq_strict=input_dq_strict,
+                    input_dq_thresholds=input_dq_thresholds,
+                    defer_on_pressure=False,
+                )
         if sink is not None:
             sink.finish()
         self._done = len(committed)
@@ -2023,6 +2192,21 @@ class AdaptiveBatchScheduler:
             except Exception:
                 pass
 
+    def _mark_wave_consumer_done(self, tid: str) -> None:
+        """Drop scheduler-owned wave refs after their final physical consumer."""
+        for wid, pending in list(self._wave_pending_consumers.items()):
+            pending.discard(tid)
+            if pending:
+                continue
+            self._wave_pending_consumers.pop(wid, None)
+            source_tasks = self._wave_source_tasks.pop(wid, ())
+            for source_tid in source_tasks:
+                self._buffer_results.pop(source_tid, None)
+            self._wave_refs.pop(wid, None)
+            release_wave = getattr(self._wave_executor, 'release_wave', None)
+            if callable(release_wave):
+                release_wave(wid)
+
     def _record_timing(self, tid: str, task: PhysicalFactorTask) -> None:
         import time
 
@@ -2039,6 +2223,7 @@ class AdaptiveBatchScheduler:
             "elapsed_ms": round(max(0.0, now_ms - started), 3),
             "preferred_backend": task.preferred_backend,
         }
+        self._mark_wave_consumer_done(tid)
 
     def _auto_shard_replan(self, dag: PhysicalFactorDAG, remaining: set[str]) -> int:
         """R38 P0-001（§4）：ready task 无法 admission 且 shardable → **真实**替换成

@@ -1,0 +1,338 @@
+schema_version: factor_engine.v6.implementation_evidence.v1
+date: '2026-09-07'
+repository: /home/sunhaiwei/quant_projects
+base_head: 6e783a57300eb6cd98d5e37ee6def4ed1033acfe
+scope: root defaults, bridge integrity, verified writer, worker transport
+current_checkpoint:
+  status: IMPLEMENTED_PARTIAL_ACCEPTANCE_NOT_PRODUCTION_READY
+  supersedes_stale_limitations_below: true
+  closed: zero-headroom fallback; parent authority before preflight; default spawn; known-generation lost-ack reconciliation; wave reuse and backend identity; finite worker-death scope abort
+  open: native physical-owner lease reclamation; actual allocator peak hard bound; tiled large-factor transport; complete resume; full operator certification; approved real-data throughput acceptance
+  frozen_wave_rpc: {passed: 14, seconds: 1.09, junit: /tmp/fe-v6-sourcecheck-wxsjEL/frozen-wave-rpc.xml}
+  frozen_memory_suite: {passed: 122, skipped: 20, seconds: 30.78, junit: /tmp/v6_memory_final.xml, sha256: 4449fcf2cf683c2ef13f191ff648553f4013ba2cf36ea5e3671a0e9128d7bff6}
+  authority_preflight: {passed: 18, junit: factor_engine/test-results/v6-wp78-authority-preflight-combined-final.xml}
+  default_spawn: {passed: 1, junit: factor_engine/test-results/v6-wp78-default-spawn-order-final.xml}
+  bounded_pipeline: {passed: 21, seconds: 90.41, warnings: 41, junit: /tmp/fe-v6-sourcecheck-wxsjEL/round2-bounded-pipeline.xml, note: after final ordering, adapter, worker payload and hash changes; compatibility fork warnings remain}
+  rpc_fix: hard_memory_limit reads parent ceiling independently of temporary zero current_read_budget; no lease allocation
+  interval_writer_measurement:
+    ledger: evidence/v6_interval_writer_measurement_20260907.json
+    seconds: 1.0267022720072418
+    baseline_rss_bytes: 124882944
+    sampled_peak_rss_bytes: 239939584
+    sampled_growth_bytes: 115056640
+    sampling_period_ms: 2
+    samples: 281
+    boundary: same-process sequential synthetic loop, includes initialization/input/allocator retention, not isolated scratch or production spawn; short peaks may be missed; measured before bounded-cell-hash repair
+    clarification: historical lifetime ru_maxrss minus late baseline does not isolate writer workspace; neither measurement proves total process-family hard bound
+  bounded_cell_hash:
+    passed: 43
+    seconds: 0.52
+    junit: /tmp/fe-v6-sourcecheck-wxsjEL/bounded-cell-hash.xml
+    fix: at most 8192 rows per cell-hash call, removes duplicate whole-chunk bytes, exact semantic readback retained, frame released before readback
+    boundary: limits hash temporary row count only, not object/string byte size or whole DQ/native allocations
+  package:
+    status: PASS_FROZEN_CODE_CHECKPOINT
+    stage: /tmp/fe-v6-final-package-DeSOR8
+    fe_sha256: fe6662fb4317d504266655632a1177e877ebec19ef66a67613d9d573a9d94999
+    fe_wheel: /tmp/fe-v6-final-package-DeSOR8/round2-wheels/factor_engine-0.3.1-py3-none-any.whl
+    da_sha256: febcc2468b0b21a24ba6f703a4ba4eb905f71eff1847f1265da247c5d79ac252
+    fe_payload: 1095 Python files and 187 resources
+    da_payload: 199 Python files and 3 resources
+    checks: sdist-to-wheel; byte parity against extracted source and server checkout; isolated force reinstall; installed imports; missing-profile fail-closed; 0.8 default; pip check
+    smoke_directory: /tmp/fe-v6-final-smoke-Qf9RcZ
+    initial_smoke_failure: staging cwd contained package source and shadowed installed module; rerun outside source trees proved installed paths
+    boundary: round2 includes worker payload release and bounded hashes; no runtime changes after build; not production install or CI/container acceptance
+  worker_payload_release:
+    passed: 21
+    seconds: 1.66
+    junit: /tmp/fe-v6-sourcecheck-wxsjEL/round2-worker-payload.xml
+    fix: drop raw payload, decoded tuple and message before user function; weakref oracle verifies nonempty raw buffer is released
+    warnings: 12 existing compatibility-fork warnings
+  posthash_measurement:
+    ledger: evidence/v6_posthash_writer_measurement_20260907.json
+    seconds: 0.6260126179549843
+    sampled_growth_bytes: 107982848
+    boundary: one fresh-process synthetic measurement only; no statistical speedup or total hard-memory claim
+deployment: NOT_RUN
+production_publication: NOT_RUN
+preservation:
+  user_report_edits: retained
+  concurrent_emitter_edits: retained; region agent owns narrow zscore changes only
+verification:
+  - name: combined_default_bridge_writer_regression
+    result: PASS
+    passed: 69
+    seconds: 21.86
+    command: >-
+      .venv/bin/python -m pytest -q
+      factor_engine/tests/operators/test_v6_rolling_bridge.py
+      factor_engine/tests/backend/test_cleaned_bridge.py
+      factor_engine/tests/storage/test_v6_parquet_writer.py
+      factor_engine/tests/storage/test_v6_durable_artifact_sink.py
+      factor_engine/tests/runtime/test_v6_default_execution_policy.py
+      factor_engine/tests/runtime/test_v6_default_engine.py
+    warnings: 2 unsupported-operator physical classification warnings; guards retained
+  - name: bounded_transport_and_profile_parser
+    result: PASS
+    passed: 35
+    seconds: 22.93
+    command: >-
+      .venv/bin/python -m pytest -q
+      factor_engine/tests/runtime/test_v6_supervised_worker.py
+      factor_engine/tests/runtime/test_v6_default_engine.py
+    warnings: 7 multithreaded fork warnings and 2 physical-classification warnings
+    oracles:
+      - late cooperative completion retires generation before reuse
+      - blocked IPC has finite return and retains lease while thread remains alive
+      - decoded request no longer retains previous input object (weakref oracle)
+      - unpicklable exception yields explicit failure and reusable worker
+      - malformed profile reports configuration error without echoing contents
+implementation:
+  bridge:
+    input_conversion: one per unique argument binding per call
+    mutation_isolation: deep copy before potentially mutating pandas delegate
+    axes: exact time and instrument labels; no anonymous-array shape inference
+    certification: NOT_CLAIMED
+  writer:
+    implementation: existing BatchParquetWriter plus isolated immutable manifest
+    checks: strict DQ; exact value/dtype/index/mask readback; cell and file hashes
+    side_effects: isolated artifact files only; no catalog registration
+    workspace_basis: STATIC_ESTIMATE max(1MiB, 4 * deep Series bytes)
+    performance: per-artifact write_seconds/verify_seconds/total_seconds recorded
+  transport:
+    timeout_scope: serialization/send/receive/decode plus finite retirement observation
+    quarantine: lease retained if child or IPC thread exit is not proven
+limitations:
+  - Worker transport uses serialized payloads, not budgeted shared-memory outputs yet.
+  - Spawn default and parent authority are integrated; full real-data end-to-end acceptance remains unrun.
+  - Whole-Series DQ allocation bound is estimated, not an allocator guarantee.
+  - Default profile now validates canonical daily HFQ dataset/COS/OHLC registry routing; real data and query snapshot evidence remain separate requirements.
+  - Default writer OS IO is supervised; quarantine can retain leases and abort rather than transparently recover.
+  - Native read-wave ownership is conservatively retained; small-pool multi-wave throughput is not solved.
+  - Real A-share approved profile and isolated output directory have been requested, not supplied.
+not_run:
+  - real_A_share_HFQ_end_to_end
+  - local_COS_equivalence
+  - 100000_real_factor_materialization
+  - full_1756_operator_parameter_certification
+  - holdout_fastest_baseline_comparison
+  - CI_container
+subsequent_rounds:
+  - name: stable_combined_v6_runtime_checkpoint
+    result: PASS
+    passed: 77
+    warnings: 43
+    seconds: 90.86
+    junit: /tmp/fe-v6-sourcecheck-wxsjEL/current-v6-runtime.xml
+    command: >-
+      .venv/bin/python -m pytest -q --tb=short
+      factor_engine/tests/runtime/test_v6_bounded_pipeline.py
+      factor_engine/tests/runtime/test_v6_persistent_run_state.py
+      factor_engine/tests/runtime/test_v6_default_engine.py
+      factor_engine/tests/runtime/test_v6_supervised_worker.py
+    note: pipeline owner held source edits during this checkpoint; legacy fork warnings remain
+    boundary: broker-accounting/transport refusal tests do not prove actual allocator or RSS copy peaks
+  - name: persisted_retry_policy_and_outcome_pagination
+    result: PASS
+    passed: 19
+    seconds: 0.28
+    command: .venv/bin/python -m pytest -q factor_engine/tests/runtime/test_v6_persistent_run_state.py
+    independent_reviewer: v6_memory (gpt-5.6-sol)
+    checks: no ordinal rebinding; no changed retry policy on reopen; successful/reused terminals require strict commit flags; keyset pagination includes failure reason
+    boundary: full job resume not implemented; supplied existing manifest/state files now fail closed rather than being overwritten
+  - name: expanded_null_rank_semantic_edges
+    result: FAIL_DIAGNOSIS_IN_PROGRESS
+    passed: 33
+    failed: 29
+    skipped: 2
+    seconds: 52.97
+    junit: /tmp/fe-v6-sourcecheck-wxsjEL/current-null-rank-edges.xml
+    primary_symptom: DuckDB real-SQL assertion fails with query_count=0 and sql_full_execution_failed; fallback output is not proof of SQL execution
+    owner: v6_memory
+  - name: actual_fixture_conversion_and_write_ledger
+    artifact: evidence/v6_fixture_artifact_ledger_20260907.json
+    scope: single synthetic six-row two-instrument Series, including NaN and signed zero
+    samples: 1
+    result: VERIFIED_ARTIFACT
+    checks: actual conversion boundaries, Arrow logical bytes, conversion seconds, writer/readback timing
+    boundary: >-
+      Not a representative throughput benchmark, no warm/cold or backend comparison,
+      not 100000-factor or real-data acceptance. copied_bytes remains null because
+      actual allocation/copy volume was not measured. No fastest-backend claim.
+  - name: production_core_triple_parity
+    result: PARTIAL_PASS_WITH_SKIPS
+    passed: 193
+    skipped: 48
+    seconds: 82.28
+    junit: /tmp/fe-v6-sourcecheck-wxsjEL/current-core-parity.xml
+    command: >-
+      .venv/bin/python -m pytest -q --tb=short
+      factor_engine/tests/backend_parity/test_production_core_triple_parity.py
+      factor_engine/tests/backend_parity/test_production_safe_bulk_parity.py
+    skip_reason: not on production daily surface
+    certification: not regenerated; skipped tests are not passes
+  - name: edge_and_native_no_fallback_expansion
+    result: FAIL_REPAIR_IN_PROGRESS
+    passed: 246
+    skipped: 60
+    failed: 1
+    seconds: 83.51
+    junit: /tmp/fe-v6-sourcecheck-wxsjEL/current-edge-native-parity.xml
+    failure: run_many CSE Polars emitter references undefined _first_long_lazy_from_plan
+    owner: v6_regions
+  - name: supervised_graceful_cleanup
+    result: PASS
+    passed: 13
+    seconds: 0.66
+    command: .venv/bin/python -m pytest -q factor_engine/tests/runtime/test_v6_supervised_worker.py
+    checks: worker-owned close hook runs and acknowledges; blocking cleanup has bounded termination
+    warnings: 10 multithreaded fork warnings in explicit legacy-context unit tests
+  - name: custom_sink_independent_verification
+    command: .venv/bin/python -m pytest -q factor_engine/tests/storage/test_v6_durable_artifact_sink.py
+    result: PASS
+    passed: 9
+    seconds: 0.19
+    checks: real readback; wrong run scope; fake verified label; self-consistent hashes with wrong values; escaping chunk paths
+  - name: default_hfq_semantics
+    command: .venv/bin/python -m pytest -q factor_engine/tests/runtime/test_v6_default_engine.py
+    result: PASS
+    passed: 28
+    seconds: 22.80
+    checks: canonical daily HFQ dataset and adjusted OHLC registry mappings; rejects raw aliases and mismatched daily scope
+    boundary: source construction only, no authorized business data read or permission inference
+  - name: worker_independent_review_followup
+    reviewer: v6_memory (gpt-5.6-sol)
+    command: .venv/bin/python -m pytest -q factor_engine/tests/runtime/test_v6_supervised_worker.py
+    result: PASS
+    passed: 11
+    seconds: 0.48
+    fixes: active guardian failure retires untracked child; stale response after proven exit is not cleanup-pending quarantine
+    warnings: 8 multithreaded fork warnings; factory/spawn integration still tracked separately
+  - name: P09_generated_optional_module_quarantine
+    command: .venv/bin/python -m pytest -q factor_engine/tests/operators/test_v6_generated_stub_quarantine.py
+    result: PASS
+    passed: 1
+    seconds: 22.94
+    checks: 918 declarations retained (4 generated class-name collisions); importing cannot register candidates; all execution paths explicitly rejected
+    boundary: quarantine not backend implementation, numerical certification, or expanded production support
+    original_failure: explicit optional module import raised abstract-class instantiation TypeError
+  - name: known_generation_commit_reconciliation
+    result: PASS
+    passed: 42
+    seconds: 0.72
+    junit: /tmp/fe-v6-sourcecheck-wxsjEL/commit-intent-reconciliation.xml
+    command: >-
+      .venv/bin/python -m pytest factor_engine/tests/storage/test_v6_durable_artifact_sink.py
+      factor_engine/tests/runtime/test_v6_persistent_run_state.py -q
+    checks: durable non-rebindable commit intent; supplied generation cannot overwrite; read-only exact reconciliation; missing generation does not search or rewrite; wrong values refused
+    boundary: helper and state tests; pipeline integration and complete resume not certified
+  - name: parallel_region_regression
+    result: PASS
+    passed: 31
+    seconds: 2.99
+    junit: /tmp/fe-v6-sourcecheck-wxsjEL/parallel-region-regression.xml
+    command: >-
+      .venv/bin/python -m pytest -q factor_engine/tests/runtime/test_parallel_region_scheduler.py
+      factor_engine/tests/multibackend/test_r45_scheduler_closure.py
+  - name: combined_edge_native_null_rerun
+    result: FAIL_REPAIR_IN_PROGRESS
+    passed: 277
+    failed: 32
+    skipped: 62
+    seconds: 147.95
+    junit: /tmp/fe-v6-sourcecheck-wxsjEL/repaired-edge-native-null-parity.xml
+    failures: native CSE read wave has unknown zero-byte estimate; zero DA envelope left by scheduler affects later reads
+    command: >-
+      .venv/bin/python -m pytest -q factor_engine/tests/backend_parity/test_p0_edge_cases_triple_parity.py
+      factor_engine/tests/backend_parity/test_polars_long_no_pandas_path.py
+      factor_engine/tests/backend_parity/test_p0_semantic_edges.py
+      factor_engine/tests/backend_parity/test_rank_null_singleton_boundaries.py
+    correction: earlier verbal 62 passed/2 skipped report has no retained verifiable command/output; do not use it to supersede this actual rerun
+  - name: isolated_null_rank_actual_rerun
+    result: PASS_WITH_SKIPS
+    passed: 62
+    skipped: 2
+    seconds: 61.09
+    junit: /tmp/fe-v6-sourcecheck-wxsjEL/isolated-null-rank-edges.xml
+    command: >-
+      .venv/bin/python -m pytest -q factor_engine/tests/backend_parity/test_p0_semantic_edges.py
+      factor_engine/tests/backend_parity/test_rank_null_singleton_boundaries.py
+    boundary: isolated process confirms numerical repairs; does not close combined-suite resource-state isolation failure
+  - name: cse_fixed_combined_edge_native_null_rerun
+    result: PASS_WITH_SKIPS_CHECKPOINT
+    passed: 309
+    skipped: 62
+    seconds: 134.53
+    junit: /tmp/fe-v6-sourcecheck-wxsjEL/cse-fixed-edge-native-null-parity.xml
+    command: >-
+      .venv/bin/python -m pytest -q factor_engine/tests/backend_parity/test_p0_edge_cases_triple_parity.py
+      factor_engine/tests/backend_parity/test_polars_long_no_pandas_path.py
+      factor_engine/tests/backend_parity/test_p0_semantic_edges.py
+      factor_engine/tests/backend_parity/test_rank_null_singleton_boundaries.py
+    fixes: nested CSE source-column closure and real scan dependencies; explicit backend respected; native path preserved; finite isolated test coordinator and controller teardown prevent leaking zero DA cap
+    boundary: active-development checkpoint; final frozen runtime verification still pending, skipped operators remain uncertified
+  - name: parent_summary_rpc
+    result: PASS
+    passed: 5
+    seconds: 2.08
+    command: >-
+      .venv/bin/python -m pytest -q factor_engine/tests/r27/test_v6_broker_summary_rpc.py
+      factor_engine/tests/r27/test_resource_broker_ipc.py
+    fix: scheduler telemetry reads parent broker summary through timed RPC instead of absent worker-local method
+  - name: default_state_writer_package_checkpoint
+    result: PASS
+    passed: 104
+    seconds: 25.97
+    junit: /tmp/fe-v6-sourcecheck-wxsjEL/default-state-writer-package-checkpoint.xml
+    command: >-
+      .venv/bin/python -m pytest -q factor_engine/tests/runtime/test_v6_default_execution_policy.py
+      factor_engine/tests/runtime/test_v6_default_engine.py factor_engine/tests/runtime/test_v6_persistent_run_state.py
+      factor_engine/tests/storage/test_v6_durable_artifact_sink.py factor_engine/tests/runtime/test_v6_package_payload_hook.py
+      factor_engine/tests/r27/test_v6_broker_summary_rpc.py
+    boundary: checkpoint before later parent-envelope RPC and authority integration
+  - name: supervised_startup_and_transport
+    result: PASS
+    passed: 20
+    seconds: 1.85
+    junit: /tmp/fe-v6-sourcecheck-wxsjEL/worker-startup-transport.xml
+    command: .venv/bin/python -m pytest -q factor_engine/tests/runtime/test_v6_supervised_worker.py
+    checks: explicit pre-spawn rejection; ambiguous Popen startup quarantined; genuine lost pipe typed only after proven exit; user EOFError does not imply process exit
+    warnings: 12 compatibility-fork warnings; default spawn tests remain separate
+  - name: observed_synthetic_writer_measurement
+    result: MEASURED_NOT_MEMORY_BOUND_PASS
+    ledger: evidence/v6_synthetic_writer_measurement_20260907.json
+    artifacts_root: /tmp/fe-v6-writer-measure-HiWGVQ
+    factors: 8
+    rows_per_factor: 100000
+    seconds: 0.7605084289098158
+    baseline_rss_bytes: 124878848
+    lifetime_peak_rss_bytes: 234790912
+    final_rss_bytes: 230440960
+    configured_writer_workspace_bytes: 33554432
+    finding: process RSS growth exceeds configured writer workspace; lazy initialization and allocator residency are not covered by a shape-only estimate
+    boundary: sequential synthetic writer-only measurement including exact readback; not real factors, backend benchmark, 100k-factor run, or proof of OOM prevention
+  - name: independent_package_payload_hook
+    result: PASS
+    passed: 3
+    seconds: 0.19
+    command: .venv/bin/python -m pytest factor_engine/tests/runtime/test_v6_package_payload_hook.py -q
+    fix: setuptools exclude-package-data does not filter Python modules; narrow build_py hook honors declared global and package exclusions and is import inert
+  - name: independent_package_install_checkpoint
+    result: PASS_CHECKPOINT_NOT_CURRENT_RUNTIME
+    stage: /tmp/fe-v6-wheel-check-ESiqn3
+    fe_wheel_sha256: 4cb0d8cec36f019bc462b46ab480965a2b9bfec6a5c7bb4e9c73b4c2f960c4ed
+    da_wheel_sha256: 4f3675135e3da0973effdfc75f735ad709faac3fa2a7581d9e32d823b676a14d
+    fe_payload: 1094 Python files and 187 resources byte-exact
+    da_payload: 199 Python files and 3 resources byte-exact
+    clean_venv: /tmp/fe-audit-package-ZQSxL0/clean-venv
+    checks: sdist to wheel; payload verifier PASS; installed imports resolve outside checkout; get_engine missing profile fails closed; default memory_fraction 0.8; pip check PASS
+    boundary: isolated package checkpoint predates latest read-wave and commit reconciliation edits; not a deployment and must rebuild final frozen sources
+  - name: historical_17_probe_rerun
+    result: MIXED_REQUIRES_INTERPRETATION
+    path: /tmp/fe-v6-sourcecheck-wxsjEL/probes-after-iteration.json
+    note: >-
+      P01-05 and P14-17 NOT_REPRODUCED; P10 CONTROL_OK; P11 finite-domain redundancy.
+      P06-08 isolated AST harness does not inject the newly factored helper and therefore raises harness NameError;
+      actual bridge tests separately exercise real Polars/Pandas conversion.
+      P09 was reproduced in this run and repaired in the later quarantine round above.
+      P12/13 are fixed literal mathematical expressions, not runtime regression tests.

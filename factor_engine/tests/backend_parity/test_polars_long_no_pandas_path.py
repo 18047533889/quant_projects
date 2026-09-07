@@ -38,6 +38,16 @@ class NoPandasSource:
     def scan_index_long(self):
         return self._lazy.select(["ts", "inst"]).unique()
 
+    def estimate_scan_cost(self, *, fields, time_range=None, instruments=None):
+        from types import SimpleNamespace
+        # This fixture owns exactly six in-memory rows. Supplying their shape
+        # keeps a native-path oracle independent of unknown-source admission.
+        frame = self.scan_polars_long(list(fields)).collect()
+        size = frame.estimated_size()
+        return SimpleNamespace(selected_bytes=size, projection_bytes=size,
+                               estimated_rows=frame.height, instrument_count=2,
+                               file_count=0, remote=False)
+
 
 @pytest.fixture(scope="module")
 def source():
@@ -191,12 +201,29 @@ def test_polars_long_no_pandas_path(source, factory_name, expr_builder):
     assert len(out["result"]) == 6
 
 
-def test_run_many_cse_no_pandas_path(source):
+def test_run_many_cse_no_pandas_path(source, monkeypatch):
+    from data_access.runtime import resource_governor as da_resources
+    from factor_engine.runtime import host_resource_coordinator as host
+    from factor_engine.runtime import resource_autopilot_service as autopilot
+    from factor_engine.runtime.resource_broker import ResourceBroker
+
+    # Numerical/native-path tests use a small finite, isolated resource domain.
+    # Never leave a background controller or a changed DA cap to later tests.
+    broker = ResourceBroker(hard_memory_limit=2 * 1024**3,
+                            min_host_reserve_gb=0.0, min_host_reserve_fraction=0.0)
+    monkeypatch.setattr(host, "_COORDINATOR", host.HostResourceCoordinator(broker=broker))
+    monkeypatch.setattr(da_resources, "_governor", da_resources.GlobalResourceGovernor(
+        max_total_reserved_memory=128 * 1024**2,
+        max_total_scan_bytes_inflight=64 * 1024**2))
+    monkeypatch.setattr(autopilot, "_AUTOPILOT", None)
     sub = make_cleaned_call_factory("ts_mean")(col("close"), 2)
     f1 = Factor(name="a", expr=sub)
     f2 = Factor(name="b", expr=make_cleaned_call_factory("rank")(sub))
     eng = FactorEngine(backend=build_backend("polars_long"), data_source=source)
-    out = eng.run_many([f1, f2], enable_cse=True)
+    try:
+        out = eng.run_many([f1, f2], enable_cse=True)
+    finally:
+        autopilot.stop_resource_autopilot()
     assert "backend_paths" in out
     assert out["backend_paths"]["a"]["primary_route"] == "polars_long_native"
     assert out["backend_paths"]["b"]["primary_route"] == "polars_long_native"

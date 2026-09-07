@@ -248,6 +248,114 @@ def test_release_unknown_task_id_no_op():
     assert broker._io.in_use == 0
 
 
+def test_unknown_release_does_not_release_real_running_tokens():
+    broker = ResourceBroker(hard_memory_limit=8 * 1024**3, cpu_slots=4)
+    task = _task(1024, cpu=1, io=1)
+    lease = broker.try_reserve(task, task_id="real")
+    assert lease is not None
+    broker.release(task, task_id="ghost")
+    assert broker._cpu.in_use == 1
+    assert broker._io.in_use == 1
+    lease.release()
+
+
+def test_protected_egress_is_atomic_and_duplicate_id_fails_closed():
+    broker = ResourceBroker(
+        hard_memory_limit=8 * 1024**3, cpu_slots=4,
+        min_host_reserve_gb=0, min_host_reserve_fraction=0,
+    )
+    leases = broker.acquire_protected_egress(1024, 2048, lease_id="job-a")
+    assert leases is not None
+    assert broker._lease_sum_bytes() == 3072
+    assert broker.acquire_protected_egress(1024, 2048, lease_id="job-a") is None
+    leases[0].release()
+    leases[1].release()
+    assert broker._lease_sum_bytes() == 0
+
+
+def test_physical_buffer_ledger_counts_unique_allocation_not_consumers():
+    broker = ResourceBroker(hard_memory_limit=8 * 1024**3, cpu_slots=4)
+    domains = ("cgroup_remaining", "host_remaining", "configured_remaining")
+    broker.register_physical_buffer("arrow-1", 4096, domains=domains, consumer_id="reader")
+    broker.register_physical_buffer("arrow-1", 4096, domains=domains, consumer_id="compute")
+    assert broker._verified_pool_residency_by_domain["host_remaining"] == 4096
+    assert broker.release_physical_buffer_reference("arrow-1", consumer_id="reader")
+    assert broker._verified_pool_residency_by_domain["host_remaining"] == 4096
+    assert broker.release_physical_buffer_reference("arrow-1", consumer_id="compute")
+    assert broker._verified_pool_residency_by_domain == {}
+
+
+def test_heavy_run_guard_blocks_second_process():
+    import subprocess
+    import sys
+    import os
+    from factor_engine.runtime.resource_broker import heavy_run_guard
+
+    script = (
+        "from factor_engine.runtime.resource_broker import heavy_run_guard\n"
+        "try:\n"
+        "  with heavy_run_guard(timeout_seconds=0.1): pass\n"
+        "except TimeoutError:\n"
+        "  raise SystemExit(23)\n"
+    )
+    with heavy_run_guard(timeout_seconds=0.1):
+        env = dict(os.environ)
+        env["PYTHONPATH"] = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+        result = subprocess.run([sys.executable, "-c", script], check=False, env=env)
+    assert result.returncode == 23
+
+
+def test_get_v2_resource_broker_is_process_singleton():
+    from factor_engine.runtime.resource_broker import get_v2_resource_broker
+
+    assert get_v2_resource_broker() is get_v2_resource_broker()
+
+
+def test_heavy_guard_remains_locked_until_tracked_worker_exits():
+    import subprocess
+    import sys
+    import os
+    from factor_engine.runtime.resource_broker import heavy_run_guard
+
+    env = dict(os.environ)
+    env["PYTHONPATH"] = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+    contender = (
+        "from factor_engine.runtime.resource_broker import heavy_run_guard\n"
+        "try:\n"
+        "  with heavy_run_guard(timeout_seconds=0.15): pass\n"
+        "except TimeoutError: raise SystemExit(23)\n"
+    )
+    worker = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(2)"])
+    try:
+        with heavy_run_guard(timeout_seconds=0.2) as guard:
+            guard.track_worker(worker.pid)
+        blocked = subprocess.run([sys.executable, "-c", contender], env=env, check=False)
+        assert blocked.returncode == 23
+    finally:
+        worker.terminate()
+        worker.wait(timeout=2)
+    admitted = subprocess.run([sys.executable, "-c", contender], env=env, check=False)
+    assert admitted.returncode == 0
+
+
+def test_v2_singleton_rejects_admin_cap_mismatch_in_fresh_process():
+    import subprocess
+    import sys
+    import os
+
+    env = dict(os.environ)
+    env["PYTHONPATH"] = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+    script = (
+        "from types import SimpleNamespace as P\n"
+        "from factor_engine.runtime.resource_broker import get_v2_resource_broker\n"
+        "get_v2_resource_broker(P(memory_fraction=.8, optional_admin_cap_bytes=None))\n"
+        "try: get_v2_resource_broker(P(memory_fraction=.8, optional_admin_cap_bytes=1024))\n"
+        "except ValueError: raise SystemExit(0)\n"
+        "raise SystemExit(1)\n"
+    )
+    assert subprocess.run([sys.executable, "-c", script], env=env, check=False).returncode == 0
+
+
 def test_token_accounting_exact_reserve_release_cycles():
     # R44-AUDIT: CPU/IO token 计数在多个 reserve/release 循环后精确回零。
     broker = ResourceBroker(
@@ -327,4 +435,3 @@ def test_concurrent_reserve_release_same_id():
     # Token 精确归零。
     assert broker._cpu.in_use == 0
     assert broker._io.in_use == 0
-

@@ -1,0 +1,29 @@
+scope: WP2_OP01_ts_zscore_and_RT17
+git_sha: 6e783a57300eb6cd98d5e37ee6def4ed1033acfe
+timestamp_utc: 2026-09-07T13:15:00Z
+runtime_winner_trace:
+  pandas_numpy: factor_engine.cleaned_operators.common.time_series.TSZScore
+  polars: factor_engine.cleaned_operators.common.polars_ts_stats.TSZScoreNative
+semantic_contract:
+  includes_current_bar_false: current value is numerator; prior observations form rolling statistics
+  finite_policy: plus_minus_inf_are_missing
+  ddof: [0, 1]
+  zero_std_policy: [zero, nan]
+  nan_policy: [ignore, propagate]
+  semantic_version: 2
+tests:
+  independent_oracle_and_invalid_domains: 13_passed
+  region_policy_and_fixed_backend: 30_passed
+  real_handoff_probes:
+    P01_TS_ZSCORE_DDOF: NOT_REPRODUCED
+    P02_TS_ZSCORE_CURRENT_BAR: NOT_REPRODUCED
+    P03_TS_ZSCORE_ZERO: NOT_REPRODUCED
+    P04_TS_ZSCORE_NAN: NOT_REPRODUCED
+    P17_BASELINE_BUCKET: NOT_REPRODUCED
+  direct_polars_native_values: PASS_ddof0_include_and_ddof1_prior_stats
+  public_polars_long_and_duckdb_compile_execute: 8_passed_all_supported_parameter_dimensions
+  fastpath_rewrite_constant_window: PASS_preserves_raw_0_div_0_as_nan
+limitations:
+  - Fastpath acceptance matrix has three evidence-ledger failures for group_zscore, zscore, and ts_zscore; primitive_verified.json hashes drift from current emitters, planner rewrite, bridge, and operator sources, so evidence_artifact_valid is false and the certified set correctly fails closed. No certification label was added.
+  - No full 1756-operator run, production data, CI, or deployment was performed.
+  - polars_expr_emitter.py contained concurrent non-zscore edits; they were preserved byte-for-byte from the remote pre-edit copy outside the ts_zscore section.

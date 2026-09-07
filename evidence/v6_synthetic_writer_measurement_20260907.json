@@ -1,0 +1,503 @@
+{
+  "artifacts": [
+    {
+      "conversions": [
+        [
+          {
+            "copied_bytes": null,
+            "from": "pandas_series",
+            "logical_arrow_bytes": 2162688,
+            "rows": 65536,
+            "seconds": 0.010328160016797483,
+            "to": "arrow_table"
+          },
+          {
+            "copied_bytes": null,
+            "from": "arrow_table",
+            "logical_arrow_bytes": 2179072,
+            "rows": 65536,
+            "seconds": 0.00625050300732255,
+            "to": "pandas_series"
+          }
+        ],
+        [
+          {
+            "copied_bytes": null,
+            "from": "pandas_series",
+            "logical_arrow_bytes": 1137312,
+            "rows": 34464,
+            "seconds": 0.0029148419853299856,
+            "to": "arrow_table"
+          },
+          {
+            "copied_bytes": null,
+            "from": "arrow_table",
+            "logical_arrow_bytes": 1145928,
+            "rows": 34464,
+            "seconds": 0.004005669034086168,
+            "to": "pandas_series"
+          }
+        ]
+      ],
+      "ordinal": 0,
+      "receipt": {
+        "bytes": 964304,
+        "committed": true,
+        "generation": "3e8a296716444c9f87ed8c4fbf9eca9b",
+        "path": "/tmp/fe-v6-writer-measure-HiWGVQ/synthetic-writer-only/values/00000000-3e8a296716444c9f87ed8c4fbf9eca9b/manifest.json",
+        "performance": {
+          "codec": "zstd_level_1",
+          "estimate_basis": "STATIC_ESTIMATE",
+          "total_seconds": 0.06335377506911755,
+          "verify_seconds": 0.02275911590550095,
+          "workspace_budget_bytes": 33554432,
+          "workspace_estimate_bytes": 4606132,
+          "write_seconds": 0.018259391887113452
+        },
+        "production_published": false,
+        "rows": 100000,
+        "sha256": "07b187487c7236e6b598439ee745f97cb80c34c1b7c8d3b961be36c9859f4840",
+        "verified": true
+      }
+    },
+    {
+      "conversions": [
+        [
+          {
+            "copied_bytes": null,
+            "from": "pandas_series",
+            "logical_arrow_bytes": 2162688,
+            "rows": 65536,
+            "seconds": 0.004369938978925347,
+            "to": "arrow_table"
+          },
+          {
+            "copied_bytes": null,
+            "from": "arrow_table",
+            "logical_arrow_bytes": 2179072,
+            "rows": 65536,
+            "seconds": 0.007594441995024681,
+            "to": "pandas_series"
+          }
+        ],
+        [
+          {
+            "copied_bytes": null,
+            "from": "pandas_series",
+            "logical_arrow_bytes": 1137312,
+            "rows": 34464,
+            "seconds": 0.002583901979960501,
+            "to": "arrow_table"
+          },
+          {
+            "copied_bytes": null,
+            "from": "arrow_table",
+            "logical_arrow_bytes": 1145928,
+            "rows": 34464,
+            "seconds": 0.0030624979408457875,
+            "to": "pandas_series"
+          }
+        ]
+      ],
+      "ordinal": 1,
+      "receipt": {
+        "bytes": 964295,
+        "committed": true,
+        "generation": "8d0823caec7a450391fde296bd11ed27",
+        "path": "/tmp/fe-v6-writer-measure-HiWGVQ/synthetic-writer-only/values/00000001-8d0823caec7a450391fde296bd11ed27/manifest.json",
+        "performance": {
+          "codec": "zstd_level_1",
+          "estimate_basis": "STATIC_ESTIMATE",
+          "total_seconds": 0.053940647980198264,
+          "verify_seconds": 0.023915080935694277,
+          "workspace_budget_bytes": 33554432,
+          "workspace_estimate_bytes": 13060436,
+          "write_seconds": 0.01715417404193431
+        },
+        "production_published": false,
+        "rows": 100000,
+        "sha256": "775c4902a8381a303cbff236eaf61a280d0525a2f29479170363efbd90dadc36",
+        "verified": true
+      }
+    },
+    {
+      "conversions": [
+        [
+          {
+            "copied_bytes": null,
+            "from": "pandas_series",
+            "logical_arrow_bytes": 2162688,
+            "rows": 65536,
+            "seconds": 0.004708208958618343,
+            "to": "arrow_table"
+          },
+          {
+            "copied_bytes": null,
+            "from": "arrow_table",
+            "logical_arrow_bytes": 2179072,
+            "rows": 65536,
+            "seconds": 0.006131155067123473,
+            "to": "pandas_series"
+          }
+        ],
+        [
+          {
+            "copied_bytes": null,
+            "from": "pandas_series",
+            "logical_arrow_bytes": 1137312,
+            "rows": 34464,
+            "seconds": 0.0026807800168171525,
+            "to": "arrow_table"
+          },
+          {
+            "copied_bytes": null,
+            "from": "arrow_table",
+            "logical_arrow_bytes": 1145928,
+            "rows": 34464,
+            "seconds": 0.003320660092867911,
+            "to": "pandas_series"
+          }
+        ]
+      ],
+      "ordinal": 2,
+      "receipt": {
+        "bytes": 964303,
+        "committed": true,
+        "generation": "a2193858765e44c4ba1ac047bd9e08d8",
+        "path": "/tmp/fe-v6-writer-measure-HiWGVQ/synthetic-writer-only/values/00000002-a2193858765e44c4ba1ac047bd9e08d8/manifest.json",
+        "performance": {
+          "codec": "zstd_level_1",
+          "estimate_basis": "STATIC_ESTIMATE",
+          "total_seconds": 0.05151142203249037,
+          "verify_seconds": 0.021161174052394927,
+          "workspace_budget_bytes": 33554432,
+          "workspace_estimate_bytes": 13060436,
+          "write_seconds": 0.01695222989656031
+        },
+        "production_published": false,
+        "rows": 100000,
+        "sha256": "d796ef44c8d5c03241bfa63570e23edfd0fc7f06ec7223d5cc140f0db55f18d8",
+        "verified": true
+      }
+    },
+    {
+      "conversions": [
+        [
+          {
+            "copied_bytes": null,
+            "from": "pandas_series",
+            "logical_arrow_bytes": 2162688,
+            "rows": 65536,
+            "seconds": 0.004334780038334429,
+            "to": "arrow_table"
+          },
+          {
+            "copied_bytes": null,
+            "from": "arrow_table",
+            "logical_arrow_bytes": 2179072,
+            "rows": 65536,
+            "seconds": 0.005619341041892767,
+            "to": "pandas_series"
+          }
+        ],
+        [
+          {
+            "copied_bytes": null,
+            "from": "pandas_series",
+            "logical_arrow_bytes": 1137312,
+            "rows": 34464,
+            "seconds": 0.0027288480196148157,
+            "to": "arrow_table"
+          },
+          {
+            "copied_bytes": null,
+            "from": "arrow_table",
+            "logical_arrow_bytes": 1145928,
+            "rows": 34464,
+            "seconds": 0.004456526017747819,
+            "to": "pandas_series"
+          }
+        ]
+      ],
+      "ordinal": 3,
+      "receipt": {
+        "bytes": 964314,
+        "committed": true,
+        "generation": "0766d72375fb4143a13e1bf34d5c9bb1",
+        "path": "/tmp/fe-v6-writer-measure-HiWGVQ/synthetic-writer-only/values/00000003-0766d72375fb4143a13e1bf34d5c9bb1/manifest.json",
+        "performance": {
+          "codec": "zstd_level_1",
+          "estimate_basis": "STATIC_ESTIMATE",
+          "total_seconds": 0.05316762102302164,
+          "verify_seconds": 0.021701078047044575,
+          "workspace_budget_bytes": 33554432,
+          "workspace_estimate_bytes": 13060436,
+          "write_seconds": 0.01744304597377777
+        },
+        "production_published": false,
+        "rows": 100000,
+        "sha256": "fa81692d5217bf3a135a1d68c4616379102b7e87a3af5e9bddd49ecb85e30029",
+        "verified": true
+      }
+    },
+    {
+      "conversions": [
+        [
+          {
+            "copied_bytes": null,
+            "from": "pandas_series",
+            "logical_arrow_bytes": 2162688,
+            "rows": 65536,
+            "seconds": 0.004134754999540746,
+            "to": "arrow_table"
+          },
+          {
+            "copied_bytes": null,
+            "from": "arrow_table",
+            "logical_arrow_bytes": 2179072,
+            "rows": 65536,
+            "seconds": 0.005480695050209761,
+            "to": "pandas_series"
+          }
+        ],
+        [
+          {
+            "copied_bytes": null,
+            "from": "pandas_series",
+            "logical_arrow_bytes": 1137312,
+            "rows": 34464,
+            "seconds": 0.002546753967180848,
+            "to": "arrow_table"
+          },
+          {
+            "copied_bytes": null,
+            "from": "arrow_table",
+            "logical_arrow_bytes": 1145928,
+            "rows": 34464,
+            "seconds": 0.004537563072517514,
+            "to": "pandas_series"
+          }
+        ]
+      ],
+      "ordinal": 4,
+      "receipt": {
+        "bytes": 964289,
+        "committed": true,
+        "generation": "9d48b852785b44e8ab2e9a77757cf719",
+        "path": "/tmp/fe-v6-writer-measure-HiWGVQ/synthetic-writer-only/values/00000004-9d48b852785b44e8ab2e9a77757cf719/manifest.json",
+        "performance": {
+          "codec": "zstd_level_1",
+          "estimate_basis": "STATIC_ESTIMATE",
+          "total_seconds": 0.05419916089158505,
+          "verify_seconds": 0.02424560987856239,
+          "workspace_budget_bytes": 33554432,
+          "workspace_estimate_bytes": 13060436,
+          "write_seconds": 0.017171073937788606
+        },
+        "production_published": false,
+        "rows": 100000,
+        "sha256": "60a8b86b85962d72f8db0a52a1961c7351aacdf0190288ee5bc3df58a999e988",
+        "verified": true
+      }
+    },
+    {
+      "conversions": [
+        [
+          {
+            "copied_bytes": null,
+            "from": "pandas_series",
+            "logical_arrow_bytes": 2162688,
+            "rows": 65536,
+            "seconds": 0.004371118964627385,
+            "to": "arrow_table"
+          },
+          {
+            "copied_bytes": null,
+            "from": "arrow_table",
+            "logical_arrow_bytes": 2179072,
+            "rows": 65536,
+            "seconds": 0.005536344018764794,
+            "to": "pandas_series"
+          }
+        ],
+        [
+          {
+            "copied_bytes": null,
+            "from": "pandas_series",
+            "logical_arrow_bytes": 1137312,
+            "rows": 34464,
+            "seconds": 0.0029951499309390783,
+            "to": "arrow_table"
+          },
+          {
+            "copied_bytes": null,
+            "from": "arrow_table",
+            "logical_arrow_bytes": 1145928,
+            "rows": 34464,
+            "seconds": 0.0033842780394479632,
+            "to": "pandas_series"
+          }
+        ]
+      ],
+      "ordinal": 5,
+      "receipt": {
+        "bytes": 964314,
+        "committed": true,
+        "generation": "0bae477fa9d64a0e80cb9d0f981ef4f5",
+        "path": "/tmp/fe-v6-writer-measure-HiWGVQ/synthetic-writer-only/values/00000005-0bae477fa9d64a0e80cb9d0f981ef4f5/manifest.json",
+        "performance": {
+          "codec": "zstd_level_1",
+          "estimate_basis": "STATIC_ESTIMATE",
+          "total_seconds": 0.05237102590035647,
+          "verify_seconds": 0.021623700042255223,
+          "workspace_budget_bytes": 33554432,
+          "workspace_estimate_bytes": 13060436,
+          "write_seconds": 0.017292221076786518
+        },
+        "production_published": false,
+        "rows": 100000,
+        "sha256": "4c6ed2b4767ba43fbdf135eca6a7255e0255729b0e920b930d3b414566174ec5",
+        "verified": true
+      }
+    },
+    {
+      "conversions": [
+        [
+          {
+            "copied_bytes": null,
+            "from": "pandas_series",
+            "logical_arrow_bytes": 2162688,
+            "rows": 65536,
+            "seconds": 0.00462356093339622,
+            "to": "arrow_table"
+          },
+          {
+            "copied_bytes": null,
+            "from": "arrow_table",
+            "logical_arrow_bytes": 2179072,
+            "rows": 65536,
+            "seconds": 0.005916462047025561,
+            "to": "pandas_series"
+          }
+        ],
+        [
+          {
+            "copied_bytes": null,
+            "from": "pandas_series",
+            "logical_arrow_bytes": 1137312,
+            "rows": 34464,
+            "seconds": 0.0027855070075020194,
+            "to": "arrow_table"
+          },
+          {
+            "copied_bytes": null,
+            "from": "arrow_table",
+            "logical_arrow_bytes": 1145928,
+            "rows": 34464,
+            "seconds": 0.0045348439598456025,
+            "to": "pandas_series"
+          }
+        ]
+      ],
+      "ordinal": 6,
+      "receipt": {
+        "bytes": 964323,
+        "committed": true,
+        "generation": "457e8bd5bdfc4b2091baeed6d73df271",
+        "path": "/tmp/fe-v6-writer-measure-HiWGVQ/synthetic-writer-only/values/00000006-457e8bd5bdfc4b2091baeed6d73df271/manifest.json",
+        "performance": {
+          "codec": "zstd_level_1",
+          "estimate_basis": "STATIC_ESTIMATE",
+          "total_seconds": 0.0540487450780347,
+          "verify_seconds": 0.02311724505852908,
+          "workspace_budget_bytes": 33554432,
+          "workspace_estimate_bytes": 13060436,
+          "write_seconds": 0.01680257497355342
+        },
+        "production_published": false,
+        "rows": 100000,
+        "sha256": "c9ffcec97762ca8dc84c6e4d3670d4ee7f6bdfd6d3581408baedcc607f32ce3a",
+        "verified": true
+      }
+    },
+    {
+      "conversions": [
+        [
+          {
+            "copied_bytes": null,
+            "from": "pandas_series",
+            "logical_arrow_bytes": 2162688,
+            "rows": 65536,
+            "seconds": 0.00421271298546344,
+            "to": "arrow_table"
+          },
+          {
+            "copied_bytes": null,
+            "from": "arrow_table",
+            "logical_arrow_bytes": 2179072,
+            "rows": 65536,
+            "seconds": 0.005769966985099018,
+            "to": "pandas_series"
+          }
+        ],
+        [
+          {
+            "copied_bytes": null,
+            "from": "pandas_series",
+            "logical_arrow_bytes": 1137312,
+            "rows": 34464,
+            "seconds": 0.00253991293720901,
+            "to": "arrow_table"
+          },
+          {
+            "copied_bytes": null,
+            "from": "arrow_table",
+            "logical_arrow_bytes": 1145928,
+            "rows": 34464,
+            "seconds": 0.0033800690434873104,
+            "to": "pandas_series"
+          }
+        ]
+      ],
+      "ordinal": 7,
+      "receipt": {
+        "bytes": 964310,
+        "committed": true,
+        "generation": "2cb06406b24e42b1b60a274b36666506",
+        "path": "/tmp/fe-v6-writer-measure-HiWGVQ/synthetic-writer-only/values/00000007-2cb06406b24e42b1b60a274b36666506/manifest.json",
+        "performance": {
+          "codec": "zstd_level_1",
+          "estimate_basis": "STATIC_ESTIMATE",
+          "total_seconds": 0.0532681179465726,
+          "verify_seconds": 0.02228227991145104,
+          "workspace_budget_bytes": 33554432,
+          "workspace_estimate_bytes": 13060436,
+          "write_seconds": 0.01779486599843949
+        },
+        "production_published": false,
+        "rows": 100000,
+        "sha256": "493c9657bc371a0bbb07cce76a415d74941a4328a1593bb50b72bc60f9261bcc",
+        "verified": true
+      }
+    }
+  ],
+  "boundaries": [
+    "writer-only",
+    "synthetic values",
+    "sequential",
+    "no backend benchmark",
+    "not hard RSS bound proof",
+    "not 100k factors",
+    "no production publication"
+  ],
+  "factors": 8,
+  "peak_basis": "Linux ru_maxrss, includes imports and data construction; not per-buffer copies",
+  "process_baseline_rss_bytes": 124878848,
+  "process_final_rss_bytes": 230440960,
+  "process_lifetime_peak_rss_bytes": 234790912,
+  "rows_per_factor": 100000,
+  "seconds": 0.7605084289098158,
+  "status": "MEASURED_SYNTHETIC_ONLY",
+  "verified_cells_per_second": 1051927.854562763,
+  "workspace_admission_bytes": 33554432
+}

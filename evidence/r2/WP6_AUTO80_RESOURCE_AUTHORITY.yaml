@@ -1,0 +1,36 @@
+id: WP6_AUTO80_RESOURCE_AUTHORITY
+git_sha: 6e783a57300eb6cd98d5e37ee6def4ed1033acfe
+timestamp_utc: 2026-09-07T11:40:32Z
+files:
+  - factor_engine/runtime/auto_memory_budget.py
+  - factor_engine/runtime/resource_broker.py
+  - factor_engine/runtime/resource_governor.py
+  - factor_engine/runtime/resource_broker_ipc.py
+  - factor_engine/tests/r27/test_auto_memory_budget.py
+  - factor_engine/tests/r27/test_resource_broker.py
+  - factor_engine/tests/r27/test_resource_broker_ipc.py
+tests:
+  passed:
+    - command: PYTHONPATH=. ../.venv/bin/python -m pytest -q tests/r27/test_auto_memory_budget.py tests/r27/test_resource_broker.py
+      result: 40 passed
+      notes: includes guardian-retained lock until tracked PID/starttime identity exits and admin-cap singleton mismatch rejection
+    - command: PYTHONPATH=. .venv/bin/python -m pytest -q factor_engine/tests/r27/test_resource_broker_ipc.py factor_engine/tests/r27/test_auto_memory_budget.py factor_engine/tests/r27/test_resource_broker.py
+      result: 44 passed
+    - command: PYTHONPATH=. ../.venv/bin/python -m pytest -q tests/r27/test_auto_memory_budget.py tests/r27/test_resource_broker.py tests/r38/test_host_lease_tree.py
+      result: 44 passed
+    - command: PYTHONPATH=. ../.venv/bin/python -m pytest -q tests/r38/test_p011_resource_broker_authority.py tests/r38/test_autopilot_signal_and_lease_2026_08.py tests/r38/test_dynamic_sink_and_service_lease.py tests/r38/test_fixed_cadence_autopilot.py
+      result: 28 passed, 1 failed
+      failure: tests/r38/test_p011_resource_broker_authority.py::test_result_queue_release_returns_bytes_after_get expects get() to release bytes, while current queue contract requires explicit release(item); no owned sink file was changed.
+  not_run:
+    - full factor_engine test suite
+    - public planner compile verification
+    - multi-process host coordinator integration
+    - pressure/OOM stress testing
+    - production or real-market-data execution
+limitations:
+  - Ancestor cgroup finite memory.max and paired remaining discovery use the actual cgroup2 mount; memory.high is a separate pressure boundary.
+  - Verified residency add-back requires callers to report unique measured pool-owned resident bytes; no inference from leases is performed.
+  - Parent-mediated spawn IPC competition, protected egress, heavy-run exclusion, and tracked-worker lifetime retention were tested locally; distributed/multi-host coordination was not tested.
+  - RLIMIT_AS headroom now uses process-family VMS; RLIMIT_DATA retains the baseline hard-limit discovery and was not separately stress-tested.
+  - No broad acceptance or production-readiness claim is made.
+  - Failed host MemAvailable probes now remain UNKNOWN; a measured numeric zero remains KNOWN_ZERO.

@@ -22,6 +22,9 @@ dependencies = [
     # extra fails load_all (intraday profile ops unregistered -> static-surface
     # gate).  It must be a hard dependency, not an optional extra.
     "polars>=0.20",
+    # v2 default resource measurement and native thread-pool enforcement.
+    "psutil>=5.9",
+    "threadpoolctl>=3.1",
 ]
 
 [project.scripts]
@@ -80,6 +83,7 @@ packages = [
     "factor_engine.docs",
     "factor_engine.export",
     "factor_engine.execution",
+    "factor_engine.examples",
     "factor_engine.expr",
     "factor_engine.factor_recipes",
     "factor_engine.fields",
@@ -123,6 +127,7 @@ packages = [
 
 [tool.setuptools.exclude-package-data]
 "*" = [
+    "setup.py",
     "tests", "tests.*",
     "benchmarks", "benchmarks.*",
     "audit", "audit.*",

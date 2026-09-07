@@ -73,31 +73,36 @@ class TSZScoreNative(SeriesOperator):
         zero_std_policy: str = "zero",
         **kwargs,
     ) -> pl.DataFrame:
-        from factor_engine.cleaned_operators.parameter_validation import strict_integer
+        from factor_engine.cleaned_operators.common.ts_zscore_spec import TSZScoreSpec
 
-        w = strict_integer(window, "window", minimum=1)
-        mp = strict_integer(min_periods, "min_periods", minimum=1)
-        if mp > w:
-            mp = w
-
-        def zscore_fn(values: pl.Series) -> float:
-            raw = np.asarray(values.to_numpy(), dtype=float)
-            finite = raw[np.isfinite(raw)]
-            if finite.size < mp:
-                return math.nan
-            current = raw[-1]
-            if not np.isfinite(current):
-                return math.nan
-            mean = float(np.mean(finite))
-            std = float(np.std(finite, ddof=1))
-            if std == 0.0:
-                return 0.0
-            return float((current - mean) / std)
-
-        exprs = [
-            pl.col(c).rolling_map(zscore_fn, window_size=w, min_samples=1).alias(c)
-            for c in _numeric_cols(x)
-        ]
+        spec = TSZScoreSpec.resolve(
+            window=window, min_periods=min_periods, null_policy=null_policy,
+            nan_policy=nan_policy, includes_current_bar=includes_current_bar,
+            ddof=ddof, zero_std_policy=zero_std_policy,
+        )
+        exprs = []
+        propagate = (
+            spec.window.nan_policy == "propagate"
+            or spec.window.null_policy.value == "propagate"
+        )
+        for c in _numeric_cols(x):
+            current = pl.col(c).cast(pl.Float64).fill_nan(None)
+            current = pl.when(current.is_finite()).then(current).otherwise(None)
+            stats = current if spec.includes_current_bar else current.shift(1)
+            mean = stats.rolling_mean(spec.window.size, min_samples=spec.window.min_periods)
+            std = stats.rolling_std(
+                spec.window.size, min_samples=spec.window.min_periods,
+                ddof=spec.window.ddof,
+            )
+            value = pl.when(current.is_null() | std.is_null()).then(None)
+            if propagate:
+                bad = stats.is_null().cast(pl.Int64).rolling_sum(
+                    spec.window.size, min_samples=1
+                ) > 0
+                value = value.when(bad).then(None)
+            zero_value = 0.0 if spec.zero_std_policy == "zero" else None
+            value = value.when(std == 0).then(zero_value).otherwise((current - mean) / std)
+            exprs.append(value.alias(c))
         return x.with_columns(exprs)
 
 

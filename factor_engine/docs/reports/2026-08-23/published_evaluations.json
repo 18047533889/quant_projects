@@ -1938,8 +1938,21 @@
  },
  "downside_vol_asymmetry_smoothed": {
   "entry": {
-   "factor_name": "factor_downside_vol_asymmetry_smoothed",
+   "code": "def factor_downside_vol_asymmetry_smoothed(df):\n    df_copy = df.copy()\n    ret = df_copy[\"close\"].pct_change()\n    negative_sq = ret.where(ret < 0, 0) ** 2\n    positive_sq = ret.where(ret > 0, 0) ** 2\n    window = 20\n    down_var = negative_sq.rolling(window=window, min_periods=window).mean()\n    up_var = positive_sq.rolling(window=window, min_periods=window).mean()\n    ratio = np.sqrt(down_var) / np.sqrt(up_var.replace(0, np.nan))\n    smoothed_ratio = ratio.rolling(window=5, min_periods=5).mean()\n    factor = np.log(smoothed_ratio + 1e-10)\n    factor.name = \"factor_downside_vol_asymmetry_smoothed\"\n    return factor.fillna(0)",
    "source_formula": "o['fillna'](o['log'](o['add'](o['ts_mean'](o['divide'](o['sqrt'](o['ts_mean'](o['power'](o['where'](o['lt'](o['ts_pct'](col('AdjClose'), 1), 0), o['ts_pct'](col('AdjClose'), 1), 0), 2), 20)), o['sqrt'](o['where'](o['eq'](o['ts_mean'](o['power'](o['where'](o['gt'](o['ts_pct'](col('AdjClose'), 1), 0), o['ts_pct'](col('AdjClose'), 1), 0), 2), 20), 0), o['log'](-1.0), o['ts_mean'](o['power'](o['where'](o['gt'](o['ts_pct'](col('AdjClose'), 1), 0), o['ts_pct'](col('AdjClose'), 1), 0), 2), 20)))), 5), 1e-10)), 0)",
+   "dsl": "log( SMA_5( sqrt(mean_{20}(neg_ret^2)) / sqrt(mean_{20}(pos_ret^2)) ) )",
+   "lqtp_formula": "log( SMA_5( sqrt(mean_{20}(neg_ret^2)) / sqrt(mean_{20}(pos_ret^2)) ) )",
+   "formula_source": {
+    "code": "def factor_downside_vol_asymmetry_smoothed(df):\n    df_copy = df.copy()\n    ret = df_copy[\"close\"].pct_change()\n    negative_sq = ret.where(ret < 0, 0) ** 2\n    positive_sq = ret.where(ret > 0, 0) ** 2\n    window = 20\n    down_var = negative_sq.rolling(window=window, min_periods=window).mean()\n    up_var = positive_sq.rolling(window=window, min_periods=window).mean()\n    ratio = np.sqrt(down_var) / np.sqrt(up_var.replace(0, np.nan))\n    smoothed_ratio = ratio.rolling(window=5, min_periods=5).mean()\n    factor = np.log(smoothed_ratio + 1e-10)\n    factor.name = \"factor_downside_vol_asymmetry_smoothed\"\n    return factor.fillna(0)",
+    "source_formula": "o['fillna'](o['log'](o['add'](o['ts_mean'](o['divide'](o['sqrt'](o['ts_mean'](o['power'](o['where'](o['lt'](o['ts_pct'](col('AdjClose'), 1), 0), o['ts_pct'](col('AdjClose'), 1), 0), 2), 20)), o['sqrt'](o['where'](o['eq'](o['ts_mean'](o['power'](o['where'](o['gt'](o['ts_pct'](col('AdjClose'), 1), 0), o['ts_pct'](col('AdjClose'), 1), 0), 2), 20), 0), o['log'](-1.0), o['ts_mean'](o['power'](o['where'](o['gt'](o['ts_pct'](col('AdjClose'), 1), 0), o['ts_pct'](col('AdjClose'), 1), 0), 2), 20)))), 5), 1e-10)), 0)",
+    "dsl": "log( SMA_5( sqrt(mean_{20}(neg_ret^2)) / sqrt(mean_{20}(pos_ret^2)) ) )",
+    "lqtp_formula": "log( SMA_5( sqrt(mean_{20}(neg_ret^2)) / sqrt(mean_{20}(pos_ret^2)) ) )",
+    "fe_formula": "o['fillna'](o['log'](o['add'](o['ts_mean'](o['divide'](o['sqrt'](o['ts_mean'](o['power'](o['where'](o['lt'](o['ts_pct'](col('AdjClose'), 1), 0), o['ts_pct'](col('AdjClose'), 1), 0), 2), 20)), o['sqrt'](o['where'](o['eq'](o['ts_mean'](o['power'](o['where'](o['gt'](o['ts_pct'](col('AdjClose'), 1), 0), o['ts_pct'](col('AdjClose'), 1), 0), 2), 20), 0), o['log'](-1.0), o['ts_mean'](o['power'](o['where'](o['gt'](o['ts_pct'](col('AdjClose'), 1), 0), o['ts_pct'](col('AdjClose'), 1), 0), 2), 20)))), 5), 1e-10)), 0)"
+   },
+   "formula_source_sha256": "d90fe4897a79b040f9cd1242ef145573e4064421a0572da60fe0d154a824afca",
+   "factor_name": "factor_downside_vol_asymmetry_smoothed",
+   "landing_backend": null,
+   "landing_backend_fallbacks": [],
    "source_metadata": null,
    "campaign": null,
    "direction": 1,
@@ -1962,17 +1975,18 @@
     "g10_annual": 0.07798637125102664,
     "g1_annual": -0.17192100007715366
    },
-   "artifact": "/tmp/report_fullpool_retest_20260906/wave_9332ad33236d1134/artifacts/downside_vol_asymmetry_smoothed.npz",
+   "artifact": "/tmp/report_fullpool_retest_20260906/wave_f8407f265b8b147d/artifacts/downside_vol_asymmetry_smoothed.npz",
    "artifact_sha256": "e848c45c1a59314ca8d3d4f0f6ca7cf3fd9e17f9482b64e4cb2c84986fdc1525"
   },
   "provenance": {
-   "run_id": "9df1b8b603de47e997bcba3c9b1947c7",
-   "started_at": "2026-09-07T03:29:20+08:00",
-   "pipeline_source_sha256": "2e7cd8c749e8b7abf9e99192090a38c4687bd7bbd984fa4f144008219972d1d8",
-   "completed_at": "2026-09-07T03:30:27+08:00"
+   "run_id": "d6b95fd3bc1e41d4a26529c5110063cd",
+   "started_at": "2026-09-07T12:04:38+08:00",
+   "pipeline_source_sha256": "8d8656bfc7a95cb5c680070958ea4c2f4e7ccf6c34490fd3246ff4aace6a5f91",
+   "completed_at": "2026-09-07T12:04:52+08:00"
   },
   "screening": "passed",
-  "evaluation_version": "equal-amount-gross100-cagr-absorbing-v2-20260907",
+  "formula_render_version": "preserved-source-v1",
+  "evaluation_version": "equal-amount-gross100-actual-volume-v3-20260907",
   "optimization_sha256": "9f7951664c32c95fef475be68b1911f8bb8844274d435fb6fce1045043ed0d34"
  },
  "downside_vol_liquidity_momentum": {
@@ -6346,8 +6360,21 @@
  },
  "downside_volatility_ratio_long": {
   "entry": {
-   "factor_name": "factor_downside_volatility_ratio_long",
+   "code": "def factor_downside_volatility_ratio_long(df):\n    df_copy = df.copy()\n    close = df_copy[\"close\"]\n    ret = close.pct_change()\n    neg_ret = ret.where(ret < 0, 0.0)\n    window = 40\n    down_vol = neg_ret.rolling(window, min_periods=window).std(ddof=1)\n    total_vol = ret.rolling(window, min_periods=window).std(ddof=1)\n    total_vol_safe = total_vol.replace(0, np.nan)\n    factor = down_vol / total_vol_safe\n    factor = factor.fillna(0.5)\n    df_copy[\"factor_downside_volatility_ratio_long\"] = factor\n    return df_copy[\"factor_downside_volatility_ratio_long\"]",
    "source_formula": "o['fillna'](o['divide'](o['ts_std'](o['where'](o['lt'](o['ts_pct'](col('AdjClose'), 1), 0), o['ts_pct'](col('AdjClose'), 1), 0.0), 40), o['where'](o['eq'](o['ts_std'](o['ts_pct'](col('AdjClose'), 1), 40), 0), o['log'](-1.0), o['ts_std'](o['ts_pct'](col('AdjClose'), 1), 40))), 0.5)",
+   "dsl": "down_vol / total_vol (rolling 40-day)",
+   "lqtp_formula": "down_vol / total_vol (rolling 40-day)",
+   "formula_source": {
+    "code": "def factor_downside_volatility_ratio_long(df):\n    df_copy = df.copy()\n    close = df_copy[\"close\"]\n    ret = close.pct_change()\n    neg_ret = ret.where(ret < 0, 0.0)\n    window = 40\n    down_vol = neg_ret.rolling(window, min_periods=window).std(ddof=1)\n    total_vol = ret.rolling(window, min_periods=window).std(ddof=1)\n    total_vol_safe = total_vol.replace(0, np.nan)\n    factor = down_vol / total_vol_safe\n    factor = factor.fillna(0.5)\n    df_copy[\"factor_downside_volatility_ratio_long\"] = factor\n    return df_copy[\"factor_downside_volatility_ratio_long\"]",
+    "source_formula": "o['fillna'](o['divide'](o['ts_std'](o['where'](o['lt'](o['ts_pct'](col('AdjClose'), 1), 0), o['ts_pct'](col('AdjClose'), 1), 0.0), 40), o['where'](o['eq'](o['ts_std'](o['ts_pct'](col('AdjClose'), 1), 40), 0), o['log'](-1.0), o['ts_std'](o['ts_pct'](col('AdjClose'), 1), 40))), 0.5)",
+    "dsl": "down_vol / total_vol (rolling 40-day)",
+    "lqtp_formula": "down_vol / total_vol (rolling 40-day)",
+    "fe_formula": "o['fillna'](o['divide'](o['ts_std'](o['where'](o['lt'](o['ts_pct'](col('AdjClose'), 1), 0), o['ts_pct'](col('AdjClose'), 1), 0.0), 40), o['where'](o['eq'](o['ts_std'](o['ts_pct'](col('AdjClose'), 1), 40), 0), o['log'](-1.0), o['ts_std'](o['ts_pct'](col('AdjClose'), 1), 40))), 0.5)"
+   },
+   "formula_source_sha256": "2ed4c0cc485419648810d841f6c2f0ea6879bd09cbf2298a07b97d5172e99747",
+   "factor_name": "factor_downside_volatility_ratio_long",
+   "landing_backend": null,
+   "landing_backend_fallbacks": [],
    "source_metadata": null,
    "campaign": null,
    "direction": 1,
@@ -6367,26 +6394,40 @@
     "ls_mdd": 0.12512945603050016,
     "ls_winrate": 0.5462922334357174,
     "rank_ic_winrate": 0.6425765907305577,
-    "g10_annual": 0.03712586725334492,
-    "g1_annual": -0.14885915280649975
+    "g10_annual": 0.03712586725334489,
+    "g1_annual": -0.14885915280649972
    },
-   "artifact": "/tmp/report_fullpool_retest_20260906/wave_9332ad33236d1134/artifacts/downside_volatility_ratio_long.npz",
-   "artifact_sha256": "614b5a1cd87118168232bf01ab322a0560a6fe8dedc362028a39ed5975a5d385"
+   "artifact": "/tmp/report_fullpool_retest_20260906/wave_647024674c244cea/artifacts/downside_volatility_ratio_long.npz",
+   "artifact_sha256": "5f8c8f7cb03fcbc68879bbbbb2724052fb7390893c4d2935ff4f1f55e99b5dcf"
   },
   "provenance": {
-   "run_id": "9df1b8b603de47e997bcba3c9b1947c7",
-   "started_at": "2026-09-07T03:29:20+08:00",
-   "pipeline_source_sha256": "2e7cd8c749e8b7abf9e99192090a38c4687bd7bbd984fa4f144008219972d1d8",
-   "completed_at": "2026-09-07T03:30:27+08:00"
+   "run_id": "e628e8684c1d4fd1a12ed906eebcdb28",
+   "started_at": "2026-09-07T12:13:25+08:00",
+   "pipeline_source_sha256": "8d8656bfc7a95cb5c680070958ea4c2f4e7ccf6c34490fd3246ff4aace6a5f91",
+   "completed_at": "2026-09-07T12:14:00+08:00"
   },
   "screening": "passed",
-  "evaluation_version": "equal-amount-gross100-cagr-absorbing-v2-20260907",
+  "formula_render_version": "preserved-source-v1",
+  "evaluation_version": "equal-amount-gross100-actual-volume-v3-20260907",
   "optimization_sha256": "b3d24266948aa422c862cf5217ac061cd3567a8646a6e0ef919aa9b9c712b3d0"
  },
  "drawdown_atr_20_normalized": {
   "entry": {
-   "factor_name": "factor_drawdown_atr_20_normalized",
+   "code": "def factor_drawdown_atr_20_normalized(df):\n    df_copy = df.copy()\n    rolling_max = df_copy['close'].rolling(window=60, min_periods=60).max()\n    drawdown = (df_copy['close'] - rolling_max) / rolling_max\n    high = df_copy['high'].values.astype(float)\n    low = df_copy['low'].values.astype(float)\n    close = df_copy['close'].values.astype(float)\n    atr = pd.Series(talib.ATR(high, low, close, timeperiod=20), index=df_copy.index)\n    normalized = -drawdown / atr.replace(0, np.nan)\n    df_copy['factor_drawdown_atr_20_normalized'] = normalized.fillna(0)\n    return df_copy['factor_drawdown_atr_20_normalized']",
    "source_formula": "(-(close - ts_max(close,60)) / ts_max(close,60)) / ts_mean(maximum(high-low, maximum(abs(high-pre_close), abs(low-pre_close))), 20)",
+   "dsl": "(-(close - max(close,60)) / max(close,60)) / ts_atr(20)",
+   "lqtp_formula": "(-(close - max(close,60)) / max(close,60)) / ts_atr(20)",
+   "formula_source": {
+    "code": "def factor_drawdown_atr_20_normalized(df):\n    df_copy = df.copy()\n    rolling_max = df_copy['close'].rolling(window=60, min_periods=60).max()\n    drawdown = (df_copy['close'] - rolling_max) / rolling_max\n    high = df_copy['high'].values.astype(float)\n    low = df_copy['low'].values.astype(float)\n    close = df_copy['close'].values.astype(float)\n    atr = pd.Series(talib.ATR(high, low, close, timeperiod=20), index=df_copy.index)\n    normalized = -drawdown / atr.replace(0, np.nan)\n    df_copy['factor_drawdown_atr_20_normalized'] = normalized.fillna(0)\n    return df_copy['factor_drawdown_atr_20_normalized']",
+    "source_formula": "(-(close - ts_max(close,60)) / ts_max(close,60)) / ts_mean(maximum(high-low, maximum(abs(high-pre_close), abs(low-pre_close))), 20)",
+    "dsl": "(-(close - max(close,60)) / max(close,60)) / ts_atr(20)",
+    "lqtp_formula": "(-(close - max(close,60)) / max(close,60)) / ts_atr(20)",
+    "fe_formula": "(-(close - ts_max(close,60)) / ts_max(close,60)) / ts_mean(maximum(high-low, maximum(abs(high-pre_close), abs(low-pre_close))), 20)"
+   },
+   "formula_source_sha256": "261f806f487b70312799d9b6ca29edf861fc724c3b1627fdfce49a951f182384",
+   "factor_name": "factor_drawdown_atr_20_normalized",
+   "landing_backend": null,
+   "landing_backend_fallbacks": [],
    "source_metadata": null,
    "campaign": null,
    "direction": 1,
@@ -6409,23 +6450,37 @@
     "g10_annual": 0.07029578538819667,
     "g1_annual": 0.0925261808277826
    },
-   "artifact": "/tmp/report_fullpool_retest_20260906/wave_9332ad33236d1134/artifacts/drawdown_atr_20_normalized.npz",
+   "artifact": "/tmp/report_fullpool_retest_20260906/wave_647024674c244cea/artifacts/drawdown_atr_20_normalized.npz",
    "artifact_sha256": "579e3da52bf6e82e5ea398bea7a547acf61aa82868af8d91e78a097d9f2b99d8"
   },
   "provenance": {
-   "run_id": "9df1b8b603de47e997bcba3c9b1947c7",
-   "started_at": "2026-09-07T03:29:20+08:00",
-   "pipeline_source_sha256": "2e7cd8c749e8b7abf9e99192090a38c4687bd7bbd984fa4f144008219972d1d8",
-   "completed_at": "2026-09-07T03:30:27+08:00"
+   "run_id": "e628e8684c1d4fd1a12ed906eebcdb28",
+   "started_at": "2026-09-07T12:13:25+08:00",
+   "pipeline_source_sha256": "8d8656bfc7a95cb5c680070958ea4c2f4e7ccf6c34490fd3246ff4aace6a5f91",
+   "completed_at": "2026-09-07T12:14:00+08:00"
   },
   "screening": "passed",
-  "evaluation_version": "equal-amount-gross100-cagr-absorbing-v2-20260907",
+  "formula_render_version": "preserved-source-v1",
+  "evaluation_version": "equal-amount-gross100-actual-volume-v3-20260907",
   "optimization_sha256": "0ccf7990068fd66f11289b6fc59e0431d8fa7f643e5200c92d68270decd99433"
  },
  "drawdown_atr_normalized_20": {
   "entry": {
-   "factor_name": "factor_drawdown_atr_normalized_20",
+   "code": "def factor_drawdown_atr_normalized_20(df):\n    df_copy = df.copy()\n    rolling_max = df_copy[\"close\"].rolling(window=60, min_periods=60).max()\n    drawdown = (df_copy[\"close\"] - rolling_max) / rolling_max\n    high = df_copy[\"high\"].values.astype(float)\n    low = df_copy[\"low\"].values.astype(float)\n    close = df_copy[\"close\"].values.astype(float)\n    atr = pd.Series(talib.ATR(high, low, close, timeperiod=20), index=df_copy.index)\n    normalized = -drawdown / atr.replace(0, np.nan)\n    df_copy[\"factor_drawdown_atr_normalized_20\"] = normalized.fillna(0)\n    return df_copy[\"factor_drawdown_atr_normalized_20\"]",
    "source_formula": "-(close - ts_max(close, 60)) / ts_max(close, 60) / ts_mean(maximum(high-low, maximum(abs(high-pre_close), abs(low-pre_close))), 20)",
+   "dsl": "-(close - max(close, 60)) / max(close, 60) / ts_atr(20)",
+   "lqtp_formula": "-(close - max(close, 60)) / max(close, 60) / ts_atr(20)",
+   "formula_source": {
+    "code": "def factor_drawdown_atr_normalized_20(df):\n    df_copy = df.copy()\n    rolling_max = df_copy[\"close\"].rolling(window=60, min_periods=60).max()\n    drawdown = (df_copy[\"close\"] - rolling_max) / rolling_max\n    high = df_copy[\"high\"].values.astype(float)\n    low = df_copy[\"low\"].values.astype(float)\n    close = df_copy[\"close\"].values.astype(float)\n    atr = pd.Series(talib.ATR(high, low, close, timeperiod=20), index=df_copy.index)\n    normalized = -drawdown / atr.replace(0, np.nan)\n    df_copy[\"factor_drawdown_atr_normalized_20\"] = normalized.fillna(0)\n    return df_copy[\"factor_drawdown_atr_normalized_20\"]",
+    "source_formula": "-(close - ts_max(close, 60)) / ts_max(close, 60) / ts_mean(maximum(high-low, maximum(abs(high-pre_close), abs(low-pre_close))), 20)",
+    "dsl": "-(close - max(close, 60)) / max(close, 60) / ts_atr(20)",
+    "lqtp_formula": "-(close - max(close, 60)) / max(close, 60) / ts_atr(20)",
+    "fe_formula": "-(close - ts_max(close, 60)) / ts_max(close, 60) / ts_mean(maximum(high-low, maximum(abs(high-pre_close), abs(low-pre_close))), 20)"
+   },
+   "formula_source_sha256": "6fd8d3992a5d6a1a51e7c0276208ce36fc61eb476b4ceca3849dae0976c35bbe",
+   "factor_name": "factor_drawdown_atr_normalized_20",
+   "landing_backend": null,
+   "landing_backend_fallbacks": [],
    "source_metadata": null,
    "campaign": null,
    "direction": 1,
@@ -6446,25 +6501,39 @@
     "ls_winrate": 0.4749414519906323,
     "rank_ic_winrate": 0.5941972920696325,
     "g10_annual": 0.07029578538819667,
-    "g1_annual": 0.09252618082778262
+    "g1_annual": 0.09252618082778265
    },
-   "artifact": "/tmp/report_fullpool_retest_20260906/wave_9332ad33236d1134/artifacts/drawdown_atr_normalized_20.npz",
-   "artifact_sha256": "aa09d891f52046fa75990a86dae8f079ce7758569259c3d19cef01dfa9cc8b95"
+   "artifact": "/tmp/report_fullpool_retest_20260906/wave_514cfd5e43164977/artifacts/drawdown_atr_normalized_20.npz",
+   "artifact_sha256": "9e4d0be8a13e5a6109448ccd139a33a2ea9d934fed8da1d46653898d2ae364a8"
   },
   "provenance": {
-   "run_id": "9df1b8b603de47e997bcba3c9b1947c7",
-   "started_at": "2026-09-07T03:29:20+08:00",
-   "pipeline_source_sha256": "2e7cd8c749e8b7abf9e99192090a38c4687bd7bbd984fa4f144008219972d1d8",
-   "completed_at": "2026-09-07T03:30:27+08:00"
+   "run_id": "dabfe4e436394cf882a308546c3a54d3",
+   "started_at": "2026-09-07T12:14:40+08:00",
+   "pipeline_source_sha256": "8d8656bfc7a95cb5c680070958ea4c2f4e7ccf6c34490fd3246ff4aace6a5f91",
+   "completed_at": "2026-09-07T12:15:05+08:00"
   },
   "screening": "passed",
-  "evaluation_version": "equal-amount-gross100-cagr-absorbing-v2-20260907",
+  "formula_render_version": "preserved-source-v1",
+  "evaluation_version": "equal-amount-gross100-actual-volume-v3-20260907",
   "optimization_sha256": "0ccf7990068fd66f11289b6fc59e0431d8fa7f643e5200c92d68270decd99433"
  },
  "drawdown_atr_normalized_v2": {
   "entry": {
-   "factor_name": "factor_drawdown_atr_normalized_v2",
+   "code": "def factor_drawdown_atr_normalized_v2(df):\n    df_copy = df.copy()\n    rolling_max = df_copy['close'].rolling(window=60, min_periods=60).max()\n    drawdown = (df_copy['close'] - rolling_max) / rolling_max\n    high = df_copy['high'].values.astype(float)\n    low = df_copy['low'].values.astype(float)\n    close = df_copy['close'].values.astype(float)\n    atr = pd.Series(talib.ATR(high, low, close, timeperiod=60), index=df_copy.index)\n    normalized = -drawdown / atr.replace(0, np.nan)\n    df_copy['factor_drawdown_atr_normalized_v2'] = normalized.fillna(0)\n    return df_copy['factor_drawdown_atr_normalized_v2']",
    "source_formula": "(-(close - ts_max(close,60)) / ts_max(close,60)) / ts_mean(maximum(high-low, maximum(abs(high-pre_close), abs(low-pre_close))), 60)",
+   "dsl": "(-(close - max(close,60)) / max(close,60)) / ts_atr(60)",
+   "lqtp_formula": "(-(close - max(close,60)) / max(close,60)) / ts_atr(60)",
+   "formula_source": {
+    "code": "def factor_drawdown_atr_normalized_v2(df):\n    df_copy = df.copy()\n    rolling_max = df_copy['close'].rolling(window=60, min_periods=60).max()\n    drawdown = (df_copy['close'] - rolling_max) / rolling_max\n    high = df_copy['high'].values.astype(float)\n    low = df_copy['low'].values.astype(float)\n    close = df_copy['close'].values.astype(float)\n    atr = pd.Series(talib.ATR(high, low, close, timeperiod=60), index=df_copy.index)\n    normalized = -drawdown / atr.replace(0, np.nan)\n    df_copy['factor_drawdown_atr_normalized_v2'] = normalized.fillna(0)\n    return df_copy['factor_drawdown_atr_normalized_v2']",
+    "source_formula": "(-(close - ts_max(close,60)) / ts_max(close,60)) / ts_mean(maximum(high-low, maximum(abs(high-pre_close), abs(low-pre_close))), 60)",
+    "dsl": "(-(close - max(close,60)) / max(close,60)) / ts_atr(60)",
+    "lqtp_formula": "(-(close - max(close,60)) / max(close,60)) / ts_atr(60)",
+    "fe_formula": "(-(close - ts_max(close,60)) / ts_max(close,60)) / ts_mean(maximum(high-low, maximum(abs(high-pre_close), abs(low-pre_close))), 60)"
+   },
+   "formula_source_sha256": "ad01dcb990bcbd4385cc6a7762b64f0b2827a58e0a7b4513221cbdf5464697b1",
+   "factor_name": "factor_drawdown_atr_normalized_v2",
+   "landing_backend": null,
+   "landing_backend_fallbacks": [],
    "source_metadata": null,
    "campaign": null,
    "direction": 1,
@@ -6487,23 +6556,37 @@
     "g10_annual": 0.03824556207130054,
     "g1_annual": 0.10113513191202947
    },
-   "artifact": "/tmp/report_fullpool_retest_20260906/wave_9332ad33236d1134/artifacts/drawdown_atr_normalized_v2.npz",
+   "artifact": "/tmp/report_fullpool_retest_20260906/wave_514cfd5e43164977/artifacts/drawdown_atr_normalized_v2.npz",
    "artifact_sha256": "e4dfb9f5ec0c8574628b550e300b1122b0f2c6093ecd272e13805b5268c8d56c"
   },
   "provenance": {
-   "run_id": "9df1b8b603de47e997bcba3c9b1947c7",
-   "started_at": "2026-09-07T03:29:20+08:00",
-   "pipeline_source_sha256": "2e7cd8c749e8b7abf9e99192090a38c4687bd7bbd984fa4f144008219972d1d8",
-   "completed_at": "2026-09-07T03:30:27+08:00"
+   "run_id": "dabfe4e436394cf882a308546c3a54d3",
+   "started_at": "2026-09-07T12:14:40+08:00",
+   "pipeline_source_sha256": "8d8656bfc7a95cb5c680070958ea4c2f4e7ccf6c34490fd3246ff4aace6a5f91",
+   "completed_at": "2026-09-07T12:15:05+08:00"
   },
   "screening": "passed",
-  "evaluation_version": "equal-amount-gross100-cagr-absorbing-v2-20260907",
+  "formula_render_version": "preserved-source-v1",
+  "evaluation_version": "equal-amount-gross100-actual-volume-v3-20260907",
   "optimization_sha256": "db5c5976c9942d9f5cc4d5cd040852f6c0fdd8ee758f5da64eaa06761ba20a2d"
  },
  "drawdown_atr_ratio": {
   "entry": {
-   "factor_name": "factor_drawdown_atr_ratio",
+   "code": "def factor_drawdown_atr_ratio(df):\n    df_copy = df.copy()\n    rolling_max = df_copy['close'].rolling(20, min_periods=10).max()\n    max_drawdown_20 = (df_copy['close'] - rolling_max) / rolling_max\n    atr = talib.ATR(df_copy['high'], df_copy['low'], df_copy['close'], timeperiod=20)\n    stress_ratio = -max_drawdown_20 / atr.replace(0.0, np.nan)\n    df_copy['factor_drawdown_atr_ratio'] = stress_ratio.fillna(0.0)\n    return df_copy['factor_drawdown_atr_ratio']",
    "source_formula": "o['fillna'](o['divide'](o['neg'](o['divide'](o['subtract'](col('AdjClose'), o['ts_max'](col('AdjClose'), 20)), o['ts_max'](col('AdjClose'), 20))), o['where'](o['eq'](o['ts_mean'](o['true_range'](col('AdjHigh'), col('AdjLow'), col('AdjClose')), 20), 0.0), o['log'](-1.0), o['ts_mean'](o['true_range'](col('AdjHigh'), col('AdjLow'), col('AdjClose')), 20))), 0.0)",
+   "dsl": "stress_ratio = -(close / ts_max(20) - 1) / ts_atr(20)",
+   "lqtp_formula": "stress_ratio = -(close / ts_max(20) - 1) / ts_atr(20)",
+   "formula_source": {
+    "code": "def factor_drawdown_atr_ratio(df):\n    df_copy = df.copy()\n    rolling_max = df_copy['close'].rolling(20, min_periods=10).max()\n    max_drawdown_20 = (df_copy['close'] - rolling_max) / rolling_max\n    atr = talib.ATR(df_copy['high'], df_copy['low'], df_copy['close'], timeperiod=20)\n    stress_ratio = -max_drawdown_20 / atr.replace(0.0, np.nan)\n    df_copy['factor_drawdown_atr_ratio'] = stress_ratio.fillna(0.0)\n    return df_copy['factor_drawdown_atr_ratio']",
+    "source_formula": "o['fillna'](o['divide'](o['neg'](o['divide'](o['subtract'](col('AdjClose'), o['ts_max'](col('AdjClose'), 20)), o['ts_max'](col('AdjClose'), 20))), o['where'](o['eq'](o['ts_mean'](o['true_range'](col('AdjHigh'), col('AdjLow'), col('AdjClose')), 20), 0.0), o['log'](-1.0), o['ts_mean'](o['true_range'](col('AdjHigh'), col('AdjLow'), col('AdjClose')), 20))), 0.0)",
+    "dsl": "stress_ratio = -(close / ts_max(20) - 1) / ts_atr(20)",
+    "lqtp_formula": "stress_ratio = -(close / ts_max(20) - 1) / ts_atr(20)",
+    "fe_formula": "o['fillna'](o['divide'](o['neg'](o['divide'](o['subtract'](col('AdjClose'), o['ts_max'](col('AdjClose'), 20)), o['ts_max'](col('AdjClose'), 20))), o['where'](o['eq'](o['ts_mean'](o['true_range'](col('AdjHigh'), col('AdjLow'), col('AdjClose')), 20), 0.0), o['log'](-1.0), o['ts_mean'](o['true_range'](col('AdjHigh'), col('AdjLow'), col('AdjClose')), 20))), 0.0)"
+   },
+   "formula_source_sha256": "8f6afb6b0a28d6523d21e0a4b0f044b9507daa280f77b973ca02df1ec564fb5a",
+   "factor_name": "factor_drawdown_atr_ratio",
+   "landing_backend": null,
+   "landing_backend_fallbacks": [],
    "source_metadata": null,
    "campaign": null,
    "direction": 1,
@@ -6523,26 +6606,40 @@
     "ls_mdd": 0.18570053132597802,
     "ls_winrate": 0.5434380776340111,
     "rank_ic_winrate": 0.5789677920062087,
-    "g10_annual": 0.02229907483682679,
+    "g10_annual": 0.0222990748368268,
     "g1_annual": -0.08230515456126324
    },
-   "artifact": "/tmp/report_fullpool_retest_20260906/wave_9332ad33236d1134/artifacts/drawdown_atr_ratio.npz",
-   "artifact_sha256": "57b609c4db643a70b22cbb6c93ae50254c9cf6d27cf96a617b49616dc1b7babc"
+   "artifact": "/tmp/report_fullpool_retest_20260906/wave_514cfd5e43164977/artifacts/drawdown_atr_ratio.npz",
+   "artifact_sha256": "7a7b8077c0f7d55357bdc6ac3d07a9a624a6ccaaad87cded5506e88b2034e21d"
   },
   "provenance": {
-   "run_id": "9df1b8b603de47e997bcba3c9b1947c7",
-   "started_at": "2026-09-07T03:29:20+08:00",
-   "pipeline_source_sha256": "2e7cd8c749e8b7abf9e99192090a38c4687bd7bbd984fa4f144008219972d1d8",
-   "completed_at": "2026-09-07T03:30:27+08:00"
+   "run_id": "dabfe4e436394cf882a308546c3a54d3",
+   "started_at": "2026-09-07T12:14:40+08:00",
+   "pipeline_source_sha256": "8d8656bfc7a95cb5c680070958ea4c2f4e7ccf6c34490fd3246ff4aace6a5f91",
+   "completed_at": "2026-09-07T12:15:05+08:00"
   },
   "screening": "passed",
-  "evaluation_version": "equal-amount-gross100-cagr-absorbing-v2-20260907",
+  "formula_render_version": "preserved-source-v1",
+  "evaluation_version": "equal-amount-gross100-actual-volume-v3-20260907",
   "optimization_sha256": "4fbb3d58d6fc0bbdee818149f227e9c0a702610df12da8e0909d5fcaa5c0396e"
  },
  "drawdown_atr_recovery": {
   "entry": {
-   "factor_name": "factor_drawdown_atr_recovery",
+   "code": "def factor_drawdown_atr_recovery(df):\n    df_copy = df.copy()\n    rolling_max = df_copy['close'].rolling(60, min_periods=60).max()\n    drawdown = df_copy['close'] / rolling_max - 1.0\n    high = df_copy['high'].values.astype('float64')\n    low = df_copy['low'].values.astype('float64')\n    close = df_copy['close'].values.astype('float64')\n    atr20 = talib.ATR(high, low, close, timeperiod=20)\n    atr20 = pd.Series(atr20, index=df_copy.index).replace(0, np.nan)\n    normalized_drawdown = drawdown / atr20\n    factor = normalized_drawdown.replace([np.inf, -np.inf], np.nan).fillna(0)\n    factor.name = \"factor_drawdown_atr_recovery\"\n    return factor",
    "source_formula": "o['fillna'](o['where'](o['eq'](o['where'](o['eq'](o['divide'](o['subtract'](o['divide'](col('AdjClose'), o['ts_max'](col('AdjClose'), 60)), 1.0), o['where'](o['eq'](o['ts_mean'](o['true_range'](col('AdjHigh'), col('AdjLow'), col('AdjClose')), 20), 0), o['log'](-1.0), o['ts_mean'](o['true_range'](col('AdjHigh'), col('AdjLow'), col('AdjClose')), 20))), o['multiply'](-1.0, o['log'](0.0))), o['log'](-1.0), o['divide'](o['subtract'](o['divide'](col('AdjClose'), o['ts_max'](col('AdjClose'), 60)), 1.0), o['where'](o['eq'](o['ts_mean'](o['true_range'](col('AdjHigh'), col('AdjLow'), col('AdjClose')), 20), 0), o['log'](-1.0), o['ts_mean'](o['true_range'](col('AdjHigh'), col('AdjLow'), col('AdjClose')), 20)))), o['neg'](o['multiply'](-1.0, o['log'](0.0)))), o['log'](-1.0), o['where'](o['eq'](o['divide'](o['subtract'](o['divide'](col('AdjClose'), o['ts_max'](col('AdjClose'), 60)), 1.0), o['where'](o['eq'](o['ts_mean'](o['true_range'](col('AdjHigh'), col('AdjLow'), col('AdjClose')), 20), 0), o['log'](-1.0), o['ts_mean'](o['true_range'](col('AdjHigh'), col('AdjLow'), col('AdjClose')), 20))), o['multiply'](-1.0, o['log'](0.0))), o['log'](-1.0), o['divide'](o['subtract'](o['divide'](col('AdjClose'), o['ts_max'](col('AdjClose'), 60)), 1.0), o['where'](o['eq'](o['ts_mean'](o['true_range'](col('AdjHigh'), col('AdjLow'), col('AdjClose')), 20), 0), o['log'](-1.0), o['ts_mean'](o['true_range'](col('AdjHigh'), col('AdjLow'), col('AdjClose')), 20))))), 0)",
+   "dsl": "-(drawdown = close/ts_max(60, close)-1; normalized_drawdown = drawdown / ts_atr(20); factor = fillna(replace(normalized_drawdown, inf, nan),0))",
+   "lqtp_formula": "drawdown = close/ts_max(60, close)-1; normalized_drawdown = drawdown / ts_atr(20); factor = fillna(replace(normalized_drawdown, inf, nan),0)",
+   "formula_source": {
+    "code": "def factor_drawdown_atr_recovery(df):\n    df_copy = df.copy()\n    rolling_max = df_copy['close'].rolling(60, min_periods=60).max()\n    drawdown = df_copy['close'] / rolling_max - 1.0\n    high = df_copy['high'].values.astype('float64')\n    low = df_copy['low'].values.astype('float64')\n    close = df_copy['close'].values.astype('float64')\n    atr20 = talib.ATR(high, low, close, timeperiod=20)\n    atr20 = pd.Series(atr20, index=df_copy.index).replace(0, np.nan)\n    normalized_drawdown = drawdown / atr20\n    factor = normalized_drawdown.replace([np.inf, -np.inf], np.nan).fillna(0)\n    factor.name = \"factor_drawdown_atr_recovery\"\n    return factor",
+    "source_formula": "o['fillna'](o['where'](o['eq'](o['where'](o['eq'](o['divide'](o['subtract'](o['divide'](col('AdjClose'), o['ts_max'](col('AdjClose'), 60)), 1.0), o['where'](o['eq'](o['ts_mean'](o['true_range'](col('AdjHigh'), col('AdjLow'), col('AdjClose')), 20), 0), o['log'](-1.0), o['ts_mean'](o['true_range'](col('AdjHigh'), col('AdjLow'), col('AdjClose')), 20))), o['multiply'](-1.0, o['log'](0.0))), o['log'](-1.0), o['divide'](o['subtract'](o['divide'](col('AdjClose'), o['ts_max'](col('AdjClose'), 60)), 1.0), o['where'](o['eq'](o['ts_mean'](o['true_range'](col('AdjHigh'), col('AdjLow'), col('AdjClose')), 20), 0), o['log'](-1.0), o['ts_mean'](o['true_range'](col('AdjHigh'), col('AdjLow'), col('AdjClose')), 20)))), o['neg'](o['multiply'](-1.0, o['log'](0.0)))), o['log'](-1.0), o['where'](o['eq'](o['divide'](o['subtract'](o['divide'](col('AdjClose'), o['ts_max'](col('AdjClose'), 60)), 1.0), o['where'](o['eq'](o['ts_mean'](o['true_range'](col('AdjHigh'), col('AdjLow'), col('AdjClose')), 20), 0), o['log'](-1.0), o['ts_mean'](o['true_range'](col('AdjHigh'), col('AdjLow'), col('AdjClose')), 20))), o['multiply'](-1.0, o['log'](0.0))), o['log'](-1.0), o['divide'](o['subtract'](o['divide'](col('AdjClose'), o['ts_max'](col('AdjClose'), 60)), 1.0), o['where'](o['eq'](o['ts_mean'](o['true_range'](col('AdjHigh'), col('AdjLow'), col('AdjClose')), 20), 0), o['log'](-1.0), o['ts_mean'](o['true_range'](col('AdjHigh'), col('AdjLow'), col('AdjClose')), 20))))), 0)",
+    "dsl": "-(drawdown = close/ts_max(60, close)-1; normalized_drawdown = drawdown / ts_atr(20); factor = fillna(replace(normalized_drawdown, inf, nan),0))",
+    "lqtp_formula": "drawdown = close/ts_max(60, close)-1; normalized_drawdown = drawdown / ts_atr(20); factor = fillna(replace(normalized_drawdown, inf, nan),0)",
+    "fe_formula": "o['fillna'](o['where'](o['eq'](o['where'](o['eq'](o['divide'](o['subtract'](o['divide'](col('AdjClose'), o['ts_max'](col('AdjClose'), 60)), 1.0), o['where'](o['eq'](o['ts_mean'](o['true_range'](col('AdjHigh'), col('AdjLow'), col('AdjClose')), 20), 0), o['log'](-1.0), o['ts_mean'](o['true_range'](col('AdjHigh'), col('AdjLow'), col('AdjClose')), 20))), o['multiply'](-1.0, o['log'](0.0))), o['log'](-1.0), o['divide'](o['subtract'](o['divide'](col('AdjClose'), o['ts_max'](col('AdjClose'), 60)), 1.0), o['where'](o['eq'](o['ts_mean'](o['true_range'](col('AdjHigh'), col('AdjLow'), col('AdjClose')), 20), 0), o['log'](-1.0), o['ts_mean'](o['true_range'](col('AdjHigh'), col('AdjLow'), col('AdjClose')), 20)))), o['neg'](o['multiply'](-1.0, o['log'](0.0)))), o['log'](-1.0), o['where'](o['eq'](o['divide'](o['subtract'](o['divide'](col('AdjClose'), o['ts_max'](col('AdjClose'), 60)), 1.0), o['where'](o['eq'](o['ts_mean'](o['true_range'](col('AdjHigh'), col('AdjLow'), col('AdjClose')), 20), 0), o['log'](-1.0), o['ts_mean'](o['true_range'](col('AdjHigh'), col('AdjLow'), col('AdjClose')), 20))), o['multiply'](-1.0, o['log'](0.0))), o['log'](-1.0), o['divide'](o['subtract'](o['divide'](col('AdjClose'), o['ts_max'](col('AdjClose'), 60)), 1.0), o['where'](o['eq'](o['ts_mean'](o['true_range'](col('AdjHigh'), col('AdjLow'), col('AdjClose')), 20), 0), o['log'](-1.0), o['ts_mean'](o['true_range'](col('AdjHigh'), col('AdjLow'), col('AdjClose')), 20))))), 0)"
+   },
+   "formula_source_sha256": "155ac028666990d6090ec0b7ea138c97e219dee7954e0b456fa81e4d12aea2c9",
+   "factor_name": "factor_drawdown_atr_recovery",
+   "landing_backend": null,
+   "landing_backend_fallbacks": [],
    "source_metadata": null,
    "campaign": null,
    "direction": -1,
@@ -6565,17 +6662,18 @@
     "g10_annual": 0.07859806489775598,
     "g1_annual": 0.06472813010783356
    },
-   "artifact": "/tmp/report_fullpool_retest_20260906/wave_9332ad33236d1134/artifacts/drawdown_atr_recovery.npz",
+   "artifact": "/tmp/report_fullpool_retest_20260906/wave_514cfd5e43164977/artifacts/drawdown_atr_recovery.npz",
    "artifact_sha256": "eaac5915bf44d6db0b6dd5600d44ce6d3f805a8b4a297d57886cf8ae6d76a163"
   },
   "provenance": {
-   "run_id": "9df1b8b603de47e997bcba3c9b1947c7",
-   "started_at": "2026-09-07T03:29:20+08:00",
-   "pipeline_source_sha256": "2e7cd8c749e8b7abf9e99192090a38c4687bd7bbd984fa4f144008219972d1d8",
-   "completed_at": "2026-09-07T03:30:27+08:00"
+   "run_id": "dabfe4e436394cf882a308546c3a54d3",
+   "started_at": "2026-09-07T12:14:40+08:00",
+   "pipeline_source_sha256": "8d8656bfc7a95cb5c680070958ea4c2f4e7ccf6c34490fd3246ff4aace6a5f91",
+   "completed_at": "2026-09-07T12:15:05+08:00"
   },
   "screening": "passed",
-  "evaluation_version": "equal-amount-gross100-cagr-absorbing-v2-20260907",
+  "formula_render_version": "preserved-source-v1",
+  "evaluation_version": "equal-amount-gross100-actual-volume-v3-20260907",
   "optimization_sha256": "2517323ad5c743ba7e7ba183c1ce90ca31329f8094c714933de8923e474b218a"
  },
  "drawdown_close_vol_ratio": {

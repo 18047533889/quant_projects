@@ -1818,6 +1818,85 @@ def _duckdb_valid(value: str) -> str:
     return f"({value} IS NOT NULL AND NOT isnan({value}) AND NOT isinf({value}))"
 
 
+# ---------------------------------------------------------------------------
+# fin_* elementwise algebraic family (pure SQL, no period walk).
+#
+# ``expr_fn(cols)`` returns a SQL expression string over the operand aliases
+# ``a0..a6``.  A ratio is NULL when the denominator is 0 / NULL, and an
+# infinite or NaN quotient is NULL too (mirrors the pandas reference).
+# ---------------------------------------------------------------------------
+
+def _sql_fin_ratio(a: str, b: str) -> str:
+    return (
+        f"CASE WHEN {b} IS NULL OR {b} = 0 THEN NULL "
+        f"WHEN NOT isnan({a} / {b}) AND NOT isinf({a} / {b}) THEN {a} / {b} "
+        f"ELSE NULL END"
+    )
+
+
+def _sql_fin_abs_ratio(a: str, b: str) -> str:
+    return _sql_fin_ratio(a, f"abs({b})")
+
+
+def _sql_fin_neg_ocf_ratio(a: str, b: str) -> str:
+    return _sql_fin_ratio(a, f"CASE WHEN {b} < 0 THEN abs({b}) ELSE NULL END")
+
+
+def _sql_fin_ratio2(a): return _sql_fin_ratio(a[0], a[1])
+def _sql_fin_abs_ratio2(a): return _sql_fin_abs_ratio(a[0], a[1])
+def _sql_fin_ratio3(a): return _sql_fin_ratio(f"({a[0]} - {a[1]})", f"abs({a[2]})")
+def _sql_fin_ratio_sum3(a): return _sql_fin_ratio(f"({a[0]} + {a[1]})", a[2])
+def _sql_fin_ratio_diff3(a): return _sql_fin_ratio(f"({a[0]} - {a[1]})", a[2])
+def _sql_fin_ratio4(a): return _sql_fin_ratio(f"({a[0]} + {a[1]} - {a[2]})", a[3])
+def _sql_fin_ratio5(a): return _sql_fin_ratio(f"({a[0]} + {a[1]} + {a[2]} - {a[3]})", a[4])
+def _sql_fin_ratio6(a): return _sql_fin_ratio(f"({a[0]} - {a[1]} - {a[2]} - {a[3]} - {a[4]})", a[5])
+def _sql_fin_ratio7(a): return _sql_fin_ratio(f"({a[0]} + {a[1]} + {a[2]} + {a[3]} + {a[4]} - {a[5]})", f"abs({a[6]})")
+def _sql_fin_ratio_cap(a): return _sql_fin_ratio(a[0], f"({a[0]} + {a[1]})")
+def _sql_fin_ratio_disp(a): return _sql_fin_ratio(f"abs({a[0]})", f"abs({a[1]})")
+def _sql_fin_ratio_dsc(a): return _sql_fin_ratio(a[0], f"({a[1]} + abs({a[2]}))")
+def _sql_fin_ratio_burn(a): return _sql_fin_neg_ocf_ratio(a[0], a[1])
+
+
+_FIN_SQL_ELEMENTWISE: dict[str, tuple[int, Callable[[list[str]], str]]] = {
+    "fin_common_size": (2, _sql_fin_ratio2),
+    "fin_cash_conversion": (2, _sql_fin_ratio2),
+    "fin_acquisition_cash_intensity": (2, _sql_fin_ratio2),
+    "fin_borrowing_intensity": (2, _sql_fin_ratio2),
+    "fin_capex_intensity": (2, _sql_fin_ratio2),
+    "fin_goodwill_intensity": (2, _sql_fin_ratio2),
+    "fin_debt_repayment_intensity": (2, _sql_fin_ratio2),
+    "fin_contract_asset_intensity": (2, _sql_fin_ratio2),
+    "fin_contract_liability_intensity": (2, _sql_fin_ratio2),
+    "fin_oci_to_equity": (2, _sql_fin_ratio2),
+    "fin_interest_coverage_proxy": (2, _sql_fin_abs_ratio2),
+    "fin_discontinued_operation_ratio": (2, _sql_fin_abs_ratio2),
+    "fin_minority_profit_share": (2, _sql_fin_abs_ratio2),
+    "fin_fair_value_income_dependence": (2, _sql_fin_abs_ratio2),
+    "fin_investment_income_dependence": (2, _sql_fin_abs_ratio2),
+    "fin_other_earnings_dependence": (2, _sql_fin_abs_ratio2),
+    "fin_rd_capitalization_ratio": (2, _sql_fin_ratio_cap),
+    "fin_expectation_dispersion": (2, _sql_fin_ratio_disp),
+    "fin_cash_burn_runway": (2, _sql_fin_ratio_burn),
+    "fin_accrual_ratio": (3, _sql_fin_ratio3),
+    "fin_cash_earnings_gap": (3, _sql_fin_ratio3),
+    "fin_impairment_intensity": (3, _sql_fin_ratio_sum3),
+    "fin_lease_intensity": (3, _sql_fin_ratio_sum3),
+    "fin_rd_total_intensity": (3, _sql_fin_ratio_sum3),
+    "fin_contract_asset_liability_gap": (3, _sql_fin_ratio_diff3),
+    "fin_lease_asset_liability_gap": (3, _sql_fin_ratio_diff3),
+    "fin_deferred_tax_gap": (3, _sql_fin_ratio_diff3),
+    "fin_comprehensive_income_gap": (3, _sql_fin_ratio_diff3),
+    "fin_roe_cash_gap": (3, _sql_fin_ratio_diff3),
+    "fin_debt_service_coverage_proxy": (3, _sql_fin_ratio_dsc),
+    "fin_actual_expectation_divergence": (3, _sql_fin_ratio3),
+    "fin_surprise": (3, _sql_fin_ratio3),
+    "fin_net_borrowing_cashflow": (4, _sql_fin_ratio4),
+    "fin_financing_gap": (5, _sql_fin_ratio5),
+    "fin_core_earnings_ratio": (6, _sql_fin_ratio6),
+    "fin_noncore_income_ratio": (7, _sql_fin_ratio7),
+}
+
+
 def _raw_literal(node: PlanNode, input_index: int, default: Any = None) -> Any:
     if input_index >= len(node.inputs):
         return default
@@ -3502,23 +3581,48 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         inner = _compile_layer(node.inputs[0], dialect=dialect)
         if inner is None:
             return None
-        spec = _window_spec(node)
+        from factor_engine.cleaned_operators.common.ts_zscore_spec import TSZScoreSpec
+        attrs = node.attrs or {}
+        from factor_engine.backend.window_spec import WindowSpec
+        window = WindowSpec.from_plan_node(node)
+        spec = TSZScoreSpec.resolve(
+            window=window.size, min_periods=window.min_periods,
+            null_policy=attrs.get("null_policy", "ignore"),
+            nan_policy=attrs.get("nan_policy", "propagate"),
+            includes_current_bar=attrs.get("includes_current_bar", True),
+            ddof=attrs.get("ddof", 1),
+            zero_std_policy=attrs.get("zero_std_policy", "zero"),
+        )
         # PARITY-SWEEP-R56: pandas rolling zscore drops ±Inf from the window
         # (mean/std over finite samples); raw stddev over Inf raises
         # OutOfRangeException in DuckDB, so mask ±Inf to NULL first.
         isnan_fn = "isNaN" if dialect == SqlDialect.CLICKHOUSE else "isnan"
         isinf_fn = "isInfinite" if dialect == SqlDialect.CLICKHOUSE else "isinf"
         safe = f"CASE WHEN _v IS NOT NULL AND NOT {isnan_fn}(_v) AND NOT {isinf_fn}(_v) THEN _v END"
-        over = (
-            f"PARTITION BY inst ORDER BY ts ROWS BETWEEN {spec.size - 1} PRECEDING AND CURRENT ROW"
+        frame = (
+            f"ROWS BETWEEN {spec.window.size - 1} PRECEDING AND CURRENT ROW"
+            if spec.includes_current_bar else
+            f"ROWS BETWEEN {spec.window.size} PRECEDING AND 1 PRECEDING"
         )
-        std_key = "stddev_pop" if spec.ddof == 0 else "stddev"
-        expr = _zscore_window_expr(
-            value_col=safe,
-            partition=over,
-            dialect=dialect,
-            std_fn_name=std_key,
-            min_periods=spec.min_periods,
+        over = f"PARTITION BY inst ORDER BY ts {frame}"
+        std_key = "stddev_pop" if spec.window.ddof == 0 else "stddev"
+        std_fn = _dialect_fn(dialect, std_key)
+        mean = f"AVG({safe}) OVER ({over})"
+        stdv = f"{std_fn}({safe}) OVER ({over})"
+        valid = f"COUNT({safe}) OVER ({over})"
+        total = f"COUNT(*) OVER ({over})"
+        propagate = (
+            spec.window.nan_policy == "propagate"
+            or spec.window.null_policy.value == "propagate"
+        )
+        zero = "0" if spec.zero_std_policy == "zero" else "NULL"
+        propagate_guard = f"WHEN {valid} < {total} THEN NULL " if propagate else ""
+        expr = (
+            f"CASE WHEN {safe} IS NULL THEN NULL "
+            f"WHEN {valid} < {spec.window.min_periods} THEN NULL "
+            f"{propagate_guard}WHEN {stdv} IS NULL THEN NULL "
+            f"WHEN {stdv} = 0 THEN {zero} "
+            f"ELSE ({safe} - {mean}) / NULLIF({stdv}, 0) END"
         )
         return _Layer(
             f"SELECT ts, inst, {expr} AS _v FROM ({inner.sql}) t",
@@ -3930,6 +4034,53 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
             return None
         return _Layer(
             _cs_mad_zscore_sql(inner.sql, dialect=dialect),
+            has_inst_window=inner.has_inst_window,
+            has_ts_partition=True,
+        )
+
+    if op == "cs_physical_panel_coverage":
+        inner = _compile_layer(node.inputs[0], dialect=dialect)
+        if inner is None:
+            return None
+        # Reference: fraction of PHYSICALLY-present panel rows that are finite,
+        # per date, broadcast to ALL cells of the date (including the NaN cell).
+        cnt_total = f"CAST(COUNT(*) OVER (PARTITION BY x.ts) AS DOUBLE)"
+        cnt_finite = f"COUNT(x._v) OVER (PARTITION BY x.ts)"
+        return _Layer(
+            f"SELECT x.ts, x.inst, {cnt_finite} / {cnt_total} AS _v "
+            f"FROM ({inner.sql}) x",
+            has_inst_window=inner.has_inst_window,
+            has_ts_partition=True,
+        )
+
+    if op == "cs_shrink_to_group_mean":
+        # layer_weighted/cs_shrink reference: shrunk = x*(1-intensity) +
+        # group_mean*intensity; group mean over finite x only (same contract
+        # as cs_shrink polars branch); unknown group -> NULL.
+        if len(node.inputs) < 2:
+            return None
+        inner = _compile_layer(node.inputs[0], dialect=dialect)
+        grp = _compile_layer(node.inputs[1], dialect=dialect)
+        if inner is None or grp is None:
+            return None
+        from factor_engine.backend.stat_valid import row_stat_invalid_sql
+
+        x_inv = row_stat_invalid_sql("x._v", dialect=dialect, exclude_nan=True)
+        g_inv = row_stat_invalid_sql("g._v", dialect=dialect, exclude_nan=True)
+        part = "PARTITION BY x.ts, g._v"
+        valid = f"(NOT ({x_inv}) AND NOT ({g_inv}))"
+        shrink_l = _literal_positional(node, 2)
+        if shrink_l is not None:
+            shrink = repr(float(shrink_l))
+        else:
+            shrink = repr(float(_float_attr(node, "shrinkage_intensity", default=0.5)))
+        return _Layer(
+            f"SELECT x.ts, x.inst, "
+            f"CASE WHEN ({x_inv}) OR ({g_inv}) THEN NULL "
+            f"WHEN SUM(CASE WHEN {valid} THEN 1 ELSE 0 END) OVER ({part}) = 0 THEN NULL "
+            f"ELSE (1.0 - {shrink}) * x._v + {shrink} * "
+            f"AVG(CASE WHEN {valid} THEN x._v END) OVER ({part}) END AS _v "
+            f"FROM ({inner.sql}) x LEFT JOIN ({grp.sql}) g USING (ts, inst)",
             has_inst_window=inner.has_inst_window,
             has_ts_partition=True,
         )
@@ -7024,6 +7175,13 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         "group_zscore",
         "group_normalize",
         "group_std",
+        "group_ex_self_std",
+        "group_ex_self_mad",
+        "group_ex_self_quantile",
+        "group_impute_median",
+        "group_tail_ratio",
+        "group_multi_resid",
+        "group_rank_weighted_value",
     }:
         if not node.inputs:
             return None
@@ -7088,6 +7246,57 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
             expr = _group_zscore_expr(value_col="x._v", partition=part, dialect=dialect)
         elif op == "group_normalize":
             expr = _group_minmax_expr(value_col="x._v", partition=part, dialect=dialect)
+        elif op == "group_ex_self_std":
+            std_fn = _dialect_fn(dialect, "stddev")
+            cnt = f"COUNT(x._v) OVER ({part})"
+            std_val = f"{std_fn}(x._v) OVER ({part})"
+            expr = (
+                f"CASE WHEN x._v IS NULL THEN NULL "
+                f"WHEN {cnt} <= 2 THEN NULL ELSE {std_val} END"
+            )
+        elif op == "group_ex_self_mad":
+            cnt = f"COUNT(x._v) OVER ({part})"
+            med = f"MEDIAN(x._v) OVER ({part})"
+            mad = f"MEDIAN(ABS(x._v - {med})) OVER ({part})"
+            expr = (
+                f"CASE WHEN x._v IS NULL THEN NULL "
+                f"WHEN {cnt} <= 2 THEN NULL ELSE {mad} END"
+            )
+        elif op == "group_ex_self_quantile":
+            cnt = f"COUNT(x._v) OVER ({part})"
+            p = _float_attr(node, "q", default=0.5)
+            pos_p = _literal_positional(node, 1)
+            if pos_p is not None:
+                p = pos_p
+            qexpr = _quantile_over(dialect, "x._v", p, part)
+            expr = (
+                f"CASE WHEN x._v IS NULL THEN NULL "
+                f"WHEN {cnt} <= 2 THEN NULL ELSE {qexpr} END"
+            )
+        elif op == "group_impute_median":
+            med = f"MEDIAN(x._v) OVER ({part})"
+            expr = (
+                f"CASE WHEN x._v IS NULL THEN {med} ELSE x._v END"
+            )
+        elif op == "group_tail_ratio":
+            q1 = _quantile_over(dialect, "x._v", 0.25, part)
+            q2e = _quantile_over(dialect, "x._v", 0.50, part)
+            q3 = _quantile_over(dialect, "x._v", 0.75, part)
+            expr = (
+                f"CASE WHEN x._v IS NULL THEN NULL "
+                f"WHEN ABS({q2e} - {q1}) <= 1e-12 THEN NULL "
+                f"ELSE ({q3} - {q2e}) / ({q2e} - {q1}) END"
+            )
+        elif op == "group_multi_resid":
+            mean = f"AVG(x._v) OVER ({part})"
+            expr = (
+                f"CASE WHEN x._v IS NULL THEN NULL ELSE x._v - ({mean}) END"
+            )
+        elif op == "group_rank_weighted_value":
+            # rank-weighted value requires an average-rank correlated subquery
+            # (rank/sum(rank) per group); defer to the bridge rather than emit a
+            # silent approximation here.
+            return None
         else:
             expr = "NULL"
         return _Layer(
@@ -8625,6 +8834,53 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
             has_ts_partition=True,
         )
 
+    if op == "group_weighted_zscore":
+        # layer_weighted._group_weighted(zscore=True): (x - weighted_mean)
+        # / sqrt(weighted_variance), mean/var over valid (finite x, finite w>0)
+        # members per (ts, group); sum(w)<=1e-12 or var<=1e-12 -> NULL.
+        if len(node.inputs) < 3:
+            return None
+        inner = _compile_layer(node.inputs[0], dialect=dialect)
+        grp = _compile_layer(node.inputs[1], dialect=dialect)
+        wgt = _compile_layer(node.inputs[2], dialect=dialect)
+        if inner is None or grp is None or wgt is None:
+            return None
+        from factor_engine.backend.stat_valid import row_stat_invalid_sql
+
+        x_inv = row_stat_invalid_sql("x._v", dialect=dialect, exclude_nan=True)
+        w_inv = row_stat_invalid_sql("w._v", dialect=dialect, exclude_nan=True)
+        g_inv = row_stat_invalid_sql("g._v", dialect=dialect, exclude_nan=True)
+        part = "PARTITION BY x.ts, g._v"
+        valid = f"(NOT ({x_inv}) AND NOT ({w_inv}) AND w._v > 0 AND NOT ({g_inv}))"
+        wsum = f"SUM(CASE WHEN {valid} THEN w._v ELSE 0 END) OVER ({part})"
+        wmean = (
+            f"SUM(CASE WHEN {valid} THEN x._v * w._v ELSE 0 END) OVER ({part}) / {wsum}"
+        )
+        # Variance must be computed in a second pass over the de-meaned value.
+        return _Layer(
+            f"WITH wmean AS ("
+            f"SELECT x.ts, x.inst, x._v, w._v AS _w, g._v AS _g, "
+            f"CASE WHEN {valid} THEN {wmean} END AS _wm "
+            f"FROM ({inner.sql}) x JOIN ({wgt.sql}) w USING (ts, inst) "
+            f"JOIN ({grp.sql}) g USING (ts, inst)"
+            f"), wvar AS ("
+            f"SELECT ts, inst, _v, _w, _g, _wm, "
+            f"SUM(CASE WHEN _wm IS NOT NULL AND _v IS NOT NULL AND _w > 0 "
+            f"THEN (_v - _wm) * (_v - _wm) * _w ELSE 0 END) "
+            f"OVER (PARTITION BY ts, _g) AS _wvar, "
+            f"SUM(CASE WHEN _wm IS NOT NULL THEN _w ELSE 0 END) "
+            f"OVER (PARTITION BY ts, _g) AS _wsum "
+            f"FROM wmean"
+            f") "
+            f"SELECT ts, inst, "
+            f"CASE WHEN _g IS NULL OR _wm IS NULL THEN NULL "
+            f"WHEN _wsum <= 1e-12 OR _wvar <= 1e-12 THEN NULL "
+            f"ELSE (_v - _wm) / SQRT(_wvar) END AS _v "
+            f"FROM wvar",
+            has_inst_window=inner.has_inst_window,
+            has_ts_partition=True,
+        )
+
     # ========================================================================
     # Batch implementation of missing simple operators
     # ========================================================================
@@ -9475,20 +9731,43 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         inner = _compile_layer(node.inputs[0], dialect=dialect)
         if inner is None:
             return None
-        w = _window_int(node)
-        over = f"PARTITION BY inst ORDER BY ts ROWS BETWEEN {w - 1} PRECEDING AND CURRENT ROW"
-        std_fn = _dialect_fn(dialect, "stddev")
+        from factor_engine.cleaned_operators.common.ts_zscore_spec import TSZScoreSpec
+        attrs = node.attrs or {}
+        from factor_engine.backend.window_spec import WindowSpec
+        window = WindowSpec.from_plan_node(node)
+        spec = TSZScoreSpec.resolve(
+            window=window.size, min_periods=window.min_periods,
+            null_policy=attrs.get("null_policy", "ignore"),
+            nan_policy=attrs.get("nan_policy", "propagate"),
+            includes_current_bar=attrs.get("includes_current_bar", True),
+            ddof=attrs.get("ddof", 1),
+            zero_std_policy=attrs.get("zero_std_policy", "zero"),
+        )
+        frame = (f"ROWS BETWEEN {spec.window.size - 1} PRECEDING AND CURRENT ROW"
+                 if spec.includes_current_bar else
+                 f"ROWS BETWEEN {spec.window.size} PRECEDING AND 1 PRECEDING")
+        over = f"PARTITION BY inst ORDER BY ts {frame}"
+        std_fn = _dialect_fn(dialect, "stddev_pop" if spec.window.ddof == 0 else "stddev")
         nf = _dialect_fn(dialect, "nullif")
+        isnan_fn = "isNaN" if dialect == SqlDialect.CLICKHOUSE else "isnan"
+        isinf_fn = "isInfinite" if dialect == SqlDialect.CLICKHOUSE else "isinf"
+        safe = f"CASE WHEN _v IS NOT NULL AND NOT {isnan_fn}(_v) AND NOT {isinf_fn}(_v) THEN _v END"
+        zero = "0" if spec.zero_std_policy == "zero" else "NULL"
+        propagate = spec.window.nan_policy == "propagate" or spec.window.null_policy.value == "propagate"
+        propagation_guard = "WHEN n_valid < n_total THEN NULL " if propagate else ""
         return _Layer(
             f"WITH stats AS ("
             f"SELECT ts, inst, _v, "
-            f"AVG(_v) OVER ({over}) AS mean, "
-            f"{std_fn}(_v) OVER ({over}) AS std "
+            f"AVG({safe}) OVER ({over}) AS mean, "
+            f"{std_fn}({safe}) OVER ({over}) AS std, "
+            f"COUNT({safe}) OVER ({over}) AS n_valid, COUNT(*) OVER ({over}) AS n_total "
             f"FROM ({inner.sql}) t0"
             f") "
             f"SELECT ts, inst, "
             f"CASE WHEN _v IS NULL THEN NULL "
-            f"WHEN std IS NULL OR std = 0 THEN 0 "
+            f"WHEN n_valid < {spec.window.min_periods} THEN NULL "
+            f"{propagation_guard}WHEN std IS NULL THEN NULL "
+            f"WHEN std = 0 THEN {zero} "
             f"ELSE (_v - mean) / {nf}(std, 0) END AS _v "
             f"FROM stats",
             has_inst_window=True,
@@ -10692,6 +10971,191 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
             f"FROM moments"
             f") "
             f"SELECT ts, inst, cov / {nf}(sx * sy, 0) AS _v FROM corr_calc",
+            has_inst_window=True,
+        )
+
+    # ------------------------------------------------------------------
+    # fin_* elementwise algebraic family (pure SQL, no period walk).
+    #
+    # These mirror the pandas reference: a ratio is NULL when the denominator
+    # is 0 / NULL, and an infinite or NaN quotient is NULL too.  The trailing
+    # ``period_id`` input (structural PIT-alignment only) is NOT compiled.
+    # ------------------------------------------------------------------
+    if op in _FIN_SQL_ELEMENTWISE:
+        spec = _FIN_SQL_ELEMENTWISE[op]
+        n_operands, expr_fn = spec
+        layers = []
+        for i in range(n_operands):
+            layer = _compile_layer(node.inputs[i], dialect=dialect)
+            if layer is None:
+                return None
+            layers.append(layer)
+        aliases = ["a", "b", "c", "d", "e", "f", "g"]
+        sql = f"SELECT {aliases[0]}.ts, {aliases[0]}.inst, {aliases[0]}._v AS a0"
+        for i in range(1, n_operands):
+            sql += f", {aliases[i]}._v AS a{i}"
+        sql += f" FROM ({layers[0].sql}) {aliases[0]}"
+        for i in range(1, n_operands):
+            sql += f" LEFT JOIN ({layers[i].sql}) {aliases[i]} USING (ts, inst)"
+        expr = expr_fn([f"a{i}" for i in range(n_operands)])
+        return _Layer(
+            f"SELECT ts, inst, {expr} AS _v FROM ({sql}) fin_elem",
+            has_inst_window=any(l.has_inst_window for l in layers),
+            has_ts_partition=any(l.has_ts_partition for l in layers),
+        )
+
+    # ==================================================================
+    # ts_* quantile / tail / scale family — DuckDB window branch.  All are
+    # single-input trailing windows (ROWS BETWEEN w-1 PRECEDING AND CURRENT
+    # ROW).  PERCENTILE_CONT matches the pandas ``es_tail.strip(rtol=1e-12)``
+    # of ``np.quantile`` / polars ``rolling_quantile(interpolation='linear')``
+    # (both are the two-nearest-observation linear interpolation in DuckDB
+    # RANK/ORDER BY semantics, verified against the pandas reference).
+    # ==================================================================
+
+    def _pquant(node, idx, key, default):
+        v = _literal_positional(node, idx)
+        if v is not None:
+            return repr(float(v))
+        return repr(float(_float_attr(node, key, default=default)))
+
+    if op == "ts_quantile_range":
+        inner = _compile_layer(node.inputs[0], dialect=dialect)
+        if inner is None:
+            return None
+        w = _window_int(node, default=20)
+        if dialect != SqlDialect.DUCKDB:
+            return None
+        lo = _pquant(node, 1, "q_low", 0.25)
+        hi = _pquant(node, 2, "q_high", 0.75)
+        over = f"PARTITION BY inst ORDER BY ts ROWS BETWEEN {w - 1} PRECEDING AND CURRENT ROW"
+        return _Layer(
+            f"SELECT ts, inst, "
+            f"PERCENTILE_CONT({hi}) WITHIN GROUP (ORDER BY _v) OVER ({over}) - "
+            f"PERCENTILE_CONT({lo}) WITHIN GROUP (ORDER BY _v) OVER ({over}) AS _v "
+            f"FROM ({inner.sql}) t",
+            has_inst_window=True,
+        )
+
+    if op == "ts_quantile_skew":
+        inner = _compile_layer(node.inputs[0], dialect=dialect)
+        if inner is None:
+            return None
+        w = _window_int(node, default=20)
+        if dialect != SqlDialect.DUCKDB:
+            return None
+        over = f"PARTITION BY inst ORDER BY ts ROWS BETWEEN {w - 1} PRECEDING AND CURRENT ROW"
+        return _Layer(
+            f"SELECT ts, inst, "
+            f"(PERCENTILE_CONT(0.75) WITHIN GROUP (ORDER BY _v) OVER ({over}) + "
+            f"PERCENTILE_CONT(0.25) WITHIN GROUP (ORDER BY _v) OVER ({over}) "
+            f"- 2.0 * PERCENTILE_CONT(0.50) WITHIN GROUP (ORDER BY _v) OVER ({over})) "
+            f"/ NULLIF(PERCENTILE_CONT(0.75) WITHIN GROUP (ORDER BY _v) OVER ({over}) "
+            f"- PERCENTILE_CONT(0.25) WITHIN GROUP (ORDER BY _v) OVER ({over}), 0.0) AS _v "
+            f"FROM ({inner.sql}) t",
+            has_inst_window=True,
+        )
+
+    if op == "ts_quantile_kurtosis":
+        inner = _compile_layer(node.inputs[0], dialect=dialect)
+        if inner is None:
+            return None
+        w = _window_int(node, default=60)
+        if dialect != SqlDialect.DUCKDB:
+            return None
+        over = f"PARTITION BY inst ORDER BY ts ROWS BETWEEN {w - 1} PRECEDING AND CURRENT ROW"
+        return _Layer(
+            f"SELECT ts, inst, "
+            f"(PERCENTILE_CONT(0.875) WITHIN GROUP (ORDER BY _v) OVER ({over}) "
+            f"- PERCENTILE_CONT(0.125) WITHIN GROUP (ORDER BY _v) OVER ({over})) "
+            f"/ NULLIF(PERCENTILE_CONT(0.75) WITHIN GROUP (ORDER BY _v) OVER ({over}) "
+            f"- PERCENTILE_CONT(0.25) WITHIN GROUP (ORDER BY _v) OVER ({over}), 0.0) AS _v "
+            f"FROM ({inner.sql}) t",
+            has_inst_window=True,
+        )
+
+    if op == "ts_tail_ratio":
+        inner = _compile_layer(node.inputs[0], dialect=dialect)
+        if inner is None:
+            return None
+        w = _window_int(node, default=60)
+        if dialect != SqlDialect.DUCKDB:
+            return None
+        over = f"PARTITION BY inst ORDER BY ts ROWS BETWEEN {w - 1} PRECEDING AND CURRENT ROW"
+        nf = _dialect_fn(dialect, "nullif")
+        return _Layer(
+            f"SELECT ts, inst, "
+            f"ABS(PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY _v) OVER ({over})) "
+            f"/ {nf}(ABS(PERCENTILE_CONT(0.05) WITHIN GROUP (ORDER BY _v) OVER ({over})), 0.0) AS _v "
+            f"FROM ({inner.sql}) t",
+            has_inst_window=True,
+        )
+
+    if op == "ts_tail_imbalance":
+        inner = _compile_layer(node.inputs[0], dialect=dialect)
+        if inner is None:
+            return None
+        w = _window_int(node, default=60)
+        if dialect != SqlDialect.DUCKDB:
+            return None
+        over = f"PARTITION BY inst ORDER BY ts ROWS BETWEEN {w - 1} PRECEDING AND CURRENT ROW"
+        mp = int(_literal_positional(node, 1) or 8)
+        mp = max(4, min(mp, w))
+        nf = _dialect_fn(dialect, "nullif")
+        cnt = f"COUNT(_v) OVER ({over})"
+        return _Layer(
+            f"SELECT ts, inst, "
+            f"CASE WHEN {cnt} < {mp} THEN NULL "
+            f"ELSE (PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY _v) OVER ({over}) "
+            f"+ PERCENTILE_CONT(0.05) WITHIN GROUP (ORDER BY _v) OVER ({over})) "
+            f"/ {nf}(PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY _v) OVER ({over}) "
+            f"- PERCENTILE_CONT(0.05) WITHIN GROUP (ORDER BY _v) OVER ({over}), 0.0) "
+            f"END AS _v "
+            f"FROM ({inner.sql}) t",
+            has_inst_window=True,
+        )
+
+    if op == "ts_scale_shift":
+        inner = _compile_layer(node.inputs[0], dialect=dialect)
+        if inner is None:
+            return None
+        short = _window_int(node, default=20)
+        longw = int(_literal_positional(node, 1) or 40)
+        over_s = f"PARTITION BY inst ORDER BY ts ROWS BETWEEN {max(short, 1) - 1} PRECEDING AND CURRENT ROW"
+        over_l = f"PARTITION BY inst ORDER BY ts ROWS BETWEEN {max(longw, 1) - 1} PRECEDING AND CURRENT ROW"
+        nf = _dialect_fn(dialect, "nullif")
+        return _Layer(
+            f"SELECT ts, inst, "
+            f"STDDEV_SAMP(_v) OVER ({over_s}) "
+            f"/ {nf}(STDDEV_SAMP(_v) OVER ({over_l}), 0.0) AS _v "
+            f"FROM ({inner.sql}) t",
+            has_inst_window=True,
+        )
+
+    if op == "ts_median3_causal":
+        inner = _compile_layer(node.inputs[0], dialect=dialect)
+        if inner is None:
+            return None
+        over = "PARTITION BY inst ORDER BY ts ROWS BETWEEN 2 PRECEDING AND CURRENT ROW"
+        return _Layer(
+            f"SELECT ts, inst, "
+            f"MEDIAN(_v) OVER ({over}) AS _v "
+            f"FROM ({inner.sql}) t",
+            has_inst_window=True,
+        )
+
+    if op == "ts_rolling_median_causal":
+        inner = _compile_layer(node.inputs[0], dialect=dialect)
+        if inner is None:
+            return None
+        w = _window_int(node, default=5)
+        over = f"PARTITION BY inst ORDER BY ts ROWS BETWEEN {max(w, 1) - 1} PRECEDING AND CURRENT ROW"
+        cnt = "COUNT(_v) OVER (%s)"
+        over_cnt = over
+        return _Layer(
+            f"SELECT ts, inst, "
+            f"CASE WHEN {cnt % over_cnt} < {w} THEN NULL ELSE MEDIAN(_v) OVER ({over}) END AS _v "
+            f"FROM ({inner.sql}) t",
             has_inst_window=True,
         )
 

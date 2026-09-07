@@ -571,27 +571,32 @@ def _positive_int_env(name: str, default: int) -> int:
     return max(1, value)
 
 
-def _default_data_cache_budget() -> int:
-    """DataAccessSource 数据缓存默认预算：显式 env > 进程预算 × 15%。
+def _data_cache_authority():
+    """Return the process/worker v2 broker, or ``None`` when authority is unknown."""
+    try:
+        from factor_engine.runtime.resource_broker import peek_v2_resource_broker
+        return peek_v2_resource_broker()
+    except Exception:
+        return None
 
-    Phase 5 R7：8GB 默认写死对 8GB 服务器是灾难、对 512GB 服务器又太保守。
-    改为跟随 ``ExecutionResourcePlan.process_budget_bytes`` 自动缩放。
-    """
+
+def _default_data_cache_budget(broker: Any | None = None) -> int:
+    """Cache residency cap from the shared broker; UNKNOWN/KNOWN_ZERO stay zero."""
+    authority = broker if broker is not None else _data_cache_authority()
+    try:
+        shared_budget = max(0, int(authority.current_read_budget()))
+    except Exception:
+        shared_budget = 0
     raw = os.environ.get("FACTOR_ENGINE_DATA_CACHE_MAX_BYTES", "").strip()
     if raw:
         try:
             value = int(raw)
-            if value > 0:
-                return value
+            if value < 0:
+                raise ValueError("must be non-negative")
+            return min(value, shared_budget)
         except ValueError as exc:
             raise ValueError(f"FACTOR_ENGINE_DATA_CACHE_MAX_BYTES must be an integer") from exc
-    try:
-        from factor_engine.runtime.resource_governor import ExecutionResourcePlan
-
-        plan = ExecutionResourcePlan.auto()
-        return max(128 * 1024 * 1024, int(plan.process_budget_bytes * 0.15))
-    except Exception:
-        return 4 * 1024 * 1024 * 1024
+    return shared_budget
 
 
 def _is_clean_catalog_miss(exc: Exception) -> bool:
@@ -879,8 +884,11 @@ class DataAccessSource(DataSource):
         # #42 字节感知缓存上限。Phase 5 R7：默认不再固定 8GB，而是跟随进程预算
         # （process_budget × 15%），8GB 服务器上自然变小、512GB 服务器上自动变大；
         # 显式 env 仍可覆盖。
-        self._max_cache_bytes = _default_data_cache_budget()
+        self._cache_broker = _data_cache_authority()
+        self._max_cache_bytes = _default_data_cache_budget(self._cache_broker)
         self._cache_bytes = 0
+        self._cache_finalizers: dict[tuple[int, str], tuple[weakref.finalize, ...]] = {}
+        self._live_cache_leases: dict[int, Any] = {}
         self._closed = False
         # R20-111：restore 失败 / 检测到运行态被破坏时置位。production 下任何
         # 后续读操作 ``_assert_healthy`` 直接 abort；research 至少记 warning。
@@ -2086,9 +2094,14 @@ class DataAccessSource(DataSource):
         # must be dropped too, otherwise a catalog change (scale/mapping) keeps
         # serving stale normalization contracts.
         self._field_plans.clear()
+        self._cache_finalizers.clear()
         self._column_cache.clear()
         self._panel_cache.clear()
         self._cache_bytes = 0
+        # Leases are intentionally not released here. A caller may still own a
+        # returned Series/DataFrame. Its weakref finalizer releases the logical
+        # residency charge only when the Python buffer object becomes unreachable.
+        # This ledger models live object ownership, not allocator/RSS contraction.
         if self._lazy_bundle is not None:
             # 资源泄漏修复：关闭旧 bundle
             if hasattr(self._lazy_bundle, "close") and callable(self._lazy_bundle.close):
@@ -2117,17 +2130,112 @@ class DataAccessSource(DataSource):
         self.close()
         return False
 
-    def _put_cache(self, cache: OrderedDict[str, Any], name: str, value: Any) -> None:
+    def bind_resource_broker(self, broker: Any) -> None:
+        """Bind the approved authority before reads; never switch live leases."""
+        if broker is None:
+            raise ValueError("resource broker is required")
+        with self._cache_lock:
+            if self._cache_broker is broker:
+                self._max_cache_bytes = _default_data_cache_budget(broker)
+                return
+            if self._column_cache or self._panel_cache or self._live_cache_leases:
+                raise RuntimeError("cannot replace data-cache broker with live buffers/leases")
+            self._cache_broker = broker
+            self._max_cache_bytes = _default_data_cache_budget(broker)
+
+    @staticmethod
+    def _physical_cache_owners(value: Any) -> tuple[Any, ...]:
+        """Find weakref-able wrappers and ndarray roots retaining the allocation.
+
+        Tracking only a Series/DataFrame is unsafe: ``to_numpy(copy=False)`` can
+        outlive that wrapper. ndarray views keep their root/base alive, so a
+        finalizer on every distinct root conservatively extends the lease.
+        Unknown ownership is rejected by returning an empty tuple.
+        """
+        try:
+            import numpy as np
+
+            candidates = [value]
+            manager = getattr(value, "_mgr", None)
+            for block in getattr(manager, "blocks", ()):
+                candidates.append(block.values)
+            if hasattr(value, "to_numpy"):
+                candidates.append(value.to_numpy(copy=False))
+            index = getattr(value, "index", None)
+            if index is not None:
+                candidates.append(index)
+                if hasattr(index, "to_numpy"):
+                    candidates.append(index.to_numpy(copy=False))
+                for code in getattr(index, "codes", ()):
+                    candidates.append(code)
+                for level in getattr(index, "levels", ()):
+                    candidates.append(level)
+                    if hasattr(level, "to_numpy"):
+                        candidates.append(level.to_numpy(copy=False))
+            owners: list[Any] = []
+            seen: set[int] = set()
+            for candidate in candidates:
+                owner = candidate
+                if isinstance(owner, np.ndarray):
+                    while isinstance(getattr(owner, "base", None), np.ndarray):
+                        owner = owner.base
+                if id(owner) in seen:
+                    continue
+                weakref.ref(owner)
+                seen.add(id(owner))
+                owners.append(owner)
+            return tuple(owners) if len(owners) >= 2 else ()
+        except Exception:
+            return ()
+
+    def _put_cache(self, cache: OrderedDict[str, Any], name: str, value: Any) -> bool:
         """R33-P0-030：column/panel 双表示统一 **global** 字节预算。
 
         并发修复：用 _cache_lock 保护 cache 和 _cache_bytes 的读写。
         """
         with self._cache_lock:
+            nbytes = self._series_bytes(value)
+            key = (id(cache), name)
+            owners = self._physical_cache_owners(value)
+            if (self._cache_broker is None or nbytes <= 0 or
+                    nbytes > self._max_cache_bytes or not owners):
+                return False
             if name in cache:
                 self._cache_bytes -= self._series_bytes(cache[name])
+                cache.pop(name)
+                self._cache_finalizers.pop(key, None)
+            while self._cache_bytes + nbytes > self._max_cache_bytes:
+                evicted = self._evict_global_lru()
+                if evicted is None:
+                    break
+                self._cache_bytes -= self._series_bytes(evicted)
+            from factor_engine.runtime.auto_memory_budget import MemoryLeaseKind
+            lease = self._cache_broker.acquire_memory(
+                MemoryLeaseKind.SOURCE_READ, nbytes,
+                lease_id=f"data-cache:{id(self)}:{id(cache)}:{name}:{time.monotonic_ns()}",
+            )
+            if lease is None:
+                return False
             cache[name] = value
             cache.move_to_end(name)
-            self._cache_bytes += self._series_bytes(value)
+            token = id(lease)
+            state = {"remaining": len(owners), "lease": lease, "lock": threading.Lock()}
+            self._live_cache_leases[token] = state
+            source_ref = weakref.ref(self)
+            def release_owner(tok=token, owner_state=state, ref=source_ref):
+                with owner_state["lock"]:
+                    owner_state["remaining"] -= 1
+                    if owner_state["remaining"] != 0:
+                        return
+                    owner_state["lease"].release()
+                source = ref()
+                if source is not None:
+                    with source._cache_lock:
+                        source._live_cache_leases.pop(tok, None)
+            self._cache_finalizers[key] = tuple(
+                weakref.finalize(owner, release_owner) for owner in owners
+            )
+            self._cache_bytes += nbytes
             # #42 先按全局字节上限淘汰（column/panel 统一 global LRU，R33-P0-030），
             # 再按单 cache 列数上限淘汰。
             while self._cache_bytes > self._max_cache_bytes:
@@ -2137,8 +2245,10 @@ class DataAccessSource(DataSource):
                 self._cache_bytes -= self._series_bytes(evicted)
             for c in (self._column_cache, self._panel_cache):
                 while len(c) > self._max_cache_columns:
-                    _, evicted = c.popitem(last=False)
+                    evicted_name, evicted = c.popitem(last=False)
+                    self._cache_finalizers.pop((id(c), evicted_name), None)
                     self._cache_bytes -= self._series_bytes(evicted)
+            return name in cache
 
     def _evict_global_lru(self) -> Any | None:
         """跨 column/panel 的 global LRU 淘汰：整体最旧者先出（R33-P0-030）。"""
@@ -2155,21 +2265,25 @@ class DataAccessSource(DataSource):
         if col_head is None and panel_head is None:
             return None
         if col_head is None:
-            _, ev = panel_head
+            evicted_name, ev = panel_head
             self._panel_cache.popitem(last=False)
+            self._cache_finalizers.pop((id(self._panel_cache), evicted_name), None)
             return ev
         if panel_head is None:
-            _, ev = col_head
+            evicted_name, ev = col_head
             self._column_cache.popitem(last=False)
+            self._cache_finalizers.pop((id(self._column_cache), evicted_name), None)
             return ev
         # 两者都非空：两个 OrderedDict 各自维护顺序，无法直接跨表比较新旧；
         # 用确定性交替策略（总驻留奇偶）从两者头部淘汰——跨表 global LRU。
         if (len(self._column_cache) + len(self._panel_cache)) % 2 == 0:
-            _, ev = col_head
+            evicted_name, ev = col_head
             self._column_cache.popitem(last=False)
+            self._cache_finalizers.pop((id(self._column_cache), evicted_name), None)
         else:
-            _, ev = panel_head
+            evicted_name, ev = panel_head
             self._panel_cache.popitem(last=False)
+            self._cache_finalizers.pop((id(self._panel_cache), evicted_name), None)
         return ev
 
     @staticmethod
@@ -2358,7 +2472,10 @@ class DataAccessSource(DataSource):
         self._normalize_contract_columns(fetched, needed)
         for name in needed:
             self._put_cache(self._column_cache, name, fetched[name])
-        return {name: self._column_cache[name] for name in names}
+        return {
+            name: self._column_cache[name] if name in self._column_cache else fetched[name]
+            for name in names
+        }
 
     def _normalize_contract_columns(self, fetched: dict[str, Any], names: list[str]) -> None:
         """Normalize every registered logical field before it enters the cache.

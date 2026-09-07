@@ -1,0 +1,33 @@
+id: WP2_OPERATOR_DEFECTS_OP05_TO_OP10
+git_sha: 6e783a57300eb6cd98d5e37ee6def4ed1033acfe
+timestamp_utc: 2026-09-07T12:10:00Z
+files:
+  - factor_engine/cleaned_operators/common/group.py
+  - factor_engine/cleaned_operators/common/cross_sectional.py
+  - factor_engine/cleaned_operators/common/polars_ts_basic.py
+  - factor_engine/cleaned_operators/common/polars_cs_basic.py
+  - factor_engine/cleaned_operators/polars_native/panel_group_misc.py
+  - factor_engine/cleaned_operators/polars_native/ts_batch1.py
+  - factor_engine/tests/operators/test_v6_group_percentile_legacy.py
+tests:
+  passed:
+    - command: PYTHONPATH=. .venv/bin/python -m pytest -q factor_engine/tests/operators/test_v6_group_percentile_legacy.py
+      result: 3 passed, 2 warnings
+    - command: direct Polars TSArgmaxAgeNative/TSArgminAgeNative prefix oracle
+      result: passed
+    - command: direct Polars OP06/07/08/10 candidate oracle
+      result: passed; OP07 and OP10 verified to reject as unsupported
+    - command: direct OP09 legacy candidate calls
+      result: passed; all three explicitly reject as unsupported
+    - command: python -m py_compile on five changed candidate modules
+      result: passed
+  not_run:
+    - full operator suite
+    - randomized import-order suite
+    - real market data
+limitations:
+  - OP-05 current winners are semantic_hardening audited implementations; repaired common/group.py class is a legacy explicit candidate.
+  - OP-07 and OP-10 unsafe shadow candidates were explicitly marked unsupported rather than assigned guessed mathematics.
+  - OP-09 current winners are separate production/overhaul implementations; the defective legacy candidates were disabled because their NaN/lookback contract lacks a trusted oracle.
+  - OP-06 contains additional non-winning candidate defects outside these narrow fixes.
+  - No claim is made that all 1756 operators are fixed or certified.

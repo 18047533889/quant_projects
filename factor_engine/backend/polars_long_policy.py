@@ -127,6 +127,67 @@ POLARS_LONG_NATIVE: frozenset[str] = frozenset(
         'where',
         'winsorize',
         'zscore',
+        # 2026-09-07 fin_* elementwise algebraic family (pure Expr, no period
+        # walk): ratio / abs-ratio / sum-diff-ratio over up to seven operands.
+        'fin_common_size',
+        'fin_cash_conversion',
+        'fin_acquisition_cash_intensity',
+        'fin_borrowing_intensity',
+        'fin_capex_intensity',
+        'fin_goodwill_intensity',
+        'fin_debt_repayment_intensity',
+        'fin_contract_asset_intensity',
+        'fin_contract_liability_intensity',
+        'fin_oci_to_equity',
+        'fin_interest_coverage_proxy',
+        'fin_discontinued_operation_ratio',
+        'fin_minority_profit_share',
+        'fin_fair_value_income_dependence',
+        'fin_investment_income_dependence',
+        'fin_other_earnings_dependence',
+        'fin_rd_capitalization_ratio',
+        'fin_expectation_dispersion',
+        'fin_cash_burn_runway',
+        'fin_accrual_ratio',
+        'fin_cash_earnings_gap',
+        'fin_impairment_intensity',
+        'fin_lease_intensity',
+        'fin_rd_total_intensity',
+        'fin_contract_asset_liability_gap',
+        'fin_lease_asset_liability_gap',
+        'fin_deferred_tax_gap',
+        'fin_comprehensive_income_gap',
+        'fin_roe_cash_gap',
+        'fin_debt_service_coverage_proxy',
+        'fin_actual_expectation_divergence',
+        'fin_surprise',
+        'fin_net_borrowing_cashflow',
+        'fin_financing_gap',
+        'fin_core_earnings_ratio',
+        'fin_noncore_income_ratio',
+        'cs_physical_panel_coverage',
+        'group_rank_weighted_value',
+        # wave2 csg (2026-09-07): polars native branches in
+        # backend/polars_expr_emitter.py (cs_shrink / weighted zscore),
+        # 三方 parity 见 tests/backend_parity/test_csg_wave2_parity.py.
+        'cs_shrink_to_group_mean',
+        'group_weighted_zscore',
+        # Tech / candle / misc family (2026-09 native branches in
+        # backend/polars_expr_emitter.py — pure rolling/ewm shifted-window,
+        # no Python UDF).  Sequential-recursion kernels (FisherTransform / QQE /
+        # RSX) stay on the registry bridge (cap path), NOT native.
+        "ALMA",
+        "CoppockCurve",
+        "ElderRay",
+        "atr_acceleration",
+        "atr_pct",
+        "atr_percentile",
+        "atr_short_long_ratio",
+        "atr_zscore",
+        "candle_body_strength",
+        "candle_pattern_count",
+        "candle_range_pct",
+        "candle_wick_balance",
     }
 )
 
@@ -148,6 +209,11 @@ POLARS_LONG_STATEFUL: frozenset[str] = frozenset(
         'ts_ema',
         'vpmacd',
         'vpmacd_signal',
+        # candlestick engine (multi-bar pattern state) + cdl_* 嵌套 prior-trend
+        # 上下文（pandas 参考嵌入 LAG 序列，polars 走 registry native 复刻）。
+        "candlestick_pattern",
+        "cdl_hammer",
+        "cdl_hanging_man",
     }
 )
 

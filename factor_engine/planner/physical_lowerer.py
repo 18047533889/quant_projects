@@ -336,16 +336,17 @@ def backend_context_for(
     且计划可下推时选 ``duckdb_sql``，Polars 可选时选 ``polars``，否则 Pandas。
     """
     backend_candidates: list[str] = []
-    route_backend = preferred
+    explicit_backend = str(getattr(ctx, "selected_backend", "") or "")
+    route_backend = explicit_backend or preferred
     try:
         from factor_engine.backend.plan_cost_router import choose_plan_route
 
-        if ctx is not None:
+        if ctx is not None and not explicit_backend:
             route = choose_plan_route(plan, ctx)
             route_backend = route.backend
             backend_candidates = [b for b, _ in route.candidate_costs]
     except Exception:
-        route_backend = preferred
+        route_backend = explicit_backend or preferred
     if route_backend is None:
         route_backend = "pandas_numpy"
     # 归一 backend 名 → HybridExecutor 分类用名。
@@ -432,23 +433,80 @@ def contract_for_plan(
     )
 
 
-def _walk_source_columns(plan: Any) -> tuple[str, ...]:
-    """root 计划引用的源列（去重、保序）。"""
+def _walk_source_columns(
+    plan: Any, shared_nodes: dict[str, Any] | None = None,
+) -> tuple[str, ...]:
+    """Collect source columns through the transitive plan-ref closure."""
+    definitions = shared_nodes or {}
     cols: list[str] = []
-    seen: set[str] = set()
+    seen_cols: set[str] = set()
+    seen_nodes: set[int] = set()
+    visiting_sids: set[str] = set()
 
     def walk(node: Any) -> None:
+        if id(node) in seen_nodes:
+            return
         op = str(getattr(node, "op", "") or "")
+        if op == "plan_ref":
+            sid = str((getattr(node, "attrs", None) or {}).get("sid") or "")
+            if not sid or sid not in definitions:
+                raise ValueError(f"Unresolved shared plan_ref sid={sid!r}")
+            if sid in visiting_sids:
+                raise ValueError(f"Cyclic shared plan_ref sid={sid!r}")
+            visiting_sids.add(sid)
+            walk(definitions[sid])
+            visiting_sids.remove(sid)
+            return
+        seen_nodes.add(id(node))
         if op == "column":
             name = str((getattr(node, "attrs", None) or {}).get("name") or "")
-            if name and name not in seen:
-                seen.add(name)
+            if name and name not in seen_cols:
+                seen_cols.add(name)
                 cols.append(name)
         for child in getattr(node, "inputs", ()) or ():
             walk(child)
 
     walk(plan)
     return tuple(cols)
+
+
+def _expand_plan_refs(plan: Any, shared_nodes: dict[str, Any]) -> Any:
+    """Build the logical view used for backend and cost analysis of a CSE root."""
+    from factor_engine.planner.logical_plan import PlanNode
+
+    visiting: set[str] = set()
+    memo: dict[int, Any] = {}
+
+    def expand(node: Any) -> Any:
+        op = str(getattr(node, "op", "") or "")
+        if op == "plan_ref":
+            sid = str((getattr(node, "attrs", None) or {}).get("sid") or "")
+            if not sid or sid not in shared_nodes:
+                raise ValueError(f"Unresolved shared plan_ref sid={sid!r}")
+            if sid in visiting:
+                raise ValueError(f"Cyclic shared plan_ref sid={sid!r}")
+            visiting.add(sid)
+            out = expand(shared_nodes[sid])
+            visiting.remove(sid)
+            return out
+        cached = memo.get(id(node))
+        if cached is not None:
+            return cached
+        original_children = tuple(getattr(node, "inputs", ()) or ())
+        children = tuple(expand(child) for child in original_children)
+        if children == original_children:
+            out = node
+        else:
+            out = PlanNode(
+                op=op, inputs=children,
+                attrs=getattr(node, "attrs", None) or {},
+                semantic_attrs=getattr(node, "semantic_attrs", None) or {},
+                node_id=getattr(node, "node_id", None),
+            )
+        memo[id(node)] = out
+        return out
+
+    return expand(plan)
 
 
 def source_identity_from_ctx(ctx: Any | None) -> tuple[SourceScopeId, str]:
@@ -489,6 +547,8 @@ def lower_root_plan(
     source_snapshot_id: str = "",
     execution_scope: str = "",
     scan_cost: Any | None = None,
+    source_columns: tuple[str, ...] | None = None,
+    analysis_plan: Any | None = None,
 ) -> list[PhysicalFactorTask]:
     """把一个 root 计划 lower 成 physical stage 链（R31 §3 / R33-P0-007..009）。
 
@@ -503,14 +563,18 @@ def lower_root_plan(
     """
     from factor_engine.backend.operator_cost import estimate_plan_cost
 
-    bctx = backend_context_for(plan, ctx=ctx, preferred=preferred_backend)
-    plan_cost = estimate_plan_cost(plan, rows=rows)
+    cost_plan = analysis_plan if analysis_plan is not None else plan
+    bctx = backend_context_for(cost_plan, ctx=ctx, preferred=preferred_backend)
+    plan_cost = estimate_plan_cost(cost_plan, rows=rows)
     total_work = float(plan_cost.get("total_work", 1.0))
     counter: list[int] = [0]
     stages: list[PhysicalFactorTask] = []
 
     # 1) SOURCE_SCAN stage：真实源列（驱动 read wave / ScanCost admission）。
-    source_cols = _walk_source_columns(plan)
+    source_cols = (
+        tuple(source_columns) if source_columns is not None
+        else _walk_source_columns(plan)
+    )
     if scan_cost is not None:
         # R33-P0-034：ScanCost 直接进 source task 资源契约（真实 IO 需求）。
         scan_contract = _contract_from_scan_cost(scan_cost, plan_cost)
@@ -761,6 +825,7 @@ def lower_batch_dag(
     source_scope, snapshot_id = source_identity_from_ctx(ctx)
     source_scope_str = source_scope.key() if isinstance(source_scope, SourceScopeId) else str(source_scope)
     physical = PhysicalFactorDAG()
+    shared_definitions = dict(dag.shared_nodes or {})
 
     # 如果启用 DAG 分区优化，先进行全局后端分配
     backend_assignments = None
@@ -774,13 +839,24 @@ def lower_batch_dag(
             pass
 
     # shared nodes
-    for sid, sub in (dag.shared_nodes or {}).items():
-        plan_cost = _plan_cost_bytes(sub)
+    for sid, sub in shared_definitions.items():
+        analysis_plan = _expand_plan_refs(sub, shared_definitions)
+        source_cols = _walk_source_columns(sub, shared_definitions)
+        plan_cost = _plan_cost_bytes(analysis_plan)
         # 如果有分区优化结果，使用指定的后端
         preferred = None
         if backend_assignments and f"cse:{sid}" in backend_assignments:
             preferred = backend_assignments[f"cse:{sid}"]
-        bctx = backend_context_for(sub, ctx=ctx, preferred=preferred)
+        bctx = backend_context_for(analysis_plan, ctx=ctx, preferred=preferred)
+        # A hoisted source-column CSE inherits the source-native representation;
+        # treating this leaf as pandas contaminates the whole wave backend mask.
+        source = getattr(ctx, "data_source", None)
+        if (
+            str(getattr(analysis_plan, "op", "") or "") == "column"
+            and callable(getattr(source, "scan_polars_long", None))
+            and "polars" in str(getattr(ctx, "selected_backend", "") or "").lower()
+        ):
+            bctx = backend_context_for(analysis_plan, ctx=None, preferred="polars")
         shared = PhysicalFactorTask(
             task_id=f"cse:{sid}",
             op=str(getattr(sub, "op", "shared")),
@@ -794,12 +870,14 @@ def lower_batch_dag(
             preferred_backend=bctx.preferred_backend,
             estimated_cost=plan_cost,
             resource_contract=contract_for_plan(
-                sub, rows=rows, instruments=instruments, backend=bctx.preferred_backend
+                analysis_plan, rows=rows, instruments=instruments,
+                backend=bctx.preferred_backend
             ),
             spillable=True,
             cacheable=True,
             deterministic=True,
             node_ref=sub,
+            required_columns=source_cols,
             executable=True,
         )
         physical.add_task(shared)
@@ -830,10 +908,14 @@ def lower_batch_dag(
     for fp in dag.roots:
         execution_scope = str(fp.execution_scope.scope_key()) if getattr(fp, "execution_scope", None) else ""
         cost = _scan_cost_for_root(scan_cost_map, source_scope_str)
-        # 使用优化的后端（如果有）
+        # 使用优化的后端（如果有）；plan_ref root 按展开后的真实计划路由。
         preferred = None
         if backend_assignments and f"root:{fp.factor_name}" in backend_assignments:
             preferred = backend_assignments[f"root:{fp.factor_name}"]
+        expanded_root = _expand_plan_refs(fp.root, shared_definitions)
+        if preferred is None:
+            preferred = backend_context_for(expanded_root, ctx=ctx).preferred_backend
+        root_source_cols = _walk_source_columns(fp.root, shared_definitions)
         stages = lower_root_plan(
             fp.root,
             factor_name=fp.factor_name,
@@ -845,10 +927,40 @@ def lower_batch_dag(
             execution_scope=execution_scope,
             scan_cost=cost,
             preferred_backend=preferred,
+            source_columns=root_source_cols,
+            analysis_plan=expanded_root,
         )
         for st in stages:
             if st.task_id not in physical.tasks:
                 physical.add_task(st)
+    # A CSE is executable work, so it must depend on a real source scan that
+    # covers its transitive physical columns. Root scans are independently
+    # executable and read-wave coalescing deduplicates identical projections.
+    source_tasks = [
+        task for task in physical.tasks.values()
+        if task.task_type == TASK_SOURCE_SCAN
+    ]
+    for cid, task in list(physical.tasks.items()):
+        if task.task_type != TASK_CSE_SHARED or not task.required_columns:
+            continue
+        required = set(task.required_columns)
+        predecessors = [
+            scan.task_id for scan in source_tasks
+            if required.issubset(set(scan.required_columns))
+        ]
+        if not predecessors:
+            raise ValueError(
+                f"CSE task {cid} has no source scan covering {sorted(required)!r}"
+            )
+        physical.tasks[cid] = rebase_task(
+            task, inputs=tuple(sorted(set(task.inputs) | set(predecessors))),
+        )
+        for scan_id in predecessors:
+            scan = physical.tasks[scan_id]
+            physical.tasks[scan_id] = rebase_task(
+                scan, consumers=tuple(sorted(set(scan.consumers) | {cid})),
+            )
+
     physical.roots = tuple(f"root:{fp.factor_name}" for fp in dag.roots)
     return physical
 

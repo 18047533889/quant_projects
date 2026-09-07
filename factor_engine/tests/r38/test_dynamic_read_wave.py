@@ -11,6 +11,8 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
+import pytest
+
 from factor_engine.planner.physical_factor_dag import (
     TASK_SOURCE_SCAN,
     PhysicalFactorDAG,
@@ -19,6 +21,7 @@ from factor_engine.planner.physical_factor_dag import (
 from factor_engine.runtime.adaptive_batch_scheduler import AdaptiveBatchScheduler
 from factor_engine.runtime.resource_autopilot import ResourceDecision
 from factor_engine.runtime.resource_broker import ResourceBroker
+from factor_engine.runtime.resource_errors import ResourceBudgetExceeded
 
 
 def _source_task(tid: str, n_cols: int) -> PhysicalFactorTask:
@@ -70,18 +73,10 @@ def test_wave_budget_shrink_repartitions_unexecuted():
     sched._last_decision = _decision(read_wave=512 * 1024**2)  # 显著缩小
     committed = set(sched._wave_covered_tasks)
 
-    sched._maybe_repartition_waves(plan, dag, committed)
-
-    # 未执行 task（src:3..5，每个 ~800MB）被拆成更小 wave。
-    new_waves = plan.read_waves.waves
-    assert len(new_waves) >= 2, f"expected repartition, got {len(new_waves)} waves"
-    ids = [w.wave_id for w in new_waves]
-    assert all(i not in sched._wave_refs for i in ids), "新 wave_id 不能与已执行冲突"
-    covered = set()
-    for w in new_waves:
-        covered.update(w.task_ids)
-    assert covered == {f"src:{i}" for i in range(3, 6)}
-    assert any("repartition:" in e for e in sched._wave_summary["events"])
+    # A single 800 MB projected column cannot fit a 512 MiB wave. Splitting by
+    # task cannot make that atomic read safe, so repartition must fail closed.
+    with pytest.raises(ResourceBudgetExceeded, match="atomic read request"):
+        sched._maybe_repartition_waves(plan, dag, committed)
 
 
 def test_no_repartition_when_budget_not_shrunk():

@@ -164,8 +164,10 @@ def descriptor_from_broker(broker: Any) -> str:
 #: 采样节流（R27-033：500ms~2s，默认 1s）。不要每 operator cell 采样。
 DEFAULT_SAMPLE_INTERVAL_SECONDS = 1.0
 #: 外部 reserve：max(min_host_reserve_gb, RAM * min_host_reserve_fraction)（R27-028）。
-DEFAULT_MIN_HOST_RESERVE_GB = 8.0
-DEFAULT_MIN_HOST_RESERVE_FRACTION = 0.15
+DEFAULT_MIN_HOST_RESERVE_GB = 0.0
+DEFAULT_MIN_HOST_RESERVE_FRACTION = 0.0
+DEFAULT_RESULT_QUEUE_FRACTION = 0.05
+DEFAULT_RESULT_QUEUE_CAP_BYTES = 256 * 1024**2
 #: 默认 spill 盘保留：max(20GB, 10%)（R27-123）。
 DEFAULT_MIN_FREE_GB = 20.0
 DEFAULT_MIN_FREE_FRACTION = 0.10
@@ -234,6 +236,10 @@ class ResourceSnapshot:
     swap_current: int | None = None
     swap_max: int | None = None
     major_fault_rate: float = 0.0
+    cgroup_memory_high_remaining: int | None = None
+    process_family_vms: int | None = None
+    rlimit_as_remaining: int | None = None
+    host_mem_available_known: bool = True
 
     @property
     def live_headroom(self) -> int:
@@ -276,6 +282,10 @@ class ResourceSnapshot:
             "mem_available_slope": round(self.mem_available_slope, 3),
             "swap_current": self.swap_current,
             "swap_max": self.swap_max,
+            "cgroup_memory_high_remaining": self.cgroup_memory_high_remaining,
+            "process_family_vms": self.process_family_vms,
+            "rlimit_as_remaining": self.rlimit_as_remaining,
+            "host_mem_available_known": self.host_mem_available_known,
         }
 
 
@@ -306,26 +316,31 @@ def _read_int(path: str) -> int | None:
 
 
 def _cgroup_memory_current() -> int | None:
-    return _read_int("/sys/fs/cgroup/memory.current") or _read_int(
-        "/sys/fs/cgroup/memory/memory.current"
-    )
+    from factor_engine.runtime.resource_governor import _cgroup_memory_current_bytes
+
+    return _cgroup_memory_current_bytes()
 
 
-def _host_mem_available() -> int:
+def _host_mem_available_sample() -> tuple[int, bool]:
     try:
         import psutil  # type: ignore[import-untyped]
 
-        return max(0, int(psutil.virtual_memory().available))
+        return max(0, int(psutil.virtual_memory().available)), True
     except Exception:
         pass
     try:
         with open("/proc/meminfo", encoding="utf-8") as fh:
             for line in fh:
                 if line.startswith("MemAvailable:"):
-                    return max(0, int(line.split()[1]) * 1024)
+                    return max(0, int(line.split()[1]) * 1024), True
     except OSError:
         pass
-    return 0
+    return 0, False
+
+
+def _host_mem_available() -> int:
+    """Backward-compatible numeric view; use sample() when state matters."""
+    return _host_mem_available_sample()[0]
 
 
 def _cpu_util(interval: float = 0.0) -> float:
@@ -710,6 +725,11 @@ class ResourceBroker:
         }
         self._max_borrow_multiplier = max(1.0, float(max_borrow_multiplier))
         self._memory_leases: dict[str, MemoryLease] = {}
+        self._verified_pool_residency_by_domain: dict[str, int] = {}
+        self._physical_buffers: dict[str, dict[str, Any]] = {}
+        self._active_execution_budget: int | None = None
+        self._healthy_budget_samples = 0
+        self._last_budget_sample_ms: float | None = None
         self._lease_counter = 0
         self._lock = threading.RLock()
         self._cached: ResourceSnapshot | None = None
@@ -773,7 +793,7 @@ class ResourceBroker:
         self._external_cpu_ema = 0.8 * self._external_cpu_ema + 0.2 * external_cpu
         # R31-P0-012：磁盘 busy ≈ 读写吞吐 / 参考带宽（饱和 → 1.0）。
         disk_busy = self._disk_io_busy(now)
-        mem_available = _host_mem_available()
+        mem_available, mem_available_known = _host_mem_available_sample()
         # R36（§69）：MemAvailable 斜率——外部任务快速吃内存时提前让路。
         slope = self._slope_tracker.update(now / 1000.0, mem_available)
         # R36（§28/29）：PSI + swap + memory.events。
@@ -781,6 +801,16 @@ class ResourceBroker:
         mem_psi = _psi("memory")
         io_psi = _psi("io")
         sw_cur, sw_max = _swap()
+        from factor_engine.runtime.resource_governor import (
+            _cgroup_v2_memory_high_remaining_bytes,
+            process_family_vms_bytes,
+        )
+        import resource
+        family_vms = process_family_vms_bytes()
+        as_soft, _ = resource.getrlimit(resource.RLIMIT_AS)
+        as_remaining = None
+        if as_soft != resource.RLIM_INFINITY and family_vms is not None:
+            as_remaining = max(0, int(as_soft) - family_vms)
         snap = ResourceSnapshot(
             timestamp_ms=now,
             hard_cpu_slots=self.hard_cpu_slots,
@@ -808,6 +838,10 @@ class ResourceBroker:
             memory_events=_memory_events(),
             swap_current=sw_cur,
             swap_max=sw_max,
+            cgroup_memory_high_remaining=_cgroup_v2_memory_high_remaining_bytes(),
+            process_family_vms=family_vms,
+            rlimit_as_remaining=as_remaining,
+            host_mem_available_known=mem_available_known,
         )
         self._cached = snap
         self._last_sample_ms = now
@@ -865,6 +899,12 @@ class ResourceBroker:
 
     def pressure_stage(self) -> str:
         snap = self._refresh()
+        # memory.high is a reclaim/throttling boundary, not an OOM hard limit.
+        # It escalates pressure without changing HardMemoryLimit.
+        if not snap.host_mem_available_known:
+            return STAGE_PRESSURE_3
+        if snap.cgroup_memory_high_remaining == 0:
+            return STAGE_PRESSURE_3
         headroom = snap.live_headroom
         reserve = self._reserve_bytes()
         # R27-131：其他任务内存上涨 → MemAvailable 下降 → 尽早停止 admission。
@@ -918,23 +958,88 @@ class ResourceBroker:
         min）。``EmergencyReserve`` 与 live 候选交给 ``compute_auto_memory_budget``。
         """
         snap = self._refresh()
+        from factor_engine.runtime.resource_governor import _cgroup_v2_memory_remaining_bytes
+
         budget = compute_auto_memory_budget(
             hard_memory_limit=self.hard_memory_limit,
             cgroup_current=snap.cgroup_memory_current,
-            host_mem_available=snap.host_mem_available,
+            host_mem_available=(snap.host_mem_available if snap.host_mem_available_known else None),
             process_family_rss=snap.process_family_rss,
+            cgroup_remaining=_cgroup_v2_memory_remaining_bytes(),
+            address_space_remaining=snap.rlimit_as_remaining,
             min_reserve_gb=self.min_host_reserve_gb,
             min_reserve_fraction=self.min_host_reserve_fraction,
             safety_factor=self._safety_factor,
+            verified_pool_residency_by_domain=self._verified_pool_residency_by_domain,
+            host_measurement_known=snap.host_mem_available_known,
         )
+        target = budget.execution_budget
+        if self._active_execution_budget is None or target <= self._active_execution_budget:
+            self._active_execution_budget = target
+            self._healthy_budget_samples = 0
+        else:
+            is_new_sample = snap.timestamp_ms != self._last_budget_sample_ms
+            healthy = self.pressure_stage() == STAGE_NORMAL
+            if is_new_sample and healthy:
+                self._healthy_budget_samples += 1
+            elif is_new_sample:
+                self._healthy_budget_samples = 0
+            if self._healthy_budget_samples >= 5:
+                step = max(1, int(target * 0.05))
+                self._active_execution_budget = min(target, self._active_execution_budget + step)
+                self._healthy_budget_samples = 0
+        self._last_budget_sample_ms = snap.timestamp_ms
+        if self._active_execution_budget != target:
+            from dataclasses import replace
+            budget = replace(budget, execution_budget=self._active_execution_budget)
         self._auto_budget = budget
         return budget
 
     def auto_memory_budget(self) -> AutoMemoryBudget:
         """当前 AutoMemoryBudget（首次调用派生，之后受采样节流）。"""
-        if self._auto_budget is None:
-            return self._refresh_auto_budget()
-        return self._auto_budget
+        return self._refresh_auto_budget()
+
+    def register_physical_buffer(
+        self, buffer_id: str, nbytes: int, *, domains: tuple[str, ...], consumer_id: str
+    ) -> None:
+        """Register one measured physical allocation and a concrete consumer."""
+        allowed = {"cgroup_remaining", "host_remaining", "configured_remaining"}
+        if not buffer_id or not consumer_id or nbytes <= 0 or not domains:
+            raise ValueError("buffer identity, positive bytes, domains and consumer required")
+        if not set(domains).issubset(allowed):
+            raise ValueError("unknown residency domain")
+        with self._lock:
+            existing = self._physical_buffers.get(buffer_id)
+            if existing is not None and (
+                existing["nbytes"] != int(nbytes) or existing["domains"] != frozenset(domains)
+            ):
+                raise ValueError("buffer identity reused with different physical allocation")
+            record = existing or {
+                "nbytes": int(nbytes), "domains": frozenset(domains), "consumers": set()
+            }
+            record["consumers"].add(consumer_id)
+            self._physical_buffers[buffer_id] = record
+            self._rebuild_verified_residency_locked()
+            self._auto_budget = None
+
+    def release_physical_buffer_reference(self, buffer_id: str, *, consumer_id: str) -> bool:
+        with self._lock:
+            record = self._physical_buffers.get(buffer_id)
+            if record is None or consumer_id not in record["consumers"]:
+                return False
+            record["consumers"].remove(consumer_id)
+            if not record["consumers"]:
+                self._physical_buffers.pop(buffer_id, None)
+            self._rebuild_verified_residency_locked()
+            self._auto_budget = None
+            return True
+
+    def _rebuild_verified_residency_locked(self) -> None:
+        totals: dict[str, int] = {}
+        for record in self._physical_buffers.values():
+            for domain in record["domains"]:
+                totals[domain] = totals.get(domain, 0) + record["nbytes"]
+        self._verified_pool_residency_by_domain = totals
 
     def execution_budget(self) -> int:
         """P3/P4：ExecutionBudget = SafeLiveBudget × safety_factor。"""
@@ -973,6 +1078,8 @@ class ResourceBroker:
                 return None
             self._lease_counter += 1
             lid = str(lease_id or f"memlease_{self._lease_counter}")
+            if lid in self._memory_leases:
+                return None
             lease = MemoryLease(self, kind, nb, lid)
             self._memory_leases[lid] = lease
             return lease
@@ -997,6 +1104,38 @@ class ResourceBroker:
             self._pool_limit(k, exec_budget)
             for k in (MemoryLeaseKind.RESULT_QUEUE, MemoryLeaseKind.WRITER_BATCH)
         )
+
+    def automatic_result_queue_budget(self) -> int:
+        """Initial bounded result queue from the one active broker pool."""
+        return min(
+            int(self.execution_budget() * DEFAULT_RESULT_QUEUE_FRACTION),
+            DEFAULT_RESULT_QUEUE_CAP_BYTES,
+        )
+
+    def acquire_protected_egress(
+        self,
+        result_queue_bytes: int,
+        writer_workspace_bytes: int,
+        *,
+        lease_id: str,
+    ) -> tuple[MemoryLease, MemoryLease] | None:
+        """Atomically reserve result delivery before compute admission."""
+        queue_bytes = int(result_queue_bytes)
+        writer_bytes = int(writer_workspace_bytes)
+        if queue_bytes <= 0 or writer_bytes <= 0 or not lease_id:
+            return None
+        with self._lock:
+            if self._lease_sum_bytes() + queue_bytes + writer_bytes > self.execution_budget():
+                return None
+            qid = f"{lease_id}:result_queue"
+            wid = f"{lease_id}:writer_workspace"
+            if qid in self._memory_leases or wid in self._memory_leases:
+                return None
+            q = MemoryLease(self, MemoryLeaseKind.RESULT_QUEUE, queue_bytes, qid)
+            w = MemoryLease(self, MemoryLeaseKind.WRITER_BATCH, writer_bytes, wid)
+            self._memory_leases[qid] = q
+            self._memory_leases[wid] = w
+            return q, w
 
     def current_cse_budget(self) -> int:
         """P3/P4: CSE cache 预算。"""
@@ -1112,9 +1251,11 @@ class ResourceBroker:
 
     def _release_locked(self, task: TaskResourceContract, *, task_id: str) -> None:
         """租约/旧 API 共用的释放原语（只在 ``ReservationLease.release`` 内幂等化）。"""
-        self._running.pop(task_id, None)
-        self._cpu.release(task.cpu_tokens)
-        self._io.release(task.io_tokens)
+        reserved = self._running.pop(task_id, None)
+        if reserved is None:
+            return
+        self._cpu.release(reserved.cpu_tokens)
+        self._io.release(reserved.io_tokens)
 
     def reserve(self, task: TaskResourceContract, *, task_id: str = "") -> bool:
         """向后兼容：返回 bool。内部经 ``try_reserve`` 拿到 lease 并持有，
@@ -1140,8 +1281,8 @@ class ResourceBroker:
         if lease is not None:
             lease.release()
             return
-        # 无租约时直接归还（覆盖直接 try_reserve 后手工 release 的调用方）。
-        self._release_locked(task, task_id=tid)
+        # Unknown/already-released ids are a no-op. Logical timeout alone is
+        # not evidence that a physical worker stopped consuming resources.
 
     def recommended_concurrency(self) -> int:
         snap = self._refresh()
@@ -1375,3 +1516,187 @@ class ResourceBroker:
             "memory_lease_bytes": self._lease_sum_bytes(),
             "active_memory_leases": len(self._memory_leases),
         }
+
+
+_V2_BROKER: ResourceBroker | None = None
+_V2_BROKER_PID: int | None = None
+_V2_BROKER_POLICY_KEY: tuple[float, int | None] | None = None
+_V2_WORKER_PROXY: Any = None
+_V2_BROKER_LOCK = threading.Lock()
+
+
+def peek_v2_resource_broker() -> Any | None:
+    """Return an already-installed v2 authority without creating one.
+
+    Source constructors use this read-only lookup so they cannot lock in the
+    default policy before the engine has validated and approved its profile.
+    """
+    if _V2_WORKER_PROXY is not None:
+        return _V2_WORKER_PROXY
+    pid = os.getpid()
+    with _V2_BROKER_LOCK:
+        if _V2_BROKER is None:
+            return None
+        if _V2_BROKER_PID != pid:
+            raise RuntimeError("forked process inherited v2 ResourceBroker; reconnect authority")
+        return _V2_BROKER
+
+
+def get_v2_resource_broker(policy: Any = None) -> ResourceBroker:
+    """Return the process authority used by every v2 request.
+
+    Forked children must reconnect through a coordinator; inheriting a broker
+    would silently split its lease ledger.
+    """
+    global _V2_BROKER, _V2_BROKER_PID, _V2_BROKER_POLICY_KEY
+    if _V2_WORKER_PROXY is not None:
+        return _V2_WORKER_PROXY
+    pid = os.getpid()
+    with _V2_BROKER_LOCK:
+        if _V2_BROKER is not None and _V2_BROKER_PID != pid:
+            raise RuntimeError("forked process inherited v2 ResourceBroker; reconnect authority")
+        fraction = float(getattr(policy, "memory_fraction", DEFAULT_SAFETY_FACTOR))
+        cap = getattr(policy, "optional_admin_cap_bytes", None)
+        policy_key = (min(fraction, 0.85), int(cap) if cap is not None else None)
+        if _V2_BROKER is None:
+            _V2_BROKER = ResourceBroker(
+                hard_memory_limit=int(cap) if cap is not None else None,
+                safety_factor=fraction,
+                min_host_reserve_gb=0,
+                min_host_reserve_fraction=0,
+            )
+            _V2_BROKER_PID = pid
+            _V2_BROKER_POLICY_KEY = policy_key
+        elif _V2_BROKER_POLICY_KEY != policy_key:
+            raise ValueError("v2 process authority already initialized with another fraction/admin cap")
+        return _V2_BROKER
+
+
+def install_v2_resource_broker_proxy(proxy: Any) -> None:
+    """Install the parent RPC authority in a spawned worker exactly once."""
+    global _V2_WORKER_PROXY
+    if proxy is None:
+        raise ValueError("worker broker proxy is required")
+    if _V2_WORKER_PROXY is not None and _V2_WORKER_PROXY is not proxy:
+        raise RuntimeError("worker broker proxy authority already installed")
+    if _V2_BROKER is not None:
+        raise RuntimeError("cannot install worker proxy after local broker creation")
+    _V2_WORKER_PROXY = proxy
+
+
+def _process_identity(pid: int) -> tuple[int, str] | None:
+    try:
+        raw = open(f"/proc/{pid}/stat", encoding="utf-8").read()
+        # comm is parenthesized and may contain spaces or ')' characters.
+        fields_after_comm = raw[raw.rfind(")") + 2 :].split()
+        return pid, fields_after_comm[19]  # field 22 starttime; tail starts at field 3
+    except (OSError, IndexError, ValueError):
+        return None
+
+
+def _heavy_guardian(connection: Any, lock_path: str, timeout_seconds: float) -> None:
+    """Independent lock owner; survives requester death until tracked workers exit."""
+    import fcntl
+    import time
+
+    tracked: set[tuple[int, str]] = set()
+    with open(lock_path, "a+", encoding="utf-8") as handle:
+        deadline = time.monotonic() + timeout_seconds
+        while True:
+            try:
+                fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                connection.send(("ready", os.getpid()))
+                break
+            except BlockingIOError:
+                if time.monotonic() >= deadline:
+                    connection.send(("timeout", None))
+                    return
+                time.sleep(0.05)
+        release_requested = False
+        while not release_requested:
+            try:
+                if connection.poll(0.1):
+                    message = connection.recv()
+                    if message[0] == "track":
+                        tracked.add((int(message[1]), str(message[2])))
+                    elif message[0] == "release":
+                        release_requested = True
+            except (EOFError, OSError):
+                release_requested = True
+        while tracked:
+            tracked = {identity for identity in tracked if _process_identity(identity[0]) == identity}
+            if tracked:
+                time.sleep(0.1)
+        fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+
+
+_ACTIVE_HEAVY_GUARD: "_HeavyRunGuard | None" = None
+_ACTIVE_HEAVY_GUARD_LOCK = threading.Lock()
+
+
+class NoActiveHeavyRunGuard(RuntimeError):
+    """No v2 heavy-run scope exists; non-v2 workers may proceed explicitly."""
+
+
+class _HeavyRunGuard:
+    def __init__(self, timeout_seconds: float) -> None:
+        self.timeout_seconds = max(0.0, float(timeout_seconds))
+        self._guardian: Any = None
+        self._connection: Any = None
+
+    def __enter__(self) -> "_HeavyRunGuard":
+        import multiprocessing as mp
+        import tempfile
+        global _ACTIVE_HEAVY_GUARD
+        path = os.path.join(tempfile.gettempdir(), f"factor-engine-v2-heavy-{os.getuid()}.lock")
+        parent, child = mp.get_context("spawn").Pipe()
+        guardian = mp.get_context("spawn").Process(
+            target=_heavy_guardian, args=(child, path, self.timeout_seconds), daemon=False
+        )
+        guardian.start()
+        child.close()
+        status, _ = parent.recv()
+        if status != "ready":
+            guardian.join()
+            parent.close()
+            raise TimeoutError("shared-host heavy-run authority wait expired")
+        self._guardian = guardian
+        self._connection = parent
+        with _ACTIVE_HEAVY_GUARD_LOCK:
+            if _ACTIVE_HEAVY_GUARD is not None:
+                raise RuntimeError("nested heavy_run_guard is not supported")
+            _ACTIVE_HEAVY_GUARD = self
+        return self
+
+    def track_worker(self, pid: int) -> None:
+        identity = _process_identity(int(pid))
+        if identity is None or self._connection is None:
+            raise ValueError("worker process identity is unavailable")
+        self._connection.send(("track", identity[0], identity[1]))
+
+    def __exit__(self, exc_type: Any, exc: Any, tb: Any) -> None:
+        global _ACTIVE_HEAVY_GUARD
+        with _ACTIVE_HEAVY_GUARD_LOCK:
+            if _ACTIVE_HEAVY_GUARD is self:
+                _ACTIVE_HEAVY_GUARD = None
+        if self._connection is not None:
+            self._connection.send(("release",))
+            self._connection.close()
+            self._connection = None
+        # Do not join: guardian intentionally retains exclusivity while any
+        # tracked quarantined worker has the same verified PID identity.
+        self._guardian = None
+
+
+def heavy_run_guard(*, timeout_seconds: float = 300.0) -> _HeavyRunGuard:
+    """Cross-process single-heavy-coordinator guard with bounded queue wait."""
+    return _HeavyRunGuard(timeout_seconds)
+
+
+def register_heavy_worker(pid: int) -> None:
+    """Attach a physical worker lifetime to the active cross-process guard."""
+    with _ACTIVE_HEAVY_GUARD_LOCK:
+        guard = _ACTIVE_HEAVY_GUARD
+    if guard is None:
+        raise NoActiveHeavyRunGuard("no active heavy_run_guard")
+    guard.track_worker(pid)

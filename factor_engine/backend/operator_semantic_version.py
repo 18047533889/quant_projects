@@ -24,6 +24,7 @@ OPERATOR_SEMANTIC_VERSIONS: dict[str, int] = {
     "rank": 1,
     "rank_pct": 1,
     "ts_beta": 3,  # v3: paired finite cohort + explicit ddof semantics
+    "ts_zscore": 2,  # v2: all declared window/numeric parameters affect execution
     # m_beta / rolling_beta are runtime aliases of ts_beta and inherit v3.
     "rolling_beta_to_market": 2,  # v2: paired cohort + benchmark alignment
     "downside_beta": 2,  # v2: downside mask after paired finite alignment

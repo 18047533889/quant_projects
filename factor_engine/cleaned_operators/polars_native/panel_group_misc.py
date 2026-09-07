@@ -2014,7 +2014,7 @@ class composition_ilr_balance(SeriesOperator):
     name="ichimoku_senkou_a",
     category="technical_indicator",
     canonical="ichimoku_senkou_a",
-    source="polars_native_phase6")
+    source="polars_native_phase6", status="unsupported")
 class ichimoku_senkou_a(SeriesOperator):
     """Ichimoku Senkou Span A"""
 
@@ -2027,6 +2027,7 @@ class ichimoku_senkou_a(SeriesOperator):
     )
 
     def _calculate_series(self, high: pl.DataFrame, low: pl.DataFrame, tenkan: int = 9, kijun: int = 26, **kwargs) -> pl.DataFrame:
+        raise NotImplementedError("ichimoku_senkou_a Polars candidate is disabled: causal signal/display shift contract is not certified")
         def senkou_a_expr(h_col, l_col):
             h = pl.col(h_col)
             l = pl.col(l_col)
@@ -2046,7 +2047,7 @@ class ichimoku_senkou_a(SeriesOperator):
     name="ichimoku_senkou_b",
     category="technical_indicator",
     canonical="ichimoku_senkou_b",
-    source="polars_native_phase6")
+    source="polars_native_phase6", status="unsupported")
 class ichimoku_senkou_b(SeriesOperator):
     """Ichimoku Senkou Span B"""
 
@@ -2059,6 +2060,7 @@ class ichimoku_senkou_b(SeriesOperator):
     )
 
     def _calculate_series(self, high: pl.DataFrame, low: pl.DataFrame, senkou: int = 52, kijun: int = 26, **kwargs) -> pl.DataFrame:
+        raise NotImplementedError("ichimoku_senkou_b Polars candidate is disabled: causal signal/display shift contract is not certified")
         def senkou_b_expr(h_col, l_col):
             h = pl.col(h_col)
             l = pl.col(l_col)
@@ -2074,7 +2076,7 @@ class ichimoku_senkou_b(SeriesOperator):
     name="ichimoku_cloud_position",
     category="technical_indicator",
     canonical="ichimoku_cloud_position",
-    source="polars_native_phase6")
+    source="polars_native_phase6", status="unsupported")
 class ichimoku_cloud_position(SeriesOperator):
     """Position relative to Ichimoku cloud"""
 
@@ -2087,6 +2089,7 @@ class ichimoku_cloud_position(SeriesOperator):
     )
 
     def _calculate_series(self, close: pl.DataFrame, high: pl.DataFrame, low: pl.DataFrame, **kwargs) -> pl.DataFrame:
+        raise NotImplementedError("ichimoku_cloud_position Polars candidate is disabled pending independent high/low causal implementation")
         def cloud_pos_expr(c_col, h_col, l_col):
             c = pl.col(c_col)
             h = pl.col(h_col)
@@ -2118,7 +2121,7 @@ class ichimoku_cloud_position(SeriesOperator):
     name="ichimoku_cloud_width",
     category="technical_indicator",
     canonical="ichimoku_cloud_width",
-    source="polars_native_phase6")
+    source="polars_native_phase6", status="unsupported")
 class ichimoku_cloud_width(SeriesOperator):
     """Ichimoku cloud width"""
 
@@ -2131,6 +2134,7 @@ class ichimoku_cloud_width(SeriesOperator):
     )
 
     def _calculate_series(self, high: pl.DataFrame, low: pl.DataFrame, **kwargs) -> pl.DataFrame:
+        raise NotImplementedError("ichimoku_cloud_width Polars candidate is disabled pending independent high/low causal implementation")
         def cloud_width_expr(h_col, l_col):
             h = pl.col(h_col)
             l = pl.col(l_col)
@@ -2491,4 +2495,3 @@ class lqtp_historical_cvar(SeriesOperator):
 
 
 print(f"Phase 6: Registered {70} panel, group, and miscellaneous operators")
-

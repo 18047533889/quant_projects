@@ -24,6 +24,9 @@ from factor_engine.backend.contracts import (  # noqa: E402  (after optional pol
 )
 
 from factor_engine.cleaned_operators.base import ParamSpec, ParamRole
+from factor_engine.cleaned_operators.common._polars_bridge import (
+    _is_panel_like, numeric_cols, to_pandas_panel, verify_frames_share_identity, frame_time_index,
+)
 
 
 def frame_like(template: pd.DataFrame, values: np.ndarray) -> pd.DataFrame:
@@ -106,40 +109,20 @@ def _pl_to_pd(frame: Any) -> pd.DataFrame:
     positional ``RangeIndex``.  Positional kernels are unaffected: ``.to_numpy()``
     rows are unchanged.
     """
-    cols = [c for c in frame.columns if c not in _SKIP_PANEL]
-    out = frame.select(cols).to_pandas()
-    time_col = next(
-        (c for c in ("__fe_time__", "date", "timestamp", "trade_date", "datetime")
-         if c in frame.columns),
-        None,
-    )
-    if time_col is not None:
-        values = frame[time_col].to_list()
-        if values:
-            idx = pd.DatetimeIndex(values)
-            if not idx.is_unique:
-                raise ValueError(
-                    f"polars panel time axis {time_col!r} has duplicate values "
-                    "(R11 P0-03 fail-closed)"
-                )
-            if not idx.is_monotonic_increasing:
-                raise ValueError(
-                    f"polars panel time axis {time_col!r} is not monotonically "
-                    "increasing (R11 P0-03 fail-closed)"
-                )
-            out.index = idx
-    return out
+    # A delegate may mutate its arguments. Never lend it a shared producer's
+    # writable NumPy storage, including an already-Pandas panel.
+    return (frame if isinstance(frame, pd.DataFrame) else to_pandas_panel(frame)).copy(deep=True)
 
 
 def _pl_rebuild(base: Any, result: Any) -> Any:
-    cols = [c for c in base.columns if c not in _SKIP_PANEL]
-    # Some pandas references return a raw numpy array (e.g.
-    # ``cs_local_density_score``) rather than a DataFrame; wrap before indexing
-    # by column name so the bridge/udf backend stays exact-parity.
+    from factor_engine.backend.operator_errors import OperatorShapeError
+
+    cols = numeric_cols(base)
+    # Anonymous arrays have no axis proof. An implementation returning arrays
+    # needs an explicit positional output adapter, not a generic relabelling.
     if not isinstance(result, pd.DataFrame):
-        pdf = pd.DataFrame(np.asarray(result, dtype=float), columns=cols)
-    else:
-        pdf = result
+        raise OperatorShapeError("polars delegate result has no labelled output-axis contract")
+    pdf = result
     # P0-14: ``base.with_columns`` fundamentally requires a SHAPE-PRESERVING
     # result — one row per base row.  A frequency-transform operator (minute ->
     # daily) returns a strictly shorter panel; rebuilding it onto the minute base
@@ -148,15 +131,48 @@ def _pl_rebuild(base: Any, result: Any) -> Any:
     # ``register_polars_bridge``); they get a purpose-built polars backend or
     # pandas-only admission.
     if len(pdf) != len(base):
-        from factor_engine.backend.operator_errors import OperatorShapeError
         raise OperatorShapeError(
             f"polars rebuild of a non-shape-preserving result: {len(pdf)} rows "
             f"vs {len(base)} base rows — a frequency-transform operator cannot be "
             "rebuilt onto the base frame with with_columns (R11 P0-14 fail-closed)"
         )
+    expected_index = frame_time_index(base)
+    if expected_index is None:
+        expected_index = pd.RangeIndex(len(base))
+    if list(pdf.columns) != cols or not pdf.index.equals(expected_index):
+        raise OperatorShapeError("polars delegate output time/instrument axes differ from input")
     return base.with_columns(
         [pl.Series(name=c, values=np.asarray(pdf[c], dtype=np.float64)) for c in cols]
     )
+
+
+def _call_pandas_delegate(canonical: str, frames: tuple, params: dict):
+    """Preserve Python argument binding; never reorder keyword operands."""
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
+
+    pandas_op = OperatorRegistry.get(canonical, "pandas_numpy")
+    if pandas_op is None:
+        raise RuntimeError(f"pandas_numpy reference missing for {canonical}")
+    panels = [v for v in (*frames, *params.values()) if _is_panel_like(v)]
+    if not panels:
+        raise ValueError(f"{canonical}: pandas delegate received no panel input")
+    verify_frames_share_identity(canonical, *panels)
+    # Reuse each conversion once within the call, but keep original positional
+    # and keyword slots. The reference's normal binder validates duplicates.
+    converted = {}
+
+    def convert(value):
+        if not _is_panel_like(value):
+            return value
+        key = id(value)
+        if key not in converted:
+            converted[key] = _pl_to_pd(value)
+        return converted[key]
+
+    args = tuple(convert(v) for v in frames)
+    kwargs = {k: convert(v) for k, v in params.items()}
+    result = pandas_op.calculate(*args, **kwargs)
+    return _pl_rebuild(panels[0], result)
 
 
 def register_polars_bridge(canonical: str) -> None:
@@ -178,18 +194,7 @@ def register_polars_bridge(canonical: str) -> None:
         metadata = PolarsMetadata(name=canonical, category="pandas_bridge", param_names=[])
 
         def _calculate_series(self, *frames, **params):
-            from factor_engine.cleaned_operators.registry import OperatorRegistry as _Reg
-
-            pandas_op = _Reg.get(canonical, "pandas_numpy")
-            if pandas_op is None:
-                raise RuntimeError(f"pandas_numpy reference missing for {canonical}")
-            converted = [
-                _pl_to_pd(value) if _is_panel_like(value) else value
-                for value in frames
-            ]
-            panel_frames = [value for value in frames if _is_panel_like(value)]
-            out = pandas_op.calculate(*converted, **params)
-            return _pl_rebuild(panel_frames[0], out)
+            return _call_pandas_delegate(canonical, frames, params)
 
     # Check if there's already a polars backend registered
     existing = OperatorRegistry.get(canonical, "polars")
@@ -260,30 +265,7 @@ def register_polars_udf(canonical: str) -> None:
         )
 
         def _calculate_series(self, *frames, **params):
-            from factor_engine.cleaned_operators.registry import OperatorRegistry as _Reg
-            from factor_engine.cleaned_operators.common._polars_bridge import _is_panel_like
-
-            # PARITY-B: a keyword-bound panel call (e.g. ``calculate(x=pl_wide)``)
-            # lands the panel in ``params`` (the shared validator keeps it a kwarg),
-            # not in ``frames``.  Normalize so the pandas delegate receives panels
-            # positionally in declaration order.
-            frames = list(frames)
-            frames.extend(params.pop(k) for k in list(params) if _is_panel_like(params[k]))
-            if not frames:
-                raise RuntimeError(
-                    f"{canonical}: polars UDF delegate received no panel input "
-                    "(expected positional or keyword panel)"
-                )
-            pandas_op = _Reg.get(canonical, "pandas_numpy")
-            if pandas_op is None:
-                raise RuntimeError(f"pandas_numpy reference missing for {canonical}")
-            converted = [
-                _pl_to_pd(value) if _is_panel_like(value) else value
-                for value in frames
-            ]
-            panel_frames = [value for value in frames if _is_panel_like(value)]
-            out = pandas_op.calculate(*converted, **params)
-            return _pl_rebuild(panel_frames[0], out)
+            return _call_pandas_delegate(canonical, frames, params)
 
     # R20: Attach param_specs from the pandas_numpy reference so the polars bridge
     # carries the same contract.  The registry backfills param_names but NOT

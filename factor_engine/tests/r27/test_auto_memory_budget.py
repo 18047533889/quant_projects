@@ -66,8 +66,7 @@ def test_emergency_reserve_is_reserved_not_part_of_execution_budget():
     assert budget.execution_budget <= budget.safe_live_budget
 
 
-def test_safety_factor_calibration_clamped():
-    # safety_factor 可校准到 0.80~0.85，但封顶 MAX_SAFETY_FACTOR=0.85。
+def test_safety_factor_explicit_override_remains_capped():
     hard = 8 * 1024**3
     b85 = compute_auto_memory_budget(
         hard_memory_limit=hard, cgroup_current=1 * 1024**3,
@@ -84,20 +83,114 @@ def test_safety_factor_calibration_clamped():
     assert b70.safety_factor == 0.7
 
 
-def test_probe_failure_derives_from_hard_limit_not_fixed_4gib():
-    # 探测全部失败时（无 cgroup / 无 MemAvailable / 无 RSS），ExecutionBudget
-    # 从 HardMemoryLimit 派生（hard × safety_factor），不是固定 4GiB。
+def test_unknown_measurement_fails_closed_without_hard_limit_fallback():
     hard = 16 * 1024**3
     budget = compute_auto_memory_budget(
         hard_memory_limit=hard,
         cgroup_current=None,
-        host_mem_available=0,
-        process_family_rss=0,
+        host_mem_available=None,
+        process_family_rss=None,
         min_reserve_gb=0,
         min_reserve_fraction=0.0,
         safety_factor=0.75,
     )
-    assert budget.execution_budget == int(hard * 0.75)
+    assert budget.measurement_state == "UNKNOWN"
+    assert budget.execution_budget == 0
+
+
+def test_failed_host_probe_is_unknown_while_measured_zero_is_known_zero():
+    common = dict(
+        hard_memory_limit=8 * 1024**3,
+        cgroup_current=None,
+        cgroup_remaining=4 * 1024**3,
+        process_family_rss=1024**3,
+        min_reserve_gb=0,
+        min_reserve_fraction=0,
+    )
+    unknown = compute_auto_memory_budget(
+        **common, host_mem_available=None, host_measurement_known=False
+    )
+    zero = compute_auto_memory_budget(
+        **common, host_mem_available=0, host_measurement_known=True
+    )
+    assert unknown.measurement_state == "UNKNOWN"
+    assert unknown.execution_budget == 0
+    assert zero.measurement_state == "KNOWN_ZERO"
+    assert zero.execution_budget == 0
+
+
+@pytest.mark.parametrize(
+    ("cgroup_current", "host_available", "family_rss"),
+    [
+        (64 * 1024**3, 48 * 1024**3, 1 * 1024**3),
+        (1 * 1024**3, 0, 1 * 1024**3),
+        (1 * 1024**3, 48 * 1024**3, 64 * 1024**3),
+    ],
+)
+def test_genuine_zero_headroom_never_resurrects_positive_budget(
+    cgroup_current, host_available, family_rss
+):
+    hard = 64 * 1024**3
+    budget = compute_auto_memory_budget(
+        hard_memory_limit=hard,
+        cgroup_current=cgroup_current,
+        host_mem_available=host_available,
+        process_family_rss=family_rss,
+        min_reserve_gb=0,
+        min_reserve_fraction=0,
+    )
+    assert budget.measurement_state == "KNOWN_ZERO"
+    assert budget.safe_live_budget == 0
+    assert budget.execution_budget == 0
+
+
+def test_verified_residency_reconstructs_pool_without_using_lease_promises():
+    gib = 1024**3
+    budget = compute_auto_memory_budget(
+        hard_memory_limit=64 * gib,
+        cgroup_current=34 * gib,
+        host_mem_available=30 * gib,
+        process_family_rss=34 * gib,
+        min_reserve_gb=0,
+        min_reserve_fraction=0,
+        verified_pool_residency_by_domain={
+            "cgroup_remaining": 30 * gib,
+            "host_remaining": 30 * gib,
+            "configured_remaining": 30 * gib,
+        },
+    )
+    assert budget.execution_budget == int(0.8 * 60 * gib)
+
+
+def test_residency_is_domain_matched_and_cannot_bypass_tighter_domain():
+    gib = 1024**3
+    budget = compute_auto_memory_budget(
+        hard_memory_limit=64 * gib,
+        cgroup_current=None,
+        cgroup_remaining=10 * gib,
+        host_mem_available=30 * gib,
+        process_family_rss=34 * gib,
+        min_reserve_gb=0,
+        min_reserve_fraction=0,
+        verified_pool_residency_by_domain={"host_remaining": 30 * gib},
+    )
+    assert budget.execution_budget == 8 * gib
+
+
+def test_rlimit_address_space_zero_denies_even_when_rss_headroom_positive():
+    gib = 1024**3
+    budget = compute_auto_memory_budget(
+        hard_memory_limit=8 * gib,
+        cgroup_current=None,
+        cgroup_remaining=8 * gib,
+        host_mem_available=8 * gib,
+        process_family_rss=1 * gib,
+        address_space_remaining=0,
+        min_reserve_gb=0,
+        min_reserve_fraction=0,
+    )
+    assert budget.measurement_state == "KNOWN_ZERO"
+    assert budget.execution_budget == 0
 
 
 # -- ResourceBroker MemoryLease 软池 ----------------------------------------

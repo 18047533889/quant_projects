@@ -9,10 +9,10 @@
     - ``EmergencyReserve``  = max(minimum_reserve, HardLimit × reserve_fraction)
     - ``SafeLiveBudget``    = min(cgroup_remaining, host_MemAvailable − reserve,
                                   configured_remaining)
-    - ``ExecutionBudget``   = SafeLiveBudget × safety_factor
-                              （0.65~0.75 起步，可校准至 0.80~0.85）
+    - ``ExecutionBudget``   = reconstructed live capacity × safety_factor
+                              （默认 0.80；显式受管覆盖有上限）
 
-任何默认值都只是**上限/回退**，绝不是一个会被直接预留的固定 4GiB。
+未知或真实零余量都拒绝新准入，不从 hard limit 生成正预算。
 
 本模块不含任何 broker 状态；单权威由
 :class:`factor_engine.runtime.resource_broker.ResourceBroker` 持有，本模块只做
@@ -61,18 +61,14 @@ class MemoryLeaseKind(str, enum.Enum):
 # ---------------------------------------------------------------------------
 
 #: EmergencyReserve 下限（GB）与占 HardLimit 的最小比例。
-DEFAULT_MIN_RESERVE_GB = 8.0
-DEFAULT_MIN_RESERVE_FRACTION = 0.15
+DEFAULT_MIN_RESERVE_GB = 0.0
+DEFAULT_MIN_RESERVE_FRACTION = 0.0
 #: EmergencyReserve 封顶（占 HardLimit 的比例，R27-029：小机器不被吃满）。
 RESERVE_CAP_FRACTION = 0.35
-#: ExecutionBudget = SafeLiveBudget × safety_factor（0.65~0.75 起步）。
-DEFAULT_SAFETY_FACTOR = 0.70
+#: ExecutionBudget 默认使用统一剩余容量 80% 池。
+DEFAULT_SAFETY_FACTOR = 0.80
 #: 可校准上限（安全前提下逐步放开）。
 MAX_SAFETY_FACTOR = 0.85
-#: 仅当什么都探测不到时的绝对上限（是 **cap**，不是被预留的固定值）。
-ABSOLUTE_FALLBACK_EXECUTION_CAP = 4 * 1024**3
-
-
 @dataclass(frozen=True)
 class AutoMemoryBudget:
     """一次 startup / resample 算出的内存预算。
@@ -88,6 +84,7 @@ class AutoMemoryBudget:
     safety_factor: float
     #: SafeLiveBudget 各候选来源（可读性/调试）。
     candidates: dict[str, int] = field(default_factory=dict)
+    measurement_state: str = "UNKNOWN"
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -97,6 +94,7 @@ class AutoMemoryBudget:
             "execution_budget": self.execution_budget,
             "safety_factor": round(self.safety_factor, 3),
             "candidates": dict(self.candidates),
+            "measurement_state": self.measurement_state,
         }
 
 
@@ -104,8 +102,12 @@ def compute_auto_memory_budget(
     *,
     hard_memory_limit: int,
     cgroup_current: int | None,
-    host_mem_available: int,
-    process_family_rss: int,
+    host_mem_available: int | None,
+    process_family_rss: int | None,
+    cgroup_remaining: int | None = None,
+    address_space_remaining: int | None = None,
+    verified_pool_residency_by_domain: dict[str, int] | None = None,
+    host_measurement_known: bool = True,
     min_reserve_gb: float = DEFAULT_MIN_RESERVE_GB,
     min_reserve_fraction: float = DEFAULT_MIN_RESERVE_FRACTION,
     safety_factor: float = DEFAULT_SAFETY_FACTOR,
@@ -119,8 +121,7 @@ def compute_auto_memory_budget(
     - ``SafeLiveBudget = min(cgroup_remaining, host_remaining, configured)``。
     - ``ExecutionBudget = SafeLiveBudget × safety_factor``。
 
-    任何默认值都只是**上限/回退**；探测失败时基于 ``HardMemoryLimit`` 派生，绝不
-    把一个固定 4GiB 直接当预留预算。固定 4GiB 仅作为绝对上限 ``ABSOLUTE_FALLBACK_EXECUTION_CAP``。
+    探测失败（UNKNOWN）或真实零余量（KNOWN_ZERO）都 fail closed。
     """
     hard = max(0, int(hard_memory_limit))
     sf = min(float(safety_factor), MAX_SAFETY_FACTOR)
@@ -136,17 +137,39 @@ def compute_auto_memory_budget(
         emergency = min(raw_reserve, int(hard * RESERVE_CAP_FRACTION))
 
     candidates: dict[str, int] = {}
-    if cgroup_current is not None and hard:
+    if cgroup_remaining is not None:
+        candidates["cgroup_remaining"] = max(0, int(cgroup_remaining))
+    elif cgroup_current is not None and hard:
         candidates["cgroup_remaining"] = max(0, hard - int(cgroup_current))
-    candidates["host_remaining"] = max(0, int(host_mem_available) - emergency)
-    candidates["configured_remaining"] = max(0, hard - int(process_family_rss))
+    if host_mem_available is not None:
+        candidates["host_remaining"] = max(0, int(host_mem_available) - emergency)
+    if process_family_rss is not None and hard:
+        candidates["configured_remaining"] = max(0, hard - int(process_family_rss))
+    if address_space_remaining is not None:
+        candidates["address_space_remaining"] = max(0, int(address_space_remaining))
 
     safe = min(candidates.values()) if candidates else 0
+    if not host_measurement_known:
+        measurement_state = "UNKNOWN"
+    elif not candidates:
+        measurement_state = "UNKNOWN"
+    elif safe == 0:
+        measurement_state = "KNOWN_ZERO"
+    else:
+        measurement_state = "KNOWN_NONZERO"
     # ExecutionBudget = SafeLiveBudget × safety_factor。
-    execution = int(safe * sf)
-    if execution <= 0:
-        # 探测失败 → 基于 HardLimit 派生（不是固定 4GiB 预留）。
-        execution = int(hard * sf)
+    # KNOWN_ZERO and UNKNOWN are both fail-closed.  In particular, a genuine
+    # zero headroom sample must never be resurrected from the hard limit.
+    residency = verified_pool_residency_by_domain or {}
+    reconstructed = {
+        name: value + max(0, int(residency.get(name, 0)))
+        for name, value in candidates.items()
+    }
+    reconstructable = min(reconstructed.values()) if reconstructed else 0
+    execution = (
+        min(hard, int(reconstructable * sf))
+        if measurement_state == "KNOWN_NONZERO" else 0
+    )
 
     return AutoMemoryBudget(
         hard_memory_limit=hard,
@@ -155,4 +178,5 @@ def compute_auto_memory_budget(
         execution_budget=max(0, execution),
         safety_factor=sf,
         candidates=candidates,
+        measurement_state=measurement_state,
     )

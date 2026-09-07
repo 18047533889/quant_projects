@@ -19,6 +19,7 @@ agent 负责接线）。
 from __future__ import annotations
 
 import time
+import itertools
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterator, Mapping, Sequence
@@ -323,9 +324,12 @@ class BatchParquetWriter:
             if isinstance(reader_or_batches, pa.RecordBatchReader):
                 schema = reader_or_batches.schema
             else:
-                for probe in cls._coerce_batches(reader_or_batches):
+                batches = iter(cls._coerce_batches(reader_or_batches))
+                probe = next(batches, None)
+                if probe is not None:
                     schema = probe.schema
-                    break
+                    # A one-shot iterator cannot be restarted after inference.
+                    reader_or_batches = itertools.chain((probe,), batches)
             if schema is None:  # pragma: no cover - defensive
                 raise ValueError("无法推导 schema：输入为空")
         if not isinstance(schema, pa.Schema):

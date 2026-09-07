@@ -144,6 +144,20 @@ def _assert_backend_plan_authority(backend: Any, plan: Any | None = None) -> Non
         )
 
 
+def _assert_public_batch_authority(engine: Any) -> None:
+    """v2 defers to the batch planner's physical admission, never Hybrid routing.
+
+    Other callers retain the legacy guard. A policy is not a certificate:
+    batch_service must still build and admit a production-ready physical plan.
+    """
+    from factor_engine.runtime.default_execution_policy import DefaultExecutionPolicy
+
+    policy = getattr(engine, "default_execution_policy", None)
+    if engine.run_mode == "production" and isinstance(policy, DefaultExecutionPolicy):
+        return
+    _assert_backend_plan_authority(engine.backend)
+
+
 def _admit_ready_single_region_batch(
     optimization: Any,
     logical_root_ids: tuple[str, ...],
@@ -3851,7 +3865,7 @@ class FactorEngine:
         """
         from factor_engine.runtime.batch_service import execute_run_many
 
-        _assert_backend_plan_authority(self.backend)
+        _assert_public_batch_authority(self)
         return execute_run_many(
             self,
             factors,
@@ -3896,7 +3910,7 @@ class FactorEngine:
         """
         from factor_engine.runtime.batch_service import execute_run_many_iter
 
-        _assert_backend_plan_authority(self.backend)
+        _assert_public_batch_authority(self)
         yield from execute_run_many_iter(
             self,
             factors,
@@ -3951,7 +3965,7 @@ class FactorEngine:
         """
         from factor_engine.runtime.batch_service import execute_run_many_parallel
 
-        _assert_backend_plan_authority(self.backend)
+        _assert_public_batch_authority(self)
         return execute_run_many_parallel(
             self,
             factors,
@@ -4005,7 +4019,7 @@ class FactorEngine:
         """
         from factor_engine.runtime.streaming_batch_service import execute_run_many_stream
 
-        _assert_backend_plan_authority(self.backend)
+        _assert_public_batch_authority(self)
         return execute_run_many_stream(
             self, factors, sink=sink, wave_size=wave_size, n_jobs=n_jobs, perf=perf,
             sink_queue_bytes=sink_queue_bytes,
@@ -4028,42 +4042,22 @@ class FactorEngine:
         Returns:
             新的 ``FactorEngine`` 实例（共享 ``backend`` 与 ``run_mode``）。
         """
-        if self.cache is None:
-            return FactorEngine(
-                backend=self.backend,
-                data_source=data_source,
-                cache=None,
-                run_mode=self.run_mode,
-            )
-        scope = compute_data_scope(data_source)
-        if isinstance(self.cache, PersistentPlanCache):
-            new_cache = self.cache.with_scope(scope, clear_memory=fresh_cache)
-            return FactorEngine(
-                backend=self.backend,
-                data_source=data_source,
-                cache=new_cache,
-                run_mode=self.run_mode,
-            )
-        if fresh_cache:
-            return FactorEngine(
-                backend=self.backend,
-                data_source=data_source,
-                cache=CacheManager(data_scope=scope),
-                run_mode=self.run_mode,
-            )
-        if getattr(self.cache, "data_scope", None) != scope:
-            return FactorEngine(
-                backend=self.backend,
-                data_source=data_source,
-                cache=CacheManager(data_scope=scope),
-                run_mode=self.run_mode,
-            )
-        return FactorEngine(
-            backend=self.backend,
-            data_source=data_source,
-            cache=self.cache,
-            run_mode=self.run_mode,
+        new_cache = self.cache
+        if self.cache is not None:
+            scope = compute_data_scope(data_source)
+            if isinstance(self.cache, PersistentPlanCache):
+                new_cache = self.cache.with_scope(scope, clear_memory=fresh_cache)
+            elif fresh_cache or getattr(self.cache, "data_scope", None) != scope:
+                new_cache = CacheManager(data_scope=scope)
+        clone = FactorEngine(
+            backend=self.backend, data_source=data_source, cache=new_cache,
+            run_mode=self.run_mode, production_fallback_policy=self.production_fallback_policy,
         )
+        # Warmup narrowing must not lose the frozen v2 policy or split its pool.
+        for name in ("default_execution_policy", "resource_broker"):
+            if hasattr(self, name):
+                setattr(clone, name, getattr(self, name))
+        return clone
 
     def run_incremental(
         self,

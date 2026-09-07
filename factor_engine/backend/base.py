@@ -16,6 +16,7 @@ class Backend(ABC):
     """
 
     #: 为 True 时 ``FactorEngine.run`` 跳过列 prefetch（后端用 scan_polars_long 等原生读）
+    runtime_backend_label: str = "pandas_numpy"
     prefers_native_scan: bool = False
     #: 为 True 时 ``run_many`` 共享子树可仅编译 LazyFrame，defer collect
     supports_lazy_shared: bool = False

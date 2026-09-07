@@ -82,8 +82,23 @@ def execute_run_many_stream(
     if sink_queue_bytes is None:
         perf = run_kwargs.get("perf")
         sink_queue_bytes = getattr(perf, "result_budget_bytes", None) if perf is not None else None
+    if sink_queue_bytes is None:
+        # v2 automatic path consumes the process/host ResourceBroker authority;
+        # it never creates a private queue budget manager.
+        broker = run_kwargs.get("broker") or getattr(engine, "resource_broker", None)
+        if broker is not None:
+            resolver = getattr(broker, "automatic_result_queue_budget", None)
+            if callable(resolver):
+                sink_queue_bytes = resolver()
+            if sink_queue_bytes is None:
+                resolver = getattr(broker, "current_sink_budget", None)
+                if callable(resolver):
+                    sink_queue_bytes = resolver()
     if isinstance(sink_queue_bytes, bool) or not isinstance(sink_queue_bytes, int) or sink_queue_bytes <= 0:
-        raise ValueError("sink_queue_bytes or perf.result_budget_bytes must provide a positive explicit budget")
+        raise ValueError(
+            "an explicit budget from the shared ResourceBroker, sink_queue_bytes, "
+            "or perf.result_budget_bytes must provide a positive result queue budget"
+        )
 
     from factor_engine.runtime.streaming_result_sink import StreamingResultSink
 

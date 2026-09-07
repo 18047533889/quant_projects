@@ -1494,6 +1494,7 @@ class CrossSectionalWinsorizePolars(SeriesOperator):
 
     def _calculate_series(self, x: pl.DataFrame, lower: float = 0.05, upper: float = 0.95, **kwargs) -> pl.DataFrame:
         min_pct, max_pct = lower, upper
+        numeric_cols = [c for c in x.columns if c not in {"date", "stock_code"}]
 
         # 使用 Numba 计算分位数并裁剪
         arr = _finite_stats_input(x.select(numeric_cols).to_numpy())

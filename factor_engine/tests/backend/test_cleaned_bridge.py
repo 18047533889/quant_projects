@@ -5,6 +5,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from factor_engine.backend.cleaned_bridge import _call_cleaned_operator
+from factor_engine.cleaned_operators.base import OperatorMetadata
 from factor_engine.backend.parameter_aliases import (
     ParameterAliasError,
     normalize_parameter_aliases,
@@ -24,6 +25,7 @@ def test_analyzer_parameter_normalization_rejects_conflict():
 
 def test_call_cleaned_operator_accepts_canonical_parameters():
     op = MagicMock()
+    op.metadata = OperatorMetadata(name="ts_mean", category="test", param_names=["window"])
     op.calculate.return_value = "ok"
     result = _call_cleaned_operator("ts_mean", op, [], {"window": 5})
     assert result == "ok"
@@ -40,6 +42,7 @@ def test_call_cleaned_operator_rejects_runtime_aliases():
 
 def test_call_cleaned_operator_reraises_unrelated_type_error():
     op = MagicMock()
+    op.metadata = OperatorMetadata(name="ts_mean", category="test", param_names=["window"])
     op.calculate.side_effect = TypeError("unsupported operand type(s)")
     with pytest.raises(TypeError, match="unsupported operand"):
         _call_cleaned_operator("ts_mean", op, [], {"window": 5})

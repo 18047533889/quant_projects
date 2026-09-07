@@ -59,9 +59,40 @@ def _env_float(name: str, default: float | None) -> float | None:
         return default
 
 
+def _cgroup_v2_ancestor_dirs() -> tuple[Path, ...]:
+    """Effective cgroup-v2 leaf and ancestors for the current process."""
+    try:
+        line = next(
+            line for line in Path("/proc/self/cgroup").read_text(encoding="utf-8").splitlines()
+            if line.startswith("0::")
+        )
+        relative = line.split("::", 1)[1].lstrip("/")
+    except (OSError, StopIteration):
+        relative = ""
+    root = Path("/sys/fs/cgroup")
+    try:
+        for mount_line in Path("/proc/self/mountinfo").read_text(encoding="utf-8").splitlines():
+            before, after = mount_line.split(" - ", 1)
+            if after.split()[0] == "cgroup2":
+                root = Path(before.split()[4].replace("\\040", " "))
+                break
+    except (OSError, ValueError, IndexError):
+        pass
+    leaf = root / relative
+    out: list[Path] = []
+    current = leaf
+    while current == root or root in current.parents:
+        out.append(current)
+        if current == root:
+            break
+        current = current.parent
+    return tuple(out)
+
+
 def _read_cgroup_v2_max() -> int | None:
-    """cgroup v2 ``memory.max``（字节）；``max`` 表示无限。"""
-    for p in ("/sys/fs/cgroup/memory.max", "/sys/fs/cgroup/memory/memory.max"):
+    """Minimum finite ``memory.max`` across the effective ancestor chain."""
+    values: list[int] = []
+    for p in (*(d / "memory.max" for d in _cgroup_v2_ancestor_dirs()), Path("/sys/fs/cgroup/memory/memory.max")):
         try:
             raw = Path(p).read_text(encoding="utf-8").strip()
         except OSError:
@@ -69,10 +100,44 @@ def _read_cgroup_v2_max() -> int | None:
         if not raw or raw == "max":
             return None
         try:
-            return int(raw)
+            value = int(raw)
+            if value > 0:
+                values.append(value)
         except ValueError:
-            return None
-    return None
+            continue
+    return min(values) if values else None
+
+
+def _cgroup_v2_memory_remaining_bytes() -> int | None:
+    """Minimum ``memory.max - memory.current`` across finite ancestors."""
+    remaining: list[int] = []
+    for directory in _cgroup_v2_ancestor_dirs():
+        try:
+            raw_max = (directory / "memory.max").read_text(encoding="utf-8").strip()
+            if raw_max == "max":
+                continue
+            maximum = int(raw_max)
+            current = int((directory / "memory.current").read_text(encoding="utf-8").strip())
+            remaining.append(max(0, maximum - current))
+        except (OSError, ValueError):
+            continue
+    return min(remaining) if remaining else None
+
+
+def _cgroup_v2_memory_high_remaining_bytes() -> int | None:
+    """Minimum finite memory.high headroom, kept separate from hard limits."""
+    remaining: list[int] = []
+    for directory in _cgroup_v2_ancestor_dirs():
+        try:
+            raw_high = (directory / "memory.high").read_text(encoding="utf-8").strip()
+            if raw_high == "max":
+                continue
+            high = int(raw_high)
+            current = int((directory / "memory.current").read_text(encoding="utf-8").strip())
+            remaining.append(max(0, high - current))
+        except (OSError, ValueError):
+            continue
+    return min(remaining) if remaining else None
 
 
 def _read_cgroup_v1_max() -> int | None:
@@ -204,8 +269,8 @@ def _host_mem_available_bytes() -> int:
 
 
 def _cgroup_memory_current_bytes() -> int | None:
-    """cgroup v2 ``memory.current``（R27-024）；不可读返回 ``None``。"""
-    for p in ("/sys/fs/cgroup/memory.current", "/sys/fs/cgroup/memory/memory.current"):
+    """Current usage of the process' effective cgroup leaf."""
+    for p in ((_cgroup_v2_ancestor_dirs()[0] / "memory.current"), Path("/sys/fs/cgroup/memory/memory.current")):
         try:
             raw = Path(p).read_text(encoding="utf-8").strip()
             return int(raw)
@@ -296,6 +361,18 @@ def process_family_memory_bytes(*, prefer_pss: bool = True) -> int | None:
         import resource
 
         return int(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss) * 1024
+    except Exception:
+        return None
+
+
+def process_family_vms_bytes() -> int | None:
+    """Current virtual address space for RLIMIT_AS comparisons (never RSS)."""
+    try:
+        import psutil  # type: ignore[import-untyped]
+
+        root = psutil.Process()
+        processes = [root, *root.children(recursive=True)]
+        return sum(max(0, int(proc.memory_info().vms)) for proc in processes)
     except Exception:
         return None
 

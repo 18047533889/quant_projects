@@ -869,9 +869,45 @@ def resolve_batch_execution_control_plane(
 
     未来可在这里扩展其它 control plane（microbatch 等），因此单独成函数。
     """
+    if (
+        engine is not None
+        and str(getattr(engine, "run_mode", "")).lower() == "production"
+        and _v2_planner_policy(engine) is not None
+    ):
+        # The public v2 guard defers authority to PhysicalRegionPlan admission.
+        # A legacy debug environment variable must never bypass that admission.
+        return "adaptive_scheduler"
     if os.environ.get("FACTOR_ENGINE_LAYER_LOOP") == "1":
         return "legacy"
     return "adaptive_scheduler"
+
+
+def _v2_planner_policy(engine: Any) -> Any | None:
+    """Return the immutable v2 policy attached by the public default-auto entry."""
+    policy = getattr(engine, "default_execution_policy", None)
+    if policy is None:
+        return None
+    required = ("digest", "optimization_budget_ms_per_group", "candidate_limit_per_group")
+    if any(not hasattr(policy, name) for name in required):
+        raise ValueError("default_execution_policy lacks planner limits or digest")
+    return policy
+
+
+def _record_region_candidate_ledger(ctx: Any, optimization: Any, policy: Any | None) -> None:
+    runtime = dict(getattr(ctx, "runtime_stats", None) or {})
+    runtime["region_candidate_ledger"] = {
+        "authority": "PhysicalBatchGlobalOptimizer",
+        "candidate_plan_count": int(getattr(optimization, "candidate_plan_count", 0)),
+        "candidate_limit": int(getattr(policy, "candidate_limit_per_group", 128)),
+        "optimization_elapsed_ms": float(getattr(optimization, "optimization_elapsed_ms", 0.0)),
+        "optimization_budget_ms": float(getattr(policy, "optimization_budget_ms_per_group", 250.0)),
+        "optimization_basis": str(getattr(optimization, "optimization_basis", "")),
+        "selected_incumbent": str(getattr(optimization, "selected_incumbent", "")),
+        "policy_digest": str(getattr(policy, "digest", "")),
+        "production_ready": bool(getattr(optimization, "production_ready", False)),
+        "readiness_reason": str(getattr(optimization, "readiness_reason", "")),
+    }
+    ctx.runtime_stats = runtime
 
 
 def _batch_source_bars_per_day(engine: Any) -> int:
@@ -1060,6 +1096,7 @@ def _execute_run_many_scheduler(
     input_dq_check: bool = False,
     input_dq_strict: bool = True,
     input_dq_thresholds=None,
+    isolate_physical_errors: bool = False,
 ) -> dict[str, Any]:
     """R31-P0-001：**默认生产执行链** = BatchCompiler → PhysicalPlanner →
     AdaptiveBatchScheduler → StreamingSink。
@@ -1081,10 +1118,70 @@ def _execute_run_many_scheduler(
     from factor_engine.runtime.resource_telemetry import record_resource_telemetry
 
     ctx = engine_to_use._make_context(shared_result_cache={}, perf=perf)
+    ctx.selected_backend = (
+        str(getattr(engine_to_use.backend, "runtime_backend_label", "") or "") or None
+    )
     ctx.runtime_stats = record_resource_telemetry(ctx.runtime_stats)
     scheduler = AdaptiveBatchScheduler(
+        broker=getattr(engine_to_use, "resource_broker", None),
         max_concurrency=max_concurrency if max_concurrency is not None else perf.max_workers,
     )
+    # Install the parent-owned DA envelope before physical preflight performs
+    # any prepare_read reservation.
+    try:
+        from factor_engine.runtime.host_resource_coordinator import get_host_coordinator
+
+        da_env = get_host_coordinator(broker=scheduler.broker).apply_da_envelope()
+        runtime = dict(ctx.runtime_stats or {})
+        runtime["host_coordinator_da_envelope"] = da_env
+        ctx.runtime_stats = runtime  # type: ignore[attr-defined]
+    except Exception:
+        if str(run_mode or "").lower() == "production":
+            raise
+    physical_preflight = None
+    physical_preflight_errors: dict[str, Any] = {}
+    if run_mode == "production" and isolate_physical_errors:
+        from factor_engine.storage.sources.data_access_source import DataAccessSource
+        source = getattr(engine_to_use, "data_source", None)
+        isolate_physical_errors = bool(
+            isinstance(source, DataAccessSource)
+            and getattr(source, "production", False)
+            and getattr(source, "strict_unknown_fields", False)
+            and getattr(source, "pit_enforce", False)
+        )
+    if run_mode == "production" and isolate_physical_errors:
+        from factor_engine.planner.dag import DAGPlan
+        from factor_engine.runtime.physical_source_binding import preflight_batch_sources
+
+        planner_policy = _v2_planner_policy(engine_to_use)
+        physical_preflight = preflight_batch_sources(
+            dag, source=engine_to_use.data_source, execution_context=ctx,
+            forced_backend=str(getattr(planner_policy, "backend", "auto")),
+        )
+        ctx.physical_snapshot_expectations = physical_preflight.snapshot_expectations
+        if physical_preflight.scope_error is not None:
+            error = physical_preflight.scope_error
+            raise RuntimeError(f"{error.code}: {error.error_type}: {error.message}")
+        physical_preflight_errors = {
+            name: {"code": error.code, "error_type": error.error_type,
+                   "message": error.message}
+            for name, error in physical_preflight.per_root_errors.items()
+        }
+        valid_names = set(physical_preflight.valid_root_names)
+        dag = DAGPlan(
+            roots=[fp for fp in dag.roots if fp.factor_name in valid_names],
+            shared_nodes=dict(physical_preflight.shared_nodes),
+        )
+        factors = [factor for factor in factors if factor.name in valid_names]
+        analyses = {name: value for name, value in analyses.items() if name in valid_names}
+        if not factors:
+            return {
+                "results": {}, "physical_preflight_errors": physical_preflight_errors,
+                "physical_preflight": {
+                    "prepare_count": physical_preflight.prepare_count,
+                    "unique_source_count": physical_preflight.unique_source_count,
+                },
+            }
     # This entry point dispatches closures over one shared context/cache. Its
     # payload is not process-serializable, and CSE mutations must stay visible
     # to every root. Generic schedulers may still use worker-local process jobs.
@@ -1096,29 +1193,18 @@ def _execute_run_many_scheduler(
             "requires a worker-local serializable runtime"
         )
     scheduler._execution_policy = "thread"
-    # R36 P0-016/017（§54/56）：FE batch run 是唯一资源权威——把 Safe Envelope
-    # 应用到 DA governor（max_total_reserved_memory / scan inflight），DA 不再
-    # 独立决定全局内存（no double admission）。
-    try:
-        from factor_engine.runtime.host_resource_coordinator import get_host_coordinator
-
-        da_env = get_host_coordinator().apply_da_envelope()
-        runtime = dict(ctx.runtime_stats or {})
-        runtime["host_coordinator_da_envelope"] = da_env
-        ctx.runtime_stats = runtime  # type: ignore[attr-defined]
-    except Exception:
-        pass
     # R38 P0-011（§7）：进程级固定 cadence 控制循环（幂等）——scheduler 只读
     # last_decision，绝不自行 tick controller（stable/cooldown 与 loop 次数解耦）。
     try:
         from factor_engine.runtime.resource_autopilot_service import start_resource_autopilot
 
-        autopilot = start_resource_autopilot()
+        autopilot = start_resource_autopilot(scheduler.broker)
         runtime = dict(ctx.runtime_stats or {})
         runtime["resource_autopilot"] = autopilot.summary()
         ctx.runtime_stats = runtime  # type: ignore[attr-defined]
     except Exception:
-        pass
+        if str(run_mode or "").lower() == "production":
+            raise
     # R33-P0-001..006：BatchDataRequest —— 从 analyses/plan 提取（multi-source）
     # → 每 source scope 一次 ScanCost（真实 time_range + instruments）→ 喂 read
     # wave / IO token / admission。估算失败记录 degraded planning（不静默）。
@@ -1162,19 +1248,34 @@ def _execute_run_many_scheduler(
         try:
             from factor_engine.planner.batch_global_optimizer import optimize_batch_global
 
-            root_plans = {fp.factor_name: fp.root for fp in dag.roots}
+            if physical_preflight is None:
+                from factor_engine.runtime.physical_source_binding import bind_batch_sources
+                root_plans, bound_shared_nodes = bind_batch_sources(
+                    dag, source=engine_to_use.data_source, execution_context=ctx,
+                )
+            else:
+                root_plans = physical_preflight.root_plans
+                bound_shared_nodes = physical_preflight.shared_nodes
+            planner_policy = _v2_planner_policy(engine_to_use)
             from factor_engine.runtime.engine import _admit_ready_single_region_batch
 
             physical_optimization = optimize_batch_global(
                 root_plans,
-                dict(dag.shared_nodes or {}),
+                bound_shared_nodes,
                 {},
                 ctx,
+                max_optimization_ms=float(
+                    getattr(planner_policy, "optimization_budget_ms_per_group", 250.0)
+                ),
+                max_candidate_plans=int(
+                    getattr(planner_policy, "candidate_limit_per_group", 128)
+                ),
+                forced_backend=str(getattr(planner_policy, "backend", "auto")),
             )
             physical_optimization = _admit_ready_single_region_batch(
-                physical_optimization,
-                tuple(root_plans),
+                physical_optimization, tuple(root_plans),
             )
+            _record_region_candidate_ledger(ctx, physical_optimization, planner_policy)
             physical_by_factor = {
                 name: physical_optimization for name in root_plans
             }
@@ -1343,6 +1444,12 @@ def _execute_run_many_scheduler(
         "batch_physical_route": batch_route_meta,
         "physical_plan": physical_plan_meta,
     }
+    if physical_preflight is not None:
+        batch_out["physical_preflight_errors"] = physical_preflight_errors
+        batch_out["physical_preflight"] = {
+            "prepare_count": physical_preflight.prepare_count,
+            "unique_source_count": physical_preflight.unique_source_count,
+        }
     _attach_batch_backend_paths(batch_out, backend_paths)
     # R31-104/103：backend transition + conversion 是第一等 telemetry。
     batch_out["backend_transition_telemetry"] = _transition_telemetry(backend_paths)
@@ -1756,6 +1863,30 @@ def execute_run_many_iter(
         input_dq_thresholds=input_dq_thresholds,
     )
     ctx = engine_to_use._make_context(shared_result_cache={}, perf=perf)
+    planner_policy = _v2_planner_policy(engine_to_use)
+    physical_by_factor: dict[str, Any] = {}
+    if run_mode == "production" and planner_policy is not None:
+        from factor_engine.planner.batch_global_optimizer import optimize_batch_global
+        from factor_engine.runtime.engine import _admit_ready_single_region_batch
+
+        from factor_engine.runtime.physical_source_binding import bind_batch_sources
+        root_plans, bound_shared_nodes = bind_batch_sources(
+            dag, source=engine_to_use.data_source, execution_context=ctx,
+        )
+        physical_optimization = optimize_batch_global(
+            root_plans,
+            bound_shared_nodes,
+            {},
+            ctx,
+            max_optimization_ms=float(planner_policy.optimization_budget_ms_per_group),
+            max_candidate_plans=int(planner_policy.candidate_limit_per_group),
+            forced_backend=str(planner_policy.backend),
+        )
+        physical_optimization = _admit_ready_single_region_batch(
+            physical_optimization, tuple(root_plans)
+        )
+        _record_region_candidate_ledger(ctx, physical_optimization, planner_policy)
+        physical_by_factor = {name: physical_optimization for name in root_plans}
     from factor_engine.backend.routing_env import routing_execution_scope
     from factor_engine.planner.dependency_graph import build_factor_batch_graph
 
@@ -1776,7 +1907,10 @@ def execute_run_many_iter(
                 if fp is None:
                     continue
                 result, path = _execute_root_with_path(
-                    engine_to_use.backend, fp.root, ctx, run_mode=run_mode, factor_name=fp.factor_name
+                    engine_to_use.backend, fp.root, ctx, run_mode=run_mode,
+                    factor_name=fp.factor_name,
+                    physical_optimization=physical_by_factor.get(fp.factor_name),
+                    physical_root_id=fp.factor_name,
                 )
                 if per_windows and fp.factor_name in per_windows:
                     result = _trim_batch_result(
@@ -1789,7 +1923,10 @@ def execute_run_many_iter(
             if fp.factor_name in seen:
                 continue
             result, path = _execute_root_with_path(
-                engine_to_use.backend, fp.root, ctx, run_mode=run_mode, factor_name=fp.factor_name
+                engine_to_use.backend, fp.root, ctx, run_mode=run_mode,
+                factor_name=fp.factor_name,
+                physical_optimization=physical_by_factor.get(fp.factor_name),
+                physical_root_id=fp.factor_name,
             )
             if per_windows and fp.factor_name in per_windows:
                 result = _trim_batch_result(
@@ -1816,6 +1953,7 @@ def execute_run_many_parallel(
     pit_forbid_forward_fill: bool = False,
     result_policy: str = "return",
     sink: Any = None,
+    isolate_physical_errors: bool = False,
 ) -> dict[str, Any]:
     """``FactorEngine.run_many_parallel`` 实现体：根节点层内并行。
 
@@ -1986,6 +2124,7 @@ def execute_run_many_parallel(
                 input_dq_strict=input_dq_strict,
                 input_dq_thresholds=input_dq_thresholds,
                 n_jobs=workers,
+                isolate_physical_errors=isolate_physical_errors,
             )
             batch_out["legacy_union_prefetch_count"] = legacy_union_prefetch
             batch_out["control_plane"] = control_plane

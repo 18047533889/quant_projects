@@ -9,6 +9,74 @@ from factor_engine.backend.contracts import ExecutionKind
 from factor_engine.backend.operator_capability import UnsupportedOperatorBackendError
 from factor_engine.planner.batch_global_optimizer import BatchGlobalOptimizer
 from factor_engine.planner.logical_plan import PlanNode
+from factor_engine.runtime.multibackend.batch_global_optimizer import (
+    NodeBackendChoice,
+    PhysicalBatchGlobalOptimizer,
+)
+
+
+def _choice(node_id, backend, cost):
+    return NodeBackendChoice(
+        node_id=node_id,
+        backend=backend,
+        compute_cost_ms=cost,
+        transfer_from_children_ms=0.0,
+        total_cost_ms=cost,
+        representation=(
+            Representation.PANDAS_LONG
+            if backend == PhysicalBackend.PANDAS_NUMPY
+            else Representation.POLARS_LONG
+        ),
+        execution_kind=ExecutionKind.PANDAS_REFERENCE,
+        production_certified=True,
+    )
+
+
+def test_complete_incumbents_keep_pandas_and_native_baselines():
+    candidates = {
+        "a": (_choice("a", PhysicalBackend.PANDAS_NUMPY, 2.0), _choice("a", PhysicalBackend.POLARS_LONG, 1.0)),
+        "b": (_choice("b", PhysicalBackend.PANDAS_NUMPY, 2.0), _choice("b", PhysicalBackend.POLARS_LONG, 1.0)),
+    }
+
+    names = {name for name, _ in PhysicalBatchGlobalOptimizer._complete_incumbents(candidates)}
+
+    assert "single:pandas_numpy:pandas_long" in names
+    assert "single:polars_long:polars_long" in names
+    assert "legal_mixed" in names
+
+
+def test_exact_search_candidate_cap_returns_legal_incumbent(monkeypatch):
+    optimizer = PhysicalBatchGlobalOptimizer(
+        exact_search_max_ambiguous_nodes=20,
+        max_candidate_plans=3,
+        max_optimization_ms=250.0,
+    )
+    candidates = {
+        node_id: (_choice(node_id, PhysicalBackend.PANDAS_NUMPY, 2.0), _choice(node_id, PhysicalBackend.POLARS_LONG, 1.0))
+        for node_id in ("root", "a", "b", "c")
+    }
+    monkeypatch.setattr(optimizer, "_eligible_choices", lambda node_id, node, rows, ctx: candidates[node_id])
+    nodes = {node_id: PlanNode("literal") for node_id in candidates}
+    graph = {"root": ["a", "b", "c"], "a": [], "b": [], "c": []}
+
+    choices, basis, count, selected = optimizer._optimize_graph(
+        nodes, graph, 100, _ctx(100), {node_id: (100, 800, 800) for node_id in nodes}
+    )
+
+    assert set(choices) == set(nodes)
+    assert basis == "bounded_incumbent_timeout"
+    assert count <= 3
+    assert selected in {"mixed", "legal_mixed", "single:polars_long:polars_long"}
+
+
+def test_explicit_pandas_policy_filters_auto_candidates(monkeypatch):
+    optimizer = PhysicalBatchGlobalOptimizer(forced_backend="pandas")
+    monkeypatch.setattr("factor_engine.backend.operator_capability.supports_pandas", lambda *a, **k: True)
+    monkeypatch.setattr("factor_engine.backend.operator_capability.supports_polars", lambda *a, **k: True)
+    monkeypatch.setattr("factor_engine.backend.polars_backend_kind.canonical_polars_is_delegate", lambda *a, **k: False)
+    choices = optimizer._eligible_choices("root", PlanNode("abs"), 100, _ctx(100))
+    assert choices
+    assert {choice.backend for choice in choices} == {PhysicalBackend.PANDAS_NUMPY}
 
 
 def _ctx(rows: int | None, *, mode: str = "research", complete: bool = False):
@@ -16,6 +84,23 @@ def _ctx(rows: int | None, *, mode: str = "research", complete: bool = False):
     if complete:
         stats.update(estimated_bytes=rows * 16, estimated_memory_bytes=rows * 8)
     return SimpleNamespace(run_mode=mode, runtime_stats=stats)
+
+
+def _bound_column(**extra):
+    from data_access.read.data_read_identity import DataReadIdentity, ResolvedFieldIdentity
+    from factor_engine.runtime.physical_source_binding import PhysicalSourceBinding
+    identity = DataReadIdentity(
+        dataset="equity_daily", revision="r1", calendar_identity="ashare_daily",
+        universe_snapshot="all_a_2026", source_snapshot="snapshot_2026",
+        fields=(ResolvedFieldIdentity(logical_name="close", physical_name="close",
+                                      dataset="equity_daily", availability="same_day"),),
+    )
+    attrs = {
+        "name": "close",
+        "physical_source_binding": PhysicalSourceBinding(identity, "close", "catalog:v1"),
+    }
+    attrs.update(extra)
+    return PlanNode("column", attrs=attrs)
 
 
 def test_nested_descendants_are_discovered_without_node_graph_entries():
@@ -44,7 +129,7 @@ def test_shared_child_gets_one_persisted_assignment():
 
 
 def test_backend_region_constructor_uses_current_contract():
-    root = PlanNode("abs", inputs=(PlanNode("column"),))
+    root = PlanNode("abs", inputs=(_bound_column(),))
     result = BatchGlobalOptimizer().optimize_batch(
         {"root": root}, {}, {}, _ctx(100)
     )
@@ -57,7 +142,7 @@ def test_backend_region_constructor_uses_current_contract():
 
 
 def test_unknown_row_estimate_is_not_production_ready():
-    root = PlanNode("abs", inputs=(PlanNode("column"),))
+    root = PlanNode("abs", inputs=(_bound_column(),))
     result = BatchGlobalOptimizer().optimize_batch(
         {"root": root}, {}, {}, _ctx(None)
     )
@@ -146,7 +231,7 @@ def test_complete_estimates_and_contracts_are_production_ready(monkeypatch):
         execution_kind=ExecutionKind.PANDAS_REFERENCE,
         is_production_eligible=lambda: True,
     ))
-    root = PlanNode("abs", inputs=(PlanNode("column"),))
+    root = PlanNode("abs", inputs=(_bound_column(),))
 
     result = BatchGlobalOptimizer().optimize_batch(
         {"root": root}, {}, {}, _ctx(100, mode="production", complete=True)
@@ -158,7 +243,7 @@ def test_complete_estimates_and_contracts_are_production_ready(monkeypatch):
 
 
 def test_research_mode_never_certifies_production_readiness():
-    root = PlanNode("abs", inputs=(PlanNode("column"),))
+    root = PlanNode("abs", inputs=(_bound_column(),))
 
     result = BatchGlobalOptimizer().optimize_batch(
         {"root": root}, {}, {}, _ctx(100, mode="research", complete=True)
@@ -224,14 +309,11 @@ def test_same_backend_representation_change_has_typed_transfer(monkeypatch):
     monkeypatch.setattr("factor_engine.backend.operator_capability.supports_pandas", lambda *a, **k: False)
     monkeypatch.setattr("factor_engine.backend.operator_capability.supports_polars", lambda *a, **k: True)
     monkeypatch.setattr("factor_engine.backend.polars_backend_kind.canonical_polars_is_delegate", lambda *a, **k: False)
-    source = PlanNode(
-        "column",
-        attrs={
-            "source_backend": "polars_panel",
-            "source_representation": "polars_wide",
-        },
-        node_id="source",
+    source = _bound_column(
+        source_backend="polars_panel",
+        source_representation="polars_wide",
     )
+    object.__setattr__(source, "node_id", "source")
     root = PlanNode("synthetic_polars", inputs=(source,), node_id="root")
 
     result = BatchGlobalOptimizer().optimize_batch(
@@ -264,14 +346,11 @@ def test_explicit_source_residency_creates_typed_transfer(monkeypatch):
         execution_kind=ExecutionKind.PANDAS_REFERENCE,
         is_production_eligible=lambda: True,
     ))
-    source = PlanNode(
-        "column",
-        attrs={
-            "source_backend": "polars_panel",
-            "source_representation": "polars_wide",
-        },
-        node_id="source",
+    source = _bound_column(
+        source_backend="polars_panel",
+        source_representation="polars_wide",
     )
+    object.__setattr__(source, "node_id", "source")
     root = PlanNode("synthetic_pandas", inputs=(source,), node_id="root")
 
     result = BatchGlobalOptimizer().optimize_batch(

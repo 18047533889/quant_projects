@@ -1,0 +1,30 @@
+scope: WP1_WP2_reconciliation_and_WP3_physical_regions
+git_sha: 6e783a57300eb6cd98d5e37ee6def4ed1033acfe
+timestamp_utc: 2026-09-07T12:45:00Z
+owned_modified_files:
+  - factor_engine/backend/plan_cost_router.py
+  - factor_engine/runtime/batch_service.py
+  - factor_engine/runtime/multibackend/batch_global_optimizer.py
+  - factor_engine/tests/planner/test_batch_global_optimizer_p0.py
+  - factor_engine/tests/runtime/test_v6_region_policy_wiring.py
+tests:
+  focused_region_suite:
+    status: PASS
+    result: 84_passed_7_warnings
+  handoff_probes:
+    P14_COST_PARENT_PREFERENCE: NOT_REPRODUCED_router_cost_5_exact_5
+    P15_COST_SHARED_DOUBLE_COUNT: NOT_REPRODUCED_router_cost_13_unique_13
+    P16_OCCURRENCE_NODE_ID: NOT_REPRODUCED_no_unresolved_edges
+  public_planner_serial_probe:
+    api: Optimizer.optimize_with_pass_trace
+    result: PASS_literal_2_plus_3_equals_5
+    passes: [literal_fold, parameter_validation, composite_lowering, post_lowering_literal_fold, fastpath_rewrite, parameter_canonicalization]
+    optimizer_compile_present: false
+    production_numeric_policy_violation: REJECTED_OperatorParameterError
+    missing_input_invariant_violation: UNEXPECTED_ACCEPT
+limitations:
+  - Public Optimizer has no compile method; verified its exported optimize_with_pass_trace boundary.
+  - Public optimizer accepted a ts_mean plan with no input; invariant coverage remains NOT_RUN/PARTIAL, not PASS.
+  - Registry declarations were used only for candidate eligibility; they are not production certification evidence.
+  - No real A-share dataset, backend performance holdout, CI, deployment, or production publication was run.
+  - Unrelated dirty report files and concurrently modified emitter files were preserved.

@@ -611,7 +611,7 @@ class CSWeightedZscoreNative(SeriesOperator):
     business_category="cross_sectional",
     canonical="cs_weighted_percentile_rank",
     source=_SRC,
-    backend="polars")
+    backend="polars", status="unsupported")
 class CSWeightedPercentileRankNative(SeriesOperator):
     """Weighted percentile rank."""
 
@@ -625,15 +625,8 @@ class CSWeightedPercentileRankNative(SeriesOperator):
     )
 
     def _calculate_series(self, x: pl.DataFrame, weights: pl.DataFrame, **kwargs) -> pl.DataFrame:
-        # Simplified: use unweighted rank as approximation
-        return _cs_long_transform(
-            x,
-            lambda long: long.with_columns(
-                (
-                    pl.col("_v").rank(method="average").over("_r")
-                    / pl.col("_v").is_not_null().cast(pl.Float64).sum().over("_r")
-                ).alias("_v")
-            ),
+        raise NotImplementedError(
+            "cs_weighted_percentile_rank Polars candidate is disabled: the prior implementation ignored weights"
         )
 
 
@@ -1058,4 +1051,3 @@ class CSSplineResidNative(SeriesOperator):
                 (pl.col("_v") - pl.col("_v").mean().over("_r")).alias("_v")
             ),
         )
-

@@ -1,0 +1,22 @@
+{
+  "schema_version": "factor_engine.fixture_measurement_excerpt.v1",
+  "scope": "One synthetic six-row writer fixture; not a throughput benchmark or production acceptance",
+  "observed_source": "/tmp/pytest-of-sunhaiwei/pytest-2044/test_real_writer_durable_exact0/isolated/values/00000000-446d04354f6d4c919d14e666e67c0a2c/manifest.json",
+  "source_retention": "Pytest subsequently removed the source fixture during normal temporary-directory rotation; this is an observed metrics excerpt, not the full commit manifest",
+  "rows": 6,
+  "output_bytes": 2796,
+  "output_sha256": "5a9af12c701797f17d875a138f594aabeb708ca6605dfff98ca1d250e234d31d",
+  "conversions": [
+    {"from": "pandas_series", "to": "arrow_table", "rows": 6, "logical_arrow_bytes": 127, "seconds": 0.01770433597266674, "copied_bytes": null},
+    {"from": "arrow_table", "to": "pandas_series", "rows": 6, "logical_arrow_bytes": 128, "seconds": 0.0021131470566615462, "copied_bytes": null}
+  ],
+  "performance": {
+    "codec": "zstd_level_1",
+    "estimate_basis": "STATIC_ESTIMATE",
+    "total_seconds": 0.029028743039816618,
+    "verify_seconds": 0.005334008950740099,
+    "workspace_budget_bytes": 1048576,
+    "workspace_estimate_bytes": 1048576,
+    "write_seconds": 0.003659349982626736
+  }
+}

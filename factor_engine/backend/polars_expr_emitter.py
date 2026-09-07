@@ -887,6 +887,176 @@ def _join_triple(
     return anchor_left_join_triple(left, mid, right)
 
 
+def _join_quad(
+    a: pl.LazyFrame,
+    b: pl.LazyFrame,
+    c: pl.LazyFrame,
+    d: pl.LazyFrame,
+) -> pl.LazyFrame:
+    """按 (ts, inst) anchor 串联 4 路 LEFT JOIN（OHLC 4 输入）。"""
+    from factor_engine.backend.long_alignment import anchor_left_join_triple
+
+    a2 = a.join(b.rename({_VAL: "_b"}), on=[_TS, _INST], how="left")
+    a3 = a2.join(c.rename({_VAL: "_c"}), on=[_TS, _INST], how="left")
+    a4 = a3.join(d.rename({_VAL: "_d"}), on=[_TS, _INST], how="left")
+    return a4
+
+
+def _compile_ohlc3(node, base, parent_op, *, ctx=None, memo=None) -> pl.LazyFrame | None:
+    """编译 3 个 OHLC 子输入 (high, low, close) 并 join，产 _VAL/_ym/_y。"""
+    h = _compile_child(node, 0, base, parent_op=parent_op, ctx=ctx, memo=memo)
+    l = _compile_child(node, 1, base, parent_op=parent_op, ctx=ctx, memo=memo)
+    c = _compile_child(node, 2, base, parent_op=parent_op, ctx=ctx, memo=memo)
+    if h is None or l is None or c is None:
+        return None
+    return _join_triple(h, l, c)
+
+
+def _compile_ohlc4(node, base, parent_op, *, ctx=None, memo=None) -> pl.LazyFrame | None:
+    """编译 4 个 OHLC 子输入 (open, high, low, close) 并 join，产 _VAL/_b/_c/_d。"""
+    o = _compile_child(node, 0, base, parent_op=parent_op, ctx=ctx, memo=memo)
+    h = _compile_child(node, 1, base, parent_op=parent_op, ctx=ctx, memo=memo)
+    l = _compile_child(node, 2, base, parent_op=parent_op, ctx=ctx, memo=memo)
+    c = _compile_child(node, 3, base, parent_op=parent_op, ctx=ctx, memo=memo)
+    if o is None or h is None or l is None or c is None:
+        return None
+    return _join_quad(o, h, l, c)
+
+
+def _join_multi(layers: list[pl.LazyFrame]) -> pl.LazyFrame:
+    """Join N long layers into one frame with columns ``_v, _y, _z, _w, _u, _t, _s``.
+
+    ``_join_binary`` renames the right operand to ``_y`` every time, which
+    collides once a third input is joined.  This helper gives each input a
+    distinct column name so the fin_* elementwise family can reference up to
+    seven operands.
+    """
+    from factor_engine.backend.long_alignment import assert_exact_key_set
+
+    names = [_VAL, "_y", "_z", "_w", "_u", "_t", "_s"]
+    joined = layers[0]
+    for i in range(1, len(layers)):
+        assert_exact_key_set(joined, layers[i], context="fin elementwise join")
+        joined = joined.join(
+            layers[i].rename({_VAL: names[i]}),
+            on=[_TS, _INST],
+            how="left",
+        )
+    return joined
+
+
+# ---------------------------------------------------------------------------
+# fin_* elementwise algebraic family (pure Expr, no period walk).
+#
+# These mirror the pandas reference exactly: a ratio is NULL when the
+# denominator is 0 / NULL, and an infinite or NaN quotient is NULL too.  The
+# ``period_id`` trailing input (structural PIT-alignment only, never used in the
+# computation) is intentionally NOT compiled — only the formula operands are.
+# ---------------------------------------------------------------------------
+
+def _fin_ratio_expr(a: pl.Expr, b: pl.Expr) -> pl.Expr:
+    q = a / b
+    return pl.when(b.is_null() | (b == 0)).then(None).otherwise(
+        pl.when(q.is_infinite() | q.is_nan()).then(None).otherwise(q)
+    )
+
+
+def _fin_abs_ratio_expr(a: pl.Expr, b: pl.Expr) -> pl.Expr:
+    return _fin_ratio_expr(a, b.abs())
+
+
+def _fin_neg_ocf_ratio_expr(a: pl.Expr, b: pl.Expr) -> pl.Expr:
+    neg = pl.when(b < 0).then(b.abs()).otherwise(None)
+    return _fin_ratio_expr(a, neg)
+
+
+def _fin_mask_expr(a: pl.Expr, thr: float) -> pl.Expr:
+    return pl.when(a.is_null() | a.is_nan() | a.is_infinite()).then(None).otherwise(
+        pl.when(a > thr).then(1.0).otherwise(0.0)
+    )
+
+
+def _fin_ratio2(a): return _fin_ratio_expr(a[0], a[1])
+def _fin_abs_ratio2(a): return _fin_abs_ratio_expr(a[0], a[1])
+def _fin_ratio3(a): return _fin_ratio_expr(a[0] - a[1], a[2].abs())
+def _fin_ratio_sum3(a): return _fin_ratio_expr(a[0] + a[1], a[2])
+def _fin_ratio_diff3(a): return _fin_ratio_expr(a[0] - a[1], a[2])
+def _fin_ratio4(a): return _fin_ratio_expr(a[0] + a[1] - a[2], a[3])
+def _fin_ratio5(a): return _fin_ratio_expr(a[0] + a[1] + a[2] - a[3], a[4])
+def _fin_ratio6(a): return _fin_ratio_expr(a[0] - a[1] - a[2] - a[3] - a[4], a[5])
+def _fin_ratio7(a): return _fin_ratio_expr(a[0] + a[1] + a[2] + a[3] + a[4] - a[5], a[6].abs())
+def _fin_ratio_cap(a): return _fin_ratio_expr(a[0], a[0] + a[1])
+def _fin_ratio_disp(a): return _fin_ratio_expr(a[0].abs(), a[1].abs())
+def _fin_ratio_dsc(a): return _fin_ratio_expr(a[0], a[1] + a[2].abs())
+def _fin_ratio_burn(a): return _fin_neg_ocf_ratio_expr(a[0], a[1])
+
+
+# op -> (n_operands, formula(cols) -> pl.Expr)
+_FIN_ELEMENTWISE_OPS: dict[str, tuple[int, Callable[[list], pl.Expr]]] = {
+    "fin_common_size": (2, _fin_ratio2),
+    "fin_cash_conversion": (2, _fin_ratio2),
+    "fin_acquisition_cash_intensity": (2, _fin_ratio2),
+    "fin_borrowing_intensity": (2, _fin_ratio2),
+    "fin_capex_intensity": (2, _fin_ratio2),
+    "fin_goodwill_intensity": (2, _fin_ratio2),
+    "fin_debt_repayment_intensity": (2, _fin_ratio2),
+    "fin_contract_asset_intensity": (2, _fin_ratio2),
+    "fin_contract_liability_intensity": (2, _fin_ratio2),
+    "fin_oci_to_equity": (2, _fin_ratio2),
+    "fin_interest_coverage_proxy": (2, _fin_abs_ratio2),
+    "fin_discontinued_operation_ratio": (2, _fin_abs_ratio2),
+    "fin_minority_profit_share": (2, _fin_abs_ratio2),
+    "fin_fair_value_income_dependence": (2, _fin_abs_ratio2),
+    "fin_investment_income_dependence": (2, _fin_abs_ratio2),
+    "fin_other_earnings_dependence": (2, _fin_abs_ratio2),
+    "fin_rd_capitalization_ratio": (2, _fin_ratio_cap),
+    "fin_expectation_dispersion": (2, _fin_ratio_disp),
+    "fin_cash_burn_runway": (2, _fin_ratio_burn),
+    "fin_accrual_ratio": (3, _fin_ratio3),
+    "fin_cash_earnings_gap": (3, _fin_ratio3),
+    "fin_impairment_intensity": (3, _fin_ratio_sum3),
+    "fin_lease_intensity": (3, _fin_ratio_sum3),
+    "fin_rd_total_intensity": (3, _fin_ratio_sum3),
+    "fin_contract_asset_liability_gap": (3, _fin_ratio_diff3),
+    "fin_lease_asset_liability_gap": (3, _fin_ratio_diff3),
+    "fin_deferred_tax_gap": (3, _fin_ratio_diff3),
+    "fin_comprehensive_income_gap": (3, _fin_ratio_diff3),
+    "fin_roe_cash_gap": (3, _fin_ratio_diff3),
+    "fin_debt_service_coverage_proxy": (3, _fin_ratio_dsc),
+    "fin_actual_expectation_divergence": (3, _fin_ratio3),
+    "fin_surprise": (3, _fin_ratio3),
+    "fin_net_borrowing_cashflow": (4, _fin_ratio4),
+    "fin_financing_gap": (5, _fin_ratio5),
+    "fin_core_earnings_ratio": (6, _fin_ratio6),
+    "fin_noncore_income_ratio": (7, _fin_ratio7),
+}
+
+
+def _compile_fin_elementwise(
+    node: PlanNode,
+    base: pl.LazyFrame,
+    *,
+    ctx: Any | None = None,
+    memo: dict[tuple[Any, ...], pl.LazyFrame] | None = None,
+) -> pl.LazyFrame | None:
+    """Compile a pure-elementwise fin_* operator (no period walk)."""
+    spec = _FIN_ELEMENTWISE_OPS.get(node.op)
+    if spec is None:
+        return None
+    n_operands, formula = spec
+    layers = []
+    for i in range(n_operands):
+        child = _compile_child(node, i, base, parent_op=node.op, ctx=ctx, memo=memo)
+        if child is None:
+            return None
+        layers.append(child)
+    joined = _join_multi(layers)
+    names = [_VAL, "_y", "_z", "_w", "_u", "_t", "_s"]
+    cols = [pl.col(names[i]) for i in range(n_operands)]
+    expr = formula(cols)
+    return joined.with_columns(expr.alias(_VAL)).select(_TS, _INST, _VAL)
+
+
 def _column_ref_name(node: PlanNode) -> str | None:
     """若 node 为 ``column`` 算子则返回列名字符串，否则 None。"""
     if node.op != "column":
@@ -1601,6 +1771,9 @@ def _compile_polars_impl(
         val = node.attrs.get("value")
         return base.select(pl.col(_TS), pl.col(_INST), pl.lit(val).alias(_VAL))
 
+    if op in _FIN_ELEMENTWISE_OPS:
+        return _compile_fin_elementwise(node, base, ctx=ctx, memo=memo)
+
     if op in _BINARY_FUSION_OPS:
         if len(node.inputs) != 2:
             return None
@@ -1837,25 +2010,30 @@ def _compile_polars_impl(
         inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
         if inner is None:
             return None
-        spec = _window_spec(node)
-        w = spec.size
-        mp = spec.min_periods
-        from factor_engine.backend.numeric_semantics import std_ddof_value, zscore_zero_std_fill
-
-        ddof = spec.ddof if "ddof" in (node.attrs or {}) else std_ddof_value("ts_zscore")
-        zero_fill = zscore_zero_std_fill("ts_zscore")
-        mean = pl.col(_VAL).rolling_mean(window_size=w, min_samples=mp).over(_INST, order_by=_TS)
-        std = pl.col(_VAL).rolling_std(window_size=w, min_samples=mp, ddof=ddof).over(_INST, order_by=_TS)
-        return inner.with_columns(
-            pl.when(pl.col(_VAL).is_null())
+        from factor_engine.cleaned_operators.common.ts_zscore_spec import TSZScoreSpec
+        attrs = node.attrs or {}
+        spec = TSZScoreSpec.resolve(
+            window=_window_spec(node).size,
+            min_periods=_window_spec(node).min_periods,
+            null_policy=attrs.get("null_policy", "ignore"),
+            nan_policy=attrs.get("nan_policy", "propagate"),
+            includes_current_bar=attrs.get("includes_current_bar", True),
+            ddof=attrs.get("ddof", 1),
+            zero_std_policy=attrs.get("zero_std_policy", "zero"),
+        )
+        current = pl.when(pl.col(_VAL).is_finite()).then(pl.col(_VAL)).otherwise(None)
+        stats = current if spec.includes_current_bar else current.shift(1).over(_INST, order_by=_TS)
+        mean = stats.rolling_mean(spec.window.size, min_samples=spec.window.min_periods).over(_INST, order_by=_TS)
+        std = stats.rolling_std(spec.window.size, min_samples=spec.window.min_periods, ddof=spec.window.ddof).over(_INST, order_by=_TS)
+        out = (pl.when(current.is_null())
             .then(None)
             .when(std.is_null())
-            .then(None)
-            .when(std == 0)
-            .then(zero_fill)
-            .otherwise((pl.col(_VAL) - mean) / std)
-            .alias(_VAL)
-        )
+            .then(None))
+        if spec.window.nan_policy == "propagate" or spec.window.null_policy.value == "propagate":
+            bad = stats.is_null().cast(pl.Int64).rolling_sum(spec.window.size, min_samples=1).over(_INST, order_by=_TS) > 0
+            out = out.when(bad).then(None)
+        out = out.when(std == 0).then(0.0 if spec.zero_std_policy == "zero" else None).otherwise((current - mean) / std)
+        return inner.with_columns(out.alias(_VAL))
 
     if op == "ts_corr":
         if len(node.inputs) < 2:
@@ -2349,6 +2527,7 @@ def _compile_polars_impl(
         "group_percentile",
         "group_winsorize",
         "group_decay_linear",
+        "group_rank_weighted_value",
     }:
         if not node.inputs:
             return None
@@ -2512,10 +2691,95 @@ def _compile_polars_impl(
                 )
         elif op == "group_normalize":
             expr = _group_normalize_on(_VAL, over_keys)
+        elif op == "group_rank_weighted_value":
+            # common::GroupRankWeightedValuePolars: x * avg_rank / sum(avg_rank)
+            # per group (average-rank; ties averaged) — pure polars over-expr.
+            rank_e = pl.col(_VAL).rank(method="average").over(*over_keys, order_by=_INST)
+            sum_r = rank_e.sum().over(*over_keys, order_by=_INST)
+            expr = pl.when(pl.col(_VAL).is_null() | pl.col(_VAL).is_nan()).then(None).otherwise(
+                pl.when((sum_r.is_null()) | (sum_r == 0)).then(None).otherwise(pl.col(_VAL) * rank_e / sum_r))
         else:
             from factor_engine.backend.rank_spec import polars_cs_rank_expr
 
             expr = polars_cs_rank_expr(_VAL, partition_cols=over_keys, order_by=_INST, canon="group_rank")
+        return joined.with_columns(expr.alias(_VAL)).select(_TS, _INST, _VAL)
+
+    if op == "cs_shrink_to_group_mean":
+        # common::CsShrinkToGroupMeanPolars: shrunk = x*(1-intensity)+group_mean*intensity;
+        # group mean computed over finite x only; unknown/invalid group label -> NaN.
+        if not node.inputs:
+            return None
+        val = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
+        if val is None:
+            return None
+        joined = val
+        if len(node.inputs) >= 2 and node.inputs[1].op not in {"literal"}:
+            grp = _compile_child(node, 1, base, parent_op=op, ctx=ctx, memo=memo)
+            if grp is None:
+                return None
+            joined = val.join(grp.rename({_VAL: _GRP}), on=[_TS, _INST], how="left")
+            over_keys = (_TS, _GRP)
+        else:
+            return None
+        shrink = _literal_value(node, 2)
+        if shrink is not None:
+            shrink = float(shrink)
+        else:
+            shrink = float(_float_attr(node, "shrinkage_intensity", default=0.5))
+        gm = pl.col(_VAL).mean().over(*over_keys, order_by=_INST)
+        expr = pl.when(pl.col(_VAL).is_null() | pl.col(_VAL).is_nan()).then(None).otherwise(
+            pl.when(pl.col(_GRP).is_null()).then(None).otherwise(
+                (1.0 - shrink) * pl.col(_VAL) + shrink * gm
+            )
+        )
+        return joined.with_columns(expr.alias(_VAL)).select(_TS, _INST, _VAL)
+
+    if op == "group_weighted_zscore":
+        # common::GroupWeightedZscorePolars: (x - Σw·x/Σw) / sqrt(Σw·(x-μ)²/Σw)
+        # per group; zero-weight-sum / single-effective-obs -> NaN.  Weight and
+        # value pairs come in as separate columns; invalid (null/NaN/inf)
+        # pairs are dropped from both numerator and denominator exactly like
+        # the pandas reference.
+        if len(node.inputs) < 2:
+            return None
+        val = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
+        if val is None:
+            return None
+        grp = _compile_child(node, 1, base, parent_op=op, ctx=ctx, memo=memo)
+        if grp is None:
+            return None
+        joined = val.join(grp.rename({_VAL: _GRP}), on=[_TS, _INST], how="left")
+        wname = None
+        if len(node.inputs) >= 3 and node.inputs[2].op not in {"literal"}:
+            wcol = _compile_child(node, 2, base, parent_op=op, ctx=ctx, memo=memo)
+            if wcol is not None:
+                joined = joined.join(wcol.rename({_VAL: "_w"}), on=[_TS, _INST], how="left")
+                wname = "_w"
+        if wname is None:
+            wl = _literal_value(node, 2) if len(node.inputs) >= 3 else None
+            joined = joined.with_columns(pl.lit(float(wl) if wl is not None else 1.0).alias("_w"))
+            wname = "_w"
+        over_keys = (_TS, _GRP)
+        v = pl.col(_VAL)
+        w = pl.col("_w")
+        valid_pair = (
+            v.is_not_null() & ~v.is_nan() & ~v.is_infinite()
+            & w.is_not_null() & ~w.is_nan() & ~w.is_infinite() & (w >= 0)
+        )
+        vv = pl.when(valid_pair).then(v)
+        ww = pl.when(valid_pair).then(w)
+        sw = ww.sum().over(*over_keys, order_by=_INST)
+        mean = (vv * ww).sum().over(*over_keys, order_by=_INST) / sw
+        var = ((vv - mean) ** 2 * ww).sum().over(*over_keys, order_by=_INST) / sw
+        expr = (
+            pl.when(pl.col(_GRP).is_null())
+            .then(None)
+            .when(sw.is_null() | (sw <= 0))
+            .then(None)
+            .when(var.is_null() | (var <= 0))
+            .then(None)
+            .otherwise((v - mean) / var.sqrt())
+        )
         return joined.with_columns(expr.alias(_VAL)).select(_TS, _INST, _VAL)
 
     if op == "cs_mad":
@@ -2686,6 +2950,18 @@ def _compile_polars_impl(
                 .otherwise(ratio.log()),
                 "log_returns",
             ).alias(_VAL)
+        )
+
+    if op == "cs_physical_panel_coverage":
+        inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
+        if inner is None:
+            return None
+        # Reference: fraction of PHYSICALLY-present panel rows that are finite,
+        # per date, broadcast to ALL cells of the date (including the NaN cell).
+        cnt_total = pl.col(_VAL).len().over(_TS, order_by=_INST).cast(pl.Float64)
+        cnt_finite = pl.col(_VAL).count().over(_TS, order_by=_INST).cast(pl.Float64)
+        return inner.with_columns(
+            pl.when(cnt_total > 0).then(cnt_finite / cnt_total).otherwise(None).alias(_VAL)
         )
 
     if op == "volatility":
@@ -3156,6 +3432,322 @@ def _compile_polars_impl(
         )
         expr = tr.ewm_mean(alpha=alpha, adjust=False, min_periods=w).over(_INST, order_by=_TS)
         return joined.with_columns(expr.alias(_VAL)).select(_TS, _INST, _VAL)
+
+    # ------------------------------------------------------------------
+    # Tech / candle / misc family: pure-numerical native branches.
+    # pandas reference semantics replicated exactly; every window ends at t
+    # (inclusive trailing), all windows min_periods=window unless noted.
+    # ------------------------------------------------------------------
+
+    if op == "ALMA":
+        inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
+        if inner is None:
+            return None
+        w = max(int(_window_int(node, default=10)), 2)
+        offset = float(_literal_value(node, 1, default=0.85) or 0.85)
+        sigma = float(_literal_value(node, 2, default=6.0) or 6.0)
+        sigma = max(sigma, 1e-6)
+        m = offset * (w - 1.0)
+        s = w / sigma
+        idx = np.arange(w, dtype=np.float64)
+        weights = np.exp(-((idx - m) ** 2) / (2.0 * s * s))
+        total = weights.sum()
+        if total <= 1e-12:
+            weights = np.ones(w, dtype=np.float64) / w
+        else:
+            weights = weights / total
+        # pandas ALMA: `rolling(window=w, min_periods=w).apply(dot(vals, wg))`;
+        # any NaN slot makes the whole window NaN, warmup = w rows.  We build it
+        # with explicit shifted weighted sums (no weights kernel) so null
+        # propagates exactly like the pandas reference.
+        weighted = sum(
+            (pl.col(_VAL).shift(i).over(_INST, order_by=_TS)) * float(weights[i])
+            for i in range(w)
+        )
+        expr = pl.when(weighted.is_nan()).then(None).otherwise(weighted)
+        return inner.with_columns(expr.alias(_VAL))
+
+    if op == "CoppockCurve":
+        inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
+        if inner is None:
+            return None
+        roc1 = max(int(_literal_value(node, 1, default=14) or 14), 1)
+        roc2 = max(int(_literal_value(node, 2, default=11) or 11), 1)
+        wma = max(int(_literal_value(node, 3, default=10) or 10), 1)
+        roc_mode = str(node.attrs.get("roc_mode") or node.attrs.get("mode") or "pct")
+        c = pl.col(_VAL)
+        sh1 = c.shift(roc1).over(_INST, order_by=_TS)
+        sh2 = c.shift(roc2).over(_INST, order_by=_TS)
+        if roc_mode == "log":
+            r1 = pl.when(sh1.is_null() | (sh1 <= 0)).then(None).otherwise((c / sh1).log())
+            r2 = pl.when(sh2.is_null() | (sh2 <= 0)).then(None).otherwise((c / sh2).log())
+        else:  # pct
+            r1 = pl.when(sh1.is_null()).then(None).otherwise(c / sh1 - 1.0)
+            r2 = pl.when(sh2.is_null()).then(None).otherwise(c / sh2 - 1.0)
+        total = r1 + r2
+        if wma <= 1:
+            expr = total
+        else:
+            wg = np.arange(1, wma + 1, dtype=np.float64)
+            wg = wg / wg.sum()
+            # WMA = sum(shift(i) * wg[i]); NaN total slot propagates the window
+            # to NaN exactly like pandas rolling.apply (null → NaN, not 0).
+            weighted = sum(
+                (total.shift(i).over(_INST, order_by=_TS)) * float(wg[i])
+                for i in range(wma)
+            )
+            expr = weighted
+        return inner.with_columns(expr.alias(_VAL))
+
+    if op == "ElderRay":
+        if len(node.inputs) < 2:
+            return None
+        h_in = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
+        l_in = _compile_child(node, 1, base, parent_op=op, ctx=ctx, memo=memo)
+        close_in = _compile_child(node, 2, base, parent_op=op, ctx=ctx, memo=memo)
+        if h_in is None or l_in is None or close_in is None:
+            return None
+        joined = _join_triple(h_in, l_in, close_in)
+        ema = int(max(_literal_value(node, 3, default=13) or 13, 1))
+        out = str(node.attrs.get("output") or "bull")
+        ev = (
+            pl.when(pl.col("_y").is_nan())
+            .then(None)
+            .otherwise(pl.col("_y"))
+            .ewm_mean(alpha=2.0 / (ema + 1.0), adjust=False, min_periods=ema, ignore_nulls=False)
+            .over(_INST, order_by=_TS)
+        )
+        if out == "bull":
+            expr = pl.col(_VAL) - ev
+        elif out == "bear":
+            expr = pl.col("_ym") - ev
+        else:  # spread
+            expr = pl.col(_VAL) - pl.col("_ym")
+        return joined.with_columns(expr.alias(_VAL)).select(_TS, _INST, _VAL)
+
+    if op == "FisherTransform":
+        if len(node.inputs) < 2:
+            return None
+        h_in = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
+        l_in = _compile_child(node, 1, base, parent_op=op, ctx=ctx, memo=memo)
+        if h_in is None or l_in is None:
+            return None
+        w = max(int(_window_int(node, default=9)), 2)
+        smooth = float(_literal_value(node, 2, default=0.33) or 0.33)
+        sig_smooth = float(_literal_value(node, 3, default=0.5) or 0.5)
+        out = str(node.attrs.get("output") or "value")
+        joined = _join_binary(h_in, l_in)
+        source = (pl.col(_VAL) + pl.col("_y")) / 2.0
+        roll_min = source.rolling_min(window_size=w, min_samples=w).over(_INST, order_by=_TS)
+        roll_max = source.rolling_max(window_size=w, min_samples=w).over(_INST, order_by=_TS)
+        rng = roll_max - roll_min
+        raw = pl.when(roll_min.is_null() | roll_max.is_null()).then(None).otherwise(
+            2.0 * ((source - roll_min) / rng - 0.5)
+        )
+        raw = pl.when(rng.is_not_null() & (rng <= 1e-12)).then(0.0).otherwise(raw)
+        z = (
+            pl.when(raw.is_null())
+            .then(None)
+            .otherwise(
+                raw.ewm_mean(alpha=smooth, adjust=False, min_samples=1, ignore_nulls=False)
+            )
+        )
+        z = z.clip(-0.999, 0.999)
+        one_m = 1.0 - z
+        fisher = 0.5 * (pl.when(one_m <= 0).then(None).otherwise(((1.0 + z) / one_m).log()))
+        sig = (
+            fisher.ewm_mean(alpha=sig_smooth, adjust=False, min_samples=1, ignore_nulls=False)
+            .over(_INST, order_by=_TS)
+            .shift(1)
+            .over(_INST, order_by=_TS)
+        )
+        if out == "signal":
+            expr = sig
+        elif out == "trigger":
+            expr = fisher - sig
+        else:
+            expr = fisher
+        return joined.with_columns(expr.alias(_VAL)).select(_TS, _INST, _VAL)
+
+    if op in {"atr_pct", "atr_acceleration", "atr_short_long_ratio"}:
+        if len(node.inputs) < 3:
+            return None
+        joined = _compile_ohlc3(node, base, op, ctx=ctx, memo=memo)
+        if joined is None:
+            return None
+        if op == "atr_short_long_ratio":
+            s = max(int(_literal_value(node, 2, default=5) or 5), 2)
+            l = max(int(_literal_value(node, 3, default=14) or 14), 2)
+            if s >= l:
+                return None
+            trs = _atr_wilder_expr(_VAL, "_ym", "_y", window=s, alpha=1.0 / s).over(_INST, order_by=_TS)
+            trl = _atr_wilder_expr(_VAL, "_ym", "_y", window=l, alpha=1.0 / l).over(_INST, order_by=_TS)
+            closep = pl.when(pl.col("_y").is_null() | (pl.col("_y") <= 0)).then(None).otherwise(pl.col("_y"))
+            ratio_s = trs / closep
+            ratio_l = trl / closep
+            denom = pl.when(ratio_l == 0).then(None).otherwise(ratio_l)
+            expr = ratio_s / denom
+            return joined.with_columns(expr.alias(_VAL)).select(_TS, _INST, _VAL)
+        # atr_pct / atr_acceleration
+        wl = max(int(_literal_value(node, 3, default=14) or 14), 2)
+        tr = _atr_wilder_expr(_VAL, "_ym", "_y", window=wl, alpha=1.0 / wl).over(
+            _INST, order_by=_TS
+        )
+        atr = pl.when(pl.col("_y").is_null() | (pl.col("_y") <= 0)).then(None).otherwise(tr / pl.col("_y"))
+        if op == "atr_acceleration":
+            atr = atr.diff().over(_INST, order_by=_TS)
+        return joined.with_columns(atr.alias(_VAL)).select(_TS, _INST, _VAL)
+
+    if op in {"candle_body_strength", "candle_wick_balance", "candle_range_pct",
+              "candle_pattern_count"}:
+        if len(node.inputs) < 4:
+            return None
+        w = max(int(_window_int(node, default=4)), 2)
+        joined = _compile_ohlc4(node, base, op, ctx=ctx, memo=memo)
+        if joined is None:
+            return None
+        o, h, l, c = pl.col(_VAL), pl.col("_b"), pl.col("_c"), pl.col("_d")
+        maxoc = pl.max_horizontal(o, c)
+        minoc = pl.min_horizontal(o, c)
+        valid = (
+            o.is_not_null() & h.is_not_null() & l.is_not_null() & c.is_not_null()
+            & (c > 0.0) & (h > l) & (h >= maxoc) & (l <= minoc)
+        )
+        rng = pl.when(valid).then(h - l).otherwise(None)
+        upper = pl.when(valid).then(h - maxoc).otherwise(None)
+        lower = pl.when(valid).then(minoc - l).otherwise(None)
+        body = pl.when(valid).then(c - o).otherwise(None)
+        absbody = pl.when(valid).then((c - o).abs()).otherwise(None)
+        if op == "candle_pattern_count":
+            with np.errstate(divide="ignore", invalid="ignore"):
+                body_r = absbody / rng
+                up_r = upper / rng
+                lo_r = lower / rng
+            doji = valid & (body_r < 0.1)
+            dom_upper = valid & (up_r >= 0.7) & (lo_r <= 0.15)
+            dom_lower = valid & (lo_r >= 0.7) & (up_r <= 0.15)
+            pattern = (doji | dom_upper | dom_lower).cast(pl.Float64)
+            num = pattern.rolling_sum(window_size=w, min_samples=1).over(_INST, order_by=_TS)
+            den = valid.cast(pl.Float64).rolling_sum(window_size=w, min_samples=1).over(_INST, order_by=_TS)
+            rows = (o.is_not_null() & h.is_not_null() & l.is_not_null() & c.is_not_null())
+            rowcnt = rows.cast(pl.Float64).rolling_sum(window_size=w, min_samples=w).over(_INST, order_by=_TS)
+            expr = pl.when(den.is_null() | (den <= 0)).then(None).otherwise(num / den)
+            expr = pl.when(rowcnt < float(w)).then(None).otherwise(expr)
+        else:
+            if op == "candle_body_strength":
+                geom = pl.when(body.is_null()).then(None).otherwise(body / rng)
+            elif op == "candle_wick_balance":
+                geom = pl.when(lower.is_null() | upper.is_null()).then(None).otherwise((lower - upper) / rng)
+            else:  # candle_range_pct
+                geom = pl.when(rng.is_null() | c.is_null() | (c <= 0)).then(None).otherwise(rng / c)
+            expr = geom.rolling_mean(window_size=w, min_samples=w).over(_INST, order_by=_TS)
+        return joined.with_columns(expr.alias(_VAL)).select(_TS, _INST, _VAL)
+
+    # =====================================================================
+    # ts_* quantile / tail / scale family — pure native polars Expr branches.
+    # pandas long-table reference semantics replicated exactly: trailing
+    # windows ending at t, linear-interpolation quantiles (np.quantile /
+    # pandas Series.quantile == polars rolling_quantile interpolation='linear'
+    # resolved via the two nearest ranked observations), and the per-operator
+    # min_periods floor. Every window is bounded by .over(_INST, order_by=_TS).
+    # =====================================================================
+
+    # window=... bounded helper:  same calling convention as ts_mean etc.
+    def _ival(node, idx, default):
+        v = _literal_value(node, idx)
+        return int(v) if v is not None else default
+
+    if op == "ts_quantile_range":
+        inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
+        if inner is None:
+            return None
+        w = _window_int(node, default=20)
+        lo = float(_literal_value(node, 1) if _literal_value(node, 1) is not None else _float_attr(node, "lower", "q_low", default=0.25))
+        hi = float(_literal_value(node, 2) if _literal_value(node, 2) is not None else _float_attr(node, "upper", "q_high", default=0.75))
+        qhi = pl.col(_VAL).rolling_quantile(quantile=hi, window_size=w, interpolation="linear").over(_INST, order_by=_TS)
+        qlo = pl.col(_VAL).rolling_quantile(quantile=lo, window_size=w, interpolation="linear").over(_INST, order_by=_TS)
+        return inner.with_columns((qhi - qlo).alias(_VAL))
+
+    if op == "ts_quantile_skew":
+        inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
+        if inner is None:
+            return None
+        w = _window_int(node, default=20)
+        ql = pl.col(_VAL).rolling_quantile(quantile=0.25, window_size=w, interpolation="linear").over(_INST, order_by=_TS)
+        qm = pl.col(_VAL).rolling_quantile(quantile=0.50, window_size=w, interpolation="linear").over(_INST, order_by=_TS)
+        qh = pl.col(_VAL).rolling_quantile(quantile=0.75, window_size=w, interpolation="linear").over(_INST, order_by=_TS)
+        iqr = qh - ql
+        expr = pl.when(iqr.is_null() | (iqr == 0)).then(None).otherwise((qh + ql - 2.0 * qm) / iqr)
+        return inner.with_columns(expr.alias(_VAL))
+
+    if op == "ts_quantile_kurtosis":
+        inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
+        if inner is None:
+            return None
+        w = _window_int(node, default=60)
+        q_a = pl.col(_VAL).rolling_quantile(quantile=0.125, window_size=w, interpolation="linear").over(_INST, order_by=_TS)
+        q_b = pl.col(_VAL).rolling_quantile(quantile=0.875, window_size=w, interpolation="linear").over(_INST, order_by=_TS)
+        q25 = pl.col(_VAL).rolling_quantile(quantile=0.25, window_size=w, interpolation="linear").over(_INST, order_by=_TS)
+        q75 = pl.col(_VAL).rolling_quantile(quantile=0.75, window_size=w, interpolation="linear").over(_INST, order_by=_TS)
+        iqr = q75 - q25
+        expr = pl.when(iqr.is_null() | (iqr == 0)).then(None).otherwise((q_b - q_a) / iqr)
+        return inner.with_columns(expr.alias(_VAL))
+
+    if op == "ts_tail_ratio":
+        inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
+        if inner is None:
+            return None
+        w = _window_int(node, default=60)
+        qlo = pl.col(_VAL).rolling_quantile(quantile=0.05, window_size=w, interpolation="linear").over(_INST, order_by=_TS)
+        qhi = pl.col(_VAL).rolling_quantile(quantile=0.95, window_size=w, interpolation="linear").over(_INST, order_by=_TS)
+        expr = pl.when(qlo.is_null() | (qlo == 0)).then(None).otherwise(qhi.abs() / qlo.abs())
+        return inner.with_columns(expr.alias(_VAL))
+
+    if op == "ts_tail_imbalance":
+        inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
+        if inner is None:
+            return None
+        w = _window_int(node, default=60)
+        mp = max(4, int(_ival(node, 1, 8)))
+        if mp > w:
+            mp = w
+        qlo = pl.col(_VAL).rolling_quantile(quantile=0.05, window_size=w, interpolation="linear").over(_INST, order_by=_TS)
+        qhi = pl.col(_VAL).rolling_quantile(quantile=0.95, window_size=w, interpolation="linear").over(_INST, order_by=_TS)
+        rng = qhi - qlo
+        expr = pl.when(qlo.is_null() | rng.is_null() | (rng == 0)).then(None).otherwise((qhi + qlo) / rng)
+        # min_periods (>=4) cannot be expressed with the fixed rolling_quantile
+        # default; use an explicit count mask to fail-close before mp rows.
+        cnt = pl.col(_VAL).is_not_null().cast(pl.Float64).rolling_sum(window_size=w, min_samples=1).over(_INST, order_by=_TS)
+        expr = pl.when(cnt.is_null() | (cnt < mp)).then(None).otherwise(expr)
+        return inner.with_columns(expr.alias(_VAL))
+
+    if op == "ts_scale_shift":
+        inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
+        if inner is None:
+            return None
+        short = _window_int(node, default=20)
+        longw = int(_literal_value(node, 1) if _literal_value(node, 1) is not None else 40)
+        s = pl.col(_VAL).rolling_std(short, min_samples=short).over(_INST, order_by=_TS)
+        l = pl.col(_VAL).rolling_std(longw, min_samples=longw).over(_INST, order_by=_TS)
+        expr = pl.when(s.is_null() | l.is_null() | (l == 0)).then(None).otherwise(s / l)
+        return inner.with_columns(expr.alias(_VAL))
+
+    if op == "ts_median3_causal":
+        inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
+        if inner is None:
+            return None
+        expr = pl.col(_VAL).rolling_median(window_size=3, min_samples=1).over(_INST, order_by=_TS)
+        return inner.with_columns(expr.alias(_VAL))
+
+    if op == "ts_rolling_median_causal":
+        inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
+        if inner is None:
+            return None
+        w = _window_int(node, default=5)
+        # pandas rolling median: NaN until the window has enough valid rows
+        # (default min_periods == window on the clean series).
+        expr = pl.col(_VAL).rolling_median(window_size=w, min_samples=w).over(_INST, order_by=_TS)
+        return inner.with_columns(expr.alias(_VAL))
 
     from .polars_registry_bridge import compile_registry_op
 

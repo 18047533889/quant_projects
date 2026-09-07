@@ -120,6 +120,7 @@ SQL_IMPLEMENTED_CANONICALS: frozenset[str] = frozenset(
         "group_std",
         "ts_cov",
         "ts_quantile",
+        "cs_physical_panel_coverage",
         "ts_product",
         "ts_regression_slope",
         "ts_skew",
@@ -620,6 +621,23 @@ SQL_IMPLEMENTED_CANONICALS = SQL_IMPLEMENTED_CANONICALS | frozenset({
     "expanding_rank",
 })
 
+# 2026-09 tech/candle family: pure rolling/ewm SQL branches added to
+# backend/sql_pushdown/emitter.py (exact-parity DuckDB window aggregates).
+SQL_IMPLEMENTED_CANONICALS = SQL_IMPLEMENTED_CANONICALS | frozenset({
+    "ALMA",
+    "CoppockCurve",
+    "ElderRay",
+    "atr_pct",
+    "atr_acceleration",
+    "atr_zscore",
+    "atr_percentile",
+    "atr_short_long_ratio",
+    "candle_body_strength",
+    "candle_wick_balance",
+    "candle_range_pct",
+    "candle_pattern_count",
+})
+
 # EWMA/Wilder 平滑族历史注记（2026-08-27 起不再从 SQL 白名单移除）：
 # RSI/ATR/DMI/DX/ADX/MACD/DEMA/TEMA/PPO/PVO/TSI/Keltner/ADL/CMF/
 # ChaikinOscillator/ForceIndex 的 pandas ewm(adjust=False) NaN 缺口语义
@@ -638,6 +656,58 @@ SQL_IMPLEMENTED_CANONICALS = SQL_IMPLEMENTED_CANONICALS - frozenset({
     "cdl_hammer", "cdl_hanging_man",
     "ts_time_slope", "ts_upside_deviation", "ts_weighted_standardized_moment",
     "ts_abdi_ranaldo_spread", "ts_value_at_argextreme",
+})
+
+# 2026-09-07 fin_* elementwise algebraic family: pure-SQL emitter branches in
+# backend/sql_pushdown/emitter.py (ratio / abs-ratio / sum-diff-ratio over up to
+# seven operands).  The trailing ``period_id`` input is structural PIT-alignment
+# only and is not compiled.  These are elementwise (no period walk), so they are
+# SQL-implemented but NOT production-safe until parity-verified.
+SQL_IMPLEMENTED_CANONICALS = SQL_IMPLEMENTED_CANONICALS | frozenset({
+    "fin_common_size",
+    "fin_cash_conversion",
+    "fin_acquisition_cash_intensity",
+    "fin_borrowing_intensity",
+    "fin_capex_intensity",
+    "fin_goodwill_intensity",
+    "fin_debt_repayment_intensity",
+    "fin_contract_asset_intensity",
+    "fin_contract_liability_intensity",
+    "fin_oci_to_equity",
+    "fin_interest_coverage_proxy",
+    "fin_discontinued_operation_ratio",
+    "fin_minority_profit_share",
+    "fin_fair_value_income_dependence",
+    "fin_investment_income_dependence",
+    "fin_other_earnings_dependence",
+    "fin_rd_capitalization_ratio",
+    "fin_expectation_dispersion",
+    "fin_cash_burn_runway",
+    "fin_accrual_ratio",
+    "fin_cash_earnings_gap",
+    "fin_impairment_intensity",
+    "fin_lease_intensity",
+    "fin_rd_total_intensity",
+    "fin_contract_asset_liability_gap",
+    "fin_lease_asset_liability_gap",
+    "fin_deferred_tax_gap",
+    "fin_comprehensive_income_gap",
+    "fin_roe_cash_gap",
+    "fin_debt_service_coverage_proxy",
+    "fin_actual_expectation_divergence",
+    "fin_surprise",
+    "fin_net_borrowing_cashflow",
+    "fin_financing_gap",
+    "fin_core_earnings_ratio",
+    "fin_noncore_income_ratio",
+})
+
+# 2026-09-07 wave2 csg: cs_shrink_to_group_mean / group_weighted_zscore —
+# polars native + DuckDB SQL 双后端（组轴聚合，三方 parity 测试见
+# tests/backend_parity/test_csg_wave2_parity.py）。
+SQL_IMPLEMENTED_CANONICALS = SQL_IMPLEMENTED_CANONICALS | frozenset({
+    "cs_shrink_to_group_mean",
+    "group_weighted_zscore",
 })
 
 # DuckDB 分层

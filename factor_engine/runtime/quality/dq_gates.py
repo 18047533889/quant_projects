@@ -53,9 +53,9 @@ class FactorDQReport:
             "checks": [
                 {
                     "name": c.name,
-                    "passed": c.passed,
+                    "passed": bool(c.passed),
                     "message": c.message,
-                    "value": c.value,
+                    "value": c.value.item() if isinstance(c.value, np.generic) else c.value,
                 }
                 for c in self.checks
             ],

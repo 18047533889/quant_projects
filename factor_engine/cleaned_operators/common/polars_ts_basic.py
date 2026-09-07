@@ -615,8 +615,12 @@ class TSArgmaxAgeNative(SeriesOperator):
         cols = _numeric_cols(x)
         exprs = []
         for c in cols:
-            argmax_idx = pl.col(c).rolling_map(lambda s: s.arg_max(), window_size=w, min_samples=mp)
-            exprs.append((pl.lit(w - 1) - argmax_idx).alias(c))
+            def age(s):
+                import numpy as np
+                v = np.asarray(s.to_numpy(), dtype=float)
+                hits = np.flatnonzero(np.isfinite(v) & (v == np.nanmax(v)))
+                return float(v.size - 1 - hits[-1]) if hits.size else np.nan
+            exprs.append(pl.col(c).rolling_map(age, window_size=w, min_samples=mp).alias(c))
         return x.lazy().with_columns(exprs).collect()
 
 
@@ -652,8 +656,12 @@ class TSArgminAgeNative(SeriesOperator):
         cols = _numeric_cols(x)
         exprs = []
         for c in cols:
-            argmin_idx = pl.col(c).rolling_map(lambda s: s.arg_min(), window_size=w, min_samples=mp)
-            exprs.append((pl.lit(w - 1) - argmin_idx).alias(c))
+            def age(s):
+                import numpy as np
+                v = np.asarray(s.to_numpy(), dtype=float)
+                hits = np.flatnonzero(np.isfinite(v) & (v == np.nanmin(v)))
+                return float(v.size - 1 - hits[-1]) if hits.size else np.nan
+            exprs.append(pl.col(c).rolling_map(age, window_size=w, min_samples=mp).alias(c))
         return x.lazy().with_columns(exprs).collect()
 
 
@@ -1233,7 +1241,7 @@ class TSZeroRatioNative(SeriesOperator):
     business_category="time_series",
     canonical="ts_days_since",
     source=_SRC,
-    backend="polars",
+    backend="polars", status="unsupported",
 )
 class TSDaysSinceNative(SeriesOperator):
     """Days since condition was last true."""
@@ -1249,6 +1257,7 @@ class TSDaysSinceNative(SeriesOperator):
     )
 
     def _calculate_series(self, condition: pl.DataFrame, max_lookback: int = 252, **kwargs) -> pl.DataFrame:
+        raise NotImplementedError("legacy ts_days_since candidate disabled: max_lookback/null contract is not certified")
         cols = _numeric_cols(condition)
         exprs = []
         for c in cols:
@@ -1268,7 +1277,7 @@ class TSDaysSinceNative(SeriesOperator):
     business_category="time_series",
     canonical="ts_days_since_high",
     source=_SRC,
-    backend="polars",
+    backend="polars", status="unsupported",
 )
 class TSDaysSinceHighNative(SeriesOperator):
     """Days since d-period high."""
@@ -1286,6 +1295,7 @@ class TSDaysSinceHighNative(SeriesOperator):
     )
 
     def _calculate_series(self, x: pl.DataFrame, d: int = 252, **kwargs) -> pl.DataFrame:
+        raise NotImplementedError("legacy ts_days_since_high candidate disabled: event-age contract is not certified")
         from factor_engine.cleaned_operators.parameter_validation import strict_integer
 
         w = strict_integer(d, "d", minimum=1)
@@ -1309,7 +1319,7 @@ class TSDaysSinceHighNative(SeriesOperator):
     business_category="time_series",
     canonical="ts_days_since_low",
     source=_SRC,
-    backend="polars",
+    backend="polars", status="unsupported",
 )
 class TSDaysSinceLowNative(SeriesOperator):
     """Days since d-period low."""
@@ -1327,6 +1337,7 @@ class TSDaysSinceLowNative(SeriesOperator):
     )
 
     def _calculate_series(self, x: pl.DataFrame, d: int = 252, **kwargs) -> pl.DataFrame:
+        raise NotImplementedError("legacy ts_days_since_low candidate disabled: event-age contract is not certified")
         from factor_engine.cleaned_operators.parameter_validation import strict_integer
 
         w = strict_integer(d, "d", minimum=1)
@@ -1572,4 +1583,3 @@ class TSBottomkSumNative(SeriesOperator):
             pl.col(c).rolling_map(lambda s: s.bottom_k(bottomk).sum(), window_size=w).alias(c)
             for c in cols
         ]).collect()
-

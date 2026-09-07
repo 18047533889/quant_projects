@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import gc
 from pathlib import Path
 
 import pandas as pd
@@ -250,6 +251,78 @@ def test_data_access_source_ashare_daily(market_env):
     assert len(close) == 2
     ts = close.index.get_level_values(0)
     assert ts[0].hour == 0 and ts[0].minute == 0
+
+
+def test_zero_broker_budget_returns_read_without_retaining_cache(market_env, monkeypatch):
+    from factor_engine.api.mining_integration import default_ashare_pv_data_source_config
+    from factor_engine.storage.sources import data_access_source as module
+
+    class ZeroBroker:
+        def current_read_budget(self):
+            return 0
+
+        def acquire_memory(self, *args, **kwargs):
+            raise AssertionError("zero cache budget must not request a lease")
+
+    monkeypatch.setattr(module, "_data_cache_authority", lambda: ZeroBroker())
+    source = build_data_source(default_ashare_pv_data_source_config())
+    close = source.load_column("close")
+
+    assert len(close) == 2
+    assert source._column_cache == {}
+    assert source._cache_bytes == 0
+
+
+def test_cached_buffer_lease_lives_until_cache_clear(market_env, monkeypatch):
+    from factor_engine.api.mining_integration import default_ashare_pv_data_source_config
+    from factor_engine.storage.sources import data_access_source as module
+
+    class Lease:
+        released = False
+
+        def release(self):
+            self.released = True
+
+    class Broker:
+        def __init__(self):
+            self.leases = []
+
+        def current_read_budget(self):
+            return 64 * 1024 * 1024
+
+        def acquire_memory(self, kind, nbytes, *, lease_id):
+            lease = Lease()
+            self.leases.append((kind, nbytes, lease_id, lease))
+            return lease
+
+    broker = Broker()
+    monkeypatch.setattr(module, "_data_cache_authority", lambda: broker)
+    source = build_data_source(default_ashare_pv_data_source_config())
+    returned = source.load_column("close")
+
+    assert source._column_cache["close"] is not None
+    assert len(broker.leases) == 1
+    assert broker.leases[0][1] == source._cache_bytes
+    assert not broker.leases[0][3].released
+
+    view = returned.to_numpy(copy=False)
+    index = returned.index
+    code = index.codes[0]
+    source.clear_cache()
+    assert not broker.leases[0][3].released
+    assert source._cache_bytes == 0
+    del returned
+    gc.collect()
+    assert not broker.leases[0][3].released
+    del view
+    gc.collect()
+    assert not broker.leases[0][3].released
+    del index
+    gc.collect()
+    assert not broker.leases[0][3].released
+    del code
+    gc.collect()
+    assert broker.leases[0][3].released
 
 
 def test_data_access_source_us_daily(market_env):

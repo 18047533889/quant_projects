@@ -1,0 +1,124 @@
+schema_version: factor_engine.evidence.v1
+work_packages: [WP7, WP8]
+git_sha: 6e783a57300eb6cd98d5e37ee6def4ed1033acfe
+timestamp_utc: '2026-09-07T14:42:48Z'
+owned_modified_files:
+  - factor_engine/runtime/streaming_batch_service.py
+  - factor_engine/runtime/finite_manifest.py
+  - factor_engine/runtime/persistent_run_state.py
+  - factor_engine/runtime/supervised_worker.py
+  - factor_engine/runtime/bounded_pipeline.py
+  - factor_engine/tests/runtime/test_v6_bounded_pipeline.py
+  - factor_engine/tests/runtime/test_v6_supervised_worker.py
+tests:
+  - command: PYTHONPATH=. ../.venv/bin/python -m pytest -q tests/runtime/test_v6_bounded_pipeline.py tests/runtime/test_v6_supervised_worker.py
+    result: PASS
+    passed: 6
+  - command: PYTHONPATH=. ../.venv/bin/python -m py_compile runtime/finite_manifest.py runtime/persistent_run_state.py runtime/supervised_worker.py runtime/bounded_pipeline.py runtime/streaming_batch_service.py
+    result: PASS
+  - command: PYTHONPATH=. ../.venv/bin/python -m pytest -q tests/runtime/test_v6_default_execution_policy.py tests/runtime/test_v6_default_engine.py tests/runtime/test_v6_bounded_pipeline.py tests/runtime/test_v6_supervised_worker.py
+    result: PASS
+    passed: 51
+    warnings: 2 multiprocessing fork deprecation warnings in test-only fork context
+  - command: PYTHONPATH=. ../.venv/bin/python -m pytest -q tests/runtime/test_v6_bounded_pipeline.py tests/runtime/test_v6_supervised_worker.py tests/runtime/test_v6_default_engine.py
+    result: PASS
+    passed: 27
+    warnings: 11
+  - command: PYTHONPATH=. ../.venv/bin/python -m pytest -q tests/runtime/test_v6_bounded_pipeline.py tests/runtime/test_v6_supervised_worker.py; PYTHONPATH=. ../.venv/bin/python -m pytest -q tests/runtime/test_v6_default_engine.py
+    result: PASS
+    passed: 28
+    warnings: 13
+  - command: PYTHONPATH=. ../.venv/bin/python -m pytest -q tests/runtime/test_v6_bounded_pipeline.py tests/runtime/test_v6_supervised_worker.py tests/runtime/test_v6_default_engine.py
+    result: PASS
+    passed: 30
+    warnings: 18
+  - command: PYTHONPATH=. ../.venv/bin/python -m pytest -q tests/runtime/test_v6_bounded_pipeline.py -x -vv
+    result: PASS
+    passed: 11
+    warnings: 20
+  - command: PYTHONPATH=. ../.venv/bin/python -m pytest -q tests/runtime/test_v6_bounded_pipeline.py --timeout=120 --timeout-method=thread
+    result: PASS
+    passed: 12
+    warnings: 29
+  - command: PYTHONPATH=. ../.venv/bin/python -m pytest -q tests/runtime/test_v6_default_engine.py tests/runtime/test_v6_supervised_worker.py
+    result: PASS
+    passed: 40
+    warnings: 10
+  - command: PYTHONPATH=. ../.venv/bin/python -m pytest -q tests/runtime/test_v6_bounded_pipeline.py::test_spawn_factory_executes_without_pickling_engine --timeout=120 --timeout-method=thread
+    result: PASS
+    passed: 1
+  - command: PYTHONPATH=. ../.venv/bin/python -m pytest -q tests/runtime/test_v6_bounded_pipeline.py tests/runtime/test_v6_persistent_run_state.py --timeout=60 --timeout-method=thread
+    result: PASS
+    passed: 34
+    warnings: 33 (31 test-only legacy-fork deprecations; 2 production eligibility warnings)
+  - command: PYTHONPATH=. ../.venv/bin/python -m pytest -q tests/runtime/test_v6_bounded_pipeline.py::test_large_result_is_rejected_before_pipe_and_small_peer_succeeds tests/runtime/test_v6_bounded_pipeline.py::test_lookahead_is_definition_byte_bounded tests/runtime/test_v6_bounded_pipeline.py::test_existing_state_paths_are_preserved_fail_closed --timeout=60 --timeout-method=thread
+    result: PASS
+    passed: 3
+    warnings: 6 test-only legacy-fork deprecation warnings
+  - command: PYTHONPATH=. ../.venv/bin/python -m pytest -q tests/runtime/test_v6_bounded_pipeline.py --timeout=150 --timeout-method=thread
+    result: PASS
+    passed: 18
+    warnings: 41 (39 test-only legacy-fork deprecations; 2 production eligibility warnings)
+  - command: PYTHONPATH=. ../.venv/bin/python -m pytest -q tests/runtime/test_v6_physical_source_binding.py tests/runtime/test_v6_supervised_worker.py --timeout=60 --timeout-method=thread
+    result: PASS
+    passed: 31
+    warnings: 12 test-only legacy-fork deprecation warnings
+  - command: PYTHONPATH=. ../.venv/bin/python -m pytest -q tests/runtime/test_v6_bounded_pipeline.py --timeout=150 --timeout-method=thread --junitxml=test-results/v6-wp78-bounded-final.xml
+    result: PASS
+    passed: 21
+    warnings: 41 (39 test-only legacy-fork deprecations; 2 production eligibility warnings)
+    junit_xml: factor_engine/test-results/v6-wp78-bounded-final.xml
+  - command: PYTHONPATH=. ../.venv/bin/python -m pytest -q tests/runtime/test_v6_physical_source_binding.py tests/runtime/test_v6_supervised_worker.py tests/runtime/test_v6_worker_resource_authority.py --timeout=60 --timeout-method=thread --junitxml=test-results/v6-wp78-authority-worker-final.xml
+    result: PASS
+    passed: 36
+    warnings: 12 test-only legacy-fork deprecation warnings
+    junit_xml: factor_engine/test-results/v6-wp78-authority-worker-final.xml
+  - command: PYTHONPATH=. ../.venv/bin/python -m pytest -q tests/runtime/test_v6_worker_resource_authority.py tests/runtime/test_v6_physical_source_binding.py --timeout=60 --timeout-method=thread --junitxml=test-results/v6-wp78-authority-preflight-combined-final.xml
+    result: PASS
+    passed: 18
+    junit_xml: factor_engine/test-results/v6-wp78-authority-preflight-combined-final.xml
+  - command: PYTHONPATH=. ../.venv/bin/python -m pytest -q tests/runtime/test_v6_bounded_pipeline.py::test_spawn_factory_executes_without_pickling_engine --timeout=150 --timeout-method=thread --junitxml=test-results/v6-wp78-default-spawn-order-final.xml
+    result: PASS
+    passed: 1
+    junit_xml: factor_engine/test-results/v6-wp78-default-spawn-order-final.xml
+limitations:
+  full_test_suite: NOT_RUN
+  full_compile_import: NOT_RUN
+  production_data: NOT_RUN
+  backend_parity: NOT_RUN
+  pit_poison: NOT_RUN
+  ci_image_wheel: NOT_RUN
+  production_gate: NOT_RUN
+  process_transport: >-
+    Results are measured before serialization; oversized results are rejected
+    before allocating their pickle, smaller peers are admitted first, and the
+    parent decodes/delivers one result blob at a time. End-to-end allocator peak,
+    pipe-copy residency calibration, and a production-size stress run remain NOT_RUN.
+  physical_preflight_isolation: >-
+    Shared per-wave source preparation and per-root unknown-field/unsupported-operator
+    isolation are implemented with unique-source counters and survivor shared-node
+    closure tests. The full production-data backend matrix remains NOT_RUN.
+  compatibility_fork: >-
+    Running physical-source tests and legacy fork-based bounded-pipeline tests in
+    the same already-multithreaded Python process reproduced a DuckDB live-PRAGMA
+    segmentation fault. Isolated fresh-interpreter suites pass, and the default
+    spawn-factory oracle passes; unsafe compatibility-fork composition is NOT_RUN
+    as a supported production claim.
+  transparent_worker_recovery: >-
+    NOT_IMPLEMENTED. A retired compile/compute worker aborts the run and terminalizes
+    later accepted ordinals instead of reusing an IPC proxy bound to an old PID.
+    Default-writer timeout, lost acknowledgement, and stale-response paths may only
+    perform read-only reconciliation for a previously persisted generation after
+    worker retirement is proven; they never rewrite the artifact.
+  native_ownership: >-
+    Rust/native result ownership is conservatively retained until process exit.
+    Native multi-wave execution under a small pool remains fail-closed and is not
+    claimed as fully resolved.
+  cross_process_resource_authority: >-
+    Spawn factory workers use parent-mediated ResourceBroker IPC and PID-bound
+    reclaim. The production broker pressure/stress matrix remains NOT_RUN here;
+    the pipeline integration oracle uses a deterministic bounded broker fixture.
+  manifest_scaling: >-
+    SQLite keeps definitions and indexes on disk and execution loads bounded
+    waves; no 100k production-data run was performed.
+  publish_deploy: NOT_RUN

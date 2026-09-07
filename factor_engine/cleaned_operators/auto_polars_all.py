@@ -1,18 +1,40 @@
 # -*- coding: utf-8 -*-
-"""Auto-generated Polars bridge registration.
+"""Quarantined legacy Polars bridge declarations, not executable backends.
 
 Category: all
-Total operators: 919
+The historical generator claimed 919 operators; this file contains 918 classes.
 
-策略：
-- 所有算子通过 polars_registry_bridge 自动编译（利用长表 map_groups）
-- 实际执行委托给已验证的 pandas 实现，保证语义一致性
-
-本文件的作用是显式注册这些算子为 polars backend，
-实际执行由 backend/polars_registry_bridge.py 的 fallback 机制处理。
+These declarations lack complete numerical implementations and parameter-domain
+evidence (one has a partial legacy kernel). Importing must neither fail halfway through registration nor
+replace a real registry winner. Historical generated descriptions below are
+retained for audit only; they are not capability or certification claims.
 """
 
-from factor_engine.cleaned_operators.base import OperatorMetadata, ParamSpec, SeriesOperator, register_operator
+from factor_engine.cleaned_operators.base import OperatorMetadata, ParamSpec, SeriesOperator as _SeriesOperator
+
+
+QUARANTINED_DECLARATIONS = []
+
+
+class SeriesOperator(_SeriesOperator):
+    """A declaration may be inspected, but must explicitly refuse execution."""
+    status = "unsupported"
+
+    def _calculate_series(self, *args, **kwargs):
+        raise NotImplementedError(
+            "legacy generated Polars declaration has no verified implementation")
+
+
+def register_operator(**declaration):
+    """Retain audit metadata without adding unimplemented registry candidates."""
+    def retain(cls):
+        cls._quarantined_original_kernel = cls.__dict__.get("_calculate_series")
+        cls._calculate_series = SeriesOperator._calculate_series
+        # Generated class names collide for four case variants. Preserve each
+        # declaration instead of silently overwriting its audit identity.
+        QUARANTINED_DECLARATIONS.append((cls, dict(declaration)))
+        return cls
+    return retain
 
 # 批量注册算子为 polars backend
 # 实际计算委托给 polars_registry_bridge.compile_registry_op

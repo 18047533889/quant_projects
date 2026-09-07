@@ -99,6 +99,7 @@ def plan_occurrences(plan: PlanNode) -> tuple[BoundNodeOccurrence, ...]:
     # 不一致 → 共享节点在 nodes/inputs 图里自相矛盾）。返回的 id 全部是确定性的
     # DFS 前序计数串，两个结构相同的子树必然得到不同 id、同一节点必映射同 id。
     assigned_ids: dict[int, str] = {}
+    claimed_ids: dict[str, int] = {}
 
     def _num(attrs: Any, key: str) -> int | None:
         try:
@@ -115,11 +116,18 @@ def plan_occurrences(plan: PlanNode) -> tuple[BoundNodeOccurrence, ...]:
         # 继续递增计数器；若后取，父节点会拿到最后一个子节点的 id → 与子节点
         # 同 id → occurrence 自引用 → DP 无限递归。
         my_id = f"n{node_counter[0]}"
-        assigned_ids[id(node)] = my_id
         attrs = getattr(node, "attrs", None) or {}
+        declared_id = getattr(node, "node_id", None)
+        node_id = str(declared_id or my_id)
+        owner = claimed_ids.get(node_id)
+        if owner is not None and owner != id(node):
+            raise ValueError(f"duplicate node_id {node_id!r} for distinct plan nodes")
+        claimed_ids[node_id] = id(node)
+        # Store the final authoritative id before visiting children so revisits
+        # and explicit shared ids use exactly the same namespace.
+        assigned_ids[id(node)] = node_id
         child_ids = tuple(walk(child) for child in (getattr(node, "inputs", ()) or ()))
         op = str(getattr(node, "op", "") or "")
-        node_id = getattr(node, "node_id", None) or my_id
         # R31-013：meta ops（column/literal/plan_ref/materialized_series）是 O(1) 读取，
         # 不进 occurrence 列表（旧 ``_canonical_ops`` 同样过滤）；真实 operator 的
         # 每个 occurrence 都必须保留（不丢重复节点与参数）。
@@ -219,10 +227,22 @@ def _measured_baseline() -> tuple[dict[str, Any], bool]:
         "ram_bucket": _ram_bucket(int(float(current.get("ram_gb") or 0))),
         "storage_class": str(current.get("storage_class", "")),
     }
+    recorded_core = recorded.get("effective_cores") or recorded.get("core_bucket") or 0
+    recorded_ram = recorded.get("ram_gb") or recorded.get("ram_bucket") or 0
+    known_core_buckets = {"<8", "8-31", "32-63", "64+"}
+    known_ram_buckets = {"<16", "16-63", "64-255", "256+"}
+    core_bucket = (
+        str(recorded_core) if str(recorded_core) in known_core_buckets
+        else _core_bucket(int(float(recorded_core)))
+    )
+    ram_bucket = (
+        str(recorded_ram) if str(recorded_ram) in known_ram_buckets
+        else _ram_bucket(float(recorded_ram))
+    )
     hw_recorded = {
         "arch": str(recorded.get("architecture") or recorded.get("arch") or ""),
-        "core_bucket": _core_bucket(int(str(recorded.get("effective_cores") or recorded.get("core_bucket") or 0).split(".")[0])),
-        "ram_bucket": _ram_bucket(int(float(str(recorded.get("ram_gb") or recorded.get("ram_bucket") or 0)))),
+        "core_bucket": core_bucket,
+        "ram_bucket": ram_bucket,
         "storage_class": str(recorded.get("storage_class") or ""),
     }
     for dim, cur in hw_current.items():
@@ -730,13 +750,7 @@ def _dag_aware_mixed_cost(
     from factor_engine.backend.operator_capability import supports_pandas, supports_polars, supports_sql
 
     nodes = {occ.node_id: occ for occ in occurrences}
-    # MB-P0-008: DP[node_id][backend] -> (cost, backend) for parent transfer affinity
-    # MB-P0-009: memo ensures each node compute counted only once in shared DAG
-    memo: dict[str, dict[str, float]] = {}  # node_id -> {backend -> cost}
     sql_backend = "clickhouse_sql" if data_kind == "clickhouse" else "duckdb_sql"
-
-    # MB-P0-010: stable node id mapping for shared nodes
-    compute_done: set[str] = set()  # Track which nodes have been computed
 
     def _eligible(occ: BoundNodeOccurrence) -> list[str]:
         opts: list[str] = []
@@ -749,74 +763,60 @@ def _dag_aware_mixed_cost(
             opts.append(sql_backend)
         return opts
 
-    def _best(occ: BoundNodeOccurrence, parent_backend: str | None = None) -> tuple[float, str]:
-        """MB-P0-008: Consider parent's preferred backend for transfer cost."""
-        node_id = occ.node_id
+    if not occurrences:
+        return None
+    eligible = {node_id: tuple(_eligible(occ)) for node_id, occ in nodes.items()}
+    if any(not choices for choices in eligible.values()):
+        return None
 
-        # MB-P0-009: Check memo first - shared node already computed
-        if node_id in memo:
-            if parent_backend and parent_backend in memo[node_id]:
-                return memo[node_id][parent_backend], parent_backend
-            # Return best option from memo
-            best_backend = min(memo[node_id].items(), key=lambda x: x[1])
-            return best_backend[1], best_backend[0]
+    # Small legacy route oracle: one physical assignment variable per DAG node.
+    # Compute is charged exactly once per node; each real consumer boundary is
+    # charged once. This fixes both parent-affinity forcing and shared-DAG double
+    # counting without pretending memoization is physical materialization.
+    import itertools
 
-        # Initialize memo for this node
-        memo[node_id] = {}
-
-        eligible = _eligible(occ)
-        if not eligible:
-            return (float("inf"), "")
-
-        # MB-P0-008: Compute cost for each backend considering children
-        for backend in eligible:
-            # Base compute cost for this node
-            compute_cost = _cost(
-                occ.canonical,
-                backend,
-                rows,
-                delegate_polars=occ.canonical in delegate_ops,
-                occ=occ,
+    node_ids = tuple(sorted(nodes))
+    combinations = 1
+    for node_id in node_ids:
+        combinations *= len(eligible[node_id])
+    if combinations > 4096:
+        # Bounded legal incumbent for the legacy estimator. Production auto uses
+        # PhysicalBatchGlobalOptimizer and its certified candidate ledger.
+        assignment = {
+            node_id: min(
+                eligible[node_id],
+                key=lambda backend: _cost(
+                    nodes[node_id].canonical, backend, rows,
+                    delegate_polars=nodes[node_id].canonical in delegate_ops,
+                    occ=nodes[node_id],
+                ),
             )
+            for node_id in node_ids
+        }
+        assignments = (tuple(assignment[node_id] for node_id in node_ids),)
+    else:
+        assignments = itertools.product(*(eligible[node_id] for node_id in node_ids))
 
-            # MB-P0-009: Only count compute once per node (not per parent)
-            if node_id not in compute_done:
-                base_cost = compute_cost
-            else:
-                base_cost = 0.0  # Already computed, only transfer cost matters
-
-            # Add child costs
-            child_cost = 0.0
-            for child_id in occ.inputs:
-                if child_id not in nodes:
-                    continue
-                # MB-P0-008: Pass our backend preference to child
-                best_child_cost, best_child_backend = _best(nodes[child_id], backend)
-                child_cost += best_child_cost
-                # Add transfer cost if backend changes
-                if backend != best_child_backend:
-                    child_cost += _delegate_penalty(rows)
-
-            memo[node_id][backend] = base_cost + child_cost
-
-        # Mark compute as done for this node
-        compute_done.add(node_id)
-
-        # MB-P0-008: If parent has preference and it's eligible, prefer it
-        if parent_backend and parent_backend in memo[node_id]:
-            return memo[node_id][parent_backend], parent_backend
-
-        # Otherwise return minimum cost backend
-        best_backend = min(memo[node_id].items(), key=lambda x: x[1])
-        return best_backend[1], best_backend[0]
-
-    root = occurrences[-1] if occurrences else None
-    if root is None:
-        return None
-    total, _backend = _best(root)
-    if total == float("inf"):
-        return None
-    return total
+    best = float("inf")
+    for values in assignments:
+        assignment = dict(zip(node_ids, values))
+        total = sum(
+            _cost(
+                nodes[node_id].canonical, backend, rows,
+                delegate_polars=nodes[node_id].canonical in delegate_ops,
+                occ=nodes[node_id],
+            )
+            for node_id, backend in assignment.items()
+        )
+        total += sum(
+            _delegate_penalty(rows)
+            for consumer_id, occ in nodes.items()
+            for child_id in occ.inputs
+            if child_id in assignment
+            and assignment[child_id] != assignment[consumer_id]
+        )
+        best = min(best, total)
+    return None if best == float("inf") else best
 
 
 def _output_shape_hash(rows: int, occurrence_count: int, ops: tuple[str, ...]) -> str:

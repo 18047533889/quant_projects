@@ -1,0 +1,358 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="2" skipped="0" tests="18" time="1.757" timestamp="2026-09-07T22:39:42.624266+08:00" hostname="qs-compute-gpu-hk-01"><testcase classname="factor_engine.tests.runtime.test_v6_worker_resource_authority" name="test_worker_autopilot_is_read_only_parent_proxy_view" time="0.005" /><testcase classname="factor_engine.tests.runtime.test_v6_worker_resource_authority" name="test_host_coordinator_reuses_explicit_proxy_and_rejects_switch" time="0.006" /><testcase classname="factor_engine.tests.runtime.test_v6_worker_resource_authority" name="test_real_prepared_read_charges_and_releases_parent_broker" time="0.455" /><testcase classname="factor_engine.tests.runtime.test_v6_physical_source_binding" name="test_plain_attrs_cannot_forge_physical_source_binding" time="0.007" /><testcase classname="factor_engine.tests.runtime.test_v6_physical_source_binding" name="test_binding_path_replaces_caller_value_with_da_identity" time="0.002" /><testcase classname="factor_engine.tests.runtime.test_v6_physical_source_binding" name="test_real_prepared_snapshot_is_accepted_by_real_identity_builder" time="0.012"><failure message="data_access.core.exceptions.ResourceAdmissionError: host-backed admission 配置但失败（R32-P0-008 fail-closed）: broker RPC acquire_memory send failed or timed out">self = &lt;data_access.runtime.resource_governor.GlobalResourceGovernor object at 0x7acfb5f8b8f0&gt;
+reservation = ResourceReservation(query_id='daily:0b8b65e8b3d6', principal_id='local', estimated_scan_bytes=492, estimated_memory=8, remote_requests=0, released=False)
+
+    def admit(self, reservation: ResourceReservation) -&gt; ResourceReservation:
+        """入场前准入（admission）。超限抛 ``ResourceAdmissionError``。
+    
+        入场顺序（§26）：``resolve exact objects → 计算 object count/bytes →
+        admission → execute``。这里在 execute 前拦截明显超限。
+    
+        R26-P1-015：duplicate ``query_id`` 不能覆盖已有 reservation → reject；
+        ``remote_requests`` 参与 admission；``released`` 状态受控。
+    
+        R32-P0-007：host-backed 时先检查本地不变量，再取 host lease。
+        R32-P0-008：host 配置但失败时 production fail，不静默 fallback。
+        """
+        host_lease = None
+        with self._lock:
+            # R32-P0-007/P0-008：本地不变量检查优先于 host lease 请求。
+            if reservation.query_id in self._active:
+                raise ResourceAdmissionError(
+                    f"resource admission: query_id={reservation.query_id!r} 已存在"
+                    "（R26-P1-015：重复 query_id 禁止覆盖已有 reservation）。"
+                )
+            if len(self._active) &gt;= self._max_active_queries:
+                raise ResourceAdmissionError(
+                    f"resource admission: active queries {len(self._active)} 达到上限 "
+                    f"{self._max_active_queries}（T-RES-001，global governor）。"
+                )
+            if self._per_principal_active is not None:
+                per = sum(
+                    1
+                    for r in self._active.values()
+                    if r.principal_id == reservation.principal_id
+                )
+                if per &gt;= self._per_principal_active:
+                    raise ResourceAdmissionError(
+                        f"resource admission: principal {reservation.principal_id!r} "
+                        f"active queries {per} 达到 per-principal 上限 "
+                        f"{self._per_principal_active}。"
+                    )
+            # R32-P0-008：区分 HOST_ABSENT / HOST_CONFIGURED / HOST_BROKEN。
+            host_lease_request = self._host_lease_request
+            host_integration_configured = host_lease_request is not None
+        # R32-P0-007：锁外调用 host coordinator。
+        if host_integration_configured:
+            try:
+&gt;               host_lease = host_lease_request(
+                    reservation.estimated_memory,
+                    reservation.estimated_scan_bytes,
+                )
+
+../data_access/runtime/resource_governor.py:372: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+runtime/host_resource_coordinator.py:245: in request_da_child_lease
+    lease = self._broker.acquire_memory(
+runtime/resource_broker_ipc.py:91: in acquire_memory
+    token = self._rpc("acquire_memory", kind=str(kind), nbytes=int(nbytes), lease_id=lease_id)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = &lt;factor_engine.runtime.resource_broker_ipc.ResourceBrokerProxy object at 0x7acfb418ce00&gt;
+operation = 'acquire_memory'
+payload = {'kind': 'SOURCE_READ', 'nbytes': 500, 'lease_id': 'da-query-workspace'}
+
+    def _rpc(self, operation: str, **payload: Any) -&gt; Any:
+        if self._broken:
+            raise BrokerRPCError("broker RPC proxy is fenced after transport failure")
+        request_id = uuid.uuid4().hex
+        if not self._lock.acquire(timeout=self.timeout_seconds):
+            raise BrokerRPCTimeout(f"broker RPC {operation} lock wait timed out")
+        try:
+            sent: list[BaseException | None] = []
+            def send_request():
+                try: self._connection.send((request_id, operation, payload)); sent.append(None)
+                except BaseException as exc: sent.append(exc)
+            sender = threading.Thread(target=send_request, daemon=True); sender.start()
+            sender.join(self.timeout_seconds)
+            if sender.is_alive() or not sent or sent[0] is not None:
+                self._fence_transport()
+&gt;               raise BrokerRPCTimeout(f"broker RPC {operation} send failed or timed out")
+E               factor_engine.runtime.resource_broker_ipc.BrokerRPCTimeout: broker RPC acquire_memory send failed or timed out
+
+runtime/resource_broker_ipc.py:66: BrokerRPCTimeout
+
+The above exception was the direct cause of the following exception:
+
+tmp_path = PosixPath('/tmp/pytest-of-sunhaiwei/pytest-2155/test_real_prepared_snapshot_is0')
+
+    def test_real_prepared_snapshot_is_accepted_by_real_identity_builder(tmp_path):
+        """Exercise the actual DA snapshot/identity API contract without mocks."""
+        import pyarrow as pa
+        import pyarrow.parquet as pq
+        from data_access.read.data_read_identity import build_data_read_identity
+        from data_access.read.semantic_catalog import SemanticField
+        from data_access.registry.loader import DatasetRegistry, StaticDataset
+        from data_access.store import DataAccessStore, get_shared_engine
+    
+        pq.write_table(pa.table({"Close": [1.0]}), tmp_path / "part.parquet")
+        dataset = StaticDataset(
+            name="daily", access_mode="published", layout="plain",
+            time_column=None, instrument_column=None,
+            hive_partitioning=False, union_by_name=False, root=str(tmp_path),
+            glob="part.parquet", schema={"Close": "float64"},
+        )
+        store = DataAccessStore(
+            registry=DatasetRegistry({"daily": dataset}), engine=get_shared_engine(),
+        )
+&gt;       prepared = store.prepare_read(
+            "daily", columns=("Close",), params={}, run_mode="production",
+            snapshot_policy="fail_if_changed",
+        )
+
+tests/runtime/test_v6_physical_source_binding.py:90: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../data_access/store.py:1665: in prepare_read
+    return self._prepare_read_core(
+../data_access/store.py:1930: in _prepare_read_core
+    res = self._pipeline.admit(
+../data_access/runtime/read_pipeline.py:236: in admit
+    self._governor.admit(res)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = &lt;data_access.runtime.resource_governor.GlobalResourceGovernor object at 0x7acfb5f8b8f0&gt;
+reservation = ResourceReservation(query_id='daily:0b8b65e8b3d6', principal_id='local', estimated_scan_bytes=492, estimated_memory=8, remote_requests=0, released=False)
+
+    def admit(self, reservation: ResourceReservation) -&gt; ResourceReservation:
+        """入场前准入（admission）。超限抛 ``ResourceAdmissionError``。
+    
+        入场顺序（§26）：``resolve exact objects → 计算 object count/bytes →
+        admission → execute``。这里在 execute 前拦截明显超限。
+    
+        R26-P1-015：duplicate ``query_id`` 不能覆盖已有 reservation → reject；
+        ``remote_requests`` 参与 admission；``released`` 状态受控。
+    
+        R32-P0-007：host-backed 时先检查本地不变量，再取 host lease。
+        R32-P0-008：host 配置但失败时 production fail，不静默 fallback。
+        """
+        host_lease = None
+        with self._lock:
+            # R32-P0-007/P0-008：本地不变量检查优先于 host lease 请求。
+            if reservation.query_id in self._active:
+                raise ResourceAdmissionError(
+                    f"resource admission: query_id={reservation.query_id!r} 已存在"
+                    "（R26-P1-015：重复 query_id 禁止覆盖已有 reservation）。"
+                )
+            if len(self._active) &gt;= self._max_active_queries:
+                raise ResourceAdmissionError(
+                    f"resource admission: active queries {len(self._active)} 达到上限 "
+                    f"{self._max_active_queries}（T-RES-001，global governor）。"
+                )
+            if self._per_principal_active is not None:
+                per = sum(
+                    1
+                    for r in self._active.values()
+                    if r.principal_id == reservation.principal_id
+                )
+                if per &gt;= self._per_principal_active:
+                    raise ResourceAdmissionError(
+                        f"resource admission: principal {reservation.principal_id!r} "
+                        f"active queries {per} 达到 per-principal 上限 "
+                        f"{self._per_principal_active}。"
+                    )
+            # R32-P0-008：区分 HOST_ABSENT / HOST_CONFIGURED / HOST_BROKEN。
+            host_lease_request = self._host_lease_request
+            host_integration_configured = host_lease_request is not None
+        # R32-P0-007：锁外调用 host coordinator。
+        if host_integration_configured:
+            try:
+                host_lease = host_lease_request(
+                    reservation.estimated_memory,
+                    reservation.estimated_scan_bytes,
+                )
+            except Exception as exc:
+                # R32-P0-008：host 配置但失败 → strict/production fail-closed。
+                # research/interactive 允许 fallback 本地 governor（仍受本地
+                # 不变量约束，不会静默无限）。
+                from data_access.read.query_budget import is_strict_semantics
+                if is_strict_semantics():
+&gt;                   raise ResourceAdmissionError(
+                        f"host-backed admission 配置但失败（R32-P0-008 fail-closed）: {exc}"
+                    ) from exc
+E                   data_access.core.exceptions.ResourceAdmissionError: host-backed admission 配置但失败（R32-P0-008 fail-closed）: broker RPC acquire_memory send failed or timed out
+
+../data_access/runtime/resource_governor.py:382: ResourceAdmissionError</failure></testcase><testcase classname="factor_engine.tests.runtime.test_v6_physical_source_binding" name="test_batch_prepares_once_and_scope_identity_prevents_cache_alias" time="0.009" /><testcase classname="factor_engine.tests.runtime.test_v6_physical_source_binding" name="test_batch_rejects_secondary_source_ref_instead_of_anchor_rebinding" time="0.001" /><testcase classname="factor_engine.tests.runtime.test_v6_physical_source_binding" name="test_typed_source_ref_uses_its_own_prepared_source" time="0.001" /><testcase classname="factor_engine.tests.runtime.test_v6_physical_source_binding" name="test_preflight_unknown_field_is_root_local_and_prepares_valid_batch_once" time="0.001" /><testcase classname="factor_engine.tests.runtime.test_v6_physical_source_binding" name="test_preflight_unsupported_operator_is_root_local" time="0.236" /><testcase classname="factor_engine.tests.runtime.test_v6_physical_source_binding" name="test_preflight_permission_failure_rejects_entire_source_scope" time="0.001" /><testcase classname="factor_engine.tests.runtime.test_v6_physical_source_binding" name="test_preflight_keeps_surviving_shared_dependency_closure" time="0.002" /><testcase classname="factor_engine.tests.runtime.test_v6_physical_source_binding" name="test_wave_rejects_real_data_access_snapshot_changed_after_preflight" time="0.011"><failure message="data_access.core.exceptions.ResourceAdmissionError: host-backed admission 配置但失败（R32-P0-008 fail-closed）: broker RPC proxy is fenced after transport failure">self = &lt;data_access.runtime.resource_governor.GlobalResourceGovernor object at 0x7acfb5f8b8f0&gt;
+reservation = ResourceReservation(query_id='daily:041af7426db8', principal_id='local', estimated_scan_bytes=492, estimated_memory=8, remote_requests=0, released=False)
+
+    def admit(self, reservation: ResourceReservation) -&gt; ResourceReservation:
+        """入场前准入（admission）。超限抛 ``ResourceAdmissionError``。
+    
+        入场顺序（§26）：``resolve exact objects → 计算 object count/bytes →
+        admission → execute``。这里在 execute 前拦截明显超限。
+    
+        R26-P1-015：duplicate ``query_id`` 不能覆盖已有 reservation → reject；
+        ``remote_requests`` 参与 admission；``released`` 状态受控。
+    
+        R32-P0-007：host-backed 时先检查本地不变量，再取 host lease。
+        R32-P0-008：host 配置但失败时 production fail，不静默 fallback。
+        """
+        host_lease = None
+        with self._lock:
+            # R32-P0-007/P0-008：本地不变量检查优先于 host lease 请求。
+            if reservation.query_id in self._active:
+                raise ResourceAdmissionError(
+                    f"resource admission: query_id={reservation.query_id!r} 已存在"
+                    "（R26-P1-015：重复 query_id 禁止覆盖已有 reservation）。"
+                )
+            if len(self._active) &gt;= self._max_active_queries:
+                raise ResourceAdmissionError(
+                    f"resource admission: active queries {len(self._active)} 达到上限 "
+                    f"{self._max_active_queries}（T-RES-001，global governor）。"
+                )
+            if self._per_principal_active is not None:
+                per = sum(
+                    1
+                    for r in self._active.values()
+                    if r.principal_id == reservation.principal_id
+                )
+                if per &gt;= self._per_principal_active:
+                    raise ResourceAdmissionError(
+                        f"resource admission: principal {reservation.principal_id!r} "
+                        f"active queries {per} 达到 per-principal 上限 "
+                        f"{self._per_principal_active}。"
+                    )
+            # R32-P0-008：区分 HOST_ABSENT / HOST_CONFIGURED / HOST_BROKEN。
+            host_lease_request = self._host_lease_request
+            host_integration_configured = host_lease_request is not None
+        # R32-P0-007：锁外调用 host coordinator。
+        if host_integration_configured:
+            try:
+&gt;               host_lease = host_lease_request(
+                    reservation.estimated_memory,
+                    reservation.estimated_scan_bytes,
+                )
+
+../data_access/runtime/resource_governor.py:372: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+runtime/host_resource_coordinator.py:245: in request_da_child_lease
+    lease = self._broker.acquire_memory(
+runtime/resource_broker_ipc.py:91: in acquire_memory
+    token = self._rpc("acquire_memory", kind=str(kind), nbytes=int(nbytes), lease_id=lease_id)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = &lt;factor_engine.runtime.resource_broker_ipc.ResourceBrokerProxy object at 0x7acfb418ce00&gt;
+operation = 'acquire_memory'
+payload = {'kind': 'SOURCE_READ', 'nbytes': 500, 'lease_id': 'da-query-workspace'}
+
+    def _rpc(self, operation: str, **payload: Any) -&gt; Any:
+        if self._broken:
+&gt;           raise BrokerRPCError("broker RPC proxy is fenced after transport failure")
+E           factor_engine.runtime.resource_broker_ipc.BrokerRPCError: broker RPC proxy is fenced after transport failure
+
+runtime/resource_broker_ipc.py:53: BrokerRPCError
+
+The above exception was the direct cause of the following exception:
+
+tmp_path = PosixPath('/tmp/pytest-of-sunhaiwei/pytest-2155/test_wave_rejects_real_data_ac0')
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7acfae707b60&gt;
+
+    def test_wave_rejects_real_data_access_snapshot_changed_after_preflight(tmp_path, monkeypatch):
+        import os
+        import pyarrow as pa
+        import pyarrow.parquet as pq
+        import pytest
+        from data_access.registry.loader import DatasetRegistry, StaticDataset
+        from data_access.store import DataAccessStore, get_shared_engine
+        from factor_engine.runtime.buffer_ref import SourceWaveExecutor
+        from factor_engine.runtime.physical_source_binding import PreparedSourceSnapshotExpectation
+        from factor_engine.storage.sources.composite_source import SnapshotVerificationError
+    
+        parquet = tmp_path / "part.parquet"
+        pq.write_table(pa.table({"Close": [1.0]}), parquet)
+        dataset = StaticDataset(
+            name="daily", access_mode="published", layout="plain",
+            time_column=None, instrument_column=None, hive_partitioning=False,
+            union_by_name=False, root=str(tmp_path), glob="part.parquet",
+            schema={"Close": "float64"},
+        )
+        store = DataAccessStore(
+            registry=DatasetRegistry({"daily": dataset}), engine=get_shared_engine(),
+        )
+&gt;       prepared = store.prepare_read(
+            "daily", columns=("Close",), params={}, run_mode="production",
+            snapshot_policy="fail_if_changed",
+        )
+
+tests/runtime/test_v6_physical_source_binding.py:408: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../data_access/store.py:1665: in prepare_read
+    return self._prepare_read_core(
+../data_access/store.py:1930: in _prepare_read_core
+    res = self._pipeline.admit(
+../data_access/runtime/read_pipeline.py:236: in admit
+    self._governor.admit(res)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = &lt;data_access.runtime.resource_governor.GlobalResourceGovernor object at 0x7acfb5f8b8f0&gt;
+reservation = ResourceReservation(query_id='daily:041af7426db8', principal_id='local', estimated_scan_bytes=492, estimated_memory=8, remote_requests=0, released=False)
+
+    def admit(self, reservation: ResourceReservation) -&gt; ResourceReservation:
+        """入场前准入（admission）。超限抛 ``ResourceAdmissionError``。
+    
+        入场顺序（§26）：``resolve exact objects → 计算 object count/bytes →
+        admission → execute``。这里在 execute 前拦截明显超限。
+    
+        R26-P1-015：duplicate ``query_id`` 不能覆盖已有 reservation → reject；
+        ``remote_requests`` 参与 admission；``released`` 状态受控。
+    
+        R32-P0-007：host-backed 时先检查本地不变量，再取 host lease。
+        R32-P0-008：host 配置但失败时 production fail，不静默 fallback。
+        """
+        host_lease = None
+        with self._lock:
+            # R32-P0-007/P0-008：本地不变量检查优先于 host lease 请求。
+            if reservation.query_id in self._active:
+                raise ResourceAdmissionError(
+                    f"resource admission: query_id={reservation.query_id!r} 已存在"
+                    "（R26-P1-015：重复 query_id 禁止覆盖已有 reservation）。"
+                )
+            if len(self._active) &gt;= self._max_active_queries:
+                raise ResourceAdmissionError(
+                    f"resource admission: active queries {len(self._active)} 达到上限 "
+                    f"{self._max_active_queries}（T-RES-001，global governor）。"
+                )
+            if self._per_principal_active is not None:
+                per = sum(
+                    1
+                    for r in self._active.values()
+                    if r.principal_id == reservation.principal_id
+                )
+                if per &gt;= self._per_principal_active:
+                    raise ResourceAdmissionError(
+                        f"resource admission: principal {reservation.principal_id!r} "
+                        f"active queries {per} 达到 per-principal 上限 "
+                        f"{self._per_principal_active}。"
+                    )
+            # R32-P0-008：区分 HOST_ABSENT / HOST_CONFIGURED / HOST_BROKEN。
+            host_lease_request = self._host_lease_request
+            host_integration_configured = host_lease_request is not None
+        # R32-P0-007：锁外调用 host coordinator。
+        if host_integration_configured:
+            try:
+                host_lease = host_lease_request(
+                    reservation.estimated_memory,
+                    reservation.estimated_scan_bytes,
+                )
+            except Exception as exc:
+                # R32-P0-008：host 配置但失败 → strict/production fail-closed。
+                # research/interactive 允许 fallback 本地 governor（仍受本地
+                # 不变量约束，不会静默无限）。
+                from data_access.read.query_budget import is_strict_semantics
+                if is_strict_semantics():
+&gt;                   raise ResourceAdmissionError(
+                        f"host-backed admission 配置但失败（R32-P0-008 fail-closed）: {exc}"
+                    ) from exc
+E                   data_access.core.exceptions.ResourceAdmissionError: host-backed admission 配置但失败（R32-P0-008 fail-closed）: broker RPC proxy is fenced after transport failure
+
+../data_access/runtime/resource_governor.py:382: ResourceAdmissionError</failure></testcase><testcase classname="factor_engine.tests.runtime.test_v6_physical_source_binding" name="test_native_wave_materializes_once_and_reuses_old_frame_after_file_change" time="0.013" /><testcase classname="factor_engine.tests.runtime.test_v6_physical_source_binding" name="test_pandas_wave_mapping_is_reused_without_source_cache" time="0.001" /><testcase classname="factor_engine.tests.runtime.test_v6_physical_source_binding" name="test_wave_adapter_keeps_value_alive_until_explicit_release" time="0.125" /><testcase classname="factor_engine.tests.runtime.test_v6_physical_source_binding" name="test_releasing_overlapping_wave_preserves_other_wave_column" time="0.001" /></testsuite></testsuites>

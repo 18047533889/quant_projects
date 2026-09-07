@@ -216,18 +216,49 @@ class ResourceAutopilotService:
         return out
 
 
+class WorkerResourceDecisionView:
+    """Read-only worker view of the parent broker; never owns a control loop."""
+
+    def __init__(self, broker: Any) -> None:
+        self._broker = broker
+
+    @property
+    def started(self) -> bool:
+        return True
+
+    def start(self) -> None:
+        return None
+
+    def stop(self) -> None:
+        return None
+
+    def last_decision(self) -> Any:
+        return self._broker.resource_decision()
+
+    def tick_count(self) -> int:
+        return 0
+
+    def summary(self) -> dict[str, Any]:
+        return {
+            "started": True,
+            "worker_read_only": True,
+            "tick_count": 0,
+            "parent_broker": self._broker.summary(),
+        }
+
+
 #: 进程级单例（一个进程一个 autopilot；绑定 host coordinator 的 broker）。
-_AUTOPILOT: ResourceAutopilotService | None = None
+_AUTOPILOT: ResourceAutopilotService | WorkerResourceDecisionView | None = None
 _AUTOPILOT_LOCK = threading.Lock()
 
 
-def get_resource_autopilot() -> ResourceAutopilotService | None:
+def get_resource_autopilot() -> ResourceAutopilotService | WorkerResourceDecisionView | None:
     return _AUTOPILOT
 
 
 def start_resource_autopilot(
     broker: Any | None = None, *, interval_s: float = DEFAULT_INTERVAL_S
-) -> ResourceAutopilotService:
+) -> ResourceAutopilotService | WorkerResourceDecisionView:
     """启动进程级 autopilot（幂等）。绑定 host coordinator 的 broker。"""
     global _AUTOPILOT
     with _AUTOPILOT_LOCK:
@@ -239,9 +270,11 @@ def start_resource_autopilot(
 
                 broker = get_host_coordinator().broker
             except Exception:
-                from factor_engine.runtime.resource_broker import ResourceBroker
-
-                broker = ResourceBroker()
+                raise RuntimeError("resource autopilot requires the installed broker authority")
+        from factor_engine.runtime.resource_broker_ipc import ResourceBrokerProxy
+        if isinstance(broker, ResourceBrokerProxy):
+            _AUTOPILOT = WorkerResourceDecisionView(broker)
+            return _AUTOPILOT
         _AUTOPILOT = ResourceAutopilotService(broker, interval_s=interval_s)
         _AUTOPILOT.start()
         return _AUTOPILOT

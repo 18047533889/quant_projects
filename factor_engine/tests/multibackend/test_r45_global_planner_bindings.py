@@ -121,18 +121,20 @@ def test_column_without_source_binding_not_certified() -> None:
 
 def test_column_with_full_source_binding_certified() -> None:
     """A column with DataReadIdentity + field + PIT + universe + snapshot is certified."""
+    from data_access.read.data_read_identity import DataReadIdentity, ResolvedFieldIdentity
+    from factor_engine.runtime.physical_source_binding import PhysicalSourceBinding
+    identity = DataReadIdentity(
+        dataset="equity_daily", revision="2026-01-01",
+        calendar_identity="cal_2026", universe_snapshot="univ_2026",
+        source_snapshot="snap_2026",
+        fields=(ResolvedFieldIdentity(logical_name="close", physical_name="close",
+                                      dataset="equity_daily", availability="same_day"),),
+    )
     node = PlanNode(
         op="column",
         attrs={
             "name": "close",
-            "dataset": "equity_daily",
-            "revision": "2026-01-01",
-            "field": "close",
-            "field_semantics": "price",
-            "calendar_identity": "cal_2026",
-            "availability_cutoff": "2026-01-01",
-            "universe_snapshot": "univ_2026",
-            "source_snapshot": "snap_2026",
+            "physical_source_binding": PhysicalSourceBinding(identity, "close", "catalog:v1"),
         },
         inputs=(),
     )

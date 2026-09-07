@@ -146,7 +146,10 @@ def _try_rewrite_ts_zscore(node: PlanNode, inputs: list[PlanNode]) -> PlanNode |
         "window": w,
         **{key: mean_node.attrs.get(key, default) for key, default in defaults.items()},
         "ddof": den.attrs.get("ddof", 1),
-        "zero_std_policy": den.attrs.get("zero_std_policy", "zero"),
+        # The source algebra is raw (x-mean)/std: a constant window is 0/0,
+        # therefore NaN. Rewriting it to canonical ts_zscore must not silently
+        # adopt ts_zscore's user-facing zero-fill default.
+        "zero_std_policy": "nan",
     }
     # R13 NEW-P1-70: rewrites carry the original node's semantic attrs (ts_zscore
     # has the same output domain/unit as the divide it replaces).

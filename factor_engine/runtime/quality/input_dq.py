@@ -99,6 +99,7 @@ def evaluate_input_columns(
     columns: set[str] | list[str],
     *,
     thresholds: InputDQThresholds | None = None,
+    prefetched: dict[str, Any] | None = None,
 ) -> InputDQReport:
     """加载依赖列并检查行数/覆盖率/标的数。"""
     th = thresholds or InputDQThresholds()
@@ -106,15 +107,14 @@ def evaluate_input_columns(
     reports: list[InputColumnReport] = []
 
     load_columns = getattr(data_source, "load_columns", None)
-    fetched: dict[str, Any] = {}
-    missing_after_batch: list[str] = list(cols)
-    if callable(load_columns) and len(cols) > 1:
+    fetched: dict[str, Any] = dict(prefetched or {})
+    missing_after_batch: list[str] = [n for n in cols if n not in fetched]
+    if callable(load_columns) and len(missing_after_batch) > 1:
         try:
-            fetched = load_columns(cols)
+            fetched.update(load_columns(missing_after_batch))
             missing_after_batch = [n for n in cols if n not in fetched]
         except Exception:
-            fetched = {}
-            missing_after_batch = list(cols)
+            missing_after_batch = [n for n in cols if n not in fetched]
 
     for name in cols:
         try:
@@ -203,9 +203,12 @@ def assert_input_dq(
     *,
     thresholds: InputDQThresholds | None = None,
     raise_on_fail: bool = True,
+    prefetched: dict[str, Any] | None = None,
 ) -> InputDQReport:
     """执行输入 DQ 检查；``raise_on_fail=True`` 时未通过则抛 :class:`InputDQError`。"""
-    report = evaluate_input_columns(data_source, columns, thresholds=thresholds)
+    report = evaluate_input_columns(
+        data_source, columns, thresholds=thresholds, prefetched=prefetched
+    )
     if not report.passed and raise_on_fail:
         raise InputDQError(report)
     return report

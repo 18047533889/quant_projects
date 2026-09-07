@@ -1752,41 +1752,34 @@ class TSZScore(SeriesOperator):
                           null_policy: str = "ignore", nan_policy: str = "propagate",
                           includes_current_bar: bool = True, ddof: int = 1,
                           zero_std_policy: str = "zero", **kwargs) -> pd.DataFrame:
-        from factor_engine.backend.numeric_semantics import zscore_zero_std_fill
+        from factor_engine.cleaned_operators.common.ts_zscore_spec import TSZScoreSpec
 
-        # 2026-08-29: LQTP 平台 ``ts_zscore(x, window, min_periods)`` 支持显式
-        # min_periods（平台默认 1）。FE 声明并透传；语义与平台一致（zscore =
-        # (x - rolling_mean) / rolling_std，滚动窗口 min_periods）。``null_policy`` /
-        # ``nan_policy`` 由 fastpath rewrite 从 (x-ts_mean)/ts_std 合成带入：
-        # null_policy=ignore → 先把 ±Inf 置 NaN（finite-only 统计契约）；否则
-        # 保持原值直接滚动。
-        from factor_engine.cleaned_operators.overhaul.base import positive_int
-
-        mp = positive_int(min_periods, "min_periods")
-        finite_x = x
-        if str(null_policy).lower() == "ignore":
-            finite_x = x.replace([np.inf, -np.inf], np.nan)
-        mean = finite_x.rolling(window=window, min_periods=mp).mean()
-        std = finite_x.rolling(window=window, min_periods=mp).std()
-
-        # R40 Parity Fix: When std=0 or NULL, return zero_fill (0.0) to match Polars backend
-        # and numeric_semantics policy. Must avoid division by zero entirely.
-        zero_fill = zscore_zero_std_fill("ts_zscore")
-
-        # Mask where std is valid (not null and not zero)
-        valid_std_mask = (std.notna()) & (std != 0)
-
-        # Initialize result as NaN everywhere
-        result = pd.DataFrame(np.nan, index=x.index, columns=x.columns)
-
-        # Compute zscore only where std is valid and non-zero
-        result[valid_std_mask] = ((finite_x - mean) / std)[valid_std_mask]
-
-        # Where std is exactly zero (constant window), use zero_fill
-        zero_std_mask = (std.notna()) & (std == 0) & finite_x.notna()
-        result[zero_std_mask] = zero_fill
-
-        return result
+        spec = TSZScoreSpec.resolve(
+            window=window, min_periods=min_periods, null_policy=null_policy,
+            nan_policy=nan_policy, includes_current_bar=includes_current_bar,
+            ddof=ddof, zero_std_policy=zero_std_policy,
+        )
+        finite_x = x.replace([np.inf, -np.inf], np.nan)
+        stats_x = finite_x if spec.includes_current_bar else finite_x.shift(1)
+        roll = stats_x.rolling(
+            window=spec.window.size, min_periods=spec.window.min_periods
+        )
+        mean = roll.mean()
+        std = roll.std(ddof=spec.window.ddof)
+        result = (finite_x - mean) / std
+        current_valid = finite_x.notna()
+        propagate = (
+            spec.window.nan_policy == "propagate"
+            or spec.window.null_policy.value == "propagate"
+        )
+        zero = std.notna() & (std == 0) & current_valid
+        result = result.mask(zero, 0.0 if spec.zero_std_policy == "zero" else np.nan)
+        if propagate:
+            bad = stats_x.isna().astype("int8").rolling(
+                spec.window.size, min_periods=1
+            ).sum() > 0
+            result = result.mask(bad)
+        return result.where(current_valid)
 
 
 def _apply_colwise_kernel(x: pd.DataFrame, fn, **kwargs) -> pd.DataFrame:
@@ -2686,34 +2679,14 @@ class TSZScorePolars(SeriesOperator):
                           null_policy: str = "ignore", nan_policy: str = "propagate",
                           includes_current_bar: bool = True, ddof: int = 1,
                           zero_std_policy: str = "zero", **kwargs) -> pl.DataFrame:
-        from factor_engine.cleaned_operators.parameter_validation import strict_integer
+        from factor_engine.cleaned_operators.common.polars_ts_stats import TSZScoreNative
 
-        w = strict_integer(window, "window", minimum=1)
-        mp = strict_integer(min_periods, "min_periods", minimum=1)
-        if mp > w:
-            mp = w
-
-        def zscore_fn(values: pl.Series) -> float:
-            raw = np.asarray(values.to_numpy(), dtype=float)
-            finite = raw[np.isfinite(raw)]
-            if finite.size < mp:
-                return np.nan
-            current = raw[-1]
-            if not np.isfinite(current):
-                return np.nan
-            mean = float(np.mean(finite))
-            std = float(np.std(finite, ddof=1))
-            if std == 0.0:
-                return 0.0
-            return float((current - mean) / std)
-
-        numeric_cols = [c for c in x.columns if c not in ["date", "stock_code"]]
-        return x.with_columns([
-            pl.col(c).rolling_map(
-                zscore_fn, window_size=w, min_samples=1
-            ).alias(c)
-            for c in numeric_cols
-        ])
+        return TSZScoreNative()._calculate_series(
+            x, window=window, min_periods=min_periods,
+            null_policy=null_policy, nan_policy=nan_policy,
+            includes_current_bar=includes_current_bar, ddof=ddof,
+            zero_std_policy=zero_std_policy,
+        )
 
 
 

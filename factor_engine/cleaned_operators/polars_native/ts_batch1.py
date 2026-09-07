@@ -2392,6 +2392,7 @@ class TSMonotonicityPolarsNative(SeriesOperator):
     }
 
     def _calculate_series(self, x, window=20, min_periods=3, **kwargs):
+        feature = x
         return (
             feature.to_frame()
             .lazy()
@@ -2850,13 +2851,14 @@ class TSPathEfficiencyPolarsNative(SeriesOperator):
     }
 
     def _calculate_series(self, x, window, min_periods=2, **kwargs):
+        feature = x
         def compute_efficiency(s):
             if len(s) < 2:
                 return None
             arr = s.to_numpy()
             straight = abs(arr[-1] - arr[0])
             path = np.abs(np.diff(arr)).sum()
-            return np.where(path if path != 0 else None != 0, (straight) / (path if path != 0 else None), np.nan)
+            return float(straight / path) if path != 0 else float("nan")
 
         return (
             feature.to_frame()
@@ -4264,4 +4266,3 @@ class TSBreakdownLowPolarsNative(SeriesOperator):
 # ============================================================================
 # Completed: 100+ ts_* operators implemented
 # ============================================================================
-

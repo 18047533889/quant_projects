@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import time
 from dataclasses import dataclass, field
 from typing import Any, Callable
 
@@ -200,6 +201,9 @@ class BatchOptimizationResult:
     optimization_basis: str  # "dp_global_exact" | "dp_global_approximate"
     production_ready: bool = False
     readiness_reason: str = ""
+    optimization_elapsed_ms: float = 0.0
+    candidate_plan_count: int = 0
+    selected_incumbent: str = ""
 
 
 class PhysicalBatchGlobalOptimizer:
@@ -228,16 +232,26 @@ class PhysicalBatchGlobalOptimizer:
         scan_cost_per_mb: float = 0.01,
         exact_search_max_ambiguous_nodes: int = 12,
         approximate_max_passes: int = 4,
+        max_optimization_ms: float = 250.0,
+        max_candidate_plans: int = 128,
+        forced_backend: str | None = None,
     ) -> None:
         if exact_search_max_ambiguous_nodes < 0:
             raise ValueError("exact_search_max_ambiguous_nodes must be non-negative")
         if approximate_max_passes <= 0:
             raise ValueError("approximate_max_passes must be positive")
+        if max_optimization_ms <= 0:
+            raise ValueError("max_optimization_ms must be positive")
+        if max_candidate_plans <= 0:
+            raise ValueError("max_candidate_plans must be positive")
         self.transfer_cost_per_mb = transfer_cost_per_mb
         self.delegate_penalty_ms = delegate_penalty_ms
         self.scan_cost_per_mb = scan_cost_per_mb
         self.exact_search_max_ambiguous_nodes = exact_search_max_ambiguous_nodes
         self.approximate_max_passes = approximate_max_passes
+        self.max_optimization_ms = float(max_optimization_ms)
+        self.max_candidate_plans = int(max_candidate_plans)
+        self.forced_backend = forced_backend
 
         # Memo for DP: (node_id, output_backend) -> (cost, choice)
         self.memo: dict[tuple[str, PhysicalBackend], tuple[float, NodeBackendChoice]] = {}
@@ -260,6 +274,7 @@ class PhysicalBatchGlobalOptimizer:
         Returns:
             BatchOptimizationResult with physical plan and choices
         """
+        optimization_started = time.monotonic()
         from factor_engine.backend.plan_cost_router import plan_occurrences
         from factor_engine.backend.operator_cost import estimate_backend_cost
 
@@ -366,7 +381,7 @@ class PhysicalBatchGlobalOptimizer:
         # Solve one assignment problem over the complete discovered DAG.  A
         # shared node is represented by one graph variable, so all roots observe
         # the same persisted assignment.
-        self._choices, optimization_basis = self._optimize_graph(
+        self._choices, optimization_basis, candidate_plan_count, selected_incumbent = self._optimize_graph(
             all_nodes, node_graph, estimate_rows, ctx, node_estimates
         )
         per_node_choices = dict(self._choices)
@@ -427,6 +442,9 @@ class PhysicalBatchGlobalOptimizer:
             optimization_basis=optimization_basis,
             production_ready=production_ready,
             readiness_reason=readiness_reason,
+            optimization_elapsed_ms=(time.monotonic() - optimization_started) * 1000.0,
+            candidate_plan_count=candidate_plan_count,
+            selected_incumbent=selected_incumbent,
         )
 
     @staticmethod
@@ -552,6 +570,9 @@ class PhysicalBatchGlobalOptimizer:
             # universe + snapshot).  Without a binding it is NOT certified.
             if op == "column":
                 certified = self._column_has_source_binding(node)
+                source_binding = dict(getattr(node, "attrs", None) or {}).get(
+                    "physical_source_binding"
+                )
             else:
                 certified = True
             if self._has_source_residency(node):
@@ -575,7 +596,7 @@ class PhysicalBatchGlobalOptimizer:
                     execution_kind=ExecutionKind.REFERENCE,
                     production_certified=certified,
                     physical_implementation_id=(
-                        f"pi:v3:source_binding:{node_id}"
+                        f"pi:v3:source_binding:{source_binding.digest}"
                         if op == "column" and certified else ""
                     ),
                     bound_parameter_identity=self._bound_parameter_identity(node),
@@ -784,6 +805,20 @@ class PhysicalBatchGlobalOptimizer:
                 f"no {'production-certified ' if mode == 'production' else ''}"
                 f"backend for operator {op!r} in batch-global optimizer"
             )
+        if self.forced_backend not in (None, "", "auto"):
+            allowed = {
+                "pandas": {PhysicalBackend.PANDAS_NUMPY},
+                "pandas_numpy": {PhysicalBackend.PANDAS_NUMPY},
+                "polars_long": {PhysicalBackend.POLARS_LONG, PhysicalBackend.POLARS_PANEL},
+                "duckdb_sql": {PhysicalBackend.DUCKDB_SQL},
+            }.get(self.forced_backend)
+            if allowed is None:
+                raise ValueError(f"unknown forced backend {self.forced_backend!r}")
+            candidates = [choice for choice in candidates if choice.backend in allowed]
+            if not candidates:
+                raise UnsupportedOperatorBackendError(
+                    f"operator {op!r} has no candidate for forced backend {self.forced_backend!r}"
+                )
         return tuple(candidates)
 
     def _optimize_graph(
@@ -793,8 +828,16 @@ class PhysicalBatchGlobalOptimizer:
         rows: int,
         ctx: Any,
         node_estimates: dict[str, tuple[int, int, int]],
-    ) -> tuple[dict[str, NodeBackendChoice], str]:
-        """Minimize one objective over every logical node and dependency edge."""
+    ) -> tuple[dict[str, NodeBackendChoice], str, int, str]:
+        """Minimize one objective over every logical node and dependency edge.
+
+        Search is wall-clock and candidate bounded.  Before exploring mixed
+        assignments we materialize every complete single-residency incumbent
+        (including Pandas) plus a cheapest-per-node legal assignment.  A timeout
+        therefore returns a real, executable plan; it never skips capability or
+        production-readiness validation.
+        """
+        deadline = time.monotonic() + self.max_optimization_ms / 1000.0
         candidates = {
             node_id: self._eligible_choices(node_id, node, rows, ctx)
             for node_id, node in all_nodes.items()
@@ -805,16 +848,33 @@ class PhysicalBatchGlobalOptimizer:
             for node_id, choices in candidates.items()
             if len(choices) == 1
         }
+        incumbents = self._complete_incumbents(candidates)
+        if not incumbents:
+            raise ValueError("batch-global optimizer produced no legal incumbent")
+        incumbent_name, incumbent = min(
+            incumbents,
+            key=lambda item: (
+                self._assignment_objective(item[1], node_graph, node_estimates),
+                item[0],
+            ),
+        )
+        evaluated = len(incumbents)
         if len(ambiguous) <= self.exact_search_max_ambiguous_nodes:
-            best = self._exact_assignment(
-                candidates, ambiguous, fixed, node_graph, node_estimates
+            best, explored, timed_out = self._exact_assignment(
+                candidates, ambiguous, fixed, node_graph, node_estimates,
+                incumbent=incumbent, deadline=deadline,
+                candidate_budget=max(0, self.max_candidate_plans - evaluated),
             )
-            basis = "dp_global_exact"
+            evaluated += explored
+            basis = "bounded_incumbent_timeout" if timed_out else "dp_global_exact"
         else:
-            best = self._approximate_assignment(
-                candidates, ambiguous, fixed, node_graph, node_estimates
+            best, explored, timed_out = self._approximate_assignment(
+                candidates, ambiguous, fixed, node_graph, node_estimates,
+                incumbent=incumbent, deadline=deadline,
+                candidate_budget=max(0, self.max_candidate_plans - evaluated),
             )
-            basis = "dp_global_approximate"
+            evaluated += explored
+            basis = "bounded_incumbent_timeout" if timed_out else "dp_global_approximate"
 
         result: dict[str, NodeBackendChoice] = {}
         for node_id, choice in best.items():
@@ -843,7 +903,45 @@ class PhysicalBatchGlobalOptimizer:
                 numeric_policy_identity=choice.numeric_policy_identity,
                 kernel_signature=choice.kernel_signature,
             )
-        return result, basis
+        selected = incumbent_name if best == incumbent else "mixed"
+        return result, basis, evaluated, selected
+
+    @staticmethod
+    def _complete_incumbents(
+        candidates: dict[str, tuple[NodeBackendChoice, ...]],
+    ) -> list[tuple[str, dict[str, NodeBackendChoice]]]:
+        """Return legal whole-residency baselines and one legal mixed fallback."""
+        if not candidates:
+            return [("empty", {})]
+        residencies = set.intersection(*(
+            {(choice.backend, choice.representation) for choice in choices}
+            for choices in candidates.values()
+        ))
+        out: list[tuple[str, dict[str, NodeBackendChoice]]] = []
+        for backend, representation in sorted(
+            residencies, key=lambda item: (item[0].value, item[1].value)
+        ):
+            assignment = {
+                node_id: min(
+                    (choice for choice in choices if (choice.backend, choice.representation)
+                     == (backend, representation)),
+                    key=lambda choice: (choice.compute_cost_ms, choice.execution_kind.value),
+                )
+                for node_id, choices in candidates.items()
+            }
+            out.append((f"single:{backend.value}:{representation.value}", assignment))
+        mixed = {
+            node_id: min(
+                choices,
+                key=lambda choice: (
+                    choice.compute_cost_ms, choice.backend.value,
+                    choice.representation.value,
+                ),
+            )
+            for node_id, choices in candidates.items()
+        }
+        out.append(("legal_mixed", mixed))
+        return out
 
     def _assignment_objective(
         self,
@@ -873,16 +971,26 @@ class PhysicalBatchGlobalOptimizer:
         fixed: dict[str, NodeBackendChoice],
         node_graph: dict[str, list[str]],
         node_estimates: dict[str, tuple[int, int, int]],
-    ) -> dict[str, NodeBackendChoice]:
-        best_cost = float("inf")
-        best: dict[str, NodeBackendChoice] | None = None
+        *,
+        incumbent: dict[str, NodeBackendChoice],
+        deadline: float,
+        candidate_budget: int,
+    ) -> tuple[dict[str, NodeBackendChoice], int, bool]:
+        best = dict(incumbent)
+        best_cost = self._assignment_objective(best, node_graph, node_estimates)
+        explored = 0
+        timed_out = False
 
         def search(index: int, assignment: dict[str, NodeBackendChoice]) -> None:
-            nonlocal best, best_cost
+            nonlocal best, best_cost, explored, timed_out
+            if timed_out or time.monotonic() >= deadline or explored >= candidate_budget:
+                timed_out = True
+                return
             compute_floor = sum(choice.compute_cost_ms for choice in assignment.values())
             if compute_floor > best_cost:
                 return
             if index == len(ambiguous):
+                explored += 1
                 value = self._assignment_objective(
                     assignment, node_graph, node_estimates
                 )
@@ -899,9 +1007,7 @@ class PhysicalBatchGlobalOptimizer:
             assignment.pop(node_id, None)
 
         search(0, dict(fixed))
-        if best is None:
-            raise ValueError("batch-global assignment produced no complete solution")
-        return best
+        return best, explored, timed_out
 
     def _approximate_assignment(
         self,
@@ -910,15 +1016,15 @@ class PhysicalBatchGlobalOptimizer:
         fixed: dict[str, NodeBackendChoice],
         node_graph: dict[str, list[str]],
         node_estimates: dict[str, tuple[int, int, int]],
-    ) -> dict[str, NodeBackendChoice]:
+        *,
+        incumbent: dict[str, NodeBackendChoice],
+        deadline: float,
+        candidate_budget: int,
+    ) -> tuple[dict[str, NodeBackendChoice], int, bool]:
         """Deterministic bounded coordinate descent over the global objective."""
-        assignment = dict(fixed)
-        for node_id in ambiguous:
-            assignment[node_id] = min(
-                self._sorted_choices(candidates[node_id]),
-                key=lambda choice: (choice.compute_cost_ms, choice.backend.value,
-                                    choice.representation.value),
-            )
+        assignment = dict(incumbent)
+        explored = 0
+        timed_out = False
 
         parents: dict[str, list[str]] = {node_id: [] for node_id in assignment}
         for consumer_id, child_ids in node_graph.items():
@@ -930,10 +1036,17 @@ class PhysicalBatchGlobalOptimizer:
         for _ in range(self.approximate_max_passes):
             changed = False
             for node_id in ambiguous:
+                if time.monotonic() >= deadline or explored >= candidate_budget:
+                    timed_out = True
+                    break
                 current = assignment[node_id]
                 best_choice = current
                 best_key: tuple[float, str, str] | None = None
                 for choice in self._sorted_choices(candidates[node_id]):
+                    explored += 1
+                    if explored > candidate_budget or time.monotonic() >= deadline:
+                        timed_out = True
+                        break
                     key = (
                         self._local_choice_cost(
                             node_id,
@@ -951,9 +1064,17 @@ class PhysicalBatchGlobalOptimizer:
                         best_choice = choice
                 assignment[node_id] = best_choice
                 changed = changed or best_choice != current
+                if timed_out:
+                    break
             if not changed:
                 break
-        return assignment
+            if timed_out:
+                break
+        incumbent_cost = self._assignment_objective(incumbent, node_graph, node_estimates)
+        assignment_cost = self._assignment_objective(assignment, node_graph, node_estimates)
+        if assignment_cost > incumbent_cost:
+            assignment = dict(incumbent)
+        return assignment, min(explored, candidate_budget), timed_out
 
     def _local_choice_cost(
         self,
@@ -1061,48 +1182,12 @@ class PhysicalBatchGlobalOptimizer:
         universe snapshot, and source snapshot.  A bare ``column`` with only a
         name (no binding) is NOT production-certified.
         """
+        from factor_engine.runtime.physical_source_binding import (
+            is_authoritative_source_binding,
+        )
+
         attrs = dict(getattr(node, "attrs", None) or {})
-        semantic = dict(getattr(node, "semantic_attrs", None) or {})
-        # DataReadIdentity binding: dataset + revision (or a data_read_identity
-        # digest) must be present.
-        has_read_identity = bool(
-            attrs.get("data_read_identity")
-            or attrs.get("dataset")
-            or semantic.get("dataset")
-        )
-        # Field semantics: the column must name a field with semantic metadata.
-        has_field_semantics = bool(
-            attrs.get("field_semantics")
-            or attrs.get("field")
-            or semantic.get("field")
-            or semantic.get("semantic_kind")
-        )
-        # PIT: calendar identity or availability cutoff present.
-        has_pit = bool(
-            attrs.get("calendar_identity")
-            or attrs.get("availability_cutoff")
-            or semantic.get("calendar_identity")
-            or semantic.get("available_at")
-        )
-        # Universe snapshot present.
-        has_universe = bool(
-            attrs.get("universe_snapshot")
-            or attrs.get("universe")
-            or semantic.get("universe")
-        )
-        # Source snapshot present.
-        has_snapshot = bool(
-            attrs.get("source_snapshot")
-            or attrs.get("source_snapshot_id")
-            or attrs.get("snapshot_id")
-        )
-        return bool(
-            has_read_identity
-            and has_field_semantics
-            and has_pit
-            and has_universe
-            and has_snapshot
-        )
+        return is_authoritative_source_binding(attrs.get("physical_source_binding"))
 
     @classmethod
     def _source_residency(
@@ -1555,13 +1640,43 @@ def optimize_batch_global(
     shared_nodes: dict[str, PlanNode],
     node_graph: dict[str, list[str]],
     ctx: Any,
+    *,
+    max_optimization_ms: float = 250.0,
+    max_candidate_plans: int = 128,
+    forced_backend: str | None = None,
 ) -> BatchOptimizationResult:
     """MB-P1-009: Entry point for batch-global optimization.
 
     This replaces the per-root loop in plan_batch_route with true global optimization.
     """
-    optimizer = PhysicalBatchGlobalOptimizer()
+    optimizer = PhysicalBatchGlobalOptimizer(
+        max_optimization_ms=max_optimization_ms,
+        max_candidate_plans=max_candidate_plans,
+        forced_backend=forced_backend,
+    )
     return optimizer.optimize_batch(roots, shared_nodes, node_graph, ctx)
+
+
+def validate_root_physical_support(
+    root: PlanNode, ctx: Any, *, forced_backend: str | None = None,
+    shared_nodes: dict[str, PlanNode] | None = None,
+) -> None:
+    """Capability-only root validation; this does not optimize a plan."""
+    optimizer = PhysicalBatchGlobalOptimizer(forced_backend=forced_backend)
+    seen: set[int] = set()
+    stack = [root]
+    while stack:
+        node = stack.pop()
+        if id(node) in seen:
+            continue
+        seen.add(id(node))
+        optimizer._eligible_choices(node.node_id, node, 1, ctx)
+        if node.op == "plan_ref":
+            sid = str((node.attrs or {}).get("sid") or "")
+            definition = (shared_nodes or {}).get(sid)
+            if definition is not None:
+                stack.append(definition)
+        stack.extend(node.inputs)
 
 
 class BatchGlobalOptimizer(PhysicalBatchGlobalOptimizer):
@@ -1575,6 +1690,9 @@ class BatchGlobalOptimizer(PhysicalBatchGlobalOptimizer):
         scan_cost_per_mb: float = 0.01,
         exact_search_max_ambiguous_nodes: int = 12,
         approximate_max_passes: int = 4,
+        max_optimization_ms: float = 250.0,
+        max_candidate_plans: int = 128,
+        forced_backend: str | None = None,
         min_savings_bytes: int = 10 * 1024 * 1024,
         min_savings_work: float = 50_000.0,
         min_reuse_count: int = 2,
@@ -1585,6 +1703,9 @@ class BatchGlobalOptimizer(PhysicalBatchGlobalOptimizer):
             scan_cost_per_mb=scan_cost_per_mb,
             exact_search_max_ambiguous_nodes=exact_search_max_ambiguous_nodes,
             approximate_max_passes=approximate_max_passes,
+            max_optimization_ms=max_optimization_ms,
+            max_candidate_plans=max_candidate_plans,
+            forced_backend=forced_backend,
         )
         self._min_savings_bytes = min_savings_bytes
         self._min_savings_work = min_savings_work

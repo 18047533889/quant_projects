@@ -232,7 +232,26 @@ class HostResourceCoordinator:
         """
         job = _ACTIVE_JOB_LEASE.get()
         if job is None:
-            return None
+            # Spawned durable workers do not own a local JobLease tree. Charge
+            # their DA query workspace directly to the installed parent broker
+            # proxy instead of falling through to DA's process-local governor.
+            # This lease is deliberately separate from READ_WAVE residency:
+            # query/decode workspace and resident output may coexist.
+            from factor_engine.runtime.auto_memory_budget import MemoryLeaseKind
+
+            requested = max(0, int(memory_bytes)) + max(0, int(scan_bytes))
+            if requested <= 0:
+                requested = 1
+            lease = self._broker.acquire_memory(
+                MemoryLeaseKind.SOURCE_READ,
+                requested,
+                lease_id="da-query-workspace",
+            )
+            if lease is None:
+                raise MemoryError(
+                    f"parent broker denied DA query workspace bytes={requested}"
+                )
+            return lease
         try:
             lease = job.request_child(
                 owner="da-scan",
@@ -479,12 +498,17 @@ _COORDINATOR: HostResourceCoordinator | None = None
 _COORDINATOR_LOCK = threading.Lock()
 
 
-def get_host_coordinator() -> HostResourceCoordinator:
+def get_host_coordinator(*, broker: Any | None = None) -> HostResourceCoordinator:
     global _COORDINATOR
     if _COORDINATOR is None:
         with _COORDINATOR_LOCK:
             if _COORDINATOR is None:
-                _COORDINATOR = HostResourceCoordinator()
+                from factor_engine.runtime.resource_broker import peek_v2_resource_broker
+
+                authority = broker if broker is not None else peek_v2_resource_broker()
+                _COORDINATOR = HostResourceCoordinator(broker=authority)
+    if broker is not None and _COORDINATOR.broker is not broker:
+        raise RuntimeError("host coordinator is already bound to another broker authority")
     return _COORDINATOR
 
 

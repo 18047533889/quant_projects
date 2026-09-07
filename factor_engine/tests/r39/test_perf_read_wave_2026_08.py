@@ -282,15 +282,12 @@ class TestPerf008SupersetCoalescing:
             time_range=("2024-09-03", "2024-12-31"), columns=["close"],
         )
 
-    def test_merge_when_cost_justifies(self):
+    def test_different_ranges_do_not_merge_without_range_aware_executor(self):
         p = ReadWavePlanner(rows_estimate=500_000)  # 默认 cost model → 合并有收益
         self._register_20_60_120(p)
         plan = p.plan()
-        assert len(plan.waves) == 1, f"expected 1 coalesced wave, got {len(plan.waves)}"
-        w = plan.waves[0]
-        assert w.superset_coalesce is True
-        assert w.time_range == ("2024-09-03", "2024-12-31")
-        assert set(w.source_tasks) == {"w20", "w60", "w120"}
+        assert len(plan.waves) == 3
+        assert all(not w.superset_coalesce for w in plan.waves)
 
     def test_no_merge_when_cost_not_justified(self):
         cm = WaveCostModel(min_superset_benefit_ratio=0.001)  # 极难合并
@@ -319,9 +316,9 @@ class TestPerf008SupersetCoalescing:
         plan = p.plan()
         for w in plan.waves:
             assert w.estimated_memory_bytes <= p.wave_memory_budget
-        # 预算只允许 2 列合并；第 3 波（另 1 列）留下 → 2 个 wave。
-        assert len(plan.waves) == 2
-        assert any(w.superset_coalesce for w in plan.waves)
+        # Ranges differ, so the non-range-aware executor must not coalesce.
+        assert len(plan.waves) == 3
+        assert all(not w.superset_coalesce for w in plan.waves)
 
 
 # ---------------------------------------------------------------------------
@@ -367,7 +364,7 @@ class TestPerf009ScopeCompatibility:
 
     def test_scope_merge_metrics_accounting(self):
         p = ReadWavePlanner(rows_estimate=1000)
-        # 重叠 instrument scope + 同 universe → 合并可行，且报告 union 指标。
+        # Scope compatibility alone cannot override different physical ranges.
         p.register_scan_task(
             "r1", dataset="d", source_scope="ss", snapshot_id="snap",
             time_range=("2024-12-12", "2024-12-31"), columns=["close"],
@@ -379,12 +376,9 @@ class TestPerf009ScopeCompatibility:
             instrument_scope=("000001", "000003"), universe_id="A",
         )
         plan = p.plan()
-        assert len(plan.waves) == 1
-        w = plan.waves[0]
-        assert w.superset_coalesce is True
-        # 额外 instrument 1 个（000002 或 000003 之一）→ 1 × rows×8。
-        assert w.instrument_scope_union_extra_bytes == 1 * 1000 * 8
-        assert plan.instrument_scope_union_extra_bytes == 1 * 1000 * 8
+        assert len(plan.waves) == 2
+        assert all(not w.superset_coalesce for w in plan.waves)
+        assert plan.instrument_scope_union_extra_bytes == 0
         assert plan.universe_scope_union_extra_rows == 0
 
     def test_universe_extra_rows_metric(self):

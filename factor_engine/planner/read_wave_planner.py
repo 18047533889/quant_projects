@@ -594,6 +594,12 @@ class ReadWavePlanner:
                         cand = remaining.pop(best_idx)
                         union_cols = current_cols | cand.columns
                         new_mem = self._wave_memory_bytes(union_cols, current + [cand])
+                        if not current and new_mem > self.wave_memory_budget:
+                            from factor_engine.runtime.resource_errors import ResourceBudgetExceeded
+                            raise ResourceBudgetExceeded(
+                                f"atomic read request {cand.task_id!r} requires {new_mem} bytes; "
+                                f"read-wave budget is {self.wave_memory_budget} bytes"
+                            )
                         if current and new_mem > self.wave_memory_budget:
                             remaining.append(cand)
                             break
@@ -838,11 +844,11 @@ class ReadWavePlanner:
         compat = scope_compatibility(wa, wb)
         if compat is ScopeCompatibility.INCOMPATIBLE:
             return False
-        # PERF-008 只合并「跨时间窗」的 wave：相同 time_range 是同一窗口，预算
-        # 拆分是刻意的，不 reverse。
-        if wa.time_range == wb.time_range:
-            return False
-        if not _ranges_overlap(wa.time_range, wb.time_range):
+        # The current executor does not pass a physical range/halo handle into
+        # the source or trim a superset for each consumer.  Until that contract
+        # exists, only identical physical ranges may share a wave.  The union
+        # memory and cost gates below still preserve deliberate budget splits.
+        if wa.time_range != wb.time_range:
             return False
         # 合并后的 union 内存必须仍在 budget 内（不能 OOM 反噬）。
         merged_reqs = _ra + _rb

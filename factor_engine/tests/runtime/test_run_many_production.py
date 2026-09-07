@@ -72,8 +72,13 @@ def test_run_many_input_dq_uses_batch_path_and_cse():
     pd.testing.assert_series_equal(out["results"]["b"], r2, check_names=False)
 
 
-def test_run_many_parallel_input_dq_single_load():
+def test_run_many_parallel_input_dq_single_load(monkeypatch):
     pytest.importorskip("joblib")
+    from factor_engine.runtime.adaptive_batch_scheduler import AdaptiveBatchScheduler
+
+    monkeypatch.setattr(
+        AdaptiveBatchScheduler, "_dynamic_wave_budget", lambda self: 16 * 1024**2
+    )
     data = _data()
     src = _CountingColumnSource(data=data)
     eng = FactorEngine(backend=PandasBackend(), data_source=src)
