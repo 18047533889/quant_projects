@@ -162,14 +162,14 @@ def test_lo_mackinlay_z_positive_for_mean_reversion() -> None:
 # §2 physical-time NaN handling for level/vol shift (review #12)
 # ---------------------------------------------------------------------------
 def test_level_shift_score_respects_nan_gap_no_bridging() -> None:
-    # `1 2 3 NaN NaN NaN 10 11 12 13 14 15`: the gap sits exactly at the window
-    # midpoint, so the trailing contiguous run [10..15] is entirely AFTER the
+    # The gap ends exactly at the current 20-row contract's midpoint, so the
+    # trailing contiguous run [10..19] is entirely AFTER the
     # midpoint.  The "before" state is unobservable in physical time -> fail-closed
     # NaN.  The old drop-finite code re-paired [1,2,3] with [10..15] and produced
     # a finite (bridged) score; the fix never bridges across the gap.
-    vals = np.array([1.0, 2.0, 3.0, np.nan, np.nan, np.nan, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0])
+    vals = np.r_[np.arange(1.0, 6.0), np.full(5, np.nan), np.arange(10.0, 20.0)]
     x = _col(vals)
-    out = OperatorRegistry.get("ts_level_shift_score").calculate(x, window=12, min_periods=2)
+    out = OperatorRegistry.get("ts_level_shift_score").calculate(x, window=20, min_periods=2)
     assert np.isnan(float(out["c"].iloc[-1]))
 
 
@@ -183,23 +183,29 @@ def test_vol_shift_score_respects_nan_gap_no_bridging() -> None:
 def test_level_shift_short_trailing_run_after_gap_is_nan() -> None:
     # The task's exact example: a short trailing run after the gap is too small
     # to split, so the score is NaN (never a half-bridged value).
-    vals = np.array([1.0, 2.0, 3.0, np.nan, np.nan, np.nan, 10.0, 11.0, 12.0])
+    vals = np.r_[np.arange(1.0, 15.0), np.full(3, np.nan), [10.0, 11.0, 12.0]]
     x = _col(vals)
-    out = OperatorRegistry.get("ts_level_shift_score").calculate(x, window=9, min_periods=2)
+    out = OperatorRegistry.get("ts_level_shift_score").calculate(x, window=20, min_periods=2)
     assert np.isnan(float(out["c"].iloc[-1]))
 
 
 def test_level_shift_split_at_physical_window_midpoint() -> None:
-    # `1 NaN 3 4 5 6 7`: trailing contiguous run = [3,4,5,6,7] starting at
-    # offset 2; window midpoint = offset 3.  Halves are computed in PHYSICAL
-    # time: first=[3], second=[4,5,6,7] (no drop-finite of the leading [1]).
-    vals = np.array([1.0, np.nan, 3.0, 4.0, 5.0, 6.0, 7.0])
+    # In a valid 20-row window, the trailing run starts at offset 9 and the
+    # physical midpoint is offset 10.  Thus first=[3], second=[4..13].
+    vals = np.r_[np.arange(1.0, 9.0), np.nan, np.arange(3.0, 14.0)]
     x = _col(vals)
-    out = OperatorRegistry.get("ts_level_shift_score").calculate(x, window=7, min_periods=2)
+    out = OperatorRegistry.get("ts_level_shift_score").calculate(x, window=20, min_periods=2)
     last = float(out["c"].iloc[-1])
     assert np.isfinite(last)
-    # mean([4,5,6,7]) - mean([3]) = 5.5 - 3 = 2.5 > 0, normalised by std>0.
+    # mean([4..13]) - mean([3]) > 0, normalised by std>0.
     assert last > 0.5
+
+
+def test_level_shift_rejects_window_below_typed_contract() -> None:
+    x = _col(np.arange(12.0))
+    with pytest.raises(Exception, match="window must be >= 20"):
+        OperatorRegistry.get("ts_level_shift_score").calculate(
+            x, window=12, min_periods=2)
 
 
 def test_level_shift_detects_mean_shift_no_nan() -> None:
@@ -302,7 +308,17 @@ def test_predictive_variants_documented_as_mining_preference() -> None:
 # ---------------------------------------------------------------------------
 # §5 polars parity (via the bridge)
 # ---------------------------------------------------------------------------
-def test_polars_parity_new_canonicals() -> None:
+@pytest.mark.parametrize("canonical,fields,kwargs", [
+    ("ts_variance_ratio_proxy", ["close"], dict(window=120, q=8, min_periods=15)),
+    ("ts_lo_mackinlay_vr", ["close"], dict(window=120, q=8, min_periods=15)),
+    ("ts_lo_mackinlay_z", ["close"], dict(window=120, q=8, min_periods=15)),
+    ("ts_cumulative_deviation_score", ["close"], dict(window=80, min_periods=10)),
+    ("ts_level_shift_score", ["close"], dict(window=80, min_periods=10)),
+    ("ts_vol_shift_score", ["close"], dict(window=80, min_periods=10)),
+    ("ts_huber_regression_predictive_resid", ["y", "x"], dict(window=60, min_periods=6)),
+    ("ts_ridge_regression_predictive_resid", ["y", "x"], dict(window=60, alpha=1e-6, min_periods=6)),
+])
+def test_polars_parity_new_canonicals(canonical, fields, kwargs) -> None:
     pytest.importorskip("polars")
     import polars as pl
 
@@ -335,29 +351,18 @@ def test_polars_parity_new_canonicals() -> None:
         cols = [c for c in pldf.columns if c != "date"]
         return pd.DataFrame({c: pldf[c].to_numpy() for c in cols}, index=idx)
 
-    cases = {
-        "ts_variance_ratio_proxy": (["close"], dict(window=120, q=8, min_periods=15)),
-        "ts_lo_mackinlay_vr": (["close"], dict(window=120, q=8, min_periods=15)),
-        "ts_lo_mackinlay_z": (["close"], dict(window=120, q=8, min_periods=15)),
-        "ts_cumulative_deviation_score": (["close"], dict(window=80, min_periods=10)),
-        "ts_level_shift_score": (["close"], dict(window=80, min_periods=10)),
-        "ts_vol_shift_score": (["close"], dict(window=80, min_periods=10)),
-        "ts_huber_regression_predictive_resid": (["y", "x"], dict(window=60, min_periods=6)),
-        "ts_ridge_regression_predictive_resid": (["y", "x"], dict(window=60, alpha=1e-6, min_periods=6)),
-    }
-    for canonical, (fields, kwargs) in cases.items():
-        p_op = OperatorRegistry.get(canonical, "pandas_numpy")
-        l_op = OperatorRegistry.get(canonical, "polars")
-        assert l_op is not None, canonical
-        # Multi-panel operators require ALIGNED column labels across inputs, so
-        # every panel is normalised to the same single column label "c".
-        p_args = [pdf[[f]].rename(columns={f: "c"}) for f in fields]
-        pl_args = [plf.select(["date", f]).rename({f: "c"}) for f in fields]
-        ref = p_op.calculate(*p_args, **kwargs)
-        got_pl = l_op.calculate(*pl_args, **kwargs)
-        got = _to_pd(got_pl).reindex(index=ref.index, columns=ref.columns)
-        assert ref.shape == got.shape, canonical
-        for col in ref.columns:
-            a = ref[col].to_numpy(dtype=float)
-            b = got[col].to_numpy(dtype=float)
-            np.testing.assert_allclose(a, b, atol=1e-6, equal_nan=True, err_msg=f"{canonical}:{col}")
+    p_op = OperatorRegistry.get(canonical, "pandas_numpy")
+    l_op = OperatorRegistry.get(canonical, "polars")
+    assert l_op is not None, canonical
+    # Multi-panel operators require ALIGNED column labels across inputs, so
+    # every panel is normalised to the same single column label "c".
+    p_args = [pdf[[f]].rename(columns={f: "c"}) for f in fields]
+    pl_args = [plf.select(["date", f]).rename({f: "c"}) for f in fields]
+    ref = p_op.calculate(*p_args, **kwargs)
+    got_pl = l_op.calculate(*pl_args, **kwargs)
+    got = _to_pd(got_pl).reindex(index=ref.index, columns=ref.columns)
+    assert ref.shape == got.shape, canonical
+    for col in ref.columns:
+        a = ref[col].to_numpy(dtype=float)
+        b = got[col].to_numpy(dtype=float)
+        np.testing.assert_allclose(a, b, atol=1e-6, equal_nan=True, err_msg=f"{canonical}:{col}")

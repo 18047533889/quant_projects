@@ -1,5 +1,5 @@
 schema_version: factor_engine.merge_recovery.v1
-status: PASS_WITH_R02_NOT_RUN
+status: PASS_WITH_R02_XFAIL
 baseline: 2bac7209
 observed_head_before_merge: d5482ca3e997b06e7e9e319861dd4525ce9c0689
 files:
@@ -21,17 +21,18 @@ files:
   factor_engine/tests/runtime/test_v7_direct_artifact_pipeline.py:
     baseline_sha256: null
     current_before_sha256: 9869ae4d6926a9a54f62d84f897d37aa9b2fc977a962a1d4360d82a9d6d76418
-    merged_sha256: f3eecc93e1bcbc85879df80eac0a0934cc7f6a95cd13e9dae746aa6322bd2fee
-    resolution: retained established tests; moved unfinished R02 oracle to NOT_RUN patch
+    merged_sha256: 6894661689e0ebc64d04f8a09d2640854d4011ea2e956e0bbacab8821738c3f1
+    resolution: retained all current tests; marked unfinished R02 oracle strict expected failure
   factor_engine/pyproject.toml:
     baseline_sha256: 1bd86ff752ff7991635768ddf45946be4e760ac94c034e6137cdb28df004037d
     current_before_sha256: 1bd86ff752ff7991635768ddf45946be4e760ac94c034e6137cdb28df004037d
     merged_sha256: 2c01def363a84547761babbe3457079780edf5ee4deb8039c6d029c250d1e2bc
     resolution: added factor_engine.reporting to explicit package list
 tests:
-  result: 69 passed
-  warnings: 62
-  duration_seconds: 189.66
+  initial_regression: '69 passed, 62 warnings, 189.66 seconds'
+  direct_suite_after_oracle_restore: '6 passed, 1 xfailed'
+  manifest_separate: '1 passed'
+  counting_boundary: 'Separate overlapping runs; counts must not be summed as unique tests.'
   included:
     - factor_engine/tests/runtime/test_v6_supervised_worker.py
     - factor_engine/tests/runtime/test_v7_direct_artifact_pipeline.py
@@ -40,9 +41,11 @@ tests:
     - factor_engine/tests/runtime/test_v6_bounded_pipeline.py
     - factor_engine/tests/test_package_manifest_complete.py
 r02:
-  status: NOT_RUN
+  status: XFAIL
   nodeid: factor_engine/tests/runtime/test_v7_direct_artifact_pipeline.py::test_default_two_slot_pipeline_overlaps_previous_write_with_next_compute
-  reason: two-slot scheduler is incomplete; no overlap claim is made
+  reason: two-slot scheduler is incomplete; serial counterexample reproduced as AssertionError
+  strict: true
+  raises: AssertionError
 boundaries:
   committed: false
   staged: false

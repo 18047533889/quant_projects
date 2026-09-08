@@ -28,7 +28,11 @@ import pandas as pd
 
 from factor_engine.cleaned_operators.base import OperatorMetadata, ParamRole, ParamSpec, SeriesOperator, register_operator
 from factor_engine.cleaned_operators.common.daily_panel import _aligned
-from factor_engine.cleaned_operators.ts_model._rolling_core import _HUBER_DELTA, pinball_quantile_fit
+from factor_engine.cleaned_operators.ts_model._rolling_core import (
+    _HUBER_DELTA,
+    pinball_quantile_fit,
+    ridge_fit,
+)
 
 # Model-audit Phase 4 (search-space hygiene): explicit ParamSpec declarations.
 # ``window`` is the alpha horizon (HORIZON, searched); ``min_periods`` is a
@@ -185,9 +189,9 @@ def _regression_resid(
     if method == "ols":
         beta, *_ = np.linalg.lstsq(design, ys, rcond=None)
     elif method == "ridge":
-        ridge = alpha * np.eye(design.shape[1])
-        ridge[0, 0] = 0.0  # 不惩罚截距
-        beta, *_ = np.linalg.lstsq(design.T @ design + ridge, design.T @ ys, rcond=None)
+        beta = ridge_fit(design, ys, alpha, has_intercept=True)
+        if beta is None:
+            return np.nan
     elif method == "huber":
         beta = _huber_fit(design, ys)
     else:

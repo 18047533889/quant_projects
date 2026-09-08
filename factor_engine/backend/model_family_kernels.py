@@ -88,7 +88,7 @@ class PCABlock:
             return out
         score = self.loadings[:k] @ z
         recon = self.mu + self.sd * (self.loadings[:k].T @ score)
-        out[active] = row_a - recon
+        out[active] = np.where(cur_valid, row_a - recon, np.nan)
         return out
 
     def commonality(self, row: np.ndarray, n_components: int) -> np.ndarray:
@@ -124,7 +124,9 @@ def fit_pca_block(X: np.ndarray, n_components: int, *, min_obs: int = 2) -> PCAB
     fit = state.to_dict()
     # 训练窗 per-stock 方差分解（canonical commonality 公式）。
     ratio = pca_commonality(X, fit)
-    var_ret = np.nanvar(X[:, fit["active"]], axis=0)
+    active_values = X[:, fit["active"]]
+    active_values = np.where(np.isfinite(active_values), active_values, np.nan)
+    var_ret = np.nanvar(active_values, axis=0)
     with np.errstate(divide="ignore", invalid="ignore"):
         var_resid = np.where(var_ret > 1e-12, var_ret * (1.0 - ratio[fit["active"]]), np.nan)
     return PCABlock(

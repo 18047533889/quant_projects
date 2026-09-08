@@ -5,6 +5,7 @@ import time
 from pathlib import Path
 
 import pandas as pd
+import pytest
 
 from factor_engine.runtime.bounded_pipeline import execute_run_many_durable
 from factor_engine.runtime.default_execution_policy import resolve_default_policy
@@ -130,6 +131,30 @@ def build_large_direct_engine(config):
     return LargeDirectEngine(config)
 
 
+class CrossWaveOverlapEngine(AckLossEngine):
+    def run_many_parallel(self, factors, *, result_policy, sink=None, **kwargs):
+        factor = factors[0]
+        root = Path(self.marker)
+        if factor.name == "second":
+            (root / "second-compute-started").write_text("started")
+        value = self._value(factor.name)
+        if result_policy == "sink":
+            if factor.name == "first":
+                (root / "first-write-started").write_text("started")
+                deadline = time.monotonic() + 5
+                while not (root / "second-compute-started").exists():
+                    if time.monotonic() >= deadline:
+                        raise RuntimeError("serial counterexample: next compute did not overlap write")
+                    time.sleep(0.01)
+            sink(factor.name, value)
+            return {"results": {}}
+        return {"results": {factor.name: value}}
+
+
+def build_cross_wave_overlap_engine(config):
+    return CrossWaveOverlapEngine(config)
+
+
 def build_real_engine_with_pid_probe(config):
     from factor_engine.backend.pandas_backend import PandasBackend
     from factor_engine.runtime.engine import FactorEngine
@@ -250,6 +275,25 @@ def test_two_default_spawn_waves_retire_pid_and_bind_fresh_generation(tmp_path):
     records = modes.read_text().splitlines()
     assert [item.split(":")[0] for item in records] == ["sink", "sink"]
     assert records[0].split(":")[1] != records[1].split(":")[1]
+
+
+@pytest.mark.xfail(
+    strict=True,
+    raises=AssertionError,
+    reason="R02: cross-wave overlap not implemented; known failure, not PASS",
+)
+def test_default_two_slot_pipeline_overlaps_previous_write_with_next_compute(tmp_path):
+    receipt = execute_run_many_durable(
+        None, [Factor("first"), Factor("second")],
+        policy=resolve_default_policy({"initial_lookahead_factors": 1}),
+        artifact_root=tmp_path / "artifacts",
+        run_kwargs={"broker": Broker()},
+        engine_factory=build_cross_wave_overlap_engine,
+        engine_factory_config={"marker": str(tmp_path), "modes": str(tmp_path / "unused")},
+    )
+    assert receipt["status"] == "SUCCEEDED"
+    assert (tmp_path / "first-write-started").is_file()
+    assert (tmp_path / "second-compute-started").is_file()
 
 
 def test_real_engine_two_wave_default_uses_fresh_compute_pid(tmp_path):

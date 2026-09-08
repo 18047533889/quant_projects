@@ -32,6 +32,13 @@ ADVANCED_CANONICALS = (
     "ts_path_signature_depth2_norm ts_path_leadlag_area"
 ).split()
 
+COMPAT_ALIAS_TARGETS = {
+    "ts_garch_vol_forecast": "ts_garch_next_vol_forecast",
+    "ts_har_rv_forecast": "ts_har_rv_next_vol_forecast",
+    "ts_har_rv_innovation_z": "ts_har_rv_forecast_error_z",
+    "ts_matrix_profile_motif_distance": "ts_matrix_profile_discord_score",
+}
+
 
 def _panel(n: int = 160, seed: int = 0, cols: int = 2) -> pd.DataFrame:
     rng = np.random.default_rng(seed)
@@ -43,7 +50,11 @@ def _panel(n: int = 160, seed: int = 0, cols: int = 2) -> pd.DataFrame:
 def test_registered_and_classified(name: str) -> None:
     from factor_engine.cleaned_operators.operator_surface import classify_canonical
 
-    assert OperatorRegistry.get(name) is not None, name
+    operator = OperatorRegistry.get(name)
+    assert operator is not None, name
+    if name in COMPAT_ALIAS_TARGETS:
+        assert operator is OperatorRegistry.get(COMPAT_ALIAS_TARGETS[name]), name
+        return
     # 2026-08 daily migration promoted many experimental model operators to the daily
     # surface; research remains for the source-side relation transforms.
     assert classify_canonical(name) in ("daily", "extended", "research"), name

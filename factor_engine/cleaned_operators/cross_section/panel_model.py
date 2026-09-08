@@ -22,7 +22,9 @@ would double-shift it.
 """
 from __future__ import annotations
 
+from contextvars import ContextVar
 from typing import Any
+from uuid import uuid4
 
 import numpy as np
 import pandas as pd
@@ -58,23 +60,38 @@ _MIN_COVERAGE_RATIO = PCA_MIN_COVERAGE
 _CANONICALS: list[str] = []
 
 #: M-036: internal fit-quality telemetry for the supervised regime / MoE
-#: forecasts.  Populated on every (col, row) fit that reaches the design stage;
-#: the module-level ``last_fit_telemetry()`` accessor exposes the most recent
-#: snapshot to audit probes.  This is a DIAGNOSTIC accessor (mirroring
+#: forecasts.  The module-level ``last_fit_telemetry()`` accessor exposes the
+#: current execution context's most recent debug snapshot to audit probes.
+#: This is a DIAGNOSTIC accessor (mirroring
 #: ``ts_model.state_space.numba_dispatch_stats``), NOT a public operator
 #: canonical — no new operator surface is registered from it.
-_LAST_FIT_TELEMETRY: dict[str, Any] = {}
+_LAST_FIT_TELEMETRY: ContextVar[dict[str, Any] | None] = ContextVar(
+    "panel_model_last_fit_telemetry", default=None
+)
 
 
 def last_fit_telemetry() -> dict[str, Any]:
-    """Fit-quality telemetry from the most recent regime / MoE supervised fit.
+    """Debug-only snapshot from this context's latest regime / MoE cell.
 
-    Keys captured (M-036): ``model``, ``effective_train_obs``,
+    This is neither execution authority nor an aligned per-cell result.  It is
+    only the last visited cell/call snapshot for diagnostics.  Keys captured
+    (M-036): ``model``, ``effective_train_obs``,
     ``effective_regime_obs`` (regime) / ``active_expert_count`` (MoE),
     ``condition_number``, ``convergence``, ``gate_entropy`` and (MoE)
     ``expert_weight_max``.  Returns a defensive copy.
     """
-    return dict(_LAST_FIT_TELEMETRY)
+    return dict(_LAST_FIT_TELEMETRY.get() or {})
+
+
+def _set_fit_telemetry(snapshot: dict[str, Any]) -> None:
+    """Replace this context's debug snapshot with a defensive copy."""
+    _LAST_FIT_TELEMETRY.set(dict(snapshot))
+
+
+def _update_fit_telemetry(values: dict[str, Any]) -> None:
+    snapshot = last_fit_telemetry()
+    snapshot.update(values)
+    _set_fit_telemetry(snapshot)
 
 
 def _design_cond(design: np.ndarray) -> float:
@@ -306,7 +323,9 @@ def _pca_resid(X: np.ndarray, cur: np.ndarray, n_components: int) -> np.ndarray:
     out = np.full(len(cur), np.nan)
     # P0-14: write residuals only for the active sub-space; inactive stocks stay
     # NaN (fail-closed) and can no longer poison their peers.
-    out[pca["active"]] = cur_active - recon
+    out[pca["active"]] = np.where(
+        np.isfinite(cur_active), cur_active - recon, np.nan
+    )
     return out
 
 
@@ -641,7 +660,7 @@ def _regime_forecast(y, feats, market_state, window, n_regimes, label_horizon=1)
     out = np.full((n_rows, n_cols), np.nan, dtype=float)
     nr = max(2, int(n_regimes))
     h = max(1, int(label_horizon))
-    _LAST_FIT_TELEMETRY.clear()
+    _set_fit_telemetry({})
     for col in range(n_cols):
         ms = mv[:, col]
         for row in range(n_rows):
@@ -682,7 +701,7 @@ def _regime_forecast(y, feats, market_state, window, n_regimes, label_horizon=1)
             reg_counts = np.bincount(reg_tr, minlength=nr)
             reg_p = reg_counts / max(int(reg_counts.sum()), 1)
             gate_entropy = float(-np.sum(reg_p[reg_p > 0] * np.log(reg_p[reg_p > 0])))
-            _LAST_FIT_TELEMETRY.update({
+            _update_fit_telemetry({
                 "model": "regime",
                 "effective_train_obs": int(mask.sum()),
                 "effective_regime_obs": int(mask.sum()),
@@ -712,8 +731,23 @@ _mk(
 
 
 def _moe_forecast(y, feats, market_state, window, n_experts, label_horizon=1):
+    call_id = uuid4().hex
+
+    def debug_status(fit_status, row=None, col=None, **values):
+        _set_fit_telemetry({
+            "debug_only": True,
+            "model": "moe",
+            "call_id": call_id,
+            "row": row,
+            "col": col,
+            "fit_status": fit_status,
+            **values,
+        })
+
+    debug_status("call_started")
     # R35-P0-M06: market_state is a REQUIRED panel for mixture-of-experts.
     if market_state is None:
+        debug_status("missing_market_state")
         raise ValueError(
             "panel_mixture_of_experts_score: market_state is a required "
             "panel (required panel param, cannot be None)"
@@ -726,6 +760,7 @@ def _moe_forecast(y, feats, market_state, window, n_experts, label_horizon=1):
     # reaching ``np.column_stack([])`` in the (now dead) ``Xc.shape[1] == 0``
     # guard below.
     if not collected:
+        debug_status("missing_predictor")
         raise ValueError(
             "panel_mixture_of_experts_score requires at least one predictor "
             "feature (market_state alone does not count)"
@@ -734,19 +769,25 @@ def _moe_forecast(y, feats, market_state, window, n_experts, label_horizon=1):
     out = np.full((n_rows, n_cols), np.nan, dtype=float)
     ne = max(2, int(n_experts))
     h = max(1, int(label_horizon))
-    _LAST_FIT_TELEMETRY.clear()
     for col in range(n_cols):
         ms = mv[:, col]
         for row in range(n_rows):
-            if row < 1 or not np.isfinite(ms[row]):
+            debug_status("cell_started", row=row, col=col)
+            if row < 1:
+                debug_status("warmup", row=row, col=col)
+                continue
+            if not np.isfinite(ms[row]):
+                debug_status("current_market_state_nonfinite", row=row, col=col)
                 continue
             start = max(0, row - int(window))
             hi = row - h
             if hi <= start:
+                debug_status("label_not_mature", row=row, col=col)
                 continue
             win_ms = ms[start:row]
             win_valid = np.isfinite(win_ms)
             if win_valid.sum() < ne * 6:
+                debug_status("insufficient_market_state_history", row=row, col=col)
                 continue
             # Expert centers and gating scale are computed causally from the
             # window ending at the previous row (the current market state never
@@ -760,12 +801,14 @@ def _moe_forecast(y, feats, market_state, window, n_experts, label_horizon=1):
             # would silently become a smaller, nearly-identical model.  Fail
             # closed (NaN cell) instead of running with fewer real experts.
             if len(centers) + 1 < ne:
+                debug_status("collapsed_expert_bins", row=row, col=col)
                 continue
             win_ms_tr = win_ms[: hi - start]
             win_valid_tr = win_valid[: hi - start]
             Xc = np.column_stack([f[start:hi, col] for f in collected])
             yc = yv[start:hi, col]
             if Xc.shape[1] == 0 or len(yc) < 15:
+                debug_status("insufficient_training_rows", row=row, col=col)
                 continue
             x_cur = np.array([f[row, col] for f in collected], dtype=float)
             preds = []
@@ -795,6 +838,21 @@ def _moe_forecast(y, feats, market_state, window, n_experts, label_horizon=1):
                 preds.append(float(beta[0] + beta[1:] @ z))
             valid_preds = [p for p in preds if np.isfinite(p)]
             if not valid_preds:
+                debug_status("all_experts_invalid", row=row, col=col, **{
+                    "model": "moe",
+                    "effective_train_obs": int(np.sum(
+                        np.all(np.isfinite(Xc), axis=1) & np.isfinite(yc) & win_valid_tr
+                    )),
+                    "active_expert_count": 0,
+                    "active_experts": 0,
+                    "condition_number": row_cond_max,
+                    "convergence": False,
+                    "all_invalid": True,
+                    "weight_sum": 0.0,
+                    "gate_entropy": np.nan,
+                    "expert_weight_max": np.nan,
+                    "n_experts": int(ne),
+                })
                 continue
             # softmax gating by distance to current market state.  ``centers``
             # holds the ne-1 internal quantile edges that define ne digitize
@@ -805,8 +863,6 @@ def _moe_forecast(y, feats, market_state, window, n_experts, label_horizon=1):
             dist = np.abs(bin_centers - ms[row])
             dist = np.where(np.isfinite(dist), dist, np.inf)
             if not np.all(np.isinf(dist)):
-                gates = np.exp(-dist / max(float(np.std(win_ms[win_valid])), 1e-6))
-                gates = gates / max(gates.sum(), _EPS)
                 pred_arr = np.array(preds)
                 # Audit M04: a NaN expert prediction must not silently lose its
                 # gate mass.  Renormalize the gates over the FINITE experts only
@@ -815,25 +871,42 @@ def _moe_forecast(y, feats, market_state, window, n_experts, label_horizon=1):
                 # subsequent multiply / dot never mixes shape(ne) x shape(n_finite).
                 finite_experts = np.isfinite(pred_arr)
                 if not np.any(finite_experts):
+                    debug_status("all_experts_invalid", row=row, col=col)
                     continue
-                g = gates[finite_experts]
+                scale = max(float(np.std(win_ms[win_valid])), 1e-6)
+                logits = -dist[finite_experts] / scale
+                finite_logits = np.isfinite(logits)
+                if not np.any(finite_logits):
+                    debug_status("all_gate_logits_invalid", row=row, col=col)
+                    continue
+                # Stable softmax is computed directly on the truly usable
+                # experts.  Invalid experts never receive or discard gate mass.
+                logits = logits[finite_logits]
+                logits = logits - float(np.max(logits))
+                g = np.exp(logits)
+                g = g / float(g.sum())
                 p = pred_arr[finite_experts]
-                g = g / g.sum()
+                p = p[finite_logits]
                 out[row, col] = float(np.dot(g, p))
                 # M-036: fit-quality telemetry (module-level diagnostic accessor).
                 eff_train = int(np.sum(
                     np.all(np.isfinite(Xc), axis=1) & np.isfinite(yc) & win_valid_tr
                 ))
-                _LAST_FIT_TELEMETRY.update({
+                debug_status("ok", row=row, col=col, **{
                     "model": "moe",
                     "effective_train_obs": eff_train,
-                    "active_expert_count": int(finite_experts.sum()),
+                    "active_expert_count": int(finite_logits.sum()),
+                    "active_experts": int(finite_logits.sum()),
                     "condition_number": row_cond_max,
-                    "convergence": bool(len(valid_preds) == ne),
+                    "convergence": bool(finite_logits.sum() == ne),
+                    "all_invalid": False,
+                    "weight_sum": float(g.sum()),
                     "gate_entropy": float(-np.sum(g * np.log(np.clip(g, 1e-12, None)))),
                     "expert_weight_max": float(g.max()),
                     "n_experts": int(ne),
                 })
+            else:
+                debug_status("all_gate_distances_invalid", row=row, col=col)
     return _frame_like(y, out)
 
 

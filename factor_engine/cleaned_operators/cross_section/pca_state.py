@@ -50,16 +50,26 @@ def _fit(
     """
     n, d = X.shape
     window = max(1, int(n))
-    finite_count = np.sum(np.isfinite(X), axis=0)
+    finite = np.isfinite(X)
+    finite_count = np.sum(finite, axis=0)
     min_obs = max(int(absolute_min_obs), int(np.ceil(window * min_coverage_ratio)))
     active = finite_count >= min_obs
+    if int(active.sum()) < 2:
+        return None
+    # One missing-value policy is authoritative for coverage, fit and
+    # imputation: NaN and either signed infinity are all missing observations.
+    sub = np.where(finite[:, active], X[:, active], np.nan)
+    mu_sub = np.nanmean(sub, axis=0)
+    sd_sub = np.nanstd(sub, axis=0)
+    informative = np.isfinite(mu_sub) & np.isfinite(sd_sub) & (sd_sub > _EPS)
+    active_indices = np.flatnonzero(active)
+    active[active_indices[~informative]] = False
     n_active = int(active.sum())
     if n_active < 2:
         return None
-    sub = X[:, active]
+    sub = np.where(finite[:, active], X[:, active], np.nan)
     mu_sub = np.nanmean(sub, axis=0)
     sd_sub = np.nanstd(sub, axis=0)
-    sd_sub = np.where(sd_sub > _EPS, sd_sub, 1.0)
     Xc = np.where(np.isfinite(sub), sub, mu_sub)
     Xs = (Xc - mu_sub) / sd_sub
     if rank_policy == "regression":
@@ -68,7 +78,10 @@ def _fit(
         k = int(min(n_components, n_active - 1, Xs.shape[0] - 1))
     if k < 1:
         return None
-    _U, s, Vt = np.linalg.svd(Xs, full_matrices=False)
+    try:
+        _U, s, Vt = np.linalg.svd(Xs, full_matrices=False)
+    except np.linalg.LinAlgError:
+        return None
     total_var = float(np.sum(s * s))
     explained = s[:k] ** 2 / max(total_var, _EPS)
     coverage = finite_count[active].astype(float) / float(window)
@@ -151,7 +164,7 @@ class PCAState:
             return out
         score = self.loadings[:k] @ z
         recon = self.mu + self.sd * (self.loadings[:k].T @ score)
-        out[active] = row_a - recon
+        out[active] = np.where(cur_valid, row_a - recon, np.nan)
         return out
 
     def transform(self, row: np.ndarray, n_components: int | None = None) -> np.ndarray:
@@ -175,7 +188,8 @@ class PCAState:
 def pca_commonality(X: np.ndarray, pca: dict[str, Any]) -> np.ndarray:
     """Per-stock commonality ``1 - Var(resid_i)/Var(ret_i)`` over the window（canonical）。"""
     n_rows, n_cols = X.shape
-    Xa = X[:, pca["active"]]
+    Xa_raw = X[:, pca["active"]]
+    Xa = np.where(np.isfinite(Xa_raw), Xa_raw, np.nan)
     Xa_imp = np.where(np.isfinite(Xa), Xa, pca["mu"][None, :])
     z = (Xa_imp - pca["mu"]) / pca["sd"]                    # (n_rows, n_active)
     score = pca["loadings"] @ z.T                           # (k, n_rows)

@@ -1,0 +1,24 @@
+schema_version: factor_engine.source_recovery.v1
+timestamp: "2026-09-08T12:35:41+08:00"
+baseline: "2bac7209c00e302728b810513c91f5475ec6954f"
+recovery_head: "d5482ca3e997b06e7e9e319861dd4525ce9c0689"
+backup_root: "/Users/shw/Documents/Codex/2026-09-06/qin/recovery_v7_20260908"
+restored_sources:
+  factor_engine/cleaned_operators/ts_model/volatility.py: "05be936fdb64314ba85a7cbb3f8b663802b845db9c125e6a12315e3f6842b0fe"
+  factor_engine/cleaned_operators/registry.py: "4d19f71b790f8b29b948f46d5f8adf5ad27ed6315feaad4fca5ed4b99d9395bf"
+  factor_engine/cleaned_operators/param_role_contract.py: "a63595ef4518789f9193a0c2810bbd617c4dff25e037be0c02f87c80441ea9a8"
+  factor_engine/storage/sources/data_access_source.py: "06c070a3e8b7bcd907183805386899337af12eca1c651b813c2449136741ee32"
+  factor_engine/runtime/default_engine.py: "3027703f4342a802fc05123f65d57d333446d846a8bca9b0491ca1682bafcd8f"
+  factor_engine/runtime/physical_source_binding.py: "44a8686dbbf5b510fd3de43e9df43d45d721d85eaa7c95c11a8aface8f012420"
+preserved_current:
+  quant_evaluator/kernels/gpu/drawdown.py: "9b2216df4309ab3bb300c95422f68bbfdfb635faa8c521753d00921700248549"
+verification:
+  focused: "78 passed, 4 skipped"
+  runtime_authority: "clean: 0 conflicts"
+  junit: "factor_engine/test-results/v7-recovery-owned-focused.xml"
+additional_verified_recovery:
+  factor_engine/cleaned_operators/cross_section/pca_state.py: "0bb0028b572a1c3075786325ae0995617f976f39608df9c28b1e00cd5da264c1"
+  factor_engine/backend/model_family_kernels.py: "23475ca76b3e251db915c856ad51308dd51cd0a75cf8aa325b32892108a5328f"
+  root_combined_model_validation: "158 passed, 4 skipped (optional arch missing); /tmp/v7-merge-models-combined.xml"
+deferred:
+  - "R04 eager ReadHandle content-identity validation; its unsynchronized oracle remains local."

@@ -1,0 +1,69 @@
+schema: factor_engine.v7.merge_review.v1
+status: MERGED_SCOPED_VALIDATION_COMPLETE
+authorization: user explicitly requested checking and merging both AIs' changes
+target: qs-server-c:/home/sunhaiwei/quant_projects
+base: 2bac7209c00e302728b810513c91f5475ec6954f
+other_backend_head: ebdb4321
+concurrent_heads_observed: [d5482ca3, 4441ad9e]
+our_commit_push_deploy: false
+method:
+  - preserve base, current and reviewed owner copies before each merge
+  - three-way comparison; check current content hash immediately before applying
+  - never reset, restore, stash, clean or overwrite from a whole stale directory
+  - treat concurrent commits as history to preserve, not as validation of incomplete source
+root_owned_merged:
+  - factor_engine/backend/operator_semantic_version.py
+  - factor_engine/tests/backend_parity/test_production_core_triple_parity.py
+  - factor_engine/tests/backend_parity/test_production_safe_bulk_parity.py
+  - factor_engine/tests/operators/test_cs_polars_native_batch1.py
+  - factor_engine/examples/run_many_v2_example.py
+  - factor_engine/tests/test_data_access_source_snapshot_cache.py
+root_merge_backups: /tmp/fe-v7-root-merge.F31up9
+preserved_other_ai_source:
+  reference: ebdb4321
+  unchanged_checked:
+    - factor_engine/backend/polars_expr_emitter.py
+    - factor_engine/backend/polars_long_policy.py
+    - factor_engine/backend/sql_pushdown/emitter.py
+    - factor_engine/backend/sql_pushdown/plan_fixtures.py
+    - factor_engine/backend/sql_tiers.py
+    - factor_engine/cleaned_operators/wave1_earnings.py
+checks:
+  source_stability:
+    tracked_python_toml_files: 56
+    hashes_unchanged_across_validation: true
+    diff_check: clean
+    manifest: v7_merge_source_hashes_20260908.txt
+  combined_models:
+    junit: /tmp/v7-merge-models-combined.xml
+    passed: 158
+    skipped: 4
+    skip_reason: optional arch dependency unavailable
+    seconds: 144.04
+  runtime_recovery:
+    initial_regression_passed: 69
+    direct_suite_after_restoring_r02_oracle: '6 passed, 1 xfailed'
+    package_manifest: '1 passed'
+    boundary: overlapping test scopes; do not sum counts as unique tests
+  both_backend_suites:
+    junit: /tmp/v7-merge-both-backends.xml
+    passed: 507
+    warnings: 9
+    seconds: 104.09
+    boundary: includes nonnumerical rejection and execution-contract tests; not 507 independently certified operators
+  candidate_isolation:
+    junit: /tmp/v7-merge-candidate-isolation.xml
+    passed: 21
+    warnings: 2
+  gpu:
+    junit: /tmp/v7-merge-gpu.xml
+    passed: 66
+    seconds: 5.34
+  registry_authority:
+    log: /tmp/v7-merge-runtime-authority.log
+    conflicts: 0
+not_claimed:
+  - entire v7 acceptance, all-operator mathematical certification, fastest possible execution
+  - completed cross-wave overlap; R02 regression is retained as a strict known expected failure
+  - eager ReadHandle approved-content identity fix; this is a separate remaining issue, not a recovered implementation
+  - actual 100000-factor materialization, full native RSS bound, production deployment

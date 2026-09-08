@@ -206,12 +206,12 @@ def test_garch_shock_uses_h_t() -> None:
     params = _fit_garch(seg[:-1])
     assert params is not None
     w, a, b = params
-    h_prev = float(np.var(seg))
+    # The backcast is part of the fitted state and therefore must use the same
+    # strict-prior segment as the parameter fit.  Replaying shocks through
+    # seg[-2] yields h_t, the variance governing seg[-1].
+    h_cur = float(np.var(seg[:-1]))
     for i in range(1, len(seg)):
-        hn = w + a * seg[i - 1] ** 2 + b * h_prev
-        if i == len(seg) - 1:
-            h_cur = h_prev  # conditional variance governing the last return
-        h_prev = hn
+        h_cur = w + a * seg[i - 1] ** 2 + b * h_cur
     shock = _garch_path(ret, 120, "shock", False, 0.0)
     assert shock == pytest.approx(seg[-1] / np.sqrt(max(h_cur, 1e-12)), rel=1e-6)
 

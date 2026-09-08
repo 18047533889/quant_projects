@@ -1,0 +1,45 @@
+work_package: WP2_SOL_RECOVERY_MERGE
+baseline_head: 2bac7209c00e302728b810513c91f5475ec6954f
+merge_head_observed: d5482ca3e997b06e7e9e319861dd4525ce9c0689
+remote_current_backup: /tmp/v7-sol-recovery-current-9CGfQq
+verified_source_snapshot: /tmp/fe-v7-package-preflight.wugeY1/source
+scope:
+  sources:
+    - factor_engine/cleaned_operators/ts_model/_rolling_core.py
+    - factor_engine/cleaned_operators/regression_models.py
+    - factor_engine/cleaned_operators/polars_native/ts_advanced_batch1.py
+    - factor_engine/cleaned_operators/polars_native/ts_advanced_batch5.py
+    - factor_engine/cleaned_operators/common/polars_ts_advanced.py
+    - factor_engine/cleaned_operators/cross_section/panel_model.py
+    - factor_engine/cleaned_operators/ts_model/sequence_anomaly.py
+  tests:
+    - factor_engine/tests/operators/test_v7_ridge_stability.py
+    - factor_engine/tests/operators/test_r11_round2_regression_defs.py
+    - factor_engine/tests/operators/test_v7_pca_moe_oracles.py
+    - factor_engine/tests/operators/test_model_semantics_fixes.py
+    - factor_engine/tests/operators/test_ts_model_next_stage.py
+recovery:
+  - Ridge stable augmented-system implementation restored from the verified package snapshot.
+  - regression_models diagnostic-only M07 tags retained and Ridge residuals reuse ridge_fit.
+  - Polars VR/Z native expressions and specialized numerical-kernel classifications restored.
+  - MOE ContextVar debug telemetry restored while retaining the PCA nonfinite-mask correction.
+  - Sequence-anomaly wrapper exposes canonical defaults through its local callable bridge.
+  - Sequence tests preserve implicit-default equivalence, finite numerics, relational rejection, and four compatibility-alias targets.
+conflicts:
+  - No post-baseline HEAD source changes overlapped the five package-snapshot restorations.
+  - panel_model required a local merged copy because the package snapshot predated MOE telemetry.
+  - regression_models required the later ridge_fit-authority hunk after restoring M07 tags.
+verification:
+  diff_check: PASS
+  root_reported_model_merge: PASS
+  root_reported_backend_suite: 507_passed
+  focused_sequence_default_bridge: 1_passed
+  focused_garch_oracle: 1_passed
+  prior_ridge_integration: 102_passed
+  prior_moe_and_panel_integration: 93_passed
+  full_suite_this_lane: NOT_RUN
+governance:
+  staged: false
+  committed: false
+  pushed: false
+  deployed: false
