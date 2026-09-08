@@ -1,0 +1,733 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="18" skipped="4" tests="121" time="40.919" timestamp="2026-09-08T12:17:02.488583+08:00" hostname="qs-compute-gpu-hk-01"><testcase classname="factor_engine.tests.operators.test_v7_volatility_contracts" name="test_v7_gjr_forecast_uses_same_leverage_step_as_history" time="25.014" /><testcase classname="factor_engine.tests.operators.test_v7_volatility_contracts" name="test_v7_gjr_gamma_zero_degenerates_to_garch" time="0.001" /><testcase classname="factor_engine.tests.operators.test_v7_volatility_contracts" name="test_v7_gjr_fixed_parameters_match_arch_7_2[-0.017]" time="0.001"><skipped type="pytest.skip" message="could not import 'arch': No module named 'arch'">/home/sunhaiwei/quant_projects/factor_engine/tests/operators/test_v7_volatility_contracts.py:48: could not import 'arch': No module named 'arch'</skipped></testcase><testcase classname="factor_engine.tests.operators.test_v7_volatility_contracts" name="test_v7_gjr_fixed_parameters_match_arch_7_2[0.017]" time="0.001"><skipped type="pytest.skip" message="could not import 'arch': No module named 'arch'">/home/sunhaiwei/quant_projects/factor_engine/tests/operators/test_v7_volatility_contracts.py:48: could not import 'arch': No module named 'arch'</skipped></testcase><testcase classname="factor_engine.tests.operators.test_v7_volatility_contracts" name="test_v7_gjr_fixed_parameters_match_arch_7_2[0.0]" time="0.000"><skipped type="pytest.skip" message="could not import 'arch': No module named 'arch'">/home/sunhaiwei/quant_projects/factor_engine/tests/operators/test_v7_volatility_contracts.py:48: could not import 'arch': No module named 'arch'</skipped></testcase><testcase classname="factor_engine.tests.operators.test_v7_volatility_contracts" name="test_v7_gjr_fixed_parameters_match_arch_7_2[-0.0]" time="0.001"><skipped type="pytest.skip" message="could not import 'arch': No module named 'arch'">/home/sunhaiwei/quant_projects/factor_engine/tests/operators/test_v7_volatility_contracts.py:48: could not import 'arch': No module named 'arch'</skipped></testcase><testcase classname="factor_engine.tests.operators.test_v7_volatility_contracts" name="test_v7_garch_forecast_nonfinite_current_shock_fails_closed" time="0.001" /><testcase classname="factor_engine.tests.operators.test_v7_volatility_contracts" name="test_v7_registered_gjr_prefix_is_not_rejected_by_future_suffix[extreme_level_like]" time="0.013" /><testcase classname="factor_engine.tests.operators.test_v7_volatility_contracts" name="test_v7_registered_gjr_prefix_is_not_rejected_by_future_suffix[long_missing]" time="0.012" /><testcase classname="factor_engine.tests.operators.test_v7_volatility_contracts" name="test_v7_registered_gjr_prefix_is_not_rejected_by_future_suffix[infinite]" time="0.012" /><testcase classname="factor_engine.tests.operators.test_v7_volatility_contracts" name="test_v7_har_innovation_pairs_features_and_labels_on_original_clock" time="0.001" /><testcase classname="factor_engine.tests.operators.test_r11_round3_tsmodel" name="test_prior_quantile_coeff_is_causal_unaffected_by_current_shock" time="0.487" /><testcase classname="factor_engine.tests.operators.test_r11_round3_tsmodel" name="test_in_sample_quantile_coeff_does_use_current_observation" time="0.489" /><testcase classname="factor_engine.tests.operators.test_r11_round3_tsmodel" name="test_quantile_coeff_prior_recovers_slope_on_symmetric_data" time="0.241" /><testcase classname="factor_engine.tests.operators.test_r11_round3_tsmodel" name="test_in_sample_coeff_metadata_is_explicitly_in_sample[ts_multi_regression_coeff-ts_multi_regression_coeff_prior]" time="0.000" /><testcase classname="factor_engine.tests.operators.test_r11_round3_tsmodel" name="test_in_sample_coeff_metadata_is_explicitly_in_sample[ts_huber_regression_coeff-ts_huber_regression_coeff_prior]" time="0.000" /><testcase classname="factor_engine.tests.operators.test_r11_round3_tsmodel" name="test_in_sample_coeff_metadata_is_explicitly_in_sample[ts_ridge_regression_coeff-ts_ridge_regression_coeff_prior]" time="0.000" /><testcase classname="factor_engine.tests.operators.test_r11_round3_tsmodel" name="test_in_sample_coeff_metadata_is_explicitly_in_sample[ts_expectile_regression_coeff-ts_expectile_regression_coeff_prior]" time="0.000" /><testcase classname="factor_engine.tests.operators.test_r11_round3_tsmodel" name="test_in_sample_coeff_metadata_is_explicitly_in_sample[ts_quantile_regression_coeff-None]" time="0.000" /><testcase classname="factor_engine.tests.operators.test_r11_round3_tsmodel" name="test_legacy_coeff_canonicals_stamped_in_sample_and_hidden" time="0.000"><failure message="TypeError: 'mappingproxy' object does not support item assignment">def test_legacy_coeff_canonicals_stamped_in_sample_and_hidden() -&gt; None:
+        """load-time catalog stamps (semantic_certification) mark the in-sample
+        coefficient canonicals diagnostic and hidden from default mining."""
+        from factor_engine.cleaned_operators.semantic_certification import stamp_compatibility_metadata
+    
+&gt;       stamp_compatibility_metadata()
+
+factor_engine/tests/operators/test_r11_round3_tsmodel.py:124: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    def stamp_compatibility_metadata() -&gt; None:
+        """Stamp honest diagnostic/benchmark metadata onto legacy registry entries."""
+        from factor_engine.cleaned_operators.registry import OperatorRegistry
+    
+        for canon in _DIAGNOSTIC_IN_SAMPLE:
+            entry = OperatorRegistry._catalog.get(canon)
+            if entry is None:
+                continue
+&gt;           entry["in_sample"] = True
+            ^^^^^^^^^^^^^^^^^^
+E           TypeError: 'mappingproxy' object does not support item assignment
+
+factor_engine/cleaned_operators/semantic_certification.py:284: TypeError</failure></testcase><testcase classname="factor_engine.tests.operators.test_r11_round3_tsmodel" name="test_kalman_gap_covariance_grows_by_q_per_missing_row" time="0.000" /><testcase classname="factor_engine.tests.operators.test_r11_round3_tsmodel" name="test_kalman_gap_level_is_last_known_level" time="0.174" /><testcase classname="factor_engine.tests.operators.test_r11_round3_tsmodel" name="test_kalman_innovation_after_gap_uses_grown_scale" time="0.001" /><testcase classname="factor_engine.tests.operators.test_r11_round3_tsmodel" name="test_kalman_leading_gap_and_all_missing_stay_nan" time="0.000" /><testcase classname="factor_engine.tests.operators.test_r11_round3_tsmodel" name="test_kalman_nonfinite_noise_scale_fails_closed[inf-1.0]" time="0.000" /><testcase classname="factor_engine.tests.operators.test_r11_round3_tsmodel" name="test_kalman_nonfinite_noise_scale_fails_closed[0.1-inf]" time="0.000" /><testcase classname="factor_engine.tests.operators.test_r11_round3_tsmodel" name="test_kalman_nonfinite_noise_scale_fails_closed[nan-1.0]" time="0.000" /><testcase classname="factor_engine.tests.operators.test_r11_round3_tsmodel" name="test_kalman_nonfinite_noise_scale_fails_closed[0.1-nan]" time="0.000" /><testcase classname="factor_engine.tests.operators.test_r11_round3_tsmodel" name="test_return_typed_ops_reject_raw_price_level[ts_garch_next_vol_forecast]" time="0.725"><failure message="Failed: DID NOT RAISE ValueError">name = 'ts_garch_next_vol_forecast'
+
+    @pytest.mark.parametrize("name", [
+        "ts_garch_next_vol_forecast", "ts_garch_vol_surprise", "ts_garch_persistence",
+        "ts_garch_standardized_shock", "ts_gjr_garch_vol_forecast", "ts_gjr_leverage",
+        "ts_har_from_return_next_vol", "ts_har_from_return_forecast_error_z",
+    ])
+    def test_return_typed_ops_reject_raw_price_level(name: str) -&gt; None:
+        """GARCH / HAR-from-return require a stationary return series; a clearly
+        non-stationary raw price level must be rejected at runtime."""
+        price = _price_panel(120)
+&gt;       with pytest.raises(ValueError, match="return"):
+E       Failed: DID NOT RAISE ValueError
+
+factor_engine/tests/operators/test_r11_round3_tsmodel.py:218: Failed</failure></testcase><testcase classname="factor_engine.tests.operators.test_r11_round3_tsmodel" name="test_return_typed_ops_reject_raw_price_level[ts_garch_vol_surprise]" time="0.727"><failure message="Failed: DID NOT RAISE ValueError">name = 'ts_garch_vol_surprise'
+
+    @pytest.mark.parametrize("name", [
+        "ts_garch_next_vol_forecast", "ts_garch_vol_surprise", "ts_garch_persistence",
+        "ts_garch_standardized_shock", "ts_gjr_garch_vol_forecast", "ts_gjr_leverage",
+        "ts_har_from_return_next_vol", "ts_har_from_return_forecast_error_z",
+    ])
+    def test_return_typed_ops_reject_raw_price_level(name: str) -&gt; None:
+        """GARCH / HAR-from-return require a stationary return series; a clearly
+        non-stationary raw price level must be rejected at runtime."""
+        price = _price_panel(120)
+&gt;       with pytest.raises(ValueError, match="return"):
+E       Failed: DID NOT RAISE ValueError
+
+factor_engine/tests/operators/test_r11_round3_tsmodel.py:218: Failed</failure></testcase><testcase classname="factor_engine.tests.operators.test_r11_round3_tsmodel" name="test_return_typed_ops_reject_raw_price_level[ts_garch_persistence]" time="0.711"><failure message="Failed: DID NOT RAISE ValueError">name = 'ts_garch_persistence'
+
+    @pytest.mark.parametrize("name", [
+        "ts_garch_next_vol_forecast", "ts_garch_vol_surprise", "ts_garch_persistence",
+        "ts_garch_standardized_shock", "ts_gjr_garch_vol_forecast", "ts_gjr_leverage",
+        "ts_har_from_return_next_vol", "ts_har_from_return_forecast_error_z",
+    ])
+    def test_return_typed_ops_reject_raw_price_level(name: str) -&gt; None:
+        """GARCH / HAR-from-return require a stationary return series; a clearly
+        non-stationary raw price level must be rejected at runtime."""
+        price = _price_panel(120)
+&gt;       with pytest.raises(ValueError, match="return"):
+E       Failed: DID NOT RAISE ValueError
+
+factor_engine/tests/operators/test_r11_round3_tsmodel.py:218: Failed</failure></testcase><testcase classname="factor_engine.tests.operators.test_r11_round3_tsmodel" name="test_return_typed_ops_reject_raw_price_level[ts_garch_standardized_shock]" time="0.724"><failure message="Failed: DID NOT RAISE ValueError">name = 'ts_garch_standardized_shock'
+
+    @pytest.mark.parametrize("name", [
+        "ts_garch_next_vol_forecast", "ts_garch_vol_surprise", "ts_garch_persistence",
+        "ts_garch_standardized_shock", "ts_gjr_garch_vol_forecast", "ts_gjr_leverage",
+        "ts_har_from_return_next_vol", "ts_har_from_return_forecast_error_z",
+    ])
+    def test_return_typed_ops_reject_raw_price_level(name: str) -&gt; None:
+        """GARCH / HAR-from-return require a stationary return series; a clearly
+        non-stationary raw price level must be rejected at runtime."""
+        price = _price_panel(120)
+&gt;       with pytest.raises(ValueError, match="return"):
+E       Failed: DID NOT RAISE ValueError
+
+factor_engine/tests/operators/test_r11_round3_tsmodel.py:218: Failed</failure></testcase><testcase classname="factor_engine.tests.operators.test_r11_round3_tsmodel" name="test_return_typed_ops_reject_raw_price_level[ts_gjr_garch_vol_forecast]" time="1.582"><failure message="Failed: DID NOT RAISE ValueError">name = 'ts_gjr_garch_vol_forecast'
+
+    @pytest.mark.parametrize("name", [
+        "ts_garch_next_vol_forecast", "ts_garch_vol_surprise", "ts_garch_persistence",
+        "ts_garch_standardized_shock", "ts_gjr_garch_vol_forecast", "ts_gjr_leverage",
+        "ts_har_from_return_next_vol", "ts_har_from_return_forecast_error_z",
+    ])
+    def test_return_typed_ops_reject_raw_price_level(name: str) -&gt; None:
+        """GARCH / HAR-from-return require a stationary return series; a clearly
+        non-stationary raw price level must be rejected at runtime."""
+        price = _price_panel(120)
+&gt;       with pytest.raises(ValueError, match="return"):
+E       Failed: DID NOT RAISE ValueError
+
+factor_engine/tests/operators/test_r11_round3_tsmodel.py:218: Failed</failure></testcase><testcase classname="factor_engine.tests.operators.test_r11_round3_tsmodel" name="test_return_typed_ops_reject_raw_price_level[ts_gjr_leverage]" time="1.699"><failure message="Failed: DID NOT RAISE ValueError">name = 'ts_gjr_leverage'
+
+    @pytest.mark.parametrize("name", [
+        "ts_garch_next_vol_forecast", "ts_garch_vol_surprise", "ts_garch_persistence",
+        "ts_garch_standardized_shock", "ts_gjr_garch_vol_forecast", "ts_gjr_leverage",
+        "ts_har_from_return_next_vol", "ts_har_from_return_forecast_error_z",
+    ])
+    def test_return_typed_ops_reject_raw_price_level(name: str) -&gt; None:
+        """GARCH / HAR-from-return require a stationary return series; a clearly
+        non-stationary raw price level must be rejected at runtime."""
+        price = _price_panel(120)
+&gt;       with pytest.raises(ValueError, match="return"):
+E       Failed: DID NOT RAISE ValueError
+
+factor_engine/tests/operators/test_r11_round3_tsmodel.py:218: Failed</failure></testcase><testcase classname="factor_engine.tests.operators.test_r11_round3_tsmodel" name="test_return_typed_ops_reject_raw_price_level[ts_har_from_return_next_vol]" time="0.042"><failure message="Failed: DID NOT RAISE ValueError">name = 'ts_har_from_return_next_vol'
+
+    @pytest.mark.parametrize("name", [
+        "ts_garch_next_vol_forecast", "ts_garch_vol_surprise", "ts_garch_persistence",
+        "ts_garch_standardized_shock", "ts_gjr_garch_vol_forecast", "ts_gjr_leverage",
+        "ts_har_from_return_next_vol", "ts_har_from_return_forecast_error_z",
+    ])
+    def test_return_typed_ops_reject_raw_price_level(name: str) -&gt; None:
+        """GARCH / HAR-from-return require a stationary return series; a clearly
+        non-stationary raw price level must be rejected at runtime."""
+        price = _price_panel(120)
+&gt;       with pytest.raises(ValueError, match="return"):
+E       Failed: DID NOT RAISE ValueError
+
+factor_engine/tests/operators/test_r11_round3_tsmodel.py:218: Failed</failure></testcase><testcase classname="factor_engine.tests.operators.test_r11_round3_tsmodel" name="test_return_typed_ops_reject_raw_price_level[ts_har_from_return_forecast_error_z]" time="0.046"><failure message="Failed: DID NOT RAISE ValueError">name = 'ts_har_from_return_forecast_error_z'
+
+    @pytest.mark.parametrize("name", [
+        "ts_garch_next_vol_forecast", "ts_garch_vol_surprise", "ts_garch_persistence",
+        "ts_garch_standardized_shock", "ts_gjr_garch_vol_forecast", "ts_gjr_leverage",
+        "ts_har_from_return_next_vol", "ts_har_from_return_forecast_error_z",
+    ])
+    def test_return_typed_ops_reject_raw_price_level(name: str) -&gt; None:
+        """GARCH / HAR-from-return require a stationary return series; a clearly
+        non-stationary raw price level must be rejected at runtime."""
+        price = _price_panel(120)
+&gt;       with pytest.raises(ValueError, match="return"):
+E       Failed: DID NOT RAISE ValueError
+
+factor_engine/tests/operators/test_r11_round3_tsmodel.py:218: Failed</failure></testcase><testcase classname="factor_engine.tests.operators.test_r11_round3_tsmodel" name="test_return_typed_ops_declare_return_input_units[ts_garch_next_vol_forecast]" time="0.001" /><testcase classname="factor_engine.tests.operators.test_r11_round3_tsmodel" name="test_return_typed_ops_declare_return_input_units[ts_garch_vol_surprise]" time="0.000" /><testcase classname="factor_engine.tests.operators.test_r11_round3_tsmodel" name="test_return_typed_ops_declare_return_input_units[ts_garch_persistence]" time="0.000" /><testcase classname="factor_engine.tests.operators.test_r11_round3_tsmodel" name="test_return_typed_ops_declare_return_input_units[ts_garch_standardized_shock]" time="0.000" /><testcase classname="factor_engine.tests.operators.test_r11_round3_tsmodel" name="test_return_typed_ops_declare_return_input_units[ts_gjr_garch_vol_forecast]" time="0.000" /><testcase classname="factor_engine.tests.operators.test_r11_round3_tsmodel" name="test_return_typed_ops_declare_return_input_units[ts_gjr_leverage]" time="0.000" /><testcase classname="factor_engine.tests.operators.test_r11_round3_tsmodel" name="test_garch_accepts_returns_and_produces_finite_output" time="1.975" /><testcase classname="factor_engine.tests.operators.test_r11_round3_tsmodel" name="test_garch_shock_deterministic_and_finite" time="4.812" /><testcase classname="factor_engine.tests.operators.test_r11_round3_tsmodel" name="test_har_rv_typed_ops_accept_rv_panel_not_rejected" time="0.011" /><testcase classname="factor_engine.tests.operators.test_r11_round3_tsmodel" name="test_har_rv_next_forecast_is_compat_alias_to_vol_forecast" time="0.001" /><testcase classname="factor_engine.tests.operators.test_r11_round3_tsmodel" name="test_har_var_forecast_equals_vol_forecast_squared" time="0.020" /><testcase classname="factor_engine.tests.operators.test_r11_round3_tsmodel" name="test_har_forecast_output_units_honest" time="0.001" /><testcase classname="factor_engine.tests.operators.test_r11_round3_tsmodel" name="test_legacy_har_rv_forecast_duplicate_describes_volatility" time="0.019" /><testcase classname="factor_engine.tests.operators.test_r11_round3_tsmodel" name="test_new_and_renamed_canonicals_registered_and_surface_consistent" time="0.000" /><testcase classname="factor_engine.tests.operators.test_v7_registry_param_spec_inheritance" name="test_backend_param_spec_inherits_omitted_canonical_role" time="0.000" /><testcase classname="factor_engine.tests.operators.test_v7_registry_param_spec_inheritance" name="test_backend_param_spec_preserves_and_reports_explicit_role_conflict" time="0.001" /><testcase classname="factor_engine.tests.runtime.test_v7_approved_snapshot" name="test_worker_factory_rejects_replacement_since_parent_approval" time="0.001"><failure message="factor_engine.runtime.default_engine.DeploymentConfigurationError: v2 deployment configuration: expected_source_content_digests">tmp_path = PosixPath('/tmp/pytest-of-sunhaiwei/pytest-2402/test_worker_factory_rejects_re0')
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7791781091f0&gt;
+
+    def test_worker_factory_rejects_replacement_since_parent_approval(tmp_path, monkeypatch):
+        business = profile(tmp_path)
+        business['expected_snapshot_token'] = 'manifest:approved:1'
+        config = module.ExecutionCoreWorkerConfig(
+&gt;           module.ApprovedDeploymentProfile.from_mapping(business), DefaultExecutionPolicy())
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+factor_engine/tests/runtime/test_v7_approved_snapshot.py:26: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+cls = &lt;class 'factor_engine.runtime.default_engine.ApprovedDeploymentProfile'&gt;
+value = {'profile_id': 'isolated-test', 'approval_id': 'test-only', 'data_source': {'type': 'data_access', 'dataset': 'ashare_...ate': '2024-01-31', ...}, 'artifact_root': '/tmp/pytest-of-sunhaiwei/pytest-2402/test_worker_factory_rejects_re0', ...}
+
+    @classmethod
+    def from_mapping(cls, value):
+        if not isinstance(value, Mapping):
+            raise DeploymentConfigurationError(detail="profile must be a mapping")
+        required = {"profile_id", "approval_id", "data_source", "artifact_root", "market",
+                    "calendar_id", "timezone", "frequency", "universe_id", "adjustment"}
+        missing = [k for k in required if value.get(k) is None or value.get(k) == ""]
+        source = value.get("data_source")
+        if not isinstance(source, Mapping):
+            missing.append("data_source.type")
+        else:
+            missing.extend("data_source." + k for k in
+                           ("dataset", "start_date", "end_date", "instrument_filter")
+                           if not source.get(k))
+        if missing:
+            raise DeploymentConfigurationError(missing)
+        unknown = set(value) - required - {
+            "execution", "expected_snapshot_token", "expected_source_snapshot_tokens",
+            "expected_source_content_digests",
+        }
+        if unknown:
+            raise DeploymentConfigurationError(detail="unknown fields: " + ", ".join(sorted(unknown)))
+        if any(not isinstance(value[k], str) or not value[k].strip() for k in required - {"data_source"}):
+            raise DeploymentConfigurationError(detail="business identity fields must be nonempty strings")
+        if value["market"] != "ashare" or value["adjustment"] != "hfq":
+            raise DeploymentConfigurationError(detail="v2 default requires approved ashare/hfq semantics")
+        if source.get("type") != "data_access":
+            raise DeploymentConfigurationError(detail="v2 source must use the DataAccess gateway")
+        # A profile label is not evidence that the selected data are adjusted.
+        # This default entry currently implements the canonical daily HFQ
+        # anchor only. Other sources need an explicit semantic adapter first.
+        if source.get("dataset") != "ashare_stock_daily_adj":
+            raise DeploymentConfigurationError(
+                detail="v2 hfq source requires canonical ashare_stock_daily_adj dataset")
+        if source.get("read_mode", "panel") != "panel" or value["frequency"] != "1d":
+            raise DeploymentConfigurationError(detail="canonical hfq anchor requires daily 1d panel scope")
+        if source.get("fields"):
+            raise DeploymentConfigurationError(
+                detail="v2 hfq field aliases must come from the semantic catalog, not profile overrides")
+        for key in ("run_mode", "production", "strict_unknown_fields", "pit_enforce"):
+            if key in source and (source[key] != "production" if key == "run_mode" else source[key] is not True):
+                raise DeploymentConfigurationError(detail=f"data_source.{key} cannot weaken production gates")
+        instruments = source["instrument_filter"]
+        if (not isinstance(instruments, list) or not instruments or
+                any(not isinstance(x, str) or not x for x in instruments) or
+                len(instruments) != len(set(instruments))):
+            raise DeploymentConfigurationError(detail="instrument_filter must be an explicit unique list")
+        try:
+            start = date.fromisoformat(source["start_date"])
+            end = date.fromisoformat(source["end_date"])
+        except (ValueError, TypeError):
+            raise DeploymentConfigurationError(detail="source dates must be ISO dates") from None
+        if start &gt; end:
+            raise DeploymentConfigurationError(detail="source start_date exceeds end_date")
+        if not Path(value["artifact_root"]).is_absolute():
+            raise DeploymentConfigurationError(detail="artifact_root must be an approved absolute directory")
+        snapshot = value.get("expected_snapshot_token")
+        if snapshot is not None and (not isinstance(snapshot, str) or not snapshot.strip()):
+            raise DeploymentConfigurationError(detail="expected_snapshot_token must be a nonempty string")
+        snapshots = value.get("expected_source_snapshot_tokens")
+        if snapshots is not None:
+            if (not isinstance(snapshots, Mapping) or not snapshots or
+                    any(not isinstance(k, str) or not k.strip() or
+                        not isinstance(v, str) or not v.strip() for k, v in snapshots.items())):
+                raise DeploymentConfigurationError(detail="expected_source_snapshot_tokens must map datasets to nonempty tokens")
+            anchor_token = snapshots.get(source["dataset"])
+            if anchor_token is None or (snapshot is not None and anchor_token != snapshot):
+                raise DeploymentConfigurationError(detail="approved snapshot set must include the consistent anchor token")
+        content_digests = value.get("expected_source_content_digests")
+        if content_digests is None:
+&gt;           raise DeploymentConfigurationError(("expected_source_content_digests",))
+E           factor_engine.runtime.default_engine.DeploymentConfigurationError: v2 deployment configuration: expected_source_content_digests
+
+factor_engine/runtime/default_engine.py:104: DeploymentConfigurationError</failure></testcase><testcase classname="factor_engine.tests.runtime.test_v7_approved_snapshot" name="test_worker_factory_propagates_approved_content_digest" time="0.001"><failure message="KeyError: 'expected_source_content_digests'">tmp_path = PosixPath('/tmp/pytest-of-sunhaiwei/pytest-2402/test_worker_factory_propagates0')
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x77917810b470&gt;
+
+    def test_worker_factory_propagates_approved_content_digest(tmp_path, monkeypatch):
+        business = profile(tmp_path)
+&gt;       approved = business['expected_source_content_digests'][business['data_source']['dataset']]
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       KeyError: 'expected_source_content_digests'
+
+factor_engine/tests/runtime/test_v7_approved_snapshot.py:39: KeyError</failure></testcase><testcase classname="factor_engine.tests.runtime.test_v7_approved_snapshot" name="test_bound_source_cannot_accept_a_later_consistent_snapshot" time="0.000" /><testcase classname="factor_engine.tests.runtime.test_v7_approved_snapshot" name="test_approved_multi_source_set_requires_anchor_and_nonempty_tokens[snapshots0]" time="0.001" /><testcase classname="factor_engine.tests.runtime.test_v7_approved_snapshot" name="test_approved_multi_source_set_requires_anchor_and_nonempty_tokens[snapshots1]" time="0.001" /><testcase classname="factor_engine.tests.runtime.test_v7_approved_snapshot" name="test_approved_multi_source_set_requires_anchor_and_nonempty_tokens[snapshots2]" time="0.001" /><testcase classname="factor_engine.tests.runtime.test_v7_approved_snapshot" name="test_v7_profile_requires_approved_anchor_content_digest[None]" time="0.001"><failure message="KeyError: 'expected_source_content_digests'">tmp_path = PosixPath('/tmp/pytest-of-sunhaiwei/pytest-2402/test_v7_profile_requires_appro0')
+digests = None
+
+    @pytest.mark.parametrize('digests', [
+        None, {}, {'secondary': 'a' * 32}, {'ashare_stock_daily_adj': 'not-a-digest'},
+        {'ashare_stock_daily_adj': 'A' * 32},
+    ])
+    def test_v7_profile_requires_approved_anchor_content_digest(tmp_path, digests):
+        business = profile(tmp_path)
+        if digests is None:
+&gt;           business.pop('expected_source_content_digests')
+E           KeyError: 'expected_source_content_digests'
+
+factor_engine/tests/runtime/test_v7_approved_snapshot.py:79: KeyError</failure></testcase><testcase classname="factor_engine.tests.runtime.test_v7_approved_snapshot" name="test_v7_profile_requires_approved_anchor_content_digest[digests1]" time="0.001" /><testcase classname="factor_engine.tests.runtime.test_v7_approved_snapshot" name="test_v7_profile_requires_approved_anchor_content_digest[digests2]" time="0.001" /><testcase classname="factor_engine.tests.runtime.test_v7_approved_snapshot" name="test_v7_profile_requires_approved_anchor_content_digest[digests3]" time="0.001" /><testcase classname="factor_engine.tests.runtime.test_v7_approved_snapshot" name="test_v7_profile_requires_approved_anchor_content_digest[digests4]" time="0.001" /><testcase classname="factor_engine.tests.runtime.test_v7_approved_snapshot" name="test_preparation_rechecks_approval_and_releases_failed_reservation[False]" time="0.008" /><testcase classname="factor_engine.tests.runtime.test_v7_approved_snapshot" name="test_preparation_rechecks_approval_and_releases_failed_reservation[True]" time="0.000" /><testcase classname="factor_engine.tests.runtime.test_v7_approved_snapshot" name="test_prepared_content_identity_rejects_aba_and_releases_reservation" time="0.000" /><testcase classname="factor_engine.tests.runtime.test_v7_approved_snapshot" name="test_approved_content_set_rejects_missing_secondary_before_prepare" time="0.000" /><testcase classname="factor_engine.tests.storage.test_v7_volume_factor_alias" name="test_adjusted_volume_independent_of_factor_alias_and_cache[requests0]" time="0.024" /><testcase classname="factor_engine.tests.storage.test_v7_volume_factor_alias" name="test_adjusted_volume_independent_of_factor_alias_and_cache[requests1]" time="0.005" /><testcase classname="factor_engine.tests.storage.test_v7_volume_factor_alias" name="test_adjusted_volume_independent_of_factor_alias_and_cache[requests2]" time="0.004" /><testcase classname="factor_engine.tests.storage.test_v7_volume_factor_alias" name="test_adjusted_volume_independent_of_factor_alias_and_cache[requests3]" time="0.006" /><testcase classname="factor_engine.tests.storage.test_v7_volume_factor_alias" name="test_adjusted_volume_independent_of_factor_alias_and_cache[requests4]" time="0.006" /><testcase classname="factor_engine.tests.storage.test_v7_volume_factor_alias" name="test_adjusted_volume_independent_of_factor_alias_and_cache[requests5]" time="0.004" /><testcase classname="factor_engine.tests.storage.test_v7_volume_factor_alias" name="test_adjusted_volume_independent_of_factor_alias_and_cache[requests6]" time="0.004" /><testcase classname="factor_engine.tests.storage.test_v7_volume_factor_alias" name="test_adjusted_volume_independent_of_factor_alias_and_cache[requests7]" time="0.004" /><testcase classname="factor_engine.tests.storage.test_v7_volume_factor_alias" name="test_adjusted_volume_independent_of_factor_alias_and_cache[requests8]" time="0.004" /><testcase classname="factor_engine.tests.runtime.test_v6_default_engine" name="test_unconfigured_public_entry_reports_before_importing_or_computing" time="0.000" /><testcase classname="factor_engine.tests.runtime.test_v6_default_engine" name="test_reports_missing_business_fields_together" time="0.000" /><testcase classname="factor_engine.tests.runtime.test_v6_default_engine" name="test_immutable_deployment_snapshot" time="0.001"><failure message="factor_engine.runtime.default_engine.DeploymentConfigurationError: v2 deployment configuration: expected_source_content_digests">tmp_path = PosixPath('/tmp/pytest-of-sunhaiwei/pytest-2402/test_immutable_deployment_snap0')
+
+    def test_immutable_deployment_snapshot(tmp_path):
+        original = profile(tmp_path)
+&gt;       frozen = ApprovedDeploymentProfile.from_mapping(original)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+factor_engine/tests/runtime/test_v6_default_engine.py:40: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+cls = &lt;class 'factor_engine.runtime.default_engine.ApprovedDeploymentProfile'&gt;
+value = {'profile_id': 'isolated-test', 'approval_id': 'test-only', 'data_source': {'type': 'data_access', 'dataset': 'ashare_...ate': '2024-01-31', ...}, 'artifact_root': '/tmp/pytest-of-sunhaiwei/pytest-2402/test_immutable_deployment_snap0', ...}
+
+    @classmethod
+    def from_mapping(cls, value):
+        if not isinstance(value, Mapping):
+            raise DeploymentConfigurationError(detail="profile must be a mapping")
+        required = {"profile_id", "approval_id", "data_source", "artifact_root", "market",
+                    "calendar_id", "timezone", "frequency", "universe_id", "adjustment"}
+        missing = [k for k in required if value.get(k) is None or value.get(k) == ""]
+        source = value.get("data_source")
+        if not isinstance(source, Mapping):
+            missing.append("data_source.type")
+        else:
+            missing.extend("data_source." + k for k in
+                           ("dataset", "start_date", "end_date", "instrument_filter")
+                           if not source.get(k))
+        if missing:
+            raise DeploymentConfigurationError(missing)
+        unknown = set(value) - required - {
+            "execution", "expected_snapshot_token", "expected_source_snapshot_tokens",
+            "expected_source_content_digests",
+        }
+        if unknown:
+            raise DeploymentConfigurationError(detail="unknown fields: " + ", ".join(sorted(unknown)))
+        if any(not isinstance(value[k], str) or not value[k].strip() for k in required - {"data_source"}):
+            raise DeploymentConfigurationError(detail="business identity fields must be nonempty strings")
+        if value["market"] != "ashare" or value["adjustment"] != "hfq":
+            raise DeploymentConfigurationError(detail="v2 default requires approved ashare/hfq semantics")
+        if source.get("type") != "data_access":
+            raise DeploymentConfigurationError(detail="v2 source must use the DataAccess gateway")
+        # A profile label is not evidence that the selected data are adjusted.
+        # This default entry currently implements the canonical daily HFQ
+        # anchor only. Other sources need an explicit semantic adapter first.
+        if source.get("dataset") != "ashare_stock_daily_adj":
+            raise DeploymentConfigurationError(
+                detail="v2 hfq source requires canonical ashare_stock_daily_adj dataset")
+        if source.get("read_mode", "panel") != "panel" or value["frequency"] != "1d":
+            raise DeploymentConfigurationError(detail="canonical hfq anchor requires daily 1d panel scope")
+        if source.get("fields"):
+            raise DeploymentConfigurationError(
+                detail="v2 hfq field aliases must come from the semantic catalog, not profile overrides")
+        for key in ("run_mode", "production", "strict_unknown_fields", "pit_enforce"):
+            if key in source and (source[key] != "production" if key == "run_mode" else source[key] is not True):
+                raise DeploymentConfigurationError(detail=f"data_source.{key} cannot weaken production gates")
+        instruments = source["instrument_filter"]
+        if (not isinstance(instruments, list) or not instruments or
+                any(not isinstance(x, str) or not x for x in instruments) or
+                len(instruments) != len(set(instruments))):
+            raise DeploymentConfigurationError(detail="instrument_filter must be an explicit unique list")
+        try:
+            start = date.fromisoformat(source["start_date"])
+            end = date.fromisoformat(source["end_date"])
+        except (ValueError, TypeError):
+            raise DeploymentConfigurationError(detail="source dates must be ISO dates") from None
+        if start &gt; end:
+            raise DeploymentConfigurationError(detail="source start_date exceeds end_date")
+        if not Path(value["artifact_root"]).is_absolute():
+            raise DeploymentConfigurationError(detail="artifact_root must be an approved absolute directory")
+        snapshot = value.get("expected_snapshot_token")
+        if snapshot is not None and (not isinstance(snapshot, str) or not snapshot.strip()):
+            raise DeploymentConfigurationError(detail="expected_snapshot_token must be a nonempty string")
+        snapshots = value.get("expected_source_snapshot_tokens")
+        if snapshots is not None:
+            if (not isinstance(snapshots, Mapping) or not snapshots or
+                    any(not isinstance(k, str) or not k.strip() or
+                        not isinstance(v, str) or not v.strip() for k, v in snapshots.items())):
+                raise DeploymentConfigurationError(detail="expected_source_snapshot_tokens must map datasets to nonempty tokens")
+            anchor_token = snapshots.get(source["dataset"])
+            if anchor_token is None or (snapshot is not None and anchor_token != snapshot):
+                raise DeploymentConfigurationError(detail="approved snapshot set must include the consistent anchor token")
+        content_digests = value.get("expected_source_content_digests")
+        if content_digests is None:
+&gt;           raise DeploymentConfigurationError(("expected_source_content_digests",))
+E           factor_engine.runtime.default_engine.DeploymentConfigurationError: v2 deployment configuration: expected_source_content_digests
+
+factor_engine/runtime/default_engine.py:104: DeploymentConfigurationError</failure></testcase><testcase classname="factor_engine.tests.runtime.test_v6_default_engine" name="test_bad_business_configuration_rejected[artifact_root-relative]" time="0.001" /><testcase classname="factor_engine.tests.runtime.test_v6_default_engine" name="test_bad_business_configuration_rejected[adjustment-raw]" time="0.001" /><testcase classname="factor_engine.tests.runtime.test_v6_default_engine" name="test_bad_business_configuration_rejected[market-us]" time="0.001" /><testcase classname="factor_engine.tests.runtime.test_v6_default_engine" name="test_bad_business_configuration_rejected[frequency-True]" time="0.001" /><testcase classname="factor_engine.tests.runtime.test_v6_default_engine" name="test_bad_business_configuration_rejected[unexpected-value]" time="0.001" /><testcase classname="factor_engine.tests.runtime.test_v6_default_engine" name="test_raw_source_or_scope_downgrade_rejected[type-parquet]" time="0.001" /><testcase classname="factor_engine.tests.runtime.test_v6_default_engine" name="test_raw_source_or_scope_downgrade_rejected[run_mode-research]" time="0.001" /><testcase classname="factor_engine.tests.runtime.test_v6_default_engine" name="test_raw_source_or_scope_downgrade_rejected[production-False]" time="0.001" /><testcase classname="factor_engine.tests.runtime.test_v6_default_engine" name="test_raw_source_or_scope_downgrade_rejected[pit_enforce-False]" time="0.001" /><testcase classname="factor_engine.tests.runtime.test_v6_default_engine" name="test_raw_source_or_scope_downgrade_rejected[instrument_filter-value4]" time="0.001" /><testcase classname="factor_engine.tests.runtime.test_v6_default_engine" name="test_raw_source_or_scope_downgrade_rejected[instrument_filter-all]" time="0.001" /><testcase classname="factor_engine.tests.runtime.test_v6_default_engine" name="test_raw_source_or_scope_downgrade_rejected[start_date-2025-01-01]" time="0.001" /><testcase classname="factor_engine.tests.runtime.test_v6_default_engine" name="test_file_parser_and_policy_agree" time="0.001"><failure message="factor_engine.runtime.default_engine.DeploymentConfigurationError: v2 deployment configuration: expected_source_content_digests">tmp_path = PosixPath('/tmp/pytest-of-sunhaiwei/pytest-2402/test_file_parser_and_policy_ag0')
+
+    def test_file_parser_and_policy_agree(tmp_path):
+        file = tmp_path / "profile.json"
+        file.write_text(json.dumps(profile(tmp_path)))
+&gt;       assert load_deployment_profile(file).to_dict() == profile(tmp_path)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+factor_engine/tests/runtime/test_v6_default_engine.py:72: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+factor_engine/runtime/default_engine.py:165: in load_deployment_profile
+    return ApprovedDeploymentProfile.from_mapping(value)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+cls = &lt;class 'factor_engine.runtime.default_engine.ApprovedDeploymentProfile'&gt;
+value = {'profile_id': 'isolated-test', 'approval_id': 'test-only', 'data_source': {'type': 'data_access', 'dataset': 'ashare_...ate': '2024-01-31', ...}, 'artifact_root': '/tmp/pytest-of-sunhaiwei/pytest-2402/test_file_parser_and_policy_ag0', ...}
+
+    @classmethod
+    def from_mapping(cls, value):
+        if not isinstance(value, Mapping):
+            raise DeploymentConfigurationError(detail="profile must be a mapping")
+        required = {"profile_id", "approval_id", "data_source", "artifact_root", "market",
+                    "calendar_id", "timezone", "frequency", "universe_id", "adjustment"}
+        missing = [k for k in required if value.get(k) is None or value.get(k) == ""]
+        source = value.get("data_source")
+        if not isinstance(source, Mapping):
+            missing.append("data_source.type")
+        else:
+            missing.extend("data_source." + k for k in
+                           ("dataset", "start_date", "end_date", "instrument_filter")
+                           if not source.get(k))
+        if missing:
+            raise DeploymentConfigurationError(missing)
+        unknown = set(value) - required - {
+            "execution", "expected_snapshot_token", "expected_source_snapshot_tokens",
+            "expected_source_content_digests",
+        }
+        if unknown:
+            raise DeploymentConfigurationError(detail="unknown fields: " + ", ".join(sorted(unknown)))
+        if any(not isinstance(value[k], str) or not value[k].strip() for k in required - {"data_source"}):
+            raise DeploymentConfigurationError(detail="business identity fields must be nonempty strings")
+        if value["market"] != "ashare" or value["adjustment"] != "hfq":
+            raise DeploymentConfigurationError(detail="v2 default requires approved ashare/hfq semantics")
+        if source.get("type") != "data_access":
+            raise DeploymentConfigurationError(detail="v2 source must use the DataAccess gateway")
+        # A profile label is not evidence that the selected data are adjusted.
+        # This default entry currently implements the canonical daily HFQ
+        # anchor only. Other sources need an explicit semantic adapter first.
+        if source.get("dataset") != "ashare_stock_daily_adj":
+            raise DeploymentConfigurationError(
+                detail="v2 hfq source requires canonical ashare_stock_daily_adj dataset")
+        if source.get("read_mode", "panel") != "panel" or value["frequency"] != "1d":
+            raise DeploymentConfigurationError(detail="canonical hfq anchor requires daily 1d panel scope")
+        if source.get("fields"):
+            raise DeploymentConfigurationError(
+                detail="v2 hfq field aliases must come from the semantic catalog, not profile overrides")
+        for key in ("run_mode", "production", "strict_unknown_fields", "pit_enforce"):
+            if key in source and (source[key] != "production" if key == "run_mode" else source[key] is not True):
+                raise DeploymentConfigurationError(detail=f"data_source.{key} cannot weaken production gates")
+        instruments = source["instrument_filter"]
+        if (not isinstance(instruments, list) or not instruments or
+                any(not isinstance(x, str) or not x for x in instruments) or
+                len(instruments) != len(set(instruments))):
+            raise DeploymentConfigurationError(detail="instrument_filter must be an explicit unique list")
+        try:
+            start = date.fromisoformat(source["start_date"])
+            end = date.fromisoformat(source["end_date"])
+        except (ValueError, TypeError):
+            raise DeploymentConfigurationError(detail="source dates must be ISO dates") from None
+        if start &gt; end:
+            raise DeploymentConfigurationError(detail="source start_date exceeds end_date")
+        if not Path(value["artifact_root"]).is_absolute():
+            raise DeploymentConfigurationError(detail="artifact_root must be an approved absolute directory")
+        snapshot = value.get("expected_snapshot_token")
+        if snapshot is not None and (not isinstance(snapshot, str) or not snapshot.strip()):
+            raise DeploymentConfigurationError(detail="expected_snapshot_token must be a nonempty string")
+        snapshots = value.get("expected_source_snapshot_tokens")
+        if snapshots is not None:
+            if (not isinstance(snapshots, Mapping) or not snapshots or
+                    any(not isinstance(k, str) or not k.strip() or
+                        not isinstance(v, str) or not v.strip() for k, v in snapshots.items())):
+                raise DeploymentConfigurationError(detail="expected_source_snapshot_tokens must map datasets to nonempty tokens")
+            anchor_token = snapshots.get(source["dataset"])
+            if anchor_token is None or (snapshot is not None and anchor_token != snapshot):
+                raise DeploymentConfigurationError(detail="approved snapshot set must include the consistent anchor token")
+        content_digests = value.get("expected_source_content_digests")
+        if content_digests is None:
+&gt;           raise DeploymentConfigurationError(("expected_source_content_digests",))
+E           factor_engine.runtime.default_engine.DeploymentConfigurationError: v2 deployment configuration: expected_source_content_digests
+
+factor_engine/runtime/default_engine.py:104: DeploymentConfigurationError</failure></testcase><testcase classname="factor_engine.tests.runtime.test_v6_default_engine" name="test_duplicate_keys_rejected" time="0.001" /><testcase classname="factor_engine.tests.runtime.test_v6_default_engine" name="test_parser_error_does_not_echo_profile_contents" time="0.001" /><testcase classname="factor_engine.tests.runtime.test_v6_default_engine" name="test_snapshot_identity_must_be_nonempty_string[]" time="0.001" /><testcase classname="factor_engine.tests.runtime.test_v6_default_engine" name="test_snapshot_identity_must_be_nonempty_string[  ]" time="0.001" /><testcase classname="factor_engine.tests.runtime.test_v6_default_engine" name="test_snapshot_identity_must_be_nonempty_string[False]" time="0.001" /><testcase classname="factor_engine.tests.runtime.test_v6_default_engine" name="test_snapshot_identity_must_be_nonempty_string[123]" time="0.001" /><testcase classname="factor_engine.tests.runtime.test_v6_default_engine" name="test_snapshot_identity_must_be_nonempty_string[token4]" time="0.001" /><testcase classname="factor_engine.tests.runtime.test_v6_default_engine" name="test_hfq_label_cannot_override_actual_source_semantics[source_change0]" time="0.001" /><testcase classname="factor_engine.tests.runtime.test_v6_default_engine" name="test_hfq_label_cannot_override_actual_source_semantics[source_change1]" time="0.001" /><testcase classname="factor_engine.tests.runtime.test_v6_default_engine" name="test_hfq_label_cannot_override_actual_source_semantics[source_change2]" time="0.001" /><testcase classname="factor_engine.tests.runtime.test_v6_default_engine" name="test_public_factory_constructs_production_core_and_shared_authority" time="0.002"><failure message="factor_engine.runtime.default_engine.DeploymentConfigurationError: v2 deployment configuration: expected_source_content_digests">tmp_path = PosixPath('/tmp/pytest-of-sunhaiwei/pytest-2402/test_public_factory_constructs0')
+
+    def test_public_factory_constructs_production_core_and_shared_authority(tmp_path):
+        file = tmp_path / "profile.json"
+        file.write_text(json.dumps(profile(tmp_path)))
+&gt;       with get_engine(profile_path=file) as first, get_engine(profile_path=file) as second:
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+factor_engine/tests/runtime/test_v6_default_engine.py:114: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+factor_engine/__init__.py:22: in get_engine
+    return build_default_engine(profile_path=profile_path, execution=execution)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+factor_engine/runtime/default_engine.py:222: in get_engine
+    deployment = load_deployment_profile(profile_path)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+factor_engine/runtime/default_engine.py:165: in load_deployment_profile
+    return ApprovedDeploymentProfile.from_mapping(value)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+cls = &lt;class 'factor_engine.runtime.default_engine.ApprovedDeploymentProfile'&gt;
+value = {'profile_id': 'isolated-test', 'approval_id': 'test-only', 'data_source': {'type': 'data_access', 'dataset': 'ashare_...ate': '2024-01-31', ...}, 'artifact_root': '/tmp/pytest-of-sunhaiwei/pytest-2402/test_public_factory_constructs0', ...}
+
+    @classmethod
+    def from_mapping(cls, value):
+        if not isinstance(value, Mapping):
+            raise DeploymentConfigurationError(detail="profile must be a mapping")
+        required = {"profile_id", "approval_id", "data_source", "artifact_root", "market",
+                    "calendar_id", "timezone", "frequency", "universe_id", "adjustment"}
+        missing = [k for k in required if value.get(k) is None or value.get(k) == ""]
+        source = value.get("data_source")
+        if not isinstance(source, Mapping):
+            missing.append("data_source.type")
+        else:
+            missing.extend("data_source." + k for k in
+                           ("dataset", "start_date", "end_date", "instrument_filter")
+                           if not source.get(k))
+        if missing:
+            raise DeploymentConfigurationError(missing)
+        unknown = set(value) - required - {
+            "execution", "expected_snapshot_token", "expected_source_snapshot_tokens",
+            "expected_source_content_digests",
+        }
+        if unknown:
+            raise DeploymentConfigurationError(detail="unknown fields: " + ", ".join(sorted(unknown)))
+        if any(not isinstance(value[k], str) or not value[k].strip() for k in required - {"data_source"}):
+            raise DeploymentConfigurationError(detail="business identity fields must be nonempty strings")
+        if value["market"] != "ashare" or value["adjustment"] != "hfq":
+            raise DeploymentConfigurationError(detail="v2 default requires approved ashare/hfq semantics")
+        if source.get("type") != "data_access":
+            raise DeploymentConfigurationError(detail="v2 source must use the DataAccess gateway")
+        # A profile label is not evidence that the selected data are adjusted.
+        # This default entry currently implements the canonical daily HFQ
+        # anchor only. Other sources need an explicit semantic adapter first.
+        if source.get("dataset") != "ashare_stock_daily_adj":
+            raise DeploymentConfigurationError(
+                detail="v2 hfq source requires canonical ashare_stock_daily_adj dataset")
+        if source.get("read_mode", "panel") != "panel" or value["frequency"] != "1d":
+            raise DeploymentConfigurationError(detail="canonical hfq anchor requires daily 1d panel scope")
+        if source.get("fields"):
+            raise DeploymentConfigurationError(
+                detail="v2 hfq field aliases must come from the semantic catalog, not profile overrides")
+        for key in ("run_mode", "production", "strict_unknown_fields", "pit_enforce"):
+            if key in source and (source[key] != "production" if key == "run_mode" else source[key] is not True):
+                raise DeploymentConfigurationError(detail=f"data_source.{key} cannot weaken production gates")
+        instruments = source["instrument_filter"]
+        if (not isinstance(instruments, list) or not instruments or
+                any(not isinstance(x, str) or not x for x in instruments) or
+                len(instruments) != len(set(instruments))):
+            raise DeploymentConfigurationError(detail="instrument_filter must be an explicit unique list")
+        try:
+            start = date.fromisoformat(source["start_date"])
+            end = date.fromisoformat(source["end_date"])
+        except (ValueError, TypeError):
+            raise DeploymentConfigurationError(detail="source dates must be ISO dates") from None
+        if start &gt; end:
+            raise DeploymentConfigurationError(detail="source start_date exceeds end_date")
+        if not Path(value["artifact_root"]).is_absolute():
+            raise DeploymentConfigurationError(detail="artifact_root must be an approved absolute directory")
+        snapshot = value.get("expected_snapshot_token")
+        if snapshot is not None and (not isinstance(snapshot, str) or not snapshot.strip()):
+            raise DeploymentConfigurationError(detail="expected_snapshot_token must be a nonempty string")
+        snapshots = value.get("expected_source_snapshot_tokens")
+        if snapshots is not None:
+            if (not isinstance(snapshots, Mapping) or not snapshots or
+                    any(not isinstance(k, str) or not k.strip() or
+                        not isinstance(v, str) or not v.strip() for k, v in snapshots.items())):
+                raise DeploymentConfigurationError(detail="expected_source_snapshot_tokens must map datasets to nonempty tokens")
+            anchor_token = snapshots.get(source["dataset"])
+            if anchor_token is None or (snapshot is not None and anchor_token != snapshot):
+                raise DeploymentConfigurationError(detail="approved snapshot set must include the consistent anchor token")
+        content_digests = value.get("expected_source_content_digests")
+        if content_digests is None:
+&gt;           raise DeploymentConfigurationError(("expected_source_content_digests",))
+E           factor_engine.runtime.default_engine.DeploymentConfigurationError: v2 deployment configuration: expected_source_content_digests
+
+factor_engine/runtime/default_engine.py:104: DeploymentConfigurationError</failure></testcase><testcase classname="factor_engine.tests.runtime.test_v6_default_engine" name="test_explicit_backend_preserved_at_construction" time="0.001"><failure message="factor_engine.runtime.default_engine.DeploymentConfigurationError: v2 deployment configuration: expected_source_content_digests">tmp_path = PosixPath('/tmp/pytest-of-sunhaiwei/pytest-2402/test_explicit_backend_preserve0')
+
+    def test_explicit_backend_preserved_at_construction(tmp_path):
+        file = tmp_path / "profile.json"
+        file.write_text(json.dumps(profile(tmp_path)))
+&gt;       with get_engine(profile_path=file, execution={"backend": "pandas"}) as engine:
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+factor_engine/tests/runtime/test_v6_default_engine.py:129: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+factor_engine/__init__.py:22: in get_engine
+    return build_default_engine(profile_path=profile_path, execution=execution)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+factor_engine/runtime/default_engine.py:222: in get_engine
+    deployment = load_deployment_profile(profile_path)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+factor_engine/runtime/default_engine.py:165: in load_deployment_profile
+    return ApprovedDeploymentProfile.from_mapping(value)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+cls = &lt;class 'factor_engine.runtime.default_engine.ApprovedDeploymentProfile'&gt;
+value = {'profile_id': 'isolated-test', 'approval_id': 'test-only', 'data_source': {'type': 'data_access', 'dataset': 'ashare_...ate': '2024-01-31', ...}, 'artifact_root': '/tmp/pytest-of-sunhaiwei/pytest-2402/test_explicit_backend_preserve0', ...}
+
+    @classmethod
+    def from_mapping(cls, value):
+        if not isinstance(value, Mapping):
+            raise DeploymentConfigurationError(detail="profile must be a mapping")
+        required = {"profile_id", "approval_id", "data_source", "artifact_root", "market",
+                    "calendar_id", "timezone", "frequency", "universe_id", "adjustment"}
+        missing = [k for k in required if value.get(k) is None or value.get(k) == ""]
+        source = value.get("data_source")
+        if not isinstance(source, Mapping):
+            missing.append("data_source.type")
+        else:
+            missing.extend("data_source." + k for k in
+                           ("dataset", "start_date", "end_date", "instrument_filter")
+                           if not source.get(k))
+        if missing:
+            raise DeploymentConfigurationError(missing)
+        unknown = set(value) - required - {
+            "execution", "expected_snapshot_token", "expected_source_snapshot_tokens",
+            "expected_source_content_digests",
+        }
+        if unknown:
+            raise DeploymentConfigurationError(detail="unknown fields: " + ", ".join(sorted(unknown)))
+        if any(not isinstance(value[k], str) or not value[k].strip() for k in required - {"data_source"}):
+            raise DeploymentConfigurationError(detail="business identity fields must be nonempty strings")
+        if value["market"] != "ashare" or value["adjustment"] != "hfq":
+            raise DeploymentConfigurationError(detail="v2 default requires approved ashare/hfq semantics")
+        if source.get("type") != "data_access":
+            raise DeploymentConfigurationError(detail="v2 source must use the DataAccess gateway")
+        # A profile label is not evidence that the selected data are adjusted.
+        # This default entry currently implements the canonical daily HFQ
+        # anchor only. Other sources need an explicit semantic adapter first.
+        if source.get("dataset") != "ashare_stock_daily_adj":
+            raise DeploymentConfigurationError(
+                detail="v2 hfq source requires canonical ashare_stock_daily_adj dataset")
+        if source.get("read_mode", "panel") != "panel" or value["frequency"] != "1d":
+            raise DeploymentConfigurationError(detail="canonical hfq anchor requires daily 1d panel scope")
+        if source.get("fields"):
+            raise DeploymentConfigurationError(
+                detail="v2 hfq field aliases must come from the semantic catalog, not profile overrides")
+        for key in ("run_mode", "production", "strict_unknown_fields", "pit_enforce"):
+            if key in source and (source[key] != "production" if key == "run_mode" else source[key] is not True):
+                raise DeploymentConfigurationError(detail=f"data_source.{key} cannot weaken production gates")
+        instruments = source["instrument_filter"]
+        if (not isinstance(instruments, list) or not instruments or
+                any(not isinstance(x, str) or not x for x in instruments) or
+                len(instruments) != len(set(instruments))):
+            raise DeploymentConfigurationError(detail="instrument_filter must be an explicit unique list")
+        try:
+            start = date.fromisoformat(source["start_date"])
+            end = date.fromisoformat(source["end_date"])
+        except (ValueError, TypeError):
+            raise DeploymentConfigurationError(detail="source dates must be ISO dates") from None
+        if start &gt; end:
+            raise DeploymentConfigurationError(detail="source start_date exceeds end_date")
+        if not Path(value["artifact_root"]).is_absolute():
+            raise DeploymentConfigurationError(detail="artifact_root must be an approved absolute directory")
+        snapshot = value.get("expected_snapshot_token")
+        if snapshot is not None and (not isinstance(snapshot, str) or not snapshot.strip()):
+            raise DeploymentConfigurationError(detail="expected_snapshot_token must be a nonempty string")
+        snapshots = value.get("expected_source_snapshot_tokens")
+        if snapshots is not None:
+            if (not isinstance(snapshots, Mapping) or not snapshots or
+                    any(not isinstance(k, str) or not k.strip() or
+                        not isinstance(v, str) or not v.strip() for k, v in snapshots.items())):
+                raise DeploymentConfigurationError(detail="expected_source_snapshot_tokens must map datasets to nonempty tokens")
+            anchor_token = snapshots.get(source["dataset"])
+            if anchor_token is None or (snapshot is not None and anchor_token != snapshot):
+                raise DeploymentConfigurationError(detail="approved snapshot set must include the consistent anchor token")
+        content_digests = value.get("expected_source_content_digests")
+        if content_digests is None:
+&gt;           raise DeploymentConfigurationError(("expected_source_content_digests",))
+E           factor_engine.runtime.default_engine.DeploymentConfigurationError: v2 deployment configuration: expected_source_content_digests
+
+factor_engine/runtime/default_engine.py:104: DeploymentConfigurationError</failure></testcase><testcase classname="factor_engine.tests.runtime.test_v6_default_engine" name="test_worker_factory_config_roundtrip_contains_no_engine_or_locks" time="0.001"><failure message="factor_engine.runtime.default_engine.DeploymentConfigurationError: v2 deployment configuration: expected_source_content_digests">tmp_path = PosixPath('/tmp/pytest-of-sunhaiwei/pytest-2402/test_worker_factory_config_rou0')
+
+    def test_worker_factory_config_roundtrip_contains_no_engine_or_locks(tmp_path):
+        from factor_engine.runtime.default_engine import (
+            ExecutionCoreWorkerConfig, build_execution_core_from_worker_config,
+        )
+        from factor_engine.runtime.default_execution_policy import DefaultExecutionPolicy
+    
+&gt;       config = ExecutionCoreWorkerConfig(ApprovedDeploymentProfile.from_mapping(profile(tmp_path)),
+                                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                                           DefaultExecutionPolicy())
+
+factor_engine/tests/runtime/test_v6_default_engine.py:140: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+cls = &lt;class 'factor_engine.runtime.default_engine.ApprovedDeploymentProfile'&gt;
+value = {'profile_id': 'isolated-test', 'approval_id': 'test-only', 'data_source': {'type': 'data_access', 'dataset': 'ashare_...ate': '2024-01-31', ...}, 'artifact_root': '/tmp/pytest-of-sunhaiwei/pytest-2402/test_worker_factory_config_rou0', ...}
+
+    @classmethod
+    def from_mapping(cls, value):
+        if not isinstance(value, Mapping):
+            raise DeploymentConfigurationError(detail="profile must be a mapping")
+        required = {"profile_id", "approval_id", "data_source", "artifact_root", "market",
+                    "calendar_id", "timezone", "frequency", "universe_id", "adjustment"}
+        missing = [k for k in required if value.get(k) is None or value.get(k) == ""]
+        source = value.get("data_source")
+        if not isinstance(source, Mapping):
+            missing.append("data_source.type")
+        else:
+            missing.extend("data_source." + k for k in
+                           ("dataset", "start_date", "end_date", "instrument_filter")
+                           if not source.get(k))
+        if missing:
+            raise DeploymentConfigurationError(missing)
+        unknown = set(value) - required - {
+            "execution", "expected_snapshot_token", "expected_source_snapshot_tokens",
+            "expected_source_content_digests",
+        }
+        if unknown:
+            raise DeploymentConfigurationError(detail="unknown fields: " + ", ".join(sorted(unknown)))
+        if any(not isinstance(value[k], str) or not value[k].strip() for k in required - {"data_source"}):
+            raise DeploymentConfigurationError(detail="business identity fields must be nonempty strings")
+        if value["market"] != "ashare" or value["adjustment"] != "hfq":
+            raise DeploymentConfigurationError(detail="v2 default requires approved ashare/hfq semantics")
+        if source.get("type") != "data_access":
+            raise DeploymentConfigurationError(detail="v2 source must use the DataAccess gateway")
+        # A profile label is not evidence that the selected data are adjusted.
+        # This default entry currently implements the canonical daily HFQ
+        # anchor only. Other sources need an explicit semantic adapter first.
+        if source.get("dataset") != "ashare_stock_daily_adj":
+            raise DeploymentConfigurationError(
+                detail="v2 hfq source requires canonical ashare_stock_daily_adj dataset")
+        if source.get("read_mode", "panel") != "panel" or value["frequency"] != "1d":
+            raise DeploymentConfigurationError(detail="canonical hfq anchor requires daily 1d panel scope")
+        if source.get("fields"):
+            raise DeploymentConfigurationError(
+                detail="v2 hfq field aliases must come from the semantic catalog, not profile overrides")
+        for key in ("run_mode", "production", "strict_unknown_fields", "pit_enforce"):
+            if key in source and (source[key] != "production" if key == "run_mode" else source[key] is not True):
+                raise DeploymentConfigurationError(detail=f"data_source.{key} cannot weaken production gates")
+        instruments = source["instrument_filter"]
+        if (not isinstance(instruments, list) or not instruments or
+                any(not isinstance(x, str) or not x for x in instruments) or
+                len(instruments) != len(set(instruments))):
+            raise DeploymentConfigurationError(detail="instrument_filter must be an explicit unique list")
+        try:
+            start = date.fromisoformat(source["start_date"])
+            end = date.fromisoformat(source["end_date"])
+        except (ValueError, TypeError):
+            raise DeploymentConfigurationError(detail="source dates must be ISO dates") from None
+        if start &gt; end:
+            raise DeploymentConfigurationError(detail="source start_date exceeds end_date")
+        if not Path(value["artifact_root"]).is_absolute():
+            raise DeploymentConfigurationError(detail="artifact_root must be an approved absolute directory")
+        snapshot = value.get("expected_snapshot_token")
+        if snapshot is not None and (not isinstance(snapshot, str) or not snapshot.strip()):
+            raise DeploymentConfigurationError(detail="expected_snapshot_token must be a nonempty string")
+        snapshots = value.get("expected_source_snapshot_tokens")
+        if snapshots is not None:
+            if (not isinstance(snapshots, Mapping) or not snapshots or
+                    any(not isinstance(k, str) or not k.strip() or
+                        not isinstance(v, str) or not v.strip() for k, v in snapshots.items())):
+                raise DeploymentConfigurationError(detail="expected_source_snapshot_tokens must map datasets to nonempty tokens")
+            anchor_token = snapshots.get(source["dataset"])
+            if anchor_token is None or (snapshot is not None and anchor_token != snapshot):
+                raise DeploymentConfigurationError(detail="approved snapshot set must include the consistent anchor token")
+        content_digests = value.get("expected_source_content_digests")
+        if content_digests is None:
+&gt;           raise DeploymentConfigurationError(("expected_source_content_digests",))
+E           factor_engine.runtime.default_engine.DeploymentConfigurationError: v2 deployment configuration: expected_source_content_digests
+
+factor_engine/runtime/default_engine.py:104: DeploymentConfigurationError</failure></testcase><testcase classname="factor_engine.tests.runtime.test_v6_default_engine" name="test_source_validation_failure_cannot_claim_policy_singleton" time="0.002"><failure message="AssertionError: Regex pattern did not match.&#10;  Expected regex: 'incompatible HFQ'&#10;  Actual message: 'v2 deployment configuration: expected_source_content_digests'">tmp_path = PosixPath('/tmp/pytest-of-sunhaiwei/pytest-2402/test_source_validation_failure0')
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x779178033dd0&gt;
+
+    def test_source_validation_failure_cannot_claim_policy_singleton(tmp_path, monkeypatch):
+        import factor_engine.runtime.default_engine as module
+        import factor_engine.runtime.resource_broker as broker_module
+    
+        file = tmp_path / "profile.json"
+        file.write_text(json.dumps(profile(tmp_path)))
+        acquisitions = []
+    
+        def acquire(policy):
+            acquisitions.append(policy)
+            raise AssertionError("invalid construction acquired the policy singleton")
+    
+        def bad_contract(source):
+            raise DeploymentConfigurationError(detail="incompatible HFQ contract")
+    
+        monkeypatch.setattr(broker_module, "get_v2_resource_broker", acquire)
+        monkeypatch.setattr(module, "_validate_hfq_source_contract", bad_contract)
+&gt;       with pytest.raises(DeploymentConfigurationError, match="incompatible HFQ"):
+E       AssertionError: Regex pattern did not match.
+E         Expected regex: 'incompatible HFQ'
+E         Actual message: 'v2 deployment configuration: expected_source_content_digests'
+
+factor_engine/tests/runtime/test_v6_default_engine.py:170: AssertionError</failure></testcase><testcase classname="factor_engine.tests.runtime.test_v6_physical_source_binding" name="test_plain_attrs_cannot_forge_physical_source_binding" time="0.003" /><testcase classname="factor_engine.tests.runtime.test_v6_physical_source_binding" name="test_binding_path_replaces_caller_value_with_da_identity" time="0.001" /><testcase classname="factor_engine.tests.runtime.test_v6_physical_source_binding" name="test_real_prepared_snapshot_is_accepted_by_real_identity_builder" time="0.089" /><testcase classname="factor_engine.tests.runtime.test_v6_physical_source_binding" name="test_batch_prepares_once_and_scope_identity_prevents_cache_alias" time="0.001" /><testcase classname="factor_engine.tests.runtime.test_v6_physical_source_binding" name="test_batch_rejects_secondary_source_ref_instead_of_anchor_rebinding" time="0.000" /><testcase classname="factor_engine.tests.runtime.test_v6_physical_source_binding" name="test_typed_source_ref_uses_its_own_prepared_source" time="0.001" /><testcase classname="factor_engine.tests.runtime.test_v6_physical_source_binding" name="test_preflight_unknown_field_is_root_local_and_prepares_valid_batch_once" time="0.001" /><testcase classname="factor_engine.tests.runtime.test_v6_physical_source_binding" name="test_preflight_unsupported_operator_is_root_local" time="0.020" /><testcase classname="factor_engine.tests.runtime.test_v6_physical_source_binding" name="test_preflight_permission_failure_rejects_entire_source_scope" time="0.000" /><testcase classname="factor_engine.tests.runtime.test_v6_physical_source_binding" name="test_preflight_keeps_surviving_shared_dependency_closure" time="0.001" /><testcase classname="factor_engine.tests.runtime.test_v6_physical_source_binding" name="test_wave_rejects_real_data_access_snapshot_changed_after_preflight" time="0.177" /><testcase classname="factor_engine.tests.runtime.test_v6_physical_source_binding" name="test_native_wave_materializes_once_and_reuses_old_frame_after_file_change" time="0.014" /><testcase classname="factor_engine.tests.runtime.test_v6_physical_source_binding" name="test_pandas_wave_mapping_is_reused_without_source_cache" time="0.001" /><testcase classname="factor_engine.tests.runtime.test_v6_physical_source_binding" name="test_wave_adapter_keeps_value_alive_until_explicit_release" time="0.154" /><testcase classname="factor_engine.tests.runtime.test_v6_physical_source_binding" name="test_releasing_overlapping_wave_preserves_other_wave_column" time="0.001" /></testsuite></testsuites>

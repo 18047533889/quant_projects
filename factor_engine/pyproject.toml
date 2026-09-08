@@ -96,6 +96,7 @@ packages = [
     "factor_engine.planning",
     "factor_engine.research_operators",
     "factor_engine.research_tools",
+    "factor_engine.reporting",
     "factor_engine.runtime",
     "factor_engine.runtime.multibackend",
     "factor_engine.runtime.pipeline",

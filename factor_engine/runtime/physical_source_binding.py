@@ -13,6 +13,8 @@ class PhysicalSourceBinding:
     read_identity: Any
     logical_field: str
     semantic_catalog_identity: str
+    approved_snapshot_token: str | None = None
+    approved_content_digest: str | None = None
 
     @property
     def digest(self) -> str:
@@ -22,6 +24,10 @@ class PhysicalSourceBinding:
             self.logical_field,
             self.semantic_catalog_identity,
         ))
+        if self.approved_snapshot_token is not None:
+            payload += "|approved_snapshot:" + self.approved_snapshot_token
+        if self.approved_content_digest is not None:
+            payload += "|approved_content:" + self.approved_content_digest
         return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
@@ -111,7 +117,11 @@ def _build_binding(
         availability_cutoff=availability_cutoff,
         fields=(semantic_field,), prepared=prepared, strict=True,
     )
-    binding = PhysicalSourceBinding(identity, logical_field, source.semantic_catalog_identity())
+    binding = PhysicalSourceBinding(
+        identity, logical_field, source.semantic_catalog_identity(),
+        getattr(source, "_approved_snapshot_token", None),
+        getattr(source, "_approved_content_digest", None),
+    )
     if not is_authoritative_source_binding(binding):
         raise ValueError(f"DataAccess issued an incomplete identity for {logical_field!r}")
     pit_relevant = any(
@@ -218,6 +228,19 @@ def bind_batch_sources(
             raise TypeError("resolved source scope is not a strict DataAccessSource")
         if not actual_source.production or not actual_source.pit_enforce:
             raise ValueError("resolved source scope is not production PIT-enforced")
+        approved = getattr(source, "_approved_source_snapshot_tokens", {})
+        if approved:
+            token = approved.get(actual_source.dataset)
+            if token is None:
+                raise ValueError("approved snapshot set omits a dependent source dataset")
+            actual_source.bind_approved_snapshot_token(token)
+        approved_content = getattr(source, "_approved_source_content_digests", {})
+        if approved_content:
+            digest = approved_content.get(actual_source.dataset)
+            if digest is None:
+                raise ValueError("approved content digest set omits a dependent source dataset")
+            actual_source.bind_approved_content_digest(digest)
+        actual_source.assert_approved_snapshot()
         field_plans = actual_source._ensure_field_plans(sorted(fields))
         physical = sorted({column for name in fields
                            for column in (tuple(field_plans[name].physical_fields) or (name,))})
@@ -228,6 +251,13 @@ def bind_batch_sources(
             params=dict(actual_source.params), run_mode="production",
             snapshot_policy="fail_if_changed",
         )
+        try:
+            actual_source.assert_approved_snapshot()
+            actual_source.assert_prepared_snapshot_approved(prepared_read)
+        except BaseException:
+            store._pipeline.release_reservation(
+                getattr(prepared_read, "resource_reservation", None))
+            raise
         if _diagnostics is not None:
             _diagnostics["prepare_count"] = _diagnostics.get("prepare_count", 0) + 1
             keys = _diagnostics.setdefault("prepared_source_keys", set())

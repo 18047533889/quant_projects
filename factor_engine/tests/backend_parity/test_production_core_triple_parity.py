@@ -8,7 +8,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
-pytest.importorskip("polars")
+# Required backend dependencies fail their own lane, never skip this module
+# (which also contains the independent Pandas/DuckDB lane).
 
 from factor_engine.api.cleaned_ops import make_cleaned_call_factory
 from factor_engine.api.columns import col
@@ -143,6 +144,24 @@ def _result_series(run_out) -> pd.Series:
     return run_out["result"].sort_index()
 
 
+# Explicit stale test-manifest names, absent from both current canonicals and
+# aliases at 2bac7209. These are rejection contracts, NOT numerical PASS cases.
+# Do not infer a replacement formula (e.g. a similarly named VWAP) here.
+UNREGISTERED_TEST_CASES = {"protected_log", "vwap", "cum_delta", "expanding_mean"}
+
+
+def _assert_unregistered_rejection(source, name, builder, backend, record_property):
+    if name not in UNREGISTERED_TEST_CASES:
+        return False
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
+    assert name not in OperatorRegistry.list_canonical()
+    assert name not in OperatorRegistry._aliases
+    with pytest.raises(KeyError, match="unknown operator canonical"):
+        _run(source, builder(), backend)
+    record_property("verdict", "UNREGISTERED_TYPED_REJECTION_NOT_NUMERICAL_PASS")
+    return True
+
+
 MEMORY_CASES = [
     ("ts_mean", lambda: make_cleaned_call_factory("ts_mean")(col("close"), 3)),
     ("ts_std", lambda: make_cleaned_call_factory("ts_std")(col("close"), 3)),
@@ -180,11 +199,10 @@ MEMORY_CASES = [
 
 
 @pytest.mark.parametrize("name,expr_builder", MEMORY_CASES)
-def test_production_core_polars_long_matches_pandas(mem_source, name, expr_builder):
-    from factor_engine.cleaned_operators.operator_surface import DAILY_CANONICALS
-    from factor_engine.cleaned_operators.registry import OperatorRegistry
-    if OperatorRegistry._aliases.get(name, name) not in DAILY_CANONICALS:
-        pytest.skip("not on the production daily surface")
+def test_production_core_polars_long_matches_pandas(mem_source, name, expr_builder, record_property):
+    import polars  # required lane dependency; missing package is a failure
+    if _assert_unregistered_rejection(mem_source, name, expr_builder, "polars_long", record_property):
+        return
     expr = expr_builder()
     pd_out = _result_series(_run(mem_source, expr, "pandas"))
     long_out = _result_series(_run(mem_source, expr, "polars_long"))
@@ -210,14 +228,10 @@ DUCKDB_CASES = [
 
 
 @pytest.mark.parametrize("name,expr_builder", DUCKDB_CASES)
-def test_production_core_duckdb_matches_pandas(duckdb_source, name, expr_builder):
+def test_production_core_duckdb_matches_pandas(duckdb_source, name, expr_builder, record_property):
     from tests.backend_parity.duckdb_parity_helpers import assert_duckdb_real_sql_execution
-    from factor_engine.cleaned_operators.operator_surface import DAILY_CANONICALS
-    from factor_engine.cleaned_operators.registry import OperatorRegistry
-
-    if OperatorRegistry._aliases.get(name, name) not in DAILY_CANONICALS:
-        pytest.skip("not on the production daily surface")
-
+    if _assert_unregistered_rejection(duckdb_source, name, expr_builder, "duckdb_sql", record_property):
+        return
     expr = expr_builder()
     pd_out = _result_series(_run(duckdb_source, expr, "pandas"))
     sql_run = _run(duckdb_source, expr, "duckdb_sql")
@@ -227,14 +241,12 @@ def test_production_core_duckdb_matches_pandas(duckdb_source, name, expr_builder
 
 
 @pytest.mark.parametrize("name,expr_builder", DUCKDB_CASES)
-def test_production_core_duckdb_matches_polars_long(mem_source, duckdb_source, name, expr_builder):
-    from factor_engine.cleaned_operators.operator_surface import DAILY_CANONICALS
-    from factor_engine.cleaned_operators.registry import OperatorRegistry
-    if OperatorRegistry._aliases.get(name, name) not in DAILY_CANONICALS:
-        pytest.skip("not on the production daily surface")
+def test_production_core_duckdb_matches_polars_long(mem_source, duckdb_source, name, expr_builder, record_property):
+    import polars  # required lane dependency
+    if _assert_unregistered_rejection(duckdb_source, name, expr_builder, "duckdb_sql", record_property):
+        return
     mem_cases = {n: b for n, b in MEMORY_CASES}
-    if name not in mem_cases:
-        pytest.skip("no memory expr")
+    assert name in mem_cases, "candidate test manifest lacks a memory expression"
     expr = mem_cases[name]()
     long_out = _result_series(_run(mem_source, expr, "polars_long"))
     sql_run = _run(duckdb_source, expr_builder(), "duckdb_sql")
@@ -243,7 +255,3 @@ def test_production_core_duckdb_matches_polars_long(mem_source, duckdb_source, n
     assert_duckdb_real_sql_execution(sql_run)
     sql_out = _result_series(sql_run)
     pd.testing.assert_series_equal(long_out, sql_out, check_names=False, rtol=1e-6, atol=1e-6)
-    from factor_engine.cleaned_operators.operator_surface import DAILY_CANONICALS
-    from factor_engine.cleaned_operators.registry import OperatorRegistry
-    if OperatorRegistry._aliases.get(name, name) not in DAILY_CANONICALS:
-        pytest.skip("not on the production daily surface")

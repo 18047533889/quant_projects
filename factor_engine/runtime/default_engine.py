@@ -47,7 +47,10 @@ class ApprovedDeploymentProfile:
                            if not source.get(k))
         if missing:
             raise DeploymentConfigurationError(missing)
-        unknown = set(value) - required - {"execution", "expected_snapshot_token"}
+        unknown = set(value) - required - {
+            "execution", "expected_snapshot_token", "expected_source_snapshot_tokens",
+            "expected_source_content_digests",
+        }
         if unknown:
             raise DeploymentConfigurationError(detail="unknown fields: " + ", ".join(sorted(unknown)))
         if any(not isinstance(value[k], str) or not value[k].strip() for k in required - {"data_source"}):
@@ -87,6 +90,28 @@ class ApprovedDeploymentProfile:
         snapshot = value.get("expected_snapshot_token")
         if snapshot is not None and (not isinstance(snapshot, str) or not snapshot.strip()):
             raise DeploymentConfigurationError(detail="expected_snapshot_token must be a nonempty string")
+        snapshots = value.get("expected_source_snapshot_tokens")
+        if snapshots is not None:
+            if (not isinstance(snapshots, Mapping) or not snapshots or
+                    any(not isinstance(k, str) or not k.strip() or
+                        not isinstance(v, str) or not v.strip() for k, v in snapshots.items())):
+                raise DeploymentConfigurationError(detail="expected_source_snapshot_tokens must map datasets to nonempty tokens")
+            anchor_token = snapshots.get(source["dataset"])
+            if anchor_token is None or (snapshot is not None and anchor_token != snapshot):
+                raise DeploymentConfigurationError(detail="approved snapshot set must include the consistent anchor token")
+        content_digests = value.get("expected_source_content_digests")
+        if content_digests is None:
+            raise DeploymentConfigurationError(("expected_source_content_digests",))
+        if (not isinstance(content_digests, Mapping) or not content_digests or
+                any(not isinstance(k, str) or not k.strip() or
+                    not isinstance(v, str) or len(v) not in (32, 64) or
+                    any(ch not in "0123456789abcdef" for ch in v)
+                    for k, v in content_digests.items())):
+            raise DeploymentConfigurationError(
+                detail="expected_source_content_digests must map datasets to approved content digests")
+        if source["dataset"] not in content_digests:
+            raise DeploymentConfigurationError(
+                detail="approved content digest set must include the anchor dataset")
         resolve_default_policy(profile=value.get("execution"))
         try:
             payload = json.dumps(dict(value), sort_keys=True, separators=(",", ":"), allow_nan=False)
@@ -158,7 +183,8 @@ class DurableFactorEngine:
         root = Path(business["artifact_root"])
         if not root.is_dir() or not os.access(root, os.W_OK | os.X_OK):
             raise DeploymentConfigurationError(detail="approved artifact_root must exist and be writable")
-        expected = business.get("expected_snapshot_token")
+        expected = business.get("expected_snapshot_token") or business.get(
+            "expected_source_snapshot_tokens", {}).get(business["data_source"]["dataset"])
         if expected is not None:
             self._engine.data_source.refresh_snapshot(force=True)
             observed = self._engine.data_source.snapshot_token
@@ -227,6 +253,16 @@ def build_execution_core_from_worker_config(config):
                                      pit_enforce=True)
     source = build_data_source(business["data_source"], build_context=context)
     try:
+        snapshots = dict(business.get("expected_source_snapshot_tokens") or {})
+        content_digests = dict(business.get("expected_source_content_digests") or {})
+        expected = business.get("expected_snapshot_token") or snapshots.get(source.dataset)
+        if expected is not None:
+            snapshots[source.dataset] = expected
+            source.bind_approved_snapshot_token(expected)
+        source._approved_source_snapshot_tokens = snapshots
+        source._approved_source_content_digests = content_digests
+        if source.dataset in content_digests:
+            source.bind_approved_content_digest(content_digests[source.dataset])
         _validate_hfq_source_contract(source)
         backend = build_backend("pandas" if policy.backend == "pandas_numpy" else policy.backend)
         core = FactorEngine(backend, source, run_mode="production")

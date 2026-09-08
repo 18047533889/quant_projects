@@ -159,20 +159,6 @@ def _looks_like_price_level(vals: np.ndarray) -> bool:
     return sd_level / max(sd_diff, _EPS) > _PRICE_LEVEL_RATIO_THRESHOLD
 
 
-def _reject_price_level(x: pd.DataFrame, canonical: str) -> None:
-    for col in x.columns:
-        if _looks_like_price_level(x[col].to_numpy(dtype=float)):
-            raise ValueError(
-                f"{canonical} requires a return / stationary series; received "
-                "a clearly non-stationary raw price level "
-                f"(sd(level)/sd(diff) > {_PRICE_LEVEL_RATIO_THRESHOLD}).  "
-                "Convert prices to returns (pct_change / log-diff) before "
-                "feeding a GARCH / HAR-from-return operator "
-                "(typed input_units=return contract, audit round-3 item 33, "
-                "fail-closed)"
-            )
-
-
 def _register(name: str, description: str, params: list[str], unit: str, fn,
               *, input_units: dict[str, str] | None = None,
               output_unit: str | None = None,
@@ -195,8 +181,9 @@ def _register(name: str, description: str, params: list[str], unit: str, fn,
         metadata.window_semantics = _WINDOW_SEMANTICS
 
         def _calculate_series(self, *args, **kwargs):
-            if reject_price_level and args:
-                _reject_price_level(args[0], name)
+            # Statistical domain checks are evaluated by each rolling kernel on
+            # its own trailing history.  A whole-frame precheck would let a
+            # future suffix erase otherwise valid historical outputs (M04).
             # M-083: scope the shared-fit cache to this one operator call.  The
             # cache must never leak fits across rows / across calls.
             _GARCH_FIT_CACHE.clear()
@@ -235,7 +222,7 @@ def _fit_garch(rets: np.ndarray) -> tuple[float, float, float] | None:
         # constant term omega alone.
         h = np.full(len(rets), long_var, dtype=float)
         for t in range(1, len(rets)):
-            h[t] = w + a * rets[t - 1] ** 2 + b * h[t - 1]
+            h[t] = _variance_step(h[t - 1], rets[t - 1], w, a, b)
         with np.errstate(divide="ignore", invalid="ignore"):
             return float(np.sum(np.log(h) + rets ** 2 / h))
     try:
@@ -272,6 +259,29 @@ def _fit_garch_cached(rets: np.ndarray) -> "tuple[float, float, float] | None":
     return result
 
 
+def _variance_step(
+    previous_variance: float,
+    shock: float,
+    omega: float,
+    alpha: float,
+    beta: float,
+    gamma: float = 0.0,
+    *,
+    asymmetric: bool = False,
+) -> float:
+    """One authoritative GARCH/GJR variance update.
+
+    ``shock`` is the zero-mean innovation under this module's declared
+    constant-zero mean model; callers with a fitted mean must pass the
+    residual, never the raw return.  The return value is conditional variance,
+    not volatility.  Non-finite state or shock fails closed.
+    """
+    if not np.isfinite(previous_variance) or not np.isfinite(shock):
+        return np.nan
+    leverage = gamma if asymmetric and shock < 0.0 else 0.0
+    return float(omega + (alpha + leverage) * shock**2 + beta * previous_variance)
+
+
 def _variance_path(
     seg: np.ndarray,
     w: float,
@@ -291,12 +301,7 @@ def _variance_path(
     """
     h = h_init
     for i in range(1, len(seg)):
-        prev_r = seg[i - 1]
-        if asymmetric:
-            lev = gamma if prev_r < 0 else 0.0
-            h = w + (a + lev) * prev_r ** 2 + b * h
-        else:
-            h = w + a * prev_r ** 2 + b * h
+        h = _variance_step(h, seg[i - 1], w, a, b, gamma, asymmetric=asymmetric)
     return h
 
 
@@ -305,9 +310,11 @@ def _garch_path(rets: np.ndarray, window: int, stat: str, asymmetric: bool, r: f
 
     Timing convention: the returned conditional variance ``h_last`` governs the
     *last* observed return (computed from information strictly before it), and
-    ``h_next = w + a*r_t^2 + b*h_last`` is the one-step-ahead forecast for the
+    ``h_next`` applies the same GARCH/GJR update as the history path, including
+    ``gamma * I(r_t < 0)`` for GJR, and is the one-step-ahead forecast for the
     next period.  The standardised shock divides ``r_t`` by ``sqrt(h_last)`` —
-    the variance that actually governed it.
+    the variance that actually governed it.  Returns are innovations under the
+    module's explicit constant-zero mean convention.
 
     P1 (parameter domain): ``window`` below ``_GARCH_MIN_WINDOW`` is a
     guaranteed-all-NaN combination (the strict-prior fit segment ``seg[:-1]``
@@ -325,11 +332,15 @@ def _garch_path(rets: np.ndarray, window: int, stat: str, asymmetric: bool, r: f
     if len(rets) < max(w, _GARCH_MIN_FIT_OBS + 1):
         return np.nan
     seg = rets[-w:]
+    if _looks_like_price_level(seg):
+        return np.nan
+    if not np.all(np.isfinite(seg)):
+        return np.nan
     # R35-P0-M01/M02/M03 (timing contract consistency): ALL GARCH/GJR statistics
     # fit their parameters strictly on <= t-1 (``fit_seg = seg[:-1]``), matching
     # ``ModelTimingContract.fit_cutoff_offset=1``.  The current return ``r_t`` is
     # never part of its own parameter fit — it only enters the *one-step state
-    # update* (``h_next = w + a*r_t**2 + b*h_last`` for the forecast) or the
+    # update* (the shared ``_variance_step`` for the forecast) or the
     # standardised shock denominator.  This is the "Scheme B" definition: params
     # strictly prior, current shock used only for one-step update.  The variance
     # recursion is seeded from the variance of that same fit segment so no leak
@@ -363,7 +374,11 @@ def _garch_path(rets: np.ndarray, window: int, stat: str, asymmetric: bool, r: f
     if stat == "forecast":
         # h_last governs the current return; the next-period forecast conditions
         # on it.
-        h_next = w + a * seg[-1] ** 2 + b * h_last
+        h_next = _variance_step(
+            h_last, seg[-1], w, a, b, gamma, asymmetric=asymmetric
+        )
+        if not np.isfinite(h_next):
+            return np.nan
         return float(np.sqrt(max(h_next, 1e-12)))
     # standardized shock of the last return uses the variance that governed it
     if not np.isfinite(seg[-1]):
@@ -385,8 +400,9 @@ def _fit_gjr(rets: np.ndarray) -> tuple[float, float, float, float] | None:
         # variance long_var (= omega/(1-a-0.5g-b)), matching _variance_path.
         h = np.full(len(rets), long_var, dtype=float)
         for t in range(1, len(rets)):
-            lev = g if rets[t - 1] < 0 else 0.0
-            h[t] = w + (a + lev) * rets[t - 1] ** 2 + b * h[t - 1]
+            h[t] = _variance_step(
+                h[t - 1], rets[t - 1], w, a, b, g, asymmetric=True
+            )
         with np.errstate(divide="ignore", invalid="ignore"):
             return float(np.sum(np.log(h) + rets ** 2 / h))
     try:
@@ -484,6 +500,8 @@ def _garch_vol_surprise(vals: np.ndarray, window: int) -> float:
     if len(vals) < max(w, _GARCH_MIN_FIT_OBS + 1):
         return np.nan
     seg = vals[-w:]
+    if _looks_like_price_level(seg):
+        return np.nan
     # P0-040 / P0 (this audit): params fit on <= t-1 (exclude the current
     # return) AND the variance recursion is seeded from that same fit segment,
     # so rv_t/h_t is a genuine out-of-sample surprise and the current return
@@ -529,7 +547,10 @@ def _gjr_leverage(vals: np.ndarray, window: int) -> float:
         return np.nan
     # Missing-gap policy (M-084): NaN anywhere in the fit window -> NaN below.
     # Shared-fit cache (M-083).
-    params = _fit_gjr_cached(vals[-w:])  # fit-through-t: r_t IS in the fit
+    seg = vals[-w:]
+    if _looks_like_price_level(seg):
+        return np.nan
+    params = _fit_gjr_cached(seg)  # fit-through-t: r_t IS in the fit
     return np.nan if params is None else float(params[2])
 
 
@@ -598,7 +619,9 @@ def _har_rv(rv: np.ndarray, window: int, stat: str) -> float:
     # t-1 feature row — never from X_t, and never mixing a t+1 forecast with a
     # current residual.
     fit_rows = np.arange(n - 2)  # 0 .. n-3
-    fit_valid = valid[fit_rows]
+    # X_s and its one-step-ahead y_s keep the same original row identity.
+    # Never filter/compress either side independently (M05).
+    fit_valid = valid[fit_rows] & np.isfinite(seg[fit_rows + 1])
     Xs = X[fit_rows][fit_valid]
     y = seg[fit_rows + 1][fit_valid]
     # M-086: _HAR_MIN_TRAIN_OBS is a policy minimum separate from ``window``;
@@ -609,6 +632,8 @@ def _har_rv(rv: np.ndarray, window: int, stat: str) -> float:
     beta = fit_linear_model_checked(Xs, y)
     if beta is None:
         return np.nan
+    if not np.all(np.isfinite(X[n - 2])) or not np.isfinite(seg[-1]):
+        return np.nan
     pred_t = float(np.dot(X[n - 2], beta))  # forecast RV_{n-1} from t-1 info
     sd = float(np.std(y - Xs @ beta))
     if not np.isfinite(sd) or sd <= 1e-12:
@@ -618,6 +643,8 @@ def _har_rv(rv: np.ndarray, window: int, stat: str) -> float:
 
 def _har_from_return(rets: np.ndarray, window: int, stat: str) -> float:
     """HAR over daily returns: squares them into an RV series internally."""
+    if _looks_like_price_level(rets[-int(window):]):
+        return np.nan
     return _har_rv(rets ** 2, window, stat)
 
 

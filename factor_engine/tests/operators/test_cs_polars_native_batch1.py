@@ -2,59 +2,111 @@
 """
 测试 Polars Native CS 算子 - Batch 1
 
-测试真正的 Polars native 实现，验证：
+测试未进入生产 bootstrap 的 Pandas↔Polars bridge candidates，验证：
 1. 基础功能正确性
 2. 边界情况处理
-3. 性能特性
+3. 候选注册隔离
+
+这些测试不构成 pure-native 执行或性能认证。
 """
 import pytest
 import pandas as pd
 import numpy as np
 
 
-import sys
 import importlib
+import importlib.util
+import sys
+from pathlib import Path
 from unittest.mock import patch
 
-def setup_module():
-    """Reset registry lifecycle to allow operator registration during test imports.
+# This optional source is not in the production bootstrap. Test its candidate
+# classes in an isolated registration ledger, never unlock the real registry.
+# The real decorator still constructs metadata/parameter wrappers; only its
+# registry destination is redirected during this synchronous module import.
+# These Pandas->Polars->Pandas candidates are NOT pure-native certification.
+from factor_engine.cleaned_operators.registry import OperatorRegistry
 
-    The registry gets finalized during normal operation, but test modules that
-    import operator classes trigger registration at import time. This hook ensures
-    the registry is writable before the imports happen.
-    """
-    from factor_engine.cleaned_operators.registry import OperatorRegistry
-    if OperatorRegistry._lifecycle != OperatorRegistry.Lifecycle.BUILDING:
-        # Safe to reset for test isolation
-        OperatorRegistry._lifecycle = OperatorRegistry.Lifecycle.BUILDING
+_CANDIDATES = {}
 
-    # Bypass layer governance check
-    try:
-        import factor_engine.cleaned_operators.layer_governance as gov
-        gov._FINALIZED = False
-    except (ImportError, AttributeError):
-        pass
 
-    # Bypass static surface check which fails due to test-only registration
-    try:
-        import factor_engine.cleaned_operators.layer_governance as gov
-        gov._FINALIZED = False
-    except (ImportError, AttributeError):
-        pass
+def _registry_structure_snapshot():
+    return {
+        "catalog_id": id(OperatorRegistry._catalog),
+        "catalog_keys": frozenset(OperatorRegistry._catalog),
+        "operators_id": id(OperatorRegistry._operators),
+        "operator_backends": tuple(sorted(
+            (canonical, tuple(sorted(backends)))
+            for canonical, backends in OperatorRegistry._operators.items()
+        )),
+        "aliases_id": id(OperatorRegistry._aliases),
+        "aliases": tuple(sorted(OperatorRegistry._aliases.items())),
+        "version": OperatorRegistry.version(),
+        "lifecycle": OperatorRegistry.lifecycle(),
+    }
 
-_MODULE_NAME = "cs_batch1_under_test"
-if _MODULE_NAME in sys.modules:
-    del sys.modules[_MODULE_NAME]
 
-from pathlib import Path as _Path
-_MODULE_PATH = str(
-    _Path(__file__).resolve().parents[2]
-    / "cleaned_operators" / "polars_native" / "cs_batch1.py"
-)
-_SPEC = importlib.util.spec_from_file_location(_MODULE_NAME, _MODULE_PATH)
+_REGISTRY_STATE = _registry_structure_snapshot()
+
+
+def _record_candidate(instance, *, canonical, backend, **kwargs):
+    key = (canonical, backend)
+    assert key not in _CANDIDATES
+    _CANDIDATES[key] = instance
+
+
+_MODULE_NAME = '_fe_v7_cs_candidate_under_test'
+_SOURCE = Path(__file__).resolve().parents[2] / 'cleaned_operators/polars_native/cs_batch1.py'
+_SPEC = importlib.util.spec_from_file_location(_MODULE_NAME, _SOURCE)
 _MODULE = importlib.util.module_from_spec(_SPEC)
 sys.modules[_MODULE_NAME] = _MODULE
-_SPEC.loader.exec_module(_MODULE)
+with patch.object(OperatorRegistry, 'register', side_effect=_record_candidate):
+    _SPEC.loader.exec_module(_MODULE)
+_REGISTRY_AFTER_CANDIDATE_IMPORT = _registry_structure_snapshot()
+assert _REGISTRY_AFTER_CANDIDATE_IMPORT == _REGISTRY_STATE
+
+_EXPECTED_CANDIDATE_KEYS = {
+    ("cs_rank_polars_native_polars_native", "polars"),
+    ("cs_demean_polars_native", "polars"),
+    ("zscore_polars_native", "polars"),
+    ("cs_bucket_polars_native", "polars"),
+    ("cs_quantile_polars_native", "polars"),
+    ("cs_fill_mean_polars_native", "polars"),
+    ("cs_fill_median_polars_native", "polars"),
+    ("cs_impute_mean_polars_native", "polars"),
+    ("cs_impute_median_polars_native", "polars"),
+    ("cs_valid_count_polars_native", "polars"),
+    ("cs_coverage_ratio_polars_native", "polars"),
+    ("cs_weighted_mean_polars_native", "polars"),
+    ("cs_weighted_demean_polars_native", "polars"),
+    ("cs_weighted_zscore_polars_native", "polars"),
+    ("cs_weighted_percentile_rank_polars_native", "polars"),
+    ("cs_neutralize_polars_native", "polars"),
+    ("cs_ridge_resid_polars_native", "polars"),
+    ("cs_lad_resid_polars_native", "polars"),
+    ("cs_huber_resid_polars_native", "polars"),
+    ("cs_quantile_resid_polars_native", "polars"),
+    ("cs_wls_resid_polars_native", "polars"),
+    ("cs_multi_resid_polars_native", "polars"),
+    ("cs_multi_ridge_resid_polars_native", "polars"),
+    ("cs_trimmed_ols_resid_polars_native", "polars"),
+    ("cs_spline_resid_polars_native", "polars"),
+    ("cs_isotonic_residual_polars_native", "polars"),
+}
+
+
+def test_candidate_loading_never_unlocks_production_registry():
+    assert set(_CANDIDATES) == _EXPECTED_CANDIDATE_KEYS
+    # Compare the immutable snapshots immediately bracketing candidate import.
+    # Session bootstrap may legitimately load/freeze the production registry
+    # between collection and this test's execution.
+    assert _REGISTRY_AFTER_CANDIDATE_IMPORT == _REGISTRY_STATE
+    assert OperatorRegistry.lifecycle() == OperatorRegistry.Lifecycle.FROZEN.value
+    for (canonical, backend), candidate in _CANDIDATES.items():
+        assert backend == "polars"
+        assert type(candidate).__module__ == _MODULE_NAME
+        assert candidate.metadata.name
+        assert callable(candidate.calculate)
 
 CSRankPolarsNative = _MODULE.CSRankPolarsNative
 CSDemeanPolarsNative = _MODULE.CSDemeanPolarsNative

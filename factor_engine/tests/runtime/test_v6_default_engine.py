@@ -17,7 +17,8 @@ def profile(tmp_path):
                             "instrument_filter": ["000001.SZ"]},
             "artifact_root": str(tmp_path), "market": "ashare", "calendar_id": "SSE",
             "timezone": "Asia/Shanghai", "frequency": "1d", "universe_id": "fixture",
-            "adjustment": "hfq"}
+            "adjustment": "hfq",
+            "expected_source_content_digests": {"ashare_stock_daily_adj": "a" * 32}}
 
 
 def test_unconfigured_public_entry_reports_before_importing_or_computing(monkeypatch):

@@ -1340,7 +1340,7 @@ class TSRidgeRegressionPredictiveResidNative(SeriesOperator):
         description="Ridge 回归预测残差",
         param_names=["y", "x", "window", "alpha", "min_periods"],
         return_type="series",
-        tags=["time_series", "polars", "native", "causal"],
+        tags=["time_series", "polars", "causal", "specialized_numerical_kernel"],
         param_specs={
             "window": ParamSpec(dtype=int, min=2, searchable=True, param_role=ParamRole.HORIZON),
             "alpha": ParamSpec(dtype=float, min=0.0, searchable=False, param_role=ParamRole.NUMERICAL),
@@ -1348,44 +1348,26 @@ class TSRidgeRegressionPredictiveResidNative(SeriesOperator):
         },
     )
 
-    def _calculate_series(self, x: pl.DataFrame, window: int = 20, alpha: float = 1.0, **kwargs) -> pl.DataFrame:
+    def _calculate_series(self, y: pl.DataFrame, x: pl.DataFrame, window: int = 20,
+                          alpha: float = 1.0, min_periods: int = 5, **kwargs) -> pl.DataFrame:
+        from factor_engine.cleaned_operators.regression_models import _regression_resid
         w = strict_integer(window, "window", minimum=3)
         a = strict_finite_scalar(alpha, "alpha", minimum=0.0)
-        cols = _numeric_cols(x)
-
-        def _ridge_pred_resid(vals):
-            arr = np.asarray(vals, dtype=float)
-            valid = ~np.isnan(arr)
-            if np.sum(valid) < w:
-                return np.nan
-            arr = arr[valid]
-            if len(arr) < w:
-                return np.nan
-
-            errors = []
-            for i in range(3, len(arr)):
-                y_train = arr[:i]
-                t_train = np.arange(len(y_train))
-                X_train = np.column_stack([np.ones(len(t_train)), t_train])
-                try:
-                    XtX = X_train.T @ X_train + a * np.eye(X_train.shape[1])
-                    Xty = X_train.T @ y_train
-                    coef = np.linalg.solve(XtX, Xty)
-                    t_next = len(y_train)
-                    forecast = coef[0] + coef[1] * t_next
-                    errors.append(arr[i] - forecast)
-                except:
-                    pass
-
-            if len(errors) < 2:
-                return np.nan
-            return float(np.std(errors, ddof=1))
-
-        exprs = [
-            pl.col(c).fill_nan(None).rolling_map(_ridge_pred_resid, window_size=w, min_samples=w).alias(c)
-            for c in cols
-        ]
-        return x.with_columns(exprs)
+        mp = max(3, strict_integer(min_periods, "min_periods", minimum=1))
+        cols = _numeric_cols(y)
+        if _numeric_cols(x) != cols or y.height != x.height:
+            raise ValueError("ridge inputs must have identical axes")
+        exprs = []
+        for column in cols:
+            yv, xv = y[column].to_numpy(), x[column].to_numpy()
+            out = np.full(y.height, np.nan)
+            for row in range(y.height):
+                start = max(0, row - w)
+                out[row] = _regression_resid(
+                    yv[start:row + 1], xv[start:row + 1], method="ridge",
+                    min_periods=mp, alpha=a, predictive=True)
+            exprs.append(pl.Series(column, out))
+        return y.with_columns(exprs)
 
 
 @register_operator(
@@ -1841,7 +1823,7 @@ class TSHuberRegressionPredictiveResidNative(SeriesOperator):
         description="Huber 鲁棒回归预测残差",
                 param_names=["y", "x", "window", "min_periods"],
         return_type="series",
-        tags=["time_series", "polars", "native", "causal"],
+        tags=["time_series", "polars", "causal", "specialized_numerical_kernel"],
         # P0-23 single-logical-authority: canonical (regression_models) owns the
         # contract.  `delta` is a kernel-internal NUMERICAL knob aliased to alpha.
         param_aliases={"delta": "alpha"},
@@ -1851,55 +1833,25 @@ class TSHuberRegressionPredictiveResidNative(SeriesOperator):
         },
     )
 
-    def _calculate_series(self, x: pl.DataFrame, window: int = 20, delta: float = 1.35, **kwargs) -> pl.DataFrame:
+    def _calculate_series(self, y: pl.DataFrame, x: pl.DataFrame, window: int = 20,
+                          min_periods: int = 5, **kwargs) -> pl.DataFrame:
+        from factor_engine.cleaned_operators.regression_models import _regression_resid
         w = strict_integer(window, "window", minimum=3)
-        d = strict_finite_scalar(delta, "delta", minimum=0.0)
-        cols = _numeric_cols(x)
-
-        def _huber_pred_resid(vals):
-            arr = np.asarray(vals, dtype=float)
-            valid = ~np.isnan(arr)
-            if np.sum(valid) < w:
-                return np.nan
-            arr = arr[valid]
-            if len(arr) < w:
-                return np.nan
-
-            errors = []
-            for i in range(3, len(arr)):
-                y_train = arr[:i]
-                t_train = np.arange(len(y_train))
-                X_train = np.column_stack([np.ones(len(t_train)), t_train])
-                try:
-                    coef = np.linalg.lstsq(X_train, y_train, rcond=None)[0]
-                    for _ in range(3):
-                        fitted = X_train @ coef
-                        resid = y_train - fitted
-                        scale = (np.median(np.abs(resid))) / 0.6745 if 0.6745 != 0 else np.nan
-                        if scale < 1e-12:
-                            break
-                        weights = np.where(
-                            np.abs(resid / scale) <= d,
-                            1.0,
-                            d / (np.abs(resid / scale) + 1e-12)
-                        )
-                        W = np.diag(weights)
-                        coef = np.linalg.lstsq(W @ X_train, W @ y_train, rcond=None)[0]
-                    t_next = len(y_train)
-                    forecast = coef[0] + coef[1] * t_next
-                    errors.append(arr[i] - forecast)
-                except:
-                    pass
-
-            if len(errors) < 2:
-                return np.nan
-            return float(np.std(errors, ddof=1))
-
-        exprs = [
-            pl.col(c).fill_nan(None).rolling_map(_huber_pred_resid, window_size=w, min_samples=w).alias(c)
-            for c in cols
-        ]
-        return x.with_columns(exprs)
+        mp = max(3, strict_integer(min_periods, "min_periods", minimum=1))
+        cols = _numeric_cols(y)
+        if _numeric_cols(x) != cols or y.height != x.height:
+            raise ValueError("Huber inputs must have identical axes")
+        exprs = []
+        for column in cols:
+            yv, xv = y[column].to_numpy(), x[column].to_numpy()
+            out = np.full(y.height, np.nan)
+            for row in range(y.height):
+                start = max(0, row - w)
+                out[row] = _regression_resid(
+                    yv[start:row + 1], xv[start:row + 1], method="huber",
+                    min_periods=mp, predictive=True)
+            exprs.append(pl.Series(column, out))
+        return y.with_columns(exprs)
 
 
 @register_operator(
@@ -2871,6 +2823,5 @@ class TSMultiRegressionAdjustedR2PriorNative(SeriesOperator):
             for c in cols
         ]
         return x.with_columns(exprs)
-
 
 

@@ -730,6 +730,10 @@ def _dataset_schema_field_spec(
     )
 
 
+class ApprovedSnapshotMismatch(ValueError):
+    reason_code = "APPROVED_SOURCE_SNAPSHOT_MISMATCH"
+
+
 class DataAccessSource(DataSource):
     """FactorEngine DataAccess source with snapshot-bound caches and preflight."""
 
@@ -1939,7 +1943,47 @@ class DataAccessSource(DataSource):
                 output_names[src] = name
         return physical, output_names
 
+    def bind_approved_snapshot_token(self, token: str) -> None:
+        """Bind administrator expectation, not the child's newly observed state."""
+        if not isinstance(token, str) or not token.strip():
+            raise ValueError("approved snapshot token must be nonempty")
+        previous = getattr(self, "_approved_snapshot_token", None)
+        if previous is not None and previous != token:
+            raise ApprovedSnapshotMismatch("approved source snapshot cannot be rebound")
+        self._approved_snapshot_token = token
+        self.assert_approved_snapshot()
+
+    def bind_approved_content_digest(self, digest: str) -> None:
+        """Bind the exact object-set digest approved for a prepared read."""
+        if (not isinstance(digest, str) or len(digest) not in (32, 64) or
+                any(ch not in "0123456789abcdef" for ch in digest)):
+            raise ValueError("approved source content digest must be lowercase hex")
+        previous = getattr(self, "_approved_content_digest", None)
+        if previous is not None and previous != digest:
+            raise ApprovedSnapshotMismatch("approved source content digest cannot be rebound")
+        self._approved_content_digest = digest
+
+    def assert_prepared_snapshot_approved(self, prepared_read) -> None:
+        """Compare the frozen exact object set, not a mutable live manifest token."""
+        expected = getattr(self, "_approved_content_digest", None)
+        if expected is None:
+            return
+        frozen = getattr(prepared_read, "resolved_source_snapshot", None)
+        if (getattr(frozen, "dataset", None) != self.dataset or
+                getattr(frozen, "content_digest", None) != expected):
+            raise ApprovedSnapshotMismatch(
+                "prepared source snapshot does not match approved content digest")
+
+    def assert_approved_snapshot(self) -> None:
+        expected = getattr(self, "_approved_snapshot_token", None)
+        if expected is None:
+            return
+        self.refresh_snapshot(force=True)
+        if self.snapshot_token != expected:
+            raise ApprovedSnapshotMismatch("approved source snapshot token does not match")
+
     def _record_read_snapshot(self, snapshot_id: str | None) -> None:
+        self.assert_approved_snapshot()
         if not snapshot_id:
             return
         if self._data_snapshot_id and snapshot_id != self._data_snapshot_id:
@@ -1971,6 +2015,8 @@ class DataAccessSource(DataSource):
         并发修复：用 _cache_lock 保护 snapshot 检查和更新，避免多线程同时触发昂贵的 describe_dataset。
         """
         self._assert_open()
+        expected = getattr(self, "_approved_snapshot_token", None)
+        force = force or expected is not None
         now = time.monotonic()
 
         # 快速路径：TTL 内短路（无锁检查）
@@ -2006,6 +2052,7 @@ class DataAccessSource(DataSource):
                 self._manifest_token = token
             else:
                 # 无 manifest：回退全量 describe（旧行为，仅此路径昂贵）
+                self._manifest_token = None
                 snapshot = store.describe_dataset(
                     self.dataset,
                     params=dict(self.params),
@@ -2021,6 +2068,8 @@ class DataAccessSource(DataSource):
                     )
                     self._clear_cache_locked(reset_snapshot=False)
                 self._data_snapshot_id = current
+            if expected is not None and self.snapshot_token != expected:
+                raise ApprovedSnapshotMismatch("approved source snapshot token does not match")
             self._snapshot_checked_at = now
             return self._data_snapshot_id
 
@@ -2469,6 +2518,16 @@ class DataAccessSource(DataSource):
         # must use the semantic contract before caching a logical factor input;
         # otherwise A-share Return remains in 1/10000 units and silently
         # contaminates every downstream return-based operator.
+        if lqtp_extra_factor:
+            # The Arrow/lazy adapter renames physical columns to the requested
+            # logical alias. A simultaneous adj_factor request must not hide
+            # the physical Factor dependency from volume normalization.
+            factor_output = output_names.get(lqtp_extra_factor, lqtp_extra_factor)
+            if factor_output not in fetched:
+                raise FieldNormalizationError(
+                    "adjusted volume is missing its same-read Factor dependency"
+                )
+            fetched[lqtp_extra_factor] = fetched[factor_output]
         self._normalize_contract_columns(fetched, needed)
         for name in needed:
             self._put_cache(self._column_cache, name, fetched[name])

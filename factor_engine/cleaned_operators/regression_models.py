@@ -73,7 +73,15 @@ def _metadata(
     input_units: dict[str, str] | None = None,
     compatible_units: dict[str, tuple[str, ...]] | None = None,
     param_specs: dict[str, ParamSpec] | None = None,
+    diagnostic_only: bool = False,
 ) -> OperatorMetadata:
+    tags = [
+        "time_series_regression", "daily", "pit_safe", "causal", "typed_v2",
+        f"signature:{','.join(params)}->series", f"domain:{domain}",
+        f"unit:{unit}", "cost:2",
+    ]
+    if diagnostic_only:
+        tags.append("diagnostic_only")
     return OperatorMetadata(
         name=name,
         category="time_series_regression",
@@ -81,11 +89,7 @@ def _metadata(
         param_names=params,
         return_type="series",
         param_specs={k: v for k, v in (param_specs or {}).items() if k in params},
-        tags=[
-            "time_series_regression", "daily", "pit_safe", "causal", "typed_v2",
-            f"signature:{','.join(params)}->series", f"domain:{domain}",
-            f"unit:{unit}", "cost:2",
-        ],
+        tags=tags,
         output_unit=output_unit,
         input_units=dict(input_units or {}),
         compatible_units=dict(compatible_units or {}),
@@ -245,6 +249,7 @@ class TsHuberRegressionInSampleResid(SeriesOperator):
         domain="price_volume",
         unit="level",
         param_specs=_REGRESSION_PARAM_SPECS,
+        diagnostic_only=True,
     )
 
     def _calculate_series(self, y: pd.DataFrame, x: pd.DataFrame, window: int = 20, min_periods: int = 5, **_: Any) -> pd.DataFrame:
@@ -329,6 +334,7 @@ class TsRidgeRegressionInSampleResid(SeriesOperator):
         domain="price_volume",
         unit="level",
         param_specs=_REGRESSION_PARAM_SPECS,
+        diagnostic_only=True,
     )
 
     def _calculate_series(self, y: pd.DataFrame, x: pd.DataFrame, window: int = 20, alpha: float = 0.1, min_periods: int = 5, **_: Any) -> pd.DataFrame:

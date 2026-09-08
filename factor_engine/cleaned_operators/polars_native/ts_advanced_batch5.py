@@ -1383,20 +1383,36 @@ class TSLevelShiftScorePolarsNative(SeriesOperator):
         description="Statistical evidence of level shift",
         param_names=["x","window","min_periods"],
         return_type="series",
-        tags=["time_series", "rolling", "breakpoint", "pit_safe"],
+        tags=["time_series", "rolling", "breakpoint", "pit_safe",
+              "specialized_numerical_kernel"],
     )
     metadata.param_specs = {
         "window": ParamSpec(dtype=int, min=20, param_role=ParamRole.HORIZON),
     }
 
     def _calculate_series(self, x, window, min_periods=None, **kwargs):
-        # R4-100 parity: canonical (x, window, min_periods).
-        feature = x
-        # TODO: Implement proper CUSUM or likelihood ratio test
-        # Placeholder: deviation from long-term mean
-        short_mean = feature.rolling_mean(window // 4)
-        long_mean = feature.rolling_mean(window)
-        return (short_mean - long_mean).abs() / (feature.rolling_std(window) + 1e-8)
+        w, mp = int(window), max(4, int(5 if min_periods is None else min_periods))
+        exprs = []
+        for column in [c for c, dtype in x.schema.items() if dtype.is_numeric()]:
+            values = x[column].to_numpy().astype(float, copy=False)
+            out = np.full(len(values), np.nan)
+            for row in range(len(values)):
+                segment = values[max(0, row - w + 1):row + 1]
+                if not len(segment) or not np.isfinite(segment[-1]):
+                    continue
+                breaks = np.flatnonzero(~np.isfinite(segment))
+                start = breaks[-1] + 1 if breaks.size else 0
+                vals = segment[start:]
+                if vals.size < mp:
+                    continue
+                midpoint = len(segment) // 2
+                first_len = max(0, min(midpoint, len(segment)) - start)
+                first, second = vals[:first_len], vals[first_len:]
+                sd = float(np.std(vals))
+                if first.size and second.size and sd > 0.0:
+                    out[row] = float(np.mean(second) - np.mean(first)) / sd
+            exprs.append(pl.Series(column, out))
+        return x.with_columns(exprs)
 
 
 # ============================================================================
@@ -1491,6 +1507,91 @@ class TSLineParallelismPolarsNative(SeriesOperator):
 # Lo-MacKinlay Variance Ratio
 # ============================================================================
 
+def _lo_mackinlay_frame(x, window, q, min_periods, *, z_score):
+    """Pure-Polars rolling Lo–MacKinlay estimator on contiguous level runs."""
+    w, periods = int(window), int(q)
+    if periods < 2 or periods >= w:
+        raise ValueError("q must be >= 2 and < window")
+    mp = max(6, int(min_periods))
+    value_cols = [name for name, dtype in x.schema.items() if dtype.is_numeric()]
+    axes = [name for name in x.columns if name not in value_cols]
+    outputs = []
+    for number, column in enumerate(value_cols):
+        prefix = f"__lm_{number}_"
+        group, ret, qret = prefix + "group", prefix + "ret", prefix + "qret"
+        n, mu, s1, s2 = prefix + "n", prefix + "mu", prefix + "s1", prefix + "s2"
+        qn, qs1, qs2 = prefix + "qn", prefix + "qs1", prefix + "qs2"
+        sigma_a, vr = prefix + "sigma_a", prefix + "vr"
+        lf = x.lazy().with_columns(
+            pl.col(column).is_null().cast(pl.UInt32).cum_sum().alias(group)
+        ).with_columns(
+            pl.col(column).diff().over(group).alias(ret),
+            pl.col(column).diff(periods).over(group).alias(qret),
+        ).with_columns(
+            pl.col(ret).is_not_null().cast(pl.UInt32).rolling_sum(
+                w - 1, min_samples=1).over(group).alias(n),
+            pl.col(ret).rolling_sum(w - 1, min_samples=1).over(group).alias(s1),
+            (pl.col(ret) ** 2).rolling_sum(w - 1, min_samples=1).over(group).alias(s2),
+            pl.col(qret).is_not_null().cast(pl.UInt32).rolling_sum(
+                w - periods, min_samples=1).over(group).alias(qn),
+            pl.col(qret).rolling_sum(w - periods, min_samples=1).over(group).alias(qs1),
+            (pl.col(qret) ** 2).rolling_sum(w - periods, min_samples=1).over(group).alias(qs2),
+        ).with_columns(
+            (pl.col(s1) / pl.col(n)).alias(mu),
+            ((pl.col(s2) - pl.col(s1) ** 2 / pl.col(n)) / (pl.col(n) - 1)).alias(sigma_a),
+        ).with_columns(
+            (
+                ((pl.col(qs2) - 2 * periods * pl.col(mu) * pl.col(qs1)
+                  + pl.col(qn) * (periods * pl.col(mu)) ** 2)
+                 / (periods * pl.col(qn) * (1 - periods / pl.col(n))))
+                / pl.col(sigma_a)
+            ).alias(vr)
+        )
+        valid = ((pl.col(n) >= mp - 1) & (pl.col(n) >= periods + 1) &
+                 (pl.col(qn) == pl.col(n) - periods + 1) & (pl.col(sigma_a) > 0))
+        if z_score:
+            theta_terms = []
+            for lag in range(1, periods):
+                a2b2, a2b, ab2, a2, b2, ab, a1, b1, count = (
+                    prefix + f"k{lag}_{suffix}" for suffix in
+                    ("a2b2", "a2b", "ab2", "a2", "b2", "ab", "a1", "b1", "count")
+                )
+                pair_window = w - 1 - lag
+                shifted = pl.col(ret).shift(lag).over(group)
+                lf = lf.with_columns(
+                    ((pl.col(ret) ** 2 * shifted ** 2).rolling_sum(pair_window, min_samples=1).over(group)).alias(a2b2),
+                    ((pl.col(ret) ** 2 * shifted).rolling_sum(pair_window, min_samples=1).over(group)).alias(a2b),
+                    ((pl.col(ret) * shifted ** 2).rolling_sum(pair_window, min_samples=1).over(group)).alias(ab2),
+                    (pl.when(shifted.is_not_null()).then(pl.col(ret) ** 2)
+                     .rolling_sum(pair_window, min_samples=1).over(group)).alias(a2),
+                    (pl.when(pl.col(ret).is_not_null()).then(shifted ** 2)
+                     .rolling_sum(pair_window, min_samples=1).over(group)).alias(b2),
+                    ((pl.col(ret) * shifted).rolling_sum(pair_window, min_samples=1).over(group)).alias(ab),
+                    (pl.when(shifted.is_not_null()).then(pl.col(ret))
+                     .rolling_sum(pair_window, min_samples=1).over(group)).alias(a1),
+                    (pl.when(pl.col(ret).is_not_null()).then(shifted)
+                     .rolling_sum(pair_window, min_samples=1).over(group)).alias(b1),
+                    ((pl.col(ret).is_not_null() & shifted.is_not_null()).cast(pl.UInt32)
+                     .rolling_sum(pair_window, min_samples=1).over(group)).alias(count),
+                )
+                numerator = (
+                    pl.col(a2b2) - 2 * pl.col(mu) * (pl.col(a2b) + pl.col(ab2))
+                    + pl.col(mu) ** 2 * (pl.col(a2) + pl.col(b2) + 4 * pl.col(ab))
+                    - 2 * pl.col(mu) ** 3 * (pl.col(a1) + pl.col(b1))
+                    + pl.col(count) * pl.col(mu) ** 4
+                )
+                theta_terms.append((2.0 * (periods - lag) / periods) ** 2 *
+                                   numerator / (pl.col(s2) - pl.col(s1) ** 2 / pl.col(n)) ** 2)
+            theta = sum(theta_terms)
+            expression = pl.when(valid & (theta > 0)).then(
+                (pl.col(vr) - 1.0) / theta.sqrt()
+            ).otherwise(None).alias(column)
+        else:
+            expression = pl.when(valid).then(pl.col(vr)).otherwise(None).alias(column)
+        outputs.append(lf.select(expression).collect().to_series())
+    result = x.select(axes) if axes else pl.DataFrame()
+    return result.with_columns(outputs)
+
 @register_operator(name="ts_lo_mackinlay_vr", canonical="ts_lo_mackinlay_vr", backend="polars")
 class TSLoMackinlayVRPolarsNative(SeriesOperator):
     """Lo-MacKinlay variance ratio test statistic"""
@@ -1509,14 +1610,7 @@ class TSLoMackinlayVRPolarsNative(SeriesOperator):
     }
 
     def _calculate_series(self, x, window=60, q=5, min_periods=10, **kwargs):
-        feature = x
-        # R4-100 parity: canonical (x, window, q, min_periods).
-        # VR(q) = Var(q-period return) / (q * Var(1-period return))
-        ret_1 = feature.diff()
-        ret_q = feature.diff(q)
-        var_1 = ret_1.rolling_var(window)
-        var_q = ret_q.rolling_var(window)
-        return var_q / (q * var_1 + 1e-8)
+        return _lo_mackinlay_frame(x, window, q, min_periods, z_score=False)
 
 
 @register_operator(name="ts_lo_mackinlay_z", canonical="ts_lo_mackinlay_z", backend="polars")
@@ -1537,17 +1631,8 @@ class TSLoMackinlayZPolarsNative(SeriesOperator):
     }
 
     def _calculate_series(self, x, window, q, min_periods=None, **kwargs):
-        # R4-100 parity: canonical (x, window, q, min_periods).
-        feature = x
-        # Z = (VR - 1) / sqrt(asymptotic variance)
-        ret_1 = feature.diff()
-        ret_q = feature.diff(q)
-        var_1 = ret_1.rolling_var(window)
-        var_q = ret_q.rolling_var(window)
-        vr = var_q / (q * var_1 + 1e-8)
-        # Simplified asymptotic variance
-        asy_var = 2.0 * (q - 1) / (3 * q * window)
-        return (vr - 1.0) / (asy_var ** 0.5 + 1e-8)
+        return _lo_mackinlay_frame(
+            x, window, q, 10 if min_periods is None else min_periods, z_score=True)
 
 
 # ============================================================================
@@ -1781,4 +1866,3 @@ class TSLag1AutocorrPolarsNative(SeriesOperator):
 #
 # All operators are registered with backend="polars" and use lazy evaluation
 # for maximum performance.
-

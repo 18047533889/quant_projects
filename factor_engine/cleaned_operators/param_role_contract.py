@@ -111,6 +111,32 @@ def backfill_scalar_roles() -> int:
                     object.__setattr__(spec, "role_source", "rule")
                     backfilled += 1
                     break
+        # The rule table runs after every backend has registered.  ParamSpec
+        # objects are not necessarily shared across implementations, so the
+        # preferred backend's newly assigned role must be copied to thinner
+        # backend declarations as well.  ``None`` is the documented
+        # undeclared-role sentinel; any non-None backend role is explicit and
+        # remains untouched so the runtime authority audit can flag a genuine
+        # contradiction.
+        for backend_op in backends_map.values():
+            if backend_op is op:
+                continue
+            backend_meta = getattr(backend_op, "metadata", None)
+            backend_specs = getattr(backend_meta, "param_specs", None) or {}
+            for name, canonical_spec in specs.items():
+                backend_spec = backend_specs.get(name)
+                canonical_role = getattr(canonical_spec, "param_role", None)
+                if (
+                    backend_spec is not None
+                    and canonical_role is not None
+                    and getattr(backend_spec, "param_role", None) is None
+                ):
+                    object.__setattr__(backend_spec, "param_role", canonical_role)
+                    object.__setattr__(
+                        backend_spec,
+                        "role_source",
+                        getattr(canonical_spec, "role_source", "canonical_backend"),
+                    )
     _APPLIED = True
     return backfilled
 

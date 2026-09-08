@@ -14,6 +14,35 @@ class OperatorSemanticVersion:
 
 # 已知语义变更历史（新因子应使用最新 version）
 OPERATOR_SEMANTIC_VERSIONS: dict[str, int] = {
+    # v7: stable original-unit Ridge kernel; old ill-conditioned outputs differ.
+    "ts_ridge_regression_coeff": 2,
+    "ts_ridge_regression_resid_z": 2,
+    "ts_ridge_regression_coeff_prior": 2,
+    "ts_ridge_regression_forecast_error": 2,
+    "ts_ridge_regression_forecast_error_z": 2,
+    "ts_ridge_regression_in_sample_resid": 2,
+    "ts_ridge_regression_predictive_resid": 2,
+    # v7: one finite cohort for PCA fit/projection and missing current masks.
+    "panel_rolling_pca_loading": 2,
+    "panel_rolling_pca_resid": 2,
+    "panel_rolling_pca_explained_ratio": 2,
+    "panel_rolling_pca_resid_vol": 2,
+    "panel_rolling_pca_resid_momentum": 2,
+    "industry_rolling_pca_loading": 2,
+    "panel_mixture_of_experts_score": 2,  # stable gate over usable experts only
+    # v7: GJR shared recursion and prefix-local return-domain validation.
+    "ts_garch_next_vol_forecast": 2,
+    "ts_garch_vol_surprise": 2,
+    "ts_garch_persistence": 2,
+    "ts_garch_standardized_shock": 2,
+    "ts_gjr_garch_vol_forecast": 2,
+    "ts_gjr_leverage": 2,
+    # v7: HAR rows preserve original feature/label clock and common cohort.
+    "ts_har_rv_next_vol_forecast": 2,
+    "ts_har_rv_next_var_forecast": 2,
+    "ts_har_rv_forecast_error_z": 2,
+    "ts_har_from_return_next_vol": 2,
+    "ts_har_from_return_forecast_error_z": 2,
     "group_percentile": 3,  # v3: backend emitters preserve current quantile/null semantics
     "signed_log": 1,  # sign(x)*log(abs(x)+1e-10)
     "compare": 2,  # v2: NULL/NaN propagate

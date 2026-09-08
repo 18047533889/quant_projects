@@ -894,6 +894,46 @@ def _backfill_logical_contract(operator: Any, prev: dict[str, Any]) -> None:
             cur = getattr(meta, field, None)
         except AttributeError:
             continue
+        if field == "param_specs" and isinstance(canonical, dict) and isinstance(cur, dict):
+            # A native backend often repeats dtype/range/history details while
+            # leaving only ``param_role`` undeclared.  Treat that None as the
+            # documented ParamSpec sentinel and inherit the canonical role;
+            # otherwise role-aware planning/search sees a different contract
+            # on each backend.  Do not attempt a generic dataclass overlay:
+            # defaults such as ``searchable=True`` cannot be distinguished
+            # from an explicit declaration.  Conversely, two non-None roles
+            # are explicit declarations and a disagreement is fail-closed.
+            merged_specs = dict(cur)
+            for name, canonical_spec in canonical.items():
+                backend_spec = merged_specs.get(name)
+                if backend_spec is None:
+                    continue
+                canonical_role = getattr(canonical_spec, "param_role", None)
+                backend_role = getattr(backend_spec, "param_role", None)
+                if canonical_role is not None and backend_role is None:
+                    try:
+                        merged_specs[name] = dataclasses.replace(
+                            backend_spec, param_role=canonical_role
+                        )
+                    except (TypeError, ValueError):
+                        pass
+                elif (
+                    canonical_role is not None
+                    and backend_role is not None
+                    and canonical_role != backend_role
+                ):
+                    # Preserve both explicit declarations so the ordinary
+                    # structural comparison/auditor reports the conflict.  A
+                    # bootstrap still contains known legacy divergences, so
+                    # making this one leaf fatal here would prevent load_all()
+                    # before the authority audit can enumerate them.
+                    continue
+            if merged_specs != cur:
+                try:
+                    meta.param_specs = merged_specs
+                    cur = merged_specs
+                except (AttributeError, TypeError, ValueError):
+                    pass
         if cur in (None, "", (), [], {}):
             # Empty backend slot -> inherit the canonical value.
             try:

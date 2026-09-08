@@ -77,12 +77,24 @@ def test_snapshot_change_uses_cheap_manifest_token(monkeypatch):
 
 
 def test_cache_is_lru_bounded(monkeypatch):
+    import pandas as pd
+
     monkeypatch.setenv("FACTOR_ENGINE_DATA_CACHE_MAX_COLUMNS", "2")
     source = DataAccessSource(dataset="demo", params={})
-    source._put_cache(source._column_cache, "a", 1)
-    source._put_cache(source._column_cache, "b", 2)
-    source._put_cache(source._column_cache, "c", 3)
-    assert list(source._column_cache) == ["b", "c"]
+    # Cache admission requires a broker and a trackable physical buffer owner;
+    # bare integers intentionally do not meet the current ownership contract.
+    source._cache_broker = SimpleNamespace(
+        acquire_memory=lambda *args, **kwargs: SimpleNamespace(release=lambda: None))
+    source._max_cache_bytes = 1024 * 1024
+    try:
+        for name in ("a", "b", "c"):
+            assert source._put_cache(source._column_cache, name, pd.Series([1.0]))
+        assert list(source._column_cache) == ["b", "c"]
+        assert not source._put_cache(source._column_cache, "scalar", 1)
+        source._cache_broker = None
+        assert not source._put_cache(source._column_cache, "unleased", pd.Series([1.0]))
+    finally:
+        source.close()
 
 
 def test_close_rejects_future_reads(monkeypatch):

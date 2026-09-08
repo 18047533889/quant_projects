@@ -1,0 +1,50 @@
+schema_version: factor_engine.merge_recovery.v1
+status: PASS_WITH_R02_NOT_RUN
+baseline: 2bac7209
+observed_head_before_merge: d5482ca3e997b06e7e9e319861dd4525ce9c0689
+files:
+  factor_engine/runtime/bounded_pipeline.py:
+    baseline_sha256: 5c636640d19b4d3954d6726d011068a7e47c48026b35dba3666f6f7236ee90cb
+    current_before_sha256: 5c636640d19b4d3954d6726d011068a7e47c48026b35dba3666f6f7236ee90cb
+    merged_sha256: 8affb04c9f3fd6afc23323e606a15d627d501696a27d741adb9ffa4472122d4f
+    resolution: restored reviewed direct-artifact and WP5 recovery changes; added inert wave context extraction
+  factor_engine/runtime/supervised_worker.py:
+    baseline_sha256: 1d953b009c88c3b122576e095ef4c6c79c82113afe60e3c95104d82f2c06c62d
+    current_before_sha256: 77a749765c88f989133a15ff16b750ea73b651c2d77d8d247b10cda7bf4812ee
+    merged_sha256: 77a749765c88f989133a15ff16b750ea73b651c2d77d8d247b10cda7bf4812ee
+    resolution: current already matched reviewed async lifecycle
+  factor_engine/tests/runtime/test_v6_supervised_worker.py:
+    baseline_sha256: a4c8e161b24e392254825c84086327b75dd13ed676e60623f1d6b8d17e27dc78
+    current_before_sha256: f588e07628aeeffdaf5f167868d0eb0d6f971b859c70a3c7b2aec01c51a5ee3b
+    merged_sha256: f588e07628aeeffdaf5f167868d0eb0d6f971b859c70a3c7b2aec01c51a5ee3b
+    resolution: current already matched reviewed async tests
+  factor_engine/tests/runtime/test_v7_direct_artifact_pipeline.py:
+    baseline_sha256: null
+    current_before_sha256: 9869ae4d6926a9a54f62d84f897d37aa9b2fc977a962a1d4360d82a9d6d76418
+    merged_sha256: f3eecc93e1bcbc85879df80eac0a0934cc7f6a95cd13e9dae746aa6322bd2fee
+    resolution: retained established tests; moved unfinished R02 oracle to NOT_RUN patch
+  factor_engine/pyproject.toml:
+    baseline_sha256: 1bd86ff752ff7991635768ddf45946be4e760ac94c034e6137cdb28df004037d
+    current_before_sha256: 1bd86ff752ff7991635768ddf45946be4e760ac94c034e6137cdb28df004037d
+    merged_sha256: 2c01def363a84547761babbe3457079780edf5ee4deb8039c6d029c250d1e2bc
+    resolution: added factor_engine.reporting to explicit package list
+tests:
+  result: 69 passed
+  warnings: 62
+  duration_seconds: 189.66
+  included:
+    - factor_engine/tests/runtime/test_v6_supervised_worker.py
+    - factor_engine/tests/runtime/test_v7_direct_artifact_pipeline.py
+    - factor_engine/tests/runtime/test_v7_direct_sink_recovery.py
+    - factor_engine/tests/runtime/test_v7_pipeline_integrity.py
+    - factor_engine/tests/runtime/test_v6_bounded_pipeline.py
+    - factor_engine/tests/test_package_manifest_complete.py
+r02:
+  status: NOT_RUN
+  nodeid: factor_engine/tests/runtime/test_v7_direct_artifact_pipeline.py::test_default_two_slot_pipeline_overlaps_previous_write_with_next_compute
+  reason: two-slot scheduler is incomplete; no overlap claim is made
+boundaries:
+  committed: false
+  staged: false
+  deployed: false
+  packaged: false

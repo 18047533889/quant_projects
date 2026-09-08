@@ -255,26 +255,82 @@ def huber_fit(
 
 
 def ridge_fit(design: np.ndarray, y: np.ndarray, alpha: float, *, has_intercept: bool = True) -> np.ndarray | None:
-    """Ridge OLS with L2 penalty on non-intercept coefficients.
+    """Stable Ridge fit with an original-feature-unit L2 penalty.
 
     The intercept column is only exempt from the penalty when the design
     actually starts with an intercept (``has_intercept=True``).  Penalising the
     first *feature* column when no intercept is present would wrongly shrink a
-    real regressor.
+    real regressor.  Features are scaled only as a numerical change of
+    variables: the augmented-system penalty is divided by the same scales, so
+    ``alpha`` continues to penalise coefficients in the caller's original
+    feature units.
+
+    ``alpha == 0`` deliberately delegates to the OLS rank/conditioning policy.
+    For positive alpha the augmented system supports ``p > n``; penalised
+    constant columns are assigned coefficient zero.  With an intercept, its
+    column must be a finite non-zero constant and is never penalised.
     """
-    if design.shape[0] < design.shape[1]:
-        return None
-    penalty = float(alpha) * np.eye(design.shape[1])
-    if has_intercept and design.shape[1] >= 1:
-        penalty[0, 0] = 0.0  # do not penalise the intercept
-    lhs = design.T @ design + penalty
-    rhs = design.T @ y
     try:
-        beta, *_ = np.linalg.lstsq(lhs, rhs, rcond=None)
-    except (np.linalg.LinAlgError, ValueError):
+        x = np.asarray(design, dtype=float)
+        target = np.asarray(y, dtype=float)
+        strength = float(alpha)
+    except (TypeError, ValueError, OverflowError):
+        _set_fit_status(False, "invalid_params")
         return None
+    if (x.ndim != 2 or target.ndim != 1 or x.shape[0] != target.shape[0] or
+            x.shape[0] == 0 or x.shape[1] == 0 or not np.isfinite(strength) or
+            strength < 0.0 or not np.all(np.isfinite(x)) or
+            not np.all(np.isfinite(target))):
+        _set_fit_status(False, "invalid_params")
+        return None
+    if strength == 0.0:
+        return ols_fit(x, target)
+
+    if has_intercept:
+        intercept_column = x[:, 0]
+        intercept_value = float(intercept_column[0])
+        if (not np.isfinite(intercept_value) or intercept_value == 0.0 or
+                not np.all(intercept_column == intercept_value)):
+            _set_fit_status(False, "invalid_params")
+            return None
+        features = x[:, 1:]
+        feature_mean = np.mean(features, axis=0)
+        target_mean = float(np.mean(target))
+        work_x = features - feature_mean
+        work_y = target - target_mean
+    else:
+        intercept_value = 0.0
+        feature_mean = np.zeros(x.shape[1], dtype=float)
+        target_mean = 0.0
+        work_x = x
+        work_y = target
+
+    # Scaling is solely a solver preconditioner.  If theta = scale * beta,
+    # alpha * ||beta||^2 becomes alpha * ||theta / scale||^2, preserving the
+    # penalty in original feature units rather than silently standardising it.
+    scale = np.max(np.abs(work_x), axis=0) if work_x.shape[1] else np.empty(0)
+    active = np.isfinite(scale) & (scale > 0.0)
+    slopes = np.zeros(work_x.shape[1], dtype=float)
+    try:
+        if np.any(active):
+            scaled_x = work_x[:, active] / scale[active]
+            penalty_rows = np.diag(np.sqrt(strength) / scale[active])
+            augmented_x = np.vstack((scaled_x, penalty_rows))
+            augmented_y = np.concatenate((work_y, np.zeros(penalty_rows.shape[0])))
+            theta, *_ = np.linalg.lstsq(augmented_x, augmented_y, rcond=0.0)
+            slopes[active] = theta / scale[active]
+    except (np.linalg.LinAlgError, ValueError, FloatingPointError):
+        _set_fit_status(False, "singular")
+        return None
+    if has_intercept:
+        intercept = (target_mean - float(feature_mean @ slopes)) / intercept_value
+        beta = np.concatenate(([intercept], slopes))
+    else:
+        beta = slopes
     if not np.all(np.isfinite(beta)):
+        _set_fit_status(False, "singular")
         return None
+    _set_fit_status(True, "converged")
     return beta
 
 

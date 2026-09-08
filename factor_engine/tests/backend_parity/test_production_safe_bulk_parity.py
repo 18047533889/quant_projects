@@ -1,5 +1,9 @@
 # -*- coding: utf-8
-"""Production-safe 算子 bulk parity：补齐 MEMORY/EDGE 未覆盖的 P0/P1 执行 case。"""
+"""Research candidate parity and explicit stale-name rejection contracts.
+
+Numerical comparisons do not confer production certification. Unregistered
+historical test names are measured rejection cases, not numerical successes.
+"""
 from __future__ import annotations
 
 from pathlib import Path
@@ -7,8 +11,6 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import pytest
-
-pytest.importorskip("polars")
 
 from factor_engine.api.cleaned_ops import make_cleaned_call_factory
 from factor_engine.api.columns import col
@@ -194,7 +196,9 @@ POLARS_BULK_CASES = [
     ("avg2", lambda: F("avg2")(col("close"), col("open"))),
     ("ts_positive_streak", lambda: F("ts_positive_streak")(col("close"))),
     ("ts_sma_cn", lambda: F("ts_sma_cn")(col("close"), 3, 1)),
-    ("overnight_return", lambda: F("overnight_return")(col("open"), col("pre_close"))),
+    # Synthetic unadjusted prices share a declared basis; opaque column names
+    # alone cannot establish this contract.
+    ("overnight_return", lambda: F("overnight_return")(col("open"), col("pre_close"), price_basis="raw")),
     ("ffill", lambda: F("ffill")(col("close"))),
     ("is_finite", lambda: F("is_finite")(col("close"))),
     ("is_null", lambda: F("is_null")(col("close"))),
@@ -364,12 +368,32 @@ def _assert_series(pd_out, other_out):
     pd.testing.assert_series_equal(left, right, check_names=False, rtol=1e-5, atol=1e-5)
 
 
-@pytest.mark.parametrize("name,expr_builder", POLARS_BULK_CASES)
-def test_bulk_polars_long_matches_pandas(bulk_source, name, expr_builder):
-    from factor_engine.cleaned_operators.operator_surface import DAILY_CANONICALS
+# Independently observed absent canonical AND alias names in the current
+# registry. Keep explicit: a newly removed operator must fail, not auto-skip.
+UNREGISTERED_TEST_CASES = {
+    "nan_to_num", "ffill", "cum_sum", "cum_max", "cum_min", "cum_prod",
+    "expanding_sum", "count", "volatility", "cum_delta", "expanding_mean",
+    "protected_sqrt", "div_or_default", "log_fill_invalid", "vwap",
+}
+
+
+def _assert_unregistered_rejection(source, name, builder, backend, record_property):
+    if name not in UNREGISTERED_TEST_CASES:
+        return False
     from factor_engine.cleaned_operators.registry import OperatorRegistry
-    if OperatorRegistry._aliases.get(name, name) not in DAILY_CANONICALS:
-        pytest.skip("not on the production daily surface")
+    assert name not in OperatorRegistry.list_canonical()
+    assert name not in OperatorRegistry._aliases
+    with pytest.raises(KeyError, match="unknown operator canonical"):
+        _run(source, builder(), backend)
+    record_property("verdict", "UNREGISTERED_TYPED_REJECTION_NOT_NUMERICAL_PASS")
+    return True
+
+
+@pytest.mark.parametrize("name,expr_builder", POLARS_BULK_CASES)
+def test_bulk_polars_long_matches_pandas(bulk_source, name, expr_builder, record_property):
+    import polars  # Required only for this lane; missing dependency is a failure.
+    if _assert_unregistered_rejection(bulk_source, name, expr_builder, "polars_long", record_property):
+        return
     expr = expr_builder()
     pd_out = _result_series(_run(bulk_source, expr, "pandas"))
     long_out = _result_series(_run(bulk_source, expr, "polars_long"))
@@ -377,11 +401,9 @@ def test_bulk_polars_long_matches_pandas(bulk_source, name, expr_builder):
 
 
 @pytest.mark.parametrize("name,expr_builder", DUCKDB_BULK_CASES)
-def test_bulk_duckdb_matches_pandas(duckdb_bulk_source, name, expr_builder):
-    from factor_engine.cleaned_operators.operator_surface import DAILY_CANONICALS
-    from factor_engine.cleaned_operators.registry import OperatorRegistry
-    if OperatorRegistry._aliases.get(name, name) not in DAILY_CANONICALS:
-        pytest.skip("not on the production daily surface")
+def test_bulk_duckdb_matches_pandas(duckdb_bulk_source, name, expr_builder, record_property):
+    if _assert_unregistered_rejection(duckdb_bulk_source, name, expr_builder, "duckdb_sql", record_property):
+        return
     from tests.backend_parity.duckdb_parity_helpers import assert_duckdb_real_sql_execution
 
     expr = expr_builder()

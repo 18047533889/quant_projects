@@ -1675,21 +1675,36 @@ class TSCumulativeDeviationScorePolarsNative(SeriesOperator):
         name="ts_cumulative_deviation_score",
         category="time_series",
         description="Cumulative deviation normalized by volatility",
-        param_names=["feature", "baseline", "window"],
+        param_names=["x", "window", "min_periods"],
         return_type="series",
-        tags=["time_series", "rolling", "deviation", "pit_safe"],
+        tags=["time_series", "rolling", "deviation", "pit_safe",
+              "specialized_numerical_kernel"],
     )
     metadata.param_specs = {
-        "baseline": ParamSpec(dtype=float, param_role=ParamRole.STATE_THRESHOLD),
         "window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
+        "min_periods": ParamSpec(dtype=int, min=1, param_role=ParamRole.SUPPORT_POLICY),
     }
 
-    def _calculate_series(self, feature, baseline, window, **kwargs):
-        deviation = feature - baseline
-        cum_dev = deviation.rolling(window).sum()
-        volatility = feature.rolling(window).std()
-        
-        return cum_dev / volatility.replace(0, np.nan)
+    def _calculate_series(self, x, window=20, min_periods=5, **kwargs):
+        w, mp = int(window), max(3, int(min_periods))
+        exprs = []
+        for column in [c for c, dtype in x.schema.items() if dtype.is_numeric()]:
+            values = x[column].to_numpy().astype(float, copy=False)
+            out = np.full(len(values), np.nan)
+            for row in range(len(values)):
+                segment = values[max(0, row - w + 1):row + 1]
+                if not len(segment) or not np.isfinite(segment[-1]):
+                    continue
+                breaks = np.flatnonzero(~np.isfinite(segment))
+                vals = segment[(breaks[-1] + 1 if breaks.size else 0):]
+                if vals.size < mp:
+                    continue
+                sd = float(np.std(vals))
+                if sd > 0.0:
+                    running = np.cumsum((vals - float(np.mean(vals))) / sd)
+                    out[row] = float(np.max(np.abs(running)))
+            exprs.append(pl.Series(column, out))
+        return x.with_columns(exprs)
 
 
 @register_operator(name="ts_cusum_pressure", canonical="ts_cusum_pressure", backend="polars")
@@ -2967,4 +2982,3 @@ class TSFeatureEffectiveRankPolarsNative(SeriesOperator):
 # The file now contains 89 operators with proper implementations or well-documented TODOs.
 # Several operators from the list are already in ts_batch1.py (ewm_cov, decay_exp_window, etc.)
 # bringing the total unique coverage to approximately 95+ operators from the target list.
-
