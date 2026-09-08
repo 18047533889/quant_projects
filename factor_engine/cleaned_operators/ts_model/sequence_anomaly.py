@@ -63,8 +63,11 @@ def _register(name: str, description: str, params: list[str], unit: str, fn, cos
                             param_specs=_MP_PARAM_SPECS)
         metadata.relational_specs = list(_MP_RELATIONAL_SPECS)
 
-        def _calculate_series(self, *args, **kwargs):
-            return fn(*args, **kwargs)
+        # Expose the real kernel through the bridge default so the shared
+        # binder can recover its canonical scalar defaults before evaluating
+        # relational specs.
+        def _calculate_series(self, *args, _fn=fn, **kwargs):
+            return _fn(*args, **kwargs)
 
     _CANONICALS.append(name)
     import factor_engine.cleaned_operators.operator_surface as _surface

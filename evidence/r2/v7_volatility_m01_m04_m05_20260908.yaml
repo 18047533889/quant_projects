@@ -1,0 +1,79 @@
+work_package: v7_volatility_m01_m04_m05
+timestamp: "2026-09-08T02:06:49+08:00"
+git_sha: 2bac7209c00e302728b810513c91f5475ec6954f
+scope:
+  owned_source:
+    - factor_engine/cleaned_operators/ts_model/volatility.py
+  tests:
+    - factor_engine/tests/operators/test_v7_volatility_contracts.py
+    - factor_engine/tests/operators/test_r11_round3_tsmodel.py
+pre_fix_identity:
+  git_blob: a63c875b4e83864eb5aac423cc9ab2f70dd13647
+  sha256: 37996c695b40189ee104d9695bb6589da9c4b102b2b4b5026e7de8f8907b6a1c
+pre_fix_reproduction:
+  result: "4 failed, 1 passed"
+  junit: factor_engine/test-results/v7-volatility-prefixed.xml
+  junit_sha256: e0d47ce5425f10f3d6693196fcb595240c706084a83e01013f95b580ccd7fe59
+  failures:
+    - GJR negative-current-shock forecast omitted gamma leverage term
+    - GJR forecast returned infinity for infinite current shock
+    - future level-like suffix caused whole registered call to reject its valid prefix
+    - HAR innovation selected feature rows without the paired next-period label mask
+fix:
+  - one authoritative variance-step function is shared by likelihood history, output history, and forecast
+  - GJR forecast applies gamma only for strictly negative residual shock; positive and signed zero do not
+  - GARCH family uses an explicit constant-zero mean innovation convention and fails closed on non-finite windows
+  - statistical price-level checks are local rolling-window states, not whole-frame exceptions
+  - HAR innovation builds one common original-clock mask for feature row and next-period label
+affected_canonicals:
+  direct_formula_change:
+    - ts_gjr_garch_vol_forecast
+  shared_garch_step_regression_checked:
+    - ts_garch_next_vol_forecast
+    - ts_garch_vol_surprise
+    - ts_garch_persistence
+    - ts_garch_standardized_shock
+    - ts_gjr_leverage
+  har_shared_kernel:
+    - ts_har_rv_next_vol_forecast
+    - ts_har_rv_next_var_forecast
+    - ts_har_rv_forecast_error_z
+    - ts_har_from_return_next_vol
+    - ts_har_from_return_forecast_error_z
+  compatibility_aliases:
+    - ts_garch_vol_forecast
+    - ts_har_rv_next_forecast
+    - ts_har_rv_forecast
+    - ts_har_rv_innovation_z
+semantic_version_recommendation:
+  bump_required: true
+  reason: GJR forecast values, HAR missing-label windows, and statistical-domain prefix behavior change
+  recompute_scope: all persisted generations containing affected canonical or alias outputs
+post_fix_tests:
+  result: "83 passed, 4 skipped (arch absent from production venv), 2 warnings"
+  junit: factor_engine/test-results/v7-volatility-regression.xml
+  junit_sha256: 653fc968109a524d8d43a504bd9b60643462c4c6a4dc2dabb4f5ee65810235bd
+  junit_mtime: "2026-09-08T01:58:21.316505519+08:00"
+  command_scope:
+    - factor_engine/tests/operators/test_v7_volatility_contracts.py
+    - factor_engine/tests/r35/test_model_audit_volatility.py
+    - factor_engine/tests/r35/test_phase_b_model_oracle.py
+    - factor_engine/tests/r35/test_phase_a_model_truth_gates.py
+    - factor_engine/tests/operators/test_r11_round3_tsmodel.py
+arch_reference:
+  result: "4 passed"
+  version: "arch 7.2.0; pandas 2.3.3; numpy 2.2.6; scipy 1.15.3"
+  interpreter: /tmp/fe-v7-arch-reference-O5vquA/venv/bin/python
+  junit: factor_engine/test-results/v7-volatility-arch72-reference.xml
+  junit_sha256: dc0d1ee44f3b68df26ae3cb96bdd54e2ca7aa4a2190500bbc592e09ff35fbc87
+  convention: fixed parameters, Zero mean residuals, identical initial variance and forecast origin; MLE estimates not compared
+validation:
+  git_diff_check: PASS
+  full_suite: NOT_RUN
+  native_backend_parity: NOT_RUN
+  arch_fixed_parameter_reference: PASS
+  arch_mle_parameter_reference: NOT_RUN
+limitations:
+  - fixed-parameter recursion is independently certified; optimizer/MLE equivalence to arch is not certified here
+  - GJR assumes a constant-zero conditional mean; no fitted mean model is implemented in this module
+  - no production deployment, commit, staging, or push was performed

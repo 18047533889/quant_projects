@@ -6,9 +6,54 @@ import weakref
 import pytest
 
 from factor_engine.runtime.supervised_worker import (
-    SupervisedReusableWorker, WorkerTimedOut, WorkerQuarantined, WorkerTransportFailed,
+    SupervisedReusableWorker, WorkerCancelled, WorkerTimedOut, WorkerQuarantined,
+    WorkerTransportFailed,
     _worker_loop,
 )
+
+
+def test_async_result_preserves_single_request_fencing():
+    worker = SupervisedReusableWorker(context="fork")
+    call = worker.execute_async(_pause, 0.05, timeout_seconds=1)
+    with pytest.raises(RuntimeError, match="active request"):
+        worker.execute(_double, 2, timeout_seconds=1)
+    assert call.result(timeout=1).value is None
+    assert worker.execute(_double, 3, timeout_seconds=1).value == 6
+    worker.close()
+
+
+def test_busy_async_handle_cannot_retire_request_it_does_not_own():
+    worker = SupervisedReusableWorker(context="fork")
+    owner = worker.execute_async(_pause, 0.1, timeout_seconds=1)
+    rejected = worker.execute_async(_double, 2, timeout_seconds=1)
+    with pytest.raises(RuntimeError, match="active request"):
+        rejected.cancel_and_retire()
+    assert owner.result(timeout=1).value is None
+    assert worker._process.is_alive()
+    owner.cancel_and_retire()
+    assert not worker._process.is_alive()
+
+
+def test_async_cancel_retires_before_releasing_lease():
+    worker = SupervisedReusableWorker(
+        context="fork", cancel_grace_seconds=0, exit_observation_seconds=1
+    )
+    lease = Lease()
+    call = worker.execute_async(_pause, 5, timeout_seconds=10, lease=lease)
+    call.cancel_and_retire()
+    assert lease.released == 1
+    assert not worker._process.is_alive()
+    with pytest.raises(WorkerCancelled):
+        call.result()
+
+
+def test_async_cancel_retires_fast_completed_worker():
+    worker = SupervisedReusableWorker(context="fork")
+    call = worker.execute_async(_double, 4, timeout_seconds=1)
+    assert call.result(timeout=1).value == 8
+    assert worker._process.is_alive()
+    call.cancel_and_retire()
+    assert not worker._process.is_alive()
 
 
 def _double(value):

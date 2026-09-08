@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="0.364" timestamp="2026-09-08T02:39:04.951694+08:00" hostname="qs-compute-gpu-hk-01"><testcase classname="tests.test_gpu_probe_parity" name="test_gpu_risk_finite_policy_and_wealth_boundaries" time="0.184"><failure message="AssertionError: &#10;Not equal to tolerance rtol=1e-12, atol=1e-12&#10;&#10;nan location mismatch:&#10; ACTUAL: array([0.150111, 0.150111,      nan,      nan])&#10; DESIRED: array([0.150111, 0.150111, 0.098995,      nan])">def test_gpu_risk_finite_policy_and_wealth_boundaries():
+        finite = np.array([0.10, -0.05, 0.02], dtype=np.float64)
+        contaminated = np.array([
+            [0.10, np.nan, np.inf, -np.inf],
+            [-0.05, 0.10, np.nan, np.inf],
+            [0.02, -0.05, -0.05, np.nan],
+            [np.nan, 0.02, 0.02, 0.02],
+        ])
+        expected_vol = np.array([
+            np.std(finite, ddof=1) * 2.0,
+            np.std(finite, ddof=1) * 2.0,
+            np.std(finite[1:], ddof=1) * 2.0,
+            np.nan,
+        ])
+&gt;       np.testing.assert_allclose(
+            _asn(compute_annualized_volatility_batch(contaminated, periods_per_year=4)),
+            expected_vol, rtol=1e-12, atol=1e-12, equal_nan=True,
+        )
+E       AssertionError: 
+E       Not equal to tolerance rtol=1e-12, atol=1e-12
+E       
+E       nan location mismatch:
+E        ACTUAL: array([0.150111, 0.150111,      nan,      nan])
+E        DESIRED: array([0.150111, 0.150111, 0.098995,      nan])
+
+quant_evaluator/tests/test_gpu_probe_parity.py:309: AssertionError</failure></testcase></testsuite></testsuites>

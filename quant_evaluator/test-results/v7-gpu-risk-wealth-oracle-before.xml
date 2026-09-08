@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="2" skipped="0" tests="2" time="0.478" timestamp="2026-09-08T02:33:40.934687+08:00" hostname="qs-compute-gpu-hk-01"><testcase classname="tests.test_gpu_probe_parity" name="test_gpu_drawdown_wipeout_matches_independent_wealth_oracle" time="0.207"><failure message="AssertionError: &#10;Not equal to tolerance rtol=0, atol=1e-12&#10;&#10;Mismatched elements: 2 / 4 (50%)&#10;Max absolute difference among violations: 1.&#10;Max relative difference among violations: 1.&#10; ACTUAL: array([-0. , -0. ,  0.2, -0. ])&#10; DESIRED: array([1. , 1. , 0.2, 0. ])">def test_gpu_drawdown_wipeout_matches_independent_wealth_oracle():
+        r = np.array([
+            [0.10, 0.10, 0.10, 0.01],
+            [-1.20, -1.00, -0.20, 0.01],
+            [4.00, 2.00, 0.05, 0.01],
+        ], dtype=np.float64)
+        # Wealth is absorbing at total loss: once wealth &lt;= 0, later arithmetic
+        # cannot fabricate a recovery.  Column 2 falls from 1.10 to 0.88 =&gt; 20%.
+        expected = np.array([1.0, 1.0, 0.2, 0.0])
+&gt;       np.testing.assert_allclose(
+            _asn(compute_max_drawdown_batch(r)), expected, rtol=0.0, atol=1e-12
+        )
+E       AssertionError: 
+E       Not equal to tolerance rtol=0, atol=1e-12
+E       
+E       Mismatched elements: 2 / 4 (50%)
+E       Max absolute difference among violations: 1.
+E       Max relative difference among violations: 1.
+E        ACTUAL: array([-0. , -0. ,  0.2, -0. ])
+E        DESIRED: array([1. , 1. , 0.2, 0. ])
+
+quant_evaluator/tests/test_gpu_probe_parity.py:268: AssertionError</failure></testcase><testcase classname="tests.test_gpu_probe_parity" name="test_gpu_calmar_matches_independent_compound_wealth_oracle" time="0.028"><failure message="AssertionError: &#10;Not equal to tolerance rtol=1e-12, atol=1e-12&#10;&#10;Mismatched elements: 2 / 2 (100%)&#10;Max absolute difference among violations: 0.1148&#10;Max relative difference among violations: 0.20325779&#10; ACTUAL: array([-0.45,  4.  ])&#10; DESIRED: array([-0.5648,  4.0094])">def test_gpu_calmar_matches_independent_compound_wealth_oracle():
+        r = np.array([
+            [0.10, 0.02], [-0.20, -0.01], [0.05, 0.03], [-0.04, 0.00],
+        ], dtype=np.float64)
+        periods = 4
+        wealth = np.cumprod(1.0 + r, axis=0)
+        high_water = np.maximum(1.0, np.maximum.accumulate(wealth, axis=0))
+        max_dd = -np.min((wealth - high_water) / high_water, axis=0)
+        annualized = wealth[-1] ** (periods / len(r)) - 1.0
+        expected = annualized / max_dd
+&gt;       np.testing.assert_allclose(
+            _asn(compute_calmar_batch(r, periods_per_year=periods, min_periods=2)),
+            expected, rtol=1e-12, atol=1e-12,
+        )
+E       AssertionError: 
+E       Not equal to tolerance rtol=1e-12, atol=1e-12
+E       
+E       Mismatched elements: 2 / 2 (100%)
+E       Max absolute difference among violations: 0.1148
+E       Max relative difference among violations: 0.20325779
+E        ACTUAL: array([-0.45,  4.  ])
+E        DESIRED: array([-0.5648,  4.0094])
+
+quant_evaluator/tests/test_gpu_probe_parity.py:289: AssertionError</failure></testcase></testsuite></testsuites>

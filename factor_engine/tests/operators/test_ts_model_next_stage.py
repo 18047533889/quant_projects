@@ -158,9 +158,24 @@ def test_path_signature_area_shape() -> None:
 
 def test_sequence_anomaly_finite() -> None:
     x = _panel(seed=8)
+    implicit = {}
     for name in ("ts_matrix_profile_discord_score", "ts_matrix_profile_motif_distance", "ts_motif_recurrence_count"):
         out = OperatorRegistry.get(name).calculate(x, m=10)
+        implicit[name] = out
         assert out.shape == x.shape, name
+        assert np.isfinite(out.to_numpy()).any(), name
+
+    explicit_default = OperatorRegistry.get(
+        "ts_matrix_profile_discord_score"
+    ).calculate(x, m=10, history_window=252)
+    pd.testing.assert_frame_equal(
+        implicit["ts_matrix_profile_discord_score"], explicit_default
+    )
+
+    with pytest.raises(ValueError, match="m < history_window"):
+        OperatorRegistry.get("ts_matrix_profile_discord_score").calculate(
+            x, m=10, history_window=10
+        )
 
 
 @pytest.mark.parametrize("name", sorted(set(REGRESSION_CANONICALS)))

@@ -1,0 +1,21 @@
+schema_version: factor_engine.audit_evidence.v1
+timestamp: "2026-09-08T02:22:57+08:00"
+scope: "WP5 direct verified-artifact recovery authority"
+changes:
+  - "WorkerProtocolError from the direct sink now escapes as a wave-level integrity failure."
+  - "A bad descriptor/protocol ACK triggers supervised compute close and exact broker-client reclamation before reconciliation."
+  - "The reconciliation engine runs with v2 inner retries disabled."
+  - "WorkerQuarantined during reconciliation propagates globally; cleanup ownership and leases remain retained."
+  - "Explicit artifact generation remains bound to commit intent and exact receipt verification."
+before_oracle:
+  command: ".venv/bin/python -m pytest factor_engine/tests/runtime/test_v7_direct_sink_recovery.py -q"
+  result: "3 failed"
+  junit: "factor_engine/test-results/v7-direct-sink-recovery-before.xml"
+after_verification:
+  command: ".venv/bin/python -m pytest factor_engine/tests/runtime/test_v7_direct_sink_recovery.py factor_engine/tests/runtime/test_v7_pipeline_integrity.py factor_engine/tests/runtime/test_v6_bounded_pipeline.py -q"
+  result: "37 passed, 46 warnings"
+  junit: "factor_engine/test-results/v7-direct-sink-recovery-after.xml"
+quality:
+  diff_check: "clean"
+  committed: false
+  staged: false

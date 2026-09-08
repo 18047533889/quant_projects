@@ -1,0 +1,83 @@
+schema_version: factor_engine.v7.implementation_checkpoint.v1
+date: '2026-09-08'
+base_head: 2bac7209c00e302728b810513c91f5475ec6954f
+handoff_baseline: 2e2feb9b8300930afe41a7792becf078f7d2b100
+status: IN_PROGRESS_NOT_FULL_ACCEPTANCE
+preservation: initial current worktree clean; prior user commits retained; no reset or rollback
+subagent_model: gpt-5.6-sol
+committed: false
+deployed: false
+production_published: false
+root_owned:
+  - factor_engine/tests/backend_parity/test_production_core_triple_parity.py
+  - factor_engine/scripts/audit_v7_bindings.py
+  - factor_engine/backend/operator_semantic_version.py
+runtime_handoff:
+  R04_owner: v6_memory; exact approved prepared-content identity now enforced including ABA; synthetic regression 60 passed
+  R05_R07_owner: v6_state_pipeline now owns bounded_pipeline for WP5; must preserve exact protocol and synced control receipt fixes
+verification:
+  - issue: R05
+    before: {failed: 2, junit: /tmp/v7-r05-before.xml}
+    after: {passed: 2, junit: /tmp/v7-r05-after.xml}
+    counterexamples: missing compile key accepted as success; overlap result and error accepted
+    fix: exact typed compile mapping; exact mutually exclusive result partition; corrupt protocol aborts scope
+  - issue: R05_R07_runtime_regression
+    result: PASS
+    passed: 34
+    warnings: 46
+    seconds: 88.82
+    junit: /tmp/v7-runtime-integrity.xml
+    checks: atomic receipt visibility; file sync failure retains previous control receipt; sync file then replace then run directory and artifact root; finite ABORT
+    boundary: before new WP5 topology; compatibility fork warnings remain
+  - issue: R04_initial_bridge
+    before: {failed: 1, junit: /tmp/v7-r04-before.xml}
+    after: {passed: 50, junit: /tmp/v7-r04-after.xml}
+    extra: {passed: 17, skipped: 4, junit: /tmp/v7-r04-source-regression.xml}
+    boundary: tests did not close ABA; memory agent implementing prepared-content pinning after independent review
+  - issue: skipped_candidate_lanes
+    before: {passed: 54, failed: 6, junit: /tmp/v7-candidate-lanes.xml}
+    after: {passed: 60, skipped: 0, seconds: 35.26, junit: /tmp/v7-candidate-lanes-after.xml}
+    numeric_comparisons: 54
+    typed_rejection_cases_not_numeric_pass: 6
+    unregistered_manifest_names: [protected_log, vwap, cum_delta, expanding_mean]
+    changes: remove module importorskip; require Polars only in own lanes; remove DAILY_CANONICALS from research candidate execution selection
+    boundary: production eligibility unchanged; pairwise parity not independent mathematical certification; missing-dependency environment not exercised
+  - issue: bulk_candidate_lanes
+    before: {passed: 151, failed: 30, junit: /tmp/v7-bulk-candidates-before.xml}
+    after: {passed: 181, warnings: 2, junit: /tmp/v7-bulk-candidates-after.xml}
+    numeric_comparisons: 152
+    typed_rejection_cases_not_numeric_pass: 29
+    changes: independent required Polars lane; no DAILY gate; explicit absent canonical-and-alias rejection; synthetic overnight prices declare raw basis
+    boundary: absent names remain unresolved historical manifest entries, not newly invented replacement operators or numerical passes
+  - issue: final_combined_candidate_lanes
+    result: {passed: 241, warnings: 2, seconds: 82.26, junit: /tmp/v7-candidate-lanes-combined-final.xml}
+    numeric_comparisons: 206
+    typed_rejection_cases_not_numeric_pass: 35
+  - issue: candidate_registry_and_model_isolation
+    result: {passed: 33, warnings: 2, seconds: 23.98, junit: /tmp/v7-candidate-model-isolation-final.xml}
+  - issue: default_resources_and_approved_snapshot
+    result: {passed: 87, warnings: 2, seconds: 26.26, junit: /tmp/v7-default-resources-approval-final.xml}
+  - issue: R08_adjusted_volume_alias
+    before: {passed: 2, failed: 3, junit: /tmp/v7-volume-alias-before.xml}
+    after_initial: {passed: 5, junit: /tmp/v7-volume-alias-after.xml}
+    counterexample: simultaneous volume and adj_factor returned raw Volume because the adapter renamed away the Factor dependency
+    correction: restore same-read physical Factor dependency before normalization; do not reuse a different snapshot or cached Factor
+    cache_regression: {passed: 66, warnings: 1, junit: /tmp/v7-da-volume-snapshot-final.xml}
+    boundary: synthetic eager Arrow adapter oracle; not real HFQ/native/COS acceptance; independent review in progress
+inventory:
+  directory: evidence/v7/initial-bindings-20260908
+  current_canonicals: 1756
+  bindings: 3992
+  aliases: 287
+  added_removed_against_handoff: 0
+  status: BINDING_INVENTORY_NOT_MATHEMATICAL_CERTIFICATION
+  boundary: active editing checkpoint; current winners and override lineage only, not exhaustive unregistered candidates
+unclosed:
+  - WP5 default direct artifacts implemented; cross-wave overlap and native process-family hard bound remain unproved
+  - approved exact-content snapshot physical-scope flexibility remains limited to one approved digest per dataset
+  - remaining model time-role and full nine-family operator evidence
+  - full 1756 mathematical and backend certification
+  - approved real-data profile, scope and isolated output root not supplied
+  - real A-share HFQ/local-COS equivalence and 100000 factor materialization
+  - final frozen wheel/isolated install/CI-container acceptance
+  - end-to-end holdout performance and process-family hard memory bound

@@ -1,0 +1,39 @@
+evidence_id: V7-R04-APPROVED-SOURCE-SNAPSHOT
+recorded_at: "2026-09-08T01:52:14+08:00"
+source_snapshot:
+  git_sha: 2bac7209c00e302728b810513c91f5475ec6954f
+  repository: /home/sunhaiwei/quant_projects
+scope:
+  modified:
+    - factor_engine/runtime/default_engine.py
+    - factor_engine/storage/sources/data_access_source.py
+    - factor_engine/runtime/physical_source_binding.py
+    - factor_engine/tests/runtime/test_v7_approved_snapshot.py
+    - factor_engine/tests/runtime/test_v6_default_engine.py
+contract:
+  profile_requirement: "expected_source_content_digests must contain the anchor dataset"
+  identity: "approved exact-object-set content_digest (32- or 64-character lowercase hex)"
+  auxiliary_live_gate: "expected_snapshot_token / expected_source_snapshot_tokens remain optional manifest-token checks"
+  multi_source: "every resolved dependent dataset must have its own approved content digest before prepare"
+reproduction:
+  junit: /tmp/v7_r04_aba_pre_fix.xml
+  junit_sha256: 462874fac1337180359df0b4a550e672dccc9e695732408b1fe49d2b67277501
+  result: "FAIL_EXPECTED: A -> B prepared snapshot -> A live-token ABA was accepted"
+verification:
+  command: "PYTHONPATH=. .venv/bin/python -m pytest -q factor_engine/tests/runtime/test_v7_approved_snapshot.py factor_engine/tests/runtime/test_v6_default_engine.py factor_engine/tests/runtime/test_v6_physical_source_binding.py"
+  result: "60 passed, 2 warnings"
+  junit: /tmp/v7_r04_after.xml
+  junit_sha256: 480b52040cd35350c01a82b0627d12670adc058ccbcd0e7ae380b7305d4ef94d
+  syntax_import_smoke: PASS
+  diff_check: PASS
+  full_suite: NOT_RUN
+oracles:
+  - "approved content identity survives validated profile serialization and worker reconstruction"
+  - "prepared frozen content_digest mismatch rejects A-B-A even when the live manifest token returns to A"
+  - "post-prepare mismatch releases the DataAccess reservation exactly once"
+  - "dependent dataset omitted from the approved digest map is rejected before prepare"
+limitations:
+  - "The administrator/publisher must supply the approved content digest; the runtime never manufactures approval from its current observation."
+  - "Manifest dataset/partition tokens are only auxiliary live-state gates and are not treated as content digests."
+  - "The approved value is an exact object-set digest keyed by dataset, not a publisher generation that automatically covers every query scope. Different warmup/lookback physical subsets fail closed when their exact digests differ; heterogeneous lookbacks are not certified as sustained workloads. A future scope-aware approval set or immutable publisher object manifest is required."
+  - "No production data read, deployment, or full-suite claim."

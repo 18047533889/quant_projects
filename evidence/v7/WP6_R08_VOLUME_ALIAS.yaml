@@ -1,0 +1,52 @@
+schema_version: factor_engine.v7.scoped_evidence.v1
+issue: R08_ADJUSTED_VOLUME_SAME_READ_FACTOR_ALIAS
+status: FIXED_WITHIN_SYNTHETIC_EAGER_ADAPTER_DOMAIN
+production_acceptance: NOT_RUN
+source:
+  path: factor_engine/storage/sources/data_access_source.py
+  sha256: 06c070a3e8b7bcd907183805386899337af12eca1c651b813c2449136741ee32
+counterexample:
+  requested: [volume, adj_factor]
+  physical_volume: [100, 240, 300]
+  physical_factor: [2, 4, 0]
+  before_values: [100, 240, 300]
+  independent_expected: [50, 60, NaN]
+  cause: adapter output_names renamed Factor to adj_factor before volume dependency normalization
+fix: restore the same-read Factor dependency from the actual adapter output alias; missing dependency fails explicitly before caching
+tests:
+  before:
+    junit: /tmp/v7-volume-alias-before.xml
+    sha256: 69eb64367415e5106efd203f51e7b21aa175106500d2e5d64e03f441774f5af9
+    failed: 3
+    passed: 2
+  current:
+    junit: /tmp/v7-volume-cache-final.xml
+    passed: 13
+    seconds: 0.28
+    alias_cases: 9
+    cache_cases: 4
+  related_snapshot_contracts:
+    junit: /tmp/v7-da-volume-snapshot-final.xml
+    passed: 66
+    warnings: 1
+    boundary: earlier five alias cases; totals overlap current tests, never add as coverage
+  independent_review:
+    junit: factor_engine/test-results/v7-volume-factor-alias-independent-review.xml
+    passed: 23
+    skipped: 4
+    conclusion: no source counterexample found; lazy path inspected but not exercised by alias oracle
+test_sources:
+  alias_oracle_sha256: ef4f15653df1feb18db989682863fadf6246579c2878b5c8898e751813721294
+  lru_contract_sha256: 59588a90b34360df042795a0b6cc9711d714e57fe007aa38d9f489b8b1ce9c5c
+scope:
+  - raw Factor and adj_factor individually, together, reordered, and through actual warm cache
+  - zero Factor retains missing volume rather than raw Volume
+  - no production profile, universe, time range or snapshot approval invented
+stale_and_recompute:
+  - prior output depending on adjusted volume when the same read requested an alias of Factor is suspect and requires a new isolated generation
+  - source implementation changed, so old adapter evidence cannot certify this implementation
+  - no canonical mathematical definition changed; field resolution now applies the already-declared volume contract consistently
+  - no old artifact or live process was rewritten or restarted
+not_proven:
+  - real A-share HFQ values, local/COS equivalence, native prepared-read path and full field-family acceptance
+  - byte-hard native allocator or process-family peak bounds

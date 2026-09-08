@@ -1,0 +1,69 @@
+evidence_id: V7-WP2-M02-RIDGE-STABILITY
+recorded_at: "2026-09-08T01:40:16+08:00"
+source_snapshot:
+  git_sha: 2bac7209c00e302728b810513c91f5475ec6954f
+  repository: /home/sunhaiwei/quant_projects
+scope:
+  modified:
+    - factor_engine/cleaned_operators/ts_model/_rolling_core.py
+    - factor_engine/cleaned_operators/regression_models.py
+    - factor_engine/tests/operators/test_v7_ridge_stability.py
+  canonical_dependants:
+    - ts_ridge_regression_coeff
+    - ts_ridge_regression_resid_z
+    - ts_ridge_regression_coeff_prior
+    - ts_ridge_regression_forecast_error
+    - ts_ridge_regression_forecast_error_z
+    - ts_ridge_regression_in_sample_resid
+    - ts_ridge_regression_predictive_resid
+reproduction:
+  artifact: /tmp/v7_m02_ridge_pre_fix.xml
+  sha256: 64c2247a3ebef094e471f11a203905942eb0216db31d3bb994e6cb1e0c967e50
+  diagnostic_text: /tmp/v7_m02_ridge_pre_fix.txt
+  result: FAIL_EXPECTED
+  counterexample: "x=1e12+linspace(-2,2,41), alpha=0.1; old slope 1.1e-11 versus closed-form 2.9947826264"
+implementation:
+  method: "centered/scaled change of variables with augmented QR/SVD least squares"
+  penalty_semantics: "alpha penalizes coefficients in original feature units; intercept is unpenalized"
+  contracts:
+    alpha_zero: "delegates to existing OLS rank and conditioning policy"
+    alpha_positive_p_gt_n: "supported through the augmented system"
+    constant_penalized_feature: "coefficient zero"
+verification:
+  focused:
+    command: "PYTHONPATH=. .venv/bin/python -m pytest -q factor_engine/tests/operators/test_v7_ridge_stability.py factor_engine/tests/operators/test_model_semantics_fixes.py -k ridge"
+    result: "7 passed, 17 deselected, 2 warnings"
+    junit: /tmp/v7_m02_ridge_final.xml
+    junit_sha256: 03ec3b1c324fe570fc326187f289075d0c51a99bf1f95ebe0c80699c6ca1fc53
+  broader_existing_model_file:
+    result: "23 passed, 1 failed"
+    failure: "test_garch_shock_uses_h_t; concurrent volatility.py work, outside Ridge-owned files"
+  registered_dependency_integration:
+    result: "102 passed, 91 deselected, 2 warnings"
+    junit: /tmp/v7_m02_ridge_integration_fixed.xml
+    junit_sha256: dc4004b585cf1341c732a99a3f86ca6689a55eb6ab4b1ca5bed70905671636ee
+    note: "Previously exposed non-Ridge failures were repaired rather than deselected."
+  regression_models_pre_fix:
+    result: FAIL_EXPECTED
+    junit: /tmp/v7_m02_regression_models_pre.xml
+    junit_sha256: 0e30b125f07bdf765154d4a8703d87e56341a03c56e9c3c72a495f906e30f963
+  syntax_import_smoke: PASS
+  diff_check: PASS
+  full_suite: NOT_RUN
+oracles:
+  - single-feature centered closed form
+  - sklearn.linear_model.Ridge solver=svd with identical alpha/intercept configuration
+  - feature-column permutation and disparate original units
+  - alpha=0, alpha>0, exact collinearity, constant column, p>n, and non-finite inputs
+  - real OperatorRegistry execution for all five canonical dependants
+hashes:
+  implementation_sha256: 9c3ab6a3ecaf2989c9449bfeb5690571f98711429ece6b8b2322bb2bb0c429ad
+  regression_models_sha256: 9e51b1f1aa9f0087874a6d1486b191c581a3dc49134b34aa081234c418b06c44
+  test_sha256: 38c55f108f089711e8fe875d5051be7fab146a320da6eed6dd6116e34548017d
+semantic_action_required:
+  update_shared_canonical_versions: true
+  reason: "The stable solver corrects outputs for high-offset/ill-conditioned windows; old and new values must not share a generation."
+limitations:
+  - "Certification is limited to the synthetic domains and registered paths listed above."
+  - "No full suite, production deployment, backend-native implementation, or walk-forward strategy performance claim."
+  - "Returned intercept and predictions can still incur ordinary floating-point cancellation at extreme offsets."

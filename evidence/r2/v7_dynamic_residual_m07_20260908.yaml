@@ -1,0 +1,55 @@
+work_package: v7_m07_dynamic_residual_timing
+timestamp: "2026-09-08T02:06:49+08:00"
+git_sha: 2bac7209c00e302728b810513c91f5475ec6954f
+owned_sources:
+  - factor_engine/cleaned_operators/ts_model/dynamic_regression.py
+  - factor_engine/cleaned_operators/regression_models.py
+tests:
+  - factor_engine/tests/operators/test_v7_dynamic_residual_timing.py
+source_preimage:
+  dynamic_regression_git_blob: 026b6b4d8ae78244836710eae50b8255e8089cda
+  regression_models_git_blob: d3a5ff1b7c2d39e8d0efc6552b2333bcc339fb9b
+mathematical_conclusion:
+  status: NO_DEFECT_FOUND_IN_DECLARED_TEST_DOMAIN
+  evidence:
+    - registered ts_multi_regression_forecast_error fits through t-1 and current y changes innovation one-for-one without changing fitted parameters
+    - registered ts_multi_regression_forecast_error_z is prefix invariant under a poisoned future suffix
+    - registered in-sample residual absorbs a current outlier and is numerically distinct from the prior-fit innovation
+  actual_winners:
+    - canonical: ts_multi_regression_forecast_error
+      module: factor_engine.cleaned_operators.ts_model.dynamic_regression
+    - canonical: ts_multi_regression_forecast_error_z
+      module: factor_engine.cleaned_operators.ts_model.dynamic_regression
+    - canonical: ts_multi_regression_resid
+      module: factor_engine.cleaned_operators.ts_model.dynamic_regression
+    - canonical: ts_huber_regression_predictive_resid
+      module: factor_engine.cleaned_operators.regression_models
+    - canonical: ts_huber_regression_in_sample_resid
+      module: factor_engine.cleaned_operators.regression_models
+metadata_defect:
+  status: FIXED
+  detail: Huber and Ridge in-sample canonicals documented diagnostic semantics but lacked diagnostic_only registration tags
+  affected_canonicals:
+    - ts_huber_regression_in_sample_resid
+    - ts_ridge_regression_in_sample_resid
+  numeric_values_changed: false
+  contract_hash_changed: true
+  old_contract_evidence: STALE
+tests_run:
+  result: "7 passed, 2 warnings"
+  junit: factor_engine/test-results/v7-dynamic-residual-timing.xml
+  junit_sha256: ee0855c0f0725748366a02ab230ba5cf23708192289f224d1aa5937de9034f0b
+  junit_mtime: "2026-09-08T01:54:18.397402124+08:00"
+registry_lifecycle:
+  result: "1 passed, 2 warnings"
+  junit: factor_engine/test-results/v7-registry-frozen-lifecycle.xml
+  junit_sha256: c4ee1965a38add806e6f642ad8adcfb57ba84af329249f64ae240886f3e62104
+validation:
+  git_diff_check: PASS
+  full_suite: NOT_RUN
+  all_residual_canonicals: NOT_RUN
+limitations:
+  - conclusions cover the listed actual winners and fixed synthetic OLS/Huber timing domains only
+  - no source change was needed in dynamic_regression.py
+  - metadata correction is not presented as a mathematical formula fix
+  - no commit, staging, push, or deployment was performed

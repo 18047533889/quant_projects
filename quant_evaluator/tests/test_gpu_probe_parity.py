@@ -256,10 +256,79 @@ def test_gpu_drawdown_parity():
                  lambda x: compute_maximum_drawdown(x)[0], r)
 
 
+def test_gpu_drawdown_wipeout_matches_independent_wealth_oracle():
+    r = np.array([
+        [0.10, 0.10, 0.10, 0.01],
+        [-1.20, -1.00, -0.20, 0.01],
+        [4.00, 2.00, 0.05, 0.01],
+    ], dtype=np.float64)
+    # Wealth is absorbing at total loss: once wealth <= 0, later arithmetic
+    # cannot fabricate a recovery.  Column 2 falls from 1.10 to 0.88 => 20%.
+    expected = np.array([1.0, 1.0, 0.2, 0.0])
+    np.testing.assert_allclose(
+        _asn(compute_max_drawdown_batch(r)), expected, rtol=0.0, atol=1e-12
+    )
+
+
 def test_gpu_calmar_parity():
     rng = np.random.default_rng(5)
     r = rng.normal(0.0005, 0.02, (300, 4))
     _risk_parity("calmar", compute_calmar_batch, compute_calmar_ratio, r)
+
+
+def test_gpu_calmar_matches_independent_compound_wealth_oracle():
+    r = np.array([
+        [0.10, 0.02], [-0.20, -0.01], [0.05, 0.03], [-0.04, 0.00],
+    ], dtype=np.float64)
+    periods = 4
+    wealth = np.cumprod(1.0 + r, axis=0)
+    high_water = np.maximum(1.0, np.maximum.accumulate(wealth, axis=0))
+    max_dd = -np.min((wealth - high_water) / high_water, axis=0)
+    annualized = wealth[-1] ** (periods / len(r)) - 1.0
+    expected = annualized / max_dd
+    np.testing.assert_allclose(
+        _asn(compute_calmar_batch(r, periods_per_year=periods, min_periods=2)),
+        expected, rtol=1e-12, atol=1e-12,
+    )
+
+
+def test_gpu_risk_finite_policy_and_wealth_boundaries():
+    finite = np.array([0.10, -0.05, 0.02], dtype=np.float64)
+    contaminated = np.array([
+        [0.10, np.nan, np.inf, -np.inf],
+        [-0.05, 0.10, np.nan, np.inf],
+        [0.02, -0.05, -0.05, np.nan],
+        [np.nan, 0.02, 0.02, 0.02],
+    ])
+    expected_vol = np.array([
+        np.std(finite, ddof=1) * 2.0,
+        np.std(finite, ddof=1) * 2.0,
+        np.std(finite[1:], ddof=1) * 2.0,
+        np.nan,
+    ])
+    np.testing.assert_allclose(
+        _asn(compute_annualized_volatility_batch(contaminated, periods_per_year=4)),
+        expected_vol, rtol=1e-12, atol=1e-12, equal_nan=True,
+    )
+
+    boundaries = np.array([
+        [np.nan, np.nan, -0.50, -1.20, -1.20],
+        [np.nan, np.nan, np.nan, np.nan, -1.30],
+        [np.nan, np.nan, np.nan, np.nan, 0.10],
+    ])
+    # Empty/all-missing and one finite observation lack two periods. A single
+    # wipeout plus a missing row is still only one observation. Two wipeouts
+    # are an absorbing bankruptcy, never a positive product recovery.
+    expected_ann = np.array([np.nan, np.nan, np.nan, np.nan, -1.0])
+    np.testing.assert_allclose(
+        _asn(compute_annualized_return_batch(boundaries, periods_per_year=4)),
+        expected_ann, rtol=0.0, atol=0.0, equal_nan=True,
+    )
+    expected_calmar = np.array([np.nan, np.nan, np.nan, np.nan, -1.0])
+    np.testing.assert_allclose(
+        _asn(compute_calmar_batch(boundaries, periods_per_year=4, min_periods=2)),
+        expected_calmar, rtol=0.0, atol=0.0, equal_nan=True,
+    )
 
 
 def test_gpu_sortino_parity():

@@ -1,0 +1,721 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="7" skipped="0" tests="90" time="34.797" timestamp="2026-09-08T01:49:36.822860+08:00" hostname="qs-compute-gpu-hk-01"><testcase classname="factor_engine.tests.operators.test_v7_dynamic_residual_timing" name="test_registered_multi_forecast_error_is_current_oos_innovation" time="0.064" /><testcase classname="factor_engine.tests.operators.test_v7_dynamic_residual_timing" name="test_current_target_changes_innovation_not_prior_fit" time="0.009" /><testcase classname="factor_engine.tests.operators.test_v7_dynamic_residual_timing" name="test_future_suffix_preserves_registered_residual_prefix" time="0.013" /><testcase classname="factor_engine.tests.operators.test_v7_dynamic_residual_timing" name="test_regression_models_predictive_and_in_sample_roles_are_distinct" time="0.022"><failure message="AttributeError: 'OperatorMetadata' object has no attribute 'diagnostic_only'">def test_regression_models_predictive_and_in_sample_roles_are_distinct():
+        from factor_engine.cleaned_operators.registry import OperatorRegistry
+    
+        x = np.linspace(-1.0, 1.0, 45)
+        y = 2.0 + 0.75 * x
+        y[-1] += 4.0
+        predictive = OperatorRegistry.get("ts_huber_regression_predictive_resid")
+        diagnostic = OperatorRegistry.get("ts_huber_regression_in_sample_resid")
+        assert type(predictive).__module__.endswith("regression_models")
+        pred = predictive.calculate(_panel(y), _panel(x), window=30, min_periods=10)["A"].iloc[-1]
+        ins = diagnostic.calculate(_panel(y), _panel(x), window=30, min_periods=10)["A"].iloc[-1]
+        np.testing.assert_allclose(pred, 4.0, rtol=1e-12, atol=1e-12)
+        assert abs(ins) &lt; abs(pred)
+&gt;       assert diagnostic.metadata.diagnostic_only is True
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AttributeError: 'OperatorMetadata' object has no attribute 'diagnostic_only'
+
+factor_engine/tests/operators/test_v7_dynamic_residual_timing.py:68: AttributeError</failure></testcase><testcase classname="factor_engine.tests.operators.test_model_semantics_fixes" name="test_prior_forecast_error_exceeds_in_sample_residual" time="0.036" /><testcase classname="factor_engine.tests.operators.test_model_semantics_fixes" name="test_prior_coeff_unaffected_by_current_shock" time="0.034" /><testcase classname="factor_engine.tests.operators.test_model_semantics_fixes" name="test_ar_prior_forecast_uses_t_minus_1_model" time="0.120" /><testcase classname="factor_engine.tests.operators.test_model_semantics_fixes" name="test_ar_prior_innovation_z_finite" time="0.100" /><testcase classname="factor_engine.tests.operators.test_model_semantics_fixes" name="test_huber_robust_to_outliers_with_sqrt_weight" time="0.035" /><testcase classname="factor_engine.tests.operators.test_model_semantics_fixes" name="test_ridge_penalises_first_feature_without_intercept" time="0.001" /><testcase classname="factor_engine.tests.operators.test_model_semantics_fixes" name="test_pca_resid_prior_window_excludes_current_row" time="0.010" /><testcase classname="factor_engine.tests.operators.test_model_semantics_fixes" name="test_pca_explained_ratio_is_per_stock_not_broadcast" time="0.009" /><testcase classname="factor_engine.tests.operators.test_model_semantics_fixes" name="test_industry_pca_loading_local_index" time="0.001" /><testcase classname="factor_engine.tests.operators.test_model_semantics_fixes" name="test_autoencoder_rank_below_feature_count" time="0.018" /><testcase classname="factor_engine.tests.operators.test_model_semantics_fixes" name="test_kalman_innovation_uses_predicted_state" time="0.001" /><testcase classname="factor_engine.tests.operators.test_model_semantics_fixes" name="test_garch_shock_uses_h_t" time="0.033"><failure message="assert -0.09391669960524904 == -0.11093364501630701 ± 1.1e-07&#10;  &#10;  comparison failed&#10;  Obtained: -0.09391669960524904&#10;  Expected: -0.11093364501630701 ± 1.1e-07">def test_garch_shock_uses_h_t() -&gt; None:
+        from factor_engine.cleaned_operators.ts_model.volatility import _garch_path, _fit_garch
+    
+        rng = np.random.default_rng(12)
+        n = 400
+        h = np.zeros(n)
+        h[0] = 1.0
+        ret = np.zeros(n)
+        for t in range(1, n):
+            h[t] = 0.05 + 0.1 * ret[t - 1] ** 2 + 0.8 * h[t - 1]
+            ret[t] = np.sqrt(h[t]) * rng.standard_normal()
+        seg = ret[-120:]
+        # P0-040: the shock of the current return must be standardised by
+        # parameters fitted strictly on &lt;= t-1 (the window *excluding* the current
+        # return), then evaluated against the variance that governed it.
+        params = _fit_garch(seg[:-1])
+        assert params is not None
+        w, a, b = params
+        h_prev = float(np.var(seg))
+        for i in range(1, len(seg)):
+            hn = w + a * seg[i - 1] ** 2 + b * h_prev
+            if i == len(seg) - 1:
+                h_cur = h_prev  # conditional variance governing the last return
+            h_prev = hn
+        shock = _garch_path(ret, 120, "shock", False, 0.0)
+&gt;       assert shock == pytest.approx(seg[-1] / np.sqrt(max(h_cur, 1e-12)), rel=1e-6)
+E       assert -0.09391669960524904 == -0.11093364501630701 ± 1.1e-07
+E         
+E         comparison failed
+E         Obtained: -0.09391669960524904
+E         Expected: -0.11093364501630701 ± 1.1e-07
+
+factor_engine/tests/operators/test_model_semantics_fixes.py:216: AssertionError</failure></testcase><testcase classname="factor_engine.tests.operators.test_model_semantics_fixes" name="test_cusum_vol_break_uses_max_abs_cumsum" time="0.001" /><testcase classname="factor_engine.tests.operators.test_model_semantics_fixes" name="test_multi_level_rank_consistency_uses_target_rank" time="0.009" /><testcase classname="factor_engine.tests.operators.test_model_semantics_fixes" name="test_peer_deviation_index_all_missing_is_nan" time="0.001" /><testcase classname="factor_engine.tests.operators.test_model_semantics_fixes" name="test_group_peer_information_diffusion_uses_group" time="0.008" /><testcase classname="factor_engine.tests.operators.test_model_semantics_fixes" name="test_liquidity_beta_regresses_on_delta" time="0.003" /><testcase classname="factor_engine.tests.operators.test_model_semantics_fixes" name="test_pcr_forecast_ignores_current_label" time="0.193" /><testcase classname="factor_engine.tests.operators.test_r11_round2_regression_defs" name="test_new_canonicals_registered_and_classified_extended[ts_variance_ratio_proxy]" time="0.000" /><testcase classname="factor_engine.tests.operators.test_r11_round2_regression_defs" name="test_new_canonicals_registered_and_classified_extended[ts_lo_mackinlay_vr]" time="0.000" /><testcase classname="factor_engine.tests.operators.test_r11_round2_regression_defs" name="test_new_canonicals_registered_and_classified_extended[ts_lo_mackinlay_z]" time="0.000" /><testcase classname="factor_engine.tests.operators.test_r11_round2_regression_defs" name="test_new_canonicals_registered_and_classified_extended[ts_cumulative_deviation_score]" time="0.000" /><testcase classname="factor_engine.tests.operators.test_r11_round2_regression_defs" name="test_new_canonicals_registered_and_classified_extended[ts_huber_regression_in_sample_resid]" time="0.000" /><testcase classname="factor_engine.tests.operators.test_r11_round2_regression_defs" name="test_new_canonicals_registered_and_classified_extended[ts_huber_regression_predictive_resid]" time="0.000" /><testcase classname="factor_engine.tests.operators.test_r11_round2_regression_defs" name="test_new_canonicals_registered_and_classified_extended[ts_ridge_regression_in_sample_resid]" time="0.000" /><testcase classname="factor_engine.tests.operators.test_r11_round2_regression_defs" name="test_new_canonicals_registered_and_classified_extended[ts_ridge_regression_predictive_resid]" time="0.000" /><testcase classname="factor_engine.tests.operators.test_r11_round2_regression_defs" name="test_legacy_spellings_resolve_via_deprecated_aliases" time="0.000" /><testcase classname="factor_engine.tests.operators.test_r11_round2_regression_defs" name="test_alias_and_canonical_produce_identical_output" time="0.415" /><testcase classname="factor_engine.tests.operators.test_r11_round2_regression_defs" name="test_variance_ratio_input_semantic_declares_price_level_not_return" time="0.000" /><testcase classname="factor_engine.tests.operators.test_r11_round2_regression_defs" name="test_variance_ratio_proxy_matches_legacy_behavior" time="0.106" /><testcase classname="factor_engine.tests.operators.test_r11_round2_regression_defs" name="test_lo_mackinlay_vr_z_finite_and_sane_on_geometric_random_walk" time="0.102" /><testcase classname="factor_engine.tests.operators.test_r11_round2_regression_defs" name="test_lo_mackinlay_z_positive_for_mean_reversion" time="0.101" /><testcase classname="factor_engine.tests.operators.test_r11_round2_regression_defs" name="test_level_shift_score_respects_nan_gap_no_bridging" time="0.001"><failure message="factor_engine.backend.operator_errors.OperatorParameterError: ts_level_shift_score.window [runtime]: window must be &gt;= 20">canonical = 'ts_level_shift_score', param_name = 'window', value = 12
+phase = 'runtime', declared_type = None
+spec = ParamSpec(dtype=&lt;class 'int'&gt;, min=20, max=None, choices=None, searchable=True, active_when=None, history_semantics=None, history_formula=None, default=MISSING, equivalence=None, param_role=&lt;ParamRole.HORIZON: 'horizon'&gt;)
+
+    def normalize_and_validate_scalar_param(
+        canonical: str,
+        param_name: str,
+        value: Any,
+        *,
+        phase: str = "planning",
+        declared_type: type | None = None,
+        spec: Any | None = None,
+    ) -&gt; Any:
+        """R19-002: the SINGLE unified scalar-parameter validation entry shared by
+        the planning-time validator (``validate_plan_params``), the runtime call
+        gate (``_normalise_call``) and the hash identity path.
+    
+        Planning and runtime consume the SAME declared ParamSpec type domain: np
+        scalars (``np.int64``/``np.float64``), Decimal, enum members and explicit
+        ``None`` are validated by exactly the same rules the kernel gate would
+        apply, instead of being skipped because ``isinstance(value, (int, float,
+        str, bool))`` is False (the old planning gap).  Structured / vector values
+        (``list``/``tuple``/``dict``/``set``) are NOT scalar params and pass through
+        unchanged — the vector / structured path owns them, matching the runtime.
+    
+        The declaration-layer numeric-string binder (:func:`cleaned_operators.base.
+        bind_numeric_string_if_declared`) runs FIRST, so a numeric string is
+        converted once here and the kernel gates (``strict_int_runtime``) never see
+        it (R19-005).  ``phase`` only labels the error context
+        (``planning``/``runtime``/``hash``); it never changes the validation rules.
+        """
+        if phase not in ("planning", "runtime", "hash"):
+            raise ValueError(
+                f"unknown phase {phase!r}; expected 'planning' | 'runtime' | 'hash'"
+            )
+        if isinstance(value, (list, tuple, dict, set, frozenset)):
+            # Structured / vector param: owned by the vector / structured path.
+            return value
+        coerced = _coerce_declared_numeric_string(value, param_name, declared_type, spec)
+        try:
+&gt;           return _normalise_integer(coerced, param_name, declared_type, spec)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+factor_engine/cleaned_operators/common/strict_params.py:203: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+factor_engine/cleaned_operators/base.py:872: in _normalise_integer
+    return _validate_param_spec(value, name, spec, lower, upper)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+value = 12, name = 'window'
+spec = ParamSpec(dtype=&lt;class 'int'&gt;, min=20, max=None, choices=None, searchable=True, active_when=None, history_semantics=None, history_formula=None, default=MISSING, equivalence=None, param_role=&lt;ParamRole.HORIZON: 'horizon'&gt;)
+lower = 20, upper = None
+
+    def _validate_param_spec(
+        value: Any,
+        name: str,
+        spec: ParamSpec,
+        lower: Any,
+        upper: Any,
+    ) -&gt; Any:
+        """Single strict entry point for a declared ``ParamSpec`` (R7-220).
+    
+        Every declared dtype is enforced here — including ``bool`` (``type(x) is
+        bool``, never a truthy int) and ``str`` — instead of each caller branch
+        re-implementing its own acceptance rules.  ``int`` accepts ``Integral`` but
+        not ``bool``; ``float`` accepts ``Real`` but not ``bool`` and must be
+        finite; ``choices`` requires exact membership.
+        """
+        dtype = spec.dtype
+        choices = spec.choices
+        # R7-222: an explicitly-declared ``None`` default (``default=None``, NOT
+        # ``MISSING``) makes ``None`` a legal value regardless of dtype — e.g.
+        # ``center=None`` (no centering) in a z-score.  Without this, the strict
+        # type gate would reject the very value the contract declares as default.
+        if value is None and spec.default is None:
+            return value
+        if dtype is bool:
+            # Strict: ``type(value) is bool`` — a truthy ``1``/``1.0`` is a contract
+            # violation, not a usable boolean.
+            if type(value) is not bool:
+                raise OperatorParameterError(
+                    f"{name} must be a boolean, not {type(value).__name__} ({value!r})"
+                )
+            return value
+        if dtype is str:
+            if not isinstance(value, str):
+                raise OperatorParameterError(
+                    f"{name} must be a string, not {type(value).__name__} ({value!r})"
+                )
+            if choices is not None and value not in choices:
+                raise OperatorParameterError(
+                    f"{name}={value!r} is not an allowed choice {list(choices)}"
+                )
+            return value
+        if dtype is int:
+            if isinstance(value, (bool, np.bool_)):
+                raise OperatorParameterError(f"{name} must be an integer, not bool")
+            if not isinstance(value, (int, float, np.integer, np.floating)):
+                raise OperatorParameterError(
+                    f"{name} must be an integer, not {type(value).__name__} ({value!r})"
+                )
+            if not np.isfinite(float(value)) or float(value) != float(int(value)):
+                raise OperatorParameterError(f"{name} must be an integer")
+            result = int(value)
+            if lower is not None and result &lt; lower:
+&gt;               raise OperatorParameterError(f"{name} must be &gt;= {lower}")
+E               factor_engine.backend.operator_errors.OperatorParameterError: window must be &gt;= 20
+
+factor_engine/cleaned_operators/base.py:1074: OperatorParameterError
+
+The above exception was the direct cause of the following exception:
+
+    def test_level_shift_score_respects_nan_gap_no_bridging() -&gt; None:
+        # `1 2 3 NaN NaN NaN 10 11 12 13 14 15`: the gap sits exactly at the window
+        # midpoint, so the trailing contiguous run [10..15] is entirely AFTER the
+        # midpoint.  The "before" state is unobservable in physical time -&gt; fail-closed
+        # NaN.  The old drop-finite code re-paired [1,2,3] with [10..15] and produced
+        # a finite (bridged) score; the fix never bridges across the gap.
+        vals = np.array([1.0, 2.0, 3.0, np.nan, np.nan, np.nan, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0])
+        x = _col(vals)
+&gt;       out = OperatorRegistry.get("ts_level_shift_score").calculate(x, window=12, min_periods=2)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+factor_engine/tests/operators/test_r11_round2_regression_defs.py:172: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+factor_engine/cleaned_operators/base.py:2155: in calculate
+    processed_args, processed_kwargs = self._prepare_call(args, kwargs)
+                                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+factor_engine/cleaned_operators/base.py:2144: in _prepare_call
+    return validate_operator_call(self, args, kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+factor_engine/cleaned_operators/base.py:2068: in validate_operator_call
+    call = bind_operator_call(operator, args, kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+factor_engine/cleaned_operators/base.py:2018: in bind_operator_call
+    processed_args, processed_kwargs = _normalise_call(
+factor_engine/cleaned_operators/base.py:1536: in _normalise_call
+    processed_kwargs[key] = normalize_and_validate_scalar_param(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+canonical = 'ts_level_shift_score', param_name = 'window', value = 12
+phase = 'runtime', declared_type = None
+spec = ParamSpec(dtype=&lt;class 'int'&gt;, min=20, max=None, choices=None, searchable=True, active_when=None, history_semantics=None, history_formula=None, default=MISSING, equivalence=None, param_role=&lt;ParamRole.HORIZON: 'horizon'&gt;)
+
+    def normalize_and_validate_scalar_param(
+        canonical: str,
+        param_name: str,
+        value: Any,
+        *,
+        phase: str = "planning",
+        declared_type: type | None = None,
+        spec: Any | None = None,
+    ) -&gt; Any:
+        """R19-002: the SINGLE unified scalar-parameter validation entry shared by
+        the planning-time validator (``validate_plan_params``), the runtime call
+        gate (``_normalise_call``) and the hash identity path.
+    
+        Planning and runtime consume the SAME declared ParamSpec type domain: np
+        scalars (``np.int64``/``np.float64``), Decimal, enum members and explicit
+        ``None`` are validated by exactly the same rules the kernel gate would
+        apply, instead of being skipped because ``isinstance(value, (int, float,
+        str, bool))`` is False (the old planning gap).  Structured / vector values
+        (``list``/``tuple``/``dict``/``set``) are NOT scalar params and pass through
+        unchanged — the vector / structured path owns them, matching the runtime.
+    
+        The declaration-layer numeric-string binder (:func:`cleaned_operators.base.
+        bind_numeric_string_if_declared`) runs FIRST, so a numeric string is
+        converted once here and the kernel gates (``strict_int_runtime``) never see
+        it (R19-005).  ``phase`` only labels the error context
+        (``planning``/``runtime``/``hash``); it never changes the validation rules.
+        """
+        if phase not in ("planning", "runtime", "hash"):
+            raise ValueError(
+                f"unknown phase {phase!r}; expected 'planning' | 'runtime' | 'hash'"
+            )
+        if isinstance(value, (list, tuple, dict, set, frozenset)):
+            # Structured / vector param: owned by the vector / structured path.
+            return value
+        coerced = _coerce_declared_numeric_string(value, param_name, declared_type, spec)
+        try:
+            return _normalise_integer(coerced, param_name, declared_type, spec)
+        except OperatorParameterError as exc:
+&gt;           raise OperatorParameterError(
+                f"{canonical}.{param_name} [{phase}]: {exc}"
+            ) from exc
+E           factor_engine.backend.operator_errors.OperatorParameterError: ts_level_shift_score.window [runtime]: window must be &gt;= 20
+
+factor_engine/cleaned_operators/common/strict_params.py:205: OperatorParameterError</failure></testcase><testcase classname="factor_engine.tests.operators.test_r11_round2_regression_defs" name="test_vol_shift_score_respects_nan_gap_no_bridging" time="0.001" /><testcase classname="factor_engine.tests.operators.test_r11_round2_regression_defs" name="test_level_shift_short_trailing_run_after_gap_is_nan" time="0.001"><failure message="factor_engine.backend.operator_errors.OperatorParameterError: ts_level_shift_score.window [runtime]: window must be &gt;= 20">canonical = 'ts_level_shift_score', param_name = 'window', value = 9
+phase = 'runtime', declared_type = None
+spec = ParamSpec(dtype=&lt;class 'int'&gt;, min=20, max=None, choices=None, searchable=True, active_when=None, history_semantics=None, history_formula=None, default=MISSING, equivalence=None, param_role=&lt;ParamRole.HORIZON: 'horizon'&gt;)
+
+    def normalize_and_validate_scalar_param(
+        canonical: str,
+        param_name: str,
+        value: Any,
+        *,
+        phase: str = "planning",
+        declared_type: type | None = None,
+        spec: Any | None = None,
+    ) -&gt; Any:
+        """R19-002: the SINGLE unified scalar-parameter validation entry shared by
+        the planning-time validator (``validate_plan_params``), the runtime call
+        gate (``_normalise_call``) and the hash identity path.
+    
+        Planning and runtime consume the SAME declared ParamSpec type domain: np
+        scalars (``np.int64``/``np.float64``), Decimal, enum members and explicit
+        ``None`` are validated by exactly the same rules the kernel gate would
+        apply, instead of being skipped because ``isinstance(value, (int, float,
+        str, bool))`` is False (the old planning gap).  Structured / vector values
+        (``list``/``tuple``/``dict``/``set``) are NOT scalar params and pass through
+        unchanged — the vector / structured path owns them, matching the runtime.
+    
+        The declaration-layer numeric-string binder (:func:`cleaned_operators.base.
+        bind_numeric_string_if_declared`) runs FIRST, so a numeric string is
+        converted once here and the kernel gates (``strict_int_runtime``) never see
+        it (R19-005).  ``phase`` only labels the error context
+        (``planning``/``runtime``/``hash``); it never changes the validation rules.
+        """
+        if phase not in ("planning", "runtime", "hash"):
+            raise ValueError(
+                f"unknown phase {phase!r}; expected 'planning' | 'runtime' | 'hash'"
+            )
+        if isinstance(value, (list, tuple, dict, set, frozenset)):
+            # Structured / vector param: owned by the vector / structured path.
+            return value
+        coerced = _coerce_declared_numeric_string(value, param_name, declared_type, spec)
+        try:
+&gt;           return _normalise_integer(coerced, param_name, declared_type, spec)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+factor_engine/cleaned_operators/common/strict_params.py:203: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+factor_engine/cleaned_operators/base.py:872: in _normalise_integer
+    return _validate_param_spec(value, name, spec, lower, upper)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+value = 9, name = 'window'
+spec = ParamSpec(dtype=&lt;class 'int'&gt;, min=20, max=None, choices=None, searchable=True, active_when=None, history_semantics=None, history_formula=None, default=MISSING, equivalence=None, param_role=&lt;ParamRole.HORIZON: 'horizon'&gt;)
+lower = 20, upper = None
+
+    def _validate_param_spec(
+        value: Any,
+        name: str,
+        spec: ParamSpec,
+        lower: Any,
+        upper: Any,
+    ) -&gt; Any:
+        """Single strict entry point for a declared ``ParamSpec`` (R7-220).
+    
+        Every declared dtype is enforced here — including ``bool`` (``type(x) is
+        bool``, never a truthy int) and ``str`` — instead of each caller branch
+        re-implementing its own acceptance rules.  ``int`` accepts ``Integral`` but
+        not ``bool``; ``float`` accepts ``Real`` but not ``bool`` and must be
+        finite; ``choices`` requires exact membership.
+        """
+        dtype = spec.dtype
+        choices = spec.choices
+        # R7-222: an explicitly-declared ``None`` default (``default=None``, NOT
+        # ``MISSING``) makes ``None`` a legal value regardless of dtype — e.g.
+        # ``center=None`` (no centering) in a z-score.  Without this, the strict
+        # type gate would reject the very value the contract declares as default.
+        if value is None and spec.default is None:
+            return value
+        if dtype is bool:
+            # Strict: ``type(value) is bool`` — a truthy ``1``/``1.0`` is a contract
+            # violation, not a usable boolean.
+            if type(value) is not bool:
+                raise OperatorParameterError(
+                    f"{name} must be a boolean, not {type(value).__name__} ({value!r})"
+                )
+            return value
+        if dtype is str:
+            if not isinstance(value, str):
+                raise OperatorParameterError(
+                    f"{name} must be a string, not {type(value).__name__} ({value!r})"
+                )
+            if choices is not None and value not in choices:
+                raise OperatorParameterError(
+                    f"{name}={value!r} is not an allowed choice {list(choices)}"
+                )
+            return value
+        if dtype is int:
+            if isinstance(value, (bool, np.bool_)):
+                raise OperatorParameterError(f"{name} must be an integer, not bool")
+            if not isinstance(value, (int, float, np.integer, np.floating)):
+                raise OperatorParameterError(
+                    f"{name} must be an integer, not {type(value).__name__} ({value!r})"
+                )
+            if not np.isfinite(float(value)) or float(value) != float(int(value)):
+                raise OperatorParameterError(f"{name} must be an integer")
+            result = int(value)
+            if lower is not None and result &lt; lower:
+&gt;               raise OperatorParameterError(f"{name} must be &gt;= {lower}")
+E               factor_engine.backend.operator_errors.OperatorParameterError: window must be &gt;= 20
+
+factor_engine/cleaned_operators/base.py:1074: OperatorParameterError
+
+The above exception was the direct cause of the following exception:
+
+    def test_level_shift_short_trailing_run_after_gap_is_nan() -&gt; None:
+        # The task's exact example: a short trailing run after the gap is too small
+        # to split, so the score is NaN (never a half-bridged value).
+        vals = np.array([1.0, 2.0, 3.0, np.nan, np.nan, np.nan, 10.0, 11.0, 12.0])
+        x = _col(vals)
+&gt;       out = OperatorRegistry.get("ts_level_shift_score").calculate(x, window=9, min_periods=2)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+factor_engine/tests/operators/test_r11_round2_regression_defs.py:188: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+factor_engine/cleaned_operators/base.py:2155: in calculate
+    processed_args, processed_kwargs = self._prepare_call(args, kwargs)
+                                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+factor_engine/cleaned_operators/base.py:2144: in _prepare_call
+    return validate_operator_call(self, args, kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+factor_engine/cleaned_operators/base.py:2068: in validate_operator_call
+    call = bind_operator_call(operator, args, kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+factor_engine/cleaned_operators/base.py:2018: in bind_operator_call
+    processed_args, processed_kwargs = _normalise_call(
+factor_engine/cleaned_operators/base.py:1536: in _normalise_call
+    processed_kwargs[key] = normalize_and_validate_scalar_param(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+canonical = 'ts_level_shift_score', param_name = 'window', value = 9
+phase = 'runtime', declared_type = None
+spec = ParamSpec(dtype=&lt;class 'int'&gt;, min=20, max=None, choices=None, searchable=True, active_when=None, history_semantics=None, history_formula=None, default=MISSING, equivalence=None, param_role=&lt;ParamRole.HORIZON: 'horizon'&gt;)
+
+    def normalize_and_validate_scalar_param(
+        canonical: str,
+        param_name: str,
+        value: Any,
+        *,
+        phase: str = "planning",
+        declared_type: type | None = None,
+        spec: Any | None = None,
+    ) -&gt; Any:
+        """R19-002: the SINGLE unified scalar-parameter validation entry shared by
+        the planning-time validator (``validate_plan_params``), the runtime call
+        gate (``_normalise_call``) and the hash identity path.
+    
+        Planning and runtime consume the SAME declared ParamSpec type domain: np
+        scalars (``np.int64``/``np.float64``), Decimal, enum members and explicit
+        ``None`` are validated by exactly the same rules the kernel gate would
+        apply, instead of being skipped because ``isinstance(value, (int, float,
+        str, bool))`` is False (the old planning gap).  Structured / vector values
+        (``list``/``tuple``/``dict``/``set``) are NOT scalar params and pass through
+        unchanged — the vector / structured path owns them, matching the runtime.
+    
+        The declaration-layer numeric-string binder (:func:`cleaned_operators.base.
+        bind_numeric_string_if_declared`) runs FIRST, so a numeric string is
+        converted once here and the kernel gates (``strict_int_runtime``) never see
+        it (R19-005).  ``phase`` only labels the error context
+        (``planning``/``runtime``/``hash``); it never changes the validation rules.
+        """
+        if phase not in ("planning", "runtime", "hash"):
+            raise ValueError(
+                f"unknown phase {phase!r}; expected 'planning' | 'runtime' | 'hash'"
+            )
+        if isinstance(value, (list, tuple, dict, set, frozenset)):
+            # Structured / vector param: owned by the vector / structured path.
+            return value
+        coerced = _coerce_declared_numeric_string(value, param_name, declared_type, spec)
+        try:
+            return _normalise_integer(coerced, param_name, declared_type, spec)
+        except OperatorParameterError as exc:
+&gt;           raise OperatorParameterError(
+                f"{canonical}.{param_name} [{phase}]: {exc}"
+            ) from exc
+E           factor_engine.backend.operator_errors.OperatorParameterError: ts_level_shift_score.window [runtime]: window must be &gt;= 20
+
+factor_engine/cleaned_operators/common/strict_params.py:205: OperatorParameterError</failure></testcase><testcase classname="factor_engine.tests.operators.test_r11_round2_regression_defs" name="test_level_shift_split_at_physical_window_midpoint" time="0.001"><failure message="factor_engine.backend.operator_errors.OperatorParameterError: ts_level_shift_score.window [runtime]: window must be &gt;= 20">canonical = 'ts_level_shift_score', param_name = 'window', value = 7
+phase = 'runtime', declared_type = None
+spec = ParamSpec(dtype=&lt;class 'int'&gt;, min=20, max=None, choices=None, searchable=True, active_when=None, history_semantics=None, history_formula=None, default=MISSING, equivalence=None, param_role=&lt;ParamRole.HORIZON: 'horizon'&gt;)
+
+    def normalize_and_validate_scalar_param(
+        canonical: str,
+        param_name: str,
+        value: Any,
+        *,
+        phase: str = "planning",
+        declared_type: type | None = None,
+        spec: Any | None = None,
+    ) -&gt; Any:
+        """R19-002: the SINGLE unified scalar-parameter validation entry shared by
+        the planning-time validator (``validate_plan_params``), the runtime call
+        gate (``_normalise_call``) and the hash identity path.
+    
+        Planning and runtime consume the SAME declared ParamSpec type domain: np
+        scalars (``np.int64``/``np.float64``), Decimal, enum members and explicit
+        ``None`` are validated by exactly the same rules the kernel gate would
+        apply, instead of being skipped because ``isinstance(value, (int, float,
+        str, bool))`` is False (the old planning gap).  Structured / vector values
+        (``list``/``tuple``/``dict``/``set``) are NOT scalar params and pass through
+        unchanged — the vector / structured path owns them, matching the runtime.
+    
+        The declaration-layer numeric-string binder (:func:`cleaned_operators.base.
+        bind_numeric_string_if_declared`) runs FIRST, so a numeric string is
+        converted once here and the kernel gates (``strict_int_runtime``) never see
+        it (R19-005).  ``phase`` only labels the error context
+        (``planning``/``runtime``/``hash``); it never changes the validation rules.
+        """
+        if phase not in ("planning", "runtime", "hash"):
+            raise ValueError(
+                f"unknown phase {phase!r}; expected 'planning' | 'runtime' | 'hash'"
+            )
+        if isinstance(value, (list, tuple, dict, set, frozenset)):
+            # Structured / vector param: owned by the vector / structured path.
+            return value
+        coerced = _coerce_declared_numeric_string(value, param_name, declared_type, spec)
+        try:
+&gt;           return _normalise_integer(coerced, param_name, declared_type, spec)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+factor_engine/cleaned_operators/common/strict_params.py:203: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+factor_engine/cleaned_operators/base.py:872: in _normalise_integer
+    return _validate_param_spec(value, name, spec, lower, upper)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+value = 7, name = 'window'
+spec = ParamSpec(dtype=&lt;class 'int'&gt;, min=20, max=None, choices=None, searchable=True, active_when=None, history_semantics=None, history_formula=None, default=MISSING, equivalence=None, param_role=&lt;ParamRole.HORIZON: 'horizon'&gt;)
+lower = 20, upper = None
+
+    def _validate_param_spec(
+        value: Any,
+        name: str,
+        spec: ParamSpec,
+        lower: Any,
+        upper: Any,
+    ) -&gt; Any:
+        """Single strict entry point for a declared ``ParamSpec`` (R7-220).
+    
+        Every declared dtype is enforced here — including ``bool`` (``type(x) is
+        bool``, never a truthy int) and ``str`` — instead of each caller branch
+        re-implementing its own acceptance rules.  ``int`` accepts ``Integral`` but
+        not ``bool``; ``float`` accepts ``Real`` but not ``bool`` and must be
+        finite; ``choices`` requires exact membership.
+        """
+        dtype = spec.dtype
+        choices = spec.choices
+        # R7-222: an explicitly-declared ``None`` default (``default=None``, NOT
+        # ``MISSING``) makes ``None`` a legal value regardless of dtype — e.g.
+        # ``center=None`` (no centering) in a z-score.  Without this, the strict
+        # type gate would reject the very value the contract declares as default.
+        if value is None and spec.default is None:
+            return value
+        if dtype is bool:
+            # Strict: ``type(value) is bool`` — a truthy ``1``/``1.0`` is a contract
+            # violation, not a usable boolean.
+            if type(value) is not bool:
+                raise OperatorParameterError(
+                    f"{name} must be a boolean, not {type(value).__name__} ({value!r})"
+                )
+            return value
+        if dtype is str:
+            if not isinstance(value, str):
+                raise OperatorParameterError(
+                    f"{name} must be a string, not {type(value).__name__} ({value!r})"
+                )
+            if choices is not None and value not in choices:
+                raise OperatorParameterError(
+                    f"{name}={value!r} is not an allowed choice {list(choices)}"
+                )
+            return value
+        if dtype is int:
+            if isinstance(value, (bool, np.bool_)):
+                raise OperatorParameterError(f"{name} must be an integer, not bool")
+            if not isinstance(value, (int, float, np.integer, np.floating)):
+                raise OperatorParameterError(
+                    f"{name} must be an integer, not {type(value).__name__} ({value!r})"
+                )
+            if not np.isfinite(float(value)) or float(value) != float(int(value)):
+                raise OperatorParameterError(f"{name} must be an integer")
+            result = int(value)
+            if lower is not None and result &lt; lower:
+&gt;               raise OperatorParameterError(f"{name} must be &gt;= {lower}")
+E               factor_engine.backend.operator_errors.OperatorParameterError: window must be &gt;= 20
+
+factor_engine/cleaned_operators/base.py:1074: OperatorParameterError
+
+The above exception was the direct cause of the following exception:
+
+    def test_level_shift_split_at_physical_window_midpoint() -&gt; None:
+        # `1 NaN 3 4 5 6 7`: trailing contiguous run = [3,4,5,6,7] starting at
+        # offset 2; window midpoint = offset 3.  Halves are computed in PHYSICAL
+        # time: first=[3], second=[4,5,6,7] (no drop-finite of the leading [1]).
+        vals = np.array([1.0, np.nan, 3.0, 4.0, 5.0, 6.0, 7.0])
+        x = _col(vals)
+&gt;       out = OperatorRegistry.get("ts_level_shift_score").calculate(x, window=7, min_periods=2)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+factor_engine/tests/operators/test_r11_round2_regression_defs.py:198: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+factor_engine/cleaned_operators/base.py:2155: in calculate
+    processed_args, processed_kwargs = self._prepare_call(args, kwargs)
+                                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+factor_engine/cleaned_operators/base.py:2144: in _prepare_call
+    return validate_operator_call(self, args, kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+factor_engine/cleaned_operators/base.py:2068: in validate_operator_call
+    call = bind_operator_call(operator, args, kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+factor_engine/cleaned_operators/base.py:2018: in bind_operator_call
+    processed_args, processed_kwargs = _normalise_call(
+factor_engine/cleaned_operators/base.py:1536: in _normalise_call
+    processed_kwargs[key] = normalize_and_validate_scalar_param(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+canonical = 'ts_level_shift_score', param_name = 'window', value = 7
+phase = 'runtime', declared_type = None
+spec = ParamSpec(dtype=&lt;class 'int'&gt;, min=20, max=None, choices=None, searchable=True, active_when=None, history_semantics=None, history_formula=None, default=MISSING, equivalence=None, param_role=&lt;ParamRole.HORIZON: 'horizon'&gt;)
+
+    def normalize_and_validate_scalar_param(
+        canonical: str,
+        param_name: str,
+        value: Any,
+        *,
+        phase: str = "planning",
+        declared_type: type | None = None,
+        spec: Any | None = None,
+    ) -&gt; Any:
+        """R19-002: the SINGLE unified scalar-parameter validation entry shared by
+        the planning-time validator (``validate_plan_params``), the runtime call
+        gate (``_normalise_call``) and the hash identity path.
+    
+        Planning and runtime consume the SAME declared ParamSpec type domain: np
+        scalars (``np.int64``/``np.float64``), Decimal, enum members and explicit
+        ``None`` are validated by exactly the same rules the kernel gate would
+        apply, instead of being skipped because ``isinstance(value, (int, float,
+        str, bool))`` is False (the old planning gap).  Structured / vector values
+        (``list``/``tuple``/``dict``/``set``) are NOT scalar params and pass through
+        unchanged — the vector / structured path owns them, matching the runtime.
+    
+        The declaration-layer numeric-string binder (:func:`cleaned_operators.base.
+        bind_numeric_string_if_declared`) runs FIRST, so a numeric string is
+        converted once here and the kernel gates (``strict_int_runtime``) never see
+        it (R19-005).  ``phase`` only labels the error context
+        (``planning``/``runtime``/``hash``); it never changes the validation rules.
+        """
+        if phase not in ("planning", "runtime", "hash"):
+            raise ValueError(
+                f"unknown phase {phase!r}; expected 'planning' | 'runtime' | 'hash'"
+            )
+        if isinstance(value, (list, tuple, dict, set, frozenset)):
+            # Structured / vector param: owned by the vector / structured path.
+            return value
+        coerced = _coerce_declared_numeric_string(value, param_name, declared_type, spec)
+        try:
+            return _normalise_integer(coerced, param_name, declared_type, spec)
+        except OperatorParameterError as exc:
+&gt;           raise OperatorParameterError(
+                f"{canonical}.{param_name} [{phase}]: {exc}"
+            ) from exc
+E           factor_engine.backend.operator_errors.OperatorParameterError: ts_level_shift_score.window [runtime]: window must be &gt;= 20
+
+factor_engine/cleaned_operators/common/strict_params.py:205: OperatorParameterError</failure></testcase><testcase classname="factor_engine.tests.operators.test_r11_round2_regression_defs" name="test_level_shift_detects_mean_shift_no_nan" time="0.008" /><testcase classname="factor_engine.tests.operators.test_r11_round2_regression_defs" name="test_cumulative_deviation_score_catches_level_jump" time="0.024" /><testcase classname="factor_engine.tests.operators.test_r11_round2_regression_defs" name="test_cumulative_deviation_heuristic_not_cusum_statistic" time="0.000" /><testcase classname="factor_engine.tests.operators.test_r11_round2_regression_defs" name="test_in_sample_resid_approximately_zero_on_perfect_line" time="0.037" /><testcase classname="factor_engine.tests.operators.test_r11_round2_regression_defs" name="test_predictive_resid_has_no_look_ahead" time="0.003" /><testcase classname="factor_engine.tests.operators.test_r11_round2_regression_defs" name="test_predictive_huber_resid_on_clean_line_no_look_ahead" time="0.022" /><testcase classname="factor_engine.tests.operators.test_r11_round2_regression_defs" name="test_predictive_variants_documented_as_mining_preference" time="0.000" /><testcase classname="factor_engine.tests.operators.test_r11_round2_regression_defs" name="test_polars_parity_new_canonicals" time="0.072"><failure message="AttributeError: 'DataFrame' object has no attribute 'diff'">def test_polars_parity_new_canonicals() -&gt; None:
+        pytest.importorskip("polars")
+        import polars as pl
+    
+        rng = np.random.default_rng(7)
+        n = 200
+        close = 100.0 + np.cumsum(rng.standard_normal(n))
+        pdf = pd.DataFrame(
+            {
+                "date": _dates(n),
+                "close": close,
+                "y": 1.5 * close + rng.standard_normal(n),
+                "x": 100.0 + np.cumsum(rng.standard_normal(n)),
+            }
+        )
+        pdf = pdf.set_index("date")
+        plf = pl.DataFrame(
+            {
+                "date": pd.DatetimeIndex(pdf.index),
+                "close": pdf["close"].to_numpy(),
+                "y": pdf["y"].to_numpy(),
+                "x": pdf["x"].to_numpy(),
+            }
+        )
+    
+        def _to_pd(pldf: pl.DataFrame) -&gt; pd.DataFrame:
+            if "date" in pldf.columns:
+                idx = pd.DatetimeIndex(pldf["date"].to_pandas())
+            else:
+                idx = pd.RangeIndex(pldf.height)
+            cols = [c for c in pldf.columns if c != "date"]
+            return pd.DataFrame({c: pldf[c].to_numpy() for c in cols}, index=idx)
+    
+        cases = {
+            "ts_variance_ratio_proxy": (["close"], dict(window=120, q=8, min_periods=15)),
+            "ts_lo_mackinlay_vr": (["close"], dict(window=120, q=8, min_periods=15)),
+            "ts_lo_mackinlay_z": (["close"], dict(window=120, q=8, min_periods=15)),
+            "ts_cumulative_deviation_score": (["close"], dict(window=80, min_periods=10)),
+            "ts_level_shift_score": (["close"], dict(window=80, min_periods=10)),
+            "ts_vol_shift_score": (["close"], dict(window=80, min_periods=10)),
+            "ts_huber_regression_predictive_resid": (["y", "x"], dict(window=60, min_periods=6)),
+            "ts_ridge_regression_predictive_resid": (["y", "x"], dict(window=60, alpha=1e-6, min_periods=6)),
+        }
+        for canonical, (fields, kwargs) in cases.items():
+            p_op = OperatorRegistry.get(canonical, "pandas_numpy")
+            l_op = OperatorRegistry.get(canonical, "polars")
+            assert l_op is not None, canonical
+            # Multi-panel operators require ALIGNED column labels across inputs, so
+            # every panel is normalised to the same single column label "c".
+            p_args = [pdf[[f]].rename(columns={f: "c"}) for f in fields]
+            pl_args = [plf.select(["date", f]).rename({f: "c"}) for f in fields]
+            ref = p_op.calculate(*p_args, **kwargs)
+&gt;           got_pl = l_op.calculate(*pl_args, **kwargs)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+factor_engine/tests/operators/test_r11_round2_regression_defs.py:357: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+factor_engine/cleaned_operators/base.py:2156: in calculate
+    return self._calculate_series(*processed_args, **processed_kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = &lt;Operator: ts_lo_mackinlay_vr&gt;
+x = shape: (200, 2)
+┌─────────────────────┬────────────┐
+│ date                ┆ c          │
+│ ---                 ┆ --- ...48253  │
+│ 2024-07-17 00:00:00 ┆ 72.092635  │
+│ 2024-07-18 00:00:00 ┆ 73.607608  │
+└─────────────────────┴────────────┘
+window = 120, q = 8, min_periods = 15, kwargs = {}
+
+    def _calculate_series(self, x, window=60, q=5, min_periods=10, **kwargs):
+        feature = x
+        # R4-100 parity: canonical (x, window, q, min_periods).
+        # VR(q) = Var(q-period return) / (q * Var(1-period return))
+&gt;       ret_1 = feature.diff()
+                ^^^^^^^^^^^^
+E       AttributeError: 'DataFrame' object has no attribute 'diff'
+
+factor_engine/cleaned_operators/polars_native/ts_advanced_batch5.py:1515: AttributeError</failure></testcase><testcase classname="factor_engine.tests.r35.test_model_audit_regression" name="test_m040_ts_ar_coefficient_documented_in_sample" time="0.019"><failure message="assert np.float64(0....8483865322973) == 0.49767775609776727 ± 1.0e-12&#10;  &#10;  comparison failed&#10;  Obtained: 0.49898483865322973&#10;  Expected: 0.49767775609776727 ± 1.0e-12">def test_m040_ts_ar_coefficient_documented_in_sample():
+        op = _get("ts_ar_coefficient")
+        desc = op.metadata.description
+        assert "IN-SAMPLE" in desc or "in-sample" in desc.lower(), desc
+        # the strictly-prior replacement is named
+        assert "ts_ar_prior_coeff" in desc, desc
+        # kernel math is unchanged: the operator output at the last row must equal
+        # the manual in-sample OLS slope of x_t on x_{t-1} over the same trailing
+        # window INCLUDING the current row (cov/var, the kernel's formula).
+        rng = np.random.default_rng(11)
+        n = 500
+        rho = 0.6
+        series = np.zeros(n)
+        for t in range(1, n):
+            series[t] = rho * series[t - 1] + rng.standard_normal()
+        x = pd.DataFrame(series, index=pd.date_range("2024-01-01", periods=n), columns=["A"])
+        out = op.calculate(x, window=250, lag=1, min_periods=10)["A"]
+        w = 250
+        seg = series[-w:]
+        current = seg[1:]
+        lagged = seg[:-1]
+        manual = float(
+            np.mean((current - np.mean(current)) * (lagged - np.mean(lagged)))
+            / np.var(lagged)
+        )
+&gt;       assert out.iloc[-1] == pytest.approx(manual, abs=1e-12)
+E       assert np.float64(0....8483865322973) == 0.49767775609776727 ± 1.0e-12
+E         
+E         comparison failed
+E         Obtained: 0.49898483865322973
+E         Expected: 0.49767775609776727 ± 1.0e-12
+
+factor_engine/tests/r35/test_model_audit_regression.py:78: AssertionError</failure></testcase><testcase classname="factor_engine.tests.r35.test_model_audit_regression" name="test_m043_ts_ar_innovation_z_documented_in_sample" time="0.000" /><testcase classname="factor_engine.tests.r35.test_model_audit_regression" name="test_m044_half_life_input_units_declared[ts_mean_reversion_half_life]" time="0.000" /><testcase classname="factor_engine.tests.r35.test_model_audit_regression" name="test_m044_half_life_input_units_declared[ts_mean_reversion_ou_approx_half_life]" time="0.000" /><testcase classname="factor_engine.tests.r35.test_model_audit_regression" name="test_m044_half_life_input_units_declared[ts_mean_reversion_ou_approx_half_life_prior]" time="0.000" /><testcase classname="factor_engine.tests.r35.test_model_audit_regression" name="test_m044_half_life_warns_on_trending_input[ts_mean_reversion_half_life]" time="0.014" /><testcase classname="factor_engine.tests.r35.test_model_audit_regression" name="test_m044_half_life_warns_on_trending_input[ts_mean_reversion_ou_approx_half_life]" time="0.014" /><testcase classname="factor_engine.tests.r35.test_model_audit_regression" name="test_m044_half_life_warns_on_trending_input[ts_mean_reversion_ou_approx_half_life_prior]" time="0.014" /><testcase classname="factor_engine.tests.r35.test_model_audit_regression" name="test_m044_half_life_stationary_input_no_warning" time="0.024" /><testcase classname="factor_engine.tests.r35.test_model_audit_regression" name="test_m045_lo_mackinlay_z_sign_doc_corrected" time="0.000" /><testcase classname="factor_engine.tests.r35.test_model_audit_regression" name="test_m045_lo_mackinlay_vr_sign_doc_present" time="0.000" /><testcase classname="factor_engine.tests.r35.test_model_audit_regression" name="test_m045_sign_direction_empirical" time="1.857" /><testcase classname="factor_engine.tests.r35.test_model_audit_regression" name="test_m050_beta_spread_diagnostic_only[ts_quantile_beta_spread]" time="0.000" /><testcase classname="factor_engine.tests.r35.test_model_audit_regression" name="test_m050_beta_spread_diagnostic_only[ts_expectile_beta_spread]" time="0.000" /><testcase classname="factor_engine.tests.r35.test_model_audit_regression" name="test_m051_prior_variants_not_diagnostic[ts_multi_regression_coeff_prior]" time="0.000" /><testcase classname="factor_engine.tests.r35.test_model_audit_regression" name="test_m051_prior_variants_not_diagnostic[ts_multi_regression_forecast_error]" time="0.000" /><testcase classname="factor_engine.tests.r35.test_model_audit_regression" name="test_m051_prior_variants_not_diagnostic[ts_multi_regression_forecast_error_z]" time="0.000" /><testcase classname="factor_engine.tests.r35.test_model_audit_regression" name="test_m051_prior_variants_not_diagnostic[ts_multi_regression_r2_prior]" time="0.000" /><testcase classname="factor_engine.tests.r35.test_model_audit_regression" name="test_m051_prior_variants_not_diagnostic[ts_multi_regression_adjusted_r2_prior]" time="0.000" /><testcase classname="factor_engine.tests.r35.test_model_audit_regression" name="test_m051_prior_variants_not_diagnostic[ts_huber_regression_coeff_prior]" time="0.000" /><testcase classname="factor_engine.tests.r35.test_model_audit_regression" name="test_m051_prior_variants_not_diagnostic[ts_huber_regression_forecast_error]" time="0.000" /><testcase classname="factor_engine.tests.r35.test_model_audit_regression" name="test_m051_prior_variants_not_diagnostic[ts_huber_regression_forecast_error_z]" time="0.000" /><testcase classname="factor_engine.tests.r35.test_model_audit_regression" name="test_m051_prior_variants_not_diagnostic[ts_ridge_regression_coeff_prior]" time="0.000" /><testcase classname="factor_engine.tests.r35.test_model_audit_regression" name="test_m051_prior_variants_not_diagnostic[ts_ridge_regression_forecast_error]" time="0.000" /><testcase classname="factor_engine.tests.r35.test_model_audit_regression" name="test_m051_prior_variants_not_diagnostic[ts_ridge_regression_forecast_error_z]" time="0.000" /><testcase classname="factor_engine.tests.r35.test_model_audit_regression" name="test_m051_prior_variants_not_diagnostic[ts_expectile_regression_coeff_prior]" time="0.000" /><testcase classname="factor_engine.tests.r35.test_model_audit_regression" name="test_m051_prior_variants_not_diagnostic[ts_expectile_regression_forecast_error]" time="0.000" /><testcase classname="factor_engine.tests.r35.test_model_audit_regression" name="test_m051_prior_variants_not_diagnostic[ts_quantile_regression_coeff_prior]" time="0.000" /><testcase classname="factor_engine.tests.r35.test_model_audit_regression" name="test_m051_prior_variants_not_diagnostic[ts_mean_reversion_ou_approx_half_life_prior]" time="0.000" /><testcase classname="factor_engine.tests.r35.test_model_audit_regression" name="test_m051_ou_approx_half_life_prior_is_causal" time="0.023" /><testcase classname="factor_engine.tests.r35.test_model_audit_regression" name="test_m052_coeff_stability_role_documented[ts_multi_regression_coeff_stability]" time="0.000" /><testcase classname="factor_engine.tests.r35.test_model_audit_regression" name="test_m052_coeff_stability_role_documented[ts_ar_coeff_stability]" time="0.000" /><testcase classname="factor_engine.tests.r35.test_model_audit_regression" name="test_m055_huber_delta_versioned_constant" time="0.000" /><testcase classname="factor_engine.tests.r35.test_model_audit_regression" name="test_m055_huber_fit_produces_sensible_coefficients" time="0.001" /><testcase classname="factor_engine.tests.r35.test_model_audit_regression" name="test_m057_quantile_beta_spread_prior_registered" time="0.000" /><testcase classname="factor_engine.tests.r35.test_model_audit_regression" name="test_m057_quantile_beta_spread_prior_is_causal" time="4.126" /><testcase classname="factor_engine.tests.r35.test_model_audit_regression" name="test_m057_prior_differs_from_in_sample" time="4.436" /><testcase classname="factor_engine.tests.r35.test_model_audit_regression" name="test_m060_expectile_fail_closed_on_non_convergence" time="0.001" /><testcase classname="factor_engine.tests.r35.test_model_audit_regression" name="test_m060_expectile_converged_telemetry" time="0.001" /><testcase classname="factor_engine.tests.r35.test_model_audit_regression" name="test_m060_huber_failure_reasons" time="0.001" /><testcase classname="factor_engine.tests.r35.test_model_audit_regression" name="test_m060_pinball_quantile_failure_reasons" time="0.004" /><testcase classname="factor_engine.tests.r35.test_model_audit_regression" name="test_m060_expectile_singular_design_reason" time="0.000" /></testsuite></testsuites>

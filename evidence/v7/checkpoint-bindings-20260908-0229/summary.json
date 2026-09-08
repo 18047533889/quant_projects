@@ -1,0 +1,27 @@
+{
+  "added": [],
+  "alias_only": [],
+  "aliases": 287,
+  "all_current_canonicals_have_rows": true,
+  "bindings": 4007,
+  "candidate_boundary": "override lineage exported; unregistered candidates need separate source review",
+  "created_at": "2026-09-07T18:29:19.694209+00:00",
+  "current_canonicals": 1756,
+  "git_head": "2bac7209c00e302728b810513c91f5475ec6954f",
+  "historical_canonicals": 1756,
+  "implementation_changes_since_previous": 28,
+  "load_profile": "load_all default",
+  "mathematical_certification": "NOT_CLAIMED",
+  "previous_bindings_sha256": "5e9e727b3f482e7a0aa69e8154aae52a75923dc88658362b57fca3bd69b3b959",
+  "removed_or_alias_only": [],
+  "schema_version": "factor_engine.v7.current_binding_inventory.v1",
+  "versions": {
+    "arch": "NOT_INSTALLED",
+    "duckdb": "1.5.4",
+    "numpy": "2.2.6",
+    "polars": "1.42.1",
+    "pyarrow": "25.0.0",
+    "scikit-learn": "1.9.0",
+    "scipy": "1.15.3"
+  }
+}

@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="4" skipped="0" tests="4" time="22.238" timestamp="2026-09-08T01:32:40.848008+08:00" hostname="qs-compute-gpu-hk-01"><testcase classname="factor_engine.tests.operators.test_v7_pca_moe_oracles" name="test_pca_nan_and_signed_infinity_share_one_training_missing_policy" time="21.883"><failure message="numpy.linalg.LinAlgError: SVD did not converge">def test_pca_nan_and_signed_infinity_share_one_training_missing_policy():
+        base = np.array([
+            [1.0, 4.0, 2.0],
+            [2.0, np.nan, 4.0],
+            [3.0, 8.0, 7.0],
+            [5.0, 9.0, 11.0],
+            [8.0, 12.0, 16.0],
+        ])
+        states = []
+        for missing in (np.nan, np.inf, -np.inf):
+            sample = base.copy()
+            sample[1, 1] = missing
+&gt;           state = PCAState.from_window(
+                sample, 1, min_coverage_ratio=0.7, absolute_min_obs=2
+            )
+
+tests/operators/test_v7_pca_moe_oracles.py:27: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+cleaned_operators/cross_section/pca_state.py:104: in from_window
+    fit = _fit(
+cleaned_operators/cross_section/pca_state.py:71: in _fit
+    _U, s, Vt = np.linalg.svd(Xs, full_matrices=False)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../.venv/lib/python3.12/site-packages/numpy/linalg/_linalg.py:1812: in svd
+    u, s, vh = gufunc(a, signature=signature)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+err = 'invalid value', flag = 8
+
+    def _raise_linalgerror_svd_nonconvergence(err, flag):
+&gt;       raise LinAlgError("SVD did not converge")
+E       numpy.linalg.LinAlgError: SVD did not converge
+
+../.venv/lib/python3.12/site-packages/numpy/linalg/_linalg.py:113: LinAlgError</failure></testcase><testcase classname="factor_engine.tests.operators.test_v7_pca_moe_oracles" name="test_pca_residual_restores_current_nonfinite_mask" time="0.001"><failure message="AssertionError: assert np.False_&#10; +  where np.False_ = &lt;ufunc 'isnan'&gt;(np.float64(inf))&#10; +    where &lt;ufunc 'isnan'&gt; = np.isnan">def test_pca_residual_restores_current_nonfinite_mask():
+        training = np.array([
+            [1.0, 2.0, 1.0],
+            [2.0, 3.0, 4.0],
+            [3.0, 5.0, 8.0],
+            [5.0, 8.0, 13.0],
+        ])
+        state = PCAState.from_window(training, 1)
+        assert state is not None
+        for missing in (np.nan, np.inf, -np.inf):
+            row = np.array([8.0, missing, 21.0])
+            residual = state.resid(row)
+&gt;           assert np.isnan(residual[1])
+E           AssertionError: assert np.False_
+E            +  where np.False_ = &lt;ufunc 'isnan'&gt;(np.float64(inf))
+E            +    where &lt;ufunc 'isnan'&gt; = np.isnan
+
+tests/operators/test_v7_pca_moe_oracles.py:54: AssertionError</failure></testcase><testcase classname="factor_engine.tests.operators.test_v7_pca_moe_oracles" name="test_moe_extreme_gate_is_stable_and_records_normalized_active_experts" time="0.007"><failure message="AssertionError: assert np.False_&#10; +  where np.False_ = &lt;ufunc 'isfinite'&gt;(np.float64(nan))&#10; +    where &lt;ufunc 'isfinite'&gt; = np.isfinite">def test_moe_extreme_gate_is_stable_and_records_normalized_active_experts():
+        n = 31
+        index = pd.RangeIndex(n)
+        x_values = np.linspace(-2.0, 2.0, n)
+        market_values = np.linspace(0.0, 1.0, n)
+        market_values[-1] = 1e300
+        y = pd.DataFrame({"A": 1.5 + 2.0 * x_values}, index=index)
+        x = pd.DataFrame({"A": x_values}, index=index)
+        market = pd.DataFrame({"A": market_values}, index=index)
+    
+        result = _moe_forecast(y, (x,), market, window=30, n_experts=2)
+&gt;       assert np.isfinite(result.iloc[-1, 0])
+E       AssertionError: assert np.False_
+E        +  where np.False_ = &lt;ufunc 'isfinite'&gt;(np.float64(nan))
+E        +    where &lt;ufunc 'isfinite'&gt; = np.isfinite
+
+tests/operators/test_v7_pca_moe_oracles.py:69: AssertionError</failure></testcase><testcase classname="factor_engine.tests.operators.test_v7_pca_moe_oracles" name="test_moe_all_invalid_is_missing_with_explicit_fit_status" time="0.002"><failure message="KeyError: 'fit_status'">def test_moe_all_invalid_is_missing_with_explicit_fit_status():
+        n = 20
+        index = pd.RangeIndex(n)
+        market_values = np.linspace(0.0, 1.0, n)
+        x = pd.DataFrame({"A": np.ones(n)}, index=index)
+        y = pd.DataFrame({"A": np.linspace(1.0, 2.0, n)}, index=index)
+        market = pd.DataFrame({"A": market_values}, index=index)
+    
+        result = _moe_forecast(y, (x,), market, window=19, n_experts=2)
+        assert np.isnan(result.iloc[-1, 0])
+        telemetry = last_fit_telemetry()
+&gt;       assert telemetry["fit_status"] == "all_experts_invalid"
+               ^^^^^^^^^^^^^^^^^^^^^^^
+E       KeyError: 'fit_status'
+
+tests/operators/test_v7_pca_moe_oracles.py:88: KeyError</failure></testcase></testsuite></testsuites>

@@ -1,0 +1,104 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="4" skipped="0" tests="5" time="22.451" timestamp="2026-09-08T01:33:16.259622+08:00" hostname="qs-compute-gpu-hk-01"><testcase classname="factor_engine.tests.operators.test_v7_volatility_contracts" name="test_v7_gjr_forecast_uses_same_leverage_step_as_history" time="21.774"><failure message="AssertionError: &#10;Not equal to tolerance rtol=1e-13, atol=1e-13&#10;&#10;Mismatched elements: 1 / 1 (100%)&#10;Max absolute difference among violations: 0.01242753&#10;Max relative difference among violations: 0.04963281&#10; ACTUAL: array(0.237962)&#10; DESIRED: array(0.250389)">monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7733f4d8a4b0&gt;
+
+    def test_v7_gjr_forecast_uses_same_leverage_step_as_history(monkeypatch):
+        import factor_engine.cleaned_operators.ts_model.volatility as vol
+    
+        params = (0.02, 0.08, 0.21, 0.63)
+        monkeypatch.setattr(vol, "_fit_gjr_cached", lambda _: params)
+        base = np.array([0.08, -0.04, 0.03, -0.02, 0.07, -0.05, 0.01,
+                         -0.06, 0.04, -0.03, 0.05, -0.02], dtype=float)
+        for current in (-0.17, 0.17, 0.0, -0.0):
+            seg = np.r_[base, current]
+            got = vol._garch_path(seg, 13, "forecast", True, 0.0)
+&gt;           np.testing.assert_allclose(got, _gjr_oracle(seg, *params), rtol=1e-13, atol=1e-13)
+E           AssertionError: 
+E           Not equal to tolerance rtol=1e-13, atol=1e-13
+E           
+E           Mismatched elements: 1 / 1 (100%)
+E           Max absolute difference among violations: 0.01242753
+E           Max relative difference among violations: 0.04963281
+E            ACTUAL: array(0.237962)
+E            DESIRED: array(0.250389)
+
+factor_engine/tests/operators/test_v7_volatility_contracts.py:26: AssertionError</failure></testcase><testcase classname="factor_engine.tests.operators.test_v7_volatility_contracts" name="test_v7_gjr_gamma_zero_degenerates_to_garch" time="0.001" /><testcase classname="factor_engine.tests.operators.test_v7_volatility_contracts" name="test_v7_garch_forecast_nonfinite_current_shock_fails_closed" time="0.001"><failure message="AssertionError: assert np.False_&#10; +  where np.False_ = &lt;ufunc 'isnan'&gt;(inf)&#10; +    where &lt;ufunc 'isnan'&gt; = np.isnan&#10; +    and   inf = &lt;function _garch_path at 0x773467373920&gt;(array([-0.08      , -0.06454545, -0.04909091, -0.03363636, -0.01818182,\n       -0.00272727,  0.01272727,  0.02818182,  0.04363636,  0.05909091,\n        0.07454545,  0.09      ,         inf]), 13, 'forecast', True, 0.0)&#10; +      where &lt;function _garch_path at 0x773467373920&gt; = &lt;module 'factor_engine.cleaned_operators.ts_model.volatility' from '/home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/ts_model/volatility.py'&gt;._garch_path">monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7733f61089b0&gt;
+
+    def test_v7_garch_forecast_nonfinite_current_shock_fails_closed(monkeypatch):
+        import factor_engine.cleaned_operators.ts_model.volatility as vol
+    
+        monkeypatch.setattr(vol, "_fit_gjr_cached", lambda _: (0.02, 0.08, 0.21, 0.63))
+        base = np.linspace(-0.08, 0.09, 12)
+        for bad in (np.nan, np.inf, -np.inf):
+&gt;           assert np.isnan(vol._garch_path(np.r_[base, bad], 13, "forecast", True, 0.0))
+E           AssertionError: assert np.False_
+E            +  where np.False_ = &lt;ufunc 'isnan'&gt;(inf)
+E            +    where &lt;ufunc 'isnan'&gt; = np.isnan
+E            +    and   inf = &lt;function _garch_path at 0x773467373920&gt;(array([-0.08      , -0.06454545, -0.04909091, -0.03363636, -0.01818182,\n       -0.00272727,  0.01272727,  0.02818182,  0.04363636,  0.05909091,\n        0.07454545,  0.09      ,         inf]), 13, 'forecast', True, 0.0)
+E            +      where &lt;function _garch_path at 0x773467373920&gt; = &lt;module 'factor_engine.cleaned_operators.ts_model.volatility' from '/home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/ts_model/volatility.py'&gt;._garch_path
+
+factor_engine/tests/operators/test_v7_volatility_contracts.py:47: AssertionError</failure></testcase><testcase classname="factor_engine.tests.operators.test_v7_volatility_contracts" name="test_v7_registered_gjr_prefix_is_not_rejected_by_future_suffix" time="0.346"><failure message="ValueError: ts_gjr_garch_vol_forecast requires a return / stationary series; received a clearly non-stationary raw price level (sd(level)/sd(diff) &gt; 5.0).  Convert prices to returns (pct_change / log-diff) before feeding a GARCH / HAR-from-return operator (typed input_units=return contract, audit round-3 item 33, fail-closed)">def test_v7_registered_gjr_prefix_is_not_rejected_by_future_suffix():
+        from factor_engine.cleaned_operators.registry import OperatorRegistry
+    
+        rng = np.random.default_rng(731)
+        prefix = pd.DataFrame({"A": rng.normal(0.0, 0.012, 90)})
+        suffix = pd.DataFrame({"A": np.linspace(20.0, 200.0, 40)})
+        op = OperatorRegistry.get("ts_gjr_garch_vol_forecast")
+        expected = op.calculate(prefix, window=40)["A"]
+&gt;       extended = op.calculate(pd.concat([prefix, suffix], ignore_index=True), window=40)["A"]
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+factor_engine/tests/operators/test_v7_volatility_contracts.py:58: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+factor_engine/cleaned_operators/base.py:2156: in calculate
+    return self._calculate_series(*processed_args, **processed_kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+factor_engine/cleaned_operators/ts_model/volatility.py:199: in _calculate_series
+    _reject_price_level(args[0], name)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+x =               A
+0     -0.000825
+1      0.015497
+2     -0.016492
+3     -0.016579
+4     -0.007577
+..          ...
+125  181.538462
+126  186.153846
+127  190.769231
+128  195.384615
+129  200.000000
+
+[130 rows x 1 columns]
+canonical = 'ts_gjr_garch_vol_forecast'
+
+    def _reject_price_level(x: pd.DataFrame, canonical: str) -&gt; None:
+        for col in x.columns:
+            if _looks_like_price_level(x[col].to_numpy(dtype=float)):
+&gt;               raise ValueError(
+                    f"{canonical} requires a return / stationary series; received "
+                    "a clearly non-stationary raw price level "
+                    f"(sd(level)/sd(diff) &gt; {_PRICE_LEVEL_RATIO_THRESHOLD}).  "
+                    "Convert prices to returns (pct_change / log-diff) before "
+                    "feeding a GARCH / HAR-from-return operator "
+                    "(typed input_units=return contract, audit round-3 item 33, "
+                    "fail-closed)"
+                )
+E               ValueError: ts_gjr_garch_vol_forecast requires a return / stationary series; received a clearly non-stationary raw price level (sd(level)/sd(diff) &gt; 5.0).  Convert prices to returns (pct_change / log-diff) before feeding a GARCH / HAR-from-return operator (typed input_units=return contract, audit round-3 item 33, fail-closed)
+
+factor_engine/cleaned_operators/ts_model/volatility.py:165: ValueError</failure></testcase><testcase classname="factor_engine.tests.operators.test_v7_volatility_contracts" name="test_v7_har_innovation_pairs_features_and_labels_on_original_clock" time="0.002"><failure message="AssertionError: &#10;Not equal to tolerance rtol=1e-10, atol=1e-10&#10;&#10;nan location mismatch:&#10; ACTUAL: array(nan)&#10; DESIRED: array(-16.205113)">def test_v7_har_innovation_pairs_features_and_labels_on_original_clock():
+        import factor_engine.cleaned_operators.ts_model.volatility as vol
+    
+        t = np.arange(120, dtype=float)
+        rv = 0.02 + 0.004 * np.sin(t / 4.0) + 0.00003 * t
+        rv[70] = np.nan
+        expected = _har_innovation_oracle(rv, 120)
+        got = vol._har_rv(rv, 120, "innovation_z")
+&gt;       np.testing.assert_allclose(got, expected, rtol=1e-10, atol=1e-10)
+E       AssertionError: 
+E       Not equal to tolerance rtol=1e-10, atol=1e-10
+E       
+E       nan location mismatch:
+E        ACTUAL: array(nan)
+E        DESIRED: array(-16.205113)
+
+factor_engine/tests/operators/test_v7_volatility_contracts.py:86: AssertionError</failure></testcase></testsuite></testsuites>

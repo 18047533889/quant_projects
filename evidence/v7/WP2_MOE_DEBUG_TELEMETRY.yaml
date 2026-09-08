@@ -1,0 +1,52 @@
+work_package: WP2_MOE_DEBUG_TELEMETRY
+baseline_head: 2bac7209c00e302728b810513c91f5475ec6954f
+scope:
+  modified_files:
+    - factor_engine/cleaned_operators/cross_section/panel_model.py
+    - factor_engine/tests/operators/test_v7_pca_moe_oracles.py
+    - evidence/v7/WP2_MOE_DEBUG_TELEMETRY.yaml
+  claim: >-
+    MOE telemetry is an explicitly debug-only, execution-context-local snapshot
+    of the last visited call/cell. It is not execution authority and is not an
+    aligned per-cell status result.
+implementation:
+  - ContextVar storage prevents mutable process-global residue across threads and async contexts.
+  - Every MOE call receives a UUID call_id and resets telemetry before structural validation.
+  - Every visited cell records row, col, and a concrete fit_status before an unchanged exit path.
+  - Numerical output shape, prediction branches, fit boundaries, and timing semantics are unchanged.
+regressions:
+  pre_fix:
+    command: >-
+      .venv/bin/python -m pytest -q
+      factor_engine/tests/operators/test_v7_pca_moe_oracles.py
+      -k debug_telemetry --junitxml=/tmp/v7_moe_telemetry_pre_fix.xml
+    result: 3 failed, 8 deselected, 2 warnings
+    junit: /tmp/v7_moe_telemetry_pre_fix.xml
+    sha256: da89dbbe5e7e56e1d5bf1af74bd772057f19585b2f0f6c4d87b43e1d119024e9
+  focused_after:
+    command: >-
+      .venv/bin/python -m pytest -q
+      factor_engine/tests/operators/test_v7_pca_moe_oracles.py
+      -k debug_telemetry --junitxml=/tmp/v7_moe_telemetry_after_focused.xml
+    result: 3 passed, 8 deselected, 2 warnings
+    junit: /tmp/v7_moe_telemetry_after_focused.xml
+    sha256: cc1e09f3e478c0efdc563bff83a4a8467230c99816283a8e02b2c295c2e92b94
+  oracle_file_after:
+    result: 11 passed, 2 warnings
+    junit: /tmp/v7_moe_telemetry_after.xml
+    sha256: 329f443d7cd31a02f23d4468607d81cebf1930ee91527dec6ffb1f8627246760
+  integration_after:
+    scope: six panel-model and R35 model audit files
+    result: 93 passed, 3 warnings
+    junit: /tmp/v7_moe_telemetry_integration.xml
+    sha256: a5a838fbb2b5e04f8fff33531c6e9fb05f05b00481e274a0e336d889c66b156e
+coverage:
+  - valid call followed by final-row nonfinite market state
+  - structural early return after a prior successful call
+  - distinct call identities across sequential calls
+  - concurrent thread isolation with different terminal statuses
+  - existing MOE prediction, gating, and missing-output oracles
+full_suite: NOT_RUN
+limitations:
+  - The accessor reports only the latest visited cell in the current execution context.
+  - Consumers needing aligned status data require a separate shaped result contract.

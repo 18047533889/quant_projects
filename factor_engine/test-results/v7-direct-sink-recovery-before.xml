@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="3" skipped="0" tests="3" time="0.421" timestamp="2026-09-08T02:20:50.921176+08:00" hostname="qs-compute-gpu-hk-01"><testcase classname="factor_engine.tests.runtime.test_v7_direct_sink_recovery" name="test_protocol_invalid_direct_receipt_is_wave_error" time="0.015"><failure message="Failed: DID NOT RAISE WorkerProtocolError">tmp_path = PosixPath('/tmp/pytest-of-sunhaiwei/pytest-2312/test_protocol_invalid_direct_r0')
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x76c4e3dbbb30&gt;
+
+    def test_protocol_invalid_direct_receipt_is_wave_error(tmp_path, monkeypatch):
+        idx = pd.MultiIndex.from_tuples(
+            [(pd.Timestamp("2025-01-02"), "A")], names=["time", "instrument"]
+        )
+        value = pd.Series([1.0], index=idx)
+        monkeypatch.setattr(
+            "factor_engine.runtime.durable_artifact_sink.required_writer_workspace_bytes",
+            lambda value: 1,
+        )
+        monkeypatch.setattr(
+            "factor_engine.runtime.durable_artifact_sink.write_verified_factor_artifact",
+            lambda *args, **kwargs: {
+                "committed": True, "verified": True, "generation": "wrong"
+            },
+        )
+        sink = pipeline._DirectVerifiedArtifactSink(
+            root=tmp_path, run_id="r", policy=object(),
+            assignments={"a": (0, "a" * 32)}, writer_bytes=1,
+            broker=SimpleNamespace(acquire_memory=lambda *a, **k: None),
+        )
+&gt;       with pytest.raises(pipeline.WorkerProtocolError):
+E       Failed: DID NOT RAISE WorkerProtocolError
+
+factor_engine/tests/runtime/test_v7_direct_sink_recovery.py:32: Failed</failure></testcase><testcase classname="factor_engine.tests.runtime.test_v7_direct_sink_recovery" name="test_reconciler_disables_nested_retries" time="0.001"><failure message="assert []">monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x76c4e3c56f60&gt;
+
+    def test_reconciler_disables_nested_retries(monkeypatch):
+        entered = []
+    
+        @contextmanager
+        def disabled():
+            entered.append(True)
+            yield
+    
+        class Engine:
+            resource_broker = None
+    
+            def run_many_parallel(self, factors, **kwargs):
+                assert entered
+                return {"results": {"a": object()}}
+    
+        reconciler = pipeline._SpawnFactoryArtifactReconciler(
+            lambda config: Engine(), {}, SimpleNamespace(acquire_memory=lambda *a, **k: None)
+        )
+        monkeypatch.setattr(
+            "factor_engine.runtime.adaptive_batch_scheduler.disable_inner_retries_for_v2",
+            disabled,
+        )
+        monkeypatch.setattr(
+            "factor_engine.runtime.durable_artifact_sink.required_writer_workspace_bytes",
+            lambda value: 0,
+        )
+        monkeypatch.setattr(
+            "factor_engine.runtime.durable_artifact_sink.reconcile_factor_artifact",
+            lambda *args, **kwargs: {"verified": True},
+        )
+&gt;       assert reconciler(None, {}, "/tmp", "r", object(), 0, "a", 1, "a" * 32) == {
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+            "verified": True
+        }
+
+factor_engine/tests/runtime/test_v7_direct_sink_recovery.py:67: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+factor_engine/runtime/bounded_pipeline.py:429: in __call__
+    output = engine.run_many_parallel(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = &lt;test_v7_direct_sink_recovery.test_reconciler_disables_nested_retries.&lt;locals&gt;.Engine object at 0x76c4e3c57020&gt;
+factors = [None], kwargs = {'result_policy': 'return'}
+
+    def run_many_parallel(self, factors, **kwargs):
+&gt;       assert entered
+E       assert []
+
+factor_engine/tests/runtime/test_v7_direct_sink_recovery.py:49: AssertionError</failure></testcase><testcase classname="factor_engine.tests.runtime.test_v7_direct_sink_recovery" name="test_compute_exit_precedes_reclaim_and_quarantine_blocks_reclaim" time="0.000"><failure message="AttributeError: module 'factor_engine.runtime.bounded_pipeline' has no attribute '_retire_direct_compute_authority'">def test_compute_exit_precedes_reclaim_and_quarantine_blocks_reclaim():
+        events = []
+        proxy = SimpleNamespace(client_id="compute-client")
+        worker = SimpleNamespace(close=lambda: events.append("exit"))
+        ipc = SimpleNamespace(reclaim_client=lambda client: events.append(("reclaim", client)))
+&gt;       pipeline._retire_direct_compute_authority(worker, ipc, proxy)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AttributeError: module 'factor_engine.runtime.bounded_pipeline' has no attribute '_retire_direct_compute_authority'
+
+factor_engine/tests/runtime/test_v7_direct_sink_recovery.py:77: AttributeError</failure></testcase></testsuite></testsuites>

@@ -1,0 +1,198 @@
+[
+  {
+    "after": "de3f6ccfc9345068",
+    "backend": "sql",
+    "before": null,
+    "canonical": "a_share_cap_ratio",
+    "prior_evidence": "STALE_REQUIRES_REVALIDATION"
+  },
+  {
+    "after": "de3f6ccfc9345068",
+    "backend": "sql",
+    "before": null,
+    "canonical": "circulating_cap_ratio_change",
+    "prior_evidence": "STALE_REQUIRES_REVALIDATION"
+  },
+  {
+    "after": "de3f6ccfc9345068",
+    "backend": "sql",
+    "before": null,
+    "canonical": "free_float_ratio",
+    "prior_evidence": "STALE_REQUIRES_REVALIDATION"
+  },
+  {
+    "after": "de3f6ccfc9345068",
+    "backend": "sql",
+    "before": null,
+    "canonical": "holder_float_concentration_gap",
+    "prior_evidence": "STALE_REQUIRES_REVALIDATION"
+  },
+  {
+    "after": "de3f6ccfc9345068",
+    "backend": "sql",
+    "before": null,
+    "canonical": "holder_freeze_ratio",
+    "prior_evidence": "STALE_REQUIRES_REVALIDATION"
+  },
+  {
+    "after": "de3f6ccfc9345068",
+    "backend": "sql",
+    "before": null,
+    "canonical": "holder_locked_share_ratio",
+    "prior_evidence": "STALE_REQUIRES_REVALIDATION"
+  },
+  {
+    "after": "de3f6ccfc9345068",
+    "backend": "sql",
+    "before": null,
+    "canonical": "holder_pledge_change",
+    "prior_evidence": "STALE_REQUIRES_REVALIDATION"
+  },
+  {
+    "after": "de3f6ccfc9345068",
+    "backend": "sql",
+    "before": null,
+    "canonical": "holder_pledge_ratio",
+    "prior_evidence": "STALE_REQUIRES_REVALIDATION"
+  },
+  {
+    "after": "a856ec54ad22f7dd",
+    "backend": "pandas_numpy",
+    "before": "cffb6b4f69348d57",
+    "canonical": "ts_garch_next_vol_forecast",
+    "prior_evidence": "STALE_REQUIRES_REVALIDATION"
+  },
+  {
+    "after": "9917d714747a8895",
+    "backend": "pandas_numpy",
+    "before": "7303b170ac0e2d39",
+    "canonical": "ts_garch_persistence",
+    "prior_evidence": "STALE_REQUIRES_REVALIDATION"
+  },
+  {
+    "after": "3f6d97365a32603a",
+    "backend": "pandas_numpy",
+    "before": "44ca9fcfb39dc071",
+    "canonical": "ts_garch_standardized_shock",
+    "prior_evidence": "STALE_REQUIRES_REVALIDATION"
+  },
+  {
+    "after": "fd8b7bac45df0e72",
+    "backend": "pandas_numpy",
+    "before": "faa85f34d642dacc",
+    "canonical": "ts_garch_vol_surprise",
+    "prior_evidence": "STALE_REQUIRES_REVALIDATION"
+  },
+  {
+    "after": "47aee11e2663bec9",
+    "backend": "pandas_numpy",
+    "before": "467ea04c3386ccb2",
+    "canonical": "ts_gjr_garch_vol_forecast",
+    "prior_evidence": "STALE_REQUIRES_REVALIDATION"
+  },
+  {
+    "after": "fd8b7bac45df0e72",
+    "backend": "pandas_numpy",
+    "before": "1ee71b4b516c5f44",
+    "canonical": "ts_gjr_leverage",
+    "prior_evidence": "STALE_REQUIRES_REVALIDATION"
+  },
+  {
+    "after": "80b38cadb571d0a5",
+    "backend": "pandas_numpy",
+    "before": "bb922872236dddc4",
+    "canonical": "ts_har_from_return_forecast_error_z",
+    "prior_evidence": "STALE_REQUIRES_REVALIDATION"
+  },
+  {
+    "after": "0fdf2d306988802c",
+    "backend": "pandas_numpy",
+    "before": "1aa7450cc89c37c7",
+    "canonical": "ts_har_from_return_next_vol",
+    "prior_evidence": "STALE_REQUIRES_REVALIDATION"
+  },
+  {
+    "after": "80b38cadb571d0a5",
+    "backend": "pandas_numpy",
+    "before": "eecbed9b336d9d1a",
+    "canonical": "ts_har_rv_forecast_error_z",
+    "prior_evidence": "STALE_REQUIRES_REVALIDATION"
+  },
+  {
+    "after": "eb00d63523fc659a",
+    "backend": "pandas_numpy",
+    "before": "272c575c1070a6dd",
+    "canonical": "ts_har_rv_next_var_forecast",
+    "prior_evidence": "STALE_REQUIRES_REVALIDATION"
+  },
+  {
+    "after": "0fdf2d306988802c",
+    "backend": "pandas_numpy",
+    "before": "1f63b9542201afe7",
+    "canonical": "ts_har_rv_next_vol_forecast",
+    "prior_evidence": "STALE_REQUIRES_REVALIDATION"
+  },
+  {
+    "after": "a519ab71e5e72d40",
+    "backend": "polars",
+    "before": "646726d06a67e40b",
+    "canonical": "ts_huber_regression_predictive_resid",
+    "prior_evidence": "STALE_REQUIRES_REVALIDATION"
+  },
+  {
+    "after": "0deb0b02151adb5b",
+    "backend": "polars",
+    "before": "47849388bf51ebc7",
+    "canonical": "ts_ridge_regression_predictive_resid",
+    "prior_evidence": "STALE_REQUIRES_REVALIDATION"
+  },
+  {
+    "after": "de3f6ccfc9345068",
+    "backend": "sql",
+    "before": null,
+    "canonical": "val1_relative_valuation_gap",
+    "prior_evidence": "STALE_REQUIRES_REVALIDATION"
+  },
+  {
+    "after": "de3f6ccfc9345068",
+    "backend": "sql",
+    "before": null,
+    "canonical": "valuation_pcf_definition_gap",
+    "prior_evidence": "STALE_REQUIRES_REVALIDATION"
+  },
+  {
+    "after": "de3f6ccfc9345068",
+    "backend": "sql",
+    "before": null,
+    "canonical": "valuation_pcf_gap_positive",
+    "prior_evidence": "STALE_REQUIRES_REVALIDATION"
+  },
+  {
+    "after": "de3f6ccfc9345068",
+    "backend": "sql",
+    "before": null,
+    "canonical": "valuation_pcf_gap_signed_log",
+    "prior_evidence": "STALE_REQUIRES_REVALIDATION"
+  },
+  {
+    "after": "de3f6ccfc9345068",
+    "backend": "sql",
+    "before": null,
+    "canonical": "valuation_pe_gap_positive",
+    "prior_evidence": "STALE_REQUIRES_REVALIDATION"
+  },
+  {
+    "after": "de3f6ccfc9345068",
+    "backend": "sql",
+    "before": null,
+    "canonical": "valuation_pe_gap_signed_log",
+    "prior_evidence": "STALE_REQUIRES_REVALIDATION"
+  },
+  {
+    "after": "de3f6ccfc9345068",
+    "backend": "sql",
+    "before": null,
+    "canonical": "valuation_pe_ttm_lyr_gap",
+    "prior_evidence": "STALE_REQUIRES_REVALIDATION"
+  }
+]

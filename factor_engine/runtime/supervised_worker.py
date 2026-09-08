@@ -27,6 +27,10 @@ class WorkerTransportFailed(RuntimeError):
     """
 
 
+class WorkerCancelled(RuntimeError):
+    """An active request was fenced and retired by its parent supervisor."""
+
+
 class WorkerQuarantined(RuntimeError):
     def __init__(self, message: str, *, pid: int | None = None) -> None:
         super().__init__(message)
@@ -84,6 +88,75 @@ def _worker_loop(connection: Any, generation: str, inherited_function: Any = Non
 class WorkerResult:
     value: Any
     generation: str
+
+
+class AsyncWorkerCall:
+    """One bounded asynchronous request owned by a supervised worker."""
+
+    def __init__(self, worker: "SupervisedReusableWorker", function: Any,
+                 args: tuple[Any, ...], kwargs: dict[str, Any],
+                 timeout_seconds: float, lease: Any) -> None:
+        self._worker = worker
+        self._cancel = threading.Event()
+        self._ready = threading.Event()
+        self._ownership: list[bool] = []
+        self._done = threading.Event()
+        self._result: WorkerResult | None = None
+        self._error: BaseException | None = None
+
+        def invoke() -> None:
+            try:
+                self._result = worker._execute_async_entry(
+                    function, args, kwargs, timeout_seconds, lease,
+                    self._cancel, self._ready, self._ownership,
+                )
+            except BaseException as exc:
+                self._error = exc
+            finally:
+                self._done.set()
+
+        self._thread = threading.Thread(
+            target=invoke, daemon=True, name="factor-v2-worker-call"
+        )
+        self._thread.start()
+        # Returning the handle transfers an already-established request, so a
+        # racing synchronous caller cannot win the worker's single-call lock.
+        self._ready.wait()
+
+    @property
+    def done(self) -> bool:
+        return self._done.is_set()
+
+    def result(self, timeout: float | None = None) -> WorkerResult:
+        if not self._done.wait(timeout):
+            raise TimeoutError("asynchronous worker result is not ready")
+        self._thread.join()
+        if self._error is not None:
+            raise self._error
+        assert self._result is not None
+        return self._result
+
+    def cancel_and_retire(self) -> None:
+        if not self._ownership or not self._ownership[0]:
+            # This handle lost the single-call admission race and therefore
+            # has no authority to retire the request that owns the worker.
+            self.result()
+            return
+        if not self._done.is_set():
+            self._cancel.set()
+        error = None
+        try:
+            self.result()
+        except WorkerCancelled:
+            pass
+        except BaseException as exc:
+            error = exc
+        # A fast successful/error response can leave the reusable process
+        # alive. Cancellation ownership is not discharged until its exit is
+        # observed; close() preserves quarantine when that proof fails.
+        self._worker.close()
+        if error is not None:
+            raise error
 
 
 class SupervisedReusableWorker:
@@ -168,7 +241,34 @@ class SupervisedReusableWorker:
         if not self._call_lock.acquire(blocking=False):
             raise RuntimeError("worker already has an active request")
         try:
-            return self._execute(function, args, kwargs, timeout_seconds, lease)
+            return self._execute(
+                function, args, kwargs, timeout_seconds, lease, threading.Event()
+            )
+        finally:
+            self._call_lock.release()
+
+    def execute_async(self, function: Callable[..., Any] | Any, *args: Any,
+                      timeout_seconds: float, lease: Any = None,
+                      **kwargs: Any) -> AsyncWorkerCall:
+        if not math.isfinite(timeout_seconds) or timeout_seconds <= 0:
+            raise ValueError("timeout_seconds must be finite and positive")
+        return AsyncWorkerCall(self, function, args, kwargs, timeout_seconds, lease)
+
+    def _execute_async_entry(self, function: Any, args: tuple[Any, ...],
+                             kwargs: dict[str, Any], timeout_seconds: float,
+                             lease: Any, cancel_event: threading.Event,
+                             ready: threading.Event,
+                             ownership: list[bool]) -> WorkerResult:
+        if not self._call_lock.acquire(blocking=False):
+            ownership.append(False)
+            ready.set()
+            raise RuntimeError("worker already has an active request")
+        ownership.append(True)
+        ready.set()
+        try:
+            return self._execute(
+                function, args, kwargs, timeout_seconds, lease, cancel_event
+            )
         finally:
             self._call_lock.release()
 
@@ -187,7 +287,7 @@ class SupervisedReusableWorker:
                 "worker or IPC thread did not exit; cleanup pending and lease retained",
                 pid=self._process.pid)
 
-    def _execute(self, function, args, kwargs, timeout_seconds, lease):
+    def _execute(self, function, args, kwargs, timeout_seconds, lease, cancel_event):
         try:
             self.start()
         except BaseException:
@@ -226,7 +326,12 @@ class SupervisedReusableWorker:
         self._transport = threading.Thread(target=exchange, daemon=True,
                                            name="factor-v2-worker-ipc")
         self._transport.start()
-        if completed.wait(timeout_seconds):
+        deadline = time.monotonic() + timeout_seconds
+        while not completed.is_set() and not cancel_event.is_set():
+            completed.wait(min(0.05, max(0.0, deadline - time.monotonic())))
+            if time.monotonic() >= deadline:
+                break
+        if completed.is_set():
             self._transport.join()
             if "error" in response:
                 self._retire()
@@ -250,6 +355,7 @@ class SupervisedReusableWorker:
                 raise RuntimeError("invalid worker exception response")
             raise value
         # Cooperative phase: invalidate write authority before termination.
+        cancelled = cancel_event.is_set()
         old_generation = self.generation
         self.generation = uuid.uuid4().hex
         completed.wait(self.cancel_grace_seconds)
@@ -259,6 +365,10 @@ class SupervisedReusableWorker:
         response.clear()
         if lease is not None:
             lease.release()
+        if cancelled:
+            raise WorkerCancelled(
+                f"worker generation {old_generation} cancelled after proven retirement"
+            )
         raise WorkerTimedOut(f"worker generation {old_generation} terminated after deadline")
 
     def close(self) -> None:

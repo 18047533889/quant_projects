@@ -1,0 +1,69 @@
+schema_version: factor_engine.v7.operator_fix.v1
+timestamp: "2026-09-08T01:39:45+08:00"
+git_sha: 2bac7209c00e302728b810513c91f5475ec6954f
+worktree_note: "Concurrent v7 work exists outside this owned file set; no commit, stage, reset, or deploy performed."
+issues:
+  M03:
+    status: FIXED_IN_OWNED_CANONICAL_SCOPE
+    defect: "PCA coverage used isfinite, but nanmean/nanstd and residual restoration did not treat signed infinity as missing."
+    policy: "NaN, +Inf, and -Inf are one missing class for coverage, fit, imputation, commonality, and current-row output masks."
+    oracle: "Compare means/scales and the sign-invariant loading subspace projector L.T@L; do not compare loading signs."
+  M06:
+    status: FIXED_IN_OWNED_CANONICAL_SCOPE
+    defect: "Extreme finite gate distances made every exponential underflow to zero; a second normalization divided by zero despite valid experts."
+    policy: "Filter usable expert predictions first, apply max-shifted softmax on that same set, and return explicit all-invalid telemetry."
+owned_modified_files:
+  - factor_engine/backend/model_family_kernels.py
+  - factor_engine/cleaned_operators/cross_section/pca_state.py
+  - factor_engine/cleaned_operators/cross_section/panel_model.py
+  - factor_engine/tests/operators/test_v7_pca_moe_oracles.py
+source_hashes:
+  factor_engine/backend/model_family_kernels.py: 23475ca76b3e251db915c856ad51308dd51cd0a75cf8aa325b32892108a5328f
+  factor_engine/cleaned_operators/cross_section/pca_state.py: 0bb0028b572a1c3075786325ae0995617f976f39608df9c28b1e00cd5da264c1
+  factor_engine/cleaned_operators/cross_section/panel_model.py: a6f4a8628730612f35a77d95b77d704ec1e4a97d9d82444aaa17a84f0e80df4f
+  factor_engine/tests/operators/test_v7_pca_moe_oracles.py: 0447b4adfc30cda5fe66b6a5bbf021236ebc036a007920a91ead200cd6da1d7a
+failure_before:
+  command: "../.venv/bin/python -m pytest -q tests/operators/test_v7_pca_moe_oracles.py --junitxml=test-results/v7/pca_moe_before.xml"
+  result: "4 failed"
+  xml: factor_engine/test-results/v7/pca_moe_before.xml
+  sha256: b447bb088c7ab0c4dd5d297fc3eecd3ee72e3ae54645d46758da948e8ad78a6b
+shared_kernel_failure_before:
+  command: "../.venv/bin/python -m pytest -q tests/operators/test_v7_pca_moe_oracles.py -k shared_pca --junitxml=test-results/v7/pca_shared_before.xml"
+  result: "2 failed, 6 deselected"
+  xml: factor_engine/test-results/v7/pca_shared_before.xml
+  sha256: cbbe156ba30f7a0cb22bc522856b985d4ea425f1d3245d3e4478085183154a45
+verification:
+  syntax_import_smoke:
+    result: PASS
+    command: "../.venv/bin/python -m py_compile cleaned_operators/cross_section/pca_state.py cleaned_operators/cross_section/panel_model.py tests/operators/test_v7_pca_moe_oracles.py"
+  oracle_and_regression:
+    result: PASS
+    count: 56
+    command: "../.venv/bin/python -m pytest -q tests/operators/test_v7_pca_moe_oracles.py tests/r35/test_model_audit_pca_pcr.py tests/r38/test_pca_shared_state_parity.py tests/modeling/test_model_learners_regime_moe.py tests/modeling/test_regime_moe_dsl_bridge.py --junitxml=test-results/v7/pca_moe_regression.xml"
+    xml: factor_engine/test-results/v7/pca_moe_regression.xml
+    sha256: 667aa4c2f9ef6e477e77abddb948176c61e965dcc2ff763362c2cfa67583b0a7
+affected_canonicals:
+  direct:
+    - panel_rolling_pca_loading
+    - panel_rolling_pca_resid
+    - panel_rolling_pca_explained_ratio
+    - panel_rolling_pca_resid_vol
+    - panel_rolling_pca_resid_momentum
+    - industry_rolling_pca_loading
+    - panel_mixture_of_experts_score
+  shared_kernel_consumers:
+    - backend.model_family_kernels.fit_pca_block
+old_evidence_invalidated:
+  - "Any PCA evidence treating Inf as a valid value for moments or residual output."
+  - "Any MOE evidence claiming stable normalization for extreme finite gate distances."
+recompute_boundary:
+  - "Historical outputs of affected PCA canonicals where a fit window or current row contains +/-Inf or constant columns."
+  - "Historical panel_mixture_of_experts_score outputs where gate exponentials underflowed or experts were invalid."
+limitations:
+  - status: NOT_RUN
+    item: "Full registry, full CI, real dataset, wheel/install, backend performance, and production gates."
+  - status: NOT_CERTIFIED
+    item: "No claim of all-operator or all-parameter mathematical correctness."
+semantic_version:
+  status: DEFERRED_TO_ROOT
+  note: "Shared semantic version files intentionally untouched per task ownership."

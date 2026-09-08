@@ -1,0 +1,70 @@
+schema_version: factor_engine.v7.wp5.v1
+timestamp: "2026-09-08T02:11:04+08:00"
+git_sha: 2bac7209c00e302728b810513c91f5475ec6954f
+status: PARTIAL_R01_R02_CLOSED_WITH_EXPLICIT_BOUNDARIES
+modified_files:
+  - factor_engine/runtime/bounded_pipeline.py
+  - factor_engine/tests/runtime/test_v7_direct_artifact_pipeline.py
+hashes:
+  factor_engine/runtime/bounded_pipeline.py: 3ad3826fe68fe84290913bf5ac28c877fed55f584f21a7a749f871f42fab8e3d
+  factor_engine/tests/runtime/test_v7_direct_artifact_pipeline.py: f3eecc93e1bcbc85879df80eac0a0934cc7f6a95cd13e9dae746aa6322bd2fee
+topology:
+  default_spawn:
+    compute: "run_many_parallel(result_policy=sink)"
+    data_plane: "each completed factor is synchronously written and exact-readback verified in the supervised compute process"
+    parent_response: "typed receipt/error descriptors only; no Series or result blob envelope"
+    admission: "parent protected writer reservation plus parent-proxy WRITER_BATCH extra lease; refusal rejects atomic output before artifact creation"
+    lost_ack: "known-generation artifact is recomputed under the same factory/snapshot and exact-reconciled; manifest presence alone never proves success"
+    native_owner: "after every normal direct wave, observe compute PID exit, reclaim that exact broker client, then create and bind a fresh proxy/PID/generation"
+  compatibility:
+    custom_sink: "legacy isolated verification path retained"
+    no_factory_fork: "legacy result transport retained; not described as the production direct path"
+attempt_budget:
+  execution: 1
+  lost_ack_recompute_reconcile: 1
+  invariant: "both use PersistentRunState.consume_attempt; no uncounted retry loop"
+tests:
+  direct_oracles:
+    result: PASS
+    count: 5
+    command: "../.venv/bin/python -m pytest -q tests/runtime/test_v7_direct_artifact_pipeline.py -k 'not real_engine'"
+    xml: factor_engine/test-results/v7/wp5_direct.xml
+    sha256: c0a3f499776966cb5622582295c74b1766637184ede0b06b7eab2c16a650bc09
+    coverage:
+      - "lost descriptor ACK causes separate-PID exact recompute/reconcile and exactly two persisted attempts"
+      - "bounded root execution overlaps next compute with current synchronous sink"
+      - "20k-row output succeeds despite a 64KiB result queue because no result pickle crosses to parent"
+      - "same atomic output is rejected before write when extra writer lease is refused"
+      - "two waves use distinct compute PIDs"
+  real_engine_two_wave:
+    result: PASS
+    count: 1
+    command: "../.venv/bin/python -m pytest -q tests/runtime/test_v7_direct_artifact_pipeline.py::test_real_engine_two_wave_default_uses_fresh_compute_pid"
+    xml: factor_engine/test-results/v7/wp5_real_two_wave.xml
+    sha256: bcb2766ed23a4ba12f297ce4cbea83baf755977be82b81f898896ce10b99c373
+    note: "Real FactorEngine/PandasBackend/InMemorySeriesSource, two one-factor waves, fresh compute PID per wave."
+  frozen_regression:
+    result: PASS
+    count: 34
+    command: "../.venv/bin/python -m pytest -q tests/runtime/test_v7_pipeline_integrity.py tests/runtime/test_v6_bounded_pipeline.py"
+    xml: factor_engine/test-results/v7/wp5_regression.xml
+    sha256: 773740df581570b165d511359ea00b5fdb43bd55fac7743442881980ee4bda2c
+    note: "Includes old spawn, protocol integrity, generation fencing, writer timeout/lost ACK, and terminal-state regressions."
+boundaries:
+  - status: NOT_A_HARD_RSS_PROOF
+    detail: "Broker admission and PID lifecycle are proven; Python/Arrow/native RSS is not inferred from shape or logical bytes."
+  - status: NOT_IMPLEMENTED
+    detail: "Cross-wave compute/write overlap is intentionally absent because each native-owner compute PID is retired after its wave."
+  - status: SCOPED
+    detail: "Compute/write overlap is proven within a wave through the bounded-root queue; at most one future per worker awaits synchronous sink."
+  - status: NOT_RUN
+    detail: "Production DataAccess native backend/cgroup peak, full CI, full registry, real dataset, wheel/install, deploy."
+  - status: FAIL_CLOSED
+    detail: "An indivisible output whose actual writer requirement cannot acquire extra parent-authorized memory is rejected; history and universe are not shortened."
+semantic_version:
+  status: DEFERRED_TO_ROOT
+git_actions:
+  commit: false
+  stage: false
+  reset: false
+  deploy: false

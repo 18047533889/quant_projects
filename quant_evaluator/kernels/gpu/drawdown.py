@@ -71,6 +71,10 @@ def compute_annualized_return_batch(returns, periods_per_year: int = 252):
     keep = rows < n_valid[None, :]  # (T, F)
     total = cp.prod(cp.where(keep, 1.0 + sorted_ret, 1.0), axis=0)  # (F,)
     ann = cp.where(total > 0.0, total ** (periods_per_year / n_valid) - 1.0, cp.nan)
+    # Bankruptcy is path-absorbing.  Two returns below -100% can make the raw
+    # product positive again, but they cannot restore exhausted capital.
+    wipeout = cp.any(keep & (sorted_ret <= -1.0), axis=0)
+    ann = cp.where(wipeout, -1.0, ann)
     ann = cp.where(n_valid >= 2, ann, cp.nan)
     return ann
 
@@ -82,7 +86,10 @@ def compute_annualized_volatility_batch(returns, periods_per_year: int = 252):
     if ret.ndim == 1:
         ret = ret[:, None]
     n_valid = cp.sum(cp.isfinite(ret), axis=0)
-    std = cp.nanstd(ret, axis=0, ddof=1)  # (F,)
+    # CPU authority drops every non-finite value, not only NaN.  Convert both
+    # infinities to NaN before the reduction so n_valid and the sample agree.
+    finite_ret = cp.where(cp.isfinite(ret), ret, cp.nan)
+    std = cp.nanstd(finite_ret, axis=0, ddof=1)  # (F,)
     vol = cp.where(std <= EPS, 0.0, std * cp.sqrt(periods_per_year))
     vol = cp.where(n_valid >= 2, vol, cp.nan)
     return vol
@@ -148,8 +155,8 @@ def compute_max_drawdown_batch(returns):
     """(T, F) -> (F,) max drawdown magnitude (positive), CPU parity.
 
     Includes the wealth<=0 wipeout guard: from the first nonpositive wealth
-    onward the drawdown is NaN (a negative wealth times (1+r) could flip
-    positive and fabricate a fake recovery).
+    onward the drawdown is -1 (total loss).  A negative wealth times (1+r)
+    must not flip positive and fabricate a recovery.
     """
     cp = _import_cp()
     ret = cp.asarray(returns, dtype=cp.float64)
@@ -163,7 +170,7 @@ def compute_max_drawdown_batch(returns):
     dd = cp.where(
         ~invalid,
         (cum - running_max) / running_max,
-        cp.nan,
+        -1.0,
     )
     max_dd = -cp.nanmin(dd, axis=0)
     max_dd = cp.where(cp.isfinite(max_dd), max_dd, cp.nan)
@@ -177,13 +184,11 @@ def compute_calmar_batch(
 ):
     """(T, F) -> (F,) Calmar ratio (CPU parity)."""
     cp = _import_cp()
-    sorted_ret, n_valid = _gather_valid_first(returns)
-    T, F = sorted_ret.shape
-    rows = cp.arange(T)[:, None]
-    keep = rows < n_valid[None, :]
-    ret_valid = cp.where(keep, sorted_ret, 0.0)
-    mean_ret = cp.sum(ret_valid, axis=0) / cp.maximum(n_valid, 1)
-    ann_ret = mean_ret * periods_per_year
+    _, n_valid = _gather_valid_first(returns)
+    # Calmar's numerator is CAGR, not arithmetic mean annualization.  Reuse
+    # the batch compound authority so missing-value compaction and nonpositive
+    # terminal wealth semantics stay identical to the CPU contract.
+    ann_ret = compute_annualized_return_batch(returns, periods_per_year)
     max_dd = compute_max_drawdown_batch(returns)
     calmar = ann_ret / max_dd
     bad = (n_valid < min_periods) | (~cp.isfinite(max_dd)) | (max_dd <= 1e-12)

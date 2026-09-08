@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="2" skipped="0" tests="2" time="22.027" timestamp="2026-09-08T01:41:45.663065+08:00" hostname="qs-compute-gpu-hk-01"><testcase classname="factor_engine.tests.operators.test_v7_pca_moe_oracles" name="test_shared_pca_block_restores_current_nonfinite_mask" time="21.727"><failure message="AssertionError: assert np.False_&#10; +  where np.False_ = &lt;ufunc 'isnan'&gt;(np.float64(inf))&#10; +    where &lt;ufunc 'isnan'&gt; = np.isnan">def test_shared_pca_block_restores_current_nonfinite_mask():
+        training = np.array([
+            [1.0, 2.0, 1.0],
+            [2.0, 3.0, 4.0],
+            [3.0, 5.0, 8.0],
+            [5.0, 8.0, 13.0],
+        ])
+        block = fit_pca_block(training, 1)
+        assert block is not None
+        residual = block.resid(np.array([8.0, np.inf, 21.0]), 1)
+&gt;       assert np.isnan(residual[1])
+E       AssertionError: assert np.False_
+E        +  where np.False_ = &lt;ufunc 'isnan'&gt;(np.float64(inf))
+E        +    where &lt;ufunc 'isnan'&gt; = np.isnan
+
+tests/operators/test_v7_pca_moe_oracles.py:83: AssertionError</failure></testcase><testcase classname="factor_engine.tests.operators.test_v7_pca_moe_oracles" name="test_shared_pca_block_nan_and_infinity_have_equal_finite_variance_state" time="0.002"><failure message="AssertionError: assert np.False_&#10; +  where np.False_ = &lt;built-in method all of numpy.ndarray object at 0x75a7da5cf6f0&gt;()&#10; +    where &lt;built-in method all of numpy.ndarray object at 0x75a7da5cf6f0&gt; = array([ True, False,  True]).all&#10; +      where array([ True, False,  True]) = &lt;ufunc 'isfinite'&gt;(array([ 6.16,   nan, 25.2 ]))&#10; +        where &lt;ufunc 'isfinite'&gt; = np.isfinite&#10; +        and   array([ 6.16,   nan, 25.2 ]) = PCABlock(loadings=array([[0.60500832, 0.5180896 , 0.60460574]]), explained=array([0.95997277]), active=array([ True,  ...138079, 5.01996016]), k=1, var_resid=array([0.09933408,        nan, 0.43935097]), var_ret=array([ 6.16,   nan, 25.2 ])).var_ret">def test_shared_pca_block_nan_and_infinity_have_equal_finite_variance_state():
+        base = np.array([
+            [1.0, 4.0, 2.0],
+            [2.0, np.nan, 4.0],
+            [3.0, 8.0, 7.0],
+            [5.0, 9.0, 11.0],
+            [8.0, 12.0, 16.0],
+        ])
+        blocks = []
+        for missing in (np.nan, np.inf, -np.inf):
+            sample = base.copy()
+            sample[1, 1] = missing
+            block = fit_pca_block(sample, 1)
+            assert block is not None
+&gt;           assert np.isfinite(block.var_ret).all()
+E           AssertionError: assert np.False_
+E            +  where np.False_ = &lt;built-in method all of numpy.ndarray object at 0x75a7da5cf6f0&gt;()
+E            +    where &lt;built-in method all of numpy.ndarray object at 0x75a7da5cf6f0&gt; = array([ True, False,  True]).all
+E            +      where array([ True, False,  True]) = &lt;ufunc 'isfinite'&gt;(array([ 6.16,   nan, 25.2 ]))
+E            +        where &lt;ufunc 'isfinite'&gt; = np.isfinite
+E            +        and   array([ 6.16,   nan, 25.2 ]) = PCABlock(loadings=array([[0.60500832, 0.5180896 , 0.60460574]]), explained=array([0.95997277]), active=array([ True,  ...138079, 5.01996016]), k=1, var_resid=array([0.09933408,        nan, 0.43935097]), var_ret=array([ 6.16,   nan, 25.2 ])).var_ret
+
+tests/operators/test_v7_pca_moe_oracles.py:101: AssertionError</failure></testcase></testsuite></testsuites>

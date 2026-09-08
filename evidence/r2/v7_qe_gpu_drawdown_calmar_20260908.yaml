@@ -1,0 +1,34 @@
+schema_version: quant_evaluator.audit_evidence.v1
+timestamp: "2026-09-08T02:36:00+08:00"
+package_version: "0.0.1a1"
+scope: "Quant Evaluator GPU maximum drawdown and Calmar kernels"
+authority:
+  maximum_drawdown: "wealth path with initial capital 1.0 and absorbing -100% drawdown after wealth <= 0"
+  calmar: "compounded annualized return divided by maximum drawdown"
+fixes:
+  - "GPU wipeout rows now contribute drawdown -1.0 instead of NaN."
+  - "GPU Calmar reuses compounded annualized return rather than arithmetic mean times periods_per_year."
+  - "GPU annualized volatility now applies the CPU finite-value policy to NaN and both infinities."
+  - "GPU compounded annual return treats any return <= -1 as absorbing bankruptcy, preventing an even number of wipeouts from fabricating positive terminal wealth."
+before_oracle:
+  result: "2 failed"
+  junit: "quant_evaluator/test-results/v7-gpu-risk-wealth-oracle-before.xml"
+boundary_oracle:
+  result_before: "1 failed"
+  junit_before: "quant_evaluator/test-results/v7-qe-gpu-risk-boundaries-before.xml"
+  cases: "empty/all-missing, NaN/+Inf/-Inf finite filtering, one observation, initial loss, and repeated wipeouts"
+after_verification:
+  result: "66 passed"
+  junit: "quant_evaluator/test-results/v7-qe-gpu-risk-boundaries-after.xml"
+  suites: 7
+stale_evaluation_scope:
+  - "Any persisted GPU maximum-drawdown result whose return path first reached wealth <= 0."
+  - "Every persisted GPU Calmar result produced by the old arithmetic-annualization kernel."
+  - "Old GPU annualized-volatility results containing positive or negative infinity."
+  - "Old GPU annualized-return and Calmar results containing two or another even number of returns <= -1."
+  - "CPU results and unrelated GPU metrics are not stale from this change."
+quality:
+  tolerance_relaxed: false
+  diff_check: "clean"
+  committed: false
+  staged: false
