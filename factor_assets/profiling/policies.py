@@ -24,6 +24,9 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass, field
 from typing import Mapping, Sequence
+import hashlib
+import json
+from types import MappingProxyType
 
 __all__ = [
     "TagSource",
@@ -39,6 +42,7 @@ __all__ = [
     "DimensionRule",
     "AdmissionFloors",
     "FactorHealthPolicy",
+    "CalibrationArtifact",
     "FACTOR_HEALTH_POLICY_CURRENT_ID",
     "FACTOR_HEALTH_POLICY_CURRENT_VERSION",
     "FACTOR_HEALTH_POLICIES",
@@ -149,7 +153,12 @@ class TaxonomyPolicy:
         }
     )
 
+    # Append-only to retain the public dataclass's historical positional arguments.
+    mechanism_sources: str = "all_fields_legacy"
+
     def __post_init__(self) -> None:
+        if self.mechanism_sources not in {"all_fields_legacy", "alpha_only"}:
+            raise ValueError("unknown mechanism_sources policy")
         if not self.policy_id:
             raise ValueError("policy_id is required")
         if not self.policy_version:
@@ -183,7 +192,7 @@ class TaxonomyPolicy:
 
 
 TAXONOMY_POLICY_CURRENT_ID = "CN_A_SHARE_DAILY_TAXONOMY_V1"
-TAXONOMY_POLICY_CURRENT_VERSION = "1.0.0"
+TAXONOMY_POLICY_CURRENT_VERSION = "2.0.0"
 
 TAXONOMY_POLICIES: Mapping[str, tuple[TaxonomyPolicy, ...]] = {
     TAXONOMY_POLICY_CURRENT_ID: (
@@ -192,6 +201,12 @@ TAXONOMY_POLICIES: Mapping[str, tuple[TaxonomyPolicy, ...]] = {
             policy_version="1.0.0",
             description="R61-FI-013 initial deterministic taxonomy policy for "
             "A-share daily factors.",
+        ),
+        TaxonomyPolicy(
+            policy_id=TAXONOMY_POLICY_CURRENT_ID,
+            policy_version="2.0.0",
+            description="Explicit usage-role taxonomy: economic mechanisms derive from alpha source domains only.",
+            mechanism_sources="alpha_only",
         ),
     ),
 }
@@ -329,6 +344,10 @@ class MetricGradeRule:
     anchors: tuple[GradeAnchor, ...]
     higher_is_better: bool = True
     missing_desirability: float = 0.0
+    evaluation_role: str = "PERFORMANCE_HIGHER"
+    applicability: tuple[str, ...] = ("*",)
+    unit: str = ""
+    runtime_metric_id: str = ""
 
     def __post_init__(self) -> None:
         if not self.metric_id:
@@ -367,6 +386,16 @@ class MetricGradeRule:
         if not 0.0 <= md <= 1.0:
             raise ValueError("missing_desirability must be in [0, 1]")
         object.__setattr__(self, "missing_desirability", md)
+        if self.evaluation_role not in {
+            "PERFORMANCE_HIGHER", "RISK_LOWER", "TARGET_RANGE",
+            "DIAGNOSTIC_ONLY", "INTEGRITY_BOOLEAN", "SAMPLE_EVIDENCE",
+        }:
+            raise ValueError("unknown evaluation_role")
+        object.__setattr__(self, "applicability", tuple(dict.fromkeys(self.applicability)))
+        if not self.applicability:
+            raise ValueError("applicability cannot be empty")
+        if not isinstance(self.runtime_metric_id, str):
+            raise TypeError("runtime_metric_id must be a string")
 
     def grade_for(self, value: float | None) -> str | None:
         if value is None:
@@ -419,6 +448,10 @@ class DimensionRule:
     geo_weight: float = 0.6
     missing_desirability: float = 0.0
     repairable: bool = True
+    required_metric_ids: tuple[str, ...] = ()
+    optional_metric_ids: tuple[str, ...] = ()
+    alternative_metric_groups: tuple[tuple[str, ...], ...] = ()
+    applicable_use_cases: tuple[str, ...] = ("*",)
 
     def __post_init__(self) -> None:
         if not self.dimension_id:
@@ -426,6 +459,19 @@ class DimensionRule:
         if not self.metric_ids:
             raise ValueError("metric_ids cannot be empty")
         object.__setattr__(self, "metric_ids", tuple(dict.fromkeys(self.metric_ids)))
+        required = tuple(dict.fromkeys(self.required_metric_ids or self.metric_ids))
+        optional = tuple(dict.fromkeys(self.optional_metric_ids))
+        if not set(required).issubset(self.metric_ids) or not set(optional).issubset(self.metric_ids):
+            raise ValueError("required/optional metric ids must belong to metric_ids")
+        if set(required) & set(optional):
+            raise ValueError("a metric cannot be both required and optional")
+        object.__setattr__(self, "required_metric_ids", required)
+        object.__setattr__(self, "optional_metric_ids", optional)
+        groups = tuple(tuple(dict.fromkeys(g)) for g in self.alternative_metric_groups)
+        if any(not g or not set(g).issubset(self.metric_ids) for g in groups):
+            raise ValueError("alternative metric groups must be non-empty subsets of metric_ids")
+        object.__setattr__(self, "alternative_metric_groups", groups)
+        object.__setattr__(self, "applicable_use_cases", tuple(dict.fromkeys(self.applicable_use_cases)))
         mw = float(self.min_weight)
         gw = float(self.geo_weight)
         if not 0.0 <= mw <= 1.0 or not 0.0 <= gw <= 1.0:
@@ -494,9 +540,11 @@ class AdmissionFloors:
     hard_gate_dimensions: tuple[str, ...] = ()
     integrity_gate_ids: tuple[str, ...] = INTEGRITY_GATE_IDS
     require_all_dimensions_graded: bool = True
+    use_case: str = "GENERIC"
+    required_dimension_ids: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "dimension_floors", dict(self.dimension_floors))
+        object.__setattr__(self, "dimension_floors", MappingProxyType(dict(self.dimension_floors)))
         for dim, floor in self.dimension_floors.items():
             if dim not in HEALTH_DIMENSIONS:
                 raise ValueError(
@@ -520,6 +568,36 @@ class AdmissionFloors:
                 raise ValueError("integrity gate ids must be non-empty strings")
         if not isinstance(self.require_all_dimensions_graded, bool):
             raise TypeError("require_all_dimensions_graded must be a bool")
+        required = tuple(dict.fromkeys(self.required_dimension_ids))
+        if not set(required).issubset(HEALTH_DIMENSIONS):
+            raise ValueError("required_dimension_ids must be canonical health dimensions")
+        object.__setattr__(self, "required_dimension_ids", required)
+
+
+@dataclass(frozen=True)
+class CalibrationArtifact:
+    """Immutable development-only, family-aware calibration provenance."""
+
+    calibration_id: str
+    calibration_version: str
+    policy_id: str
+    cutoff_as_of: str
+    method: str
+    family_scope: str
+    reference_candidate_hash: str
+    sample_count: int
+    split_role: str = "DEVELOPMENT"
+    sealed_test_used: bool = False
+
+    def __post_init__(self) -> None:
+        if not all((self.calibration_id, self.calibration_version, self.policy_id,
+                    self.cutoff_as_of, self.method, self.family_scope,
+                    self.reference_candidate_hash)):
+            raise ValueError("calibration provenance fields are required")
+        if self.split_role not in {"TRAIN", "DEVELOPMENT"} or self.sealed_test_used:
+            raise ValueError("calibration must be train/development-only; sealed test is forbidden")
+        if self.sample_count < 1:
+            raise ValueError("calibration sample_count must be positive")
 
 
 def _anchor_table(
@@ -618,6 +696,10 @@ class FactorHealthPolicy:
     metric_grade_rules: Mapping[str, MetricGradeRule] = field(default_factory=dict)
     dimension_rules: Mapping[str, DimensionRule] = field(default_factory=dict)
     admission_floors: AdmissionFloors = field(default_factory=AdmissionFloors)
+    use_case_admission_floors: Mapping[str, AdmissionFloors] = field(default_factory=dict)
+    calibration_ref: str = ""
+    policy_status: str = "CALIBRATION_REQUIRED"
+    metric_aliases: Mapping[str, str] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if not self.policy_id:
@@ -645,8 +727,10 @@ class FactorHealthPolicy:
                     "display_score_bands min scores must strictly decrease "
                     f"best->worst, got {mins}"
                 )
-        object.__setattr__(self, "metric_grade_rules", dict(self.metric_grade_rules))
-        object.__setattr__(self, "dimension_rules", dict(self.dimension_rules))
+        object.__setattr__(self, "metric_grade_rules", MappingProxyType(dict(self.metric_grade_rules)))
+        object.__setattr__(self, "dimension_rules", MappingProxyType(dict(self.dimension_rules)))
+        object.__setattr__(self, "use_case_admission_floors", MappingProxyType(dict(self.use_case_admission_floors)))
+        object.__setattr__(self, "metric_aliases", MappingProxyType(dict(self.metric_aliases)))
         for rule in self.metric_grade_rules.values():
             if not isinstance(rule, MetricGradeRule):
                 raise TypeError("metric_grade_rules values must be MetricGradeRule")
@@ -655,6 +739,8 @@ class FactorHealthPolicy:
                 raise TypeError("dimension_rules values must be DimensionRule")
         if not isinstance(self.admission_floors, AdmissionFloors):
             raise TypeError("admission_floors must be an AdmissionFloors")
+        if any(not isinstance(v, AdmissionFloors) for v in self.use_case_admission_floors.values()):
+            raise TypeError("use_case_admission_floors values must be AdmissionFloors")
 
     # -- resolution helpers -------------------------------------------------
 
@@ -669,6 +755,7 @@ class FactorHealthPolicy:
         return self.display_score_bands[-1][0]
 
     def metric_rule(self, metric_id: str) -> MetricGradeRule:
+        metric_id = self.metric_aliases.get(metric_id, metric_id)
         try:
             return self.metric_grade_rules[metric_id]
         except KeyError:
@@ -678,7 +765,30 @@ class FactorHealthPolicy:
             ) from None
 
     def has_metric_rule(self, metric_id: str) -> bool:
-        return metric_id in self.metric_grade_rules
+        return self.metric_aliases.get(metric_id, metric_id) in self.metric_grade_rules
+
+    def canonical_metric_id(self, metric_id: str) -> str:
+        return self.metric_aliases.get(metric_id, metric_id)
+
+    def admission_for(self, use_case: str | None = None) -> AdmissionFloors:
+        if use_case is None:
+            return self.admission_floors
+        try:
+            return self.use_case_admission_floors[use_case]
+        except KeyError:
+            raise KeyError(f"unknown use_case {use_case!r} for policy {self.policy_id}") from None
+
+    @property
+    def policy_hash(self) -> str:
+        payload = {
+            "id": self.policy_id, "version": self.policy_version,
+            "scope": [self.market, self.frequency, self.target_id, self.universe_class],
+            "calibration_ref": self.calibration_ref,
+            "aliases": dict(self.metric_aliases),
+            "use_cases": {k: {"floors": dict(v.dimension_floors), "required": v.required_dimension_ids,
+                               "gates": v.integrity_gate_ids} for k, v in self.use_case_admission_floors.items()},
+        }
+        return hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()
 
     def grade_and_desirability(
         self, metric_id: str, value: float | None
@@ -813,7 +923,8 @@ def _default_metric_grade_rules() -> dict[str, MetricGradeRule]:
             "factor_turnover_rate", best=0.05, worst=0.60
         ),
         "cost_drag": lower_is_better("cost_drag", best=0.0, worst=0.15),
-        "max_drawdown": higher_is_better("max_drawdown", good=-0.10, bad=-0.45),
+        # Canonical QE drawdown is a positive loss magnitude: lower is better.
+        "max_drawdown": lower_is_better("max_drawdown", best=0.10, worst=0.45),
         "max_drawdown_duration": lower_is_better(
             "max_drawdown_duration", best=30.0, worst=300.0
         ),
@@ -871,6 +982,8 @@ def _default_dimension_rules() -> dict[str, DimensionRule]:
         "shape_quality": DimensionRule(
             "shape_quality",
             ("quantile_monotonicity", "u_shape_score", "top_tail_cliff"),
+            required_metric_ids=("top_tail_cliff",),
+            optional_metric_ids=("quantile_monotonicity", "u_shape_score"),
         ),
         "regime_sensitivity": DimensionRule(
             "regime_sensitivity", ("regime_dispersion", "regime_sign_consistency"),
@@ -879,7 +992,67 @@ def _default_dimension_rules() -> dict[str, DimensionRule]:
 
 
 FACTOR_HEALTH_POLICY_CURRENT_ID = "CN_A_SHARE_DAILY_H10_V1"
-FACTOR_HEALTH_POLICY_CURRENT_VERSION = "1.0.0"
+FACTOR_HEALTH_POLICY_CURRENT_VERSION = "2.0.0"
+
+
+def _v5_metric_grade_rules() -> dict[str, MetricGradeRule]:
+    rules = _default_metric_grade_rules()
+    effect_desirability = (1.00, 0.94, 0.87, 0.80, 0.70, 0.58, 0.40, 0.10)
+    rank_ic = _anchor_table(
+        (0.040, 0.030, 0.022, 0.016, 0.010, 0.005, 0.0),
+        desirabilities=effect_desirability, higher_is_better=True,
+    )
+    raw_icir = _anchor_table(
+        (0.50, 0.35, 0.25, 0.18, 0.12, 0.06, 0.0),
+        desirabilities=effect_desirability, higher_is_better=True,
+    )
+    rules["rank_ic"] = MetricGradeRule("rank_ic", rank_ic, unit="correlation", runtime_metric_id="rank_ic")
+    rules["rank_icir_raw"] = MetricGradeRule("rank_icir_raw", raw_icir, unit="mean_over_sample_std", runtime_metric_id="ic_ir")
+    old_cost = rules["cost_drag"]
+    rules["cost_drag"] = MetricGradeRule(
+        "cost_drag", old_cost.anchors, higher_is_better=old_cost.higher_is_better,
+        evaluation_role="RISK_LOWER", runtime_metric_id="turnover_cost",
+    )
+    # Risk/resource utilization u=observed/budget. C remains a report grade;
+    # admission floors independently reject u>1.
+    utilization = _anchor_table(
+        (0.35, 0.50, 0.65, 0.80, 0.90, 1.00, 1.20),
+        desirabilities=effect_desirability, higher_is_better=False,
+    )
+    for metric_id in ("drawdown_budget_utilization", "underwater_budget_utilization",
+                      "tail_budget_utilization", "cost_budget_utilization"):
+        rules[metric_id] = MetricGradeRule(
+            metric_id, utilization, higher_is_better=False,
+            evaluation_role="RISK_LOWER", unit="ratio",
+            runtime_metric_id=("max_drawdown" if metric_id == "drawdown_budget_utilization"
+                               else "drawdown_duration" if metric_id == "underwater_budget_utilization"
+                               else "cvar_95" if metric_id == "tail_budget_utilization"
+                               else "turnover_cost"),
+        )
+    return rules
+
+
+def _v5_dimension_rules() -> dict[str, DimensionRule]:
+    rules = _default_dimension_rules()
+    rules["predictive_power"] = DimensionRule(
+        "predictive_power", ("rank_ic", "rank_icir_raw"),
+        required_metric_ids=("rank_ic",), optional_metric_ids=("rank_icir_raw",),
+        repairable=False,
+    )
+    rules["drawdown"] = DimensionRule(
+        "drawdown", ("drawdown_budget_utilization", "underwater_budget_utilization"),
+        required_metric_ids=("drawdown_budget_utilization",),
+        optional_metric_ids=("underwater_budget_utilization",),
+    )
+    # Ties and generic 30-day staleness are diagnostics, not universal grades.
+    rules["data_coverage"] = DimensionRule(
+        "data_coverage", ("coverage", "missing_ratio", "effective_n"),
+        required_metric_ids=("coverage",), optional_metric_ids=("missing_ratio", "effective_n"),
+    )
+    rules["freshness"] = DimensionRule(
+        "freshness", ("label_maturity",), required_metric_ids=("label_maturity",),
+    )
+    return rules
 
 FACTOR_HEALTH_POLICIES: Mapping[str, tuple[FactorHealthPolicy, ...]] = {
     FACTOR_HEALTH_POLICY_CURRENT_ID: (
@@ -907,6 +1080,59 @@ FACTOR_HEALTH_POLICIES: Mapping[str, tuple[FactorHealthPolicy, ...]] = {
                 hard_gate_dimensions=("data_coverage",),
                 require_all_dimensions_graded=True,
             ),
+        ),
+        FactorHealthPolicy(
+            policy_id=FACTOR_HEALTH_POLICY_CURRENT_ID,
+            policy_version="2.0.0",
+            market="CN", frequency="1d", target_id="TargetVwapReturnH10",
+            universe_class="cn_a_share_daily_full_float", factor_family_scope="*",
+            description="V5 H10 cold-start, use-case scoped multidimensional grading policy.",
+            rank_ic_anchors=_anchor_table(
+                (0.040, 0.030, 0.022, 0.016, 0.010, 0.005, 0.0),
+                desirabilities=(1.00, .94, .87, .80, .70, .58, .40, .10),
+                higher_is_better=True,
+            ),
+            icir_anchors=_anchor_table(
+                (0.50, 0.35, 0.25, 0.18, 0.12, 0.06, 0.0),
+                desirabilities=(1.00, .94, .87, .80, .70, .58, .40, .10),
+                higher_is_better=True,
+            ),
+            metric_grade_rules=_v5_metric_grade_rules(),
+            dimension_rules=_v5_dimension_rules(),
+            admission_floors=AdmissionFloors(
+                dimension_floors={"predictive_power": "B+", "data_coverage": "B"},
+                hard_gate_dimensions=("data_coverage",),
+                require_all_dimensions_graded=False,
+            ),
+            use_case_admission_floors={
+                "LONG_ONLY_RESEARCH": AdmissionFloors(
+                    use_case="LONG_ONLY_RESEARCH",
+                    dimension_floors={"data_coverage": "B", "drawdown": "B"},
+                    hard_gate_dimensions=("data_coverage", "drawdown"),
+                    required_dimension_ids=("predictive_power", "data_coverage", "drawdown", "cost_drag"),
+                    require_all_dimensions_graded=False,
+                ),
+                "LONG_SHORT_RESEARCH": AdmissionFloors(
+                    use_case="LONG_SHORT_RESEARCH",
+                    dimension_floors={"predictive_power": "B", "data_coverage": "B", "drawdown": "B"},
+                    hard_gate_dimensions=("data_coverage", "drawdown"),
+                    required_dimension_ids=("predictive_power", "data_coverage", "turnover", "cost_drag", "drawdown", "tail_risk", "capacity"),
+                    require_all_dimensions_graded=False,
+                ),
+                "MODEL_FEATURE": AdmissionFloors(
+                    use_case="MODEL_FEATURE",
+                    dimension_floors={"data_coverage": "C"},
+                    hard_gate_dimensions=("data_coverage",),
+                    required_dimension_ids=("robustness", "data_coverage", "complexity"),
+                    require_all_dimensions_graded=False,
+                ),
+            },
+            metric_aliases={
+                "rank_ic_ir": "rank_icir_raw", "icir": "rank_icir_raw",
+                "rankicir": "rank_icir_raw", "rank_icir": "rank_icir_raw",
+            },
+            calibration_ref="coldstart:CN_A_DAILY_H10:20260907",
+            policy_status="CALIBRATION_REQUIRED",
         ),
     ),
 }

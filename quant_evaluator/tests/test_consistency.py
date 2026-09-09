@@ -209,7 +209,19 @@ def test_batch_equals_streaming_coverage(panel):
     stream_res = se.evaluate_large_batch(
         batch, bundle, [{"metric_id": "cov", "metric_kind": "coverage"}]
     )
-    cov_stream = float(stream_res.metrics["cov"])
+    # V5: no implicit cross-factor aggregation. Each coordinate must retain its
+    # own numerator/denominator even when batch compatibility helpers aggregate.
+    cov_by_factor = stream_res.metrics["cov"]
+    from quant_evaluator.metrics.label_panel import normalize_label_panel
+    label_panel, label_mask = normalize_label_panel(bundle, batch.num_assets)
+    for f, fid in enumerate(batch.factor_ids):
+        mask = np.isfinite(batch.values[:,:,f]) & np.isfinite(label_panel)
+        if batch.validity is not None:
+            mask &= batch.validity[:,:,f]
+        if label_mask is not None:
+            mask &= label_mask
+        assert cov_by_factor[fid] == pytest.approx(np.mean(mask))
+    cov_stream = np.mean(list(cov_by_factor.values()))
 
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", DeprecationWarning)
@@ -238,7 +250,9 @@ def _partitionable_specs():
         {
             "metric_id": "pearson_ic_series",
             "metric_kind": "custom",
-            "metadata": {"partitionability": "PARTITIONABLE", "aggregation": "concat"},
+            "metadata": {"partitionability": "PARTITIONABLE", "aggregation": "concat",
+                         "chunk_contract": {"version": 1, "split_axis": "time",
+                                            "output_axes": ["time", "factor"], "merge": "concat", "halo": 0}},
         }
     ]
 
@@ -288,7 +302,8 @@ def test_cache_hit_equals_cache_miss(panel):
     """Cold (miss) vs warm (hit) evaluation of the same inputs must return
     identical values, and the second call must actually be served from cache."""
     _, labels, batch, bundle = panel
-    specs = [{"metric_id": "rank_ic", "metric_kind": "custom"}]
+    specs = [{"metric_id": "rank_ic", "metric_kind": "custom", "metadata": {
+        "cache_contract": {"version": 1, "semantic_ref": "rank_ic-test-fixed.v1", "dependency_refs": {"ic": "test-frozen.v1"}}}}]
 
     ev = Evaluator(enable_cache=True)
     cold = ev.evaluate(batch, bundle, specs, use_chunking=False)
@@ -303,7 +318,8 @@ def test_cache_key_depends_on_input_content(panel):
     """Changing ONE factor cell must produce a DIFFERENT cache entry (a new
     miss) — the cache key hashes the actual factor/label values."""
     values, labels, batch, bundle = panel
-    specs = [{"metric_id": "rank_ic", "metric_kind": "custom"}]
+    specs = [{"metric_id": "rank_ic", "metric_kind": "custom", "metadata": {
+        "cache_contract": {"version": 1, "semantic_ref": "rank_ic-test-fixed.v1", "dependency_refs": {"ic": "test-frozen.v1"}}}}]
 
     ev = Evaluator(enable_cache=True)
     r0 = ev.evaluate(batch, bundle, specs, use_chunking=False)

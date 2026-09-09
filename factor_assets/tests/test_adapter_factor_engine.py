@@ -366,11 +366,12 @@ class TestFEIdentityProvider:
 
 
 class TestFEIdentityProviderStringParsing:
-    """Test FE identity provider with string parsing (not yet implemented)."""
+    """Verify delegation without importing FE math into an optional unit test."""
 
-    def test_string_parsing_not_implemented(self):
-        """Test that string parsing raises NotImplementedError."""
+    def test_string_parsing_delegates_to_fe_parser(self, monkeypatch):
         from unittest.mock import MagicMock
+        from types import SimpleNamespace
+        import sys
 
         # Mock FE (hermetic — never import the real factor_engine.expr)
         mock_expr = MagicMock()
@@ -379,6 +380,12 @@ class TestFEIdentityProviderStringParsing:
         mock_expr.expression_payload = mock_expression_payload
         mock_expr.base.ensure_expr = lambda x: x
         saved = _install_fe_mocks(mock_expr)
+        calls = []
+        parsed = MockCleanedCall('ts_mean', [MockColumnRef('close'), MockLiteral(20)])
+        def parse(text, **kwargs):
+            calls.append((text, kwargs))
+            return parsed
+        monkeypatch.setitem(sys.modules, 'factor_engine.api.dsl_parser', SimpleNamespace(parse_expr=parse))
         try:
             import importlib
             import factor_assets.adapters.factor_engine
@@ -388,8 +395,8 @@ class TestFEIdentityProviderStringParsing:
 
             provider = FEIdentityProvider()
 
-            with pytest.raises(ValueError, match="Invalid factor expression"):
-                provider.get_canonical_hash("ts_mean(close, 20)")
+            assert provider.get_canonical_hash("ts_mean(close, 20)") == provider.get_canonical_hash(parsed)
+            assert calls == [('ts_mean(close, 20)', {'surface': 'daily', 'dialect': 'native', 'dialect_version': None})]
         finally:
             _restore_fe_mocks(saved)
 

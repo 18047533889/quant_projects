@@ -26,6 +26,14 @@ from .trades import TradeArtifact, TradesArtifact
 from .positions import PositionArtifact, PositionsArtifact
 from .ledger import CashLedgerArtifact, CashLedgerRow
 from .backtest import BacktestArtifact, BacktestRequest
+from .costs import (
+    CostScope, FixedSlippageProfile, FeeScheduleEntry, FillForBilling, FeeBreakdown, FeeSchedule,
+    ordinary_ashare_research_schedule,
+)
+from .trajectories import (
+    TrajectoryRefs, PortfolioTrajectory, build_research_trajectory, build_trajectory_from_execution_plan,
+    actual_calendar_carry_cost, build_trajectory_from_filled_ledger,
+)
 
 __all__ = [
     "SignalArtifact",
@@ -44,4 +52,7 @@ __all__ = [
     "CashLedgerRow",
     "BacktestArtifact",
     "BacktestRequest",
+    "CostScope", "FixedSlippageProfile", "FeeScheduleEntry", "FillForBilling", "FeeBreakdown",
+    "FeeSchedule", "ordinary_ashare_research_schedule", "TrajectoryRefs",
+    "PortfolioTrajectory", "build_research_trajectory", "build_trajectory_from_execution_plan", "actual_calendar_carry_cost", "build_trajectory_from_filled_ledger",
 ]

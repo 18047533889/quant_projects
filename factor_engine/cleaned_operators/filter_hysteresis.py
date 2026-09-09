@@ -27,6 +27,7 @@ from factor_engine.cleaned_operators.base import (
     register_operator,
 )
 from factor_engine.cleaned_operators.common.daily_panel import _aligned
+from factor_engine.cleaned_operators.filter_contracts import FilterContract, FilterRole, JumpPreservationPolicy
 from factor_engine.cleaned_operators.rolling_pack import frame_like
 
 _EPS = 1e-12
@@ -1033,6 +1034,19 @@ class StateL1TurnoverProx(SeriesOperator):
         },
     )
 
+    filter_contract = FilterContract(
+        role=FilterRole.RATE_LIMIT,
+        causal=True,
+        uses_current_observation=True,
+        stateful=True,
+        checkpointable=True,
+        time_shard_safe=False,
+        warmup=0,
+        lag_class="variable",
+        jump_policy=JumpPreservationPolicy.PRESERVE_ALL_FINITE_JUMPS,
+        turnover_control=True,
+    )
+
     def _calculate_series(
         self,
         x: pd.DataFrame,
@@ -1121,6 +1135,19 @@ class StateL2PartialAdjustment(SeriesOperator):
                 param_role=ParamRole.ECONOMIC,
             ),
         },
+    )
+
+    filter_contract = FilterContract(
+        role=FilterRole.RATE_LIMIT,
+        causal=True,
+        uses_current_observation=True,
+        stateful=True,
+        checkpointable=True,
+        time_shard_safe=False,
+        warmup=0,
+        lag_class="variable",
+        jump_policy=JumpPreservationPolicy.PRESERVE_ALL_FINITE_JUMPS,
+        turnover_control=True,
     )
 
     def _calculate_series(

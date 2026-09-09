@@ -44,9 +44,11 @@ def test_ignore_clause_passthrough_for_non_insert():
     assert PostgresDialect.adapt_ignore(sql) == sql
 
 
-def test_postgres_db_without_driver_fails_closed():
+def test_postgres_db_without_driver_fails_closed(monkeypatch):
     """No psycopg2 in this venv -> clear PostgresBackendUnavailable, never a
     silent NOT_IMPLEMENTED passthrough (R55 #92)."""
+    import sys
+    monkeypatch.setitem(sys.modules, 'psycopg2', None)
     with pytest.raises(PostgresBackendUnavailable):
         PostgresDb("postgresql://u:p@localhost:5432/db", create=False)
 

@@ -110,7 +110,7 @@ def batched_sector_exposure(factor_values, sector_labels, weights=None):
     return exposure, counts
 
 
-def batched_factor_loadings(factor_values, risk_factors, intercept=True, min_obs=10):
+def batched_factor_loadings(factor_values, risk_factors, intercept=True, min_obs=10, *, weights=None, standardized=False, return_diagnostics=False):
     """Cross-sectional OLS factor loadings, (T, K+1) / (T, K) + R2 + residuals.
 
     Matches ``compute_factor_loadings``.  ``factor_values`` is (T, F, N) and
@@ -125,10 +125,19 @@ def batched_factor_loadings(factor_values, risk_factors, intercept=True, min_obs
     if rf.ndim != 3 or rf.shape[0] != T or rf.shape[1] != N:
         raise ValueError(f"risk_factors must be (T, N, K) == {(T, N, 'K')}, got {rf.shape}")
     K = rf.shape[2]
+    if isinstance(min_obs,(bool,np.bool_)) or not isinstance(min_obs,(int,np.integer)) or min_obs<2:
+        raise ValueError("min_obs must be an integer >=2")
+    w = cp.ones((T,N)) if weights is None else cp.asarray(weights,dtype=cp.float64)
+    if w.shape!=(T,N) or bool(cp.any(cp.isfinite(w)&(w<0))):
+        raise ValueError("weights must be nonnegative (T,N)")
     num_coefs = K + 1 if intercept else K
     loadings = cp.full((T, F, num_coefs), cp.nan, dtype=cp.float64)
     r_squared = cp.full((T, F), cp.nan, dtype=cp.float64)
     residuals = cp.full((T, F, N), cp.nan, dtype=cp.float64)
+    evidence={"raw_loadings":cp.full_like(loadings,cp.nan),
+              "counts":cp.zeros((T,F),dtype=cp.int64),
+              "rank":cp.zeros((T,F),dtype=cp.int64),
+              "effective_df":cp.zeros((T,F),dtype=cp.int64)}
 
     for t in range(T):
         X = rf[t]  # (N, K)
@@ -136,8 +145,9 @@ def batched_factor_loadings(factor_values, risk_factors, intercept=True, min_obs
         all_fin = cp.all(X_fin, axis=1)  # (N,)
         y = x[t]  # (F, N)
         y_fin = cp.isfinite(y)  # (F, N)
-        valid = all_fin[None, :] & y_fin  # (F, N)
+        valid = all_fin[None, :] & y_fin & cp.isfinite(w[t])[None,:] & (w[t]>0)[None,:]
         n_valid = cp.sum(valid, axis=1)  # (F,)
+        evidence["counts"][t]=n_valid
         ok = n_valid >= min_obs
         if not bool(cp.any(ok)):
             continue
@@ -148,32 +158,43 @@ def batched_factor_loadings(factor_values, risk_factors, intercept=True, min_obs
                 continue
             row_mask = valid[f]  # (N,)
             Xv = X[row_mask]  # (n, K)
-            if intercept:
-                Xv = cp.column_stack([cp.ones(Xv.shape[0]), Xv])  # (n, C)
             yv = y[f, row_mask]  # (n,)
-            XtX = Xv.T @ Xv  # (C, C)
-            Xty = Xv.T @ yv  # (C,)
-            try:
-                beta = cp.linalg.solve(XtX, Xty)  # (C,)
-            except Exception:
-                continue
-            if not bool(cp.all(cp.isfinite(beta))):
-                continue
-            loadings[t, f] = beta
-            y_pred = Xv @ beta  # (n,)
-            ss_res = cp.sum((yv - y_pred) ** 2)
-            y_mean = cp.mean(yv)
-            ss_tot = cp.sum((yv - y_mean) ** 2)
-            if ss_tot > 0:
-                r_squared[t, f] = 1.0 - ss_res / ss_tot
-            # residuals over all N (NaN where invalid)
-            Xfull = X
+            ww=w[t,row_mask]; ww=ww/cp.max(ww); ww=ww/ww.sum()
+            xo=Xv[0]+cp.sum(ww[:,None]*(Xv-Xv[0]),axis=0) if intercept else cp.zeros(K)
+            yo=yv[0]+cp.sum(ww*(yv-yv[0])) if intercept else 0.
+            xc=Xv-xo; yc=yv-yo
+            xs=cp.sqrt(cp.sum(ww[:,None]*xc*xc,axis=0)); xs=cp.where(xs>0,xs,1.)
+            ys=cp.sqrt(cp.sum(ww*yc*yc)); ys=cp.where(ys>0,ys,1.)
+            design=xc/xs
             if intercept:
-                Xfull = cp.column_stack([cp.ones(N), Xfull])
-            resid = y[f] - Xfull @ beta  # (N,)
-            resid = cp.where(row_mask, resid, cp.nan)
-            residuals[t, f] = resid
-    return loadings, r_squared, residuals
+                design=cp.column_stack((cp.ones(len(yv)),design))
+            rootw=cp.sqrt(ww)
+            u,singular,vh=cp.linalg.svd(design*rootw[:,None],full_matrices=False)
+            rank=int(cp.sum(singular>cp.finfo(cp.float64).eps*max(design.shape)*singular[0]))
+            coordinates=u[:,:rank].T@(yc/ys*rootw)
+            beta=vh[:rank].T@(coordinates/singular[:rank])
+            evidence["rank"][t,f]=rank
+            evidence["effective_df"][t,f]=len(yv)-rank
+            if len(yv)-rank<2: continue
+            predicted=(u[:,:rank]@coordinates)*ys/rootw
+            resid=yc-predicted
+            condition=singular[0]/singular[rank-1] if rank else cp.inf
+            tolerance=64*cp.finfo(cp.float64).eps*max(len(yv),num_coefs)*cp.maximum(cp.maximum(cp.linalg.norm(yc),cp.linalg.norm(predicted)),cp.finfo(cp.float64).tiny)
+            if bool(cp.linalg.norm(resid)<=tolerance): resid=cp.zeros_like(resid)
+            ss_tot=cp.sum(ww*(yv-(yv[0]+cp.sum(ww*(yv-yv[0]))))**2)
+            if bool(ss_tot>0) and rank>int(intercept):
+                r_squared[t,f]=1.-cp.sum(ww*resid**2)/ss_tot
+            if rank==num_coefs:
+                slopes=beta[int(intercept):]*ys/xs
+                raw=cp.concatenate((cp.atleast_1d(yo+beta[0]*ys-xo@slopes),slopes)) if intercept else slopes
+                evidence["raw_loadings"][t,f]=raw
+                if standardized:
+                    sx=cp.sqrt(cp.sum(ww[:,None]*xc*xc,axis=0))
+                    raw[int(intercept):]=cp.where((sx>0)&cp.isfinite(r_squared[t,f]),slopes*sx/cp.sqrt(ss_tot),cp.nan)
+                loadings[t,f]=raw
+            residuals[t,f,row_mask]=resid
+    result=(loadings,r_squared,residuals)
+    return (*result,evidence) if return_diagnostics else result
 
 
 def batched_style_exposure(factor_values, style_factors, style_names):

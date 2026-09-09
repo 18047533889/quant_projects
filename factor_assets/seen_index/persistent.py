@@ -48,36 +48,48 @@ class PersistentSeenIndex:
         self._initialize_db()
 
     def _initialize_db(self) -> None:
-        """Initialize database schema."""
-        self._conn = sqlite3.connect(
-            self.db_path,
-            timeout=self.busy_timeout_ms / 1_000,
-            check_same_thread=False,
-        )
-        self._conn.execute(f"PRAGMA busy_timeout={self.busy_timeout_ms}")
-        self._conn.execute("PRAGMA journal_mode=WAL")
-        self._conn.execute("PRAGMA synchronous=NORMAL")
-
-        self._conn.execute("""
-            CREATE TABLE IF NOT EXISTS seen_factors (
-                canonical_hash TEXT PRIMARY KEY,
-                factor_id TEXT NOT NULL,
-                first_seen_at TEXT NOT NULL,
-                origin TEXT NOT NULL,
-                origin_ref TEXT,
-                structural_hash TEXT
-            )
-        """)
-
-        self._conn.execute("""
-            CREATE UNIQUE INDEX IF NOT EXISTS uq_factor_id ON seen_factors(factor_id)
-        """)
-
-        self._conn.execute("""
-            CREATE INDEX IF NOT EXISTS idx_first_seen ON seen_factors(first_seen_at)
-        """)
-
-        self._conn.commit()
+        """Initialize schema, retrying bounded transient SQLite contention."""
+        for attempt in range(self.max_busy_retries + 1):
+            connection = None
+            try:
+                connection = sqlite3.connect(
+                    self.db_path,
+                    timeout=self.busy_timeout_ms / 1_000,
+                    check_same_thread=False,
+                )
+                connection.execute(f"PRAGMA busy_timeout={self.busy_timeout_ms}")
+                connection.execute("PRAGMA journal_mode=WAL")
+                connection.execute("PRAGMA synchronous=NORMAL")
+                connection.execute("""
+                    CREATE TABLE IF NOT EXISTS seen_factors (
+                        canonical_hash TEXT PRIMARY KEY,
+                        factor_id TEXT NOT NULL,
+                        first_seen_at TEXT NOT NULL,
+                        origin TEXT NOT NULL,
+                        origin_ref TEXT,
+                        structural_hash TEXT
+                    )
+                """)
+                connection.execute("""
+                    CREATE UNIQUE INDEX IF NOT EXISTS uq_factor_id ON seen_factors(factor_id)
+                """)
+                connection.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_first_seen ON seen_factors(first_seen_at)
+                """)
+                connection.commit()
+                self._conn = connection
+                return
+            except sqlite3.OperationalError as exc:
+                if connection is not None:
+                    connection.close()
+                if not self._is_busy_error(exc) or attempt == self.max_busy_retries:
+                    raise
+                time.sleep(min(0.01 * (2 ** attempt), 0.1))
+            except Exception:
+                if connection is not None:
+                    connection.close()
+                raise
+        raise RuntimeError("unreachable")
 
     def record(
         self,

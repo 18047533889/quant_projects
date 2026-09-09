@@ -8,6 +8,7 @@ expected shortfall ratio, and tail dependence metrics.
 from typing import Tuple, Optional
 import numpy as np
 from scipy import stats
+from .var_cvar import empirical_expected_shortfall
 
 
 def compute_tail_ratio(
@@ -155,14 +156,12 @@ def compute_upside_potential_ratio(
         excess = ret_valid - minimum_acceptable_return
 
         # Upside potential (positive excess)
-        upside = excess[excess > 0]
-        upside_potential = np.mean(upside) if len(upside) > 0 else 0.0
+        upside_potential = np.mean(np.maximum(excess, 0.))
 
         # Downside deviation (negative excess)
-        downside = excess[excess < 0]
-        downside_deviation = np.sqrt(np.mean(downside ** 2)) if len(downside) > 0 else 0.0
+        downside_deviation = np.sqrt(np.mean(np.minimum(excess, 0.) ** 2))
 
-        if downside_deviation < 1e-10:
+        if not np.isfinite(downside_deviation) or downside_deviation <= 0:
             continue
 
         upr[f] = upside_potential / downside_deviation
@@ -238,12 +237,19 @@ def compute_expected_shortfall_ratio(
         returns: Return series (T,) or (T, F)
         confidence_level: Confidence level for CVaR
         risk_free_rate: Annual risk-free rate
-        periods_per_year: Periods per year for annualization
+        periods_per_year: Converts annual risk-free rate only; does not scale ES
         min_periods: Minimum periods required
 
     Returns:
         ES Ratio, scalar or shape (F,). Higher is better.
     """
+    if (isinstance(periods_per_year, (bool, np.bool_)) or not isinstance(periods_per_year, (int, np.integer))
+            or periods_per_year < 1 or isinstance(risk_free_rate, (bool, np.bool_))
+            or not np.isfinite(risk_free_rate)):
+        raise ValueError("valid annual risk-free rate and periods_per_year required")
+    returns = np.asarray(returns, dtype=float)
+    if returns.ndim not in (1, 2):
+        raise ValueError("ES ratio requires (T,) or (T,F) returns")
     if returns.ndim == 1:
         returns = returns[:, np.newaxis]
         squeeze = True
@@ -254,7 +260,6 @@ def compute_expected_shortfall_ratio(
     es_ratio = np.full(F, np.nan)
 
     rf_per_period = risk_free_rate / periods_per_year
-    quantile = 1.0 - confidence_level
 
     for f in range(F):
         ret_f = returns[:, f]
@@ -270,20 +275,13 @@ def compute_expected_shortfall_ratio(
         excess_ret = ret_valid - rf_per_period
         mean_excess = np.mean(excess_ret)
 
-        # CVaR (Expected Shortfall)
-        var_threshold = np.quantile(ret_valid, quantile)
-        tail_returns = ret_valid[ret_valid <= var_threshold]
+        cvar = empirical_expected_shortfall(ret_valid, confidence_level)
 
-        if len(tail_returns) == 0:
+        if not np.isfinite(cvar) or cvar <= 0:
             continue
 
-        cvar = -np.mean(tail_returns)
-
-        if cvar < 1e-10:
-            continue
-
-        # Annualize
-        es_ratio[f] = mean_excess / cvar * np.sqrt(periods_per_year)
+        # Same-period mean/ES; there is no universal sqrt(time) ES scaling.
+        es_ratio[f] = mean_excess / cvar
 
     return es_ratio[0] if squeeze else es_ratio
 
@@ -297,7 +295,9 @@ def compute_tail_dependence(
     """
     Compute lower and upper tail dependence between two return series.
 
-    Measures correlation in extreme events (left and right tails).
+    Compatibility diagnostic: finite-q P(Y tail | X tail), NOT correlation
+    or an asymptotic tail-dependence coefficient. Use
+    compute_finite_q_coexceedance for counts, both directions and status.
 
     Args:
         returns_x: First return series (T,)
@@ -307,8 +307,8 @@ def compute_tail_dependence(
 
     Returns:
         (lower_tail_dep, upper_tail_dep)
-        Lower tail dependence: correlation when both have extreme losses
-        Upper tail dependence: correlation when both have extreme gains
+        Directional finite-q conditional probabilities P(Y-tail | X-tail).
+        These are neither correlations nor asymptotic tail coefficients.
     """
     if returns_x.ndim != 1 or returns_y.ndim != 1:
         raise ValueError("compute_tail_dependence requires 1D returns")
@@ -357,3 +357,37 @@ def compute_tail_dependence(
         upper_tail_dep = prob_both_upper / prob_x_upper
 
     return lower_tail_dep, upper_tail_dep
+
+
+def compute_finite_q_coexceedance(returns_x, returns_y, quantile=.05, min_periods=30,
+                                  min_tail_observations=5):
+    """Directional finite-q event counts, inclusive empirical quantile ties."""
+    x, y = np.asarray(returns_x, dtype=float), np.asarray(returns_y, dtype=float)
+    if x.ndim != 1 or x.shape != y.shape:
+        raise ValueError("coexceedance requires aligned one-dimensional samples")
+    if isinstance(quantile, bool) or not np.isfinite(quantile) or not 0 < quantile < .5:
+        raise ValueError("tail quantile must be in (0, .5)")
+    for name, value in (("min_periods", min_periods), ("min_tail_observations", min_tail_observations)):
+        if isinstance(value, (bool, np.bool_)) or not isinstance(value, (int, np.integer)) or value < 1:
+            raise ValueError(f"{name} must be a positive integer")
+    valid = np.isfinite(x) & np.isfinite(y)
+    x, y = x[valid], y[valid]
+    result = {"metric_id": "finite_q_coexceedance.v1", "quantile": quantile,
+              "n_valid": len(x), "qualification": "DESCRIPTIVE_ONLY", "tails": {}}
+    for name, q in (("lower", quantile), ("upper", 1-quantile)):
+        if len(x) < min_periods:
+            result["tails"][name] = {"status": "INSUFFICIENT_DATA"}
+            continue
+        tx, ty = np.quantile(x, q), np.quantile(y, q)
+        ex, ey = (x <= tx, y <= ty) if name == "lower" else (x >= tx, y >= ty)
+        nx, ny, joint = int(ex.sum()), int(ey.sum()), int((ex & ey).sum())
+        degenerate=np.ptp(x)==0 or np.ptp(y)==0
+        enough=nx>=min_tail_observations and ny>=min_tail_observations
+        status="DEGENERATE_MARGIN" if degenerate else ("INSUFFICIENT_TAIL_EVENTS" if not enough else "DESCRIPTIVE_ONLY")
+        result["tails"][name] = {"status": status,
+            "x_count": nx, "y_count": ny, "joint_count": joint,
+            "p_y_given_x": joint/nx if nx else np.nan,
+            "p_x_given_y": joint/ny if ny else np.nan,
+            "joint_probability": joint/len(x), "threshold_x": float(tx), "threshold_y": float(ty),
+            "ties_rule":"inclusive_empirical_quantile","marginal_quality":"ADEQUATE" if enough and not degenerate else "LOW"}
+    return result

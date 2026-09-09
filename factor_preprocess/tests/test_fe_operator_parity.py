@@ -150,7 +150,7 @@ def test_cs_rank_inf_excluded_like_nan():
 
 
 @needs_fe
-def test_cs_demean_fe_backed_matches_fp_kernel():
+def test_cs_demean_fe_backed_matches_fp_kernel_random_panel():
     from factor_preprocess.transforms import cs_demean
 
     mat, dates, cols = _rng_panel(3)
@@ -190,7 +190,7 @@ def test_cs_zscore_is_not_routed_singleton_semantics_differ():
 
 
 @needs_fe
-def test_cs_demean_fe_backed_matches_fp_kernel():
+def test_cs_demean_fe_backed_matches_fp_kernel_after_zscore_nonrouting_case():
     from factor_preprocess.transforms import cs_demean
 
     mat, dates, cols = _rng_panel(3)
@@ -233,6 +233,29 @@ def test_forward_fill_fe_backed_matches_fp_kernel(max_lag):
     )
 
 
+@needs_fe
+def test_v7_forward_fill_positional_max_lag_is_bound_not_dropped():
+    from factor_preprocess.transforms import forward_fill
+
+    mat, dates, cols = _rng_panel(27, T=8, N=3)
+    ldf = _long(mat, dates, cols).sort_values(["asset_id", "date"])
+    executor = get_fe_executor("ffill_limit", fallback=forward_fill)
+    out = executor(ldf, 1, "asset_id", "date", "value")
+    expected = forward_fill(ldf, 1, "asset_id", "date", "value")
+    np.testing.assert_allclose(out.to_numpy(), expected.to_numpy(), equal_nan=True)
+    assert executor.effective_parameters == {"max_periods": 1}
+
+
+@needs_fe
+def test_v7_duplicate_time_asset_identity_is_rejected_even_when_values_match():
+    mat, dates, cols = _rng_panel(28, T=3, N=2)
+    ldf = _long(mat, dates, cols)
+    ldf = pd.concat([ldf, ldf.iloc[[0]]], ignore_index=True)
+    executor = get_fe_executor("rank")
+    with pytest.raises(ValueError, match="duplicate .* identities"):
+        executor(values=ldf)
+
+
 # ---------------------------------------------------------------------------
 # Neutralization exact duplicate (add_intercept=False)
 # ---------------------------------------------------------------------------
@@ -255,7 +278,8 @@ def test_ols_neutralize_fe_backed_matches_fp_kernel():
             exp_rows.append({"date": t, "asset_id": c, "e1": e1[i, j], "e2": e2[i, j]})
     lexp = pd.DataFrame(exp_rows)
 
-    out = _adapter_call("cs_neutralize", ldf, exposures=lexp, add_intercept=False)
+    out = _adapter_call("cs_neutralize", ldf, exposures=lexp,
+                        exposure_cols=("e1", "e2"), add_intercept=False)
     fp = ols_neutralize(
         ldf, lexp[["date", "asset_id", "e1", "e2"]],
         min_observations=2, add_intercept=False,

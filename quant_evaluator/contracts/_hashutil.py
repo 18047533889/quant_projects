@@ -49,11 +49,11 @@ def canonicalize(value: Any) -> Any:
     back to ``repr`` (which is not stable across processes).
     """
     if isinstance(value, np.ndarray):
-        if value.dtype.hasobject:
+        if value.dtype.hasobject or value.dtype.fields is not None:
             raise TypeError(
-                "canonicalize: object-dtype ndarray is not supported (fail-closed)"
+                "canonicalize: object-dtype or structured-dtype ndarray is not supported (fail-closed)"
             )
-        array = np.ascontiguousarray(value)
+        array = np.asarray(value)
         return {
             "__ndarray__": True,
             "dtype": array.dtype.str,
@@ -86,6 +86,12 @@ def canonicalize(value: Any) -> Any:
                     f"{type(k).__name__} (fail-closed)"
                 )
             result[k] = canonicalize(v)
+        reserved = {'__ndarray__', '__datetime__', '__date__', '__timedelta__',
+                    '__decimal__', '__enum__', '__bytes__', '__mapping__'}
+        if reserved.intersection(result):
+            # User mappings resembling a typed canonical value must not share
+            # its identity. Ordinary string-key maps retain their old hashes.
+            return {'__mapping__': sorted(result.items())}
         return result
     if isinstance(value, (list, tuple)):
         return [canonicalize(v) for v in value]
@@ -101,7 +107,7 @@ def stable_content_hex(*, tag: str, fields: Mapping[str, Any]) -> str:
 
     Deterministic across processes regardless of ``PYTHONHASHSEED``.
     """
-    canonical = {str(k): canonicalize(v) for k, v in fields.items()}
+    canonical = canonicalize(fields)
     blob = json.dumps(
         [tag, canonical],
         sort_keys=True,

@@ -18,6 +18,9 @@ Import patterns:
         # Handle gracefully — QE integration not available
         pass
 """
+from factor_assets.adapters.qe_joint_evidence import adapt_qe_distributions
+
+__all__ = ["adapt_qe_distributions"]
 
 from typing import Optional
 
@@ -43,4 +46,15 @@ class OptionalDependencyMissing(ImportError):
 
 __all__ = [
     "OptionalDependencyMissing",
+    "build_similarity_fingerprint",
+    "assign_preprocessed_fingerprint",
+    "classify_definition_taxonomy",
+    "adapt_qe_distributions",
 ]
+
+
+from factor_assets.adapters.fingerprint import (
+    assign_preprocessed_fingerprint,
+    build_similarity_fingerprint,
+)
+from factor_assets.adapters.production_taxonomy import classify_definition_taxonomy

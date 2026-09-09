@@ -39,7 +39,7 @@ def _eval_protocol(split_id, plan_masks, fn=None):
 def _run_safe_session():
     # Search uses sample 0 (train); sample 1 is reserved for the sealed test.
     protocol = _eval_protocol("split", ([True, False], [False, False], [False, False]))
-    return SearchRunner(
+    session = SearchRunner(
         SearchConfig(
             budget=SearchBudget(max_trials=1, max_evaluations=1, max_cost_units=1.0),
             enable_multifidelity=False,
@@ -48,10 +48,23 @@ def _run_safe_session():
         _trial,
         protocol,
     ).run("safe")
+    session.selection_decision_id = "decision:v8-fixture"
+    session.selection_decision_hash = "decision-hash:v8-fixture"
+    session.selection_request_hash = "request-hash:v8-fixture"
+    return session
 
 
 def _sealed_plan():
     return SplitPlan("test", [False, False], [False, False], [False, True], {})
+
+
+def test_research_raw_score_winner_without_fa_receipt_cannot_freeze():
+    session = _run_safe_session()
+    session.selection_decision_id = None
+    session.selection_decision_hash = None
+    session.selection_request_hash = None
+    with pytest.raises(ValueError, match="authoritative FA decision receipt"):
+        session.freeze_for_sealed_test(_sealed_plan())
 
 
 def test_malformed_trial_is_rejected_before_evaluation():
@@ -250,18 +263,13 @@ def test_invalid_split_contracts_fail_closed(factory, error):
         factory()
 
 
-def test_sealed_test_workflow_freezes_and_consumes_once():
+def test_direct_sealed_test_consumption_is_retired():
     session = _run_safe_session()
     plan = _sealed_plan()
     handle = session.freeze_for_sealed_test(plan)
-    result = session.consume_sealed_test(
-        handle, plan, EvaluationProtocol(plan, lambda trial, fidelity: {"rank_ic": 0.25})
-    )
-    assert result.trial_id == "trial"
-    assert result.test_metrics == {"rank_ic": 0.25}
-    with pytest.raises(ValueError, match="already been consumed"):
+    with pytest.raises(ValueError, match="direct consume_sealed_test is retired"):
         session.consume_sealed_test(
-            handle, plan, EvaluationProtocol(plan, lambda trial, fidelity: {"rank_ic": 0.1})
+            handle, plan, EvaluationProtocol(plan, lambda trial, fidelity: {"rank_ic": 0.25})
         )
 
 
@@ -271,7 +279,7 @@ def test_sealed_test_rejects_mismatched_plan_and_post_freeze_mutation():
     handle = session.freeze_for_sealed_test(plan)
     with pytest.raises(ValueError, match="already frozen"):
         session.freeze_for_sealed_test(plan)
-    with pytest.raises(ValueError, match="does not match"):
+    with pytest.raises(ValueError, match="does not match|semantics differ"):
         session.consume_sealed_test(
             handle,
             SplitPlan("other", [False, False], [False, False], [False, True], {}),
@@ -302,4 +310,3 @@ def _integrity_evidence(trial_id="t1", kind=None):
         before,
         after,
     )
-

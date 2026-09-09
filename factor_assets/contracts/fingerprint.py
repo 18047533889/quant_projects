@@ -56,6 +56,13 @@ class SimilarityFingerprintArtifact:
     universe: str
     window: str
     content_hash: str = ""
+    preprocessing_ref: str = ""
+    mask_policy: str = ""
+    direction: str = ""
+    aggregation_method: str = ""
+    embedding_model_version: str = ""
+    value_ref: str = ""
+    profile_ref: str = ""
 
     def __post_init__(self) -> None:
         if not self.factor_id:
@@ -84,6 +91,13 @@ class SimilarityFingerprintArtifact:
             self.snapshot,
             self.universe,
             self.window,
+            self.preprocessing_ref,
+            self.mask_policy,
+            self.direction,
+            self.aggregation_method,
+            self.embedding_model_version,
+            self.value_ref,
+            self.profile_ref,
         )
         if not self.content_hash:
             object.__setattr__(self, "content_hash", computed)
@@ -102,7 +116,22 @@ class SimilarityFingerprintArtifact:
             "universe": self.universe,
             "window": self.window,
             "content_hash": self.content_hash,
+            "preprocessing_ref": self.preprocessing_ref,
+            "mask_policy": self.mask_policy,
+            "direction": self.direction,
+            "aggregation_method": self.aggregation_method,
+            "embedding_model_version": self.embedding_model_version,
+            "value_ref": self.value_ref,
+            "profile_ref": self.profile_ref,
         }
+
+    @property
+    def production_spec_complete(self) -> bool:
+        return all((
+            self.preprocessing_ref, self.mask_policy, self.direction,
+            self.aggregation_method, self.embedding_model_version,
+            self.value_ref, self.profile_ref,
+        ))
 
 
 @dataclass(frozen=True)
@@ -122,6 +151,10 @@ class ANNIndexArtifact:
     recall_benchmark: Optional[float] = None
     version: str = "1.0"
     content_hash: str = ""
+    member_set_hash: str = ""
+    embedding_spec_hash: str = ""
+    near_duplicate_recall: Optional[float] = None
+    audit_query_count: int = 0
 
     def __post_init__(self) -> None:
         if not self.index_id:
@@ -144,6 +177,13 @@ class ANNIndexArtifact:
             if not 0.0 <= rb <= 1.0:
                 raise ValueError("recall_benchmark must be in [0, 1]")
             object.__setattr__(self, "recall_benchmark", rb)
+        if self.near_duplicate_recall is not None:
+            nr = float(self.near_duplicate_recall)
+            if not 0.0 <= nr <= 1.0:
+                raise ValueError("near_duplicate_recall must be in [0, 1]")
+            object.__setattr__(self, "near_duplicate_recall", nr)
+        if isinstance(self.audit_query_count, bool) or self.audit_query_count < 0:
+            raise ValueError("audit_query_count must be a non-negative integer")
         computed = canonical_digest(
             self.index_id,
             self.backend,
@@ -152,6 +192,10 @@ class ANNIndexArtifact:
             self.seed,
             self.recall_benchmark,
             self.version,
+            self.member_set_hash,
+            self.embedding_spec_hash,
+            self.near_duplicate_recall,
+            self.audit_query_count,
         )
         if not self.content_hash:
             object.__setattr__(self, "content_hash", computed)
@@ -171,4 +215,18 @@ class ANNIndexArtifact:
             "recall_benchmark": self.recall_benchmark,
             "version": self.version,
             "content_hash": self.content_hash,
+            "member_set_hash": self.member_set_hash,
+            "embedding_spec_hash": self.embedding_spec_hash,
+            "near_duplicate_recall": self.near_duplicate_recall,
+            "audit_query_count": self.audit_query_count,
         }
+
+    def certified_for_recall(self, minimum: float = 0.95) -> bool:
+        return (
+            self.capability is ANNIndexCapability.APPROXIMATE
+            and bool(self.member_set_hash)
+            and bool(self.embedding_spec_hash)
+            and self.audit_query_count > 0
+            and self.near_duplicate_recall is not None
+            and self.near_duplicate_recall >= minimum
+        )

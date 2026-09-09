@@ -11,8 +11,64 @@ from scipy.stats import ks_2samp, rankdata, wasserstein_distance
 
 class MonitorAction(str, enum.Enum):
     MONITOR = "monitor"
-    RETRAIN = "retrain"
+    CAMPAIGN_REQUEST = "campaign_request"
     PROMOTION_BLOCK = "promotion_block"
+
+
+class LifecycleReason(str, enum.Enum):
+    WAITING_LABEL = "waiting_label"
+    DATA_PENDING = "data_pending"
+    BUDGET_STOP = "budget_stop"
+    INVALID_SPEC = "invalid_spec"
+    IMPLEMENTATION_ERROR = "implementation_error"
+    REJECTED_QUALITY = "rejected_quality"
+
+
+class LifecycleAction(str, enum.Enum):
+    WAIT_FOR_MATURITY = "wait_for_maturity"
+    WAIT_FOR_DATA = "wait_for_data"
+    REQUEST_BUDGET = "request_budget"
+    TERMINAL_REJECT = "terminal_reject"
+    RETRY_AFTER_FIX = "retry_after_fix"
+
+
+@dataclass(frozen=True)
+class LifecycleDisposition:
+    action: LifecycleAction
+    retryable: bool
+    terminal: bool
+    gc_candidate: bool
+
+
+_LIFECYCLE_POLICY = {
+    LifecycleReason.WAITING_LABEL: LifecycleDisposition(LifecycleAction.WAIT_FOR_MATURITY, True, False, False),
+    LifecycleReason.DATA_PENDING: LifecycleDisposition(LifecycleAction.WAIT_FOR_DATA, True, False, False),
+    LifecycleReason.BUDGET_STOP: LifecycleDisposition(LifecycleAction.REQUEST_BUDGET, True, False, False),
+    LifecycleReason.INVALID_SPEC: LifecycleDisposition(LifecycleAction.TERMINAL_REJECT, False, True, True),
+    LifecycleReason.IMPLEMENTATION_ERROR: LifecycleDisposition(LifecycleAction.RETRY_AFTER_FIX, True, False, False),
+    LifecycleReason.REJECTED_QUALITY: LifecycleDisposition(LifecycleAction.TERMINAL_REJECT, False, True, True),
+}
+
+
+@dataclass(frozen=True)
+class LifecycleEvent:
+    work_intent_id: str
+    reason: LifecycleReason
+    original_cause: str
+    occurred_at: str
+    prior_state: str
+    next_state: str
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.reason, LifecycleReason):
+            raise TypeError("LifecycleEvent.reason must be LifecycleReason")
+        for name in ("work_intent_id", "original_cause", "occurred_at", "prior_state", "next_state"):
+            if not getattr(self, name):
+                raise ValueError(f"LifecycleEvent.{name} is required")
+
+    @property
+    def disposition(self) -> LifecycleDisposition:
+        return _LIFECYCLE_POLICY[self.reason]
 
 
 @dataclass(frozen=True)
@@ -25,7 +81,7 @@ class DriftThreshold:
         if self.block is not None and value >= self.block:
             return MonitorAction.PROMOTION_BLOCK
         if self.retrain is not None and value >= self.retrain:
-            return MonitorAction.RETRAIN
+            return MonitorAction.CAMPAIGN_REQUEST
         return MonitorAction.MONITOR
 
 
@@ -33,6 +89,38 @@ DRIFT_DIMENSIONS = (
     "psi", "ks", "wasserstein", "prediction_rank", "coefficient",
     "ic_decay", "coverage", "regime_occupancy", "missingness",
 )
+
+DRIFT_CATEGORIES = {
+    "psi": "feature", "ks": "feature", "wasserstein": "feature",
+    "prediction_rank": "predictive", "coefficient": "exposure",
+    "ic_decay": "predictive", "coverage": "data",
+    "regime_occupancy": "feature", "missingness": "data",
+}
+
+
+@dataclass(frozen=True)
+class CampaignRequestPolicy:
+    """Pre-approved, finite authority for a new research campaign."""
+
+    campaign_id: str
+    candidate_budget: int
+    baseline_artifact_id: str
+    baseline_feature_version: str
+    rollback_artifact_id: str
+    rollback_feature_version: str
+
+    def __post_init__(self) -> None:
+        for name in (
+            "campaign_id", "baseline_artifact_id", "baseline_feature_version",
+            "rollback_artifact_id", "rollback_feature_version",
+        ):
+            if not getattr(self, name):
+                raise ValueError(f"{name} is required")
+        if self.candidate_budget < 1:
+            raise ValueError("candidate_budget must be >= 1")
+        if ((self.rollback_artifact_id == self.baseline_artifact_id)
+                != (self.rollback_feature_version == self.baseline_feature_version)):
+            raise ValueError("rollback must bind a matching artifact and feature version")
 
 
 @dataclass(frozen=True)
@@ -46,11 +134,31 @@ class DriftContract:
         if missing:
             raise ValueError(f"missing drift thresholds: {sorted(missing)}")
 
-    def assess(self, metrics: dict[str, float]) -> dict[str, MonitorAction]:
+    def assess(
+        self,
+        metrics: dict[str, float],
+        *,
+        campaign_policy: CampaignRequestPolicy | None = None,
+        realised_metrics: dict[str, "RealisedMetric"] | None = None,
+        asof: str | None = None,
+    ) -> dict[str, MonitorAction]:
         missing = set(DRIFT_DIMENSIONS) - set(metrics)
         if missing:
             raise ValueError(f"missing drift metrics: {sorted(missing)}")
-        return {name: self.thresholds[name].action(float(metrics[name])) for name in DRIFT_DIMENSIONS}
+        actions = {name: self.thresholds[name].action(float(metrics[name])) for name in DRIFT_DIMENSIONS}
+        requests = [name for name, action in actions.items() if action is MonitorAction.CAMPAIGN_REQUEST]
+        if requests and campaign_policy is None:
+            raise ValueError("drift campaign request requires a bounded CampaignRequestPolicy")
+        predictive_requests = [name for name in requests if DRIFT_CATEGORIES[name] == "predictive"]
+        if predictive_requests:
+            if realised_metrics is None or asof is None:
+                raise ValueError("predictive drift requires mature realised metrics and asof")
+            for name in predictive_requests:
+                metric = realised_metrics.get(name)
+                if metric is None:
+                    raise ValueError(f"missing realised metric for predictive drift: {name}")
+                metric.require_available(asof)
+        return actions
 
 
 def _finite(values: Any) -> np.ndarray:

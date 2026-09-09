@@ -12,7 +12,7 @@ from scipy.stats import pearsonr, rankdata, spearmanr
 __all__ = [
     "EvaluationContractError", "ICMetricConvention", "MetricValue",
     "per_date_rank_ic", "ic_series", "block_aware_ic", "cross_sectional_ic",
-    "evaluate_predictions", "EvaluationReport",
+    "evaluate_predictions", "EvaluationReport", "ModelPredictionArtifact",
 ]
 
 
@@ -56,6 +56,43 @@ class MetricValue:
         return {"value": self.value, "status": self.status, "reason": self.reason, "n_obs": self.n_obs}
 
 
+@dataclass(frozen=True)
+class ModelPredictionArtifact:
+    """Immutable ordered OOS predictions bound to model and feature identities."""
+
+    prediction_id: str
+    values: Any
+    time_axis: tuple[Any, ...]
+    asset_axis: tuple[Any, ...]
+    model_artifact_ref: str
+    feature_manifest_ref: str
+    oos_evidence_ref: str
+
+    def __post_init__(self) -> None:
+        for name in ("prediction_id", "model_artifact_ref", "feature_manifest_ref",
+                     "oos_evidence_ref"):
+            value = getattr(self, name)
+            if not isinstance(value, str) or not value.strip():
+                raise EvaluationContractError(f"{name} is required")
+        times, assets = tuple(self.time_axis), tuple(self.asset_axis)
+        if not times or not assets or len(set(times)) != len(times) or len(set(assets)) != len(assets):
+            raise EvaluationContractError("prediction axes must be explicit, ordered and unique")
+        try:
+            monotonic = all(left < right for left, right in zip(times, times[1:]))
+        except (TypeError, ValueError) as exc:
+            raise EvaluationContractError("prediction time axis must be strictly increasing") from exc
+        if not monotonic:
+            raise EvaluationContractError("prediction time axis must be strictly increasing")
+        values = np.asarray(self.values, dtype=np.float64)
+        if values.shape != (len(times), len(assets)):
+            raise EvaluationContractError("prediction values must align exactly to time and asset axes")
+        contiguous = np.ascontiguousarray(values, dtype=np.float64)
+        frozen = np.frombuffer(contiguous.tobytes(order="C"), dtype=np.float64).reshape(values.shape)
+        object.__setattr__(self, "values", frozen)
+        object.__setattr__(self, "time_axis", times)
+        object.__setattr__(self, "asset_axis", assets)
+
+
 def _array(name: str, values: Any, n: int | None = None) -> np.ndarray:
     out = np.asarray(values).ravel()
     if n is not None and len(out) != n:
@@ -70,6 +107,18 @@ def _weights(values: Any, n: int) -> np.ndarray | None:
     if not np.isfinite(out).all() or np.any(out < 0) or not np.any(out > 0):
         raise EvaluationContractError("weights must be finite, non-negative, and contain positive mass")
     return out
+
+
+def _factor_evidence_refs(name: str, values: Any) -> dict[str, str]:
+    refs = dict(values or {})
+    forbidden = {"sharpe", "sharpe_ratio", "portfolio_sharpe", "portfolio_return"}
+    if any(not isinstance(key, str) or not key or key.lower() in forbidden
+           or not isinstance(value, str) or not value
+           for key, value in refs.items()):
+        raise EvaluationContractError(
+            f"{name} must map factor names to non-empty evidence refs; portfolio metrics are model-level"
+        )
+    return refs
 
 
 def _weighted_corr(x: np.ndarray, y: np.ndarray, w: np.ndarray) -> float:
@@ -169,6 +218,12 @@ class EvaluationReport:
     metric_values: dict[str, MetricValue] = field(default_factory=dict)
     metric_convention: dict[str, Any] = field(default_factory=dict)
     evaluation_version: str = "r41-v1"
+    prediction_id: str | None = None
+    prediction_evidence: dict[str, Any] = field(default_factory=dict)
+    portfolio_evidence: dict[str, Any] = field(default_factory=dict)
+    research_diagnostics: dict[str, Any] = field(default_factory=dict)
+    training_importance_evidence: dict[str, str] = field(default_factory=dict)
+    oos_ablation_evidence_refs: dict[str, str] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         out = {name: getattr(self, name) for name in self.__dataclass_fields__ if name != "metric_values"}
@@ -241,8 +296,17 @@ def _year_by_year(pred, y, dates):
 
 def evaluate_predictions(pred, y, dates, security_ids=None, *, date_col=None, stock_col=None,
                          weights=None, eligible=None, extra: Mapping[str, np.ndarray] | None = None,
-                         convention=DEFAULT_IC_CONVENTION):
-    """Compute OOS metrics; stable security identity is required for portfolio metrics."""
+                         convention=DEFAULT_IC_CONVENTION, prediction_id=None,
+                         prediction_batch=None, label_bundle=None, portfolio_returns=None,
+                         prediction_evaluator=None, prediction_artifact=None,
+                         training_importance_evidence=None, oos_ablation_evidence_refs=None):
+    """Evaluate predictions, keeping diagnostic label spreads separate from PnL.
+
+    The legacy array path is descriptive and does not establish OOS identity.
+    For identity-bound QE evidence supply a single-output prediction_batch and
+    label_bundle, with row order exactly T then N. Portfolio evidence additionally
+    requires independent typed returns; labels are never substituted for them.
+    """
     del date_col, stock_col
     pred = _array("pred", pred).astype(np.float64)
     y, dates = _array("y", y, len(pred)).astype(np.float64), _array("dates", dates, len(pred))
@@ -252,6 +316,57 @@ def evaluate_predictions(pred, y, dates, security_ids=None, *, date_col=None, st
         identity = pd.DataFrame({"date": dates, "security_id": ids})
         if identity.security_id.isna().any() or identity.duplicated().any():
             raise EvaluationContractError("security_ids must be non-missing and unique within each date")
+    prediction_evidence = {}
+    portfolio_evidence = {}
+    training_importance_evidence = _factor_evidence_refs(
+        "training_importance_evidence", training_importance_evidence)
+    oos_ablation_evidence_refs = _factor_evidence_refs(
+        "oos_ablation_evidence_refs", oos_ablation_evidence_refs)
+    if set(training_importance_evidence) & set(oos_ablation_evidence_refs):
+        raise EvaluationContractError("training importance and OOS ablation evidence must be separate")
+    if prediction_artifact is not None:
+        if not isinstance(prediction_artifact, ModelPredictionArtifact):
+            raise EvaluationContractError("prediction_artifact must be ModelPredictionArtifact")
+        if prediction_id != prediction_artifact.prediction_id:
+            raise EvaluationContractError("prediction_id must match prediction artifact")
+        if not (np.array_equal(dates, np.repeat(prediction_artifact.time_axis,
+                                                len(prediction_artifact.asset_axis))) and
+                ids is not None and np.array_equal(ids, np.tile(prediction_artifact.asset_axis,
+                                                                 len(prediction_artifact.time_axis))) and
+                np.array_equal(pred, prediction_artifact.values.ravel(), equal_nan=True)):
+            raise EvaluationContractError("rows must match immutable prediction artifact axes and values")
+    if prediction_batch is not None or label_bundle is not None or portfolio_returns is not None:
+        if prediction_batch is None or label_bundle is None or not isinstance(prediction_id, str) or not prediction_id.strip():
+            raise EvaluationContractError("typed evaluation requires prediction_id, prediction_batch and label_bundle")
+        if prediction_batch.factor_ids != (prediction_id,):
+            raise EvaluationContractError("prediction_id must bind exactly one QE output axis")
+        times, assets = prediction_batch.time_axis.values, prediction_batch.asset_axis.values
+        if times is None or assets is None or ids is None:
+            raise EvaluationContractError("typed prediction evidence requires explicit time and security coordinates")
+        if not (np.array_equal(dates, np.repeat(times, len(assets))) and
+                np.array_equal(ids, np.tile(assets, len(times)))):
+            raise EvaluationContractError("prediction rows do not match QE time/security axes")
+        if not (np.array_equal(pred, prediction_batch.values[..., 0].ravel(), equal_nan=True) and
+                np.array_equal(y, label_bundle.values.ravel(), equal_nan=True)):
+            raise EvaluationContractError("prediction/label rows do not match typed QE values")
+        if w is not None:
+            raise EvaluationContractError("weighted IC has no certified typed QE adapter")
+        if prediction_evaluator is None:
+            raise EvaluationContractError("typed evaluation requires an explicitly bound prediction_evaluator port")
+        predictive, portfolio, predictive_ir = prediction_evaluator(
+            prediction_batch, label_bundle, min_assets=convention.min_pairs_per_date,
+            portfolio_returns=portfolio_returns)
+        prediction_evidence = {'prediction_id': prediction_id, 'kind': 'prediction',
+                               'qe_bundle': predictive.to_dict()}
+        # Legacy descriptive columns use the same validity domain, rather than
+        # silently counting observations excluded from the authoritative QE IC.
+        if prediction_batch.validity is not None:
+            pred = np.where(prediction_batch.validity[..., 0].ravel(), pred, np.nan)
+        if label_bundle.validity is not None:
+            y = np.where(label_bundle.validity.ravel(), y, np.nan)
+        if portfolio_returns is not None:
+            portfolio_evidence = {'prediction_id': prediction_id, 'kind': 'research_probe',
+                                  'execution_certified': False, 'qe_bundle': portfolio.to_dict()}
     finite = np.isfinite(pred) & np.isfinite(y)
     metric_w = np.ones(len(pred)) if w is None else w
     mse = float(np.average((pred[finite] - y[finite]) ** 2, weights=metric_w[finite])) if metric_w[finite].sum() else float("nan")
@@ -299,7 +414,34 @@ def evaluate_predictions(pred, y, dates, security_ids=None, *, date_col=None, st
                 max(0, support["n_valid_dates"] - 1)),
         },
         metric_convention=convention.to_dict(),
+        evaluation_version="v3-separated-evidence-2",
+        prediction_id=prediction_id,
+        prediction_evidence=prediction_evidence,
+        portfolio_evidence=portfolio_evidence,
+        research_diagnostics={
+            'forward_label_spread': spread,
+            'top_membership_jaccard_change': turnover,
+            'execution_certified': False,
+            'legacy_aliases': {'long_short_spread': 'forward_label_spread',
+                               'turnover': 'top_membership_jaccard_change'},
+            'prediction_identity_bound': bool(prediction_evidence),
+            'oos_certified': False,
+        },
+        training_importance_evidence=training_importance_evidence,
+        oos_ablation_evidence_refs=oos_ablation_evidence_refs,
     )
+    # These legacy fields remain display aliases, never execution evidence.
+    report.portfolio_support.update(kind='forward_label_diagnostic', execution_certified=False)
+    if prediction_evidence:
+        report.rank_ic = report.mean_daily_rank_ic = predictive.get_metric('rank_ic', prediction_id).value
+        series = predictive.artifacts['rank_ic_series'].values
+        report.icir = report.daily_rank_ic_ir = predictive_ir
+        valid_ics = series[:, 0][np.isfinite(series[:, 0])]
+        report.metric_values['daily_rank_ic_ir'] = MetricValue(
+            report.icir, 'defined' if np.isfinite(report.icir) else 'undefined',
+            None if np.isfinite(report.icir) else 'insufficient or constant QE daily IC series', len(valid_ics))
+        report.rolling_oos_ic = [{'date': str(date), 'rank_ic': float(value)}
+                                for date, value in zip(label_bundle.decision_time, series[:, 0])]
     if extra:
         for labels_key, asof_key, attr in (
             ("regime_labels", "regime_label_asof_dates", "bull_bear"),

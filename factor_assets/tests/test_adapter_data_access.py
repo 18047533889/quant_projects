@@ -12,6 +12,43 @@ from unittest.mock import patch
 from factor_assets.adapters import OptionalDependencyMissing
 
 
+class _DatedUniverseStore:
+    def _resolve_universe_instruments(self, universe, time_range=None, instruments=None):
+        assert universe == "universe:history"
+        day = time_range[0]
+        members = {
+            date(2020, 1, 2): ["LIVE", "DELISTED_LATER"],
+            date(2021, 1, 2): ["LIVE", "NEW_MEMBER"],
+        }[day]
+        return members
+
+
+def test_resolve_universe_snapshot_membership_changes_with_date():
+    from factor_assets.adapters.data_access import resolve_universe_snapshot
+    store = _DatedUniverseStore()
+    old = resolve_universe_snapshot(store, "universe:history", as_of=date(2020, 1, 2))
+    new = resolve_universe_snapshot(store, "universe:history", as_of=date(2021, 1, 2))
+    assert old.snapshot_id != new.snapshot_id
+    assert old.eligible_members == ("DELISTED_LATER", "LIVE")
+    assert new.eligible_members == ("LIVE", "NEW_MEMBER")
+
+
+def test_historically_eligible_delisted_member_is_preserved():
+    from factor_assets.adapters.data_access import resolve_universe_snapshot
+    resolved = resolve_universe_snapshot(
+        _DatedUniverseStore(), "universe:history", as_of=date(2020, 1, 2)
+    )
+    assert "DELISTED_LATER" in resolved.eligible_members
+
+
+def test_unresolved_universe_snapshot_fails_closed():
+    from factor_assets.adapters.data_access import (
+        DataAccessUnavailableAsOfError, resolve_universe_snapshot,
+    )
+    with pytest.raises(DataAccessUnavailableAsOfError):
+        resolve_universe_snapshot(SimpleNamespace(), "universe:missing", as_of=date(2020, 1, 2))
+
+
 class TestDAFactorValueReader:
     """Test DA factor value reader."""
 
@@ -241,7 +278,11 @@ class TestDACatalogReader:
             calls.append(("read_joined", args, kwargs))
             return Handle([{"asset": "A", "universe": "A"}])
 
-        store = SimpleNamespace(read_factors=read_factors, read_joined=read_joined)
+        store = SimpleNamespace(
+            read_factors=read_factors,
+            read_joined=read_joined,
+            _resolve_universe_instruments=lambda universe, time_range, instruments: ["A"],
+        )
         with patch.object(da_mod, "_try_import_da", lambda: setattr(da_mod, "DA_AVAILABLE", True)):
             reader = DAFactorValueReader(store=store)
         result = reader.read_factor_values(

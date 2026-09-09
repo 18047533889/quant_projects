@@ -325,7 +325,7 @@ def test_hac_tstat_matches_manual_newey_west_lag1_exactly():
 
     d = x - x.mean()
     gamma0 = np.mean(d ** 2)
-    gamma1 = np.mean(d[:-1] * d[1:])
+    gamma1 = np.sum(d[:-1] * d[1:]) / n
     weight = 1.0 - 1.0 / (1.0 + 1.0)          # 1 - lag/(max_lag+1)
     hac_var = (gamma0 + 2.0 * weight * gamma1) / n
     se_hand = np.sqrt(hac_var)

@@ -6,7 +6,43 @@ FA stores only references and selected summary fingerprints, not raw evidence.
 """
 
 from dataclasses import dataclass
-from typing import Optional
+from typing import Mapping, Optional, Sequence
+
+
+@dataclass(frozen=True)
+class EvidenceInvalidationPlan:
+    """Read-only impact plan for metric semantic-version changes."""
+
+    stale_evidence_ids: tuple[str, ...]
+    affected_factor_ids: tuple[str, ...]
+    unaffected_evidence_ids: tuple[str, ...]
+    required_metric_versions: tuple[tuple[str, str], ...]
+
+
+def plan_metric_version_invalidation(
+    evidence_refs: Sequence["EvidenceRef"],
+    required_metric_versions: Mapping[str, str],
+) -> EvidenceInvalidationPlan:
+    """Identify old metric evidence without mutating assets or repositories."""
+    required = dict(required_metric_versions)
+    if any(not key or not value for key, value in required.items()):
+        raise ValueError("metric ids and required versions must be non-empty")
+    stale = tuple(
+        ref.evidence_id for ref in evidence_refs
+        if ref.metric_name in required
+        and ref.metric_version != required[ref.metric_name]
+    )
+    stale_set = set(stale)
+    return EvidenceInvalidationPlan(
+        stale_evidence_ids=stale,
+        affected_factor_ids=tuple(sorted({
+            ref.factor_id for ref in evidence_refs if ref.evidence_id in stale_set
+        })),
+        unaffected_evidence_ids=tuple(
+            ref.evidence_id for ref in evidence_refs if ref.evidence_id not in stale_set
+        ),
+        required_metric_versions=tuple(sorted(required.items())),
+    )
 
 
 @dataclass(frozen=True)

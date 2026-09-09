@@ -95,6 +95,11 @@ def fit_regime_switching(
     - scale: stores {std} per regime
     - none: no parameters
     """
+    if not regime_labels.index.equals(values.index):
+        raise ValueError("regime_labels index/order must exactly match values.index")
+    labels = regime_labels.dropna()
+    if any(isinstance(v, (bool, np.bool_)) or not np.isfinite(v) or float(v) != int(v) for v in labels):
+        raise ValueError("regime labels must be finite non-boolean integers")
     if transform_type not in ["zscore", "rank", "winsor", "scale", "none"]:
         raise ValueError(f"Unknown transform_type: {transform_type}")
 
@@ -120,7 +125,7 @@ def fit_regime_switching(
         mask = (regime_labels == regime) & regime_labels.notna()
         regime_values = values.loc[mask, value_col].values
 
-        n_obs = np.sum(mask)
+        n_obs = int(np.isfinite(regime_values).sum())
         if n_obs < min_obs_per_regime:
             raise InsufficientObservations(
                 f"Regime {regime} has only {n_obs} observations, "
@@ -165,6 +170,7 @@ def fit_regime_switching(
         fit_window_start=fit_window_start,
         fit_window_end=fit_window_end,
     )
+from factor_preprocess.regime.adaptive_weights import UnknownRegimePolicy, _coerce_unknown_policy
 
 
 def regime_switching_transform(
@@ -174,6 +180,8 @@ def regime_switching_transform(
     time_col: str = "date",
     value_col: str = "value",
     check_staleness: bool = True,
+    unknown_regime_policy=UnknownRegimePolicy.FAIL,
+    fallback_regime: Optional[int] = None,
 ) -> pd.Series:
     """
     Apply regime-specific transform to values.
@@ -214,8 +222,32 @@ def regime_switching_transform(
     - Unknown regimes produce NaN output (fail-closed)
     - For "rank", uses cross-sectional percentile rank at each time
     """
+    if not isinstance(regime_labels, pd.Series) and hasattr(regime_labels, "scope"):
+        if (getattr(regime_labels,"scope",None)!="FILTERED_ASOF" or
+                not getattr(regime_labels,"production_eligible",False) or
+                getattr(regime_labels,"fit_end",None) is None or
+                getattr(regime_labels,"decision_time",None) is None):
+            raise ValueError("production regime switching requires bound FILTERED_ASOF inference")
+        regime_labels=pd.Series(np.asarray(regime_labels.states),index=values.index)
     if fitted_state is None:
         raise MissingFittedStateError("fitted_state is required")
+    if not regime_labels.index.equals(values.index):
+        raise ValueError("regime_labels index/order must exactly match values.index")
+    policy=_coerce_unknown_policy(unknown_regime_policy)
+    known=set(fitted_state.regime_params)
+    if policy is UnknownRegimePolicy.FALLBACK_GLOBAL and fallback_regime not in known:
+        raise ValueError("FALLBACK_GLOBAL requires an explicit fitted fallback_regime")
+
+    def resolve(regime):
+        if pd.isna(regime): return None
+        if isinstance(regime,(bool,np.bool_)) or not np.isfinite(regime) or float(regime)!=int(regime): raise ValueError(f"invalid regime label {regime!r}")
+        key=int(regime)
+        if key in known: return key
+        if policy is UnknownRegimePolicy.FAIL: raise ValueError(f"unknown regime {key}")
+        if policy is UnknownRegimePolicy.FAIL_NAN: return None
+        if policy is UnknownRegimePolicy.FALLBACK_GLOBAL: return int(fallback_regime)
+        if policy is UnknownRegimePolicy.IDENTITY_RESEARCH_ONLY: return "IDENTITY"
+        raise RuntimeError("unhandled unknown regime policy")
 
     # Verify sort order
     if not values[time_col].is_monotonic_increasing:
@@ -246,7 +278,9 @@ def regime_switching_transform(
             regimes = regime_labels.loc[group.index].values
 
             # Only rank where regime is valid
-            mask = np.isfinite(vals) & np.isfinite(regimes)
+            resolved=[resolve(r) for r in regimes]
+            eligible=np.array([r is not None for r in resolved])
+            mask = np.isfinite(vals) & eligible
 
             if not np.any(mask):
                 return pd.Series(np.full(len(group), np.nan), index=group.index)
@@ -262,7 +296,7 @@ def regime_switching_transform(
                 pct_ranks = (ranks - 1.0) / (len(ranks) - 1.0)
                 ranked[mask] = pct_ranks
             elif len(valid_vals) == 1:
-                ranked[mask] = 0.5
+                pass  # explicit insufficient eligible cross-section
 
             return pd.Series(ranked, index=group.index)
 
@@ -272,21 +306,16 @@ def regime_switching_transform(
             result_list.append(rank_cs(group))
 
         result_series = pd.concat(result_list)
+        result_series.attrs["unknown_regime_policy"]=policy.value
+        result_series.attrs["eligibility_status_by_time"]={time_val:("READY" if np.isfinite(part).sum()>=2 else "INSUFFICIENT_ELIGIBLE_SAMPLE") for time_val,part in result_series.groupby(values[time_col].to_numpy())}
         return result_series
 
     # For other transforms, apply row-wise
     for i in range(len(values)):
         regime = regime_labels.iloc[i]
 
-        if pd.isna(regime):
-            # NaN regime -> NaN output
-            continue
-
-        regime_int = int(regime)
-
-        if regime_int not in fitted_state.regime_params:
-            # Unknown regime -> NaN output (fail-closed)
-            continue
+        regime_int=resolve(regime)
+        if regime_int is None: continue
 
         val = raw_values[i]
 
@@ -294,6 +323,7 @@ def regime_switching_transform(
             # NaN input -> NaN output
             continue
 
+        if regime_int == "IDENTITY": result[i]=val; continue
         params = fitted_state.regime_params[regime_int]
 
         if transform_type == "zscore":
@@ -313,4 +343,6 @@ def regime_switching_transform(
         elif transform_type == "none":
             result[i] = val
 
-    return pd.Series(result, index=values.index)
+    answer=pd.Series(result,index=values.index)
+    answer.attrs["unknown_regime_policy"]=policy.value
+    return answer

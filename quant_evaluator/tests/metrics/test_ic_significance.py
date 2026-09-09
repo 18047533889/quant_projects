@@ -17,6 +17,7 @@ Only quant_evaluator/metrics/ic.py + tests/metrics/ are touched.
 """
 
 import numpy as np
+import pytest
 
 from quant_evaluator.contracts.factor_batch import AxisRef, FactorBatch
 from quant_evaluator.contracts.label_bundle import LabelBundle
@@ -120,30 +121,32 @@ def test_ic_significance_does_not_change_compute_mean_ic():
 # ---------------------------------------------------------------------------
 
 
-def test_sparse_tie_factor_spearman_is_nan_and_excluded_from_mean():
-    """3-level factor with 30 obs: rank levels < floor -> NaN, no fake IC."""
+def test_sparse_tie_factor_spearman_is_defined_independently_of_evidence_grade():
+    """V5: ties reduce information but do not make nonconstant Spearman undefined."""
+    from scipy.stats import spearmanr
     factor = np.array(
         [0.0, 1.0, 2.0] * 10, dtype=float
     )  # only 3 distinct levels
     labels = np.arange(30, dtype=float)
 
     corr = _spearman_rank_correlation(factor, labels, min_obs=10)
-    assert np.isnan(corr)
+    assert corr == pytest.approx(spearmanr(factor, labels).statistic)
 
-    # And through the daily pipeline: all days NaN, mean excludes them.
+    # The daily pipeline uses exactly the same rank definition.
     T, N, F = 30, 30, 1
     values = np.tile(factor, (T, 1)).reshape(T, N, F)
     label_panel = np.tile(labels, (T, 1))
     ic_series, counts = compute_daily_ic(
         _batch(values), _bundle(label_panel), method="spearman", min_assets=10
     )
-    assert np.all(np.isnan(ic_series))
+    np.testing.assert_allclose(ic_series, corr)
     mean_ic, _ = compute_mean_ic(ic_series, min_periods=1)
-    assert np.isnan(mean_ic)
+    assert mean_ic == pytest.approx(corr)
 
 
-def test_sparse_tie_factor_excluded_from_daily_mean_but_real_levels_kept():
-    """Tie-sparse factor is NaN (excluded); a real-levels factor still computes."""
+def test_discrete_and_continuous_factors_retain_independent_daily_rank_ic():
+    """Both kinds use average-tie Spearman; neither contaminates the other."""
+    from scipy.stats import spearmanr
     rng = np.random.default_rng(11)
     T, N, F = 20, 30, 2
     tie = np.tile(np.array([0.0, 1.0, 2.0] * 10), (T, 1)).reshape(T, N, 1)
@@ -153,8 +156,7 @@ def test_sparse_tie_factor_excluded_from_daily_mean_but_real_levels_kept():
     ic_series, _ = compute_daily_ic(
         _batch(values), _bundle(labels), method="spearman", min_assets=10
     )
-    # tie factor: NaN everywhere; real factor: computable
-    assert np.all(np.isnan(ic_series[:, 0]))
+    np.testing.assert_allclose(ic_series[:,0], [spearmanr(tie[t,:,0],labels[t]).statistic for t in range(T)])
     assert np.count_nonzero(np.isfinite(ic_series[:, 1])) >= 15
 
 

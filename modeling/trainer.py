@@ -18,7 +18,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from modeling.artifact import FrozenPreprocessing, ModelArtifact, ModelArtifactManifest
+from modeling.artifact import FrozenPreprocessing, ModelArtifact, ModelArtifactManifest, ReplayContract
 from modeling.contracts import DecisionClock, LabelContract, ParameterSearchPolicy, SampleAdequacyContract
 from modeling.dataset import PanelDataset
 from modeling.hyperparams import validate_search_grid
@@ -42,6 +42,18 @@ class PreprocessingSpec:
     steps: tuple[str, ...] = ("imputer", "winsor", "standardize")
     winsor_quantiles: tuple[float, float] = (0.01, 0.99)
     use_standardize: bool = True
+    consumer_profile: str = ""
+    policy_version: str = ""
+    missing_policy: str = ""
+    scale_policy: str = ""
+    categorical_policy: str = ""
+
+    @property
+    def is_explicit_consumer_policy(self) -> bool:
+        return bool(
+            self.consumer_profile and self.policy_version and self.missing_policy
+            and self.scale_policy and self.categorical_policy
+        )
 
 
 def fit_preprocessing(train_ds: PanelDataset, spec: PreprocessingSpec) -> FrozenPreprocessing:
@@ -55,7 +67,10 @@ def fit_preprocessing(train_ds: PanelDataset, spec: PreprocessingSpec) -> Frozen
     if unknown:
         raise ValueError(f"unknown preprocessing steps: {sorted(unknown)!r}")
 
-    current = X.copy()
+    # Fit and apply must agree on invalid values: the frozen imputer treats
+    # NaN and both infinities as missing. Letting infinity enter nanmean or
+    # nanquantile corrupts statistics of the otherwise finite TRAIN samples.
+    current = np.where(np.isfinite(X), X, np.nan)
     steps: list[dict[str, Any]] = []
     for kind in spec.steps:
         if kind == "imputer":
@@ -77,6 +92,9 @@ def fit_preprocessing(train_ds: PanelDataset, spec: PreprocessingSpec) -> Frozen
             std = np.where(np.isfinite(std) & (std > 0), std, 1.0)
             steps.append({"kind": kind, "mean": mean.tolist(), "scale": std.tolist()})
             current = (current - mean) / std
+    for step in steps:
+        # Included in state_hash; existing serialized states remain unchanged.
+        step["fit_semantics_version"] = "finite-only-v2"
     return FrozenPreprocessing(steps)
 
 
@@ -105,6 +123,8 @@ class TrainResult:
     validation_scores: list[dict[str, Any]]
     preprocessing: FrozenPreprocessing
     fold_id: int | None = None
+    training_importance_evidence: dict[str, str] = field(default_factory=dict)
+    oos_ablation_evidence_refs: dict[str, str] = field(default_factory=dict)
 
 
 def _free_parameter_count(candidate: dict[str, Any]) -> int:
@@ -123,6 +143,12 @@ def _free_parameter_count(candidate: dict[str, Any]) -> int:
 def _schema_hash(columns: list[str]) -> str:
     import hashlib
     return hashlib.sha256("|".join(columns).encode("utf-8")).hexdigest()
+
+
+def _dataset_schema_hash(ds: PanelDataset) -> str:
+    if ds.feature_schema is not None:
+        return ds.feature_schema.fingerprint()
+    return "legacy-columns:" + _schema_hash(ds.feature_cols)
 def _maturity_cutoff(
     final_fit_end: str,
     horizon_bars: int,
@@ -176,9 +202,9 @@ def _evaluate_validation(
     """
     if validation_ds is None or validation_ds.n_rows == 0:
         raise ValueError("validation_ds is required and must be non-empty")
-    Xv, yv, dv, _, _ = validation_ds.as_matrix()
+    Xv, yv, dv, _, semantic_valid = validation_ds.as_matrix()
     Xv = preprocessing.transform(Xv)
-    finite = np.isfinite(yv) & np.isfinite(Xv).all(axis=1)
+    finite = semantic_valid & np.isfinite(yv) & np.isfinite(Xv).all(axis=1)
     if not np.any(finite):
         return {"rank_ic": float("nan"), "icir": float("nan"), "mse": float("nan")}
     Xv = Xv[finite]
@@ -225,7 +251,7 @@ def _extract_matrices(
     Weights are aligned to the full cohort (finite features AND finite labels)
     so no declared weight is silently ignored.
     """
-    X_full, y_full, _, _, _ = ds.as_matrix()
+    X_full, y_full, _, _, semantic_valid = ds.as_matrix()
     X_all = preprocessing.transform(X_full)
     transformed_finite = np.isfinite(X_all).all(axis=1)
 
@@ -242,14 +268,14 @@ def _extract_matrices(
             raise ValueError(f"aux_col {aux_col!r} missing from panel")
         aux_arr = ds.frame[aux_col].to_numpy(dtype=np.float64)
     if y_full is not None:
-        ok = np.isfinite(y_full) & transformed_finite
+        ok = semantic_valid & np.isfinite(y_full) & transformed_finite
         X_tr = X_all[ok]
         y_tr = y_full[ok]
         if aux_arr is not None:
             aux_arr = aux_arr[ok]
         weights = None if weights_all is None else weights_all[ok]
     else:
-        ok = transformed_finite
+        ok = semantic_valid & transformed_finite
         X_tr, y_tr = X_all[ok], None
         if aux_arr is not None:
             aux_arr = aux_arr[ok]
@@ -296,6 +322,7 @@ def train_model(
     cancel_token: Any | None = None,
     sample_weight_policy: str | None = None,
     sample_weight_half_life_dates: float | None = None,
+    replay_contract: ReplayContract | None = None,
 ) -> TrainResult:
     """Run one validation-backed training fold and fail closed on leakage.
 
@@ -318,11 +345,45 @@ def train_model(
         raise ValueError(f"unknown retrain_policy {retrain_policy!r}")
     if train_ds.label_col is None:
         raise ValueError("training panel must be labelled")
+    if train_ds.feature_schema is not None and train_ds.feature_schema.is_complete:
+        if not isinstance(replay_contract, ReplayContract):
+            raise ValueError("complete production feature manifest requires ReplayContract")
+        if not preprocessing_spec.is_explicit_consumer_policy:
+            raise ValueError("complete production feature manifest requires explicit consumer preprocessing policy")
+        if preprocessing_spec.consumer_profile != train_ds.feature_schema.consumer_profile:
+            raise ValueError("preprocessing consumer profile differs from feature manifest")
+        if preprocessing_spec.missing_policy not in {
+            "impute_with_mask", "reason_aware_impute_with_mask"
+        }:
+            raise ValueError("unsupported production missing_policy")
+        if "imputer" not in preprocessing_spec.steps or any(
+            field.mask_ref is None for field in train_ds.feature_schema.fields
+        ):
+            raise ValueError("impute_with_mask requires imputer and an explicit mask_ref per feature")
+        if preprocessing_spec.missing_policy == "reason_aware_impute_with_mask":
+            if train_ds.missing_reason_plane is None:
+                raise ValueError("reason-aware missing policy requires an authoritative missing reason plane")
+            if any(field.missing_reason_ref is None or field.missing_age_ref is None
+                   for field in train_ds.feature_schema.fields):
+                raise ValueError("reason-aware missing policy requires reason and age refs per feature")
+        expected_scale = "train_zscore" if (
+            "standardize" in preprocessing_spec.steps and preprocessing_spec.use_standardize
+        ) else "raw_clean"
+        if preprocessing_spec.scale_policy != expected_scale:
+            raise ValueError("scale_policy does not match preprocessing steps")
+        if preprocessing_spec.categorical_policy not in {"none", "frozen_vocabulary"}:
+            raise ValueError("categorical_policy must be 'none' or 'frozen_vocabulary'")
+    derived_feature_schema_hash = _dataset_schema_hash(train_ds)
+    if (train_ds.feature_schema is not None and train_ds.feature_schema.is_complete
+            and feature_schema_hash and feature_schema_hash != derived_feature_schema_hash):
+        raise ValueError("caller feature_schema_hash differs from dataset feature manifest")
     if validation_ds is not None:
         if validation_ds.label_col is None:
             raise ValueError("validation panel must be labelled")
         if list(train_ds.feature_cols) != list(validation_ds.feature_cols):
             raise ValueError("training and validation feature schemas differ")
+        if _dataset_schema_hash(train_ds) != _dataset_schema_hash(validation_ds):
+            raise ValueError("training and validation feature manifests differ")
         train_dates = train_ds.frame[train_ds.date_col]
         validation_dates = validation_ds.frame[validation_ds.date_col]
         if train_dates.max() >= validation_dates.min():
@@ -330,15 +391,23 @@ def train_model(
 
     from modeling.walk_forward import purge_and_embargo, purge_before_boundary
 
+    source_feature_schema = train_ds.feature_schema
+
     _calendar_frames = [train_ds.frame[train_ds.date_col]]
     if validation_ds is not None:
         _calendar_frames.append(validation_ds.frame[validation_ds.date_col])
+    if evaluation_boundary is not None:
+        _calendar_frames.append(pd.Series([evaluation_boundary]))
     _bar_calendar: np.ndarray = np.sort(
         pd.Index(pd.to_datetime(pd.concat(_calendar_frames))).unique().to_numpy()
     )
     train_ds = purge_and_embargo(train_ds, validation_ds, label_contract)
+    # Legacy slicing helpers predate FeatureSchema.  Preserve the already
+    # validated immutable manifest across their row-only transformation.
+    train_ds.feature_schema = source_feature_schema
     if validation_ds is None and evaluation_boundary is not None:
         train_ds = purge_before_boundary(train_ds, evaluation_boundary, label_contract)
+        train_ds.feature_schema = source_feature_schema
     if train_ds.n_rows == 0:
         raise ValueError("no training rows remain after purge/embargo")
     _raise_if_cancelled(cancel_token)
@@ -479,22 +548,52 @@ def train_model(
     _raise_if_cancelled(cancel_token)
     if retrain_policy == "train_plus_validation" and validation_ds is not None:
         refit_frame = pd.concat([train_ds.frame, validation_ds.frame], ignore_index=True)
+        if (train_ds.missing_reason_plane is None) != (validation_ds.missing_reason_plane is None):
+            raise ValueError("train and validation missingness authority presence differs")
+        refit_missingness = None
+        if train_ds.missing_reason_plane is not None:
+            left, right = train_ds.missing_reason_plane, validation_ds.missing_reason_plane
+            refit_missingness = type(left)(
+                reasons=np.concatenate([left.reasons, right.reasons], axis=0),
+                original_missing=np.concatenate([left.original_missing, right.original_missing], axis=0),
+                filled=np.concatenate([left.filled, right.filled], axis=0),
+                usable=np.concatenate([left.usable, right.usable], axis=0),
+                age=np.concatenate([left.age, right.age], axis=0),
+            )
+        if (train_ds.label_missing_reasons is None) != (validation_ds.label_missing_reasons is None):
+            raise ValueError("train and validation label missing-reason presence differs")
+        refit_label_reasons = (
+            None if train_ds.label_missing_reasons is None else
+            np.concatenate([train_ds.label_missing_reasons, validation_ds.label_missing_reasons])
+        )
         refit_ds = PanelDataset(
             frame=refit_frame,
             date_col=train_ds.date_col,
             stock_col=train_ds.stock_col,
             feature_cols=list(train_ds.feature_cols),
             label_col=train_ds.label_col,
+            feature_schema=train_ds.feature_schema,
+            run_mode=train_ds.run_mode,
+            missing_reason_plane=refit_missingness,
+            label_missing_reasons=refit_label_reasons,
         )
         # The final fit also sees validation rows — their labels mature at
         # anchor + H and MUST NOT reach into the next held-out set.  Purge the
         # combined refit window against the evaluation (test) boundary too.
         if evaluation_boundary is not None:
             refit_ds = purge_before_boundary(refit_ds, evaluation_boundary, label_contract)
+            refit_ds.feature_schema = source_feature_schema
     else:
         refit_ds = train_ds
+    # The frozen transform is part of the final fit.  When the declared final
+    # cohort includes validation, its state must be fitted on that exact cohort
+    # (never reuse train-only selection state while claiming a larger fit set).
+    final_preprocessing = (
+        fit_preprocessing(refit_ds, preprocessing_spec)
+        if refit_ds is not train_ds else preprocessing
+    )
     X_fit, y_fit, aux_fit, weights_fit = _extract_matrices(
-        refit_ds, preprocessing, aux_col, decay_half_life_bars, sample_weight_policy, sample_weight_half_life_dates
+        refit_ds, final_preprocessing, aux_col, decay_half_life_bars, sample_weight_policy, sample_weight_half_life_dates
     )
     best_spec = LearnerSpec(
         learner_name=learner_cls.name,
@@ -560,11 +659,17 @@ def train_model(
         refit_used_validation=refit_used_validation,
         decision_clock_id=decision_clock.decision_at,
         label_contract_id=label_contract.label_name,
-        feature_schema_hash=feature_schema_hash or _schema_hash(train_ds.feature_cols),
+        feature_schema_hash=feature_schema_hash or derived_feature_schema_hash,
+        feature_manifest=(
+            train_ds.feature_schema.to_dict()
+            if train_ds.feature_schema is not None and train_ds.feature_schema.is_complete
+            else {}
+        ),
+        replay_contract=(replay_contract.to_dict() if replay_contract is not None else {}),
         data_source_hash=data_source_hash,
         universe_hash=universe_hash,
         hyperparameters=dict(best_hyperparams),
-        preprocessing_state_hash=preprocessing.state_hash(),
+        preprocessing_state_hash=final_preprocessing.state_hash(),
         fit_code_commit=fit_code_commit,
         random_seed=random_seed,
         available_at=training_cutoff,
@@ -594,17 +699,31 @@ def train_model(
             "identities": exposure_ledger.identities,
             "digest": exposure_ledger.digest(),
         },
+        "preprocessing_policy": {
+            "consumer_profile": preprocessing_spec.consumer_profile,
+            "policy_version": preprocessing_spec.policy_version,
+            "steps": preprocessing_spec.steps,
+            "missing_policy": preprocessing_spec.missing_policy,
+            "scale_policy": preprocessing_spec.scale_policy,
+            "categorical_policy": preprocessing_spec.categorical_policy,
+            "production_certified": bool(
+                train_ds.feature_schema is not None
+                and train_ds.feature_schema.is_complete
+                and preprocessing_spec.is_explicit_consumer_policy
+                and isinstance(replay_contract, ReplayContract)
+            ),
+        },
     }
     artifact = ModelArtifact(
         manifest=manifest,
         learner=best_learner,
         frozen=frozen,
-        preprocessing=preprocessing,
+        preprocessing=final_preprocessing,
         fit_info=fit_info,
     )
     return TrainResult(
         artifact=artifact,
         selected_hyperparams=dict(best_hyperparams),
         validation_scores=validation_scores,
-        preprocessing=preprocessing,
+        preprocessing=final_preprocessing,
     )

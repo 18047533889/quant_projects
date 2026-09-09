@@ -1,7 +1,12 @@
 """SearchRunner: orchestrate mutation search with budget and plateau stopping."""
 
 import json
+import hashlib
+import copy
 import numbers
+import os
+import tempfile
+import threading
 import warnings
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -11,7 +16,7 @@ def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
 from math import isfinite
 from types import MappingProxyType
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Mapping, Optional
 
 from factor_optimizer.capabilities import ExecutionMode, require_production_capability
 from factor_optimizer.contracts.objective import (
@@ -32,8 +37,10 @@ from factor_optimizer.contracts.multiplicity import MultiplicityArtifact
 from factor_optimizer.contracts.splits import (
     EvaluationProtocol,
     LabelBundle,
+    SealedTestEvaluationOutcome,
     SealedTestHandle,
     SealedTestResult,
+    SelectedExecutionSpec,
     SplitPlan,
     validate_split_plan,
 )
@@ -46,10 +53,13 @@ from factor_optimizer.data_capabilities import (
     ScopedEvaluator,
     build_search_capabilities,
 )
-from factor_optimizer.search.multifidelity import FidelityTier, MultiFidelityScheduler
+from factor_optimizer.search.multifidelity import (
+    EvaluationStage, FidelityTier, MultiFidelityScheduler, StageProfileRegistry,
+)
 from factor_optimizer.search.plateau import PlateauConfig, PlateauDetector
 from factor_optimizer.search.strategies import SearchStrategy
 from factor_optimizer.search.tiered_evaluation import (
+    TierEvaluationOutcome,
     TieredEvaluationPolicy,
     TieredEvaluationScheduler,
 )
@@ -105,6 +115,13 @@ class SearchConfig:
     # serialized, but a resumed run can verify it is running the SAME strategy
     # spec the checkpoint was created under.
     candidate_strategy_spec: Optional["SearchStrategySpec"] = None
+    # Optional durable campaign database. When configured the public runner
+    # automatically uses the SQLite-backed tracker; callers do not need a
+    # test-only factory injection.
+    durable_campaign_store_path: Optional[str] = None
+    # Explicit compatibility mode: may compute diagnostic/screening scores,
+    # but can never advance quality tiers or freeze a selectable winner.
+    screening_only: bool = True
 
     def __post_init__(self):
         # P1-FO-006: derive the candidate-strategy spec from the runtime
@@ -137,6 +154,13 @@ class SearchConfig:
             not isfinite(self.evaluation_cost_units) or self.evaluation_cost_units < 0
         ):
             raise ValueError("evaluation_cost_units must be finite and >= 0")
+        if self.durable_campaign_store_path is not None and (
+            not isinstance(self.durable_campaign_store_path, str)
+            or not self.durable_campaign_store_path.strip()
+        ):
+            raise ValueError("durable_campaign_store_path must be a non-empty path")
+        if not isinstance(self.screening_only, bool):
+            raise TypeError("screening_only must be a bool")
         if self.objective_direction is not None:
             if self.objective_direction not in OBJECTIVE_DIRECTIONS:
                 raise ValueError(
@@ -210,6 +234,8 @@ class SearchConfig:
                 else None
             ),
             "candidate_strategy": None,
+            "durable_campaign_store_path": self.durable_campaign_store_path,
+            "screening_only": self.screening_only,
         }
 
     @classmethod
@@ -263,7 +289,11 @@ class SearchSession:
     sealed_split_id: Optional[str] = None
     sealed_test_masks: Optional[Dict[str, List[bool]]] = None
     sealed_test_consumed: bool = False
+    sealed_test_state: str = "AVAILABLE"
+    sealed_test_reservation_ref: Optional[str] = None
+    sealed_execution_spec: Optional[SelectedExecutionSpec] = None
     sealed_test_results: List[Dict[str, Any]] = field(default_factory=list)
+    _sealed_test_lock: Any = field(default_factory=threading.RLock, repr=False, compare=False)
     strategy: Optional[SearchStrategy] = None
     # FO-P0-04: append-only ledger of every proposal attempt.  A burned-budget
     # proposal (raised / non-Trial) is recorded here as PROPOSAL_FAILED /
@@ -272,6 +302,21 @@ class SearchSession:
     # P0-FO-003: full-proposal-process multiplicity artifact, derived once at
     # finish() so the true hypothesis count is bound to the search result.
     multiplicity_artifact: Optional["MultiplicityArtifact"] = None
+    # Hash of the compiled execution configuration captured when the session
+    # starts.  Mutating a SearchConfig later must not silently alter a resumed
+    # campaign's objective, budget, or split policy.
+    execution_plan_hash: Optional[str] = None
+    stage_execution_trace: List[Dict[str, Any]] = field(default_factory=list)
+    selection_decision_id: Optional[str] = None
+    selection_decision_hash: Optional[str] = None
+    selection_request_hash: Optional[str] = None
+
+    def __post_init__(self) -> None:
+        actual = _execution_plan_hash(self.config)
+        if self.execution_plan_hash is None:
+            self.execution_plan_hash = actual
+        elif self.execution_plan_hash != actual:
+            raise ValueError("execution plan hash does not match search configuration")
 
     def __setattr__(self, name: str, value: Any) -> None:
         # Sealed-test state is append-only through freeze/consume; direct
@@ -279,7 +324,9 @@ class SearchSession:
         if (
             getattr(self, "frozen_at", None) is not None
             and name in ("frozen_at", "sealed_trial_id", "sealed_split_id",
-                         "sealed_test_masks", "sealed_test_consumed")
+                         "sealed_test_masks", "sealed_test_consumed",
+                         "sealed_test_state", "sealed_test_reservation_ref",
+                         "sealed_execution_spec")
             and getattr(self, name, None) is not value
             and not getattr(self, "_sealing", False)
         ):
@@ -345,13 +392,15 @@ class SearchSession:
         never lost.  ``multiplicity_artifact`` is derived once at finish.
         """
         self._ensure_mutable()
-        self.finished_at = _utcnow()
-        self.stop_reason = reason
+        self.ledger.verify_chain()
+        pending_multiplicity = self.multiplicity_artifact
         if self.multiplicity_artifact is None:
             from factor_optimizer.contracts.multiplicity import MultiplicityArtifact
 
             counts = self.ledger.status_counts()
-            total = len(self.ledger)
+            # A proposal may emit lifecycle events (PROPOSED/SELECTED) in
+            # addition to exactly one terminal outcome.  Multiplicity counts
+            # hypotheses, not ledger events.
             # Every proposal attempt must have exactly one terminal outcome.
             # Map the ledger statuses to the multiplicity buckets; any status
             # that is not one of the known buckets would make the artifact
@@ -363,32 +412,34 @@ class SearchSession:
                 "ILLEGAL",
                 "EVALUATED",
                 "EVALUATION_FAILED",
-                "PROPOSED",
-                "SELECTED",
+                "PRUNED",
             }
-            accounted = 0
             for key, n in counts.items():
-                if key not in known:
+                if key not in known and key not in {"PROPOSED", "SELECTED"}:
                     raise ValueError(
                         f"ledger contains outcome {key!r} with no multiplicity "
                         "bucket; every proposal must map to exactly one terminal "
                         "outcome"
                     )
-                accounted += n
-            if accounted != total:
-                raise ValueError(
-                    "ledger outcome count mismatch; every proposal must have "
-                    "exactly one terminal outcome"
-                )
-            self.multiplicity_artifact = MultiplicityArtifact(
+            total = sum(counts.get(key, 0) for key in known)
+            pending_multiplicity = MultiplicityArtifact(
                 search_session_id=self.session_id,
                 total_proposals=total,
                 parse_failures=counts.get("PROPOSAL_FAILED", 0),
                 duplicates=counts.get("DUPLICATE", 0),
-                valid_evaluated=counts.get("EVALUATED", 0),
+                valid_evaluated=counts.get("EVALUATED", 0) + counts.get("PRUNED", 0),
                 failed_evaluations=counts.get("EVALUATION_FAILED", 0),
                 illegal=counts.get("ILLEGAL", 0),
             )
+        # Validate and seal before publishing any terminal session state.
+        # A failure above or in chain validation leaves the session resumable,
+        # with no half-committed finished timestamp or multiplicity artifact.
+        self.ledger.verify_chain()
+        if not self.ledger.sealed:
+            self.ledger.seal()
+        self.multiplicity_artifact = pending_multiplicity
+        self.stop_reason = reason
+        self.finished_at = _utcnow()
 
     def freeze_for_sealed_test(self, split_plan: SplitPlan) -> SealedTestHandle:
         """Freeze the finished winner and issue its one-shot test authority."""
@@ -399,6 +450,10 @@ class SearchSession:
             raise ValueError("search session is already frozen")
         if not self.best_trial_id:
             raise ValueError("cannot freeze a session without an evaluated winner")
+        if not self.selection_decision_id:
+            raise ValueError(
+                "screening-only/provisional winner lacks an authoritative FA decision receipt"
+            )
         winner = next(
             (trial for trial in self.successful_trials() if trial.trial_id == self.best_trial_id),
             None,
@@ -426,6 +481,17 @@ class SearchSession:
                 "validation": tuple(split_plan.validation_mask),
                 "test": tuple(split_plan.test_mask),
             })
+            self.sealed_execution_spec = SelectedExecutionSpec(
+                trial_id=winner.trial_id,
+                mutation_id=winner.mutation_id,
+                parent_factor_ids=tuple(winner.parent_factor_ids),
+                selection_evaluation_ref=winner.evaluation_ref,
+                sealed_split_hash=_split_semantics_hash(split_plan),
+                metadata=_sealed_execution_metadata(
+                    winner.metadata, self.config.objective_spec.metric_name
+                ),
+            )
+            self.sealed_test_state = "AVAILABLE"
         finally:
             object.__setattr__(self, "_sealing", False)
         return SealedTestHandle(
@@ -434,6 +500,7 @@ class SearchSession:
             split_id=split_plan.split_id,
             evaluation_ref=winner.evaluation_ref,
             frozen_at=self.frozen_at,
+            execution_spec_hash=self.sealed_execution_spec.spec_hash,
         )
 
     def consume_sealed_test(
@@ -452,86 +519,13 @@ class SearchSession:
                 "split_plan is bound to the sealed test segment; bare callables "
                 "decide their own data boundary and are not accepted"
             )
-        if evaluator.split_plan.split_id != split_plan.split_id:
-            raise ValueError(
-                "evaluator protocol split_id must match the sealed split_plan"
-            )
-        if self.frozen_at is None:
-            raise ValueError("search session is not frozen")
-        if self.sealed_test_consumed:
-            raise ValueError("sealed test handle has already been consumed")
-        expected = (
-            self.session_id,
-            self.sealed_trial_id,
-            self.sealed_split_id,
-            self.frozen_at,
+        _validate_sealed_binding(
+            self, handle, split_plan, evaluator_plan=evaluator.split_plan
         )
-        actual = (
-            handle.search_session_id,
-            handle.trial_id,
-            handle.split_id,
-            handle.frozen_at,
+        raise ValueError(
+            "direct consume_sealed_test is retired: sealed certification must "
+            "use SealedTestExecutor with a durable TestAuthorityBroker"
         )
-        if actual != expected or split_plan.split_id != self.sealed_split_id:
-            raise ValueError("sealed test handle does not match frozen session")
-        # split_id equality alone is trivially forgeable; the plan presented
-        # at consume time must be mask-identical to the one frozen earlier.
-        frozen_masks = self.sealed_test_masks
-        if frozen_masks is not None and (
-            tuple(split_plan.train_mask) != frozen_masks["train"]
-            or tuple(split_plan.validation_mask) != frozen_masks["validation"]
-            or tuple(split_plan.test_mask) != frozen_masks["test"]
-        ):
-            raise ValueError(
-                "sealed test split_plan masks differ from the frozen plan; "
-                "a reused split_id cannot re-bind the sealed test segment"
-            )
-        # The evaluator must be bound to this exact plan, not just to a
-        # plan carrying the same split_id.
-        if (
-            tuple(evaluator.split_plan.train_mask) != tuple(split_plan.train_mask)
-            or tuple(evaluator.split_plan.validation_mask) != tuple(split_plan.validation_mask)
-            or tuple(evaluator.split_plan.test_mask) != tuple(split_plan.test_mask)
-        ):
-            raise ValueError(
-                "evaluator protocol masks must match the sealed split_plan masks"
-            )
-        winner = next(
-            (trial for trial in self.successful_trials() if trial.trial_id == handle.trial_id),
-            None,
-        )
-        if winner is None or winner.evaluation_ref != handle.evaluation_ref:
-            raise ValueError("sealed test handle evidence does not match frozen winner")
-        metrics = evaluator.evaluate(winner, 0)
-        if not isinstance(metrics, dict) or not all(
-            isinstance(name, str)
-            and isinstance(value, (int, float))
-            and not isinstance(value, bool)
-            and isfinite(value)
-            for name, value in metrics.items()
-        ):
-            raise ValueError("sealed test evaluator must return finite numeric metrics")
-        # Consume the seal via the guarded path (False→True is the one legal
-        # transition; any reset attempt stays blocked by __setattr__).
-        object.__setattr__(self, "sealed_test_consumed", True)
-        result = SealedTestResult(
-            trial_id=winner.trial_id,
-            test_metrics=dict(metrics),
-            frozen_at=self.frozen_at,
-            search_session_id=self.session_id,
-            split_id=split_plan.split_id,
-            evaluation_ref=winner.evaluation_ref,
-        )
-        self.sealed_test_results.append(
-            {
-                "trial_id": result.trial_id,
-                "split_id": result.split_id,
-                "evaluation_ref": result.evaluation_ref,
-                "frozen_at": result.frozen_at.isoformat(),
-                "test_metrics": dict(result.test_metrics),
-            }
-        )
-        return result
 
     def is_finished(self) -> bool:
         """Check if session is complete."""
@@ -553,11 +547,31 @@ class SearchSession:
         resumed from this checkpoint reproduces the exact same proposal
         trajectory as an uninterrupted one.
         """
+        if self.execution_plan_hash != _execution_plan_hash(self.config):
+            raise ValueError(
+                "search configuration changed after session start; create a new "
+                "session instead of checkpointing a mutated execution plan"
+            )
         payload = self.to_dict()
         if self.strategy is not None:
             payload["strategy"] = self.strategy.to_checkpoint_dict()
-        with open(path, "w", encoding="utf-8") as fh:
-            json.dump(payload, fh, indent=2, sort_keys=True)
+        destination = os.path.abspath(os.fspath(path))
+        directory = os.path.dirname(destination)
+        fd, temporary = tempfile.mkstemp(
+            prefix=".fo-checkpoint-", suffix=".tmp", dir=directory, text=True
+        )
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as fh:
+                json.dump(payload, fh, indent=2, sort_keys=True)
+                fh.flush()
+                os.fsync(fh.fileno())
+            os.replace(temporary, destination)
+        except BaseException:
+            try:
+                os.unlink(temporary)
+            except FileNotFoundError:
+                pass
+            raise
 
     @classmethod
     def resume(cls, path: str) -> "SearchSession":
@@ -589,7 +603,7 @@ class SearchSession:
             "recent_scores": list(self.recent_scores),
             # Checkpoint format: 2 serializes sealed_test_masks alongside
             # frozen_at; format 1 checkpoints (no key) predate mask pinning.
-            "checkpoint_format": 2,
+            "checkpoint_format": 3,
             # The search-time data boundary must survive a checkpoint
             # roundtrip: freeze_for_sealed_test's overlap guard reads it
             # from the config, so a restored session without it would
@@ -608,8 +622,19 @@ class SearchSession:
                 else None
             ),
             "sealed_test_consumed": self.sealed_test_consumed,
+            "sealed_test_state": self.sealed_test_state,
+            "sealed_test_reservation_ref": self.sealed_test_reservation_ref,
+            "sealed_execution_spec": (
+                self.sealed_execution_spec.to_dict()
+                if self.sealed_execution_spec is not None else None
+            ),
             "sealed_test_results": [dict(item) for item in self.sealed_test_results],
             "ledger": self.ledger.to_dict(),
+            "execution_plan_hash": self.execution_plan_hash,
+            "stage_execution_trace": [dict(item) for item in self.stage_execution_trace],
+            "selection_decision_id": self.selection_decision_id,
+            "selection_decision_hash": self.selection_decision_hash,
+            "selection_request_hash": self.selection_request_hash,
         }
 
     @classmethod
@@ -723,6 +748,25 @@ class SearchSession:
         sealed_test_consumed = values["sealed_test_consumed"]
         if not isinstance(sealed_test_consumed, bool):
             raise ValueError("checkpoint sealed_test_consumed must be a boolean")
+        _format = values.get("checkpoint_format", 1)
+        sealed_test_state = values.get(
+            "sealed_test_state", "CONSUMED" if sealed_test_consumed else "AVAILABLE"
+        )
+        if sealed_test_state not in {"AVAILABLE", "RESERVED", "CONSUMED"}:
+            raise ValueError("checkpoint sealed_test_state is invalid")
+        sealed_state_disagrees = sealed_test_consumed != (sealed_test_state == "CONSUMED")
+        reservation_ref = values.get("sealed_test_reservation_ref")
+        if sealed_test_state in {"RESERVED", "CONSUMED"} and (
+            not isinstance(reservation_ref, str) or not reservation_ref.strip()
+        ):
+            raise ValueError("checkpoint reserved sealed test requires a reservation ref")
+        execution_spec_raw = values.get("sealed_execution_spec")
+        execution_spec = (
+            SelectedExecutionSpec.from_dict(execution_spec_raw)
+            if execution_spec_raw is not None else None
+        )
+        if _format >= 3 and (frozen_at is None) != (execution_spec is None):
+            raise ValueError("checkpoint frozen session must carry its execution spec")
         sealed_test_masks = values.get("sealed_test_masks")
         if sealed_test_masks is not None:
             if not isinstance(sealed_test_masks, dict) or set(sealed_test_masks) != {
@@ -745,7 +789,6 @@ class SearchSession:
         # still restore: their seal identity survives via frozen_at /
         # sealed_trial_id / sealed_split_id, and the consume-time mask
         # comparison degrades to skip rather than reject.
-        _format = values.get("checkpoint_format", 1)
         if _format >= 2 and (frozen_at is None) != (sealed_test_masks is None):
             raise ValueError("checkpoint sealed_test_masks must be present exactly when frozen")
         if frozen_at is not None and sealed_test_masks is None:
@@ -813,6 +856,8 @@ class SearchSession:
             raise ValueError(
                 "checkpoint records sealed test evidence but the seal is unconsumed"
             )
+        if sealed_state_disagrees:
+            raise ValueError("checkpoint sealed-test state and consumed flag disagree")
         # Reattach the serialized search-time data boundary so the frozen
         # session's overlap guard survives the checkpoint roundtrip.
         _restore_search_split_plan(config, values.get("search_split_masks"))
@@ -844,8 +889,16 @@ class SearchSession:
             sealed_split_id=None,
             sealed_test_masks=None,
             sealed_test_consumed=False,
+            sealed_test_state="AVAILABLE",
+            sealed_test_reservation_ref=None,
+            sealed_execution_spec=None,
             sealed_test_results=list(sealed_test_results),
             ledger=ledger,
+            execution_plan_hash=values.get("execution_plan_hash"),
+            stage_execution_trace=list(values.get("stage_execution_trace", [])),
+            selection_decision_id=values.get("selection_decision_id"),
+            selection_decision_hash=values.get("selection_decision_hash"),
+            selection_request_hash=values.get("selection_request_hash"),
         )
         if frozen_at is not None:
             # Replay the freeze through the guarded path so the restored
@@ -873,9 +926,155 @@ class SearchSession:
                         "test": tuple(sealed_test_masks["test"]),
                     })
                 session.sealed_test_consumed = sealed_test_consumed
+                session.sealed_test_state = sealed_test_state
+                session.sealed_test_reservation_ref = reservation_ref
+                session.sealed_execution_spec = execution_spec
             finally:
                 object.__setattr__(session, "_sealing", False)
         return session
+
+
+def _execution_plan_hash(config: SearchConfig) -> str:
+    """Return a deterministic identity for the executable search config."""
+    encoded = json.dumps(
+        config.to_dict(), sort_keys=True, separators=(",", ":"), default=str
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def _sealed_test_evaluation_ref(
+    session: SearchSession,
+    execution_spec: SelectedExecutionSpec,
+    split_plan: SplitPlan,
+) -> str:
+    """Deterministic, unique evidence identity for this sealed exposure."""
+    payload = {
+        "search_session_id": session.session_id,
+        "split_id": split_plan.split_id,
+        "execution_spec_hash": execution_spec.spec_hash,
+        "frozen_at": session.frozen_at.isoformat() if session.frozen_at else None,
+        "test_mask": list(split_plan.test_mask),
+    }
+    digest = hashlib.sha256(
+        json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
+    return f"sealed_test_evaluation:{digest}"
+
+
+def _split_semantics_hash(split_plan: SplitPlan) -> str:
+    bundle = split_plan.label_bundle
+    payload = {
+        "split_id": split_plan.split_id,
+        "train_mask": list(split_plan.train_mask),
+        "validation_mask": list(split_plan.validation_mask),
+        "test_mask": list(split_plan.test_mask),
+        "metadata": split_plan.metadata,
+        "time_index": list(split_plan.time_index) if split_plan.time_index is not None else None,
+        "label_horizon": split_plan.label_horizon,
+        "purge": split_plan.purge,
+        "embargo": split_plan.embargo,
+        "validation_embargo": split_plan.validation_embargo,
+        "label_bundle": (
+            {
+                name: getattr(bundle, name)
+                for name in (
+                    "label_start_time", "label_end_time", "label_horizon", "sample_ids",
+                    "decision_times", "label_start_times", "label_end_times",
+                    "label_availability_times",
+                )
+            }
+            if bundle is not None else None
+        ),
+    }
+    return hashlib.sha256(
+        json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str).encode()
+    ).hexdigest()
+
+
+def _sealed_execution_metadata(metadata: Dict[str, Any], objective_metric: str) -> Dict[str, Any]:
+    """Freeze the objective plus any explicitly declared valid test metrics."""
+    result = copy.deepcopy(metadata)
+    execution = result.get("execution_spec")
+    if isinstance(execution, dict):
+        declared = execution.get("required_test_metrics", ())
+        if isinstance(declared, str):
+            declared = (declared,)
+        else:
+            declared = tuple(declared)
+        execution["required_test_metrics"] = tuple(
+            dict.fromkeys((*declared, objective_metric))
+        )
+    return result
+
+
+def _validate_sealed_binding(
+    session: SearchSession,
+    handle: SealedTestHandle,
+    split_plan: SplitPlan,
+    *,
+    evaluator_plan: Optional[SplitPlan] = None,
+) -> SelectedExecutionSpec:
+    """Validate every frozen identity before any test capability can issue."""
+    if not isinstance(handle, SealedTestHandle):
+        raise TypeError("handle must be a SealedTestHandle")
+    if session.frozen_at is None:
+        raise ValueError("search session is not frozen")
+    spec = session.sealed_execution_spec
+    if spec is None:
+        raise ValueError("sealed execution specification is missing")
+    expected = (
+        session.session_id,
+        session.sealed_trial_id,
+        session.sealed_split_id,
+        session.frozen_at,
+        spec.selection_evaluation_ref,
+        spec.spec_hash,
+    )
+    actual = (
+        handle.search_session_id,
+        handle.trial_id,
+        handle.split_id,
+        handle.frozen_at,
+        handle.evaluation_ref,
+        handle.execution_spec_hash,
+    )
+    if actual != expected:
+        raise ValueError("sealed test handle does not match frozen session")
+    frozen_masks = session.sealed_test_masks
+    if frozen_masks is None or any(
+        tuple(getattr(split_plan, f"{name}_mask")) != frozen_masks[name]
+        for name in ("train", "validation", "test")
+    ):
+        raise ValueError("sealed test split_plan masks differ from the frozen plan")
+    if _split_semantics_hash(split_plan) != spec.sealed_split_hash:
+        raise ValueError("sealed test split semantics differ from the frozen plan")
+    if evaluator_plan is not None:
+        if any(
+            tuple(getattr(evaluator_plan, f"{name}_mask"))
+            != tuple(getattr(split_plan, f"{name}_mask"))
+            for name in ("train", "validation", "test")
+        ):
+            raise ValueError("evaluator protocol masks must match the sealed split_plan masks")
+        if _split_semantics_hash(evaluator_plan) != spec.sealed_split_hash:
+            raise ValueError("evaluator protocol split semantics differ from the frozen plan")
+    return spec
+
+
+def _sealed_test_evaluation_ref(
+    session: SearchSession,
+    execution_spec: SelectedExecutionSpec,
+    split_plan: SplitPlan,
+) -> str:
+    payload = {
+        "search_session_id": session.session_id,
+        "split_id": split_plan.split_id,
+        "execution_spec_hash": execution_spec.spec_hash,
+        "frozen_at": session.frozen_at.isoformat() if session.frozen_at else None,
+    }
+    digest = hashlib.sha256(
+        json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
+    return f"sealed_test_evaluation:{digest}"
 
 
 def _is_improvement(
@@ -981,6 +1180,63 @@ class SearchRunner:
     must never weaken that boundary.
     """
 
+    @staticmethod
+    def plan_diagnosis_trials(
+        parent_factor_id: str,
+        diagnoses,
+        *,
+        explicit_budget: Optional[int] = None,
+    ):
+        """Public runner entry for the bounded V5 diagnosis router."""
+        from factor_optimizer.search.diagnosis_routing import route_diagnoses
+
+        return route_diagnoses(
+            parent_factor_id, diagnoses, explicit_budget=explicit_budget
+        )
+
+    @classmethod
+    def for_diagnoses(
+        cls,
+        config: SearchConfig,
+        parent_factor_id: str,
+        diagnoses,
+        evaluation_fn,
+        *,
+        explicit_budget: Optional[int] = None,
+        portfolio_recipe_context=None,
+        **runner_kwargs,
+    ):
+        """Build a real runner whose proposals come from the V5 route plan."""
+        routed = cls.plan_diagnosis_trials(
+            parent_factor_id, diagnoses, explicit_budget=explicit_budget
+        )
+        if config.budget.max_trials != len(routed):
+            raise ValueError(
+                "diagnosis runner max_trials must equal the compiled raw+candidate count"
+            )
+        proposals = iter(item.to_trial() for item in routed)
+        if any(item.recipe_kind.value == "PORTFOLIO_RECIPE" for item in routed):
+            if not isinstance(portfolio_recipe_context, dict):
+                raise TypeError("portfolio routes require portfolio_recipe_context")
+            signal_ranks = portfolio_recipe_context.get("signal_ranks")
+            consumer = portfolio_recipe_context.get("consumer")
+            if signal_ranks is None or not callable(consumer):
+                raise TypeError("portfolio_recipe_context requires signal_ranks and callable consumer")
+            from factor_optimizer.search.diagnosis_routing import execute_routed_portfolio_trial
+            from factor_optimizer.contracts.splits import EvaluationProtocol
+            def dispatch(trial, fidelity):
+                if trial.metadata.get("recipe_kind") != "PORTFOLIO_RECIPE":
+                    return (evaluation_fn.evaluate(trial, fidelity)
+                            if isinstance(evaluation_fn, EvaluationProtocol) else evaluation_fn(trial, fidelity))
+                return execute_routed_portfolio_trial(trial, signal_ranks, consumer, fidelity)
+            bound_evaluator = (EvaluationProtocol(evaluation_fn.split_plan, dispatch)
+                               if isinstance(evaluation_fn, EvaluationProtocol) else dispatch)
+        else:
+            if portfolio_recipe_context is not None:
+                raise ValueError("portfolio_recipe_context supplied without a portfolio route")
+            bound_evaluator = evaluation_fn
+        return cls(config, lambda: next(proposals), bound_evaluator, **runner_kwargs)
+
     def __init__(
         self,
         config: SearchConfig,
@@ -989,6 +1245,10 @@ class SearchRunner:
         plateau_detector: Optional[Callable[[List[float]], bool]] = None,
         trial_validator: Optional[Callable[[Trial], Dict[str, Any]]] = None,
         strategy: Optional[SearchStrategy] = None,
+        budget_tracker_factory: Optional[Callable[[str, SearchBudget], Any]] = None,
+        decision_provider: Optional[Any] = None,
+        decision_request_factory: Optional[Callable[[SearchSession], Any]] = None,
+        stage_decision_request_factory: Optional[Callable[..., Any]] = None,
     ):
         if config.execution_mode is ExecutionMode.PRODUCTION:
             require_production_capability()
@@ -1029,6 +1289,18 @@ class SearchRunner:
         self.plateau_detector = plateau_detector
         self.trial_validator = trial_validator
         self.strategy = strategy
+        self._budget_tracker_factory = budget_tracker_factory
+        if (decision_provider is None) != (decision_request_factory is None):
+            raise ValueError("decision_provider and decision_request_factory are required together")
+        self.decision_provider = decision_provider
+        self.decision_request_factory = decision_request_factory
+        self.stage_decision_request_factory = stage_decision_request_factory
+        if not config.screening_only and (
+            decision_provider is None or decision_request_factory is None
+        ):
+            raise TypeError("selectable search requires DecisionProvider and final request factory")
+        if not config.screening_only and config.tiered_evaluation is not None and stage_decision_request_factory is None:
+            raise TypeError("selectable tiered search requires stage decision request factory")
         # FO-AutoTmt: tiered evaluation funnel scheduler (None when disabled).
         self._tiered_scheduler: Optional[TieredEvaluationScheduler] = None
         if config.tiered_evaluation is not None:
@@ -1094,6 +1366,29 @@ class SearchRunner:
             # never carries the placeholder strings "search"/"search_dataset".
             self._bind_capabilities(session_id="<pending>")
 
+    def _finish(self, session: SearchSession, reason: str) -> None:
+        """Run the sole authoritative final decision before sealing."""
+        if self.decision_provider is not None:
+            from factor_optimizer.ports.factor_intelligence import require_bound_decision_receipt
+            request = self.decision_request_factory(session)
+            receipt = require_bound_decision_receipt(request, self.decision_provider.decide(request))
+            status = getattr(receipt.status, "value", receipt.status)
+            if status == "SELECTED":
+                if receipt.winner_id not in {
+                    trial.trial_id for trial in session.successful_trials()
+                }:
+                    raise ValueError("decision winner is not a successfully evaluated candidate")
+                if not receipt.eligibility.get(receipt.winner_id, False):
+                    raise ValueError("decision winner is not eligible")
+                session.best_trial_id = receipt.winner_id
+                session.best_score = receipt.conservative_utility[receipt.winner_id]
+            else:
+                session.best_trial_id = session.best_score = None
+            session.selection_decision_id = receipt.decision_id
+            session.selection_decision_hash = receipt.content_hash
+            session.selection_request_hash = receipt.request_hash
+        session.finish(reason)
+
     def _bind_capabilities(self, session_id: str) -> None:
         """Build/re-issue the search data capabilities bound to a REAL session id.
 
@@ -1116,10 +1411,23 @@ class SearchRunner:
     def run(self, session_id: str) -> SearchSession:
         """Execute a new search until budget exhausted or plateau reached."""
         self._bind_capabilities(session_id=session_id)
+        if self._budget_tracker_factory is not None:
+            budget_tracker = self._budget_tracker_factory(session_id, self.config.budget)
+        elif self.config.durable_campaign_store_path is not None:
+            from factor_optimizer.contracts.campaign_store import (
+                DurableBudgetTracker, SQLiteCampaignStore,
+            )
+            budget_tracker = DurableBudgetTracker(
+                SQLiteCampaignStore(self.config.durable_campaign_store_path),
+                session_id,
+                self.config.budget,
+            )
+        else:
+            budget_tracker = BudgetTracker(budget=self.config.budget)
         session = SearchSession(
             session_id=session_id,
             config=self.config,
-            budget_tracker=BudgetTracker(budget=self.config.budget),
+            budget_tracker=budget_tracker,
             strategy=self.strategy,
         )
         return self._run_session(session)
@@ -1197,6 +1505,8 @@ class SearchRunner:
                 )
             self._validate_extension_growth(budget_extension)
             session.budget_tracker = BudgetTracker(budget_extension.new_budget)
+            if session.ledger.sealed:
+                session.ledger.begin_authorized_extension()
             session.finished_at = None
             session.stop_reason = None
             return self._run_session(session)
@@ -1215,6 +1525,8 @@ class SearchRunner:
         # already-evaluated trials are preserved; only the consumption counters
         # and the terminal flags are reset so the runner can propose again.
         if session.is_finished():
+            if session.ledger.sealed:
+                session.ledger.begin_authorized_extension()
             session.budget_tracker = BudgetTracker(self.config.budget)
             session.finished_at = None
             session.stop_reason = None
@@ -1260,13 +1572,13 @@ class SearchRunner:
 
         while not session.is_finished():
             if budget_tracker.is_exhausted():
-                session.finish(reason="budget_exhausted")
+                self._finish(session, "budget_exhausted")
                 break
             if self._check_plateau(recent_scores):
-                session.finish(reason="plateau_detected")
+                self._finish(session, "plateau_detected")
                 break
             if not budget_tracker.can_propose_trial():
-                session.finish(reason="max_trials_reached")
+                self._finish(session, "max_trials_reached")
                 break
 
             try:
@@ -1337,20 +1649,27 @@ class SearchRunner:
             result = None
             artifact = None
             while True:
+                issued_tier_job = None
+                if tiered_active:
+                    recipe_version = trial.metadata.get("recipe_version", trial.mutation_id)
+                    issued_tier_job = self._tiered_scheduler.issue(candidate, recipe_version)
                 reserved_cost = self.config.evaluation_cost_units
                 if reserved_cost is None:
                     reserved_cost = budget_tracker.remaining_cost()
-                if not budget_tracker.reserve_evaluation(reserved_cost):
+                if not budget_tracker.reserve_evaluation(
+                    reserved_cost, attempt_id=trial.trial_id
+                ):
                     trial.update_status(TrialStatus.FAILED, failure_reason="evaluation budget unavailable")
                     session.ledger.append_trial(
                         "EVALUATION_FAILED", trial.trial_id,
                         failure_reason="evaluation budget unavailable",
                     )
-                    session.finish(reason="evaluation_budget_unavailable")
+                    self._finish(session, "evaluation_budget_unavailable")
                     break
 
                 trial.update_status(TrialStatus.EVALUATING)
                 try:
+                    budget_tracker.start_evaluation(attempt_id=trial.trial_id)
                     train_capability = None
                     if self._data_capabilities is not None:
                         train_capability = self._data_capabilities.get(
@@ -1385,10 +1704,31 @@ class SearchRunner:
                     # FAILED instead of letting it become the incumbent.
                     artifact.require_passing_integrity()
                     actual_cost = artifact.compute_cost
-                    budget_tracker.commit_evaluation(reserved_cost, float(actual_cost))
+                    stage = EvaluationStage.STAGE5 if fidelity >= 4 else EvaluationStage(fidelity + 1)
+                    profile = StageProfileRegistry.default().profile_for(stage)
+                    session.stage_execution_trace.append({
+                        "trial_id": trial.trial_id,
+                        "stage": stage.name,
+                        "fidelity": fidelity,
+                        "evidence_profile": profile.evidence_profile,
+                        "profile_policy_version": profile.policy_version,
+                        "split_ref": getattr(self._search_split_plan, "split_id", None),
+                        "evaluation_ref": artifact.evidence_ref,
+                        "objective_id": self.config.objective_spec.metric_name,
+                        "actual_cost": float(actual_cost),
+                    })
+                    budget_tracker.commit_evaluation(
+                        reserved_cost, float(actual_cost), attempt_id=trial.trial_id
+                    )
                 except Exception as exc:
-                    if budget_tracker.evaluations_reserved:
-                        budget_tracker.release_evaluation(reserved_cost)
+                    if budget_tracker.has_reservation(trial.trial_id):
+                        # Execution started: a failed attempt consumed the
+                        # reserved resource envelope on both durable and
+                        # in-memory paths.  Never refund it as if no work ran.
+                        budget_tracker.commit_evaluation(
+                            reserved_cost, reserved_cost,
+                            attempt_id=trial.trial_id
+                        )
                     trial.update_status(TrialStatus.FAILED, failure_reason=str(exc))
                     session.ledger.append_trial(
                         "EVALUATION_FAILED", trial.trial_id, failure_reason=str(exc)
@@ -1440,12 +1780,55 @@ class SearchRunner:
                 # search-time (train/validation) evaluation; the sealed test
                 # never influences tier routing.
                 if tiered_active:
-                    passed = True
-                    next_name = self._tiered_scheduler.advance(
-                        candidate, tier_name, passed
+                    # The EvaluationProtocol owns the declared cheap evidence
+                    # (Q10 shape, event applicability/coverage, model
+                    # complementarity, integrity).  SearchRunner must not
+                    # reinterpret a low primary RankIC as failure, nor ignore
+                    # a typed evidence-based prune.  COMPLETE survives;
+                    # PRUNED/FAILED never reaches a more expensive tier.
+                    passed = (
+                        artifact.status == EvaluationStatus.COMPLETE
+                        and not self.config.screening_only
                     )
+                    if passed and self.stage_decision_request_factory is not None:
+                        from factor_optimizer.ports.factor_intelligence import require_bound_decision_receipt
+                        stage_request = self.stage_decision_request_factory(
+                            session, trial, artifact, issued_tier_job
+                        )
+                        stage_receipt = require_bound_decision_receipt(
+                            stage_request, self.decision_provider.decide(stage_request)
+                        )
+                        stage_status = getattr(stage_receipt.status, "value", stage_receipt.status)
+                        passed = (
+                            stage_status == "SELECTED"
+                            and bool(stage_receipt.eligibility.get(trial.trial_id, False))
+                            and stage_receipt.final_fidelity == issued_tier_job.tier_name
+                        )
+                    evaluation_ref = artifact.evidence_ref
+                    if not isinstance(evaluation_ref, str) or not evaluation_ref.strip():
+                        trial.update_status(
+                            TrialStatus.FAILED,
+                            failure_reason="tier outcome requires a non-empty evaluation_ref",
+                        )
+                        session.ledger.append_trial(
+                            "EVALUATION_FAILED", trial.trial_id,
+                            failure_reason="missing tier evaluation_ref",
+                        )
+                        break
+                    outcome = TierEvaluationOutcome(
+                        outcome_id=artifact.content_hash,
+                        job_id=issued_tier_job.job_id,
+                        candidate_id=candidate,
+                        recipe_version=issued_tier_job.recipe_version,
+                        tier_name=issued_tier_job.tier_name,
+                        attempt=issued_tier_job.attempt,
+                        evaluation_ref=evaluation_ref,
+                        passed=passed,
+                    )
+                    next_name = self._tiered_scheduler.advance(outcome)
                     if next_name is not None:
                         if next_name != tier_name:
+                            tier_name = next_name
                             fidelity = self._tiered_scheduler.fidelity_for(candidate)
                         continue
                     # No next tier: candidate either completed the full funnel
@@ -1474,6 +1857,51 @@ class SearchRunner:
             if session.is_finished() and (artifact is None or trial.status == TrialStatus.FAILED):
                 break
             if artifact is None or trial.status == TrialStatus.FAILED:
+                continue
+
+            # A COMPLETE evaluator artifact is only evidence availability; it
+            # is not a quality-pass.  If the authoritative tier decision (or
+            # screening-only mode) pruned the scheduler candidate, the trial
+            # cannot fall through into EVALUATED/incumbent selection.
+            if (
+                tiered_active
+                and self._tiered_scheduler.is_pruned(candidate)
+            ):
+                trial.update_status(
+                    TrialStatus.PRUNED,
+                    evaluation_ref=artifact.evidence_ref,
+                    metadata={
+                        "score": artifact.primary_objective_value,
+                        "fidelity": fidelity,
+                        "evaluation_artifact": artifact.to_dict(),
+                    },
+                )
+                session.ledger.append_trial("PRUNED", trial.trial_id)
+                continue
+
+            if artifact.status == EvaluationStatus.PRUNED:
+                trial.update_status(
+                    TrialStatus.PRUNED,
+                    evaluation_ref=artifact.evidence_ref,
+                    metadata={
+                        "score": artifact.primary_objective_value,
+                        "fidelity": fidelity,
+                        "evaluation_artifact": artifact.to_dict(),
+                    },
+                )
+                # A pruned candidate was still a valid evaluated hypothesis,
+                # so it remains in the multiplicity denominator.
+                session.ledger.append_trial("EVALUATED", trial.trial_id)
+                continue
+            if artifact.status == EvaluationStatus.FAILED:
+                trial.update_status(
+                    TrialStatus.FAILED,
+                    failure_reason="evaluation artifact declared failed",
+                )
+                session.ledger.append_trial(
+                    "EVALUATION_FAILED", trial.trial_id,
+                    failure_reason="evaluation artifact declared failed",
+                )
                 continue
 
             evaluation_ref = artifact.evidence_ref
@@ -1517,7 +1945,7 @@ class SearchRunner:
                 )
 
         if not session.is_finished():
-            session.finish(reason="manual_stop")
+            self._finish(session, "manual_stop")
         return session
 
     def _validate_trial(self, trial: Trial) -> Dict[str, Any]:
@@ -1605,6 +2033,7 @@ class SearchRunner:
                 PlateauConfig(
                     window_size=max(self.config.plateau_window, 2),
                     min_relative_improvement=self.config.plateau_threshold,
+                    direction=self.config.objective_spec.direction,
                 )
             )
         return self._default_plateau_detector.is_plateau(recent_scores)
@@ -1792,59 +2221,192 @@ class SealedTestExecutor:
         if not any(split_plan.test_mask):
             raise ValueError("SplitPlan has no test data")
         validate_split_plan(split_plan)
-        if not isinstance(handle, SealedTestHandle):
-            raise TypeError("handle must be a SealedTestHandle")
-        if session.frozen_at is None:
-            raise ValueError("search session is not frozen")
-        if session.sealed_test_consumed:
-            raise ValueError("sealed test handle has already been consumed")
-        if session.sealed_trial_id != handle.trial_id:
-            raise ValueError("sealed test handle does not match frozen session")
-        winner = next(
-            (
-                trial
-                for trial in session.successful_trials()
-                if trial.trial_id == handle.trial_id
-            ),
-            None,
-        )
-        if winner is None or winner.evaluation_ref != handle.evaluation_ref:
-            raise ValueError(
-                "sealed test handle evidence does not match frozen winner"
-            )
-        # R46 P0-S: route the physical test-data path through the broker.
+        frozen_spec = _validate_sealed_binding(session, handle, split_plan)
+        frozen_spec.validate_certification_complete()
         broker = self._test_authority_broker
+        if not broker.has_durable_authority:
+            raise ValueError(
+                "sealed certification requires a durable campaign-store reservation"
+            )
+        binding = broker.durable_binding()
+        if (
+            binding["candidate_set_hash"] != frozen_spec.spec_hash
+            or binding["profile_hash"] != frozen_spec.sealed_split_hash
+            or binding["campaign_id"] != session.session_id
+            or binding["dataset_identity"] != broker.dataset_identity
+            or binding["split_id"] != split_plan.split_id
+            or binding["purpose"] != "sealed_test"
+            or broker.search_session_id != session.session_id
+            or broker.split_id != split_plan.split_id
+        ):
+            raise ValueError(
+                "durable sealed authority is not bound to this campaign, frozen "
+                "execution specification, and complete split semantics"
+            )
+        reservation_ref = _sealed_test_evaluation_ref(session, frozen_spec, split_plan)
+        execution = frozen_spec.metadata["execution_spec"]
+        expected_identity = (
+            frozen_spec.spec_hash,
+            broker.dataset_identity,
+            split_plan.split_id,
+            execution["model_input_ref"],
+            frozen_spec.sealed_split_hash,
+            execution["cost_model_ref"],
+            reservation_ref,
+        )
+        if binding["state"] == "COMPLETED":
+            completed = broker.cached_test_result
+            if completed is None:
+                completed = {
+                    "result_ref": binding["result_ref"],
+                    "result": json.loads(binding["result_json"]),
+                }
+            payload = completed["result"]
+            persisted_identity = tuple(payload[name] for name in (
+                "execution_spec_hash", "dataset_identity", "split_id",
+                "factor_identity", "time_identity", "cost_identity",
+                "test_evidence_ref",
+            ))
+            if (
+                completed["result_ref"] != reservation_ref
+                or persisted_identity != expected_identity
+                or payload["trial_id"] != frozen_spec.trial_id
+                or payload["selection_evaluation_ref"]
+                != frozen_spec.selection_evaluation_ref
+            ):
+                raise ValueError("completed sealed result identity is invalid")
+            metrics = dict(payload["test_metrics"])
+            if (
+                not metrics
+                or not all(
+                    isinstance(name, str)
+                    and isinstance(value, (int, float))
+                    and not isinstance(value, bool)
+                    and isfinite(value)
+                    for name, value in metrics.items()
+                )
+                or set(frozen_spec.required_test_metrics).difference(metrics)
+            ):
+                raise ValueError("completed sealed result is missing required metrics")
+            result = SealedTestResult(
+                trial_id=frozen_spec.trial_id,
+                test_metrics=metrics,
+                frozen_at=session.frozen_at,
+                search_session_id=session.session_id,
+                split_id=split_plan.split_id,
+                evaluation_ref=reservation_ref,
+                selection_evaluation_ref=frozen_spec.selection_evaluation_ref,
+                execution_spec_hash=frozen_spec.spec_hash,
+            )
+            object.__setattr__(session, "sealed_test_consumed", True)
+            object.__setattr__(session, "sealed_test_state", "CONSUMED")
+            if not any(item.get("evaluation_ref") == reservation_ref for item in session.sealed_test_results):
+                session.sealed_test_results.append({
+                    "trial_id": result.trial_id,
+                    "split_id": result.split_id,
+                    "evaluation_ref": result.evaluation_ref,
+                    "selection_evaluation_ref": result.selection_evaluation_ref,
+                    "execution_spec_hash": result.execution_spec_hash,
+                    "frozen_at": result.frozen_at.isoformat(),
+                    "test_metrics": dict(result.test_metrics),
+                })
+            return result
+        if session.sealed_test_state != "AVAILABLE":
+            raise ValueError("sealed test handle has already been consumed or reserved")
+        if broker.store_ref is None:
+            raise ValueError("sealed certification requires an attached TestStoreRef")
+        # Durable reservation precedes local reservation and every physical read.
         test_capability = broker.issue_test_capability(split_plan.test_mask)
-        provider = broker.create_test_provider({"test_segment": handle.split_id})
-        data = provider.resolve(test_capability)
+        attempt_token = test_capability.attempt_token
+        with session._sealed_test_lock:
+            if session.sealed_test_state != "AVAILABLE":
+                raise ValueError("sealed test handle has already been consumed or reserved")
+            object.__setattr__(session, "sealed_test_state", "RESERVED")
+            object.__setattr__(session, "sealed_test_reservation_ref", reservation_ref)
+        # R46 P0-S: route the physical test-data path through the broker.
+        provider = broker.create_test_provider(attempt_token)
         scoped = ScopedEvaluator(provider, self._runner.evaluation_fn.evaluator)
-        metrics = scoped.evaluate(test_capability, winner, 0)
-        if not isinstance(metrics, dict) or not all(
+        try:
+            outcome = scoped.evaluate(test_capability, frozen_spec, 0)
+        except Exception:
+            if broker.durable_binding()["exposed_at"] is None:
+                broker.mark_test_infrastructure_failure(attempt_token)
+                object.__setattr__(session, "sealed_test_state", "AVAILABLE")
+                object.__setattr__(session, "sealed_test_reservation_ref", None)
+            raise
+        if not isinstance(outcome, SealedTestEvaluationOutcome):
+            raise TypeError(
+                "certified sealed test evaluator must return "
+                "SealedTestEvaluationOutcome, not bare metrics"
+            )
+        actual_identity = (
+            outcome.execution_spec_hash,
+            outcome.dataset_identity,
+            outcome.split_id,
+            outcome.factor_identity,
+            outcome.time_identity,
+            outcome.cost_identity,
+            outcome.test_evidence_ref,
+        )
+        if actual_identity != expected_identity:
+            raise ValueError(
+                "sealed test outcome identity does not match frozen execution, "
+                "dataset, split, factor, time, cost, and evidence bindings"
+            )
+        metrics = outcome.metrics
+        if not isinstance(metrics, Mapping) or not all(
             isinstance(name, str)
             and isinstance(value, (int, float))
             and not isinstance(value, bool)
             and isfinite(value)
             for name, value in metrics.items()
-        ):
+        ) or not metrics:
             raise ValueError(
                 "sealed test evaluator must return finite numeric metrics"
             )
+        missing_metrics = set(frozen_spec.required_test_metrics).difference(metrics)
+        if missing_metrics:
+            raise ValueError(
+                "sealed test result missing required metrics: "
+                + ", ".join(sorted(missing_metrics))
+            )
+        broker.complete_test_attempt(
+            attempt_token,
+            reservation_ref,
+            {
+                "trial_id": frozen_spec.trial_id,
+                "selection_evaluation_ref": frozen_spec.selection_evaluation_ref,
+                "execution_spec_hash": frozen_spec.spec_hash,
+                "dataset_identity": outcome.dataset_identity,
+                "split_id": outcome.split_id,
+                "factor_identity": outcome.factor_identity,
+                "time_identity": outcome.time_identity,
+                "cost_identity": outcome.cost_identity,
+                "test_evidence_ref": outcome.test_evidence_ref,
+                "test_metrics": dict(metrics),
+            },
+        )
         # Consume the seal via the guarded path (False->True is the one legal
         # transition; any reset attempt stays blocked by __setattr__).
         object.__setattr__(session, "sealed_test_consumed", True)
+        object.__setattr__(session, "sealed_test_state", "CONSUMED")
         result = SealedTestResult(
-            trial_id=winner.trial_id,
+            trial_id=frozen_spec.trial_id,
             test_metrics=dict(metrics),
             frozen_at=session.frozen_at,
             search_session_id=session.session_id,
             split_id=split_plan.split_id,
-            evaluation_ref=winner.evaluation_ref,
+            evaluation_ref=reservation_ref,
+            selection_evaluation_ref=frozen_spec.selection_evaluation_ref,
+            execution_spec_hash=frozen_spec.spec_hash,
         )
         session.sealed_test_results.append(
             {
                 "trial_id": result.trial_id,
                 "split_id": result.split_id,
                 "evaluation_ref": result.evaluation_ref,
+                "selection_evaluation_ref": result.selection_evaluation_ref,
+                "execution_spec_hash": result.execution_spec_hash,
                 "frozen_at": result.frozen_at.isoformat(),
                 "test_metrics": dict(result.test_metrics),
             }

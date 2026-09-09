@@ -9,10 +9,7 @@ from itertools import product
 import os
 from typing import Any, Dict, Mapping, Optional, Sequence
 
-import dill
 import pandas as pd
-
-from .runner import compare_reports, run_backtest, vbt
 
 
 _WORKER_TARGETS: dict[str, pd.DataFrame] = {}
@@ -21,6 +18,20 @@ _WORKER_SYMBOLS: Optional[list[str]] = None
 _WORKER_START: Optional[str] = None
 _WORKER_END: Optional[str] = None
 _WORKER_KWARGS: dict[str, Any] = {}
+
+
+def run_backtest(*args: Any, **kwargs: Any) -> Any:
+    """Lazy, patchable compatibility boundary for the single-run engine."""
+    from .runner import run_backtest as implementation
+
+    return implementation(*args, **kwargs)
+
+
+def compare_reports(*args: Any, **kwargs: Any) -> Any:
+    """Lazy, patchable compatibility boundary for report comparison."""
+    from .runner import compare_reports as implementation
+
+    return implementation(*args, **kwargs)
 
 
 def _set_process_data_root(market: str, data_root: Optional[str]) -> None:
@@ -65,6 +76,7 @@ def _run_process_job(
 ) -> tuple[str, bytes, bytes]:
     """Execute one batch job inside a process-pool worker."""
     print(f"[batch/process {os.getpid()}] 开始 {run_id}")
+    import dill
     portfolio = run_backtest(
         _WORKER_MARKET,
         _WORKER_TARGETS[target_label],
@@ -88,6 +100,9 @@ def _restore_process_portfolio(
     portfolio_dumps: bytes,
     metadata_dumps: bytes,
 ) -> Any:
+    import dill
+    from .runner import vbt
+
     portfolio = vbt.Portfolio.loads(portfolio_dumps)
     for name, value in dill.loads(metadata_dumps).items():
         setattr(portfolio, name, value)

@@ -22,6 +22,8 @@ import threading
 import time
 import uuid
 import zlib
+import sys
+from collections import deque
 from abc import ABC, abstractmethod
 from contextlib import contextmanager
 from dataclasses import dataclass, field
@@ -357,6 +359,7 @@ class MemoryCacheLayer:
         max_size_bytes: int,
         compressor: Compressor,
         enable_compression: bool = True,
+        workspace_budget_bytes: Optional[int] = None,
     ):
         """
         Initialize memory cache layer.
@@ -369,10 +372,13 @@ class MemoryCacheLayer:
         self.max_size_bytes = max_size_bytes
         self.compressor = compressor
         self.enable_compression = enable_compression
+        self.workspace_budget_bytes = max_size_bytes if workspace_budget_bytes is None else workspace_budget_bytes
+        if self.workspace_budget_bytes <= 0:
+            raise ValueError("workspace budget must be positive")
         self._cache: Dict[str, CacheEntry] = {}
         self._current_size = 0
         self._lock = threading.RLock()
-        self._compression_stats: List[CompressionStats] = []
+        self._compression_stats = deque(maxlen=1000)
 
     def get(self, key: str) -> Optional[Tuple[Any, CacheMetadata]]:
         """Get value from memory cache."""
@@ -387,6 +393,8 @@ class MemoryCacheLayer:
                 return None
 
             # Decompress if needed
+            if 2 * entry.metadata.size_bytes + entry.metadata.compressed_size > self.workspace_budget_bytes:
+                return None  # Keep the valid entry for a later larger-budget reader.
             try:
                 if not _codec_compatible(
                     entry.metadata.compression_method, self.compressor
@@ -442,8 +450,13 @@ class MemoryCacheLayer:
                     return False
 
                 # Serialize
+                estimate = self._estimated_serialization_bytes(value, limit=self.workspace_budget_bytes // 4)
+                if estimate is None or 4 * estimate > self.workspace_budget_bytes:
+                    return False
                 data = pickle.dumps(value, protocol=pickle.HIGHEST_PROTOCOL)
                 original_size = len(data)
+                if 4 * original_size > self.workspace_budget_bytes:
+                    return False
 
                 # Compress if enabled
                 if self.enable_compression:
@@ -477,6 +490,12 @@ class MemoryCacheLayer:
                 )
 
                 # Evict if necessary
+                old_entry = self._cache.get(key)
+                old_size = old_entry.metadata.compressed_size if old_entry else 0
+                # Account for replaceable old bytes before evicting unrelated keys.
+                if old_entry is not None:
+                    self._cache.pop(key)
+                    self._current_size -= old_size
                 while self._current_size + compressed_size > self.max_size_bytes:
                     if not self._evict_lru():
                         return False
@@ -511,6 +530,39 @@ class MemoryCacheLayer:
             return True
         return False
 
+    @staticmethod
+    def _estimated_serialization_bytes(value, seen=None, limit=1 << 30, depth=0):
+        """Conservative built-in/array estimate; unknown reducers bypass L1.
+
+        This bounds supported payload workspaces, not arbitrary Python pickle
+        reducers. No reducer is executed just to discover that it is too big.
+        """
+        if depth >= 128:
+            return None
+        seen = set() if seen is None else seen
+        if id(value) in seen:
+            return 0
+        seen.add(id(value))
+        # Subclasses may implement arbitrary reducers; do not execute them.
+        if type(value) is np.ndarray:
+            return None if value.dtype.hasobject else value.nbytes + 1024
+        if type(value) in (str, bytes, bytearray, int, float, bool, type(None)):
+            return sys.getsizeof(value) + 128
+        if type(value) in (tuple, list, dict, set, frozenset):
+            # Traverse original key/value objects, not ephemeral items tuples:
+            # their recycled ids would otherwise bypass the shared seen set.
+            elements = (part for pair in value.items() for part in pair) if type(value) is dict else value
+            total = sys.getsizeof(value) + 1024
+            for item in elements:
+                if total > limit:
+                    return total
+                size = MemoryCacheLayer._estimated_serialization_bytes(item, seen, limit-total, depth+1)
+                if size is None:
+                    return None
+                total += size
+            return total
+        return None
+
     def scan_keys(self, prefix: str) -> List[str]:
         """Return live (non-expired) keys beginning with ``prefix``."""
         with self._lock:
@@ -543,7 +595,7 @@ class MemoryCacheLayer:
             return set(keys_to_remove) if return_keys else len(keys_to_remove)
 
     def clear(self):
-        """Clear all entries."""
+        """Clear entries; retain at most 1000 lifetime compression observations."""
         with self._lock:
             self._cache.clear()
             self._current_size = 0
@@ -576,7 +628,7 @@ class MemoryCacheLayer:
             avg_compression_ratio = 1.0
             if self._compression_stats:
                 avg_compression_ratio = sum(
-                    s.ratio for s in self._compression_stats[-1000:]
+                    s.ratio for s in self._compression_stats
                 ) / min(1000, len(self._compression_stats))
 
             return {
@@ -590,6 +642,8 @@ class MemoryCacheLayer:
                     (1.0 - total_compressed / max(1, total_original)) * 100
                 ),
                 "avg_compression_ratio": avg_compression_ratio,
+                "compression_history_size": len(self._compression_stats),
+                "workspace_budget_bytes": self.workspace_budget_bytes,
             }
 
 

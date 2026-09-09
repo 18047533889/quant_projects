@@ -191,15 +191,17 @@ class TimeAxisRef:
         return 0 if self.time_index is None else len(self.time_index)
 
     def to_dict(self) -> dict:
+        from quant_evaluator.contracts._ndarray_codec import encode_value
         return {
             "kind": "time",
-            "time_index": None if self.time_index is None else list(self.time_index),
+            "time_index": None if self.time_index is None else encode_value(self.time_index),
             "time_zone": self.time_zone,
         }
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "TimeAxisRef":
-        time_index = data.get("time_index")
+        from quant_evaluator.contracts._ndarray_codec import decode_value
+        time_index = decode_value(data.get("time_index"))
         return cls(
             time_index=None if time_index is None else tuple(time_index),
             time_zone=data.get("time_zone"),

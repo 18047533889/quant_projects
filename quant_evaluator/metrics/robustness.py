@@ -88,6 +88,38 @@ def compute_subsample_ic_std(
     return robustness_std
 
 
+def _validate_hac_policy(max_lag, kernel):
+    if isinstance(max_lag, (bool, np.bool_)) or not isinstance(max_lag, (int, np.integer)) or max_lag < 0:
+        raise ValueError("max_lag must be a nonnegative integer")
+    if kernel not in ("bartlett", "uniform"):
+        raise ValueError("kernel must be bartlett or uniform")
+
+
+def _validate_bootstrap_policy(t, block_length, num_bootstrap, confidence_level, random_seed):
+    for name, value in (("block_length", block_length), ("num_bootstrap", num_bootstrap)):
+        if isinstance(value, (bool, np.bool_)) or not isinstance(value, (int, np.integer)) or value < 1:
+            raise ValueError(f"{name} must be a positive integer")
+    if block_length > t:
+        raise ValueError("block_length exceeds time axis")
+    if num_bootstrap < 2:
+        raise ValueError("num_bootstrap must be at least two")
+    if (isinstance(confidence_level, (bool, np.bool_))
+            or not isinstance(confidence_level, (int, float, np.integer, np.floating))
+            or not np.isfinite(confidence_level) or not 0 < confidence_level < 1):
+        raise ValueError("confidence_level must be finite and in (0, 1)")
+    if random_seed is not None and (isinstance(random_seed, (bool, np.bool_))
+            or not isinstance(random_seed, (int, np.integer)) or random_seed < 0):
+        raise ValueError("random_seed must be a nonnegative integer or None")
+
+
+def _contiguous_sample(column):
+    positions = np.flatnonzero(np.isfinite(column))
+    if (np.isinf(column).any() or not len(positions)
+            or positions[-1] - positions[0] + 1 != len(positions)):
+        return np.empty(0, dtype=float)
+    return column[positions[0]:positions[-1] + 1]
+
+
 def compute_hac_variance(
     series: np.ndarray,
     max_lag: int = 5,
@@ -98,6 +130,9 @@ def compute_hac_variance(
 
     Newey-West HAC variance estimator for time series with autocorrelation.
     Uses weighted sum of autocovariances with kernel weighting.
+    Empty endpoints are trimmed; internal missing dates or infinity return NaN.
+    All lag autocovariances use denominator n (Newey-West v2). The output
+    is variance_of_sample_mean, not long_run_variance. No df correction.
 
     Args:
         series: Time series (T,) or (T, F)
@@ -107,8 +142,12 @@ def compute_hac_variance(
     Returns:
         hac_var: shape (F,) - HAC variance estimate per factor
     """
+    _validate_hac_policy(max_lag, kernel)
+    series = np.asarray(series, dtype=float)
     if series.ndim == 1:
         series = series.reshape(-1, 1)
+    if series.ndim != 2:
+        raise ValueError("HAC requires a time series or T x F matrix")
 
     T, F = series.shape
 
@@ -119,7 +158,8 @@ def compute_hac_variance(
 
     for f in range(F):
         ts = series[:, f]
-        valid_ts = ts[~np.isnan(ts)]
+        # Trim empty endpoints only. Internal gaps cannot acquire new lags.
+        valid_ts = _contiguous_sample(ts)
 
         if len(valid_ts) < max_lag + 10:
             continue
@@ -139,7 +179,7 @@ def compute_hac_variance(
                 break
 
             # Autocovariance at lag
-            gamma_lag = np.mean(ts_demean[:-lag] * ts_demean[lag:])
+            gamma_lag = np.sum(ts_demean[:-lag] * ts_demean[lag:]) / n
 
             # Kernel weight
             if kernel == "bartlett":
@@ -175,6 +215,12 @@ def compute_hac_tstat(
         t_stat_hac: shape (F,) - HAC-robust t-statistics
         se_hac: shape (F,) - HAC standard errors
     """
+    _validate_hac_policy(max_lag, kernel)
+    ic_series = np.asarray(ic_series, dtype=float)
+    if ic_series.ndim == 1:
+        ic_series = ic_series[:, None]
+    if ic_series.ndim != 2:
+        raise ValueError("HAC requires a time series or T x F matrix")
     T, F = ic_series.shape
 
     t_stat_hac = np.full(F, np.nan, dtype=np.float64)
@@ -182,7 +228,7 @@ def compute_hac_tstat(
 
     for f in range(F):
         ic_f = ic_series[:, f]
-        valid_ic = ic_f[~np.isnan(ic_f)]
+        valid_ic = _contiguous_sample(ic_f)
 
         if len(valid_ic) < max_lag + 10:
             continue
@@ -221,6 +267,8 @@ def compute_block_bootstrap_ci(
 
     Block bootstrap preserves temporal dependence structure by resampling
     contiguous blocks of observations.
+    All factors share original-time-axis draws. A column with missing or
+    infinite observations is insufficient (NaN); no calendar compression occurs.
 
     Args:
         ic_series: Daily IC series (T, F)
@@ -234,16 +282,22 @@ def compute_block_bootstrap_ci(
         ci_lower: shape (F,) - lower bound of CI for mean IC
         ci_upper: shape (F,) - upper bound of CI for mean IC
     """
+    ic_series = np.asarray(ic_series, dtype=float)
+    if ic_series.ndim == 1:
+        ic_series = ic_series[:, None]
+    if ic_series.ndim != 2:
+        raise ValueError("bootstrap requires a time series or T x F matrix")
     T, F = ic_series.shape
-
-    if block_length <= 0 or block_length > T:
-        raise ValueError(f"block_length must be in (0, {T}], got {block_length}")
-
-    if confidence_level <= 0 or confidence_level >= 1:
-        raise ValueError(f"confidence_level must be in (0, 1), got {confidence_level}")
+    _validate_bootstrap_policy(T, block_length, num_bootstrap, confidence_level, random_seed)
 
     # Local Generator: never touch the global numpy RNG state.
     rng = np.random.default_rng(random_seed)
+    # One original-time-axis draw matrix, independent of factor order/count.
+    # This direct multi-candidate producer requires a complete common calendar.
+    # Gapped columns remain NaN; callers must not compress them before entry.
+    num_blocks = (T + block_length - 1) // block_length
+    shared_starts = rng.integers(0, T - block_length + 1,
+                                size=(num_bootstrap, num_blocks))
 
     alpha = 1.0 - confidence_level
     lower_percentile = 100 * (alpha / 2)
@@ -254,7 +308,9 @@ def compute_block_bootstrap_ci(
 
     for f in range(F):
         ic_f = ic_series[:, f]
-        valid_ic = ic_f[~np.isnan(ic_f)]
+        if not np.isfinite(ic_f).all():
+            continue
+        valid_ic = ic_f
 
         if len(valid_ic) < block_length * 2:
             continue
@@ -266,7 +322,7 @@ def compute_block_bootstrap_ci(
 
         for b in range(num_bootstrap):
             # Sample blocks with replacement (local Generator)
-            block_starts = rng.choice(n - block_length + 1, size=num_blocks, replace=True)
+            block_starts = shared_starts[b]
 
             # Reconstruct bootstrap sample
             bootstrap_sample = []
@@ -281,3 +337,34 @@ def compute_block_bootstrap_ci(
         ci_upper[f] = np.percentile(bootstrap_means, upper_percentile)
 
     return ci_lower, ci_upper
+
+
+def compute_joint_block_bootstrap(ic_series, plan, factor_ids):
+    """Public joint producer, preserves every original-clock replicate.
+
+    Complete common-grid estimator only: gaps/Inf produce missing evidence,
+    never independently compacted candidate draws. Segment boundaries are
+    honored by the QE-owned plan. Monte Carlo dispersion is not extra market
+    sample size. Returned artifact binds clock, plan and named factor order.
+    """
+    from quant_evaluator.contracts.resampling import ResamplingPlan
+    from quant_evaluator.contracts.metric_artifacts import DistributionMetricArtifact
+    if not isinstance(plan, ResamplingPlan):
+        raise TypeError("joint bootstrap requires a ResamplingPlan")
+    values = np.asarray(ic_series, dtype=float)
+    ids = tuple(factor_ids)
+    if values.shape != (len(plan.time_ids), len(ids)) or len(set(ids)) != len(ids) or not ids:
+        raise ValueError("joint bootstrap axes mismatch")
+    samples = np.full((plan.num_replicates, len(ids)), np.nan)
+    valid = np.isfinite(values).all(axis=0)
+    for repeat, index in enumerate(plan.indices()):
+        samples[repeat, valid] = np.mean(values[index][:, valid], axis=0)
+    return DistributionMetricArtifact(
+        metric_id="ic_mean_joint_moving_block.v1", domain="robustness",
+        samples=samples, stat_names=ids,
+        provenance={"resampling_plan_ref": plan.content_hash,
+                    "replicate_ids": plan.replicate_ids, "clock_ref": plan.clock_ref,
+                    "time_ids": plan.time_ids, "factor_ids": ids,
+                    "missing_policy": "complete_common_grid_or_insufficient",
+                    "effective_replicates": tuple(plan.num_replicates if v else 0 for v in valid)},
+    )

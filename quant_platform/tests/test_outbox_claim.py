@@ -85,6 +85,39 @@ def test_duplicate_done_is_noop():
     assert inbox.get("ik-1")["status"] == "DONE"
 
 
+def test_interrupted_handler_rolls_back_claim_and_database_effects():
+    db = SqliteDb(":memory:")
+
+    def interrupted(event):
+        db.execute("INSERT INTO teams (team_id, name) VALUES ('interrupt', 'test')")
+        raise KeyboardInterrupt("process interrupted")
+
+    with pytest.raises(KeyboardInterrupt):
+        Inbox(db, interrupted).process(_source_event())
+    assert db.query("SELECT * FROM teams") == []
+    assert Inbox(db, lambda event: None).get("ik-1") is None
+    assert Inbox(db, lambda event: None).process(_source_event()) is True
+
+
+def test_replica_does_not_leave_processing_claim():
+    db = SqliteDb(":memory:")
+    assert Inbox(db, lambda event: None, replica=True).process(_source_event())
+    assert db.query("SELECT * FROM inbox_events") == []
+
+
+def test_handler_not_found_is_retryable_failure_not_stuck_processing():
+    db = SqliteDb(":memory:")
+
+    def missing(event):
+        raise InboxEventNotFound("dependency not yet materialized")
+
+    inbox = Inbox(db, missing)
+    with pytest.raises(InboxEventNotFound):
+        inbox.process(_source_event())
+    assert inbox.get("ik-1")["status"] == "FAILED"
+    assert Inbox(db, lambda event: None).process(_source_event())
+
+
 def test_dead_letter_after_max_retries():
     db = SqliteDb(":memory:")
 
@@ -208,7 +241,8 @@ def test_two_workers_only_one_can_claim_same_sql_row():
     assert row["claim_token"] == "A"
 
 
-def test_publish_pending_never_double_delivers_and_recovers_failures():
+def test_publish_pending_honors_backoff_and_recovers_failures(monkeypatch):
+    monkeypatch.setattr("quant_platform.app.outbox.time.time", lambda: 1000.0)
     db = SqliteDb(":memory:")
     delivered = []
 
@@ -239,7 +273,10 @@ def test_publish_pending_never_double_delivers_and_recovers_failures():
     assert row["attempts"] == 1
     assert row["retry_count"] == 1
     assert row["last_error"] == "bus down"
-    # second drain succeeds -> sent exactly once
+    # An immediate drain must respect the retry timestamp.
+    assert outbox.publish_pending() == 0
+    monkeypatch.setattr("quant_platform.app.outbox.time.time", lambda: 1002.0)
+    # Eligible retry succeeds; the bus failed before accepting the first send.
     assert outbox.publish_pending() == 1
     assert len(delivered) == 1
     assert db.query("SELECT status FROM outbox_events")[0]["status"] == "sent"
@@ -262,3 +299,58 @@ def test_publish_failure_keeps_pending_and_increments_attempts_legacy_alignment(
     row = db.query("SELECT status, attempts FROM outbox_events")[0]
     assert row["status"] == "pending"
     assert row["attempts"] == 1
+
+
+def test_expired_outbox_claim_is_recoverable_and_old_token_fenced():
+    db = SqliteDb(":memory:")
+    outbox = Outbox(db, InMemoryPublisher())
+    with db.transaction():
+        event_id = outbox.emit(event_type="test", aggregate_type="test", aggregate_id="1",
+                               correlation_id="1", idempotency_key="lease-test")
+    with db.transaction():
+        assert outbox.claim(event_id, worker_id="same-worker", claim_token="old", now=100.0)
+        assert not outbox.claim(event_id, worker_id="same-worker", claim_token="new", now=101.0)
+    assert outbox.recover_expired_claims(now=109.0, lease_seconds=10.0) == 0
+    assert outbox.recover_expired_claims(now=110.0, lease_seconds=10.0) == 1
+    with db.transaction():
+        assert outbox.claim(event_id, worker_id="same-worker", claim_token="new", now=110.0)
+        assert not outbox.finish(event_id, claim_token="old")
+        outbox.fail(event_id, claim_token="old", error="late failure", now=111.0, next_attempt_at=112.0)
+        assert outbox.finish(event_id, claim_token="new")
+        assert not outbox.finish(event_id, claim_token="new")
+
+
+@pytest.mark.parametrize("lease", [0, -1, float('nan'), float('inf')])
+def test_invalid_outbox_lease_rejected(lease):
+    outbox = Outbox(SqliteDb(":memory:"), InMemoryPublisher())
+    with pytest.raises(ValueError):
+        outbox.recover_expired_claims(now=100.0, lease_seconds=lease)
+
+
+def test_targeted_drain_leaves_unrelated_pending_and_expired_claims_untouched(monkeypatch):
+    monkeypatch.setattr("quant_platform.app.outbox.time.time", lambda: 1000.0)
+    db = SqliteDb(":memory:")
+    publisher = InMemoryPublisher()
+    outbox = Outbox(db, publisher)
+    ids = {}
+    with db.transaction():
+        for key in ("production-pending", "production-expired", "shadow-target"):
+            ids[key] = outbox.emit(event_type="test", aggregate_type="test", aggregate_id=key,
+                                   correlation_id="isolation", idempotency_key=key)
+        for key in ("production-expired", "shadow-target"):
+            assert outbox.claim(ids[key], worker_id="old-worker", claim_token=key, now=1.0)
+    before = [dict(row) for row in db.query("SELECT * FROM outbox_events WHERE id != ? ORDER BY id", (ids["shadow-target"],))]
+    assert outbox.publish_pending(idempotency_key="missing-key") == 0
+    assert outbox.publish_pending(idempotency_key="shadow-target") == 1
+    assert outbox.publish_pending(idempotency_key="shadow-target") == 0
+    after = [dict(row) for row in db.query("SELECT * FROM outbox_events WHERE id != ? ORDER BY id", (ids["shadow-target"],))]
+    assert after == before
+    assert not outbox.finish(ids["shadow-target"], claim_token="shadow-target")
+    assert db.query("SELECT status FROM outbox_events WHERE id = ?", (ids["shadow-target"],))[0]["status"] == "sent"
+
+
+@pytest.mark.parametrize("key", ["", False, 1, []])
+def test_targeted_drain_rejects_invalid_scope(key):
+    outbox = Outbox(SqliteDb(":memory:"), InMemoryPublisher())
+    with pytest.raises(ValueError, match="idempotency_key"):
+        outbox.publish_pending(idempotency_key=key)

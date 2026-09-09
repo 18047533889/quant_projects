@@ -2,7 +2,8 @@
 Value at Risk (VaR) and Conditional Value at Risk (CVaR) computation.
 
 Implements multiple VaR methodologies: historical, parametric, and Cornish-Fisher.
-CVaR (Expected Shortfall) measures expected loss beyond VaR threshold.
+Historical Expected Shortfall integrates a fixed lower-tail probability mass,
+including fractional boundary observations; it is not a threshold mean.
 """
 
 from typing import Tuple, Optional
@@ -200,9 +201,7 @@ def compute_var_cornish_fisher(
         if not np.isfinite(std_ret) or std_ret <= 0:
             continue
         if not np.isfinite(skew) or not np.isfinite(kurt):
-            # Fall back to parametric if moments fail
-            var_value = mean_ret + z * std_ret
-            var[f] = -var_value if var_value < 0 else 0.0
+            # An unavailable CF estimate is not a Gaussian estimate.
             continue
 
         # Cornish-Fisher expansion
@@ -264,15 +263,7 @@ def compute_cvar(
 
             ret_valid = ret_f[valid]
 
-            # VaR threshold
-            var_threshold = np.quantile(ret_valid, quantile)
-
-            # Returns below VaR (losses exceeding VaR)
-            tail_returns = ret_valid[ret_valid <= var_threshold]
-
-            if len(tail_returns) > 0:
-                mean_tail = np.mean(tail_returns)
-                cvar[f] = -mean_tail if mean_tail < 0 else 0.0
+            cvar[f] = max(0.0, empirical_expected_shortfall(ret_valid, confidence_level))
 
     elif method == "parametric":
         # Parametric CVaR for normal distribution
@@ -326,8 +317,28 @@ def compute_var_cvar(
     _validate_confidence_level(confidence_level)
     var = compute_var(returns, confidence_level, method, min_periods)
 
-    # CVaR not defined for cornish_fisher method, fall back to historical
-    cvar_method = "historical" if method == "cornish_fisher" else method
-    cvar = compute_cvar(returns, confidence_level, cvar_method, min_periods)
+    if method == "cornish_fisher":
+        raise ValueError("Cornish-Fisher ES is unsupported; request historical ES separately")
+    cvar = compute_cvar(returns, confidence_level, method, min_periods)
 
     return var, cvar
+
+
+def empirical_expected_shortfall(returns, confidence_level=0.95):
+    """Signed empirical loss ES v2: fixed tail mass, fractional boundary.
+
+    Equal observation weights; finite observations only. This is a descriptive
+    same-period estimate, not an inference/adequate-tail-sample certificate.
+    compute_cvar is the separately documented positive-loss-clamped display.
+    """
+    _validate_confidence_level(confidence_level)
+    values = np.asarray(returns, dtype=float)
+    if values.ndim != 1:
+        raise ValueError("empirical ES requires a one-dimensional return sample")
+    losses = np.sort(-values[np.isfinite(values)])[::-1]
+    if not len(losses):
+        return float("nan")
+    mass = (1.0 - confidence_level) * len(losses)
+    full = int(np.floor(mass))
+    fraction = mass - full
+    return float((losses[:full].sum() + (fraction * losses[full] if full < len(losses) else 0.)) / mass)

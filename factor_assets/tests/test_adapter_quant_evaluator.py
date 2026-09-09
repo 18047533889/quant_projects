@@ -8,6 +8,7 @@ import pytest
 from datetime import datetime
 from dataclasses import dataclass, field
 from typing import Dict, Tuple, Optional, Any
+from types import SimpleNamespace
 
 from factor_assets.adapters import OptionalDependencyMissing
 
@@ -56,6 +57,7 @@ class MockEvaluationBundle:
     config_hash: Optional[str] = None
     warnings: Tuple[str, ...] = field(default_factory=tuple)
     metadata: Dict[str, Any] = field(default_factory=dict)
+    artifacts: Dict[str, Any] = field(default_factory=dict)
 
 
 class TestQEEvidenceProvider:
@@ -157,6 +159,37 @@ class TestQEEvidenceProvider:
         assert bundle_ref.primary_metric == "pearson_ic"
         assert bundle_ref.primary_value == 0.05
         assert len(bundle_ref.warnings) == 0
+
+    def test_v6_typed_generalization_bridge_uses_namespaced_diagnosis_keys(self):
+        from factor_assets.adapters.quant_evaluator import QEEvidenceProvider
+
+        factor_id = "F1234567890abcdef"
+        metrics = {
+            name: MockMetricValue(name, value, True, 12, "2.0.0")
+            for name, value in (
+                ("validation_retention", .4),
+                ("train_validation_icir_delta", 1.5),
+            )
+        }
+        provenance = {
+            "metric_instance": "rank_ic:h1", "train_split_ref": "train:s1",
+            "validation_split_ref": "validation:s1", "factor_versions": ("v1",),
+        }
+        artifacts = {
+            name: SimpleNamespace(
+                values=[metric.value], factor_axis=SimpleNamespace(factor_ids=(factor_id,)),
+                provenance=provenance,
+            ) for name, metric in metrics.items()
+        }
+        bundle = MockEvaluationBundle(
+            request_id="qe:g1", factor_ids=(factor_id,), label_id="h1",
+            timestamp="2026-09-08T00:00:00Z", metric_values=metrics,
+            metric_versions={name: "2.0.0" for name in metrics}, artifacts=artifacts,
+        )
+        evidence = QEEvidenceProvider().generalization_diagnosis_evidence(bundle, factor_id)
+        assert evidence["generalization.validation_retention.evidence_status"] == "COMPUTED"
+        assert evidence["generalization.validation_retention.value"] == .4
+        assert evidence["generalization.train_validation_icir_delta.value"] == 1.5
 
     def test_create_evidence_bundle_ref_with_warnings(self):
         """Test bundle ref creation with warnings."""

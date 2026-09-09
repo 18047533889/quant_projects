@@ -36,11 +36,14 @@ pure arithmetic over the plan's parameter triple.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Dict, Optional, Sequence
+from numbers import Integral
+from typing import Dict, Mapping, Optional, Sequence, Tuple
 
 __all__ = [
     "AdaptiveBinsPolicy",
     "AdaptiveBinsResolution",
+    "AdaptiveBinsDateEvidence",
+    "AdaptiveBinsFactorEvidence",
     "resolve_bin_count",
     "resolve_bin_count_from_counts",
 ]
@@ -65,16 +68,16 @@ class AdaptiveBinsPolicy:
     fallback_bins: Sequence[int] = (10, 5)
     min_effective_names_per_bin: int = 100
     policy_id: str = "QE_ADAPTIVE_BINS"
-    policy_version: str = "1.0.0"
+    policy_version: str = "2.0.0"
 
     def __post_init__(self) -> None:
-        if self.preferred_bins < 2:
+        if isinstance(self.preferred_bins, bool) or not isinstance(self.preferred_bins, Integral) or self.preferred_bins < 2:
             raise ValueError(
                 f"AdaptiveBinsPolicy.preferred_bins must be >= 2, got "
                 f"{self.preferred_bins}"
             )
-        fallback = tuple(int(b) for b in self.fallback_bins)
-        if any(b < 2 for b in fallback):
+        fallback = tuple(self.fallback_bins)
+        if any(isinstance(b,bool) or not isinstance(b,Integral) or b < 2 for b in fallback):
             raise ValueError(
                 f"AdaptiveBinsPolicy.fallback_bins must all be >= 2, got "
                 f"{fallback}"
@@ -84,7 +87,9 @@ class AdaptiveBinsPolicy:
                 "AdaptiveBinsPolicy bin counts (preferred + fallback) must be "
                 "distinct"
             )
-        if self.min_effective_names_per_bin < 1:
+        if any(a <= b for a,b in zip((self.preferred_bins,*fallback), fallback)):
+            raise ValueError("AdaptiveBinsPolicy candidates must be strictly descending")
+        if isinstance(self.min_effective_names_per_bin,bool) or not isinstance(self.min_effective_names_per_bin,Integral) or self.min_effective_names_per_bin < 1:
             raise ValueError(
                 f"AdaptiveBinsPolicy.min_effective_names_per_bin must be >= 1, "
                 f"got {self.min_effective_names_per_bin}"
@@ -98,6 +103,30 @@ class AdaptiveBinsPolicy:
     def candidate_bin_counts(self):
         """Bin counts tried in order of preference, longest first."""
         return (self.preferred_bins, *self.fallback_bins)
+
+    def to_dict(self) -> Dict[str, object]:
+        """Canonical JSON-safe policy representation for request transport."""
+        return {
+            "preferred_bins": self.preferred_bins,
+            "fallback_bins": tuple(self.fallback_bins),
+            "min_effective_names_per_bin": self.min_effective_names_per_bin,
+            "policy_id": self.policy_id,
+            "policy_version": self.policy_version,
+        }
+
+    @classmethod
+    def from_dict(cls, value: Mapping[str, object]) -> "AdaptiveBinsPolicy":
+        """Normalize a transported mapping through the policy validator."""
+        if not isinstance(value, Mapping):
+            raise TypeError("AdaptiveBinsPolicy.from_dict requires a mapping")
+        allowed = {
+            "preferred_bins", "fallback_bins", "min_effective_names_per_bin",
+            "policy_id", "policy_version",
+        }
+        unknown = set(value) - allowed
+        if unknown:
+            raise ValueError(f"Unknown AdaptiveBinsPolicy fields: {sorted(unknown)}")
+        return cls(**dict(value))
 
 
 @dataclass(frozen=True)
@@ -139,6 +168,56 @@ class AdaptiveBinsResolution:
         }
 
 
+@dataclass(frozen=True)
+class AdaptiveBinsDateEvidence:
+    """Tie-aware feasibility evidence for one factor on one date."""
+
+    date_index: int
+    applicable: bool
+    finite_names: int
+    distinct_levels: int
+    candidate_min_bucket_counts: Tuple[Tuple[int, Optional[int]], ...]
+    reason: str
+
+    def to_dict(self) -> Dict[str, object]:
+        return {
+            "date_index": self.date_index,
+            "applicable": self.applicable,
+            "finite_names": self.finite_names,
+            "distinct_levels": self.distinct_levels,
+            "candidate_min_bucket_counts": {
+                str(q): count for q, count in self.candidate_min_bucket_counts
+            },
+            "reason": self.reason,
+        }
+
+
+@dataclass(frozen=True)
+class AdaptiveBinsFactorEvidence:
+    """Fixed-Q adaptive-bin decision and its complete per-date coverage."""
+
+    factor_id: str
+    resolution: AdaptiveBinsResolution
+    tie_policy: str
+    comparison_policy: str
+    dates: Tuple[AdaptiveBinsDateEvidence, ...]
+
+    def to_dict(self) -> Dict[str, object]:
+        return {
+            "factor_id": self.factor_id,
+            "selected_q": self.resolution.bin_count,
+            "fallback_reason": self.resolution.reason,
+            "min_names_per_bin": self.resolution.min_names_per_bin,
+            "policy_id": self.resolution.policy_id,
+            "policy_version": self.resolution.policy_version,
+            "tie_policy": self.tie_policy,
+            "comparison_policy": self.comparison_policy,
+            "applicable_dates": sum(row.applicable for row in self.dates),
+            "total_dates": len(self.dates),
+            "dates": tuple(row.to_dict() for row in self.dates),
+        }
+
+
 def resolve_bin_count(
     names_per_date: Sequence[int],
     policy: Optional[AdaptiveBinsPolicy] = None,
@@ -171,7 +250,9 @@ def resolve_bin_count(
             policy_id=policy.policy_id,
             policy_version=policy.policy_version,
         )
-    valid = [int(n) for n in names_per_date if int(n) >= 0]
+    if any(isinstance(n,bool) or not isinstance(n,Integral) or n < 0 for n in names_per_date):
+        raise ValueError("names_per_date must contain non-negative integers, never bool/float")
+    valid = list(names_per_date)
     if not valid:
         return AdaptiveBinsResolution(
             bin_count=None,
@@ -192,7 +273,7 @@ def resolve_bin_count(
     return AdaptiveBinsResolution(
         bin_count=None,
         reason="insufficient",
-        min_names_per_bin=min_names / min(policy.fallback_bins),
+        min_names_per_bin=min_names / min(policy.candidate_bin_counts()),
         policy_id=policy.policy_id,
         policy_version=policy.policy_version,
     )
@@ -220,6 +301,13 @@ def resolve_bin_count_from_counts(
     """
     if policy is None:
         policy = AdaptiveBinsPolicy()
+    if not isinstance(policy, AdaptiveBinsPolicy):
+        raise TypeError("policy must be AdaptiveBinsPolicy")
+    for bins, observed in per_bin_counts.items():
+        if isinstance(bins,bool) or not isinstance(bins,Integral) or bins < 2:
+            raise ValueError("per_bin_counts keys must be integer bin counts >=2")
+        if any(isinstance(n,bool) or not isinstance(n,Integral) or n < 0 for n in observed):
+            raise ValueError("per_bin_counts must contain non-negative integers")
     for bins in policy.candidate_bin_counts():
         observed = per_bin_counts.get(bins)
         if observed is None or len(observed) == 0:

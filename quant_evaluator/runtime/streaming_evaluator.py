@@ -1,8 +1,8 @@
 """
 Streaming evaluator for datasets too large for memory.
 
-Processes data in chunks using generator-based loading, accumulates statistics
-incrementally, and maintains constant memory usage for 100k+ factors.
+Processes generator-based chunks and accumulates statistics incrementally.
+Memory mode retains series; certified summary/sink modes retain per-factor state.
 """
 
 from dataclasses import dataclass, field
@@ -90,6 +90,15 @@ class StreamingMetricState:
 
     def _finalize_ic(self) -> np.ndarray:
         """Finalize IC computation from accumulated sums."""
+        if 'ic_moments_by_factor' in self.custom_state:
+            return {fid: moments.summary() for fid, moments in self.custom_state['ic_moments_by_factor'].items()}
+        if "centered_ic_parts" in self.custom_state:
+            result = np.full((self.expected_total_time or 0, self.expected_total_factors or 0), np.nan)
+            for ((t0,t1),(f0,f1)), values in self.custom_state["centered_ic_parts"].items():
+                result[t0:t1,f0:f1] = values
+            return result
+        if "centered_ic_series" in self.custom_state:
+            return np.concatenate(self.custom_state["centered_ic_series"], axis=0)
         if self.custom_state.get("ic_parts") is not None:
             result = np.full(
                 (self.expected_total_time or 0, self.expected_total_factors or 0),
@@ -128,12 +137,17 @@ class StreamingMetricState:
 
     def _finalize_coverage(self) -> float:
         """Finalize coverage from paired valid observations, not chunk ratios."""
+        if "coverage_by_factor" in self.custom_state:
+            return {fid: valid/total if total else float("nan")
+                    for fid, (valid,total) in self.custom_state["coverage_by_factor"].items()}
         if self.total_count == 0:
             return self.sum_values / self.count if self.count else 0.0
         return self.valid_count / self.total_count
 
     def _finalize_summary(self) -> Dict[str, float]:
         """Finalize summary statistics."""
+        if "moments_by_factor" in self.custom_state:
+            return {fid: moments.summary() for fid, moments in self.custom_state["moments_by_factor"].items()}
         if self.count == 0:
             return {"mean": 0.0, "std": 0.0, "count": 0}
 
@@ -202,10 +216,12 @@ class StreamingEvaluationResult:
 
 class StreamingEvaluator:
     """
-    Streaming evaluator for large-scale factor evaluation with constant memory.
+    Evaluate complete-cross-section streams with explicit output retention.
 
-    Processes data through generators, accumulates statistics incrementally,
-    and supports evaluation of 100k+ factors without loading full dataset into memory.
+    The default memory-series mode retains O(T*F) output. Opt-in summary/sink
+    modes bound built-in IC/coverage/summary state to O(F) plus one input tile.
+    This is a batch stream, not a label availability or event replay authority;
+    use LabelMaturationQueue for as-known Bar processing and checkpoints.
     """
 
     def __init__(
@@ -451,6 +467,8 @@ class StreamingEvaluator:
         metric_specs: List[Dict],
         *,
         _internal_splitter: bool = False,
+        output_mode: str = 'memory',
+        series_sink: Optional[Callable] = None,
     ) -> StreamingEvaluationResult:
         """
         Evaluate metrics on streaming data.
@@ -458,6 +476,12 @@ class StreamingEvaluator:
         Args:
             data_generator: Generator yielding (factor_batch, label_bundle) chunks
             metric_specs: List of metric specifications
+            output_mode: memory retains IC series; summary retains only per-factor
+                statistics; sink also emits IC series synchronously. Coverage and
+                summary metrics have no series and remain in the returned result.
+            series_sink: IC callback (metric_id, factor_ids, times, values), which
+                must complete persistence before returning None. Async sinks are
+                unsupported. This call does not checkpoint source offsets.
 
         Returns:
             StreamingEvaluationResult with finalized metrics
@@ -466,6 +490,10 @@ class StreamingEvaluator:
             InvalidContractError: If metrics not registered
             RuntimeError: If budget exceeded
         """
+        if output_mode not in {'memory','summary','sink'}:
+            raise InvalidContractError('output_mode must be memory, summary, or sink')
+        if (output_mode == 'sink') != callable(series_sink):
+            raise InvalidContractError('sink mode requires a synchronous acknowledged series_sink only')
         requested_metric_ids = [spec["metric_id"] for spec in metric_specs]
         if len(requested_metric_ids) != len(set(requested_metric_ids)):
             duplicate_ids = sorted(
@@ -483,6 +511,13 @@ class StreamingEvaluator:
 
         # Initialize metric states
         metric_states = self._initialize_metric_states(metric_specs)
+        if output_mode != 'memory':
+            for metric_id,state in metric_states.items():
+                function = self._streaming_metrics[metric_id]['update_fn']
+                if function not in (streaming_ic_updater, streaming_coverage_updater, streaming_summary_updater):
+                    raise InvalidContractError('Bounded retention is not certified for this custom updater')
+                state.custom_state['output_mode'] = output_mode
+                state.custom_state['series_sink'] = series_sink
 
         # Process chunks
         chunks_processed = 0
@@ -496,6 +531,9 @@ class StreamingEvaluator:
                 factor_batch, label_bundle = item
                 chunk_descriptor = None
             self.budget_tracker.check_budget(raise_on_exceed=True)
+            if output_mode != 'memory' and (factor_batch.num_times > self.chunk_size_time
+                                            or factor_batch.num_factors > self.chunk_size_factors):
+                raise InvalidContractError('Source exceeded declared bounded time/factor tile dimensions')
 
             # Validate chunk and public stream continuity before updating state.
             if _internal_splitter:
@@ -578,6 +616,18 @@ class StreamingEvaluator:
         result.metadata["chunk_size_time"] = self.chunk_size_time
         result.metadata["chunk_size_factors"] = self.chunk_size_factors
         result.metadata["num_metrics"] = len(metric_states)
+        result.metadata['output_mode'] = output_mode
+        result.metadata['state_schema'] = 'centered-stream.v2' if output_mode != 'memory' else 'series.v1'
+        result.metadata['backpressure'] = 'synchronous_sink_ack_before_next_source_read'
+        result.metadata['capabilities'] = {
+            'window': 'all_observations_in_call',
+            'remove': 'unsupported',
+            'checkpoint': 'unsupported_use_LabelMaturationQueue_for_IC',
+            'series_sink_metrics': [key for key in metric_states
+                                    if self._streaming_metrics[key]['update_fn'] is streaming_ic_updater],
+            'asset_axis': 'complete_cross_section_required',
+            'large_batch_input': 'full_host_panel_not_a_bounded_source',
+        }
         if stream_state.get("identity") is not None:
             result.provenance = self._stream_provenance(
                 stream_state["identity"],
@@ -834,6 +884,9 @@ class StreamingEvaluator:
         seen: set[int] = set()
 
         def array_bytes(value: Any) -> int:
+            from quant_evaluator.runtime.online_moments import OnlineMoments
+            if isinstance(value, OnlineMoments):
+                return sys.getsizeof(value) + sum(sys.getsizeof(v) for v in vars(value).values())
             if isinstance(value, np.ndarray):
                 identity = id(value)
                 if identity in seen:
@@ -858,184 +911,79 @@ class StreamingEvaluator:
 
 # Built-in streaming metric updaters
 
-def streaming_ic_updater(
-    state: StreamingMetricState,
-    factor_batch: FactorBatch,
-    label_bundle: LabelBundle,
-) -> StreamingMetricState:
+def streaming_ic_updater(state, factor_batch, label_bundle):
+    """Exact Pearson per complete cross-section; output series storage is O(T*F).
+
+    This is not a Spearman sufficient statistic and is never advertised as one.
+    Center before products to avoid high-location cancellation.
     """
-    Update IC state incrementally from chunk.
-
-    Accumulates sufficient statistics for correlation computation.
-    When chunking by time, stores separate time slices.
-    When chunking by assets, accumulates statistics within time periods.
-    """
-    T, N, F = factor_batch.values.shape
-
-    labels_broadcast, label_validity = normalize_label_panel(
-        label_bundle, factor_batch.values.shape[1]
-    )
-
-    # Apply validity
-    factors = factor_batch.values.copy()
-    if factor_batch.validity is not None:
-        factors = np.where(factor_batch.validity, factors, np.nan)
-
-    labels = labels_broadcast.copy()
-    if label_validity is not None:
-        labels = np.where(label_validity, labels, np.nan)
-
-    # Expand labels for broadcasting: (T, N, 1)
-    labels_expanded = labels[:, :, np.newaxis] if labels.ndim == 2 else labels[:, np.newaxis, np.newaxis]
-
-    # Compute pairwise finite mask
-    finite_mask = np.isfinite(factors) & np.isfinite(labels_expanded)
-
-    # Compute chunk statistics
-    chunk_sum_x = np.where(finite_mask, factors, 0.0).sum(axis=1)  # (T, F)
-    chunk_sum_y = np.where(finite_mask, labels_expanded, 0.0).sum(axis=1)
-    chunk_sum_xx = np.where(finite_mask, factors ** 2, 0.0).sum(axis=1)
-    chunk_sum_yy = np.where(finite_mask, labels_expanded ** 2, 0.0).sum(axis=1)
-    chunk_sum_xy = np.where(finite_mask, factors * labels_expanded, 0.0).sum(axis=1)
-    chunk_valid_counts = np.sum(finite_mask, axis=1, dtype=np.int32)
-
+    labels, validity = normalize_label_panel(label_bundle, factor_batch.num_assets)
+    values = np.full((factor_batch.num_times, factor_batch.num_factors), np.nan)
+    for t in range(factor_batch.num_times):
+        for f in range(factor_batch.num_factors):
+            x = factor_batch.values[t,:,f]
+            y = labels[t]
+            mask = np.isfinite(x) & np.isfinite(y)
+            if factor_batch.validity is not None:
+                mask &= factor_batch.validity[t,:,f]
+            if validity is not None:
+                mask &= validity[t]
+            if np.count_nonzero(mask) >= 10:
+                xx, yy = x[mask].astype(np.float64), y[mask].astype(np.float64)
+                xx = (xx-xx[0]) - np.mean(xx-xx[0])
+                yy = (yy-yy[0]) - np.mean(yy-yy[0])
+                den = np.linalg.norm(xx)*np.linalg.norm(yy)
+                if den > 0:
+                    values[t,f] = np.clip(np.dot(xx,yy)/den, -1, 1)
+    if state.custom_state.get('output_mode','memory') != 'memory':
+        from quant_evaluator.runtime.online_moments import OnlineMoments
+        if state.custom_state['output_mode'] == 'sink':
+            # The sink owns persistence/idempotency. Exceptions propagate before
+            # accepting another source tile; no unbounded internal write queue.
+            acknowledgement = state.custom_state['series_sink'](
+                state.metric_id, tuple(factor_batch.factor_ids),
+                tuple(label_bundle.decision_time), values)
+            if acknowledgement is not None:
+                import inspect
+                if inspect.iscoroutine(acknowledgement):
+                    acknowledgement.close()
+                raise InvalidContractError('series_sink must finish synchronously and return None')
+        moments = state.custom_state.setdefault('ic_moments_by_factor',{})
+        for f,fid in enumerate(factor_batch.factor_ids):
+            moments.setdefault(fid,OnlineMoments()).update(values[:,f])
+        return state
     descriptor = state.current_chunk_descriptor
     if descriptor is not None:
-        if descriptor.parent_identity != state.custom_state.get("parent_identity", descriptor.parent_identity):
-            raise SnapshotMismatchError("internal chunk parent identity changed")
-        state.custom_state.setdefault("parent_identity", descriptor.parent_identity)
         state.expected_total_time = descriptor.total_time
         state.expected_total_factors = descriptor.total_factors
-        state.custom_state.setdefault("ic_parts", {})[
-            (descriptor.time_slice, descriptor.factor_slice)
-        ] = (
-            chunk_sum_x, chunk_sum_y, chunk_sum_xx, chunk_sum_yy,
-            chunk_sum_xy, chunk_valid_counts,
-        )
-        return state
-
-    # Initialize or concatenate accumulators
-    if state.sum_x is None:
-        # First chunk - initialize
-        state.sum_x = chunk_sum_x
-        state.sum_y = chunk_sum_y
-        state.sum_xx = chunk_sum_xx
-        state.sum_yy = chunk_sum_yy
-        state.sum_xy = chunk_sum_xy
-        state.valid_counts = chunk_valid_counts
-        state.accumulated_time = T
-        state.accumulated_factors = F
+        state.custom_state.setdefault("centered_ic_parts", {})[(descriptor.time_slice, descriptor.factor_slice)] = values
     else:
-        # Determine strategy based on accumulated vs chunk dimensions
-        # If we've accumulated fewer time periods than this chunk would complete,
-        # we're chunking by time and should concatenate
-        # If accumulated_time already covers this chunk's periods, we're chunking
-        # by assets/factors and should accumulate
-
-        # Check if this is a new time slice or same time with more assets/factors
-        prev_T = state.accumulated_time
-
-        # Simple heuristic: if current chunk has same T as accumulated and we haven't
-        # seen different factor counts, we're likely chunking by assets
-        # Otherwise, we're chunking by time or factors
-
-        curr_T, curr_F = chunk_sum_x.shape
-        state_T, state_F = state.sum_x.shape
-
-        # If state has fewer time periods than expected, we're accumulating time
-        if state_T == curr_T and state_F == curr_F:
-            # Exact same dimensions - check if we're repeating time (asset chunks)
-            # or progressing through time
-            # Use accumulated_time as indicator: if it equals state_T, we're on first pass
-            # through factors, so this is likely new time periods (concatenate)
-            # If accumulated_time > state_T, we've wrapped around (accumulate)
-            if state.accumulated_time == state_T:
-                # First time seeing this time block size - assume new time periods
-                state.sum_x = np.concatenate([state.sum_x, chunk_sum_x], axis=0)
-                state.sum_y = np.concatenate([state.sum_y, chunk_sum_y], axis=0)
-                state.sum_xx = np.concatenate([state.sum_xx, chunk_sum_xx], axis=0)
-                state.sum_yy = np.concatenate([state.sum_yy, chunk_sum_yy], axis=0)
-                state.sum_xy = np.concatenate([state.sum_xy, chunk_sum_xy], axis=0)
-                state.valid_counts = np.concatenate([state.valid_counts, chunk_valid_counts], axis=0)
-                state.accumulated_time += curr_T
-            else:
-                # We've seen this pattern before - accumulate
-                state.sum_x += chunk_sum_x
-                state.sum_y += chunk_sum_y
-                state.sum_xx += chunk_sum_xx
-                state.sum_yy += chunk_sum_yy
-                state.sum_xy += chunk_sum_xy
-                state.valid_counts += chunk_valid_counts
-        elif state_T == curr_T:
-            # Same time, different factors - chunking by factors, concatenate along F
-            state.sum_x = np.concatenate([state.sum_x, chunk_sum_x], axis=1)
-            state.sum_y = np.concatenate([state.sum_y, chunk_sum_y], axis=1)
-            state.sum_xx = np.concatenate([state.sum_xx, chunk_sum_xx], axis=1)
-            state.sum_yy = np.concatenate([state.sum_yy, chunk_sum_yy], axis=1)
-            state.sum_xy = np.concatenate([state.sum_xy, chunk_sum_xy], axis=1)
-            state.valid_counts = np.concatenate([state.valid_counts, chunk_valid_counts], axis=1)
-            state.accumulated_factors += curr_F
-        else:
-            # Different time - chunking by time, concatenate along T
-            state.sum_x = np.concatenate([state.sum_x, chunk_sum_x], axis=0)
-            state.sum_y = np.concatenate([state.sum_y, chunk_sum_y], axis=0)
-            state.sum_xx = np.concatenate([state.sum_xx, chunk_sum_xx], axis=0)
-            state.sum_yy = np.concatenate([state.sum_yy, chunk_sum_yy], axis=0)
-            state.sum_xy = np.concatenate([state.sum_xy, chunk_sum_xy], axis=0)
-            state.valid_counts = np.concatenate([state.valid_counts, chunk_valid_counts], axis=0)
-            state.accumulated_time += curr_T
-
+        state.custom_state.setdefault("centered_ic_series", []).append(values)
     return state
 
 
-def streaming_coverage_updater(
-    state: StreamingMetricState,
-    factor_batch: FactorBatch,
-    label_bundle: LabelBundle,
-) -> StreamingMetricState:
-    """
-    Update coverage state incrementally from chunk.
-
-    Accumulates count of valid observations.
-    """
-    total_count = factor_batch.values.shape[0] * factor_batch.values.shape[1] * factor_batch.values.shape[2]
-    factor_mask = np.isfinite(factor_batch.values)
+def streaming_coverage_updater(state, factor_batch, label_bundle):
+    """Paired finite coverage, independently keyed by immutable factor ID."""
+    labels, validity = normalize_label_panel(label_bundle, factor_batch.num_assets)
+    mask = np.isfinite(factor_batch.values) & np.isfinite(labels[:,:,None])
     if factor_batch.validity is not None:
-        factor_mask &= factor_batch.validity
-
-    label_values, label_validity = normalize_label_panel(
-        label_bundle, factor_batch.values.shape[1]
-    )
-    label_mask = np.isfinite(label_values)
-    if label_validity is not None:
-        label_mask &= label_validity
-    pair_mask = factor_mask & label_mask[:, :, None]
-    total_count = int(np.prod(pair_mask.shape))
-    state.valid_count += int(np.sum(pair_mask))
-    state.total_count += total_count
-    state.count += 1
+        mask &= factor_batch.validity
+    if validity is not None:
+        mask &= validity[:,:,None]
+    counts = state.custom_state.setdefault("coverage_by_factor", {})
+    for f, fid in enumerate(factor_batch.factor_ids):
+        old_valid, old_total = counts.get(fid, (0,0))
+        counts[fid] = (old_valid + int(np.count_nonzero(mask[:,:,f])), old_total + int(mask[:,:,f].size))
     return state
 
 
-def streaming_summary_updater(
-    state: StreamingMetricState,
-    factor_batch: FactorBatch,
-    label_bundle: LabelBundle,
-) -> StreamingMetricState:
-    """
-    Update summary statistics state incrementally from chunk.
-
-    Accumulates mean and variance using Welford's online algorithm.
-    """
-    valid_mask = np.isfinite(factor_batch.values)
-    if factor_batch.validity is not None:
-        valid_mask = valid_mask & factor_batch.validity
-
-    valid_values = factor_batch.values[valid_mask]
-
-    if len(valid_values) > 0:
-        state.sum_values += np.sum(valid_values)
-        state.sum_squared += np.sum(valid_values ** 2)
-        state.count += len(valid_values)
-
+def streaming_summary_updater(state, factor_batch, label_bundle):
+    """Per-factor mergeable centered moments; no cross-factor pooling."""
+    from quant_evaluator.runtime.online_moments import OnlineMoments
+    states = state.custom_state.setdefault("moments_by_factor", {})
+    for f, fid in enumerate(factor_batch.factor_ids):
+        values = factor_batch.values[:,:,f]
+        if factor_batch.validity is not None:
+            values = np.where(factor_batch.validity[:,:,f], values, np.nan)
+        states.setdefault(fid, OnlineMoments()).update(values)
     return state

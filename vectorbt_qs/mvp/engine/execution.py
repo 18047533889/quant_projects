@@ -9,6 +9,8 @@ explicit corporate-action flows, so accurate valuation stays in real units.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import date as Date
+from decimal import Decimal
 from typing import Any, Dict, List
 from warnings import warn
 
@@ -24,6 +26,7 @@ class ExecutionCosts:
     stamp_tax: float = 0.0005
     transfer_fee: float = 0.00001
     minimum_commission: float = 5.0
+    fee_schedule: Any = None
 
     def __post_init__(self) -> None:
         for name in ("commission", "stamp_tax", "transfer_fee", "minimum_commission"):
@@ -33,6 +36,12 @@ class ExecutionCosts:
 
     @classmethod
     def from_config(cls, config: Dict[str, Any]) -> "ExecutionCosts":
+        schedule_ref = config.get("fee_schedule_ref")
+        if schedule_ref is not None:
+            if schedule_ref != "CN_SH_SZ_A_ORDINARY_RESEARCH_V5":
+                raise ValueError(f"unknown fee_schedule_ref: {schedule_ref}")
+            from vectorbt_qs.contracts.costs import ordinary_ashare_research_schedule
+            return cls(fee_schedule=ordinary_ashare_research_schedule())
         costs = config.get("costs")
         if costs is not None:
             if not isinstance(costs, dict):
@@ -74,17 +83,41 @@ class ExecutionCosts:
             raise ValueError("accurate 模式不支持非零 fixed_fees；请改用 costs.minimum_commission")
         return cls()
 
-    def rate(self, side: str) -> float:
+    def _scheduled_entry(self, side: str, trade_date: Any):
+        if self.fee_schedule is None:
+            return None
+        if trade_date is None:
+            raise ValueError("effective-dated fee schedule requires trade_date")
+        from vectorbt_qs.contracts.costs import FillForBilling
+        fill = FillForBilling(
+            trade_date=trade_date.date() if hasattr(trade_date, "date") else Date.fromisoformat(str(trade_date)[:10]),
+            market="CN_SH_SZ", instrument="ORDINARY_A", account="RESEARCH",
+            side=side, notional_cny=Decimal("0"), billing_group="rate_lookup",
+        )
+        return self.fee_schedule.resolve(fill)
+
+    def rate(self, side: str, trade_date: Any = None) -> float:
+        entry = self._scheduled_entry(side, trade_date)
+        if entry is not None:
+            rate = float(entry.commission_bps) / 10000.0
+            if "transfer_fee" not in entry.included_components:
+                rate += float(entry.transfer_fee_bps) / 10000.0
+            if "stamp_tax" not in entry.included_components:
+                rate += float(entry.stamp_tax_bps) / 10000.0
+            return rate
         rate = self.commission + self.transfer_fee
         if side == "sell":
             rate += self.stamp_tax
         return rate
 
-    def fixed_fee(self, notional: float) -> float:
-        return max(0.0, self.minimum_commission - notional * self.commission)
+    def fixed_fee(self, notional: float, side: str = "buy", trade_date: Any = None) -> float:
+        entry = self._scheduled_entry(side, trade_date)
+        minimum = self.minimum_commission if entry is None else float(entry.minimum_commission_cny)
+        commission = self.commission if entry is None else float(entry.commission_bps) / 10000.0
+        return max(0.0, minimum - notional * commission)
 
-    def total_fee(self, notional: float, side: str) -> float:
-        return notional * self.rate(side) + self.fixed_fee(notional)
+    def total_fee(self, notional: float, side: str, trade_date: Any = None) -> float:
+        return notional * self.rate(side, trade_date) + self.fixed_fee(notional, side, trade_date)
 
 
 @dataclass
@@ -272,7 +305,11 @@ def plan_ashare_orders_python(
     )
 
     last_action_row = -1
-    for date, target_row in scheduled_targets.iterrows():
+    if not scheduled_targets.index.isin(index).all():
+        raise ValueError("scheduled targets contain dates outside the execution calendar")
+    # Corporate actions and holdings exist on non-rebalance dates too. NaN
+    # targets preserve shares, so visiting the complete calendar adds no trades.
+    for date, target_row in scheduled_targets.reindex(index=index).iterrows():
         row_pos = index.get_loc(date)
         px = order_price.loc[date]
         suspended = is_suspend.loc[date]
@@ -426,11 +463,11 @@ def plan_ashare_orders_python(
                 log_rows.append({"date": date, "symbol": symbol, "side": "sell", "requested": requested, "filled": 0.0, "status": "blocked", "reason": "price_bound"})
                 continue
             notional = executable * execution_price
-            fixed = costs.fixed_fee(notional)
-            cash += notional - costs.total_fee(notional, "sell")
+            fixed = costs.fixed_fee(notional, "sell", date)
+            cash += notional - costs.total_fee(notional, "sell", date)
             shares[symbol] -= executable
             order_size.at[date, symbol] = -executable
-            fee_rates.at[date, symbol] = costs.rate("sell")
+            fee_rates.at[date, symbol] = costs.rate("sell", date)
             fixed_fees.at[date, symbol] = fixed
             sell_symbols.append(symbol)
             status = "filled" if executable == requested else "partial_volume"
@@ -481,7 +518,7 @@ def plan_ashare_orders_python(
             if quantity <= 0:
                 return 0.0
             notional = quantity * execution_price
-            return notional + costs.total_fee(notional, "buy")
+            return notional + costs.total_fee(notional, "buy", date)
 
         requested_cost = sum(buy_cost(*candidate) for candidate in tradable_buys)
         scale = min(1.0, cash / requested_cost) if requested_cost > 0 else 0.0
@@ -541,11 +578,11 @@ def plan_ashare_orders_python(
                 continue
 
             notional = affordable * execution_price
-            fixed = costs.fixed_fee(notional)
-            cash -= notional + costs.total_fee(notional, "buy")
+            fixed = costs.fixed_fee(notional, "buy", date)
+            cash -= notional + costs.total_fee(notional, "buy", date)
             shares[symbol] += affordable
             order_size.at[date, symbol] = affordable
-            fee_rates.at[date, symbol] = costs.rate("buy")
+            fee_rates.at[date, symbol] = costs.rate("buy", date)
             fixed_fees.at[date, symbol] = fixed
             buy_symbols.append(symbol)
             if affordable < requested:
@@ -603,6 +640,15 @@ def plan_ashare_orders(
     machine available as a readable oracle for regression and diagnostics.
     """
     normalized_engine = str(planner_engine).lower()
+    if not scheduled_targets.index.isin(order_price.index).all():
+        raise ValueError("scheduled targets contain dates outside the execution calendar")
+    # Keep compiled/reference planners on the same full economic-event clock.
+    scheduled_targets = scheduled_targets.reindex(index=order_price.index)
+    if costs.fee_schedule is not None and normalized_engine == "numba":
+        # The compiled planner accepts only one scalar fee vector.  Falling
+        # back preserves the effective-date contract instead of backfilling
+        # today's statutory rate through history.
+        normalized_engine = "python"
     if normalized_engine == "python":
         return plan_ashare_orders_python(
             close,

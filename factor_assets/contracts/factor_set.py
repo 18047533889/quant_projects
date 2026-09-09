@@ -8,6 +8,8 @@ References factors by ID only — no raw values stored.
 from dataclasses import dataclass
 from typing import Mapping, Optional
 
+from factor_assets.contracts.assembly_evidence import AssemblySelectionEvidence
+
 
 @dataclass(frozen=True)
 class FactorMembership:
@@ -50,6 +52,11 @@ class FactorMembership:
     assembly_score: Optional[float] = None     # policy score that ranked this member
     selection_rank: Optional[int] = None       # 0-based rank within the assembled set
     reason: Optional[str] = None               # SelectionReason value
+    microcluster_id: Optional[str] = None
+    macrocluster_id: Optional[str] = None
+    cluster_set_version_ref: Optional[str] = None
+    cluster_membership_evidence_ref: Optional[str] = None
+    display_anchor_of: Optional[str] = None
 
     def __post_init__(self):
         if not self.factor_id:
@@ -146,6 +153,10 @@ class FactorSetSpec:
     frequency: Optional[str] = None
     max_factors: Optional[int] = None
     min_evidence_date: Optional[str] = None
+    selection_as_of: Optional[str] = None
+    recipe_ref: Optional[str] = None
+    use_case: Optional[str] = None
+    horizon: Optional[int] = None
     required_domains: tuple[str, ...] = ()
     excluded_domains: tuple[str, ...] = ()
     min_lifecycle_state: Optional[str] = None
@@ -190,6 +201,10 @@ class FactorSetSpec:
             "frequency": self.frequency,
             "max_factors": self.max_factors,
             "min_evidence_date": self.min_evidence_date,
+            "selection_as_of": self.selection_as_of,
+            "recipe_ref": self.recipe_ref,
+            "use_case": self.use_case,
+            "horizon": self.horizon,
             "required_domains": list(self.required_domains),
             "excluded_domains": list(self.excluded_domains),
             "min_lifecycle_state": self.min_lifecycle_state,
@@ -215,6 +230,10 @@ class FactorSetSpec:
             frequency=data.get("frequency"),
             max_factors=data.get("max_factors"),
             min_evidence_date=data.get("min_evidence_date"),
+            selection_as_of=data.get("selection_as_of"),
+            recipe_ref=data.get("recipe_ref"),
+            use_case=data.get("use_case"),
+            horizon=data.get("horizon"),
             required_domains=tuple(data.get("required_domains") or ()),
             excluded_domains=tuple(data.get("excluded_domains") or ()),
             min_lifecycle_state=data.get("min_lifecycle_state"),
@@ -254,6 +273,8 @@ class FactorSetArtifact:
     versions: tuple[str, ...] = ()
     evidence_refs: tuple[str, ...] = ()
     spec: Optional[FactorSetSpec] = None
+    universe_snapshot_ref: Optional[str] = None
+    selection_evidence: Optional[AssemblySelectionEvidence] = None
 
     def __post_init__(self):
         if not self.set_id:
@@ -272,8 +293,14 @@ class FactorSetArtifact:
             raise ValueError("snapshot_ref is required")
         if not self.universe_ref:
             raise ValueError("universe_ref is required")
+        if self.universe_snapshot_ref is not None and not self.universe_snapshot_ref:
+            raise ValueError("universe_snapshot_ref must be non-empty or None")
         if not self.split_ref:
             raise ValueError("split_ref is required")
+        if self.selection_evidence is not None and not isinstance(
+            self.selection_evidence, AssemblySelectionEvidence
+        ):
+            raise TypeError("selection_evidence must be AssemblySelectionEvidence or None")
         member_ids = [m.factor_id for m in self.members]
         if len(set(member_ids)) != len(member_ids):
             raise ValueError("duplicate factor_id in members")

@@ -7,15 +7,35 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Callable, Iterable, Mapping, Optional, Union
 
-from factor_assets.contracts.admission import FactorAdmissionArtifact
+from factor_assets.contracts.admission import AdmissionDecision, FactorAdmissionArtifact
 from factor_assets.contracts.asset import FactorAsset
-from factor_assets.contracts.assembly_evidence import AssemblyPolicy
+from factor_assets.contracts.assembly_evidence import (
+    AssemblyPolicy,
+    AssemblyClusterMembership,
+    AssemblyEvidence,
+    AssemblySelectionEvidence,
+    EvidenceMaturity,
+    GreedySelectionStep,
+)
 from factor_assets.contracts.factor_set import FactorMembership, FactorSetArtifact, FactorSetSpec
 from factor_assets.contracts.lifecycle import LifecycleState
 from factor_assets.contracts.similarity import SimilarityArtifact
 from factor_assets.errors import CapabilityError
 from factor_assets.optimizer.pareto import ParetoPoint
 from factor_assets.selection.policy import SelectionDecision
+
+
+def _parse_utc(value: str) -> datetime:
+    """Parse ISO-8601 and normalize aware timestamps to UTC for replay."""
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"invalid ISO-8601 timestamp: {value!r}") from exc
+    if parsed.tzinfo is None:
+        # Date-only legacy bounds mean UTC start-of-day; decision timestamps
+        # should still be emitted with explicit zones by producers.
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
 
 
 class FactorSetAssembler:
@@ -56,6 +76,9 @@ class FactorSetAssembler:
         treatment_selection_artifacts: Optional[Mapping[str, object]] = None,
         production: bool = False,
         assembly_policy: Optional[AssemblyPolicy] = None,
+        universe_snapshot: object | None = None,
+        cluster_memberships: Optional[Mapping[str, AssemblyClusterMembership]] = None,
+        assembly_evidence: Optional[Mapping[str, AssemblyEvidence]] = None,
     ) -> FactorSetArtifact:
         """Assemble a factor set from candidate assets.
 
@@ -98,6 +121,16 @@ class FactorSetAssembler:
         """
         if not isinstance(spec, FactorSetSpec):
             raise TypeError("spec must be a FactorSetSpec")
+        universe_snapshot_ref = None
+        if universe_snapshot is not None:
+            resolved_ref = getattr(universe_snapshot, "universe_ref", None)
+            snapshot = getattr(universe_snapshot, "snapshot", universe_snapshot)
+            resolved_ref = resolved_ref or getattr(snapshot, "universe_id", None)
+            universe_snapshot_ref = getattr(universe_snapshot, "snapshot_id", None) or getattr(snapshot, "snapshot_id", None)
+            if resolved_ref != spec.universe_ref:
+                raise ValueError("universe snapshot does not match spec.universe_ref")
+            if not universe_snapshot_ref:
+                raise ValueError("universe snapshot is unresolved")
         if spec.max_factors is not None and spec.max_factors < 1:
             raise ValueError("max_factors must be >= 1")
         if spec.selection_policy not in self._KNOWN_POLICIES:
@@ -112,9 +145,12 @@ class FactorSetAssembler:
             )
 
         admission_artifacts = self._validate_admission_artifacts(admission_artifacts)
+        if production:
+            self._validate_production_context(spec, admission_artifacts)
         treatment_artifacts = self._validate_treatment_selection_artifacts(
             treatment_selection_artifacts
         )
+        typed_assembly_evidence = self._validate_assembly_evidence(assembly_evidence)
 
         admitted_factor_ids: Optional[set[str]] = None
         latest_decisions: dict[str, SelectionDecision] = {}
@@ -147,10 +183,13 @@ class FactorSetAssembler:
                     )
                 by_timestamp[decision.timestamp] = decision
 
-            latest_decisions = {
-                factor_id: by_timestamp[max(by_timestamp)]
-                for factor_id, by_timestamp in decisions_by_factor.items()
-            }
+            as_of = _parse_utc(spec.selection_as_of) if spec.selection_as_of else None
+            latest_decisions = {}
+            for factor_id, by_timestamp in decisions_by_factor.items():
+                eligible = [( _parse_utc(ts), decision) for ts, decision in by_timestamp.items()]
+                eligible = [(ts, d) for ts, d in eligible if as_of is None or ts <= as_of]
+                if eligible:
+                    latest_decisions[factor_id] = max(eligible, key=lambda row: row[0])[1]
             admitted_factor_ids = {
                 factor_id
                 for factor_id, decision in latest_decisions.items()
@@ -180,11 +219,30 @@ class FactorSetAssembler:
                 if self._matches(asset, spec):
                     matched.append(asset)
 
-        matched = self._rank(matched, spec, latest_decisions, similarity_provider, assembly_policy)
-        matched = self._apply_policy_constraints(matched, assembly_policy)
-        matched = self._apply_family_constraints(matched, spec.family_constraints)
-        if spec.max_factors is not None:
-            matched = matched[: spec.max_factors]
+        if spec.selection_policy == "pareto_front":
+            if assembly_policy is None or not assembly_policy.required_objectives:
+                raise ValueError("pareto_front requires policy-frozen required_objectives")
+            matched = [asset for asset in matched if _has_required_objectives(
+                latest_decisions.get(asset.factor_id), assembly_policy.required_objectives
+            )]
+        selection_evidence = None
+        if spec.selection_policy == "diverse":
+            matched, selection_evidence = _constrained_mmr_select(
+                matched,
+                spec,
+                latest_decisions,
+                similarity_provider,
+                assembly_policy,
+                typed_assembly_evidence,
+                cluster_memberships,
+                production=production,
+            )
+        else:
+            matched = self._rank(matched, spec, latest_decisions, similarity_provider, assembly_policy)
+            matched = self._apply_policy_constraints(matched, assembly_policy, cluster_memberships)
+            matched = self._apply_family_constraints(matched, spec.family_constraints)
+            if spec.max_factors is not None:
+                matched = matched[: spec.max_factors]
         if not matched:
             raise ValueError("no factor assets match the FactorSetSpec")
 
@@ -193,9 +251,14 @@ class FactorSetAssembler:
         memberships = self._build_memberships(
             matched, latest_decisions, spec, admission_artifacts,
             treatment_artifacts, production,
+            cluster_memberships,
         )
-        assembly_hash = self._assembly_hash(factor_ids, spec, memberships)
-        policy_hash = self._policy_hash(spec)
+        self._validate_final_constraints(memberships, assembly_policy)
+        assembly_hash = self._assembly_hash(
+            factor_ids, spec, memberships, universe_snapshot_ref, assembly_policy,
+            selection_evidence,
+        )
+        policy_hash = self._policy_hash(spec, assembly_policy)
         versions = tuple(
             member.factor_version
             if member.factor_version is not None
@@ -220,7 +283,26 @@ class FactorSetAssembler:
             versions=versions,
             evidence_refs=evidence_refs,
             spec=spec,
+            universe_snapshot_ref=universe_snapshot_ref,
+            selection_evidence=selection_evidence,
         )
+
+    @staticmethod
+    def _validate_assembly_evidence(
+        evidence: Optional[Mapping[str, AssemblyEvidence]],
+    ) -> dict[str, AssemblyEvidence]:
+        if evidence is None:
+            return {}
+        if not isinstance(evidence, Mapping):
+            raise TypeError("assembly_evidence must be a mapping")
+        validated = {}
+        for factor_id, artifact in evidence.items():
+            if not isinstance(artifact, AssemblyEvidence):
+                raise TypeError(f"assembly_evidence[{factor_id!r}] must be AssemblyEvidence")
+            if artifact.factor_id != factor_id:
+                raise ValueError("assembly_evidence key/factor identity mismatch")
+            validated[factor_id] = artifact
+        return validated
 
     @staticmethod
     def _validate_admission_artifacts(
@@ -318,6 +400,11 @@ class FactorSetAssembler:
                 "production assembly requires an admission artifact for every "
                 f"member; missing artifact for factor_id {factor_id!r}"
             )
+        if production and artifact.decision is not AdmissionDecision.APPROVED:
+            raise ValueError(
+                "production assembly requires an APPROVED admission artifact; "
+                f"factor_id {factor_id!r} is {artifact.decision.value}"
+            )
         return artifact
 
     @staticmethod
@@ -352,12 +439,10 @@ class FactorSetAssembler:
         ``factor_id``.  When the composite scores are absent the ranking fails
         safe to recency ordering — it never invents a score.
 
-        ``diverse`` ranks by greedy Maximal Marginal Relevance (MMR):
-        ``lambda*quality - (1-lambda)*max_similarity_to_selected``, where
-        quality comes from the decision metadata (fallback to recency rank)
-        and similarity comes from the caller-supplied ``similarity_provider``.
-        The policy fails closed (raises) when ``diverse`` is selected without
-        a similarity provider.
+        ``diverse`` is deliberately not handled by this order-only helper.
+        Public assembly routes it through ``_constrained_mmr_select``, which
+        owns typed quality, feasibility, K-bounding, similarity validation,
+        and selection evidence as one atomic algorithm.
 
         Ranking never *admits* anyone — it only orders the set already
         admitted by the selection decisions.
@@ -375,13 +460,16 @@ class FactorSetAssembler:
         ranked.sort(key=lambda asset: decision_key(asset)[0], reverse=True)
 
         if spec.selection_policy == "pareto_front":
-            objectives = _pareto_objectives(ranked, decisions)
+            objectives = list(assembly_policy.required_objectives) if assembly_policy else []
             if objectives:
                 ranked = _pareto_rank(ranked, decisions, objectives)
         elif spec.selection_policy == "family_robust":
             ranked = _family_robust_rank(ranked, decisions)
         elif spec.selection_policy == "diverse":
-            ranked = _diverse_mmr_rank(ranked, decisions, similarity_provider, assembly_policy)
+            raise RuntimeError(
+                "diverse selection must use _constrained_mmr_select; "
+                "order-only MMR is retired"
+            )
         return ranked
 
     @staticmethod
@@ -392,6 +480,7 @@ class FactorSetAssembler:
         admission_artifacts: Optional[Mapping[str, FactorAdmissionArtifact]] = None,
         treatment_selection_artifacts: Optional[Mapping[str, object]] = None,
         production: bool = False,
+        cluster_memberships: Optional[Mapping[str, AssemblyClusterMembership]] = None,
     ) -> tuple[FactorMembership, ...]:
         """Build per-member provenance from the admission decisions.
 
@@ -415,12 +504,52 @@ class FactorSetAssembler:
             else treatment_selection_artifacts
         )
         members: list[FactorMembership] = []
+        cluster_memberships = dict(cluster_memberships or {})
         for rank, asset in enumerate(assets):
             decision = decisions.get(asset.factor_id)
+            cluster_membership = cluster_memberships.get(asset.factor_id)
+            if cluster_membership is not None and cluster_membership.factor_id != asset.factor_id:
+                raise ValueError("cluster membership key/factor identity mismatch")
             artifact = FactorSetAssembler._admission_for(
                 asset.factor_id, artifacts, production
             )
             selection_artifact = treatment.get(asset.factor_id)
+            if production:
+                if asset.lifecycle_state in (
+                    LifecycleState.DEPRECATED,
+                    LifecycleState.RETIRED,
+                ):
+                    raise ValueError(
+                        "production assembly rejects the current lifecycle "
+                        f"state for factor_id {asset.factor_id!r}: "
+                        f"{asset.lifecycle_state.value}"
+                    )
+                if not asset.is_usable:
+                    raise ValueError(
+                        "production assembly rejects the current health state "
+                        f"for factor_id {asset.factor_id!r}: "
+                        f"{asset.health_state.value}"
+                    )
+                latest_evidence = asset.latest_evidence_ref
+                if latest_evidence is not None:
+                    if asset.factor_id not in latest_evidence.factor_ids:
+                        raise ValueError(
+                            "production asset latest evidence does not contain "
+                            f"factor_id {asset.factor_id!r}"
+                        )
+                    if latest_evidence.bundle_id not in artifact.evidence_refs:
+                        raise ValueError(
+                            "production admission is not bound to the asset's "
+                            f"latest evidence for factor_id {asset.factor_id!r}"
+                        )
+                if (
+                    selection_artifact is not None
+                    and selection_artifact.factor_version != artifact.factor_version
+                ):
+                    raise ValueError(
+                        "production treatment factor_version does not match "
+                        f"admission factor_version for factor_id {asset.factor_id!r}"
+                    )
             treatment_selection_ref = (
                 _read_content_hash(selection_artifact, asset.factor_id)
                 if selection_artifact is not None
@@ -484,8 +613,10 @@ class FactorSetAssembler:
                     cluster_id=cluster_id,
                     orientation=orientation,
                     representative_of=(
-                        f"cluster:{cluster_id}"
-                        if cluster_id is not None
+                        f"microcluster:{cluster_membership.microcluster_id}"
+                        if cluster_membership is not None
+                        and cluster_membership.microcluster_id is not None
+                        and cluster_membership.representative_factor_id == asset.factor_id
                         else None
                     ),
                     selection_decision_ref=(
@@ -506,6 +637,10 @@ class FactorSetAssembler:
                     assembly_score=_decision_score(decision),
                     selection_rank=rank,
                     reason=decision.reason.value if decision is not None else None,
+                    microcluster_id=(cluster_membership.microcluster_id if cluster_membership else None),
+                    macrocluster_id=(cluster_membership.macrocluster_id if cluster_membership else None),
+                    cluster_set_version_ref=(cluster_membership.cluster_set_version_ref if cluster_membership else None),
+                    cluster_membership_evidence_ref=(cluster_membership.evidence_ref if cluster_membership else None),
                 )
             )
         return tuple(members)
@@ -515,6 +650,9 @@ class FactorSetAssembler:
         factor_ids: tuple[str, ...],
         spec: FactorSetSpec,
         memberships: tuple[FactorMembership, ...],
+        universe_snapshot_ref: str | None = None,
+        assembly_policy: Optional[AssemblyPolicy] = None,
+        selection_evidence: Optional[AssemblySelectionEvidence] = None,
     ) -> str:
         """Canonical content hash over the assembly identity.
 
@@ -555,6 +693,11 @@ class FactorSetAssembler:
                 member.assembly_score,
                 member.selection_rank,
                 member.reason,
+                member.microcluster_id,
+                member.macrocluster_id,
+                member.cluster_set_version_ref,
+                member.cluster_membership_evidence_ref,
+                member.display_anchor_of,
             ):
                 _prefixed(field_value)
 
@@ -563,19 +706,42 @@ class FactorSetAssembler:
         _prefixed(spec.selection_policy)
         _prefixed(spec.data_snapshot_ref)
         _prefixed(spec.universe_ref)
+        _prefixed(universe_snapshot_ref)
         _prefixed(spec.split_ref)
         _prefixed(spec.treatment_optimization_ref)
         _prefixed(spec.frequency)
         _prefixed(spec.max_factors)
         _prefixed(spec.min_evidence_date)
+        _prefixed(spec.selection_as_of)
+        _prefixed(spec.recipe_ref)
+        _prefixed(spec.use_case)
+        _prefixed(spec.horizon)
         _prefixed(spec.required_domains)
         _prefixed(spec.excluded_domains)
         _prefixed(spec.min_lifecycle_state)
         _prefixed(spec.family_constraints)
+        _prefixed(assembly_policy.content_hash if assembly_policy else None)
+        if selection_evidence is not None:
+            _prefixed(selection_evidence.algorithm_version)
+            _prefixed(selection_evidence.policy_ref)
+            for step in selection_evidence.steps:
+                _prefixed(step.rank)
+                _prefixed(step.factor_id)
+                _prefixed(step.quality)
+                _prefixed(step.max_redundancy)
+                _prefixed(step.objective)
+                for key, value in sorted(step.constraint_headroom.items()):
+                    _prefixed(key)
+                    _prefixed(value)
+            for factor_id, reason in sorted(selection_evidence.rejections.items()):
+                _prefixed(factor_id)
+                _prefixed(reason)
+            for ref in selection_evidence.pair_evidence_refs:
+                _prefixed(ref)
         return digest.hexdigest()
 
     @staticmethod
-    def _policy_hash(spec: FactorSetSpec) -> str:
+    def _policy_hash(spec: FactorSetSpec, assembly_policy: Optional[AssemblyPolicy] = None) -> str:
         """Hash of the fields that define selection semantics."""
         digest = hashlib.sha256()
         semantic_fields = (
@@ -584,12 +750,17 @@ class FactorSetAssembler:
             spec.frequency or "",
             str(spec.max_factors),
             str(spec.min_evidence_date),
+            str(spec.selection_as_of),
+            spec.recipe_ref or "",
+            spec.use_case or "",
+            str(spec.horizon),
             *spec.required_domains,
             "#",
             *spec.excluded_domains,
             str(spec.min_lifecycle_state),
             spec.family_constraints or "",
             spec.split_ref or "",
+            assembly_policy.content_hash if assembly_policy else "NO_ASSEMBLY_POLICY",
         )
         for field in semantic_fields:
             encoded = field.encode("utf-8")
@@ -600,7 +771,8 @@ class FactorSetAssembler:
 
     @staticmethod
     def _apply_policy_constraints(
-        assets: list[FactorAsset], assembly_policy: Optional[AssemblyPolicy]
+        assets: list[FactorAsset], assembly_policy: Optional[AssemblyPolicy],
+        cluster_memberships: Optional[Mapping[str, AssemblyClusterMembership]] = None,
     ) -> list[FactorAsset]:
         """Enforce the typed :class:`AssemblyPolicy` budgets when a policy is
         EXPLICITLY supplied.
@@ -638,16 +810,11 @@ class FactorSetAssembler:
                 break
             # ``family`` is the microcluster grouping; a missing grouping is
             # its own bucket — never silently exempt from the cap.
-            micro = (
-                f"__micro_{asset.factor_id}"
-                if asset.family is None
-                else f"micro_{asset.family}"
-            )
-            macro = (
-                f"__macro_{asset.factor_id}"
-                if asset.family is None
-                else f"macro_{asset.family}"
-            )
+            membership = (cluster_memberships or {}).get(asset.factor_id)
+            # All unknowns share bounded buckets; changing factor_id cannot
+            # manufacture independent concentration capacity.
+            micro = membership.microcluster_id if membership and membership.microcluster_id else "UNKNOWN_MICRO"
+            macro = membership.macrocluster_id if membership and membership.macrocluster_id else "UNKNOWN_MACRO"
             if micro_counts.get(micro, 0) >= micro_limit:
                 continue
             if macro_counts.get(macro, 0) >= macro_limit:
@@ -691,6 +858,51 @@ class FactorSetAssembler:
         return selected
 
     @staticmethod
+    def _validate_production_context(
+        spec: FactorSetSpec,
+        artifacts: Mapping[str, FactorAdmissionArtifact],
+    ) -> None:
+        if not spec.recipe_ref or not spec.selection_as_of:
+            raise ValueError("production assembly requires recipe_ref and selection_as_of")
+        as_of = _parse_utc(spec.selection_as_of)
+        for factor_id, artifact in artifacts.items():
+            expected = {
+                "universe_ref": spec.universe_ref,
+                "snapshot_ref": spec.data_snapshot_ref,
+                "split_ref": spec.split_ref,
+                "recipe_ref": spec.recipe_ref,
+            }
+            for name, value in expected.items():
+                if not value or getattr(artifact, name) != value:
+                    raise ValueError(f"production evidence context mismatch for {factor_id}: {name}")
+            if not artifact.data_as_of or _parse_utc(artifact.data_as_of) > as_of:
+                raise ValueError(f"production evidence data_as_of is unresolved/future for {factor_id}")
+            if not artifact.created_at or _parse_utc(artifact.created_at) > as_of:
+                raise ValueError(f"production evidence was unavailable at selection_as_of for {factor_id}")
+
+    @staticmethod
+    def _validate_final_constraints(
+        memberships: tuple[FactorMembership, ...],
+        policy: Optional[AssemblyPolicy],
+    ) -> None:
+        """Recheck final content after every ranking/cap stage."""
+        if policy is None:
+            return
+        micro: dict[str, int] = {}
+        macro: dict[str, int] = {}
+        for member in memberships:
+            mi = member.microcluster_id or "UNKNOWN_MICRO"
+            ma = member.macrocluster_id or "UNKNOWN_MACRO"
+            micro[mi] = micro.get(mi, 0) + 1
+            macro[ma] = macro.get(ma, 0) + 1
+        if any(n > policy.max_per_microcluster for n in micro.values()):
+            raise ValueError("final set violates max_per_microcluster")
+        if any(n > policy.max_per_macrocluster for n in macro.values()):
+            raise ValueError("final set violates max_per_macrocluster")
+        if policy.capacity_budget is not None and len(memberships) > policy.capacity_budget:
+            raise ValueError("final set violates capacity_budget")
+
+    @staticmethod
     def _matches(asset: FactorAsset, spec: FactorSetSpec) -> bool:
         metadata = asset.metadata
         if spec.frequency is not None and metadata.frequency != spec.frequency:
@@ -715,7 +927,10 @@ class FactorSetAssembler:
                 if asset.latest_evidence_ref is not None
                 else None
             )
-            if evidence_timestamp is None or evidence_timestamp < spec.min_evidence_date:
+            if evidence_timestamp is None or _parse_utc(evidence_timestamp) < _parse_utc(spec.min_evidence_date):
+                return False
+        if spec.selection_as_of is not None and asset.latest_evidence_ref is not None:
+            if _parse_utc(asset.latest_evidence_ref.timestamp) > _parse_utc(spec.selection_as_of):
                 return False
         return True
 
@@ -835,6 +1050,13 @@ def _pareto_objectives(
     if not common:
         return []
     return sorted(common)
+
+
+def _has_required_objectives(
+    decision: Optional[SelectionDecision], required: tuple[str, ...]
+) -> bool:
+    objectives = _decision_objectives(decision)
+    return objectives is not None and all(name in objectives for name in required)
 
 
 def _pareto_rank(
@@ -980,6 +1202,227 @@ class _DiversePolicy:
         return fv
 
 
+def _family_limit(constraints: Optional[str]) -> Optional[int]:
+    if constraints is None or not constraints.strip():
+        return None
+    key, separator, value = constraints.partition("=")
+    if not separator or key.strip() != "max_per_family":
+        raise ValueError("family_constraints must use 'max_per_family=N' syntax")
+    try:
+        limit = int(value.strip())
+    except ValueError as exc:
+        raise ValueError("max_per_family must be a positive integer") from exc
+    if limit < 1:
+        raise ValueError("max_per_family must be a positive integer")
+    return limit
+
+
+def _constrained_mmr_select(
+    assets: list[FactorAsset],
+    spec: FactorSetSpec,
+    decisions: dict[str, SelectionDecision],
+    similarity_provider,
+    assembly_policy: Optional[AssemblyPolicy],
+    assembly_evidence: Mapping[str, AssemblyEvidence],
+    cluster_memberships: Optional[Mapping[str, AssemblyClusterMembership]],
+    *,
+    production: bool,
+) -> tuple[list[FactorAsset], AssemblySelectionEvidence]:
+    """Select K members with feasibility checked before each MMR commit.
+
+    Only committed members update redundancy.  Each remaining candidate is
+    compared once with a newly committed member and the running maximum is
+    cached, giving at most ``sum(F-i, i=1..K-1)`` provider calls.
+    """
+    if similarity_provider is None:
+        raise ValueError("diverse (MMR) selection requires a similarity_provider")
+    policy = assembly_policy or AssemblyPolicy(
+        "legacy-diverse", "2.0.0", max_per_microcluster=max(1, len(assets)),
+        max_per_macrocluster=max(1, len(assets)),
+    )
+    q_weight = _DiversePolicy(policy).quality_weight_abs
+    r_weight = _DiversePolicy(policy).redundancy_weight
+    family_limit = _family_limit(spec.family_constraints)
+    clusters = dict(cluster_memberships or {})
+    by_id = {asset.factor_id: asset for asset in assets}
+    rejections: dict[str, str] = {}
+    qualities: dict[str, float] = {}
+
+    for asset in assets:
+        factor_id = asset.factor_id
+        typed = assembly_evidence.get(factor_id)
+        if typed is not None:
+            if typed.maturity is not EvidenceMaturity.MATURE:
+                rejections[factor_id] = "QUALITY_EVIDENCE_NOT_MATURE"
+                continue
+            if not typed.evidence_refs:
+                rejections[factor_id] = "MISSING_QUALITY_EVIDENCE_REF"
+                continue
+            if typed.quality_definition != policy.quality_definition:
+                rejections[factor_id] = "QUALITY_DEFINITION_MISMATCH"
+                continue
+            if typed.quality_unit != policy.quality_unit:
+                rejections[factor_id] = "QUALITY_UNIT_MISMATCH"
+                continue
+            if typed.quality_policy_ref != policy.quality_policy_ref:
+                rejections[factor_id] = "QUALITY_POLICY_MISMATCH"
+                continue
+            quality = typed.quality_score
+            if policy.quality_unit == "unit_interval" and not 0.0 <= quality <= 1.0:
+                rejections[factor_id] = "QUALITY_DOMAIN_VIOLATION"
+                continue
+            qualities[factor_id] = quality
+            continue
+        if production:
+            rejections[factor_id] = "MISSING_QUALITY_EVIDENCE"
+            continue
+        decision = decisions.get(factor_id)
+        raw = decision.metadata.get("quality") if decision and decision.metadata else None
+        if isinstance(raw, bool) or not isinstance(raw, (int, float)):
+            rejections[factor_id] = "MISSING_QUALITY_EVIDENCE"
+            continue
+        value = float(raw)
+        if not (-float("inf") < value < float("inf")):
+            rejections[factor_id] = "INVALID_QUALITY"
+            continue
+        qualities[factor_id] = value
+
+    remaining = {factor_id for factor_id in by_id if factor_id in qualities}
+    selected: list[FactorAsset] = []
+    max_redundancy = {factor_id: 0.0 for factor_id in remaining}
+    steps: list[GreedySelectionStep] = []
+    pair_cache: dict[tuple[str, str], float] = {}
+    pair_refs: set[str] = set()
+    capacity = policy.capacity_budget if policy.capacity_budget is not None else len(assets)
+    target = min(spec.max_factors if spec.max_factors is not None else len(assets), capacity)
+
+    def groups(factor_id: str) -> tuple[str, str]:
+        membership = clusters.get(factor_id)
+        return (
+            membership.microcluster_id if membership and membership.microcluster_id else "UNKNOWN_MICRO",
+            membership.macrocluster_id if membership and membership.macrocluster_id else "UNKNOWN_MACRO",
+        )
+
+    def infeasible(asset: FactorAsset) -> Optional[str]:
+        selected_ids = [item.factor_id for item in selected]
+        if family_limit is not None and sum(item.family == asset.family for item in selected) >= family_limit:
+            return "FAMILY_LIMIT"
+        micro, macro = groups(asset.factor_id)
+        if sum(groups(fid)[0] == micro for fid in selected_ids) >= policy.max_per_microcluster:
+            return "MICROCLUSTER_LIMIT"
+        if sum(groups(fid)[1] == macro for fid in selected_ids) >= policy.max_per_macrocluster:
+            return "MACROCLUSTER_LIMIT"
+        typed = assembly_evidence.get(asset.factor_id)
+        if policy.health_floor is not None:
+            if typed is None or typed.health_score is None:
+                return "MISSING_HEALTH_EVIDENCE"
+            if typed.health_score < policy.health_floor:
+                return "HEALTH_FLOOR"
+        if policy.turnover_budget is not None:
+            if typed is None or typed.turnover_score is None:
+                return "MISSING_TURNOVER_EVIDENCE"
+            used = sum(
+                assembly_evidence[item.factor_id].turnover_score or 0.0
+                for item in selected
+            )
+            if used + typed.turnover_score > policy.turnover_budget:
+                return "TURNOVER_BUDGET"
+        return None
+
+    def similarity_value(factor_a: str, factor_b: str) -> float:
+        key = tuple(sorted((factor_a, factor_b)))
+        if key in pair_cache:
+            return pair_cache[key]
+        result = similarity_provider(factor_a, factor_b)
+        if isinstance(result, SimilarityArtifact):
+            if {result.factor_a, result.factor_b} != {factor_a, factor_b}:
+                raise ValueError("similarity artifact pair IDs do not match requested pair")
+            if result.snapshot_ref != spec.data_snapshot_ref:
+                raise ValueError("similarity artifact snapshot context mismatch")
+            if result.universe_ref != spec.universe_ref:
+                raise ValueError("similarity artifact universe context mismatch")
+            if not result.window_ref:
+                raise ValueError("similarity artifact window context is required")
+            if result.primary_view != policy.similarity_view:
+                raise ValueError("similarity artifact definition/primary_view mismatch")
+            value = result.primary_value
+            pair_refs.add(result.similarity_spec_hash)
+            signed = policy.similarity_view in {"rank_corr", "pearson_corr", "kendall_tau", "pnl_corr"}
+        else:
+            if production:
+                raise TypeError(
+                    "production constrained MMR requires typed SimilarityArtifact evidence"
+                )
+            value = result
+            signed = True
+        if value is None:
+            raise ValueError(f"similarity is UNKNOWN for pair {key}")
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise TypeError("similarity must be a non-boolean number")
+        numeric = float(value)
+        if not (-float("inf") < numeric < float("inf")):
+            raise ValueError("similarity must be finite")
+        lower = -1.0 if signed else 0.0
+        if not lower <= numeric <= 1.0:
+            raise ValueError(f"similarity is outside [{lower}, 1] domain")
+        magnitude = abs(numeric) if signed else numeric
+        pair_cache[key] = magnitude
+        return magnitude
+
+    while remaining and len(selected) < target:
+        for factor_id in sorted(tuple(remaining)):
+            reason = infeasible(by_id[factor_id])
+            if reason is not None:
+                rejections[factor_id] = reason
+                remaining.remove(factor_id)
+        if not remaining:
+            break
+        best_id = None
+        best_score = float("-inf")
+        for factor_id in sorted(remaining):
+            score = q_weight * qualities[factor_id] - r_weight * max_redundancy[factor_id]
+            if score > best_score:
+                best_id, best_score = factor_id, score
+        assert best_id is not None
+        chosen = by_id[best_id]
+        selected.append(chosen)
+        remaining.remove(best_id)
+        steps.append(GreedySelectionStep(
+            len(selected) - 1, best_id, qualities[best_id], max_redundancy[best_id], best_score,
+            {
+                "set_slots": target - len(selected),
+                "capacity_slots": capacity - len(selected),
+                "turnover_remaining": (
+                    None if policy.turnover_budget is None else policy.turnover_budget - sum(
+                        assembly_evidence[item.factor_id].turnover_score or 0.0 for item in selected
+                    )
+                ),
+            },
+        ))
+        if len(selected) >= target:
+            break
+        for factor_id in sorted(tuple(remaining)):
+            reason = infeasible(by_id[factor_id])
+            if reason is not None:
+                rejections[factor_id] = reason
+                remaining.remove(factor_id)
+                continue
+            max_redundancy[factor_id] = max(
+                max_redundancy[factor_id], similarity_value(factor_id, best_id)
+            )
+
+    for factor_id in remaining:
+        rejections[factor_id] = "SELECTION_LIMIT_REACHED"
+    evidence = AssemblySelectionEvidence(
+        policy.selection_algorithm_version,
+        f"{policy.policy_id}@{policy.version}",
+        tuple(steps),
+        rejections,
+        tuple(sorted(pair_refs)),
+    )
+    return selected, evidence
+
+
 def _diverse_mmr_rank(
     assets: list[FactorAsset],
     decisions: dict[str, SelectionDecision],
@@ -991,107 +1434,17 @@ def _diverse_mmr_rank(
     ],
     assembly_policy: Optional[AssemblyPolicy] = None,
 ) -> list[FactorAsset]:
-    """Rank by greedy Maximal Marginal Relevance (MMR).
+    """Retired unsafe order-only MMR entry point.
 
-    MMR score for candidate ``c`` given the already-selected set ``S`` is::
-
-        quality_weight * quality(c)
-            - redundancy_weight * max_{s in S} similarity(c, s)
-
-    Quality comes from the decision metadata ``quality`` key (finite float);
-    when absent it falls back to the recency rank (higher recency = higher
-    quality).  Similarity comes from the caller-supplied ``similarity_provider``,
-    which may return either a bare float (backward compatible) or a
-    :class:`SimilarityArtifact` whose ``primary_view`` value is consumed
-    (``None`` similarity — from either form — is treated as zero).  The policy
-    fails closed (raises) when ``diverse`` is selected without a similarity
-    provider, so this helper is only reached with a provider present.
-
-    DLIB-FA-013: the weights come from the optional typed :class:`AssemblyPolicy`
-    (defaulting to the legacy 0.5/0.5), not a module-level magic constant.  The
-    policy version is recorded on each membership's ``preprocess_policy_ref``
-    semantics (via ``assembly_policy``), so a change in how quality vs.
-    redundancy is traded is observable and reproducible.
+    This signature cannot carry the typed quality evidence, FactorSetSpec K,
+    feasibility constraints, context-checked similarities, or selection trace
+    required by V6. Keeping a second implementation would create conflicting
+    selection authority, so every invocation fails before consulting inputs.
     """
-    if similarity_provider is None:
-        raise ValueError(
-            "diverse (MMR) selection requires a similarity_provider; "
-            "failing closed rather than silently degrading to non-MMR"
-        )
-
-    policy = _DiversePolicy(assembly_policy)
-    q_weight = policy.quality_weight_abs
-    r_weight = abs(float(policy.redundancy_weight))
-
-    def quality(asset: FactorAsset, recency_rank: int) -> float:
-        decision = decisions.get(asset.factor_id)
-        if decision is not None and decision.metadata:
-            raw = decision.metadata.get("quality")
-            if isinstance(raw, (int, float)) and not isinstance(raw, bool):
-                value = float(raw)
-                if value == value and value not in (float("inf"), float("-inf")):
-                    return value
-        # Fallback: higher recency (lower rank index) = higher quality.
-        return float(len(assets) - recency_rank)
-
-    def similarity_value(factor_a: str, factor_b: str) -> float:
-        """Similarity magnitude for MMR.
-
-        An ``UNKNOWN`` similarity (provider returning ``None``, or an artifact
-        whose primary view is ``None``) MUST NOT be conflated with a computed
-        zero.  In production a missing measurement is a hard failure — MMR
-        would otherwise reward exactly the pairs it cannot assess.  This
-        helper raises, forcing a caller to supply a real similarity or an
-        explicit UNKNOWN policy; a bare ``float`` is treated as a computed
-        similarity (abs-normalized).
-        """
-        result = similarity_provider(factor_a, factor_b)
-        if isinstance(result, SimilarityArtifact):
-            value = result.primary_value
-        else:
-            value = result
-        if value is None:
-            raise ValueError(
-                "diverse (MMR) selection received an UNKNOWN similarity "
-                f"(None) for pair ({factor_a!r}, {factor_b!r}); an unmeasured "
-                "similarity must not be treated as zero. Supply a real "
-                "similarity or an explicit UNKNOWN policy."
-            )
-        return abs(float(value))
-
-    # Precompute quality for each asset (recency rank = index in input order).
-    quality_by_id = {
-        asset.factor_id: quality(asset, idx)
-        for idx, asset in enumerate(assets)
-    }
-
-    remaining = list(assets)
-    selected: list[FactorAsset] = []
-    selected_ids: list[str] = []
-
-    while remaining:
-        best_asset = None
-        best_score = float("-inf")
-        for asset in remaining:
-            q = quality_by_id[asset.factor_id]
-            if selected_ids:
-                max_sim = max(
-                    similarity_value(asset.factor_id, s)
-                    for s in selected_ids
-                )
-            else:
-                max_sim = 0.0
-            mmr = q_weight * q - r_weight * max_sim
-            if mmr > best_score:
-                best_score = mmr
-                best_asset = asset
-        if best_asset is None:
-            break
-        selected.append(best_asset)
-        selected_ids.append(best_asset.factor_id)
-        remaining.remove(best_asset)
-
-    return selected
+    raise RuntimeError(
+        "_diverse_mmr_rank is retired; use _constrained_mmr_select through "
+        "FactorSetAssembler.assemble"
+    )
 
 
 __all__ = ["FactorSetAssembler"]

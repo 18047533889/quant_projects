@@ -39,18 +39,26 @@ from factor_assets.profiling.policies import (
 )
 
 
+def test_health_policy_rule_mappings_are_deeply_immutable():
+    policy = get_health_policy()
+    with pytest.raises(TypeError):
+        policy.metric_grade_rules["rank_ic"] = policy.metric_grade_rules["rank_ic"]
+    with pytest.raises(TypeError):
+        policy.dimension_rules["predictive_power"] = policy.dimension_rules["predictive_power"]
+
+
 class TestHealthPolicyRegistry:
     def test_resolve_current(self):
         p = get_health_policy()
         assert p.policy_id == "CN_A_SHARE_DAILY_H10_V1"
-        assert p.policy_version == "1.0.0"
+        assert p.policy_version == "2.0.0"
         assert p.market == "CN"
         assert p.frequency == "1d"
         assert p.target_id == "TargetVwapReturnH10"
 
     def test_registry_constants_match(self):
         assert FACTOR_HEALTH_POLICY_CURRENT_ID == "CN_A_SHARE_DAILY_H10_V1"
-        assert FACTOR_HEALTH_POLICY_CURRENT_VERSION == "1.0.0"
+        assert FACTOR_HEALTH_POLICY_CURRENT_VERSION == "2.0.0"
         assert FACTOR_HEALTH_POLICIES[FACTOR_HEALTH_POLICY_CURRENT_ID][0].policy_id == \
             FACTOR_HEALTH_POLICY_CURRENT_ID
 
@@ -89,16 +97,16 @@ class TestAnchorsVersionedInPolicy:
     def test_rank_ic_anchors_match_plan_101(self):
         p = get_health_policy()
         expected = {
-            "S+": 0.050, "S": 0.040, "A+": 0.030, "A": 0.022,
-            "B+": 0.017, "B": 0.012, "C": 0.005, "D": None,
+            "S+": 0.040, "S": 0.030, "A+": 0.022, "A": 0.016,
+            "B+": 0.010, "B": 0.005, "C": 0.000, "D": None,
         }
         assert {a.grade: a.ge for a in p.rank_ic_anchors} == expected
 
     def test_icir_anchors_match_plan_102(self):
         p = get_health_policy()
         expected = {
-            "S+": 1.50, "S": 1.10, "A+": 0.85, "A": 0.65,
-            "B+": 0.45, "B": 0.30, "C": 0.15, "D": None,
+            "S+": 0.50, "S": 0.35, "A+": 0.25, "A": 0.18,
+            "B+": 0.12, "B": 0.06, "C": 0.00, "D": None,
         }
         assert {a.grade: a.ge for a in p.icir_anchors} == expected
 
@@ -162,7 +170,7 @@ class TestAbsoluteVsCohortPolicySemantics:
         )
         assert strict.rank_ic_anchors[0].ge == 0.06
         current = get_health_policy()
-        assert current.rank_ic_anchors[0].ge == 0.050
+        assert current.rank_ic_anchors[0].ge == 0.040
         assert strict.rank_ic_anchors[0].ge == 0.06
 
 

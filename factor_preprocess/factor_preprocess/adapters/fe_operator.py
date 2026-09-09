@@ -39,9 +39,11 @@ primary signal.
 from __future__ import annotations
 
 from typing import Any, Callable, Dict, List, Optional, Tuple
+import inspect
 
 import numpy as np
 import pandas as pd
+import inspect
 
 #: Non-panel (scalar/flag) parameters that must NOT be interpreted as value
 #: columns when mapping a long frame onto an FE operator call.
@@ -82,17 +84,28 @@ def _long_to_wide(
     Row order is irrelevant for the pivot; the caller re-aligns the stacked
     result back onto the input index afterwards.
     """
+    required = {time_col, asset_col, value_col}
+    missing = required.difference(values.columns)
+    if missing:
+        raise ValueError(f"long factor frame missing columns: {sorted(missing)}")
+    if values[[time_col, asset_col]].isna().any().any():
+        raise ValueError("time and asset identity columns cannot contain nulls")
+    duplicate = values.duplicated([time_col, asset_col], keep=False)
+    if duplicate.any():
+        keys = values.loc[duplicate, [time_col, asset_col]].drop_duplicates()
+        raise ValueError(
+            "conflicting duplicate (time, asset) identities are ambiguous: "
+            f"{list(keys.itertuples(index=False, name=None))[:5]}"
+        )
     if values[time_col].dtype.kind == "M":
         times = pd.DatetimeIndex(sorted(values[time_col].unique()))
     else:
         times = pd.Index(sorted(values[time_col].unique()))
-    assets = pd.Index(sorted(values[asset_col].astype(str).unique()))
-    pivot = values.pivot_table(
+    assets = pd.Index(sorted(values[asset_col].unique()))
+    pivot = values.pivot(
         index=time_col,
         columns=asset_col,
         values=value_col,
-        aggfunc="first",
-        sort=False,
     )
     pivot = pivot.reindex(index=times, columns=assets)
     return pivot
@@ -101,7 +114,7 @@ def _long_to_wide(
 def _stack_back(panel: pd.DataFrame, template: pd.DataFrame, time_col, asset_col, value_col) -> pd.Series:
     """Re-align a wide FE result onto the template's long row order."""
     wide = panel
-    # Build a lookup from (time, asset-as-str) -> value for every template row.
+    # Preserve identity types: only the security catalog may equate 1 and "1".
     lookup = {}
     times = list(wide.index)
     for col in wide.columns:
@@ -112,10 +125,10 @@ def _stack_back(panel: pd.DataFrame, template: pd.DataFrame, time_col, asset_col
                 continue
             if isinstance(v, float) and np.isnan(v):
                 continue
-            lookup[(t, str(col))] = v
+            lookup[(t, col)] = v
     result = np.full(len(template), np.nan, dtype=float)
     t_vals = template[time_col].tolist()
-    a_vals = template[asset_col].astype(str).tolist()
+    a_vals = template[asset_col].tolist()
     for i in range(len(template)):
         result[i] = lookup.get((t_vals[i], a_vals[i]), np.nan)
     return pd.Series(result, index=template.index, name=value_col)
@@ -128,11 +141,15 @@ class FeOperatorExecutor:
     unavailable at call time (never deleted — plan §26 F3).
     """
 
-    def __init__(self, canonical: str, fallback: Optional[Callable] = None):
+    _PARAM_ALIASES = {"max_lag": "max_periods"}
+
+    def __init__(self, canonical: str, fallback: Optional[Callable] = None, *, allow_research_fallback: bool = False):
         self.canonical = canonical
         self.fallback = fallback
         self._registry = None
         self._op = None
+        self.allow_research_fallback = allow_research_fallback
+        self.effective_parameters: Dict[str, Any] = {}
 
     def _ensure(self):
         if self._registry is None:
@@ -148,49 +165,111 @@ class FeOperatorExecutor:
         """Route a long-format FP call through the FE operator."""
         try:
             self._ensure()
-        except Exception:
-            if self.fallback is not None:
+        except (ImportError, ModuleNotFoundError):
+            if self.fallback is not None and self.allow_research_fallback:
                 return self.fallback(*args, **kwargs)
             raise
-        values = kwargs.get("values", args[0] if args else None)
+        call_args = dict(kwargs)
+        if args:
+            if self.fallback is None:
+                if len(args) > 1:
+                    raise TypeError("only values may be positional without a declared FP signature")
+                positional = {"values": args[0]}
+            else:
+                positional = dict(inspect.signature(self.fallback).bind_partial(*args).arguments)
+            overlap = set(positional).intersection(call_args)
+            if overlap:
+                raise TypeError(f"parameters supplied positionally and by keyword: {sorted(overlap)}")
+            call_args.update(positional)
+        if "date_col" in call_args:
+            if "time_col" in call_args:
+                raise TypeError("date_col and time_col cannot both be supplied")
+            call_args["time_col"] = call_args.pop("date_col")
+        values = call_args.get("values")
         if values is None:
             raise TypeError(
                 f"FE-backed {self.canonical}: expected a long-format values "
                 "DataFrame as first positional/keyword 'values' argument"
             )
-        value_col = kwargs.get("value_col", "value")
-        time_col = kwargs.get("time_col", "date")
-        asset_col = kwargs.get("asset_col", "asset_id")
+        value_col = call_args.get("value_col", "value")
+        time_col = call_args.get("time_col", "date")
+        asset_col = call_args.get("asset_col", "asset_id")
 
         # Extract scalar params to forward (winzoring bounds / OLS flags / etc).
+        adapter_only = {"values", "time_col", "asset_col", "value_col", "exposures", "exposure_cols"}
         scalar_kw = {}
-        for k in ("lower", "upper", "add_intercept", "min_obs", "ddof",
-                  "target_std", "max_gap", "max_periods", "p", "min_periods"):
-            if k in kwargs and k not in ("time_col", "asset_col", "value_col", "values"):
-                scalar_kw[k] = kwargs[k]
+        for key, value in call_args.items():
+            if key in adapter_only:
+                continue
+            effective = self._PARAM_ALIASES.get(key, key)
+            if effective in scalar_kw:
+                raise TypeError(f"parameter {effective!r} supplied more than once")
+            scalar_kw[effective] = value
+        self.effective_parameters = dict(scalar_kw)
         # expose frame: kwargs['exposures'] is the exposure long frame.
-        exposures = kwargs.get("exposures")
+        exposures = call_args.get("exposures")
 
         panel = _long_to_wide(values, value_col, time_col, asset_col)
         if exposures is not None:
             # Exposures come as a long frame with the SAME long schema but
             # multiple value columns (e1, e2, ...). Build one panel per
             # exposure column so FE receives exposure panels in column order.
-            exp_value_cols = [
-                c for c in exposures.columns
-                if c not in (time_col, asset_col)
-            ]
+            exp_value_cols = call_args.get("exposure_cols")
+            if not exp_value_cols:
+                raise ValueError("exposure_cols must explicitly identify exposure columns")
+            unknown = set(exp_value_cols).difference(exposures.columns)
+            if unknown:
+                raise ValueError(f"unknown exposure columns: {sorted(unknown)}")
             exp_panels = [
                 _long_to_wide(exposures, c, time_col, asset_col)
                 for c in exp_value_cols
             ]
+            if any(
+                not item.index.equals(panel.index) or not item.columns.equals(panel.columns)
+                for item in exp_panels
+            ):
+                raise ValueError("exposures must exactly match the factor time/asset axes")
+            inspect.signature(self._op.calculate).bind(panel, *exp_panels, **scalar_kw)
             out = self._op.calculate(panel, *exp_panels, **scalar_kw)
         else:
+            inspect.signature(self._op.calculate).bind(panel, **scalar_kw)
             out = self._op.calculate(panel, **scalar_kw)
         return _stack_back(out, values, time_col, asset_col, value_col)
 
 
-def get_fe_executor(canonical: str, fallback: Optional[Callable] = None) -> Optional[FeOperatorExecutor]:
+class FeRecipeExecutor:
+    """Execute an all-FE stateless TreatmentRecipe with one panel boundary."""
+
+    def __init__(self, recipe, registry):
+        self.recipe = recipe
+        self.registry = registry
+        self.runtime_stats: Dict[str, Any] = {}
+
+    def __call__(self, values, *, value_col="value", time_col="date", asset_col="asset_id"):
+        panel = _long_to_wide(values, value_col, time_col, asset_col)
+        steps = []
+        for step in self.recipe.ordered_steps:
+            meta = self.registry.get(step.implementation_ref)
+            if meta is None or self.registry.resolve_origin(step.implementation_ref) != "FE_OPERATOR":
+                raise ValueError(
+                    f"recipe step {step.implementation_ref!r} is not an FE stateless operator"
+                )
+            params = {
+                FeOperatorExecutor._PARAM_ALIASES.get(k, k): v
+                for k, v in dict(step.parameters).items()
+            }
+            # FE ``rank`` has fixed pct=True semantics and therefore declares
+            # no scalar pct parameter. FP's domain gate has already rejected
+            # pct=False; omit the identity-valued spelling from the physical call.
+            if meta.fe_operator_id == "rank" and params.get("pct") is True:
+                params.pop("pct")
+            steps.append((meta.fe_operator_id, params))
+        from factor_engine.backend.cleaned_bridge import execute_operator_recipe
+        out = execute_operator_recipe(panel, tuple(steps), runtime_stats=self.runtime_stats)
+        return _stack_back(out, values, time_col, asset_col, value_col)
+
+
+def get_fe_executor(canonical: str, fallback: Optional[Callable] = None, *, allow_research_fallback: bool = False) -> Optional[FeOperatorExecutor]:
     """Return a lazily-FE-backed executor for ``canonical``.
 
     Returns ``None`` when FE cannot be imported (so the registry falls back to
@@ -199,12 +278,13 @@ def get_fe_executor(canonical: str, fallback: Optional[Callable] = None) -> Opti
     """
     try:
         _fe_operator_registry()  # import + load probe
-    except Exception:
+    except (ImportError, ModuleNotFoundError):
         return None
-    return FeOperatorExecutor(canonical, fallback=fallback)
+    return FeOperatorExecutor(canonical, fallback=fallback, allow_research_fallback=allow_research_fallback)
 
 
 __all__ = [
     "FeOperatorExecutor",
+    "FeRecipeExecutor",
     "get_fe_executor",
 ]

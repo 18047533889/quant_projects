@@ -185,7 +185,7 @@ def test_decision_consumes_health_dimensions_not_scalar_metrics():
     )
     policy = _generalized_policy()
     result = policy.decision(
-        [raw, treat], raw_trial_id="RAW",
+        [raw, treat], raw_trial_id="RAW", screening_only=True,
         integrity_evidence=_evidence_for(raw, treat),
     )
     assert result.winner_trial_id == "EWMA"
@@ -207,7 +207,7 @@ def test_decision_requires_fitness_spec_constructed_policy():
     )
     legacy = TreatmentDecisionPolicy(anchors, _policy())
     with pytest.raises(TypeError, match="decision"):
-        legacy.decision([raw], raw_trial_id="RAW")
+        legacy.decision([raw], raw_trial_id="RAW", screening_only=True)
 
 
 # ---------------------------------------------------------------------------
@@ -225,7 +225,7 @@ def test_decision_runs_all_steps_and_trace_is_auditable():
     )
     policy = _generalized_policy()
     result = policy.decision(
-        [raw, treat], raw_trial_id="RAW",
+        [raw, treat], raw_trial_id="RAW", screening_only=True,
         integrity_evidence=_evidence_for(raw, treat),
     )
     assert isinstance(result, DecisionResult)
@@ -253,7 +253,7 @@ def test_decision_keeps_raw_when_treatment_worse():
     )
     policy = _generalized_policy()
     result = policy.decision(
-        [raw, bad], raw_trial_id="RAW",
+        [raw, bad], raw_trial_id="RAW", screening_only=True,
         integrity_evidence=_evidence_for(raw, bad),
     )
     assert result.winner_trial_id == "RAW"
@@ -290,7 +290,7 @@ def test_decision_enforces_spec_required_health_dimension_floor():
     )
     policy = _generalized_policy(spec)
     result = policy.decision(
-        [raw, no_pred], raw_trial_id="RAW",
+        [raw, no_pred], raw_trial_id="RAW", screening_only=True,
         integrity_evidence=_evidence_for(raw, no_pred),
     )
     assert "EWMA" not in result.pareto_trial_ids
@@ -317,7 +317,7 @@ def test_decision_tier_gate_rejects_point_only_under_bootstrap_spec():
     )
     policy = _generalized_policy(spec)
     result = policy.decision(
-        [raw, point_only], raw_trial_id="RAW",
+        [raw, point_only], raw_trial_id="RAW", screening_only=True,
         integrity_evidence=_evidence_for(raw, point_only),
     )
     # The no-bootstrap candidate was hard-rejected at STEP 1 (tier below the
@@ -339,7 +339,7 @@ def test_decision_all_candidates_tier_rejected_fails_closed():
     )
     policy = _generalized_policy(spec)
     with pytest.raises(ValueError, match="hard gates"):
-        policy.decision([a, b], raw_trial_id="RAW",
+        policy.decision([a, b], raw_trial_id="RAW", screening_only=True,
                         integrity_evidence=_evidence_for(a, b))
 
 
@@ -354,7 +354,7 @@ def test_decision_point_only_accepted_when_spec_allows_point_estimates():
     )
     policy = _generalized_policy()  # default minimum = POINT_ESTIMATE_ONLY
     result = policy.decision(
-        [raw, treat], raw_trial_id="RAW",
+        [raw, treat], raw_trial_id="RAW", screening_only=True,
         integrity_evidence=_evidence_for(raw, treat),
     )
     assert result.winner_trial_id == "EWMA"
@@ -365,7 +365,7 @@ def test_decision_missing_integrity_evidence_still_fails_closed():
     treat = HealthDecisionInput(trial_id="EWMA", health_view=_good_treatment_health(fid="EWMA"))
     policy = _generalized_policy()
     result = policy.decision(
-        [raw, treat], raw_trial_id="RAW",
+        [raw, treat], raw_trial_id="RAW", screening_only=True,
         integrity_evidence=_evidence_for(raw),  # only RAW has evidence
     )
     assert "EWMA" not in result.pareto_trial_ids
@@ -387,7 +387,7 @@ def test_decision_fitness_artifact_records_normalized_deltas():
     )
     policy = _generalized_policy()
     result = policy.decision(
-        [raw, treat], raw_trial_id="RAW",
+        [raw, treat], raw_trial_id="RAW", screening_only=True,
         integrity_evidence=_evidence_for(raw, treat),
     )
     artifacts = {a.trial_id: a for a in result.fitness_artifacts}
@@ -407,7 +407,7 @@ def test_decision_fitness_artifact_is_typed_and_frozen():
         trial_id="RAW", health_view=_good_raw_health(fid="RAW"), evidence_tier="VALIDATION_SERIES"
     )
     policy = _generalized_policy()
-    result = policy.decision([raw], raw_trial_id="RAW",
+    result = policy.decision([raw], raw_trial_id="RAW", screening_only=True,
                              integrity_evidence=_evidence_for(raw))
     artifact = result.fitness_artifacts[0]
     assert isinstance(artifact, CandidateFitnessArtifact)
@@ -437,14 +437,42 @@ def test_legacy_decide_still_works_byte_for_byte():
     ewma = _smoothed_metrics("EWMA")
     policy = TreatmentDecisionPolicy(_anchors(), legacy_policy())
     result = policy.decide(
-        [raw, ewma], raw_trial_id="RAW",
+        [raw, ewma], raw_trial_id="RAW", screening_only=True,
         integrity_evidence=legacy_evidence(raw, ewma),
     )
     assert result.winner_trial_id == "EWMA"
     # And decide() on a spec-built policy is rejected (mode separation).
     spec_policy = _generalized_policy()
     with pytest.raises(TypeError, match="decision"):
-        spec_policy.decide([raw])
+        spec_policy.decide([raw], screening_only=True)
+
+
+def test_legacy_decide_requires_explicit_screening_mode():
+    from tests.search.test_dlib_uncertainty_winner import _anchors, _raw_metrics
+
+    policy = TreatmentDecisionPolicy(_anchors(), _policy())
+    with pytest.raises(ValueError, match="authoritative_decision"):
+        policy.decide([_raw_metrics()])
+
+
+def test_local_health_decision_requires_explicit_screening_mode_and_marks_result():
+    raw = HealthDecisionInput(
+        trial_id="RAW",
+        health_view=_good_raw_health(fid="RAW"),
+        evidence_tier="VALIDATION_SERIES",
+    )
+    policy = _generalized_policy()
+    with pytest.raises(ValueError, match="authoritative_decision"):
+        policy.decision([raw], raw_trial_id="RAW")
+
+    result = policy.decision(
+        [raw],
+        raw_trial_id="RAW",
+        screening_only=True,
+        integrity_evidence=_evidence_for(raw),
+    )
+    assert result.authoritative is False
+    assert result.purpose == "SCREENING_DIAGNOSTIC"
 
 
 def test_scalar_mode_policy_cannot_call_decision():
@@ -453,7 +481,7 @@ def test_scalar_mode_policy_cannot_call_decision():
     raw = HealthDecisionInput(trial_id="RAW", health_view=_good_raw_health(fid="RAW"))
     policy = TreatmentDecisionPolicy(_anchors(), _policy())
     with pytest.raises(TypeError, match="decide"):
-        policy.decision([raw], raw_trial_id="RAW")
+        policy.decision([raw], raw_trial_id="RAW", screening_only=True)
 
 
 def test_constructor_requires_exactly_one_mode():
@@ -480,7 +508,7 @@ def test_decision_outcome_reports_raw_selected():
     )
     policy = _generalized_policy()
     result = policy.decision(
-        [raw, bad], raw_trial_id="RAW",
+        [raw, bad], raw_trial_id="RAW", screening_only=True,
         integrity_evidence=_evidence_for(raw, bad),
     )
     assert result.outcome == "RAW_SELECTED_NO_IMPROVEMENT"
@@ -497,7 +525,7 @@ def test_decision_outcome_reports_improved():
     )
     policy = _generalized_policy()
     result = policy.decision(
-        [raw, treat], raw_trial_id="RAW",
+        [raw, treat], raw_trial_id="RAW", screening_only=True,
         integrity_evidence=_evidence_for(raw, treat),
     )
     assert result.outcome == "IMPROVED"
@@ -513,7 +541,7 @@ def test_decision_requires_raw_candidate_fails_closed():
     )
     policy = _generalized_policy()
     with pytest.raises(ValueError, match="RAW"):
-        policy.decision([treat], raw_trial_id="RAW",
+        policy.decision([treat], raw_trial_id="RAW", screening_only=True,
                         integrity_evidence=_evidence_for(treat))
 
 
@@ -556,7 +584,7 @@ def test_decision_bootstrap_series_drives_step6():
         _spec(minimum_evidence_tier=EvidenceTier.BOOTSTRAP_CONFIDENCE)
     )
     result = policy.decision(
-        [raw, treat], raw_trial_id="RAW",
+        [raw, treat], raw_trial_id="RAW", screening_only=True,
         integrity_evidence=_evidence_for(raw, treat),
     )
     assert result.winner_trial_id == "EWMA"

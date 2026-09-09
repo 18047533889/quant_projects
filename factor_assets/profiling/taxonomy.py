@@ -149,12 +149,18 @@ class FactorTaxonomyArtifact:
     taxonomy_policy_id: str
     taxonomy_policy_version: str
     content_hash: str
+    alpha_source_fields: tuple[str, ...] = ()
+    control_fields: tuple[str, ...] = ()
+    eligibility_fields: tuple[str, ...] = ()
+    weight_fields: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if not self.factor_definition_id:
             raise ValueError("factor_definition_id is required")
         if len(set(self.data_domains)) != len(self.data_domains):
             raise ValueError("data_domains must be deduplicated")
+        for name in ("alpha_source_fields", "control_fields", "eligibility_fields", "weight_fields"):
+            object.__setattr__(self, name, tuple(dict.fromkeys(getattr(self, name))))
 
     @property
     def domain_set(self) -> DomainTagSet:
@@ -191,6 +197,10 @@ class FactorTaxonomyArtifact:
             "taxonomy_policy_id": self.taxonomy_policy_id,
             "taxonomy_policy_version": self.taxonomy_policy_version,
             "content_hash": self.content_hash,
+            "alpha_source_fields": list(self.alpha_source_fields),
+            "control_fields": list(self.control_fields),
+            "eligibility_fields": list(self.eligibility_fields),
+            "weight_fields": list(self.weight_fields),
         }
 
 
@@ -205,6 +215,8 @@ def classify_factor_taxonomy(
     policy: TaxonomyPolicy | None = None,
     field_taxonomy: Mapping[str, Sequence[str]] | None = None,
     lineage: Sequence[str] | None = None,
+    field_roles: Mapping[str, str] | None = None,
+    production: bool = False,
 ) -> FactorTaxonomyArtifact:
     """Classify a factor definition into a frozen taxonomy artifact.
 
@@ -251,6 +263,18 @@ def classify_factor_taxonomy(
     op_ids = tuple(str(getattr(u, "operator_id", "")) for u in op_usages)
     operator_ref_ids = tuple(o for o in op_ids if not _is_mechanical_noise(o))
     field_ids = tuple(str(getattr(u, "canonical_field_id", "")) for u in field_usages)
+    if production:
+        if field_taxonomy is None or field_roles is None:
+            raise ValueError("production taxonomy requires canonical field_taxonomy and field_roles")
+        missing = [field_id for field_id in field_ids if field_id not in field_taxonomy or field_id not in field_roles]
+        if missing:
+            raise ValueError(f"production taxonomy has unresolved canonical fields: {missing}")
+    roles = {"alpha": [], "control": [], "eligibility": [], "weight": []}
+    for field_id in field_ids:
+        role = (field_roles or {}).get(field_id, "alpha")
+        if role not in roles:
+            raise ValueError(f"unknown field role {role!r}")
+        roles[role].append(field_id)
 
     data_domains = derive_data_domains(
         field_usages, policy=policy, field_taxonomy=field_taxonomy
@@ -258,7 +282,12 @@ def classify_factor_taxonomy(
     structure_tags = derive_structure_tags(
         op_usages, policy=policy, lineage=lineage, data_domains=data_domains
     )
-    mechanism_tags = derive_mechanism_tags(op_ids, data_domains)
+    # Controls/eligibility/weights are recorded as dependencies, not alpha
+    # sources. A size neutralizer cannot turn a price alpha into a size alpha.
+    alpha_usages = tuple(u for u in field_usages if str(getattr(u,"canonical_field_id","")) in roles["alpha"])
+    alpha_domains = derive_data_domains(alpha_usages,policy=policy,field_taxonomy=field_taxonomy)
+    mechanism_domains = alpha_domains if policy.mechanism_sources == "alpha_only" else data_domains
+    mechanism_tags = derive_mechanism_tags(op_ids, mechanism_domains)
     frequency_tags = derive_frequency_tags(field_usages)
     display_family = derive_display_family(data_domains, policy=policy)
 
@@ -274,6 +303,10 @@ def classify_factor_taxonomy(
         taxonomy_policy_id=policy.policy_id,
         taxonomy_policy_version=policy.policy_version,
         content_hash="",
+        alpha_source_fields=tuple(roles["alpha"]),
+        control_fields=tuple(roles["control"]),
+        eligibility_fields=tuple(roles["eligibility"]),
+        weight_fields=tuple(roles["weight"]),
     )
     content_hash = _artifact_hash(artifact)
     return FactorTaxonomyArtifact(
@@ -288,6 +321,10 @@ def classify_factor_taxonomy(
         taxonomy_policy_id=artifact.taxonomy_policy_id,
         taxonomy_policy_version=artifact.taxonomy_policy_version,
         content_hash=content_hash,
+        alpha_source_fields=artifact.alpha_source_fields,
+        control_fields=artifact.control_fields,
+        eligibility_fields=artifact.eligibility_fields,
+        weight_fields=artifact.weight_fields,
     )
 
 
@@ -982,6 +1019,10 @@ def _artifact_hash(artifact: FactorTaxonomyArtifact) -> str:
             "operator_usage_ref": artifact.operator_usage_ref,
             "taxonomy_policy_id": artifact.taxonomy_policy_id,
             "taxonomy_policy_version": artifact.taxonomy_policy_version,
+            "alpha_source_fields": list(artifact.alpha_source_fields),
+            "control_fields": list(artifact.control_fields),
+            "eligibility_fields": list(artifact.eligibility_fields),
+            "weight_fields": list(artifact.weight_fields),
         },
         sort_keys=True,
         separators=(",", ":"),

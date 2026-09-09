@@ -62,7 +62,34 @@ def _validate_exposure_bundle(bundle: Any, exposure_type: str) -> Dict[str, Any]
             f"Exposure bundle for '{exposure_type}' missing required provenance "
             f"keys: {missing}"
         )
-    return bundle
+    for key in ("knowledge_time", "effective_time", "snapshot_ref", "market", "universe_ref"):
+        if metadata[key] in (None, "", "unknown"):
+            raise ValueError(
+                f"Exposure bundle for '{exposure_type}' has unresolved provenance {key!r}"
+            )
+    values = bundle.get("values")
+    dates = bundle.get("dates")
+    assets = bundle.get("assets")
+    if not all(isinstance(v, np.ndarray) for v in (values, dates, assets)):
+        raise ValueError(f"Exposure bundle for '{exposure_type}' requires ndarray values/dates/assets")
+    if values.ndim != 2 or dates.ndim != 1 or assets.ndim != 1:
+        raise ValueError(f"Exposure bundle for '{exposure_type}' requires named TN axes")
+    if values.shape != (len(dates), len(assets)):
+        raise ValueError(
+            f"Exposure bundle for '{exposure_type}' shape {values.shape} != "
+            f"(dates={len(dates)}, assets={len(assets)})"
+        )
+    if len(set(dates.tolist())) != len(dates) or len(set(assets.tolist())) != len(assets):
+        raise ValueError(f"Exposure bundle for '{exposure_type}' axes must be unique")
+    # Snapshot at the boundary: callers cannot mutate provider buffers after validation.
+    result = dict(bundle)
+    for key in ("values", "dates", "assets"):
+        frozen = np.array(bundle[key], copy=True)
+        frozen.flags.writeable = False
+        result[key] = frozen
+    result["layout"] = "TN"
+    result["dtype"] = str(result["values"].dtype)
+    return result
 
 
 class ExposureProvider(Protocol):

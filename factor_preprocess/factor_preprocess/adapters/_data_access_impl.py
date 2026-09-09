@@ -91,30 +91,54 @@ class DefaultExposureProvider:
         """Read a panel from the data_access store, fail-closed on any error."""
         store = self._require_store(feature)
         try:
+            requested_columns = list(columns)
+            if "UpdateTime" not in requested_columns:
+                requested_columns.append("UpdateTime")
             handle = store.read_frame(
                 dataset,
-                columns=columns,
+                columns=requested_columns,
                 time_range=(start_date, end_date) if start_date or end_date else None,
                 instrument_filter=assets,
             )
             df = handle.to_pandas()
-        except Exception as exc:  # noqa: BLE001 - fail closed on any data error
-            raise OptionalDependencyMissing(
-                package_name="data_access",
-                feature_name=f"{feature} (data unavailable: {type(exc).__name__})",
+        except Exception as exc:  # fail closed, but do not mislabel schema/data errors as missing package
+            raise RuntimeError(
+                f"data_access read failed for {feature}: {type(exc).__name__}: {exc}"
             ) from exc
 
         if df is None or df.empty:
-            raise OptionalDependencyMissing(
-                package_name="data_access",
-                feature_name=f"{feature} (empty result)",
-            )
+            raise ValueError(f"data_access returned no rows for {feature}")
 
         time_col = "TradeDate"
         sym_col = "Symbol"
-        dates = np.asarray(df[time_col].astype(str).to_numpy())
-        assets_arr = np.asarray(df[sym_col].astype(str).to_numpy())
-        return df, dates, assets_arr
+        required = {time_col, sym_col, "UpdateTime"}
+        missing = required.difference(df.columns)
+        if missing:
+            raise ValueError(f"{feature} missing required identity/time columns: {sorted(missing)}")
+        if df[list(required)].isna().any().any():
+            raise ValueError(f"{feature} contains null identity/knowledge time")
+        return df
+
+    @staticmethod
+    def _to_panel(df, value_col: str, feature: str):
+        """Create a deterministic TN panel without coercing instrument identity."""
+        keys = ["TradeDate", "Symbol"]
+        duplicate = df.duplicated(keys, keep=False)
+        if duplicate.any():
+            counts = df.loc[duplicate].groupby(keys, dropna=False)[value_col].nunique(dropna=False)
+            conflicts = counts[counts > 1]
+            if not conflicts.empty:
+                raise ValueError(f"{feature} conflicting duplicate keys: {list(conflicts.index[:5])}")
+            df = df.drop_duplicates(keys, keep="first")
+        dates = np.asarray(sorted(df["TradeDate"].unique()))
+        assets = np.asarray(sorted(df["Symbol"].unique()))
+        values = df.pivot(index="TradeDate", columns="Symbol", values=value_col).reindex(
+            index=dates, columns=assets
+        ).to_numpy()
+        knowledge_time = df["UpdateTime"].max()
+        if knowledge_time is None or str(knowledge_time) in ("", "unknown", "NaT"):
+            raise ValueError(f"{feature} has no real knowledge_time")
+        return values, dates, assets, str(knowledge_time)
 
     def _bundle(
         self,
@@ -142,7 +166,7 @@ class DefaultExposureProvider:
         assets: Optional[List[str]] = None,
         industry_classification: str = "default",
     ) -> Dict[str, Any]:
-        df, dates, assets_arr = self._read_panel(
+        df = self._read_panel(
             _INDUSTRY_DATASET,
             ["TradeDate", "Symbol", "IndustryCode"],
             market,
@@ -151,12 +175,12 @@ class DefaultExposureProvider:
             assets,
             "industry exposure",
         )
-        values = df["IndustryCode"].astype(str).to_numpy().reshape(-1, 1)
+        values, dates, assets_arr, knowledge_time = self._to_panel(df, "IndustryCode", "industry exposure")
         metadata = _build_metadata(
             market=market,
             classification_version=industry_classification,
             snapshot_ref=f"{_INDUSTRY_DATASET}@{market}",
-            knowledge_time=str(df["UpdateTime"].max()) if "UpdateTime" in df else "unknown",
+            knowledge_time=knowledge_time,
             effective_time=str(dates[-1]) if len(dates) else "unknown",
             universe_ref=_UNIVERSE_DATASET,
         )
@@ -184,7 +208,7 @@ class DefaultExposureProvider:
             "log_market_cap": "MarketCap",
             "total_assets": "ACap",
         }.get(size_metric, "MarketCap")
-        df, dates, assets_arr = self._read_panel(
+        df = self._read_panel(
             _SIZE_DATASET,
             ["TradeDate", "Symbol", col],
             market,
@@ -193,15 +217,15 @@ class DefaultExposureProvider:
             assets,
             "size exposure",
         )
-        raw = df[col].to_numpy(dtype=float)
         if size_metric == "log_market_cap":
-            raw = np.log(np.maximum(raw, 1.0))
-        values = raw.reshape(-1, 1)
+            df = df.copy()
+            df[col] = np.log(np.maximum(df[col].to_numpy(dtype=float), 1.0))
+        values, dates, assets_arr, knowledge_time = self._to_panel(df, col, "size exposure")
         metadata = _build_metadata(
             market=market,
             classification_version="size",
             snapshot_ref=f"{_SIZE_DATASET}@{market}",
-            knowledge_time=str(df["UpdateTime"].max()) if "UpdateTime" in df else "unknown",
+            knowledge_time=knowledge_time,
             effective_time=str(dates[-1]) if len(dates) else "unknown",
             universe_ref=_UNIVERSE_DATASET,
         )
@@ -221,7 +245,7 @@ class DefaultExposureProvider:
         assets: Optional[List[str]] = None,
         sector_classification: str = "default",
     ) -> Dict[str, Any]:
-        df, dates, assets_arr = self._read_panel(
+        df = self._read_panel(
             _SECTOR_DATASET,
             ["TradeDate", "Symbol", "IndustryName"],
             market,
@@ -230,12 +254,12 @@ class DefaultExposureProvider:
             assets,
             "sector exposure",
         )
-        values = df["IndustryName"].astype(str).to_numpy().reshape(-1, 1)
+        values, dates, assets_arr, knowledge_time = self._to_panel(df, "IndustryName", "sector exposure")
         metadata = _build_metadata(
             market=market,
             classification_version=sector_classification,
             snapshot_ref=f"{_SECTOR_DATASET}@{market}",
-            knowledge_time=str(df["UpdateTime"].max()) if "UpdateTime" in df else "unknown",
+            knowledge_time=knowledge_time,
             effective_time=str(dates[-1]) if len(dates) else "unknown",
             universe_ref=_UNIVERSE_DATASET,
         )
@@ -258,7 +282,7 @@ class DefaultExposureProvider:
         assets: Optional[List[str]] = None,
         window_days: int = 252,
     ) -> Dict[str, Any]:
-        df, dates, assets_arr = self._read_panel(
+        df = self._read_panel(
             _BETA_DATASET,
             ["TradeDate", "Symbol", "Return"],
             market,
@@ -270,12 +294,12 @@ class DefaultExposureProvider:
         # Placeholder beta: single-column panel of returns reshaped to 1 asset
         # column. Real beta estimation is out of scope for the adapter boundary;
         # the bundle still carries full provenance.
-        values = df["Return"].to_numpy(dtype=float).reshape(-1, 1)
+        values, dates, assets_arr, knowledge_time = self._to_panel(df, "Return", "beta exposure")
         metadata = _build_metadata(
             market=market,
             classification_version="beta",
             snapshot_ref=f"{_BETA_DATASET}@{market}",
-            knowledge_time=str(df["UpdateTime"].max()) if "UpdateTime" in df else "unknown",
+            knowledge_time=knowledge_time,
             effective_time=str(dates[-1]) if len(dates) else "unknown",
             universe_ref=_UNIVERSE_DATASET,
         )

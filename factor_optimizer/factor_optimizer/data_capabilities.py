@@ -33,9 +33,10 @@ data based on the capability; the search worker never holds a test provider.
 import hashlib
 import secrets
 import threading
+from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 from enum import Enum
-from typing import Dict, Optional, Tuple
+from typing import Any, Dict, Mapping, Optional, Tuple
 
 from factor_optimizer.contracts.splits import SplitPlan
 from factor_optimizer.errors import CapabilityForgeryError
@@ -311,8 +312,36 @@ class TestDataCapability(DataCapability):
     (R46 P0-R / P0-S).
     """
 
-    def __init__(self, allowed_mask, **identity):
+    def __init__(self, allowed_mask, *, attempt_token: int = 0, **identity):
+        if (
+            isinstance(attempt_token, bool)
+            or not isinstance(attempt_token, int)
+            or attempt_token < 0
+        ):
+            raise ValueError("attempt_token must be a non-negative integer")
+        self._attempt_token = attempt_token
         super().__init__(DataScope.TEST, allowed_mask, **identity)
+        self._attempt_token_digest = hashlib.sha256(
+            f"{self._capability_id}:{self._nonce}:{attempt_token}".encode()
+        ).hexdigest()
+
+    @property
+    def attempt_token(self) -> int:
+        return self._attempt_token
+
+    def verify_identity(self) -> None:
+        super().verify_identity()
+        if (
+            isinstance(self._attempt_token, bool)
+            or not isinstance(self._attempt_token, int)
+            or self._attempt_token < 0
+        ):
+            raise CapabilityForgeryError("test capability attempt_token is invalid")
+        expected = hashlib.sha256(
+            f"{self._capability_id}:{self._nonce}:{self._attempt_token}".encode()
+        ).hexdigest()
+        if self._attempt_token_digest != expected:
+            raise CapabilityForgeryError("test capability attempt_token was altered")
 
 
 # ---------------------------------------------------------------------------
@@ -403,6 +432,11 @@ class TestAuthorityBroker:
         search_session_id: str,
         split_id: str,
         ttl_seconds: int = 3600,
+        campaign_store=None,
+        campaign_id: Optional[str] = None,
+        candidate_set_hash: Optional[str] = None,
+        purpose: str = "sealed_test",
+        profile_hash: Optional[str] = None,
     ):
         if not isinstance(dataset_identity, str) or not dataset_identity.strip():
             raise ValueError("dataset_identity must be a non-empty string")
@@ -419,6 +453,27 @@ class TestAuthorityBroker:
         self._search_session_id = search_session_id
         self._split_id = split_id
         self._ttl_seconds = ttl_seconds
+        durable_values = (campaign_store, campaign_id, candidate_set_hash, profile_hash)
+        if any(value is not None for value in durable_values) and not all(
+            value is not None for value in durable_values
+        ):
+            raise ValueError(
+                "campaign_store, campaign_id, candidate_set_hash, and profile_hash "
+                "must be supplied together"
+            )
+        self._campaign_store = campaign_store
+        self._sealed_scope_hash = None
+        self._cached_test_result = None
+        self._active_attempt_count: Optional[int] = None
+        if campaign_store is not None:
+            self._sealed_scope_hash = campaign_store.freeze_candidate_set(
+                campaign_id=campaign_id,
+                candidate_set_hash=candidate_set_hash,
+                dataset_identity=dataset_identity,
+                split_id=split_id,
+                purpose=purpose,
+                profile_hash=profile_hash,
+            )
         # FO-P0-03: the physical test-data path.  None until the test
         # authority attaches an opaque store; a provider without one fails
         # closed rather than falling back to a caller's raw dict.
@@ -428,21 +483,53 @@ class TestAuthorityBroker:
     def store_ref(self) -> Optional[TestStoreRef]:
         return self._store_ref
 
+    @property
+    def dataset_identity(self) -> str:
+        return self._dataset_identity
+
+    @property
+    def search_session_id(self) -> str:
+        return self._search_session_id
+
+    @property
+    def split_id(self) -> str:
+        return self._split_id
+
     def attach_store_ref(self, store_ref: TestStoreRef) -> None:
         """Attach the opaque physical store this broker owns."""
         if not isinstance(store_ref, TestStoreRef):
             raise TypeError("store_ref must be a TestStoreRef")
         if self._store_ref is not None:
             raise ValueError("broker already has a store attached")
+        if store_ref.dataset_identity != self._dataset_identity:
+            raise ValueError(
+                "store_ref dataset_identity must match the broker dataset"
+            )
         self._store_ref = store_ref
 
     def issue_test_capability(self, test_mask) -> TestDataCapability:
         """Issue a TEST capability bound to this broker's identity."""
+        if self._campaign_store is not None:
+            self._cached_test_result = self._campaign_store.begin_test_attempt(
+                self._sealed_scope_hash
+            )
+            if self._cached_test_result is not None:
+                raise ValueError(
+                    "sealed evaluation is already complete; read its immutable "
+                    "result instead of issuing fresh test access"
+                )
+            self._active_attempt_count = int(
+                self._campaign_store.sealed_state(self._sealed_scope_hash)[
+                    "attempt_count"
+                ]
+            )
+        attempt_token = self._active_attempt_count or 0
         now = datetime.now(timezone.utc)
         _capability_issuer.broker = self
         try:
             return TestDataCapability(
                 test_mask,
+                attempt_token=attempt_token,
                 search_session_id=self._search_session_id,
                 split_id=self._split_id,
                 dataset_identity=self._dataset_identity,
@@ -453,39 +540,66 @@ class TestAuthorityBroker:
         finally:
             _capability_issuer.broker = None
 
-    def create_test_provider(self, test_data=None) -> "TestDataProvider":
-        """Create a provider that resolves test data for a TEST capability.
+    @property
+    def cached_test_result(self):
+        """Previously completed immutable result, when durable mode found one."""
+        return deepcopy(self._cached_test_result)
 
-        ``test_data`` (backward-compatible): a raw dict is wrapped into an
-        opaque ``TestStoreRef`` so existing test code keeps working.  When
-        omitted, the broker's attached opaque store is used.  A provider with
-        no store fails closed at resolve.
-        """
-        if test_data is not None and not isinstance(test_data, TestStoreRef):
-            if not isinstance(test_data, dict):
-                raise TypeError("test_data must be a dict or TestStoreRef")
-            test_data = TestStoreRef(
-                _DictStore(test_data),
-                dataset_identity=self._dataset_identity,
-            )
-        store_ref = test_data if test_data is not None else self._store_ref
-        return TestDataProvider(
-            store_ref,
-            dataset_identity=self._dataset_identity,
-            provider_identity=self._provider_identity,
+    @property
+    def active_attempt_token(self) -> int:
+        """Opaque immutable token for the attempt most recently issued."""
+        if self._active_attempt_count is None:
+            raise ValueError("broker has no active sealed attempt")
+        return self._active_attempt_count
+
+    @property
+    def has_durable_authority(self) -> bool:
+        """Whether test exposure is fenced by a cross-process transaction."""
+        return self._campaign_store is not None and self._sealed_scope_hash is not None
+
+    def durable_binding(self) -> Mapping[str, Any]:
+        """Return the immutable persisted binding for certification checks."""
+        if not self.has_durable_authority:
+            raise ValueError("broker has no durable campaign store")
+        return self._campaign_store.sealed_state(self._sealed_scope_hash)
+
+    def mark_test_infrastructure_failure(self, attempt_token: int) -> None:
+        """Permit an audited retry of the same frozen request only."""
+        if self._campaign_store is None:
+            raise ValueError("broker has no durable campaign store")
+        self._campaign_store.mark_infrastructure_failure(
+            self._sealed_scope_hash, attempt_token
         )
 
+    def complete_test_attempt(self, attempt_token: int, result_ref: str, result) -> None:
+        """Persist the immutable outcome of the logical sealed evaluation."""
+        if self._campaign_store is None:
+            raise ValueError("broker has no durable campaign store")
+        self._campaign_store.complete_test(
+            self._sealed_scope_hash, attempt_token, result_ref, result
+        )
 
-class _DictStore:
-    """Adapter wrapping a plain dict as an opaque ``read()`` store."""
-
-    def __init__(self, data: dict):
-        if not isinstance(data, dict):
-            raise TypeError("data must be a dict")
-        object.__setattr__(self, "_data", dict(data))
-
-    def read(self):
-        return object.__getattribute__(self, "_data")
+    def create_test_provider(self, attempt_token: Optional[int] = None) -> "TestDataProvider":
+        """Create a provider backed only by the broker's attached store."""
+        if self._campaign_store is not None and (
+            not isinstance(attempt_token, int) or isinstance(attempt_token, bool)
+        ):
+            raise ValueError("durable test provider requires an attempt token")
+        return TestDataProvider(
+            self._store_ref,
+            dataset_identity=self._dataset_identity,
+            provider_identity=self._provider_identity,
+            search_session_id=self._search_session_id,
+            split_id=self._split_id,
+            expected_attempt_token=attempt_token,
+            exposure_authorizer=(
+                None
+                if self._campaign_store is None
+                else lambda token=attempt_token: self._campaign_store.mark_test_exposed(
+                    self._sealed_scope_hash, token
+                )
+            ),
+        )
 
 
 class TestDataProvider:
@@ -505,6 +619,10 @@ class TestDataProvider:
         *,
         dataset_identity: str,
         provider_identity: str,
+        search_session_id: Optional[str] = None,
+        split_id: Optional[str] = None,
+        expected_attempt_token: Optional[int] = None,
+        exposure_authorizer=None,
     ):
         if not isinstance(dataset_identity, str) or not dataset_identity.strip():
             raise ValueError("dataset_identity must be a non-empty string")
@@ -515,6 +633,12 @@ class TestDataProvider:
         self._store_ref = store_ref
         self._dataset_identity = dataset_identity
         self._provider_identity = provider_identity
+        self._search_session_id = search_session_id
+        self._split_id = split_id
+        self._expected_attempt_token = expected_attempt_token
+        if exposure_authorizer is not None and not callable(exposure_authorizer):
+            raise TypeError("exposure_authorizer must be callable or None")
+        self._exposure_authorizer = exposure_authorizer
 
     @property
     def dataset_identity(self) -> str:
@@ -551,11 +675,35 @@ class TestDataProvider:
             raise CapabilityForgeryError(
                 "test capability provider_identity does not match the provider"
             )
+        if (
+            self._search_session_id is not None
+            and capability.search_session_id != self._search_session_id
+        ):
+            raise CapabilityForgeryError(
+                "test capability search_session_id does not match the provider"
+            )
+        if self._split_id is not None and capability.split_id != self._split_id:
+            raise CapabilityForgeryError(
+                "test capability split_id does not match the provider"
+            )
+        if (
+            self._expected_attempt_token is not None
+            and capability.attempt_token != self._expected_attempt_token
+        ):
+            raise CapabilityForgeryError(
+                "test capability attempt_token does not match the provider attempt"
+            )
         if self._store_ref is None:
             raise CapabilityForgeryError(
                 "test provider has no opaque store attached; refusing to "
                 "resolve test data from a raw caller payload"
             )
+        if self._store_ref.dataset_identity != self._dataset_identity:
+            raise CapabilityForgeryError(
+                "test store dataset_identity does not match the provider"
+            )
+        if self._exposure_authorizer is not None:
+            self._exposure_authorizer()
         return self._store_ref.read()
 
 

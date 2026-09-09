@@ -30,7 +30,7 @@ from factor_assets.profiling.dimensions import (
     build_dimension_grade,
     build_dimension_grades,
 )
-from factor_assets.profiling.metric_grading import grade_metric_evidence
+from factor_assets.profiling.metric_grading import MetricGradeArtifact, grade_metric_evidence
 from factor_assets.profiling.policies import (
     FactorHealthPolicy,
     MetricGradeRule,
@@ -101,6 +101,32 @@ class TestAggregationFormula:
 
 
 class TestDimensionGradeArtifact:
+    @staticmethod
+    def _shape_ref(metric_id, desirability):
+        return MetricGradeArtifact(
+            metric_id=metric_id,
+            value=desirability,
+            evidence_status="COMPUTED",
+            grade="A",
+            desirability=desirability,
+            grading_policy_id=POLICY.policy_id,
+            grading_policy_version=POLICY.policy_version,
+        )
+
+    def test_u_shape_does_not_require_monotonicity(self):
+        refs = [
+            self._shape_ref("u_shape_score", 0.9),
+            self._shape_ref("quantile_monotonicity", 0.0),
+            self._shape_ref("top_tail_cliff", 0.8),
+        ]
+        shaped = build_dimension_grade(
+            factor_definition_id="F1", evaluation_ref="E1",
+            dimension_id="shape_quality", metric_grade_refs=refs,
+            shape_family="U",
+        )
+        assert shaped.score is not None and shaped.score > 75
+        assert "quantile_monotonicity" not in shaped.bottlenecks
+
     def _pred_power(self, rank_ic=0.06, icir=1.6, status_ic="COMPUTED",
                     status_ir="COMPUTED"):
         refs = [
@@ -125,14 +151,14 @@ class TestDimensionGradeArtifact:
         assert d.evidence_tier == "COMPLETE"
         # every metric shares the same (maximum) desirability so all are
         # "bottlenecks" in the min sense — the aggregation is a pure S+
-        assert d.bottlenecks == ("rank_ic", "rank_ic_ir")
+        assert d.bottlenecks == ("rank_ic", "rank_icir_raw")
         assert d.missing_metric_refs == ()
         assert d.has_score
 
     def test_mixed_desirability_hand_computed(self):
-        # rank_ic = 0.003 -> D desirability 0.10; icir = 1.6 -> S+ desirability 1.0
+        # V5 rank_ic = 0.003 -> C desirability 0.40; raw ICIR -> S+.
         d = self._pred_power(rank_ic=0.003, icir=1.6)
-        expected01 = 0.4 * 0.10 + 0.6 * math.sqrt(0.10)
+        expected01 = 0.4 * 0.40 + 0.6 * math.sqrt(0.40)
         assert d.score == pytest.approx(100.0 * expected01)
         assert d.bottlenecks == ("rank_ic",)
 
@@ -164,7 +190,7 @@ class TestDimensionGradeArtifact:
         assert d.score is None
         assert d.grade is None
         assert d.evidence_tier == "MISSING"
-        assert set(d.missing_metric_refs) == {"rank_ic", "rank_ic_ir"}
+        assert set(d.missing_metric_refs) == {"rank_ic", "rank_icir_raw"}
 
     def test_partial_evidence_tier(self):
         # one COMPUTED, one missing (not in the passed refs)
@@ -178,8 +204,8 @@ class TestDimensionGradeArtifact:
             metric_grade_refs=[ref],
         )
         assert d.evidence_tier == "PARTIAL"
-        assert d.score is not None
-        assert "rank_ic_ir" in d.missing_metric_refs
+        assert d.score == pytest.approx(100.0)  # optional persistence evidence remains explicit
+        assert "rank_icir_raw" in d.missing_metric_refs
 
     def test_dimension_grade_artifact_frozen(self):
         d = self._pred_power()
@@ -246,6 +272,6 @@ class TestBuildAllDimensions:
         )
         by = {d.dimension_id: d for d in dims}
         assert by["predictive_power"].evidence_tier == "PARTIAL"
-        assert by["predictive_power"].score is not None
+        assert by["predictive_power"].score == pytest.approx(100.0)
         assert by["turnover"].evidence_tier == "MISSING"
         assert by["turnover"].score is None

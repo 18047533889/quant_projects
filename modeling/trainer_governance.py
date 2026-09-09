@@ -19,12 +19,77 @@ __all__ = [
     "CandidateExposureLedger",
     "ComparisonRecord",
     "ComparisonStatus",
+    "FeatureExperimentSpec",
     "apply_versioned_transform",
     "common_oos_cohort",
     "enforce_coverage",
     "incremental_value",
     "validate_pit_categorical_vocabulary",
 ]
+
+
+@dataclass(frozen=True)
+class FeatureExperimentSpec:
+    """Frozen identity shared by every add/drop/substitute model experiment."""
+
+    campaign_id: str
+    baseline_feature_set_ref: str
+    fold_refs: tuple[str, ...]
+    random_seed: int
+    resource_profile_ref: str
+    baseline_evidence_ref: str
+    model_recipe_ref: str
+    label_horizon: int
+    estimated_cost_per_evaluation: float
+
+    def __post_init__(self) -> None:
+        for name in (
+            "campaign_id", "baseline_feature_set_ref", "resource_profile_ref",
+            "baseline_evidence_ref", "model_recipe_ref",
+        ):
+            if not isinstance(getattr(self, name), str) or not getattr(self, name):
+                raise ValueError(f"FeatureExperimentSpec.{name} is required")
+        if not self.fold_refs or any(not isinstance(ref, str) or not ref for ref in self.fold_refs):
+            raise ValueError("FeatureExperimentSpec.fold_refs must be non-empty")
+        if isinstance(self.random_seed, bool) or not isinstance(self.random_seed, int):
+            raise ValueError("FeatureExperimentSpec.random_seed must be an integer")
+        if isinstance(self.label_horizon, bool) or not isinstance(self.label_horizon, int) or self.label_horizon < 1:
+            raise ValueError("FeatureExperimentSpec.label_horizon must be a positive integer")
+        if (not np.isfinite(self.estimated_cost_per_evaluation)
+                or self.estimated_cost_per_evaluation <= 0):
+            raise ValueError("estimated_cost_per_evaluation must be positive and finite")
+
+    def attempt_id(self, operation: str, feature_index: int) -> str:
+        payload = {
+            "campaign_id": self.campaign_id,
+            "baseline_feature_set_ref": self.baseline_feature_set_ref,
+            "fold_refs": self.fold_refs,
+            "random_seed": self.random_seed,
+            "resource_profile_ref": self.resource_profile_ref,
+            "baseline_evidence_ref": self.baseline_evidence_ref,
+            "model_recipe_ref": self.model_recipe_ref,
+            "operation": operation,
+            "feature_index": feature_index,
+        }
+        encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+        return "model-feature:" + hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+
+    def evaluation_intent_hash(self) -> str:
+        payload = {
+            "baseline_feature_set_ref": self.baseline_feature_set_ref,
+            "fold_refs": self.fold_refs, "random_seed": self.random_seed,
+            "resource_profile_ref": self.resource_profile_ref,
+            "label_horizon": self.label_horizon,
+        }
+        return hashlib.sha256(json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+
+    def effective_spec_hash(self, operation: str, feature_index: int) -> str:
+        payload = {
+            "baseline_feature_set_ref": self.baseline_feature_set_ref,
+            "model_recipe_ref": self.model_recipe_ref,
+            "operation": operation, "feature_index": feature_index,
+        }
+        return hashlib.sha256(json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
 
 
 class ComparisonStatus:

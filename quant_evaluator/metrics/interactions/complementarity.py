@@ -10,6 +10,7 @@ import numpy as np
 
 from quant_evaluator.contracts.factor_batch import FactorBatch
 from quant_evaluator.contracts.label_bundle import LabelBundle
+from quant_evaluator.metrics.interactions.substitution import compute_substitution_effect
 
 
 def compute_complementarity_score(
@@ -48,72 +49,10 @@ def compute_complementarity_score(
     if method not in ("pearson", "spearman"):
         raise ValueError(f"Unknown method: {method}. Must be 'pearson' or 'spearman'")
 
-    values = factor_batch.values  # (T, N, F)
-    labels = label_bundle.values
-
-    if labels.ndim == 1:
-        labels = np.broadcast_to(labels[:, np.newaxis], (factor_batch.num_times, factor_batch.num_assets))
-
-    T, N, F = values.shape
-
-    ic_a = np.full(T, np.nan, dtype=np.float64)
-    ic_b = np.full(T, np.nan, dtype=np.float64)
-    ic_combined = np.full(T, np.nan, dtype=np.float64)
-
-    for t in range(T):
-        factor_a = values[t, :, factor_a_idx]
-        factor_b = values[t, :, factor_b_idx]
-        label_t = labels[t, :]
-
-        # Apply validity masks
-        if factor_batch.validity is not None:
-            factor_a = np.where(factor_batch.validity[t, :, factor_a_idx], factor_a, np.nan)
-            factor_b = np.where(factor_batch.validity[t, :, factor_b_idx], factor_b, np.nan)
-
-        if label_bundle.validity is not None:
-            label_t = np.where(label_bundle.validity[t, :], label_t, np.nan)
-
-        # Compute IC for each factor individually
-        valid_a = np.isfinite(factor_a) & np.isfinite(label_t)
-        if np.sum(valid_a) >= min_assets:
-            fa = factor_a[valid_a]
-            la = label_t[valid_a]
-            if np.std(fa) > 0 and np.std(la) > 0:
-                if method == "pearson":
-                    ic_a[t] = np.corrcoef(fa, la)[0, 1]
-                else:
-                    from scipy import stats
-                    ic_a[t], _ = stats.spearmanr(fa, la)
-
-        valid_b = np.isfinite(factor_b) & np.isfinite(label_t)
-        if np.sum(valid_b) >= min_assets:
-            fb = factor_b[valid_b]
-            lb = label_t[valid_b]
-            if np.std(fb) > 0 and np.std(lb) > 0:
-                if method == "pearson":
-                    ic_b[t] = np.corrcoef(fb, lb)[0, 1]
-                else:
-                    from scipy import stats
-                    ic_b[t], _ = stats.spearmanr(fb, lb)
-
-        # Compute combined IC (equal-weighted)
-        valid_both = np.isfinite(factor_a) & np.isfinite(factor_b) & np.isfinite(label_t)
-        if np.sum(valid_both) >= min_assets:
-            fa_both = factor_a[valid_both]
-            fb_both = factor_b[valid_both]
-            l_both = label_t[valid_both]
-
-            # Standardize and combine
-            fa_std = (fa_both - np.mean(fa_both)) / (np.std(fa_both) + 1e-8)
-            fb_std = (fb_both - np.mean(fb_both)) / (np.std(fb_both) + 1e-8)
-            combined = (fa_std + fb_std) / 2.0
-
-            if np.std(combined) > 0 and np.std(l_both) > 0:
-                if method == "pearson":
-                    ic_combined[t] = np.corrcoef(combined, l_both)[0, 1]
-                else:
-                    from scipy import stats
-                    ic_combined[t], _ = stats.spearmanr(combined, l_both)
+    ic_a, ic_b, ic_combined = compute_substitution_effect(
+        factor_batch, label_bundle, factor_a_idx, factor_b_idx,
+        method=method, min_assets=min_assets,
+    )
 
     # Compute complementarity metrics
     valid_mask = np.isfinite(ic_a) & np.isfinite(ic_b) & np.isfinite(ic_combined)
@@ -148,6 +87,8 @@ def detect_complementary_pairs(
     method: str = "pearson",
     min_assets: int = 30,
     min_periods: int = 20,
+    candidate_pairs=None,
+    max_pairs=None,
 ) -> List[Tuple[int, int, float, float]]:
     """
     Detect pairs of factors that exhibit complementarity.
@@ -169,8 +110,12 @@ def detect_complementary_pairs(
     F = factor_batch.num_factors
     complementary_pairs = []
 
-    for i in range(F):
-        for j in range(i + 1, F):
+    pairs = list(candidate_pairs) if candidate_pairs is not None else [
+        (i, j) for i in range(F) for j in range(i + 1, F)
+    ]
+    if max_pairs is not None and (max_pairs < 0 or len(pairs) > max_pairs):
+        raise ValueError("candidate pair budget exceeded")
+    for i, j in pairs:
             comp_score, mean_lift, _ = compute_complementarity_score(
                 factor_batch, label_bundle, i, j,
                 method=method, min_assets=min_assets, min_periods=min_periods

@@ -8,12 +8,14 @@ correlation breakdown analysis, and worst-case scenario identification.
 from typing import Dict, List, Tuple, Optional, Union
 import numpy as np
 from scipy import stats
+import hashlib
 
 
 def apply_historical_scenario(
     returns: np.ndarray,
     scenario_returns: np.ndarray,
     scaling_method: str = "direct",
+    return_evidence: bool = False,
 ) -> np.ndarray:
     """
     Apply historical scenario to current returns distribution.
@@ -61,7 +63,12 @@ def apply_historical_scenario(
         else:
             raise ValueError(f"Unknown scaling_method: {scaling_method}")
 
-    return scenario_impact[:, 0] if squeeze else scenario_impact
+    values=scenario_impact[:, 0] if squeeze else scenario_impact
+    if return_evidence:
+        return {"values":values,"evidence_type":"GENERATED_RETURN_SCENARIO",
+                "formal_strategy_stress_eligible":False,
+                "scaling_method":scaling_method}
+    return values
 
 
 def apply_hypothetical_scenario(
@@ -82,6 +89,17 @@ def apply_hypothetical_scenario(
     Returns:
         Shocked returns, same shape as returns
     """
+    returns = np.asarray(returns, dtype=float)
+    if returns.ndim not in (1, 2):
+        raise ValueError("shock returns require (T,) or (T,F) axes")
+    if isinstance(shock_size, (bool, np.bool_)) or not np.isscalar(shock_size) or not np.isfinite(shock_size):
+        raise ValueError("shock size must be a finite number")
+    if shock_type not in ("absolute", "volatility"):
+        raise ValueError("unknown shock type")
+    if correlation_adjustment is not None and (isinstance(correlation_adjustment, (bool, np.bool_))
+            or not np.isscalar(correlation_adjustment) or not np.isfinite(correlation_adjustment)
+            or correlation_adjustment < 0):
+        raise ValueError("correlation multiplier must be finite and nonnegative")
     if returns.ndim == 1:
         returns = returns[:, np.newaxis]
         squeeze = True
@@ -114,33 +132,63 @@ def apply_hypothetical_scenario(
         else:
             raise ValueError(f"Unknown shock_type: {shock_type}")
 
-    # Apply correlation adjustment if multi-factor
-    if F > 1 and correlation_adjustment is not None:
-        # Adjust cross-factor correlation
-        mean_shocked = np.nanmean(shocked, axis=0, keepdims=True)
-        centered = shocked - mean_shocked
-
-        # Scale cross-correlation
-        for f1 in range(F):
-            for f2 in range(f1 + 1, F):
-                # Extract valid pairs
-                valid_pair = np.isfinite(centered[:, f1]) & np.isfinite(centered[:, f2])
-                if np.sum(valid_pair) < 2:
-                    continue
-
-                # Compute correlation adjustment
-                corr_current = np.corrcoef(centered[valid_pair, f1], centered[valid_pair, f2])[0, 1]
-                if not np.isfinite(corr_current):
-                    continue
-
-                # Adjust correlation (simplified approach)
-                adjustment_factor = correlation_adjustment - 1.0
-                centered[valid_pair, f1] += adjustment_factor * centered[valid_pair, f2] * 0.5
-                centered[valid_pair, f2] += adjustment_factor * centered[valid_pair, f1] * 0.5
-
-        shocked = centered + mean_shocked
+    # Explicit scalar semantics: multiply original off-diagonal correlations,
+    # preserve means and marginal sample volatility, reject infeasible targets.
+    if correlation_adjustment is not None and correlation_adjustment != 1.0:
+        if not np.isfinite(correlation_adjustment) or correlation_adjustment < 0:
+            raise ValueError("correlation multiplier must be finite and nonnegative")
+        target = np.eye(F) + correlation_adjustment * (np.corrcoef(shocked, rowvar=False) - np.eye(F))
+        shocked = apply_target_correlation(shocked, target)
 
     return shocked[:, 0] if squeeze else shocked
+
+
+def apply_target_correlation(returns, target_correlation, *, asset_ids=None,
+                             target_asset_ids=None, return_evidence=False):
+    """Symmetric whiten/color transform, no in-place pair mutation.
+
+    Columns and target rows/columns share the same caller-supplied asset order.
+    A simultaneous permutation commutes with the symmetric matrix functions.
+    Singular source, indefinite target and incomplete samples are unsupported.
+    This generates returns, not a position/execution replay.
+    """
+    x = np.asarray(returns, dtype=float)
+    target = np.asarray(target_correlation, dtype=float)
+    if x.ndim != 2 or x.shape[0] <= x.shape[1] or not np.isfinite(x).all():
+        raise ValueError("complete full-rank sample required for correlation mapping")
+    f = x.shape[1]
+    if target.shape != (f, f):
+        raise ValueError("target correlation axes must match source assets")
+    if (asset_ids is None) != (target_asset_ids is None):
+        raise ValueError("both asset_ids and target_asset_ids are required for named mapping")
+    if asset_ids is not None:
+        asset_ids, target_asset_ids = tuple(asset_ids), tuple(target_asset_ids)
+        if len(asset_ids)!=f or len(set(asset_ids))!=f or len(target_asset_ids)!=f or set(asset_ids)!=set(target_asset_ids):
+            raise ValueError("asset axes must be unique and identify the same assets")
+        order=[target_asset_ids.index(name) for name in asset_ids]
+        target=target[np.ix_(order,order)]
+    if target.shape != (f, f) or not np.isfinite(target).all() or not np.allclose(target, target.T, atol=1e-12, rtol=0) or not np.allclose(np.diag(target), 1., atol=1e-12, rtol=0):
+        raise ValueError("target correlation must be symmetric with unit diagonal")
+    std = np.std(x, axis=0, ddof=1)
+    if np.any(std <= 0):
+        raise ValueError("constant source margin")
+    mean = np.mean(x, axis=0)
+    z = (x-mean)/std
+    source = z.T@z/(len(x)-1)
+    eigen, vectors = np.linalg.eigh(source)
+    target_eigen, target_vectors = np.linalg.eigh(target)
+    if np.min(eigen) <= 1e-12 or np.min(target_eigen) < -1e-12:
+        raise ValueError("source is singular or target is not PSD")
+    whitening = (vectors * (1/np.sqrt(eigen)))@vectors.T
+    coloring = (target_vectors * np.sqrt(np.maximum(target_eigen, 0)))@target_vectors.T
+    mapped=(z@whitening@coloring)*std + mean
+    if not return_evidence: return mapped
+    achieved=np.corrcoef(mapped,rowvar=False)
+    return {"values":mapped,"evidence_type":"GENERATED_RETURN_SCENARIO",
+            "asset_ids":asset_ids,"target_correlation":target.copy(),
+            "achieved_correlation":achieved,
+            "max_abs_error":float(np.max(np.abs(achieved-target))),
+            "qualification":"DIAGNOSTIC_ONLY"}
 
 
 def compute_scenario_impact(
@@ -148,6 +196,7 @@ def compute_scenario_impact(
     scenario_returns: np.ndarray,
     metrics: Optional[List[str]] = None,
     periods_per_year: int = 252,
+    evidence_type: str = "GENERATED_RETURN_SCENARIO",
 ) -> Dict[str, Union[float, np.ndarray]]:
     """
     Compute impact of scenario on portfolio metrics.
@@ -180,7 +229,17 @@ def compute_scenario_impact(
             f"Supported metrics: {sorted(known_metrics)}"
         )
 
-    result = {}
+    if evidence_type != "GENERATED_RETURN_SCENARIO":
+        raise ValueError("naked returns cannot assert POSITION_REPLAY; use compute_position_replay_impact")
+    result = {"evidence_type": evidence_type,
+              "formal_strategy_stress_eligible": False}
+
+    returns = np.asarray(returns, dtype=float)
+    scenario_returns = np.asarray(scenario_returns, dtype=float)
+    if returns.ndim not in (1, 2) or scenario_returns.ndim not in (1, 2):
+        raise ValueError("scenario returns require (T,) or (T,F) axes")
+    if (1 if returns.ndim == 1 else returns.shape[1]) != (1 if scenario_returns.ndim == 1 else scenario_returns.shape[1]):
+        raise ValueError("baseline and scenario factor axes differ")
 
     # Ensure same shape
     if returns.ndim == 1:
@@ -230,6 +289,38 @@ def compute_scenario_impact(
             change = scenario - baseline if isinstance(scenario, np.ndarray) else scenario - baseline
             result[f"{metric}_change"] = change
 
+    return result
+
+
+def compute_position_replay_impact(baseline, scenario, *, metrics=None, periods_per_year=252):
+    """Consume the existing execution-domain trajectories, never a type label.
+
+    Execution-bound eligibility is separate from numerical qualification and
+    the FA policy's common-scenario/usage approval; this function grants neither.
+    """
+    from vectorbt_qs.contracts.trajectories import PortfolioTrajectory
+    from vectorbt_qs.contracts.costs import CostScope
+    from quant_evaluator.adapters.execution_trajectory import trajectory_to_probe_artifact
+    if not isinstance(baseline, PortfolioTrajectory) or not isinstance(scenario, PortfolioTrajectory):
+        raise TypeError("position replay requires PortfolioTrajectory artifacts")
+    if (baseline.refs.factor_ids != scenario.refs.factor_ids or baseline.profile != scenario.profile
+            or baseline.dates != scenario.dates or baseline.refs.portfolio_ref != scenario.refs.portfolio_ref
+            or baseline.scope != scenario.scope):
+        raise ValueError("position replay comparison domain mismatch")
+    if baseline.scenario_id == scenario.scenario_id:
+        raise ValueError("baseline and stressed scenario need distinct identities")
+    profile = {CostScope.GROSS_DIAGNOSTIC:'gross', CostScope.NET_ASSUMED:'net-base',
+               CostScope.NET_EXECUTABLE:'net-executable'}[baseline.scope]
+    left = trajectory_to_probe_artifact(baseline, expected_portfolio_profile=baseline.profile,
+                                       expected_cost_profile=profile)
+    right = trajectory_to_probe_artifact(scenario, expected_portfolio_profile=scenario.profile,
+                                        expected_cost_profile=profile)
+    result = compute_scenario_impact(left.values, right.values, metrics, periods_per_year)
+    result.update(evidence_type='POSITION_REPLAY', baseline_trajectory_ref=baseline.artifact_id,
+                  scenario_trajectory_ref=scenario.artifact_id, scenario_id=scenario.scenario_id,
+                  formal_strategy_stress_eligible=bool(baseline.scope == CostScope.NET_EXECUTABLE
+                      and baseline.executable_certified and scenario.executable_certified),
+                  numerical_qualification='REQUIRES_SEPARATE_RECEIPT')
     return result
 
 
@@ -385,3 +476,36 @@ def compute_worst_case_scenarios(
 
     # Return top n_scenarios
     return scenarios[:n_scenarios]
+
+
+def evaluate_official_scenario_set(returns_by_candidate, scenarios, *, metrics=None):
+    """Evaluate every candidate against one fixed, deduplicated event set.
+
+    This is a comparison coordinator, not a position replay engine. Scenario
+    records must carry predeclared ``event_id`` and ``returns``. Equivalent
+    aliases declare their canonical_event_id before equal weighting. Equal
+    return arrays do not establish that two economic events are equivalent.
+    Conflicting reuse of a canonical event identity fails closed.
+    """
+    if not isinstance(returns_by_candidate, dict) or not returns_by_candidate:
+        raise ValueError("nonempty candidate mapping required")
+    unique={}
+    for item in scenarios:
+        event_id=item.get("canonical_event_id",item.get("event_id")); values=np.asarray(item.get("returns"),dtype=float)
+        if not isinstance(event_id,str) or not event_id or values.ndim not in (1,2) or values.size == 0 or not np.isfinite(values).all():
+            raise ValueError("complete finite event_id/returns scenario required")
+        digest=hashlib.sha256(values.tobytes()+str(values.shape).encode()).hexdigest()
+        if event_id in unique and unique[event_id][0]!=digest: raise ValueError("conflicting scenario event identity")
+        unique[event_id]=(digest,values)
+    if not unique: raise ValueError("official scenario set cannot be empty")
+    event_ids=tuple(sorted(unique))
+    import json
+    identity=json.dumps([(event_id,unique[event_id][0]) for event_id in event_ids],
+                        separators=(',',':')).encode()
+    output={}
+    for candidate_id,baseline in returns_by_candidate.items():
+        output[candidate_id]={event_id:compute_scenario_impact(np.asarray(baseline,dtype=float),unique[event_id][1],metrics=metrics,evidence_type="GENERATED_RETURN_SCENARIO") for event_id in event_ids}
+    return {"scenario_set_id":"official:"+hashlib.sha256(identity).hexdigest(),
+            "event_ids":event_ids,"event_weight":1/len(event_ids),
+            "evidence_type":"GENERATED_RETURN_SCENARIO","results":output,
+            "formal_strategy_stress_eligible":False}

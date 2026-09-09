@@ -73,6 +73,11 @@ def compute_quantile_returns_fast(
         )
 
 
+def _validate_quantile_count(n_quantiles):
+    if isinstance(n_quantiles, (bool, np.bool_)) or not isinstance(n_quantiles, (int, np.integer)) or n_quantiles < 1:
+        raise ValueError("n_quantiles must be a positive integer")
+
+
 def assign_quantiles(
     values: np.ndarray,
     n_quantiles: int = 5,
@@ -100,9 +105,13 @@ def assign_quantiles(
     """
     # QE-Q-P0-001: Validate that method parameter actually affects behavior
     policy = validate_tie_policy(method)
-
-    if values.ndim == 1:
-        values = values.reshape(-1, 1)
+    _validate_quantile_count(n_quantiles)
+    values = np.asarray(values)
+    original_ndim = values.ndim
+    if original_ndim not in (1, 2):
+        raise ValueError("assign_quantiles accepts N or T x N")
+    if original_ndim == 1:
+        values = values[None, :]
 
     T, N = values.shape
     quantiles = np.full((T, N), -1, dtype=np.int32)
@@ -124,7 +133,7 @@ def assign_quantiles(
 
         quantiles[t, finite_mask] = q_bins
 
-    return quantiles
+    return quantiles[0] if original_ndim == 1 else quantiles
 
 
 def assign_quantiles_fast(
@@ -149,7 +158,10 @@ def assign_quantiles_fast(
         Quantile assignments (0 to n_quantiles-1), or -1 for NaN
     """
     policy = validate_tie_policy(method)
-
+    _validate_quantile_count(n_quantiles)
+    original_ndim = values.ndim
+    if original_ndim not in (2, 3):
+        raise ValueError("quantile input must be T x N or T x N x F")
     if values.ndim == 2:
         T, N = values.shape
         F = 1
@@ -177,7 +189,7 @@ def assign_quantiles_fast(
 
             quantiles[t, finite_mask, f] = q_bins
 
-    if F == 1:
+    if original_ndim == 2:
         return quantiles.reshape(T, N)
     return quantiles
 
@@ -259,7 +271,10 @@ def assign_quantiles_batch(
         Quantile assignments shape (T, N, F), -1 for NaN
     """
     policy = validate_tie_policy(method)
-
+    _validate_quantile_count(n_quantiles)
+    original_ndim = values.ndim
+    if original_ndim not in (2, 3):
+        raise ValueError("quantile input must be T x N or T x N x F")
     if values.ndim == 2:
         values = values[:, :, np.newaxis]
 
@@ -288,7 +303,7 @@ def assign_quantiles_batch(
 
             quantiles[t, mask, f] = q_bins
 
-    return quantiles[:, :, 0] if quantiles.shape[2] == 1 else quantiles
+    return quantiles[:, :, 0] if original_ndim == 2 else quantiles
 
 
 

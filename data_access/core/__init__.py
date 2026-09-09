@@ -25,6 +25,7 @@ from .storage import (
 from .exceptions import DataAccessError, DataError, EngineError, ValidationError
 from .namespace import is_namespace_explicit, resolve_namespace, resolve_operator
 from .retry import retry_io
+from .missingness import MissingReason, MissingReasonPlane
 
 __all__ = [
     "DuckDBEngine",
@@ -52,4 +53,6 @@ __all__ = [
     "resolve_operator",
     "is_namespace_explicit",
     "retry_io",
+    "MissingReason",
+    "MissingReasonPlane",
 ]

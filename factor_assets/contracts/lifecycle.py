@@ -16,6 +16,7 @@ __all__ = [
     "LifecycleState",
     "ValidationStatus",
     "HealthState",
+    "StateEventKind",
     "StateTransition",
     "StateEvent",
     "is_legal_transition",
@@ -69,6 +70,10 @@ class HealthState(Enum):
     DEPRECATED = "DEPRECATED"  # Discouraged; kept for reference/comparison
     RETIRED = "RETIRED"      # Archived; excluded from new assemblies
 
+class StateEventKind(Enum):
+    LIFECYCLE_TRANSITION = "LIFECYCLE_TRANSITION"
+    HEALTH_TRANSITION = "HEALTH_TRANSITION"
+
 
 @dataclass(frozen=True)
 class StateTransition:
@@ -100,12 +105,20 @@ class StateEvent:
     policy_version: Optional[str] = None
     actor: Optional[str] = None
     notes: Optional[str] = None
+    event_kind: StateEventKind = StateEventKind.LIFECYCLE_TRANSITION
+    health_from: Optional[HealthState] = None
+    health_to: Optional[HealthState] = None
 
     def __post_init__(self):
         if not self.factor_id:
             raise ValueError("factor_id is required")
         if not self.timestamp:
             raise ValueError("timestamp is required")
+        if not isinstance(self.event_kind, StateEventKind):
+            raise TypeError("event_kind must be StateEventKind")
+        if self.event_kind is StateEventKind.HEALTH_TRANSITION:
+            if not isinstance(self.health_from, HealthState) or not isinstance(self.health_to, HealthState):
+                raise ValueError("health transition requires typed health_from and health_to")
 
 
 # Legal transitions per CONTRACT_FREEZE_DRAFT

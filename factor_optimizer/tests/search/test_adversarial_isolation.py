@@ -30,6 +30,7 @@ from factor_optimizer.data_capabilities import (
     TestAuthorityBroker,
     TestDataCapability,
     TestDataProvider,
+    TestStoreRef,
     TrainDataCapability,
     ValidationDataCapability,
     build_search_capabilities,
@@ -217,7 +218,7 @@ def test_capability_forgery_wrong_scope_fails():
         search_session_id="s1",
         split_id="p1",
     )
-    provider = broker.create_test_provider({"test_y": [1, 2, 3]})
+    provider = _attach(broker, {"test_y": [1, 2, 3]})
     with pytest.raises(CapabilityForgeryError, match="requires a TestDataCapability"):
         provider.resolve(train)
 
@@ -279,7 +280,7 @@ def test_expired_capability_is_rejected():
         "_expiry",
         datetime.now(timezone.utc) - timedelta(seconds=10),
     )
-    provider = broker.create_test_provider({"test_y": [1, 2, 3]})
+    provider = _attach(broker, {"test_y": [1, 2, 3]})
     with pytest.raises(CapabilityForgeryError, match="expired"):
         provider.resolve(cap)
 
@@ -309,7 +310,7 @@ def test_test_provider_resolves_only_for_matching_test_capability():
         search_session_id="s1",
         split_id="p1",
     )
-    provider = broker.create_test_provider({"test_y": [1, 2, 3]})
+    provider = _attach(broker, {"test_y": [1, 2, 3]})
     cap = broker.issue_test_capability([False, False, True])
     assert provider.resolve(cap) == {"test_y": [1, 2, 3]}
 
@@ -321,7 +322,7 @@ def test_test_provider_rejects_mismatched_dataset_identity():
         search_session_id="s1",
         split_id="p1",
     )
-    provider = broker.create_test_provider({"test_y": [1, 2, 3]})
+    provider = _attach(broker, {"test_y": [1, 2, 3]})
     other = TestAuthorityBroker(
         dataset_identity="other_ds",
         provider_identity="prov",
@@ -340,7 +341,7 @@ def test_test_provider_rejects_mismatched_provider_identity():
         search_session_id="s1",
         split_id="p1",
     )
-    provider = broker.create_test_provider({"test_y": [1, 2, 3]})
+    provider = _attach(broker, {"test_y": [1, 2, 3]})
     other = TestAuthorityBroker(
         dataset_identity="ds",
         provider_identity="other_prov",
@@ -646,3 +647,16 @@ def _integrity_evidence(trial_id="t1", kind=None):
         before,
         after,
     )
+class _Store:
+    def __init__(self, payload):
+        self.payload = payload
+
+    def read(self):
+        return self.payload
+
+
+def _attach(broker, payload):
+    broker.attach_store_ref(
+        TestStoreRef(_Store(payload), dataset_identity=broker.dataset_identity)
+    )
+    return broker.create_test_provider()

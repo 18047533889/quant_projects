@@ -170,94 +170,31 @@ def johansen_test(
     if lags < 1:
         raise ValueError(f"lags must be >= 1, got {lags}")
 
-    # Remove deterministic components if needed
-    if det_order >= 0:
-        data_adj, _ = _residuals_from_deterministics(data, det_order)
-    else:
-        data_adj = data.copy()
-
-    # Construct differenced and lagged level matrices
-    # Δy_t = y_t - y_{t-1}
-    dy = np.diff(data_adj, axis=0)  # (T-1, K)
-
-    # Lagged levels: y_{t-1}
-    y_lag = data_adj[:-1, :]  # (T-1, K)
-
-    # If lags > 1, include lagged differences as regressors
-    if lags > 1:
-        dy_lags = _lag_matrix(dy, lags - 1)  # (T-lags, K*(lags-1))
-        # Align all matrices
-        dy = dy[lags - 1 :, :]  # (T-lags, K)
-        y_lag = y_lag[lags - 1 :, :]  # (T-lags, K)
-        X_short = dy_lags  # (T-lags, K*(lags-1))
-    else:
-        X_short = None
-
-    T_eff = dy.shape[0]
-
-    # Regress dy and y_lag on short-run dynamics (if any) to get residuals
-    if X_short is not None:
-        # Residuals from dy ~ X_short
-        R0 = dy - X_short @ np.linalg.lstsq(X_short, dy, rcond=None)[0]
-        # Residuals from y_lag ~ X_short
-        R1 = y_lag - X_short @ np.linalg.lstsq(X_short, y_lag, rcond=None)[0]
-    else:
-        R0 = dy
-        R1 = y_lag
-
-    # Compute moment matrices
-    S00 = (R0.T @ R0) / T_eff
-    S11 = (R1.T @ R1) / T_eff
-    S01 = (R0.T @ R1) / T_eff
-    S10 = S01.T
-
-    # Solve generalized eigenvalue problem: S10 @ S00^{-1} @ S01 @ v = λ S11 @ v
+    if isinstance(lags, (bool, np.bool_)) or not isinstance(lags, (int, np.integer)):
+        raise ValueError("lags must be an integer VAR-level lag")
+    if isinstance(det_order, (bool, np.bool_)):
+        raise ValueError("det_order must not be boolean")
+    if not 1 <= K <= 12 or not np.isfinite(data).all():
+        raise ValueError("unsupported dimension or incomplete joint calendar")
+    if K == 1 and det_order >= 0:
+        raise ValueError("unsupported Johansen K=1 deterministic domain in installed reference implementation")
+    from statsmodels.tsa.vector_ar.vecm import coint_johansen
     try:
-        S00_inv = np.linalg.inv(S00)
-        S11_inv = np.linalg.inv(S11)
-    except np.linalg.LinAlgError:
-        raise ValueError("Singular moment matrix; check for perfect collinearity")
-
-    # Equivalent: solve eigenvalue problem for S11^{-1} @ S10 @ S00^{-1} @ S01
-    M = S11_inv @ S10 @ S00_inv @ S01
-
-    eigenvalues, eigenvectors = np.linalg.eig(M)
-    eigenvalues = np.real(eigenvalues)  # Should be real
-
-    # Sort eigenvalues in descending order
-    idx = np.argsort(eigenvalues)[::-1]
-    eigenvalues = eigenvalues[idx]
-
-    # Clip to [0, 1) range (theoretical bound)
-    eigenvalues = np.clip(eigenvalues, 0, 1 - 1e-10)
-
-    # Compute test statistics
-    # Trace statistic: -T * sum_{i=r}^{K-1} ln(1 - λ_i)
-    # Max eigenvalue statistic: -T * ln(1 - λ_r)
-
-    trace_stats = np.zeros(K, dtype=np.float64)
-    max_eig_stats = np.zeros(K, dtype=np.float64)
-
-    for r in range(K):
-        # Trace: sum from r to K-1
-        trace_stats[r] = -T_eff * np.sum(np.log(1 - eigenvalues[r:]))
-        # Max eigenvalue: single eigenvalue at r
-        max_eig_stats[r] = -T_eff * np.log(1 - eigenvalues[r])
-
-    # Determine rank by comparing trace statistic to critical values
+        result = coint_johansen(data, det_order, lags - 1)
+    except np.linalg.LinAlgError as exc:
+        raise ValueError("singular Johansen design") from exc
+    if (not np.isfinite(result.eig).all() or np.any(result.eig < -1e-10)
+            or np.any(result.eig >= 1) or not np.isfinite(result.lr1).all()):
+        raise ValueError("numerically invalid Johansen result")
+    column = {0.10: 0, 0.05: 1, 0.01: 2}[alpha]
     rank = 0
-    for r in range(K):
-        if r >= len(_TRACE_CRITICAL_VALUES):
-            break  # No critical values for r > 4
-
-        crit_val = _TRACE_CRITICAL_VALUES[r].get(alpha, np.inf)
-        if trace_stats[r] > crit_val:
-            rank = r + 1
-        else:
-            break  # Stop at first non-rejection
-
-    return trace_stats, max_eig_stats, rank, eigenvalues
-
+    for statistic, critical in zip(result.lr1, result.cvt[:, column]):
+        if not np.isfinite(critical) or critical <= 0:
+            raise ValueError("unsupported Johansen critical distribution")
+        if statistic <= critical:
+            break
+        rank += 1
+    return result.lr1.copy(), result.lr2.copy(), rank, result.eig.copy()
 
 def engle_granger_test(
     y: np.ndarray,
@@ -308,39 +245,12 @@ def engle_granger_test(
     coef = np.linalg.lstsq(X, y, rcond=None)[0]
     residuals = y - X @ coef
 
-    # Step 2: ADF test on residuals (no constant, no trend)
-    # Δe_t = ρ e_{t-1} + ε_t
-    # Under null: ρ = 0 (unit root, no cointegration)
-    de = np.diff(residuals)
-    e_lag = residuals[:-1]
-
-    # OLS: de ~ e_lag (no intercept for residuals)
-    rho = np.sum(de * e_lag) / np.sum(e_lag**2)
-    residual_adf = de - rho * e_lag
-    sigma = np.std(residual_adf, ddof=1)
-    se_rho = sigma / np.sqrt(np.sum(e_lag**2))
-
-    adf_stat = rho / se_rho
-
-    # Critical values for Engle-Granger test (more negative than standard ADF)
-    # Approximate values for T > 100, 2 variables
-    critical_values = {
-        0.01: -3.90,
-        0.05: -3.34,
-        0.10: -3.04,
-    }
-
-    crit_val = critical_values.get(alpha, -3.34)
-    is_cointegrated = adf_stat < crit_val
-
-    # Approximate p-value (rough interpolation)
-    if adf_stat < -3.90:
-        p_value = 0.01
-    elif adf_stat < -3.34:
-        p_value = 0.05
-    elif adf_stat < -3.04:
-        p_value = 0.10
-    else:
-        p_value = 0.20
-
-    return adf_stat, p_value, is_cointegrated, residuals
+    if isinstance(alpha, (bool, np.bool_)) or not np.isfinite(alpha) or not 0 < alpha < 1:
+        raise ValueError("alpha must be finite in (0, 1)")
+    if not np.isfinite(y).all() or not np.isfinite(x).all() or np.linalg.matrix_rank(X) < 2:
+        raise ValueError("Engle-Granger requires finite nondegenerate joint observations")
+    from statsmodels.tsa.stattools import coint
+    adf_stat, p_value, _ = coint(y, x, trend="c", autolag="aic")
+    if not np.isfinite(adf_stat) or not np.isfinite(p_value):
+        raise ValueError("degenerate Engle-Granger inference")
+    return float(adf_stat), float(p_value), bool(p_value < alpha), residuals

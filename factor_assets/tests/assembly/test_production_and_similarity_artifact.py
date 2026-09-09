@@ -15,6 +15,7 @@ from factor_assets.contracts.lifecycle import LifecycleState
 from factor_assets.contracts.lineage import LineageRef
 from factor_assets.contracts.evidence_ref import EvidenceBundleRef
 from factor_assets.contracts.similarity import SimilarityArtifact
+from factor_assets.contracts.assembly_evidence import AssemblyPolicy
 from factor_assets.selection import SelectionDecision, SelectionReason
 
 
@@ -47,6 +48,8 @@ def make_spec(set_id, name, policy, **kwargs):
     kwargs.setdefault("data_snapshot_ref", "snapshot:default")
     kwargs.setdefault("universe_ref", "universe:default")
     kwargs.setdefault("split_ref", "split:default")
+    kwargs.setdefault("recipe_ref", "recipe:default")
+    kwargs.setdefault("selection_as_of", "2026-01-01T00:00:00Z")
     return FactorSetSpec(set_id, name, policy, **kwargs)
 
 
@@ -83,6 +86,11 @@ def make_admission(factor_id, **overrides):
         gate_results=("gate-1",),
         policy_ref="policy:1.0",
         created_at="2024-08-01T00:00:00Z",
+        universe_ref="universe:default",
+        snapshot_ref="snapshot:default",
+        split_ref="split:default",
+        recipe_ref="recipe:default",
+        data_as_of="2024-08-01T00:00:00Z",
     )
     defaults.update(overrides)
     return FactorAdmissionArtifact(**defaults)
@@ -148,7 +156,8 @@ class TestProductionModeMandatory:
         assert membership.health_state_ref == "lifecycle:APPROVED"
         assert membership.cluster_id == 3
         assert membership.orientation == 1
-        assert membership.representative_of == "cluster:3"
+        # Admission cluster membership alone does not prove representative status.
+        assert membership.representative_of is None
         assert membership.factor_version == "v1"
 
     def test_production_fails_when_admission_artifact_missing_health(self):
@@ -188,16 +197,18 @@ class TestProductionModeMandatory:
             )
 
     def test_production_factor_version_comes_from_admission_artifact(self):
-        # factor_version is always derivable from asset metadata (canonical_hash
-        # is required), but an admission artifact's factor_version takes
-        # precedence when present.
+        # FactorAsset has no factor-definition-version field.  The admission
+        # and treatment artifacts are the two resolvable definition identities
+        # at assembly time, and they must agree.
         spec = make_spec("set-1", "Prod", "manual")
         artifact = make_admission("F1", factor_version="v2")
         result = FactorSetAssembler().assemble(
             spec,
             [make_asset("F1")],
             admission_artifacts={"F1": artifact},
-            treatment_selection_artifacts={"F1": make_treatment("F1")},
+            treatment_selection_artifacts={
+                "F1": make_treatment("F1", factor_version="v2")
+            },
             production=True,
         )
         (membership,) = result.memberships
@@ -233,7 +244,7 @@ class TestProductionModeMandatory:
             )
 
     def test_production_with_non_manual_policy_and_artifacts(self):
-        spec = make_spec("set-1", "Prod", "pareto_front")
+        spec = make_spec("set-1", "Prod", "family_robust")
         result = FactorSetAssembler().assemble(
             spec,
             [make_asset("F1")],
@@ -335,6 +346,10 @@ class TestMMRConsumesSimilarityArtifact:
                 decided("F3", 0.8, "2024-01-01T00:00:00Z"),
             ],
             similarity_provider=similarity_provider,
+            assembly_policy=AssemblyPolicy(
+                "pnl-diverse", "2.0.0", similarity_view="pnl_corr",
+                max_per_microcluster=3, max_per_macrocluster=3,
+            ),
         )
         # With pnl_corr as primary, F1 and F2 are near-duplicates -> F3 chosen.
         assert result.factor_ids == ("F1", "F3")

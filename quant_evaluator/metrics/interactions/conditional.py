@@ -5,12 +5,26 @@ Measures factor performance conditional on another factor's value or after
 controlling for other factors.
 """
 
+from dataclasses import dataclass
 from typing import Optional, Tuple
 import numpy as np
 
 from quant_evaluator.contracts.factor_batch import FactorBatch
 from quant_evaluator.contracts.label_bundle import LabelBundle
 from quant_evaluator.metrics.label_panel import normalize_label_panel
+from quant_evaluator.metrics.exposure import rank_aware_projection
+
+
+SAME_DATE_DESCRIPTIVE = "SAME_DATE_DESCRIPTIVE"
+SPEARMAN_DEFINITION = "raw_value_residuals_then_spearman_correlation"
+
+
+@dataclass(frozen=True)
+class IncrementalICDiagnostics:
+    estimation_scope: str
+    method_definition: str
+    test_projection: Tuple[object, ...]
+    label_projection: Tuple[object, ...]
 
 
 def compute_conditional_ic(
@@ -38,7 +52,7 @@ def compute_conditional_ic(
     Returns:
         (conditional_ic, sample_counts)
         conditional_ic: shape (T, F, Q) - IC per factor per quantile
-        sample_counts: shape (T, Q) - asset count per quantile
+        sample_counts: shape (T, F, Q) - actual joint evaluation count
     """
     if method not in ("pearson", "spearman"):
         raise ValueError(f"Unknown method: {method}. Must be 'pearson' or 'spearman'")
@@ -51,7 +65,7 @@ def compute_conditional_ic(
     T, N, F = values.shape
 
     conditional_ic = np.full((T, F, quantiles), np.nan, dtype=np.float64)
-    sample_counts = np.zeros((T, quantiles), dtype=np.int32)
+    sample_counts = np.zeros((T, F, quantiles), dtype=np.int32)
 
     for t in range(T):
         conditioning_values = values[t, :, conditioning_factor_idx]
@@ -61,8 +75,8 @@ def compute_conditional_ic(
             conditioning_valid = factor_batch.validity[t, :, conditioning_factor_idx]
             conditioning_values = np.where(conditioning_valid, conditioning_values, np.nan)
 
-        # Filter finite conditioning values and labels
-        valid_mask = np.isfinite(conditioning_values) & np.isfinite(labels[t])
+        # Group membership is decision-time information and must not depend on labels.
+        valid_mask = np.isfinite(conditioning_values)
         if np.sum(valid_mask) < min_assets:
             continue
 
@@ -87,8 +101,6 @@ def compute_conditional_ic(
             if np.sum(quantile_mask) < min_assets:
                 continue
 
-            sample_counts[t, q] = int(np.sum(quantile_mask))
-
             # Compute IC for each factor within this quantile
             for f in range(F):
                 factor_t = values[t, :, f]
@@ -108,6 +120,7 @@ def compute_conditional_ic(
 
                 # Compute correlation
                 valid_obs = np.isfinite(factor_q) & np.isfinite(label_q)
+                sample_counts[t, f, q] = int(np.sum(valid_obs))
                 factor_valid = factor_q[valid_obs]
                 label_valid = label_q[valid_obs]
 
@@ -135,9 +148,11 @@ def compute_incremental_ic(
     test_factor_idx: int,
     method: str = "pearson",
     min_assets: int = 30,
-) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    *,
+    return_diagnostics: bool = False,
+):
     """
-    Compute incremental IC: IC contribution of test factor after controlling for base factors.
+    Compute same-date descriptive partial association after controlling for bases.
 
     Uses residualization: regress test factor on base factors, then compute IC
     of residuals with labels.
@@ -153,7 +168,7 @@ def compute_incremental_ic(
     Returns:
         (incremental_ic, base_ic, total_ic)
         incremental_ic: shape (T,) - IC of residualized test factor
-        base_ic: shape (T,) - IC of base factors' prediction
+        base_ic: shape (T,) - descriptive in-sample fitted association; not OOS
         total_ic: shape (T,) - IC of test factor without residualization
     """
     if method not in ("pearson", "spearman"):
@@ -169,6 +184,8 @@ def compute_incremental_ic(
     incremental_ic = np.full(T, np.nan, dtype=np.float64)
     base_ic = np.full(T, np.nan, dtype=np.float64)
     total_ic = np.full(T, np.nan, dtype=np.float64)
+    test_diagnostics = [None] * T
+    label_diagnostics = [None] * T
 
     for t in range(T):
         # Extract base factors and test factor
@@ -219,26 +236,19 @@ def compute_incremental_ic(
                 from scipy import stats
                 total_ic[t], _ = stats.spearmanr(test_valid, label_valid)
 
-        # Residualize test factor against base factors
+        # Authority is rank-aware; duplicate controls span the same subspace.
         try:
-            # Add intercept
-            X = np.column_stack([np.ones(len(base_valid)), base_valid])
-            XtX = X.T @ X
-            Xty_test = X.T @ test_valid
-            Xty_label = X.T @ label_valid
-
-            beta_test = np.linalg.solve(XtX, Xty_test)
-            beta_label = np.linalg.solve(XtX, Xty_label)
-
-            # Residuals
-            test_residual = test_valid - X @ beta_test
-            label_residual = label_valid - X @ beta_label
-
-            # Base prediction
-            base_pred = X @ beta_label
+            test_fitted, test_residual, test_diag = rank_aware_projection(
+                base_valid, test_valid, add_intercept=True,
+            )
+            base_pred, label_residual, label_diag = rank_aware_projection(
+                base_valid, label_valid, add_intercept=True,
+            )
+            test_diagnostics[t] = test_diag
+            label_diagnostics[t] = label_diag
 
             # Compute base IC
-            if np.std(base_pred) > 0 and np.std(label_valid) > 0:
+            if label_diag["status"] != "INSUFFICIENT_DF" and np.std(base_pred) > 0 and np.std(label_valid) > 0:
                 if method == "pearson":
                     base_ic[t] = np.corrcoef(base_pred, label_valid)[0, 1]
                 else:
@@ -246,16 +256,24 @@ def compute_incremental_ic(
                     base_ic[t], _ = stats.spearmanr(base_pred, label_valid)
 
             # Compute incremental IC
-            if np.std(test_residual) > 0 and np.std(label_residual) > 0:
+            if (test_diag["status"] != "NO_RESIDUAL_VARIANCE" and
+                    label_diag["status"] != "NO_RESIDUAL_VARIANCE" and
+                    test_diag["effective_df"] >= 2 and label_diag["effective_df"] >= 2):
                 if method == "pearson":
                     incremental_ic[t] = np.corrcoef(test_residual, label_residual)[0, 1]
                 else:
                     from scipy import stats
                     incremental_ic[t], _ = stats.spearmanr(test_residual, label_residual)
 
-        except np.linalg.LinAlgError:
+        except (np.linalg.LinAlgError, ValueError):
             continue
 
+    if return_diagnostics:
+        return incremental_ic, base_ic, total_ic, IncrementalICDiagnostics(
+            SAME_DATE_DESCRIPTIVE,
+            SPEARMAN_DEFINITION if method == "spearman" else "raw_value_residuals_then_pearson_correlation",
+            tuple(test_diagnostics), tuple(label_diagnostics),
+        )
     return incremental_ic, base_ic, total_ic
 
 

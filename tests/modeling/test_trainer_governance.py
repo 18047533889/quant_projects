@@ -6,7 +6,7 @@ import pytest
 
 from modeling.contracts import DecisionClock
 from modeling.hyperparams import validate_search_grid
-from modeling.selection import candidate_identity, select_best_validation
+from modeling.selection import ConsumerNonInferiorityContract, candidate_identity, select_best_validation
 from modeling.trainer import _assert_declared_feature_availability
 from modeling.trainer_governance import (
     CandidateExposureLedger,
@@ -53,6 +53,29 @@ def test_exposure_budget_and_ledger_are_hard_and_stable():
     assert ledger.digest() == CandidateExposureLedger(2, ["a", "b"]).digest()
     with pytest.raises(ValueError, match="budget"):
         ledger.expose("c")
+
+
+def test_selection_applies_consumer_objective_noninferiority_and_risk_gate():
+    contract = ConsumerNonInferiorityContract(
+        "strict-portfolio", "net_utility", epsilon=.01,
+        min_risk_improvement=.02, max_risk_budget=.10,
+    )
+    common = dict(consumer_profile="strict-portfolio", baseline_score=0.0,
+                  delta_ci_high=.02, effect_size=.01)
+    scores = [
+        {"hyperparams": {"n_components": 2}, "net_utility": .20,
+         **common, "delta_ci_low": -.02, "risk_improvement": .05, "risk_budget": .05},
+        {"hyperparams": {"n_components": 3}, "net_utility": .10,
+         **common, "delta_ci_low": -.005, "risk_improvement": .03, "risk_budget": .05},
+        {"hyperparams": {"n_components": 5}, "net_utility": .30,
+         **common, "delta_ci_low": 0.0, "risk_improvement": .03, "risk_budget": .20},
+    ]
+    best, diagnostics = select_best_validation(
+        scores, objective="net_utility", noninferiority=contract
+    )
+    assert best == {"n_components": 3}
+    assert diagnostics["noninferiority"][candidate_identity({"n_components": 2})]["passed"] is False
+    assert diagnostics["noninferiority"][candidate_identity({"n_components": 5})]["passed"] is False
 
 
 def test_comparison_status_keeps_not_computable_separate_from_code_error():

@@ -87,7 +87,8 @@ def test_gpu_probe_cohort_hand_example():
     per_cohort_day = (0.5 * (0.01 + 0.0) / 2.0 + 0.5 * (0.005 + 0.0) / 2.0) / 20.0
     expected = np.zeros(T)
     for t in range(T):
-        active = sum(1 for s in range(t) if t <= s + 20)
+        # Entry at s+1; first earned price interval ends at s+2, exit s+21.
+        active = sum(1 for s in range(t) if s + 2 <= t <= s + 21)
         expected[t] = active * per_cohort_day
     np.testing.assert_allclose(pnl, expected, rtol=1e-10, atol=1e-12)
 
@@ -250,24 +251,19 @@ def test_gpu_drawdown_parity():
     rng = np.random.default_rng(4)
     T, F = 300, 4
     r = rng.normal(0, 0.02, (T, F))
-    r[50, 0] = -1.5  # wipeout col 0
-    r[60, 1] = -1.2  # wipeout col 1
+    r[50, 0] = -1.0  # default col 0: 100% loss, not missing evidence
+    r[60, 1] = -1.0  # default col 1
     _risk_parity("maxdd", compute_max_drawdown_batch,
                  lambda x: compute_maximum_drawdown(x)[0], r)
 
 
-def test_gpu_drawdown_wipeout_matches_independent_wealth_oracle():
-    r = np.array([
-        [0.10, 0.10, 0.10, 0.01],
-        [-1.20, -1.00, -0.20, 0.01],
-        [4.00, 2.00, 0.05, 0.01],
-    ], dtype=np.float64)
-    # Wealth is absorbing at total loss: once wealth <= 0, later arithmetic
-    # cannot fabricate a recovery.  Column 2 falls from 1.10 to 0.88 => 20%.
-    expected = np.array([1.0, 1.0, 0.2, 0.0])
-    np.testing.assert_allclose(
-        _asn(compute_max_drawdown_batch(r)), expected, rtol=0.0, atol=1e-12
-    )
+def test_gpu_drawdown_negative_capital_rejected():
+    with pytest.raises(ValueError, match="negative-capital"):
+        compute_max_drawdown_batch(np.array([[-1.2], [-2.]]))
+
+
+def test_gpu_drawdown_empty_shape():
+    assert _asn(compute_max_drawdown_batch(np.empty((0, 3)))).shape == (3,)
 
 
 def test_gpu_calmar_parity():
@@ -287,7 +283,8 @@ def test_gpu_calmar_matches_independent_compound_wealth_oracle():
     annualized = wealth[-1] ** (periods / len(r)) - 1.0
     expected = annualized / max_dd
     np.testing.assert_allclose(
-        _asn(compute_calmar_batch(r, periods_per_year=periods, min_periods=2)),
+        _asn(compute_calmar_batch(r, periods_per_year=periods, min_periods=2,
+                                  annualization="cagr")),
         expected, rtol=1e-12, atol=1e-12,
     )
 
@@ -311,23 +308,27 @@ def test_gpu_risk_finite_policy_and_wealth_boundaries():
         expected_vol, rtol=1e-12, atol=1e-12, equal_nan=True,
     )
 
+    negative_capital = np.array([[-1.20], [-1.30], [0.10]])
+    with pytest.raises(ValueError, match="negative-capital"):
+        compute_max_drawdown_batch(negative_capital)
+    with pytest.raises(ValueError, match="negative-capital"):
+        compute_calmar_batch(negative_capital, periods_per_year=4, min_periods=2)
+
     boundaries = np.array([
-        [np.nan, np.nan, -0.50, -1.20, -1.20],
-        [np.nan, np.nan, np.nan, np.nan, -1.30],
-        [np.nan, np.nan, np.nan, np.nan, 0.10],
+        [np.nan, np.nan, -1.00, -1.00],
+        [np.nan, -0.50, np.nan, -1.00],
+        [np.nan, np.nan, np.nan, 0.10],
     ])
-    # Empty/all-missing and one finite observation lack two periods. A single
-    # wipeout plus a missing row is still only one observation. Two wipeouts
-    # are an absorbing bankruptcy, never a positive product recovery.
-    expected_ann = np.array([np.nan, np.nan, np.nan, np.nan, -1.0])
+    # Empty/all-missing and one finite observation lack two periods. Exactly
+    # -100% is an absorbing zero-NAV loss, never a negative-capital model.
+    expected_ann = np.array([np.nan, np.nan, np.nan, -1.0])
     np.testing.assert_allclose(
         _asn(compute_annualized_return_batch(boundaries, periods_per_year=4)),
         expected_ann, rtol=0.0, atol=0.0, equal_nan=True,
     )
-    expected_calmar = np.array([np.nan, np.nan, np.nan, np.nan, -1.0])
     np.testing.assert_allclose(
-        _asn(compute_calmar_batch(boundaries, periods_per_year=4, min_periods=2)),
-        expected_calmar, rtol=0.0, atol=0.0, equal_nan=True,
+        _asn(compute_max_drawdown_batch(boundaries, missing_return_policy="zero_fill")),
+        np.array([0.0, 0.5, 1.0, 1.0]), rtol=0.0, atol=0.0,
     )
 
 

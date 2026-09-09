@@ -182,10 +182,12 @@ class TestAssemblyHashIsRealContentHash:
         # part of the assembly identity (the hash covers the spec identity,
         # not just the member list).
         base = assemble(make_spec(), [make_asset("F1")])
+        diverse_decision = make_decision("F1")
+        object.__setattr__(diverse_decision, "metadata", MappingProxyType({"quality": 1.0}))
         other = assemble(
             make_spec(policy="diverse", max_factors=1),
             [make_asset("F1")],
-            selection_decisions=[make_decision("F1")],
+            selection_decisions=[diverse_decision],
             similarity_provider=lambda a, b: 0.5,
         )
         assert other.assembly_hash != base.assembly_hash

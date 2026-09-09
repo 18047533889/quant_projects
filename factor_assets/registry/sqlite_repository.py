@@ -1,6 +1,7 @@
 """Durable SQLite lifecycle repository (schema v1)."""
 from __future__ import annotations
 import contextlib
+import hashlib
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
@@ -9,7 +10,7 @@ from dataclasses import replace
 from factor_assets.contracts.asset import AssetMetadata, FactorAsset
 from factor_assets.contracts.evidence_ref import EvidenceBundleRef, evidence_bundle_event_id
 from factor_assets.contracts.lineage import LineageRef
-from factor_assets.contracts.lifecycle import HealthState, LifecycleState, StateEvent, validate_transition
+from factor_assets.contracts.lifecycle import HealthState, LifecycleState, StateEvent, StateEventKind, validate_transition
 from factor_assets.errors import (
     CapabilityError,
     DuplicateIdentityError,
@@ -25,9 +26,10 @@ class SQLiteLifecycleRepository:
     EPHEMERAL = False
     PRODUCTION_CAPABLE = True
 
-    def __init__(self, db_path: str | Path):
+    def __init__(self, db_path: str | Path, *, transactional_outbox=None):
         if not db_path or str(db_path) == ":memory:": raise CapabilityError("SQLite production repository requires an explicit file db_path")
         self.db_path = Path(db_path)
+        self._transactional_outbox = transactional_outbox
         if self.db_path.exists() and self.db_path.is_dir(): raise ValueError("db_path must be a file")
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         with self._connection() as conn: migrate(conn)
@@ -90,11 +92,27 @@ class SQLiteLifecycleRepository:
                 row = conn.execute("SELECT payload,revision FROM assets WHERE factor_id=?", (factor_id,)).fetchone()
                 if row is None: raise AssetNotFoundError(f"Factor {factor_id} not found")
                 asset, revision = asset_from_json(row[0]), row[1]
+                bundle_refs = ()
+                if evidence_bundle_ref is not None:
+                    bundle_refs = ("evaluation_bundle_ref", evidence_bundle_event_id(evidence_bundle_ref),
+                                   "evidence_bundle_sha256:" + hashlib.sha256(evidence_to_json(evidence_bundle_ref).encode()).hexdigest())
+                refs = tuple(dict.fromkeys(tuple(evidence_refs) + bundle_refs))
+                # Idempotency precedes optimistic concurrency: a lost-response
+                # retry remains successful even after later valid revisions.
+                if decision_id is not None:
+                    old = conn.execute("SELECT payload,revision FROM lifecycle_events WHERE factor_id=? AND decision_id=?", (factor_id, decision_id)).fetchone()
+                    if old is not None:
+                        old_event = event_from_json(old[0])
+                        if (old_event.to_state == to_state and tuple(old_event.evidence_refs) == refs
+                                and old_event.policy_version == policy_version and old_event.actor == actor
+                                and old_event.notes == notes):
+                            historical = replace(asset, lifecycle_state=old_event.to_state)
+                            return CommittedTransition(historical, old_event, old["revision"])
+                        raise LifecycleConflictError(f"Conflicting transition decision_id {decision_id} for factor {factor_id}")
                 if expected_state is not None and asset.lifecycle_state != expected_state: raise LifecycleConflictError(f"Expected state {expected_state.value} for factor {factor_id}, found {asset.lifecycle_state.value}")
                 if expected_revision is not None and revision != expected_revision: raise LifecycleConflictError(f"Expected revision {expected_revision} for factor {factor_id}, found {revision}")
                 if from_eval := (asset.lifecycle_state == to_state == LifecycleState.EVALUATED):
                     if expected_revision is None and not decision_id: raise LifecycleConflictError("EVALUATED re-evaluation requires expected_revision or decision_id")
-                refs = tuple(dict.fromkeys(tuple(evidence_refs) + (("evaluation_bundle_ref", evidence_bundle_event_id(evidence_bundle_ref)) if evidence_bundle_ref else ())))
                 if decision_id is not None:
                     old = conn.execute("SELECT payload,revision FROM lifecycle_events WHERE factor_id=? AND decision_id=?", (factor_id, decision_id)).fetchone()
                     if old is not None:
@@ -125,7 +143,11 @@ class SQLiteLifecycleRepository:
                 elif to_state == LifecycleState.APPROVED and asset.approved_at is None: updates["approved_at"] = now
                 elif to_state == LifecycleState.PRODUCTION_READY and asset.production_ready_at is None: updates["production_ready_at"] = now
                 updated = replace(asset, **updates); event = StateEvent(factor_id, asset.lifecycle_state, to_state, now, refs, decision_id, policy_version, actor, notes); new_revision = revision + 1
-                conn.execute("UPDATE assets SET payload=?,revision=? WHERE factor_id=?", (asset_to_json(updated), new_revision, factor_id)); conn.execute("INSERT INTO lifecycle_events(factor_id,revision,decision_id,payload) VALUES (?,?,?,?)", (factor_id,new_revision,decision_id,event_to_json(event))); conn.commit(); return CommittedTransition(updated,event,new_revision)
+                conn.execute("UPDATE assets SET payload=?,revision=? WHERE factor_id=?", (asset_to_json(updated), new_revision, factor_id)); conn.execute("INSERT INTO lifecycle_events(factor_id,revision,decision_id,payload) VALUES (?,?,?,?)", (factor_id,new_revision,decision_id,event_to_json(event)))
+                if self._transactional_outbox is not None:
+                    self._transactional_outbox.stage(conn=conn, event=event, revision=new_revision,
+                                                     idempotency_key=f"factor-lifecycle:{factor_id}:{new_revision}")
+                conn.commit(); return CommittedTransition(updated,event,new_revision)
             except (sqlite3.Error, OSError, ValueError, TypeError,
                     FactorAssetsError, AssetNotFoundError):
                 # Governance/contract errors (DuplicateIdentityError etc.) must
@@ -146,10 +168,15 @@ class SQLiteLifecycleRepository:
                 now = datetime.now(timezone.utc).isoformat()
                 updated = replace(asset, health_state=health)
                 note = f"Health change {asset.health_state.value} -> {health.value}" + (f": {reason}" if reason else "")
-                event = StateEvent(factor_id, asset.lifecycle_state, asset.lifecycle_state, now, (), None, None, actor, note)
+                event = StateEvent(factor_id, asset.lifecycle_state, asset.lifecycle_state, now, (), None, None, actor, note,
+                                   event_kind=StateEventKind.HEALTH_TRANSITION,
+                                   health_from=asset.health_state, health_to=health)
                 new_revision = revision + 1
                 conn.execute("UPDATE assets SET payload=?,revision=? WHERE factor_id=?", (asset_to_json(updated), new_revision, factor_id))
                 conn.execute("INSERT INTO lifecycle_events(factor_id,revision,decision_id,payload) VALUES (?,?,?,?)", (factor_id,new_revision,None,event_to_json(event)))
+                if self._transactional_outbox is not None:
+                    self._transactional_outbox.stage(conn=conn, event=event, revision=new_revision,
+                                                     idempotency_key=f"factor-health:{factor_id}:{new_revision}")
                 conn.commit()
             except (sqlite3.Error, OSError, ValueError, TypeError,
                     FactorAssetsError, AssetNotFoundError):

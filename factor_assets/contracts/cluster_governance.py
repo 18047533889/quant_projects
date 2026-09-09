@@ -29,6 +29,7 @@ AST / candidate provenance.  It is kept but scoped research-only.
 from __future__ import annotations
 
 import hashlib
+import math
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
@@ -240,6 +241,8 @@ class ClusterSetVersionArtifact:
     assignment_artifact_ref: str
     created_at: str
     content_hash: str = ""
+    refresh_trigger_ref: str = ""
+    downstream_validation_ref: str = ""
 
     def __post_init__(self) -> None:
         if not self.cluster_set_version_id:
@@ -282,6 +285,8 @@ class ClusterSetVersionArtifact:
             self.resolution,
             self.clustering_policy_ref,
             self.assignment_artifact_ref,
+            self.refresh_trigger_ref,
+            self.downstream_validation_ref,
         )
         if not self.content_hash:
             object.__setattr__(self, "content_hash", computed)
@@ -306,6 +311,8 @@ class ClusterSetVersionArtifact:
             "assignment_artifact_ref": self.assignment_artifact_ref,
             "created_at": self.created_at,
             "content_hash": self.content_hash,
+            "refresh_trigger_ref": self.refresh_trigger_ref,
+            "downstream_validation_ref": self.downstream_validation_ref,
         }
 
 
@@ -495,59 +502,46 @@ class ClusterVersionMatcher:
         DISSOLVED; a current cluster with no previous match is NEW.
         """
         edges: list[ClusterLineageEdge] = []
-        prev_by_id = dict(previous)
-        cur_by_id = dict(current)
-
-        # For each previous cluster, find the best current match by Jaccard.
-        for prev_id, prev_artifact in prev_by_id.items():
-            prev_members = set(prev_artifact.member_factor_ids)
-            best_cur_id: Optional[str] = None
-            best_score = 0.0
-            for cur_id, cur_artifact in cur_by_id.items():
-                cur_members = set(cur_artifact.member_factor_ids)
-                score = self.jaccard(prev_members, cur_members)
-                if score > best_score:
-                    best_score = score
-                    best_cur_id = cur_id
-            if best_cur_id is None or best_score < self.overlap_threshold:
-                edges.append(
-                    ClusterLineageEdge(
-                        from_cluster_id=prev_id,
-                        to_cluster_id=prev_id,
-                        from_cluster_set_version_ref=prev_artifact.cluster_set_version_ref,
-                        to_cluster_set_version_ref="",
-                        match=ClusterVersionMatch.DISSOLVED,
-                    )
-                )
+        prev_by_id, cur_by_id = dict(previous), dict(current)
+        links: list[tuple[str, str, float]] = []
+        for prev_id, prev_artifact in sorted(prev_by_id.items()):
+            a = set(prev_artifact.member_factor_ids)
+            for cur_id, cur_artifact in sorted(cur_by_id.items()):
+                b = set(cur_artifact.member_factor_ids)
+                intersection = len(a & b)
+                if not intersection:
+                    continue
+                # Require either Jaccard or strong retention in both directions;
+                # retain all qualifying links to expose split/merge topology.
+                j = self.jaccard(a, b)
+                retention = min(intersection / len(a), intersection / len(b))
+                if max(j, retention) >= self.overlap_threshold:
+                    links.append((prev_id, cur_id, j))
+        prev_degree = {pid: sum(p == pid for p, _, _ in links) for pid in prev_by_id}
+        cur_degree = {cid: sum(c == cid for _, c, _ in links) for cid in cur_by_id}
+        for prev_id, cur_id, score in links:
+            if prev_degree[prev_id] > 1:
+                kind = ClusterVersionMatch.SPLIT
+            elif cur_degree[cur_id] > 1:
+                kind = ClusterVersionMatch.MERGED
             else:
-                match = (
-                    ClusterVersionMatch.UNCHANGED
-                    if best_score >= 0.9
-                    else ClusterVersionMatch.MIGRATED
-                )
-                edges.append(
-                    ClusterLineageEdge(
-                        from_cluster_id=prev_id,
-                        to_cluster_id=best_cur_id,
-                        from_cluster_set_version_ref=prev_artifact.cluster_set_version_ref,
-                        to_cluster_set_version_ref=cur_by_id[best_cur_id].cluster_set_version_ref,
-                        match=match,
-                    )
-                )
-
-        # Current clusters with no previous match are NEW.
-        matched_prev = {e.to_cluster_id for e in edges if e.match is not ClusterVersionMatch.DISSOLVED}
-        for cur_id, cur_artifact in cur_by_id.items():
-            if cur_id not in matched_prev:
-                edges.append(
-                    ClusterLineageEdge(
-                        from_cluster_id=cur_id,
-                        to_cluster_id=cur_id,
-                        from_cluster_set_version_ref="",
-                        to_cluster_set_version_ref=cur_artifact.cluster_set_version_ref,
-                        match=ClusterVersionMatch.NEW,
-                    )
-                )
+                kind = ClusterVersionMatch.UNCHANGED if score >= .9 else ClusterVersionMatch.MIGRATED
+            edges.append(ClusterLineageEdge(
+                prev_id, cur_id, prev_by_id[prev_id].cluster_set_version_ref,
+                cur_by_id[cur_id].cluster_set_version_ref, kind,
+            ))
+        linked_prev = {p for p, _, _ in links}
+        linked_cur = {c for _, c, _ in links}
+        for prev_id in sorted(set(prev_by_id) - linked_prev):
+            edges.append(ClusterLineageEdge(
+                prev_id, prev_id, prev_by_id[prev_id].cluster_set_version_ref, "",
+                ClusterVersionMatch.DISSOLVED,
+            ))
+        for cur_id in sorted(set(cur_by_id) - linked_cur):
+            edges.append(ClusterLineageEdge(
+                cur_id, cur_id, "", cur_by_id[cur_id].cluster_set_version_ref,
+                ClusterVersionMatch.NEW,
+            ))
         return edges
 
 
@@ -567,6 +561,7 @@ class IncrementalClusterAssignment:
     kind: IncrementalAssignmentKind
     cluster_set_version_ref: str
     affinity: Optional[float] = None
+    parent_cluster_set_hash: str = ""
     content_hash: str = ""
 
     def __post_init__(self) -> None:
@@ -576,6 +571,8 @@ class IncrementalClusterAssignment:
             raise TypeError("kind must be an IncrementalAssignmentKind")
         if not self.cluster_set_version_ref:
             raise ValueError("cluster_set_version_ref is required")
+        if self.kind is IncrementalAssignmentKind.ASSIGNED and not self.parent_cluster_set_hash:
+            raise ValueError("ASSIGNED outcomes require parent_cluster_set_hash for CAS")
         if self.affinity is not None:
             if isinstance(self.affinity, bool) or not isinstance(self.affinity, (int, float)):
                 raise TypeError("affinity must be a non-boolean number or None")
@@ -589,6 +586,7 @@ class IncrementalClusterAssignment:
             self.kind.value,
             self.cluster_set_version_ref,
             self.affinity,
+            self.parent_cluster_set_hash,
         )
         if not self.content_hash:
             object.__setattr__(self, "content_hash", computed)
@@ -606,6 +604,7 @@ class IncrementalClusterAssignment:
             "kind": self.kind.value,
             "cluster_set_version_ref": self.cluster_set_version_ref,
             "affinity": self.affinity,
+            "parent_cluster_set_hash": self.parent_cluster_set_hash,
             "content_hash": self.content_hash,
         }
 
@@ -633,6 +632,7 @@ class ClusterResolutionSelector:
         "representative_stability",
         "within_cluster_similarity",
         "downstream_library_utility",
+        "vi",
     })
 
     def __init__(self, resolutions: tuple[float, ...] = (0.5, 0.8, 1.0, 1.2, 1.5, 2.0)):
@@ -644,7 +644,11 @@ class ClusterResolutionSelector:
     def _score_value(key: str, value: float) -> float:
         """Normalize a metric value so higher is better."""
         if key == "vi":
-            return -value  # variation of information: lower is better
+            if value < 0:
+                raise ValueError("variation of information must be non-negative")
+            return 1.0 / (1.0 + value)  # bounded, lower VI is better
+        if not 0.0 <= value <= 1.0:
+            raise ValueError(f"stability metric {key!r} must be normalized to [0,1]")
         return value
 
     def select(
@@ -661,29 +665,34 @@ class ClusterResolutionSelector:
         """
         if not scores:
             raise ValueError("scores must be non-empty")
-        best_resolution: Optional[float] = None
-        best_composite = float("-inf")
-        best_modularity = float("-inf")
-        for resolution, metric_scores in scores.items():
+        unknown = set(scores) - set(self.resolutions)
+        if unknown:
+            raise ValueError(f"scores contain resolutions outside declared grid: {sorted(unknown)}")
+        composites: dict[float, float] = {}
+        for resolution in self.resolutions:
+            if resolution not in scores:
+                continue
+            metric_scores = scores[resolution]
             values = [
                 self._score_value(key, v)
                 for key, v in metric_scores.items()
-                if key in self.STABILITY_KEYS and v == v
+                if key in self.STABILITY_KEYS and isinstance(v, (int, float))
+                and not isinstance(v, bool) and math.isfinite(v)
             ]
             if not values:
-                values = [v for v in metric_scores.values() if v == v]
-            composite = sum(values) / len(values) if values else float("-inf")
-            modularity = metric_scores.get("modularity", float("-inf"))
-            if (
-                composite > best_composite
-                or (
-                    composite == best_composite
-                    and modularity > best_modularity
-                )
-            ):
-                best_composite = composite
-                best_modularity = modularity
-                best_resolution = resolution
-        if best_resolution is None:
-            raise ValueError("no resolution had a finite composite score")
-        return best_resolution
+                continue
+            composites[resolution] = sum(values) / len(values)
+        if not composites:
+            raise ValueError("required normalized stability evidence is missing")
+        best = max(composites.values())
+        near = [r for r in self.resolutions if r in composites and composites[r] >= best - .02]
+        # Choose the center of the longest adjacent stable plateau; a singleton
+        # is allowed only when no adjacent configuration has comparable evidence.
+        runs: list[list[float]] = []
+        for r in near:
+            if not runs or self.resolutions.index(r) != self.resolutions.index(runs[-1][-1]) + 1:
+                runs.append([r])
+            else:
+                runs[-1].append(r)
+        plateau = max(runs, key=lambda run: (len(run), max(composites[r] for r in run)))
+        return plateau[(len(plateau) - 1) // 2]

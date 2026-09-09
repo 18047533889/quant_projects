@@ -64,6 +64,11 @@ def _content_hash(
     evidence_refs: tuple[str, ...],
     gate_results: tuple[str, ...],
     policy_ref: Optional[str],
+    universe_ref: Optional[str],
+    snapshot_ref: Optional[str],
+    split_ref: Optional[str],
+    recipe_ref: Optional[str],
+    data_as_of: Optional[str],
 ) -> str:
     """sha256 over every semantic field of the admission artifact.
 
@@ -89,6 +94,8 @@ def _content_hash(
         "#",
         *gate_results,
         policy_ref or "",
+        universe_ref or "", snapshot_ref or "", split_ref or "",
+        recipe_ref or "", data_as_of or "",
     ):
         _length_prefixed(digest, item)
     return digest.hexdigest()
@@ -137,6 +144,11 @@ class FactorAdmissionArtifact:
     policy_ref: Optional[str] = None
     created_at: Optional[str] = None
     content_hash: str = ""
+    universe_ref: Optional[str] = None
+    snapshot_ref: Optional[str] = None
+    split_ref: Optional[str] = None
+    recipe_ref: Optional[str] = None
+    data_as_of: Optional[str] = None
 
     def __post_init__(self) -> None:
         if not self.factor_id:
@@ -194,6 +206,11 @@ class FactorAdmissionArtifact:
             self.evidence_refs,
             self.gate_results,
             self.policy_ref,
+            self.universe_ref,
+            self.snapshot_ref,
+            self.split_ref,
+            self.recipe_ref,
+            self.data_as_of,
         )
         if not self.content_hash:
             object.__setattr__(self, "content_hash", computed_hash)
@@ -290,6 +307,11 @@ class FactorAdmissionArtifact:
             "health_state_ref": self.health_state_ref,
             "similarity_ref": self.similarity_ref,
             "novelty_ref": self.novelty_ref,
+            "universe_ref": self.universe_ref,
+            "snapshot_ref": self.snapshot_ref,
+            "split_ref": self.split_ref,
+            "recipe_ref": self.recipe_ref,
+            "data_as_of": self.data_as_of,
             "cluster_id": self.cluster_id,
             "orientation": self.orientation,
             "decision": self.decision.value,

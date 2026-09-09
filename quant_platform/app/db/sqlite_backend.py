@@ -76,6 +76,6 @@ class SqliteDb:
         try:
             yield self._conn
             self._conn.commit()
-        except Exception:
+        except BaseException:
             self._conn.rollback()
             raise

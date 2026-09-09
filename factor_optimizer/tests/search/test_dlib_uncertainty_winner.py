@@ -248,6 +248,7 @@ def test_treatment_decision_8_step_does_not_pick_raw_by_single_rank_ic():
     result = policy.decide(
         [raw, ewma, kama, dual],
         raw_trial_id="RAW",
+        screening_only=True,
         integrity_evidence=_evidence_for(raw, ewma, kama, dual),
     )
 
@@ -278,6 +279,7 @@ def test_treatment_decision_keeps_raw_when_treatment_worse():
     result = policy.decide(
         [raw, bad],
         raw_trial_id="RAW",
+        screening_only=True,
         integrity_evidence=_evidence_for(raw, bad),
     )
     assert result.winner_trial_id == "RAW"
@@ -291,6 +293,7 @@ def test_treatment_decision_integrity_gate_hard_rejects():
     result = policy.decide(
         [raw, broken],
         raw_trial_id="RAW",
+        screening_only=True,
         integrity_evidence=_evidence_for(raw, broken),
     )
     # The broken candidate is hard-rejected at STEP 1 and never reaches the
@@ -307,6 +310,7 @@ def test_treatment_decision_requires_raw_candidate():
         policy.decide(
             [ewma],
             raw_trial_id="RAW",
+            screening_only=True,
             integrity_evidence=_evidence_for(ewma),
         )
 
@@ -320,6 +324,7 @@ def test_treatment_decision_all_hard_rejected_fails_closed():
         policy.decide(
             [broken1, broken2],
             raw_trial_id="B1",
+            screening_only=True,
             integrity_evidence=_evidence_for(broken1, broken2),
         )
 
@@ -338,6 +343,7 @@ def test_treatment_decision_rejects_missing_integrity_evidence():
     result = policy.decide(
         [raw, shiny],
         raw_trial_id="RAW",
+        screening_only=True,
         integrity_evidence=_evidence_for(raw),
     )
     assert "SHINY" not in result.pareto_trial_ids
@@ -354,6 +360,7 @@ def test_treatment_decision_rejects_stale_integrity_evidence():
     result = policy.decide(
         [raw, ewma],
         raw_trial_id="RAW",
+        screening_only=True,
         # EWMA's evidence carries the wrong treatment id.
         integrity_evidence=_evidence_for(raw, ewma) | {
             "EWMA": _evidence_for(_smoothed_metrics("OTHER"))["OTHER"],
@@ -396,6 +403,7 @@ def test_treatment_decision_rejects_failed_integrity_check():
     result = policy.decide(
         [raw, shiny],
         raw_trial_id="RAW",
+        screening_only=True,
         integrity_evidence={**_evidence_for(raw), "SHINY": failed},
     )
     assert "SHINY" not in result.pareto_trial_ids
@@ -408,7 +416,7 @@ def test_treatment_decision_all_candidates_without_evidence_raises_typed_error()
     ewma = _smoothed_metrics("EWMA")
     policy = TreatmentDecisionPolicy(_anchors(), _policy())
     with pytest.raises(TreatmentIntegrityError, match="integrity"):
-        policy.decide([raw, ewma], raw_trial_id="RAW")
+        policy.decide([raw, ewma], raw_trial_id="RAW", screening_only=True)
 
 
 def test_treatment_decision_not_run_evidence_is_rejected():
@@ -432,6 +440,7 @@ def test_treatment_decision_not_run_evidence_is_rejected():
     result = policy.decide(
         [raw, ewma],
         raw_trial_id="RAW",
+        screening_only=True,
         integrity_evidence={**_evidence_for(raw), "EWMA": not_run},
     )
     assert "EWMA" not in result.pareto_trial_ids
@@ -531,6 +540,40 @@ def test_uncertainty_selector_prefers_clear_winner():
     selector = UncertaintyAwareWinnerSelector(_policy())
     winner = selector.select([a, b], {"A": 0.9, "B": 0.4})
     assert winner.trial_id == "A"
+
+
+def test_v7_paired_comparison_rejects_different_bootstrap_draw_identity():
+    samples = {"predictive": [0.5, 0.5], "tradability": [0.5, 0.5], "stability": [0.5, 0.5]}
+    a = UncertaintyEvidence(
+        trial_id="A", dimension_samples=samples, bootstrap_plan_ref="plan:1",
+        draw_ids=("d1", "d2"), turnover=0.2,
+    )
+    b = UncertaintyEvidence(
+        trial_id="B", dimension_samples=samples, bootstrap_plan_ref="plan:2",
+        draw_ids=("d1", "d2"), turnover=0.1,
+    )
+    with pytest.raises(ValueError, match="same bootstrap plan"):
+        UncertaintyAwareWinnerSelector(_policy()).select(
+            [a, b], {"A": 0.5, "B": 0.5}
+        )
+
+
+@pytest.mark.parametrize("dimensions", [3, 14])
+def test_v7_all_ties_reach_equivalence_branch_independent_of_dimension_count(dimensions):
+    samples = {f"d{i}": [0.5] * 8 for i in range(dimensions)}
+    draw_ids = tuple(f"draw:{i}" for i in range(8))
+    a = UncertaintyEvidence(
+        trial_id="A", dimension_samples=samples, bootstrap_plan_ref="plan:tie",
+        draw_ids=draw_ids, turnover=0.3,
+    )
+    b = UncertaintyEvidence(
+        trial_id="B", dimension_samples=samples, bootstrap_plan_ref="plan:tie",
+        draw_ids=draw_ids, turnover=0.1,
+    )
+    winner = UncertaintyAwareWinnerSelector(_policy()).select(
+        [a, b], {"A": 0.5, "B": 0.5}
+    )
+    assert winner.trial_id == "B"
 
 
 def test_uncertainty_selector_empty_fails_closed():
@@ -910,17 +953,17 @@ def test_search_worker_cannot_reuse_sealed_handle():
         trials=[trial],
         best_score=1.0,
         best_trial_id="t1",
+        selection_decision_id="decision:v8-fixture",
+        selection_decision_hash="decision-hash:v8-fixture",
+        selection_request_hash="request-hash:v8-fixture",
         stop_reason="budget_exhausted",
     )
     session.finish("done")
     frozen = SplitPlan("test", [True, False], [False, False], [False, True], {})
     handle = session.freeze_for_sealed_test(frozen)
-    # First consume succeeds.
-    session.consume_sealed_test(
-        handle, frozen, EvaluationProtocol(frozen, lambda t, f: {"rank_ic": 0.25})
-    )
-    # Reusing the same handle must fail closed (one-shot seal).
-    with pytest.raises(ValueError, match="already been consumed"):
+    # The legacy direct route cannot certify a one-shot read because it has no
+    # cross-process durable authority.
+    with pytest.raises(ValueError, match="direct consume_sealed_test is retired"):
         session.consume_sealed_test(
-            handle, frozen, EvaluationProtocol(frozen, lambda t, f: {"rank_ic": 0.5})
+            handle, frozen, EvaluationProtocol(frozen, lambda t, f: {"rank_ic": 0.25})
         )

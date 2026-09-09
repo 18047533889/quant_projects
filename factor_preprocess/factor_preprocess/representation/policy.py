@@ -36,9 +36,13 @@ Key guarantees (R61-FI-044):
 """
 from dataclasses import dataclass, field
 from enum import Enum
+import math
+import os
+from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
-from factor_preprocess.contracts._deep_freeze import deep_freeze
+from factor_preprocess.contracts._deep_freeze import as_plain, deep_freeze
+from factor_preprocess.contracts.treatment_recipe import _stable_repr
 from factor_preprocess.errors import InvalidContractError
 
 
@@ -73,6 +77,7 @@ class RepresentationPolicy:
     description: str
     allowed_representations: Tuple[str, ...] = field(default_factory=tuple)
     required_normalizations: Tuple[str, ...] = field(default_factory=tuple)
+    required_normalization_any_of: Tuple[Tuple[str, ...], ...] = field(default_factory=tuple)
     zscore_optional: bool = False
     robust_outlier_handling_required: bool = False
     train_fitted_scaling_required: bool = False
@@ -87,6 +92,10 @@ class RepresentationPolicy:
         )
         object.__setattr__(
             self, "required_normalizations", tuple(self.required_normalizations)
+        )
+        object.__setattr__(
+            self, "required_normalization_any_of",
+            tuple(tuple(group) for group in self.required_normalization_any_of),
         )
         if not isinstance(self.profile_id, RepresentationProfileId):
             object.__setattr__(
@@ -111,10 +120,14 @@ class RepresentationPolicy:
         """
         proposed = set(proposed_normalizations or ())
         missing = [r for r in self.required_normalizations if r not in proposed]
-        if missing:
+        missing_groups = [
+            group for group in self.required_normalization_any_of
+            if not proposed.intersection(group)
+        ]
+        if missing or missing_groups:
             raise InvalidContractError(
-                f"{self.profile_id.value} profile requires normalization(s) "
-                f"{missing} but the representation carries only "
+                f"{self.profile_id.value} profile requires all_of={missing} "
+                f"and one_of_each={missing_groups} but the representation carries only "
                 f"{sorted(proposed)}"
             )
 
@@ -157,7 +170,10 @@ def _profile_linear() -> RepresentationPolicy:
             "robust-z-score is normally required."
         ),
         allowed_representations=("robust_outlier_treated", "zscore", "robust_zscore"),
-        required_normalizations=("train_fitted_zscore", "train_fitted_robust_zscore"),
+        required_normalizations=(),
+        required_normalization_any_of=((
+            "train_fitted_zscore", "train_fitted_robust_zscore"
+        ),),
         zscore_optional=False,
         robust_outlier_handling_required=True,
         train_fitted_scaling_required=True,
@@ -285,6 +301,9 @@ class FeatureRepresentationArtifact:
     model_id: str
     profile_id: RepresentationProfileId
     profile_version: str
+    factor_version: str
+    canonical_storage_ref: str
+    destination_storage_ref: str
     transform_chain: Tuple[Dict[str, Any], ...] = field(default_factory=tuple)
     representation_name: str = ""
     artifact_kind: ArtifactKind = ArtifactKind.MODEL_SPECIFIC_REPRESENTATION
@@ -301,21 +320,32 @@ class FeatureRepresentationArtifact:
             )
         if not self.model_id:
             raise InvalidContractError("FeatureRepresentationArtifact.model_id cannot be empty")
+        if not self.factor_version:
+            raise InvalidContractError("FeatureRepresentationArtifact.factor_version cannot be empty")
+        if not self.destination_storage_ref:
+            raise InvalidContractError("destination_storage_ref cannot be empty")
+        if not self.canonical_storage_ref:
+            raise InvalidContractError("canonical_storage_ref cannot be empty")
         if not isinstance(self.profile_id, RepresentationProfileId):
             object.__setattr__(
                 self, "profile_id", RepresentationProfileId(self.profile_id)
             )
         if not isinstance(self.artifact_kind, ArtifactKind):
             object.__setattr__(self, "artifact_kind", ArtifactKind(self.artifact_kind))
-        object.__setattr__(self, "transform_chain", tuple(self.transform_chain))
+        object.__setattr__(self, "transform_chain", deep_freeze(tuple(self.transform_chain)))
 
-        # Fail closed: a model representation must NEVER point at the canonical
-        # factor-asset namespace.
-        if self.canonical_factor_ref.startswith(CANONICAL_FACTOR_NAMESPACE_PREFIX):
+        expected_source = (
+            f"{CANONICAL_FACTOR_NAMESPACE_PREFIX}{self.factor_id}@{self.factor_version}"
+        )
+        if self.canonical_factor_ref != expected_source:
             raise InvalidContractError(
-                "FeatureRepresentationArtifact.canonical_factor_ref must reference "
-                "the canonical factor ASSET (alpha form); it cannot BE a "
-                "canonical-asset identity"
+                "canonical_factor_ref must identify the matching canonical "
+                f"factor/version {expected_source!r}"
+            )
+        if not self.artifact_id.startswith(REPRESENTATION_NAMESPACE_PREFIX):
+            raise CanonicalAssetOverwriteError(
+                "FeatureRepresentationArtifact.artifact_id must be in the "
+                "model_representation namespace"
             )
 
         actual = self._derive_hash()
@@ -337,8 +367,11 @@ class FeatureRepresentationArtifact:
                 self.model_id,
                 self.profile_id.value,
                 self.profile_version,
+                self.factor_version,
+                self.canonical_storage_ref,
+                self.destination_storage_ref,
                 self.representation_name,
-                repr(self.transform_chain),
+                _stable_repr(self.transform_chain),
                 self.artifact_kind.value,
             ]
         )
@@ -352,7 +385,10 @@ class FeatureRepresentationArtifact:
             "model_id": self.model_id,
             "profile_id": self.profile_id.value,
             "profile_version": self.profile_version,
-            "transform_chain": [dict(s) for s in self.transform_chain],
+            "factor_version": self.factor_version,
+            "canonical_storage_ref": self.canonical_storage_ref,
+            "destination_storage_ref": self.destination_storage_ref,
+            "transform_chain": [as_plain(s) for s in self.transform_chain],
             "representation_name": self.representation_name,
             "artifact_kind": self.artifact_kind.value,
             "content_hash": self.content_hash,
@@ -365,25 +401,26 @@ def register_feature_representation(
     factor_id: str,
     canonical_factor_ref: str,
     model_id: str,
+    factor_version: str,
+    canonical_storage_ref: str,
+    destination_storage_ref: str,
     profile_id,
     transform_chain,
     representation_name: str = "",
 ) -> FeatureRepresentationArtifact:
     """Create + register a model-specific representation artifact.
 
-    ``canonical_factor_ref`` must reference the canonical factor asset (the
-    alpha form) and MUST NOT be a canonical-asset *identity* — writing a
-    model representation *over* the canonical factor asset is forbidden
-    (R61-FI-044, plan §28). The artifact is model-specific and evaluated for
-    model suitability; it is never the canonical factor asset.
+    ``canonical_factor_ref`` is the typed source identity and must be in the
+    canonical ``factor_asset`` domain. ``artifact_id`` is the distinct write
+    identity and must be in the ``model_representation`` domain. Resolved
+    source and destination locations are bound into the content hash and are
+    checked again by :func:`write_feature_representation`.
     """
     profile = get_representation_policy(profile_id)
-    if canonical_factor_ref.startswith(CANONICAL_FACTOR_NAMESPACE_PREFIX):
+    if not artifact_id.startswith(REPRESENTATION_NAMESPACE_PREFIX):
         raise CanonicalAssetOverwriteError(
-            f"refusing to write model representation {artifact_id!r} over the "
-            f"canonical factor-asset namespace {canonical_factor_ref!r} — a "
-            "model-specific representation must be tracked as its own "
-            "artifact, never overwrite the canonical factor asset"
+            f"representation destination {artifact_id!r} is outside the "
+            "model_representation namespace"
         )
     return FeatureRepresentationArtifact(
         artifact_id=artifact_id,
@@ -392,9 +429,60 @@ def register_feature_representation(
         model_id=model_id,
         profile_id=profile.profile_id,
         profile_version=profile.version,
+        factor_version=factor_version,
+        canonical_storage_ref=canonical_storage_ref,
+        destination_storage_ref=destination_storage_ref,
         transform_chain=tuple(transform_chain),
         representation_name=representation_name,
     )
+
+
+def write_feature_representation(
+    artifact: FeatureRepresentationArtifact,
+    payload: bytes,
+    *,
+    canonical_storage_path,
+    representation_storage_root,
+) -> Path:
+    """Create a representation file without overwriting any resolved object."""
+    if not isinstance(artifact, FeatureRepresentationArtifact):
+        raise TypeError("artifact must be a FeatureRepresentationArtifact")
+    if not isinstance(payload, bytes):
+        raise TypeError("payload must be bytes")
+    if artifact.content_hash != artifact._derive_hash():
+        raise InvalidContractError("representation artifact content hash is stale or tampered")
+    source = Path(canonical_storage_path).resolve(strict=True)
+    registered_source = Path(artifact.canonical_storage_ref).resolve(strict=True)
+    if source != registered_source:
+        raise InvalidContractError(
+            "canonical storage path does not resolve to the registered parent asset"
+        )
+    root = Path(representation_storage_root).resolve(strict=True)
+    destination = Path(artifact.destination_storage_ref).resolve(strict=False)
+    if destination == source:
+        raise CanonicalAssetOverwriteError(
+            "resolved representation destination aliases the canonical source"
+        )
+    if destination != root and root not in destination.parents:
+        raise CanonicalAssetOverwriteError(
+            "resolved representation destination is outside its storage domain"
+        )
+    if destination.exists() or destination.is_symlink():
+        raise FileExistsError(f"representation destination already exists: {destination}")
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    descriptor = os.open(destination, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o640)
+    try:
+        with os.fdopen(descriptor, "wb") as stream:
+            stream.write(payload)
+            stream.flush()
+            os.fsync(stream.fileno())
+    except Exception:
+        try:
+            destination.unlink()
+        except FileNotFoundError:
+            pass
+        raise
+    return destination
 
 
 # ---------------------------------------------------------------------------
@@ -410,6 +498,26 @@ class SignalDestructionConflict(InvalidContractError):
     NEVER silently force the model normalization over material signal
     destruction.
     """
+
+
+def decide_representation(provider, request, treated_candidate_id: str):
+    """Delegate representation admission to the shared DecisionProvider.
+
+    FP intentionally owns no score table here.  The same immutable request can
+    therefore be replayed through FO and FP and yields the provider's canonical
+    DecisionArtifact/content hash and comparison relationship.
+    """
+    if provider is None or not callable(getattr(provider, "decide", None)):
+        raise InvalidContractError("provider must implement DecisionProvider.decide(request)")
+    if not treated_candidate_id:
+        raise InvalidContractError("treated_candidate_id is required")
+    candidate_ids = {c.candidate_id for c in request.candidates}
+    if treated_candidate_id not in candidate_ids:
+        raise InvalidContractError("treated candidate is not in the canonical request")
+    artifact = provider.decide(request)
+    # Admission/status semantics belong to the provider's versioned policy;
+    # this adapter deliberately returns its artifact unchanged.
+    return artifact
 
 
 NON_INFERIORITY_POLICY_VERSION = "2026-09-05.1"
@@ -459,7 +567,8 @@ def non_inferior(
 ) -> bool:
     """True when the model-treated representation is non-inferior.
 
-    The model treatment destroys ``abs(evidence_alpha - evidence_model_treated)``
+    The model treatment destroys only a signed deterioration. Improvement is
+    never converted into destruction by an absolute value.
     of the alpha evidence. When the destruction exceeds the versioned
     tolerance the guard raises :class:`SignalDestructionConflict` — it never
     returns False silently, because returning False would let the caller
@@ -470,14 +579,30 @@ def non_inferior(
     normalized to its absolute value so "flipping sign" is detected as full
     destruction.
     """
+    if isinstance(evidence_alpha, bool) or isinstance(evidence_model_treated, bool):
+        raise InvalidContractError("non-inferiority evidence must be finite numeric values")
+    try:
+        finite = math.isfinite(float(evidence_alpha)) and math.isfinite(
+            float(evidence_model_treated)
+        )
+    except (TypeError, ValueError, OverflowError):
+        finite = False
+    if not finite:
+        raise InvalidContractError("non-inferiority evidence must be finite numeric values")
     if evidence_alpha == evidence_model_treated:
         return True
     base = abs(evidence_alpha)
     if base == 0.0:
-        # No positive alpha evidence to protect: the model treatment is not
-        # destroying any measurable signal.
+        if evidence_model_treated >= 0.0:
+            return True
+        raise SignalDestructionConflict(
+            "model treatment degrades a zero alpha baseline; relative "
+            "non-inferiority is undefined and cannot be auto-approved"
+        )
+    signed_destroy = evidence_alpha - evidence_model_treated
+    if signed_destroy <= 0.0:
         return True
-    relative_destroy = abs(evidence_alpha - evidence_model_treated) / base
+    relative_destroy = signed_destroy / base
     if relative_destroy > tolerance.max_relative_destroy:
         raise SignalDestructionConflict(
             f"model treatment destroys {relative_destroy:.2%} of the alpha "
@@ -503,9 +628,11 @@ __all__ = [
     "CanonicalAssetOverwriteError",
     "FeatureRepresentationArtifact",
     "register_feature_representation",
+    "write_feature_representation",
     "NonInferiorityTolerance",
     "NON_INFERIORITY_POLICY_VERSION",
     "DEFAULT_NON_INFERIORITY_TOLERANCE",
     "non_inferior",
     "SignalDestructionConflict",
+    "decide_representation",
 ]

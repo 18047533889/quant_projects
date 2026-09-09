@@ -58,9 +58,13 @@ from factor_optimizer.contracts.treatment_integrity import (
 )
 from factor_optimizer.errors import TreatmentIntegrityError
 from factor_optimizer.ports.factor_intelligence import (
+    DecisionProvider,
     FactorHealthView,
     HealthDimension,
     HealthGrade,
+    SelectionDecisionRequestView,
+    SelectionDecisionReceiptView,
+    require_bound_decision_receipt,
 )
 from factor_optimizer.search.desirability import desirability_for
 from factor_optimizer.search.pareto import ParetoFrontier, ParetoPoint
@@ -299,6 +303,8 @@ class DecisionResult:
     raw_kept: bool = False
     outcome: str = "IMPROVED"
     fitness_artifacts: Tuple[CandidateFitnessArtifact, ...] = ()
+    authoritative: bool = False
+    purpose: str = "SCREENING_DIAGNOSTIC"
 
 
 # ---------------------------------------------------------------------------
@@ -337,20 +343,23 @@ _HEALTH_TO_BALANCED = {
 
 
 class TreatmentDecisionPolicy:
-    """Formal 8-step treatment-selection pipeline (scalar + health-dimension).
+    """Treatment-selection facade with one formal and two diagnostic paths.
 
     Two construction modes:
 
-    - Legacy scalar mode (``decide()``): built with ``DesirabilityAnchors`` +
-      ``WinnerPolicy`` and scores the hard-coded 8 RAW metrics.  Kept
-      byte-for-byte for backward compatibility; deprecated as the production
-      scoring authority (the health-dimension path is authoritative).
-    - Generalized health-dimension mode (``decision()``): built with a
+    - Legacy scalar screening mode (``decide(..., screening_only=True)``):
+      built with ``DesirabilityAnchors`` + ``WinnerPolicy`` and scores the
+      hard-coded 8 RAW metrics.
+    - Generalized health-dimension screening mode
+      (``decision(..., screening_only=True)``): built with a
       :class:`FactorFitnessSpec` + :class:`WinnerPolicy`; consumes FA
       ``FactorHealthView`` 14-dim grades per candidate, applies dimension
       floors / evidence-tier gates declared by the spec, computes RAW-relative
       deltas over the health dimensions, and runs the same Pareto / uncertainty
       / robust-utility / near-equivalence steps.
+    - Formal selection (``authoritative_decision(request)``): delegates the
+      complete decision to the injected FA provider and verifies that its
+      receipt is exactly bound to the request.
     """
 
     def __init__(
@@ -361,6 +370,7 @@ class TreatmentDecisionPolicy:
         *,
         fitness_spec: Optional[FactorFitnessSpec] = None,
         require_integrity_evidence: bool = True,
+        decision_provider: Optional[DecisionProvider] = None,
     ):
         # Exactly one scoring authority: legacy anchors OR generalized spec.
         if (anchors is None) == (fitness_spec is None):
@@ -385,6 +395,24 @@ class TreatmentDecisionPolicy:
         self.policy = policy
         self.uncertainty_config = uncertainty_config or UncertaintyConfig()
         self.require_integrity_evidence = require_integrity_evidence
+        if decision_provider is not None and not isinstance(
+            decision_provider, DecisionProvider
+        ):
+            raise TypeError("decision_provider must implement DecisionProvider")
+        self.decision_provider = decision_provider
+
+    def authoritative_decision(
+        self, request: SelectionDecisionRequestView
+    ) -> SelectionDecisionReceiptView:
+        """Delegate final selection to FA and verify exact request binding.
+
+        FO deliberately performs no grade mapping, thresholding, Pareto
+        pruning, or utility recomputation on this path.
+        """
+        if self.decision_provider is None:
+            raise ValueError("an FA DecisionProvider is required for final selection")
+        receipt = self.decision_provider.decide(request)
+        return require_bound_decision_receipt(request, receipt)
 
     # -- mode helpers --------------------------------------------------------
 
@@ -783,13 +811,18 @@ class TreatmentDecisionPolicy:
         integrity_evidence: Optional[
             Mapping[str, TreatmentIntegrityEvidence]
         ] = None,
+        screening_only: bool = False,
     ) -> DecisionResult:
-        """Run the full 8-step pipeline and return the winner (SCALAR MODE).
+        """Run the local scalar pipeline as an explicit screening diagnostic.
 
-        Deprecated compatibility layer (R61-FI-032): the production scoring
-        authority is the health-dimension :meth:`decision` path.  Existing
-        callers and tests keep using ``decide`` byte-for-byte.
+        The returned winner is never formal selection authority. Production
+        selection must use :meth:`authoritative_decision`.
         """
+        if not screening_only:
+            raise ValueError(
+                "legacy decide() is screening-only; formal selection requires "
+                "authoritative_decision(request)"
+            )
         if self._generalized:
             raise TypeError(
                 "decide() is the legacy scalar path; this policy was built "
@@ -912,8 +945,9 @@ class TreatmentDecisionPolicy:
         integrity_evidence: Optional[
             Mapping[str, TreatmentIntegrityEvidence]
         ] = None,
+        screening_only: bool = False,
     ) -> DecisionResult:
-        """Run the 8-step pipeline consuming FA health dimensions (AUTHORITATIVE).
+        """Run the local health-dimension pipeline as a screening diagnostic.
 
         ``candidates`` are :class:`HealthDecisionInput` objects carrying a FA
         ``FactorHealthView`` (14-dim grades).  The pipeline:
@@ -928,10 +962,15 @@ class TreatmentDecisionPolicy:
         STEP 7  robust utility.
         STEP 8  near-equivalence.
 
-        The RAW baseline is always kept as a candidate; a RAW winner is
+        The RAW baseline is always kept as a candidate; a diagnostic RAW winner is
         reported via ``outcome`` and its fitness artifact so the caller can
         produce the RAW factor body (R61-FI-033).
         """
+        if not screening_only:
+            raise ValueError(
+                "local health decision() is screening-only; formal selection "
+                "requires authoritative_decision(request)"
+            )
         if not self._generalized:
             raise TypeError(
                 "decision() is the generalized health-dimension path; this "

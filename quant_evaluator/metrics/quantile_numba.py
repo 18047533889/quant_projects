@@ -211,13 +211,17 @@ def assign_quantiles_numba(
     # Validate tie policy
     from quant_evaluator.contracts.quantile_policy import validate_tie_policy
     policy = validate_tie_policy(method)
-
+    from quant_evaluator.metrics.quantile import _validate_quantile_count
+    _validate_quantile_count(n_quantiles)
+    original_ndim = values.ndim
+    if original_ndim not in (2, 3):
+        raise ValueError("quantile input must be T x N or T x N x F")
     if values.ndim == 2:
         values = values[:, :, np.newaxis]
 
     quantiles = _assign_quantiles_jit(values, n_quantiles, policy.value)
 
-    return quantiles[:, :, 0] if quantiles.shape[2] == 1 else quantiles
+    return quantiles[:, :, 0] if original_ndim == 2 else quantiles
 
 
 def compute_quantile_returns_numba(

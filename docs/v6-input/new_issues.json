@@ -1,0 +1,415 @@
+{
+  "head": "2bac7209c00e302728b810513c91f5475ec6954f",
+  "kind": "addendum_not_v5_replay",
+  "issues": [
+    {
+      "id": "X01",
+      "title": "风格暴露与纯度没有真正使用待评估因子",
+      "priority": "P0",
+      "evidence": "D/S：函数行为及指标含义冲突",
+      "sources": [
+        "S01"
+      ],
+      "boundary": "compute_style_exposure_evidence / compute_size_exposure / compute_purity_ratio / compute_exposure_evidence",
+      "newness": "V5要求风险评价与因子身份相绑定；本轮新增的是具体计算对象错误，不重复分派中性化或空门槛整改。",
+      "observation": "ExposurePanel定义为证券级(T,N,K)风险解释变量。风格函数对该面板直接求均值；purity以各风格均值平方与面板方差计算。综合入口虽接收factor_values，但这些风格/纯度字段不使用它。同一个风险面板会给完全不同的待评因子同样结果。",
+      "example": "风险size变量均值0、方差>0；令待评因子x=size。当前size_exposure=0、purity_ratio=1；但x实际上完全由size解释。P01验证此反例。",
+      "change": [
+        "区分SecurityExposurePanel、FactorLoadingSeries、PortfolioExposureSeries，优先扩展现有类型；不能把风险解释变量当已计算的因子暴露。",
+        "信号暴露至少输入因子值、风险面板、当时有效mask、权重和时间/证券坐标；调用已有回归/相关内核输出逐日期×因子×风格的结果。",
+        "组合暴露使用真实目标/持仓权重与风险面板，例如w^T Z；信号回归系数不能冒充组合风险。",
+        "风格解释度可明确为含截距、同样本/同权重回归的R²；剩余方差比只在总方差>0且模型适用时定义。高维拟合、正则方法及负样本外R²必须另作解释，不盲目截成完美纯度。",
+        "如仍保留风险面板均值/方差，改名为context统计，不进入某个因子的纯度/中性化通过证据。"
+      ],
+      "tests": [
+        "x=Z_size应显示高size解释度；与size正交的x结果应不同。",
+        "仅换待评因子而保持风险面板不变，证据应跟随因子变化。",
+        "把风险变量平移或换单位，规范化暴露/解释度应遵循已声明的不变性；常数因子不返回完美纯度。",
+        "从公开评价到FA风险标签检查字段来源，防止正确新函数无人调用。"
+      ],
+      "migration": "仅失效依赖错误风格/纯度定义的评价、标签和准入；若生产中根本未消费这些字段，保留范围证明，不宣称全库受影响。",
+      "dependencies": [],
+      "status": "TO_VERIFY_IN_IMPLEMENTER_CHECKOUT"
+    },
+    {
+      "id": "X02",
+      "title": "替代性检测可能把明显互补的因子认作可替代",
+      "priority": "P0",
+      "evidence": "D：判断分支与所声明关系相反",
+      "sources": [
+        "S02",
+        "S03"
+      ],
+      "boundary": "detect_substitutable_factors / compute_substitution_effect",
+      "newness": "V5已区分冗余和增量。本轮新增对现有替代检测函数的具体反例。",
+      "observation": "替代评分为|IC组合|/max(|IC_A|,|IC_B|)，达到默认0.9便入可替代列表。没有接近1的上界，也没有执行docstring所称的高相关检查。组合改善越大，越容易被判为可替代。",
+      "example": "A与B正交，y=A+B，两个单独IC均约0.7071，组合IC约1，ratio≈1.4142，仍通过“替代”门。P02。",
+      "change": [
+        "用有类型关系证据分别表示近重复、可替换、互补、权衡、未知；相似性与效用差不得折成同一个单向ratio。",
+        "复用QE共同样本配对比较：对冻结方向、冻结基准及组合配方计算净效用或IC差值；替代要满足用途相关的等价/非劣与可替代性条件。",
+        "互补不是要求IC相加后超加性；相关系数不是可直接相加的收益贡献。组合权重、标准化和符号全部属于配方。",
+        "批量检测只接候选pair清单和预算，避免在所有F上无条件双重循环；不再复制第三份IC和标准化数学。"
+      ],
+      "tests": [
+        "正交互补反例不得被当作无增量近重复删除。",
+        "A与A同样本近等价；A与-A按冻结方向处理，不能用日后绝对值翻转掩盖关系。",
+        "弱信号分母接近0时不输出巨大替代分数。",
+        "关系字段消费端只按被授权用途决策。"
+      ],
+      "migration": "重算使用该判据产生的替代/去重决定。相同数学定义的原始因子值无须重新落值。",
+      "dependencies": [],
+      "status": "TO_VERIFY_IN_IMPLEMENTER_CHECKOUT"
+    },
+    {
+      "id": "X03",
+      "title": "边际贡献把样本变化误计成新因子信息",
+      "priority": "P0",
+      "evidence": "D/S：比较口径不一致",
+      "sources": [
+        "S02",
+        "S03",
+        "S06"
+      ],
+      "boundary": "compute_marginal_contribution / compute_substitution_effect / compute_complementarity_score",
+      "newness": "V5有共同样本原则；本轮给出违反该原则的实际函数位置和可重复反例。",
+      "observation": "基准IC在baseline有效样本计算，加入候选后的IC在更小joint样本计算，两者直接相减；两因子互补函数也可能将各自样本的IC与交集上的组合IC比较。条件IC还先用标签是否finite影响分组，标签validity又稍后处理，分组样本与实际计数不一致。",
+      "example": "64只证券的基准全样本IC≈0，前32只IC=1。候选只在前32只存在且值恒定；联合IC=1，于是旧边际贡献≈1，但共同32只样本的实际增量=0。候选可用性可能有分组信息，应单独评价，不能冒充连续因子值的新增预测。P03。",
+      "change": [
+        "在同一pair/factor-set comparison中先生成共同样本身份；基准、候选和组合都在该样本重新计算。",
+        "同时保留native deployment范围结果，明确coverage/value/missing-indicator三类贡献；不能只看交集而忽略真实覆盖损失。",
+        "条件分组若声明为决策时可见分组，只用当时conditioning值与有效性形成；事后标签联合过滤只影响评估与n_joint，不能重新定义交易群体。",
+        "按T×F×Q输出实际评价有效数，而不是用T×Q分组总人数代替每个被测因子的有效样本。"
+      ],
+      "tests": [
+        "恒定on-support候选的共同样本增量=0，同时输出覆盖差异。",
+        "把无效标签的物理存储从有限值改NaN，不得不经说明地改变其他合法样本的分组/结果。",
+        "候选覆盖一致时，成对结果与各自原结果一致。"
+      ],
+      "migration": "只重算受影响comparison及依赖它的替代/互补准入；真实可用性信号可另建明确recipe验证，不应一概删除。",
+      "dependencies": [
+        "X02"
+      ],
+      "status": "TO_VERIFY_IN_IMPLEMENTER_CHECKOUT"
+    },
+    {
+      "id": "X04",
+      "title": "加入无关缺失因子，会让原本有效的相关性消失",
+      "priority": "P0",
+      "evidence": "D：不相关候选破坏pairwise统计",
+      "sources": [
+        "S04"
+      ],
+      "boundary": "compute_correlation_matrix(cross_sectional=True)",
+      "newness": "不是V5已列GPU mask问题，而是CPU交互相关矩阵的全F预筛。",
+      "observation": "日期级预门槛使用np.all(isfinite(values_t),axis=1)，要求所有F列同时有效；后续虽按pairwise算相关，整个日期已可能被提前跳过。",
+      "example": "A、B在64只证券都有数据且相关≈1。追加一列全NaN的C，日期级有效数从64变0，A/B相关也不再计算。P04。",
+      "change": [
+        "删除跨所有候选F的门槛；每一对按其自己的joint mask、有效资产数和有效日期数计算。",
+        "如某用途确需统一完整样本，显式设listwise policy与命名scope，不能挂在pairwise指标下面。",
+        "批量计划固定pair身份、窗口和mask；F分片、候选顺序和加入无关列不得改变既有pair。"
+      ],
+      "tests": [
+        "追加全缺失列、交换候选次序、分批合并，既有A/B结果和有效计数一致。",
+        "常数相关定义为不适用或未定义，而不是对角线1即宣称有可用信息。",
+        "不在十万规模构造T×F×F dense结果；走已有候选稀疏pair路径。"
+      ],
+      "migration": "只失效被错误日期筛选影响的相似边/簇版本，不因修一条pair便全部重聚类。",
+      "dependencies": [],
+      "status": "TO_VERIFY_IN_IMPLEMENTER_CHECKOUT"
+    },
+    {
+      "id": "X05",
+      "title": "泛化对比用np.resize把少量或空证据变成完整数组",
+      "priority": "P0",
+      "evidence": "D：输入身份与值被静默改变",
+      "sources": [
+        "S05"
+      ],
+      "boundary": "compute_validation_retention_array / compute_generalization_deltas / build_train_validation_artifact",
+      "newness": "V5未具体定位这里的数组循环补值；不是重复分派一般轴对齐。",
+      "observation": "将两侧reshape(-1)，取最长长度，再np.resize到同长。短数组会循环复制；空数值数组会产生零。形状合法后，错配可能无法从最终制品发现。",
+      "example": "train有三个因子，valid=[0.08,0.16]，结果被扩成[0.08,0.16,0.08]；空valid可成为[0,0,0]。第三个因子没有证据却被填出数值。P05。",
+      "change": [
+        "按factor_id、factor_version、metric_instance与split refs显式对齐。长度不一且没有合法映射时拒绝，不允许reshape抹掉轴。",
+        "允许集合对齐时，输出每项缺失与未测量原因；不将None/空数组变成0。",
+        "单因子标量与多因子向量采用不同显式合同。需要广播的context参数可以广播，评价结果不能广播。"
+      ],
+      "tests": [
+        "3对2、空对非空、相同长度不同顺序、T×F误输入均有明确验证结果。",
+        "同一因子的证据不得循环复制给另一个factor_id。"
+      ],
+      "migration": "识别由这种补值产生的generalization artifact；已知明确映射的正常等长结果可保留。",
+      "dependencies": [],
+      "status": "TO_VERIFY_IN_IMPLEMENTER_CHECKOUT"
+    },
+    {
+      "id": "X06",
+      "title": "泛化置信区间的样本单位错成了因子数量",
+      "priority": "P0",
+      "evidence": "S：统计估计对象错误",
+      "sources": [
+        "S05"
+      ],
+      "boundary": "_confidence_band / build_train_validation_artifact",
+      "newness": "V5配对CI原则之外的新定位：该函数把每因子一个汇总值当成置信区间样本。",
+      "observation": "构造器输入明确为每因子一条summary，_confidence_band直接在这些值之间估计标准误并返回一个公共区间。它没有该因子的日度/fold序列，无法证明单因子时间泛化不确定性。",
+      "example": "两因子summary计算CI约[-0.0286,1.8286]；把同样两行重复100次，不增加一天市场样本，CI变成约[0.8342,0.9658]。P06。",
+      "change": [
+        "单因子区间必须消费该因子的时间块、fold或同方案抽样分布及有效样本数；输出factor_id×comparison的区间。",
+        "只有一个summary时输出CI_NOT_IDENTIFIED_FROM_SUMMARY，不制造时间置信度；也不因只有一个因子就否定已有日度证据。",
+        "若要报告库级横截面描述，使用独立metric ID并说明样本单位/相关家族，不能给每个因子套同一区间。",
+        "强制维护block draw IDs与n_time/n_fold/n_factor，防止shape正确而统计单位错误。"
+      ],
+      "tests": [
+        "复制其他因子、添加无关候选不能缩窄当前因子的时间区间。",
+        "增加独立时间证据才可按模型假设改变其精度；别名不增加样本量。",
+        "库级描述区间与单因子准入证据类型不可互换。"
+      ],
+      "migration": "重算/撤销错误CI对应的证据等级与准入，不必改已有正确点估计。",
+      "dependencies": [
+        "X05"
+      ],
+      "status": "TO_VERIFY_IN_IMPLEMENTER_CHECKOUT"
+    },
+    {
+      "id": "X07",
+      "title": "验证均值为零时，保留率区间错误收缩成[0,0]",
+      "priority": "P1",
+      "evidence": "D：delta-method代数在零分子处错误退化",
+      "sources": [
+        "S05"
+      ],
+      "boundary": "_confidence_band",
+      "newness": "与X06不同：即使将来输入轴修对，这个公式本身仍有零分子边界错误。",
+      "observation": "公式先用SE_valid/max(|mean_valid|,epsilon)，最后乘|mean_valid/mean_train|。当mean_valid=0，最后一步使所有不确定性乘成0。",
+      "example": "train=[.1,.1,.1]，valid=[-.02,0,.02]；验证样本有方差，旧CI仍为[0,0]。示例只验证代数，不把三点正态近似称有效95%置信检验。P07。",
+      "change": [
+        "若保留delta method，直接用ratio梯度计算方差：Var(V)/mu_T² + mu_V² Var(T)/mu_T⁴ − 2 mu_V Cov(T,V)/mu_T³。不得通过乘零掩盖分子不确定性。",
+        "均值、方差、协方差的估计依正确样本单位和时间依赖而定，不能假设两个时期必然独立。",
+        "分母接近零时返回不稳定或使用预声明的替代推断；仍可报告绝对差与其区间，不临时放大epsilon造有限值。"
+      ],
+      "tests": [
+        "零验证均值但非零方差时，区间不得零宽。",
+        "验证均值从正、零到负连续变化，结果不因epsilon产生不合理断裂。",
+        "分母零/接近零有独立状态，不能称完全确定。"
+      ],
+      "migration": "在修复X06的同一统计PR处理此公式，但保留独立边界测试。",
+      "dependencies": [
+        "X06"
+      ],
+      "status": "TO_VERIFY_IN_IMPLEMENTER_CHECKOUT"
+    },
+    {
+      "id": "X08",
+      "title": "同日拟合标签得到的base_ic不能当作样本外预测增量",
+      "priority": "P1",
+      "evidence": "G/S：合法诊断被误用的接口风险",
+      "sources": [
+        "S06"
+      ],
+      "boundary": "compute_incremental_ic / compute_partial_ic",
+      "newness": "V5已说残差IC是线索；本轮确认base_ic的拟合方式，要求从类型上防误用。",
+      "observation": "每个日期用当日横截面的future labels拟合beta_label，再在同一横截面计算base_pred与label的相关。这是同样本拟合关联，不是模型在事前预测出的信号。partial correlation作为事后描述可以合法保留，不应简单说整个函数必须删除。",
+      "example": "64个独立随机标签、20个随机解释变量的隔离例子，同样本拟合IC≈0.519；独立4096样本IC≈-0.0114。它只是说明in-sample fit不能认证OOS效果，不是项目实测。P08。",
+      "change": [
+        "现有partial/residual统计标记SAME_DATE_DESCRIPTIVE，记录拟合标签用途与信息集；名称别叫可交易base prediction。",
+        "新增/替换的模型效用证据必须消费训练内fit、开发验证上predict的真实预测制品，再由QE计算比较。",
+        "FA准入明确哪些用途可接受描述性筛查，哪些必须OOS_MODEL_DELTA；禁止仅因字段名incremental便升级。",
+        "穿透真实调用者：若生产已经正确隔离，只补类型/调用测试关闭风险，不重训所有模型。"
+      ],
+      "tests": [
+        "随机标签的样本内高拟合不能触发生产增量准入。",
+        "增加控制列可能提高样本内base_ic，但不能自动提高证据等级。",
+        "该函数作为partial association仍允许运行，不误伤合法诊断。"
+      ],
+      "migration": "只有存在误消费才失效依赖准入；目前未证明所有生产入口会这样用。",
+      "dependencies": [],
+      "status": "TO_VERIFY_IN_IMPLEMENTER_CHECKOUT"
+    },
+    {
+      "id": "X09",
+      "title": "相关控制因子使残差评价奇异、静默跳过或留下数值噪声",
+      "priority": "P1",
+      "evidence": "D/G：确定性奇异分支及数值稳健性缺口",
+      "sources": [
+        "S06"
+      ],
+      "boundary": "compute_incremental_ic：np.linalg.solve(X.T@X,...)",
+      "newness": "V5未具体定位该交互回归分支；保留已有FE/QE数值权威，不另建回归系统。",
+      "observation": "用正规方程求解，遇LinAlgError直接continue；相关/重复控制正是因子库常见输入。只检查残差std>0也不能区分真正剩余信息与浮点投影误差。",
+      "example": "两列相同control使XtX奇异，但它们定义的控制子空间与只保留一列相同，投影残差仍可由rank-aware least squares稳定获得。P09。",
+      "change": [
+        "复用现有QR/SVD/rank-aware solver；允许明确的冗余列处理或受控拒绝，报告rank、effective_df和condition diagnostics。",
+        "样本门槛不仅min_assets，还须考虑控制秩及剩余自由度；K接近N时不得形成看似可靠的偏相关。",
+        "残差方差使用与原尺度、dtype和solver误差相配的门槛；真无剩余方差返回NO_RESIDUAL_VARIANCE，而非相关极高的舍入噪声。",
+        "method=spearman须明确：原值残差的Spearman，与先rank后回归的partial Spearman并非同一个定义，需分ID或文档收口。"
+      ],
+      "tests": [
+        "重复一个control不改变其控制子空间下结果，或明确返回冗余输入诊断。",
+        "全行业dummy+intercept、共线、K≥N、极大均值小方差、恰好可解释目标分别测试。"
+      ],
+      "migration": "只重算此前因奇异/残差噪声受影响的条件证据。改变regularization是新方法版本，不能静默改历史定义。",
+      "dependencies": [],
+      "status": "TO_VERIFY_IN_IMPLEMENTER_CHECKOUT"
+    },
+    {
+      "id": "X10",
+      "title": "MMR把缺少质量证据的因子赋予候选数量级高分",
+      "priority": "P1",
+      "evidence": "D/S：缺失回退与质量标度冲突",
+      "sources": [
+        "S07"
+      ],
+      "boundary": "_diverse_mmr_rank.quality",
+      "newness": "V5已修/保留None相似度拒绝；本轮不是重复该项，而是quality缺失的另一条回退。",
+      "observation": "显式quality采用调用方数值，缺失时使用len(assets)-recency_rank。于是同一排序混用quality分数与候选数量。候选越多，缺证据者的回退值可能越大。",
+      "example": "三个候选中，缺quality者得到3，另两个真实quality为0.9/0.8，在相同相似度下缺证据者优先。P10。",
+      "change": [
+        "质量值绑定定义、单位、同用途标度、证据引用和policy。生产缺必需quality应补测/隔离，不用新鲜度冒充质量。",
+        "若研究用户明确选择按recency选，则提供单独MANUAL/RECENCY策略并标其证据范围；不能默默进入MMR。",
+        "批次大小、candidate order、分页合并不应更改同一因子的quality。"
+      ],
+      "tests": [
+        "复制候选、加入无关候选不抬高缺证据对象quality。",
+        "同metric不同标度必须显式转换；无转换不比较。"
+      ],
+      "migration": "追踪使用回退quality选择的集合，不重算原始因子。",
+      "dependencies": [],
+      "status": "TO_VERIFY_IN_IMPLEMENTER_CHECKOUT"
+    },
+    {
+      "id": "X11",
+      "title": "MMR对NaN/Inf等相似度仍可静默丢候选",
+      "priority": "P1",
+      "evidence": "D：非法相似数值缺少边界处理",
+      "sources": [
+        "S07"
+      ],
+      "boundary": "_diverse_mmr_rank.similarity_value / greedy loop",
+      "newness": "None已被显式拒绝，此处只补剩余NaN/Inf/bool/值域路径。",
+      "observation": "similarity_value拒绝None后直接abs(float(value))。NaN进入max与mmr，比较不成立时best_asset可能保持None，循环break，结果不一定给出相应失败状态。",
+      "example": "先选A，对B得到NaN相似度，B从最终结果消失但没有产生“未知/非法相似度”的明确结果。P11。",
+      "change": [
+        "严格检查数值非bool、finite及当前similarity definition的有效域；合法带符号相关可按声明转幅度，但必须保留方向来源。",
+        "类型化SimilarityArtifact还要校验pair IDs、definition/窗口/股票池/数据版本和valid状态。",
+        "未知可追加测量或按显式研究政策隔离；不得等同0，也不得只break悄悄返回短集合。"
+      ],
+      "tests": [
+        "None、NaN、±Inf、bool、越界值与声明合法负相关逐项测试。",
+        "任何候选未入选都有解释：质量、约束、冗余、未知或失败，不凭Python浮点比较消失。"
+      ],
+      "migration": "仅核查含非法相似值的装配批次；保留已正确的None拒绝。",
+      "dependencies": [],
+      "status": "TO_VERIFY_IN_IMPLEMENTER_CHECKOUT"
+    },
+    {
+      "id": "X12",
+      "title": "MMR完整排序重算历史相似度，呈立方调用增长",
+      "priority": "P1",
+      "evidence": "D/G：静态可见的资源复杂度与配置未下推",
+      "sources": [
+        "S07"
+      ],
+      "boundary": "_diverse_mmr_rank / FactorSetAssembler.assemble",
+      "newness": "V5主要处理GPU/输出有界性；本轮新增FA候选选择层的CPU/证据provider瓶颈。",
+      "observation": "while remaining下，对所有剩余候选再次遍历全部selected。完成整个F排序后才应用max_factors。即使最终只取100个，前面仍执行全量循环。无缓存时provider调用数为Σk(F−k)=F(F−1)(F+1)/6。",
+      "example": "F=20实际循环1330次；F=100000公式推导为166666666650000次。该数字是代码结构推导，不是实际十万次基准耗时。P12。",
+      "change": [
+        "把max_factors和可行约束传入选择器，选够K即可停，不先完整排序。",
+        "每个候选缓存当前max_redundancy；新增一个合格成员后，仅更新对这个成员的相似度，降到约O(FK)次比较。",
+        "同一pair+spec+snapshot缓存正规证据，可批量QE refine；不因减少调用去掉未知状态验证。",
+        "若K很大仍代价高，先限定可比较集/簇代表和预算，记录近似性质，不假称全库最优。"
+      ],
+      "tests": [
+        "计数测试证明复杂度与K而非全F立方相关；K=1无需任何pair provider调用。",
+        "小规模结果与既定贪心金标一致；中断、缓存、分批不会变更最终已承诺集合。"
+      ],
+      "migration": "主要是执行计划优化；数值和选择合同不变时不失效历史结果，修正约束算法则按X13版本化。",
+      "dependencies": [
+        "X10",
+        "X11"
+      ],
+      "status": "TO_VERIFY_IN_IMPLEMENTER_CHECKOUT"
+    },
+    {
+      "id": "X13",
+      "title": "先MMR排序再套约束，使被剔除因子仍影响其他候选",
+      "priority": "P1",
+      "evidence": "S/G：约束贪心选择与现有后过滤不等价",
+      "sources": [
+        "S07"
+      ],
+      "boundary": "assemble：_rank → _apply_policy_constraints → _apply_family_constraints → truncate",
+      "newness": "不是V5已有micro/macro字段混用，而是约束施加的执行顺序。",
+      "observation": "完整MMR排序把暂时选入但最终因family cap淘汰的因子也加入selected，其他候选因与它相似被惩罚。后过滤不能撤销这个惩罚。现有方法可以是明示的启发式，但不能当成在最终可行集合上的MMR目标。",
+      "example": "A/B同族且限1个。完整顺序A,B,D,C；删B后取2个成A,D。B原本不可选，正确的可行贪心第二步应比较C/D并选C，得到A,C。P13。",
+      "change": [
+        "在每次选择之前检查当前微簇/宏组/血缘/资源预算是否可行，只有真正入选成员才更新冗余状态。",
+        "配额和硬约束引用现有FA政策，不由选择器再造一套；已拒成员不进入相似惩罚集合。",
+        "输出目标值、约束余量和拒绝原因；不把约束贪心称全局最优。",
+        "纯后处理仅用于不会影响前序评分的格式/展示操作。"
+      ],
+      "tests": [
+        "给定反例必须A,C；删掉不可行的B不应改变可行贪心结果。",
+        "约束次序、输入排列、并列tie-break和资源限制有确定政策。"
+      ],
+      "migration": "重新评审受后过滤惩罚影响的特征集合，只有实际成员/函数改变才触发相应模型重新验证。",
+      "dependencies": [
+        "X12"
+      ],
+      "status": "TO_VERIFY_IN_IMPLEMENTER_CHECKOUT"
+    },
+    {
+      "id": "X14",
+      "title": "分阶段调度器接受未到达阶段的成功结果",
+      "priority": "P0",
+      "evidence": "D/G：局部状态机可跳级；生产可达性待穿透",
+      "sources": [
+        "S08"
+      ],
+      "boundary": "TieredEvaluationScheduler.advance / tier_for / to_dict/from_dict",
+      "newness": "V5有多保真调度原则，本轮具体定位未验证当前stage及结果身份的状态转换。",
+      "observation": "advance通过外部tier_name找到idx，但没有与候选_at中的真实阶段核对。新候选可直接提交Tier4 success得到completed；passed也未在该入口严格要求bool，重复成功没有evidence/outcome身份去重。",
+      "example": "保存状态Tier1，对advance提供Tier4与True，按当前分支可直接进入completed。P14只重放该决策分支，不证明主Runner一定允许外部调用这样做。",
+      "change": [
+        "结果必须绑定实际issued_job、candidate/recipe版本、stage、evaluation_ref、attempt及outcome_id，逐项核对当前状态。",
+        "严格布尔/类型化pass结果；禁止字符串false因truthiness算成功。",
+        "结果重复投递幂等；滞后的低tier消息不能回退状态或重复计数；终态不可被旧消息重新激活。",
+        "连续通过次数需预声明证据独立性，同一数据/同一评价ref重复调用不增加“多次确认”。复用已有任务事务和ledger。"
+      ],
+      "tests": [
+        "Tier1→直接Tier4被拒；错误recipe、错job、重复outcome、false字符串、完成后旧事件、重启后重放逐项测试。",
+        "若上游已不可绕过地保护，保留该调用链证明并加边界测试，不重复实现另一个调度器。"
+      ],
+      "migration": "核查异常跳级/重复确认对应trial；无发生证明则只改边界，不自动撤销全部优化成果。",
+      "dependencies": [],
+      "status": "TO_VERIFY_IN_IMPLEMENTER_CHECKOUT"
+    },
+    {
+      "id": "X15",
+      "title": "模型表示防覆盖检查混淆了来源引用和写入目标",
+      "priority": "P1",
+      "evidence": "D/G：被检查的身份字段不对应保护目标",
+      "sources": [
+        "S09"
+      ],
+      "boundary": "FeatureRepresentationArtifact.__post_init__ / register_feature_representation",
+      "newness": "与V5的非劣性和归一化OR/AND不同，这是模型表示的父引用/目标身份边界。",
+      "observation": "代码因canonical_factor_ref带factor_asset:前缀而拒绝，理由是不能覆盖原始资产；但canonical_factor_ref是来源。实际新对象artifact_id没有相同的目标命名空间检查。",
+      "example": "parent=factor_asset:alpha_v1、destination=model_representation:x会因来源前缀失败；destination=factor_asset:alpha_v1配不带该前缀的来源字符串，则不会被这段检查拦住。P15不涉及任何真实写盘，不能据此声称已经覆盖资产。",
+      "change": [
+        "用现有typed ref明确source canonical factor与destination representation。来源允许且应解析到合法canonical资产。",
+        "目标必须属于模型表示身份域且不能覆盖canonical对象；在实际writer上再次校验解析后存储地址/对象generation，而不是只做前缀。",
+        "若合法来源使用另一种ref协议，显式建resolver和domain验证，不能让名称相似的字符串承担读写语义。",
+        "合法来源关系、recipe及state原样保留，不为了过guard删除父因子血缘。"
+      ],
+      "tests": [
+        "合法父资产与新表示目标通过；canonical目标、别名指向canonical存储、错父资产或跨版本来源拒绝。",
+        "只创建制品与真实写盘分开验收，失败不覆盖已有对象。"
+      ],
+      "migration": "检查因此被阻断/误登记的模型表示；不重新落原始因子，也不声称未执行的写盘事故。",
+      "dependencies": [],
+      "status": "TO_VERIFY_IN_IMPLEMENTER_CHECKOUT"
+    }
+  ]
+}

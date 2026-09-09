@@ -40,6 +40,7 @@ NOVELTY_SCORE_KEY = "novelty_score"
 NUM_VALID_PERIODS_KEY = "num_valid_periods"
 
 DEFAULT_MIN_PERIODS = 20
+SAME_DATE_DESCRIPTIVE = "SAME_DATE_DESCRIPTIVE"
 
 # Below this |total_ic| the ratio is numerically meaningless; the score
 # then depends only on whether any residual signal exists at all.  IC
@@ -73,6 +74,7 @@ class ResidualICNoveltyProducer:
         min_periods: int = DEFAULT_MIN_PERIODS,
         method: str = "pearson",
         min_assets: int = 30,
+        allow_same_date_descriptive: bool = False,
     ):
         """
         Initialize producer.
@@ -92,11 +94,17 @@ class ResidualICNoveltyProducer:
         self._min_periods = min_periods
         self._method = method
         self._min_assets = min_assets
+        self._allow_same_date_descriptive = bool(allow_same_date_descriptive)
 
     @property
     def min_periods(self) -> int:
         """Minimum finite-period count required to emit a signal."""
         return self._min_periods
+
+    @property
+    def estimation_scope(self) -> str:
+        """Scope of the QE statistic; consumers must not upgrade it to OOS."""
+        return SAME_DATE_DESCRIPTIVE
 
     def compute_signals(
         self,
@@ -140,6 +148,11 @@ class ResidualICNoveltyProducer:
                 "test_factor_idx cannot appear in base_factor_indices "
                 "(self-residualization)"
             )
+
+        # This adapter feeds an admission decision. QE's same-date residual
+        # association is a legitimate diagnostic, but never OOS model evidence.
+        if not self._allow_same_date_descriptive:
+            return None
 
         incremental_ic, _base_ic, total_ic = _qe_compute_incremental_ic(
             factor_batch,

@@ -113,6 +113,7 @@ class PromotionReasonCode(str, Enum):
     DUPLICATE_OF_EXISTING_MEMBER = "duplicate_of_existing_member"
     MERGE_SUGGESTED = "merge_suggested"
     LINEAGE_NOT_REACHABLE = "lineage_not_reachable"
+    UNCERTIFIED_EVIDENCE = "uncertified_evidence"
 
 
 def _finite_float(value: object, label: str, *, allow_none: bool) -> Optional[float]:
@@ -158,6 +159,11 @@ class CandidateEvaluationRef:
     #: (``TreatmentOptimizationResultArtifact`` / ``library_snapshot_ref``)
     #: that produced the candidate's winning treatment.
     treatment_optimization_ref: Optional[str] = None
+    factor_definition_id: Optional[str] = None
+    factor_value_ref: Optional[str] = None
+    config_hash: Optional[str] = None
+    health_card_ref: Optional[str] = None
+    metric_versions: tuple[tuple[str, str], ...] = ()
 
     def __post_init__(self) -> None:
         if not self.candidate_ref:
@@ -175,10 +181,14 @@ class CandidateEvaluationRef:
             raise ValueError("evidence_status must be a non-empty string or None")
         if not isinstance(self.return_basis, str) or not self.return_basis:
             raise ValueError("return_basis must be a non-empty string")
-        for name in ("evidence_ref", "evaluation_ref", "treatment_optimization_ref"):
+        for name in ("evidence_ref", "evaluation_ref", "treatment_optimization_ref", "factor_definition_id", "factor_value_ref", "config_hash", "health_card_ref"):
             value = getattr(self, name)
             if value is not None and (not isinstance(value, str) or not value):
                 raise ValueError(f"{name} must be a non-empty string or None")
+        versions = tuple((str(metric), str(version)) for metric, version in self.metric_versions)
+        if len({metric for metric, _ in versions}) != len(versions):
+            raise ValueError("metric_versions must not contain duplicate metric ids")
+        object.__setattr__(self, "metric_versions", versions)
 
     @classmethod
     def from_dict(cls, data: Mapping[str, object]) -> "CandidateEvaluationRef":
@@ -191,12 +201,17 @@ class CandidateEvaluationRef:
         return cls(
             candidate_ref=str(data["candidate_ref"]),
             rank_ic=data.get("rank_ic"),
-            label_maturity=data.get("label_maturity", True),
+            label_maturity=data.get("label_maturity", False),
             evidence_status=_optional_str("evidence_status"),
             return_basis=data.get("return_basis", VWAP_TO_VWAP_BASIS),
             evidence_ref=_optional_str("evidence_ref"),
             evaluation_ref=_optional_str("evaluation_ref"),
             treatment_optimization_ref=_optional_str("treatment_optimization_ref"),
+            factor_definition_id=_optional_str("factor_definition_id"),
+            factor_value_ref=_optional_str("factor_value_ref"),
+            config_hash=_optional_str("config_hash"),
+            health_card_ref=_optional_str("health_card_ref"),
+            metric_versions=tuple(data.get("metric_versions", ())),
         )
 
 
@@ -272,6 +287,7 @@ class PromotionDecisionArtifact:
             PromotionReasonCode.RETURN_BASIS_WRONG,
             PromotionReasonCode.RANK_IC_BELOW_THRESHOLD,
             PromotionReasonCode.DUPLICATE_OF_EXISTING_MEMBER,
+            PromotionReasonCode.UNCERTIFIED_EVIDENCE,
         )
         if self.decision is PromotionDecision.REJECT:
             if not any(code in reject_codes for code in self.reason_codes):
@@ -497,6 +513,8 @@ class PromotionGate:
         *,
         library_member_refs: Sequence[str] = (),
         similarity_fn: Optional[Callable[[str, str], Optional[float]]] = None,
+        certified_release: bool = False,
+        required_metric_versions: Optional[Mapping[str, str]] = None,
     ) -> PromotionDecisionArtifact:
         """Evaluate one candidate against the promotion gates (fail-closed).
 
@@ -519,6 +537,27 @@ class PromotionGate:
             raise TypeError("similarity_fn must be callable or None")
 
         reject_codes: list[PromotionReasonCode] = []
+
+        if not isinstance(certified_release, bool):
+            raise TypeError("certified_release must be a bool")
+        if certified_release and not all(
+            (
+                evaluation.evidence_ref,
+                evaluation.evaluation_ref,
+                evaluation.factor_definition_id,
+                evaluation.factor_value_ref,
+                evaluation.config_hash,
+                evaluation.health_card_ref,
+            )
+        ):
+            reject_codes.append(PromotionReasonCode.UNCERTIFIED_EVIDENCE)
+        if certified_release and required_metric_versions:
+            observed_versions = dict(evaluation.metric_versions)
+            if any(
+                observed_versions.get(metric_id) != version
+                for metric_id, version in required_metric_versions.items()
+            ):
+                reject_codes.append(PromotionReasonCode.UNCERTIFIED_EVIDENCE)
 
         # 1) Label maturity (fail-closed).
         if not evaluation.label_maturity or (

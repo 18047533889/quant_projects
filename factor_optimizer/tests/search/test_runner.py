@@ -359,7 +359,7 @@ def test_search_runner_cost_greater_than_remaining_does_not_execute():
     assert session.trials[-1].status == TrialStatus.FAILED
 
 
-def test_search_runner_evaluation_failure_refunds_reservation():
+def test_search_runner_started_failure_charges_reserved_envelope():
     budget = SearchBudget(max_trials=2, max_evaluations=2, max_cost_units=10.0)
     config = SearchConfig(budget=budget, evaluation_cost_units=10.0)
     calls = 0
@@ -378,7 +378,10 @@ def test_search_runner_evaluation_failure_refunds_reservation():
         return {"evaluation_id": trial.trial_id, "score": 1.0, "cost": 10.0, "treatment_integrity_evidence": _integrity_evidence(trial.trial_id)}
 
     session = SearchRunner(config, proposal_fn, _protocol(evaluation_fn)).run("refund")
-    assert calls == 2
+    # A69: the callback started and consumed resources before failing.  With
+    # no worker meter, conservatively charge its reserved envelope; do not
+    # refund the expensive failure and dispatch another job on false budget.
+    assert calls == 1
     assert session.budget_tracker.cost_used == 10.0
     assert session.budget_tracker.cost_reserved == 0.0
     assert session.budget_tracker.evaluations_used == 1
@@ -618,4 +621,3 @@ def _integrity_evidence(trial_id="t1", kind=None):
         before,
         after,
     )
-

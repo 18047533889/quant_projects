@@ -10,6 +10,7 @@ This adapter enables optional reads when factor values are needed.
 This is an OPTIONAL adapter — FA core does not depend on DA.
 """
 
+from dataclasses import dataclass
 from typing import Protocol, Optional, Dict, Any, Tuple
 from datetime import date, datetime
 from collections.abc import Mapping
@@ -45,6 +46,67 @@ class DataAccessPITRejectedError(DataAccessAdapterError):
 
 class DataAccessSchemaError(DataAccessAdapterError):
     code = "SCHEMA_ERROR"
+
+
+@dataclass(frozen=True)
+class ResolvedUniverseSnapshot:
+    """Authoritative dated universe identity and eligible member set."""
+
+    universe_ref: str
+    snapshot_id: str
+    eligible_members: tuple[str, ...]
+    snapshot: Any
+
+
+def resolve_universe_snapshot(
+    store: Any,
+    universe_ref: str,
+    *,
+    as_of: date | datetime | None = None,
+    effective_interval: tuple[date | datetime, date | datetime] | None = None,
+    membership_policy_version: str = "1",
+    tradability_policy_version: str = "1",
+    source_snapshot: Any = None,
+) -> ResolvedUniverseSnapshot:
+    """Resolve a real DataAccess ``UniverseSnapshot`` for a dated interval.
+
+    Resolution fails closed: an absent resolver, a mismatched returned universe,
+    or an empty/invalid snapshot is never treated as an unconstrained universe.
+    Historical membership is resolved for the requested date, not against the
+    instrument's current listing status.
+    """
+    if not isinstance(universe_ref, str) or not universe_ref:
+        raise ValueError("universe_ref is required")
+    if as_of is not None and effective_interval is not None:
+        raise ValueError("provide as_of or effective_interval, not both")
+    interval = effective_interval or ((as_of, as_of) if as_of is not None else None)
+    resolver = getattr(store, "_resolve_universe_instruments", None)
+    if not callable(resolver):
+        raise DataAccessUnavailableAsOfError(
+            f"DataAccess cannot resolve universe {universe_ref!r}"
+        )
+    try:
+        from data_access.r30.universe_snapshot import UniverseSnapshot
+        snapshot = UniverseSnapshot.from_store(
+            store,
+            universe_ref,
+            time_range=interval,
+            membership_policy_version=membership_policy_version,
+            tradability_policy_version=tradability_policy_version,
+            source_snapshot=source_snapshot,
+        )
+    except Exception as exc:
+        _raise_typed(f"DataAccess universe snapshot failed for {universe_ref!r}", exc)
+    if snapshot.universe_id != universe_ref or not snapshot.snapshot_id:
+        raise DataAccessSchemaError(
+            f"resolved universe snapshot disagrees with {universe_ref!r}"
+        )
+    return ResolvedUniverseSnapshot(
+        universe_ref=universe_ref,
+        snapshot_id=snapshot.snapshot_id,
+        eligible_members=tuple(snapshot.members),
+        snapshot=snapshot,
+    )
 
 
 def _is_missing_factor_error(exc: BaseException) -> bool:
@@ -267,6 +329,11 @@ class DAFactorValueReader:
         """Read and terminally materialize one factor through DataAccess."""
         if start_date > end_date:
             raise ValueError("start_date must be <= end_date")
+        resolved_universe = None
+        if universe is not None:
+            resolved_universe = resolve_universe_snapshot(
+                self._store, universe, effective_interval=(start_date, end_date)
+            )
         try:
             if universe is None:
                 handle = self._store.read_factors(
@@ -292,7 +359,15 @@ class DAFactorValueReader:
                 "DataAccess factor read did not return a materializable handle"
             )
         try:
-            return materialize()
+            values = materialize()
+            # Bind the exact dated universe identity to Arrow outputs without
+            # changing their public table type.
+            if resolved_universe is not None and hasattr(values, "replace_schema_metadata"):
+                metadata = dict(getattr(getattr(values, "schema", None), "metadata", None) or {})
+                metadata[b"universe_ref"] = universe.encode("utf-8")
+                metadata[b"universe_snapshot_id"] = resolved_universe.snapshot_id.encode("utf-8")
+                values = values.replace_schema_metadata(metadata)
+            return values
         except Exception as exc:
             _raise_typed(f"DataAccess factor materialization failed for {factor_id!r}", exc)
 
@@ -394,4 +469,6 @@ __all__ = [
     "DataAccessPermissionError",
     "DataAccessPITRejectedError",
     "DataAccessSchemaError",
+    "ResolvedUniverseSnapshot",
+    "resolve_universe_snapshot",
 ]

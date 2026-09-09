@@ -27,6 +27,15 @@ from factor_optimizer.search.strategies import (
 )
 
 
+def _integrity_evidence(trial_id):
+    from factor_optimizer.contracts.treatment_integrity import build_integrity_evidence
+    before = [float(i) for i in range(1, 33)]
+    after = [value * 0.5 + 0.01 for value in before]
+    return build_integrity_evidence(
+        trial_id, f"treatment::{trial_id}", {"window": 3}, before, after
+    )
+
+
 def _space() -> SearchSpace:
     return SearchSpace(
         parameters=[

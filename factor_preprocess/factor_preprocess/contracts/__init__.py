@@ -12,6 +12,7 @@ from factor_preprocess.contracts.feature_bundle import (
     ChannelRef,
     FeatureManifest,
 )
+from factor_preprocess.contracts.treatment_lineage import OutputProperties, derive_output_properties
 from factor_preprocess.contracts.treatment_spec import (
     PriceBasis,
     ValueUnit,
@@ -37,6 +38,8 @@ __all__ = [
     "AxisRef",
     "ChannelRef",
     "FeatureManifest",
+    "OutputProperties",
+    "derive_output_properties",
     # Treatment identity split (P0-FP #103)
     "PriceBasis",
     "ValueUnit",

@@ -60,6 +60,8 @@ class BudgetTracker:
     llm_calls_used: int = 0
     evaluations_reserved: int = 0
     cost_reserved: float = 0.0
+    overrun_cost: float = 0.0
+    reservations: Dict[str, float] = field(default_factory=dict)
     _lock: Lock = field(default_factory=Lock, init=False, repr=False, compare=False)
 
     def can_propose_trial(self) -> bool:
@@ -78,46 +80,70 @@ class BudgetTracker:
         with self._lock:
             return self.cost_used + self.cost_reserved + cost <= self.budget.max_cost_units
 
-    def reserve_evaluation(self, cost: float) -> bool:
+    def reserve_evaluation(self, cost: float, attempt_id: Optional[str] = None) -> bool:
         """Atomically reserve one evaluation and its maximum expected cost."""
         if not isfinite(cost) or cost < 0:
             raise ValueError("evaluation cost reservation must be finite and >= 0")
         with self._lock:
+            key = self._attempt_key(attempt_id)
+            if key in self.reservations:
+                raise RuntimeError("evaluation attempt already has an active reservation")
             if self.evaluations_used + self.evaluations_reserved >= self.budget.max_evaluations:
                 return False
             if self.cost_used + self.cost_reserved + cost > self.budget.max_cost_units:
                 return False
             self.evaluations_reserved += 1
             self.cost_reserved += cost
+            self.reservations[key] = float(cost)
             return True
 
-    def commit_evaluation(self, reserved_cost: float, actual_cost: float) -> None:
+    def commit_evaluation(self, reserved_cost: float, actual_cost: float, attempt_id: Optional[str] = None) -> None:
         """Commit a reservation and refund any unused reserved cost."""
         if not isfinite(actual_cost) or actual_cost < 0:
             raise ValueError("actual evaluation cost must be finite and >= 0")
         if not isfinite(reserved_cost) or reserved_cost < 0:
             raise ValueError("reserved evaluation cost must be finite and >= 0")
-        if actual_cost > reserved_cost:
-            raise ValueError("actual evaluation cost exceeds reserved cost")
         with self._lock:
-            self._require_reservation(reserved_cost)
+            key = self._require_reservation(reserved_cost, attempt_id)
             self.evaluations_reserved -= 1
             self.cost_reserved -= reserved_cost
             self.evaluations_used += 1
             self.cost_used += actual_cost
+            self.overrun_cost += max(0.0, actual_cost - reserved_cost)
+            del self.reservations[key]
 
-    def release_evaluation(self, reserved_cost: float) -> None:
+    def start_evaluation(self, attempt_id: Optional[str] = None) -> None:
+        """Mark execution started (in-memory reservations need no transition)."""
+
+    def has_reservation(self, attempt_id: Optional[str]) -> bool:
+        """Return whether this exact attempt owns an active reservation."""
+        with self._lock:
+            return self._attempt_key(attempt_id) in self.reservations
+
+    def release_evaluation(self, reserved_cost: float, attempt_id: Optional[str] = None) -> None:
         """Refund a reservation after an evaluation fails."""
         if not isfinite(reserved_cost) or reserved_cost < 0:
             raise ValueError("reserved evaluation cost must be finite and >= 0")
         with self._lock:
-            self._require_reservation(reserved_cost)
+            key = self._require_reservation(reserved_cost, attempt_id)
             self.evaluations_reserved -= 1
             self.cost_reserved -= reserved_cost
+            del self.reservations[key]
 
-    def _require_reservation(self, reserved_cost: float) -> None:
-        if self.evaluations_reserved < 1 or self.cost_reserved < reserved_cost:
+    @staticmethod
+    def _attempt_key(attempt_id: Optional[str]) -> str:
+        if attempt_id is None:
+            return "__legacy_single_reservation__"
+        if not isinstance(attempt_id, str) or not attempt_id.strip():
+            raise ValueError("attempt_id must be a non-empty string")
+        return attempt_id
+
+    def _require_reservation(self, reserved_cost: float, attempt_id: Optional[str]) -> str:
+        key = self._attempt_key(attempt_id)
+        actual_reserved = self.reservations.get(key)
+        if actual_reserved is None or actual_reserved != float(reserved_cost):
             raise RuntimeError("evaluation reservation is not active")
+        return key
 
     def can_call_llm(self) -> bool:
         """Check if budget allows another LLM call."""
@@ -198,6 +224,8 @@ class BudgetTracker:
                 "llm_calls_used": self.llm_calls_used,
                 "evaluations_reserved": self.evaluations_reserved,
                 "cost_reserved": self.cost_reserved,
+                "reservations": dict(self.reservations),
+                "overrun_cost": self.overrun_cost,
             }
 
     @classmethod
@@ -205,4 +233,25 @@ class BudgetTracker:
         """Deserialize budget consumption, including active reservations."""
         values = dict(data)
         values["budget"] = SearchBudget.from_dict(values["budget"])
-        return cls(**values)
+        tracker = cls(**values)
+        if any(not isinstance(k, str) or not k or not isfinite(v) or v < 0
+               for k, v in tracker.reservations.items()):
+            raise ValueError("budget reservations are invalid")
+        if tracker.evaluations_reserved != len(tracker.reservations):
+            raise ValueError("reserved evaluation count does not match attempts")
+        if abs(tracker.cost_reserved - sum(tracker.reservations.values())) > 1e-9:
+            raise ValueError("reserved cost does not match attempts")
+        for name in ("trials_used", "evaluations_used", "llm_calls_used", "evaluations_reserved"):
+            value = getattr(tracker, name)
+            if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+                raise ValueError(f"budget counters: {name} must be a non-negative integer")
+        if not isfinite(tracker.cost_used) or tracker.cost_used < 0:
+            raise ValueError("budget counters: cost_used must be finite and >= 0")
+        if not isfinite(tracker.overrun_cost) or tracker.overrun_cost < 0:
+            raise ValueError("budget counters: overrun_cost must be finite and >= 0")
+        if tracker.evaluations_used + tracker.evaluations_reserved > tracker.budget.max_evaluations:
+            raise ValueError("evaluation usage exceeds budget")
+        excess = max(0.0, tracker.cost_used + tracker.cost_reserved - tracker.budget.max_cost_units)
+        if tracker.overrun_cost + 1e-9 < excess:
+            raise ValueError("cost usage exceeds budget without recorded overrun")
+        return tracker

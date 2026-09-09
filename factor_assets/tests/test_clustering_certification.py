@@ -20,6 +20,7 @@ import pytest
 
 from factor_assets.clustering import (
     CertifiedGraphArtifact,
+    ClusterQualityPolicy,
     ConnectedComponents,
     ExecutionMode,
     GraphCertificationStatus,
@@ -200,7 +201,8 @@ def test_production_leiden_with_certified_graph_proceeds():
     graph = _two_triangles_graph()
     cert = _certify(graph, certification_id="cert-prod-1")
     result = LeidenClustering(
-        graph, seed=42, execution_mode=PRODUCTION, certification=cert
+        graph, seed=42, execution_mode=PRODUCTION, certification=cert,
+        quality_policy=ClusterQualityPolicy(.8, 'fixture-medoid', '1'),
     ).cluster()
     assert result.num_clusters == 2
     assert result.certification_id == "cert-prod-1"
@@ -213,7 +215,8 @@ def test_production_leiden_cluster_artifact_records_certification():
     graph = _two_triangles_graph()
     cert = _certify(graph, certification_id="cert-prod-2")
     artifact = LeidenClustering(
-        graph, seed=42, execution_mode=PRODUCTION, certification=cert
+        graph, seed=42, execution_mode=PRODUCTION, certification=cert,
+        quality_policy=ClusterQualityPolicy(.8, 'fixture-medoid', '1'),
     ).cluster_artifact(
         snapshot_ref="snapshot:2024",
         universe_ref="universe:ashare",
@@ -223,6 +226,12 @@ def test_production_leiden_cluster_artifact_records_certification():
     assert artifact.algorithm == "leiden"
     assert artifact.content_hash
     assert artifact.assignments
+    import json
+    from factor_assets.clustering.families import ClusterArtifact
+    restored = ClusterArtifact(**json.loads(json.dumps(artifact.to_dict())))
+    assert restored.certification_id == artifact.certification_id
+    assert restored.execution_mode == "PRODUCTION"
+    assert restored.content_hash == artifact.content_hash
 
 
 def test_production_accepts_string_mode_and_exactly_certified_classes():
@@ -231,7 +240,8 @@ def test_production_accepts_string_mode_and_exactly_certified_classes():
     for completeness in CERTIFIED_COMPLETENESS_CLASSES:
         cert = _certify(graph, completeness=completeness)
         result = LeidenClustering(
-            graph, execution_mode="PRODUCTION", certification=cert
+            graph, execution_mode="PRODUCTION", certification=cert,
+            quality_policy=ClusterQualityPolicy(.8, 'fixture-medoid', '1'),
         ).cluster()
         assert result.certification_id == "cert-1"
         assert result.execution_mode == "PRODUCTION"

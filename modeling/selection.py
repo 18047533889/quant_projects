@@ -9,13 +9,62 @@ does not over-trust a fragile optimum.
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass
 from typing import Any, Callable
 
 import numpy as np
 
-__all__ = ["select_best_validation", "neighborhood_stability", "candidate_identity"]
+__all__ = ["ConsumerNonInferiorityContract", "select_best_validation", "neighborhood_stability", "candidate_identity"]
 
 _COMPLEXITY_PARAMS = ("n_components", "n_regimes", "n_experts")
+
+
+@dataclass(frozen=True)
+class ConsumerNonInferiorityContract:
+    """Pre-declared paired acceptance rule for one consumer objective."""
+
+    consumer_profile: str
+    objective: str
+    epsilon: float
+    min_risk_improvement: float = 0.0
+    max_risk_budget: float | None = None
+
+    def __post_init__(self) -> None:
+        if not self.consumer_profile or not self.objective:
+            raise ValueError("consumer_profile and objective are required")
+        if not np.isfinite(self.epsilon) or self.epsilon < 0:
+            raise ValueError("epsilon must be finite and non-negative")
+        if not np.isfinite(self.min_risk_improvement) or self.min_risk_improvement < 0:
+            raise ValueError("min_risk_improvement must be finite and non-negative")
+        if self.max_risk_budget is not None and (
+            not np.isfinite(self.max_risk_budget) or self.max_risk_budget < 0
+        ):
+            raise ValueError("max_risk_budget must be finite and non-negative")
+
+    def assess(self, entry: dict[str, Any]) -> tuple[bool, dict[str, Any]]:
+        required = {
+            "consumer_profile", "baseline_score", "delta_ci_low", "delta_ci_high",
+            "effect_size", "risk_improvement", "risk_budget",
+        }
+        missing = required - set(entry)
+        if missing:
+            raise ValueError(f"non-inferiority evidence missing fields: {sorted(missing)}")
+        if entry["consumer_profile"] != self.consumer_profile:
+            raise ValueError("candidate consumer_profile differs from comparison contract")
+        numeric = {name: float(entry[name]) for name in required - {"consumer_profile"}}
+        if not all(np.isfinite(value) for value in numeric.values()):
+            raise ValueError("non-inferiority evidence must be finite")
+        passed = numeric["delta_ci_low"] >= -self.epsilon
+        passed &= numeric["risk_improvement"] >= self.min_risk_improvement
+        if self.max_risk_budget is not None:
+            passed &= numeric["risk_budget"] <= self.max_risk_budget
+        return bool(passed), {
+            "passed": bool(passed), "epsilon": self.epsilon,
+            "delta_ci": (numeric["delta_ci_low"], numeric["delta_ci_high"]),
+            "effect_size": numeric["effect_size"],
+            "risk_improvement": numeric["risk_improvement"],
+            "risk_budget": numeric["risk_budget"],
+        }
 
 
 def candidate_identity(hyperparams: dict[str, Any]) -> str:
@@ -28,6 +77,7 @@ def select_best_validation(
     *,
     objective: str = "rank_ic",
     score_fn: Callable[[dict[str, Any]], float] | None = None,
+    noninferiority: ConsumerNonInferiorityContract | None = None,
 ) -> tuple[dict[str, Any] | None, dict[str, Any]]:
     """Pick the best candidate by ``objective``.
 
@@ -45,13 +95,21 @@ def select_best_validation(
         return float(v) if isinstance(v, (int, float)) else float("nan")
 
     scored: list[tuple[float, str, dict[str, Any]]] = []
+    comparison_diagnostics: dict[str, Any] = {}
     for entry in validation_scores:
+        identity = str(
+            entry.get("candidate_id")
+            or candidate_identity(entry.get("hyperparams", {}))
+        )
+        if noninferiority is not None:
+            if noninferiority.objective != objective:
+                raise ValueError("non-inferiority objective differs from selection objective")
+            passed, comparison = noninferiority.assess(entry)
+            comparison_diagnostics[identity] = comparison
+            if not passed:
+                continue
         v = _score(entry)
         if np.isfinite(v):
-            identity = str(
-                entry.get("candidate_id")
-                or candidate_identity(entry.get("hyperparams", {}))
-            )
             scored.append((v, identity, entry))
     if not scored:
         return (
@@ -60,6 +118,7 @@ def select_best_validation(
                 "n_candidates": len(validation_scores),
                 "objective": objective,
                 "reason": "no finite objective scores",
+                "noninferiority": comparison_diagnostics,
             },
         )
 
@@ -79,6 +138,7 @@ def select_best_validation(
             {"candidate_id": identity, "hyperparams": s.get("hyperparams"), objective: v}
             for v, identity, s in scored
         ],
+        "noninferiority": comparison_diagnostics,
     }
     return best_entry.get("hyperparams"), diagnostics
 

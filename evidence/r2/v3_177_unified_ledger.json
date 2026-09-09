@@ -1,0 +1,3024 @@
+{
+  "schema_version": "v3-177-unified-ledger/1",
+  "authoritative_spec": "docs/V3_REMEDIATION_SPEC_20260906.md",
+  "truth_policy": "Package test counts are supporting evidence only; CLOSED requires public path, targeted tests, and history/migration evidence.",
+  "items": [
+    {
+      "issue_id": "QE-01",
+      "requirement_code": "QE-01",
+      "title": "组合绩效被错误归因：不同因子收到同一个指标",
+      "status": "FIXED_LOCAL",
+      "reported_owner_status": "FIXED_LOCAL",
+      "public_paths": [
+        "quant_evaluator/runtime/evaluator.py::evaluate"
+      ],
+      "tests": [
+        "quant_evaluator/tests/test_v3_public_artifacts.py",
+        "quant_evaluator/tests/test_v3_risk_variants.py",
+        "quant_evaluator/tests/test_v3_cohort_intervals.py"
+      ],
+      "history_evidence": [
+        "Version changes retained as new registry versions; OPS08 dry-run migration planner exists but historical full replay is not certified."
+      ],
+      "source_ledger": "evidence/r2/v3_qe_ledger_merge_20260907.json",
+      "next_local_step": "GPU portfolio staging and frozen PortfolioSpec chain remain to implement."
+    },
+    {
+      "issue_id": "QE-02",
+      "requirement_code": "QE-02",
+      "title": "公共接口把序列和分层向量静默压成均值",
+      "status": "FIXED_LOCAL",
+      "reported_owner_status": "FIXED_LOCAL",
+      "public_paths": [
+        "quant_evaluator/runtime/evaluator.py::evaluate"
+      ],
+      "tests": [
+        "quant_evaluator/tests/test_v3_public_artifacts.py"
+      ],
+      "history_evidence": [
+        "Version changes retained as new registry versions; OPS08 dry-run migration planner exists but historical full replay is not certified."
+      ],
+      "source_ledger": "evidence/r2/v3_qe_ledger_merge_20260907.json",
+      "next_local_step": "Distribution/matrix and TQF public artifacts and all consumer migrations remain."
+    },
+    {
+      "issue_id": "QE-03",
+      "requirement_code": "QE-03",
+      "title": "形式上存在的依赖被当成已经构造的证据",
+      "status": "PARTIAL",
+      "reported_owner_status": "PARTIAL",
+      "public_paths": [
+        "quant_evaluator/runtime/evaluator.py::evaluate"
+      ],
+      "tests": [
+        "quant_evaluator/tests/test_v3_public_artifacts.py",
+        "quant_evaluator/tests/test_public_gpu_exposure_v3.py"
+      ],
+      "history_evidence": [
+        "Version changes retained as new registry versions; OPS08 dry-run migration planner exists but historical full replay is not certified."
+      ],
+      "source_ledger": "evidence/r2/v3_qe_ledger_merge_20260907.json",
+      "next_local_step": "CUDA exposure builder not implemented"
+    },
+    {
+      "issue_id": "QE-04",
+      "requirement_code": "QE-04",
+      "title": "GPU 分支绕过统一校验并遗漏 validity",
+      "status": "FIXED_LOCAL",
+      "reported_owner_status": "FIXED_LOCAL",
+      "public_paths": [
+        "quant_evaluator/runtime/evaluator.py::evaluate"
+      ],
+      "tests": [
+        "quant_evaluator/tests/test_v3_input_contracts.py",
+        "quant_evaluator/tests/test_v3_gpu_semantics.py"
+      ],
+      "history_evidence": [
+        "Version changes retained as new registry versions; OPS08 dry-run migration planner exists but historical full replay is not certified."
+      ],
+      "source_ledger": "evidence/r2/v3_qe_ledger_merge_20260907.json",
+      "next_local_step": "Requires per-issue GOLD/E2E/migration closure before VERIFIED."
+    },
+    {
+      "issue_id": "QE-05",
+      "requirement_code": "QE-05",
+      "title": "CPU/GPU 输出合同、metric ID 与 artifact kind 不一致",
+      "status": "FIXED_LOCAL",
+      "reported_owner_status": "FIXED_LOCAL",
+      "public_paths": [
+        "quant_evaluator/runtime/evaluator.py::evaluate"
+      ],
+      "tests": [
+        "quant_evaluator/tests/test_v3_public_artifacts.py"
+      ],
+      "history_evidence": [
+        "Version changes retained as new registry versions; OPS08 dry-run migration planner exists but historical full replay is not certified."
+      ],
+      "source_ledger": "evidence/r2/v3_qe_ledger_merge_20260907.json",
+      "next_local_step": "Requires per-issue GOLD/E2E/migration closure before VERIFIED."
+    },
+    {
+      "issue_id": "QE-06",
+      "requirement_code": "QE-06",
+      "title": "GPU 的ICIR、样本门槛和分层数脱离指标政策",
+      "status": "FIXED_LOCAL",
+      "reported_owner_status": "FIXED_LOCAL",
+      "public_paths": [
+        "quant_evaluator/runtime/evaluator.py::evaluate"
+      ],
+      "tests": [
+        "quant_evaluator/tests/test_v3_gpu_semantics.py",
+        "quant_evaluator/tests/test_v3_public_artifacts.py"
+      ],
+      "history_evidence": [
+        "Version changes retained as new registry versions; OPS08 dry-run migration planner exists but historical full replay is not certified."
+      ],
+      "source_ledger": "evidence/r2/v3_qe_ledger_merge_20260907.json",
+      "next_local_step": "Requires per-issue GOLD/E2E/migration closure before VERIFIED."
+    },
+    {
+      "issue_id": "QE-07",
+      "requirement_code": "QE-07",
+      "title": "GPU 把两类不同换手指标计算成同一数值",
+      "status": "FIXED_LOCAL",
+      "reported_owner_status": "FIXED_LOCAL",
+      "public_paths": [
+        "quant_evaluator/runtime/evaluator.py::evaluate"
+      ],
+      "tests": [
+        "quant_evaluator/tests/test_v3_gpu_semantics.py"
+      ],
+      "history_evidence": [
+        "Version changes retained as new registry versions; OPS08 dry-run migration planner exists but historical full replay is not certified."
+      ],
+      "source_ledger": "evidence/r2/v3_qe_ledger_merge_20260907.json",
+      "next_local_step": "Requires per-issue GOLD/E2E/migration closure before VERIFIED."
+    },
+    {
+      "issue_id": "QE-08",
+      "requirement_code": "QE-08",
+      "title": "GPU 分层单调性与CPU回答的不是同一问题",
+      "status": "FIXED_LOCAL",
+      "reported_owner_status": "FIXED_LOCAL",
+      "public_paths": [
+        "quant_evaluator/runtime/evaluator.py::evaluate"
+      ],
+      "tests": [
+        "quant_evaluator/tests/test_v3_gpu_semantics.py"
+      ],
+      "history_evidence": [
+        "Version changes retained as new registry versions; OPS08 dry-run migration planner exists but historical full replay is not certified."
+      ],
+      "source_ledger": "evidence/r2/v3_qe_ledger_merge_20260907.json",
+      "next_local_step": "historical GOLD/E2E evidence pending"
+    },
+    {
+      "issue_id": "QE-09",
+      "requirement_code": "QE-09",
+      "title": "GPU cohort 把远期标签当成日度持仓收益",
+      "status": "FIXED_LOCAL",
+      "reported_owner_status": "FIXED_LOCAL",
+      "public_paths": [
+        "quant_evaluator/runtime/evaluator.py::evaluate"
+      ],
+      "tests": [
+        "quant_evaluator/tests/test_v3_cohort_intervals.py"
+      ],
+      "history_evidence": [
+        "Version changes retained as new registry versions; OPS08 dry-run migration planner exists but historical full replay is not certified."
+      ],
+      "source_ledger": "evidence/r2/v3_qe_ledger_merge_20260907.json",
+      "next_local_step": "Requires per-issue GOLD/E2E/migration closure before VERIFIED."
+    },
+    {
+      "issue_id": "QE-10",
+      "requirement_code": "QE-10",
+      "title": "GPU 为每个组合指标重复计算同一组合PnL",
+      "status": "FIXED_LOCAL",
+      "reported_owner_status": "FIXED_LOCAL",
+      "public_paths": [
+        "quant_evaluator/runtime/evaluator.py::evaluate"
+      ],
+      "tests": [
+        "quant_evaluator/tests/test_v3_risk_variants.py",
+        "quant_evaluator/tests/test_v3_cohort_intervals.py"
+      ],
+      "history_evidence": [
+        "Version changes retained as new registry versions; OPS08 dry-run migration planner exists but historical full replay is not certified."
+      ],
+      "source_ledger": "evidence/r2/v3_qe_ledger_merge_20260907.json",
+      "next_local_step": "Requires per-issue GOLD/E2E/migration closure before VERIFIED."
+    },
+    {
+      "issue_id": "QE-11",
+      "requirement_code": "QE-11",
+      "title": "回撤计算漏掉初始净值1，第一笔亏损消失",
+      "status": "FIXED_LOCAL",
+      "reported_owner_status": "FIXED_LOCAL",
+      "public_paths": [
+        "quant_evaluator/runtime/evaluator.py::evaluate"
+      ],
+      "tests": [
+        "quant_evaluator/tests/test_v3_drawdown_contracts.py"
+      ],
+      "history_evidence": [
+        "Version changes retained as new registry versions; OPS08 dry-run migration planner exists but historical full replay is not certified."
+      ],
+      "source_ledger": "evidence/r2/v3_qe_ledger_merge_20260907.json",
+      "next_local_step": "All report/public risk builder paths and historical invalidation integration pending."
+    },
+    {
+      "issue_id": "QE-12",
+      "requirement_code": "QE-12",
+      "title": "破产状态被NaN屏蔽，最大回撤可能反而为0",
+      "status": "FIXED_LOCAL",
+      "reported_owner_status": "FIXED_LOCAL",
+      "public_paths": [
+        "quant_evaluator/runtime/evaluator.py::evaluate"
+      ],
+      "tests": [
+        "quant_evaluator/tests/test_v3_drawdown_contracts.py"
+      ],
+      "history_evidence": [
+        "Version changes retained as new registry versions; OPS08 dry-run migration planner exists but historical full replay is not certified."
+      ],
+      "source_ledger": "evidence/r2/v3_qe_ledger_merge_20260907.json",
+      "next_local_step": "Historical asset gate now supplied by FA; root E2E wiring pending."
+    },
+    {
+      "issue_id": "QE-13",
+      "requirement_code": "QE-13",
+      "title": "空Sharpe返回三元回撤结构；空回撤缺少正确保护",
+      "status": "FIXED_LOCAL",
+      "reported_owner_status": "FIXED_LOCAL",
+      "public_paths": [
+        "quant_evaluator/runtime/evaluator.py::evaluate"
+      ],
+      "tests": [
+        "quant_evaluator/tests/test_v3_drawdown_contracts.py"
+      ],
+      "history_evidence": [
+        "Version changes retained as new registry versions; OPS08 dry-run migration planner exists but historical full replay is not certified."
+      ],
+      "source_ledger": "evidence/r2/v3_qe_ledger_merge_20260907.json",
+      "next_local_step": "Empty public batch diagnosis/serialization boundaries still need end-to-end checking."
+    },
+    {
+      "issue_id": "QE-14",
+      "requirement_code": "QE-14",
+      "title": "水下期计算删除缺失日期，压缩了真实时间轴",
+      "status": "FIXED_LOCAL",
+      "reported_owner_status": "FIXED_LOCAL",
+      "public_paths": [
+        "quant_evaluator/runtime/evaluator.py::evaluate"
+      ],
+      "tests": [
+        "quant_evaluator/tests/test_v3_drawdown_contracts.py"
+      ],
+      "history_evidence": [
+        "Version changes retained as new registry versions; OPS08 dry-run migration planner exists but historical full replay is not certified."
+      ],
+      "source_ledger": "evidence/r2/v3_qe_ledger_merge_20260907.json",
+      "next_local_step": "Explicit calendar dates/missing-reason contract and calendar-duration reporting remain."
+    },
+    {
+      "issue_id": "QE-15",
+      "requirement_code": "QE-15",
+      "title": "恢复时间扫描跨越多个回撤事件，并混同未恢复样本",
+      "status": "FIXED_LOCAL",
+      "reported_owner_status": "FIXED_LOCAL",
+      "public_paths": [
+        "quant_evaluator/runtime/evaluator.py::evaluate"
+      ],
+      "tests": [
+        "quant_evaluator/tests/test_v3_drawdown_contracts.py"
+      ],
+      "history_evidence": [
+        "Version changes retained as new registry versions; OPS08 dry-run migration planner exists but historical full replay is not certified."
+      ],
+      "source_ledger": "evidence/r2/v3_qe_ledger_merge_20260907.json",
+      "next_local_step": "Calendar duration and formal event artifact public projection remain."
+    },
+    {
+      "issue_id": "QE-16",
+      "requirement_code": "QE-16",
+      "title": "偏度注释宣称bias=False，实际计算未做有限样本校正",
+      "status": "FIXED_LOCAL",
+      "reported_owner_status": "FIXED_LOCAL",
+      "public_paths": [
+        "quant_evaluator/runtime/evaluator.py::evaluate"
+      ],
+      "tests": [
+        "quant_evaluator/tests/test_v3_drawdown_contracts.py"
+      ],
+      "history_evidence": [
+        "Version changes retained as new registry versions; OPS08 dry-run migration planner exists but historical full replay is not certified."
+      ],
+      "source_ledger": "evidence/r2/v3_qe_ledger_merge_20260907.json",
+      "next_local_step": "Historical threshold calibration and full public risk inputs pending."
+    },
+    {
+      "issue_id": "QE-17",
+      "requirement_code": "QE-17",
+      "title": "Sortino与Calmar使用了未充分区分的统计变体",
+      "status": "FIXED_LOCAL",
+      "reported_owner_status": "FIXED_LOCAL",
+      "public_paths": [
+        "quant_evaluator/runtime/evaluator.py::evaluate"
+      ],
+      "tests": [
+        "quant_evaluator/tests/test_v3_risk_variants.py"
+      ],
+      "history_evidence": [
+        "Version changes retained as new registry versions; OPS08 dry-run migration planner exists but historical full replay is not certified."
+      ],
+      "source_ledger": "evidence/r2/v3_qe_ledger_merge_20260907.json",
+      "next_local_step": "Requires per-issue GOLD/E2E/migration closure before VERIFIED."
+    },
+    {
+      "issue_id": "QE-18",
+      "requirement_code": "QE-18",
+      "title": "最差月／季实际是滚动21／63期，而不是自然月／季",
+      "status": "FIXED_LOCAL",
+      "reported_owner_status": "FIXED_LOCAL",
+      "public_paths": [
+        "quant_evaluator/runtime/evaluator.py::evaluate"
+      ],
+      "tests": [
+        "quant_evaluator/tests/test_calendar_returns.py",
+        "quant_evaluator/tests/test_v3_calendar_public.py"
+      ],
+      "history_evidence": [
+        "Version changes retained as new registry versions; OPS08 dry-run migration planner exists but historical full replay is not certified."
+      ],
+      "source_ledger": "evidence/r2/v3_qe_ledger_merge_20260907.json",
+      "next_local_step": "historical GOLD/E2E evidence pending"
+    },
+    {
+      "issue_id": "QE-19",
+      "requirement_code": "QE-19",
+      "title": "3D因子调用时不支持文档承诺的2D公共validity mask",
+      "status": "FIXED_LOCAL",
+      "reported_owner_status": "FIXED_LOCAL",
+      "public_paths": [
+        "quant_evaluator/runtime/evaluator.py::evaluate"
+      ],
+      "tests": [
+        "quant_evaluator/tests/test_v3_cohort_intervals.py"
+      ],
+      "history_evidence": [
+        "Version changes retained as new registry versions; OPS08 dry-run migration planner exists but historical full replay is not certified."
+      ],
+      "source_ledger": "evidence/r2/v3_qe_ledger_merge_20260907.json",
+      "next_local_step": "Requires per-issue GOLD/E2E/migration closure before VERIFIED."
+    },
+    {
+      "issue_id": "QE-20",
+      "requirement_code": "QE-20",
+      "title": "通用多空分桶可在平局因子上同时买卖同一组",
+      "status": "FIXED_LOCAL",
+      "reported_owner_status": "FIXED_LOCAL",
+      "public_paths": [
+        "quant_evaluator/runtime/evaluator.py::evaluate"
+      ],
+      "tests": [
+        "quant_evaluator/tests/test_v3_cohort_intervals.py"
+      ],
+      "history_evidence": [
+        "Version changes retained as new registry versions; OPS08 dry-run migration planner exists but historical full replay is not certified."
+      ],
+      "source_ledger": "evidence/r2/v3_qe_ledger_merge_20260907.json",
+      "next_local_step": "Requires per-issue GOLD/E2E/migration closure before VERIFIED."
+    },
+    {
+      "issue_id": "QE-21",
+      "requirement_code": "QE-21",
+      "title": "drop缺失收益在形成桶之前排除未来不可得标签",
+      "status": "FIXED_LOCAL",
+      "reported_owner_status": "FIXED_LOCAL",
+      "public_paths": [
+        "quant_evaluator/runtime/evaluator.py::evaluate"
+      ],
+      "tests": [
+        "quant_evaluator/tests/test_v3_cohort_intervals.py"
+      ],
+      "history_evidence": [
+        "Version changes retained as new registry versions; OPS08 dry-run migration planner exists but historical full replay is not certified."
+      ],
+      "source_ledger": "evidence/r2/v3_qe_ledger_merge_20260907.json",
+      "next_local_step": "Requires per-issue GOLD/E2E/migration closure before VERIFIED."
+    },
+    {
+      "issue_id": "QE-22",
+      "requirement_code": "QE-22",
+      "title": "成本函数未拒绝负换手，能产生“交易返利”",
+      "status": "FIXED_LOCAL",
+      "reported_owner_status": "FIXED_LOCAL",
+      "public_paths": [
+        "quant_evaluator/runtime/evaluator.py::evaluate"
+      ],
+      "tests": [
+        "quant_evaluator/tests/test_v3_drawdown_contracts.py"
+      ],
+      "history_evidence": [
+        "Version changes retained as new registry versions; OPS08 dry-run migration planner exists but historical full replay is not certified."
+      ],
+      "source_ledger": "evidence/r2/v3_qe_ledger_merge_20260907.json",
+      "next_local_step": "Requires per-issue GOLD/E2E/migration closure before VERIFIED."
+    },
+    {
+      "issue_id": "QE-23",
+      "requirement_code": "QE-23",
+      "title": "cohort在下一日VWAP入场，却赚到了入场前的涨跌",
+      "status": "FIXED_LOCAL",
+      "reported_owner_status": "FIXED_LOCAL",
+      "public_paths": [
+        "quant_evaluator/runtime/evaluator.py::evaluate"
+      ],
+      "tests": [
+        "quant_evaluator/tests/test_v3_cohort_intervals.py"
+      ],
+      "history_evidence": [
+        "Version changes retained as new registry versions; OPS08 dry-run migration planner exists but historical full replay is not certified."
+      ],
+      "source_ledger": "evidence/r2/v3_qe_ledger_merge_20260907.json",
+      "next_local_step": "Requires per-issue GOLD/E2E/migration closure before VERIFIED."
+    },
+    {
+      "issue_id": "QE-24",
+      "requirement_code": "QE-24",
+      "title": "同日进出只扣单边成本，末尾未成熟cohort被强平",
+      "status": "FIXED_LOCAL",
+      "reported_owner_status": "FIXED_LOCAL",
+      "public_paths": [
+        "quant_evaluator/runtime/evaluator.py::evaluate"
+      ],
+      "tests": [
+        "quant_evaluator/tests/test_v3_cohort_intervals.py"
+      ],
+      "history_evidence": [
+        "Version changes retained as new registry versions; OPS08 dry-run migration planner exists but historical full replay is not certified."
+      ],
+      "source_ledger": "evidence/r2/v3_qe_ledger_merge_20260907.json",
+      "next_local_step": "Requires per-issue GOLD/E2E/migration closure before VERIFIED."
+    },
+    {
+      "issue_id": "QE-25",
+      "requirement_code": "QE-25",
+      "title": "probe组合与“可执行实盘PnL”的声明不匹配",
+      "status": "PARTIAL",
+      "reported_owner_status": "PARTIAL",
+      "public_paths": [
+        "quant_evaluator/runtime/evaluator.py::evaluate"
+      ],
+      "tests": [
+        "quant_evaluator/tests/test_v3_trade_eligibility.py"
+      ],
+      "history_evidence": [
+        "Version changes retained as new registry versions; OPS08 dry-run migration planner exists but historical full replay is not certified."
+      ],
+      "source_ledger": "evidence/r2/v3_qe_ledger_merge_20260907.json",
+      "next_local_step": "Research purpose and execution_certified=false carried into scalar artifacts; typed side-specific trade permissions applied CPU/CUDA, prohibited exit fails closed."
+    },
+    {
+      "issue_id": "QE-26",
+      "requirement_code": "QE-26",
+      "title": "日度风险链存在多个不相容的缺失/零填充默认",
+      "status": "PARTIAL",
+      "reported_owner_status": "PARTIAL",
+      "public_paths": [
+        "quant_evaluator/runtime/evaluator.py::evaluate"
+      ],
+      "tests": [
+        "quant_evaluator/tests/test_v3_cohort_intervals.py",
+        "quant_evaluator/tests/test_v3_drawdown_contracts.py"
+      ],
+      "history_evidence": [
+        "Version changes retained as new registry versions; OPS08 dry-run migration planner exists but historical full replay is not certified."
+      ],
+      "source_ledger": "evidence/r2/v3_qe_ledger_merge_20260907.json",
+      "next_local_step": "Held unknown quote remains NaN; coherent risk valuation/NAV missingness across every legacy risk path still incomplete."
+    },
+    {
+      "issue_id": "QE-27",
+      "requirement_code": "QE-27",
+      "title": "指标版本与观测数量在公共证据里被错误简化",
+      "status": "PARTIAL",
+      "reported_owner_status": "PARTIAL",
+      "public_paths": [
+        "quant_evaluator/runtime/evaluator.py::evaluate"
+      ],
+      "tests": [
+        "quant_evaluator/tests/test_v3_public_artifacts.py",
+        "quant_evaluator/tests/test_v3_calendar_public.py"
+      ],
+      "history_evidence": [
+        "Version changes retained as new registry versions; OPS08 dry-run migration planner exists but historical full replay is not certified."
+      ],
+      "source_ledger": "evidence/r2/v3_qe_ledger_merge_20260907.json",
+      "next_local_step": "Actual registry versions/config hash, public sample counts + sample units, typed bundle JSON roundtrip. Some legacy scalar fallback count semantics remain."
+    },
+    {
+      "issue_id": "QE-28",
+      "requirement_code": "QE-28",
+      "title": "评估DAG未充分复用，批处理和预算在公共入口失效",
+      "status": "PARTIAL",
+      "reported_owner_status": "PARTIAL",
+      "public_paths": [
+        "quant_evaluator/runtime/evaluator.py::evaluate"
+      ],
+      "tests": [
+        "quant_evaluator/tests/test_v3_public_artifacts.py"
+      ],
+      "history_evidence": [
+        "Version changes retained as new registry versions; OPS08 dry-run migration planner exists but historical full replay is not certified."
+      ],
+      "source_ledger": "evidence/r2/v3_qe_ledger_merge_20260907.json",
+      "next_local_step": "Request-local shared IC builders/counts and portfolio reuse; tier/node budget admission enforced. Full resource-aware builder DAG not complete."
+    },
+    {
+      "issue_id": "QE-29",
+      "requirement_code": "QE-29",
+      "title": "低层评估与标签合同缺少完整坐标绑定",
+      "status": "PARTIAL",
+      "reported_owner_status": "PARTIAL",
+      "public_paths": [
+        "quant_evaluator/runtime/evaluator.py::evaluate"
+      ],
+      "tests": [
+        "quant_evaluator/tests/test_v3_input_contracts.py",
+        "quant_evaluator/tests/test_v3_immutable_inputs.py"
+      ],
+      "history_evidence": [
+        "Version changes retained as new registry versions; OPS08 dry-run migration planner exists but historical full replay is not certified."
+      ],
+      "source_ledger": "evidence/r2/v3_qe_ledger_merge_20260907.json",
+      "next_local_step": "Caller-wide migration and strict production completeness pending."
+    },
+    {
+      "issue_id": "QE-30",
+      "requirement_code": "QE-30",
+      "title": "decision_time与signal_available_time的含义和不等式需要纠正",
+      "status": "FIXED_LOCAL",
+      "reported_owner_status": "FIXED_LOCAL",
+      "public_paths": [
+        "quant_evaluator/runtime/evaluator.py::evaluate"
+      ],
+      "tests": [
+        "quant_evaluator/tests/test_v3_input_contracts.py"
+      ],
+      "history_evidence": [
+        "Version changes retained as new registry versions; OPS08 dry-run migration planner exists but historical full replay is not certified."
+      ],
+      "source_ledger": "evidence/r2/v3_qe_ledger_merge_20260907.json",
+      "next_local_step": "Legacy unbound axes remain allowed; strict production rejection/caller migration pending."
+    },
+    {
+      "issue_id": "QE-31",
+      "requirement_code": "QE-31",
+      "title": "标签快照可被外部修改，chunk与cache又遗漏关键字段",
+      "status": "FIXED_LOCAL",
+      "reported_owner_status": "FIXED_LOCAL",
+      "public_paths": [
+        "quant_evaluator/runtime/evaluator.py::evaluate"
+      ],
+      "tests": [
+        "quant_evaluator/tests/test_v3_input_contracts.py",
+        "quant_evaluator/tests/test_v3_immutable_inputs.py",
+        "quant_evaluator/tests/test_v3_metadata_ownership.py",
+        "quant_evaluator/tests/test_v3_object_axis_transport.py"
+      ],
+      "history_evidence": [
+        "Version changes retained as new registry versions; OPS08 dry-run migration planner exists but historical full replay is not certified."
+      ],
+      "source_ledger": "evidence/r2/v3_qe_ledger_merge_20260907.json",
+      "next_local_step": "Adversarial ndarray setflags ownership and full factor snapshot audit pending."
+    },
+    {
+      "issue_id": "QE-32",
+      "requirement_code": "QE-32",
+      "title": "预测期限衰减指标实际测的是IC序列自相关",
+      "status": "FIXED_LOCAL",
+      "reported_owner_status": "FIXED_LOCAL",
+      "public_paths": [
+        "quant_evaluator.api.horizons.evaluate_horizons"
+      ],
+      "tests": [
+        "quant_evaluator/tests/test_horizons.py",
+        "quant_evaluator/tests/test_v3_statistical_evidence.py"
+      ],
+      "history_evidence": [
+        "Old serial-ACF evidence cannot be relabeled as predictive horizon decay; new horizon bundle binds label content refs and sample policy. No historical in-place rewrite performed."
+      ],
+      "source_ledger": "evidence/r2/v3_qe_ledger_merge_20260907.json",
+      "next_local_step": "Historical GOLD/E2E migration and downstream FA/FO scenario closure pending."
+    },
+    {
+      "issue_id": "QE-33",
+      "requirement_code": "QE-33",
+      "title": "形状稳定性输出Fisher-z而非声明的相关性尺度",
+      "status": "FIXED_LOCAL",
+      "reported_owner_status": "FIXED_LOCAL",
+      "public_paths": [
+        "quant_evaluator/runtime/evaluator.py::evaluate"
+      ],
+      "tests": [
+        "quant_evaluator/tests/test_v3_shape_contracts.py",
+        "quant_evaluator/tests/test_shape_evidence.py"
+      ],
+      "history_evidence": [
+        "Registry shape versions bumped2.0.0; historical FA health thresholds/replay need validation."
+      ],
+      "source_ledger": "evidence/r2/v3_qe_ledger_merge_20260907.json",
+      "next_local_step": "GOLD/public downstream/history migration closure pending."
+    },
+    {
+      "issue_id": "QE-34",
+      "requirement_code": "QE-34",
+      "title": "形状confidence与asymmetry指标名超出实际计算含义",
+      "status": "FIXED_LOCAL",
+      "reported_owner_status": "FIXED_LOCAL",
+      "public_paths": [
+        "quant_evaluator/runtime/evaluator.py::evaluate"
+      ],
+      "tests": [
+        "quant_evaluator/tests/test_v3_shape_contracts.py",
+        "quant_evaluator/tests/test_shape_evidence.py"
+      ],
+      "history_evidence": [
+        "Registry shape versions bumped2.0.0; historical FA health thresholds/replay need validation."
+      ],
+      "source_ledger": "evidence/r2/v3_qe_ledger_merge_20260907.json",
+      "next_local_step": "GOLD/public downstream/history migration closure pending."
+    },
+    {
+      "issue_id": "QE-35",
+      "requirement_code": "QE-35",
+      "title": "自适应分层合同存在边界洞，人数不能代替实际桶可用性",
+      "status": "FIXED_LOCAL",
+      "reported_owner_status": "FIXED_LOCAL",
+      "public_paths": [
+        "quant_evaluator/runtime/evaluator.py::evaluate"
+      ],
+      "tests": [
+        "quant_evaluator/tests/test_v3_shape_contracts.py",
+        "quant_evaluator/tests/test_shape_evidence.py"
+      ],
+      "history_evidence": [
+        "Adaptive count registry3.0.0 and policy2.0.0; historical FA health thresholds/replay need validation."
+      ],
+      "source_ledger": "evidence/r2/v3_qe_ledger_merge_20260907.json",
+      "next_local_step": "historical GOLD/E2E evidence pending"
+    },
+    {
+      "issue_id": "FP-01",
+      "requirement_code": "FP-01",
+      "title": "整数证券代码经FE适配后变成全空列",
+      "status": "FIXED_LOCAL",
+      "reported_owner_status": "FIXED_LOCAL",
+      "public_paths": [],
+      "tests": [],
+      "history_evidence": [
+        "test_integer_asset_identity_survives_long_to_wide"
+      ],
+      "source_ledger": "evidence/r2/v3_preprocess_ledger_20260907.json",
+      "next_local_step": "Implement and validate 整数证券代码经FE适配后变成全空列; patch public caller under factor_preprocess/factor_preprocess and add success/failure coverage at tests/fp/test_fp_01_public_path.py."
+    },
+    {
+      "issue_id": "FP-02",
+      "requirement_code": "FP-02",
+      "title": "重复日期证券记录被first静默吞掉",
+      "status": "FIXED_LOCAL",
+      "reported_owner_status": "FIXED_LOCAL",
+      "public_paths": [],
+      "tests": [],
+      "history_evidence": [
+        "test_conflicting_duplicate_primary_key_fails_in_any_order"
+      ],
+      "source_ledger": "evidence/r2/v3_preprocess_ledger_20260907.json",
+      "next_local_step": "Implement and validate 重复日期证券记录被first静默吞掉; patch public caller under factor_preprocess/factor_preprocess and add success/failure coverage at tests/fp/test_fp_02_public_path.py."
+    },
+    {
+      "issue_id": "FP-03",
+      "requirement_code": "FP-03",
+      "title": "FP→FE参数映射遗漏，实际变换不等于记录配方",
+      "status": "FIXED_LOCAL",
+      "reported_owner_status": "FIXED_LOCAL",
+      "public_paths": [],
+      "tests": [],
+      "history_evidence": [
+        "test_public_execution_binds_forward_fill_max_lag_to_effective_fe_parameter"
+      ],
+      "source_ledger": "evidence/r2/v3_preprocess_ledger_20260907.json",
+      "next_local_step": "Implement and validate FP→FE参数映射遗漏，实际变换不等于记录配方; patch public caller under factor_preprocess/factor_preprocess and add success/failure coverage at tests/fp/test_fp_03_public_path.py."
+    },
+    {
+      "issue_id": "FP-04",
+      "requirement_code": "FP-04",
+      "title": "存在绕过FE的公开执行口，fallback吞掉所有加载错误",
+      "status": "FIXED_LOCAL",
+      "reported_owner_status": "FIXED_LOCAL",
+      "public_paths": [],
+      "tests": [],
+      "history_evidence": [
+        "factor_preprocess/tests/test_fe_operator_parity.py"
+      ],
+      "source_ledger": "evidence/r2/v3_preprocess_ledger_20260907.json",
+      "next_local_step": "Implement and validate 存在绕过FE的公开执行口，fallback吞掉所有加载错误; patch public caller under factor_preprocess/factor_preprocess and add success/failure coverage at tests/fp/test_fp_04_public_path.py."
+    },
+    {
+      "issue_id": "FP-05",
+      "requirement_code": "FP-05",
+      "title": "FE桥仍是固定CPU长宽表转换，不是GPU批量执行链",
+      "status": "FIXED_LOCAL",
+      "reported_owner_status": "FIXED_LOCAL",
+      "public_paths": [],
+      "tests": [],
+      "history_evidence": [
+        "factor_engine/tests/backend/test_operator_recipe_execution_v3.py",
+        "test_public_recipe_execution_uses_single_panel_boundary"
+      ],
+      "source_ledger": "evidence/r2/v3_preprocess_ledger_20260907.json",
+      "next_local_step": "GPU/Q residency NOT_RUN"
+    },
+    {
+      "issue_id": "FP-06",
+      "requirement_code": "FP-06",
+      "title": "暴露矩阵输入靠“所有非键列”猜测，缺少显式schema与轴",
+      "status": "FIXED_LOCAL",
+      "reported_owner_status": "FIXED_LOCAL",
+      "public_paths": [],
+      "tests": [],
+      "history_evidence": [
+        "test_ols_neutralize_fe_backed_matches_fp_kernel"
+      ],
+      "source_ledger": "evidence/r2/v3_preprocess_ledger_20260907.json",
+      "next_local_step": "Implement and validate 暴露矩阵输入靠“所有非键列”猜测，缺少显式schema与轴; patch public caller under factor_preprocess/factor_preprocess and add success/failure coverage at tests/fp/test_fp_06_public_path.py."
+    },
+    {
+      "issue_id": "FP-07",
+      "requirement_code": "FP-07",
+      "title": "变换去重只看semantic_id与stage，可能删除必要操作",
+      "status": "FIXED_LOCAL",
+      "reported_owner_status": "FIXED_LOCAL",
+      "public_paths": [],
+      "tests": [],
+      "history_evidence": [
+        "factor_preprocess/tests/contracts/test_lineage_dedup.py"
+      ],
+      "source_ledger": "evidence/r2/v3_preprocess_ledger_20260907.json",
+      "next_local_step": "Implement and validate 变换去重只看semantic_id与stage，可能删除必要操作; patch public caller under factor_preprocess/factor_preprocess and add success/failure coverage at tests/fp/test_fp_07_public_path.py."
+    },
+    {
+      "issue_id": "FP-08",
+      "requirement_code": "FP-08",
+      "title": "已有处理签名只是出现记录，不是最终输出性质",
+      "status": "FIXED_LOCAL",
+      "reported_owner_status": "FIXED_LOCAL",
+      "public_paths": [],
+      "tests": [],
+      "history_evidence": [
+        "test_output_properties_track_root_not_historical_occurrence"
+      ],
+      "source_ledger": "evidence/r2/v3_preprocess_ledger_20260907.json",
+      "next_local_step": "Implement and validate 已有处理签名只是出现记录，不是最终输出性质; patch public caller under factor_preprocess/factor_preprocess and add success/failure coverage at tests/fp/test_fp_08_public_path.py."
+    },
+    {
+      "issue_id": "FP-09",
+      "requirement_code": "FP-09",
+      "title": "合法顺序认证可被一个RAW标签绕过",
+      "status": "FIXED_LOCAL",
+      "reported_owner_status": "FIXED_LOCAL",
+      "public_paths": [],
+      "tests": [],
+      "history_evidence": [
+        "test_raw_tag_cannot_certify_nonempty_illegal_recipe"
+      ],
+      "source_ledger": "evidence/r2/v3_preprocess_ledger_20260907.json",
+      "next_local_step": "Implement and validate 合法顺序认证可被一个RAW标签绕过; patch public caller under factor_preprocess/factor_preprocess and add success/failure coverage at tests/fp/test_fp_09_public_path.py."
+    },
+    {
+      "issue_id": "FP-10",
+      "requirement_code": "FP-10",
+      "title": "变换注册默认可生产，参数域和生产状态只做局部检查",
+      "status": "FIXED_LOCAL",
+      "reported_owner_status": "FIXED_LOCAL",
+      "public_paths": [],
+      "tests": [],
+      "history_evidence": [
+        "test_new_registry_entry_defaults_research_and_runtime_domain_is_enforced"
+      ],
+      "source_ledger": "evidence/r2/v3_preprocess_ledger_20260907.json",
+      "next_local_step": "Implement and validate 变换注册默认可生产，参数域和生产状态只做局部检查; patch public caller under factor_preprocess/factor_preprocess and add success/failure coverage at tests/fp/test_fp_10_public_path.py."
+    },
+    {
+      "issue_id": "FP-11",
+      "requirement_code": "FP-11",
+      "title": "声明不可变的配方及语义标识仍可被修改",
+      "status": "FIXED_LOCAL",
+      "reported_owner_status": "FIXED_LOCAL",
+      "public_paths": [],
+      "tests": [],
+      "history_evidence": [
+        "test_semantic_identity_and_policy_steps_are_immutable"
+      ],
+      "source_ledger": "evidence/r2/v3_preprocess_ledger_20260907.json",
+      "next_local_step": "Implement and validate 声明不可变的配方及语义标识仍可被修改; patch public caller under factor_preprocess/factor_preprocess and add success/failure coverage at tests/fp/test_fp_11_public_path.py."
+    },
+    {
+      "issue_id": "FP-12",
+      "requirement_code": "FP-12",
+      "title": "实现哈希fallback使用生成器repr，不是字节码内容",
+      "status": "FIXED_LOCAL",
+      "reported_owner_status": "FIXED_LOCAL",
+      "public_paths": [],
+      "tests": [],
+      "history_evidence": [
+        "test_dynamic_function_fingerprint_is_content_based_and_mutable_closure_rejected"
+      ],
+      "source_ledger": "evidence/r2/v3_preprocess_ledger_20260907.json",
+      "next_local_step": "Implement and validate 实现哈希fallback使用生成器repr，不是字节码内容; patch public caller under factor_preprocess/factor_preprocess and add success/failure coverage at tests/fp/test_fp_12_public_path.py."
+    },
+    {
+      "issue_id": "FA-01",
+      "requirement_code": "FA-01",
+      "title": "健康卡空完整性门槛得到通过",
+      "status": "FIXED_LOCAL",
+      "reported_owner_status": "FIXED_LOCAL",
+      "public_paths": [
+        "factor_assets.profiling.health_card.build_health_card"
+      ],
+      "tests": [
+        "factor_assets/tests/profiling/test_health_card.py"
+      ],
+      "history_evidence": [
+        "historical health cards admitted from bare gate booleans"
+      ],
+      "source_ledger": "evidence/r2/v3_assets_20260906.yaml",
+      "next_local_step": "cross-package AdmissionAuthority integration is parent-owned"
+    },
+    {
+      "issue_id": "FA-02",
+      "requirement_code": "FA-02",
+      "title": "健康卡可以混装其他因子的评级，并接受自报准入结论",
+      "status": "FIXED_LOCAL",
+      "reported_owner_status": "FIXED_LOCAL",
+      "public_paths": [
+        "factor_assets.profiling.health_card.FactorHealthCardArtifact"
+      ],
+      "tests": [
+        "factor_assets/tests/profiling/test_health_card.py"
+      ],
+      "history_evidence": [
+        "manually constructed or deserialized mixed-context health cards"
+      ],
+      "source_ledger": "evidence/r2/v3_assets_20260906.yaml",
+      "next_local_step": "parent must populate the new explicit provenance fields at cross-package adapters"
+    },
+    {
+      "issue_id": "FA-03",
+      "requirement_code": "FA-03",
+      "title": "健康政策frozen但规则字典可原地变更",
+      "status": "FIXED_LOCAL",
+      "reported_owner_status": "FIXED_LOCAL",
+      "public_paths": [
+        "factor_assets.profiling.policies.get_health_policy"
+      ],
+      "tests": [
+        "factor_assets/tests/profiling/test_policies.py"
+      ],
+      "history_evidence": [
+        "health policies previously mutable through public rule mappings"
+      ],
+      "source_ledger": "evidence/r2/v3_assets_20260906.yaml",
+      "next_local_step": "content-addressed registry collision enforcement not independently closed here"
+    },
+    {
+      "issue_id": "FA-04",
+      "requirement_code": "FA-04",
+      "title": "缺一项证据就把整个维度打零，缺失与低质量混同",
+      "status": "FIXED_LOCAL",
+      "reported_owner_status": "FIXED_LOCAL",
+      "public_paths": [],
+      "tests": [
+        "factor_assets/tests/profiling/test_dimensions.py"
+      ],
+      "history_evidence": [],
+      "source_ledger": "evidence/r2/v3_assets_20260906.yaml",
+      "next_local_step": "Implement and validate 缺一项证据就把整个维度打零，缺失与低质量混同; patch public caller under factor_assets and add success/failure coverage at tests/fa/test_fa_04_public_path.py."
+    },
+    {
+      "issue_id": "FA-05",
+      "requirement_code": "FA-05",
+      "title": "形状质量不能把高单调性与高U型评分同时当共同优点",
+      "status": "FIXED_LOCAL",
+      "reported_owner_status": "FIXED_LOCAL",
+      "public_paths": [],
+      "tests": [
+        "factor_assets/tests/profiling/test_dimensions.py"
+      ],
+      "history_evidence": [],
+      "source_ledger": "evidence/r2/v3_assets_20260906.yaml",
+      "next_local_step": "QE adapter must pass the training-frozen family"
+    },
+    {
+      "issue_id": "FA-06",
+      "requirement_code": "FA-06",
+      "title": "字段类别、机制标签和控制字段角色尚需精确绑定",
+      "status": "FIXED_LOCAL",
+      "reported_owner_status": "FIXED_LOCAL",
+      "public_paths": [
+        "factor_assets.profiling.taxonomy.classify_factor_taxonomy(production=True)"
+      ],
+      "tests": [
+        "factor_assets/tests/profiling/test_taxonomy.py::test_production_taxonomy_requires_catalog_and_preserves_field_roles"
+      ],
+      "history_evidence": [
+        "Taxonomy2.0.0 new; old1.0.0 replay retained. Former string-literal IDs cannot be relabeled as fields: reevaluate under actual canonical field identity and retain old literal artifacts immutable. No production migration executed."
+      ],
+      "source_ledger": "evidence/r2/v3_qe_ledger_merge_20260907.json",
+      "next_local_step": "requires DA canonical field taxonomy and FE role-bearing static-analysis contract"
+    },
+    {
+      "issue_id": "FA-07",
+      "requirement_code": "FA-07",
+      "title": "旧PromotionGate可接受裸数值和默认成熟，并软化已有硬失败",
+      "status": "FIXED_LOCAL",
+      "reported_owner_status": "FIXED_LOCAL",
+      "public_paths": [
+        "factor_assets.library.promotion_gate.PromotionGate.evaluate"
+      ],
+      "tests": [
+        "factor_assets/tests/test_library_promotion_gate.py"
+      ],
+      "history_evidence": [
+        "legacy approvals still require re-certification under the broader identity contract"
+      ],
+      "source_ledger": "evidence/r2/v3_assets_20260906.yaml",
+      "next_local_step": "parent is converging platform callers onto certified_release mode"
+    },
+    {
+      "issue_id": "FA-08",
+      "requirement_code": "FA-08",
+      "title": "MERGE_NEAREST把因子投到最大簇却沿用别簇高相似度",
+      "status": "FIXED_LOCAL",
+      "reported_owner_status": "FIXED_LOCAL",
+      "public_paths": [
+        "factor_assets.clustering.incremental.incremental_assign"
+      ],
+      "tests": [
+        "factor_assets/tests/test_incremental_cluster_assign.py"
+      ],
+      "history_evidence": [
+        "incremental assignments",
+        "cluster overlays and features derived from redirected assignments"
+      ],
+      "source_ledger": "evidence/r2/v3_assets_20260906.yaml",
+      "next_local_step": "Implement and validate MERGE_NEAREST把因子投到最大簇却沿用别簇高相似度; patch public caller under factor_assets and add success/failure coverage at tests/fa/test_fa_08_public_path.py."
+    },
+    {
+      "issue_id": "FA-09",
+      "requirement_code": "FA-09",
+      "title": "低相似度、未测量与ANN近似不能用同一种证据状态",
+      "status": "FIXED_LOCAL",
+      "reported_owner_status": "FIXED_LOCAL",
+      "public_paths": [
+        "quant_evaluator.metrics.interactions.pairwise.compute_pairwise_artifacts; factor_assets.adapters.quant_evaluator.QEEvidenceProvider.create_pairwise_evidence; factor_assets.clustering.incremental.incremental_assign"
+      ],
+      "tests": [
+        "quant_evaluator/tests/test_pairwise_artifact_v3.py",
+        "factor_assets/tests/test_fa09_qe_pairwise.py",
+        "factor_assets/tests/test_incremental_cluster_assign.py"
+      ],
+      "history_evidence": [
+        "retain old unknown origin; old embedding-only candidates remain APPROXIMATE and are never relabeled CERTIFIED"
+      ],
+      "source_ledger": "evidence/r2/v3_assets_177_ledger.json",
+      "next_local_step": "Implement and validate 低相似度、未测量与ANN近似不能用同一种证据状态; patch public caller under factor_assets and add success/failure coverage at tests/fa/test_fa_09_public_path.py."
+    },
+    {
+      "issue_id": "FA-10",
+      "requirement_code": "FA-10",
+      "title": "增量ANN在新因子×簇循环重建索引，归属只看单个最近成员",
+      "status": "FIXED_LOCAL",
+      "reported_owner_status": "FIXED_LOCAL",
+      "public_paths": [
+        "factor_assets.clustering.incremental.incremental_assign"
+      ],
+      "tests": [
+        "factor_assets/tests/test_incremental_cluster_assign.py"
+      ],
+      "history_evidence": [
+        "rebuild affected ANN indices; old indices remain immutable"
+      ],
+      "source_ledger": "current working-tree verified tests",
+      "next_local_step": "ANN index build remains inside factor-by-cluster selection loop; persistent global index redesign exceeds safe bounded patch"
+    },
+    {
+      "issue_id": "FA-11",
+      "requirement_code": "FA-11",
+      "title": "旧Pareto实现允许缺失/NaN目标悄悄进入非支配前沿",
+      "status": "FIXED_LOCAL",
+      "reported_owner_status": "FIXED_LOCAL",
+      "public_paths": [
+        "factor_assets.optimizer.pareto.ParetoOptimizer.compute_frontier"
+      ],
+      "tests": [
+        "factor_assets/tests/optimizer/test_pareto_negative.py"
+      ],
+      "history_evidence": [
+        "frontiers containing incomplete or non-finite candidates"
+      ],
+      "source_ledger": "evidence/r2/v3_assets_20260906.yaml",
+      "next_local_step": "FO authority consolidation is parent-owned"
+    },
+    {
+      "issue_id": "FO-01",
+      "requirement_code": "FO-01",
+      "title": "Optimizer的QE适配器对多因子批返回空metrics",
+      "status": "EVIDENCE_INCOMPLETE",
+      "reported_owner_status": "INTEGRATION_VERIFIED",
+      "public_paths": [],
+      "tests": [],
+      "history_evidence": [
+        "real CPU and NVIDIA L20 CUDA 3-factor adapter typed grouped evidence"
+      ],
+      "source_ledger": "evidence/r2/v3_optimizer_ledger_merge_20260907.json",
+      "next_local_step": "Implement and validate Optimizer的QE适配器对多因子批返回空metrics; patch public caller under factor_optimizer/factor_optimizer and add success/failure coverage at tests/fo/test_fo_01_public_path.py."
+    },
+    {
+      "issue_id": "FO-02",
+      "requirement_code": "FO-02",
+      "title": "QE适配器没有传递split、backend、参数和完整证据身份",
+      "status": "EVIDENCE_INCOMPLETE",
+      "reported_owner_status": "INTEGRATION_VERIFIED",
+      "public_paths": [],
+      "tests": [],
+      "history_evidence": [
+        "tier/cost_budget/metric_parameters/backend/gpu_policy forwarded through QE EvaluationRequest"
+      ],
+      "source_ledger": "evidence/r2/v3_optimizer_ledger_merge_20260907.json",
+      "next_local_step": "Implement and validate QE适配器没有传递split、backend、参数和完整证据身份; patch public caller under factor_optimizer/factor_optimizer and add success/failure coverage at tests/fo/test_fo_02_public_path.py."
+    },
+    {
+      "issue_id": "FO-03",
+      "requirement_code": "FO-03",
+      "title": "Optimizer明确research_only，不能把已声明的阻断项当完成",
+      "status": "EVIDENCE_INCOMPLETE",
+      "reported_owner_status": "ALREADY_FIXED_VERIFIED",
+      "public_paths": [],
+      "tests": [],
+      "history_evidence": [
+        "production remains fail-closed; research path works"
+      ],
+      "source_ledger": "evidence/r2/v3_optimizer_ledger_merge_20260907.json",
+      "next_local_step": "full production legality and FA admission certification"
+    },
+    {
+      "issue_id": "FO-04",
+      "requirement_code": "FO-04",
+      "title": "多保真阶段表与搜索执行需要穿透，串行限制是真实能力边界",
+      "status": "EVIDENCE_INCOMPLETE",
+      "reported_owner_status": "INTEGRATION_VERIFIED",
+      "public_paths": [],
+      "tests": [],
+      "history_evidence": [
+        "SearchRunner stage execution trace records profile/version/split/evidence/cost and survives checkpoint"
+      ],
+      "source_ledger": "evidence/r2/v3_optimizer_ledger_merge_20260907.json",
+      "next_local_step": "Implement and validate 多保真阶段表与搜索执行需要穿透，串行限制是真实能力边界; patch public caller under factor_optimizer/factor_optimizer and add success/failure coverage at tests/fo/test_fo_04_public_path.py."
+    },
+    {
+      "issue_id": "FO-05",
+      "requirement_code": "FO-05",
+      "title": "搜索配置可变与checkpoint恢复需要绑定实际执行状态",
+      "status": "EVIDENCE_INCOMPLETE",
+      "reported_owner_status": "INTEGRATION_VERIFIED",
+      "public_paths": [],
+      "tests": [],
+      "history_evidence": [
+        "atomic checkpoint, execution plan hash, RNG and ledger resume"
+      ],
+      "source_ledger": "evidence/r2/v3_optimizer_ledger_merge_20260907.json",
+      "next_local_step": "Implement and validate 搜索配置可变与checkpoint恢复需要绑定实际执行状态; patch public caller under factor_optimizer/factor_optimizer and add success/failure coverage at tests/fo/test_fo_05_public_path.py."
+    },
+    {
+      "issue_id": "PL-01",
+      "requirement_code": "PL-01",
+      "title": "无效候选本应被报告，却因空hash触发报告对象异常",
+      "status": "FIXED_LOCAL",
+      "reported_owner_status": "FIXED_LOCAL",
+      "public_paths": [
+        "Pipeline.run -> PipelineReport.with_normalization_failed"
+      ],
+      "tests": [
+        "test_bad_and_good_ingestion_records_reconcile_without_fake_hash"
+      ],
+      "history_evidence": [
+        "recover missing ingestion audit records where source rows remain"
+      ],
+      "source_ledger": "evidence/r2/v3_platform_ledger.json",
+      "next_local_step": "Implement and validate 无效候选本应被报告，却因空hash触发报告对象异常; patch public caller under declared owner package and add success/failure coverage at tests/pl/test_pl_01_public_path.py."
+    },
+    {
+      "issue_id": "PL-02",
+      "requirement_code": "PL-02",
+      "title": "消费去重早于执行成功，失败候选可永久失去重试",
+      "status": "FIXED_LOCAL_DURABLE_FAULT_INJECTION_PENDING",
+      "reported_owner_status": "FIXED_LOCAL_DURABLE_FAULT_INJECTION_PENDING",
+      "public_paths": [
+        "Pipeline.run -> _record_terminal_consumption"
+      ],
+      "tests": [
+        "test_retryable_failure_is_not_consumed_before_success"
+      ],
+      "history_evidence": [
+        "dry-run historical consumed rows lacking terminal outcomes"
+      ],
+      "source_ledger": "evidence/r2/v3_platform_ledger.json",
+      "next_local_step": "Implement and validate 消费去重早于执行成功，失败候选可永久失去重试; patch public caller under declared owner package and add success/failure coverage at tests/pl/test_pl_02_public_path.py."
+    },
+    {
+      "issue_id": "PL-03",
+      "requirement_code": "PL-03",
+      "title": "平台把所有评估异常重新标成CAPABILITY，丢失重试分类",
+      "status": "FIXED_LOCAL",
+      "reported_owner_status": "FIXED_LOCAL",
+      "public_paths": [
+        "Pipeline._make_candidate_handler"
+      ],
+      "tests": [
+        "quant_platform/tests/test_orchestrator_pipeline.py"
+      ],
+      "history_evidence": [
+        "reclassify only old errors whose original cause is available"
+      ],
+      "source_ledger": "evidence/r2/v3_platform_ledger.json",
+      "next_local_step": "Implement and validate 平台把所有评估异常重新标成CAPABILITY，丢失重试分类; patch public caller under declared owner package and add success/failure coverage at tests/pl/test_pl_03_public_path.py."
+    },
+    {
+      "issue_id": "PL-04",
+      "requirement_code": "PL-04",
+      "title": "平台仍用RankIC是否存在先否决，绕过分用途准入政策",
+      "status": "FIXED_LOCAL",
+      "reported_owner_status": "FIXED_LOCAL",
+      "public_paths": [
+        "Pipeline.run -> AdmissionAuthority.decide"
+      ],
+      "tests": [
+        "test_rank_ic_not_applicable_reaches_domain_admission_authority"
+      ],
+      "history_evidence": [
+        "allow purpose-specific re-review of early rejects"
+      ],
+      "source_ledger": "evidence/r2/v3_platform_ledger.json",
+      "next_local_step": "Implement and validate 平台仍用RankIC是否存在先否决，绕过分用途准入政策; patch public caller under declared owner package and add success/failure coverage at tests/pl/test_pl_04_public_path.py."
+    },
+    {
+      "issue_id": "PL-05",
+      "requirement_code": "PL-05",
+      "title": "平台把semantic_family_hint或spec hash当factor_definition_ref",
+      "status": "FIXED_LOCAL_CALLER_POPULATION_PENDING",
+      "reported_owner_status": "FIXED_LOCAL_CALLER_POPULATION_PENDING",
+      "public_paths": [
+        "normalize_candidate -> FactorCandidateManifest -> AdmissionRequest"
+      ],
+      "tests": [
+        "test_admission_request_carries_domain_refs_only"
+      ],
+      "history_evidence": [
+        "unresolved legacy refs remain isolated"
+      ],
+      "source_ledger": "evidence/r2/v3_platform_ledger.json",
+      "next_local_step": "Implement and validate 平台把semantic_family_hint或spec hash当factor_definition_ref; patch public caller under declared owner package and add success/failure coverage at tests/pl/test_pl_05_public_path.py."
+    },
+    {
+      "issue_id": "PL-06",
+      "requirement_code": "PL-06",
+      "title": "特征快照只含本轮批准项，版本又依赖内存计数",
+      "status": "FIXED_LOCAL_PERSISTENCE_PENDING",
+      "reported_owner_status": "FIXED_LOCAL_PERSISTENCE_PENDING",
+      "public_paths": [
+        "Pipeline._snapshot_feature_set"
+      ],
+      "tests": [
+        "test_pipeline_feature_snapshot_and_retrain_diff_across_rounds"
+      ],
+      "history_evidence": [
+        "old round snapshots cannot represent published complete sets"
+      ],
+      "source_ledger": "evidence/r2/v3_platform_ledger.json",
+      "next_local_step": "Implement and validate 特征快照只含本轮批准项，版本又依赖内存计数; patch public caller under declared owner package and add success/failure coverage at tests/pl/test_pl_06_public_path.py."
+    },
+    {
+      "issue_id": "PL-07",
+      "requirement_code": "PL-07",
+      "title": "候选ArtifactRef的hash、大小、媒体类型和真实字节未对齐",
+      "status": "FIXED_LOCAL",
+      "reported_owner_status": "FIXED_LOCAL",
+      "public_paths": [
+        "quant_platform.app.orchestrator.Pipeline._build_candidate_artifact"
+      ],
+      "tests": [
+        "quant_platform/tests/test_orchestrator_pipeline.py"
+      ],
+      "history_evidence": [
+        "canonical payload bytes are newly published; old memory refs are not production certified"
+      ],
+      "source_ledger": "current working-tree verified tests",
+      "next_local_step": "configured DA publisher/resolver required for durable publication"
+    },
+    {
+      "issue_id": "PL-08",
+      "requirement_code": "PL-08",
+      "title": "平台骨架的事件、登记和发布不是可证明的原子事务",
+      "status": "FIXED_LOCAL",
+      "reported_owner_status": "FIXED_LOCAL",
+      "public_paths": [
+        "Pipeline.run registry/outbox/snapshot sequence"
+      ],
+      "tests": [
+        "quant_platform/tests/test_postgres_live.py",
+        "quant_platform/tests/test_postgres_dialect.py",
+        "quant_platform/tests/test_migrations.py",
+        "quant_platform/tests/test_generation_coordinator.py"
+      ],
+      "history_evidence": [
+        "postgres_event_clock_migration requires explicit legacy timezone, preserves fractional Unixsecond clocks and IDs, transactional/idempotent fixture migration passed. No production migration executed."
+      ],
+      "source_ledger": "evidence/r2/v3_qe_ledger_merge_20260907.json",
+      "next_local_step": "transactional outbox and generation-publisher composition remains"
+    },
+    {
+      "issue_id": "QA-01",
+      "requirement_code": "QA-01",
+      "title": "对拍测试没有覆盖真实参数桥，且同名测试被覆盖",
+      "status": "FIXED_LOCAL",
+      "reported_owner_status": "FIXED_LOCAL",
+      "public_paths": [
+        "factor_preprocess.registry.transforms.get_default_registry",
+        "jobs.qa.run_qat07_import_matrix.collect_parity_evidence",
+        "jobs.qa.run_qat07_import_matrix.reconcile_collected_tests"
+      ],
+      "tests": [
+        "factor_preprocess/tests/test_fe_operator_parity.py",
+        "factor_preprocess/tests/test_v3_preprocess_contracts.py",
+        "jobs/tests/test_qat07_implementation_comparison.py"
+      ],
+      "history_evidence": [
+        "Previous import-only or manual max_periods parity claims do not certify recipe execution. Old evidence retained; new required collection receipt binds source SHA256 and exact nodeids."
+      ],
+      "source_ledger": "evidence/r2/v3_qe_ledger_merge_20260907.json",
+      "next_local_step": "This collector receipt covers the named FE parity module; full177/GOLD/E2E certification remains separate. QAT07 wheel rerun after final package freeze pending."
+    },
+    {
+      "issue_id": "QA-02",
+      "requirement_code": "QA-02",
+      "title": "已有文档和“已注册”不能替代可执行能力表",
+      "status": "FIXED_LOCAL",
+      "reported_owner_status": "FIXED_LOCAL",
+      "public_paths": [
+        "quant_evaluator.scripts.generate_capability_matrix.generate_capability_matrix",
+        "quant_evaluator.scripts.generate_capability_matrix.CapabilityRunEvidence.from_public_cpu",
+        "quant_evaluator.scripts.generate_capability_matrix.CapabilityRunEvidence.from_public_gpu"
+      ],
+      "tests": [
+        "quant_evaluator/tests/test_generate_capability_matrix.py",
+        "quant_evaluator/tests/test_gpu_metric_expansion.py"
+      ],
+      "history_evidence": [
+        "Checked-in CSV regenerated for159metrics with zero supplied runtime evidence. Public GPU is NOT_RUN159, missing auxiliary declarations are NOT_DECLARED. Downstream adapter/profile/admission/update/publication all remain NOT_RUN. Old all-green declaration counts are not executable or production certifications."
+      ],
+      "source_ledger": "evidence/r2/v3_qe_ledger_merge_20260907.json",
+      "next_local_step": "Evidence receipt certifies only the specific versioned data run, not independent full parity or downstream production readiness. A complete per-capability run/admission/update/publication evidence matrix remains to execute."
+    },
+    {
+      "issue_id": "V-01",
+      "requirement_code": "V-01",
+      "title": "全量调用图与唯一权威清点，追踪旁路而非只改点名文件",
+      "status": "TO_VERIFY",
+      "reported_owner_status": "TO_VERIFY",
+      "public_paths": [],
+      "tests": [],
+      "history_evidence": [],
+      "source_ledger": "loop/v3_remediation_ledger.json",
+      "next_local_step": "Implement and validate 全量调用图与唯一权威清点，追踪旁路而非只改点名文件; patch public caller under declared owner package and add success/failure coverage at tests/v/test_v_01_public_path.py."
+    },
+    {
+      "issue_id": "V-02",
+      "requirement_code": "V-02",
+      "title": "自动标签必须真的在每次候选进入时生成，并可重评更新",
+      "status": "TO_VERIFY",
+      "reported_owner_status": "TO_VERIFY",
+      "public_paths": [],
+      "tests": [],
+      "history_evidence": [],
+      "source_ledger": "loop/v3_remediation_ledger.json",
+      "next_local_step": "Implement and validate 自动标签必须真的在每次候选进入时生成，并可重评更新; patch public caller under declared owner package and add success/failure coverage at tests/v/test_v_02_public_path.py."
+    },
+    {
+      "issue_id": "V-03",
+      "requirement_code": "V-03",
+      "title": "建立逐指标→逐维度→用途准入的完整政策，而非一个总分",
+      "status": "TO_VERIFY",
+      "reported_owner_status": "TO_VERIFY",
+      "public_paths": [],
+      "tests": [],
+      "history_evidence": [],
+      "source_ledger": "loop/v3_remediation_ledger.json",
+      "next_local_step": "Implement and validate 建立逐指标→逐维度→用途准入的完整政策，而非一个总分; patch public caller under declared owner package and add success/failure coverage at tests/v/test_v_03_public_path.py."
+    },
+    {
+      "issue_id": "V-04",
+      "requirement_code": "V-04",
+      "title": "U/倒U与尾部修复需要低自由度实现、父子重评和完整血缘",
+      "status": "TO_VERIFY",
+      "reported_owner_status": "TO_VERIFY",
+      "public_paths": [],
+      "tests": [],
+      "history_evidence": [],
+      "source_ledger": "loop/v3_remediation_ledger.json",
+      "next_local_step": "Implement and validate U/倒U与尾部修复需要低自由度实现、父子重评和完整血缘; patch public caller under declared owner package and add success/failure coverage at tests/v/test_v_04_public_path.py."
+    },
+    {
+      "issue_id": "V-05",
+      "requirement_code": "V-05",
+      "title": "廉价初筛不能提前杀掉非线性、稀疏事件或互补特征",
+      "status": "TO_VERIFY",
+      "reported_owner_status": "TO_VERIFY",
+      "public_paths": [],
+      "tests": [],
+      "history_evidence": [],
+      "source_ledger": "loop/v3_remediation_ledger.json",
+      "next_local_step": "Implement and validate 廉价初筛不能提前杀掉非线性、稀疏事件或互补特征; patch public caller under declared owner package and add success/failure coverage at tests/v/test_v_05_public_path.py."
+    },
+    {
+      "issue_id": "V-06",
+      "requirement_code": "V-06",
+      "title": "中性化是受约束的候选选择，必须验证最终暴露而非名字",
+      "status": "TO_VERIFY",
+      "reported_owner_status": "TO_VERIFY",
+      "public_paths": [],
+      "tests": [],
+      "history_evidence": [],
+      "source_ledger": "loop/v3_remediation_ledger.json",
+      "next_local_step": "Implement and validate 中性化是受约束的候选选择，必须验证最终暴露而非名字; patch public caller under declared owner package and add success/failure coverage at tests/v/test_v_06_public_path.py."
+    },
+    {
+      "issue_id": "V-07",
+      "requirement_code": "V-07",
+      "title": "所有可生产滤波通过前缀不变与增量状态回放",
+      "status": "PARTIAL_FIXED_EWMA_FULL_REPLAY",
+      "reported_owner_status": "PARTIAL_FIXED_EWMA_FULL_REPLAY",
+      "public_paths": [
+        "factor_preprocess.adapters.apply_frozen_ewma_full_replay",
+        "factor_preprocess.adapters.FrozenEwmaReplaySpec",
+        "factor_preprocess.transforms.ewma",
+        "factor_preprocess.registry.transforms.create_default_registry",
+        "factor_preprocess.registry.policies.get_default_policy_registry",
+        "factor_engine.recursive_kernel.ema_segment",
+        "factor_engine.stateful_contract.StatefulCheckpointRegistry",
+        "factor_engine.runtime.stateful_checkpoint_store.StatefulCheckpointStore"
+      ],
+      "tests": [
+        "EWMA replay plus prefix suites: 31 passed, 1 xfailed",
+        "factor_preprocess/tests/test_ewma_full_replay_adapter.py: 23 passed",
+        "full factor_preprocess suite: 336 passed, 1 xfailed, 3 warnings"
+      ],
+      "history_evidence": [
+        "test_public_full_daily_random_chunk_and_restart_oracle",
+        "test_future_poison_and_new_asset_do_not_change_history",
+        "test_resume_rejects_changed_frozen_identity",
+        "test_non_append_revision_integrity_and_budget_fail_closed",
+        "test_offline_one_sided_smoothers_are_prefix_invariant",
+        "test_hp_filters_are_offline_only_not_production_causal",
+        "test_causal_smoothers_are_production",
+        "test_spec_is_strict",
+        "test_explicit_utc_and_kernel_implementation_identity_are_frozen",
+        "test_competing_subprocess_writers_cannot_lose_history"
+      ],
+      "source_ledger": "evidence/r2/v3_preprocess_ledger_20260907.json",
+      "next_local_step": "PARTIAL: exact restart replay is bounded full-history recomputation, not efficient O(1) sufficient-state incremental execution"
+    },
+    {
+      "issue_id": "V-08",
+      "requirement_code": "V-08",
+      "title": "树模型与神经网络的输入表示有独立契约，不统一强制zscore",
+      "status": "TO_VERIFY",
+      "reported_owner_status": "TO_VERIFY",
+      "public_paths": [],
+      "tests": [],
+      "history_evidence": [],
+      "source_ledger": "loop/v3_remediation_ledger.json",
+      "next_local_step": "Implement and validate 树模型与神经网络的输入表示有独立契约，不统一强制zscore; patch public caller under declared owner package and add success/failure coverage at tests/v/test_v_08_public_path.py."
+    },
+    {
+      "issue_id": "V-09",
+      "requirement_code": "V-09",
+      "title": "诊断驱动小预算搜索，而非穷举所有预处理排列",
+      "status": "EVIDENCE_INCOMPLETE",
+      "reported_owner_status": "INTEGRATION_VERIFIED",
+      "public_paths": [],
+      "tests": [],
+      "history_evidence": [
+        "bounded durable campaign budget and attempts"
+      ],
+      "source_ledger": "evidence/r2/v3_optimizer_ledger_merge_20260907.json",
+      "next_local_step": "Implement and validate 诊断驱动小预算搜索，而非穷举所有预处理排列; patch public caller under declared owner package and add success/failure coverage at tests/v/test_v_09_public_path.py."
+    },
+    {
+      "issue_id": "V-10",
+      "requirement_code": "V-10",
+      "title": "多保真初筛与精筛用相同身份、明确样本，不能拿低精度分数冒充最终证据",
+      "status": "FIXED_LOCAL",
+      "reported_owner_status": "FIXED_LOCAL",
+      "public_paths": [],
+      "tests": [],
+      "history_evidence": [
+        "stage trace preserves split/profile/fidelity identity"
+      ],
+      "source_ledger": "evidence/r2/v3_optimizer_ledger_merge_20260907.json",
+      "next_local_step": "QE common confirmation sample policy integration"
+    },
+    {
+      "issue_id": "V-11",
+      "requirement_code": "V-11",
+      "title": "训练、验证、封存测试和跨session试验次数必须联合治理",
+      "status": "EVIDENCE_INCOMPLETE",
+      "reported_owner_status": "INTEGRATION_VERIFIED",
+      "public_paths": [],
+      "tests": [],
+      "history_evidence": [
+        "cross-session sealed access and hypothesis family durability"
+      ],
+      "source_ledger": "evidence/r2/v3_optimizer_ledger_merge_20260907.json",
+      "next_local_step": "Implement and validate 训练、验证、封存测试和跨session试验次数必须联合治理; patch public caller under declared owner package and add success/failure coverage at tests/v/test_v_11_public_path.py."
+    },
+    {
+      "issue_id": "V-12",
+      "requirement_code": "V-12",
+      "title": "Purging、embargo和PIT按真实标签区间验证，避免前视与过度清洗",
+      "status": "TO_VERIFY",
+      "reported_owner_status": "TO_VERIFY",
+      "public_paths": [],
+      "tests": [],
+      "history_evidence": [],
+      "source_ledger": "loop/v3_remediation_ledger.json",
+      "next_local_step": "Implement and validate Purging、embargo和PIT按真实标签区间验证，避免前视与过度清洗; patch public caller under declared owner package and add success/failure coverage at tests/v/test_v_12_public_path.py."
+    },
+    {
+      "issue_id": "V-13",
+      "requirement_code": "V-13",
+      "title": "实盘指标必须带可执行性与成本规格，研究probe另设身份",
+      "status": "TO_VERIFY",
+      "reported_owner_status": "TO_VERIFY",
+      "public_paths": [],
+      "tests": [],
+      "history_evidence": [],
+      "source_ledger": "loop/v3_remediation_ledger.json",
+      "next_local_step": "Implement and validate 实盘指标必须带可执行性与成本规格，研究probe另设身份; patch public caller under declared owner package and add success/failure coverage at tests/v/test_v_13_public_path.py."
+    },
+    {
+      "issue_id": "V-14",
+      "requirement_code": "V-14",
+      "title": "相似度去重是分层流程，不能一把0.7/0.95阈值删除所有高相关因子",
+      "status": "TO_VERIFY",
+      "reported_owner_status": "TO_VERIFY",
+      "public_paths": [],
+      "tests": [],
+      "history_evidence": [],
+      "source_ledger": "loop/v3_remediation_ledger.json",
+      "next_local_step": "Implement and validate 相似度去重是分层流程，不能一把0.7/0.95阈值删除所有高相关因子; patch public caller under declared owner package and add success/failure coverage at tests/v/test_v_14_public_path.py."
+    },
+    {
+      "issue_id": "V-15",
+      "requirement_code": "V-15",
+      "title": "新增簇、增量归属和全量重聚类有明确版本与触发",
+      "status": "TO_VERIFY",
+      "reported_owner_status": "TO_VERIFY",
+      "public_paths": [],
+      "tests": [],
+      "history_evidence": [],
+      "source_ledger": "loop/v3_remediation_ledger.json",
+      "next_local_step": "Implement and validate 新增簇、增量归属和全量重聚类有明确版本与触发; patch public caller under declared owner package and add success/failure coverage at tests/v/test_v_15_public_path.py."
+    },
+    {
+      "issue_id": "V-16",
+      "requirement_code": "V-16",
+      "title": "筛选允许少量互补版本，而不是单冠军或全收",
+      "status": "FIXED_LOCAL",
+      "reported_owner_status": "FIXED_LOCAL",
+      "public_paths": [],
+      "tests": [],
+      "history_evidence": [
+        "public complementary winner set"
+      ],
+      "source_ledger": "evidence/r2/v3_optimizer_ledger_merge_20260907.json",
+      "next_local_step": "FA/modeling real incremental evidence"
+    },
+    {
+      "issue_id": "V-17",
+      "requirement_code": "V-17",
+      "title": "父因子拆分和簇聚合都生成新资产，必须再次评价",
+      "status": "TO_VERIFY",
+      "reported_owner_status": "TO_VERIFY",
+      "public_paths": [],
+      "tests": [],
+      "history_evidence": [],
+      "source_ledger": "loop/v3_remediation_ledger.json",
+      "next_local_step": "Implement and validate 父因子拆分和簇聚合都生成新资产，必须再次评价; patch public caller under declared owner package and add success/failure coverage at tests/v/test_v_17_public_path.py."
+    },
+    {
+      "issue_id": "V-18",
+      "requirement_code": "V-18",
+      "title": "定义、配方、落值、评价、簇与模型身份串成可追溯链",
+      "status": "FIXED_LOCAL_INTEGRATION_PENDING",
+      "reported_owner_status": "FIXED_LOCAL_INTEGRATION_PENDING",
+      "public_paths": [],
+      "tests": [],
+      "history_evidence": [
+        "quant_platform.app.orchestrator.PipelineConfig.require_complete_execution_trace",
+        "EventEnvelope.trace_id and payload.execution_trace",
+        "build_modeling_feature_manifest lineage",
+        "test_complete_execution_trace_uses_real_public_pipeline_refs",
+        "test_complete_execution_trace_fails_closed_on_missing_or_mismatched_refs",
+        "28 focused orchestrator and manifest tests passed",
+        "full quant_platform: 411 passed, 10 skipped, 1 unrelated identity-boundary failure"
+      ],
+      "source_ledger": "evidence/r2/v3_preprocess_ledger_20260907.json",
+      "next_local_step": "legacy research pipeline remains readable with require_complete_execution_trace disabled; it cannot claim a complete production trace"
+    },
+    {
+      "issue_id": "V-19",
+      "requirement_code": "V-19",
+      "title": "每日因子更新执行冻结配方，不重新跑优化器",
+      "status": "TO_VERIFY",
+      "reported_owner_status": "TO_VERIFY",
+      "public_paths": [],
+      "tests": [],
+      "history_evidence": [],
+      "source_ledger": "loop/v3_remediation_ledger.json",
+      "next_local_step": "Implement and validate 每日因子更新执行冻结配方，不重新跑优化器; patch public caller under declared owner package and add success/failure coverage at tests/v/test_v_19_public_path.py."
+    },
+    {
+      "issue_id": "V-20",
+      "requirement_code": "V-20",
+      "title": "失败values清理应真实执行且不破坏生产、共享DAG或统计历史",
+      "status": "TO_VERIFY",
+      "reported_owner_status": "TO_VERIFY",
+      "public_paths": [],
+      "tests": [],
+      "history_evidence": [],
+      "source_ledger": "loop/v3_remediation_ledger.json",
+      "next_local_step": "Implement and validate 失败values清理应真实执行且不破坏生产、共享DAG或统计历史; patch public caller under declared owner package and add success/failure coverage at tests/v/test_v_20_public_path.py."
+    },
+    {
+      "issue_id": "V-21",
+      "requirement_code": "V-21",
+      "title": "上线后诊断与漂移监测不重用测试集调参",
+      "status": "TO_VERIFY",
+      "reported_owner_status": "TO_VERIFY",
+      "public_paths": [],
+      "tests": [],
+      "history_evidence": [],
+      "source_ledger": "loop/v3_remediation_ledger.json",
+      "next_local_step": "Implement and validate 上线后诊断与漂移监测不重用测试集调参; patch public caller under declared owner package and add success/failure coverage at tests/v/test_v_21_public_path.py."
+    },
+    {
+      "issue_id": "V-22",
+      "requirement_code": "V-22",
+      "title": "Agent仅作有界提案和解释，不承担不可验证的硬门",
+      "status": "EVIDENCE_INCOMPLETE",
+      "reported_owner_status": "ALREADY_FIXED_VERIFIED",
+      "public_paths": [],
+      "tests": [],
+      "history_evidence": [
+        "deterministic validator and no-LLM fallback tests"
+      ],
+      "source_ledger": "evidence/r2/v3_optimizer_ledger_merge_20260907.json",
+      "next_local_step": "Implement and validate Agent仅作有界提案和解释，不承担不可验证的硬门; patch public caller under declared owner package and add success/failure coverage at tests/v/test_v_22_public_path.py."
+    },
+    {
+      "issue_id": "V-23",
+      "requirement_code": "V-23",
+      "title": "真实端到端与硬件基准必须覆盖公共入口，而不止内核mock",
+      "status": "TO_VERIFY",
+      "reported_owner_status": "TO_VERIFY",
+      "public_paths": [],
+      "tests": [],
+      "history_evidence": [],
+      "source_ledger": "loop/v3_remediation_ledger.json",
+      "next_local_step": "Implement and validate 真实端到端与硬件基准必须覆盖公共入口，而不止内核mock; patch public caller under declared owner package and add success/failure coverage at tests/v/test_v_23_public_path.py."
+    },
+    {
+      "issue_id": "V-24",
+      "requirement_code": "V-24",
+      "title": "CI和最终验收追踪所有发现、迁移以及既有证据失效范围",
+      "status": "TO_VERIFY",
+      "reported_owner_status": "TO_VERIFY",
+      "public_paths": [],
+      "tests": [],
+      "history_evidence": [],
+      "source_ledger": "loop/v3_remediation_ledger.json",
+      "next_local_step": "Implement and validate CI和最终验收追踪所有发现、迁移以及既有证据失效范围; patch public caller under declared owner package and add success/failure coverage at tests/v/test_v_24_public_path.py."
+    },
+    {
+      "issue_id": "DTA-01",
+      "requirement_code": "DTA-01",
+      "title": "证券永久身份、更名和跨市场同名不能共用时序状态",
+      "status": "FIXED_LOCAL",
+      "reported_owner_status": "FIXED_LOCAL",
+      "public_paths": [],
+      "tests": [],
+      "history_evidence": [
+        "test_provider_panel_has_true_time_asset_axes_without_symbol_coercion"
+      ],
+      "source_ledger": "evidence/r2/v3_preprocess_ledger_20260907.json",
+      "next_local_step": "provider Symbol must already be canonical permanent identity; catalog resolution is DA upstream"
+    },
+    {
+      "issue_id": "DTA-02",
+      "requirement_code": "DTA-02",
+      "title": "财报必须按双时态可见版本连接，不能按报告期连接",
+      "status": "FIXED_LOCAL",
+      "reported_owner_status": "FIXED_LOCAL",
+      "public_paths": [],
+      "tests": [],
+      "history_evidence": [
+        "data_access/tests/test_cos_pit_edges.py",
+        "test_bundle_rejects_shape_axis_and_fabricated_time"
+      ],
+      "source_ledger": "evidence/r2/v3_preprocess_ledger_20260907.json",
+      "next_local_step": "adapter exposure provider now requires real UpdateTime; financial PIT remains DA temporal_join authority"
+    },
+    {
+      "issue_id": "DTA-03",
+      "requirement_code": "DTA-03",
+      "title": "拆分、分红、复权和停牌复牌不应制造伪收益",
+      "status": "EVIDENCE_INCOMPLETE",
+      "reported_owner_status": "ALREADY_FIXED_VERIFIED",
+      "public_paths": [],
+      "tests": [],
+      "history_evidence": [
+        "data_access/tests/security/test_r32_p0_121_128.py"
+      ],
+      "source_ledger": "evidence/r2/v3_preprocess_ledger_20260907.json",
+      "next_local_step": "QE portfolio corporate-action reconciliation not in this package"
+    },
+    {
+      "issue_id": "DTA-04",
+      "requirement_code": "DTA-04",
+      "title": "股票池与退市样本覆盖必须是历史可投资集合",
+      "status": "FIXED_LOCAL",
+      "reported_owner_status": "FIXED_LOCAL",
+      "public_paths": [
+        "factor_assets.adapters.data_access.resolve_universe_snapshot"
+      ],
+      "tests": [
+        "factor_assets/tests/test_adapter_data_access.py",
+        "factor_assets/tests/assembly/test_engine.py"
+      ],
+      "history_evidence": [
+        "new assemblies bind dated universe snapshot; old lineage remains research-only"
+      ],
+      "source_ledger": "current working-tree verified tests",
+      "next_local_step": "historical investable-universe evaluation is FA/QE public path"
+    },
+    {
+      "issue_id": "DTA-05",
+      "requirement_code": "DTA-05",
+      "title": "可交易性要区分买入、卖出、做空和回补",
+      "status": "PARTIAL",
+      "reported_owner_status": "PARTIAL",
+      "public_paths": [
+        "quant_evaluator/runtime/evaluator.py::evaluate"
+      ],
+      "tests": [
+        "quant_evaluator/tests/test_v3_trade_eligibility.py"
+      ],
+      "history_evidence": [
+        "Version changes retained as new registry versions; OPS08 dry-run migration planner exists but historical full replay is not certified."
+      ],
+      "source_ledger": "evidence/r2/v3_qe_ledger_merge_20260907.json",
+      "next_local_step": "Typed side-specific can_buy/sell/borrow/cover panel has clocks/axes/universe ref, applied in CPU/CUDA probe entry and exit checks."
+    },
+    {
+      "issue_id": "DTA-06",
+      "requirement_code": "DTA-06",
+      "title": "派生字段的来源分类与单位代数必须一致",
+      "status": "EVIDENCE_INCOMPLETE",
+      "reported_owner_status": "ALREADY_FIXED_VERIFIED",
+      "public_paths": [],
+      "tests": [],
+      "history_evidence": [
+        "data_access/tests/unit/test_r30_concepts_2026_08.py"
+      ],
+      "source_ledger": "evidence/r2/v3_preprocess_ledger_20260907.json",
+      "next_local_step": "Implement and validate 派生字段的来源分类与单位代数必须一致; patch public caller under data_access and add success/failure coverage at tests/dta/test_dta_06_public_path.py."
+    },
+    {
+      "issue_id": "DTA-07",
+      "requirement_code": "DTA-07",
+      "title": "跨市场时区、交易日和汇率对齐不允许日期字符串碰撞",
+      "status": "EVIDENCE_INCOMPLETE",
+      "reported_owner_status": "ALREADY_FIXED_VERIFIED",
+      "public_paths": [],
+      "tests": [],
+      "history_evidence": [
+        "data_access/tests/unit/test_r24_pit_crossmarket_2026_08.py"
+      ],
+      "source_ledger": "evidence/r2/v3_preprocess_ledger_20260907.json",
+      "next_local_step": "Implement and validate 跨市场时区、交易日和汇率对齐不允许日期字符串碰撞; patch public caller under data_access and add success/failure coverage at tests/dta/test_dta_07_public_path.py."
+    },
+    {
+      "issue_id": "DTA-08",
+      "requirement_code": "DTA-08",
+      "title": "缺失原因必须从原始字段一直传到模型与清理任务",
+      "status": "FIXED_PUBLIC_DA_FP_MODELING_CHAIN",
+      "reported_owner_status": "FIXED_PUBLIC_DA_FP_MODELING_CHAIN",
+      "public_paths": [],
+      "tests": [],
+      "history_evidence": [
+        "data_access.core.missingness.MissingReasonPlane",
+        "FeatureBundle.get_missing_reason_plane",
+        "PanelDataset.as_matrix",
+        "test_explicit_missing_reasons_survive_da_fp_modeling_and_drive_semantic_coverage",
+        "test_reason_plane_never_infers_two_nan_causes_and_rejects_fabricated_fill"
+      ],
+      "source_ledger": "evidence/r2/v3_preprocess_ledger_20260907.json",
+      "next_local_step": "Implement and validate 缺失原因必须从原始字段一直传到模型与清理任务; patch public caller under data_access and add success/failure coverage at tests/dta/test_dta_08_public_path.py."
+    },
+    {
+      "issue_id": "DTA-09",
+      "requirement_code": "DTA-09",
+      "title": "所有as-of和多表join必须验证基数及方向",
+      "status": "FIXED_LOCAL",
+      "reported_owner_status": "FIXED_LOCAL",
+      "public_paths": [],
+      "tests": [],
+      "history_evidence": [
+        "test_provider_panel_rejects_conflicting_join_duplicates",
+        "data_access/tests/test_cos_pit_edges.py"
+      ],
+      "source_ledger": "evidence/r2/v3_preprocess_ledger_20260907.json",
+      "next_local_step": "Implement and validate 所有as-of和多表join必须验证基数及方向; patch public caller under data_access and add success/failure coverage at tests/dta/test_dta_09_public_path.py."
+    },
+    {
+      "issue_id": "DTA-10",
+      "requirement_code": "DTA-10",
+      "title": "晚到数据watermark与局部重算范围需要显式依赖",
+      "status": "EVIDENCE_INCOMPLETE",
+      "reported_owner_status": "FIXED_PUBLIC_CROSS_LIBRARY_VERIFIED",
+      "public_paths": [],
+      "tests": [],
+      "history_evidence": [
+        "DataChangeSet.snapshot_before",
+        "DataChangeSet.data_watermark_after",
+        "plan_minimal_recompute",
+        "compute_state_node_identity",
+        "test_late_revision_has_explicit_watermarks_bounded_window_and_full_recompute_parity",
+        "test_snapshot_revision_changes_checkpoint_identity_and_ema_policy_is_not_polluted_resume"
+      ],
+      "source_ledger": "evidence/r2/v3_preprocess_ledger_20260907.json",
+      "next_local_step": "Implement and validate 晚到数据watermark与局部重算范围需要显式依赖; patch public caller under data_access and add success/failure coverage at tests/dta/test_dta_10_public_path.py."
+    },
+    {
+      "issue_id": "DTA-11",
+      "requirement_code": "DTA-11",
+      "title": "多期限标签成熟度与共同比较样本必须同时保留",
+      "status": "TRANSFERRED",
+      "reported_owner_status": "TRANSFERRED",
+      "public_paths": [],
+      "tests": [],
+      "history_evidence": [],
+      "source_ledger": "evidence/r2/v3_preprocess_ledger_20260907.json",
+      "next_local_step": "QE/FO maturity and common-sample authority"
+    },
+    {
+      "issue_id": "DTA-12",
+      "requirement_code": "DTA-12",
+      "title": "面板布局、dtype与只读所有权必须在跨库边界锁定",
+      "status": "FIXED_LOCAL",
+      "reported_owner_status": "FIXED_LOCAL",
+      "public_paths": [],
+      "tests": [],
+      "history_evidence": [
+        "test_validate_bundle_requires_provenance",
+        "test_bundle_snapshot_preserves_instrument_identity_dtype"
+      ],
+      "source_ledger": "evidence/r2/v3_preprocess_ledger_20260907.json",
+      "next_local_step": "Implement and validate 面板布局、dtype与只读所有权必须在跨库边界锁定; patch public caller under data_access and add success/failure coverage at tests/dta/test_dta_12_public_path.py."
+    },
+    {
+      "issue_id": "STA-01",
+      "requirement_code": "STA-01",
+      "title": "RankIC按每个因子的共同有效集合重新确定秩",
+      "status": "FIXED_LOCAL",
+      "reported_owner_status": "FIXED_LOCAL",
+      "public_paths": [
+        "quant_evaluator.runtime.evaluator.evaluate"
+      ],
+      "tests": [
+        "quant_evaluator/tests/test_v3_pairwise_rank_public.py",
+        "quant_evaluator/tests/test_numerical_oracle.py"
+      ],
+      "history_evidence": [
+        "Existing pairwise reranking behavior now verified against independent per-factor scipy rank oracle on actual CPU/L20 public paths, masked poison and joint asset/factor permutations. No new numerical change in this verification."
+      ],
+      "source_ledger": "evidence/r2/v3_qe_ledger_merge_20260907.json",
+      "next_local_step": "Full historical/cross-domain certification remains separate from this focused public numerical proof."
+    },
+    {
+      "issue_id": "STA-02",
+      "requirement_code": "STA-02",
+      "title": "HAC和有效时间样本数不得由股票格数替代",
+      "status": "PARTIAL",
+      "reported_owner_status": "PARTIAL",
+      "public_paths": [
+        "quant_evaluator.metrics.statistical_evidence.build_hac_evidence",
+        "quant_evaluator.runtime.evaluator.evaluate"
+      ],
+      "tests": [
+        "quant_evaluator/tests/test_v3_statistical_evidence.py",
+        "quant_evaluator/tests/test_v3_public_artifacts.py"
+      ],
+      "history_evidence": [
+        "Typed and legacy CPU/GPU HAC reject internal calendar gaps, trim only empty endpoints, validate policy and preserve existing contiguous covariance convention. hac_tstat/hac_pvalue and four derived multiple corrections now use public semantic version2.0.0 so old evidence can be invalidated."
+      ],
+      "source_ledger": "evidence/r2/v3_qe_ledger_merge_20260907.json",
+      "next_local_step": "A general irregular-time estimator is not implemented: gapped samples explicitly insufficient. Actual selective historical replay across all downstream domains is not yet certified."
+    },
+    {
+      "issue_id": "STA-03",
+      "requirement_code": "STA-03",
+      "title": "块bootstrap必须保留时间依赖和候选间的配对关系",
+      "status": "PARTIAL",
+      "reported_owner_status": "PARTIAL",
+      "public_paths": [
+        "quant_evaluator.metrics.statistical_evidence.build_paired_block_bootstrap_difference"
+      ],
+      "tests": [
+        "quant_evaluator/tests/test_v3_statistical_evidence.py",
+        "quant_evaluator/tests/test_v3_shape_contracts.py"
+      ],
+      "history_evidence": [
+        "Identical candidate differences produce exact zero intervals. Legacy direct CPU/GPU bootstrap now shares one original-calendar draw matrix across candidates, invariant to factor permutation/singleton batching; incomplete columns are NaN. Independent manual block oracle and realL20 regression passed; public block_bootstrap_ci version2.0.0."
+      ],
+      "source_ledger": "evidence/r2/v3_qe_ledger_merge_20260907.json",
+      "next_local_step": "Irregular/gapped resampling remains unsupported and fails closed. Complete shape/FO historical replay and all campaign-level use remain to be verified."
+    },
+    {
+      "issue_id": "STA-04",
+      "requirement_code": "STA-04",
+      "title": "搜索尝试账本与FDR假设族不能通过改名重置",
+      "status": "EVIDENCE_INCOMPLETE",
+      "reported_owner_status": "INTEGRATION_VERIFIED",
+      "public_paths": [],
+      "tests": [],
+      "history_evidence": [
+        "durable proposal/executed/unique-effective/pvalue/horizon family counts across aliases and restart; incomplete FDR input rejected"
+      ],
+      "source_ledger": "evidence/r2/v3_optimizer_ledger_merge_20260907.json",
+      "next_local_step": "Implement and validate 搜索尝试账本与FDR假设族不能通过改名重置; patch public caller under quant_evaluator/metrics and add success/failure coverage at tests/sta/test_sta_04_public_path.py."
+    },
+    {
+      "issue_id": "STA-05",
+      "requirement_code": "STA-05",
+      "title": "DSR的样本、Sharpe尺度和有效试验数要可审计",
+      "status": "FIXED_LOCAL",
+      "reported_owner_status": "FIXED_LOCAL",
+      "public_paths": [],
+      "tests": [],
+      "history_evidence": [
+        "durable effective-trial and pvalue family summary available to DSR"
+      ],
+      "source_ledger": "evidence/r2/v3_optimizer_ledger_merge_20260907.json",
+      "next_local_step": "QE DSR kernel must bind returns frequency/count/skew/kurtosis and ledger ref"
+    },
+    {
+      "issue_id": "STA-06",
+      "requirement_code": "STA-06",
+      "title": "PBO或多切分验证只能用于声明的研究目的",
+      "status": "EVIDENCE_INCOMPLETE",
+      "reported_owner_status": "INTEGRATION_VERIFIED",
+      "public_paths": [],
+      "tests": [],
+      "history_evidence": [
+        "diagnostic/non-forward and winner-only split refs rejected for production OOS"
+      ],
+      "source_ledger": "evidence/r2/v3_optimizer_ledger_merge_20260907.json",
+      "next_local_step": "Implement and validate PBO或多切分验证只能用于声明的研究目的; patch public caller under quant_evaluator/metrics and add success/failure coverage at tests/sta/test_sta_06_public_path.py."
+    },
+    {
+      "issue_id": "STA-07",
+      "requirement_code": "STA-07",
+      "title": "训练验证衰减要区分过拟合、市场状态与近零分母",
+      "status": "EVIDENCE_INCOMPLETE",
+      "reported_owner_status": "INTEGRATION_VERIFIED",
+      "public_paths": [],
+      "tests": [],
+      "history_evidence": [
+        "signed difference, near-zero ratio inapplicability, sign reversal contract"
+      ],
+      "source_ledger": "evidence/r2/v3_optimizer_ledger_merge_20260907.json",
+      "next_local_step": "QE paired uncertainty and effective-window producer"
+    },
+    {
+      "issue_id": "STA-08",
+      "requirement_code": "STA-08",
+      "title": "评级锚点校准和显示分位数必须分开版本",
+      "status": "TO_VERIFY",
+      "reported_owner_status": "TO_VERIFY",
+      "public_paths": [],
+      "tests": [],
+      "history_evidence": [],
+      "source_ledger": "loop/v3_remediation_ledger.json",
+      "next_local_step": "Implement and validate 评级锚点校准和显示分位数必须分开版本; patch public caller under quant_evaluator/metrics and add success/failure coverage at tests/sta/test_sta_08_public_path.py."
+    },
+    {
+      "issue_id": "STA-09",
+      "requirement_code": "STA-09",
+      "title": "市场状态切片要标明事前可知还是事后压力复盘",
+      "status": "FIXED_LOCAL",
+      "reported_owner_status": "FIXED_LOCAL",
+      "public_paths": [],
+      "tests": [],
+      "history_evidence": [
+        "split-purpose production guard prevents diagnostic regime evidence promotion"
+      ],
+      "source_ledger": "evidence/r2/v3_optimizer_ledger_merge_20260907.json",
+      "next_local_step": "QE/FA typed online-causal versus ex-post regime artifact"
+    },
+    {
+      "issue_id": "STA-10",
+      "requirement_code": "STA-10",
+      "title": "期限峰值、符号变化与滤波半衰期不能混作一个数字",
+      "status": "EVIDENCE_INCOMPLETE",
+      "reported_owner_status": "INTEGRATION_VERIFIED",
+      "public_paths": [],
+      "tests": [],
+      "history_evidence": [
+        "horizon sign-change/multi-peak diagnosis never fabricates half-life; horizon count enters hypothesis family"
+      ],
+      "source_ledger": "evidence/r2/v3_optimizer_ledger_merge_20260907.json",
+      "next_local_step": "QE curve-fit evidence for eligible monotone decay"
+    },
+    {
+      "issue_id": "STA-11",
+      "requirement_code": "STA-11",
+      "title": "尾部指标需要明确损失符号、加权分位与样本不足",
+      "status": "TO_VERIFY",
+      "reported_owner_status": "TO_VERIFY",
+      "public_paths": [],
+      "tests": [],
+      "history_evidence": [],
+      "source_ledger": "loop/v3_remediation_ledger.json",
+      "next_local_step": "Implement and validate 尾部指标需要明确损失符号、加权分位与样本不足; patch public caller under quant_evaluator/metrics and add success/failure coverage at tests/sta/test_sta_11_public_path.py."
+    },
+    {
+      "issue_id": "STA-12",
+      "requirement_code": "STA-12",
+      "title": "多维评级不重复计分，诊断结论必须给出证据原因",
+      "status": "TO_VERIFY",
+      "reported_owner_status": "TO_VERIFY",
+      "public_paths": [],
+      "tests": [],
+      "history_evidence": [],
+      "source_ledger": "loop/v3_remediation_ledger.json",
+      "next_local_step": "Implement and validate 多维评级不重复计分，诊断结论必须给出证据原因; patch public caller under quant_evaluator/metrics and add success/failure coverage at tests/sta/test_sta_12_public_path.py."
+    },
+    {
+      "issue_id": "RCP-01",
+      "requirement_code": "RCP-01",
+      "title": "缺失指标、新鲜度等辅助通道必须分支输出而非替换主信号",
+      "status": "FIXED_LOCAL",
+      "reported_owner_status": "FIXED_LOCAL",
+      "public_paths": [],
+      "tests": [],
+      "history_evidence": [
+        "test_auxiliary_channels_preserve_primary_signal_and_original_mask"
+      ],
+      "source_ledger": "evidence/r2/v3_preprocess_ledger_20260907.json",
+      "next_local_step": "Implement and validate 缺失指标、新鲜度等辅助通道必须分支输出而非替换主信号; patch public caller under factor_preprocess/factor_preprocess；factor_engine；factor_optimizer/factor_optimizer/policy and add success/failure coverage at tests/rcp/test_rcp_01_public_path.py."
+    },
+    {
+      "issue_id": "RCP-02",
+      "requirement_code": "RCP-02",
+      "title": "z-score、rank的幂等和零方差处理必须带适用前提",
+      "status": "FIXED_LOCAL",
+      "reported_owner_status": "FIXED_LOCAL",
+      "public_paths": [],
+      "tests": [],
+      "history_evidence": [
+        "test_lineage_dedupe_only_removes_adjacent_exact_duplicate"
+      ],
+      "source_ledger": "evidence/r2/v3_preprocess_ledger_20260907.json",
+      "next_local_step": "Implement and validate z-score、rank的幂等和零方差处理必须带适用前提; patch public caller under factor_preprocess/factor_preprocess；factor_engine；factor_optimizer/factor_optimizer/policy and add success/failure coverage at tests/rcp/test_rcp_02_public_path.py."
+    },
+    {
+      "issue_id": "RCP-03",
+      "requirement_code": "RCP-03",
+      "title": "去极值政策需区分截面winsor、时间拟合阈值和合法经济极值",
+      "status": "EVIDENCE_INCOMPLETE",
+      "reported_owner_status": "ALREADY_FIXED_VERIFIED",
+      "public_paths": [],
+      "tests": [],
+      "history_evidence": [
+        "factor_preprocess/tests/contracts/test_fit_apply_guards.py"
+      ],
+      "source_ledger": "evidence/r2/v3_preprocess_ledger_20260907.json",
+      "next_local_step": "Implement and validate 去极值政策需区分截面winsor、时间拟合阈值和合法经济极值; patch public caller under factor_preprocess/factor_preprocess；factor_engine；factor_optimizer/factor_optimizer/policy and add success/failure coverage at tests/rcp/test_rcp_03_public_path.py."
+    },
+    {
+      "issue_id": "RCP-04",
+      "requirement_code": "RCP-04",
+      "title": "中性化求解器必须声明设计矩阵、权重与精确性",
+      "status": "EVIDENCE_INCOMPLETE",
+      "reported_owner_status": "ALREADY_FIXED_VERIFIED",
+      "public_paths": [],
+      "tests": [],
+      "history_evidence": [
+        "factor_preprocess/tests/test_fe_operator_parity.py"
+      ],
+      "source_ledger": "evidence/r2/v3_preprocess_ledger_20260907.json",
+      "next_local_step": "Implement and validate 中性化求解器必须声明设计矩阵、权重与精确性; patch public caller under factor_preprocess/factor_preprocess；factor_engine；factor_optimizer/factor_optimizer/policy and add success/failure coverage at tests/rcp/test_rcp_04_public_path.py."
+    },
+    {
+      "issue_id": "RCP-05",
+      "requirement_code": "RCP-05",
+      "title": "最终中性约束与rank、clip、平滑的顺序要以输出性质验收",
+      "status": "FIXED_LOCAL",
+      "reported_owner_status": "FIXED_LOCAL",
+      "public_paths": [],
+      "tests": [],
+      "history_evidence": [
+        "test_affine_scaling_preserves_neutrality_only_with_same_mask_and_weights"
+      ],
+      "source_ledger": "evidence/r2/v3_preprocess_ledger_20260907.json",
+      "next_local_step": "QE measured residual exposure required for integration certification"
+    },
+    {
+      "issue_id": "RCP-06",
+      "requirement_code": "RCP-06",
+      "title": "因果平滑状态要区别重复事件值、休市和新观测",
+      "status": "EVIDENCE_INCOMPLETE",
+      "reported_owner_status": "ALREADY_FIXED_VERIFIED",
+      "public_paths": [],
+      "tests": [],
+      "history_evidence": [
+        "factor_preprocess/tests/contracts/test_leakage_properties.py"
+      ],
+      "source_ledger": "evidence/r2/v3_preprocess_ledger_20260907.json",
+      "next_local_step": "Implement and validate 因果平滑状态要区别重复事件值、休市和新观测; patch public caller under factor_preprocess/factor_preprocess；factor_engine；factor_optimizer/factor_optimizer/policy and add success/failure coverage at tests/rcp/test_rcp_06_public_path.py."
+    },
+    {
+      "issue_id": "RCP-07",
+      "requirement_code": "RCP-07",
+      "title": "偏斜U型的中心拟合与左右分支需要低自由度监督契约",
+      "status": "FIXED_LOCAL",
+      "reported_owner_status": "FIXED_LOCAL",
+      "public_paths": [],
+      "tests": [],
+      "history_evidence": [
+        "TRAIN-only finite U-center grid and frozen evidence-bound state"
+      ],
+      "source_ledger": "evidence/r2/v3_optimizer_ledger_merge_20260907.json",
+      "next_local_step": "QE TQF evidence and FE application adapter"
+    },
+    {
+      "issue_id": "RCP-08",
+      "requirement_code": "RCP-08",
+      "title": "尾部修复不能凭单张20层平均图选择任意cutoff",
+      "status": "FIXED_LOCAL",
+      "reported_owner_status": "FIXED_LOCAL",
+      "public_paths": [],
+      "tests": [],
+      "history_evidence": [
+        "finite tail cutoff grid and validation/test refit rejection"
+      ],
+      "source_ledger": "evidence/r2/v3_optimizer_ledger_merge_20260907.json",
+      "next_local_step": "QE bucket count/tie/tradability/risk evidence and FE application adapter"
+    },
+    {
+      "issue_id": "RCP-09",
+      "requirement_code": "RCP-09",
+      "title": "原始、中性、平滑、模型表示版本不互相覆盖",
+      "status": "EVIDENCE_INCOMPLETE",
+      "reported_owner_status": "ALREADY_FIXED_VERIFIED",
+      "public_paths": [],
+      "tests": [],
+      "history_evidence": [
+        "factor_preprocess/tests/representation/test_representation_policies.py"
+      ],
+      "source_ledger": "evidence/r2/v3_preprocess_ledger_20260907.json",
+      "next_local_step": "Implement and validate 原始、中性、平滑、模型表示版本不互相覆盖; patch public caller under factor_preprocess/factor_preprocess；factor_engine；factor_optimizer/factor_optimizer/policy and add success/failure coverage at tests/rcp/test_rcp_09_public_path.py."
+    },
+    {
+      "issue_id": "RCP-10",
+      "requirement_code": "RCP-10",
+      "title": "可读DSL与执行计划必须能无损往返并显示实际参数",
+      "status": "FIXED_LOCAL",
+      "reported_owner_status": "FIXED_LOCAL",
+      "public_paths": [],
+      "tests": [],
+      "history_evidence": [
+        "test_recipe_canonical_roundtrip_and_compile_fail_closed",
+        "test_fitted_recipe_requires_bound_state_ref_at_compile"
+      ],
+      "source_ledger": "evidence/r2/v3_preprocess_ledger_20260907.json",
+      "next_local_step": "Implement and validate 可读DSL与执行计划必须能无损往返并显示实际参数; patch public caller under factor_preprocess/factor_preprocess；factor_engine；factor_optimizer/factor_optimizer/policy and add success/failure coverage at tests/rcp/test_rcp_10_public_path.py."
+    },
+    {
+      "issue_id": "SRH-01",
+      "requirement_code": "SRH-01",
+      "title": "参数变异需要证明改变有效执行，而非只改变描述",
+      "status": "TO_VERIFY",
+      "reported_owner_status": "TO_VERIFY",
+      "public_paths": [],
+      "tests": [],
+      "history_evidence": [],
+      "source_ledger": "loop/v3_remediation_ledger.json",
+      "next_local_step": "Implement and validate 参数变异需要证明改变有效执行，而非只改变描述; patch public caller under factor_optimizer/factor_optimizer；factor_assets/selection；quant_evaluator and add success/failure coverage at tests/srh/test_srh_01_public_path.py."
+    },
+    {
+      "issue_id": "SRH-02",
+      "requirement_code": "SRH-02",
+      "title": "诊断冲突与多问题并存时先修完整性再修效用",
+      "status": "TO_VERIFY",
+      "reported_owner_status": "TO_VERIFY",
+      "public_paths": [],
+      "tests": [],
+      "history_evidence": [],
+      "source_ledger": "loop/v3_remediation_ledger.json",
+      "next_local_step": "Implement and validate 诊断冲突与多问题并存时先修完整性再修效用; patch public caller under factor_optimizer/factor_optimizer；factor_assets/selection；quant_evaluator and add success/failure coverage at tests/srh/test_srh_02_public_path.py."
+    },
+    {
+      "issue_id": "SRH-03",
+      "requirement_code": "SRH-03",
+      "title": "Pareto需要容差、未知状态与可比较目标集合",
+      "status": "EVIDENCE_INCOMPLETE",
+      "reported_owner_status": "INTEGRATION_VERIFIED",
+      "public_paths": [],
+      "tests": [],
+      "history_evidence": [
+        "finite hard-gated epsilon winner-set policy"
+      ],
+      "source_ledger": "evidence/r2/v3_optimizer_ledger_merge_20260907.json",
+      "next_local_step": "Implement and validate Pareto需要容差、未知状态与可比较目标集合; patch public caller under factor_optimizer/factor_optimizer；factor_assets/selection；quant_evaluator and add success/failure coverage at tests/srh/test_srh_03_public_path.py."
+    },
+    {
+      "issue_id": "SRH-04",
+      "requirement_code": "SRH-04",
+      "title": "多赢家集合选择应验证边际贡献与母因子上限",
+      "status": "FIXED_LOCAL",
+      "reported_owner_status": "FIXED_LOCAL",
+      "public_paths": [],
+      "tests": [],
+      "history_evidence": [
+        "empty/complementary winner sets, family cap, incremental gate, duplicate correlation"
+      ],
+      "source_ledger": "evidence/r2/v3_optimizer_ledger_merge_20260907.json",
+      "next_local_step": "FA/modeling OOS incremental producer integration"
+    },
+    {
+      "issue_id": "SRH-05",
+      "requirement_code": "SRH-05",
+      "title": "分阶段晋级必须防止短窗幸存偏差与样本不公平",
+      "status": "TO_VERIFY",
+      "reported_owner_status": "TO_VERIFY",
+      "public_paths": [],
+      "tests": [],
+      "history_evidence": [],
+      "source_ledger": "loop/v3_remediation_ledger.json",
+      "next_local_step": "Implement and validate 分阶段晋级必须防止短窗幸存偏差与样本不公平; patch public caller under factor_optimizer/factor_optimizer；factor_assets/selection；quant_evaluator and add success/failure coverage at tests/srh/test_srh_05_public_path.py."
+    },
+    {
+      "issue_id": "SRH-06",
+      "requirement_code": "SRH-06",
+      "title": "预算预留、取消与重试要有持久化资源账本",
+      "status": "EVIDENCE_INCOMPLETE",
+      "reported_owner_status": "INTEGRATION_VERIFIED",
+      "public_paths": [],
+      "tests": [],
+      "history_evidence": [
+        "SQLite concurrent reservation and restart tests"
+      ],
+      "source_ledger": "evidence/r2/v3_optimizer_ledger_merge_20260907.json",
+      "next_local_step": "Implement and validate 预算预留、取消与重试要有持久化资源账本; patch public caller under factor_optimizer/factor_optimizer；factor_assets/selection；quant_evaluator and add success/failure coverage at tests/srh/test_srh_06_public_path.py."
+    },
+    {
+      "issue_id": "SRH-07",
+      "requirement_code": "SRH-07",
+      "title": "封存测试访问要绑定候选集合且不能在日志中泄露",
+      "status": "EVIDENCE_INCOMPLETE",
+      "reported_owner_status": "INTEGRATION_VERIFIED",
+      "public_paths": [],
+      "tests": [],
+      "history_evidence": [
+        "durable frozen candidate-set authority, infra-only retry, immutable result replay"
+      ],
+      "source_ledger": "evidence/r2/v3_optimizer_ledger_merge_20260907.json",
+      "next_local_step": "Implement and validate 封存测试访问要绑定候选集合且不能在日志中泄露; patch public caller under factor_optimizer/factor_optimizer；factor_assets/selection；quant_evaluator and add success/failure coverage at tests/srh/test_srh_07_public_path.py."
+    },
+    {
+      "issue_id": "SRH-08",
+      "requirement_code": "SRH-08",
+      "title": "候选生成器与异步执行顺序必须可复现",
+      "status": "EVIDENCE_INCOMPLETE",
+      "reported_owner_status": "INTEGRATION_VERIFIED",
+      "public_paths": [],
+      "tests": [],
+      "history_evidence": [
+        "named strategy RNG checkpoint/resume; serialized control plane"
+      ],
+      "source_ledger": "evidence/r2/v3_optimizer_ledger_merge_20260907.json",
+      "next_local_step": "Implement and validate 候选生成器与异步执行顺序必须可复现; patch public caller under factor_optimizer/factor_optimizer；factor_assets/selection；quant_evaluator and add success/failure coverage at tests/srh/test_srh_08_public_path.py."
+    },
+    {
+      "issue_id": "SRH-09",
+      "requirement_code": "SRH-09",
+      "title": "早停需考虑评价噪声、成本和基线而非裸分数平台",
+      "status": "EVIDENCE_INCOMPLETE",
+      "reported_owner_status": "ALREADY_FIXED_VERIFIED",
+      "public_paths": [],
+      "tests": [],
+      "history_evidence": [
+        "budget-bounded plateau tests"
+      ],
+      "source_ledger": "evidence/r2/v3_optimizer_ledger_merge_20260907.json",
+      "next_local_step": "QE paired uncertainty evidence for statistically meaningful gain"
+    },
+    {
+      "issue_id": "SRH-10",
+      "requirement_code": "SRH-10",
+      "title": "失败修复、参数平台与以后复用应沉淀为有版本知识",
+      "status": "EVIDENCE_INCOMPLETE",
+      "reported_owner_status": "INTEGRATION_VERIFIED",
+      "public_paths": [],
+      "tests": [],
+      "history_evidence": [
+        "durable failure knowledge keyed by effective spec, intent, context"
+      ],
+      "source_ledger": "evidence/r2/v3_optimizer_ledger_merge_20260907.json",
+      "next_local_step": "Implement and validate 失败修复、参数平台与以后复用应沉淀为有版本知识; patch public caller under factor_optimizer/factor_optimizer；factor_assets/selection；quant_evaluator and add success/failure coverage at tests/srh/test_srh_10_public_path.py."
+    },
+    {
+      "issue_id": "SIM-01",
+      "requirement_code": "SIM-01",
+      "title": "相似度类型与逐日聚合方法必须写进fingerprint规格",
+      "status": "FIXED_LOCAL_INTEGRATION_PENDING",
+      "reported_owner_status": "FIXED_LOCAL_INTEGRATION_PENDING",
+      "public_paths": [
+        "factor_assets.contracts.fingerprint.SimilarityFingerprintArtifact"
+      ],
+      "tests": [
+        "factor_assets/tests/contracts/test_fingerprint_spec_v3.py::test_fingerprint_identity_binds_preprocessing_and_aggregation"
+      ],
+      "history_evidence": [
+        "regenerate legacy fingerprints before certified use"
+      ],
+      "source_ledger": "evidence/r2/v3_preprocess_ledger_20260907.json",
+      "next_local_step": "QE formal pairwise producer coverage is outside this package"
+    },
+    {
+      "issue_id": "SIM-02",
+      "requirement_code": "SIM-02",
+      "title": "共同覆盖不足时不能证明不重复或高相似",
+      "status": "FIXED_LOCAL",
+      "reported_owner_status": "FIXED_LOCAL",
+      "public_paths": [
+        "quant_evaluator.metrics.interactions.pairwise.PairwiseCorrelationArtifact; PairwiseWindowEvidence; factor_assets.adapters.quant_evaluator.QEEvidenceProvider.create_pairwise_evidence; factor_assets.clustering.incremental.incremental_assign"
+      ],
+      "tests": [
+        "quant_evaluator/tests/test_pairwise_artifact_v3.py",
+        "factor_assets/tests/test_fa09_qe_pairwise.py",
+        "factor_assets/tests/test_incremental_cluster_assign.py"
+      ],
+      "history_evidence": [
+        "legacy aggregate-only similarities remain UNKNOWN/research-only; regenerate typed multi-window evidence before certification"
+      ],
+      "source_ledger": "evidence/r2/v3_assets_177_ledger.json",
+      "next_local_step": "Implement and validate 共同覆盖不足时不能证明不重复或高相似; patch public caller under factor_assets/clustering and add success/failure coverage at tests/sim/test_sim_02_public_path.py."
+    },
+    {
+      "issue_id": "SIM-03",
+      "requirement_code": "SIM-03",
+      "title": "极高相关候选也要检查尾部、mask和参数平台差异",
+      "status": "INTEGRATION_PENDING",
+      "reported_owner_status": "INTEGRATION_PENDING",
+      "public_paths": [
+        "factor_assets.contracts.similarity.SimilarityArtifact"
+      ],
+      "tests": [
+        "factor_assets/tests/contracts/test_similarity_and_admission.py"
+      ],
+      "history_evidence": [
+        "do not auto-delete near duplicates"
+      ],
+      "source_ledger": "evidence/r2/v3_assets_177_ledger.json",
+      "next_local_step": "requires QE multi-window/tail/mask evidence and FO cost evidence"
+    },
+    {
+      "issue_id": "SIM-04",
+      "requirement_code": "SIM-04",
+      "title": "相似图不等于协方差矩阵，缺边补零需禁止隐式使用",
+      "status": "ALREADY_FIXED_LOCAL_E2E_PENDING",
+      "reported_owner_status": "ALREADY_FIXED_LOCAL_E2E_PENDING",
+      "public_paths": [
+        "factor_assets.clustering.certification.enforce_certified_graph"
+      ],
+      "tests": [
+        "factor_assets/tests/test_clustering_certification.py",
+        "factor_assets/tests/test_graph_construction_invariants.py"
+      ],
+      "history_evidence": [
+        "none inside FA"
+      ],
+      "source_ledger": "evidence/r2/v3_assets_177_ledger.json",
+      "next_local_step": "cross-package covariance consumer audit not completed"
+    },
+    {
+      "issue_id": "SIM-05",
+      "requirement_code": "SIM-05",
+      "title": "Leiden分簇结果还要检查经济同质性与方向一致",
+      "status": "FIXED_LOCAL",
+      "reported_owner_status": "FIXED_LOCAL",
+      "public_paths": [
+        "factor_assets.clustering.families.LeidenClustering"
+      ],
+      "tests": [
+        "factor_assets/tests/test_clustering_leiden.py",
+        "factor_assets/tests/test_clustering_families.py"
+      ],
+      "history_evidence": [
+        "Old cluster artifacts without quality retain legacy content hash; new quality changes identity. Existing production callers must supply a calibrated quality policy and reevaluate old clusters. No production graph/pointer mutated."
+      ],
+      "source_ledger": "evidence/r2/v3_qe_ledger_merge_20260907.json",
+      "next_local_step": "economic homogeneity quality fields not closed"
+    },
+    {
+      "issue_id": "SIM-06",
+      "requirement_code": "SIM-06",
+      "title": "未测边、测得低边与认证图内容必须分开",
+      "status": "ALREADY_FIXED_LOCAL_E2E_PENDING",
+      "reported_owner_status": "ALREADY_FIXED_LOCAL_E2E_PENDING",
+      "public_paths": [
+        "factor_assets.clustering.certification.CertifiedGraphArtifact"
+      ],
+      "tests": [
+        "factor_assets/tests/test_clustering_certification.py"
+      ],
+      "history_evidence": [
+        "legacy uncertified graphs remain research-only"
+      ],
+      "source_ledger": "evidence/r2/v3_assets_177_ledger.json",
+      "next_local_step": "manifest-to-pairwise evidence resolution audit not closed"
+    },
+    {
+      "issue_id": "SIM-07",
+      "requirement_code": "SIM-07",
+      "title": "ANN索引的召回质量、版本和增量维护需要验收",
+      "status": "PARTIAL_FIXED_LOCAL",
+      "reported_owner_status": "PARTIAL_FIXED_LOCAL",
+      "public_paths": [
+        "factor_assets.contracts.fingerprint.ANNIndexArtifact.certified_for_recall"
+      ],
+      "tests": [
+        "factor_assets/tests/contracts/test_fingerprint_spec_v3.py::test_ann_certification_requires_near_duplicate_recall_and_membership_identity"
+      ],
+      "history_evidence": [
+        "rebuild unaudited indices"
+      ],
+      "source_ledger": "evidence/r2/v3_assets_177_ledger.json",
+      "next_local_step": "no exact-recall audit dataset or certified ANN runtime in this run"
+    },
+    {
+      "issue_id": "SIM-08",
+      "requirement_code": "SIM-08",
+      "title": "增量归簇要比较多个支持邻居和歧义间隔",
+      "status": "FIXED_LOCAL",
+      "reported_owner_status": "FIXED_LOCAL",
+      "public_paths": [],
+      "tests": [],
+      "history_evidence": [
+        "factor_assets.clustering.incremental.IncrementalPolicy.cluster_support_k",
+        "factor_assets.clustering.incremental._aggregate_cluster_support",
+        "test_single_bridge_neighbor_cannot_certify_cluster_support",
+        "test_medoid_and_top_k_support_produce_conservative_cluster_affinity",
+        "test_supported_cluster_ambiguity_is_independent_of_mapping_order",
+        "test_redirect_uses_supported_final_cluster_evidence",
+        "25 focused incremental tests passed",
+        "root full factor_assets integration: 1315 passed, 43 skipped"
+      ],
+      "source_ledger": "evidence/r2/v3_preprocess_ledger_20260907.json",
+      "next_local_step": "final-target affinity corrected; medoid and top-k support contract remains"
+    },
+    {
+      "issue_id": "SIM-09",
+      "requirement_code": "SIM-09",
+      "title": "簇split/merge要保留逻辑身份和旧模型引用",
+      "status": "ALREADY_FIXED_LOCAL_E2E_PENDING",
+      "reported_owner_status": "ALREADY_FIXED_LOCAL_E2E_PENDING",
+      "public_paths": [
+        "factor_assets.clustering.incremental.build_incremental_cluster_version; build_incremental_lineage_edges"
+      ],
+      "tests": [
+        "factor_assets/tests/test_clustering_lineage.py",
+        "factor_assets/tests/test_incremental_cluster_assign.py"
+      ],
+      "history_evidence": [
+        "old versions remain readable"
+      ],
+      "source_ledger": "evidence/r2/v3_assets_177_ledger.json",
+      "next_local_step": "model-serving compatibility gate is outside this package"
+    },
+    {
+      "issue_id": "SIM-10",
+      "requirement_code": "SIM-10",
+      "title": "簇压缩成模型特征时，聚合函数与拟合窗口须固定",
+      "status": "ALREADY_FIXED_LOCAL_E2E_PENDING",
+      "reported_owner_status": "ALREADY_FIXED_LOCAL_E2E_PENDING",
+      "public_paths": [
+        "factor_assets.aggregation.specs.AggregationFitArtifact.validate_oos_evaluation"
+      ],
+      "tests": [
+        "factor_assets/tests/aggregation/test_specs.py",
+        "factor_assets/tests/aggregation/test_representatives.py"
+      ],
+      "history_evidence": [
+        "new member/weight/spec creates a new aggregate identity"
+      ],
+      "source_ledger": "evidence/r2/v3_assets_177_ledger.json",
+      "next_local_step": "cross-package FE/FP/modeling aggregation state contract not closed"
+    },
+    {
+      "issue_id": "MOD-01",
+      "requirement_code": "MOD-01",
+      "title": "模型每个训练fold都要重新拟合特征选择和预处理状态",
+      "status": "FIXED_LOCAL",
+      "reported_owner_status": "FIXED_LOCAL",
+      "public_paths": [],
+      "tests": [],
+      "history_evidence": [
+        "test_heldout_mutation_does_not_change_selection_preprocessing_state",
+        "test_final_refit_preprocessing_matches_declared_train_plus_validation_cohort"
+      ],
+      "source_ledger": "evidence/r2/v3_preprocess_ledger_20260907.json",
+      "next_local_step": "Implement and validate 模型每个训练fold都要重新拟合特征选择和预处理状态; patch public caller under modeling and add success/failure coverage at tests/mod/test_mod_01_public_path.py."
+    },
+    {
+      "issue_id": "MOD-02",
+      "requirement_code": "MOD-02",
+      "title": "低单因子IC特征必须通过有限预算的增量检验",
+      "status": "FIXED_LOCAL_MODELING_SURFACE",
+      "reported_owner_status": "FIXED_LOCAL_MODELING_SURFACE",
+      "public_paths": [],
+      "tests": [],
+      "history_evidence": [
+        "modeling/trainer_governance.py::FeatureExperimentSpec",
+        "modeling/diagnostics.py::feature_ablation",
+        "test_feature_diagnostics_distinguish_frozen_perturbation_and_retraining",
+        "test_retrained_ablation_stops_at_durable_campaign_budget"
+      ],
+      "source_ledger": "evidence/r2/v3_preprocess_ledger_20260907.json",
+      "next_local_step": "Implement and validate 低单因子IC特征必须通过有限预算的增量检验; patch public caller under modeling and add success/failure coverage at tests/mod/test_mod_02_public_path.py."
+    },
+    {
+      "issue_id": "MOD-03",
+      "requirement_code": "MOD-03",
+      "title": "中性化的非劣性容忍区要与消费者目标一致",
+      "status": "FIXED_LOCAL_MODELING_SURFACE",
+      "reported_owner_status": "FIXED_LOCAL_MODELING_SURFACE",
+      "public_paths": [],
+      "tests": [],
+      "history_evidence": [
+        "modeling/selection.py::ConsumerNonInferiorityContract",
+        "test_selection_applies_consumer_objective_noninferiority_and_risk_gate"
+      ],
+      "source_ledger": "evidence/r2/v3_preprocess_ledger_20260907.json",
+      "next_local_step": "Implement and validate 中性化的非劣性容忍区要与消费者目标一致; patch public caller under modeling and add success/failure coverage at tests/mod/test_mod_03_public_path.py."
+    },
+    {
+      "issue_id": "MOD-04",
+      "requirement_code": "MOD-04",
+      "title": "神经网络、树与线性模型各自处理缺失和尺度",
+      "status": "FIXED_LOCAL_MODELING_SURFACE",
+      "reported_owner_status": "FIXED_LOCAL_MODELING_SURFACE",
+      "public_paths": [],
+      "tests": [],
+      "history_evidence": [
+        "modeling/trainer.py::PreprocessingSpec",
+        "test_generic_preprocessing_default_cannot_certify_complete_production_manifest"
+      ],
+      "source_ledger": "evidence/r2/v3_preprocess_ledger_20260907.json",
+      "next_local_step": "Implement and validate 神经网络、树与线性模型各自处理缺失和尺度; patch public caller under modeling and add success/failure coverage at tests/mod/test_mod_04_public_path.py."
+    },
+    {
+      "issue_id": "MOD-05",
+      "requirement_code": "MOD-05",
+      "title": "模型特征顺序、列内定义与数据集指纹必须严格校验",
+      "status": "FIXED_LOCAL",
+      "reported_owner_status": "FIXED_LOCAL",
+      "public_paths": [],
+      "tests": [],
+      "history_evidence": [
+        "test_full_feature_manifest_hash_detects_semantic_change_and_order",
+        "test_same_columns_with_changed_state_ref_are_rejected_between_fold_cohorts",
+        "full-manifest artifact serialization roundtrip in test_v3_mod_01_05_08.py"
+      ],
+      "source_ledger": "evidence/r2/v3_preprocess_ledger_20260907.json",
+      "next_local_step": "Implement and validate 模型特征顺序、列内定义与数据集指纹必须严格校验; patch public caller under modeling and add success/failure coverage at tests/mod/test_mod_05_public_path.py."
+    },
+    {
+      "issue_id": "MOD-06",
+      "requirement_code": "MOD-06",
+      "title": "新增研究因子不能自动改变线上簇列或模型输入",
+      "status": "FIXED_LOCAL",
+      "reported_owner_status": "FIXED_LOCAL",
+      "public_paths": [
+        "quant_platform.app.orchestrator.Pipeline.modeling_feature_manifests"
+      ],
+      "tests": [
+        "quant_platform/tests/test_modeling_manifest_bridge.py",
+        "quant_platform/tests/test_orchestrator_pipeline.py"
+      ],
+      "history_evidence": [
+        "incomplete provenance stays research-only and model_ready=false"
+      ],
+      "source_ledger": "current working-tree verified tests",
+      "next_local_step": "production FeatureSetVersion pointer and compatibility gate caller is factor_assets/assembly/engine.py/platform release path"
+    },
+    {
+      "issue_id": "MOD-07",
+      "requirement_code": "MOD-07",
+      "title": "模型预测评价、组合评价与特征归因要分开",
+      "status": "FIXED_LOCAL",
+      "reported_owner_status": "FIXED_LOCAL",
+      "public_paths": [
+        "jobs.evaluate_model_predictions.evaluate_model_predictions",
+        "modeling.evaluation.evaluate_predictions"
+      ],
+      "tests": [
+        "tests/modeling/test_v3_mod07_evidence.py",
+        "tests/modeling/test_r41_evaluation_oos_ic.py",
+        "tests/modeling/test_packaging_independence.py"
+      ],
+      "history_evidence": [
+        "Report version v3-separated-evidence-2; legacy aliases retain diagnostic status, no factor inherits model performance."
+      ],
+      "source_ledger": "evidence/r2/v3_qe_ledger_merge_20260907.json",
+      "next_local_step": "Public jobs train_evaluate_model_predictions/evaluate_trained_model_predictions now execute real PCR model artifact with independently checked OOS schema and value-bound prediction ID; full scenario GOLD/E2E trace remains pending. Legacy array-only paths remain research/descriptive. Execution-domain portfolio certification is not asserted."
+    },
+    {
+      "issue_id": "MOD-08",
+      "requirement_code": "MOD-08",
+      "title": "漂移监测、影子运行和回滚不能触发无界自动优化",
+      "status": "FIXED_LOCAL_MODELING_SURFACE",
+      "reported_owner_status": "FIXED_LOCAL_MODELING_SURFACE",
+      "public_paths": [],
+      "tests": [],
+      "history_evidence": [
+        "test_drift_cannot_trigger_unbounded_retrain",
+        "test_predictive_drift_requires_mature_metric",
+        "test_rollback_binding_cannot_mix_model_and_feature_versions"
+      ],
+      "source_ledger": "evidence/r2/v3_preprocess_ledger_20260907.json",
+      "next_local_step": "platform shadow publish/rollback persistence remains platform owner"
+    },
+    {
+      "issue_id": "OPS-01",
+      "requirement_code": "OPS-01",
+      "title": "相同工作意图的并发写入必须原子幂等",
+      "status": "READ_ONLY_TRANSFERRED",
+      "reported_owner_status": "READ_ONLY_TRANSFERRED",
+      "public_paths": [],
+      "tests": [],
+      "history_evidence": [],
+      "source_ledger": "evidence/r2/v3_preprocess_ledger_20260907.json",
+      "next_local_step": "shared persistence owner: quant_platform/app outbox/work-intent transactions and FA/DA registries"
+    },
+    {
+      "issue_id": "OPS-02",
+      "requirement_code": "OPS-02",
+      "title": "资源调度要包含共享数据、显存工作区和背压",
+      "status": "READ_ONLY_TRANSFERRED",
+      "reported_owner_status": "READ_ONLY_TRANSFERRED",
+      "public_paths": [],
+      "tests": [],
+      "history_evidence": [],
+      "source_ledger": "evidence/r2/v3_preprocess_ledger_20260907.json",
+      "next_local_step": "shared runtime owner: QE/FE/platform resource planner, reservation and backpressure"
+    },
+    {
+      "issue_id": "OPS-03",
+      "requirement_code": "OPS-03",
+      "title": "OOM和后端降级必须保持语义且不能伪报GPU完成",
+      "status": "READ_ONLY_TRANSFERRED",
+      "reported_owner_status": "READ_ONLY_TRANSFERRED",
+      "public_paths": [],
+      "tests": [],
+      "history_evidence": [],
+      "source_ledger": "evidence/r2/v3_preprocess_ledger_20260907.json",
+      "next_local_step": "shared runtime owner: QE/FE effective-backend and partial-result contracts"
+    },
+    {
+      "issue_id": "OPS-04",
+      "requirement_code": "OPS-04",
+      "title": "性能基准必须覆盖端到端与设备同步边界",
+      "status": "FIXED_LOCAL_MODELING_SURFACE",
+      "reported_owner_status": "FIXED_LOCAL_MODELING_SURFACE",
+      "public_paths": [],
+      "tests": [],
+      "history_evidence": [
+        "modeling/benchmark.py::BenchmarkSpec",
+        "modeling/benchmark.py::measure_synchronized_phase",
+        "test_gpu_benchmark_times_through_sync_and_requires_complete_receipt"
+      ],
+      "source_ledger": "evidence/r2/v3_preprocess_ledger_20260907.json",
+      "next_local_step": "QE/FE benchmark runners must populate the validated receipt from real device executions"
+    },
+    {
+      "issue_id": "OPS-05",
+      "requirement_code": "OPS-05",
+      "title": "失败物化值GC需要根集合、租约和回滚保留窗口",
+      "status": "FIXED_REAL_DURABLE_REGISTRY",
+      "reported_owner_status": "FIXED_REAL_DURABLE_REGISTRY",
+      "public_paths": [],
+      "tests": [],
+      "history_evidence": [
+        "DurableGenerationCoordinator.snapshot_for_gc",
+        "DurableGenerationCoordinator.protect_gc_root",
+        "test_real_registry_snapshot_and_epoch_root_race_blocks_gc",
+        "test_concurrent_root_and_sweep_have_one_safe_winner"
+      ],
+      "source_ledger": "evidence/r2/v3_preprocess_ledger_20260907.json",
+      "next_local_step": "Implement and validate 失败物化值GC需要根集合、租约和回滚保留窗口; patch public caller under quant_platform/app and add success/failure coverage at tests/ops/test_ops_05_public_path.py."
+    },
+    {
+      "issue_id": "OPS-06",
+      "requirement_code": "OPS-06",
+      "title": "扫描后新增引用的GC竞态必须可防护",
+      "status": "FIXED_REAL_DURABLE_REGISTRY",
+      "reported_owner_status": "FIXED_REAL_DURABLE_REGISTRY",
+      "public_paths": [],
+      "tests": [],
+      "history_evidence": [
+        "DurableGenerationCoordinator.claim_gc_tombstone",
+        "DurableGenerationCoordinator.publish",
+        "test_real_registry_tombstone_rejects_publish_and_new_root",
+        "test_concurrent_publish_and_sweep_never_leave_dangling_reference_or_bytes"
+      ],
+      "source_ledger": "evidence/r2/v3_preprocess_ledger_20260907.json",
+      "next_local_step": "Implement and validate 扫描后新增引用的GC竞态必须可防护; patch public caller under quant_platform/app and add success/failure coverage at tests/ops/test_ops_06_public_path.py."
+    },
+    {
+      "issue_id": "OPS-07",
+      "requirement_code": "OPS-07",
+      "title": "删除回执要覆盖对象版本、缓存和实际空间回收",
+      "status": "FIXED_REAL_DURABLE_REGISTRY",
+      "reported_owner_status": "FIXED_REAL_DURABLE_REGISTRY",
+      "public_paths": [],
+      "tests": [],
+      "history_evidence": [
+        "DurableGenerationCoordinator.record_deletion_receipt",
+        "RootAwareGarbageCollector.sweep",
+        "test_gc_crash_after_tombstone_replays_to_one_durable_receipt",
+        "test_provider_retention_is_pending_not_physical_success"
+      ],
+      "source_ledger": "evidence/r2/v3_preprocess_ledger_20260907.json",
+      "next_local_step": "Implement and validate 删除回执要覆盖对象版本、缓存和实际空间回收; patch public caller under quant_platform/app and add success/failure coverage at tests/ops/test_ops_07_public_path.py."
+    },
+    {
+      "issue_id": "OPS-08",
+      "requirement_code": "OPS-08",
+      "title": "算法修复后要按依赖失效历史评级、簇和模型",
+      "status": "PARTIAL",
+      "reported_owner_status": "PARTIAL",
+      "public_paths": [
+        "quant_platform.app.ops08_migration.plan_ops08_migration",
+        "quant_platform.app.ops08_migration.execute_ops08_shadow",
+        "jobs.ops08_replay_fixture"
+      ],
+      "tests": [
+        "quant_platform/tests/test_ops08_migration.py",
+        "quant_platform/tests/test_outbox_claim.py"
+      ],
+      "history_evidence": [
+        "Frozen dependency graph selective invalidation and actual shadow risk evaluation-to-health plus recipe-to-FP-value-to-QE-to-health replay. Persisted audit-only envelopes, exact direct dependencies and scoped outbox publishing preserve original bytes/pointers; 12 focused replay tests and 23 outbox tests. Cluster/feature/model replay authorities and approved production pointer switch/rollback remain incomplete."
+      ],
+      "source_ledger": "current working-tree verified tests",
+      "next_local_step": "FA/QE/FE/platform dependency invalidation and production-pointer migration authority"
+    },
+    {
+      "issue_id": "OPS-09",
+      "requirement_code": "OPS-09",
+      "title": "离线回放必须在无Agent、无实时API下重现生产特征",
+      "status": "FIXED_LOCAL_MODELING_SURFACE",
+      "reported_owner_status": "FIXED_LOCAL_MODELING_SURFACE",
+      "public_paths": [],
+      "tests": [],
+      "history_evidence": [
+        "modeling/artifact.py::ReplayContract",
+        "ModelArtifact.from_dict_for_replay",
+        "ModelArtifact.load_for_replay",
+        "strict replay tests in test_v3_mod_01_05_08.py"
+      ],
+      "source_ledger": "evidence/r2/v3_preprocess_ledger_20260907.json",
+      "next_local_step": "FE/DA replay runner must supply matching frozen dependency refs and must not resolve live defaults"
+    },
+    {
+      "issue_id": "OPS-10",
+      "requirement_code": "OPS-10",
+      "title": "错误状态、等待成熟、维修失败与淘汰必须有不同动作",
+      "status": "FIXED_LOCAL_MODELING_CONTRACT",
+      "reported_owner_status": "FIXED_LOCAL_MODELING_CONTRACT",
+      "public_paths": [],
+      "tests": [],
+      "history_evidence": [
+        "modeling/monitoring.py::LifecycleReason",
+        "LifecycleEvent",
+        "test_lifecycle_reason_preserves_cause_and_drives_retry_gc_policy"
+      ],
+      "source_ledger": "evidence/r2/v3_preprocess_ledger_20260907.json",
+      "next_local_step": "platform persistent event store/UI/GC must consume this typed mapping rather than a generic FAILED state"
+    },
+    {
+      "issue_id": "QAT-01",
+      "requirement_code": "QAT-01",
+      "title": "属性测试需要覆盖因子、证券、时间轴与掩码变换",
+      "status": "TO_VERIFY",
+      "reported_owner_status": "TO_VERIFY",
+      "public_paths": [],
+      "tests": [],
+      "history_evidence": [],
+      "source_ledger": "loop/v3_remediation_ledger.json",
+      "next_local_step": "Implement and validate 属性测试需要覆盖因子、证券、时间轴与掩码变换; patch public caller under tests and add success/failure coverage at tests/qat/test_qat_01_public_path.py."
+    },
+    {
+      "issue_id": "QAT-02",
+      "requirement_code": "QAT-02",
+      "title": "金标必须独立于待测实现，CPU/GPU不能一起算错",
+      "status": "TO_VERIFY",
+      "reported_owner_status": "TO_VERIFY",
+      "public_paths": [],
+      "tests": [],
+      "history_evidence": [],
+      "source_ledger": "loop/v3_remediation_ledger.json",
+      "next_local_step": "Implement and validate 金标必须独立于待测实现，CPU/GPU不能一起算错; patch public caller under tests and add success/failure coverage at tests/qat/test_qat_02_public_path.py."
+    },
+    {
+      "issue_id": "QAT-03",
+      "requirement_code": "QAT-03",
+      "title": "没有真实GPU时只能验证协议，不能签发硬件parity",
+      "status": "TO_VERIFY",
+      "reported_owner_status": "TO_VERIFY",
+      "public_paths": [],
+      "tests": [],
+      "history_evidence": [],
+      "source_ledger": "loop/v3_remediation_ledger.json",
+      "next_local_step": "Implement and validate 没有真实GPU时只能验证协议，不能签发硬件parity; patch public caller under tests and add success/failure coverage at tests/qat/test_qat_03_public_path.py."
+    },
+    {
+      "issue_id": "QAT-04",
+      "requirement_code": "QAT-04",
+      "title": "变异测试证明守门真正保护，而不是写了断言名",
+      "status": "TO_VERIFY",
+      "reported_owner_status": "TO_VERIFY",
+      "public_paths": [],
+      "tests": [],
+      "history_evidence": [],
+      "source_ledger": "loop/v3_remediation_ledger.json",
+      "next_local_step": "Implement and validate 变异测试证明守门真正保护，而不是写了断言名; patch public caller under tests and add success/failure coverage at tests/qat/test_qat_04_public_path.py."
+    },
+    {
+      "issue_id": "QAT-05",
+      "requirement_code": "QAT-05",
+      "title": "序列化与内容身份fuzz要覆盖错误值和跨对象嫁接",
+      "status": "TO_VERIFY",
+      "reported_owner_status": "TO_VERIFY",
+      "public_paths": [],
+      "tests": [],
+      "history_evidence": [],
+      "source_ledger": "loop/v3_remediation_ledger.json",
+      "next_local_step": "Implement and validate 序列化与内容身份fuzz要覆盖错误值和跨对象嫁接; patch public caller under tests and add success/failure coverage at tests/qat/test_qat_05_public_path.py."
+    },
+    {
+      "issue_id": "QAT-06",
+      "requirement_code": "QAT-06",
+      "title": "数据差分与增量回放要包含晚到、修订、停牌和断点",
+      "status": "TO_VERIFY",
+      "reported_owner_status": "TO_VERIFY",
+      "public_paths": [],
+      "tests": [],
+      "history_evidence": [],
+      "source_ledger": "loop/v3_remediation_ledger.json",
+      "next_local_step": "Implement and validate 数据差分与增量回放要包含晚到、修订、停牌和断点; patch public caller under tests and add success/failure coverage at tests/qat/test_qat_06_public_path.py."
+    },
+    {
+      "issue_id": "QAT-07",
+      "requirement_code": "QAT-07",
+      "title": "独立wheel与monorepo必须使用同一有效实现",
+      "status": "FIXED_LOCAL",
+      "reported_owner_status": "FIXED_LOCAL",
+      "public_paths": [
+        "jobs/qa/run_qat07_import_matrix.py"
+      ],
+      "tests": [
+        "jobs/tests/test_qat07_implementation_comparison.py",
+        "jobs/qa/run_qat07_import_matrix.py"
+      ],
+      "history_evidence": [
+        "Isolated temporary installation only; original venv unchanged. Same-source byte evidence and actual sample public FP operation parity recorded, not all operator capability certification."
+      ],
+      "source_ledger": "evidence/r2/v3_qe_ledger_merge_20260907.json",
+      "next_local_step": "Historical GOLD/E2E rollout not certified; source comparison covers installed Python files, not all possible package resource files or every public operator's behavior."
+    },
+    {
+      "issue_id": "QAT-08",
+      "requirement_code": "QAT-08",
+      "title": "任务关闭必须同时覆盖需求、入口和历史结果迁移",
+      "status": "TO_VERIFY",
+      "reported_owner_status": "TO_VERIFY",
+      "public_paths": [],
+      "tests": [],
+      "history_evidence": [],
+      "source_ledger": "loop/v3_remediation_ledger.json",
+      "next_local_step": "Implement and validate 任务关闭必须同时覆盖需求、入口和历史结果迁移; patch public caller under tests and add success/failure coverage at tests/qat/test_qat_08_public_path.py."
+    }
+  ],
+  "additional_findings": [
+    {
+      "finding_id": "V3-EXTRA-MODELING-FINITE-FIT",
+      "related_requirements": [
+        "V-08",
+        "MOD-04"
+      ],
+      "status": "FIXED_LOCAL",
+      "public_path": "modeling.trainer.fit_preprocessing",
+      "root_cause": "Training imputer/winsor/scaler used nanmean/nanquantile while retaining infinities. One infinity corrupted otherwise valid finite training statistics and could silently replace a finite mean with zero.",
+      "fix": "Normalize all nonfinite training features to NaN before sequential fitting; preserve caller arrays. Frozen steps include fit_semantics_version=finite-only-v2 in their existing state hash. Existing serialized states are not rewritten.",
+      "tests": [
+        "tests/modeling/test_v3_preprocessing_finite_fit.py",
+        "tests/modeling/test_v3_mod_01_05_08.py"
+      ],
+      "evidence": [
+        "5 independent regressions failed before fix; 13 focused tests passed after",
+        "evidence/r2/v3_r5_finite_fit_before.log",
+        "evidence/r2/v3_r5_finite_fit_after.log"
+      ],
+      "migration": "New fitted states are separately identified. Refit affected training-only states and reevaluate downstream models in shadow before any approved production switch. No production model or fitted state overwritten."
+    }
+  ],
+  "frozen_r5_verification": {
+    "qe": {
+      "result": "851 passed, 2 optional absent-kernel skips, 4 warnings",
+      "evidence": "evidence/r2/v3_r5_qe_capability_final.log"
+    },
+    "optimizer_preprocess": {
+      "result": "1150 passed, 1 expected offline HP xfail, 12 warnings",
+      "evidence": "evidence/r2/v3_r5_frozen_fofp.log"
+    },
+    "modeling_jobs": {
+      "result": "453 passed, 59 warnings",
+      "evidence": "evidence/r2/v3_r5_frozen_modeljobs.log"
+    },
+    "qat07": {
+      "result": "PASS;8 wheels;1750 installed Python files match checkout;actual FP parameter/output parity and actual test collection reconciliation PASS",
+      "evidence": "evidence/r2/v3_qat07_r5_source_parity_20260907.json"
+    },
+    "platform": {
+      "result": "469 passed before one added livePG isolation test;final livePG suite20passed",
+      "evidence": [
+        "evidence/r2/v3_r5_platform_final.log",
+        "evidence/r2/v3_r5_postgres_final.log"
+      ]
+    },
+    "scope": "Current frozen verification; no production deployment/migration or complete177/GOLD40/E2E8 certification is inferred. Earlier reported_test_context remains historical."
+  },
+  "gold40": {
+    "covered": [
+      "metric, resolved recipe hash and exact implementation-ref dependency invalidation (8 focused planner tests)",
+      "public FP max_lag mapping and frozen recipe identity",
+      "checkpoint offline replay identity",
+      "real-GPU execution status recorded separately"
+    ],
+    "gap": "OPS08 actual selective risk evaluation-to-health and recipe-to-FP-value-to-QE-to-health shadow replay now exists with persisted audit-only envelopes, immutable originals, exact dry-run reconciliation and scoped publication isolation. Cluster/feature/model recomputation and same-lineage approved production rollback remain incomplete.",
+    "status": "PARTIAL",
+    "tests": [
+      "factor_assets/tests/contracts/test_evidence_invalidation_v3.py",
+      "factor_preprocess/tests/test_v3_preprocess_contracts.py",
+      "factor_optimizer/tests/search/test_execution_plan_checkpoint_v3.py",
+      "quant_evaluator/tests/test_v3_gpu_semantics.py"
+    ]
+  },
+  "e2e_chains": {
+    "E2E-A": {
+      "gap": "Real DSL/catalog/snapshot -> FE -> OOS IC and Q10 -> typed FA grades -> production health PIT rejection exists. Rejected path explicitly stops before promotion; no fake health-ref promotion rejection. Recipe, parent trial, successful admission/library publish and feature version remain absent.",
+      "status": "PARTIAL",
+      "tests": [
+        "factor_optimizer/tests/search/test_qe_adapter_v3.py",
+        "factor_assets/tests/test_library_promotion_gate.py",
+        "jobs/tests/test_e2e_a_fe_qe_fa_spine.py"
+      ]
+    },
+    "E2E-B": {
+      "gap": "Real FE parent/child DSL and public QE IC/Q10/shape/curvature evidence feed bounded TRAIN-only center fitting; OOS poison cannot change frozen center. No direct-kernel bypass or scenario-label decision branch. Still lacks durable campaign/trial linkage, FA health/admission and library/feature publication under a complete trace.",
+      "status": "PARTIAL",
+      "tests": [
+        "factor_optimizer/tests/search/test_supervised_parameter_v3.py",
+        "quant_evaluator/tests/test_shape_evidence.py",
+        "jobs/tests/test_e2e_b_shape_rescue.py"
+      ]
+    },
+    "E2E-C": {
+      "gap": "Real FE -> public Q10/adaptive Q20 -> liquidity/size exposure -> six bounded TRAIN-only DSL candidates -> frozen OOS reevaluation is executable. Small/tied/absent risk evidence fails closed. Durable trial, FA health/admission, library and feature publication trace remain incomplete.",
+      "status": "PARTIAL",
+      "tests": [
+        "factor_optimizer/tests/search/test_supervised_parameter_v3.py",
+        "quant_evaluator/tests/test_daily_quantile_artifact_v3.py"
+      ]
+    },
+    "E2E-D": {
+      "gap": "Real FE raw + FP OLS industry/size candidates -> public QE final exposures/IC -> existing noninferiority/WinnerSet selection implemented in controlled synthetic cases. Actual recipe/value/evaluation identities are carried; missing trial/health/library/feature refs remain None. OOS/FA admission/library publication/feature version remain incomplete.",
+      "status": "PARTIAL",
+      "tests": [
+        "quant_evaluator/tests/test_exposure_evidence.py",
+        "factor_optimizer/tests/search/test_winner_set_v3.py",
+        "jobs/tests/test_e2e_d_risk_shift.py"
+      ]
+    },
+    "E2E-E": {
+      "gap": "Real DataChangeSet -> bounded FP fill/mask/age -> schema-checked model features implemented with full revised oracle in tests. Canonical DSL/catalog, monitor/admission and complete trace remain incomplete; research schema does not fabricate recipe/cluster refs.",
+      "status": "PARTIAL",
+      "tests": [
+        "data_access/tests/unit/test_r30_change_lineage_2026_08.py",
+        "factor_preprocess/tests/test_v3_preprocess_contracts.py",
+        "tests/modeling/test_e2e_e_revision_preprocess_modeling.py"
+      ]
+    },
+    "E2E-F": {
+      "gap": "Bounded durable campaign + actual FE/QE pure-noise threshold rejection -> real DurableGenerationCoordinator stage/publish/root/lineage snapshot -> exact-version physical GC now tested, retaining formula/trial/evidence and protected roots. Full ProposalGenerator/SearchRunner verdict trace remains absent. Current lineage edges conservatively protect every generation of the referenced artifact, not precise per-generation edges.",
+      "status": "PARTIAL",
+      "tests": [
+        "factor_optimizer/tests/search/test_durable_campaign_store_v3.py",
+        "quant_platform/tests/test_generation_coordinator.py",
+        "jobs/tests/test_e2e_f_noise_failure_gc.py"
+      ]
+    },
+    "E2E-G": {
+      "gap": "Version->deployed/replacement model compatibility is implemented with exact refs and resolver-backed binding; still needs DSL/catalog/snapshot and real FE/QE-produced multi-representative evidence plus complete health/admission trace (current component pairwise data are contract fixtures)",
+      "status": "PARTIAL",
+      "tests": [
+        "factor_assets/tests/test_incremental_cluster_assign.py",
+        "factor_assets/tests/test_library_promotion_gate.py",
+        "jobs/tests/test_e2e_g_cluster_model_compatibility.py",
+        "quant_platform/tests/test_modeling_manifest_bridge.py"
+      ]
+    },
+    "E2E-H": {
+      "gap": "Real FE checkpoint -> frozen FP and apply-only fitted state -> exact-intent durable publication/recovery implemented. Mature monitoring reads physically verified bounded generation history, rejects conflicting overlap and missing bytes, gates on actual valid daily QE IC count, binds aggregate values/axes/generations/policy identity, and respects label maturity before QE. Other drift dimensions remain explicitly externally supplied; full catalog/admission/feature trace is incomplete.",
+      "status": "PARTIAL",
+      "tests": [
+        "factor_optimizer/tests/search/test_execution_plan_checkpoint_v3.py",
+        "factor_preprocess/tests/test_v3_preprocess_contracts.py",
+        "tests/modeling/test_r41_monitoring_ledger_contracts.py",
+        "tests/modeling/test_e2e_h_fixed_update.py"
+      ]
+    }
+  },
+  "latest_integrated_verification": {
+    "result": "447 passed, zero skipped, 59 warnings",
+    "scope": "tests/modeling + jobs/tests with mature fixed-update monitor and E2E-C; before later finite-only modeling fit and V-05 runner fixes",
+    "evidence": "evidence/r2/v3_r5_modeling_jobs_final.log"
+  },
+  "reported_test_context": {
+    "qe": "844 passed, 2 optional-kernel skips, 4 warnings after actual CUDA exposure and CPU residual validity fixes; evidence/r2/v3_r5_qe_final.log; subsequent capability-matrix tests tracked separately",
+    "factor_assets": "1375 passed, zero skipped, 49 warnings with isolated real Faiss/Annoy/igraph; no FA source changes in current continuation",
+    "platform": "469 passed, zero skipped, 3 warnings including real PostgreSQL and actual OPS08 shadow replay; then 20 live PostgreSQL tests including targeted outbox recovery isolation",
+    "optimizer_preprocess": "1118 passed, 1 xfailed, 12 warnings before subsequent V-05/V-07 audit changes; current-source rerun tracked in R5 report",
+    "modeling": "447 combined modeling/jobs passed before finite-only fit amendment; 5 independent finite-fit regressions failed before fix, 13 focused passed after; final modeling rerun tracked in R5 report",
+    "classification": "supporting evidence only; no package count promotes any of the 177 issues, GOLD40 or E2E chains to CLOSED"
+  },
+  "priority_remaining_non_qe": [
+    "FO-01: Implement and validate Optimizer的QE适配器对多因子批返回空metrics; patch public caller under factor_optimizer/factor_optimizer and add success/failure coverage at tests/fo/test_fo_01_public_path.py.",
+    "FO-02: Implement and validate QE适配器没有传递split、backend、参数和完整证据身份; patch public caller under factor_optimizer/factor_optimizer and add success/failure coverage at tests/fo/test_fo_02_public_path.py.",
+    "FO-03: full production legality and FA admission certification",
+    "FO-04: Implement and validate 多保真阶段表与搜索执行需要穿透，串行限制是真实能力边界; patch public caller under factor_optimizer/factor_optimizer and add success/failure coverage at tests/fo/test_fo_04_public_path.py.",
+    "FO-05: Implement and validate 搜索配置可变与checkpoint恢复需要绑定实际执行状态; patch public caller under factor_optimizer/factor_optimizer and add success/failure coverage at tests/fo/test_fo_05_public_path.py.",
+    "V-01: Implement and validate 全量调用图与唯一权威清点，追踪旁路而非只改点名文件; patch public caller under declared owner package and add success/failure coverage at tests/v/test_v_01_public_path.py.",
+    "V-02: Implement and validate 自动标签必须真的在每次候选进入时生成，并可重评更新; patch public caller under declared owner package and add success/failure coverage at tests/v/test_v_02_public_path.py.",
+    "V-03: Implement and validate 建立逐指标→逐维度→用途准入的完整政策，而非一个总分; patch public caller under declared owner package and add success/failure coverage at tests/v/test_v_03_public_path.py.",
+    "V-04: Implement and validate U/倒U与尾部修复需要低自由度实现、父子重评和完整血缘; patch public caller under declared owner package and add success/failure coverage at tests/v/test_v_04_public_path.py.",
+    "V-05: Implement and validate 廉价初筛不能提前杀掉非线性、稀疏事件或互补特征; patch public caller under declared owner package and add success/failure coverage at tests/v/test_v_05_public_path.py.",
+    "V-06: Implement and validate 中性化是受约束的候选选择，必须验证最终暴露而非名字; patch public caller under declared owner package and add success/failure coverage at tests/v/test_v_06_public_path.py.",
+    "V-08: Implement and validate 树模型与神经网络的输入表示有独立契约，不统一强制zscore; patch public caller under declared owner package and add success/failure coverage at tests/v/test_v_08_public_path.py.",
+    "V-09: Implement and validate 诊断驱动小预算搜索，而非穷举所有预处理排列; patch public caller under declared owner package and add success/failure coverage at tests/v/test_v_09_public_path.py.",
+    "V-11: Implement and validate 训练、验证、封存测试和跨session试验次数必须联合治理; patch public caller under declared owner package and add success/failure coverage at tests/v/test_v_11_public_path.py.",
+    "V-12: Implement and validate Purging、embargo和PIT按真实标签区间验证，避免前视与过度清洗; patch public caller under declared owner package and add success/failure coverage at tests/v/test_v_12_public_path.py.",
+    "V-13: Implement and validate 实盘指标必须带可执行性与成本规格，研究probe另设身份; patch public caller under declared owner package and add success/failure coverage at tests/v/test_v_13_public_path.py.",
+    "V-14: Implement and validate 相似度去重是分层流程，不能一把0.7/0.95阈值删除所有高相关因子; patch public caller under declared owner package and add success/failure coverage at tests/v/test_v_14_public_path.py.",
+    "V-15: Implement and validate 新增簇、增量归属和全量重聚类有明确版本与触发; patch public caller under declared owner package and add success/failure coverage at tests/v/test_v_15_public_path.py.",
+    "V-17: Implement and validate 父因子拆分和簇聚合都生成新资产，必须再次评价; patch public caller under declared owner package and add success/failure coverage at tests/v/test_v_17_public_path.py.",
+    "V-19: Implement and validate 每日因子更新执行冻结配方，不重新跑优化器; patch public caller under declared owner package and add success/failure coverage at tests/v/test_v_19_public_path.py.",
+    "V-20: Implement and validate 失败values清理应真实执行且不破坏生产、共享DAG或统计历史; patch public caller under declared owner package and add success/failure coverage at tests/v/test_v_20_public_path.py.",
+    "V-21: Implement and validate 上线后诊断与漂移监测不重用测试集调参; patch public caller under declared owner package and add success/failure coverage at tests/v/test_v_21_public_path.py.",
+    "V-22: Implement and validate Agent仅作有界提案和解释，不承担不可验证的硬门; patch public caller under declared owner package and add success/failure coverage at tests/v/test_v_22_public_path.py.",
+    "V-23: Implement and validate 真实端到端与硬件基准必须覆盖公共入口，而不止内核mock; patch public caller under declared owner package and add success/failure coverage at tests/v/test_v_23_public_path.py.",
+    "V-24: Implement and validate CI和最终验收追踪所有发现、迁移以及既有证据失效范围; patch public caller under declared owner package and add success/failure coverage at tests/v/test_v_24_public_path.py.",
+    "DTA-03: QE portfolio corporate-action reconciliation not in this package",
+    "DTA-06: Implement and validate 派生字段的来源分类与单位代数必须一致; patch public caller under data_access and add success/failure coverage at tests/dta/test_dta_06_public_path.py.",
+    "DTA-07: Implement and validate 跨市场时区、交易日和汇率对齐不允许日期字符串碰撞; patch public caller under data_access and add success/failure coverage at tests/dta/test_dta_07_public_path.py.",
+    "DTA-10: Implement and validate 晚到数据watermark与局部重算范围需要显式依赖; patch public caller under data_access and add success/failure coverage at tests/dta/test_dta_10_public_path.py.",
+    "STA-04: Implement and validate 搜索尝试账本与FDR假设族不能通过改名重置; patch public caller under quant_evaluator/metrics and add success/failure coverage at tests/sta/test_sta_04_public_path.py.",
+    "STA-06: Implement and validate PBO或多切分验证只能用于声明的研究目的; patch public caller under quant_evaluator/metrics and add success/failure coverage at tests/sta/test_sta_06_public_path.py.",
+    "STA-07: QE paired uncertainty and effective-window producer",
+    "STA-08: Implement and validate 评级锚点校准和显示分位数必须分开版本; patch public caller under quant_evaluator/metrics and add success/failure coverage at tests/sta/test_sta_08_public_path.py.",
+    "STA-10: QE curve-fit evidence for eligible monotone decay",
+    "STA-11: Implement and validate 尾部指标需要明确损失符号、加权分位与样本不足; patch public caller under quant_evaluator/metrics and add success/failure coverage at tests/sta/test_sta_11_public_path.py.",
+    "STA-12: Implement and validate 多维评级不重复计分，诊断结论必须给出证据原因; patch public caller under quant_evaluator/metrics and add success/failure coverage at tests/sta/test_sta_12_public_path.py.",
+    "RCP-03: Implement and validate 去极值政策需区分截面winsor、时间拟合阈值和合法经济极值; patch public caller under factor_preprocess/factor_preprocess；factor_engine；factor_optimizer/factor_optimizer/policy and add success/failure coverage at tests/rcp/test_rcp_03_public_path.py.",
+    "RCP-04: Implement and validate 中性化求解器必须声明设计矩阵、权重与精确性; patch public caller under factor_preprocess/factor_preprocess；factor_engine；factor_optimizer/factor_optimizer/policy and add success/failure coverage at tests/rcp/test_rcp_04_public_path.py.",
+    "RCP-06: Implement and validate 因果平滑状态要区别重复事件值、休市和新观测; patch public caller under factor_preprocess/factor_preprocess；factor_engine；factor_optimizer/factor_optimizer/policy and add success/failure coverage at tests/rcp/test_rcp_06_public_path.py.",
+    "RCP-09: Implement and validate 原始、中性、平滑、模型表示版本不互相覆盖; patch public caller under factor_preprocess/factor_preprocess；factor_engine；factor_optimizer/factor_optimizer/policy and add success/failure coverage at tests/rcp/test_rcp_09_public_path.py."
+  ]
+}

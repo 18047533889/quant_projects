@@ -9,6 +9,7 @@ Covers:
 """
 import numpy as np
 import pytest
+import pandas as pd
 
 from factor_preprocess.adapters.data_access import (
     DataAccessAdapter,
@@ -19,12 +20,13 @@ from factor_preprocess.adapters.data_access import (
     check_data_access_available,
     create_adapter,
 )
+from factor_preprocess.adapters._data_access_impl import DefaultExposureProvider
 
 
 def _valid_bundle(overrides=None, metadata_overrides=None, drop_metadata_keys=None):
     """Build a provenance-complete exposure bundle."""
     metadata = {
-        "knowledge_time": "2024-01-02T00:00:00",
+        "knowledge_time": "2024-01-02T00:00:00+00:00",
         "effective_time": "2024-01-02",
         "snapshot_ref": "snap-123",
         "classification_version": "default",
@@ -37,7 +39,7 @@ def _valid_bundle(overrides=None, metadata_overrides=None, drop_metadata_keys=No
         for k in drop_metadata_keys:
             metadata.pop(k, None)
     bundle = {
-        "values": np.array([[1.0], [2.0]]),
+        "values": np.array([[1.0, 2.0], [3.0, 4.0]]),
         "dates": np.array(["2024-01-02", "2024-01-03"]),
         "assets": np.array(["000001.SZ", "000002.SZ"]),
         "metadata": metadata,
@@ -147,3 +149,48 @@ def test_validate_bundle_requires_provenance():
     # A complete bundle passes through.
     out = _validate_exposure_bundle(_valid_bundle(), "industry")
     assert out["metadata"]["snapshot_ref"] == "snap-123"
+    assert out["layout"] == "TN"
+    assert not out["values"].flags.writeable
+
+
+def test_bundle_rejects_shape_axis_and_fabricated_time():
+    with pytest.raises(ValueError, match="shape"):
+        _validate_exposure_bundle(_valid_bundle(overrides={"values": np.ones((2, 1))}), "size")
+    with pytest.raises(ValueError, match="unresolved provenance"):
+        _validate_exposure_bundle(
+            _valid_bundle(metadata_overrides={"knowledge_time": "unknown"}), "size"
+        )
+
+
+def test_bundle_snapshot_preserves_instrument_identity_dtype():
+    original = _valid_bundle(overrides={"assets": np.array([1, 2], dtype=np.int64)})
+    out = _validate_exposure_bundle(original, "size")
+    assert out["assets"].dtype == np.int64
+    original["assets"][0] = 99
+    assert out["assets"].tolist() == [1, 2]
+
+
+def test_provider_panel_has_true_time_asset_axes_without_symbol_coercion():
+    frame = pd.DataFrame({
+        "TradeDate": [2, 1, 2, 1],
+        "Symbol": [2, 1, 1, 2],
+        "UpdateTime": ["2024-01-03T00:00:00+00:00"] * 4,
+        "Exposure": [22.0, 11.0, 21.0, 12.0],
+    })
+    values, dates, assets, knowledge = DefaultExposureProvider._to_panel(
+        frame, "Exposure", "test exposure"
+    )
+    assert values.tolist() == [[11.0, 12.0], [21.0, 22.0]]
+    assert dates.tolist() == [1, 2]
+    assert assets.dtype == np.int64
+    assert knowledge == "2024-01-03T00:00:00+00:00"
+
+
+def test_provider_panel_rejects_conflicting_join_duplicates():
+    frame = pd.DataFrame({
+        "TradeDate": [1, 1], "Symbol": ["A", "A"],
+        "UpdateTime": ["2024-01-02T00:00:00+00:00"] * 2,
+        "Exposure": [1.0, 9.0],
+    })
+    with pytest.raises(ValueError, match="conflicting duplicate"):
+        DefaultExposureProvider._to_panel(frame, "Exposure", "test exposure")

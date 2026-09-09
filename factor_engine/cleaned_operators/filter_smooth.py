@@ -228,6 +228,19 @@ class TSSuperSmoother(SeriesOperator):
         tags=["signal_filter", "causal", "stateful"],
     )
 
+    filter_contract = FilterContract(
+        role=FilterRole.LOW_PASS,
+        causal=True,
+        uses_current_observation=True,
+        stateful=True,
+        checkpointable=True,
+        time_shard_safe=False,
+        warmup=0,
+        lag_class="zero",
+        jump_policy=JumpPreservationPolicy.PRESERVE_ALL_FINITE_JUMPS,
+        turnover_control=False,
+    )
+
     def _calculate_series(
         self,
         x: pd.DataFrame,
@@ -267,6 +280,7 @@ class TSSuperSmoother(SeriesOperator):
 
             y_t_minus_2 = xv[idx0, col]
             y_t_minus_1 = xv[idx1, col]
+            x_t_minus_1 = xv[idx1, col]
 
             out[idx0, col] = y_t_minus_2
             out[idx1, col] = y_t_minus_1
@@ -278,11 +292,16 @@ class TSSuperSmoother(SeriesOperator):
                     out[row, col] = np.nan
                     continue
 
-                y_t = c1 * curr + c2 * y_t_minus_1 + c3 * y_t_minus_2
+                # Ehlers two-pole Super Smoother. Averaging the current and
+                # previous inputs is part of the canonical transfer function;
+                # using c1*x_t alone creates the overshoot caught by the
+                # independent step/spike response tests.
+                y_t = c1 * (curr + x_t_minus_1) / 2.0 + c2 * y_t_minus_1 + c3 * y_t_minus_2
                 out[row, col] = y_t
 
                 y_t_minus_2 = y_t_minus_1
                 y_t_minus_1 = y_t
+                x_t_minus_1 = curr
 
         from factor_engine.cleaned_operators.rolling_pack import frame_like
         return frame_like(x, out)
@@ -478,6 +497,19 @@ class TSKama(TsKamaOperator):
     checkpointable = True
     time_shard_safe = False
 
+    filter_contract = FilterContract(
+        role=FilterRole.ADAPTIVE_LOW_PASS,
+        causal=True,
+        uses_current_observation=True,
+        stateful=True,
+        checkpointable=True,
+        time_shard_safe=False,
+        warmup=10,
+        lag_class="variable",
+        jump_policy=JumpPreservationPolicy.PRESERVE_ALL_FINITE_JUMPS,
+        turnover_control=False,
+    )
+
     def _calculate_series(
         self,
         x: pd.DataFrame,
@@ -557,6 +589,19 @@ class TSCausalLocalLinearSmoother(SeriesOperator):
                 searchable=False,
             ),
         },
+    )
+
+    filter_contract = FilterContract(
+        role=FilterRole.LOW_PASS,
+        causal=True,
+        uses_current_observation=True,
+        stateful=False,
+        checkpointable=False,
+        time_shard_safe=True,
+        warmup=10,
+        lag_class="zero",
+        jump_policy=JumpPreservationPolicy.PRESERVE_ALL_FINITE_JUMPS,
+        turnover_control=False,
     )
 
     def _calculate_series(

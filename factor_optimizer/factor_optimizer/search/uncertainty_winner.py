@@ -102,6 +102,8 @@ class UncertaintyEvidence:
     turnover: float = 0.0
     compute_cost: float = 0.0
     n_transforms: int = 0
+    bootstrap_plan_ref: Optional[str] = None
+    draw_ids: Optional[Sequence[str]] = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.trial_id, str) or not self.trial_id.strip():
@@ -141,6 +143,17 @@ class UncertaintyEvidence:
             raise TypeError("n_transforms must be an integer")
         if self.n_transforms < 0:
             raise ValueError("n_transforms must be >= 0")
+        if self.bootstrap_plan_ref is not None and (
+            not isinstance(self.bootstrap_plan_ref, str)
+            or not self.bootstrap_plan_ref.strip()
+        ):
+            raise ValueError("bootstrap_plan_ref must be non-empty when supplied")
+        if self.draw_ids is not None:
+            draw_ids = tuple(self.draw_ids)
+            if not draw_ids or len(set(draw_ids)) != len(draw_ids):
+                raise ValueError("draw_ids must be non-empty and unique")
+            if {len(values) for values in self.dimension_samples.values()} != {len(draw_ids)}:
+                raise ValueError("draw_ids must align with every dimension sample")
 
 
 def _percentile(values: Sequence[float], q: float) -> float:
@@ -403,7 +416,21 @@ class UncertaintyAwareWinnerSelector:
                 dom_ab = _dominance_probability(
                     a, b, self.policy, robustness_scores
                 )
-                dom_ba = 1.0 - dom_ab
+                dom_ba = _dominance_probability(
+                    b, a, self.policy, robustness_scores
+                )
+                if (
+                    a.bootstrap_plan_ref is not None
+                    or b.bootstrap_plan_ref is not None
+                    or a.draw_ids is not None
+                    or b.draw_ids is not None
+                ) and (
+                    a.bootstrap_plan_ref != b.bootstrap_plan_ref
+                    or tuple(a.draw_ids or ()) != tuple(b.draw_ids or ())
+                ):
+                    raise ValueError(
+                        "paired winner comparison requires the same bootstrap plan and draw IDs"
+                    )
                 # Statistically equivalent: heavy CI overlap and neither
                 # side is decisive (P0-10: p in [0.5-band, 0.5+band] means
                 # neither A nor B dominates; the historical
@@ -412,39 +439,19 @@ class UncertaintyAwareWinnerSelector:
                 decisive_a = dom_ab >= self.config.decisive_probability
                 decisive_b = dom_ba >= self.config.decisive_probability
                 # Near-equivalence for the tie-break (P0-10).
-                near_eq = not decisive_a and not decisive_b and abs(
-                    dom_ab - 0.5
-                ) <= self.config.equivalence_probability_band
-                # P0-10 (also) caps the near-equivalence tie-break at the
-                # infimum of the dominance probability over internal prunings.
-                # Fisher-precision pruning is the OUTER bound (the wide CI of
-                # a noisy split beats the infimum by a margin); with only
-                # step-2 pruning active, the infimum here sits at
-                # P(DIM_j is decision-relevant for ANY surrogate dimension j)
-                # >= (1 - size_per_j)^K (independent, one-sided), which a
-                # strictly-superior full factor beats by a strictly positive
-                # margin when each component split is a clean subset.
+                tie_probability = max(0.0, 1.0 - dom_ab - dom_ba)
+                near_eq = (
+                    not decisive_a
+                    and not decisive_b
+                    and (
+                        tie_probability > 0.0
+                        or abs(dom_ab - dom_ba)
+                        <= 2.0 * self.config.equivalence_probability_band
+                    )
+                )
                 equivalent = (
                     overlap >= self.config.equivalence_region
                     and near_eq
-                    and (
-                        dom_ab
-                        >= (
-                            1.0
-                            - 0.99 * self.config.confidence_level
-                            / max(1, len(a.dimension_samples) ** 2)
-                        )
-                        ** len(a.dimension_samples)
-                    )
-                    and (
-                        dom_ba
-                        >= (
-                            1.0
-                            - 0.99 * self.config.confidence_level
-                            / max(1, len(b.dimension_samples) ** 2)
-                        )
-                        ** len(b.dimension_samples)
-                    )
                 )
                 if not equivalent:
                     continue

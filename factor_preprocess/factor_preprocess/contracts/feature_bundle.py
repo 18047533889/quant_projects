@@ -447,6 +447,12 @@ class FeatureBundle:
     has_freshness_channel: bool = False
     has_exposure_channel: bool = False
 
+    # DTA-08: authoritative value-independent reason/mask plane supplied by
+    # Data Access. Kept out of the numeric feature channels so string reasons
+    # cannot replace or coerce the primary signal. FP consumes it structurally
+    # (duck type) and does not define a second reason enum.
+    missing_reason_plane: Any = None
+
     # FP-P0-03: reject duplicate axis labels unless explicitly allowed.
     allow_duplicate_axis_labels: bool = False
 
@@ -527,13 +533,151 @@ class FeatureBundle:
                 f"with actual channels (exposure present: {expected_exposure})"
             )
 
-        # Auto-generate manifest for NF/TNF layouts if not provided
+        # Auto-generate manifest before validating any aligned auxiliary plane.
         if self.manifest is None and self.layout in ("NF", "TNF"):
             self._auto_generate_manifest()
+        if self.missing_reason_plane is not None:
+            plane = self.missing_reason_plane
+            required = ("reasons", "original_missing", "filled", "usable", "age", "coverage")
+            absent = [name for name in required if not hasattr(plane, name)]
+            if absent or not callable(getattr(plane, "coverage", None)):
+                raise InvalidContractError(
+                    f"missing_reason_plane lacks authoritative fields: {absent}"
+                )
+            primary_shape = np.asarray(self.get_primary_values()).shape
+            for name in required[:-1]:
+                if np.asarray(getattr(plane, name)).shape != primary_shape:
+                    raise InvalidContractError(
+                        f"missing_reason_plane.{name} shape must equal primary feature shape"
+                    )
+            # Snapshot the authority object by reconstructing its immutable
+            # type; this prevents caller-owned aliases crossing the boundary.
+            try:
+                snap = type(plane)(
+                    reasons=plane.reasons,
+                    original_missing=plane.original_missing,
+                    filled=plane.filled,
+                    usable=plane.usable,
+                    age=plane.age,
+                )
+            except Exception as exc:
+                raise InvalidContractError(
+                    f"invalid authoritative missing_reason_plane: {exc}"
+                ) from exc
+            object.__setattr__(self, "missing_reason_plane", snap)
 
         # FP-P0-03: validate manifest + axes against the values shape.
         if self.manifest is not None:
             self._validate_shape()
+
+    @classmethod
+    def from_primary_with_auxiliary(
+        cls,
+        *,
+        bundle_id: str,
+        primary_values: np.ndarray,
+        feature_ids: Tuple[str, ...],
+        time_axis: AxisRef,
+        asset_axis: AxisRef,
+        original_validity_mask: np.ndarray,
+        missing_reason_plane: Any = None,
+        freshness_values: Optional[np.ndarray] = None,
+        layout: str = "TNF",
+        **metadata,
+    ) -> "FeatureBundle":
+        """Build a bundle without allowing auxiliary outputs to replace signal.
+
+        ``primary_values`` is always the first, feature-typed channel.  The
+        missing channel is derived from the *pre-transform* validity mask,
+        never from an imputed result.  Optional freshness values are appended
+        as a separate channel.  All arrays must have the same shape so channel
+        concatenation cannot silently broadcast or reorder axes (RCP-01).
+        """
+        primary = np.asarray(primary_values)
+        validity = np.asarray(original_validity_mask)
+        if primary.shape != validity.shape:
+            raise InvalidContractError(
+                "original_validity_mask shape must equal primary_values shape"
+            )
+        if validity.dtype.kind != "b":
+            raise InvalidContractError("original_validity_mask must have boolean dtype")
+        if missing_reason_plane is not None:
+            authoritative_original = np.asarray(
+                getattr(missing_reason_plane, "original_missing", None)
+            )
+            if authoritative_original.shape != validity.shape or not np.array_equal(
+                authoritative_original, ~validity
+            ):
+                raise InvalidContractError(
+                    "original_validity_mask must exactly match missing_reason_plane.original_missing"
+                )
+        if primary.ndim not in (2, 3) or primary.shape[-1] != len(feature_ids):
+            raise InvalidContractError(
+                "primary feature dimension must equal len(feature_ids)"
+            )
+
+        arrays = [primary, (~validity).astype(np.float64)]
+        channels = {
+            "primary": ChannelRef("primary", "feature", tuple(feature_ids)),
+            "missing": ChannelRef("missing", "missing", tuple(feature_ids)),
+        }
+        if freshness_values is not None:
+            freshness = np.asarray(freshness_values)
+            if freshness.shape != primary.shape:
+                raise InvalidContractError(
+                    "freshness_values shape must equal primary_values shape"
+                )
+            arrays.append(freshness)
+            channels["freshness"] = ChannelRef(
+                "freshness", "freshness", tuple(feature_ids)
+            )
+        values = np.concatenate(arrays, axis=-1)
+        return cls(
+            bundle_id=bundle_id,
+            time_axis=time_axis,
+            asset_axis=asset_axis,
+            channels=channels,
+            values=values,
+            layout=layout,
+            source_factor_ids=tuple(feature_ids),
+            has_missing_channel=True,
+            has_freshness_channel=freshness_values is not None,
+            missing_reason_plane=missing_reason_plane,
+            **metadata,
+        )
+
+    def get_missing_reason_plane(self) -> Any:
+        """Return the immutable DA reason plane; never infer one from NaN."""
+        if self.missing_reason_plane is None:
+            raise InvalidContractError("FeatureBundle has no authoritative missing_reason_plane")
+        return self.missing_reason_plane
+
+    def get_primary_values(self) -> np.ndarray:
+        """Return the canonical signal channel; auxiliary channels never qualify."""
+        feature_channels = [
+            name for name, ref in self.channels.items()
+            if ref.channel_type == "feature"
+        ]
+        if len(feature_channels) != 1:
+            raise InvalidContractError(
+                "FeatureBundle requires exactly one primary feature channel"
+            )
+        return self.get_channel_values(feature_channels[0])
+
+    def get_original_validity_mask(self) -> np.ndarray:
+        """Recover the original, pre-imputation validity mask."""
+        missing_channels = [
+            name for name, ref in self.channels.items()
+            if ref.channel_type == "missing"
+        ]
+        if len(missing_channels) != 1:
+            raise InvalidContractError(
+                "FeatureBundle requires exactly one missing channel to recover original validity"
+            )
+        missing = self.get_channel_values(missing_channels[0])
+        if not np.all(np.isin(missing, (0.0, 1.0))):
+            raise InvalidContractError("missing channel must be binary")
+        return missing == 0.0
 
     def _validate_shape(self):
         """Validate values ndim/axis lengths against layout and manifest."""

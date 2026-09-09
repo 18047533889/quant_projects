@@ -242,32 +242,146 @@ def compute_inverted_u_score(qr: np.ndarray) -> np.ndarray:
 # ---------------------------------------------------------------------------
 
 
-def compute_adaptive_quantile_count(qr_or_artifact) -> np.ndarray:
-    """Actual quantile-bin count used to build the profile, per factor, (F,).
+def compute_adaptive_quantile_count(factor_batch, policy=None, tie_policy="max"):
+    """Resolve a tie-aware fixed quantile count independently per factor.
 
-    The plan §14.1 policy selects the largest feasible count from
-    ``(preferred_bins, *fallback_bins)``; the ARTIFACT records which count
-    was actually used.  This metric reads the ``n_quantiles`` of the
-    ``QuantileReturnArtifact`` / the row count of a plain matrix and reports
-    it as a constant per factor — so consumers never assume 20.
+    The public path accepts a :class:`FactorBatch`, applies the canonical
+    quantile tie rule on every date, and returns a ``ScalarMetricArtifact``
+    whose provenance contains the complete per-date feasibility evidence.
+    A candidate Q is selected only when every date has all Q occupied buckets
+    with the policy's minimum effective names.  Missing dates are recorded and
+    make the fixed-Q comparison insufficient; they are never dropped.
 
-    Accepts either a ``QuantileReturnArtifact`` (uses ``n_quantiles``) or a
-    plain ``(n_quantiles, F)`` array (uses ``values.shape[0]``).  Returns an
-    integer-valued float array ``(F,)``.  Missing/empty input is an explicit
-    NaN, never 0 (0 bins is a fabricated count).
+    Plain quantile profiles remain accepted for backwards-compatible direct
+    helper use, where this function only reports their already-built row count.
     """
-    if hasattr(qr_or_artifact, "n_quantiles"):
-        nq = int(qr_or_artifact.n_quantiles)
-        values = np.asarray(qr_or_artifact.values, dtype=np.float64)
-    else:
-        values = np.asarray(qr_or_artifact, dtype=np.float64)
-        if values.ndim == 1:
-            values = values[:, None]
-        nq = int(values.shape[0])
-    if values.ndim != 2 or values.shape[0] == 0:
-        return np.array([np.nan], dtype=np.float64)
-    out = np.full(values.shape[1], float(nq), dtype=np.float64)
-    return out
+    if not (hasattr(factor_batch, "time_axis") and hasattr(factor_batch, "validity")):
+        qr_or_artifact = factor_batch
+        if hasattr(qr_or_artifact, "n_quantiles"):
+            nq = int(qr_or_artifact.n_quantiles)
+            values = np.asarray(qr_or_artifact.values, dtype=np.float64)
+        else:
+            values = np.asarray(qr_or_artifact, dtype=np.float64)
+            if values.ndim == 1:
+                values = values[:, None]
+            nq = int(values.shape[0])
+        if values.ndim != 2 or values.shape[0] == 0:
+            return np.array([np.nan], dtype=np.float64)
+        return np.where(np.all(np.isfinite(values), axis=0), float(nq), np.nan)
+
+    from quant_evaluator.contracts.adaptive_bins_policy import (
+        AdaptiveBinsDateEvidence,
+        AdaptiveBinsFactorEvidence,
+        AdaptiveBinsPolicy,
+        AdaptiveBinsResolution,
+    )
+    from quant_evaluator.contracts.axis_refs import FactorAxisRef
+    from quant_evaluator.contracts.metric_artifacts import ScalarMetricArtifact
+    from quant_evaluator.contracts.quantile_policy import validate_tie_policy
+    from quant_evaluator.metrics.quantile import assign_quantiles_batch
+
+    if policy is None:
+        policy = AdaptiveBinsPolicy()
+    elif not isinstance(policy, AdaptiveBinsPolicy):
+        from collections.abc import Mapping
+        if isinstance(policy, Mapping):
+            policy = AdaptiveBinsPolicy.from_dict(policy)
+    if not isinstance(policy, AdaptiveBinsPolicy):
+        raise TypeError("policy must be AdaptiveBinsPolicy")
+    tie_policy_value = validate_tie_policy(tie_policy).value
+    values = np.asarray(factor_batch.values, dtype=np.float64)
+    if factor_batch.validity is not None:
+        values = np.where(factor_batch.validity, values, np.nan)
+
+    candidates = policy.candidate_bin_counts()
+    assignments = {
+        q: assign_quantiles_batch(values, n_quantiles=q, method=tie_policy_value)
+        for q in candidates
+    }
+    if values.shape[2] == 1:
+        assignments = {q: a[:, :, None] for q, a in assignments.items()}
+
+    output = np.full(factor_batch.num_factors, np.nan, dtype=np.float64)
+    factor_evidence = []
+    observation_counts = []
+    for f, factor_id in enumerate(factor_batch.factor_ids):
+        date_rows = []
+        candidate_minima = {q: [] for q in candidates}
+        for t in range(factor_batch.num_times):
+            finite = np.isfinite(values[t, :, f])
+            finite_names = int(finite.sum())
+            distinct = int(np.unique(values[t, finite, f]).size) if finite_names else 0
+            observed = []
+            for q in candidates:
+                assigned = assignments[q][t, :, f]
+                valid_bins = assigned[assigned >= 0]
+                minimum = (
+                    int(np.bincount(valid_bins, minlength=q).min())
+                    if valid_bins.size else None
+                )
+                observed.append((q, minimum))
+                candidate_minima[q].append(minimum)
+            applicable = finite_names > 0
+            date_rows.append(AdaptiveBinsDateEvidence(
+                date_index=t,
+                applicable=applicable,
+                finite_names=finite_names,
+                distinct_levels=distinct,
+                candidate_min_bucket_counts=tuple(observed),
+                reason="evaluated" if applicable else "missing_factor_values",
+            ))
+
+        selected = None
+        selected_minimum = None
+        for q in candidates:
+            counts = candidate_minima[q]
+            if counts and all(
+                count is not None and count >= policy.min_effective_names_per_bin
+                for count in counts
+            ):
+                selected = q
+                selected_minimum = float(min(counts))
+                break
+        reason = (
+            "preferred" if selected == policy.preferred_bins
+            else "fallback" if selected is not None
+            else "insufficient"
+        )
+        resolution = AdaptiveBinsResolution(
+            bin_count=selected,
+            reason=reason,
+            min_names_per_bin=selected_minimum,
+            policy_id=policy.policy_id,
+            policy_version=policy.policy_version,
+        )
+        if selected is not None:
+            output[f] = float(selected)
+        observation_counts.append(sum(row.applicable for row in date_rows))
+        factor_evidence.append(AdaptiveBinsFactorEvidence(
+            factor_id=factor_id,
+            resolution=resolution,
+            tie_policy=tie_policy_value,
+            comparison_policy="largest_fixed_q_feasible_on_every_date",
+            dates=tuple(date_rows),
+        ))
+
+    return ScalarMetricArtifact(
+        metric_id="adaptive_quantile_count",
+        domain="quantile_shape",
+        values=output,
+        factor_axis=FactorAxisRef(tuple(factor_batch.factor_ids)),
+        provenance={
+            "adaptive_bins_policy": {
+                "policy_id": policy.policy_id,
+                "policy_version": policy.policy_version,
+                "preferred_bins": policy.preferred_bins,
+                "fallback_bins": tuple(policy.fallback_bins),
+                "min_effective_names_per_bin": policy.min_effective_names_per_bin,
+            },
+            "adaptive_bins_coverage": tuple(row.to_dict() for row in factor_evidence),
+            "observation_counts": tuple(observation_counts),
+        },
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -377,21 +491,9 @@ def compute_tail_vs_middle_contrast(qr: np.ndarray) -> np.ndarray:
 def compute_left_right_asymmetry(qr: np.ndarray) -> np.ndarray:
     """Left-right asymmetry of the quantile profile per factor, (F,).
 
-    Signed measure of the curve's asymmetry about the median quantile:
-
-        (mean(ret[top-half]) - ret[mid]) - (ret[mid] - mean(ret[bottom-half])).
-
-    Positive = the rise into the top tail exceeds the rise out of the
-    bottom tail (asymmetric upside tail); negative = bottom tail is the
-    stronger side.  Note: ``mid = n_quantiles // 2`` taken literally on an
-    even-count profile with QUANTILE 0 = lowest value (QE2-P0-001) includes
-    the upper quantile midpoint bar in ``top`` and excludes it from
-    ``bottom``, so a *perfectly symmetric* U-shaped profile reports a small
-    POSITIVE artifact (the metric measures the drawn quantile curve, not a
-    latent symmetric function).  Consumers should compare lr-asymmetry
-    across factors, or normalise orientation first — NEVER read a value as
-    "symmetric U" in absolute terms.  Direction is ``neutral`` (informative
-    sign).  NaN when the halves cannot be formed.
+    Mean right-minus-left mirrored bucket contrast. Symmetric U and inverted-U
+    profiles are zero; curvature is not asymmetry. The central bucket (odd Q)
+    is excluded. All mirrored pairs must be finite; direction is descriptive.
     """
     m = _as_matrix(qr)
     nq, F = m.shape
@@ -402,12 +504,10 @@ def compute_left_right_asymmetry(qr: np.ndarray) -> np.ndarray:
     for f in range(F):
         col = m[:, f]
         bottom = col[:mid]
-        top = col[mid + 1:]
-        if bottom.size == 0 or top.size == 0:
+        top = col[-mid:][::-1]
+        if not np.all(np.isfinite(np.concatenate([bottom, top]))):
             continue
-        if not np.all(np.isfinite(np.concatenate([bottom, top]))) or not np.isfinite(col[mid]):
-            continue
-        out[f] = (float(np.mean(top)) - col[mid]) - (col[mid] - float(np.mean(bottom)))
+        out[f] = float(np.mean(top - bottom))
     return out
 
 
@@ -477,8 +577,8 @@ def compute_shape_stability(qr: np.ndarray) -> np.ndarray:
     """Quantile-shape stability across windows per factor, (F,).
 
     For a 3-D ``(W, n_quantiles, F)`` input: mean Fisher-z-corrected
-    correlation of each window's profile against the overall mean profile,
-    averaged across windows.  ``1`` = identical shape every window (stable),
+    correlation of each window's profile against the leave-one-window-out
+    mean profile, inverse transformed to correlation units. ``1`` = stable,
     low = shape churns.  For a 2-D single profile input this returns NaN
     with an honest ``unsupported`` (single-profile stability is undefined —
     there is no second observation), never 0 or 1.
@@ -491,13 +591,10 @@ def compute_shape_stability(qr: np.ndarray) -> np.ndarray:
         return np.full(windows.shape[2], np.nan, dtype=np.float64)
     F = windows.shape[2]
     out = np.full(F, np.nan)
-    mean_profile = _per_window_profile(windows)  # (nq, F)
     for f in range(F):
-        mp = mean_profile[:, f]
-        if np.sum(np.isfinite(mp)) < 3:
-            continue
         corrs = []
         for w in range(nw):
+            mp = _per_window_profile(np.delete(windows, w, axis=0))[:, f]
             wp = windows[w, :, f]
             finite = np.isfinite(wp) & np.isfinite(mp)
             if np.sum(finite) < 3:
@@ -508,7 +605,7 @@ def compute_shape_stability(qr: np.ndarray) -> np.ndarray:
             if np.isfinite(r):
                 corrs.append(r)
         if corrs:
-            out[f] = float(np.mean(np.arctanh(np.clip(corrs, -1 + 1e-9, 1 - 1e-9))))
+            out[f] = float(np.tanh(np.mean(np.arctanh(np.clip(corrs, -1 + 1e-9, 1 - 1e-9)))))
     return out
 
 
@@ -551,12 +648,14 @@ def compute_shape_regime_stability(qr: np.ndarray) -> np.ndarray:
             if np.isfinite(r):
                 corrs.append(r)
         if corrs:
-            out[f] = float(np.mean(np.arctanh(np.clip(corrs, -1 + 1e-9, 1 - 1e-9))))
+            out[f] = float(np.tanh(np.mean(np.arctanh(np.clip(corrs, -1 + 1e-9, 1 - 1e-9)))))
     return out
 
 
-def compute_shape_bootstrap_confidence(qr: np.ndarray) -> np.ndarray:
-    """Bootstrap confidence of the shape family per factor, (F,).
+def compute_shape_bootstrap_confidence(qr: np.ndarray, block_length: int = 2,
+                                      resamples: int = 100, random_seed: int = 0,
+                                      agreement_threshold: float = .5) -> np.ndarray:
+    """Descriptive moving-block bootstrap rank-agreement frequency, not U probability.
 
     For a 3-D ``(W, n_quantiles, F)`` input: fraction of bootstrap resamples
     (across the W windows) whose quantile-rank order (Spearman of the
@@ -568,36 +667,46 @@ def compute_shape_bootstrap_confidence(qr: np.ndarray) -> np.ndarray:
     m = np.asarray(qr, dtype=np.float64)
     windows, multi = _windows_or_single(m)
     nw = windows.shape[0]
-    rng = np.random.default_rng(0)
-    resamples = 100
+    if isinstance(block_length, bool) or not isinstance(block_length, (int, np.integer)) or block_length < 1:
+        raise ValueError("block_length must be a positive integer")
+    if isinstance(resamples, bool) or not isinstance(resamples, (int, np.integer)) or resamples < 1:
+        raise ValueError("resamples must be a positive integer")
+    if not np.isfinite(agreement_threshold) or not -1 <= agreement_threshold <= 1:
+        raise ValueError("agreement_threshold must be in [-1,1]")
+    rng = np.random.default_rng(random_seed)
     if nw < 3:
         return np.full(windows.shape[2], np.nan, dtype=np.float64)
+    if block_length > nw:
+        raise ValueError("block_length cannot exceed window count")
+    from scipy.stats import rankdata
+    # One request-level draw schedule for every factor: adding/reordering other
+    # factors cannot change a factor's evidence through RNG consumption.
+    starts = rng.integers(0, nw-block_length+1, size=(resamples,int(np.ceil(nw/block_length))))
+    bootstrap_indices = (starts[:,:,None]+np.arange(block_length)).reshape(resamples,-1)[:,:nw]
     F = windows.shape[2]
     out = np.full(F, np.nan)
     mean_profile = _per_window_profile(windows)
     for f in range(F):
         mp = mean_profile[:, f]
-        ref_row = np.argsort(np.argsort(mp))  # rank style
         if np.sum(np.isfinite(mp)) < 3:
             continue
         agreed = 0
         drawn = 0
-        for _ in range(resamples):
-            idx = rng.integers(0, nw, size=nw)
+        for idx in bootstrap_indices:
             sample = windows[idx, :, f]
             with np.errstate(invalid="ignore"):
                 sp = np.nanmean(sample, axis=0)
             finite = np.isfinite(sp) & np.isfinite(mp)
             if np.sum(finite) < 3:
                 continue
-            if np.ptp(sp[finite]) == 0.0:
+            if np.ptp(sp[finite]) == 0.0 or np.ptp(mp[finite]) == 0.0:
                 continue
             r = np.corrcoef(
-                np.argsort(np.argsort(sp[finite])),
-                np.argsort(np.argsort(mp[finite])),
+                rankdata(sp[finite],method="average"),
+                rankdata(mp[finite],method="average"),
             )[0, 1]
             drawn += 1
-            if np.isfinite(r) and r >= 0.5:
+            if np.isfinite(r) and r >= agreement_threshold:
                 agreed += 1
         if drawn:
             out[f] = agreed / drawn

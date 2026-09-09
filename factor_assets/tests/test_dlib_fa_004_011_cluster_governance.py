@@ -231,6 +231,7 @@ def test_incremental_assignment_never_mutates_cluster_set_version():
         kind=IncrementalAssignmentKind.ASSIGNED,
         cluster_set_version_ref="csv1",
         affinity=0.8,
+        parent_cluster_set_hash="parent-content-hash",
     )
     assert incremental.kind is IncrementalAssignmentKind.ASSIGNED
     assert incremental.cluster_set_version_ref == "csv1"

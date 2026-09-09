@@ -100,6 +100,13 @@ class DataChangeSet:
     change_kind: ChangeKind | str = ChangeKind.append
     revision_availability: dict = field(default_factory=dict)
     detected_at: str | None = None
+    # DTA-10 append-only identities: preserve legacy positional construction.
+    snapshot_before: str | None = None
+    snapshot_after: str | None = None
+    data_watermark_before: str | None = None
+    data_watermark_after: str | None = None
+    event_time_range: tuple | None = None
+    knowledge_time_range: tuple | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "changed_objects", _freeze_sequence(self.changed_objects))
@@ -109,6 +116,16 @@ class DataChangeSet:
         object.__setattr__(self, "change_kind", _coerce_change_kind(self.change_kind))
         if isinstance(self.changed_time_range, (list, tuple)) and len(self.changed_time_range) == 2:
             object.__setattr__(self, "changed_time_range", tuple(self.changed_time_range))
+        for field_name in ("event_time_range", "knowledge_time_range"):
+            value = getattr(self, field_name)
+            if value is not None:
+                if not isinstance(value, (list, tuple)) or len(value) != 2:
+                    raise ValueError(f"{field_name} must be a (start, end) pair")
+                object.__setattr__(self, field_name, tuple(value))
+        if bool(self.snapshot_before) != bool(self.snapshot_after):
+            raise ValueError("snapshot_before and snapshot_after must be supplied together")
+        if bool(self.data_watermark_before) != bool(self.data_watermark_after):
+            raise ValueError("data watermark before/after must be supplied together")
         if not isinstance(self.revision_availability, dict):
             object.__setattr__(self, "revision_availability", dict(self.revision_availability or {}))
         if self.detected_at is None:
@@ -120,6 +137,12 @@ class DataChangeSet:
             "dataset": self.dataset,
             "source_before": self.source_before,
             "source_after": self.source_after,
+            "snapshot_before": self.snapshot_before,
+            "snapshot_after": self.snapshot_after,
+            "data_watermark_before": self.data_watermark_before,
+            "data_watermark_after": self.data_watermark_after,
+            "event_time_range": None if self.event_time_range is None else list(self.event_time_range),
+            "knowledge_time_range": None if self.knowledge_time_range is None else list(self.knowledge_time_range),
             "changed_objects": list(self.changed_objects),
             "changed_partitions": list(self.changed_partitions),
             "changed_time_range": (

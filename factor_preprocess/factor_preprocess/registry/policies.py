@@ -30,7 +30,7 @@ class PolicyLevel(str, Enum):
     PRODUCTION = "production"
 
 
-@dataclass
+@dataclass(frozen=True)
 class TransformStep:
     """Single transform step in a pipeline.
 
@@ -62,7 +62,7 @@ class TransformStep:
         return hash((self.name, self.parameters, self.step_id, self.skip_if_missing))
 
 
-@dataclass
+@dataclass(frozen=True)
 class PolicyPreset:
     """
     Named policy configuration for preprocessing pipelines.

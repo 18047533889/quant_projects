@@ -27,7 +27,7 @@ def _op(name: str, backend: str = "pandas_numpy"):
 # ---------------------------------------------------------------------------
 # 1. same_clock_lag
 # ---------------------------------------------------------------------------
-def test_same_clock_lag_basic() -> None:
+def test_same_clock_lag_basic_first_catalog_entry() -> None:
     """Basic functionality test."""
     np.random.seed(42)
     idx = pd.date_range("2024-01-01", periods=20)
@@ -43,7 +43,7 @@ def test_same_clock_lag_basic() -> None:
         pytest.fail(f"{op} basic test failed: {e}")
 
 
-def test_same_clock_lag_handles_nans() -> None:
+def test_same_clock_lag_handles_nans_first_catalog_entry() -> None:
     """NaN handling test."""
     idx = pd.date_range("2024-01-01", periods=10)
     x = pd.DataFrame([[1.0, np.nan, 3.0]] * 10, index=idx, columns=["A", "B", "C"])
@@ -56,7 +56,7 @@ def test_same_clock_lag_handles_nans() -> None:
         pytest.fail(f"NaN test failed: {e}")
 
 
-def test_same_clock_lag_deterministic() -> None:
+def test_same_clock_lag_deterministic_first_catalog_entry() -> None:
     """Determinism test - same input yields same output."""
     np.random.seed(123)
     idx = pd.date_range("2024-01-01", periods=15)
@@ -74,7 +74,7 @@ def test_same_clock_lag_deterministic() -> None:
 # ---------------------------------------------------------------------------
 # 2. same_clock_lag
 # ---------------------------------------------------------------------------
-def test_same_clock_lag_basic() -> None:
+def test_same_clock_lag_basic_second_catalog_entry() -> None:
     """Basic functionality test."""
     np.random.seed(42)
     idx = pd.date_range("2024-01-01", periods=20)
@@ -90,7 +90,7 @@ def test_same_clock_lag_basic() -> None:
         pytest.fail(f"{op} basic test failed: {e}")
 
 
-def test_same_clock_lag_handles_nans() -> None:
+def test_same_clock_lag_handles_nans_second_catalog_entry() -> None:
     """NaN handling test."""
     idx = pd.date_range("2024-01-01", periods=10)
     x = pd.DataFrame([[1.0, np.nan, 3.0]] * 10, index=idx, columns=["A", "B", "C"])
@@ -103,7 +103,7 @@ def test_same_clock_lag_handles_nans() -> None:
         pytest.fail(f"NaN test failed: {e}")
 
 
-def test_same_clock_lag_deterministic() -> None:
+def test_same_clock_lag_deterministic_second_catalog_entry() -> None:
     """Determinism test - same input yields same output."""
     np.random.seed(123)
     idx = pd.date_range("2024-01-01", periods=15)

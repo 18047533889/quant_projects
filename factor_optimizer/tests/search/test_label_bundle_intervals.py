@@ -328,3 +328,62 @@ def test_large_vectorized_case_completes_quickly():
     assert result["validated"] is True
     # O(N log N) searchsorted: 10k samples must complete far under 5s.
     assert elapsed < 5.0, f"vectorized validation took {elapsed:.2f}s -- O(N^2)?"
+
+
+def test_v7_forward_split_rejects_training_label_not_mature_at_validation_decision():
+    bundle = LabelBundle(
+        sample_ids=("train", "validation", "test"),
+        decision_times=("2026-01-01", "2026-01-05", "2026-02-01"),
+        label_start_times=("2026-01-02", "2026-01-06", "2026-02-02"),
+        label_end_times=("2026-01-10", "2026-01-20", "2026-02-05"),
+        label_availability_times=("2026-01-11", "2026-01-21", "2026-02-06"),
+    )
+    with pytest.raises(ValueError, match="overlaps validation|not mature"):
+        SplitPlan(
+            split_id="v7-forward",
+            train_mask=(True, False, False),
+            validation_mask=(False, True, False),
+            test_mask=(False, False, True),
+            metadata={"protocol": "forward_validation"},
+            label_bundle=bundle,
+        )
+
+
+def test_v7_timestamp_validation_does_not_cancel_explicit_embargo():
+    bundle = LabelBundle(
+        sample_ids=("test", "train", "validation"),
+        decision_times=("2026-01-01", "2026-01-03", "2026-01-10"),
+        label_start_times=("2026-01-01", "2026-01-03", "2026-01-10"),
+        label_end_times=("2026-01-02", "2026-01-04", "2026-01-11"),
+        label_availability_times=("2026-01-02", "2026-01-04", "2026-01-11"),
+    )
+    with pytest.raises(ValueError, match="falls within embargo"):
+        SplitPlan(
+            split_id="v7-embargo",
+            train_mask=(False, True, False),
+            validation_mask=(False, False, True),
+            test_mask=(True, False, False),
+            metadata={"protocol": "purged_cv", "embargo_unit": "time_index_position"},
+            time_index=("2026-01-01", "2026-01-03", "2026-01-10"),
+            label_bundle=bundle,
+            embargo=10,
+        )
+
+
+def test_v7_forward_maturity_rejected_without_interval_overlap():
+    bundle = LabelBundle(
+        sample_ids=("train", "validation", "test"),
+        decision_times=("2026-01-01", "2026-01-05", "2026-02-01"),
+        label_start_times=("2026-01-02", "2026-01-06", "2026-02-02"),
+        label_end_times=("2026-01-03", "2026-01-20", "2026-02-05"),
+        label_availability_times=("2026-01-11", "2026-01-21", "2026-02-06"),
+    )
+    with pytest.raises(ValueError, match="not mature"):
+        SplitPlan(
+            split_id="v7-maturity-only",
+            train_mask=(True, False, False),
+            validation_mask=(False, True, False),
+            test_mask=(False, False, True),
+            metadata={"protocol": "forward_validation"},
+            label_bundle=bundle,
+        )

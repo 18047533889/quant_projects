@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import numpy as np
+import pandas as pd
 
 from modeling.artifact import PredictionContext
 from modeling.contracts import ApplicationWindow
@@ -97,7 +98,10 @@ def test_label_shuffle_known_bad_learner_fails_null_control():
     assert result["leakage_suspected"] is True
 
 
-def test_feature_diagnostics_distinguish_frozen_perturbation_and_retraining():
+def test_feature_diagnostics_distinguish_frozen_perturbation_and_retraining(tmp_path):
+    from factor_optimizer.contracts.campaign_store import DurableBudgetTracker, SQLiteCampaignStore
+    from factor_optimizer.contracts.search_budget import SearchBudget
+    from modeling.trainer_governance import FeatureExperimentSpec
     ds = synthetic_panel(n_dates=10, n_stocks=12, seed=3)
     X, y, dates, _, finite = ds.as_matrix()
     X, y, dates = X[finite], y[finite], dates[finite]
@@ -128,9 +132,55 @@ def test_feature_diagnostics_distinguish_frozen_perturbation_and_retraining():
     )
     result = feature_ablation(
         Artifact(), X, y, _corr, dates=dates, shuffle_mode="within_date",
-        retrain_without_feature_fn=Retrained, context=context,
+        retrain_without_feature_fn=lambda j: (Retrained(j), f"qe:evidence:{j}"),
+        experiment_spec=FeatureExperimentSpec(
+            "model-ablation", "feature-set-v1", ("fold-1",), 0,
+            "cpu-small-v1", "qe:baseline:1", "pcr-recipe-v1", 1, 1.0,
+        ),
+        budget_tracker=DurableBudgetTracker(
+            SQLiteCampaignStore(tmp_path / "campaign.sqlite3"), "model-ablation",
+            SearchBudget(max_trials=3, max_evaluations=3, max_cost_units=3.0),
+        ),
+        context=context,
     )
     assert result["retrained"] is True
     assert set(result["occlusion"]) == set(result["permutation"])
     assert set(result["retrained_feature_ablation"]) == {"0", "1", "2"}
     assert sorted(retrain_calls) == [0, 1, 2]
+    assert result["retrained_evidence_refs"]["0"] == "qe:evidence:0"
+
+
+def test_retrained_ablation_stops_at_durable_campaign_budget(tmp_path):
+    import pytest
+    from factor_optimizer.contracts.campaign_store import DurableBudgetTracker, SQLiteCampaignStore
+    from factor_optimizer.contracts.search_budget import SearchBudget
+    from modeling.trainer_governance import FeatureExperimentSpec
+
+    class Artifact:
+        def predict(self, values, *, context):
+            return values[:, 0]
+
+    class Retrained:
+        def predict(self, values):
+            return values[:, 0]
+
+    X = np.arange(24.0).reshape(8, 3)
+    y = X[:, 0]
+    dates = np.asarray(pd.date_range("2026-01-01", periods=8), dtype=object)
+    context = PredictionContext(ApplicationWindow(dates[0], dates[-1]), dates, dates[-1], "schema")
+    tracker = DurableBudgetTracker(
+        SQLiteCampaignStore(tmp_path / "one.sqlite3"), "bounded-ablation",
+        SearchBudget(max_trials=1, max_evaluations=1, max_cost_units=1.0),
+    )
+    spec = FeatureExperimentSpec(
+        "bounded-ablation", "features-v1", ("fold-1",), 7,
+        "cpu-v1", "qe:baseline", "model-recipe-v1", 1, 1.0,
+    )
+    with pytest.raises(ValueError, match="budget exhausted"):
+        feature_ablation(
+            Artifact(), X, y, lambda pred, truth: float(np.mean(pred == truth)),
+            dates=dates, retrain_without_feature_fn=lambda j: (Retrained(), f"qe:{j}"),
+            experiment_spec=spec, budget_tracker=tracker, context=context,
+        )
+    state = SQLiteCampaignStore(tmp_path / "one.sqlite3").budget_state("bounded-ablation")
+    assert state["evaluations_used"] == 1

@@ -43,11 +43,15 @@ from quant_evaluator.metrics.probe_portfolio.sharpe import (
     compute_positive_month_ratio,
     compute_annualized_return,
     compute_annualized_volatility,
+    compute_active_metrics,
 )
 from quant_evaluator.metrics.probe_portfolio.costs import (
     COST_SCENARIOS,
     cost_scenario,
     apply_per_side_costs,
+    CostEvidence,
+    compute_transaction_costs,
+    heuristic_cost_scan,
 )
 
 __all__ = [
@@ -62,9 +66,13 @@ __all__ = [
     "compute_positive_month_ratio",
     "compute_annualized_return",
     "compute_annualized_volatility",
+    "compute_active_metrics",
     "COST_SCENARIOS",
     "cost_scenario",
     "apply_per_side_costs",
+    "CostEvidence",
+    "compute_transaction_costs",
+    "heuristic_cost_scan",
     "compute_metrics_from_cohort",
     # Legacy flat-module re-exports (the package moved to a directory layout;
     # keep the historical names importable from the metrics package).
@@ -158,15 +166,16 @@ def compute_metrics_from_cohort(
         min_periods=min_periods,
         rolling_window=rolling_window,
         rolling_quantile=rolling_quantile,
+        holding_days=holding,
     )
-    loa_metrics = compute_portfolio_metrics(
-        cohort["active_ret"],
-        periods_per_year=periods_per_year,
-        risk_free_rate=risk_free_rate,
-        min_periods=min_periods,
-        rolling_window=rolling_window,
-        rolling_quantile=rolling_quantile,
-    )
+    # This legacy producer supplies only an arithmetic spread, not separate
+    # long-only and benchmark NAV trajectories. It cannot support geometric
+    # LO performance. Call sharpe.compute_active_metrics with both trajectories.
+    loa_metrics = {
+        "status": "WAIT",
+        "reason": "separate portfolio and benchmark NAV return trajectories required",
+        "return_basis": "arithmetic_active_diagnostic",
+    }
     return {
         "cohort": cohort,
         "metrics": {

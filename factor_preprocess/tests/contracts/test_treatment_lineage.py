@@ -43,18 +43,15 @@ def test_rank_pre_vs_post_neutralization_are_different_semantics():
     assert deduped.steps[1].stage == TransformStage.POST_NEUTRALIZATION
 
 
-def test_dedupe_by_semantic_stage_not_function_name():
-    # Two steps with the same stage but different function names are the same
-    # treatment and must dedupe to one.
+def test_aliases_are_not_deduped_without_canonical_dag_proof():
     a = _rank_step(TransformStage.POST_NEUTRALIZATION, name="cs_rank")
     b = _rank_step(TransformStage.POST_NEUTRALIZATION, name="rank")
     lineage = TransformLineage((a, b))
     deduped = lineage.dedupe()
-    assert len(deduped) == 1
-    assert deduped.steps[0].name == "cs_rank"  # first wins
+    assert len(deduped) == 2
 
 
-def test_dedupe_keeps_distinct_semantic_ids():
+def test_non_adjacent_repeat_is_preserved():
     winsor = TransformStep(
         semantic_id=TransformSemanticID("WINSOR:q01_q99"),
         stage=TransformStage.OUTLIER,
@@ -63,7 +60,7 @@ def test_dedupe_keeps_distinct_semantic_ids():
     rank = _rank_step(TransformStage.POST_NEUTRALIZATION)
     lineage = TransformLineage((winsor, rank, winsor))
     deduped = lineage.dedupe()
-    assert len(deduped) == 2
+    assert len(deduped) == 3
 
 
 def test_already_industry_neutral_prunes_duplicate():

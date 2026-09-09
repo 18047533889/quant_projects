@@ -7,7 +7,9 @@ FA stores only metadata and references, not raw factor values or weights.
 
 from dataclasses import dataclass
 from enum import Enum
-from typing import Optional
+from typing import Callable, Optional
+import hashlib
+import json
 
 
 class WeightingScheme(Enum):
@@ -90,6 +92,11 @@ class AggregationSpec:
             WeightingScheme.RANK_IC,
             WeightingScheme.MEAN_ABSOLUTE_IC,
         )
+
+    @property
+    def content_hash(self) -> str:
+        payload = {k: (v.value if isinstance(v, Enum) else v) for k, v in self.__dict__.items() if k != "created_at"}
+        return hashlib.sha256(json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
 
 
 @dataclass(frozen=True)
@@ -180,6 +187,9 @@ class AggregationFitArtifact:
     fit_method: str
     computed_weights: tuple[float, ...]
     created_at: str = ""
+    fit_sample_ids: tuple[str, ...] = ()
+    fit_label_vintage: Optional[str] = None
+    fit_labels_matured: bool = True
 
     def __post_init__(self):
         if not self.fit_id:
@@ -209,6 +219,10 @@ class AggregationFitArtifact:
             if fw != fw or fw in (float("inf"), float("-inf")):
                 raise ValueError("computed_weights must be finite")
         object.__setattr__(self, "computed_weights", tuple(self.computed_weights))
+        object.__setattr__(self, "fit_sample_ids", tuple(self.fit_sample_ids))
+        if len(set(self.fit_sample_ids)) != len(self.fit_sample_ids): raise ValueError("duplicate fit sample ids")
+        if self.fit_sample_ids and not self.fit_label_vintage: raise ValueError("typed fit samples require label vintage")
+        if not isinstance(self.fit_labels_matured,bool): raise TypeError("fit_labels_matured must be bool")
         if not self.created_at:
             from datetime import datetime, timezone
             object.__setattr__(
@@ -237,6 +251,11 @@ class AggregationFitArtifact:
         eval_split_ref: Optional[str],
         eval_window_ref: Optional[str] = None,
         eval_snapshot_ref: Optional[str] = None,
+        split_resolver: Optional[Callable[[str], object]] = None,
+        eval_sample_ids: tuple[str, ...] = (),
+        eval_label_vintage: Optional[str] = None,
+        eval_labels_matured: bool = True,
+        authoritative_coordinates: bool = False,
     ) -> str:
         """Validate that an evaluation of a fit is genuinely out-of-sample.
 
@@ -250,18 +269,34 @@ class AggregationFitArtifact:
                 "an out-of-sample evaluation of an aggregation fit requires "
                 "eval_split_ref — evaluating on the fit split would be leakage"
             )
-        if eval_split_ref == fit_artifact.fit_split_ref:
+        if not isinstance(authoritative_coordinates,bool): raise TypeError("authoritative_coordinates must be bool")
+        if authoritative_coordinates and not fit_artifact.fit_sample_ids:
+            raise ValueError("authoritative OOS evaluation requires resolved fit sample/vintage coordinates")
+        fit_coordinates = split_resolver(fit_artifact.fit_split_ref) if split_resolver else fit_artifact.fit_split_ref
+        eval_coordinates = split_resolver(eval_split_ref) if split_resolver else eval_split_ref
+        def canonical_coordinates(value):
+            return tuple(sorted(value)) if isinstance(value,(tuple,list,set,frozenset)) else value
+        if canonical_coordinates(eval_coordinates) == canonical_coordinates(fit_coordinates):
             raise ValueError(
                 f"out-of-sample evaluation split {eval_split_ref!r} equals the "
                 f"fit split {fit_artifact.fit_split_ref!r}; fitting and "
                 "evaluating on the SAME split is leakage — use a held-out split"
             )
+        eval_sample_ids=tuple(eval_sample_ids)
+        if fit_artifact.fit_sample_ids:
+            if not eval_sample_ids or not eval_label_vintage: raise ValueError("typed OOS evaluation requires sample and label-vintage coordinates")
+            if len(set(eval_sample_ids))!=len(eval_sample_ids): raise ValueError("duplicate evaluation sample ids")
+            if set(fit_artifact.fit_sample_ids).intersection(eval_sample_ids): raise ValueError("fit/evaluation sample coordinates overlap")
+            if not fit_artifact.fit_labels_matured or not eval_labels_matured: raise ValueError("unmatured labels cannot authorize OOS evaluation")
+            if eval_snapshot_ref is None: raise ValueError("typed OOS evaluation requires snapshot vintage reference")
         return eval_split_ref
 
     def to_dict(self) -> dict:
         return {
             "fit_id": self.fit_id,
             "spec_id": self.spec.spec_id,
+            "spec_content_hash": self.spec.content_hash,
+            "weights_content_hash": hashlib.sha256(json.dumps(list(self.computed_weights), separators=(",", ":")).encode()).hexdigest(),
             "fit_split_ref": self.fit_split_ref,
             "fit_window_ref": self.fit_window_ref,
             "fit_snapshot_ref": self.fit_snapshot_ref,
@@ -269,4 +304,7 @@ class AggregationFitArtifact:
             "fit_method": self.fit_method,
             "computed_weights": list(self.computed_weights),
             "created_at": self.created_at,
+            "fit_sample_ids": list(self.fit_sample_ids),
+            "fit_label_vintage": self.fit_label_vintage,
+            "fit_labels_matured": self.fit_labels_matured,
         }

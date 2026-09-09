@@ -55,7 +55,7 @@ def test_broker_holds_opaque_store_ref_not_raw_payload():
 
 def test_provider_resolves_only_via_opaque_store_identity():
     broker = _broker()
-    store = TestStoreRef(_OpaqueTestStore({"test_y": [1, 2, 3]}), dataset_identity="ds-identity")
+    store = TestStoreRef(_OpaqueTestStore({"test_y": [1, 2, 3]}), dataset_identity="ds-123")
     broker.attach_store_ref(store)
     provider = broker.create_test_provider()
     cap = broker.issue_test_capability([False, False, True])

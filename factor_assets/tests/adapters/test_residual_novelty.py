@@ -67,9 +67,17 @@ def _passing_gate(factor_id="F001"):
 
 
 class TestComputeSignals:
-    def test_returns_all_signal_keys(self):
+    def test_default_admission_path_rejects_same_date_descriptive_evidence(self):
         batch, labels = _make_batch()
         producer = ResidualICNoveltyProducer()
+        assert producer.estimation_scope == "SAME_DATE_DESCRIPTIVE"
+        assert producer.compute_signals(
+            batch, labels, base_factor_indices=(0,), test_factor_idx=2
+        ) is None
+
+    def test_returns_all_signal_keys(self):
+        batch, labels = _make_batch()
+        producer = ResidualICNoveltyProducer(allow_same_date_descriptive=True)
         signals = producer.compute_signals(
             batch, labels, base_factor_indices=(0,), test_factor_idx=2
         )
@@ -86,7 +94,7 @@ class TestComputeSignals:
 
     def test_novelty_score_in_unit_interval(self):
         batch, labels = _make_batch()
-        signals = ResidualICNoveltyProducer().compute_signals(
+        signals = ResidualICNoveltyProducer(allow_same_date_descriptive=True).compute_signals(
             batch, labels, base_factor_indices=(0,), test_factor_idx=2
         )
         assert 0.0 <= signals[NOVELTY_SCORE_KEY] <= 1.0
@@ -95,14 +103,14 @@ class TestComputeSignals:
         # Factor 1 is a noisy copy of base factor 0: most of its IC is
         # explained, so residual novelty must be low.
         batch, labels = _make_batch()
-        signals = ResidualICNoveltyProducer().compute_signals(
+        signals = ResidualICNoveltyProducer(allow_same_date_descriptive=True).compute_signals(
             batch, labels, base_factor_indices=(0,), test_factor_idx=1
         )
         assert signals[NOVELTY_SCORE_KEY] < 0.5
 
     def test_independent_factor_scores_higher_than_redundant(self):
         batch, labels = _make_batch()
-        producer = ResidualICNoveltyProducer()
+        producer = ResidualICNoveltyProducer(allow_same_date_descriptive=True)
         redundant = producer.compute_signals(
             batch, labels, base_factor_indices=(0,), test_factor_idx=1
         )
@@ -117,7 +125,7 @@ class TestComputeSignals:
     def test_insufficient_periods_fails_closed(self):
         # Every period below min_assets → all-NaN incremental IC → None.
         batch, labels = _make_batch(T=5, N=3)
-        signals = ResidualICNoveltyProducer().compute_signals(
+        signals = ResidualICNoveltyProducer(allow_same_date_descriptive=True).compute_signals(
             batch, labels, base_factor_indices=(0,), test_factor_idx=2
         )
         assert signals is None
@@ -126,7 +134,7 @@ class TestComputeSignals:
         # A corrupt/absent total-IC series (finite incremental IC but no
         # finite total IC) must NOT produce a maximal novelty score — the
         # signal is absent entirely (fail-closed, never fail-open).
-        producer = ResidualICNoveltyProducer()
+        producer = ResidualICNoveltyProducer(allow_same_date_descriptive=True)
         batch, labels = _make_batch()
         # Simulate QE returning NaN total_ic: patch via a thin wrapper is
         # overkill; instead check the consistency gate directly with a
@@ -165,14 +173,14 @@ class TestComputeSignals:
     def test_min_periods_gate(self):
         # T=10 valid periods < min_periods=20 → None; min_periods=5 → signal.
         batch, labels = _make_batch(T=10)
-        producer = ResidualICNoveltyProducer()
+        producer = ResidualICNoveltyProducer(allow_same_date_descriptive=True)
         assert (
             producer.compute_signals(
                 batch, labels, base_factor_indices=(0,), test_factor_idx=2
             )
             is None
         )
-        lenient = ResidualICNoveltyProducer(min_periods=5)
+        lenient = ResidualICNoveltyProducer(min_periods=5, allow_same_date_descriptive=True)
         assert (
             lenient.compute_signals(
                 batch, labels, base_factor_indices=(0,), test_factor_idx=2
@@ -214,7 +222,9 @@ class TestComputeSignals:
                     rn._qe_compute_incremental_ic = original
 
         batch, labels = _make_batch(T=20)
-        signals = _PartialNaNTotalProducer(min_periods=5).compute_signals(
+        signals = _PartialNaNTotalProducer(
+            min_periods=5, allow_same_date_descriptive=True,
+        ).compute_signals(
             batch, labels, base_factor_indices=(0,), test_factor_idx=2
         )
         assert signals is not None
@@ -226,14 +236,14 @@ class TestComputeSignals:
     def test_empty_base_indices_rejected(self):
         batch, labels = _make_batch()
         with pytest.raises(ValueError, match="non-empty"):
-            ResidualICNoveltyProducer().compute_signals(
+            ResidualICNoveltyProducer(allow_same_date_descriptive=True).compute_signals(
                 batch, labels, base_factor_indices=(), test_factor_idx=2
             )
 
     def test_self_residualization_rejected(self):
         batch, labels = _make_batch()
         with pytest.raises(ValueError, match="self-residualization"):
-            ResidualICNoveltyProducer().compute_signals(
+            ResidualICNoveltyProducer(allow_same_date_descriptive=True).compute_signals(
                 batch, labels, base_factor_indices=(0, 2), test_factor_idx=2
             )
 
@@ -285,7 +295,7 @@ class TestMapNoveltyScore:
 class TestEvidenceRoundTrip:
     def test_signals_wrapped_as_evidence_result(self):
         batch, labels = _make_batch()
-        signals = ResidualICNoveltyProducer().compute_signals(
+        signals = ResidualICNoveltyProducer(allow_same_date_descriptive=True).compute_signals(
             batch, labels, base_factor_indices=(0,), test_factor_idx=2
         )
         evidence = evidence_result_from_signals(
@@ -300,7 +310,7 @@ class TestEvidenceRoundTrip:
 
     def test_round_trip_extracts_inputs(self):
         batch, labels = _make_batch()
-        signals = ResidualICNoveltyProducer().compute_signals(
+        signals = ResidualICNoveltyProducer(allow_same_date_descriptive=True).compute_signals(
             batch, labels, base_factor_indices=(0,), test_factor_idx=2
         )
         evidence = evidence_result_from_signals(
@@ -396,7 +406,7 @@ class TestPolicyIntegration:
 
     def _evidence(self, seed=7):
         batch, labels = _make_batch(seed=seed)
-        signals = ResidualICNoveltyProducer().compute_signals(
+        signals = ResidualICNoveltyProducer(allow_same_date_descriptive=True).compute_signals(
             batch, labels, base_factor_indices=(0,), test_factor_idx=2
         )
         assert signals is not None
@@ -426,7 +436,7 @@ class TestPolicyIntegration:
         # With a nonzero novelty floor, a mostly-redundant factor (a noisy
         # copy of the base) must be recorded as SHADOW, never admitted.
         batch, labels = _make_batch()
-        signals = ResidualICNoveltyProducer().compute_signals(
+        signals = ResidualICNoveltyProducer(allow_same_date_descriptive=True).compute_signals(
             batch, labels, base_factor_indices=(0,), test_factor_idx=1
         )
         assert signals is not None

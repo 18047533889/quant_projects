@@ -160,6 +160,14 @@ from .storage import (
     LocalArtifactCache,
     ObjectMetadata,
     ObjectStore,
+    GCObject,
+    GCRootSnapshot,
+    GCDryRunPlan,
+    GCTombstoneClaim,
+    TombstoneClaimStatus,
+    DeletionStatus,
+    DeletionReceipt,
+    GCReferenceAuthority,
 )
 from .timing import EvidenceStatus, TimingContract
 from .workflow import (
@@ -316,6 +324,14 @@ __all__ = [
     "ObjectMetadata",
     "LocalArtifactCache",
     "CacheEvictionPolicy",
+    "GCObject",
+    "GCRootSnapshot",
+    "GCDryRunPlan",
+    "GCTombstoneClaim",
+    "TombstoneClaimStatus",
+    "DeletionStatus",
+    "DeletionReceipt",
+    "GCReferenceAuthority",
     # timing
     "TimingContract",
     "EvidenceStatus",

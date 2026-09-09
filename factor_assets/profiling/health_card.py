@@ -76,11 +76,10 @@ class IntegrityGateResult:
     detail: str = ""
 
     def __post_init__(self) -> None:
-        if self.gate_id not in INTEGRITY_GATE_IDS:
-            raise ValueError(
-                f"unknown integrity gate {self.gate_id!r}; expected one of "
-                f"{INTEGRITY_GATE_IDS}"
-            )
+        if (not isinstance(self.gate_id, str) or not self.gate_id.strip()
+                or (self.gate_id not in INTEGRITY_GATE_IDS
+                    and not self.gate_id.startswith("custom:"))):
+            raise ValueError("integrity gate id must be a non-empty string")
         if self.passed is not None and not isinstance(self.passed, bool):
             raise TypeError("passed must be a bool, None, or absent")
         if not isinstance(self.evidence_ref, str):
@@ -176,6 +175,8 @@ class FactorHealthCardArtifact:
     admission_relevant: AdmissionSummary
     health_policy_id: str
     health_policy_version: str
+    use_case: str = "GENERIC"
+    required_integrity_gate_ids: tuple[str, ...] = INTEGRITY_GATE_IDS
 
     def __post_init__(self) -> None:
         if not self.factor_definition_id:
@@ -184,6 +185,7 @@ class FactorHealthCardArtifact:
             raise ValueError("evaluation_ref is required")
         object.__setattr__(self, "dimension_grades", tuple(self.dimension_grades))
         object.__setattr__(self, "integrity_gates", tuple(self.integrity_gates))
+        object.__setattr__(self, "required_integrity_gate_ids", tuple(self.required_integrity_gate_ids))
         if len(self.dimension_grades) != len(HEALTH_DIMENSIONS):
             raise ValueError(
                 "health card requires exactly one dimension artifact per health "
@@ -199,6 +201,19 @@ class FactorHealthCardArtifact:
         for gate in self.integrity_gates:
             if not isinstance(gate, IntegrityGateResult):
                 raise TypeError("integrity_gates must contain IntegrityGateResult")
+        gate_ids = [gate.gate_id for gate in self.integrity_gates]
+        if len(gate_ids) != len(set(gate_ids)):
+            raise ValueError("integrity gates must not contain duplicate gate ids")
+        for dim in self.dimension_grades:
+            if dim.factor_definition_id != self.factor_definition_id:
+                raise ValueError("dimension grade factor identity does not match health card")
+            if dim.evaluation_ref != self.evaluation_ref:
+                raise ValueError("dimension grade evaluation identity does not match health card")
+            if (
+                dim.dimension_policy_id != self.health_policy_id
+                or dim.dimension_policy_version != self.health_policy_version
+            ):
+                raise ValueError("dimension grade policy identity does not match health card")
         if self.display_overall_grade not in HealthGradeVocabulary.all():
             raise ValueError(
                 f"unknown display overall grade {self.display_overall_grade!r}"
@@ -211,6 +226,16 @@ class FactorHealthCardArtifact:
             raise TypeError("admission_relevant must be an AdmissionSummary")
         if not self.health_policy_id or not self.health_policy_version:
             raise ValueError("health policy id/version are required")
+        expected_gate_pass = (
+            len(self.integrity_gates) == len(self.required_integrity_gate_ids)
+            and set(gate_ids) == set(self.required_integrity_gate_ids)
+            and all(
+                gate.passed is True and bool(gate.evidence_ref.strip())
+                for gate in self.integrity_gates
+            )
+        )
+        if self.admission_relevant.hard_gates_passed != expected_gate_pass:
+            raise ValueError("admission summary contradicts integrity gate evidence")
 
     def dimension(self, dimension_id: str) -> DimensionGradeArtifact | None:
         for d in self.dimension_grades:
@@ -260,6 +285,8 @@ class FactorHealthCardArtifact:
             },
             "health_policy_id": self.health_policy_id,
             "health_policy_version": self.health_policy_version,
+            "use_case": self.use_case,
+            "required_integrity_gate_ids": list(self.required_integrity_gate_ids),
         }
 
 
@@ -271,18 +298,32 @@ class FactorHealthCardArtifact:
 def _integrity_results(
     gate_results: Mapping[str, bool | None] | Sequence[IntegrityGateResult],
     gate_details: Mapping[str, str] | None = None,
+    required_gate_ids: Sequence[str] = INTEGRITY_GATE_IDS,
 ) -> tuple[IntegrityGateResult, ...]:
     details = dict(gate_details or {})
+    required = tuple(required_gate_ids)
+    if not required or len(required) != len(set(required)) or any(not g for g in required):
+        raise ValueError("policy integrity gates must be non-empty, unique ids")
     if isinstance(gate_results, Sequence) and not isinstance(gate_results, (str, bytes)):
-        return tuple(gate_results)
+        gates = tuple(gate_results)
+        gate_ids = [gate.gate_id for gate in gates]
+        if len(gate_ids) != len(set(gate_ids)):
+            raise ValueError("integrity gates must not contain duplicate gate ids")
+        if set(gate_ids) != set(required):
+            missing = sorted(set(required) - set(gate_ids))
+            raise ValueError(f"integrity gates must exactly cover the policy gates; missing={missing}")
+        return gates
     out: list[IntegrityGateResult] = []
-    for gate_id in INTEGRITY_GATE_IDS:
+    for gate_id in required:
         passed = gate_results.get(gate_id) if isinstance(gate_results, Mapping) else None
         out.append(
             IntegrityGateResult(
                 gate_id=gate_id,
                 passed=passed,
-                evidence_ref=f"integrity:{gate_id}",
+                # A legacy bool mapping contains no resolvable evidence identity.
+                # Keep the observation for display, but do not manufacture a
+                # trusted reference on the caller's behalf.
+                evidence_ref="",
                 detail=details.get(gate_id, ""),
             )
         )
@@ -298,6 +339,8 @@ def build_health_card(
     | Sequence[IntegrityGateResult] = (),
     policy=None,
     gate_details: Mapping[str, str] | None = None,
+    production: bool = False,
+    use_case: str | None = None,
 ) -> FactorHealthCardArtifact:
     """Deterministically assemble a frozen health card under a health policy.
 
@@ -311,7 +354,23 @@ def build_health_card(
     if policy is None:
         policy = get_health_policy()
     dims = tuple(dimension_grades)
-    gates = _integrity_results(integrity_gates, gate_details)
+    if production:
+        refs = [ref for dim in dims for ref in dim.metric_grade_refs]
+        if not refs or any(not ref.production_provenance_complete for ref in refs):
+            raise ValueError(
+                "production health cards require resolved factor/value/axis/evaluation/config provenance"
+            )
+        if any(ref.factor_definition_id != factor_definition_id for ref in refs):
+            raise ValueError("metric evidence factor identity does not match health card")
+        if any(ref.evaluation_ref != evaluation_ref for ref in refs):
+            raise ValueError("metric evidence evaluation identity does not match health card")
+        if len({ref.config_hash for ref in refs}) != 1:
+            raise ValueError("metric evidence config hashes must match")
+    floors = policy.admission_for(use_case)
+    gates = _integrity_results(
+        integrity_gates, gate_details,
+        required_gate_ids=floors.integrity_gate_ids,
+    )
 
     # -- display overall (mean of graded dimension scores; never admission) --
     graded_scores = [d.score for d in dims if d.score is not None]
@@ -326,16 +385,16 @@ def build_health_card(
     ungraded: list[str] = []
     floor_violations: list[str] = []
     hard_gate_failures: list[str] = []
-    floors = policy.admission_floors
     for dim in dims:
         if dim.evidence_tier == EVIDENCE_TIER_MISSING or dim.grade is None:
             ungraded.append(dim.dimension_id)
-            if policy.is_hard_gate_dimension(dim.dimension_id):
+            if dim.dimension_id in floors.hard_gate_dimensions:
                 hard_gate_failures.append(dim.dimension_id)
-            elif floors.require_all_dimensions_graded:
+            if (floors.require_all_dimensions_graded
+                    or dim.dimension_id in floors.required_dimension_ids):
                 floor_violations.append(dim.dimension_id)
             continue
-        floor = policy.dimension_floor(dim.dimension_id)
+        floor = floors.dimension_floors.get(dim.dimension_id)
         if floor is not None and dim.grade not in HealthGradeVocabulary.RANKED:
             # ungraded handled above; this is defensive
             floor_violations.append(dim.dimension_id)
@@ -343,14 +402,18 @@ def build_health_card(
         if floor is not None:
             if HealthGradeVocabulary.rank(dim.grade) > HealthGradeVocabulary.rank(floor):
                 floor_violations.append(dim.dimension_id)
-                if policy.is_hard_gate_dimension(dim.dimension_id):
+                if dim.dimension_id in floors.hard_gate_dimensions:
                     hard_gate_failures.append(dim.dimension_id)
-        elif policy.is_hard_gate_dimension(dim.dimension_id):
+        elif dim.dimension_id in floors.hard_gate_dimensions:
             # hard-gate dimension with no explicit floor: must be >= B to pass
             if HealthGradeVocabulary.rank(dim.grade) > HealthGradeVocabulary.rank("B"):
                 hard_gate_failures.append(dim.dimension_id)
 
-    hard_gates_passed = all(g.passed is True for g in gates)
+    hard_gates_passed = (
+        len(gates) == len(floors.integrity_gate_ids)
+        and {g.gate_id for g in gates} == set(floors.integrity_gate_ids)
+        and all(g.passed is True and bool(g.evidence_ref.strip()) for g in gates)
+    )
     summary = AdmissionSummary(
         hard_gates_passed=hard_gates_passed,
         dimension_floor_violations=tuple(floor_violations),
@@ -368,4 +431,6 @@ def build_health_card(
         admission_relevant=summary,
         health_policy_id=policy.policy_id,
         health_policy_version=policy.policy_version,
+        use_case=use_case or floors.use_case,
+        required_integrity_gate_ids=floors.integrity_gate_ids,
     )

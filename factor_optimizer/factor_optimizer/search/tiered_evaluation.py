@@ -23,6 +23,44 @@ from typing import Any, Dict, List, Optional, Tuple
 
 
 @dataclass(frozen=True)
+class IssuedTierJob:
+    job_id: str
+    candidate_id: str
+    recipe_version: str
+    tier_name: str
+    attempt: int
+
+    def __post_init__(self):
+        for name in ("job_id", "candidate_id", "recipe_version", "tier_name"):
+            if not isinstance(getattr(self, name), str) or not getattr(self, name).strip():
+                raise ValueError(f"{name} must be a non-empty string")
+        if isinstance(self.attempt, bool) or not isinstance(self.attempt, int) or self.attempt < 1:
+            raise ValueError("attempt must be a positive integer")
+
+
+@dataclass(frozen=True)
+class TierEvaluationOutcome:
+    outcome_id: str
+    job_id: str
+    candidate_id: str
+    recipe_version: str
+    tier_name: str
+    attempt: int
+    evaluation_ref: str
+    passed: bool
+
+    def __post_init__(self):
+        for name in ("outcome_id", "job_id", "candidate_id", "recipe_version",
+                     "tier_name", "evaluation_ref"):
+            if not isinstance(getattr(self, name), str) or not getattr(self, name).strip():
+                raise ValueError(f"{name} must be a non-empty string")
+        if type(self.passed) is not bool:
+            raise TypeError("passed must be a strict bool")
+        if isinstance(self.attempt, bool) or not isinstance(self.attempt, int) or self.attempt < 1:
+            raise ValueError("attempt must be a positive integer")
+
+
+@dataclass(frozen=True)
 class EvaluationTier:
     """A single stage in the evaluation funnel.
 
@@ -194,6 +232,11 @@ class TieredEvaluationScheduler:
         self._pruned: set = set()
         # candidate_id -> True when it has completed the full funnel.
         self._completed: set = set()
+        self._issued: Dict[str, IssuedTierJob] = {}
+        self._active_job: Dict[str, str] = {}
+        self._attempts: Dict[str, int] = {}
+        self._outcomes: Dict[str, Tuple[Dict[str, Any], Optional[str]]] = {}
+        self._evaluation_refs: set = set()
 
     @property
     def policy(self) -> TieredEvaluationPolicy:
@@ -222,6 +265,10 @@ class TieredEvaluationScheduler:
             raise ValueError(
                 f"candidate {candidate_id!r} was pruned and has no active tier"
             )
+        if candidate_id in self._completed:
+            raise ValueError(
+                f"candidate {candidate_id!r} completed and has no active tier"
+            )
         if candidate_id in self._at:
             return self._at[candidate_id][0]
         self._at[candidate_id] = (self.initial_tier(), 0)
@@ -233,40 +280,90 @@ class TieredEvaluationScheduler:
     def is_completed(self, candidate_id: str) -> bool:
         return candidate_id in self._completed
 
-    def advance(self, candidate_id: str, tier_name: str, passed: bool) -> Optional[str]:
-        """Register an outcome for ``candidate_id`` at ``tier_name``.
+    def issue(self, candidate_id: str, recipe_version: str) -> IssuedTierJob:
+        """Issue the only outcome-capable job for a candidate's current tier."""
+        tier_name = self.tier_for(candidate_id)
+        if candidate_id in self._active_job:
+            active = self._issued[self._active_job[candidate_id]]
+            if active.recipe_version != recipe_version:
+                raise ValueError("active issued job is bound to another recipe version")
+            return active
+        attempt = self._attempts.get(candidate_id, 0) + 1
+        job_id = f"tier-job:{candidate_id}:{attempt}"
+        job = IssuedTierJob(job_id, candidate_id, recipe_version, tier_name, attempt)
+        self._issued[job_id] = job
+        self._active_job[candidate_id] = job_id
+        self._attempts[candidate_id] = attempt
+        return job
+
+    def advance(self, outcome: TierEvaluationOutcome) -> Optional[str]:
+        """Apply an outcome bound to an actually issued job and attempt.
 
         Returns the tier the candidate should run next:
           - the same tier when it passed but has not yet met ``promote_after``;
           - the next (more expensive) tier when it passed and is promoted;
           - ``None`` when it was pruned (failed) or completed the funnel.
         """
-        if candidate_id in self._pruned:
-            return None
-        idx = self._policy.tier_index(tier_name)
+        if not isinstance(outcome, TierEvaluationOutcome):
+            raise TypeError("advance requires a TierEvaluationOutcome")
+        payload = asdict(outcome)
+        if outcome.outcome_id in self._outcomes:
+            prior_payload, prior_result = self._outcomes[outcome.outcome_id]
+            if prior_payload != payload:
+                raise ValueError("outcome_id was already used for a different payload")
+            return prior_result
+        job = self._issued.get(outcome.job_id)
+        if job is None:
+            raise ValueError("outcome references an unknown issued job")
+        for name in ("candidate_id", "recipe_version", "tier_name", "attempt"):
+            if getattr(outcome, name) != getattr(job, name):
+                raise ValueError(f"outcome {name} does not match issued job")
+        candidate_id = outcome.candidate_id
+        if self._active_job.get(candidate_id) != outcome.job_id:
+            raise ValueError("outcome references a stale or already-consumed attempt")
+        evidence_key = (candidate_id, outcome.tier_name, outcome.evaluation_ref)
+        if evidence_key in self._evaluation_refs:
+            raise ValueError("evaluation_ref was already consumed for this candidate and tier")
+        if candidate_id in self._pruned or candidate_id in self._completed:
+            raise ValueError("terminal candidate cannot accept another outcome")
+        expected_tier = self.tier_for(candidate_id)
+        if outcome.tier_name != expected_tier:
+            raise ValueError("outcome tier does not match candidate current tier")
+        del self._active_job[candidate_id]
+        self._evaluation_refs.add(evidence_key)
+        idx = self._policy.tier_index(outcome.tier_name)
         current_tier = self._policy.tiers[idx]
 
-        if not passed:
+        if not outcome.passed:
             self._pruned.add(candidate_id)
             if candidate_id in self._at:
                 del self._at[candidate_id]
-            return None
+            result = None
+            self._outcomes[outcome.outcome_id] = (payload, result)
+            return result
 
-        consecutive = self._at.get(candidate_id, (tier_name, 0))[1] + 1
-        self._at[candidate_id] = (tier_name, consecutive)
+        consecutive = self._at.get(candidate_id, (outcome.tier_name, 0))[1] + 1
+        self._at[candidate_id] = (outcome.tier_name, consecutive)
 
         if consecutive < current_tier.promote_after:
             # Not yet promoted: stay at the same (cheap) tier to re-confirm.
-            return tier_name
+            result = outcome.tier_name
+            self._outcomes[outcome.outcome_id] = (payload, result)
+            return result
 
         if idx + 1 < len(self._policy.tiers):
             next_name = self._policy.tiers[idx + 1].name
             self._at[candidate_id] = (next_name, 0)
-            return next_name
+            result = next_name
+            self._outcomes[outcome.outcome_id] = (payload, result)
+            return result
 
         # Survived every tier: full backtest done.
         self._completed.add(candidate_id)
-        return None
+        del self._at[candidate_id]
+        result = None
+        self._outcomes[outcome.outcome_id] = (payload, result)
+        return result
 
     def promote_count(self, candidate_id: str, tier_name: str) -> int:
         """Number of consecutive successful evaluations recorded at a tier."""
@@ -280,6 +377,11 @@ class TieredEvaluationScheduler:
             "at": {k: [v[0], v[1]] for k, v in self._at.items()},
             "pruned": sorted(self._pruned),
             "completed": sorted(self._completed),
+            "issued": {k: asdict(v) for k, v in self._issued.items()},
+            "active_job": dict(self._active_job),
+            "attempts": dict(self._attempts),
+            "outcomes": {k: [payload, result] for k, (payload, result) in self._outcomes.items()},
+            "evaluation_refs": [list(v) for v in sorted(self._evaluation_refs)],
         }
 
     @classmethod
@@ -291,4 +393,9 @@ class TieredEvaluationScheduler:
         }
         sched._pruned = set(data.get("pruned", []))
         sched._completed = set(data.get("completed", []))
+        sched._issued = {k: IssuedTierJob(**v) for k, v in data.get("issued", {}).items()}
+        sched._active_job = dict(data.get("active_job", {}))
+        sched._attempts = {k: int(v) for k, v in data.get("attempts", {}).items()}
+        sched._outcomes = {k: (v[0], v[1]) for k, v in data.get("outcomes", {}).items()}
+        sched._evaluation_refs = {tuple(v) for v in data.get("evaluation_refs", [])}
         return sched

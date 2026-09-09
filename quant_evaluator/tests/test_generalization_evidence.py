@@ -40,12 +40,25 @@ from quant_evaluator.metrics.generalization_evidence import (
     RetentionGrade,
     RetentionPolicy,
     TrainVsValidationArtifact,
-    build_train_validation_artifact,
+    build_train_validation_artifact as _build_train_validation_artifact,
     compute_generalization_deltas,
     compute_validation_retention,
     compute_validation_retention_array,
+    project_generalization_metric,
 )
 from quant_evaluator.registry.metrics import get_metric
+
+
+def build_train_validation_artifact(*args, **kwargs):
+    """Legacy V5 fixtures now bind an explicit single ordered identity."""
+    train = np.asarray(args[0] if args else kwargs["train_dim"])
+    count = train.shape[0] if train.ndim == 1 else 1
+    kwargs.setdefault("train_factor_ids", tuple(f"f{i}" for i in range(count)))
+    kwargs.setdefault("validation_factor_ids", tuple(f"f{i}" for i in range(count)))
+    kwargs.setdefault("train_factor_versions", tuple("v1" for _ in range(count)))
+    kwargs.setdefault("validation_factor_versions", tuple("v1" for _ in range(count)))
+    kwargs.setdefault("metric_instance", "rank_ic:h1:daily")
+    return _build_train_validation_artifact(*args, **kwargs)
 
 # ---------------------------------------------------------------------------
 # 1. Frozen artifact with the plan §13.6 fields.
@@ -75,6 +88,8 @@ def test_artifact_carries_all_plan_fields():
         validation_sharpe=np.array([1.2]),
         train_shape=np.array([0.5]),
         validation_shape=np.array([0.4]),
+        metric_instance_refs={"rankic": "rank_ic:h1", "icir": "ic_ir:h1",
+                              "sharpe": "sharpe:probe", "shape": "shape:q5"},
     )
     assert list(art.train_predictive_dimension) == [0.3]
     assert list(art.validation_predictive_dimension) == [0.27]
@@ -191,10 +206,73 @@ def test_confidence_band_on_artifact():
         train_dim=np.array([0.3, 0.28, 0.32]),
         validation_dim=np.array([0.27, 0.25, 0.26]),
     )
-    assert art.confidence_interval_95 is not None
-    lo, hi = art.confidence_interval_95
-    assert lo is not None and hi is not None
-    assert lo < hi
+    assert art.confidence_interval_95 is None
+    assert art.confidence_interval_status == (
+        "CI_NOT_IDENTIFIED_FROM_SUMMARY",
+        "CI_NOT_IDENTIFIED_FROM_SUMMARY",
+        "CI_NOT_IDENTIFIED_FROM_SUMMARY",
+    )
+
+
+def test_v6_rejects_resize_flatten_and_empty_evidence():
+    with pytest.raises(ValueError, match="identical factor counts"):
+        compute_validation_retention_array(np.array([.1, .2, .3]), np.array([.1, .2]))
+    with pytest.raises(ValueError, match="must not be empty"):
+        compute_validation_retention_array(np.array([.1]), np.array([]))
+    with pytest.raises(ValueError, match="one-dimensional"):
+        compute_generalization_deltas(np.ones((3, 2)), np.ones((3, 2)))
+
+
+def test_v6_explicit_factor_identity_reorders_every_metric():
+    artifact = build_train_validation_artifact(
+        np.array([.2, .4]), np.array([.2, .1]),
+        train_rankic=np.array([.2, .4]), validation_rankic=np.array([.2, .1]),
+        metric_instance_refs={"rankic": "rank_ic:h1"},
+        train_factor_ids=("a", "b"), validation_factor_ids=("b", "a"),
+        train_factor_versions=("v1", "v2"), validation_factor_versions=("v2", "v1"),
+        metric_instance="rank_ic:h1", train_split_ref="split:train",
+        validation_split_ref="split:validation",
+    )
+    assert artifact.factor_ids == ("a", "b")
+    assert artifact.validation_predictive_dimension == (.1, .2)
+    assert artifact.train_validation_rankic_delta == pytest.approx((-.1, -.2))
+
+
+def test_v6_factor_identity_set_mismatch_is_explicit():
+    with pytest.raises(ValueError, match="missing_validation"):
+        build_train_validation_artifact(
+            np.array([.2, .4]), np.array([.2]),
+            train_factor_ids=("a", "b"), validation_factor_ids=("a",),
+            train_factor_versions=("v1", "v1"), validation_factor_versions=("v1",),
+        )
+
+
+def test_v6_per_factor_ci_uses_samples_not_other_factors():
+    kwargs = dict(
+        train_factor_ids=("a",), validation_factor_ids=("a",),
+        train_factor_versions=("v1",), validation_factor_versions=("v1",),
+        sample_unit="fold", train_split_ref="train:2024", validation_split_ref="valid:2024",
+        sample_dependence="independent", train_sample_ids=("t1", "t2", "t3"),
+        validation_sample_ids=("v1", "v2", "v3"),
+    )
+    one = build_train_validation_artifact(
+        np.array([.1]), np.array([0.]), train_samples=np.array([[.09], [.1], [.11]]),
+        validation_samples=np.array([[-.02], [0.], [.02]]), **kwargs)
+    lo, hi = one.confidence_intervals_95[0]
+    assert one.confidence_interval_status == ("VALID",)
+    assert lo < 0 < hi and hi - lo > 0
+
+    two = build_train_validation_artifact(
+        np.array([.1, 9.]), np.array([0., 9.]),
+        train_samples=np.column_stack((np.array([.09, .1, .11]), [8., 9., 10.])),
+        validation_samples=np.column_stack((np.array([-.02, 0., .02]), [8., 9., 10.])),
+        train_factor_ids=("a", "unrelated"), validation_factor_ids=("a", "unrelated"),
+        train_factor_versions=("v1", "v1"), validation_factor_versions=("v1", "v1"),
+        sample_unit="fold", train_split_ref="train:2024", validation_split_ref="valid:2024",
+        sample_dependence="independent", train_sample_ids=("t1", "t2", "t3"),
+        validation_sample_ids=("v1", "v2", "v3"),
+    )
+    assert two.confidence_intervals_95[0] == pytest.approx(one.confidence_intervals_95[0])
 
 
 def test_reasons_all_plan_states():
@@ -320,7 +398,7 @@ def test_no_hardcoded_anchors_outside_policy():
     src = inspect.getsource(module)
     # The only 0.90/0.80-style literals may appear inside RetentionPolicy's
     # own declaration; the builder functions must not define thresholds.
-    builder_src = inspect.getsource(build_train_validation_artifact)
+    builder_src = inspect.getsource(_build_train_validation_artifact)
     for literal in ("0.90", "0.80", "0.70", "0.25"):
         assert literal not in builder_src, literal
 
@@ -367,3 +445,99 @@ def test_validation_retention_direction_is_higher_is_better():
     spec = get_metric("validation_retention")
     assert spec.direction == "higher_is_better"
     assert get_metric("parameter_generalization").direction == "higher_is_better"
+
+
+def test_v6_typed_artifact_projects_all_public_generalization_metrics():
+    artifact = build_train_validation_artifact(
+        np.array([.2, .4]), np.array([.1, .2]),
+        train_rankic=np.array([.2, .4]), validation_rankic=np.array([.1, .2]),
+        train_icir=np.array([1., 2.]), validation_icir=np.array([.5, 1.]),
+        train_sharpe=np.array([1., 2.]), validation_sharpe=np.array([.8, 1.8]),
+        train_shape=np.array([.7, .8]), validation_shape=np.array([.6, .7]),
+        metric_instance_refs={"rankic": "rank_ic:h1", "icir": "ic_ir:h1",
+                              "sharpe": "sharpe:probe", "shape": "shape:q5"},
+        train_factor_ids=("a", "b"), validation_factor_ids=("a", "b"),
+        train_factor_versions=("v1", "v2"), validation_factor_versions=("v1", "v2"),
+        metric_instance="rank_ic:h1", train_split_ref="train:s1",
+        validation_split_ref="validation:s1",
+    )
+    for metric_id in GENERALIZATION_IDS:
+        projected = project_generalization_metric(
+            artifact, metric_id, expected_factor_ids=("a", "b"),
+            expected_factor_versions=("v1", "v2"),
+            producer_version="2.0.0",
+        )
+        assert projected.values.shape == (2,)
+        assert projected.factor_axis.factor_ids == ("a", "b")
+        expected_instance = {
+            "train_validation_rankic_delta": "rank_ic:h1",
+            "train_validation_icir_delta": "ic_ir:h1",
+            "train_validation_sharpe_delta": "sharpe:probe",
+            "train_validation_shape_delta": "shape:q5",
+        }.get(metric_id, "rank_ic:h1")
+        assert projected.provenance["metric_instance"] == expected_instance
+        assert projected.provenance["confidence_interval_status"] == (
+            "CI_NOT_IDENTIFIED_FROM_SUMMARY", "CI_NOT_IDENTIFIED_FROM_SUMMARY")
+
+
+def test_v6_parameter_generalization_is_per_factor_not_cross_factor_mean():
+    one = build_train_validation_artifact(np.array([.2]), np.array([.1]))
+    two = build_train_validation_artifact(np.array([.2, 10.]), np.array([.1, 9.]))
+    assert one.parameter_generalization[0] == two.parameter_generalization[0]
+    assert one.parameter_generalization[0] == pytest.approx(.5)
+
+
+def test_v6_public_evaluate_consumes_typed_evidence_for_all_eight_metrics():
+    from quant_evaluator.contracts.factor_batch import AxisRef, FactorBatch
+    from quant_evaluator.contracts.label_bundle import LabelBundle
+    from quant_evaluator.runtime.evaluator import Evaluator, evaluate
+
+    times = ("2024-01-01", "2024-01-02")
+    factors = FactorBatch(
+        ("a", "b"), AxisRef("time", "date", 2, np.asarray(times)),
+        AxisRef("asset", "str", 2, np.asarray(("x", "y"))),
+        np.ones((2, 2, 2)),
+        context_refs={"factor_versions": {"a": "v1", "b": "v2"}},
+    )
+    labels = LabelBundle(
+        "h1", np.ones((2, 2)), 1, decision_time=times,
+        label_start_time=times, label_end_time=("2024-01-02", "2024-01-03"),
+        asset_axis=factors.asset_axis,
+    )
+    evidence = build_train_validation_artifact(
+        np.array([.2, .4]), np.array([.1, .2]),
+        train_rankic=np.array([.2, .4]), validation_rankic=np.array([.1, .2]),
+        train_icir=np.array([1., 2.]), validation_icir=np.array([.5, 1.]),
+        train_sharpe=np.array([1., 2.]), validation_sharpe=np.array([.8, 1.8]),
+        train_shape=np.array([.7, .8]), validation_shape=np.array([.6, .7]),
+        metric_instance_refs={"rankic": "rank_ic:h1", "icir": "ic_ir:h1",
+                              "sharpe": "sharpe:probe", "shape": "shape:q5"},
+        train_factor_ids=("a", "b"), validation_factor_ids=("a", "b"),
+        train_factor_versions=("v1", "v2"), validation_factor_versions=("v1", "v2"),
+        metric_instance="rank_ic:h1", train_split_ref="train:s1",
+        validation_split_ref="validation:s1",
+    )
+    runtime = Evaluator()
+    bundle = evaluate(
+        factors, labels, metrics=GENERALIZATION_IDS,
+        generalization_evidence=evidence, evaluator=runtime,
+    )
+    assert set(bundle.grouped_metrics["a"]) == set(GENERALIZATION_IDS)
+    assert set(bundle.grouped_metrics["b"]) == set(GENERALIZATION_IDS)
+    for metric_id in GENERALIZATION_IDS:
+        assert bundle.artifacts[metric_id].factor_axis.factor_versions == ("v1", "v2")
+        assert bundle.artifacts[metric_id].provenance["metric_instance"]
+        assert bundle.grouped_metrics["a"][metric_id].observation_count == 1
+    assert bundle.grouped_metrics["a"]["parameter_generalization"].value == pytest.approx(.5)
+    changed = build_train_validation_artifact(
+        np.array([.2, .4]), np.array([.05, .2]),
+        train_factor_ids=("a", "b"), validation_factor_ids=("a", "b"),
+        train_factor_versions=("v1", "v2"), validation_factor_versions=("v1", "v2"),
+        metric_instance="rank_ic:h1", train_split_ref="train:s1",
+        validation_split_ref="validation:s2",
+    )
+    replay = evaluate(
+        factors, labels, metrics=("validation_retention",),
+        generalization_evidence=changed, evaluator=runtime,
+    )
+    assert replay.grouped_metrics["a"]["validation_retention"].value == pytest.approx(.25)

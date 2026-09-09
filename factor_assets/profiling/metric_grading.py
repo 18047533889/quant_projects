@@ -108,6 +108,10 @@ class EvidenceStatusVocabulary:
         return (cls.COMPUTED,) + cls.non_computed()
 
 
+EVIDENCE_LEVELS = ("E0", "E1", "E2", "E3")
+APPLICABILITY_STATES = ("APPLICABLE", "NOT_APPLICABLE", "NOT_RUN_BUDGET")
+
+
 #: The iron-law set: any of these statuses -> no grade, no desirability.
 BAD_EVIDENCE_STATUSES: tuple[str, ...] = EvidenceStatusVocabulary.non_computed()
 #: Alias for readability in call sites.
@@ -191,6 +195,24 @@ class MetricGradeArtifact:
     grading_policy_version: str = ""
     #: Reference to the QE evaluation that produced the evidence.
     evaluation_ref: str = ""
+    factor_definition_id: str = ""
+    factor_value_ref: str = ""
+    factor_axis_ref: str = ""
+    config_hash: str = ""
+    created_from_refs: tuple[str, ...] = ()
+    use_case: str = "GENERIC"
+    applicability: str = "APPLICABLE"
+    applicability_reason: str = ""
+    evidence_level: str = "E0"
+    calibration_ref: str = ""
+    metric_instance: str = ""
+    horizon: int | None = None
+    universe_ref: str = ""
+    data_as_of: str = ""
+    recipe_ref: str = ""
+    representation_ref: str = ""
+    portfolio_spec_ref: str = ""
+    reason_codes: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if not isinstance(self.metric_id, str) or not self.metric_id:
@@ -202,9 +224,24 @@ class MetricGradeArtifact:
                 "metric_version must be a version (or empty), got "
                 f"{self.metric_version!r}"
             )
+        object.__setattr__(self, "created_from_refs", tuple(self.created_from_refs))
+        object.__setattr__(self, "reason_codes", tuple(dict.fromkeys(self.reason_codes)))
+        if self.applicability not in APPLICABILITY_STATES:
+            raise ValueError("unknown applicability state")
+        if self.applicability != "APPLICABLE" and not self.applicability_reason:
+            raise ValueError("non-applicable/not-run metrics require an applicability reason")
+        if self.evidence_level not in EVIDENCE_LEVELS:
+            raise ValueError("evidence_level must be E0..E3")
+        if self.horizon is not None and self.horizon < 1:
+            raise ValueError("horizon must be positive")
+        for name in ("factor_definition_id", "factor_value_ref", "factor_axis_ref", "config_hash", "evaluation_ref"):
+            if not isinstance(getattr(self, name), str):
+                raise TypeError(f"{name} must be a string")
 
         status = resolve_evidence_status(self.evidence_status)
         object.__setattr__(self, "evidence_status", status)
+        if self.evidence_level != "E0" and status != EvidenceStatusVocabulary.COMPUTED:
+            raise ValueError("non-computed evidence cannot claim E1-E3")
 
         # -- value / status consistency ----------------------------------
         value = self._coerce_optional_fraction(self.value, "value")
@@ -316,6 +353,19 @@ class MetricGradeArtifact:
     # -- conveniences -------------------------------------------------------
 
     @property
+    def production_provenance_complete(self) -> bool:
+        return all(
+            (
+                self.factor_definition_id,
+                self.factor_value_ref,
+                self.factor_axis_ref,
+                self.config_hash,
+                self.evaluation_ref,
+                self.metric_version,
+            )
+        ) and bool(self.created_from_refs)
+
+    @property
     def has_grade(self) -> bool:
         """True iff a grade is bound (implies COMPUTED evidence)."""
         return self.grade is not None
@@ -324,6 +374,11 @@ class MetricGradeArtifact:
     def has_desirability(self) -> bool:
         """True iff a desirability is bound (implies COMPUTED evidence)."""
         return self.desirability is not None
+
+    @property
+    def effect_grade(self) -> str | None:
+        """V5 name for the point-effect grade; evidence_level is independent."""
+        return self.grade
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -342,6 +397,25 @@ class MetricGradeArtifact:
             "grading_policy_id": self.grading_policy_id,
             "grading_policy_version": self.grading_policy_version,
             "evaluation_ref": self.evaluation_ref,
+            "factor_definition_id": self.factor_definition_id,
+            "factor_value_ref": self.factor_value_ref,
+            "factor_axis_ref": self.factor_axis_ref,
+            "config_hash": self.config_hash,
+            "created_from_refs": list(self.created_from_refs),
+            "use_case": self.use_case,
+            "applicability": self.applicability,
+            "applicability_reason": self.applicability_reason,
+            "effect_grade": self.effect_grade,
+            "evidence_level": self.evidence_level,
+            "calibration_ref": self.calibration_ref,
+            "metric_instance": self.metric_instance,
+            "horizon": self.horizon,
+            "universe_ref": self.universe_ref,
+            "data_as_of": self.data_as_of,
+            "recipe_ref": self.recipe_ref,
+            "representation_ref": self.representation_ref,
+            "portfolio_spec_ref": self.portfolio_spec_ref,
+            "reason_codes": list(self.reason_codes),
         }
 
 
@@ -362,6 +436,24 @@ def grade_metric_evidence(
     confidence_interval: tuple[float, float] | None = None,
     statistical_confidence: float | None = None,
     raw_relative_delta: float | None = None,
+    factor_definition_id: str = "",
+    factor_value_ref: str = "",
+    factor_axis_ref: str = "",
+    config_hash: str = "",
+    created_from_refs: Sequence[str] = (),
+    use_case: str = "GENERIC",
+    applicability: str = "APPLICABLE",
+    applicability_reason: str = "",
+    evidence_level: str | None = None,
+    calibration_ref: str | None = None,
+    metric_instance: str = "",
+    horizon: int | None = None,
+    universe_ref: str = "",
+    data_as_of: str = "",
+    recipe_ref: str = "",
+    representation_ref: str = "",
+    portfolio_spec_ref: str = "",
+    reason_codes: Sequence[str] = (),
 ) -> MetricGradeArtifact:
     """Grade one metric evidence value under a versioned FactorHealthPolicy.
 
@@ -377,14 +469,21 @@ def grade_metric_evidence(
     if policy is None:
         policy = get_health_policy()
     status = resolve_evidence_status(evidence_status)
+    canonical_metric_id = policy.canonical_metric_id(metric_id)
+
+    # A point estimate can establish only descriptive E1. E2/E3 must be
+    # explicitly supplied by a validation workflow carrying its own evidence.
+    resolved_level = evidence_level or (
+        "E1" if status == EvidenceStatusVocabulary.COMPUTED else "E0"
+    )
 
     grade: str | None = None
     desirability: float | None = None
     if status == EvidenceStatusVocabulary.COMPUTED:
-        grade, desirability = policy.grade_and_desirability(metric_id, value)
+        grade, desirability = policy.grade_and_desirability(canonical_metric_id, value)
 
     return MetricGradeArtifact(
-        metric_id=metric_id,
+        metric_id=canonical_metric_id,
         metric_version=metric_version,
         value=value,
         evidence_status=status,
@@ -397,6 +496,24 @@ def grade_metric_evidence(
         grading_policy_id=policy.policy_id,
         grading_policy_version=policy.policy_version,
         evaluation_ref=evaluation_ref,
+        factor_definition_id=factor_definition_id,
+        factor_value_ref=factor_value_ref,
+        factor_axis_ref=factor_axis_ref,
+        config_hash=config_hash,
+        created_from_refs=tuple(created_from_refs),
+        use_case=use_case,
+        applicability=applicability,
+        applicability_reason=applicability_reason,
+        evidence_level=resolved_level,
+        calibration_ref=policy.calibration_ref if calibration_ref is None else calibration_ref,
+        metric_instance=metric_instance,
+        horizon=horizon,
+        universe_ref=universe_ref,
+        data_as_of=data_as_of,
+        recipe_ref=recipe_ref,
+        representation_ref=representation_ref,
+        portfolio_spec_ref=portfolio_spec_ref,
+        reason_codes=tuple(reason_codes),
     )
 
 

@@ -14,6 +14,8 @@ dependencies = []
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0", "build>=1.2"]
+# Isolated live-backend QA only; the default DTO wheel remains dependency-free.
+postgres-test = ["psycopg2-binary==2.9.10"]
 
 [tool.setuptools]
 py-modules = []

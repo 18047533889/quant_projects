@@ -17,6 +17,7 @@ from __future__ import annotations
 import hashlib
 import os
 import sys
+import pytest
 
 # The quant_platform workspace is FLAT-LAYOUT: ``quant_platform/`` *is* the
 # package root. Importing ``quant_platform`` requires the *parent* of this
@@ -71,6 +72,7 @@ def _raw_candidate(
     market: str = "ashare",
     frequency: str = "1d",
 ) -> dict:
+    definition_ref = f"factor-definition://{factor_name}/{_h(formula)[:16]}"
     return {
         "semantic_id": _h(f"sem:{factor_name}:{formula}"),
         "content_hash": _h(seed),
@@ -82,6 +84,9 @@ def _raw_candidate(
         "factor_name": factor_name,
         "formula": formula,
         "factor_spec_uri": f"recipe://{factor_name}/{seed}",
+        "factor_definition_ref": definition_ref,
+        "semantic_ref": f"factor-semantic://{factor_name}",
+        "factor_value_ref": f"factor-value://{factor_name}/{seed}",
         "formula_language": "recipe",
         "published_at": "2026-08-28T00:00:00Z",
     }
@@ -122,6 +127,14 @@ def _batch():
         _raw_candidate(seed="durable-a", factor_name="durable_a", formula="sma(close, 5)"),
         _raw_candidate(seed="durable-b", factor_name="durable_b", formula="ema(close, 5)"),
     ]
+
+
+def test_missing_definition_ref_never_enters_feature_manifest():
+    """PL-05: the platform must not invent a definition identity."""
+    raw = _raw_candidate(seed="missing-definition")
+    raw.pop("factor_definition_ref")
+    with pytest.raises(ValueError, match="factor_definition_ref is required"):
+        _make_pipeline().run([raw], library_snapshot=_library_snapshot())
 
 
 def test_pipeline_replay_short_circuits_across_instances_with_same_store():

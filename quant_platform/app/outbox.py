@@ -3,7 +3,7 @@
 QRP-P1. Implements the transactional outbox pattern (spec §11.1): an event row
 is inserted in the SAME transaction as the state update it announces, so the
 platform never double-writes events and state. A background publisher claims
-pending events (a claim ack is never double-delivered) and marks them sent; an
+pending events with at-least-once delivery and marks them sent; an
 inbox consumer dedupes by idempotency key and drives a durable state machine.
 
 Outbox row lifecycle (R55 #91):
@@ -37,6 +37,7 @@ in-process ``InMemoryPublisher`` is provided for tests.
 from __future__ import annotations
 
 import json
+import math
 import time
 import uuid
 from typing import Any, Protocol, runtime_checkable
@@ -160,9 +161,8 @@ class Outbox:
     def claim(self, event_id: int, *, worker_id: str, claim_token: str, now: float) -> bool:
         """Atomically claim one specific pending row.
 
-        Only a row currently in ``pending``/``claimed`` for this same worker can
-        be flipped to ``claimed``; any other state (``sent``, or ``claimed`` by a
-        *different* worker) returns False. The single guarded ``UPDATE`` is the
+        Only an eligible pending row can be flipped to claimed. Reusing a worker
+        ID does not permit stealing an existing claim. The guarded UPDATE is the
         row lock: PostgreSQL acquires a row-level lock per row (and a live PG
         backend should use ``SELECT ... FOR UPDATE SKIP LOCKED`` for the
         ``publish_pending`` scan — see its docstring), SQLite relies on the
@@ -171,38 +171,24 @@ class Outbox:
         No races need to be handled in caller code: exactly one worker can ever
         observe this row as pending-and-claimable for itself.
         """
-        self._db.execute(
+        cursor = self._db.execute(
             "UPDATE outbox_events SET status = 'claimed', worker_id = ?, "
             "claim_token = ?, claimed_at = ?, retry_count = retry_count + 1 "
-            "WHERE id = ? AND status IN ('pending', 'claimed') "
-            "AND (worker_id IS NULL OR worker_id = ?)",
-            (worker_id, claim_token, now, event_id, worker_id),
+            "WHERE id = ? AND status = 'pending' "
+            "AND (next_attempt_at IS NULL OR next_attempt_at <= ?)",
+            (worker_id, claim_token, now, event_id, now),
         )
-        rows = self._db.query(
-            "SELECT status, worker_id, claim_token FROM outbox_events WHERE id = ?",
-            (event_id,),
-        )
-        if not rows:
-            return False
-        row = rows[0]
-        return (
-            row["status"] == "claimed"
-            and str(row.get("worker_id") or "") == worker_id
-            and str(row.get("claim_token") or "") == claim_token
-        )
+        return cursor.rowcount == 1
 
     def finish(self, event_id: int, *, claim_token: str) -> bool:
         """Mark a claimed row ``sent``. No-op (False) unless the caller still
         holds the claim (guarded by claim_token)."""
-        self._db.execute(
+        cursor = self._db.execute(
             "UPDATE outbox_events SET status = 'sent', claimed_at = NULL "
             "WHERE id = ? AND status = 'claimed' AND claim_token = ?",
             (event_id, claim_token),
         )
-        rows = self._db.query(
-            "SELECT status FROM outbox_events WHERE id = ?", (event_id,)
-        )
-        return bool(rows and rows[0]["status"] == "sent")
+        return cursor.rowcount == 1
 
     def fail(
         self,
@@ -233,13 +219,40 @@ class Outbox:
                 (error, next_attempt_at, event_id, claim_token),
             )
 
-    def publish_pending(self, limit: int = 100) -> int:
+    def recover_expired_claims(self, *, now: float, lease_seconds: float,
+                               idempotency_key: str | None = None) -> int:
+        """Fence expired acknowledgements and make interrupted sends retryable.
+
+        The bus may already have accepted an expired send. Consumers therefore
+        must deduplicate by the stable event idempotency key. Expiry cannot
+        cancel a slow external sender or guarantee exactly-once network effects.
+        """
+        if not math.isfinite(now) or not math.isfinite(lease_seconds) or lease_seconds <= 0:
+            raise ValueError("claim recovery requires finite time and positive lease_seconds")
+        if idempotency_key is not None and (not isinstance(idempotency_key, str) or not idempotency_key):
+            raise ValueError("idempotency_key must be a nonempty string")
+        scope = " AND idempotency_key = ?" if idempotency_key is not None else ""
+        params = (now, now - lease_seconds)
+        if idempotency_key is not None:
+            params += (idempotency_key,)
+        with self._db.transaction() as conn:
+            cursor = conn.execute(
+                "UPDATE outbox_events SET status = 'pending', worker_id = NULL, "
+                "claim_token = NULL, claimed_at = NULL, next_attempt_at = ?, "
+                "last_error = 'claim lease expired; delivery outcome unknown' "
+                "WHERE status = 'claimed' AND claimed_at IS NOT NULL AND claimed_at <= ?" + scope,
+                params,
+            )
+            return cursor.rowcount
+
+    def publish_pending(self, limit: int = 100, *, claim_lease_seconds: float = 300.0,
+                        idempotency_key: str | None = None) -> int:
         """Claim + publish pending events and mark them sent.
 
         Each event is claimed in its own transaction (concurrency-safe across
         workers), delivered via the publisher, then marked ``sent`` in a second
-        transaction. A delivery failure returns the row to ``pending`` with
-        ``retry_count`` incremented (never double-delivered, always recoverable).
+        transaction. Failures retry after their backoff; expired claims recover
+        on a later drain. External delivery is at-least-once, not exactly-once.
 
         PostgreSQL note: a live PG backend should select candidate rows with
         ``SELECT ... FOR UPDATE SKIP LOCKED`` (row-claim semantics) so that two
@@ -249,11 +262,19 @@ class Outbox:
         simply matches 0 rows. The ``SKIP LOCKED`` optimization is documented in
         ``postgres_backend.py`` as the deployment-time tuning knob.
 
+        An exact idempotency_key scopes both lease recovery and publication;
+        shadow workflows must supply it to avoid touching unrelated events.
         Returns count published.
         """
+        scan_time = float(time.time())
+        self.recover_expired_claims(now=scan_time, lease_seconds=claim_lease_seconds,
+                                    idempotency_key=idempotency_key)
+        scope = " AND idempotency_key = ?" if idempotency_key is not None else ""
+        params = (scan_time, limit) if idempotency_key is None else (scan_time, idempotency_key, limit)
         rows = self._db.query(
-            "SELECT * FROM outbox_events WHERE status = 'pending' ORDER BY id LIMIT ?",
-            (limit,),
+            "SELECT * FROM outbox_events WHERE status = 'pending' "
+            "AND (next_attempt_at IS NULL OR next_attempt_at <= ?)" + scope + " ORDER BY id LIMIT ?",
+            params,
         )
         published = 0
         for row in rows:
@@ -268,8 +289,9 @@ class Outbox:
                 conn.execute(
                     "UPDATE outbox_events SET status = 'claimed', worker_id = ?, "
                     "claim_token = ?, claimed_at = ?, retry_count = retry_count + 1 "
-                    "WHERE id = ? AND status = 'pending'",
-                    (worker_id, claim_token, now, event_id),
+                    "WHERE id = ? AND status = 'pending' "
+                    "AND (next_attempt_at IS NULL OR next_attempt_at <= ?)",
+                    (worker_id, claim_token, now, event_id, now),
                 )
                 claimed = conn.execute(
                     "SELECT 1 FROM outbox_events WHERE id = ? AND status = 'claimed' "
@@ -396,7 +418,7 @@ class Inbox:
                     prev_count + 1,
                     next_attempt_at,
                     error[:4000],
-                    1 if dead_letter else 0,
+                    bool(dead_letter),
                     error[:4000] if dead_letter else None,
                     now,
                     key,
@@ -404,120 +426,89 @@ class Inbox:
             )
 
     def process(self, event: dict[str, Any]) -> bool:
-        """Process ``event`` through one state transition.
+        """Atomically claim, handle and acknowledge database-local work.
 
-        Returns True if the handler newly ran (RECEIVED->PROCESSING->DONE or
-        FAILED-recovered), False if it was a duplicate (already DONE) or a
-        dead-lettered message processed by a replica. ``InboxEventNotFound`` is
-        raised when the event is missing or already dead-lettered after the
-        handler failed past max retries (the handler's original exception is
-        surfaced as-is on the first failure so callers observe it).
+        The claim is never committed separately: a killed process rolls back
+        both its claim and handler writes. A savepoint retains failure metadata
+        without retaining failed handler writes. Handlers must use this DB
+        connection and must not commit it or open a nested transaction. Network
+        effects require their own idempotency key or a transactional outbox;
+        this method does not promise exactly-once external delivery.
+
+        Legacy durable PROCESSING rows are deliberately not reclaimed without
+        operator evidence that their old worker is stopped.
         """
         key = event.get("idempotency_key")
-        if not key:
+        if not isinstance(key, str) or not key.strip():
             raise ValueError("inbox event requires idempotency_key")
-        now = float(time.time())
-        event_id = event.get("event_id") or key
-
-        rows = self._db.query(
-            "SELECT status, dead_letter, retry_count FROM inbox_events "
-            "WHERE idempotency_key = ?",
-            (key,),
-        )
-        if not rows:
-            # First sight: RECEIVE + PROCESSING together with the handler in one
-            # transaction so the ack and the handler's DB side effects commit
-            # (or roll back) atomically.
-            with self._db.transaction() as conn:
-                conn.execute(
-                    "INSERT OR IGNORE INTO inbox_events "
-                    "(event_id, idempotency_key, status, retry_count, next_attempt_at, "
-                    " last_error, dead_letter, dead_letter_reason, processed_at) "
-                    "VALUES (?, ?, 'PROCESSING', 0, NULL, NULL, 0, NULL, ?)",
-                    (event_id, key, now),
-                )
-                # R55 #92: ``INSERT OR IGNORE`` is SQLite-only.  PostgreSQL
-                # normalizes it to ``INSERT ... ON CONFLICT DO NOTHING`` (see
-                # ``PostgresDialect.adapt_ignore``).
-        else:
-            prev = rows[0]
-            prev_status = prev["status"]
-            if prev["dead_letter"]:
-                raise InboxEventNotFound(
-                    f"inbox event for key {key!r} is dead-lettered: "
-                    f"{prev.get('last_error')!r}"
-                )
-            if prev_status == INBOX_DONE:
-                return False
-            if prev_status == INBOX_PROCESSING:
-                # Already claimed by another consumer; do not run the handler.
-                return False
-            if prev_status == INBOX_RECEIVED:
-                # Upgrade to PROCESSING in its own transaction so the next
-                # reader never doubles the handler on this row.
-                with self._db.transaction() as conn:
-                    conn.execute(
-                        "UPDATE inbox_events SET status = 'PROCESSING', processed_at = ? "
-                        "WHERE idempotency_key = ? AND status = 'RECEIVED'",
-                        (now, key),
-                    )
-            if prev_status == INBOX_FAILED:
-                # FAILED + retries exhausted -> dead-letter now (before this
-                # retry attempt burns another handler run).
-                if int(prev["retry_count"]) >= self.max_retries:
-                    self.mark_failed(
-                        event, error="max retries exceeded", now=now, dead_letter=True
-                    )
-                    raise InboxEventNotFound(
-                        f"inbox event for key {key!r} exceeded {self.max_retries} retries; "
-                        "dead-lettered"
-                    )
-                # FAILED -> PROCESSING for this retry attempt.
-                with self._db.transaction() as conn:
-                    conn.execute(
-                        "UPDATE inbox_events SET status = 'PROCESSING', processed_at = ? "
-                        "WHERE idempotency_key = ? AND status = 'FAILED' "
-                        "AND dead_letter = 0",
-                        (now, key),
-                    )
-
         if self.replica:
+            # A read-only replica must never acquire a durable processing claim.
+            row = self.get(key)
+            if row and (row["dead_letter"] or row["status"] in (INBOX_DONE, INBOX_PROCESSING)):
+                return False
             self._handler(event)
             return True
-
-        try:
-            with self._db.transaction() as conn:
-                self._handler(event)
-                conn.execute(
-                    "UPDATE inbox_events SET status = 'DONE', processed_at = ? "
-                    "WHERE idempotency_key = ?",
-                    (now, key),
-                )
-        except InboxEventNotFound:
-            raise
-        except Exception as exc:
-            error = str(exc)[:4000]
-            rows_after = self._db.query(
-                "SELECT retry_count FROM inbox_events WHERE idempotency_key = ?",
+        now = float(time.time())
+        failure: Exception | None = None
+        with self._db.transaction() as conn:
+            conn.execute(
+                "INSERT OR IGNORE INTO inbox_events "
+                "(event_id, idempotency_key, status, retry_count, dead_letter, processed_at) "
+                "VALUES (?, ?, 'RECEIVED', 0, FALSE, ?)",
+                (event.get("event_id") or key, key, now),
+            )
+            # Lock existing rows too. On PostgreSQL a concurrent first insert
+            # waits for the other transaction; this update then locks its result.
+            conn.execute(
+                "UPDATE inbox_events SET status = status WHERE idempotency_key = ?",
                 (key,),
             )
-            retries = int(rows_after[0]["retry_count"]) if rows_after else 0
-            dead_letter = retries >= self.max_retries
-            self.mark_failed(
-                event,
-                error=error,
-                now=now,
-                dead_letter=dead_letter,
-            )
-            if dead_letter:
-                raise InboxEventNotFound(
-                    f"inbox event for key {key!r} exceeded {self.max_retries} retries; "
-                    "dead-lettered: " + error
-                ) from exc
-            # Non-terminal handler failure: recorded FAILED (retryable), message
-            # is NOT burned as processed — a later process() re-runs it. The
-            # handler's original exception is propagated so callers can react.
-            raise
+            row = conn.execute(
+                "SELECT status, dead_letter, retry_count, last_error FROM inbox_events "
+                "WHERE idempotency_key = ?", (key,),
+            ).fetchone()
+            if row["dead_letter"]:
+                raise InboxEventNotFound(f"inbox event for key {key!r} is dead-lettered")
+            if row["status"] in (INBOX_DONE, INBOX_PROCESSING):
+                return False
+            if row["status"] not in (INBOX_RECEIVED, INBOX_FAILED):
+                raise ValueError(f"unsupported inbox state: {row['status']!r}")
+            retries = int(row["retry_count"])
+            if row["status"] == INBOX_FAILED and retries >= self.max_retries:
+                conn.execute(
+                    "UPDATE inbox_events SET status = 'FAILED', retry_count = ?, "
+                    "dead_letter = TRUE, dead_letter_reason = ?, last_error = ?, "
+                    "next_attempt_at = NULL, processed_at = ? WHERE idempotency_key = ?",
+                    (retries + 1, "max retries exceeded", "max retries exceeded", now, key),
+                )
+                failure = InboxEventNotFound(f"inbox event for key {key!r} exceeded {self.max_retries} retries")
+            else:
+                conn.execute(
+                    "UPDATE inbox_events SET status = 'PROCESSING', processed_at = ? "
+                    "WHERE idempotency_key = ?", (now, key),
+                )
+                savepoint = "inbox_handler_" + uuid.uuid4().hex
+                conn.execute(f"SAVEPOINT {savepoint}")
+                try:
+                    self._handler(event)
+                    conn.execute(
+                        "UPDATE inbox_events SET status = 'DONE', processed_at = ?, "
+                        "next_attempt_at = NULL, last_error = NULL WHERE idempotency_key = ?",
+                        (float(time.time()), key),
+                    )
+                except Exception as exc:
+                    conn.execute(f"ROLLBACK TO SAVEPOINT {savepoint}")
+                    conn.execute(
+                        "UPDATE inbox_events SET status = 'FAILED', retry_count = ?, "
+                        "next_attempt_at = ?, last_error = ?, processed_at = ? "
+                        "WHERE idempotency_key = ?",
+                        (retries + 1, now + 1.0, str(exc)[:4000], now, key),
+                    )
+                    failure = exc
+                finally:
+                    conn.execute(f"RELEASE SAVEPOINT {savepoint}")
+        if failure is not None:
+            raise failure
         return True
 
     def process_many(self, events: list[dict[str, Any]]) -> tuple[int, int]:
@@ -562,6 +553,6 @@ class Inbox:
             self._db.query(
                 "SELECT idempotency_key, status, retry_count, last_error, "
                 "dead_letter_reason, processed_at FROM inbox_events "
-                "WHERE dead_letter = 1 ORDER BY processed_at DESC"
+                "WHERE dead_letter = TRUE ORDER BY processed_at DESC"
             )
         )

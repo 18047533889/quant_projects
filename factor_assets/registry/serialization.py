@@ -100,8 +100,15 @@ def asset_from_json(text: str) -> FactorAsset:
 
 def event_to_json(value: StateEvent) -> str:
     obj = asdict(value); obj["from_state"] = value.from_state.value; obj["to_state"] = value.to_state.value
+    obj["event_kind"] = value.event_kind.value
+    obj["health_from"] = value.health_from.value if value.health_from else None
+    obj["health_to"] = value.health_to.value if value.health_to else None
     return _pack("state_event", obj)
 def event_from_json(text: str) -> StateEvent:
     obj = _unpack(text, "state_event"); obj["from_state"] = LifecycleState(obj["from_state"]); obj["to_state"] = LifecycleState(obj["to_state"])
+    from factor_assets.contracts.lifecycle import HealthState, StateEventKind
+    obj["event_kind"] = StateEventKind(obj.get("event_kind", "LIFECYCLE_TRANSITION"))
+    obj["health_from"] = HealthState(obj["health_from"]) if obj.get("health_from") else None
+    obj["health_to"] = HealthState(obj["health_to"]) if obj.get("health_to") else None
     obj["evidence_refs"] = tuple(obj.get("evidence_refs", ()))
     return StateEvent(**obj)

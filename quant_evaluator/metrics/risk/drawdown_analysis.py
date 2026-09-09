@@ -9,6 +9,59 @@ from typing import Tuple, List, Dict, Optional
 import numpy as np
 
 
+def drawdown_events(returns: np.ndarray) -> List[Dict]:
+    """Single-pass, observation-aligned events (definition version 0.3).
+
+    A missing return makes subsequent NAV unknown, not a flat day. Such an
+    event is censored at the first valuation gap; no recovery is inferred
+    across it. Durations are grid intervals, never finite-observation counts.
+    """
+    values = np.asarray(returns, dtype=np.float64)
+    if values.ndim != 1:
+        raise ValueError("drawdown_events requires 1D returns")
+    if np.any(values[np.isfinite(values)] < -1):
+        raise ValueError("returns below -100% require an explicit negative-capital contract")
+    events = []
+    wealth = high = 1.0
+    peak = -1
+    event = None
+    for t, value in enumerate(values):
+        if not np.isfinite(value):
+            if event is None:
+                event = dict(peak_idx=peak, start_idx=t, trough_idx=-1,
+                             drawdown=np.nan)
+            event.update(recovery_idx=-1, end_idx=len(values) - 1,
+                         censored=True, status="INVALID_VALUATION",
+                         first_missing_idx=t, duration=len(values) - event["start_idx"],
+                         valid_observations=int(np.isfinite(values[event["start_idx"]:]).sum()))
+            events.append(event)
+            return events
+        wealth *= 1 + value
+        dd = max(0., 1 - wealth / high)
+        # Same exact highwater contract as maximum-drawdown peak indices.
+        # A measured underwater loss cannot be relabelled as a new peak.
+        if wealth >= high:
+            if event is not None:
+                event.update(recovery_idx=t, end_idx=t, censored=False,
+                             status="RECOVERED", duration=t - event["start_idx"],
+                             valid_observations=t - event["start_idx"] + 1)
+                events.append(event)
+                event = None
+            high, peak = max(high, wealth), t
+        else:
+            if event is None:
+                event = dict(peak_idx=peak, start_idx=t, trough_idx=t, drawdown=dd)
+            if dd > event["drawdown"]:
+                event.update(trough_idx=t, drawdown=dd)
+    if event is not None:
+        event.update(recovery_idx=-1, end_idx=len(values) - 1, censored=True,
+                     status="DEFAULTED" if wealth == 0 else "ACTIVE",
+                     duration=len(values) - event["start_idx"],
+                     valid_observations=len(values) - event["start_idx"])
+        events.append(event)
+    return events
+
+
 def compute_drawdown_series(
     returns: np.ndarray,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
@@ -30,6 +83,8 @@ def compute_drawdown_series(
     else:
         squeeze = False
 
+    if np.any(returns[np.isfinite(returns)] < -1.0):
+        raise ValueError("returns below -100% require an explicit negative-capital contract")
     # Replace NaN with 0 for cumulative computation
     returns_filled = np.where(np.isfinite(returns), returns, 0.0)
 
@@ -40,24 +95,9 @@ def compute_drawdown_series(
     # observation must count even before an observed wealth peak exists.
     running_max = np.maximum(1.0, np.maximum.accumulate(cum_returns, axis=0))
 
-    # Drawdown (negative values)
-    # Total-wipeout guard: if a return <= -1 drives wealth (cum_returns) to <= 0,
-    # the ratio (cum - max) / max is wrong-signed (wealth 0 -> drawdown 0, i.e. a
-    # wipeout masquerading as "no drawdown"; negative wealth -> positive drawdown).
-    # Fail closed: from the first nonpositive wealth onward, drawdown stays NaN —
-    # a negative wealth times (1 + r) can flip positive again, which would
-    # fabricate a fake recovery, so forward-fill the invalid mask.
-    invalid = np.maximum.accumulate(cum_returns <= 0, axis=0)
-    cum_returns[invalid] = 0.0
-    running_max = np.maximum(1.0, np.maximum.accumulate(cum_returns, axis=0))
-    drawdown_series = np.full(cum_returns.shape, np.nan)
-    np.divide(
-        cum_returns - running_max,
-        running_max,
-        out=drawdown_series,
-        where=~invalid,
-    )
-    drawdown_series[invalid] = -1.0
+    # Zero NAV is an absorbing default with an observed 100% loss, not missing
+    # evidence. Negative capital is rejected above before compounding.
+    drawdown_series = (cum_returns - running_max) / running_max
 
     if squeeze:
         return drawdown_series[:, 0], cum_returns[:, 0], running_max[:, 0]
@@ -130,7 +170,7 @@ def compute_drawdown_statistics(
             )
 
         # Average drawdown when in drawdown (negative values)
-        in_drawdown = dd_series < -1e-10  # Small threshold to avoid floating point issues
+        in_drawdown = dd_series < 0  # Same exact highwater event definition
         if np.sum(in_drawdown) > 0:
             avg_dd[f] = -np.mean(dd_series[in_drawdown])
             dd_vol[f] = np.std(dd_series[in_drawdown], ddof=1) if np.sum(in_drawdown) > 1 else 0.0
@@ -174,71 +214,13 @@ def identify_drawdown_periods(
             - duration: Duration from peak to recovery
             - drawdown: Maximum drawdown magnitude
     """
-    if returns.ndim != 1:
-        raise ValueError("identify_drawdown_periods requires 1D returns")
-
-    dd_series, cum_returns, running_max = compute_drawdown_series(returns)
-
-    periods = []
-    in_drawdown = False
-    peak_idx = 0
-
-    for t in range(len(dd_series)):
-        if not in_drawdown:
-            # Check if entering drawdown
-            if dd_series[t] < -threshold:
-                in_drawdown = True
-                peak_idx = -1  # Initial capital unless an observed peak exists.
-                # Find actual peak by searching backward
-                for i in range(t - 1, -1, -1):
-                    if cum_returns[i] >= running_max[t]:
-                        peak_idx = i
-                        break
-        else:
-            # Check if recovered (back to running max)
-            if abs(dd_series[t]) < 1e-10:
-                # Find trough in this period
-                trough_idx = peak_idx
-                max_dd_in_period = 0.0
-                for i in range(max(0, peak_idx), t + 1):
-                    if dd_series[i] < -max_dd_in_period:
-                        max_dd_in_period = -dd_series[i]
-                        trough_idx = i
-
-                duration = t - peak_idx + 1
-
-                if duration >= min_duration:
-                    periods.append({
-                        "peak_idx": peak_idx,
-                        "trough_idx": trough_idx,
-                        "recovery_idx": t,
-                        "duration": duration,
-                        "drawdown": max_dd_in_period,
-                    })
-
-                in_drawdown = False
-
-    # Handle ongoing drawdown at end
-    if in_drawdown:
-        trough_idx = peak_idx
-        max_dd_in_period = 0.0
-        for i in range(max(0, peak_idx), len(dd_series)):
-            if dd_series[i] < -max_dd_in_period:
-                max_dd_in_period = -dd_series[i]
-                trough_idx = i
-
-        duration = len(dd_series) - peak_idx
-
-        if duration >= min_duration:
-            periods.append({
-                "peak_idx": peak_idx,
-                "trough_idx": trough_idx,
-                "recovery_idx": -1,  # Not recovered
-                "duration": duration,
-                "drawdown": max_dd_in_period,
-            })
-
-    return periods
+    if not np.isfinite(threshold) or threshold < 0:
+        raise ValueError("threshold must be finite and non-negative")
+    return [
+        event for event in drawdown_events(returns)
+        if event["duration"] >= min_duration
+        and (event["status"] == "INVALID_VALUATION" or event["drawdown"] > threshold)
+    ]
 
 
 def compute_drawdown_duration(
@@ -280,6 +262,9 @@ def compute_drawdown_duration(
 
         # Identify periods
         periods = identify_drawdown_periods(ret_f, threshold=0.0, min_duration=1)
+        if any(p["status"] == "INVALID_VALUATION" for p in periods):
+            current_duration[f] = np.nan
+            continue
 
         if len(periods) == 0:
             max_duration[f] = 0.0

@@ -26,21 +26,25 @@ def test_pareto_single_point():
     assert len(frontier.points) == 1
 
 
-def test_pareto_missing_objectives():
-    """Test points with missing objective values."""
+def test_pareto_missing_objectives_are_ineligible():
     optimizer = ParetoOptimizer(objectives=["rank_ic", "sharpe"])
 
-    point_a = ParetoPoint("a", {"rank_ic": 0.05})  # Missing sharpe -> -inf
-    point_b = ParetoPoint("b", {"rank_ic": 0.03, "sharpe": 1.5})
+    frontier = optimizer.compute_frontier([
+        {"point_id": "a", "objectives": {"rank_ic": 0.05}},
+        {"point_id": "b", "objectives": {"rank_ic": 0.03, "sharpe": 1.5}},
+    ])
+    assert [p.point_id for p in frontier.points] == ["b"]
+    assert frontier.dominated_count == 1
 
-    # Point with missing objective gets -inf for that dimension
-    # b has sharpe=1.5 vs a's sharpe=-inf, so b is better on sharpe
-    # but b's rank_ic=0.03 < a's rank_ic=0.05, so b is NOT at_least_as_good on all
-    # Therefore b does NOT dominate a
-    assert not point_b.dominates(point_a, ["rank_ic", "sharpe"])
 
-    # However a also does not dominate b (a is worse on sharpe)
-    assert not point_a.dominates(point_b, ["rank_ic", "sharpe"])
+@pytest.mark.parametrize("bad", [float("nan"), float("inf"), float("-inf")])
+def test_pareto_nonfinite_objectives_are_ineligible(bad):
+    optimizer = ParetoOptimizer(objectives=["rank_ic", "sharpe"])
+    frontier = optimizer.compute_frontier([
+        {"point_id": "bad", "objectives": {"rank_ic": bad, "sharpe": 99.0}},
+        {"point_id": "good", "objectives": {"rank_ic": 0.03, "sharpe": 1.5}},
+    ])
+    assert [p.point_id for p in frontier.points] == ["good"]
 
 
 def test_pareto_all_dominated():

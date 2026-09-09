@@ -11,7 +11,25 @@ FA stores only selection metadata and factor references, not raw values.
 
 from dataclasses import dataclass
 from enum import Enum
-from typing import Optional, Protocol
+from typing import Mapping, Optional, Protocol
+import math
+
+@dataclass(frozen=True)
+class ICEvidenceReceipt:
+    factor_id: str
+    value: float
+    evidence_ref: str
+    universe_ref: str
+    window_ref: str
+    snapshot_ref: str
+    split_ref: str
+    label_ref: str
+    comparison_context_hash: str
+    mature: bool
+    def __post_init__(self):
+        if not all((self.factor_id,self.evidence_ref,self.universe_ref,self.window_ref,self.snapshot_ref,self.split_ref,self.label_ref,self.comparison_context_hash)): raise ValueError("complete IC evidence identity/context required")
+        if isinstance(self.value,bool) or not isinstance(self.value,(int,float)) or not math.isfinite(self.value): raise ValueError("IC evidence value must be a finite non-boolean number")
+        if not self.mature: raise ValueError("IC evidence must be mature")
 
 
 class RepresentativeSelectionMethod(Enum):
@@ -62,6 +80,7 @@ class RepresentativeSelection:
     ic_window_ref: Optional[str] = None
     ic_snapshot_ref: Optional[str] = None
     ic_split_ref: Optional[str] = None
+    selection_role: str = "CENTRAL"
 
     def __post_init__(self):
         if not self.selection_id:
@@ -122,7 +141,7 @@ class ICProvider(Protocol):
         factor_id: str,
         universe_ref: Optional[str] = None,
         lookback_periods: Optional[int] = None,
-    ) -> Optional[float]:
+    ) -> Optional[ICEvidenceReceipt]:
         """
         Get IC value for a factor.
 
@@ -184,6 +203,12 @@ class FamilyRepresentativeSelector:
         universe_ref: Optional[str] = None,
         lookback_periods: Optional[int] = None,
         random_seed: Optional[int] = None,
+        subfamily_assignments: Optional[Mapping[str,str]] = None,
+        ic_window_ref: Optional[str] = None,
+        ic_snapshot_ref: Optional[str] = None,
+        ic_split_ref: Optional[str] = None,
+        ic_label_ref: Optional[str] = None,
+        comparison_context_hash: Optional[str] = None,
     ) -> RepresentativeSelection:
         """
         Select representative factors from a family.
@@ -218,7 +243,8 @@ class FamilyRepresentativeSelector:
 
         if method == RepresentativeSelectionMethod.MAX_IC:
             selected, ic_values, warn = self._select_max_ic(
-                factor_ids, max_representatives, universe_ref, lookback_periods
+                factor_ids, max_representatives, universe_ref, lookback_periods,
+                ic_window_ref, ic_snapshot_ref, ic_split_ref, ic_label_ref, comparison_context_hash
             )
             warnings.extend(warn)
             return RepresentativeSelection(
@@ -231,6 +257,8 @@ class FamilyRepresentativeSelector:
                 universe_ref=universe_ref,
                 lookback_periods=lookback_periods,
                 ic_values=ic_values,
+                ic_evidence_refs=tuple(self._last_ic_refs),
+                ic_window_ref=ic_window_ref, ic_snapshot_ref=ic_snapshot_ref, ic_split_ref=ic_split_ref,
                 warnings=tuple(warnings),
             )
 
@@ -248,12 +276,14 @@ class FamilyRepresentativeSelector:
                 candidate_factor_ids=factor_ids,
                 universe_ref=universe_ref,
                 avg_correlations=avg_corrs,
+                selection_role="DIVERSITY",
                 warnings=tuple(warnings),
             )
 
         elif method == RepresentativeSelectionMethod.EQUAL_WEIGHT:
-            # For equal weight, select evenly spaced factors
-            selected = self._select_equal_weight(factor_ids, max_representatives)
+            if not subfamily_assignments or set(subfamily_assignments) != set(factor_ids):
+                raise ValueError("EQUAL_WEIGHT requires one subfamily assignment per factor")
+            selected = self._select_equal_weight(factor_ids, max_representatives, subfamily_assignments)
             return RepresentativeSelection(
                 selection_id=selection_id,
                 family=family,
@@ -262,6 +292,8 @@ class FamilyRepresentativeSelector:
                 timestamp=timestamp,
                 candidate_factor_ids=factor_ids,
                 universe_ref=universe_ref,
+                subfamily_assignments=tuple(subfamily_assignments[f] for f in selected),
+                selection_role="SUBFAMILY_BALANCED",
             )
 
         elif method == RepresentativeSelectionMethod.FIRST:
@@ -298,6 +330,8 @@ class FamilyRepresentativeSelector:
         max_representatives: int,
         universe_ref: Optional[str],
         lookback_periods: Optional[int],
+        window_ref: Optional[str], snapshot_ref: Optional[str], split_ref: Optional[str],
+        label_ref: Optional[str], comparison_context_hash: Optional[str],
     ) -> tuple[tuple[str, ...], tuple[float, ...], list[str]]:
         """Select factors with highest IC."""
         if self.ic_provider is None:
@@ -307,12 +341,16 @@ class FamilyRepresentativeSelector:
         ic_data = []
 
         for fid in factor_ids:
-            ic = self.ic_provider.get_ic(fid, universe_ref, lookback_periods)
-            if ic is None:
+            receipt = self.ic_provider.get_ic(fid, universe_ref, lookback_periods)
+            if receipt is None:
                 warnings.append(f"No IC data for {fid}, skipping")
                 # Do NOT fill with 0.0 - skip factors without evidence
                 continue
-            ic_data.append((fid, abs(ic)))  # Use absolute IC
+            if not isinstance(receipt, ICEvidenceReceipt): raise TypeError("ICProvider must return ICEvidenceReceipt, not a bare float")
+            if (receipt.factor_id!=fid or receipt.universe_ref!=universe_ref or receipt.window_ref!=window_ref
+                    or receipt.snapshot_ref!=snapshot_ref or receipt.split_ref!=split_ref or receipt.label_ref!=label_ref
+                    or receipt.comparison_context_hash!=comparison_context_hash): raise ValueError("IC evidence context mismatch")
+            ic_data.append((fid, receipt.value, receipt.evidence_ref))
 
         if not ic_data:
             raise ValueError(
@@ -321,10 +359,11 @@ class FamilyRepresentativeSelector:
             )
 
         # Sort by descending absolute IC
-        ic_data.sort(key=lambda x: x[1], reverse=True)
+        ic_data.sort(key=lambda x: (-x[1], x[0]))
 
-        selected_ids = tuple(fid for fid, _ in ic_data[:max_representatives])
-        selected_ics = tuple(ic for _, ic in ic_data[:max_representatives])
+        selected_ids = tuple(fid for fid, _, _ in ic_data[:max_representatives])
+        selected_ics = tuple(ic for _, ic, _ in ic_data[:max_representatives])
+        self._last_ic_refs = tuple(ref for _, _, ref in ic_data[:max_representatives])
 
         return selected_ids, selected_ics, warnings
 
@@ -371,14 +410,20 @@ class FamilyRepresentativeSelector:
         self,
         factor_ids: tuple[str, ...],
         max_representatives: int,
+        assignments: Mapping[str,str],
     ) -> tuple[str, ...]:
         """Select evenly spaced factors for equal representation."""
         if max_representatives >= len(factor_ids):
             return factor_ids
 
-        # Select evenly spaced indices
-        n = len(factor_ids)
-        step = n / max_representatives
-        indices = [int(i * step) for i in range(max_representatives)]
-
-        return tuple(factor_ids[i] for i in indices)
+        groups={}
+        for fid in sorted(factor_ids): groups.setdefault(assignments[fid],[]).append(fid)
+        selected=[]
+        ordered=sorted(groups)
+        while len(selected)<max_representatives:
+            changed=False
+            for group in ordered:
+                if groups[group] and len(selected)<max_representatives:
+                    selected.append(groups[group].pop(0)); changed=True
+            if not changed: break
+        return tuple(selected)

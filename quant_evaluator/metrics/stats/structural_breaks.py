@@ -68,6 +68,11 @@ def chow_test(
     if X.ndim == 1:
         X = X[:, np.newaxis]
 
+    if X.ndim != 2 or not np.isfinite(X).all() or not np.isfinite(y).all():
+        raise ValueError("Chow requires a complete finite joint y/X calendar")
+    if isinstance(breakpoint, (bool, np.bool_)) or not isinstance(breakpoint, (int, np.integer)):
+        raise ValueError("breakpoint must be an integer")
+
     if X.shape[0] != T:
         raise ValueError(f"X and y must have same length: {X.shape[0]} vs {T}")
 
@@ -92,8 +97,10 @@ def chow_test(
     n1, n2 = len(y1), len(y2)
     n = n1 + n2
 
-    if n1 < k or n2 < k:
+    if n1 <= k or n2 <= k:
         raise ValueError(f"Insufficient observations in subsamples: {n1}, {n2} < {k}")
+    if any(np.linalg.matrix_rank(design) != k for design in (X_aug, X1, X2)):
+        raise ValueError("Chow requires full-rank pooled and segment designs")
 
     # Fit pooled model
     beta_pooled = np.linalg.lstsq(X_aug, y, rcond=None)[0]
@@ -121,7 +128,7 @@ def chow_test(
     # p-value from F distribution
     df1 = k
     df2 = n - 2 * k
-    p_value = 1.0 - stats.f.cdf(f_stat, df1, df2)
+    p_value = stats.f.sf(f_stat, df1, df2)
 
     return f_stat, p_value, df1, df2, k
 
@@ -129,16 +136,18 @@ def chow_test(
 def cusum_test(
     residuals: np.ndarray,
     alpha: float = 0.05,
+    *, residual_kind: str = "recursive",
 ) -> Tuple[np.ndarray, float, float, bool]:
     """
     CUSUM (Cumulative Sum) test for parameter stability.
 
-    Tests whether cumulative sum of recursive residuals stays within confidence
-    bounds. Detects gradual parameter drift.
+    Explicit OLS-residual CUSUM, using statsmodels' asymptotic boundary.
+    The legacy recursive mode is unqualified and fails closed.
 
     Args:
-        residuals: Recursive residuals from rolling regression (T,)
+        residuals: OLS residuals from the declared regression (T,)
         alpha: Significance level (0.01, 0.05, or 0.10)
+        residual_kind: Must explicitly be 'ols'; recursive is unsupported.
 
     Returns:
         (cusum_stats, boundary, max_stat, is_stable)
@@ -148,56 +157,28 @@ def cusum_test(
         is_stable: True if no break detected (max_stat < boundary)
 
     Note:
-        Input should be recursive residuals, not OLS residuals.
-        For simplicity, this accepts pre-computed residuals.
+        Accepts pre-computed residuals; this does not certify their fit lineage.
     """
+    if alpha not in (.01, .05, .10):
+        raise ValueError("unsupported CUSUM alpha")
+    if residual_kind != "ols":
+        raise ValueError("recursive-residual CUSUM is not qualified; request residual_kind='ols' with OLS residuals")
     residuals = np.asarray(residuals, dtype=np.float64)
-
-    if residuals.ndim != 1:
-        raise ValueError("Residuals must be 1-dimensional")
-
-    T = len(residuals)
-
-    # Remove NaN
-    mask = np.isfinite(residuals)
-    residuals = residuals[mask]
-    T = len(residuals)
-
-    if T < 20:
-        raise ValueError(f"Insufficient data: T={T} < 20")
-
-    # Standardize residuals
-    sigma = np.std(residuals, ddof=1)
-    if sigma <= 0:
-        raise ValueError("Residuals have zero variance")
-
-    standardized = residuals / sigma
-
-    # Cumulative sum
-    cusum_stats = np.cumsum(standardized)
-
-    # Critical boundary: c * sqrt(T) where c depends on alpha
-    # Approximate values from Brown, Durbin, Evans (1975)
-    critical_values = {
-        0.01: 1.143,
-        0.05: 0.948,
-        0.10: 0.850,
-    }
-
-    c = critical_values.get(alpha, 0.948)
-    boundary = c * np.sqrt(T)
-
-    # Test statistic: max |CUSUM_t|
-    max_stat = np.max(np.abs(cusum_stats))
-
-    is_stable = max_stat < boundary
-
-    return cusum_stats, boundary, max_stat, is_stable
+    if residuals.ndim != 1 or len(residuals) < 20 or not np.isfinite(residuals).all():
+        raise ValueError("CUSUM requires a complete finite residual calendar of at least 20 periods")
+    from statsmodels.stats.diagnostic import breaks_cusumolsresid
+    if np.sum(residuals**2) <= 0:
+        raise ValueError("zero residual energy")
+    statistic, _, critical = breaks_cusumolsresid(residuals, ddof=0)
+    boundary = dict(critical)[int(round(100*alpha))]
+    path = np.cumsum(residuals)/np.sqrt(np.sum(residuals**2))
+    return path, float(boundary), float(statistic), bool(statistic < boundary)
 
 
 def cusum_of_squares_test(
     residuals: np.ndarray,
     alpha: float = 0.05,
+    *, research_only: bool = False,
 ) -> Tuple[np.ndarray, Tuple[float, float], float, bool]:
     """
     CUSUM of Squares test for variance stability.
@@ -219,6 +200,8 @@ def cusum_of_squares_test(
     Reference:
         Brown, Durbin, Evans (1975), Section 4.2
     """
+    if research_only is not True:
+        raise ValueError("CUSUM squares boundary is HEURISTIC; explicit research_only=True required")
     residuals = np.asarray(residuals, dtype=np.float64)
 
     if residuals.ndim != 1:
@@ -244,11 +227,13 @@ def cusum_of_squares_test(
 
     # Critical bounds: approximately c_α ± (t/T) where c_α depends on alpha
     # Asymptotic bounds under null of stability
+    if alpha not in (0.01, 0.05, 0.10):
+        raise ValueError("unsupported CUSUM-squares alpha")
     c_alpha = {
         0.01: 1.63,
         0.05: 1.36,
         0.10: 1.22,
-    }.get(alpha, 1.36)
+    }[alpha]
 
     t_normalized = np.arange(1, T + 1) / T
     lower_bound = t_normalized - c_alpha * np.sqrt(t_normalized * (1 - t_normalized))
@@ -291,10 +276,10 @@ def sup_wald_test(
         min_obs: Minimum observations per subsample
 
     Returns:
-        (sup_stat, breakpoint, p_value_approx)
+        (sup_stat, breakpoint, unavailable_p_value)
         sup_stat: Supremum Wald statistic (max over all breakpoints)
         breakpoint: Estimated breakpoint location
-        p_value_approx: Approximate p-value
+        unavailable_p_value: NaN; descriptive scan is not calibrated inference.
 
     Reference:
         Andrews (1993), Section 2
@@ -344,18 +329,9 @@ def sup_wald_test(
     sup_stat = f_stats[sup_idx]
     breakpoint = breakpoints[sup_idx]
 
-    # Approximate p-value (very rough, based on Andrews 1993 Table I)
-    # For 1 regressor, trim=0.15, critical values at 10%/5%/1% ≈ 7.04/8.68/11.79
-    if sup_stat > 11.79:
-        p_value_approx = 0.01
-    elif sup_stat > 8.68:
-        p_value_approx = 0.05
-    elif sup_stat > 7.04:
-        p_value_approx = 0.10
-    else:
-        p_value_approx = 0.20
-
-    return sup_stat, breakpoint, p_value_approx
+    # Coarse critical-value bands are not calibrated p-values. Preserve the
+    # descriptive supremum/location; missing inference cannot enter FDR.
+    return sup_stat, breakpoint, float("nan")
 
 
 def bai_perron_test(
@@ -407,10 +383,18 @@ def bai_perron_test(
     k = K + 1
 
     min_segment = max(min_obs, int(T * trim))
+    if isinstance(max_breaks, (bool, np.bool_)) or not isinstance(max_breaks, (int, np.integer)) or max_breaks < 0:
+        raise ValueError("max_breaks must be a nonnegative integer")
+    if not 0 < trim < .5 or min_obs < 1 or T < min_segment or min_segment <= k:
+        raise ValueError("invalid or infeasible segment policy")
+    if X.shape[0] != T or not np.isfinite(X).all() or not np.isfinite(y).all():
+        raise ValueError("sequential breaks require a complete finite joint calendar")
 
     # Sequential search for breaks
     breakpoints = []
     prev_bic = np.inf
+    n_breaks = 0
+    accepted_breakpoints = []
 
     for m in range(max_breaks + 1):
         if m == 0:
@@ -425,7 +409,7 @@ def bai_perron_test(
             candidate_rss = []
 
             # Try adding a break in each feasible location
-            for bp in range(min_segment, T - min_segment):
+            for bp in range(min_segment, T - min_segment + 1):
                 # Check if bp creates valid segments
                 all_bp = sorted(breakpoints + [bp])
                 segments = [0] + all_bp + [T]
@@ -481,15 +465,17 @@ def bai_perron_test(
 
         # Stop if BIC increases (overfitting)
         if bic > prev_bic:
-            breakpoints = breakpoints[:-1]  # Remove last break
-            n_breaks = m - 1
+            breakpoints = accepted_breakpoints.copy()
+            n_breaks = len(breakpoints)
             bic = prev_bic
             break
 
         prev_bic = bic
+        accepted_breakpoints = breakpoints.copy()
+        n_breaks = len(breakpoints)
 
         if m == max_breaks:
             n_breaks = max_breaks
             bic = prev_bic
 
-    return n_breaks, breakpoints, bic
+    return n_breaks, accepted_breakpoints, prev_bic

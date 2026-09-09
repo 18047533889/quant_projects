@@ -45,6 +45,9 @@ class FactorCandidateManifest:
     semantic_family_hint: str | None = None
     campaign_id: str | None = None
     attempt_id: str | None = None
+    factor_definition_ref: str | None = None
+    semantic_ref: str | None = None
+    factor_value_ref: str | None = None
 
     def __post_init__(self) -> None:
         if not self.schema_version:

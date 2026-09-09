@@ -51,6 +51,8 @@ def make_spec(set_id, name, policy="manual", **kwargs):
     kwargs.setdefault("data_snapshot_ref", "snapshot:default")
     kwargs.setdefault("universe_ref", "universe:default")
     kwargs.setdefault("split_ref", "split:default")
+    kwargs.setdefault("recipe_ref", "recipe:default")
+    kwargs.setdefault("selection_as_of", "2026-01-01T00:00:00Z")
     return FactorSetSpec(set_id, name, policy, **kwargs)
 
 
@@ -70,6 +72,9 @@ def make_admission(factor_id):
         gate_results=("gate-1",),
         policy_ref="policy:1.0",
         created_at="2024-08-01T00:00:00Z",
+        universe_ref="universe:default", snapshot_ref="snapshot:default",
+        split_ref="split:default", recipe_ref="recipe:default",
+        data_as_of="2024-08-01T00:00:00Z",
     )
 
 

@@ -42,8 +42,16 @@ from factor_preprocess.adapters.factor_assets import (
 from factor_preprocess.adapters.data_access import (
     OptionalDependencyMissing as DataAccessError,
 )
+from factor_preprocess.adapters.ewma_full_replay import (
+    EXECUTION_MODE as EWMA_REPLAY_EXECUTION_MODE,
+    FrozenEwmaReplaySpec,
+    apply_frozen_ewma_full_replay,
+)
 
 __all__ = [
     "FactorAssetsError",
     "DataAccessError",
+    "EWMA_REPLAY_EXECUTION_MODE",
+    "FrozenEwmaReplaySpec",
+    "apply_frozen_ewma_full_replay",
 ]

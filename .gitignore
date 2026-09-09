@@ -83,3 +83,9 @@ factor_engine/docs/reports/*/summary_stats.json
 # R2 runmany evidence: values.npy 是 100k×256 float64 memmap 预分配盘（196MB/个），
 # 重跑可再生，不入库；同目录的 progress.jsonl / report.json 等小工件照常提交
 evidence/r2/runmany_*/values.npy
+
+# These are Python source packages, not generated market datasets.
+!vectorbt_qs/mvp/data/
+!vectorbt_qs/mvp/data/*.py
+!vectorbt_qs/vectorbt/vectorbt/data/
+!vectorbt_qs/vectorbt/vectorbt/data/*.py

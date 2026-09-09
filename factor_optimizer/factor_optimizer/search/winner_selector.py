@@ -63,6 +63,25 @@ class WinnerPolicy:
             raise ValueError("policy_version must be non-empty (policies are versioned)")
 
 
+@dataclass(frozen=True)
+class WinnerSetPolicy:
+    """Predeclared policy for a small complementary winner set."""
+
+    max_winners: int = 3
+    max_per_family: int = 1
+    utility_epsilon: float = 1e-6
+    duplicate_correlation: float = 0.995
+    minimum_incremental_value: float = 0.0
+
+    def __post_init__(self):
+        if self.max_winners < 1 or self.max_per_family < 1:
+            raise ValueError("winner and family caps must be positive")
+        if self.utility_epsilon < 0:
+            raise ValueError("utility_epsilon must be non-negative")
+        if not 0 <= self.duplicate_correlation <= 1:
+            raise ValueError("duplicate_correlation must be in [0,1]")
+
+
 def _validate_desirabilities_and_scores(
     dimension_desirabilities: Sequence[float],
     robustness_score: float,
@@ -294,3 +313,69 @@ def select_winner(
             break
 
     return best
+
+
+def select_complementary_winners(
+    pareto_candidates: Iterable[ParetoPoint],
+    robustness_scores: Dict[str, float],
+    complexity_scores: Dict[str, float],
+    utility_policy: WinnerPolicy,
+    set_policy: WinnerSetPolicy,
+    *,
+    pairwise_correlations: Optional[Dict[Tuple[str, str], float]] = None,
+) -> List[ParetoPoint]:
+    """Select zero or more eligible, incremental, non-duplicate candidates.
+
+    ``eligible``, ``family_id``, ``purpose`` and ``incremental_value`` are read
+    from point metadata. Missing eligibility/incremental evidence fails closed.
+    This keeps hard gates outside scalar utility and makes an empty set valid.
+    """
+    correlations = pairwise_correlations or {}
+    eligible = []
+    for point in pareto_candidates:
+        if point.metadata.get("eligible") is not True:
+            continue
+        incremental = point.metadata.get("incremental_value")
+        if (
+            isinstance(incremental, bool)
+            or not isinstance(incremental, (int, float))
+            or not math.isfinite(float(incremental))
+            or incremental < set_policy.minimum_incremental_value
+        ):
+            continue
+        # Reuse the strict required-score validation in select_winner.
+        if point.trial_id not in robustness_scores or point.trial_id not in complexity_scores:
+            raise KeyError(f"missing required winner evidence for {point.trial_id!r}")
+        score = RobustBalancedUtility(
+            list(point.objectives), robustness_scores[point.trial_id],
+            complexity_scores[point.trial_id], utility_policy,
+        )
+        eligible.append((score, point))
+
+    eligible.sort(
+        key=lambda item: (
+            -round(item[0] / max(set_policy.utility_epsilon, 1e-15)),
+            complexity_scores[item[1].trial_id], item[1].trial_id,
+        )
+    )
+    selected: List[ParetoPoint] = []
+    family_counts: Dict[str, int] = {}
+    for _, point in eligible:
+        family = str(point.metadata.get("family_id", point.trial_id))
+        if family_counts.get(family, 0) >= set_policy.max_per_family:
+            continue
+        duplicate = False
+        for prior in selected:
+            rho = correlations.get((point.trial_id, prior.trial_id))
+            if rho is None:
+                rho = correlations.get((prior.trial_id, point.trial_id))
+            if rho is not None and math.isfinite(rho) and abs(rho) >= set_policy.duplicate_correlation:
+                duplicate = True
+                break
+        if duplicate:
+            continue
+        selected.append(point)
+        family_counts[family] = family_counts.get(family, 0) + 1
+        if len(selected) >= set_policy.max_winners:
+            break
+    return selected

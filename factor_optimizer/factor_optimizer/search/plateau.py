@@ -22,6 +22,7 @@ class PlateauConfig:
     min_absolute_improvement: Optional[float] = None
     require_both: bool = False
     use_median: bool = False
+    direction: str = "maximize"
 
     def __post_init__(self):
         if self.window_size < 2:
@@ -30,6 +31,8 @@ class PlateauConfig:
             raise ValueError("min_relative_improvement must be >= 0")
         if self.min_absolute_improvement is not None and self.min_absolute_improvement < 0:
             raise ValueError("min_absolute_improvement must be >= 0")
+        if self.direction not in {"maximize", "minimize"}:
+            raise ValueError("direction must be 'maximize' or 'minimize'")
 
 
 class PlateauDetector:
@@ -73,12 +76,14 @@ class PlateauDetector:
         # window gives the extra observation to the current half.
         window = score_list[-self.config.window_size:]
         mid = len(window) // 2
+        orient = 1.0 if self.config.direction == "maximize" else -1.0
+        oriented = [orient * float(score) for score in window]
         baseline = (
-            statistics.median(window[:mid])
+            statistics.median(oriented[:mid])
             if self.config.use_median
-            else max(window[:mid])
+            else max(oriented[:mid])
         )
-        current_best = max(window[mid:])
+        current_best = max(oriented[mid:])
 
         # Check relative improvement
         relative_ok = True
@@ -123,10 +128,12 @@ class PlateauDetector:
         else:
             abs_threshold = 0.0
 
-        best_so_far = self.score_history[0]
+        orient = 1.0 if self.config.direction == "maximize" else -1.0
+        best_so_far = orient * self.score_history[0]
         plateau_count = 0
 
-        for score in self.score_history[1:]:
+        for raw_score in self.score_history[1:]:
+            score = orient * raw_score
             improvement = score - best_so_far
             if best_so_far != 0:
                 relative_imp = improvement / abs(best_so_far)
@@ -203,6 +210,7 @@ class AdaptivePlateauDetector:
             min_absolute_improvement=self.base_config.min_absolute_improvement,
             require_both=self.base_config.require_both,
             use_median=self.base_config.use_median,
+            direction=self.base_config.direction,
         )
 
         # In early phase, be more lenient (higher threshold = easier to plateau)
@@ -249,6 +257,14 @@ class MultiObjectivePlateauDetector:
         self.window_size = window_size
         self.min_new_nondominated = min_new_nondominated
         self.frontier_sizes: List[int] = []
+        self.hypervolume_history: List[float] = []
+
+    def add_hypervolume(self, hypervolume: float) -> None:
+        """Record feasible-frontier quality against one fixed reference point."""
+        value = float(hypervolume)
+        if value < 0:
+            raise ValueError("hypervolume must be >= 0")
+        self.hypervolume_history.append(value)
 
     def add_frontier_size(self, size: int) -> None:
         """Record current frontier size."""
@@ -256,6 +272,11 @@ class MultiObjectivePlateauDetector:
 
     def is_plateau(self) -> bool:
         """Check if frontier has stopped growing."""
+        if self.hypervolume_history:
+            if len(self.hypervolume_history) < self.window_size:
+                return False
+            window = self.hypervolume_history[-self.window_size:]
+            return window[-1] - window[0] <= 0.0
         if len(self.frontier_sizes) < self.window_size:
             return False
 
@@ -273,6 +294,9 @@ class MultiObjectivePlateauDetector:
         Returns:
             Average new points per evaluation over window
         """
+        if self.hypervolume_history:
+            window = self.hypervolume_history[-self.window_size:]
+            return 0.0 if len(window) < 2 else (window[-1] - window[0]) / (len(window) - 1)
         if len(self.frontier_sizes) < 2:
             return 0.0
 
@@ -286,3 +310,4 @@ class MultiObjectivePlateauDetector:
     def reset(self) -> None:
         """Clear history."""
         self.frontier_sizes.clear()
+        self.hypervolume_history.clear()

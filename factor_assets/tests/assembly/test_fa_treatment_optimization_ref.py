@@ -317,6 +317,9 @@ class TestReadContentHashFailClosed:
             reason="APPROVED",
             evidence_refs=("bundle-F1",),
             gate_results=("gate-1",),
+            universe_ref="universe:default", snapshot_ref="snap:1",
+            split_ref="split:default", recipe_ref="recipe:default",
+            data_as_of="2024-01-01T00:00:00Z", created_at="2024-01-01T00:00:00Z",
         )
         spec = FactorSetSpec(
             set_id="s1",
@@ -325,6 +328,8 @@ class TestReadContentHashFailClosed:
             data_snapshot_ref="snap:1",
             universe_ref="universe:default",
             split_ref="split:default",
+            recipe_ref="recipe:default",
+            selection_as_of="2026-01-01T00:00:00Z",
         )
         result = FactorSetAssembler().assemble(
             spec,

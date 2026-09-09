@@ -33,8 +33,11 @@ def test_public_return_api_and_aggregate_costs_have_one_hundred_percent_gross():
 
 
 def test_equity_exhaustion_is_absorbing_and_reports_full_loss():
-    r = np.array([.1,-1.2,-2.,.1])
+    r = np.array([.1,-1.,.5,.1])
     np.testing.assert_allclose(compute_wealth_curve(r), [1.1,0.,0.,0.])
     np.testing.assert_allclose(compute_aligned_wealth_curve(r), [1.1,0.,0.,0.])
     assert compute_maximum_drawdown(r)[0] == 1.
     assert compute_maximum_drawdown(np.array([-.1,0.,.05]))[0] == pytest.approx(.1)
+    for kernel in (compute_wealth_curve,compute_aligned_wealth_curve,compute_maximum_drawdown):
+        with pytest.raises(ValueError,match="negative-capital"):
+            kernel(np.array([.1,-1.01]))

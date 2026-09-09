@@ -44,9 +44,14 @@ threshold call on rank_ic / label maturity / return basis / similarity).
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
-from dataclasses import dataclass, replace
+from contextlib import contextmanager, nullcontext
+from contextvars import ContextVar
+from dataclasses import dataclass, replace, asdict
 from datetime import datetime, timezone
 from typing import Any, Callable
+import hashlib
+import json
+import uuid
 
 from quant_platform.app.candidate.ingest import (
     CandidateNormalizationError,
@@ -57,6 +62,7 @@ from quant_platform.app.candidate.ingest import (
 )
 from quant_platform.app.contracts import (
     ARTIFACT_TYPE_FACTOR_CANDIDATE,
+    ARTIFACT_TYPE_FEATURE_SET,
     AdmissionAuthority,
     AdmissionRequest,
     AdmissionVerdict,
@@ -146,23 +152,25 @@ class PipelineStateItem:
     state after the fact.  A frozen dataclass makes each state item immutable.
     """
 
-    __slots__ = ("candidate_id", "content_hash", "status", "reason")
+    __slots__ = ("candidate_id", "ingestion_record_id", "content_hash", "status", "reason")
 
     candidate_id: str
-    content_hash: str
+    ingestion_record_id: str
+    content_hash: str | None
     status: str
     reason: str
 
-    def __init__(self, candidate_id: str, content_hash: str, status: str, reason: str) -> None:
+    def __init__(self, candidate_id: str, content_hash: str | None, status: str, reason: str, ingestion_record_id: str | None = None) -> None:
         if not isinstance(candidate_id, str) or not candidate_id:
             raise ValueError("candidate_id must be a non-empty string")
-        if not isinstance(content_hash, str) or not content_hash:
-            raise ValueError("content_hash must be a non-empty string")
+        if content_hash is not None and (not isinstance(content_hash, str) or not content_hash):
+            raise ValueError("content_hash must be a non-empty string or None")
         if not isinstance(status, str) or not status:
             raise ValueError("status must be a non-empty string")
         if not isinstance(reason, str) or not reason:
             raise ValueError("reason must be a non-empty string")
         object.__setattr__(self, "candidate_id", candidate_id)
+        object.__setattr__(self, "ingestion_record_id", ingestion_record_id or content_hash or f"ingestion:{candidate_id}")
         object.__setattr__(self, "content_hash", content_hash)
         object.__setattr__(self, "status", status)
         object.__setattr__(self, "reason", reason)
@@ -170,9 +178,10 @@ class PipelineStateItem:
     def __setattr__(self, name: str, value: object) -> None:
         raise AttributeError(f"PipelineStateItem is a frozen value object; cannot assign {name!r}")
 
-    def to_dict(self) -> dict[str, str]:
+    def to_dict(self) -> dict[str, str | None]:
         return {
             "candidate_id": self.candidate_id,
+            "ingestion_record_id": self.ingestion_record_id,
             "content_hash": self.content_hash,
             "status": self.status,
             "reason": self.reason,
@@ -250,6 +259,7 @@ class PipelineReport:
         status: str,
         reason: str,
         content_hash: str,
+        ingestion_record_id: str | None = None,
     ) -> "PipelineReport":
         """New report with one per-candidate state appended (never mutates)."""
         item = PipelineStateItem(
@@ -257,6 +267,7 @@ class PipelineReport:
             content_hash=content_hash,
             status=status,
             reason=reason,
+            ingestion_record_id=ingestion_record_id,
         )
         return replace(self, states=self.states + (item,))
 
@@ -356,6 +367,19 @@ class PipelineReport:
             content_hash=content_hash,
         )
 
+    def with_normalization_failed(
+        self, *, candidate_id: str, ingestion_record_id: str, reason: str
+    ) -> "PipelineReport":
+        return replace(
+            self, num_normalization_failed=self.num_normalization_failed + 1
+        ).with_item(
+            candidate_id=candidate_id,
+            ingestion_record_id=ingestion_record_id,
+            content_hash=None,
+            status="FAILED",
+            reason=reason,
+        )
+
     def with_event(self, event_id: str) -> "PipelineReport":
         return replace(
             self,
@@ -411,6 +435,10 @@ class CandidateEvaluation:
     evidence_ref: str | None = None
     evaluation_ref: str | None = None
     treatment_optimization_ref: str | None = None
+    recipe_ref: str | None = None
+    preprocess_state_ref: str | None = None
+    factor_value_ref: str | None = None
+    metric_policy_ref: str | None = None
 
     def __post_init__(self) -> None:
         if not self.candidate_ref:
@@ -477,6 +505,10 @@ def build_with_evidence(evidence: Mapping[str, Any]) -> CandidateEvaluation:
         evidence_ref=evidence.get("evidence_ref"),
         evaluation_ref=evidence.get("evaluation_ref"),
         treatment_optimization_ref=evidence.get("treatment_optimization_ref"),
+        recipe_ref=evidence.get("recipe_ref"),
+        preprocess_state_ref=evidence.get("preprocess_state_ref"),
+        factor_value_ref=evidence.get("factor_value_ref"),
+        metric_policy_ref=evidence.get("metric_policy_ref"),
     )
 
 
@@ -498,6 +530,12 @@ class PipelineConfig:
     min_rank_ic: float = 0.02
     retrain_policy: RetrainPolicy | None = None
     feature_set_id: str = "fs_pipeline_default"
+    require_complete_execution_trace: bool = False
+    feature_set_update_mode: str = 'MERGE'
+
+    def __post_init__(self):
+        if self.feature_set_update_mode not in {'MERGE', 'REPLACE'}:
+            raise ValueError('feature_set_update_mode must be MERGE or REPLACE')
 
 
 def _default_evaluate(candidate: Any, context: Mapping[str, Any]) -> CandidateEvaluation:
@@ -556,6 +594,9 @@ class Pipeline:
         config: PipelineConfig | None = None,
         worker_id: str = "qrpp5-worker",
         run_storage: Any | None = None,
+        artifact_publisher: Any | None = None,
+        generation_coordinator: Any | None = None,
+        failure_injector: Callable[[str, ArtifactRef], None] | None = None,
     ) -> None:
         self.registry = registry if registry is not None else ArtifactRegistry()
         self.outbox = outbox if outbox is not None else InMemoryOutbox()
@@ -568,6 +609,12 @@ class Pipeline:
         #: OPTIONAL durable backing store for anti-replay state (P0-PLAT-004).
         #: ``None`` = pure in-memory (today's behavior, unchanged).
         self.run_storage = run_storage
+        # Production composition injects the durable two-phase publisher.  A
+        # missing publisher deliberately retains the historical research-only
+        # in-memory path; it must not be mistaken for a durable publication.
+        self.artifact_publisher = artifact_publisher
+        self.generation_coordinator = generation_coordinator
+        self.failure_injector = failure_injector
 
         self._processed_fingerprints: set[str] = set()
         self._consumed_manifests: list[Any] = []
@@ -575,6 +622,14 @@ class Pipeline:
         self._run_counter = 0
         self._evaluation_by_job: dict[str, CandidateEvaluation] = {}
         self._verdict_by_job: dict[str, AdmissionVerdict] = {}
+        self._definition_by_artifact_hash: dict[str, str] = {}
+        self._feature_provenance_by_artifact_hash: dict[str, dict[str, Any]] = {}
+        self._modeling_feature_manifests: list[dict[str, Any]] = []
+        self._research_payloads: dict[str, bytes] = {}
+        self._execution_trace_by_candidate: dict[str, dict[str, str]] = {}
+        self._reservation_context = ContextVar(
+            f"pipeline_reservation_{id(self)}", default=(None, ())
+        )
 
         # P0-PLAT-004: seed anti-replay state from the durable store so a
         # process restart preserves it. Fingerprints recorded by past runs make
@@ -603,8 +658,46 @@ class Pipeline:
         """All delegated admission verdicts recorded this pipeline's lifetime."""
         return tuple(self._verdict_by_job.values())
 
+    def modeling_feature_manifests(self) -> tuple[Mapping[str, Any], ...]:
+        return tuple(self._modeling_feature_manifests)
+
     # ---- run -----------------------------------------------------------------
     def run(
+        self, raw_records: Iterable[Mapping[str, Any]], *,
+        library_snapshot: Mapping[str, Any], now: datetime | None = None,
+    ) -> PipelineReport:
+        """Reserve discovered candidates before entering any external reader."""
+        if self.run_storage is None:
+            return self._run(raw_records, library_snapshot=library_snapshot, now=now)
+        records = list(raw_records)
+        candidates = {}
+        for raw in records:
+            try:
+                manifest = normalize_candidate(raw)
+            except CandidateNormalizationError:
+                continue
+            candidates[manifest.factor_spec_sha256] = json.dumps(dict(raw),sort_keys=True)
+        token = str(uuid.uuid4())
+        reserved_hashes = self.run_storage.reserve_candidates(candidates, token)
+        context_token = self._reservation_context.set((token, tuple(reserved_hashes)))
+        try:
+            return self._run(records, library_snapshot=library_snapshot, now=now)
+        finally:
+            self.run_storage.release_reservations(token)
+            self._reservation_context.reset(context_token)
+
+    def _check_reservations(self):
+        if self.run_storage is not None:
+            token, hashes = self._reservation_context.get()
+            self.run_storage.assert_reservations(hashes, token)
+
+    def _publication_fence(self):
+        if self.run_storage is None:
+            return nullcontext()
+        token, hashes = self._reservation_context.get()
+        return self.run_storage.fence_reservations(hashes, token)
+
+    def _run(
         self,
         raw_records: Iterable[Mapping[str, Any]],
         *,
@@ -634,7 +727,8 @@ class Pipeline:
                 normalization_failures.append(
                     {
                         "candidate_id": candidate_id,
-                        "content_hash": "",
+                        "content_hash": None,
+                        "ingestion_record_id": f"ingestion:{len(normalization_failures)}:{candidate_id}",
                         "status": "FAILED",
                         "reason": f"{PipelineStatusReason.QRP_NORMALIZATION_FAILED}:{exc.reason}",
                     }
@@ -662,14 +756,22 @@ class Pipeline:
             if hasattr(report, "num_replayed"):
                 report = report.as_replayed()  # no-op re-entrant
             for item in normalization_failures:
-                report = report.with_item(**item)
+                report = report.with_normalization_failed(
+                    candidate_id=item["candidate_id"],
+                    ingestion_record_id=item["ingestion_record_id"],
+                    reason=item["reason"],
+                )
             return report
 
         self._run_counter += 1
         run_index = self._run_counter
         report = PipelineReport(batch_fingerprint=fingerprint)
         for item in normalization_failures:
-            report = report.with_item(**item)
+            report = report.with_normalization_failed(
+                candidate_id=item["candidate_id"],
+                ingestion_record_id=item["ingestion_record_id"],
+                reason=item["reason"],
+            )
 
         # Known registry for reconciliation: every manifest this Pipeline has
         # consumed across past runs (a duplicate content/semantic identity is a
@@ -681,7 +783,9 @@ class Pipeline:
         if self.run_storage is not None:
             known_hash_entries: list[Any] = []
             for manifest in manifests:
-                if manifest.factor_spec_sha256 in self._consumed_hash_seed:
+                if (manifest.factor_spec_sha256 in self._consumed_hash_seed
+                        or self.run_storage.is_consumed_hash(manifest.factor_spec_sha256)):
+                    self._consumed_hash_seed.add(manifest.factor_spec_sha256)
                     known_hash_entries.append(manifest)
             known = known + known_hash_entries
         reconcile = reconcile_candidates(manifests, known)
@@ -697,6 +801,8 @@ class Pipeline:
             reconcile_conflict_by_hash[conflict.content_hash] = conflict.reason
 
         seen_dual_key: set[tuple[str, str]] = set()
+        retryable_failure = False
+        approved_pending_consumption = []
         for manifest in manifests:
             ch = manifest.factor_spec_sha256
             semantic = manifest.semantic_family_hint or ""
@@ -748,17 +854,6 @@ class Pipeline:
                 status="NEW_CONSUMED",
                 reason=PipelineStatusReason.QRP_OK,
             )
-            self._consumed_manifests.append(manifest)
-            # P0-PLAT-004: durably record the NEW consumption so a process
-            # restart still anti-replays this candidate.
-            if self.run_storage is not None:
-                self.run_storage.record_consumed(
-                    candidate_id=str(manifest.candidate_id),
-                    content_hash=ch,
-                    semantic=str(manifest.semantic_family_hint or ""),
-                    consumed_at=now,
-                )
-
             # Schedule the candidate on the JobRunner (treatment + evaluation).
             job_key = (
                 f"candidate:{manifest.candidate_id}:{ch}:scenario:{run_index}"
@@ -775,6 +870,10 @@ class Pipeline:
                 handler=self._make_candidate_handler(manifest, library_snapshot, job_key),
             )
             if record.status.name != "SUCCEEDED":
+                if record.status.name == "FAILED_RETRYABLE":
+                    retryable_failure = True
+                else:
+                    self._record_terminal_consumption(manifest, now)
                 report = report.with_failed(
                     candidate_id=manifest.candidate_id,
                     content_hash=ch,
@@ -783,7 +882,7 @@ class Pipeline:
                 continue
 
             evaluation = self._evaluation_by_job.get(job_key)
-            if evaluation is None or evaluation.rank_ic is None:
+            if evaluation is None:
                 event_id = self._publish_event(
                     milestone="CANDIDATE_REJECTED",
                     candidate=manifest,
@@ -807,14 +906,18 @@ class Pipeline:
             request = AdmissionRequest(
                 candidate_ref=str(manifest.candidate_id),
                 content_hash=ch,
-                factor_definition_ref=str(getattr(manifest, "semantic_family_hint", "") or ""),
-                semantic_ref=str(getattr(manifest, "semantic_family_hint", "") or ""),
+                factor_definition_ref=str(getattr(manifest, "factor_definition_ref", "") or ""),
+                semantic_ref=str(getattr(manifest, "semantic_ref", "") or ""),
                 evaluation=evaluation,
                 library_snapshot_ref=self._library_ref(library_snapshot),
                 context={"job_key": job_key},
             )
             verdict = self.admission_authority.decide(request)
             self._verdict_by_job[job_key] = verdict
+            if self.config.require_complete_execution_trace:
+                self._execution_trace_by_candidate[manifest.candidate_id] = (
+                    self._build_execution_trace(manifest, evaluation, verdict, library_snapshot)
+                )
             approved = verdict.decision == DECISION_APPROVED
             decision_payload = {
                 "decision": verdict.decision,
@@ -824,29 +927,80 @@ class Pipeline:
                 "policy_ref": verdict.policy_ref,
                 "delegated": True,
             }
-            event_id = self._publish_event(
-                milestone="CANDIDATE_APPROVED" if approved else (
-                    "CANDIDATE_SHADOWED" if verdict.decision == DECISION_SHADOWED else "CANDIDATE_REJECTED"
-                ),
-                candidate=manifest,
-                reason=_verdict_reason(verdict),
-                status="APPROVED" if approved else verdict.decision,
-                library_snapshot=library_snapshot,
-                now=now,
-                run_index=run_index,
-                decision=decision_payload,
-            )
-            report = report.with_event(event_id)
+            # Approval is a visibility claim.  For approved candidates it is
+            # emitted only after bytes have been durably published and the
+            # registry contains the verified reference.  Rejection/shadowing
+            # can be emitted immediately because they expose no artifact.
+            event_id = None
+            if not approved:
+                event_id = self._publish_event(
+                    milestone=(
+                        "CANDIDATE_SHADOWED"
+                        if verdict.decision == DECISION_SHADOWED
+                        else "CANDIDATE_REJECTED"
+                    ),
+                    candidate=manifest,
+                    reason=_verdict_reason(verdict),
+                    status=verdict.decision,
+                    library_snapshot=library_snapshot,
+                    now=now,
+                    run_index=run_index,
+                    decision=decision_payload,
+                )
+                report = report.with_event(event_id)
 
             if approved:
-                artifact = self._build_candidate_artifact(manifest, now, library_snapshot)
-                stored = self.registry.register(artifact)
+                with self._publication_fence():
+                    artifact = self._build_candidate_artifact(manifest, now, library_snapshot)
+                    payload = self._research_payloads[artifact.content_hash]
+                    if self.generation_coordinator is not None:
+                        self.generation_coordinator.stage(artifact, payload)
+                        self.generation_coordinator.outbox.publish_pending()
+                        active = self.generation_coordinator.resolve_active(artifact.artifact_id)
+                        if active is None:
+                            raise RuntimeError(
+                                "artifact generation is not COMPLETE; approval remains invisible"
+                            )
+                    elif self.artifact_publisher is not None:
+                        artifact = self.artifact_publisher.publish(artifact, payload)
+                        self._inject_failure("blob_written_before_registry", artifact)
+                    stored = self.registry.register(artifact)
+                self._inject_failure("registry_written_before_visibility", stored)
+                self._definition_by_artifact_hash[stored.content_hash] = (
+                    manifest.factor_definition_ref or ""
+                )
+                detail = dict(verdict.detail or {})
+                self._feature_provenance_by_artifact_hash[stored.content_hash] = {
+                    "raw_value_ref": manifest.factor_value_ref,
+                    "treatment_selection_ref": detail.get("treatment_selection_ref"),
+                    "preprocess_state_ref": detail.get("preprocess_state_ref"),
+                    "cluster_version_ref": detail.get("cluster_version_ref"),
+                    "treated_feature_ref": detail.get("treated_feature_ref"),
+                    "dtype": detail.get("dtype"),
+                    "evaluation_ref": evaluation.evaluation_ref,
+                    "metric_policy_ref": evaluation.metric_policy_ref,
+                    "health_policy_ref": verdict.policy_ref,
+                    "health_verdict_ref": verdict.content_hash,
+                    "library_version_ref": self._library_ref(library_snapshot),
+                }
                 report = report.with_approved(
                     candidate_id=manifest.candidate_id,
                     content_hash=ch,
                     artifact_id=stored.artifact_id,
                     registry_content_hash=stored.content_hash,
                 )
+                event_id = self._publish_event(
+                    milestone="CANDIDATE_APPROVED",
+                    candidate=manifest,
+                    reason=_verdict_reason(verdict),
+                    status="APPROVED",
+                    library_snapshot=library_snapshot,
+                    now=now,
+                    run_index=run_index,
+                    decision=decision_payload,
+                    artifact_id=stored.artifact_id,
+                )
+                report = report.with_event(event_id)
                 event_id = self._publish_event(
                     milestone="ARTIFACT_REGISTERED",
                     candidate=manifest,
@@ -871,17 +1025,42 @@ class Pipeline:
                     content_hash=ch,
                     reason=_verdict_reason(verdict),
                 )
+            if approved:
+                # Approval bytes alone do not mean the feature-set update is
+                # durable. A crash before its publication must remain retryable.
+                approved_pending_consumption.append(manifest)
+            else:
+                self._record_terminal_consumption(manifest, now)
 
         # 5. FeatureSet snapshot for the approved group + diff vs previous round.
         if report.approved_content_hashes:
             report = self._snapshot_feature_set(report, library_snapshot)
+            if self.config.require_complete_execution_trace:
+                manifest = self._modeling_feature_manifests[-1]
+                manifest_ref = str(manifest["feature_set_version_ref"])
+                for candidate in manifests:
+                    trace = self._execution_trace_by_candidate.get(candidate.candidate_id)
+                    if trace is None:
+                        continue
+                    trace["feature_manifest_ref"] = manifest_ref
+                    event_id = self._publish_event(
+                        milestone="FEATURE_SET_CREATED", candidate=candidate,
+                        reason=PipelineStatusReason.QRP_GATE_QUALIFIES,
+                        status="APPROVED", library_snapshot=library_snapshot,
+                        now=now, run_index=run_index, trace=trace,
+                    )
+                    report = report.with_event(event_id)
 
-        self._processed_fingerprints.add(fingerprint)
+        for completed in approved_pending_consumption:
+            self._record_terminal_consumption(completed, now)
+
+        if not retryable_failure:
+            self._processed_fingerprints.add(fingerprint)
         # P0-PLAT-004: durably record the batch fingerprint after the batch so
         # a process restart still anti-replays THIS batch. The store is
         # idempotent — a crash mid-run that partially consumed candidates and a
         # replay of the same batch records the fingerprint again harmlessly.
-        if self.run_storage is not None:
+        if self.run_storage is not None and not retryable_failure:
             self.run_storage.record_fingerprint(fingerprint)
         # Anti-replay must survive run() returning: a replay of THIS batch is
         # caught at the top of the next run() via _processed_fingerprints.
@@ -890,6 +1069,70 @@ class Pipeline:
         return report
 
     # ---- internals ------------------------------------------------------------
+    def _inject_failure(self, stage: str, artifact: ArtifactRef) -> None:
+        """Test-only crash seam at publication durability boundaries."""
+        if self.failure_injector is not None:
+            self.failure_injector(stage, artifact)
+
+    def _build_execution_trace(self, candidate, evaluation, verdict, library_snapshot):
+        if evaluation.candidate_ref != candidate.candidate_id:
+            raise ValueError("complete execution trace mismatched refs: ['candidate_ref']")
+        detail = dict(verdict.detail or {})
+        refs = {
+            "request_ref": getattr(candidate, "campaign_id", None),
+            "parent_trial_ref": getattr(candidate, "attempt_id", None),
+            "definition_ref": getattr(candidate, "factor_definition_ref", None),
+            "recipe_ref": evaluation.recipe_ref,
+            "state_ref": evaluation.preprocess_state_ref,
+            "value_ref": evaluation.factor_value_ref,
+            "evaluation_ref": evaluation.evaluation_ref,
+            "metric_policy_ref": evaluation.metric_policy_ref,
+            "health_policy_ref": verdict.policy_ref,
+            "health_verdict_ref": verdict.content_hash,
+            "library_version_ref": self._library_ref(library_snapshot),
+        }
+        missing = sorted(name for name, value in refs.items()
+                         if not isinstance(value, str) or not value)
+        if missing:
+            raise ValueError(f"complete execution trace missing refs: {missing}")
+        expected = {
+            "factor_value_ref": getattr(candidate, "factor_value_ref", None),
+            "recipe_ref": detail.get("treatment_selection_ref"),
+            "state_ref": detail.get("preprocess_state_ref"),
+            "evaluation_ref": detail.get("evaluation_ref"),
+        }
+        actual = {
+            "factor_value_ref": refs["value_ref"], "recipe_ref": refs["recipe_ref"],
+            "state_ref": refs["state_ref"], "evaluation_ref": refs["evaluation_ref"],
+        }
+        mismatched = sorted(name for name in expected
+                            if expected[name] != actual[name])
+        if mismatched:
+            raise ValueError(f"complete execution trace mismatched refs: {mismatched}")
+        return {name: str(value) for name, value in refs.items()}
+
+    def _record_terminal_consumption(self, manifest: Any, now: datetime) -> None:
+        if any(
+            existing.factor_spec_sha256 == manifest.factor_spec_sha256
+            for existing in self._consumed_manifests
+        ):
+            return
+        if self.run_storage is not None:
+            token, _ = self._reservation_context.get()
+            self.run_storage.consume_reserved(
+                candidate_id=str(manifest.candidate_id),
+                content_hash=manifest.factor_spec_sha256,
+                semantic=str(manifest.semantic_family_hint or ""),
+                consumed_at=now,
+                owner_token=token,
+            )
+            _, hashes = self._reservation_context.get()
+            self._reservation_context.set((
+                token, tuple(ch for ch in hashes if ch != manifest.factor_spec_sha256)
+            ))
+        self._consumed_manifests.append(manifest)
+        self._consumed_hash_seed.add(manifest.factor_spec_sha256)
+
     def _make_candidate_handler(
         self,
         candidate: Any,
@@ -902,13 +1145,19 @@ class Pipeline:
                     candidate,
                     {"library_snapshot": library_snapshot, "job_key": job_key},
                 )
+            except JobError:
+                raise
+            except (TimeoutError, ConnectionError, OSError) as exc:
+                raise JobError(ErrorClass.RETRYABLE_INFRASTRUCTURE, str(exc)) from exc
+            except MemoryError as exc:
+                raise JobError(ErrorClass.RESOURCE_EXCEEDED, str(exc)) from exc
+            except (TypeError, ValueError) as exc:
+                raise JobError(ErrorClass.INVALID_INPUT, str(exc)) from exc
             except Exception as exc:
-                raise JobError(ErrorClass.CAPABILITY, str(exc)) from exc
+                raise JobError(ErrorClass.SEMANTIC_CONTRACT, str(exc)) from exc
             if evaluation is None:
                 return JobResult(summary=_BAD_EVIDENCE_MARKER)
             self._evaluation_by_job[job_key] = evaluation
-            if evaluation.rank_ic is None:
-                return JobResult(summary=_BAD_EVIDENCE_MARKER)
             output_refs = tuple(
                 r for r in (evaluation.evidence_ref, evaluation.evaluation_ref) if r
             )
@@ -930,25 +1179,105 @@ class Pipeline:
         the report; only the FACTOR_CANDIDATE artifacts are registered into the
         artifact registry (num_registered stays == approved count).
         """
-        revision = len(self._feature_snapshots) + 1
-        version = FeatureSetVersion(
+        parent_generation = None
+        self._check_reservations()
+        if self.generation_coordinator is not None:
+            self.generation_coordinator.outbox.publish_pending()
+            active = self.generation_coordinator.resolve_active('feature-set:' + self.config.feature_set_id)
+            if active is not None:
+                parent_generation = active['generation_id']
+                raw = json.loads(bytes.fromhex(active['payload_hex']))['version']
+                raw['ordered_members'] = tuple(FeatureMemberRef(**m) for m in raw['ordered_members'])
+                raw['source_library_versions'] = tuple(raw['source_library_versions'])
+                if raw.get('created_at'):
+                    raw['created_at'] = datetime.fromisoformat(raw['created_at'])
+                restored = FeatureSetVersion(**raw)
+                if not self._feature_snapshots or self._feature_snapshots[-1].version != restored.version:
+                    self._feature_snapshots.append(restored)
+        revision = int(self._feature_snapshots[-1].version.removeprefix('v')) + 1 if self._feature_snapshots else 1
+        existing_members = (
+            tuple(self._feature_snapshots[-1].ordered_members)
+            if self._feature_snapshots and self.config.feature_set_update_mode == 'MERGE' else ()
+        )
+        additions = [
+            (ch, self._definition_by_artifact_hash.get(ch, ""))
+            for ch in report.approved_content_hashes
+        ]
+        incoming_members = tuple(
+            FeatureMemberRef(
+                position=offset,
+                feature_name=f"factor_{ch[:10]}",
+                factor_definition_ref=definition_ref,
+                raw_value_ref=self._feature_provenance_by_artifact_hash.get(ch, {}).get("raw_value_ref"),
+                treatment_selection_ref=self._feature_provenance_by_artifact_hash.get(ch, {}).get("treatment_selection_ref"),
+                treated_feature_ref=self._feature_provenance_by_artifact_hash.get(ch, {}).get("treated_feature_ref"),
+                dtype=self._feature_provenance_by_artifact_hash.get(ch, {}).get("dtype"),
+                source_artifact_id=f"FC_{ch[:16]}",
+                metadata={
+                    key: value for key, value in {
+                        "preprocess_state_ref": self._feature_provenance_by_artifact_hash.get(ch, {}).get("preprocess_state_ref"),
+                        "cluster_version_ref": self._feature_provenance_by_artifact_hash.get(ch, {}).get("cluster_version_ref"),
+                        "evaluation_ref": self._feature_provenance_by_artifact_hash.get(ch, {}).get("evaluation_ref"),
+                        "metric_policy_ref": self._feature_provenance_by_artifact_hash.get(ch, {}).get("metric_policy_ref"),
+                        "health_policy_ref": self._feature_provenance_by_artifact_hash.get(ch, {}).get("health_policy_ref"),
+                        "health_verdict_ref": self._feature_provenance_by_artifact_hash.get(ch, {}).get("health_verdict_ref"),
+                        "library_version_ref": self._feature_provenance_by_artifact_hash.get(ch, {}).get("library_version_ref"),
+                    }.items() if value
+                },
+            )
+            for offset, (ch, definition_ref) in enumerate(additions)
+        )
+        # A definition ref is the stable logical slot, but provenance is part
+        # of its executable identity. MERGE replaces that slot when recipe,
+        # state, value, cluster, evaluation, or source artifact changes.
+        incoming_by_definition = {
+            member.factor_definition_ref: member for member in incoming_members
+        }
+        merged = []
+        for member in existing_members:
+            merged.append(incoming_by_definition.pop(member.factor_definition_ref, member))
+        merged.extend(incoming_by_definition.values())
+        combined_members = tuple(
+            replace(member, position=position)
+            for position, member in enumerate(merged if existing_members else incoming_members)
+        )
+        unchanged = bool(self._feature_snapshots and combined_members == self._feature_snapshots[-1].ordered_members)
+        if unchanged:
+            revision = int(self._feature_snapshots[-1].version.removeprefix('v'))
+        version = self._feature_snapshots[-1] if unchanged else FeatureSetVersion(
             feature_set_id=self.config.feature_set_id,
             version=f"v{revision}",
-            ordered_members=tuple(
-                FeatureMemberRef(
-                    position=idx,
-                    feature_name=f"factor_{ch[:10]}",
-                    factor_definition_ref=ch,
-                    source_artifact_id="",
-                )
-                for idx, ch in enumerate(report.approved_content_hashes)
-            ),
+            ordered_members=combined_members,
             consumer_profile=self.config.scope,
             source_library_versions=(
                 str(library_snapshot.get("library_version_ref") or "lib:unknown"),
             ),
         )
-        self._feature_snapshots.append(version)
+        if self.generation_coordinator is not None and not unchanged:
+            payload = json.dumps({'schema':'feature-set-generation.v1',
+                'update_mode':self.config.feature_set_update_mode,
+                'parent_generation':parent_generation, 'version':asdict(version)},
+                sort_keys=True, separators=(',', ':'), default=lambda obj: obj.isoformat()
+                    if isinstance(obj,datetime) else obj.value).encode()
+            digest = hashlib.sha256(payload).hexdigest()
+            ref = ArtifactRef(artifact_id='feature-set:' + self.config.feature_set_id,
+                artifact_type=ARTIFACT_TYPE_FEATURE_SET, schema_version='1.0',
+                content_hash=digest, storage_uri=f'feature-set://{self.config.feature_set_id}/{digest}',
+                size_bytes=len(payload), created_at=datetime.now(timezone.utc),
+                producer_type=_PRODUCER, producer_version='2.0.0')
+            with self._publication_fence():
+                generation = self.generation_coordinator.stage(
+                    ref, payload, expected_parent_generation=parent_generation
+                )
+                self.generation_coordinator.outbox.publish_pending()
+                published = self.generation_coordinator.resolve_active(ref.artifact_id)
+                if published is None or published['generation_id'] != generation:
+                    raise RuntimeError('feature-set generation not COMPLETE; candidate remains retryable')
+                self._inject_failure('feature_set_complete_before_consumption', ref)
+        if not unchanged:
+            self._feature_snapshots.append(version)
+        from quant_platform.app.modeling_manifest_bridge import build_modeling_feature_manifest
+        self._modeling_feature_manifests.append(build_modeling_feature_manifest(version))
         artifact = FeatureSetArtifact(
             feature_set_id=version.feature_set_id,
             feature_set_version=version.version,
@@ -961,7 +1290,7 @@ class Pipeline:
 
         diff_category: str | None = None
         retrain = False
-        if len(self._feature_snapshots) >= 2:
+        if len(self._feature_snapshots) >= 2 and not unchanged:
             prev = self._feature_snapshots[-2]
             event = retrain_required_for_diff(prev, version)
             retrain = event is not None
@@ -971,6 +1300,7 @@ class Pipeline:
                 from quant_platform.app.contracts import classify_feature_set_diff  # noqa: PLC0415
 
                 diff_category = classify_feature_set_diff(prev, version).category.value
+                retrain = prev.schema_hash != version.schema_hash
         return report.with_feature_snapshot(
             artifact=artifact,
             revision=revision,
@@ -1009,20 +1339,32 @@ class Pipeline:
         library_snapshot: Mapping[str, Any],
     ) -> ArtifactRef:
         """Build the FACTOR_CANDIDATE ArtifactRef registered on approval."""
-        ch = candidate.factor_spec_sha256
+        source_spec_hash = candidate.factor_spec_sha256
+        payload = json.dumps(
+            {
+                "candidate_id": candidate.candidate_id,
+                "factor_definition_ref": candidate.factor_definition_ref,
+                "semantic_ref": candidate.semantic_ref,
+                "factor_value_ref": candidate.factor_value_ref,
+                "source_spec_hash": source_spec_hash,
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+        ch = hashlib.sha256(payload).hexdigest()
         artifact_id = f"FC_{ch[:16]}"
-        payload = f"{candidate.candidate_id}:{ch}"
+        self._research_payloads[ch] = payload
         return ArtifactRef(
             artifact_id=artifact_id,
             artifact_type=ARTIFACT_TYPE_FACTOR_CANDIDATE,
             schema_version="1.0",
             content_hash=ch,
             storage_uri=f"mem://candidates/{artifact_id}.json",
-            size_bytes=len(payload.encode("utf-8")),
+            size_bytes=len(payload),
             created_at=now,
             producer_type=_PRODUCER,
             producer_version=_PRODUCER_VERSION,
-            semantic_hash=candidate.semantic_family_hint or "",
+            semantic_hash=candidate.semantic_ref or "",
             media_type="application/json",
             producer_source_ref=candidate.factor_spec_uri,
             snapshot_ref=str(
@@ -1046,6 +1388,7 @@ class Pipeline:
         run_index: int,
         decision: Mapping[str, Any] | None = None,
         artifact_id: str | None = None,
+        trace: Mapping[str, str] | None = None,
     ) -> str:
         """Append one milestone EventEnvelope to the outbox; returns the id."""
         content_ch = getattr(candidate, "factor_spec_sha256", "") or str(
@@ -1080,6 +1423,8 @@ class Pipeline:
                 payload["reason_codes"] = tuple(str(c) for c in codes)
         if artifact_id:
             payload["artifact_id"] = artifact_id
+        if trace is not None:
+            payload["execution_trace"] = dict(trace)
 
         envelope = EventEnvelope(
             event_id=event_id,
@@ -1093,6 +1438,7 @@ class Pipeline:
             causation_id=None,
             payload=payload,
             idempotency_key=key,
+            trace_id=(content_hash(*[trace[k] for k in sorted(trace)]) if trace else None),
         )
         # Deterministic correlation id: batch-level fingerprint of the consumed
         # fingerprint is not available here; use the per-run consumed set.

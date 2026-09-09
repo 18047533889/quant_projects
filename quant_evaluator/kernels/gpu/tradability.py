@@ -80,23 +80,25 @@ def batched_factor_turnover_rate(factor_values, quantile: float = 0.9):
     for t in range(T - 1):
         a = x[t]      # (F, N)
         b = x[t + 1]  # (F, N)
-        valid = cp.isfinite(a) & cp.isfinite(b)  # (F, N)
-        n = cp.sum(valid, axis=1)  # (F,)
-        ok = n >= 10
+        va, vb = cp.isfinite(a), cp.isfinite(b)
+        na, nb = va.sum(axis=1), vb.sum(axis=1)
+        n = cp.sum(va | vb, axis=1)
+        ok = (na >= 10) & (nb >= 10)
         if not bool(cp.any(ok)):
             continue
-        a_safe = cp.where(valid, a, cp.inf)
-        b_safe = cp.where(valid, b, cp.inf)
-        thr_a = _nanquantile_rows(a_safe, n, quantile)  # (F,)
-        thr_b = _nanquantile_rows(b_safe, n, quantile)  # (F,)
+        a_safe = cp.where(va, a, cp.inf)
+        b_safe = cp.where(vb, b, cp.inf)
+        thr_a = _nanquantile_rows(a_safe, na, quantile)
+        thr_b = _nanquantile_rows(b_safe, nb, quantile)
         if quantile > 0.5:
             in_a = a_safe >= thr_a[:, None]
             in_b = b_safe >= thr_b[:, None]
         else:
             in_a = a_safe <= thr_a[:, None]
             in_b = b_safe <= thr_b[:, None]
-        in_a = in_a & valid
-        in_b = in_b & valid
+        in_a = in_a & va
+        in_b = in_b & vb
+        ok &= ~cp.any(in_a & ~vb, axis=1)
         changed = in_a != in_b  # (F, N)
         rate = cp.sum(changed, axis=1) / cp.maximum(n, 1.0)  # (F,)
         out[t] = cp.where(ok, rate, cp.nan)

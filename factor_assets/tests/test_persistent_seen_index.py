@@ -115,8 +115,13 @@ class TestPersistentSeenIndex:
         barrier = threading.Barrier(4)
 
         def write(writer_id):
-            with PersistentSeenIndex(str(db_path)) as index:
-                barrier.wait()
+            try:
+                index = PersistentSeenIndex(str(db_path))
+            except Exception:
+                barrier.abort()
+                raise
+            with index:
+                barrier.wait(timeout=5)
                 return index.record("shared", f"factor-{writer_id}", f"origin-{writer_id}")
 
         with ThreadPoolExecutor(max_workers=4) as pool:

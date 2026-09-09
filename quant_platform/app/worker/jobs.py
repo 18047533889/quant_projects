@@ -37,6 +37,7 @@ from ..contracts.jobs import (
 
 __all__ = [
     "JobRunnerError",
+    "StaleJobAttemptError",
     "JobError",
     "JobRunner",
     "JobExecutionRecord",
@@ -49,6 +50,10 @@ __all__ = [
 
 class JobRunnerError(Exception):
     """Base error raised by ``JobRunner``."""
+
+
+class StaleJobAttemptError(JobRunnerError):
+    """A reclaimed attempt finished after its durable lease was fenced out."""
 
 
 class JobError(Exception):
@@ -164,7 +169,7 @@ class JobRunner:
     dataclass from ``contracts/jobs.py`` (no new contract symbols).
     """
 
-    def __init__(self, worker_id: str = "qrpp4-worker") -> None:
+    def __init__(self, worker_id: str = "qrpp4-worker", durable_store=None) -> None:
         if not worker_id:
             raise ValueError("worker_id is required")
         self.worker_id = worker_id
@@ -172,6 +177,7 @@ class JobRunner:
         self._records: dict[str, JobExecutionRecord] = {}  # frozen snapshot
         self._executions: list[JobExecutionRecord] = []  # append-only log
         self._default_handler: Callable[[JobSpec], JobResult] | None = None
+        self._durable_store = durable_store
 
     # ---- queries ----
     def get(self, idempotency_key: str) -> JobExecutionRecord | None:
@@ -202,6 +208,23 @@ class JobRunner:
         if spec is None or not isinstance(spec, JobSpec):
             raise JobRunnerError("execute requires a JobSpec")
         job = self._jobs.get(spec.idempotency_key)
+        loaded_for_claim = False
+        if job is None and self._durable_store is not None:
+            persisted = self._durable_store.load(spec.idempotency_key)
+            if persisted is not None:
+                if persisted.status is JobStatus.SUCCEEDED:
+                    self._records[spec.idempotency_key] = persisted
+                    return persisted
+                if persisted.status not in {JobStatus.FAILED_RETRYABLE, JobStatus.RUNNING} or persisted.attempt_count > spec.max_retries:
+                    self._records[spec.idempotency_key] = persisted
+                    return persisted
+                job = _InternalJob(spec)
+                job.created_at, job.started_at = persisted.created_at, persisted.started_at
+                job.attempts = list(persisted.attempts)
+                job.status = (JobStatus.PENDING if persisted.status is JobStatus.RUNNING else persisted.status)
+                job.finished_at = persisted.finished_at
+                self._jobs[spec.idempotency_key] = job
+                loaded_for_claim = True
         if job is None:
             job = _InternalJob(spec)
             self._jobs[spec.idempotency_key] = job
@@ -212,15 +235,21 @@ class JobRunner:
             JobStatus.TIMED_OUT,
             JobStatus.CANCELLED,
         }:
+            if (job.status is JobStatus.FAILED_RETRYABLE
+                    and len(job.attempts) <= spec.max_retries):
+                job.status = JobStatus.PENDING
+                job.error_class = None
+                job.finished_at = None
+            else:
             # Idempotent resubmission: return the existing terminal record
             # without re-running the handler.
-            existing = self._records.get(spec.idempotency_key)
-            if existing is not None:
-                return existing
-            snapshot = job.freeze()
-            self._records[spec.idempotency_key] = snapshot
-            return snapshot
-        else:
+                existing = self._records.get(spec.idempotency_key)
+                if existing is not None:
+                    return existing
+                snapshot = job.freeze()
+                self._records[spec.idempotency_key] = snapshot
+                return snapshot
+        elif not loaded_for_claim:
             # In-flight (RUNNING/PENDING): refuse to double-execute.
             raise JobRunnerError(
                 f"job {spec.idempotency_key!r} already RUNNING/PENDING — "
@@ -228,9 +257,19 @@ class JobRunner:
             )
 
         handler = handler or self._read_default_handler()
+        fencing_token = None
+        if self._durable_store is not None:
+            fencing_token = self._durable_store.claim(spec, self.worker_id)
+            if fencing_token is None:
+                persisted = self._durable_store.load(spec.idempotency_key)
+                if persisted is not None:
+                    self._records[spec.idempotency_key] = persisted
+                    return persisted
+                raise JobRunnerError("durable job claim lost without a persisted record")
+
         if handler is None:
             self._fail(job, ErrorClass.CAPABILITY, "no handler registered")
-            return self._snapshot(job)
+            return self._snapshot(job, fencing_token=fencing_token)
 
         now = datetime.now(timezone.utc)
         job.status = JobStatus.RUNNING
@@ -259,7 +298,7 @@ class JobRunner:
         except Exception as exc:  # unknown error -> terminal failure
             self._fail(job, ErrorClass.CAPABILITY, str(exc))
 
-        return self._snapshot(job)
+        return self._snapshot(job, fencing_token=fencing_token)
 
     # ---- registry hooks ----
     def register(self, handler: Callable[[JobSpec], JobResult]) -> None:
@@ -282,8 +321,20 @@ class JobRunner:
         job.finished_at = datetime.now(timezone.utc)
         job.current_stage = None
 
-    def _snapshot(self, job: _InternalJob) -> JobExecutionRecord:
+    def _snapshot(self, job: _InternalJob, *, fencing_token=None) -> JobExecutionRecord:
         rec = job.freeze()
+        if self._durable_store is not None:
+            if fencing_token is None:
+                raise JobRunnerError("durable snapshot requires a fencing token")
+            saved = self._durable_store.save(
+                rec, fencing_token=fencing_token, worker_id=self.worker_id)
+            if not saved:
+                persisted = self._durable_store.load(job.idempotency_key)
+                if persisted is not None:
+                    self._records[job.idempotency_key] = persisted
+                raise StaleJobAttemptError(
+                    f"job {job.idempotency_key!r} attempt token {fencing_token} "
+                    "is stale after lease reclaim")
         self._records[job.idempotency_key] = rec
         self._executions.append(rec)
         return self._records[job.idempotency_key]

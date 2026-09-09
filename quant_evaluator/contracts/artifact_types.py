@@ -22,7 +22,7 @@ Shape conventions (F = number of factors, always the LAST axis):
 """
 
 from dataclasses import dataclass, field
-from typing import Any, Mapping, Tuple
+from typing import Any, ClassVar, Mapping, Tuple
 import numpy as np
 
 from quant_evaluator.contracts._hashutil import stable_content_hex, stable_hash
@@ -32,6 +32,7 @@ from quant_evaluator.contracts.metric_artifacts import FrozenMapping
 __all__ = [
     "ICSeriesArtifact",
     "QuantileReturnArtifact",
+    "DailyQuantileReturnArtifact",
     "ProbePortfolioArtifact",
     "ExposureArtifact",
 ]
@@ -220,6 +221,107 @@ class QuantileReturnArtifact:
             n_quantiles=int(data["n_quantiles"]),
             factor_ids=tuple(data.get("factor_ids", ())),
             metric_id=data.get("metric_id", "quantile_returns"),
+            provenance=decode_value(data.get("provenance", {})),
+        )
+
+
+@dataclass(frozen=True, eq=False)
+class DailyQuantileReturnArtifact:
+    """Daily quantile returns and counts, shape ``(T, Q, F)``.
+
+    This intentionally does not replace the time-averaged QF artifact.
+    Certification additionally requires external tie, tradability and risk
+    evidence references; their absence never changes the numeric payload.
+    """
+
+    artifact_kind: ClassVar[str] = "daily_quantile"
+
+    values: np.ndarray
+    counts: np.ndarray
+    valid_mask: np.ndarray
+    time_axis: Tuple[Any, ...]
+    quantile_axis: Tuple[int, ...]
+    factor_axis: Tuple[str, ...]
+    tie_status_ref: str | None = None
+    tradability_ref: str | None = None
+    risk_exposure_ref: str | None = None
+    producer_version: str = "1.0.0"
+    metric_id: str = "quantile_returns.daily"
+    provenance: Mapping[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        values = _freeze_array(self.values, "values")
+        counts = _freeze_array(self.counts, "counts")
+        raw_valid = np.asarray(self.valid_mask)
+        if raw_valid.dtype != np.bool_:
+            raise ValueError("daily quantile valid_mask must have strict bool dtype")
+        valid = _freeze_array(raw_valid, "valid_mask")
+        if values.ndim != 3 or counts.shape != values.shape or valid.shape != values.shape:
+            raise ValueError("daily quantile values/counts/valid_mask must share (T,Q,F) shape")
+        if not np.issubdtype(counts.dtype, np.integer) or np.any(counts < 0):
+            raise ValueError("daily quantile counts must be non-negative integers")
+        axes = (tuple(self.time_axis), tuple(self.quantile_axis), tuple(self.factor_axis))
+        if tuple(map(len, axes)) != values.shape:
+            raise ValueError("daily quantile axes do not match (T,Q,F) payload")
+        if tuple(self.quantile_axis) != tuple(range(values.shape[1])):
+            raise ValueError("quantile_axis must be canonical zero-based bucket ids")
+        if len(set(self.time_axis)) != len(self.time_axis) or len(set(self.factor_axis)) != len(self.factor_axis):
+            raise ValueError("daily quantile time and factor axes must be unique")
+        if np.any(valid & (~np.isfinite(values) | (counts <= 0))):
+            raise ValueError("valid daily quantiles require finite values and positive counts")
+        for name in ("producer_version", "metric_id"):
+            if not isinstance(getattr(self, name), str) or not getattr(self, name).strip():
+                raise ValueError(f"{name} must be non-empty")
+        object.__setattr__(self, "values", values)
+        object.__setattr__(self, "counts", counts)
+        object.__setattr__(self, "valid_mask", valid)
+        object.__setattr__(self, "time_axis", axes[0])
+        object.__setattr__(self, "quantile_axis", axes[1])
+        object.__setattr__(self, "factor_axis", axes[2])
+        object.__setattr__(self, "provenance", FrozenMapping(self.provenance))
+
+    @property
+    def provenance_refs_present(self) -> bool:
+        return all(
+            isinstance(ref, str) and bool(ref.strip())
+            for ref in (self.tie_status_ref, self.tradability_ref, self.risk_exposure_ref)
+        )
+
+    def require_certification_ready(self, resolver) -> None:
+        """Require every opaque ref to resolve through the caller's authority."""
+        if not self.provenance_refs_present:
+            raise ValueError("daily quantile artifact lacks tie/tradability/risk evidence refs")
+        if not callable(resolver) or not all(
+            resolver(ref) is True
+            for ref in (self.tie_status_ref, self.tradability_ref, self.risk_exposure_ref)
+        ):
+            raise ValueError("daily quantile evidence refs are not authority-resolved")
+
+    def __eq__(self, other: object) -> bool:
+        if type(self) is not type(other): return NotImplemented
+        return self.to_dict() == other.to_dict()
+
+    def to_dict(self) -> dict:
+        return {
+            "values": encode_value(self.values), "counts": encode_value(self.counts),
+            "valid_mask": encode_value(self.valid_mask), "time_axis": encode_value(self.time_axis),
+            "quantile_axis": list(self.quantile_axis), "factor_axis": list(self.factor_axis),
+            "tie_status_ref": self.tie_status_ref, "tradability_ref": self.tradability_ref,
+            "risk_exposure_ref": self.risk_exposure_ref, "producer_version": self.producer_version,
+            "metric_id": self.metric_id, "provenance": encode_value(dict(self.provenance)),
+        }
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> "DailyQuantileReturnArtifact":
+        return cls(
+            values=decode_value(data["values"]), counts=decode_value(data["counts"]),
+            valid_mask=decode_value(data["valid_mask"]),
+            time_axis=tuple(decode_value(data["time_axis"])),
+            quantile_axis=tuple(data["quantile_axis"]), factor_axis=tuple(data["factor_axis"]),
+            tie_status_ref=data.get("tie_status_ref"), tradability_ref=data.get("tradability_ref"),
+            risk_exposure_ref=data.get("risk_exposure_ref"),
+            producer_version=data.get("producer_version", "1.0.0"),
+            metric_id=data.get("metric_id", "quantile_returns.daily"),
             provenance=decode_value(data.get("provenance", {})),
         )
 

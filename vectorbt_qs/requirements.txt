@@ -4,7 +4,8 @@ numpy>=1.26,<2
 pandas>=2.2,<3
 scipy
 matplotlib
-plotly>=4.12.0
+# Vendored VectorBT uses the legacy scattermapbox schema; verified in V6.
+plotly==5.24.1
 ipywidgets>=7.0.0
 anywidget
 numba>=0.60,<0.61

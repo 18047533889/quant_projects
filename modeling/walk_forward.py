@@ -181,17 +181,54 @@ def _filter_by_dates(ds: PanelDataset, start: Any, end: Any, col: str) -> PanelD
         stock_col=ds.stock_col,
         feature_cols=list(ds.feature_cols),
         label_col=ds.label_col,
+        feature_schema=ds.feature_schema,
+        run_mode=ds.run_mode,
+        missing_reason_plane=ds._slice_missingness(mask.to_numpy()),
+        label_missing_reasons=(
+            None if ds.label_missing_reasons is None else ds.label_missing_reasons[mask.to_numpy()]
+        ),
     )
 
 
 def _empty_like(ds: PanelDataset) -> PanelDataset:
+    empty = np.zeros(ds.n_rows, dtype=bool)
     return PanelDataset(
         frame=ds.frame.iloc[0:0].reset_index(drop=True),
         date_col=ds.date_col,
         stock_col=ds.stock_col,
         feature_cols=list(ds.feature_cols),
         label_col=ds.label_col,
+        feature_schema=ds.feature_schema,
+        run_mode=ds.run_mode,
+        missing_reason_plane=ds._slice_missingness(empty),
+        label_missing_reasons=(
+            None if ds.label_missing_reasons is None else ds.label_missing_reasons[empty]
+        ),
     )
+
+
+def _concat_missingness(left: PanelDataset, right: PanelDataset | None) -> tuple[Any, Any]:
+    if right is None:
+        return left.missing_reason_plane, left.label_missing_reasons
+    if (left.missing_reason_plane is None) != (right.missing_reason_plane is None):
+        raise ValueError("split datasets disagree on missingness authority presence")
+    plane = None
+    if left.missing_reason_plane is not None:
+        a, b = left.missing_reason_plane, right.missing_reason_plane
+        plane = type(a)(
+            reasons=np.concatenate([a.reasons, b.reasons]),
+            original_missing=np.concatenate([a.original_missing, b.original_missing]),
+            filled=np.concatenate([a.filled, b.filled]),
+            usable=np.concatenate([a.usable, b.usable]),
+            age=np.concatenate([a.age, b.age]),
+        )
+    if (left.label_missing_reasons is None) != (right.label_missing_reasons is None):
+        raise ValueError("split datasets disagree on label missing-reason presence")
+    labels = (
+        None if left.label_missing_reasons is None else
+        np.concatenate([left.label_missing_reasons, right.label_missing_reasons])
+    )
+    return plane, labels
 
 
 def _fold_sample_adequate(ds: PanelDataset | None, spec: WalkForwardSpec, prefix: str) -> bool:
@@ -527,12 +564,19 @@ def nested_splits(
         if fold.validation_ds is not None:
             frames.append(fold.validation_ds.frame)
         combined = pd.concat(frames, ignore_index=True)
+        combined_missingness, combined_label_reasons = _concat_missingness(
+            fold.train_ds, fold.validation_ds
+        )
         combined_ds = PanelDataset(
             frame=combined,
             date_col=fold.train_ds.date_col,
             stock_col=fold.train_ds.stock_col,
             feature_cols=list(fold.train_ds.feature_cols),
             label_col=fold.train_ds.label_col,
+            feature_schema=fold.train_ds.feature_schema,
+            run_mode=fold.train_ds.run_mode,
+            missing_reason_plane=combined_missingness,
+            label_missing_reasons=combined_label_reasons,
         )
         inner_folds = make_walk_forward_splits(combined_ds, inner_spec, date_col=date_col)
         out.append((fold, inner_folds))

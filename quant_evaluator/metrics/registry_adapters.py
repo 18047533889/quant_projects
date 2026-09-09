@@ -24,6 +24,56 @@ from quant_evaluator.metrics.temporal import (
     compute_mean_rank_stability,
 )
 from quant_evaluator.metrics.turnover import compute_turnover_series
+from quant_evaluator.contracts.artifact_types import DailyQuantileReturnArtifact
+
+
+def build_daily_quantile_return_artifact(
+    factor_batch: FactorBatch,
+    label_bundle: LabelBundle,
+    n_quantiles: int = 5,
+    min_assets: int = 10,
+    min_periods: int = 20,
+    *,
+    tie_status_ref: str | None = None,
+    tradability_ref: str | None = None,
+    risk_exposure_ref: str | None = None,
+    producer_version: str = "1.0.0",
+    split_ref: str | None = None,
+    config_hash: str | None = None,
+) -> DailyQuantileReturnArtifact:
+    """Build the non-aggregated daily TQF quantile evidence artifact."""
+    if min_periods < 1:
+        raise ValueError("min_periods must be positive")
+    returns, counts = compute_quantile_returns_fast(
+        factor_batch, label_bundle, n_quantiles=n_quantiles,
+        min_assets=min_assets,
+    )
+    counts = np.asarray(counts)
+    valid = np.isfinite(returns) & (counts >= min_assets)
+    time_axis = tuple(label_bundle.observation_time or label_bundle.decision_time)
+    return DailyQuantileReturnArtifact(
+        values=returns,
+        counts=counts.astype(np.int64, copy=False),
+        valid_mask=valid,
+        time_axis=time_axis,
+        quantile_axis=tuple(range(n_quantiles)),
+        factor_axis=tuple(factor_batch.factor_ids),
+        tie_status_ref=tie_status_ref,
+        tradability_ref=tradability_ref,
+        risk_exposure_ref=risk_exposure_ref,
+        producer_version=producer_version,
+        provenance={
+            "label_id": label_bundle.target_id,
+            "label_content_hash": label_bundle.content_hash,
+            "factor_value_hash": factor_batch.value_hash,
+            "n_quantiles": n_quantiles,
+            "min_assets": min_assets,
+            "min_periods": min_periods,
+            "split_ref": split_ref,
+            "config_hash": config_hash,
+            "valid_period_counts_qf": np.sum(valid, axis=0),
+        },
+    )
 
 
 def compute_ic_ir_value(
@@ -66,7 +116,8 @@ def compute_rank_stability_value(
 ) -> np.ndarray:
     """Return time-averaged rank stability per factor."""
     return compute_mean_rank_stability(
-        factor_batch.values,
+        np.where(factor_batch.validity, factor_batch.values, np.nan)
+        if factor_batch.validity is not None else factor_batch.values,
         lag=lag,
         method=method,
         min_periods=min_periods,
@@ -97,6 +148,8 @@ def compute_turnover_value(
     values = np.asarray(factor_batch.values, dtype=np.float64)
     if values.ndim != 3:
         raise ValueError("factor_batch.values must be (T, N, F)")
+    if factor_batch.validity is not None:
+        values = np.where(factor_batch.validity, values, np.nan)
     n_factors = values.shape[2]
     result = np.full(n_factors, np.nan, dtype=np.float64)
     for f in range(n_factors):
@@ -177,6 +230,43 @@ def compute_quantile_returns_full_value(
     valid_counts = np.sum(np.isfinite(quantile_returns), axis=0)  # (n_quantiles, F)
     return np.where(valid_counts >= min_periods, means, np.nan)
 
+
+def compute_daily_quantile_monotonicity_series_value(
+    factor_batch: FactorBatch,
+    label_bundle: LabelBundle,
+    n_quantiles: int = 5,
+    min_assets: int = 10,
+) -> np.ndarray:
+    """Per-date increasing-adjacent-pair fraction, shape ``(T,F)``.
+
+    This is deliberately distinct from ``quantile_monotonicity``, which is
+    computed once on the long-run mean profile. Non-finite adjacent pairs do
+    not enter a date's denominator; a date with no valid pair is NaN.
+    """
+    daily, _ = compute_quantile_returns_fast(
+        factor_batch, label_bundle, n_quantiles=n_quantiles, min_assets=min_assets)
+    pairs = np.isfinite(daily[:, :-1, :]) & np.isfinite(daily[:, 1:, :])
+    denominator = pairs.sum(axis=1)
+    increasing = ((daily[:, 1:, :] > daily[:, :-1, :]) & pairs).sum(axis=1)
+    with np.errstate(invalid="ignore", divide="ignore"):
+        values = increasing / denominator
+    return np.where(denominator > 0, values, np.nan)
+
+
+def compute_daily_quantile_monotonicity_rate_value(
+    factor_batch: FactorBatch,
+    label_bundle: LabelBundle,
+    n_quantiles: int = 5,
+    min_assets: int = 10,
+    min_periods: int = 20,
+) -> np.ndarray:
+    """Mean valid daily-profile monotonicity fraction per factor."""
+    series = compute_daily_quantile_monotonicity_series_value(
+        factor_batch, label_bundle, n_quantiles=n_quantiles, min_assets=min_assets)
+    counts = np.isfinite(series).sum(axis=0)
+    means = np.nansum(series, axis=0) / np.maximum(counts, 1)
+    return np.where(counts >= min_periods, means, np.nan)
+
 def compute_block_bootstrap_ci_value(
     ic_series: np.ndarray,
     min_periods: int = 60,
@@ -216,6 +306,8 @@ def compute_factor_turnover_rate_value(
     values = np.asarray(factor_batch.values, dtype=np.float64)
     if values.ndim != 3:
         raise ValueError("factor_batch.values must be (T, N, F)")
+    if factor_batch.validity is not None:
+        values = np.where(factor_batch.validity, values, np.nan)
     turnover_series = compute_factor_turnover_rate(values, quantile=quantile)
     if turnover_series.size == 0:
         return np.full(values.shape[2], np.nan, dtype=np.float64)

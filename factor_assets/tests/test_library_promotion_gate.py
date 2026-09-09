@@ -130,6 +130,27 @@ def test_rejects_missing_rank_ic():
     assert PromotionReasonCode.RANK_IC_BELOW_THRESHOLD in artifact.reason_codes
 
 
+def test_raw_numerical_evaluation_is_not_certified_release_evidence():
+    artifact = gate().evaluate("v102", eval_ref(rank_ic=0.2), certified_release=True)
+    assert artifact.decision is PromotionDecision.REJECT
+    assert PromotionReasonCode.UNCERTIFIED_EVIDENCE in artifact.reason_codes
+
+
+def test_old_metric_version_cannot_enter_certified_release():
+    evaluation = CandidateEvaluationRef(
+        candidate_ref="F1", rank_ic=0.2, label_maturity=True,
+        evidence_ref="e", evaluation_ref="eval", factor_definition_id="def",
+        factor_value_ref="value", config_hash="cfg", health_card_ref="health",
+        metric_versions=(("max_drawdown", "1.0.0"),),
+    )
+    artifact = gate().evaluate(
+        "v102", evaluation, certified_release=True,
+        required_metric_versions={"max_drawdown": "2.0.0"},
+    )
+    assert artifact.decision is PromotionDecision.REJECT
+    assert PromotionReasonCode.UNCERTIFIED_EVIDENCE in artifact.reason_codes
+
+
 # ---------------------------------------------------------------------------
 # reject / review: duplicate similarity to existing member
 # ---------------------------------------------------------------------------

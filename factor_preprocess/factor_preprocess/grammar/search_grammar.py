@@ -320,8 +320,11 @@ def certify_production_presets(policy_registry=None, transform_registry=None):
             continue
         recipe = _certified_recipe_for(preset)
         if recipe is not None:
-            # Explicit named exception overrides default canonical order.
-            out.append((preset.name, True, f"certified_exception:{recipe}"))
+            expected = next((t.stages for t in CERTIFIED_TEMPLATES if t.name == recipe), None)
+            if expected == seq:
+                out.append((preset.name, True, f"certified_exception:{recipe}"))
+            else:
+                out.append((preset.name, False, f"recipe tag {recipe!r} does not match actual stages"))
             continue
         valid, errors = validate_stage_order(seq)
         if valid:

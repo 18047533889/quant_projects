@@ -38,7 +38,9 @@ class FEIdentityProvider:
     FA does NOT duplicate FE's parser or hash logic — it delegates through this adapter.
     """
 
-    def __init__(self, compiler_generation: Optional[str] = None):
+    def __init__(self, compiler_generation: Optional[str] = None, *,
+                 surface: str = "daily", dialect: str = "native",
+                 dialect_version: Optional[str] = None):
         """
         Initialize FE identity provider.
 
@@ -52,6 +54,9 @@ class FEIdentityProvider:
             raise OptionalDependencyMissing("factor_engine", "FEIdentityProvider")
 
         self.compiler_generation = compiler_generation or "fe-0.9.x"
+        self.surface = surface
+        self.dialect = dialect
+        self.dialect_version = dialect_version
 
     def get_canonical_hash(self, expression: str) -> str:
         """
@@ -142,8 +147,10 @@ class FEIdentityProvider:
             ValueError: If expression is invalid
         """
         canonical_repr = self.get_canonical_repr(expression)
-        canonical_hash = self.get_canonical_hash(expression)
-        fe_identity_ref = self.get_identity_ref(expression)
+        # Parsing/parameter certification belongs to FE and may be expensive.
+        # Resolve once so all three identity fields describe the same tree.
+        canonical_hash = hashlib.sha256(canonical_repr.encode("utf-8")).hexdigest()
+        fe_identity_ref = canonical_hash
 
         return FactorIdentity(
             canonical_repr=canonical_repr,
@@ -157,8 +164,9 @@ class FEIdentityProvider:
         """
         Parse expression string through FE.
 
-        Note: FE's ensure_expr only handles simple literals, not full expressions.
-        For complex expressions, pass Expr nodes directly via FEIdentityProviderFromExpr.
+        Uses FE's existing budgeted/allowlisted DSL parser. ``ensure_expr`` is
+        a scalar conversion API: passing a field name to it creates a string
+        literal and therefore the wrong factor identity.
 
         Args:
             expression: Expression string or Expr node
@@ -168,22 +176,16 @@ class FEIdentityProvider:
 
         Raises:
             ValueError: If expression cannot be parsed
-            NotImplementedError: If expression is a complex string (not supported)
         """
         if isinstance(expression, Expr):
             return expression
 
-        # ensure_expr can handle simple field names but not complex expressions
-        # For now, only support simple identifiers
-        if not expression or not expression.replace('_', '').isalnum():
-            raise NotImplementedError(
-                "String expression parsing requires FE parser integration. "
-                "Pass Expr node directly or use FEIdentityProviderFromExpr."
-            )
-
-        # Use FE's ensure_expr for simple field names only
+        if not isinstance(expression, str) or not expression.strip():
+            raise ValueError("expression must be a nonempty DSL string or FE Expr")
         try:
-            return ensure_expr(expression)
+            from factor_engine.api.dsl_parser import parse_expr
+            return parse_expr(expression, surface=self.surface, dialect=self.dialect,
+                              dialect_version=self.dialect_version)
         except (TypeError, ValueError, KeyError, AttributeError, RuntimeError) as e:
             raise ValueError(f"Failed to parse expression '{expression}': {e}") from e
 

@@ -134,7 +134,7 @@ def batched_pairwise_correlation(factor_values, method="pearson", min_obs=30):
             xv = x[valid]
             yv = y[valid]
             if cp.std(xv) == 0 or cp.std(yv) == 0:
-                corr[i, j] = 1.0 if i == j else cp.nan
+                corr[i, j] = cp.nan
                 corr[j, i] = corr[i, j]
                 continue
             if method == "pearson":
@@ -156,20 +156,20 @@ def batched_conditional_ic(
     """Conditional IC per factor per conditioning quantile, (T, F, Q) + counts.
 
     Matches ``compute_conditional_ic``.  ``factor_values`` is (T, F, N),
-    ``labels`` is (T, N).  Returns (conditional_ic (T,F,Q), sample_counts (T,Q)).
+    ``labels`` is (T, N).  Returns (conditional_ic (T,F,Q), sample_counts (T,F,Q)).
     """
     cp = _import_cp()
     x = _as_tfn(factor_values)
     y = cp.asarray(labels, dtype=cp.float64)
     T, F, N = x.shape
     cond_ic = cp.full((T, F, quantiles), cp.nan, dtype=cp.float64)
-    counts = cp.zeros((T, quantiles), dtype=cp.int32)
+    counts = cp.zeros((T, F, quantiles), dtype=cp.int32)
     ic_fn = _ic_fn(method)
 
     for t in range(T):
         cv = x[t, conditioning_factor_idx, :]  # (N,)
         lt = y[t]  # (N,)
-        valid_mask = cp.isfinite(cv) & cp.isfinite(lt)
+        valid_mask = cp.isfinite(cv)
         if cp.sum(valid_mask) < min_assets:
             continue
         cv_fin = cv[valid_mask]
@@ -181,7 +181,6 @@ def batched_conditional_ic(
             nq = cp.sum(qmask)
             if nq < min_assets:
                 continue
-            counts[t, q] = nq
             # IC of each factor within this quantile
             for f in range(F):
                 factor_t = x[t, f, :]
@@ -189,6 +188,7 @@ def batched_conditional_ic(
                 fq = factor_t[qmask]
                 lq = label_t[qmask]
                 valid_obs = cp.isfinite(fq) & cp.isfinite(lq)
+                counts[t, f, q] = cp.sum(valid_obs)
                 if cp.sum(valid_obs) < min_assets:
                     continue
                 fv = fq[valid_obs]
@@ -227,12 +227,10 @@ def batched_substitution_effect(
         fa = x[t, factor_a_idx, :]
         fb = x[t, factor_b_idx, :]
         lt = y[t]
-        valid_a = cp.isfinite(fa) & cp.isfinite(lt)
-        valid_b = cp.isfinite(fb) & cp.isfinite(lt)
         valid_both = cp.isfinite(fa) & cp.isfinite(fb) & cp.isfinite(lt)
-        if cp.sum(valid_a) >= min_assets:
-            fa_v = fa[valid_a]
-            la_v = lt[valid_a]
+        if cp.sum(valid_both) >= min_assets:
+            fa_v = fa[valid_both]
+            la_v = lt[valid_both]
             if cp.std(fa_v) > 0 and cp.std(la_v) > 0:
                 if method == "pearson":
                     ic_a[t] = cp.corrcoef(fa_v, la_v)[0, 1]
@@ -241,9 +239,8 @@ def batched_substitution_effect(
                     rf = batched_rank(fa_v[None, :], pct=False)[0]
                     rl = batched_rank(la_v[None, :], pct=False)[0]
                     ic_a[t] = cp.corrcoef(rf, rl)[0, 1]
-        if cp.sum(valid_b) >= min_assets:
-            fb_v = fb[valid_b]
-            lb_v = lt[valid_b]
+            fb_v = fb[valid_both]
+            lb_v = lt[valid_both]
             if cp.std(fb_v) > 0 and cp.std(lb_v) > 0:
                 if method == "pearson":
                     ic_b[t] = cp.corrcoef(fb_v, lb_v)[0, 1]
@@ -388,17 +385,28 @@ def batched_incremental_ic(
                 rt = batched_rank(test_valid[None, :], pct=False)[0]
                 rl = batched_rank(label_valid[None, :], pct=False)[0]
                 total_ic[t] = cp.corrcoef(rt, rl)[0, 1]
-        # residualize
-        X = cp.column_stack([cp.ones(base_valid.shape[0]), base_valid])  # (n, K+1)
-        XtX = X.T @ X
+        # Rank-aware centered least squares; duplicate controls preserve subspace.
+        n = base_valid.shape[0]
+        xc = base_valid - cp.mean(base_valid, axis=0)
+        xs = cp.std(xc, axis=0)
+        xs = cp.where(xs > 0, xs, 1.0)
+        X = cp.column_stack([cp.ones(n), xc / xs])
         try:
-            beta_test = cp.linalg.solve(XtX, X.T @ test_valid)
-            beta_label = cp.linalg.solve(XtX, X.T @ label_valid)
+            u, singular, _ = cp.linalg.svd(X, full_matrices=False)
         except Exception:
             continue
-        test_residual = test_valid - X @ beta_test
-        label_residual = label_valid - X @ beta_label
-        base_pred = X @ beta_label
+        cutoff = cp.finfo(cp.float64).eps * max(X.shape) * singular[0]
+        rank = int(cp.sum(singular > cutoff))
+        left = u[:, :rank]
+        test_centered = test_valid - cp.mean(test_valid)
+        label_centered = label_valid - cp.mean(label_valid)
+        # Project through the identified left subspace, not unstable coefficients.
+        test_residual = test_centered - left @ (left.T @ test_centered)
+        label_residual = label_centered - left @ (left.T @ label_centered)
+        base_pred = label_valid - label_residual
+        effective_df = n - rank
+        test_tol = 64 * cp.finfo(cp.float64).eps * max(n, K + 1) * max(float(cp.linalg.norm(test_centered)), cp.finfo(cp.float64).tiny)
+        label_tol = 64 * cp.finfo(cp.float64).eps * max(n, K + 1) * max(float(cp.linalg.norm(label_centered)), cp.finfo(cp.float64).tiny)
         if cp.std(base_pred) > 0 and cp.std(label_valid) > 0:
             if method == "pearson":
                 base_ic[t] = cp.corrcoef(base_pred, label_valid)[0, 1]
@@ -407,7 +415,8 @@ def batched_incremental_ic(
                 rb = batched_rank(base_pred[None, :], pct=False)[0]
                 rl = batched_rank(label_valid[None, :], pct=False)[0]
                 base_ic[t] = cp.corrcoef(rb, rl)[0, 1]
-        if cp.std(test_residual) > 0 and cp.std(label_residual) > 0:
+        if (effective_df >= 2 and cp.linalg.norm(test_residual) > test_tol and
+                cp.linalg.norm(label_residual) > label_tol):
             if method == "pearson":
                 incremental_ic[t] = cp.corrcoef(test_residual, label_residual)[0, 1]
             else:

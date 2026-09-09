@@ -8,11 +8,76 @@ from typing import Optional, Tuple
 import numpy as np
 
 
+def rank_aware_projection(X, y, *, add_intercept=True, rcond=None, weights=None):
+    """Centered/scaled weighted least squares; one projection authority.
+
+    Inputs are already joint finite rows. Redundant controls define the same
+    subspace; diagnostics distinguish their non-identifiable coefficients from
+    well-defined fitted values. No in-sample projection certifies OOS utility.
+    """
+    X=np.asarray(X,dtype=np.float64); y=np.asarray(y,dtype=np.float64)
+    if X.ndim!=2 or y.ndim!=1 or X.shape[0]!=len(y) or not len(y):
+        raise ValueError("projection requires aligned nonempty (N,K) and (N,) arrays")
+    if not np.isfinite(X).all() or not np.isfinite(y).all():
+        raise ValueError("projection inputs must be finite joint observations")
+    if not isinstance(add_intercept,(bool,np.bool_)):
+        raise TypeError("add_intercept must be bool")
+    if rcond is not None and (isinstance(rcond,(bool,np.bool_)) or not np.isfinite(rcond) or rcond<0 or rcond>=1):
+        raise ValueError("rcond must be None or a finite relative threshold in [0,1)")
+    n,k=X.shape
+    w=np.ones(n) if weights is None else np.asarray(weights,dtype=np.float64)
+    if w.shape!=(n,) or not np.isfinite(w).all() or np.any(w<=0):
+        raise ValueError("projection weights must be finite strictly positive and aligned")
+    w=w/np.max(w); w=w/w.sum()
+    if add_intercept:
+        x_origin=X[0]+np.sum((X-X[0])*w[:,None],axis=0)
+        y_origin=y[0]+np.sum((y-y[0])*w)
+        xc=X-x_origin; yc=y-y_origin
+    else:
+        x_origin=np.zeros(k); y_origin=0.; xc=X; yc=y
+    xs=np.sqrt(np.sum(w[:,None]*xc*xc,axis=0)); xs=np.where(xs>0,xs,1.)
+    ys=float(np.sqrt(np.sum(w*yc*yc))); ys=ys if ys>0 else 1.
+    design=xc/xs
+    if add_intercept:
+        design=np.column_stack((np.ones(n),design))
+    rootw=np.sqrt(w)
+    u,singular,vh=np.linalg.svd(design*rootw[:,None],full_matrices=False)
+    cutoff=(np.finfo(float).eps*max(design.shape) if rcond is None else rcond)
+    rank=int(np.sum(singular>cutoff*singular[0])) if len(singular) else 0
+    projected_coordinates=u[:,:rank].T@(yc/ys*rootw)
+    beta=vh[:rank].T@(projected_coordinates/singular[:rank])
+    rank=int(rank); df=n-rank
+    condition=float(singular[0]/singular[rank-1]) if rank else np.inf
+    # Project through orthonormal left singular vectors: an ill-conditioned
+    # coefficient basis must not amplify error in the fitted subspace.
+    predicted_center=(u[:,:rank]@projected_coordinates)*ys/rootw
+    residual=yc-predicted_center
+    scale=float(np.linalg.norm(yc))
+    tolerance=64*np.finfo(np.float64).eps*max(n,k+int(add_intercept))*max(scale,float(np.linalg.norm(predicted_center)),np.finfo(float).tiny)
+    status="RANK_DEFICIENT" if rank<design.shape[1] else "OK"
+    if df<2:
+        status="INSUFFICIENT_DF"
+    elif np.linalg.norm(residual)<=tolerance:
+        status="NO_RESIDUAL_VARIANCE"
+        residual=np.zeros_like(residual)
+    slopes=beta[int(add_intercept):]*ys/xs
+    coefficients=np.r_[y_origin+beta[0]*ys-x_origin@slopes,slopes] if add_intercept else slopes
+    # The centered calculation avoids cancellation in residuals at large means.
+    fitted=y-residual
+    diagnostics={"coefficients":coefficients,"rank":rank,"effective_df":df,"n":n,
+        "condition":condition,"residual_tolerance":tolerance,"status":status,
+        "estimation_scope":"SAME_DATE_DESCRIPTIVE","method_version":"centered_wls_svd.v1",
+        "total_variance":float(np.sum(w*(y-(y[0]+np.sum(w*(y-y[0]))))**2)),
+        "residual_variance":float(np.sum(w*residual**2))}
+    return fitted,residual,diagnostics
+
+
 def compute_factor_loadings(
     factor_values: np.ndarray,
     risk_factors: np.ndarray,
     intercept: bool = True,
     min_obs: int = 10,
+    *, weights=None, return_diagnostics: bool = False,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
     Compute factor loadings via cross-sectional OLS regression.
@@ -32,6 +97,12 @@ def compute_factor_loadings(
         r_squared: shape (T,)
         residuals: shape (T, N)
     """
+    factor_values=np.asarray(factor_values,dtype=float)
+    risk_factors=np.asarray(risk_factors,dtype=float)
+    if factor_values.ndim!=2 or risk_factors.ndim!=3 or risk_factors.shape[:2]!=factor_values.shape:
+        raise ValueError("factor/risk inputs must have aligned (T,N)/(T,N,K) axes")
+    if isinstance(min_obs,(bool,np.bool_)) or not isinstance(min_obs,(int,np.integer)) or min_obs<2:
+        raise ValueError("min_obs must be an integer >=2")
     T, N = factor_values.shape
     K = risk_factors.shape[2]
 
@@ -39,54 +110,34 @@ def compute_factor_loadings(
     loadings = np.full((T, num_coefs), np.nan, dtype=np.float64)
     r_squared = np.full(T, np.nan, dtype=np.float64)
     residuals = np.full((T, N), np.nan, dtype=np.float64)
+    weights=np.ones((T,N)) if weights is None else np.asarray(weights,dtype=float)
+    if weights.shape!=(T,N) or np.any(np.isfinite(weights)&(weights<0)):
+        raise ValueError("weights must have shape (T,N) and be nonnegative")
+    diagnostics=[]
 
     for t in range(T):
         y = factor_values[t, :]  # (N,)
         X = risk_factors[t, :, :]  # (N, K)
 
         # Filter finite observations
-        valid_mask = np.isfinite(y) & np.all(np.isfinite(X), axis=1)
+        valid_mask = np.isfinite(y) & np.all(np.isfinite(X), axis=1) & np.isfinite(weights[t]) & (weights[t]>0)
         y_valid = y[valid_mask]
         X_valid = X[valid_mask, :]
 
         if len(y_valid) < min_obs:
+            diagnostics.append({"status":"INSUFFICIENT_OBSERVATIONS","n":len(y_valid),"rank":0,"effective_df":0})
             continue
-
-        # Add intercept column
-        if intercept:
-            X_valid = np.column_stack([np.ones(len(y_valid)), X_valid])
-
-        # OLS: beta = (X'X)^-1 X'y
-        try:
-            XtX = X_valid.T @ X_valid
-            Xty = X_valid.T @ y_valid
-            beta = np.linalg.solve(XtX, Xty)
-
-            loadings[t, :] = beta
-
-            # Compute R^2
-            y_pred = X_valid @ beta
-            ss_res = np.sum((y_valid - y_pred) ** 2)
-            ss_tot = np.sum((y_valid - np.mean(y_valid)) ** 2)
-
-            if ss_tot > 0:
-                r_squared[t] = 1.0 - ss_res / ss_tot
-            else:
-                r_squared[t] = np.nan
-
-            # Compute residuals for all assets (NaN for invalid)
-            resid_t = np.full(N, np.nan, dtype=np.float64)
-            X_full = risk_factors[t, :, :]
-            if intercept:
-                X_full = np.column_stack([np.ones(N), X_full])
-            resid_t[valid_mask] = y_valid - (X_valid @ beta)
-            residuals[t, :] = resid_t
-
-        except np.linalg.LinAlgError:
-            # Singular matrix, skip this period
+        _,resid,diag=rank_aware_projection(X_valid,y_valid,add_intercept=intercept,weights=weights[t,valid_mask])
+        diagnostics.append(diag)
+        if diag["effective_df"]<2:
             continue
-
-    return loadings, r_squared, residuals
+        if diag["rank"]==num_coefs:
+            loadings[t]=diag["coefficients"]
+        if diag["total_variance"]>0 and diag["rank"]>int(intercept):
+            r_squared[t]=1.-diag["residual_variance"]/diag["total_variance"]
+        residuals[t,valid_mask]=resid
+    result=(loadings,r_squared,residuals)
+    return (*result,tuple(diagnostics)) if return_diagnostics else result
 
 
 def compute_sector_exposure(

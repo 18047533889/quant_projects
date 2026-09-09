@@ -10,7 +10,9 @@ The pinned source tree is the repodir ``quant_evaluator/`` package (not
 ``build/lib``) — see ``test_production_serialization.py``.
 """
 
-_REPO_ROOT = "/home/sunhaiwei/quant_projects"
+from pathlib import Path
+
+_REPO_ROOT = str(Path(__file__).resolve().parent.parent)
 import sys
 
 if _REPO_ROOT not in sys.path:

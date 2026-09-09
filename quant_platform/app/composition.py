@@ -81,7 +81,9 @@ def _build_db(dsn: str | None) -> Any:
     if dsn == ":memory:" or dsn.startswith("sqlite:"):
         path = ":memory:" if dsn == ":memory:" else dsn[len("sqlite:"):]
         return SqliteDb(path)
-    # A non-sqlite DSN is a PostgreSQL DSN.  ``PostgresDb(dsn, create=True)``
+    if not (dsn.startswith(("postgresql://", "postgres://")) or "=" in dsn):
+        return SqliteDb(dsn)
+    # PostgreSQL URI or libpq keyword DSN. ``PostgresDb(dsn, create=True)``
     # applies the schema itself; ``PostgresBackendUnavailable`` surfaces when
     # psycopg2 is not installed (the repo's fail-closed convention).
     return PostgresDb(dsn, create=True)
@@ -120,7 +122,9 @@ def production_composition(
     if hasattr(backend, "_conn"):
         create_schema(backend._conn)
         backend._conn.commit()
-        apply_migrations(backend._conn)
+        # Keep the dialect facade: a raw psycopg2 connection has neither the
+        # SQLite executescript API nor the migration runner's query adapter.
+        apply_migrations(backend)
     else:
         create_schema(backend)
         apply_migrations(backend)

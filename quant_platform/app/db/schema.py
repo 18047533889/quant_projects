@@ -121,6 +121,61 @@ CREATE TABLE IF NOT EXISTS artifact_lineage (
 )
 """
 
+ARTIFACT_GENERATIONS = """
+CREATE TABLE IF NOT EXISTS artifact_generations (
+    generation_id          TEXT PRIMARY KEY,
+    artifact_id            TEXT NOT NULL REFERENCES artifacts(artifact_id),
+    content_hash           TEXT NOT NULL,
+    artifact_json          TEXT NOT NULL,
+    payload_hex            TEXT NOT NULL,
+    status                 TEXT NOT NULL CHECK (status IN ('STAGED', 'COMPLETE')),
+    active                 BOOLEAN NOT NULL DEFAULT FALSE,
+    resolved_storage_uri   TEXT,
+    completed_at           TIMESTAMP,
+    UNIQUE (artifact_id, content_hash)
+)
+"""
+
+ARTIFACT_GC_STATE = """
+CREATE TABLE IF NOT EXISTS artifact_gc_state (
+    singleton       INTEGER PRIMARY KEY CHECK (singleton = 1),
+    reference_epoch INTEGER NOT NULL
+)
+"""
+
+ARTIFACT_GC_ROOTS = """
+CREATE TABLE IF NOT EXISTS artifact_gc_roots (
+    root_kind       TEXT NOT NULL CHECK (root_kind IN ('production','approved_release','active_read','retryable_job','retained_research','rollback','pending_label')),
+    artifact_id     TEXT NOT NULL,
+    generation_id  TEXT NOT NULL,
+    created_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (root_kind, artifact_id, generation_id)
+)
+"""
+
+ARTIFACT_GC_TOMBSTONES = """
+CREATE TABLE IF NOT EXISTS artifact_gc_tombstones (
+    artifact_id     TEXT NOT NULL,
+    generation_id  TEXT NOT NULL REFERENCES artifact_generations(generation_id),
+    claim_id        TEXT NOT NULL UNIQUE,
+    claimed_epoch   INTEGER NOT NULL,
+    claimed_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (artifact_id, generation_id)
+)
+"""
+
+ARTIFACT_DELETION_RECEIPTS = """
+CREATE TABLE IF NOT EXISTS artifact_deletion_receipts (
+    artifact_id     TEXT NOT NULL,
+    generation_id  TEXT NOT NULL,
+    receipt_json    TEXT NOT NULL,
+    created_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (artifact_id, generation_id),
+    FOREIGN KEY (artifact_id, generation_id)
+      REFERENCES artifact_gc_tombstones(artifact_id, generation_id)
+)
+"""
+
 # ---------------------------------------------------------------------------
 # Jobs
 # ---------------------------------------------------------------------------
@@ -179,6 +234,9 @@ CREATE TABLE IF NOT EXISTS workflow_runs (
 # Transactional outbox / inbox
 # ---------------------------------------------------------------------------
 
+# Event clocks are Unix seconds throughout Outbox/Inbox, including fractional
+# retry/claim deadlines. DOUBLE PRECISION preserves that domain on both SQLite
+# and PostgreSQL; calendar TIMESTAMP is not interchangeable with epoch numbers.
 OUTBOX_EVENTS = """
 CREATE TABLE IF NOT EXISTS outbox_events (
     id                  INTEGER PRIMARY KEY,
@@ -191,14 +249,14 @@ CREATE TABLE IF NOT EXISTS outbox_events (
     actor_principal_id  TEXT,
     idempotency_key     TEXT NOT NULL UNIQUE,
     payload_json        TEXT,
-    occurred_at         TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    occurred_at         DOUBLE PRECISION NOT NULL,
     status              TEXT NOT NULL DEFAULT 'pending',
     attempts            INTEGER NOT NULL DEFAULT 0,
     worker_id           TEXT,
     claim_token         TEXT,
-    claimed_at          TIMESTAMP,
+    claimed_at          DOUBLE PRECISION,
     retry_count         INTEGER NOT NULL DEFAULT 0,
-    next_attempt_at     TIMESTAMP,
+    next_attempt_at     DOUBLE PRECISION,
     last_error          TEXT,
     dead_letter_reason  TEXT
 )
@@ -210,11 +268,11 @@ CREATE TABLE IF NOT EXISTS inbox_events (
     idempotency_key     TEXT NOT NULL UNIQUE,
     status              TEXT NOT NULL DEFAULT 'RECEIVED',
     retry_count         INTEGER NOT NULL DEFAULT 0,
-    next_attempt_at     TIMESTAMP,
+    next_attempt_at     DOUBLE PRECISION,
     last_error          TEXT,
     dead_letter         BOOLEAN NOT NULL DEFAULT FALSE,
     dead_letter_reason  TEXT,
-    processed_at        TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    processed_at        DOUBLE PRECISION NOT NULL
 )
 """
 
@@ -438,6 +496,8 @@ CREATE TABLE IF NOT EXISTS consumed_manifests (
 )
 """
 
+from .durable_store import CREATE_CANDIDATE_RESERVATIONS
+
 BATCH_FINGERPRINTS = """
 CREATE TABLE IF NOT EXISTS batch_fingerprints (
     fingerprint     TEXT PRIMARY KEY,
@@ -485,6 +545,11 @@ SCHEMA_DDL: tuple[str, ...] = (
     PERMISSIONS,
     ARTIFACTS,
     ARTIFACT_LINEAGE,
+    ARTIFACT_GENERATIONS,
+    ARTIFACT_GC_STATE,
+    ARTIFACT_GC_ROOTS,
+    ARTIFACT_GC_TOMBSTONES,
+    ARTIFACT_DELETION_RECEIPTS,
     JOBS,
     JOB_ATTEMPTS,
     JOB_RESULTS,
@@ -509,6 +574,7 @@ SCHEMA_DDL: tuple[str, ...] = (
     AUDIT_LOGS,
     WORKFLOW_STAGE_RUNS,
     CONSUMED_MANIFESTS,
+    CREATE_CANDIDATE_RESERVATIONS,
     BATCH_FINGERPRINTS,
     STAGE_IDEMPOTENCY_KEYS,
 )
@@ -523,6 +589,11 @@ TABLE_NAMES: tuple[str, ...] = (
     "permissions",
     "artifacts",
     "artifact_lineage",
+    "artifact_generations",
+    "artifact_gc_state",
+    "artifact_gc_roots",
+    "artifact_gc_tombstones",
+    "artifact_deletion_receipts",
     "jobs",
     "job_attempts",
     "job_results",
@@ -547,6 +618,7 @@ TABLE_NAMES: tuple[str, ...] = (
     "audit_logs",
     "workflow_stage_runs",
     "consumed_manifests",
+    "candidate_reservations",
     "batch_fingerprints",
     "stage_idempotency_keys",
 )
@@ -566,6 +638,5 @@ def create_schema(conn) -> None:
     if hasattr(conn, "executescript"):
         conn.executescript(";\n".join(SCHEMA_DDL) + ";")
         return
-    for statement in SCHEMA_DDL:
-        cur = conn.cursor()
-        cur.execute(statement)
+    from .postgres_backend import create_schema as create_postgres_schema
+    create_postgres_schema(conn)

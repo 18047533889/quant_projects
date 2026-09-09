@@ -267,6 +267,21 @@ def normalize_evaluation_result(
     ``promotion_evidence`` so the runner no longer reads bare magic keys.
     """
     if isinstance(result, TrialEvaluationArtifact):
+        result.verify()
+        if result.trial_id != trial_id:
+            raise ValueError("evaluation artifact is bound to another trial")
+        expected = {
+            "objective_spec_ref": objective_spec_ref,
+            "split_ref": split_ref,
+            "fidelity": fidelity,
+        }
+        for name, value in expected.items():
+            if getattr(result, name) != value:
+                raise ValueError(
+                    f"evaluation artifact {name} does not match the issued request"
+                )
+        if not isinstance(result.evidence_ref, str) or not result.evidence_ref.strip():
+            raise ValueError("evaluation artifact requires a non-empty evidence_ref")
         return result
     if not isinstance(result, dict):
         raise TypeError("evaluation result must be a dict or TrialEvaluationArtifact")

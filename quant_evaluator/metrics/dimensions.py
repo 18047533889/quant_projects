@@ -142,6 +142,9 @@ def collect_dimension_metric_ids(
         known = set(registry.list_all_metric_ids())
     else:
         known = set(_registered_ids())
+    missing = set(DIMENSION_METRICS.get(dimension, ())) - known
+    if missing:
+        raise ValueError(f"Missing required dimension metrics: {sorted(missing)}")
     return tuple(
         sorted(
             metric_id
@@ -149,3 +152,15 @@ def collect_dimension_metric_ids(
             if metric_id in known
         )
     )
+
+
+def resolve_required_metrics(requested_ids, registry=None):
+    """Lossless compilation inventory; the caller may show every missing ID."""
+    requested = tuple(requested_ids)
+    if not requested or len(set(requested)) != len(requested):
+        raise ValueError("required metric IDs must be nonempty and unique")
+    known = set(registry.list_all_metric_ids()) if registry is not None else set(_registered_ids())
+    missing = tuple(x for x in requested if x not in known)
+    return {"requested": requested, "resolved": tuple(x for x in requested if x in known),
+            "unsupported": missing, "missing_required": missing,
+            "status": "WAIT" if missing else "RESOLVED_NOT_QUALIFIED"}

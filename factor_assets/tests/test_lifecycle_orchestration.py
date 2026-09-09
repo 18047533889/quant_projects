@@ -3,6 +3,7 @@ Test lifecycle orchestration and state transition validation.
 """
 
 import pytest
+from types import SimpleNamespace
 
 from factor_assets.contracts.asset import AssetMetadata
 from factor_assets.contracts.lifecycle import LifecycleState, LifecycleConflictError
@@ -281,15 +282,17 @@ def test_orchestrator_warnings_missing_decision_id():
         decision_id=None,
     )
 
-    result = orchestrator.execute_transition(request)
-
-    assert len(result.warnings) > 0
-    assert any("decision_id" in w for w in result.warnings)
+    with pytest.raises(LifecycleConflictError, match="typed trusted authorization"):
+        orchestrator.execute_transition(request)
 
 
 def test_orchestrator_complete_lifecycle_flow():
     """Test orchestrating complete lifecycle flow with events."""
-    orchestrator, repository = _orchestrator_with_asset()
+    _, repository = _orchestrator_with_asset()
+    approval=SimpleNamespace(factor_id="F001",content_hash="approval",decision="APPROVED")
+    certification=SimpleNamespace(factor_id="F001",content_hash="certification",status="CERTIFIED")
+    resolver=SimpleNamespace(resolve=lambda ref:{"approval":approval,"certification":certification}[ref])
+    orchestrator=LifecycleOrchestrator(repository,authorization_resolver=resolver)
 
     all_events = []
 
@@ -313,6 +316,7 @@ def test_orchestrator_complete_lifecycle_flow():
         from_state=LifecycleState.EVALUATED,
         to_state=LifecycleState.APPROVED,
         evidence_refs=("gate_results",),
+        authorization_ref="approval",
     )
     orchestrator.execute_transition(r2)
 
@@ -322,6 +326,7 @@ def test_orchestrator_complete_lifecycle_flow():
         from_state=LifecycleState.APPROVED,
         to_state=LifecycleState.PRODUCTION_READY,
         evidence_refs=("certification",),
+        authorization_ref="certification",
     )
     orchestrator.execute_transition(r3)
 

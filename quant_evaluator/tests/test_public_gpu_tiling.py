@@ -59,7 +59,7 @@ def test_public_api_tiles_before_upload_and_respects_validity(monkeypatch):
     out = evaluate(fb, lb, backend="cuda_strict", metrics=("rank_ic_series", "coverage", "quantile_returns_full"))
     assert uploaded == [2, 2, 1]
     assert out.factor_ids == fb.factor_ids
-    assert out.vector_metrics["quantile_returns"].shape == (4, 10, 5)
+    assert out.vector_metrics["quantile_returns_full"].shape == (5, 5)
     np.testing.assert_allclose(out.series_metrics["rank_ic_series"], _oracle(fb, lb), atol=1e-12)
     valid = fb.validity & lb.validity[:, :, None] & np.isfinite(fb.values)
     np.testing.assert_allclose(out.scalar_metrics["coverage"], valid.mean(axis=(0, 1)))
@@ -101,6 +101,57 @@ def test_budget_does_not_force_unfitting_minimum_tile():
         session.estimate_tile(None, 500, 2000, 8)
 
 
+def test_public_l20_quantile_monotonicity_uses_strict_shape_kernel(monkeypatch):
+    """QE-08: formal metric is monotonicity of the mean profile, not daily votes."""
+    T,N,F = 40,100,2
+    ranks = np.arange(N,dtype=float)
+    values = np.broadcast_to(ranks[None,:,None],(T,N,F)).copy()
+    validity = np.ones_like(values,dtype=bool)
+    validity[:,30:,1] = False  # five buckets cannot meet min_assets=10 for f1
+    labels = np.empty((T,N),dtype=float)
+    labels[:25] = ranks
+    labels[25:] = -ranks  # 15 daily profiles reverse, mean profile still increases
+    fb = FactorBatch(('mean_monotone','insufficient'),AxisRef('time','int',T),
+        AxisRef('asset','int',N),values,validity=validity)
+    lb = LabelBundle('ret',labels,1,decision_time=tuple(range(T)),
+        label_start_time=tuple(range(1,T+1)),label_end_time=tuple(range(2,T+2)))
+    metrics = ('quantile_monotonicity','daily_quantile_monotonicity_series',
+               'daily_quantile_monotonicity_rate')
+    cpu = evaluate(fb,lb,metrics=metrics)
+    monkeypatch.setattr(DeviceEvaluationSession,'estimate_tile',lambda *a,**k:1)
+    gpu = evaluate(fb,lb,backend='cuda_strict',metrics=metrics)
+    for mid in metrics:
+        np.testing.assert_allclose(gpu.artifacts[mid].values,cpu.artifacts[mid].values,
+            rtol=0,atol=1e-12,equal_nan=True)
+    assert cpu.get_metric('quantile_monotonicity','mean_monotone').value == 1.0
+    assert not cpu.get_metric('quantile_monotonicity','insufficient').valid
+    assert cpu.get_metric('daily_quantile_monotonicity_rate','mean_monotone').value == .625
+    assert cpu.get_metric('daily_quantile_monotonicity_rate','mean_monotone').observation_count == 40
+    daily = cpu.artifacts['daily_quantile_monotonicity_series'].values
+    np.testing.assert_equal(daily[:25,0],np.ones(25))
+    np.testing.assert_equal(daily[25:,0],np.zeros(15))
+    assert np.isnan(daily[:,1]).all()
+    assert gpu.metadata['shape_kernel_backend'] == 'cuda_strict'
+    assert gpu.metadata['shape_kernel_no_fallback'] is True
+    assert gpu.metadata['shape_kernel_dispatches'] == 6
+    assert gpu.metadata['factor_tiles_processed'] == 2
+    assert gpu.metadata['peak_vram'] > 0
+    assert gpu.metadata['vram_budget_bytes'] >= gpu.metadata['peak_vram']
+
+
+def test_strict_cuda_does_not_advertise_unwired_shape_metrics(monkeypatch):
+    fb,lb = _contracts()
+    opened = []
+    original = DeviceEvaluationSession._open
+    def track(self):
+        opened.append(True); return original(self)
+    monkeypatch.setattr(DeviceEvaluationSession,'_open',track)
+    from quant_evaluator.contracts.errors import UnsupportedMetricError
+    with pytest.raises(UnsupportedMetricError,match='u_shape_score'):
+        evaluate(fb,lb,backend='cuda_strict',metrics=('u_shape_score',))
+    assert opened == []
+
+
 def test_cuda_respects_sealed_split_before_device_open(monkeypatch):
     from quant_evaluator.contracts.sealed_split import SealedSplitRef
     from quant_evaluator.contracts.errors import SealedSplitOverlapError
@@ -128,7 +179,8 @@ def test_real_budget_multiple_tiles_transfer_labels_once():
     np.testing.assert_allclose(result.series_metrics["rank_ic_series"], expected, atol=1e-12)
     assert result.metadata["factor_tiles_processed"] == 2
     assert result.metadata["h2d_bytes"] == values.nbytes + lb.values.nbytes
-    assert result.metadata["d2h_bytes"] == expected.nbytes
+    # Daily values plus one authoritative int64 observation count per factor.
+    assert result.metadata["d2h_bytes"] == expected.nbytes + len(fb.factor_ids) * np.dtype(np.int64).itemsize
     assert result.metadata["peak_vram"] > 0
 
 
@@ -155,17 +207,22 @@ def test_overlapping_sessions_keep_thread_local_allocators():
     assert cp.cuda.get_allocator() == original
 
 
-def test_memmap_factor_slices_are_not_full_host_copies(monkeypatch, tmp_path):
+def test_memmap_is_snapshotted_once_then_factor_tiles_share_snapshot(monkeypatch, tmp_path):
     from dataclasses import replace
     fb, lb = _contracts()
     values = np.memmap(tmp_path / "factors.dat", mode="w+", dtype="float64", shape=fb.values.shape)
     values[:] = fb.values
     fb = replace(fb, values=values, validity=None)
+    # Writable caller-owned files cannot be a durable input snapshot. The
+    # contract copies once; tiling must still avoid one full copy per tile.
+    assert not np.shares_memory(fb.values, values)
+    values[:] = 999
+    assert not np.all(fb.values == 999)
     original = DeviceEvaluationSession.stage_factors
     shared = []
 
     def stage(self, chunk, ids, layout="T,F,N"):
-        shared.append(np.shares_memory(chunk, values))
+        shared.append(np.shares_memory(chunk, fb.values))
         return original(self, chunk, ids, layout)
 
     monkeypatch.setattr(DeviceEvaluationSession, "estimate_tile", lambda *a, **k: 2)

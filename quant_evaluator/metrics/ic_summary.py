@@ -30,22 +30,32 @@ def compute_icir(
     Returns:
         ICIR array of shape (F,), NaN if insufficient periods or zero std
     """
-    valid_periods = np.sum(~np.isnan(ic_series), axis=0)
+    values = np.asarray(ic_series)
+    _reject_boolean_ic_series(values)
+    if values.ndim != 2:
+        raise ValueError("ic_series must have shape (T, F)")
+    if isinstance(min_periods, bool) or not isinstance(min_periods, (int, np.integer)):
+        raise TypeError("min_periods must be an integer")
+    if min_periods < 2:
+        raise ValueError("min_periods must be at least 2 for sample standard deviation")
 
-    with np.errstate(invalid='ignore', divide='ignore'):
-        mean_ic = np.nanmean(ic_series, axis=0)
-        std_ic = np.nanstd(ic_series, axis=0, ddof=1)
-        icir = mean_ic / std_ic
-
-    insufficient = (
-        (valid_periods < min_periods)
-        | (std_ic < 1e-10)
-        | np.isnan(std_ic)
-        | ~np.isfinite(icir)
-    )
-    icir = np.where(insufficient, np.nan, icir)
-
-    return icir
+    values = values.astype(np.float64, copy=False)
+    result = np.full(values.shape[1], np.nan, dtype=np.float64)
+    for factor_index in range(values.shape[1]):
+        finite = values[np.isfinite(values[:, factor_index]), factor_index]
+        if finite.size < min_periods:
+            continue
+        # Raw ICIR is mean / sample std.  Only exact zero variance is
+        # undefined; a small but genuine dispersion must not be thresholded
+        # away because that changes the economic statistic by scale.
+        if np.all(finite == finite[0]):
+            continue
+        std_ic = float(np.std(finite, ddof=1))
+        with np.errstate(over="ignore", divide="ignore", invalid="ignore"):
+            value = float(np.mean(finite) / std_ic)
+        if np.isfinite(value):
+            result[factor_index] = value
+    return result
 
 
 def compute_ic_tstat(

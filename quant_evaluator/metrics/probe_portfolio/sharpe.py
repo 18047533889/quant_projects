@@ -40,7 +40,7 @@ def _as_1d(returns: np.ndarray, name: str = "returns") -> np.ndarray:
     return arr
 
 
-def compute_drawdown_persistence(returns: np.ndarray) -> float:
+def compute_drawdown_persistence(returns: np.ndarray, holding_days: int = 20, min_periods: int = 10) -> float:
     """DrawdownPersistence = 0.5*normalized(MaxDDDuration) + 0.5*normalized(TimeUnderWater)。
 
     归一化口径（全程 [0,1]，越大越差）：
@@ -58,8 +58,10 @@ def compute_drawdown_persistence(returns: np.ndarray) -> float:
     """
     returns = _as_1d(returns)
     valid = np.isfinite(returns)
-    if np.sum(valid) < 10:
-        return 0.0
+    if isinstance(holding_days, bool) or not isinstance(holding_days, (int, np.integer)) or holding_days < 1:
+        raise ValueError("holding_days must be a positive integer")
+    if np.sum(valid) < max(10, min_periods) or not valid.all():
+        return np.nan
     ret = returns[valid]
 
     dd_stats = compute_drawdown_statistics(ret, min_periods=10)
@@ -68,7 +70,7 @@ def compute_drawdown_persistence(returns: np.ndarray) -> float:
     max_dd_duration = float(dd_duration["max_drawdown_duration"])
     time_underwater = float(dd_stats["time_underwater_pct"])  # 百分数
 
-    norm_duration = min(max_dd_duration / (10.0 * 20.0), 1.0)
+    norm_duration = min(max_dd_duration / (10.0 * holding_days), 1.0)
     norm_tuw = min(time_underwater / 100.0, 1.0)
     return float(0.5 * norm_duration + 0.5 * norm_tuw)
 
@@ -162,6 +164,7 @@ def compute_portfolio_metrics(
     min_periods: int = 20,
     rolling_window: int = 60,
     rolling_quantile: float = 0.20,
+    holding_days: int = 20,
 ) -> dict:
     """真实 daily PnL 指标全家桶（Sharpe / Sortino / Calmar / MaxDD 等）。
 
@@ -181,8 +184,12 @@ def compute_portfolio_metrics(
             drawdown_persistence / rolling_sharpe_q20 / positive_month_ratio
     """
     returns = _as_1d(returns)
-    if returns.size == 0:
-        return {
+    base = {"status": "READY", "reason": None,
+            "return_basis": "portfolio_nav_return.v1",
+            "risk_duration_budget_days": 10 * holding_days}
+    if np.isfinite(returns).sum() < min_periods or not np.isfinite(returns).all():
+        return {**base, "status": "INSUFFICIENT_DATA",
+            "reason": f"need {min_periods} aligned finite returns",
             "sharpe": np.nan,
             "sortino": np.nan,
             "calmar": np.nan,
@@ -193,8 +200,10 @@ def compute_portfolio_metrics(
             "rolling_sharpe_q20": np.nan,
             "positive_month_ratio": np.nan,
             "drawdown_persistence": np.nan,
+            "max_drawdown_duration": np.nan,
+            "time_underwater_pct": np.nan,
         }
-    metrics = {
+    metrics = {**base,
         "sharpe": float(compute_sharpe_ratio(
             returns, risk_free_rate=risk_free_rate,
             periods_per_year=periods_per_year, min_periods=min_periods,
@@ -214,9 +223,41 @@ def compute_portfolio_metrics(
         "annualized_volatility": compute_annualized_volatility(returns, periods_per_year),
         "rolling_sharpe_q20": compute_rolling_sharpe_quantile(
             returns, window=rolling_window, quantile=rolling_quantile,
-            periods_per_year=periods_per_year, min_periods=min(30, rolling_window),
+            periods_per_year=periods_per_year, min_periods=min_periods,
         ),
         "positive_month_ratio": compute_positive_month_ratio(returns),
-        "drawdown_persistence": compute_drawdown_persistence(returns),
+        "drawdown_persistence": compute_drawdown_persistence(returns, holding_days=holding_days, min_periods=min_periods),
+        "max_drawdown_duration": float(compute_drawdown_duration(returns, min_periods=min_periods)["max_drawdown_duration"]),
+        "time_underwater_pct": float(compute_drawdown_statistics(returns, min_periods=min_periods)["time_underwater_pct"]),
     }
     return metrics
+
+
+def compute_active_metrics(portfolio_returns, benchmark_returns, *, periods_per_year=252,
+                           risk_free_rate=0., min_periods=20):
+    """Same-clock arithmetic active/IR and geometric relative-NAV contracts.
+
+    Absolute statistics consume the portfolio NAV return, never rP-rB.
+    Equal constant active returns have undefined IR (zero tracking error).
+    """
+    rp = _as_1d(portfolio_returns)
+    rb = _as_1d(benchmark_returns)
+    if rp.shape != rb.shape or not np.isfinite(rp).all() or not np.isfinite(rb).all():
+        raise ValueError("active metrics require aligned finite portfolio and benchmark trajectories")
+    if np.any(rp < -1) or np.any(rb <= -1):
+        raise ValueError("invalid portfolio or zero benchmark NAV")
+    active = rp-rb
+    relative = (1+rp)/(1+rb)-1
+    te = float(np.std(active, ddof=1)) if len(rp) >= min_periods else np.nan
+    ready = len(rp) >= min_periods
+    return {
+        "status": "READY" if ready else "INSUFFICIENT_DATA",
+        "reason": None if ready else f"need {min_periods} aligned returns",
+        "return_basis": "arithmetic_active_and_relative_nav.v1",
+        "active_mean": float(np.mean(active)) if len(rp) >= min_periods else np.nan,
+        "tracking_error": te*np.sqrt(periods_per_year),
+        "information_ratio": float(np.mean(active)/te*np.sqrt(periods_per_year)) if np.isfinite(te) and te > 0 else np.nan,
+        "relative_nav": np.cumprod(1+relative),
+        "relative_max_drawdown": float(compute_maximum_drawdown(relative)[0]) if len(rp) >= min_periods else np.nan,
+        "absolute": compute_portfolio_metrics(rp, periods_per_year, risk_free_rate, min_periods),
+    }

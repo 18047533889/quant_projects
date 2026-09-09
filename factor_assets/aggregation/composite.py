@@ -59,6 +59,23 @@ class RegimeType(Enum):
     DOWN = "DOWN"
     ALL = "ALL"
 
+class ReturnMeasure(Enum):
+    VWAP_FORWARD_HOLDING_RETURN = "VWAP_FORWARD_HOLDING_RETURN"
+    CROSS_SECTIONAL_MEAN_RETURN = "CROSS_SECTIONAL_MEAN_RETURN"
+
+@dataclass(frozen=True)
+class ReturnSeriesEvidence:
+    factor_id: str
+    values: tuple[float, ...]
+    measure: ReturnMeasure
+    horizon: int
+    snapshot_vintage: str
+    sample_ids: tuple[str, ...]
+    def __post_init__(self):
+        if not self.factor_id or not self.snapshot_vintage or not isinstance(self.measure,ReturnMeasure): raise ValueError("complete return semantic identity required")
+        if self.horizon < 1 or len(self.values)!=len(self.sample_ids) or len(set(self.sample_ids))!=len(self.sample_ids): raise ValueError("return horizon/sample axis mismatch")
+        if any(isinstance(v,bool) or not isinstance(v,(int,float)) or not math.isfinite(v) for v in self.values): raise ValueError("return samples must be finite numbers")
+
 
 class CompactCompositeValue:
     """Compact composite signal aggregate (bounded, no raw time series)."""
@@ -94,6 +111,7 @@ class CompactCompositeValue:
         self.agg_freq = agg_freq
         self.n_securities = n_securities
         self.n_observations = n_observations
+        if not isinstance(orientation, OrientationType): raise TypeError("orientation must be an OrientationType")
         self.horizon = horizon
         self.orientation = orientation
         self.regime = regime
@@ -154,9 +172,9 @@ class OrientationMapping:
             return agg_return
         if orientation is OrientationType.SHORT:
             return -agg_return
-        # LONG_SHORT: neutral exposure — use the absolute signal magnitude
-        # as the composite's carry, but do not stack a fabricated direction.
-        return abs(agg_return)
+        # LONG_SHORT is already a signed realized spread return.  Taking its
+        # magnitude would turn a realized loss into an apparent profit.
+        return agg_return
 
 
 class RegimeMapping:
@@ -191,6 +209,7 @@ class CompositeEvaluator:
         orientation: OrientationType = OrientationType.LONG,
         regime_weights: Optional[Mapping[str, float]] = None,
     ):
+        if not isinstance(orientation, OrientationType): raise TypeError("orientation must be an OrientationType")
         self.horizon = horizon
         self.orientation = orientation
         self.regime_weights = regime_weights or {"ALL": 1.0}
@@ -207,6 +226,7 @@ class CompositeEvaluator:
         agg_freq: str,
         n_observations: int,
         evidence_basis_ref: str,
+        authoritative: bool = False,
     ) -> CompactCompositeValue:
         """Compose a compact composite value from per-factor vwap-to-vwap
         return series.
@@ -221,6 +241,9 @@ class CompositeEvaluator:
         """
         if not spec.factor_ids:
             raise ValueError("spec.factor_ids cannot be empty")
+        if not isinstance(authoritative,bool): raise TypeError("authoritative must be bool")
+        if authoritative and any(not isinstance(cluster_returns.get(fid),ReturnSeriesEvidence) for fid in spec.factor_ids):
+            raise EvidenceUnavailableError("authoritative composition requires typed ReturnSeriesEvidence for every factor")
         missing = [fid for fid in spec.factor_ids if fid not in cluster_returns]
         if missing:
             raise EvidenceUnavailableError(
@@ -230,13 +253,27 @@ class CompositeEvaluator:
         # Aggregate each factor's horizon return.
         horizon_returns: Dict[str, float] = {}
         for fid in spec.factor_ids:
-            series = cluster_returns[fid]
+            supplied = cluster_returns[fid]
+            if isinstance(supplied,ReturnSeriesEvidence):
+                if supplied.factor_id!=fid or supplied.measure is not ReturnMeasure.VWAP_FORWARD_HOLDING_RETURN or supplied.horizon!=self.horizon:
+                    raise ValueError("return evidence semantic identity mismatch")
+                series=list(supplied.values)
+            else:
+                series = supplied
             if len(series) < min(self.horizon, 1):
                 raise InsufficientObservations(f"insufficient series for {fid}")
             horizon_returns[fid] = self.horizon_mapping.aggregate_vwap_to_vwap_return(series)
 
-        # Compose with equal weights on the finite aggregate returns.
-        weights = {fid: 1.0 / len(spec.factor_ids) for fid in spec.factor_ids}
+        if spec.weighting_scheme is WeightingScheme.EQUAL:
+            values = [1.0] * len(spec.factor_ids)
+        elif spec.weighting_scheme is WeightingScheme.CUSTOM:
+            values = list(spec.custom_weights or ())
+        else:
+            raise ValueError("fitted weighting schemes require an AggregationFitArtifact; compose cannot silently use equal weights")
+        total_weight = sum(values)
+        if not math.isfinite(total_weight) or total_weight <= 0:
+            raise ValueError("aggregation weights must have a positive finite sum")
+        weights = {fid: values[i] / total_weight for i, fid in enumerate(spec.factor_ids)}
         raw_composite = sum(
             weights[fid] * horizon_returns[fid] for fid in spec.factor_ids
         )
@@ -246,8 +283,9 @@ class CompositeEvaluator:
         regime_agg = sum(
             w * oriented
             for w in self.regime_mapping.regime_weights.values()
-        ) / len(self.regime_mapping.regime_weights)
-        regime_agg = max(0.0, regime_agg) if not math.isfinite(regime_agg) else regime_agg
+        ) / sum(self.regime_mapping.regime_weights.values())
+        if not math.isfinite(regime_agg):
+            raise NumericalFailure("regime aggregation is non-finite")
 
         return CompactCompositeValue(
             composite_factor_id=composite_factor_id,
@@ -270,7 +308,11 @@ class CompositeEvaluator:
         weights = result.computed_weights
         if not weights:
             return {"available": False}
-        hhi = sum(w * w for w in weights)
+        gross = sum(abs(w) for w in weights)
+        if not math.isfinite(gross) or gross <= 0:
+            return {"available": False}
+        normalized = [abs(w) / gross for w in weights]
+        hhi = sum(w * w for w in normalized)
         n = len(weights)
         return {
             "available": True,

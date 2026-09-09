@@ -23,6 +23,13 @@ class BatchEvaluationBundle:
     series_metrics: Dict[str, np.ndarray] = field(default_factory=dict)   # (T,F)
     vector_metrics: Dict[str, np.ndarray] = field(default_factory=dict)   # (Q,F)
     metadata: Dict[str, Any] = field(default_factory=dict)
+    observation_counts: Dict[str, np.ndarray] = field(default_factory=dict)
+
+    def get_metric(self, metric_id):
+        for group in (self.scalar_metrics, self.series_metrics, self.vector_metrics):
+            if metric_id in group:
+                return group[metric_id]
+        raise KeyError(metric_id)
 
     def for_factor(self, factor_id: str) -> Dict[str, Any]:
         """Project a single factor's scalar/vector view."""

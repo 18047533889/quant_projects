@@ -8,8 +8,18 @@ from .objective import (
     ObjectiveSpec,
 )
 from .search_budget import SearchBudget, BudgetTracker
+from .campaign_store import CampaignStateError, DurableBudgetTracker, Reservation, SQLiteCampaignStore
+from .statistical_governance import (
+    HorizonDiagnosis, RetentionEvidence, SplitEvidenceRef, SplitPurpose,
+    diagnose_horizon_curve, retention_evidence,
+)
 from .trial import Trial, TrialStatus
-from .splits import EvaluationProtocol, SplitPlan
+from .splits import (
+    EvaluationProtocol,
+    SealedTestEvaluationOutcome,
+    SelectedExecutionSpec,
+    SplitPlan,
+)
 from .validator import TrialValidatorIdentity, MutationGrammarValidator
 from .library_snapshot_ref import LibrarySnapshotRef
 from .treatment_integrity import (
@@ -46,10 +56,22 @@ __all__ = [
     "DEFAULT_METRIC_NAME",
     "SearchBudget",
     "BudgetTracker",
+    "CampaignStateError",
+    "DurableBudgetTracker",
+    "Reservation",
+    "SQLiteCampaignStore",
+    "HorizonDiagnosis",
+    "RetentionEvidence",
+    "SplitEvidenceRef",
+    "SplitPurpose",
+    "diagnose_horizon_curve",
+    "retention_evidence",
     "Trial",
     "TrialStatus",
     "SplitPlan",
     "EvaluationProtocol",
+    "SelectedExecutionSpec",
+    "SealedTestEvaluationOutcome",
     "TrialValidatorIdentity",
     "MutationGrammarValidator",
     "LibrarySnapshotRef",

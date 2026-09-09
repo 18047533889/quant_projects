@@ -4,8 +4,9 @@ import numpy as np
 import pytest
 
 from modeling.benchmark import (
-    PREDICTION_SIZES, RETRAIN_SIZES, RuntimeBoundary,
+    BENCHMARK_PHASES, PREDICTION_SIZES, RETRAIN_SIZES, BenchmarkResult, BenchmarkSpec, RuntimeBoundary,
     deterministic_resource_parity, seed_stability, validate_benchmark_sizes,
+    measure_synchronized_phase,
 )
 from modeling.ledger import (
     ArtifactDependencyDAG, ArtifactSchemaMigration, FeatureBundle, FrozenModelSchema,
@@ -13,18 +14,26 @@ from modeling.ledger import (
     RetrainFingerprint, RuntimeEnvironment, TrainingRun,
 )
 from modeling.monitoring import (
-    DRIFT_DIMENSIONS, DataQualityCertificate, DriftContract, DriftThreshold,
-    ModelCostContract, MonitorAction, RealisedMetric, production_drift_metrics,
+    DRIFT_DIMENSIONS, CampaignRequestPolicy, DataQualityCertificate, DriftContract, DriftThreshold,
+    LifecycleAction, LifecycleEvent, LifecycleReason, ModelCostContract, MonitorAction,
+    RealisedMetric, production_drift_metrics,
 )
 
 
 def test_production_drift_contract_has_all_dimensions_and_distinct_actions():
     thresholds = {name: DriftThreshold(0.05, retrain=0.2, block=0.5) for name in DRIFT_DIMENSIONS}
     contract = DriftContract(thresholds)
-    actions = contract.assess({name: (0.1 if name == "psi" else 0.3 if name == "ks" else 0.7)
-                               for name in DRIFT_DIMENSIONS})
+    metrics = {name: (0.1 if name == "psi" else 0.3 if name == "ks" else 0.7)
+               for name in DRIFT_DIMENSIONS}
+    policy = CampaignRequestPolicy("c1", 3, "a1", "f1", "a0", "f0")
+    realised = {
+        name: RealisedMetric("p1", name, .1, 1, "2026-01-01", "2026-02-01", "2026-02-01")
+        for name in ("prediction_rank", "ic_decay")
+    }
+    actions = contract.assess(metrics, campaign_policy=policy,
+                              realised_metrics=realised, asof="2026-02-01")
     assert actions["psi"] is MonitorAction.MONITOR
-    assert actions["ks"] is MonitorAction.RETRAIN
+    assert actions["ks"] is MonitorAction.CAMPAIGN_REQUEST
     assert actions["wasserstein"] is MonitorAction.PROMOTION_BLOCK
     with pytest.raises(ValueError, match="missing drift metrics"):
         contract.assess({"psi": 0.0})
@@ -130,3 +139,45 @@ def test_real_scale_benchmark_scaffold_and_runtime_training_boundary():
     for operation in RuntimeBoundary.TRAINING_OPERATIONS:
         with pytest.raises(RuntimeError, match="cannot perform"):
             RuntimeBoundary.require_runtime(operation)
+
+
+def test_gpu_benchmark_times_through_sync_and_requires_complete_receipt():
+    events = []
+    ticks = iter((1.0, 3.5))
+    value, elapsed = measure_synchronized_phase(
+        lambda: events.append("kernel") or 7,
+        lambda: events.append("sync"), clock=lambda: next(ticks),
+    )
+    assert (value, elapsed, events) == (7, 2.5, ["kernel", "sync"])
+    spec = BenchmarkSpec("gpu-a", "deps-v1", 10, 20, 3, "float32", 20,
+                         "qe-profile-v1", 4096, "cold", "cuda")
+    phases = {name: .1 for name in BENCHMARK_PHASES}
+    receipt = BenchmarkResult(200, spec=spec, phase_seconds=phases,
+                              device_synchronized=True, correctness_verified=True,
+                              max_abs_error=1e-7, missing_state_ref="mask-v1")
+    receipt.require_publishable()
+    assert receipt.end_to_end_seconds == pytest.approx(.8)
+    with pytest.raises(ValueError, match="synchronization"):
+        BenchmarkResult(200, spec=spec, phase_seconds=phases,
+                        correctness_verified=True, max_abs_error=0,
+                        missing_state_ref="mask-v1").require_publishable()
+
+
+@pytest.mark.parametrize(
+    "reason,action,retryable,terminal,gc_candidate",
+    [
+        (LifecycleReason.WAITING_LABEL, LifecycleAction.WAIT_FOR_MATURITY, True, False, False),
+        (LifecycleReason.DATA_PENDING, LifecycleAction.WAIT_FOR_DATA, True, False, False),
+        (LifecycleReason.BUDGET_STOP, LifecycleAction.REQUEST_BUDGET, True, False, False),
+        (LifecycleReason.INVALID_SPEC, LifecycleAction.TERMINAL_REJECT, False, True, True),
+        (LifecycleReason.IMPLEMENTATION_ERROR, LifecycleAction.RETRY_AFTER_FIX, True, False, False),
+        (LifecycleReason.REJECTED_QUALITY, LifecycleAction.TERMINAL_REJECT, False, True, True),
+    ],
+)
+def test_lifecycle_reason_preserves_cause_and_drives_retry_gc_policy(
+    reason, action, retryable, terminal, gc_candidate
+):
+    event = LifecycleEvent("intent-1", reason, "original stack/cause", "2026-09-07T00:00:00Z",
+                           "RUNNING", "STOPPED")
+    assert event.original_cause == "original stack/cause"
+    assert event.disposition == (event.disposition.__class__(action, retryable, terminal, gc_candidate))

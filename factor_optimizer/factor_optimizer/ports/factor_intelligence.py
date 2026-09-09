@@ -25,7 +25,7 @@ Ownership & authority
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Protocol, Sequence, runtime_checkable
+from typing import Any, Mapping, Optional, Protocol, Sequence, runtime_checkable
 
 # ---------------------------------------------------------------------------
 # Health vocabulary
@@ -291,23 +291,101 @@ class FactorIntelligenceProvider(Protocol):
     def get_health_card(
         self, factor_definition_id: str, evaluation_ref: str
     ) -> FactorHealthView:
-        """Health-card view for a factor definition + evaluation.
-
-        Returns an explicit ``UNKNOWN`` view or raises
-        :class:`FactorIntelligenceUnknownFactorError` for unknown ids.
-        """
+        """Health-card view for a factor definition + evaluation."""
         ...
 
     def get_diagnoses(
         self, factor_definition_id: str, health_ref: str
     ) -> Sequence[DiagnosisView]:
-        """Diagnoses for a factor definition + health-card ref.
-
-        Empty sequence is legal (a healthy factor has no diagnoses); an
-        unknown id raises :class:`FactorIntelligenceUnknownFactorError`.
-        """
+        """Diagnoses for a factor definition + health-card ref."""
         ...
 
+
+@runtime_checkable
+class SelectionDecisionRequestView(Protocol):
+    """Structural FO view of FA's authoritative decision request."""
+
+    request_id: str
+    policy_id: str
+    policy_content_hash: str
+    comparison_context_hash: str
+    purpose: str
+    decision_level: str
+    baseline_ref: Optional[str]
+    candidates: Sequence[Any]
+    required_final_fidelity: str
+    hypothesis_family_ref: str
+
+    @property
+    def content_hash(self) -> str: ...
+
+    @property
+    def candidate_set_hash(self) -> str: ...
+
+
+@runtime_checkable
+class SelectionDecisionReceiptView(Protocol):
+    """Structural FO view of the immutable FA decision receipt."""
+
+    request_id: str
+    request_hash: str
+    policy_id: str
+    policy_content_hash: str
+    comparison_context_hash: str
+    candidate_set_hash: str
+    decision_id: str
+    content_hash: str
+    status: Any
+    eligibility: Mapping[str, bool]
+    gate_receipts: Sequence[Any]
+    point_utility: Mapping[str, Optional[float]]
+    conservative_utility: Mapping[str, Optional[float]]
+    relationship: Mapping[str, Any]
+    effect_refs: Mapping[str, Optional[str]]
+    qualification_scope: Mapping[str, Optional[str]]
+    reasons: Sequence[str]
+    winner_id: Optional[str]
+    retained_ids: Sequence[str]
+    final_fidelity: str
+
+
+@runtime_checkable
+class DecisionProvider(Protocol):
+    """Sole selection authority consumed by FO; implementations live in FA."""
+
+    def decide(
+        self, request: SelectionDecisionRequestView
+    ) -> SelectionDecisionReceiptView: ...
+
+
+def require_bound_decision_receipt(
+    request: SelectionDecisionRequestView,
+    receipt: SelectionDecisionReceiptView,
+) -> SelectionDecisionReceiptView:
+    """Fail closed unless an FA receipt is bound to the exact FO request."""
+    bindings = {
+        "request_id": request.request_id,
+        "request_hash": request.content_hash,
+        "policy_id": request.policy_id,
+        "policy_content_hash": request.policy_content_hash,
+        "comparison_context_hash": request.comparison_context_hash,
+        "candidate_set_hash": request.candidate_set_hash,
+        "final_fidelity": request.required_final_fidelity,
+    }
+    for name, expected in bindings.items():
+        if getattr(receipt, name, None) != expected:
+            raise ValueError(f"decision receipt {name} binding mismatch")
+    if not isinstance(receipt.decision_id, str) or not receipt.decision_id:
+        raise ValueError("decision receipt requires decision_id")
+    if not isinstance(receipt.content_hash, str) or not receipt.content_hash:
+        raise ValueError("decision receipt requires content_hash")
+    status = getattr(receipt.status, "value", receipt.status)
+    if status in {"WAIT", "INCOMPARABLE"}:
+        if any(value is not None for value in receipt.point_utility.values()):
+            raise ValueError("unready decision must not publish point utility")
+        if any(value is not None for value in receipt.conservative_utility.values()):
+            raise ValueError("unready decision must not publish conservative utility")
+    return receipt
 
 # ---------------------------------------------------------------------------
 # Unknown-factor sentinel
@@ -385,4 +463,8 @@ __all__ = [
     "FactorIntelligenceView",
     "FactorIntelligenceUnknownFactorError",
     "unknown_factor_view",
+    "SelectionDecisionRequestView",
+    "SelectionDecisionReceiptView",
+    "DecisionProvider",
+    "require_bound_decision_receipt",
 ]

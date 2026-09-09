@@ -31,20 +31,33 @@ def _finite_columns(m):
     return cp.sum(cp.isfinite(m), axis=0) >= 2
 
 
-def quantile_monotonicity(qr):
+def quantile_monotonicity(qr, *, return_device=False):
     cp = _import_cp()
     m = _as_matrix(qr)
     nq, F = m.shape
     out = cp.full(F, cp.nan)
     if nq < 2:
-        return out.get()
+        return out if return_device else out.get()
     finite = cp.isfinite(m)
     pairs = finite[:-1, :] & finite[1:, :]
     n = cp.sum(pairs, axis=0).astype(cp.float64)
     inc = cp.sum((m[1:, :] > m[:-1, :]) & pairs, axis=0)
     ratio = inc / cp.maximum(n, 1)
     out = cp.where(n >= 1, ratio, cp.nan)
-    return out.get()
+    return out if return_device else out.get()
+
+
+def daily_quantile_monotonicity(daily_qr, *, return_device=False):
+    """Per-date finite-adjacent monotonicity fractions over ``(T,Q,F)``."""
+    cp = _import_cp()
+    values = cp.asarray(daily_qr, dtype=cp.float64)
+    if values.ndim != 3:
+        raise ValueError("daily quantile returns must have shape (T,Q,F)")
+    pairs = cp.isfinite(values[:, :-1, :]) & cp.isfinite(values[:, 1:, :])
+    denominator = cp.sum(pairs, axis=1)
+    increasing = cp.sum((values[:, 1:, :] > values[:, :-1, :]) & pairs, axis=1)
+    out = cp.where(denominator > 0, increasing / cp.maximum(denominator, 1), cp.nan)
+    return out if return_device else out.get()
 
 
 def quantile_curvature(qr):

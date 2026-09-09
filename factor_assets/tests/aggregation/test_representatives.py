@@ -6,6 +6,7 @@ from factor_assets.aggregation.representatives import (
     RepresentativeSelection,
     FamilyRepresentativeSelector,
     ICProvider,
+    ICEvidenceReceipt,
     CorrelationProvider,
 )
 
@@ -17,7 +18,9 @@ class MockICProvider:
         self.ic_data = ic_data
 
     def get_ic(self, factor_id: str, universe_ref=None, lookback_periods=None):
-        return self.ic_data.get(factor_id)
+        value=self.ic_data.get(factor_id)
+        if value is None: return None
+        return ICEvidenceReceipt(factor_id,value,"ev:"+factor_id,universe_ref,"window","snapshot","split","label","ctx",True)
 
 
 class MockCorrelationProvider:
@@ -193,6 +196,8 @@ def test_selector_max_ic():
         factor_ids=("f1", "f2", "f3", "f4"),
         method=RepresentativeSelectionMethod.MAX_IC,
         max_representatives=2,
+        universe_ref="U", ic_window_ref="window", ic_snapshot_ref="snapshot",
+        ic_split_ref="split", ic_label_ref="label", comparison_context_hash="ctx",
     )
 
     assert selection.num_selected == 2
@@ -202,7 +207,7 @@ def test_selector_max_ic():
 
 
 def test_selector_max_ic_with_negative_ic():
-    """Test MAX_IC selection uses absolute IC."""
+    """Test MAX_IC respects the frozen signed metric direction."""
     ic_provider = MockICProvider({
         "f1": 0.10,
         "f2": -0.15,  # Negative IC
@@ -216,11 +221,12 @@ def test_selector_max_ic_with_negative_ic():
         factor_ids=("f1", "f2", "f3"),
         method=RepresentativeSelectionMethod.MAX_IC,
         max_representatives=1,
+        universe_ref="U", ic_window_ref="window", ic_snapshot_ref="snapshot",
+        ic_split_ref="split", ic_label_ref="label", comparison_context_hash="ctx",
     )
 
-    # Should select f2 with highest absolute IC
-    assert selection.selected_factor_ids == ("f2",)
-    assert selection.ic_values == (0.15,)
+    assert selection.selected_factor_ids == ("f1",)
+    assert selection.ic_values == (0.10,)
 
 
 def test_selector_max_ic_missing_data():
@@ -238,6 +244,8 @@ def test_selector_max_ic_missing_data():
         factor_ids=("f1", "f2", "f3"),
         method=RepresentativeSelectionMethod.MAX_IC,
         max_representatives=2,
+        universe_ref="U", ic_window_ref="window", ic_snapshot_ref="snapshot",
+        ic_split_ref="split", ic_label_ref="label", comparison_context_hash="ctx",
     )
 
     # Should select f3 and f1, with warning about f2
@@ -328,10 +336,10 @@ def test_selector_equal_weight():
         factor_ids=("f1", "f2", "f3", "f4", "f5", "f6"),
         method=RepresentativeSelectionMethod.EQUAL_WEIGHT,
         max_representatives=3,
+        subfamily_assignments={"f1":"a","f2":"a","f3":"b","f4":"b","f5":"c","f6":"c"},
     )
 
     assert selection.num_selected == 3
-    # Should select evenly spaced factors
     assert selection.selected_factor_ids == ("f1", "f3", "f5")
 
 
@@ -344,6 +352,7 @@ def test_selector_equal_weight_exact_fit():
         factor_ids=("f1", "f2", "f3"),
         method=RepresentativeSelectionMethod.EQUAL_WEIGHT,
         max_representatives=3,
+        subfamily_assignments={"f1":"a","f2":"b","f3":"c"},
     )
 
     assert selection.num_selected == 3
@@ -486,6 +495,8 @@ def test_selector_selection_id_format():
         method=RepresentativeSelectionMethod.MAX_IC,
         max_representatives=1,
         universe_ref="US_LARGE",
+        ic_window_ref="window", ic_snapshot_ref="snapshot", ic_split_ref="split",
+        ic_label_ref="label", comparison_context_hash="ctx",
     )
 
     # Selection ID should contain family and method

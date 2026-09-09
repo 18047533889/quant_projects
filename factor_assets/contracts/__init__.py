@@ -58,6 +58,9 @@ from factor_assets.contracts.assembly_evidence import (
     AssemblyEvidence,
     LibraryCandidateEvidence,
     AssemblyPolicy,
+    AssemblyClusterMembership,
+    GreedySelectionStep,
+    AssemblySelectionEvidence,
 )
 from factor_assets.contracts.fingerprint import (
     SimilarityFingerprintArtifact,
@@ -115,6 +118,9 @@ __all__ = [
     "AssemblyEvidence",
     "LibraryCandidateEvidence",
     "AssemblyPolicy",
+    "AssemblyClusterMembership",
+    "GreedySelectionStep",
+    "AssemblySelectionEvidence",
     # Fingerprint / ANN (DLIB-FA-006/52)
     "SimilarityFingerprintArtifact",
     "ANNIndexArtifact",

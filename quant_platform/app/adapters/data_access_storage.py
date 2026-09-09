@@ -60,6 +60,13 @@ from data_access.write.object_store_generation_publisher import (
 from quant_platform.app.contracts import (
     ArtifactRef,
     CacheEvictionPolicy,
+    DeletionReceipt,
+    DeletionStatus,
+    GCDryRunPlan,
+    GCObject,
+    GCReferenceAuthority,
+    LocalArtifactCache,
+    TombstoneClaimStatus,
     ObjectMetadata,
 )
 
@@ -70,6 +77,7 @@ __all__ = [
     "LocalArtifactCacheImpl",
     "ObjectMetadataImpl",
     "sha256_bytes",
+    "RootAwareGarbageCollector",
 ]
 
 # The fixed object key (relative to the generation dir) holding a published payload.
@@ -508,6 +516,17 @@ class LocalArtifactCacheImpl:
             total = self._hits + self._misses
             return float(self._hits / total) if total else 0.0
 
+    def evict(self, content_hash: str) -> bool:
+        """Evict one exact content version; idempotent and lock-protected."""
+        with self._lock:
+            existed = content_hash in self._index or (self.root / content_hash).exists()
+            self._index.pop(content_hash, None)
+            try:
+                (self.root / content_hash).unlink()
+            except FileNotFoundError:
+                pass
+            return existed
+
     def _evict_locked(self) -> None:
         while self._total_bytes_locked() > self.max_bytes and self._index:
             oldest_hash, _ = next(iter(self._index.items()))
@@ -519,3 +538,118 @@ class LocalArtifactCacheImpl:
 
     def _total_bytes_locked(self) -> int:
         return sum(sz for sz, _ in self._index.values())
+
+
+class RootAwareGarbageCollector:
+    """Dry-run-first GC over the existing registry and DataAccess authorities."""
+
+    def __init__(
+        self,
+        storage: DataAccessStorageAdapter,
+        reference_authority: GCReferenceAuthority,
+        *,
+        cache: LocalArtifactCache | None = None,
+    ) -> None:
+        if not isinstance(reference_authority, GCReferenceAuthority):
+            raise TypeError("reference_authority must implement GCReferenceAuthority")
+        self.storage = storage
+        self.reference_authority = reference_authority
+        self.cache = cache
+
+    def dry_run(self) -> GCDryRunPlan:
+        snapshot = self.reference_authority.snapshot_for_gc()
+        by_key = {obj.key: obj for obj in snapshot.objects}
+        live = set(snapshot.roots)
+        pending = list(snapshot.roots)
+        while pending:
+            parent = pending.pop()
+            for child in snapshot.references.get(parent, ()):
+                if child not in live:
+                    live.add(child)
+                    pending.append(child)
+        candidates = tuple(sorted(
+            (obj for key, obj in by_key.items() if obj.terminal and key not in live),
+            key=lambda obj: obj.key,
+        ))
+        return GCDryRunPlan(
+            snapshot_epoch=snapshot.epoch,
+            candidates=candidates,
+            live_keys=frozenset(live),
+            estimated_reclaim_bytes=sum(obj.size_bytes for obj in candidates),
+        )
+
+    def sweep(self, plan: GCDryRunPlan) -> tuple[DeletionReceipt, ...]:
+        """Delete only atomically tombstoned exact versions from an explicit plan."""
+        if not isinstance(plan, GCDryRunPlan):
+            raise TypeError("sweep requires GCDryRunPlan")
+        receipts: list[DeletionReceipt] = []
+        for obj in plan.candidates:
+            prior = self.reference_authority.get_deletion_receipt(*obj.key)
+            if prior is not None:
+                receipts.append(prior)
+                continue
+            claim = self.reference_authority.claim_gc_tombstone(
+                obj.object_id, obj.object_version, expected_epoch=plan.snapshot_epoch
+            )
+            if claim.status is TombstoneClaimStatus.ALREADY_TERMINAL:
+                # Another worker owns the physical phase.  Never overwrite its
+                # receipt with a weaker status; wait briefly for durable finalization.
+                for _ in range(100):
+                    prior = self.reference_authority.get_deletion_receipt(*obj.key)
+                    if prior is not None:
+                        receipts.append(prior)
+                        break
+                    time.sleep(0.001)
+                else:
+                    # Crash replay: the tombstone is already the publication
+                    # barrier, so exact-version delete is safe and idempotent.
+                    self.storage.delete(obj.storage_uri)
+                    cache_evicted = self.cache.evict(obj.content_hash) if self.cache is not None else False
+                    try:
+                        self.storage.head(obj.storage_uri)
+                    except DataError:
+                        absent = True
+                    else:
+                        absent = False
+                    recovered = DeletionReceipt(
+                        obj.object_id, obj.object_version, obj.storage_uri, obj.content_hash,
+                        DeletionStatus.PHYSICAL_DELETED if absent else DeletionStatus.PROVIDER_RETENTION_PENDING,
+                        datetime.now(timezone.utc), claim.claim_id, cache_evicted, absent,
+                        "" if absent else "provider still reports exact object version",
+                    )
+                    receipts.append(self.reference_authority.record_deletion_receipt(recovered))
+                continue
+            if claim.status is not TombstoneClaimStatus.CLAIMED:
+                receipt = DeletionReceipt(
+                    obj.object_id, obj.object_version, obj.storage_uri, obj.content_hash,
+                    DeletionStatus.SKIPPED_PROTECTED, datetime.now(timezone.utc),
+                    claim.claim_id, False, False, claim.reason or claim.status.value,
+                )
+                # A protection decision belongs to this plan/epoch, not to the
+                # object's terminal deletion history. Persisting it would make
+                # a later root release impossible to collect.
+                receipts.append(receipt)
+                continue
+
+            # The authority's persisted tombstone is the publication barrier:
+            # after CLAIMED, no new registry reference may legally target this version.
+            self.storage.delete(obj.storage_uri)
+            cache_evicted = self.cache.evict(obj.content_hash) if self.cache is not None else False
+            try:
+                self.storage.head(obj.storage_uri)
+            except DataError:
+                absent = True
+            else:
+                absent = False
+            status = (
+                DeletionStatus.PHYSICAL_DELETED
+                if absent else DeletionStatus.PROVIDER_RETENTION_PENDING
+            )
+            receipt = DeletionReceipt(
+                obj.object_id, obj.object_version, obj.storage_uri, obj.content_hash,
+                status, datetime.now(timezone.utc), claim.claim_id,
+                cache_evicted, absent,
+                "" if absent else "provider still reports exact object version",
+            )
+            receipts.append(self.reference_authority.record_deletion_receipt(receipt))
+        return tuple(receipts)

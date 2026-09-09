@@ -6,6 +6,8 @@ from factor_assets.aggregation.composite import (
     CompositeEvaluator,
     OrientationType,
     RegimeType,
+    ReturnMeasure,
+    ReturnSeriesEvidence,
 )
 from factor_assets.aggregation.specs import (
     AggregationResult,
@@ -142,5 +144,25 @@ def test_composite_regime_weights():
         evidence_basis_ref="ev1",
     )
     assert value.regime is RegimeType.ALL
-    # raw 0.02 x regime weights (1.0 + 0.5) / 2 = 0.015.
-    assert value.agg_vwap_to_vwap_return == pytest.approx(0.015)
+    # Normalization is by total regime weight; rescaling weights is invariant.
+    assert value.agg_vwap_to_vwap_return == pytest.approx(0.02)
+
+def test_t98_orientation_and_return_measure_identity_fail_closed():
+    with pytest.raises(TypeError,match="OrientationType"):
+        CompositeEvaluator(horizon=2,orientation="LONG")
+    ev=CompositeEvaluator(horizon=2,orientation=OrientationType.LONG)
+    wrong=ReturnSeriesEvidence("F1",(.01,.02),ReturnMeasure.CROSS_SECTIONAL_MEAN_RETURN,2,"snap",("a","b"))
+    right=ReturnSeriesEvidence("F2",(.02,.03),ReturnMeasure.VWAP_FORWARD_HOLDING_RETURN,2,"snap",("a","b"))
+    with pytest.raises(ValueError,match="semantic identity"):
+        ev.compose("CF",make_spec(),{"F1":wrong,"F2":right},agg_freq="daily",n_observations=2,evidence_basis_ref="basis",authoritative=True)
+
+def test_t98_typed_holding_return_horizon_must_match_evaluator():
+    ev=CompositeEvaluator(horizon=2)
+    values={fid:ReturnSeriesEvidence(fid,(.01,.02,.03),ReturnMeasure.VWAP_FORWARD_HOLDING_RETURN,1,"snap",("a","b","c")) for fid in ("F1","F2")}
+    with pytest.raises(ValueError,match="semantic identity"):
+        ev.compose("CF",make_spec(),values,agg_freq="daily",n_observations=3,evidence_basis_ref="basis",authoritative=True)
+
+def test_t98_authoritative_path_rejects_naked_finite_series():
+    with pytest.raises(EvidenceUnavailableError,match="typed ReturnSeriesEvidence"):
+        CompositeEvaluator(horizon=1).compose("CF",make_spec(),{"F1":[.1],"F2":[.2]},
+            agg_freq="daily",n_observations=1,evidence_basis_ref="basis",authoritative=True)

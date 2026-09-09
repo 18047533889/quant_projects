@@ -108,12 +108,14 @@ def gpu_neutralized_rank_ic(
         resid = residuals[t]  # (N,) on device
         y = fwd[t]  # (N,) on device
         valid = cp.isfinite(resid) & cp.isfinite(y)
-        if int(cp.sum(valid)) < 2:
+        if int(cp.sum(valid)) < min_obs:
             continue
         r = resid[valid]
         yy = y[valid]
-        r_rank = cp.argsort(cp.argsort(r)).astype(cp.float64)
-        y_rank = cp.argsort(cp.argsort(yy)).astype(cp.float64)
+        from quant_evaluator.kernels.gpu.rank import batched_rank
+        # Shared average-tie rank authority; ordinal argsort ranks are not Spearman.
+        r_rank = batched_rank(r[None, :], pct=False)[0]
+        y_rank = batched_rank(yy[None, :], pct=False)[0]
         r_rank = r_rank - cp.mean(r_rank)
         y_rank = y_rank - cp.mean(y_rank)
         denom = cp.sqrt(cp.sum(r_rank ** 2) * cp.sum(y_rank ** 2))

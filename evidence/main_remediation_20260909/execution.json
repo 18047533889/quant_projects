@@ -1,0 +1,174 @@
+{
+  "checkout": "/home/sunhaiwei/quant_projects",
+  "head_before_commit": "91b6539c0df3bbfdd96262828375fd71860fd567",
+  "branch": "main",
+  "source_changed": false,
+  "source_files": 5767,
+  "suites": {
+    "qe": {
+      "returncode": 0,
+      "command": [
+        "/home/sunhaiwei/quant_projects/.venv/bin/python",
+        "-m",
+        "pytest",
+        "quant_evaluator/tests",
+        "-q",
+        "--timeout=300",
+        "--junitxml=/home/sunhaiwei/quant-main-integration.Fwo5WJ/regression3/qe.xml"
+      ]
+    },
+    "fa_main": {
+      "returncode": 0,
+      "command": [
+        "/home/sunhaiwei/quant_projects/.venv/bin/python",
+        "-m",
+        "pytest",
+        "factor_assets/tests",
+        "-k",
+        "not test_concurrent_writers_same_hash_are_idempotent",
+        "-q",
+        "--timeout=300",
+        "--junitxml=/home/sunhaiwei/quant-main-integration.Fwo5WJ/regression3/fa_main.xml"
+      ]
+    },
+    "fa_concurrency": {
+      "returncode": 0,
+      "command": [
+        "/home/sunhaiwei/quant_projects/.venv/bin/python",
+        "-m",
+        "pytest",
+        "factor_assets/tests/test_persistent_seen_index.py::TestPersistentSeenIndex::test_concurrent_writers_same_hash_are_idempotent",
+        "-q",
+        "--timeout=300",
+        "--junitxml=/home/sunhaiwei/quant-main-integration.Fwo5WJ/regression3/fa_concurrency.xml"
+      ]
+    },
+    "fo": {
+      "returncode": 0,
+      "command": [
+        "/home/sunhaiwei/quant_projects/.venv/bin/python",
+        "-m",
+        "pytest",
+        "factor_optimizer/tests",
+        "-q",
+        "--timeout=300",
+        "--junitxml=/home/sunhaiwei/quant-main-integration.Fwo5WJ/regression3/fo.xml"
+      ]
+    },
+    "fp": {
+      "returncode": 0,
+      "command": [
+        "/home/sunhaiwei/quant_projects/.venv/bin/python",
+        "-m",
+        "pytest",
+        "factor_preprocess/tests",
+        "-q",
+        "--timeout=300",
+        "--junitxml=/home/sunhaiwei/quant-main-integration.Fwo5WJ/regression3/fp.xml"
+      ]
+    },
+    "platform": {
+      "returncode": 0,
+      "command": [
+        "/home/sunhaiwei/quant_projects/.venv/bin/python",
+        "-m",
+        "pytest",
+        "quant_platform/tests",
+        "-q",
+        "--timeout=300",
+        "--junitxml=/home/sunhaiwei/quant-main-integration.Fwo5WJ/regression3/platform.xml"
+      ]
+    },
+    "modeljobs": {
+      "returncode": 0,
+      "command": [
+        "/home/sunhaiwei/quant_projects/.venv/bin/python",
+        "-m",
+        "pytest",
+        "tests/modeling",
+        "jobs/tests",
+        "-q",
+        "--timeout=300",
+        "--junitxml=/home/sunhaiwei/quant-main-integration.Fwo5WJ/regression3/modeljobs.xml"
+      ]
+    },
+    "vectorbt": {
+      "returncode": 0,
+      "command": [
+        "/home/sunhaiwei/quant_projects/.venv/bin/python",
+        "-m",
+        "pytest",
+        "vectorbt_qs/tests",
+        "-q",
+        "--timeout=300",
+        "--junitxml=/home/sunhaiwei/quant-main-integration.Fwo5WJ/regression3/vectorbt.xml"
+      ]
+    },
+    "integration_edges": {
+      "returncode": 0,
+      "command": [
+        "/home/sunhaiwei/quant_projects/.venv/bin/python",
+        "-m",
+        "pytest",
+        "test_validate_unified_ledger.py",
+        "factor_engine/tests/backend/test_polars_ts_rolling_pairwise.py",
+        "factor_engine/tests/operators/test_filter_layer.py",
+        "factor_engine/tests/operators/test_same_clock_lag.py",
+        "factor_engine/tests/operators/test_v9_butterworth_frequency.py",
+        "factor_engine/tests/operators/test_v9_local_linear_endpoint.py",
+        "data_access/tests/unit/test_r30_change_lineage_2026_08.py",
+        "data_access/tests/unit/test_r32_change_impact_p0.py",
+        "-q",
+        "--timeout=300",
+        "--junitxml=/home/sunhaiwei/quant-main-integration.Fwo5WJ/regression3/integration_edges.xml"
+      ]
+    }
+  },
+  "counts": {
+    "qe": {
+      "passed": 1230,
+      "failed": 0,
+      "skipped_or_xfailed": 2
+    },
+    "fa_main": {
+      "passed": 1480,
+      "failed": 0,
+      "skipped_or_xfailed": 0
+    },
+    "fa_concurrency": {
+      "passed": 1,
+      "failed": 0,
+      "skipped_or_xfailed": 0
+    },
+    "fo": {
+      "passed": 885,
+      "failed": 0,
+      "skipped_or_xfailed": 0
+    },
+    "fp": {
+      "passed": 377,
+      "failed": 0,
+      "skipped_or_xfailed": 1
+    },
+    "platform": {
+      "passed": 464,
+      "failed": 0,
+      "skipped_or_xfailed": 21
+    },
+    "modeljobs": {
+      "passed": 466,
+      "failed": 0,
+      "skipped_or_xfailed": 0
+    },
+    "vectorbt": {
+      "passed": 102,
+      "failed": 0,
+      "skipped_or_xfailed": 0
+    },
+    "integration_edges": {
+      "passed": 186,
+      "failed": 0,
+      "skipped_or_xfailed": 0
+    }
+  }
+}

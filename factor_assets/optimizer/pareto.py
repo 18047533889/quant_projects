@@ -5,6 +5,7 @@ No weighted-score approximation: uses strict multi-objective dominance.
 """
 
 from dataclasses import dataclass, field
+import math
 from typing import Any, Dict, List, Optional, Set
 
 
@@ -42,8 +43,12 @@ class ParetoPoint:
         strictly_better = False
 
         for obj_name in objectives:
-            self_val = self.objectives.get(obj_name, float('-inf'))
-            other_val = other.objectives.get(obj_name, float('-inf'))
+            if obj_name not in self.objectives or obj_name not in other.objectives:
+                return False
+            self_val = self.objectives[obj_name]
+            other_val = other.objectives[obj_name]
+            if not math.isfinite(float(self_val)) or not math.isfinite(float(other_val)):
+                return False
 
             if self_val < other_val:
                 at_least_as_good = False
@@ -125,11 +130,25 @@ class ParetoOptimizer:
 
         # Convert to ParetoPoint objects
         pareto_points = []
+        invalid_count = 0
         for p in points:
             point_id = p.get(point_id_key, "")
             objectives = p.get(objective_key, {})
             metadata = {k: v for k, v in p.items() if k not in {point_id_key, objective_key}}
 
+            if (
+                not point_id
+                or not isinstance(objectives, dict)
+                or any(name not in objectives for name in self.objectives)
+                or any(
+                    isinstance(objectives.get(name), bool)
+                    or not isinstance(objectives.get(name), (int, float))
+                    or not math.isfinite(float(objectives[name]))
+                    for name in self.objectives
+                )
+            ):
+                invalid_count += 1
+                continue
             pareto_points.append(
                 ParetoPoint(
                     point_id=point_id,
@@ -140,7 +159,7 @@ class ParetoOptimizer:
 
         # Find non-dominated points
         non_dominated = []
-        dominated_count = 0
+        dominated_count = invalid_count
 
         for i, point in enumerate(pareto_points):
             is_dominated = False

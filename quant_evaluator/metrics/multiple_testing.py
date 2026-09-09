@@ -314,11 +314,12 @@ def sidak_correction(
         return np.full_like(p_values, np.nan), np.zeros_like(p_values, dtype=bool)
 
     # Adjusted alpha for Šidák
-    alpha_sidak = 1.0 - (1.0 - alpha) ** (1.0 / n_tests)
+    alpha_sidak = -np.expm1(np.log1p(-alpha) / n_tests)
 
     # Adjust p-values: 1 - (1 - p)^m
     adjusted = np.full_like(p_flat, np.nan)
-    adjusted[valid_mask] = 1.0 - (1.0 - p_flat[valid_mask]) ** n_tests
+    with np.errstate(divide="ignore"):
+        adjusted[valid_mask] = -np.expm1(n_tests * np.log1p(-p_flat[valid_mask]))
     adjusted[valid_mask] = np.minimum(adjusted[valid_mask], 1.0)
 
     # Rejection mask
@@ -326,6 +327,38 @@ def sidak_correction(
     reject[valid_mask] = p_flat[valid_mask] <= alpha_sidak
 
     return adjusted.reshape(original_shape), reject.reshape(original_shape)
+
+
+def compute_family_correction(family, alpha=.05):
+    """Correct a whole preregistered family, never finite batch survivors.
+
+    Missing terminal tests conservatively occupy their slots with an upper
+    bound of one solely inside correction; this is NOT a measured p-value.
+    Pending tests block every confirmatory rejection until the family closes.
+    """
+    from quant_evaluator.contracts.hypothesis_family import HypothesisFamilyArtifact
+    from quant_evaluator.contracts.metric_artifacts import FrozenMapping
+    if not isinstance(family, HypothesisFamilyArtifact):
+        raise TypeError("complete HypothesisFamilyArtifact required")
+    alpha = _validate_alpha(alpha)
+    p = np.array([m['pvalue'] if m['status'] == 'COMPUTED' else 1. for m in family.members])
+    method = family.correction_method
+    methods = {'holm': holm_bonferroni_correction, 'bonferroni': bonferroni_correction,
+               'sidak': sidak_correction, 'bh': benjamini_hochberg_correction}
+    if method == 'by':
+        from scipy.stats import false_discovery_control
+        adjusted = false_discovery_control(p, method='by')
+        reject = adjusted <= alpha
+    else:
+        adjusted, reject = methods[method](p, alpha)[:2]
+    pending = any(m['status'] == 'PENDING' for m in family.members)
+    return FrozenMapping({'family_ref': family.content_hash, 'method': method,
+        'assumptions': family.assumptions, 'alpha': alpha, 'm': len(family.members),
+        'status': 'WAIT' if pending else 'COMPUTED', 'ledger_head': family.ledger_head,
+        'members': {m['hypothesis_id']: {'adjusted_p': float(adjusted[i]) if m['status'] == 'COMPUTED' else None,
+            'reject': bool(not pending and m['status'] == 'COMPUTED' and reject[i]),
+            'status': m['status'], 'pvalue_ref': m.get('pvalue_ref')}
+            for i, m in enumerate(family.members)}})
 
 
 def compute_fdr(

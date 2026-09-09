@@ -29,7 +29,7 @@ from __future__ import annotations
 import enum
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Callable, Protocol, runtime_checkable
+from typing import Any, Callable, Mapping, Protocol, runtime_checkable
 
 from .artifact_ref import ArtifactRef
 from .rbac import Permission, SecurityClassification
@@ -46,7 +46,127 @@ __all__ = [
     "AuditEvent",
     "ObjectStore",
     "ObjectMetadata",
+    "GCObject",
+    "GCRootSnapshot",
+    "GCDryRunPlan",
+    "GCTombstoneClaim",
+    "TombstoneClaimStatus",
+    "DeletionStatus",
+    "DeletionReceipt",
+    "GCReferenceAuthority",
 ]
+
+
+@dataclass(frozen=True)
+class GCObject:
+    object_id: str
+    object_version: str
+    storage_uri: str
+    content_hash: str
+    lifecycle_state: str
+    terminal: bool
+    size_bytes: int = 0
+
+    def __post_init__(self) -> None:
+        for name in ("object_id", "object_version", "storage_uri", "content_hash", "lifecycle_state"):
+            if not getattr(self, name):
+                raise ValueError(f"GCObject.{name} is required")
+        if self.size_bytes < 0:
+            raise ValueError("GCObject.size_bytes cannot be negative")
+
+    @property
+    def key(self) -> tuple[str, str]:
+        return self.object_id, self.object_version
+
+
+@dataclass(frozen=True)
+class GCRootSnapshot:
+    epoch: int
+    objects: tuple[GCObject, ...]
+    references: Mapping[tuple[str, str], tuple[tuple[str, str], ...]]
+    production_roots: frozenset[tuple[str, str]] = frozenset()
+    approved_release_roots: frozenset[tuple[str, str]] = frozenset()
+    active_read_roots: frozenset[tuple[str, str]] = frozenset()
+    retryable_job_roots: frozenset[tuple[str, str]] = frozenset()
+    retained_research_roots: frozenset[tuple[str, str]] = frozenset()
+    rollback_roots: frozenset[tuple[str, str]] = frozenset()
+    pending_label_roots: frozenset[tuple[str, str]] = frozenset()
+
+    @property
+    def roots(self) -> frozenset[tuple[str, str]]:
+        return frozenset().union(
+            self.production_roots, self.approved_release_roots, self.active_read_roots,
+            self.retryable_job_roots, self.retained_research_roots, self.rollback_roots,
+            self.pending_label_roots,
+        )
+
+
+@dataclass(frozen=True)
+class GCDryRunPlan:
+    snapshot_epoch: int
+    candidates: tuple[GCObject, ...]
+    live_keys: frozenset[tuple[str, str]]
+    estimated_reclaim_bytes: int
+
+
+class TombstoneClaimStatus(str, enum.Enum):
+    CLAIMED = "CLAIMED"
+    ROOTED = "ROOTED"
+    LEASED = "LEASED"
+    EPOCH_CHANGED = "EPOCH_CHANGED"
+    ALREADY_TERMINAL = "ALREADY_TERMINAL"
+
+
+@dataclass(frozen=True)
+class GCTombstoneClaim:
+    status: TombstoneClaimStatus
+    object_id: str
+    object_version: str
+    claim_id: str | None = None
+    claimed_epoch: int | None = None
+    reason: str = ""
+
+
+class DeletionStatus(str, enum.Enum):
+    SKIPPED_PROTECTED = "SKIPPED_PROTECTED"
+    LOGICAL_DELETED = "LOGICAL_DELETED"
+    PHYSICAL_DELETED = "PHYSICAL_DELETED"
+    PROVIDER_RETENTION_PENDING = "PROVIDER_RETENTION_PENDING"
+
+
+@dataclass(frozen=True)
+class DeletionReceipt:
+    object_id: str
+    object_version: str
+    storage_uri: str
+    content_hash: str
+    status: DeletionStatus
+    deleted_at: datetime
+    claim_id: str | None
+    cache_evicted: bool
+    head_verified_absent: bool
+    retained_reason: str = ""
+
+
+@runtime_checkable
+class GCReferenceAuthority(Protocol):
+    """Existing registry transaction seam; implementations own refs and tombstones."""
+
+    def snapshot_for_gc(self) -> GCRootSnapshot: ...
+
+    def claim_gc_tombstone(
+        self, object_id: str, object_version: str, *, expected_epoch: int
+    ) -> GCTombstoneClaim:
+        """Atomically recheck roots/leases/epoch and persist an idempotent tombstone."""
+        ...
+
+    def record_deletion_receipt(self, receipt: DeletionReceipt) -> DeletionReceipt:
+        """Persist or return the immutable receipt for this exact object version."""
+        ...
+
+    def get_deletion_receipt(
+        self, object_id: str, object_version: str
+    ) -> DeletionReceipt | None: ...
 
 
 @runtime_checkable
@@ -119,6 +239,10 @@ class LocalArtifactCache(Protocol):
 
     def hit_rate(self) -> float:
         """Cache hit-rate metric (spec §22)."""
+        ...
+
+    def evict(self, content_hash: str) -> bool:
+        """Idempotently remove one exact content version."""
         ...
 
 

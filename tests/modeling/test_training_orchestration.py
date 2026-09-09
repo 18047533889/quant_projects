@@ -46,6 +46,12 @@ from modeling.walk_forward import (
     stitch_oos_windows,
 )
 from factor_engine.market.exchange_session_calendar import ExchangeSessionCalendar
+from jobs.evaluate_model_predictions import (
+    evaluate_trained_model_predictions,
+    train_evaluate_model_predictions,
+)
+from quant_evaluator.contracts.factor_batch import AxisRef as QEAxisRef
+from quant_evaluator.contracts.label_bundle import LabelBundle
 
 
 # --------------------------------------------------------------------------- #
@@ -383,6 +389,79 @@ def test_train_model_end_to_end():
     assert np.isfinite(pred).all()
     assert result.artifact.manifest.preprocessing_state_hash != ""
     assert isinstance(result.artifact, ModelArtifact)
+
+
+def test_real_training_output_flows_through_typed_prediction_and_qe_evidence():
+    ds = make_panel(n_dates=10, n_stocks=120, seed=101)
+    dates = sorted(ds.frame["date"].unique())
+    train_ds = ds.filter_dates(start=dates[0], end=dates[5])
+    val_ds = ds.filter_dates(start=dates[6], end=dates[7])
+    oos_ds = ds.filter_dates(start=dates[8], end=dates[9])
+    oos_times = tuple(np.asarray(sorted(oos_ds.frame["date"].unique()), dtype="datetime64[ns]"))
+    oos_assets = tuple(oos_ds.frame.loc[oos_ds.frame["date"] == oos_times[0], "stock"])
+    labels = oos_ds.frame["label"].to_numpy().reshape(len(oos_times), len(oos_assets))
+    label_bundle = LabelBundle(
+        "trained_model_oos", labels, 1, decision_time=oos_times,
+        label_start_time=oos_times,
+        label_end_time=tuple(pd.Timestamp(value) + pd.Timedelta(days=1) for value in oos_times),
+        asset_axis=QEAxisRef("asset", "str", len(oos_assets), oos_assets),
+    )
+    result, prediction, report = train_evaluate_model_predictions(
+        PCRLearner, train_ds, val_ds, oos_ds, label_bundle,
+        train_kwargs={
+            "preprocessing_spec": PreprocessingSpec(),
+            "hyperparam_grid": [{"n_components": 2}],
+            "label_contract": vwap_to_vwap_label("ret_1", horizon_bars=1),
+            "decision_clock": ashare_decision_clock(AFTER_CLOSE_TO_NEXT_VWAP),
+            "universe_hash": "actual-universe:S000-S119",
+            "data_source_hash": "actual-panel:" + str(len(ds.frame)),
+            "model_version": "1.0", "random_seed": 7,
+            "sample_contract": _lenient_contract(),
+        },
+    )
+    assert prediction.model_artifact_ref == result.artifact.manifest.artifact_id
+    assert prediction.feature_manifest_ref == result.artifact.manifest.feature_schema_hash
+    assert prediction.oos_evidence_ref == label_bundle.content_hash
+    assert prediction.prediction_id.startswith("prediction:")
+    assert report.prediction_id == prediction.prediction_id
+    assert report.prediction_evidence["qe_bundle"]
+
+    changed_frame = oos_ds.frame.copy()
+    changed_frame.loc[0, ds.feature_cols[0]] += 1.0
+    changed_oos = PanelDataset(
+        changed_frame, date_col=oos_ds.date_col, stock_col=oos_ds.stock_col,
+        feature_cols=oos_ds.feature_cols, label_col=oos_ds.label_col,
+    )
+    changed_prediction, _ = evaluate_trained_model_predictions(
+        result, changed_oos, label_bundle,
+    )
+    assert changed_prediction.model_artifact_ref == prediction.model_artifact_ref
+    assert changed_prediction.prediction_id != prediction.prediction_id
+
+    reordered_oos = PanelDataset(
+        oos_ds.frame.copy(), date_col=oos_ds.date_col, stock_col=oos_ds.stock_col,
+        feature_cols=list(reversed(oos_ds.feature_cols)), label_col=oos_ds.label_col,
+    )
+    with pytest.raises(ValueError, match="OOS feature manifest"):
+        evaluate_trained_model_predictions(result, reordered_oos, label_bundle)
+
+    overlapping_frame = oos_ds.frame.copy()
+    overlapping_times = tuple(np.asarray((dates[4], dates[5]), dtype="datetime64[ns]"))
+    overlapping_frame["date"] = np.repeat(overlapping_times, len(oos_assets))
+    overlapping_oos = PanelDataset(
+        overlapping_frame, date_col=oos_ds.date_col, stock_col=oos_ds.stock_col,
+        feature_cols=oos_ds.feature_cols, label_col=oos_ds.label_col,
+    )
+    overlapping_labels = LabelBundle(
+        "overlapping_model_oos", labels, 1, decision_time=overlapping_times,
+        label_start_time=overlapping_times,
+        label_end_time=tuple(
+            pd.Timestamp(value) + pd.Timedelta(days=1) for value in overlapping_times
+        ),
+        asset_axis=QEAxisRef("asset", "str", len(oos_assets), oos_assets),
+    )
+    with pytest.raises(ValueError, match="fit window must precede"):
+        evaluate_trained_model_predictions(result, overlapping_oos, overlapping_labels)
 
 
 def test_train_model_train_only_mode_rejects_missing_validation():

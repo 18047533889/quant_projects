@@ -32,7 +32,9 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from quant_evaluator.metrics.exposure_evidence import (
     ExposureStyle,
     ExposurePanel,
+    FactorLoadingSeries,
     StyleExposureEvidence,
+    build_factor_loading_series,
     compute_style_exposure_evidence,
     compute_max_absolute_style_exposure,
     compute_exposure_drift,
@@ -106,6 +108,35 @@ def _known_panel():
     )
 
 
+def _known_loadings():
+    """Typed factor evidence with a positive industry and negative size loading."""
+    p = _panel(seed=5)
+    factor = 2.0 * p.values[:, :, 0] - p.values[:, :, 1] + 0.2 * p.values[:, :, 2]
+    return build_factor_loading_series(p, factor, factor_id="known", min_obs=10)
+
+
+def _loading(values, *, r_squared=None, style_names=None):
+    """Small typed fixture for reducers that consume already-estimated loadings."""
+    values = np.asarray(values, dtype=float)
+    t, k = values.shape
+    names = tuple(style_names or (f"s{i}" for i in range(k)))
+    r2 = np.asarray(r_squared if r_squared is not None else np.zeros(t), dtype=float)
+    return FactorLoadingSeries(
+        values=values,
+        raw_loadings=values,
+        r_squared=r2,
+        counts=np.full(t, 20),
+        style_names=names,
+        factor_id="fixture",
+        source_ref="risk:fixture",
+        provider="test",
+        date_index=tuple(range(t)),
+        common_support_ref="support:fixture",
+        diagnostics=tuple({} for _ in range(t)),
+        factor_value_ref="factor:fixture",
+    )
+
+
 # ---------------------------------------------------------------------------
 # 1. ExposurePanel contract (DataAccess-authoritative ref, injectable provider)
 # ---------------------------------------------------------------------------
@@ -132,7 +163,7 @@ def test_exposure_panel_shape_validation():
 
 def test_style_exposure_evidence_typed_per_style():
     """The evidence is per-style typed fields — no single scalar API."""
-    ev = compute_style_exposure_evidence(_known_panel())
+    ev = compute_style_exposure_evidence(_known_loadings())
     assert isinstance(ev, StyleExposureEvidence)
     assert len(ev.values) == len(_STYLES)
     assert tuple(ev.style_names) == _STYLES
@@ -144,10 +175,10 @@ def test_style_exposure_evidence_typed_per_style():
 # 2. Per-style exposure signs and magnitudes
 # ---------------------------------------------------------------------------
 def test_known_style_signs_and_magnitudes():
-    p = _known_panel()
-    assert compute_industry_exposure(p) == pytest.approx(0.30, abs=0.02)
-    assert compute_size_exposure(p) == pytest.approx(-0.20, abs=0.02)
-    assert compute_beta_exposure(p) == pytest.approx(0.0, abs=0.02)
+    p = _known_loadings()
+    assert compute_industry_exposure(p) > 0.5
+    assert compute_size_exposure(p) < -0.2
+    assert compute_beta_exposure(p) > 0.0
     # the typed per-style accessors match the evidence vector
     ev = compute_style_exposure_evidence(p, absolute=False)
     assert ev.values[0] == pytest.approx(compute_industry_exposure(p), abs=1e-9)
@@ -160,12 +191,7 @@ def test_missing_style_is_nan_not_zero():
     T, N = 40, 30
     rng = np.random.default_rng(9)
     values = rng.normal(0.0, 1.0, (T, N, 2))
-    p = ExposurePanel(
-        values=values,
-        style_names=("industry", "size"),
-        source_ref="ds://test",
-        provider="test",
-    )
+    p = _loading(np.zeros((T, 2)), style_names=("industry", "size"))
     assert np.isnan(compute_momentum_exposure(p))
     assert np.isnan(compute_liquidity_exposure(p))
 
@@ -173,7 +199,7 @@ def test_missing_style_is_nan_not_zero():
 def test_absolute_vs_signed_mean():
     """absolute=True returns mean |x| >= |signed mean| (equal for constant
     sign), and both are per-style fields."""
-    p = _known_panel()
+    p = _known_loadings()
     signed = compute_style_exposure_evidence(p, absolute=False)
     abs_ev = compute_style_exposure_evidence(p, absolute=True)
     assert abs_ev.values[0] >= abs(signed.values[0])
@@ -184,17 +210,16 @@ def test_absolute_vs_signed_mean():
 # 3. max_absolute_style_exposure
 # ---------------------------------------------------------------------------
 def test_max_absolute_style_exposure_picks_largest_abs():
-    p = _known_panel()
+    p = _known_loadings()
     res = compute_max_absolute_style_exposure(p)
     assert res["style"] == "industry"
-    assert res["value"] == pytest.approx(0.30, abs=0.02)
-    assert res["absolute_mean"] >= 0.30
+    assert res["value"] > 0.5
+    assert res["absolute_mean"] >= abs(res["value"])
 
 
 def test_max_absolute_style_exposure_unknown_when_no_data():
     T, N = 40, 30
-    values = np.full((T, N, 3), np.nan)
-    p = ExposurePanel(values=values, style_names=("a", "b", "c"))
+    p = _loading(np.full((T, 3), np.nan), style_names=("a", "b", "c"))
     res = compute_max_absolute_style_exposure(p)
     assert res["style"] == ExposureStyle.UNKNOWN.value
     assert np.isnan(res["value"])
@@ -206,8 +231,8 @@ def test_max_absolute_style_exposure_unknown_when_no_data():
 def test_exposure_drift_hand_computed():
     T, N, K = 5, 4, 3
     rng = np.random.default_rng(7)
-    values = rng.normal(0.0, 1.0, (T, N, K))
-    p = ExposurePanel(values=values, style_names=("a", "b", "c"))
+    values = rng.normal(0.0, 1.0, (T, K))
+    p = _loading(values, style_names=("a", "b", "c"))
     drift = compute_exposure_drift(p)
     diffs = []
     for t in range(T - 1):
@@ -220,12 +245,12 @@ def test_exposure_drift_hand_computed():
 
 def test_exposure_drift_constant_panel_zero():
     T, N, K = 5, 4, 3
-    p = ExposurePanel(values=np.ones((T, N, K)), style_names=("a", "b", "c"))
+    p = _loading(np.ones((T, K)), style_names=("a", "b", "c"))
     assert compute_exposure_drift(p) == pytest.approx(0.0, abs=1e-12)
 
 
 def test_exposure_drift_short_nan():
-    p = ExposurePanel(values=np.ones((1, 4, 3)), style_names=("a", "b", "c"))
+    p = _loading(np.ones((1, 3)), style_names=("a", "b", "c"))
     assert np.isnan(compute_exposure_drift(p))
 
 
@@ -233,24 +258,16 @@ def test_exposure_drift_short_nan():
 # 5. purity_ratio
 # ---------------------------------------------------------------------------
 def test_purity_ratio_hand_computed():
-    T, N, K = 40, 30, 2
-    rng = np.random.default_rng(11)
-    values = rng.normal(0.0, 1.0, (T, N, K))
-    p = ExposurePanel(values=values, style_names=("a", "b"))
+    r2 = np.array([0.0, 0.25, 0.75, 1.0])
+    p = _loading(np.zeros((4, 2)), r_squared=r2, style_names=("a", "b"))
     purity = compute_purity_ratio(p)
-    mu = [np.mean(values[:, :, k]) for k in range(K)]
-    resid = [np.mean((values[:, :, k] - mu[k]) ** 2) for k in range(K)]
-    style_part = float(np.sum(np.square(mu)))
-    resid_part = float(np.sum(resid))
-    expected = 1.0 - style_part / (style_part + resid_part)
-    assert purity == pytest.approx(expected, abs=1e-9)
+    expected = float(np.mean(1.0 - r2))
+    assert compute_purity_ratio(p, min_finite=1) == pytest.approx(expected, abs=1e-12)
 
 
 def test_purity_ratio_no_valid_style_nan():
     T, N, K = 40, 30, 2
-    p = ExposurePanel(
-        values=np.full((T, N, K), np.nan), style_names=("a", "b")
-    )
+    p = _loading(np.full((T, K), np.nan), r_squared=np.full(T, np.nan), style_names=("a", "b"))
     assert np.isnan(compute_purity_ratio(p))
 
 
@@ -258,8 +275,7 @@ def test_purity_ratio_high_for_clean_factor():
     """A factor with tiny style footprint -> high purity (close to 1)."""
     T, N, K = 40, 30, 3
     rng = np.random.default_rng(13)
-    values = rng.normal(0.0, 1e-6, (T, N, K))
-    p = ExposurePanel(values=values, style_names=("a", "b", "c"))
+    p = _loading(np.zeros((T, K)), r_squared=np.full(T, 1e-6), style_names=("a", "b", "c"))
     assert compute_purity_ratio(p) > 0.99
 
 
@@ -310,8 +326,9 @@ def test_neutralized_rank_ic_survives_style_removal():
     fwd = fwd + 0.05 * panel[:, :, 0]
     p = ExposurePanel(values=panel, style_names=("a", "b", "c"))
     neutralized = compute_neutralized_rank_ic(factor, fwd, p, min_obs=10)
-    # residuals of regressing factor on panel are ~0 -> residual IC ~ 0
-    assert abs(neutralized) < 0.05
+    # Exact style replication leaves a constant residual, so rank IC is
+    # undefined rather than fabricated as zero.
+    assert np.isnan(neutralized)
 
 
 def test_residual_rank_ic_alias_matches():
@@ -355,7 +372,10 @@ def test_exposure_evidence_bundle_has_all_fields():
         "residual_rank_ic",
         "purity_ratio",
     }
-    assert set(bundle.keys()) == expected_keys
+    assert expected_keys.issubset(bundle)
+    assert bundle["estimation_scope"] == "SAME_DATE_DESCRIPTIVE"
+    assert bundle["method_version"] == "factor_standardized_wls.v2"
+    assert isinstance(bundle["factor_loading_series"], FactorLoadingSeries)
 
 
 # ---------------------------------------------------------------------------

@@ -14,13 +14,45 @@ date belong to one split.
 from __future__ import annotations
 
 import datetime as _dt
+import hashlib
+import json
 from dataclasses import dataclass, field
 from typing import Any
 
 import numpy as np
 import pandas as pd
 
-__all__ = ["FeatureSchema", "PanelDataset", "panel_telemetry"]
+__all__ = ["FeatureField", "FeatureSchema", "PanelDataset", "panel_telemetry"]
+
+
+@dataclass(frozen=True)
+class FeatureField:
+    """One ordered model input, including its semantic (not just column) identity."""
+
+    name: str
+    value_ref: str
+    recipe_ref: str
+    state_ref: str
+    dtype: str
+    mask_ref: str | None = None
+    cluster_version_ref: str | None = None
+    missing_reason_ref: str | None = None
+    missing_age_ref: str | None = None
+
+    def __post_init__(self) -> None:
+        for attr in ("name", "value_ref", "recipe_ref", "state_ref", "dtype"):
+            if not isinstance(getattr(self, attr), str) or not getattr(self, attr):
+                raise ValueError(f"FeatureField.{attr} is required")
+
+    def to_dict(self) -> dict[str, str | None]:
+        return {
+            "name": self.name, "value_ref": self.value_ref,
+            "recipe_ref": self.recipe_ref, "state_ref": self.state_ref,
+            "dtype": self.dtype, "mask_ref": self.mask_ref,
+            "missing_reason_ref": self.missing_reason_ref,
+            "missing_age_ref": self.missing_age_ref,
+            "cluster_version_ref": self.cluster_version_ref,
+        }
 
 
 @dataclass(frozen=True)
@@ -28,10 +60,42 @@ class FeatureSchema:
     """Explicit ordered feature contract required by production datasets."""
 
     columns: tuple[str, ...]
+    fields: tuple[FeatureField, ...] = ()
+    consumer_profile: str = ""
+    feature_set_version_ref: str = ""
+    manifest_version: str = "feature-manifest-v1"
 
     def __post_init__(self) -> None:
         if not self.columns or len(set(self.columns)) != len(self.columns):
             raise ValueError("FeatureSchema columns must be non-empty and unique")
+        if self.fields:
+            if tuple(field.name for field in self.fields) != self.columns:
+                raise ValueError("FeatureSchema fields must match ordered columns exactly")
+            if not self.consumer_profile or not self.feature_set_version_ref:
+                raise ValueError("complete FeatureSchema requires consumer_profile and feature_set_version_ref")
+            if any(not field.cluster_version_ref for field in self.fields):
+                raise ValueError("complete FeatureSchema requires cluster_version_ref per field")
+
+    @property
+    def is_complete(self) -> bool:
+        return bool(self.fields and self.consumer_profile)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "manifest_version": self.manifest_version,
+            "consumer_profile": self.consumer_profile,
+            "feature_set_version_ref": self.feature_set_version_ref,
+            "fields": [field.to_dict() for field in self.fields],
+            "columns": list(self.columns),
+            "complete": self.is_complete,
+        }
+
+    def fingerprint(self) -> str:
+        """Canonical full-manifest hash; legacy column-only schemas are namespaced."""
+        payload = self.to_dict()
+        encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+        prefix = "full:" if self.is_complete else "legacy-columns:"
+        return prefix + hashlib.sha256(encoded.encode("utf-8")).hexdigest()
 
 
 @dataclass
@@ -61,6 +125,8 @@ class PanelDataset:
     duplicate_policy: str = "error"  # "error" | "aggregate"
     feature_schema: FeatureSchema | None = None
     run_mode: str = "production"
+    missing_reason_plane: Any = None
+    label_missing_reasons: Any = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.frame, pd.DataFrame):
@@ -105,9 +171,35 @@ class PanelDataset:
                     "each (stock, date) must be a unique observation; pass "
                     "duplicate_policy='aggregate' to dedupe explicitly"
                 )
+            if self.missing_reason_plane is not None or self.label_missing_reasons is not None:
+                raise ValueError(
+                    "duplicate aggregation with aligned missingness evidence requires an explicit reducer"
+                )
             self.frame = self.frame.drop_duplicates(
                 subset=[self.date_col, self.stock_col], keep="first"
             ).reset_index(drop=True)
+        if self.missing_reason_plane is not None:
+            plane = self.missing_reason_plane
+            required = ("reasons", "original_missing", "filled", "usable", "age", "coverage")
+            if any(not hasattr(plane, name) for name in required) or not callable(plane.coverage):
+                raise ValueError("missing_reason_plane is not an authoritative reason plane")
+            expected = (self.n_rows, len(self.feature_cols))
+            if any(np.asarray(getattr(plane, name)).shape != expected for name in required[:-1]):
+                raise ValueError(f"missing_reason_plane must align to panel feature shape {expected}")
+            try:
+                self.missing_reason_plane = type(plane)(
+                    reasons=plane.reasons, original_missing=plane.original_missing,
+                    filled=plane.filled, usable=plane.usable, age=plane.age,
+                )
+            except Exception as exc:
+                raise ValueError(f"invalid missing_reason_plane: {exc}") from exc
+        if self.label_missing_reasons is not None:
+            labels = np.asarray(self.label_missing_reasons, dtype=str)
+            if labels.shape != (self.n_rows,):
+                raise ValueError("label_missing_reasons must align to panel rows")
+            labels = np.array(labels, copy=True)
+            labels.flags.writeable = False
+            self.label_missing_reasons = labels
 
     # -- construction --------------------------------------------------------
     @classmethod
@@ -145,6 +237,12 @@ class PanelDataset:
             stock_col=self.stock_col,
             feature_cols=list(self.feature_cols),
             label_col=self.label_col,
+            feature_schema=self.feature_schema,
+            run_mode=self.run_mode,
+            missing_reason_plane=self._slice_missingness(mask.to_numpy()),
+            label_missing_reasons=(
+                None if self.label_missing_reasons is None else self.label_missing_reasons[mask.to_numpy()]
+            ),
         )
 
     def filter_stocks(self, stocks: Any) -> "PanelDataset":
@@ -155,6 +253,24 @@ class PanelDataset:
             stock_col=self.stock_col,
             feature_cols=list(self.feature_cols),
             label_col=self.label_col,
+            feature_schema=self.feature_schema,
+            run_mode=self.run_mode,
+            missing_reason_plane=self._slice_missingness(
+                self.frame[self.stock_col].isin(stocks).to_numpy()
+            ),
+            label_missing_reasons=(
+                None if self.label_missing_reasons is None
+                else self.label_missing_reasons[self.frame[self.stock_col].isin(stocks).to_numpy()]
+            ),
+        )
+
+    def _slice_missingness(self, row_mask: np.ndarray) -> Any:
+        if self.missing_reason_plane is None:
+            return None
+        plane = self.missing_reason_plane
+        return type(plane)(
+            reasons=plane.reasons[row_mask], original_missing=plane.original_missing[row_mask],
+            filled=plane.filled[row_mask], usable=plane.usable[row_mask], age=plane.age[row_mask],
         )
 
     # -- matrix view ---------------------------------------------------------
@@ -167,6 +283,9 @@ class PanelDataset:
         present) are finite.  Consumers must never impute with future data.
         """
         X = self.frame[self.feature_cols].to_numpy(dtype=np.float64)
+        if self.missing_reason_plane is not None:
+            X = np.array(X, copy=True)
+            X[~np.asarray(self.missing_reason_plane.usable, dtype=bool)] = np.nan
         y = (
             self.frame[self.label_col].to_numpy(dtype=np.float64)
             if self.label_col is not None
@@ -175,8 +294,12 @@ class PanelDataset:
         dates = self.frame[self.date_col].to_numpy()
         stocks = self.frame[self.stock_col].to_numpy()
         finite = np.isfinite(X).all(axis=1)
+        if self.missing_reason_plane is not None:
+            finite &= np.asarray(self.missing_reason_plane.usable, dtype=bool).all(axis=1)
         if y is not None:
             finite &= np.isfinite(y)
+            if self.label_missing_reasons is not None:
+                finite &= self.label_missing_reasons != "label_not_yet_mature"
         return X, y, dates, stocks, finite
 
     @property
@@ -218,6 +341,10 @@ def panel_telemetry(ds: PanelDataset) -> dict[str, Any]:
     _, y, _, _, finite = ds.as_matrix()
     finite_obs = int(finite.sum()) if y is not None else int(np.isfinite(f[ds.feature_cols].to_numpy()).all(axis=1).sum())
     missing_fraction = (1.0 - finite_obs / n_stock_date) if n_stock_date else 0.0
+    semantic_coverage = (
+        ds.missing_reason_plane.coverage()
+        if ds.missing_reason_plane is not None else None
+    )
     return {
         "n_stock_date_obs": int(n_stock_date),
         "n_unique_dates": n_dates,
@@ -234,6 +361,11 @@ def panel_telemetry(ds: PanelDataset) -> dict[str, Any]:
         "finite_obs": finite_obs,
         "missing_fraction": float(missing_fraction),
         "date_coverage": float(_panel_date_coverage(f, ds.date_col)),
+        "missingness_coverage": semantic_coverage,
+        "label_not_yet_mature_count": (
+            0 if ds.label_missing_reasons is None
+            else int(np.sum(ds.label_missing_reasons == "label_not_yet_mature"))
+        ),
     }
 
 

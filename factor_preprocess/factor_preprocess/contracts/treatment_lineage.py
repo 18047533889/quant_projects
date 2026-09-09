@@ -33,6 +33,7 @@ class TransformStage(str, Enum):
     SCALING = "scaling"
 
 
+@dataclass(frozen=True)
 class TransformSemanticID:
     """
     Canonical semantic identifier of a transform treatment.
@@ -48,12 +49,11 @@ class TransformSemanticID:
     function name.
     """
 
-    __slots__ = ("value",)
+    value: str
 
-    def __init__(self, value: str):
-        if not value or not isinstance(value, str):
+    def __post_init__(self):
+        if not self.value or not isinstance(self.value, str):
             raise ValueError("TransformSemanticID must be a non-empty string")
-        self.value = value
 
     def __str__(self) -> str:
         return self.value
@@ -61,15 +61,6 @@ class TransformSemanticID:
     def __repr__(self) -> str:
         return f"TransformSemanticID({self.value!r})"
 
-    def __eq__(self, other: Any) -> bool:
-        if isinstance(other, TransformSemanticID):
-            return self.value == other.value
-        if isinstance(other, str):
-            return self.value == other
-        return NotImplemented
-
-    def __hash__(self) -> int:
-        return hash(self.value)
 
 
 @dataclass(frozen=True)
@@ -132,13 +123,15 @@ class TransformLineage:
         ``rank@pre_neutralization`` and ``rank@post_neutralization`` are
         DIFFERENT treatments and are both kept. First occurrence wins.
         """
-        seen: List[Tuple[str, str]] = []
         kept: List[TransformStep] = []
         for step in self.steps:
-            key = (step.semantic_id.value, step.stage.value)
-            if key not in seen:
-                seen.append(key)
-                kept.append(step)
+            key = (step.semantic_id.value, step.stage.value, step.name, step.parameters)
+            if kept:
+                previous = kept[-1]
+                previous_key = (previous.semantic_id.value, previous.stage.value, previous.name, previous.parameters)
+                if key == previous_key:
+                    continue
+            kept.append(step)
         return TransformLineage(tuple(kept))
 
 
@@ -155,6 +148,71 @@ class ExistingTreatmentStatus(str, Enum):
     KNOWN = "known"
     UNKNOWN = "unknown"
     INCOMPLETE = "incomplete"
+
+
+@dataclass(frozen=True)
+class OutputProperties:
+    """Properties guaranteed at the current lineage root, not historical tags."""
+
+    status: ExistingTreatmentStatus = ExistingTreatmentStatus.KNOWN
+    ranked: bool = False
+    scaling_axis: Optional[str] = None
+    orthogonal_to: Tuple[str, ...] = ()
+    mask_ref: Optional[str] = None
+    weight_ref: Optional[str] = None
+    last_semantic_id: Optional[str] = None
+
+    def __post_init__(self):
+        if not isinstance(self.status, ExistingTreatmentStatus):
+            object.__setattr__(self, "status", ExistingTreatmentStatus(self.status))
+        object.__setattr__(self, "orthogonal_to", tuple(self.orthogonal_to))
+
+
+def derive_output_properties(lineage) -> OutputProperties:
+    """Derive conservative root postconditions from the ordered actual steps.
+
+    A nonlinear rank/clip after neutralization invalidates exact linear
+    orthogonality. Cross-sectional affine z-scoring preserves it only when the
+    step explicitly retains the same mask and weights. Unknown semantics make
+    the result unknown instead of pretending the factor is untreated.
+    """
+    if not isinstance(lineage, TransformLineage):
+        lineage = TransformLineage(tuple(lineage))
+    props = OutputProperties()
+    known = set(_FE_DSL_SEMANTIC_MAP.values()) | {"NEUTRAL:ols", "ABS"}
+    for step in lineage.steps:
+        sid = step.semantic_id.value
+        params = dict(step.parameters)
+        if sid not in known:
+            props = OutputProperties(
+                status=ExistingTreatmentStatus.UNKNOWN,
+                last_semantic_id=sid,
+            )
+            continue
+        orthogonal = props.orthogonal_to
+        ranked = props.ranked
+        axis = props.scaling_axis
+        if "NEUTRAL" in sid:
+            orthogonal = tuple(params.get("exposure_ids", (sid,)))
+            ranked = False
+        elif "RANK" in sid or "WINSOR" in sid or sid == "ABS":
+            orthogonal = ()
+            ranked = "RANK" in sid
+            axis = params.get("axis", "cs") if ranked else axis
+        elif "ZSCORE" in sid or "SCALE" in sid or "DEMEAN" in sid:
+            axis = params.get("axis", "cs")
+            if orthogonal and not params.get("preserves_mask_and_weights", False):
+                orthogonal = ()
+        props = OutputProperties(
+            status=props.status,
+            ranked=ranked,
+            scaling_axis=axis,
+            orthogonal_to=orthogonal,
+            mask_ref=params.get("mask_ref", props.mask_ref),
+            weight_ref=params.get("weight_ref", props.weight_ref),
+            last_semantic_id=sid,
+        )
+    return props
 
 
 @dataclass(frozen=True)
@@ -308,6 +366,8 @@ __all__ = [
     "TransformLineage",
     "ExistingTreatmentSignature",
     "ExistingTreatmentStatus",
+    "OutputProperties",
+    "derive_output_properties",
     "build_signature_from_lineage",
     "map_fe_dsl_to_semantic",
 ]

@@ -128,12 +128,12 @@ class TestComputedGrading:
         assert a.desirability == 1.0
         assert a.value == 0.06
 
-    def test_rank_ic_low_scores_d(self):
+    def test_rank_ic_weak_nonnegative_scores_c(self):
         a = grade_metric_evidence(
             metric_id="rank_ic", value=0.001, evidence_status="COMPUTED"
         )
-        assert a.grade == "D"
-        assert a.desirability < 0.2
+        assert a.grade == "C"
+        assert a.desirability == 0.4
 
     def test_icir_anchor_policy_bound(self):
         a = grade_metric_evidence(
@@ -185,7 +185,7 @@ class TestAbsoluteVsCohortNeverDerived:
         a = grade_metric_evidence(
             metric_id="rank_ic", value=0.04, evidence_status="COMPUTED"
         )
-        assert a.grade == "S"
+        assert a.grade == "S+"
         assert a.cohort_percentile is None
 
     def test_cohort_percentile_out_of_range_rejected(self):

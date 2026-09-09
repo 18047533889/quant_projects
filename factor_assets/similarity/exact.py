@@ -49,7 +49,7 @@ class SimilarityResult:
     """
     factor_id_a: str
     factor_id_b: str
-    similarity_score: float  # [-1, 1] for correlation methods
+    similarity_score: Optional[float]  # None unless a value is admissible
     method: SimilarityMethod
     timestamp: str  # ISO 8601
     sample_size: int
@@ -69,8 +69,11 @@ class SimilarityResult:
             raise ValueError("factor_id_b is required")
         if not isinstance(self.method, SimilarityMethod):
             raise TypeError("method must be a SimilarityMethod")
-        if not -1.0 <= self.similarity_score <= 1.0:
-            raise ValueError("similarity_score must be in [-1, 1]")
+        if self.measurement_status is SimilarityMeasurementStatus.COMPUTED_VALUE:
+            if self.similarity_score is None or not -1.0 <= self.similarity_score <= 1.0:
+                raise ValueError("similarity_score must be in [-1, 1] for computed evidence")
+        elif self.similarity_score is not None and not -1.0 <= self.similarity_score <= 1.0:
+            raise ValueError("similarity_score must be None or in [-1, 1]")
         if self.sample_size < 0:
             raise ValueError("sample_size must be non-negative")
         if not isinstance(self.measurement_status, SimilarityMeasurementStatus):
@@ -351,20 +354,44 @@ class QEPairwiseSimilarity:
         return self._cache.get(key)
 
     def _convert_qe_result(self, qe_result, method: SimilarityMethod) -> SimilarityResult:
-        """Convert QE correlation result to SimilarityResult."""
-        # Placeholder for QE result conversion
-        # In practice, qe_result would have structure like:
-        # {correlation: float, sample_size: int, timestamp: str, ...}
+        """Convert typed QE evidence; legacy aggregate-only dicts stay UNKNOWN."""
+        if hasattr(qe_result, "correlation"):
+            windows = tuple(getattr(qe_result, "windows", ()))
+            computed = getattr(getattr(qe_result, "status", None), "value", None) == "computed"
+            window_computed = all(
+                getattr(getattr(w, "status", None), "value", None) == "computed"
+                and w.confidence_interval[0] is not None
+                for w in windows
+            ) and bool(windows)
+            signs = {1 if w.correlation > 0 else -1 if w.correlation < 0 else 0
+                     for w in windows if w.correlation is not None}
+            admissible = computed and window_computed and len(signs - {0}) <= 1
+            return SimilarityResult(
+                factor_id_a=qe_result.factor_id_a,
+                factor_id_b=qe_result.factor_id_b,
+                similarity_score=(float(qe_result.correlation) if admissible else None),
+                method=method,
+                timestamp="",
+                sample_size=qe_result.pair_count,
+                universe_ref=qe_result.universe_ref,
+                period_start=qe_result.window_ref,
+                period_end=qe_result.window_ref,
+                measurement_status=(SimilarityMeasurementStatus.COMPUTED_VALUE
+                                    if admissible else SimilarityMeasurementStatus.UNKNOWN),
+            )
+        # Aggregate-only legacy payload has no per-window stability or
+        # uncertainty evidence. Preserve its value origin but do not certify it.
         return SimilarityResult(
             factor_id_a=qe_result.get("factor_id_a"),
             factor_id_b=qe_result.get("factor_id_b"),
-            similarity_score=qe_result.get("correlation"),
+            similarity_score=None,
             method=method,
             timestamp=qe_result.get("timestamp"),
             sample_size=qe_result.get("sample_size"),
             universe_ref=qe_result.get("universe_ref"),
             period_start=qe_result.get("period_start"),
             period_end=qe_result.get("period_end"),
+            measurement_status=SimilarityMeasurementStatus.UNKNOWN,
         )
 
     def clear(self) -> None:

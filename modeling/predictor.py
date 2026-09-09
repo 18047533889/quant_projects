@@ -47,6 +47,14 @@ def predict_panel(
     context: PredictionContext,
 ) -> pd.Series:
     """Score panel rows using a row-aligned mandatory context."""
+    if dataset.feature_schema is not None and dataset.feature_schema.is_complete:
+        dataset_hash = dataset.feature_schema.fingerprint()
+        if context.feature_schema_hash != dataset_hash:
+            raise ValueError("prediction context does not match dataset feature manifest")
+        if artifact.manifest.feature_schema_hash != dataset_hash:
+            raise ValueError("artifact does not match dataset feature manifest")
+        if not artifact.manifest.feature_manifest:
+            raise ValueError("legacy artifact cannot score a complete production feature manifest")
     values = dataset.frame[dataset.feature_cols].to_numpy(dtype=np.float64)
     predictions = Predictor().predict(artifact, values, context)
     return pd.Series(predictions, index=dataset.frame.index)

@@ -20,7 +20,15 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from factor_preprocess.transforms.smoothing import trailing_sma
+from factor_preprocess.transforms.smoothing import (
+    kalman_local_level,
+    kama,
+    one_sided_iir_lowpass,
+    robust_ewma,
+    trailing_median,
+    trailing_sma,
+)
+from factor_preprocess.transforms import ewma
 from factor_preprocess.transforms.decomposition.trend import hp_filter
 from factor_preprocess.registry.transforms import (
     TransformRegistry,
@@ -50,21 +58,32 @@ def _make_single_asset(seed: int = 0, n: int = 60):
 # ---------------------------------------------------------------------------
 # 1. PASS: the causal smoother family IS prefix-invariant.
 # ---------------------------------------------------------------------------
-def test_trailing_sma_is_prefix_invariant():
-    """Recomputing trailing_sma over a prefix reproduces the prefix outputs."""
+@pytest.mark.parametrize(
+    ("transform", "kwargs"),
+    [
+        (ewma, {"halflife": 5}),
+        (trailing_sma, {"window": 5}),
+        (trailing_median, {"window": 5}),
+        (robust_ewma, {"halflife": 5}),
+        (kama, {"period_fast": 2, "period_slow": 20, "period_er": 5}),
+        (one_sided_iir_lowpass, {"alpha": 0.2}),
+        (kalman_local_level, {"process_noise": 0.01, "measurement_noise": 0.3}),
+    ],
+)
+def test_offline_one_sided_smoothers_are_prefix_invariant(transform, kwargs):
+    """Batch causality is necessary, but does not certify checkpoint replay."""
     df = _make_single_asset(seed=1, n=60)
-    full = trailing_sma(df, window=5)
-    T = len(df)
+    full = transform(df, **kwargs)
     for t in [10, 20, 30, 45, 55]:
         prefix_df = df.iloc[:t]
-        prefix_out = trailing_sma(prefix_df, window=5)
+        prefix_out = transform(prefix_df, **kwargs)
         expected = full.iloc[:t].to_numpy()
         actual = prefix_out.iloc[:t].to_numpy()
         # Compare only where both are defined (NaN warmup propagates the same).
         mask = ~np.isnan(expected) & ~np.isnan(actual)
         np.testing.assert_allclose(
             actual[mask], expected[mask], rtol=1e-9, atol=1e-9,
-            err_msg=f"trailing_sma not prefix-invariant at t={t}",
+            err_msg=f"{transform.__name__} not prefix-invariant at t={t}",
         )
 
 
@@ -125,11 +144,12 @@ def test_hp_filters_are_offline_only_not_production_causal():
 
 
 # ---------------------------------------------------------------------------
-# 4. The causal smoother family is PRODUCTION-admissible in the registry.
+# 4. Batch-causal smoother metadata remains factual and production-admissible.
 # ---------------------------------------------------------------------------
 def test_causal_smoothers_are_production():
     registry = create_default_registry()
     for name in (
+        "ewma",
         "trailing_sma",
         "trailing_median",
         "robust_ewma",
@@ -141,4 +161,4 @@ def test_causal_smoothers_are_production():
         assert meta is not None, f"{name} not registered"
         assert meta.causal_safe is True, f"{name} must be causal_safe"
         assert meta.admission == "PRODUCTION", f"{name} must be PRODUCTION"
-        registry.validate_production(name)  # should not raise
+        registry.validate_production(name)

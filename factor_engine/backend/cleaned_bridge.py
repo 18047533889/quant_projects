@@ -19,6 +19,66 @@ from .panel_native import panel_native_enabled, to_panel
 from factor_engine.cache.panel_cache import series_panel_cache_key
 
 
+@dataclass
+class _RecipePanelSource:
+    """Request-local source used by the canonical plan executor."""
+
+    panel: Any
+    column_name: str = "__recipe_input__"
+    load_count: int = 0
+
+    def load_column(self, name: str):
+        if name != self.column_name:
+            raise KeyError(name)
+        self.load_count += 1
+        series = self.panel.stack(future_stack=True)
+        series.index = series.index.set_names(("timestamp", "instrument"))
+        series.name = name
+        return series
+
+    def load_columns(self, names):
+        return {name: self.load_column(name) for name in names}
+
+
+def compile_operator_recipe(steps) -> PlanNode:
+    """Compile ordered canonical operators into one existing logical-plan DAG.
+
+    ``steps`` contains ``(canonical_operator, scalar_parameters)`` pairs. The
+    input column is loaded once and every subsequent node consumes the prior
+    node. Unknown operators fail before execution.
+    """
+    ensure_cleaned_loaded()
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
+
+    node = PlanNode("column", attrs={"name": "__recipe_input__"})
+    for canonical, parameters in steps:
+        resolved = OperatorRegistry.resolve_canonical_strict(str(canonical))
+        if OperatorRegistry.get(resolved) is None:
+            raise ValueError(f"unknown recipe operator {canonical!r}")
+        node = PlanNode(resolved, inputs=(node,), attrs=dict(parameters))
+    return node
+
+
+def execute_operator_recipe(panel, steps, *, runtime_stats=None):
+    """Execute a multi-step recipe through one PlanNode/PandasBackend session."""
+    if not isinstance(panel, pd.DataFrame):
+        raise TypeError("recipe panel must be a pandas DataFrame")
+    source = _RecipePanelSource(panel)
+    stats = runtime_stats if runtime_stats is not None else {}
+    plan = compile_operator_recipe(steps)
+    from factor_engine.backend.pandas_backend import PandasBackend
+
+    ctx = ExecutionContext(data_source=source, run_mode="research", runtime_stats=stats)
+    result = PandasBackend().execute(plan, ctx)
+    stats["recipe_input_load_count"] = source.load_count
+    stats["recipe_operator_count"] = len(tuple(steps))
+    if isinstance(result, pd.Series) and isinstance(result.index, pd.MultiIndex):
+        return result.unstack(level=-1)
+    if isinstance(result, pd.DataFrame):
+        return result
+    raise TypeError(f"recipe execution returned unsupported type {type(result).__name__}")
+
+
 class NoCertifiedParameterRegionError(ValueError):
     """R40 #156: a production operator has NO certified parameter region for the
     selected backend — fail closed instead of the legacy ``coverage_skip``

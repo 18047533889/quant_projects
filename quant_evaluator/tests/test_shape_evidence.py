@@ -319,14 +319,14 @@ def test_shape_stability_high_for_stable_windows():
     windows = _windowed_stable_u()
     stability = compute_shape_stability(windows)
     assert np.isfinite(stability[0])
-    assert stability[0] > 2.0  # Fisher-z of high correlations
+    assert 0.99 < stability[0] <= 1.0  # inverse Fisher, correlation units
 
 
 def test_shape_regime_stability_high_for_stable_windows():
     windows = _windowed_stable_u()
     regime = compute_shape_regime_stability(windows)
     assert np.isfinite(regime[0])
-    assert regime[0] > 2.0
+    assert 0.99 < regime[0] <= 1.0
 
 
 def test_shape_bootstrap_confidence_high_for_stable_windows():
@@ -364,7 +364,8 @@ def test_new_shape_ids_registered_with_bound_compute_fn():
         assert metric_id in registered, metric_id
         spec = get_metric(metric_id)
         assert spec.compute_fn is not None, metric_id
-        assert spec.requires == ["QuantileReturnArtifact"], metric_id
+        expected = ["factor_batch"] if metric_id == "adaptive_quantile_count" else ["QuantileReturnArtifact"]
+        assert spec.requires == expected, metric_id
 
 
 def test_pre_existing_shape_ids_untouched():

@@ -83,6 +83,9 @@ class DimensionGradeArtifact:
     missing_metric_refs: tuple[str, ...]
     dimension_policy_id: str
     dimension_policy_version: str
+    evidence_level: str = "E0"
+    applicability: str = "APPLICABLE"
+    reason_codes: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if not self.factor_definition_id:
@@ -98,6 +101,11 @@ class DimensionGradeArtifact:
         object.__setattr__(self, "bottlenecks", tuple(self.bottlenecks))
         object.__setattr__(self, "diagnosis_tags", tuple(self.diagnosis_tags))
         object.__setattr__(self, "missing_metric_refs", tuple(self.missing_metric_refs))
+        object.__setattr__(self, "reason_codes", tuple(dict.fromkeys(self.reason_codes)))
+        if self.evidence_level not in {"E0", "E1", "E2", "E3"}:
+            raise ValueError("evidence_level must be E0..E3")
+        if self.applicability not in {"APPLICABLE", "NOT_APPLICABLE", "NOT_RUN_BUDGET"}:
+            raise ValueError("unknown applicability")
         if self.score is not None:
             s = float(self.score)
             if math.isnan(s) or math.isinf(s) or not 0.0 <= s <= 100.0:
@@ -135,6 +143,9 @@ class DimensionGradeArtifact:
             "missing_metric_refs": list(self.missing_metric_refs),
             "dimension_policy_id": self.dimension_policy_id,
             "dimension_policy_version": self.dimension_policy_version,
+            "evidence_level": self.evidence_level,
+            "applicability": self.applicability,
+            "reason_codes": list(self.reason_codes),
         }
 
 
@@ -195,6 +206,7 @@ def build_dimension_grade(
     metric_grade_refs: Sequence[MetricGradeArtifact],
     policy=None,
     diagnosis_tags: Sequence[str] = (),
+    shape_family: str | None = None,
 ) -> DimensionGradeArtifact:
     """Aggregate graded metrics of one dimension into a frozen dimension artifact.
 
@@ -210,20 +222,47 @@ def build_dimension_grade(
     if policy is None:
         policy = get_health_policy()
     rule = policy.dimension_rule(dimension_id)
+    active_metric_ids = tuple(rule.metric_ids)
+    if dimension_id == "shape_quality":
+        family_metrics = {
+            "MONOTONIC": ("quantile_monotonicity", "top_tail_cliff"),
+            "U": ("u_shape_score", "top_tail_cliff"),
+            "INVERTED_U": ("u_shape_score", "top_tail_cliff"),
+            "TAIL": ("top_tail_cliff",),
+        }
+        if shape_family is not None:
+            if shape_family not in family_metrics:
+                raise ValueError("shape_family must be a frozen supported family")
+            active_metric_ids = family_metrics[shape_family]
 
     refs = tuple(metric_grade_refs)
     by_id: dict[str, MetricGradeArtifact] = {}
     for ref in refs:
         if not isinstance(ref, MetricGradeArtifact):
             raise TypeError("metric_grade_refs must contain MetricGradeArtifact")
+        if ref.factor_definition_id and ref.factor_definition_id != factor_definition_id:
+            raise ValueError("metric grade factor_definition_id mismatch")
+        if ref.evaluation_ref and ref.evaluation_ref != evaluation_ref:
+            raise ValueError("metric grade evaluation_ref mismatch")
+        if ((ref.grading_policy_id and ref.grading_policy_id != policy.policy_id)
+                or (ref.grading_policy_version and ref.grading_policy_version != policy.policy_version)):
+            raise ValueError("metric grade policy identity/version mismatch")
         if ref.metric_id in by_id:
             raise ValueError(f"duplicate metric grade ref for {ref.metric_id!r}")
         by_id[ref.metric_id] = ref
+    # Context coordinates are cohort invariants: mixing horizons, universes,
+    # costs/configs, snapshots or representations produces a meaningless
+    # dimension even when each individual grade is valid.
+    for field_name in ("horizon", "universe_ref", "config_hash", "data_as_of",
+                       "portfolio_spec_ref", "factor_axis_ref", "use_case"):
+        values = {getattr(ref, field_name) for ref in refs}
+        if len(values) > 1:
+            raise ValueError(f"metric grade {field_name} mismatch")
 
     desirabilities: dict[str, float] = {}
     missing: list[str] = []
     tier = EVIDENCE_TIER_COMPLETE
-    for metric_id in rule.metric_ids:
+    for metric_id in active_metric_ids:
         ref = by_id.get(metric_id)
         d = None if ref is None else ref.desirability
         if ref is not None and ref.evidence_status == "COMPUTED" and d is not None:
@@ -234,14 +273,19 @@ def build_dimension_grade(
     score: float | None
     grade: str | None
     bottlenecks: tuple[str, ...]
-    if not desirabilities:
+    required_missing = set(rule.required_metric_ids).intersection(missing)
+    if not desirabilities or required_missing:
         score = None
         grade = None
         bottlenecks = ()
-        tier = EVIDENCE_TIER_MISSING
+        tier = EVIDENCE_TIER_PARTIAL if desirabilities else EVIDENCE_TIER_MISSING
     else:
-        score01, bottlenecks_list = _dimension_score_from_rule(rule, desirabilities)
-        score = score01
+        values = list(desirabilities.values())
+        score = 100.0 * aggregate_dimension_score(
+            values, min_weight=rule.min_weight, geo_weight=rule.geo_weight
+        )
+        minimum = min(values)
+        bottlenecks_list = [mid for mid, value in desirabilities.items() if value == minimum]
         grade = policy.display_grade_for_score(score)
         bottlenecks = tuple(bottlenecks_list)
         if missing:
@@ -263,6 +307,12 @@ def build_dimension_grade(
         missing_metric_refs=tuple(missing),
         dimension_policy_id=policy.policy_id,
         dimension_policy_version=policy.policy_version,
+        evidence_level=(
+            min((r.evidence_level for r in refs if r.metric_id in active_metric_ids),
+                key=("E0", "E1", "E2", "E3").index)
+            if any(r.metric_id in active_metric_ids for r in refs) else "E0"
+        ),
+        reason_codes=tuple(f"MISSING:{m}" for m in missing),
     )
 
 
@@ -288,6 +338,7 @@ def build_dimension_grades(
     metric_grade_refs: Mapping[str, Sequence[MetricGradeArtifact]],
     policy=None,
     diagnosis_tags: Mapping[str, Sequence[str]] | None = None,
+    shape_family: str | None = None,
 ) -> tuple[DimensionGradeArtifact, ...]:
     """Aggregate all 14 dimensions in canonical order.
 
@@ -312,6 +363,7 @@ def build_dimension_grades(
             }] if policy.has_dimension_rule(dim_id) else (),
             policy=policy,
             diagnosis_tags=tags.get(dim_id, ()),
+            shape_family=shape_family if dim_id == "shape_quality" else None,
         )
         for dim_id in HEALTH_DIMENSIONS
     )

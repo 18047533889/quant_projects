@@ -1,4 +1,25 @@
-from .runner import run_backtest, run_backtest_grid, portfolio_report, compare_reports
+"""MVP engine public API.
+
+Runner functions are loaded on first access so lightweight batch/profile
+imports do not require the optional plotting and backtest runtime stack.
+"""
+
+_RUNNER_EXPORTS = {
+    "run_backtest",
+    "run_backtest_grid",
+    "portfolio_report",
+    "compare_reports",
+}
+
+
+def __getattr__(name):
+    if name in _RUNNER_EXPORTS:
+        from . import runner
+
+        value = getattr(runner, name)
+        globals()[name] = value
+        return value
+    raise AttributeError(name)
 from .batch import (
     BatchBacktestResult,
     apply_parameter_overrides,

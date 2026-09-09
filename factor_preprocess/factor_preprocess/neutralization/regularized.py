@@ -1,462 +1,69 @@
-"""
-Regularized neutralization for cross-sectional residuals.
-
-Implements Ridge, Lasso, and Elastic Net per-date neutralization
-with automatic alpha selection and numerical stability checks.
-"""
+"""Regularized cross-sectional neutralization with explicit solver evidence."""
+from numbers import Integral, Real
 import numpy as np
 import pandas as pd
-from typing import Optional, Literal
 
-
-def ridge_neutralize(
-    values: pd.DataFrame,
-    exposures: pd.DataFrame,
-    alpha: float = 1.0,
-    date_col: str = "date",
-    asset_col: str = "asset_id",
-    value_col: str = "value",
-    min_observations: int = 10,
-    add_intercept: bool = True,
-    normalize: bool = True,
-) -> pd.Series:
-    """
-    Cross-sectional Ridge (L2) neutralization.
-
-    Parameters
-    ----------
-    values : pd.DataFrame
-        Factor values to neutralize. Columns: [date_col, asset_col, value_col]
-    exposures : pd.DataFrame
-        Exposure matrix. Columns: [date_col, asset_col, exposure1, exposure2, ...]
-    alpha : float
-        Regularization strength (larger = more shrinkage)
-    date_col : str
-        Date column name
-    asset_col : str
-        Asset identifier column
-    value_col : str
-        Factor value column to neutralize
-    min_observations : int
-        Minimum valid observations per date to fit
-    add_intercept : bool
-        Whether to add intercept column (intercept not regularized)
-    normalize : bool
-        Whether to standardize exposures before fitting
-
-    Returns
-    -------
-    pd.Series
-        Residuals aligned with values index.
-        Dates with insufficient data produce NaN.
-
-    Notes
-    -----
-    Uses closed-form Ridge solution: (X'X + alpha*I)^-1 X'y
-    Intercept is not penalized when add_intercept=True.
-    Per-date operation prevents time-series leakage.
-    """
-    merged = values.merge(
-        exposures,
-        on=[date_col, asset_col],
-        how="left",
-        suffixes=("", "_exp"),
-    )
-
-    exposure_cols = [c for c in exposures.columns if c not in [date_col, asset_col]]
-
-    if not exposure_cols:
-        raise ValueError("No exposure columns found")
-
-    results = []
-
-    for date, group in merged.groupby(date_col):
-        y = group[value_col].values
-        X = group[exposure_cols].values
-
-        # Drop rows with any NaN
-        valid_mask = np.isfinite(y) & np.all(np.isfinite(X), axis=1)
-        n_valid = np.sum(valid_mask)
-
-        if n_valid < min_observations:
-            residuals = np.full_like(y, np.nan)
-        else:
-            y_valid = y[valid_mask]
-            X_valid = X[valid_mask]
-
-            # Normalize exposures if requested
-            if normalize:
-                X_mean = X_valid.mean(axis=0)
-                X_std = X_valid.std(axis=0, ddof=1)
-                X_std[X_std == 0] = 1.0  # Avoid division by zero
-                X_valid_norm = (X_valid - X_mean) / X_std
-            else:
-                X_valid_norm = X_valid
-                X_mean = None
-                X_std = None
-
-            try:
-                if add_intercept:
-                    # Center y, fit Ridge on normalized X
-                    y_mean = y_valid.mean()
-                    y_centered = y_valid - y_mean
-
-                    # Ridge regression on normalized features
-                    XtX = X_valid_norm.T @ X_valid_norm
-                    Xty = X_valid_norm.T @ y_centered
-                    ridge_matrix = XtX + alpha * np.eye(XtX.shape[0])
-                    coef = np.linalg.solve(ridge_matrix, Xty)
-
-                    # Compute intercept
-                    intercept = y_mean
-                else:
-                    # Ridge without intercept
-                    XtX = X_valid_norm.T @ X_valid_norm
-                    Xty = X_valid_norm.T @ y_valid
-                    ridge_matrix = XtX + alpha * np.eye(XtX.shape[0])
-                    coef = np.linalg.solve(ridge_matrix, Xty)
-                    intercept = 0.0
-
-                # Predict on all data (including NaN rows)
-                if normalize:
-                    X_all_norm = (X - X_mean) / X_std
-                else:
-                    X_all_norm = X
-
-                y_pred = X_all_norm @ coef + intercept
-                residuals = y - y_pred
-
-                # NaN inputs produce NaN residuals
-                residuals[~valid_mask] = np.nan
-
-            except np.linalg.LinAlgError:
-                residuals = np.full_like(y, np.nan)
-
-        result_df = pd.DataFrame({
-            date_col: date,
-            asset_col: group[asset_col].values,
-            "residual": residuals,
-        }, index=group.index)
-
-        results.append(result_df)
-
-    if not results:
-        return pd.Series(np.nan, index=values.index)
-
-    all_results = pd.concat(results)
-    return all_results["residual"].reindex(values.index)
-
-
-def lasso_neutralize(
-    values: pd.DataFrame,
-    exposures: pd.DataFrame,
-    alpha: float = 1.0,
-    date_col: str = "date",
-    asset_col: str = "asset_id",
-    value_col: str = "value",
-    min_observations: int = 10,
-    add_intercept: bool = True,
-    normalize: bool = True,
-    max_iter: int = 1000,
-    tol: float = 1e-4,
-) -> pd.Series:
-    """
-    Cross-sectional Lasso (L1) neutralization.
-
-    Parameters
-    ----------
-    values : pd.DataFrame
-        Factor values to neutralize
-    exposures : pd.DataFrame
-        Exposure matrix
-    alpha : float
-        Regularization strength
-    date_col : str
-        Date column name
-    asset_col : str
-        Asset identifier column
-    value_col : str
-        Factor value column to neutralize
-    min_observations : int
-        Minimum valid observations per date
-    add_intercept : bool
-        Whether to add intercept (not regularized)
-    normalize : bool
-        Whether to standardize exposures
-    max_iter : int
-        Maximum coordinate descent iterations
-    tol : float
-        Convergence tolerance
-
-    Returns
-    -------
-    pd.Series
-        Residuals aligned with values index
-
-    Notes
-    -----
-    Uses coordinate descent for L1 minimization.
-    Implements soft thresholding for feature selection.
-    """
-    merged = values.merge(
-        exposures,
-        on=[date_col, asset_col],
-        how="left",
-        suffixes=("", "_exp"),
-    )
-
-    exposure_cols = [c for c in exposures.columns if c not in [date_col, asset_col]]
-
-    if not exposure_cols:
-        raise ValueError("No exposure columns found")
-
-    results = []
-
-    for date, group in merged.groupby(date_col):
-        y = group[value_col].values
-        X = group[exposure_cols].values
-
-        valid_mask = np.isfinite(y) & np.all(np.isfinite(X), axis=1)
-        n_valid = np.sum(valid_mask)
-
-        if n_valid < min_observations:
-            residuals = np.full_like(y, np.nan)
-        else:
-            y_valid = y[valid_mask]
-            X_valid = X[valid_mask]
-
-            # Normalize
-            if normalize:
-                X_mean = X_valid.mean(axis=0)
-                X_std = X_valid.std(axis=0, ddof=1)
-                X_std[X_std == 0] = 1.0
-                X_valid_norm = (X_valid - X_mean) / X_std
-            else:
-                X_valid_norm = X_valid
-                X_mean = None
-                X_std = None
-
-            try:
-                if add_intercept:
-                    y_mean = y_valid.mean()
-                    y_centered = y_valid - y_mean
-                else:
-                    y_centered = y_valid
-                    y_mean = 0.0
-
-                # Coordinate descent for Lasso
-                n_features = X_valid_norm.shape[1]
-                coef = np.zeros(n_features)
-
-                for iteration in range(max_iter):
-                    coef_old = coef.copy()
-
-                    for j in range(n_features):
-                        # Compute partial residual
-                        r = y_centered - X_valid_norm @ coef + coef[j] * X_valid_norm[:, j]
-
-                        # Soft thresholding
-                        rho = X_valid_norm[:, j] @ r
-                        z = np.sum(X_valid_norm[:, j] ** 2)
-
-                        if z > 0:
-                            if rho < -alpha:
-                                coef[j] = (rho + alpha) / z
-                            elif rho > alpha:
-                                coef[j] = (rho - alpha) / z
-                            else:
-                                coef[j] = 0.0
-
-                    # Check convergence
-                    if np.max(np.abs(coef - coef_old)) < tol:
-                        break
-
-                # Compute intercept
-                if add_intercept:
-                    intercept = y_mean - (X_valid_norm.mean(axis=0) @ coef)
-                else:
-                    intercept = 0.0
-
-                # Predict
-                if normalize:
-                    X_all_norm = (X - X_mean) / X_std
-                else:
-                    X_all_norm = X
-
-                y_pred = X_all_norm @ coef + intercept
-                residuals = y - y_pred
-                residuals[~valid_mask] = np.nan
-
-            except Exception:
-                residuals = np.full_like(y, np.nan)
-
-        result_df = pd.DataFrame({
-            date_col: date,
-            asset_col: group[asset_col].values,
-            "residual": residuals,
-        }, index=group.index)
-
-        results.append(result_df)
-
-    if not results:
-        return pd.Series(np.nan, index=values.index)
-
-    all_results = pd.concat(results)
-    return all_results["residual"].reindex(values.index)
-
-
-def elastic_net_neutralize(
-    values: pd.DataFrame,
-    exposures: pd.DataFrame,
-    alpha: float = 1.0,
-    l1_ratio: float = 0.5,
-    date_col: str = "date",
-    asset_col: str = "asset_id",
-    value_col: str = "value",
-    min_observations: int = 10,
-    add_intercept: bool = True,
-    normalize: bool = True,
-    max_iter: int = 1000,
-    tol: float = 1e-4,
-) -> pd.Series:
-    """
-    Cross-sectional Elastic Net (L1 + L2) neutralization.
-
-    Parameters
-    ----------
-    values : pd.DataFrame
-        Factor values to neutralize
-    exposures : pd.DataFrame
-        Exposure matrix
-    alpha : float
-        Overall regularization strength
-    l1_ratio : float
-        Mix of L1 and L2 penalty. 0 = Ridge, 1 = Lasso
-    date_col : str
-        Date column name
-    asset_col : str
-        Asset identifier column
-    value_col : str
-        Factor value column to neutralize
-    min_observations : int
-        Minimum valid observations per date
-    add_intercept : bool
-        Whether to add intercept
-    normalize : bool
-        Whether to standardize exposures
-    max_iter : int
-        Maximum iterations
-    tol : float
-        Convergence tolerance
-
-    Returns
-    -------
-    pd.Series
-        Residuals aligned with values index
-
-    Notes
-    -----
-    Combines L1 (feature selection) and L2 (stability).
-    Uses coordinate descent with elastic net penalty.
-    """
-    merged = values.merge(
-        exposures,
-        on=[date_col, asset_col],
-        how="left",
-        suffixes=("", "_exp"),
-    )
-
-    exposure_cols = [c for c in exposures.columns if c not in [date_col, asset_col]]
-
-    if not exposure_cols:
-        raise ValueError("No exposure columns found")
-
-    results = []
-
-    for date, group in merged.groupby(date_col):
-        y = group[value_col].values
-        X = group[exposure_cols].values
-
-        valid_mask = np.isfinite(y) & np.all(np.isfinite(X), axis=1)
-        n_valid = np.sum(valid_mask)
-
-        if n_valid < min_observations:
-            residuals = np.full_like(y, np.nan)
-        else:
-            y_valid = y[valid_mask]
-            X_valid = X[valid_mask]
-
-            if normalize:
-                X_mean = X_valid.mean(axis=0)
-                X_std = X_valid.std(axis=0, ddof=1)
-                X_std[X_std == 0] = 1.0
-                X_valid_norm = (X_valid - X_mean) / X_std
-            else:
-                X_valid_norm = X_valid
-                X_mean = None
-                X_std = None
-
-            try:
-                if add_intercept:
-                    y_mean = y_valid.mean()
-                    y_centered = y_valid - y_mean
-                else:
-                    y_centered = y_valid
-                    y_mean = 0.0
-
-                # Elastic net coordinate descent
-                n_features = X_valid_norm.shape[1]
-                coef = np.zeros(n_features)
-
-                l1_penalty = alpha * l1_ratio
-                l2_penalty = alpha * (1 - l1_ratio)
-
-                for iteration in range(max_iter):
-                    coef_old = coef.copy()
-
-                    for j in range(n_features):
-                        r = y_centered - X_valid_norm @ coef + coef[j] * X_valid_norm[:, j]
-                        rho = X_valid_norm[:, j] @ r
-                        z = np.sum(X_valid_norm[:, j] ** 2) + l2_penalty
-
-                        if z > 0:
-                            if rho < -l1_penalty:
-                                coef[j] = (rho + l1_penalty) / z
-                            elif rho > l1_penalty:
-                                coef[j] = (rho - l1_penalty) / z
-                            else:
-                                coef[j] = 0.0
-
-                    if np.max(np.abs(coef - coef_old)) < tol:
-                        break
-
-                if add_intercept:
-                    intercept = y_mean - (X_valid_norm.mean(axis=0) @ coef)
-                else:
-                    intercept = 0.0
-
-                if normalize:
-                    X_all_norm = (X - X_mean) / X_std
-                else:
-                    X_all_norm = X
-
-                y_pred = X_all_norm @ coef + intercept
-                residuals = y - y_pred
-                residuals[~valid_mask] = np.nan
-
-            except Exception:
-                residuals = np.full_like(y, np.nan)
-
-        result_df = pd.DataFrame({
-            date_col: date,
-            asset_col: group[asset_col].values,
-            "residual": residuals,
-        }, index=group.index)
-
-        results.append(result_df)
-
-    if not results:
-        return pd.Series(np.nan, index=values.index)
-
-    all_results = pd.concat(results)
-    return all_results["residual"].reindex(values.index)
+def _num(name, x, low=0.0, high=None, strict=False):
+    if isinstance(x, (bool, np.bool_)) or not isinstance(x, Real): raise TypeError(f"{name} must be a real number, not bool")
+    x=float(x)
+    if not np.isfinite(x) or x < low or (strict and x == low) or (high is not None and x > high): raise ValueError(f"invalid {name}")
+    return x
+
+def _inputs(values, exposures, keys, value_col):
+    if value_col not in values: raise ValueError(f"missing value column {value_col}")
+    for f,n in ((values,"values"),(exposures,"exposures")):
+        m=[k for k in keys if k not in f]
+        if m: raise ValueError(f"{n} missing keys: {m}")
+    if exposures.duplicated(keys).any(): raise ValueError("exposure keys must be unique")
+    cols=[c for c in exposures if c not in keys]
+    if not cols: raise ValueError("No exposure columns found")
+    overlap=set(cols)&set(values.columns)
+    if overlap: raise ValueError(f"factor/exposure field collision: {sorted(overlap)}")
+    tag="__fp_row_ordinal__"
+    if tag in values or tag in exposures: raise ValueError(f"reserved field {tag}")
+    left=values.copy(); left[tag]=np.arange(len(left))
+    return left.merge(exposures,on=keys,how="left",sort=False,validate="many_to_one"),cols,tag
+
+def _cd(X,y,alpha,l1_ratio,max_iter,tol):
+    n,p=X.shape; b=np.zeros(p); l1=alpha*l1_ratio; l2=alpha*(1-l1_ratio); conv=False
+    for it in range(1,max_iter+1):
+        old=b.copy()
+        for j in range(p):
+            r=y-X@b+X[:,j]*b[j]; rho=X[:,j]@r/n; z=X[:,j]@X[:,j]/n+l2
+            b[j]=np.sign(rho)*max(abs(rho)-l1,0)/z if z else 0
+        if np.max(np.abs(b-old),initial=0)<=tol: conv=True; break
+    r=y-X@b; grad=-(X.T@r)/n+l2*b
+    gap=float(np.max(np.where(b!=0,np.abs(grad+l1*np.sign(b)),np.maximum(np.abs(grad)-l1,0)),initial=0))
+    obj=float(r@r/(2*n)+l1*np.abs(b).sum()+l2*(b@b)/2)
+    return b,it,conv,obj,gap
+
+def _run(values,exposures,*,kind,alpha,date_col,asset_col,value_col,min_observations,add_intercept,normalize,max_iter=1000,tol=1e-4,l1_ratio=0.0):
+    alpha=_num("alpha",alpha)
+    if isinstance(min_observations,(bool,np.bool_)) or not isinstance(min_observations,Integral) or min_observations<=0: raise ValueError("min_observations must be a positive integer")
+    if kind!="ridge":
+        if isinstance(max_iter,(bool,np.bool_)) or not isinstance(max_iter,Integral) or max_iter<=0: raise ValueError("max_iter must be a positive integer")
+        tol=_num("tol",tol,strict=True); l1_ratio=_num("l1_ratio",l1_ratio,high=1)
+    merged,cols,tag=_inputs(values,exposures,[date_col,asset_col],value_col)
+    out=np.full(len(values),np.nan); evidence=[]
+    for date,g in merged.groupby(date_col,sort=False,dropna=False):
+        y=g[value_col].to_numpy(float); X=g[cols].to_numpy(float); valid=np.isfinite(y)&np.isfinite(X).all(1); n=int(valid.sum())
+        if n<min_observations:
+            evidence.append(dict(date=date,status="INSUFFICIENT_DATA",n_effective=n,n_iter=0,converged=False)); continue
+        Xv=X[valid]; yv=y[valid]; xm=Xv.mean(0) if add_intercept else np.zeros(Xv.shape[1]); ym=float(yv.mean()) if add_intercept else 0.; Xc=Xv-xm; yc=yv-ym
+        scale=Xc.std(0,ddof=1) if normalize else np.ones(Xc.shape[1]); scale[~np.isfinite(scale)|(scale==0)]=1; Z=Xc/scale
+        try:
+            if kind=="ridge":
+                b=np.linalg.solve(Z.T@Z/n+alpha*np.eye(Z.shape[1]),Z.T@yc/n); it=1; conv=True; r=yc-Z@b; obj=float(r@r/(2*n)+alpha*(b@b)/2); gap=float(np.max(np.abs(-(Z.T@r)/n+alpha*b),initial=0))
+            else: b,it,conv,obj,gap=_cd(Z,yc,alpha,l1_ratio,max_iter,tol)
+        except np.linalg.LinAlgError:
+            evidence.append(dict(date=date,status="NUMERICAL_FAILURE",n_effective=n,n_iter=0,converged=False)); continue
+        coef=b/scale; intercept=ym-xm@coef if add_intercept else 0.; residual=y-(X@coef+intercept); residual[~valid]=np.nan; out[g[tag].to_numpy(int)]=residual
+        evidence.append(dict(date=date,status="CONVERGED" if conv else "ITERATION_BUDGET_EXHAUSTED",n_effective=n,n_iter=it,converged=conv,objective=obj,stationarity_gap=gap,effective_alpha=alpha,loss_normalization="mean"))
+    ans=pd.Series(out,index=values.index,name="residual"); ans.attrs["fit_diagnostics"]=evidence; ans.attrs["objective"]="||y-Xb||^2/(2n)+alpha*(l1_ratio*L1+(1-l1_ratio)*L2/2)"; return ans
+
+def ridge_neutralize(values,exposures,alpha=1.0,date_col="date",asset_col="asset_id",value_col="value",min_observations=10,add_intercept=True,normalize=True):
+    return _run(values,exposures,kind="ridge",alpha=alpha,date_col=date_col,asset_col=asset_col,value_col=value_col,min_observations=min_observations,add_intercept=add_intercept,normalize=normalize)
+def lasso_neutralize(values,exposures,alpha=1.0,date_col="date",asset_col="asset_id",value_col="value",min_observations=10,add_intercept=True,normalize=True,max_iter=1000,tol=1e-4):
+    return _run(values,exposures,kind="lasso",alpha=alpha,date_col=date_col,asset_col=asset_col,value_col=value_col,min_observations=min_observations,add_intercept=add_intercept,normalize=normalize,max_iter=max_iter,tol=tol,l1_ratio=1.)
+def elastic_net_neutralize(values,exposures,alpha=1.0,l1_ratio=0.5,date_col="date",asset_col="asset_id",value_col="value",min_observations=10,add_intercept=True,normalize=True,max_iter=1000,tol=1e-4):
+    return _run(values,exposures,kind="elastic",alpha=alpha,date_col=date_col,asset_col=asset_col,value_col=value_col,min_observations=min_observations,add_intercept=add_intercept,normalize=normalize,max_iter=max_iter,tol=tol,l1_ratio=l1_ratio)

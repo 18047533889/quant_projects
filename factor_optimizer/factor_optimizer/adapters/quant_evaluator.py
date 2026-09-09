@@ -2,7 +2,9 @@
 
 from collections.abc import Mapping
 from copy import deepcopy
-from typing import Any, Dict, List, Optional, Protocol, runtime_checkable
+import hashlib
+import json
+from typing import Any, Dict, List, Optional, Protocol, Sequence, runtime_checkable
 
 
 from factor_optimizer.capabilities import ExecutionMode, require_production_capability
@@ -57,6 +59,16 @@ class QuantEvaluatorAdapter(Protocol):
         labels: Any,
         metrics: Optional[List[str]] = None,
         context: Optional[Dict[str, Any]] = None,
+        *,
+        split_ref: Any = None,
+        backend: Any = None,
+        gpu_policy: Any = None,
+        tier: Optional[str] = None,
+        cost_budget: Optional[float] = None,
+        metric_parameters: Optional[Dict[str, Dict[str, Any]]] = None,
+        request_metadata: Optional[Dict[str, Any]] = None,
+        metric_instances: Optional[Sequence[Any]] = None,
+        scenario_inputs: Optional[Mapping[str, Any]] = None,
     ) -> Dict[str, Any]:
         """
         Submit evaluation request to QE.
@@ -158,6 +170,16 @@ def create_qe_adapter(*, execution_mode: ExecutionMode = ExecutionMode.RESEARCH_
                 labels: Any,
                 metrics: Optional[List[str]] = None,
                 context: Optional[Dict[str, Any]] = None,
+                *,
+                split_ref: Any = None,
+                backend: Any = None,
+                gpu_policy: Any = None,
+                tier: Optional[str] = None,
+                cost_budget: Optional[float] = None,
+                metric_parameters: Optional[Dict[str, Dict[str, Any]]] = None,
+                request_metadata: Optional[Dict[str, Any]] = None,
+                metric_instances: Optional[Sequence[Any]] = None,
+                scenario_inputs: Optional[Mapping[str, Any]] = None,
             ) -> Dict[str, Any]:
                 """Evaluate through QE and persist a plain evidence snapshot."""
                 if self._evidence_store is None:
@@ -166,11 +188,51 @@ def create_qe_adapter(*, execution_mode: ExecutionMode = ExecutionMode.RESEARCH_
                         "an evidence store is required before evaluation"
                     )
                 metric_ids = tuple(metrics) if metrics is not None else ("coverage",)
+                request = None
+                if (
+                    tier is not None or cost_budget is not None
+                    or metric_parameters is not None or request_metadata is not None
+                    or metric_instances is not None or scenario_inputs is not None
+                ):
+                    from dataclasses import fields
+                    from quant_evaluator.api.requests import EvaluationRequest
+
+                    supported = {item.name for item in fields(EvaluationRequest)}
+                    if metric_parameters is not None and "metric_parameters" not in supported:
+                        raise ValueError(
+                            "installed QE EvaluationRequest does not yet support "
+                            "metric_parameters; refusing to silently drop them"
+                        )
+                    for name, value in (("metric_instances", metric_instances),
+                                        ("scenario_inputs", scenario_inputs)):
+                        if value is not None and name not in supported:
+                            raise ValueError(
+                                f"installed QE EvaluationRequest does not yet support {name}; "
+                                "refusing to silently drop it"
+                            )
+                    request_values = dict(
+                        batch_or_factor_ids=factor_batch,
+                        label_bundle=labels,
+                        metric_ids=metric_ids,
+                        context=context,
+                        tier=tier or "core",
+                        cost_budget=cost_budget,
+                        metadata=dict(request_metadata or {}),
+                        split_ref=split_ref,
+                    )
+                    if metric_parameters is not None:
+                        request_values["metric_parameters"] = metric_parameters
+                    if metric_instances is not None:
+                        request_values["metric_instances"] = tuple(metric_instances)
+                    if scenario_inputs is not None:
+                        request_values["scenario_inputs"] = dict(scenario_inputs)
+                    request = EvaluationRequest(**request_values)
                 bundle = evaluate(
-                    factor_batch,
-                    labels,
-                    context=context,
-                    metrics=metric_ids,
+                    request if request is not None else factor_batch,
+                    None if request is not None else labels,
+                    **({} if request is not None else {"context": context, "metrics": metric_ids, "split_ref": split_ref}),
+                    backend=backend,
+                    gpu_policy=gpu_policy,
                 )
                 evaluation_id = f"qe_adapter_{uuid.uuid4().hex}"
                 from dataclasses import asdict, is_dataclass
@@ -188,10 +250,51 @@ def create_qe_adapter(*, execution_mode: ExecutionMode = ExecutionMode.RESEARCH_
                         return value.item()
                     return value
 
-                metric_values = {
-                    metric_id: plain(metric.value)
-                    for metric_id, metric in bundle.metric_values.items()
+                def metric_evidence(metric: Any) -> Dict[str, Any]:
+                    """Preserve validity metadata; a bare value is not evidence."""
+                    payload = plain(metric)
+                    if not isinstance(payload, dict):
+                        raise TypeError("QE metric evidence must be a typed record")
+                    required_fields = {
+                        "metric_id", "value", "valid", "observation_count",
+                        "metric_version", "warnings",
+                    }
+                    missing = required_fields.difference(payload)
+                    if missing:
+                        raise TypeError(
+                            "QE metric evidence is missing required fields: "
+                            + ", ".join(sorted(missing))
+                        )
+                    return payload
+
+                # Single-factor ``metric_values`` is only a convenience view.
+                # The grouped mapping is authoritative and prevents positional
+                # zip/alignment bugs when QE returns candidates in another order.
+                if not hasattr(bundle, "grouped_metrics"):
+                    raise TypeError(
+                        "QE backend returned an untyped batch bundle without "
+                        "per-factor validity/count/version evidence"
+                    )
+                grouped_source = bundle.grouped_metrics or {}
+                if not grouped_source and len(bundle.factor_ids) == 1:
+                    grouped_source = {bundle.factor_ids[0]: bundle.metric_values}
+                grouped_metrics = {
+                    factor_id: {
+                        metric_id: metric_evidence(metric)
+                        for metric_id, metric in factor_metrics.items()
+                    }
+                    for factor_id, factor_metrics in grouped_source.items()
                 }
+                missing_factors = set(bundle.factor_ids).difference(grouped_metrics)
+                if missing_factors:
+                    raise ValueError(
+                        "QE batch response omitted factor evidence: "
+                        + ", ".join(sorted(missing_factors))
+                    )
+                metric_values = (
+                    grouped_metrics[bundle.factor_ids[0]]
+                    if len(bundle.factor_ids) == 1 else {}
+                )
                 diagnostics = {
                     factor_id: plain(diagnosis)
                     for factor_id, diagnosis in bundle.diagnostics.items()
@@ -200,17 +303,51 @@ def create_qe_adapter(*, execution_mode: ExecutionMode = ExecutionMode.RESEARCH_
                     "evaluation_id": evaluation_id,
                     "evidence_scope": self._evidence_store.evidence_scope,
                     "metrics": metric_values,
-                    "grouped_metrics": plain(bundle.grouped_metrics),
+                    "grouped_metrics": grouped_metrics,
                     "diagnostics": diagnostics,
                     "metadata": plain(bundle.metadata),
+                    "request_id": bundle.request_id,
+                    "factor_ids": list(bundle.factor_ids),
+                    "label_id": bundle.label_id,
+                    "schema_version": bundle.schema_version,
+                    "metric_versions": plain(bundle.metric_versions),
+                    "instance_specs": plain(getattr(bundle, "instance_specs", {})),
+                    "instance_results": plain(getattr(bundle, "instance_results", {})),
+                    "series_refs": plain(bundle.series_refs),
+                    "split_ref": plain(bundle.split_ref),
+                    "config_hash": bundle.config_hash,
+                    "warnings": plain(bundle.warnings),
+                    "requested_backend": plain(backend),
+                    "requested_gpu_policy": plain(gpu_policy),
                 }
+                identity_payload = dict(evidence)
+                identity_payload.pop("evaluation_id")
+                evidence["content_identity"] = hashlib.sha256(
+                    json.dumps(
+                        identity_payload,
+                        sort_keys=True,
+                        separators=(",", ":"),
+                        default=str,
+                    ).encode("utf-8")
+                ).hexdigest()
                 self._evidence_store.put(evaluation_id, evidence)
                 return {
                     "evaluation_id": evaluation_id,
                     "metrics": evidence["metrics"],
+                    "grouped_metrics": evidence["grouped_metrics"],
                     "diagnostics": evidence["diagnostics"],
                     "evidence_ref": evaluation_id,
                     "evidence_scope": self._evidence_store.evidence_scope,
+                    "content_identity": evidence["content_identity"],
+                    "instance_specs": evidence["instance_specs"],
+                    "instance_results": evidence["instance_results"],
+                    "metric_versions": evidence["metric_versions"],
+                    "request_id": evidence["request_id"],
+                    "factor_ids": evidence["factor_ids"],
+                    "label_id": evidence["label_id"],
+                    "split_ref": evidence["split_ref"],
+                    "config_hash": evidence["config_hash"],
+                    "warnings": evidence["warnings"],
                 }
 
             def get_evidence(self, evaluation_id: str) -> Dict[str, Any]:

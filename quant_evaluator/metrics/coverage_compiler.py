@@ -25,13 +25,15 @@ Each column is computed by actually inspecting the source tree:
                         is mentioned in ``tests/``.
     - ``report``      : the metric's id or its implementation function name
                         is mentioned in ``reporting/`` (a panel consuming it).
-    - ``prod_status`` : READY when kernel+registry+artifact+test+report all
+    - ``prod_status`` : INVENTORY_WIRED when kernel+registry+artifact+test+report all
                         hold; GAP when at least kernel/registry hold but one
                         of artifact/test/report is missing; NOT_IMPL when the
                         kernel does not resolve.
 
 The compiler is idempotent and deterministic (sorted rows), and refuses to
 touch anything outside ``quant_evaluator``.
+No row certifies mathematical correctness, executed assertions or production
+admission. NumericalQualificationReceipt is independent of this inventory.
 """
 
 from __future__ import annotations
@@ -163,7 +165,7 @@ def _mentioned(text: str, needle: str) -> bool:
             code_tokens.append(tok.string)
     except (tokenize.TokenError, IndentationError, SyntaxError):
         # Unparseable text: fall back to the raw substring check (best effort).
-        return needle in _METRIC_MENTION_RE.findall(text) or needle in text
+        return False
     return needle in code_tokens or needle in " ".join(code_tokens)
 
 
@@ -182,8 +184,7 @@ def _scan_artifact_consumers() -> Tuple[Set[str], Set[str]]:
     ) + _scan_tree(os.path.join(root, "metrics"))
     texts = _file_texts(candidate_files)
     for path, text in texts.items():
-        if _ARTIFACT_CLASS_RE.search(text):
-            kinds.update(_ARTIFACT_CLASS_RE.findall(text))
+        kinds.update(name for name in _ARTIFACT_CLASS_RE.findall(text) if _mentioned(text, name))
     # For each metric, does a file that mentions a canonical artifact class
     # also mention the metric's kernel function name?
     from quant_evaluator.metrics import catalog as catalog_module
@@ -192,7 +193,7 @@ def _scan_artifact_consumers() -> Tuple[Set[str], Set[str]]:
         spec = catalog_module.get_metric_spec(metric_id)
         impl_fn = spec.implementation_id.rpartition(".")[2] if "." in spec.implementation_id else ""
         for path, text in texts.items():
-            if _ARTIFACT_CLASS_RE.search(text) and (
+            if any(_mentioned(text, name) for name in _ARTIFACT_CLASS_RE.findall(text)) and (
                 _mentioned(text, metric_id) or _mentioned(text, impl_fn)
             ):
                 ids_mentioned.add(metric_id)
@@ -236,7 +237,7 @@ def compile_coverage_rows() -> List[Dict[str, str]]:
         if not resolved:
             prod_status = "NOT_IMPL"
         elif resolved and registered and artifact_hit and test_hit and report_hit:
-            prod_status = "READY"
+            prod_status = "INVENTORY_WIRED"
         else:
             prod_status = "GAP"
 

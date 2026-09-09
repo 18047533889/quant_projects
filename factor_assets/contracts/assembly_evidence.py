@@ -29,6 +29,9 @@ __all__ = [
     "AssemblyEvidence",
     "LibraryCandidateEvidence",
     "AssemblyPolicy",
+    "AssemblyClusterMembership",
+    "GreedySelectionStep",
+    "AssemblySelectionEvidence",
 ]
 
 
@@ -77,6 +80,9 @@ class AssemblyEvidence:
     cluster_redundancy: Optional[float] = None
     evidence_refs: tuple[str, ...] = ()
     maturity: EvidenceMaturity = EvidenceMaturity.MATURE
+    quality_definition: str = "legacy.unspecified"
+    quality_unit: str = "legacy.unspecified"
+    quality_policy_ref: str = "legacy.unspecified"
     content_hash: str = ""
 
     def __post_init__(self) -> None:
@@ -94,6 +100,10 @@ class AssemblyEvidence:
         object.__setattr__(self, "evidence_refs", tuple(self.evidence_refs))
         if not isinstance(self.maturity, EvidenceMaturity):
             raise TypeError("maturity must be an EvidenceMaturity")
+        for name in ("quality_definition", "quality_unit", "quality_policy_ref"):
+            value = getattr(self, name)
+            if not isinstance(value, str) or not value:
+                raise ValueError(f"{name} must be a non-empty string")
         computed = canonical_digest(
             self.factor_id,
             self.quality_score,
@@ -109,6 +119,9 @@ class AssemblyEvidence:
             self.cluster_redundancy,
             self.evidence_refs,
             self.maturity.value,
+            self.quality_definition,
+            self.quality_unit,
+            self.quality_policy_ref,
         )
         if not self.content_hash:
             object.__setattr__(self, "content_hash", computed)
@@ -135,6 +148,9 @@ class AssemblyEvidence:
             "cluster_redundancy": self.cluster_redundancy,
             "evidence_refs": list(self.evidence_refs),
             "maturity": self.maturity.value,
+            "quality_definition": self.quality_definition,
+            "quality_unit": self.quality_unit,
+            "quality_policy_ref": self.quality_policy_ref,
             "content_hash": self.content_hash,
         }
 
@@ -242,6 +258,13 @@ class AssemblyPolicy:
     capacity_budget: Optional[int] = None
     turnover_budget: Optional[float] = None
     health_floor: Optional[float] = None
+    required_objectives: tuple[str, ...] = ()
+    optional_objectives: tuple[str, ...] = ()
+    selection_algorithm_version: str = "constrained_mmr.v2"
+    quality_definition: str = "legacy.unspecified"
+    quality_unit: str = "legacy.unspecified"
+    quality_policy_ref: str = "legacy.unspecified"
+    similarity_view: str = "rank_corr"
 
     def __post_init__(self) -> None:
         if not self.policy_id:
@@ -305,6 +328,19 @@ class AssemblyPolicy:
             if not 0.0 <= hf <= 1.0:
                 raise ValueError("health_floor must be in [0, 1] or None")
             object.__setattr__(self, "health_floor", hf)
+        required = tuple(dict.fromkeys(self.required_objectives))
+        optional = tuple(dict.fromkeys(self.optional_objectives))
+        if set(required) & set(optional) or any(not x for x in required + optional):
+            raise ValueError("required/optional objectives must be unique non-empty names")
+        object.__setattr__(self, "required_objectives", required)
+        object.__setattr__(self, "optional_objectives", optional)
+        for name in (
+            "selection_algorithm_version", "quality_definition", "quality_unit",
+            "quality_policy_ref", "similarity_view",
+        ):
+            value = getattr(self, name)
+            if not isinstance(value, str) or not value:
+                raise ValueError(f"{name} must be a non-empty string")
 
     def to_dict(self) -> dict:
         return {
@@ -317,4 +353,75 @@ class AssemblyPolicy:
             "capacity_budget": self.capacity_budget,
             "turnover_budget": self.turnover_budget,
             "health_floor": self.health_floor,
+            "required_objectives": list(self.required_objectives),
+            "optional_objectives": list(self.optional_objectives),
+            "selection_algorithm_version": self.selection_algorithm_version,
+            "quality_definition": self.quality_definition,
+            "quality_unit": self.quality_unit,
+            "quality_policy_ref": self.quality_policy_ref,
+            "similarity_view": self.similarity_view,
         }
+
+    @property
+    def content_hash(self) -> str:
+        return canonical_digest(self.to_dict())
+
+
+@dataclass(frozen=True)
+class AssemblyClusterMembership:
+    """Actual information/risk grouping used by assembly, separate from lineage family."""
+
+    factor_id: str
+    microcluster_id: Optional[str]
+    macrocluster_id: Optional[str]
+    cluster_set_version_ref: str
+    representative_factor_id: Optional[str] = None
+    evidence_ref: str = ""
+
+    def __post_init__(self) -> None:
+        if not self.factor_id or not self.cluster_set_version_ref:
+            raise ValueError("factor_id and cluster_set_version_ref are required")
+        if self.microcluster_id is None and self.macrocluster_id is None and not self.evidence_ref:
+            raise ValueError("unknown grouping requires an explicit evidence/reason ref")
+
+
+@dataclass(frozen=True)
+class GreedySelectionStep:
+    """One committed constrained-MMR choice; rejected candidates never appear."""
+
+    rank: int
+    factor_id: str
+    quality: float
+    max_redundancy: float
+    objective: float
+    constraint_headroom: Mapping[str, float | int | None]
+
+    def __post_init__(self) -> None:
+        if self.rank < 0 or not self.factor_id:
+            raise ValueError("rank must be non-negative and factor_id is required")
+        for name in ("quality", "max_redundancy", "objective"):
+            object.__setattr__(self, name, _finite_float(getattr(self, name), name))
+        object.__setattr__(self, "constraint_headroom", MappingProxyType(dict(self.constraint_headroom)))
+
+
+@dataclass(frozen=True)
+class AssemblySelectionEvidence:
+    """Replayable evidence from the feasibility-aware greedy selector."""
+
+    algorithm_version: str
+    policy_ref: str
+    steps: tuple[GreedySelectionStep, ...]
+    rejections: Mapping[str, str]
+    pair_evidence_refs: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        if not self.algorithm_version or not self.policy_ref:
+            raise ValueError("algorithm_version and policy_ref are required")
+        object.__setattr__(self, "steps", tuple(self.steps))
+        if any(not isinstance(step, GreedySelectionStep) for step in self.steps):
+            raise TypeError("steps must contain GreedySelectionStep values")
+        rejected = dict(self.rejections)
+        if any(not factor_id or not reason for factor_id, reason in rejected.items()):
+            raise ValueError("rejection factor IDs and reasons must be non-empty")
+        object.__setattr__(self, "rejections", MappingProxyType(rejected))
+        object.__setattr__(self, "pair_evidence_refs", tuple(self.pair_evidence_refs))

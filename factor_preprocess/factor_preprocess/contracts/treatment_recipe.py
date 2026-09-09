@@ -103,6 +103,7 @@ class RecipeStep:
     implementation_ref: str
     stage: str
     requires_fit: bool = False
+    state_ref: Optional[str] = None
     parameters: Dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self):
@@ -213,6 +214,7 @@ class TreatmentRecipe:
                     "semantic": step.semantic_transform_id,
                     "stage": step.stage,
                     "requires_fit": step.requires_fit,
+                    "state_ref": step.state_ref,
                     "params": step.parameters,
                     "impl": step.implementation_ref,
                 }
@@ -329,6 +331,70 @@ class TreatmentRecipe:
     def step_semantic_ids(self) -> tuple:
         """Ordered semantic transform ids of the recipe steps."""
         return tuple(step.semantic_transform_id for step in self.ordered_steps)
+
+    def to_canonical_dict(self) -> Dict[str, Any]:
+        """Render a lossless, JSON-compatible recipe representation."""
+        def plain(value):
+            if isinstance(value, Mapping):
+                return {str(k): plain(v) for k, v in value.items()}
+            if isinstance(value, (tuple, list)):
+                return [plain(v) for v in value]
+            if isinstance(value, (set, frozenset)):
+                return sorted(plain(v) for v in value)
+            if isinstance(value, Enum):
+                return value.value
+            return value
+        return {
+            "recipe_id": self.recipe_id,
+            "source_factor_definition_ref": self.source_factor_definition_ref,
+            "source_factor_value_ref": self.source_factor_value_ref,
+            "ordered_steps": [
+                {
+                    "step_id": s.step_id,
+                    "semantic_transform_id": s.semantic_transform_id,
+                    "implementation_ref": s.implementation_ref,
+                    "stage": s.stage,
+                    "requires_fit": s.requires_fit,
+                    "state_ref": s.state_ref,
+                    "parameters": plain(s.parameters),
+                }
+                for s in self.ordered_steps
+            ],
+            "existing_treatment_signature": plain(self.existing_treatment_signature),
+            "neutralization_spec": plain(self.neutralization_spec),
+            "fit_boundary": self.fit_boundary.value,
+            "registry_snapshot_identity": self.registry_snapshot_identity,
+            "policy_identity": self.policy_identity,
+            "causality_certificate_ref": self.causality_certificate_ref,
+            "schema_version": self.schema_version.value,
+            "content_hash": self.content_hash,
+        }
+
+    @classmethod
+    def from_canonical_dict(cls, payload: Dict[str, Any]) -> "TreatmentRecipe":
+        """Parse the canonical representation and revalidate its content hash."""
+        data = dict(payload)
+        data["ordered_steps"] = tuple(RecipeStep(**step) for step in data["ordered_steps"])
+        return cls(**data)
+
+    def compile(self, registry, *, fitted_state_refs=()) -> tuple:
+        """Resolve every actual step against the registry, failing closed."""
+        available_states = set(fitted_state_refs)
+        executors = []
+        for step in self.ordered_steps:
+            metadata = registry.get(step.implementation_ref)
+            if metadata is None:
+                raise InvalidContractError(
+                    f"unknown recipe implementation {step.implementation_ref!r}"
+                )
+            metadata.bind_parameters(dict(step.parameters))
+            if step.requires_fit:
+                if not step.state_ref or step.state_ref not in available_states:
+                    raise InvalidContractError(
+                        f"missing fitted state ref for step {step.step_id!r}"
+                    )
+            executors.append(registry.get_execution(step.implementation_ref))
+        return tuple(executors)
 
     def _validate_lineage_guard(self) -> None:
         """R61-FI-043 fail-closed duplicate-guard over the ordered steps.

@@ -1,9 +1,9 @@
 """PostgreSQL metadata backend (adapter seam).
 
 QRP-P1. Implements the same ``Db`` Protocol as ``SqliteDb`` but against
-``psycopg2``. **psycopg2 is NOT installed in this repo/venv** and must not be
-blind-installed (project rule: only project-defined pinned deps; none define
-psycopg2). This module therefore:
+``psycopg2``. The optional ``postgres-test`` extra pins the isolated live-QA
+driver; the default DTO distribution has no third-party runtime dependencies.
+Do not install an unpinned driver into a production environment. This module:
 
 - Imports ``psycopg2`` lazily inside the constructor.
 - Raises a clear ``PostgresBackendUnavailable`` if the driver is missing.
@@ -167,7 +167,8 @@ class PostgresDb:
                 "psycopg2 is not installed. Install a project-pinned psycopg2 "
                 "and point PostgresDb at a live PG server to enable this backend."
             ) from exc
-        self._conn = psycopg2.connect(dsn)
+        from psycopg2.extras import DictCursor
+        self._conn = psycopg2.connect(dsn, cursor_factory=DictCursor)
         self._conn.autocommit = False
         if create:
             create_schema(self._conn)
@@ -175,6 +176,10 @@ class PostgresDb:
 
     def close(self) -> None:
         self._conn.close()
+
+    def execute_returning(self, sql: str, params: Sequence[Any] = ()) -> Any:
+        """Expose the shared transaction's RETURNING path on the DB facade."""
+        return PostgresTransaction(self._conn).execute_returning(sql, params)
 
     def execute(self, sql: str, params: Sequence[Any] = ()) -> Any:
         cur = self._conn.cursor()
@@ -199,7 +204,7 @@ class PostgresDb:
         try:
             yield adapter
             self._conn.commit()
-        except Exception:
+        except BaseException:
             self._conn.rollback()
             raise
 
@@ -217,4 +222,7 @@ def create_schema(conn) -> None:
 
     for statement in SCHEMA_DDL:
         cur = conn.cursor()
+        # SQLite INTEGER PRIMARY KEY supplies generated row IDs. PostgreSQL
+        # requires the equivalent sequence-backed surrogate key explicitly.
+        statement = statement.replace('INTEGER PRIMARY KEY', 'BIGSERIAL PRIMARY KEY')
         cur.execute(PostgresDialect.adapt(statement))

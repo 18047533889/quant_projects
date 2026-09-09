@@ -20,12 +20,13 @@ def test_immediate_typed_decision_replay(tmp_path):
     replay = repo.commit_transition("F", LifecycleState.EVALUATED, decision_id="d", evidence_bundle_ref=_bundle())
     assert replay.revision == first.revision == 1
 
-def test_replay_after_superseding_transition_is_rejected(tmp_path):
+def test_replay_after_superseding_transition_returns_original_receipt(tmp_path):
     repo = _repo(tmp_path); _register(repo)
-    repo.commit_transition("F", LifecycleState.EVALUATED, decision_id="d", evidence_bundle_ref=_bundle())
+    first = repo.commit_transition("F", LifecycleState.EVALUATED, decision_id="d", evidence_bundle_ref=_bundle())
     repo.commit_transition("F", LifecycleState.APPROVED, evidence_refs=("gate_results",))
-    with pytest.raises(LifecycleConflictError):
-        repo.commit_transition("F", LifecycleState.EVALUATED, decision_id="d", evidence_bundle_ref=_bundle())
+    replay = repo.commit_transition("F", LifecycleState.EVALUATED, decision_id="d", evidence_bundle_ref=_bundle())
+    assert replay.revision == first.revision == 1
+    assert replay.event == first.event
 
 def test_conflicting_typed_payload_is_rejected(tmp_path):
     repo = _repo(tmp_path); _register(repo)

@@ -193,6 +193,8 @@ def feature_ablation(
     shuffle_mode: str = "global",
     block_size: int | None = None,
     retrain_without_feature_fn: Callable[[int], Any] | None = None,
+    experiment_spec: Any | None = None,
+    budget_tracker: Any | None = None,
     context: PredictionContext,
 ) -> dict[str, Any]:
     """Separate frozen-model perturbation from retrained ablation.
@@ -211,6 +213,22 @@ def feature_ablation(
     occlusion: dict[str, float] = {}
     permutation: dict[str, float] = {}
     retrained: dict[str, float] = {}
+    retrained_evidence_refs: dict[str, str] = {}
+    if retrain_without_feature_fn is not None:
+        from modeling.trainer_governance import FeatureExperimentSpec
+        if not isinstance(experiment_spec, FeatureExperimentSpec):
+            raise TypeError("retrained ablation requires FeatureExperimentSpec")
+        required_budget_methods = (
+            "reserve_evaluation", "start_evaluation", "commit_evaluation",
+            "release_evaluation",
+        )
+        if budget_tracker is None or any(
+            not callable(getattr(budget_tracker, name, None)) for name in required_budget_methods
+        ):
+            raise TypeError("retrained ablation requires a durable budget tracker")
+        campaign_store = getattr(budget_tracker, "store", None)
+        if not callable(getattr(campaign_store, "record_hypothesis_attempt", None)):
+            raise TypeError("durable budget tracker must expose its SQLite campaign store")
     rng = np.random.default_rng(0)
     for j in range(d):
         Xd = X.copy()
@@ -223,17 +241,66 @@ def feature_ablation(
         Xs[:, j] = X[indices, j]
         permutation[str(j)] = float(baseline - eval_fn(artifact.predict(Xs, context=context), y))
         if retrain_without_feature_fn is not None:
-            rebuilt = retrain_without_feature_fn(j)
+            attempt_id = experiment_spec.attempt_id("drop", j)
+            estimated = experiment_spec.estimated_cost_per_evaluation
+            if not budget_tracker.reserve_evaluation(estimated, attempt_id=attempt_id):
+                raise ValueError(f"feature experiment budget exhausted before feature {j}")
+            started = False
+            try:
+                budget_tracker.start_evaluation(attempt_id=attempt_id)
+                started = True
+                rebuilt_result = retrain_without_feature_fn(j)
+                if (not isinstance(rebuilt_result, tuple) or len(rebuilt_result) != 2
+                        or not isinstance(rebuilt_result[1], str) or not rebuilt_result[1]):
+                    raise ValueError("retrained ablation must return (artifact, evidence_ref)")
+                rebuilt, evidence_ref = rebuilt_result
+                campaign_store.record_hypothesis_attempt(
+                    campaign_id=experiment_spec.campaign_id,
+                    proposal_id=attempt_id,
+                    evaluation_intent_hash=experiment_spec.evaluation_intent_hash(),
+                    horizon=experiment_spec.label_horizon,
+                    effective_spec_hash=experiment_spec.effective_spec_hash("drop", j),
+                    executed=True,
+                    has_pvalue=False,
+                )
+                budget_tracker.commit_evaluation(
+                    estimated, estimated, attempt_id=attempt_id
+                )
+            except Exception:
+                # STARTED work must be charged, even if model/evidence generation
+                # fails; only never-started reservations may be released.
+                if started:
+                    budget_tracker.commit_evaluation(
+                        estimated, estimated, attempt_id=attempt_id
+                    )
+                else:
+                    budget_tracker.release_evaluation(estimated, attempt_id=attempt_id)
+                raise
             X_without = np.delete(X, j, axis=1)
             retrained[str(j)] = float(
                 baseline - eval_fn(rebuilt.predict(X_without), y)
             )
+            retrained_evidence_refs[str(j)] = evidence_ref
     return {
         "baseline": baseline,
         "n_features": d,
         "occlusion": occlusion,
         "permutation": permutation,
         "retrained_feature_ablation": retrained,
+        "retrained_evidence_refs": retrained_evidence_refs,
+        "experiment_identity": (
+            None if experiment_spec is None else {
+                "campaign_id": experiment_spec.campaign_id,
+                "baseline_feature_set_ref": experiment_spec.baseline_feature_set_ref,
+                "fold_refs": experiment_spec.fold_refs,
+                "random_seed": experiment_spec.random_seed,
+                "resource_profile_ref": experiment_spec.resource_profile_ref,
+                "baseline_evidence_ref": experiment_spec.baseline_evidence_ref,
+                "model_recipe_ref": experiment_spec.model_recipe_ref,
+                "label_horizon": experiment_spec.label_horizon,
+                "evaluation_intent_hash": experiment_spec.evaluation_intent_hash(),
+            }
+        ),
         "retrained": retrain_without_feature_fn is not None,
         "shuffle_mode": shuffle_mode,
         "block_size": block_size,

@@ -13,6 +13,7 @@ lose a burned-budget record.
 """
 
 import hashlib
+import json
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
@@ -53,6 +54,7 @@ class LedgerEntry:
     recorded_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     previous_entry_hash: str = "0" * 64
     entry_hash: str = ""
+    hash_encoding_version: int = 2
 
     def __post_init__(self) -> None:
         if isinstance(self.sequence, bool) or not isinstance(self.sequence, int):
@@ -75,10 +77,27 @@ class LedgerEntry:
             object.__setattr__(self, "entry_hash", self.compute_entry_hash())
 
     def _hash_payload(self) -> bytes:
-        return (
-            f"{self.sequence}|{self.status_value}|{self.trial_id}|"
-            f"{self.failure_reason}|{self.recorded_at.isoformat()}|"
-            f"{self.previous_entry_hash}"
+        if self.hash_encoding_version == 1:
+            return (
+                f"{self.sequence}|{self.status_value}|{self.trial_id}|"
+                f"{self.failure_reason}|{self.recorded_at.isoformat()}|"
+                f"{self.previous_entry_hash}"
+            ).encode("utf-8")
+        if self.hash_encoding_version != 2:
+            raise ValueError("unsupported ledger hash encoding version")
+        return json.dumps(
+            {
+                "sequence": self.sequence,
+                "status": self.status_value,
+                "trial_id": self.trial_id,
+                "failure_reason": self.failure_reason,
+                "recorded_at": self.recorded_at.isoformat(),
+                "previous_entry_hash": self.previous_entry_hash,
+                "hash_encoding_version": self.hash_encoding_version,
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
         ).encode("utf-8")
 
     def compute_entry_hash(self) -> str:
@@ -99,6 +118,7 @@ class LedgerEntry:
             "recorded_at": self.recorded_at.isoformat(),
             "previous_entry_hash": self.previous_entry_hash,
             "entry_hash": self.entry_hash,
+            "hash_encoding_version": self.hash_encoding_version,
         }
 
     @classmethod
@@ -106,6 +126,7 @@ class LedgerEntry:
         if not isinstance(data, dict):
             raise TypeError("LedgerEntry.from_dict requires a dict")
         values = dict(data)
+        values.setdefault("hash_encoding_version", 1)
         recorded = values.get("recorded_at")
         if isinstance(recorded, str):
             values["recorded_at"] = datetime.fromisoformat(recorded)
@@ -137,6 +158,7 @@ class TrialLedger:
         self._sealed_head_hash: Optional[str] = None
         self._sealed_entry_count: Optional[int] = None
         self._sealed_at: Optional[datetime] = None
+        self._prior_seals: Tuple[Dict[str, Any], ...] = ()
 
     def append(
         self,
@@ -195,6 +217,21 @@ class TrialLedger:
         self._sealed_head_hash = self._entries[-1].entry_hash if self._entries else "0" * 64
         self._sealed_entry_count = len(self._entries)
         self._sealed_at = datetime.now(timezone.utc)
+
+    def begin_authorized_extension(self) -> None:
+        """Open a new append epoch while retaining the prior immutable seal."""
+        if not self.sealed:
+            raise ValueError("only a sealed ledger can be extended")
+        self.verify_chain()
+        self._prior_seals = self._prior_seals + ({
+            "head_hash": self._sealed_head_hash,
+            "entry_count": self._sealed_entry_count,
+            "sealed_at": self._sealed_at.isoformat() if self._sealed_at else None,
+        },)
+        self._sealed_head_hash = None
+        self._sealed_entry_count = None
+        self._sealed_at = None
+        self._closed = False
 
     @property
     def sealed(self) -> bool:
@@ -271,9 +308,11 @@ class TrialLedger:
             "entries": [entry.to_dict() for entry in self._entries],
             "next_sequence": len(self._entries) + 1,
             "sealed": self._sealed_head_hash is not None,
+            "closed": self._closed,
             "sealed_head_hash": self._sealed_head_hash,
             "sealed_entry_count": self._sealed_entry_count,
             "sealed_at": self._sealed_at.isoformat() if self._sealed_at else None,
+            "prior_seals": [dict(item) for item in self._prior_seals],
         }
 
     @classmethod
@@ -286,6 +325,7 @@ class TrialLedger:
         entries = [LedgerEntry.from_dict(item) for item in raw]
         ledger = cls()
         ledger._entries = tuple(entries)
+        ledger._prior_seals = tuple(dict(item) for item in data.get("prior_seals", ()))
         # Re-seal when the checkpoint recorded a sealed ledger so the loaded
         # state rejects further appends and re-verifies the chain.
         if data.get("sealed"):
@@ -297,8 +337,11 @@ class TrialLedger:
             ledger._sealed_at = sealed_at
             ledger._closed = True
         else:
-            ledger._closed = False
+            ledger._closed = bool(data.get("closed", False))
         ledger.verify_chain()
+        expected_next = len(entries) + 1
+        if data.get("next_sequence", expected_next) != expected_next:
+            raise ValueError("ledger checkpoint next_sequence is inconsistent")
         return ledger
 
     def _coerce_sequence(self, status) -> str:

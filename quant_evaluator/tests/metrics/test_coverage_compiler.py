@@ -66,7 +66,7 @@ def test_prod_status_mapping_consistent():
         if row["kernel"] == "NO":
             assert row["prod_status"] == "NOT_IMPL", row
         elif all(row[c] == "YES" for c in ("kernel", "registry", "artifact", "test", "report")):
-            assert row["prod_status"] == "READY", row
+            assert row["prod_status"] == "INVENTORY_WIRED", row
         else:
             assert row["prod_status"] == "GAP", row
 

@@ -19,6 +19,7 @@ from factor_preprocess.representation.policy import (
     CanonicalAssetOverwriteError,
     FeatureRepresentationArtifact,
     register_feature_representation,
+    write_feature_representation,
     NonInferiorityTolerance,
     NON_INFERIORITY_POLICY_VERSION,
     DEFAULT_NON_INFERIORITY_TOLERANCE,
@@ -116,9 +117,12 @@ def test_profile_version_is_stable():
 
 def test_artifact_records_model_specific_representation():
     artifact = register_feature_representation(
-        artifact_id="rep_linear_01",
+        artifact_id="model_representation:rep_linear_01",
         factor_id="fac_alpha_1",
-        canonical_factor_ref="factor:fac_alpha_1",
+        canonical_factor_ref="factor_asset:fac_alpha_1@v1",
+        factor_version="v1",
+        canonical_storage_ref="/canonical/fac_alpha_1.bin",
+        destination_storage_ref="/representations/rep_linear_01.bin",
         model_id="ridge_v3",
         profile_id=RepresentationProfileId.LINEAR,
         transform_chain=[{"name": "robust_zscore"}, {"name": "train_fitted_zscore"}],
@@ -138,9 +142,12 @@ def test_artifact_canonical_ref_must_point_at_factor_asset():
     # identity must fail closed even at the artifact level.
     with pytest.raises(InvalidContractError):
         FeatureRepresentationArtifact(
-            artifact_id="bad",
+            artifact_id="model_representation:bad",
             factor_id="f",
-            canonical_factor_ref="factor_asset:fac_alpha_1",
+            canonical_factor_ref="factor_asset:fac_alpha_1@v1",
+            factor_version="v1",
+            canonical_storage_ref="/canonical/fac_alpha_1.bin",
+            destination_storage_ref="/representations/bad.bin",
             model_id="m",
             profile_id=RepresentationProfileId.TREE_TABULAR,
             profile_version=REPRESENTATION_POLICY_VERSION,
@@ -150,9 +157,12 @@ def test_artifact_canonical_ref_must_point_at_factor_asset():
 def test_register_forbids_overwriting_canonical_factor_asset():
     with pytest.raises(CanonicalAssetOverwriteError):
         register_feature_representation(
-            artifact_id="rep_bad",
+            artifact_id="factor_asset:fac_alpha_1",
             factor_id="fac_alpha_1",
-            canonical_factor_ref=f"{CANONICAL_FACTOR_NAMESPACE_PREFIX}fac_alpha_1",
+            canonical_factor_ref=f"{CANONICAL_FACTOR_NAMESPACE_PREFIX}fac_alpha_1@v1",
+            factor_version="v1",
+            canonical_storage_ref="/canonical/fac_alpha_1",
+            destination_storage_ref="/canonical/fac_alpha_1",
             model_id="ridge_v3",
             profile_id=RepresentationProfileId.LINEAR,
             transform_chain=[{"name": "zscore"}],
@@ -164,9 +174,11 @@ def test_model_representation_may_differ_from_alpha_winner():
     # only when tracked as a model-specific artifact. The artifact carries the
     # canonical factor ref (alpha winner) and its own transform chain.
     artifact = register_feature_representation(
-        artifact_id="rep_tree_rank",
+        artifact_id="model_representation:rep_tree_rank",
         factor_id="fac_alpha_1",
-        canonical_factor_ref="factor:fac_alpha_1",  # canonical alpha form
+        canonical_factor_ref="factor_asset:fac_alpha_1@v1",
+        factor_version="v1", canonical_storage_ref="/canonical/fac_alpha_1.bin",
+        destination_storage_ref="/representations/tree_rank.bin",
         model_id="lgbm_prod",
         profile_id=RepresentationProfileId.TREE_TABULAR,
         transform_chain=[{"name": "cs_rank", "params": {"pct": True}}],
@@ -175,24 +187,107 @@ def test_model_representation_may_differ_from_alpha_winner():
     # Not the RAW-vs-treatment winner: it is a rank view recorded separately.
     assert artifact.representation_name == "rank"
     assert artifact.factor_id == "fac_alpha_1"
-    assert artifact.canonical_factor_ref == "factor:fac_alpha_1"
+    assert artifact.canonical_factor_ref == "factor_asset:fac_alpha_1@v1"
 
 
 def test_artifact_hash_content_derived():
     a1 = register_feature_representation(
-        artifact_id="x", factor_id="f", canonical_factor_ref="factor:f",
+        artifact_id="model_representation:x", factor_id="f", canonical_factor_ref="factor_asset:f@v1",
+        factor_version="v1", canonical_storage_ref="/canonical/f.bin", destination_storage_ref="/representations/x.bin",
         model_id="m", profile_id="TREE_TABULAR", transform_chain=[{"name": "rank"}],
     )
     a2 = register_feature_representation(
-        artifact_id="x", factor_id="f", canonical_factor_ref="factor:f",
+        artifact_id="model_representation:x", factor_id="f", canonical_factor_ref="factor_asset:f@v1",
+        factor_version="v1", canonical_storage_ref="/canonical/f.bin", destination_storage_ref="/representations/x.bin",
         model_id="m", profile_id="TREE_TABULAR", transform_chain=[{"name": "rank"}],
     )
     a3 = register_feature_representation(
-        artifact_id="x", factor_id="f", canonical_factor_ref="factor:f",
+        artifact_id="model_representation:x", factor_id="f", canonical_factor_ref="factor_asset:f@v1",
+        factor_version="v1", canonical_storage_ref="/canonical/f.bin", destination_storage_ref="/representations/x.bin",
         model_id="m", profile_id="TREE_TABULAR", transform_chain=[{"name": "zscore"}],
     )
     assert a1.content_hash == a2.content_hash
     assert a1.content_hash != a3.content_hash
+
+
+def test_v6_legal_canonical_source_and_real_representation_write(tmp_path):
+    from factor_preprocess import write_feature_representation as public_writer
+    canonical = tmp_path / "canonical" / "alpha_v1.bin"
+    canonical.parent.mkdir()
+    canonical.write_bytes(b"canonical")
+    root = tmp_path / "representations"
+    root.mkdir()
+    destination = root / "model.bin"
+    artifact = register_feature_representation(
+        artifact_id="model_representation:model-v1", factor_id="alpha",
+        factor_version="v1", canonical_factor_ref="factor_asset:alpha@v1",
+        canonical_storage_ref=str(canonical), destination_storage_ref=str(destination), model_id="m1",
+        profile_id="TREE_TABULAR", transform_chain=[{"name": "rank"}],
+    )
+    assert public_writer is write_feature_representation
+    written = public_writer(
+        artifact, b"representation", canonical_storage_path=canonical,
+        representation_storage_root=root,
+    )
+    assert written.read_bytes() == b"representation"
+    assert canonical.read_bytes() == b"canonical"
+    with pytest.raises(FileExistsError):
+        write_feature_representation(
+            artifact, b"replacement", canonical_storage_path=canonical,
+            representation_storage_root=root,
+        )
+    assert written.read_bytes() == b"representation"
+
+
+def test_v6_writer_rejects_wrong_parent_version_and_resolved_alias(tmp_path):
+    with pytest.raises(InvalidContractError, match="matching canonical"):
+        register_feature_representation(
+            artifact_id="model_representation:wrong-parent", factor_id="alpha",
+            factor_version="v2", canonical_factor_ref="factor_asset:alpha@v1",
+            canonical_storage_ref=str(tmp_path / "canonical" / "alpha-v1"),
+            destination_storage_ref=str(tmp_path / "representations" / "x"),
+            model_id="m", profile_id="TREE_TABULAR", transform_chain=[],
+        )
+
+    canonical = tmp_path / "canonical.bin"
+    canonical.write_bytes(b"canonical")
+    root = tmp_path / "representations"
+    root.mkdir()
+    alias = root / "alias.bin"
+    alias.symlink_to(canonical)
+    artifact = register_feature_representation(
+        artifact_id="model_representation:alias", factor_id="alpha",
+        factor_version="v1", canonical_factor_ref="factor_asset:alpha@v1",
+        canonical_storage_ref=str(canonical), destination_storage_ref=str(alias), model_id="m",
+        profile_id="TREE_TABULAR", transform_chain=[],
+    )
+    with pytest.raises(CanonicalAssetOverwriteError, match="aliases"):
+        write_feature_representation(
+            artifact, b"bad", canonical_storage_path=canonical,
+            representation_storage_root=root,
+        )
+    assert canonical.read_bytes() == b"canonical"
+
+
+def test_v6_transform_chain_is_deep_frozen_and_canonical_hashed():
+    source = {"name": "rank", "params": {"pct": True, "clip": [0, 1]}}
+    common = dict(
+        artifact_id="model_representation:frozen", factor_id="alpha",
+        factor_version="v1", canonical_factor_ref="factor_asset:alpha@v1",
+        canonical_storage_ref="/canonical/alpha", destination_storage_ref="/representations/frozen",
+        model_id="m", profile_id=RepresentationProfileId.TREE_TABULAR,
+        profile_version=REPRESENTATION_POLICY_VERSION,
+    )
+    artifact = FeatureRepresentationArtifact(transform_chain=(source,), **common)
+    source["params"]["pct"] = False
+    assert artifact.transform_chain[0]["params"]["pct"] is True
+    with pytest.raises(TypeError):
+        artifact.transform_chain[0]["params"]["pct"] = False
+    reordered = FeatureRepresentationArtifact(
+        transform_chain=({"params": {"clip": [0, 1], "pct": True}, "name": "rank"},),
+        **common,
+    )
+    assert reordered.content_hash == artifact.content_hash
 
 
 # ---------------------------------------------------------------------------
@@ -221,19 +316,27 @@ def test_sign_flip_detected_as_full_destruction():
         non_inferior(0.05, -0.01)
 
 
-def test_negative_alpha_normalized_to_absolute():
-    # Evidence measured as a negative metric (e.g. signed direction) treats
-    # the absolute magnitude as the protected signal.
-    with pytest.raises(SignalDestructionConflict):
-        non_inferior(-0.05, 0.02)  # abs base .05, moved to +.02: destroy 140%
+def test_negative_alpha_uses_frozen_higher_is_better_orientation():
+    # V5: a signed improvement cannot become destruction through abs(delta).
+    assert non_inferior(-0.05, 0.02) is True
     assert non_inferior(-0.05, -0.05) is True
-    assert non_inferior(-0.05, -0.052) is True  # 4% destroy
+    assert non_inferior(-0.05, -0.052) is True  # 4% deterioration
+    with pytest.raises(SignalDestructionConflict):
+        non_inferior(-0.05, -0.08)
 
 
 def test_zero_alpha_no_signal_to_protect():
     # No positive/negative alpha evidence -> nothing destroyed -> allowed.
     assert non_inferior(0.0, 0.0) is True
     assert non_inferior(0.0, 0.01) is True
+    with pytest.raises(SignalDestructionConflict, match="zero alpha baseline"):
+        non_inferior(0.0, -0.01)
+
+
+@pytest.mark.parametrize("before,after", [(float("nan"), 0.1), (0.1, float("inf")), (True, 0.1)])
+def test_v7_non_inferiority_rejects_nonfinite_or_boolean_evidence(before, after):
+    with pytest.raises(InvalidContractError, match="finite numeric"):
+        non_inferior(before, after)
 
 
 def test_custom_versioned_tolerance():

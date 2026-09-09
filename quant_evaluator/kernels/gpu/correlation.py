@@ -126,7 +126,9 @@ def batched_spearman_ic(
     T, F, N = x.shape
     dlx = dlx.reshape(T, F)
     dly = dly.reshape(T, F)
-    min_levels = max(min_obs // 2, 2)
+    # Mathematical definition, not a quality gate. Binary/ordinal signals
+    # retain average-tie Spearman; confidence/applicability is separate.
+    min_levels = 2
     # rx and ry are (T,F,N); _pairwise_finite_sums handles y.ndim==3
     ic, n = _pairwise_finite_sums(rx, ry, min_obs)
     low_levels = (dlx < min_levels) | (dly < min_levels)

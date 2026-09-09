@@ -52,6 +52,7 @@ class GPUExecutionPolicy:
     precision_policy: PrecisionPolicy = PrecisionPolicy.GPU_MIXED
     oom_retile: bool = True
     strict_backend: bool = False
+    required_capabilities: Tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if not 0.0 < self.max_vram_fraction <= 1.0:
@@ -60,6 +61,9 @@ class GPUExecutionPolicy:
             )
         if not self.device_ids:
             raise ValueError("device_ids must be non-empty")
+        object.__setattr__(self, 'required_capabilities', tuple(self.required_capabilities))
+        if any(x not in ('async_transfer', 'pinned_host_memory', 'double_buffer') for x in self.required_capabilities):
+            raise ValueError('unknown mandatory GPU capability')
 
 
 class DeviceFactorBatch:

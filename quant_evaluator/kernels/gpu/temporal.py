@@ -74,7 +74,7 @@ def ic_autocorrelation_series(ic_series, max_lag=20, min_obs=30):
     return acf.get()
 
 
-def half_life(ic_series, min_periods=60):
+def half_life(ic_series, min_periods=60, *, model="centered_ar1"):
     """Batch-vectorized AR(1) IC half-life.
 
     phi_f = sum(y * x) / sum(x * x) with x = ic[t], y = ic[t+1] over
@@ -83,6 +83,8 @@ def half_life(ic_series, min_periods=60):
     or phi outside (0, 1).
     """
     cp = _import_cp()
+    if model not in ("centered_ar1", "zero_mean_ar1"):
+        raise ValueError("unknown AR1 model")
     ic = cp.asarray(ic_series)
     if ic.ndim == 1:
         ic = ic[:, None]
@@ -99,6 +101,9 @@ def half_life(ic_series, min_periods=60):
 
     x = cp.where(pair_mask, ic[:-1, :], 0.0)     # x_{t-1}
     y = cp.where(pair_mask, ic[1:, :], 0.0)      # x_t
+    if model == "centered_ar1":
+        x = cp.where(pair_mask, x - cp.sum(x, axis=0) / cp.maximum(n_pairs, 1), 0.)
+        y = cp.where(pair_mask, y - cp.sum(y, axis=0) / cp.maximum(n_pairs, 1), 0.)
     s_xy = cp.sum(x * y, axis=0)
     s_xx = cp.sum(x * x, axis=0)
     # divide by the true sum(x*x) (guard only against zero/negative denom)

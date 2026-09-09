@@ -22,6 +22,8 @@ from typing import Callable, Dict, List, Optional, Set, Any, Tuple
 from enum import Enum
 import hashlib
 import inspect
+import marshal
+import base64
 
 from factor_preprocess.errors import GovernanceError
 from factor_preprocess.contracts._deep_freeze import deep_freeze, as_plain
@@ -48,12 +50,31 @@ ALL_FAMILY_TAGS = frozenset({
 
 def _source_of(func: Callable) -> str:
     """Best-effort stable source of a callable (may not exist for builtins)."""
+    code = getattr(func, "__code__", None)
     try:
-        return inspect.getsource(func)
+        source = inspect.getsource(func)
     except (TypeError, OSError, IOError):
-        # Fall back to bytecode disassembly which is content-stable.
-        import dis
-        return str(dis.get_instructions(func))
+        source = ""
+    if code is not None:
+        if code is None:
+            raise ValueError(
+                f"callable {func!r} has no stable inspectable implementation; "
+                "it cannot receive a production implementation hash"
+            )
+        closure_values = []
+        for cell in (getattr(func, "__closure__", None) or ()):
+            value = cell.cell_contents
+            if isinstance(value, (dict, list, set, bytearray)):
+                raise ValueError("mutable closure state cannot be content-certified")
+            closure_values.append(repr(value))
+        payload = base64.b64encode(marshal.dumps(code)).decode("ascii")
+        return source + "|code=" + payload + "|closure=" + "|".join(closure_values)
+    if source:
+        return source
+    raise ValueError(
+        f"callable {func!r} has no stable inspectable implementation; "
+        "it cannot receive a production implementation hash"
+    )
 
 
 def _hash_bytes(text: str) -> str:
@@ -358,6 +379,39 @@ class TransformMetadata:
             raise ValueError(
                 f"Transform '{self.name}' has invalid parameters: {exc}"
             ) from exc
+        for name, domain in self.parameter_domain.items():
+            if name not in parameters:
+                continue
+            value = parameters[name]
+            if not isinstance(domain, (tuple, list)) or len(domain) != 2:
+                raise ValueError(f"Transform '{self.name}' has invalid domain for {name!r}")
+            lower, upper = domain
+            if lower is not None and value < lower:
+                raise ValueError(
+                    f"Transform '{self.name}' parameter {name!r}={value!r} is below {lower!r}"
+                )
+            if upper is not None and value > upper:
+                raise ValueError(
+                    f"Transform '{self.name}' parameter {name!r}={value!r} is above {upper!r}"
+                )
+
+
+class _ValidatedExecutor:
+    """Runtime call boundary that enforces the registered parameter contract."""
+
+    def __init__(self, metadata: TransformMetadata, executor: Callable):
+        self.metadata = metadata
+        self.executor = executor
+
+    def __call__(self, *args, **kwargs):
+        # Positional values are validated by the implementation signature;
+        # keyword parameters are checked here before backend dispatch.
+        contract_kwargs = {k: v for k, v in kwargs.items() if k != "exposure_cols"}
+        self.metadata.bind_parameters(contract_kwargs)
+        return self.executor(*args, **kwargs)
+
+    def __getattr__(self, name):
+        return getattr(self.executor, name)
 
 
 class TransformRegistry:
@@ -381,6 +435,7 @@ class TransformRegistry:
         self._sealed = False
         self._snapshot_identity: Optional[str] = None
         self._events: List[str] = []
+        self._allow_legacy_builtin_admission = False
 
     def _check_not_sealed(self):
         """Fail closed: no runtime mutation of sealed production semantics."""
@@ -486,9 +541,9 @@ class TransformRegistry:
             ``"stateless"`` or ``"fitted"`` (machine-readable mirror of
             ``requires_fit`` for origin routing).
         """
-        # Existing callers omit admission for ordinary causal transforms;
-        # make that omission explicit rather than treating it as unknown.
-        admission = admission or "PRODUCTION"
+        admission = admission or (
+            "PRODUCTION" if self._allow_legacy_builtin_admission else "RESEARCH_ONLY"
+        )
         self._check_not_sealed()
         if admission not in {"PRODUCTION", "OFFLINE_ONLY", "RESEARCH_ONLY"}:
             raise ValueError("admission must be PRODUCTION, OFFLINE_ONLY, or RESEARCH_ONLY")
@@ -710,13 +765,19 @@ class TransformRegistry:
                 meta = self._transforms[name]
                 executor = get_fe_executor(meta.fe_operator_id, fallback=meta.func)
                 if executor is not None:
-                    return executor
-        return self._transforms[name].func
+                    return _ValidatedExecutor(self._transforms[name], executor)
+        return _ValidatedExecutor(self._transforms[name], self._transforms[name].func)
 
     def get_function(self, name: str) -> Optional[Callable]:
         """Get transform function by name."""
         metadata = self._transforms.get(name)
         return metadata.func if metadata else None
+
+    def get_recipe_execution(self, recipe):
+        """Compile an all-FE stateless recipe into one panel execution session."""
+        recipe.compile(self)
+        from factor_preprocess.adapters.fe_operator import FeRecipeExecutor
+        return FeRecipeExecutor(recipe, self)
 
     def list_by_category(self, category: TransformCategory) -> List[TransformMetadata]:
         """List isolated deep-frozen transform metadata snapshots in a category."""
@@ -820,6 +881,9 @@ def create_default_registry() -> TransformRegistry:
     from factor_preprocess.transforms.event_decay import event_decay
 
     registry = TransformRegistry()
+    # Built-ins predate evidence-aware admission. Preserve their reviewed
+    # status while making every external/new registration fail-safe by default.
+    registry._allow_legacy_builtin_admission = True
 
     # Cross-sectional transforms
     registry.register(

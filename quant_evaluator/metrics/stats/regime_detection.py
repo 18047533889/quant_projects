@@ -20,9 +20,41 @@ References:
 """
 
 from typing import Tuple, Optional
+from dataclasses import dataclass
 import numpy as np
 from scipy import stats
 from scipy.special import logsumexp
+
+@dataclass(frozen=True)
+class RegimeInference:
+    probabilities: np.ndarray
+    states: np.ndarray
+    scope: str
+    fit_end: Optional[object]
+    decision_time: Optional[object]
+    production_eligible: bool
+
+    def __post_init__(self):
+        if self.scope not in {"FILTERED_ASOF", "SMOOTHED_POSTHOC"}:
+            raise ValueError("invalid inference scope")
+        p, s = np.asarray(self.probabilities), np.asarray(self.states)
+        if p.ndim != 2 or s.shape != (len(p),) or not np.isfinite(p).all():
+            raise ValueError("invalid posterior/state axes")
+        if self.fit_end is None or self.decision_time is None:
+            raise ValueError("typed inference requires fit_end and decision_time")
+        try:
+            ordered = self.decision_time > self.fit_end
+        except TypeError as exc:
+            raise ValueError("fit_end and decision_time must share an ordered clock") from exc
+        if not ordered:
+            raise ValueError("decision_time must be strictly after fit_end")
+        if self.production_eligible != (self.scope == "FILTERED_ASOF"):
+            raise ValueError("production eligibility contradicts inference scope")
+
+def require_production_inference(result: RegimeInference) -> RegimeInference:
+    if not isinstance(result, RegimeInference) or not result.production_eligible or result.scope != "FILTERED_ASOF":
+        raise ValueError("production preprocessing requires FILTERED_ASOF regime inference")
+    return result
 
 
 class GaussianHMM:
@@ -39,6 +71,7 @@ class GaussianHMM:
         n_iter: int = 100,
         tol: float = 1e-4,
         random_state: Optional[int] = None,
+        missing_policy: str = "reject",
     ):
         """
         Initialize HMM.
@@ -53,6 +86,13 @@ class GaussianHMM:
         self.n_iter = n_iter
         self.tol = tol
         self.random_state = random_state
+        if missing_policy not in {"reject"}:
+            raise ValueError("only explicit missing_policy='reject' is currently supported")
+        self.missing_policy = missing_policy
+        if isinstance(n_iter, bool) or not isinstance(n_iter, (int,np.integer)) or n_iter <= 0:
+            raise ValueError("n_iter must be a positive integer")
+        if isinstance(tol, bool) or not np.isfinite(tol) or tol <= 0:
+            raise ValueError("tol must be positive and finite")
 
         # Model parameters (fitted during training)
         self.start_prob_ = None  # (n_states,) initial state distribution
@@ -176,7 +216,7 @@ class GaussianHMM:
         return log_beta
 
     def _compute_posteriors(
-        self, log_alpha: np.ndarray, log_beta: np.ndarray
+        self, log_alpha: np.ndarray, log_beta: np.ndarray, log_emission: np.ndarray
     ) -> Tuple[np.ndarray, np.ndarray]:
         """
         Compute posterior state probabilities (E-step).
@@ -201,9 +241,6 @@ class GaussianHMM:
         #          = α_t(i) * A_{i,j} * b_j(x_{t+1}) * β_{t+1}(j) / P(X)
         xi = np.zeros((T - 1, self.n_states, self.n_states))
         log_trans = np.log(self.trans_mat_ + 1e-10)
-
-        # Precompute emission for t+1
-        log_emission = self._compute_log_likelihood(self._X_fit)
 
         for t in range(T - 1):
             for i in range(self.n_states):
@@ -265,18 +302,18 @@ class GaussianHMM:
         Returns:
             self
         """
-        X = np.asarray(X, dtype=np.float64).ravel()
-        self._X_fit = X  # Store for xi computation
+        # Invalidate first: any failed refit must make the old fitted model unusable.
+        self.start_prob_=self.trans_mat_=self.means_=self.vars_=None
+        self.converged_=False; self.n_iter_fit_=0; self.log_likelihood_history_=[]
+        X = np.asarray(X, dtype=np.float64)
+        if X.ndim == 2 and X.shape[1] == 1: X=X[:,0]
+        elif X.ndim != 1: raise ValueError(f"X must have shape (T,) or (T,1), got {X.shape}")
+        if not np.isfinite(X).all():
+            raise ValueError("NaN/Inf requires a declared event-clock missing transition model; missing_policy='reject'")
 
         T = len(X)
         if T < 2 * self.n_states:
             raise ValueError(f"Insufficient data: T={T} < {2*self.n_states}")
-
-        # Remove NaN/Inf
-        mask = np.isfinite(X)
-        if not np.all(mask):
-            X = X[mask]
-            T = len(X)
 
         # Initialize parameters
         self._initialize_params(X)
@@ -290,17 +327,26 @@ class GaussianHMM:
             log_emission = self._compute_log_likelihood(X)
             log_alpha, log_likelihood = self._forward(log_emission)
             log_beta = self._backward(log_emission)
-            gamma, xi = self._compute_posteriors(log_alpha, log_beta)
+            gamma, xi = self._compute_posteriors(log_alpha, log_beta, log_emission)
 
             # M-step
             self._update_params(gamma, xi, X)
+            if (not np.isfinite(self.trans_mat_).all() or
+                    not np.allclose(self.trans_mat_.sum(axis=1), 1.0)):
+                self.start_prob_=self.trans_mat_=self.means_=self.vars_=None
+                self.n_iter_fit_=0
+                raise FloatingPointError("invalid transition matrix after M-step")
 
             self.log_likelihood_history_.append(log_likelihood)
 
             # Check convergence
             if iteration > 0:
                 delta = log_likelihood - prev_log_likelihood
-                if delta < self.tol:
+                if delta < -max(self.tol, 1e-8):
+                    self.start_prob_=self.trans_mat_=self.means_=self.vars_=None
+                    self.n_iter_fit_=0
+                    raise FloatingPointError(f"EM likelihood decreased by {delta}")
+                if 0 <= delta < self.tol:
                     self.converged_ = True
                     self.n_iter_fit_ = iteration + 1
                     break
@@ -322,7 +368,11 @@ class GaussianHMM:
         Returns:
             State sequence (T,) with values in [0, n_states-1]
         """
-        X = np.asarray(X, dtype=np.float64).ravel()
+        if self.n_iter_fit_ == 0 or self.means_ is None: raise RuntimeError("model is not fitted")
+        X = np.asarray(X, dtype=np.float64)
+        if X.ndim == 2 and X.shape[1] == 1: X=X[:,0]
+        elif X.ndim != 1: raise ValueError("X must have shape (T,) or (T,1)")
+        if not np.isfinite(X).all(): raise ValueError("missing observations rejected by event-clock contract")
         T = len(X)
 
         log_emission = self._compute_log_likelihood(X)
@@ -352,7 +402,7 @@ class GaussianHMM:
 
         return states
 
-    def predict_proba(self, X: np.ndarray) -> np.ndarray:
+    def predict_proba(self, X: np.ndarray, scope="smoothed_posthoc") -> np.ndarray:
         """
         Compute posterior state probabilities.
 
@@ -362,17 +412,29 @@ class GaussianHMM:
         Returns:
             State probabilities (T, n_states)
         """
-        X = np.asarray(X, dtype=np.float64).ravel()
+        canonical={"smoothed_posthoc":"SMOOTHED_POSTHOC","filtered_asof":"FILTERED_ASOF",
+                   "SMOOTHED_POSTHOC":"SMOOTHED_POSTHOC","FILTERED_ASOF":"FILTERED_ASOF"}.get(scope)
+        if canonical is None: raise ValueError("unknown inference scope")
+        return self._scope_probabilities(X, canonical)
 
-        log_emission = self._compute_log_likelihood(X)
-        log_alpha, _ = self._forward(log_emission)
-        log_beta = self._backward(log_emission)
+    def _scope_probabilities(self, X, scope):
+        if self.n_iter_fit_ == 0 or self.means_ is None: raise RuntimeError("model is not fitted")
+        X=np.asarray(X,dtype=float)
+        if X.ndim==2 and X.shape[1]==1: X=X[:,0]
+        elif X.ndim!=1: raise ValueError("X must have shape (T,) or (T,1)")
+        if not np.isfinite(X).all(): raise ValueError("missing observations rejected by event-clock contract")
+        emission=self._compute_log_likelihood(X); alpha,_=self._forward(emission)
+        if scope=="FILTERED_ASOF": gamma=alpha
+        elif scope=="SMOOTHED_POSTHOC": gamma=alpha+self._backward(emission)
+        else: raise ValueError("scope must be FILTERED_ASOF or SMOOTHED_POSTHOC")
+        gamma-=logsumexp(gamma,axis=1,keepdims=True)
+        return np.exp(gamma)
 
-        # γ_t(s) = α_t(s) * β_t(s) / P(X)
-        log_gamma = log_alpha + log_beta
-        log_gamma -= logsumexp(log_gamma, axis=1, keepdims=True)
-
-        return np.exp(log_gamma)
+    def infer(self, X, *, scope="FILTERED_ASOF", fit_end=None, decision_time=None):
+        """Typed inference; only filtered probabilities are production eligible."""
+        probabilities=self._scope_probabilities(X,scope)
+        states=np.argmax(probabilities,axis=1).astype(np.int32)
+        return RegimeInference(probabilities,states,scope,fit_end,decision_time,scope=="FILTERED_ASOF")
 
 
 def detect_regimes(

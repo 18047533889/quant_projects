@@ -74,14 +74,14 @@ def test_cohort_pnl_matches_hand_computation():
     for t in range(T):
         active = 0
         for s in range(t):
-            if t <= s + 20:
+            if s + 2 <= t <= s + 21:
                 active += 1
         expected[t] = active * per_cohort_day
 
     np.testing.assert_allclose(pnl, expected, rtol=1e-10, atol=1e-12)
 
     # 总 PnL = Σ_s min(20, T-s-1) × per_cohort_day
-    expected_total = sum(min(20, T - s - 1) * per_cohort_day for s in range(T))
+    expected_total = sum(max(0, min(20, T - s - 2)) * per_cohort_day for s in range(T))
     assert abs(pnl.sum() - expected_total) < 1e-10
 
     # gross exposure 稳态 = 每 cohort 名义 1.0 / 20 × 20 = 1.0
@@ -113,7 +113,7 @@ def test_cohort_pnl_holdings_exit_day_included():
     # 稳态：t=20 起（s∈[0,19] 全部 active）直到 t=40 后 cohort 0 出场。
     # 直接对拍逐日 active 计数。
     for t in [20, 30, 40, 41]:
-        active = sum(1 for s in range(max(0, t - 20), t) if t <= s + 20)
+        active = sum(1 for s in range(t) if s + 2 <= t <= s + 21)
         assert abs(pnl[t] - active * per_cohort_day) < 1e-10, (
             f"t={t} 期望 {active * per_cohort_day}，got {pnl[t]}"
         )
@@ -147,8 +147,10 @@ def test_cost_scenarios_interface():
         cost_scenario(-0.1)
     # 快速敏感性近似不抛错且单调
     pnl = np.array([0.001, -0.0005, 0.002])
-    net_1x = apply_per_side_costs(pnl, cost_multiplier=1.0)
-    net_3x = apply_per_side_costs(pnl, cost_multiplier=3.0)
+    with pytest.raises(ValueError, match="HEURISTIC_COST_SCAN"):
+        apply_per_side_costs(pnl, cost_multiplier=1.0)
+    net_1x = apply_per_side_costs(pnl, cost_multiplier=1.0, research_only=True)
+    net_3x = apply_per_side_costs(pnl, cost_multiplier=3.0, research_only=True)
     assert np.all(net_3x <= net_1x)
 
 
@@ -241,7 +243,9 @@ def test_dual_view_long_short_and_long_only_active():
     full = compute_metrics_from_cohort(factor, ret, vwap, holding=20)
     assert set(full["metrics"].keys()) == {"long_short", "long_only_active"}
     assert np.isfinite(full["metrics"]["long_short"]["sharpe"])
-    assert np.isfinite(full["metrics"]["long_only_active"]["sharpe"])
+    # Arithmetic active alone cannot establish long-only NAV Sharpe.
+    assert full["metrics"]["long_only_active"]["status"] == "WAIT"
+    assert "sharpe" not in full["metrics"]["long_only_active"]
 
 
 # ---------------------------------------------------------------------------
@@ -344,7 +348,9 @@ def test_nan_handling_and_tradable():
     # 验证：t=29 入场 cohort（entry 30）被跳过，t=30 入场 cohort（entry 31）正常。
     assert out["cohort_weight"][29] == 0.0
     assert out["cohort_weight"][30] > 0.0
-    assert np.all(np.isfinite(out["pnl_net"]))
+    # Existing held positions have unknown valuation, not a true flat return.
+    assert np.isnan(out["pnl_net"][30])
+    assert np.all(np.isfinite(np.delete(out["pnl_net"], 30)))
 
 
 def test_input_validation():

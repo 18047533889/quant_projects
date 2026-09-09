@@ -1,21 +1,16 @@
 """GPU robustness kernels (spec §20, Wave 4).
 
-Batch-vectorized over F (NO ``for f in range(F)``).  All inputs are daily IC
-series of shape (T, F) — small relative to raw factor tensors — so the point
-is cross-factor batch vectorization, not per-factor Python loops.
+HAC is batch-vectorized over F; bootstrap streams factors while sharing time
+draws. All inputs are daily IC series of shape (T, F).
 
 Semantics preserved from the CPU oracle in
 :mod:`quant_evaluator.metrics.robustness`:
 
-  * HAC variance / t-stat   — Newey-West lag-weighted autocovariance on the
-    per-factor NaN-compressed valid series.  The CPU reference compresses
-    NaNs out *before* autocovariance (unlike the temporal ACF, whose oracle
-    keeps the calendar); the GPU kernels reproduce that exact compressed
-    arithmetic batch-vectorized (front-packing columns and summing over the
-    valid-slot count masks gives bit-parity).
-  * Block bootstrap CI      — deterministic Philox RNG; block starts drawn
-    with replacement over valid-slot offsets; CI from ``np.percentile``.
-  * Subsample IC/std        — deterministic Philox RNG; per-bootstrap
+  * HAC variance / t-stat   — endpoint trimming only; internal gaps and
+    infinities give insufficient (NaN) evidence, never compressed calendar lags.
+  * Block bootstrap CI      — deterministic PCG64 RNG, shared original-time
+    draws across all factors; incomplete columns give NaN, not compressed blocks.
+  * Subsample IC/std        — deterministic PCG64 RNG; per-bootstrap
     without-replacement subset; mean / std (ddof=1) over columns.
 
 CuPy is imported lazily so the module (and any importers) load on a
@@ -51,7 +46,7 @@ def _import_cp():
 
 
 def _front_packed(ic):
-    """NaN-compress each column to the front (HAC oracle semantics).
+    """Pack contiguous finite segments, marking internal gaps insufficient.
 
     Returns (packed (T,F), n_finite (F,)).  Slot k of factor f holds the k-th
     finite value of column f, preserving original order.
@@ -61,21 +56,32 @@ def _front_packed(ic):
     T, F = ic.shape
     rank = cp.cumsum(finite, axis=0) - 1
     n_f = cp.sum(finite, axis=0).astype(cp.int64)
+    time_rows = cp.arange(T)[:, None]
+    if T:
+        first = cp.min(cp.where(finite, time_rows, T), axis=0)
+        last = cp.max(cp.where(finite, time_rows, -1), axis=0)
+        contiguous = ((last - first + 1) == n_f) & ~cp.isinf(ic).any(axis=0)
+    else:
+        contiguous = cp.zeros(F, dtype=bool)
     fgrid = cp.broadcast_to(cp.arange(F)[None, :], (T, F))
     rows = rank[finite]
     cols = fgrid[finite]
     vals = ic[finite].astype(cp.float64)
     A = cp.zeros((T, F), dtype=cp.float64)
     A[rows, cols] = vals
-    return A, n_f
+    return A, cp.where(contiguous, n_f, 0)
 
 
 def _hac_variance_impl(series, max_lag=5, kernel="bartlett"):
-    """Front-packed HAC variance; internal, over a GPU array (T,F)."""
+    """Contiguous-sample HAC variance; internal, over a GPU array (T,F)."""
     cp = _import_cp()
+    from quant_evaluator.metrics.robustness import _validate_hac_policy
+    _validate_hac_policy(max_lag, kernel)
     ic = cp.asarray(series)
     if ic.ndim == 1:
         ic = ic[:, None]
+    if ic.ndim != 2:
+        raise ValueError("HAC requires a time series or T x F matrix")
     T, F = ic.shape
     A, n_f = _front_packed(ic)
     mean_f = cp.sum(A, axis=0) / cp.maximum(n_f, 1)
@@ -86,7 +92,7 @@ def _hac_variance_impl(series, max_lag=5, kernel="bartlett"):
 
     tvec = cp.arange(T, dtype=cp.float64)[:, None]
     count = n_f.astype(cp.float64) - 1  # max valid slot index per factor (n_f-1)
-    for lag in range(1, max_lag + 1):
+    for lag in range(1, min(max_lag + 1, T)):
         # pairs (slot k, slot k+lag) available where k <= n_f-lag-1
         valid_slots = n_f - lag                       # (F,)
         slot_mask = tvec < valid_slots[None, :].astype(cp.float64)  # (T,F)
@@ -96,7 +102,7 @@ def _hac_variance_impl(series, max_lag=5, kernel="bartlett"):
         s_prev = cp.sum(slot_mask * A, axis=0)
         s_curr = cp.sum(slot_mask * A_lag, axis=0)
         cnt = valid_slots.astype(cp.float64)
-        cov = (num - mean_f * (s_prev + s_curr) + cnt * mean_f * mean_f) / cnt
+        cov = (num - mean_f * (s_prev + s_curr) + cnt * mean_f * mean_f) / cp.maximum(n_f, 1)
         if kernel == "bartlett":
             w = 1.0 - lag / (max_lag + 1)
         else:
@@ -178,12 +184,11 @@ def block_bootstrap_ci(
     ic = cp.asarray(ic_series)
     if ic.ndim == 1:
         ic = ic[:, None]
+    if ic.ndim != 2:
+        raise ValueError("bootstrap requires a time series or T x F matrix")
     T, F = ic.shape
-
-    if block_length <= 0 or block_length > T:
-        raise ValueError(f"block_length must be in (0, {T}], got {block_length}")
-    if confidence_level <= 0 or confidence_level >= 1:
-        raise ValueError(f"confidence_level must be in (0, 1), got {confidence_level}")
+    from quant_evaluator.metrics.robustness import _validate_bootstrap_policy
+    _validate_bootstrap_policy(T, block_length, num_bootstrap, confidence_level, random_seed)
 
     alpha = 1.0 - confidence_level
     lower_percentile = 100.0 * (alpha / 2)
@@ -195,12 +200,12 @@ def block_bootstrap_ci(
     ci_lower = cp.full(F, cp.nan, dtype=cp.float64)
     ci_upper = cp.full(F, cp.nan, dtype=cp.float64)
 
-    f_slots = cp.where(n_f >= block_length * 2)[0]
+    f_slots = cp.where((n_f == T) & (n_f >= block_length * 2))[0]
 
-    # A single shared RNG across factors, driven exactly like the oracle:
-    # for each factor f, for each bootstrap b, draw num_blocks block starts
-    # with replacement over valid-slot offsets.
+    # One shared original-calendar draw matrix, independent of factor ordering.
     rng = _rng(random_seed)
+    shared_starts = rng.integers(0, T - block_length + 1,
+                                size=(num_bootstrap, (T + block_length - 1) // block_length))
 
     for f in f_slots.get().tolist():
         col = ic[:, f]
@@ -210,7 +215,7 @@ def block_bootstrap_ci(
         m = n - block_length + 1  # number of possible block starts
 
         # Deterministic host index draw (PCG64 parity with the CPU oracle).
-        starts = rng.integers(0, m, size=(num_bootstrap, num_blocks))  # (B, nbk)
+        starts = shared_starts  # Identical draws for every candidate and factor order.
 
         # Build the block-concatenation index tensor (B, num_blocks*block_length),
         # streamed in factor tiles of bootstrap count — never B x T x F.

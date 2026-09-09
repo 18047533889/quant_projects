@@ -13,6 +13,8 @@ def compute_condition_number(
     exposures: pd.DataFrame,
     date_col: str = "date",
     asset_col: str = "asset_id",
+    add_intercept: bool = False,
+    sample_weights: Optional[pd.Series] = None,
 ) -> pd.DataFrame:
     """
     Compute condition number of exposure matrix per date.
@@ -50,6 +52,15 @@ def compute_condition_number(
         # Remove rows with NaN
         valid_mask = np.all(np.isfinite(X), axis=1)
         X_valid = X[valid_mask]
+        if sample_weights is not None:
+            if not sample_weights.index.equals(exposures.index):
+                raise ValueError("sample_weights must align exactly with exposures.index")
+            w = sample_weights.loc[group.index].to_numpy(dtype=float)[valid_mask]
+            if np.any(~np.isfinite(w)) or np.any(w < 0):
+                raise ValueError("sample_weights must be finite and non-negative")
+            X_valid = X_valid * np.sqrt(w)[:, None]
+        if add_intercept:
+            X_valid = np.column_stack([np.ones(len(X_valid)), X_valid])
 
         if X_valid.shape[0] > 0:
             try:
@@ -71,6 +82,8 @@ def compute_condition_number(
                     "rank": rank,
                     "n_exposures": X_valid.shape[1],
                     "n_observations": X_valid.shape[0],
+                    "degrees_of_freedom": X_valid.shape[0] - rank,
+                    "full_column_rank": bool(rank == X_valid.shape[1]),
                 })
 
             except np.linalg.LinAlgError:
@@ -80,6 +93,8 @@ def compute_condition_number(
                     "rank": np.nan,
                     "n_exposures": X_valid.shape[1],
                     "n_observations": X_valid.shape[0],
+                    "degrees_of_freedom": np.nan,
+                    "full_column_rank": False,
                 })
         else:
             results.append({
@@ -88,6 +103,8 @@ def compute_condition_number(
                 "rank": np.nan,
                 "n_exposures": len(exposure_cols),
                 "n_observations": 0,
+                "degrees_of_freedom": 0,
+                "full_column_rank": False,
             })
 
     return pd.DataFrame(results)
@@ -217,9 +234,9 @@ def check_residual_exposures(
                     # t-statistic for testing ρ = 0
                     t_stat = corr * np.sqrt(n - 2) / np.sqrt(1 - corr**2 + 1e-10)
 
-                    # Two-tailed p-value (approximate using normal)
+                    # Des-tailed Student-t reference under IID assumptions.
                     from scipy import stats
-                    p_value = 2 * (1 - stats.norm.cdf(np.abs(t_stat)))
+                    p_value = 2 * stats.t.sf(np.abs(t_stat), df=n - 2)
 
                     results.append({
                         date_col: date,
@@ -228,6 +245,7 @@ def check_residual_exposures(
                         "t_stat": t_stat,
                         "p_value": p_value,
                         "n_observations": n,
+                        "diagnostic_scope": "descriptive_same_sample_not_alpha_confidence",
                     })
 
     return pd.DataFrame(results)

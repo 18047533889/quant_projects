@@ -93,6 +93,18 @@ def construct_long_short_portfolio(
         ValueError: In ``strict`` mode, when any cross-section fails the
             bucket guards
     """
+    factor_values = np.asarray(factor_values, dtype=float)
+    if factor_values.ndim not in (2, 3):
+        raise ValueError("factor_values must have layout (T,N) or (T,N,F)")
+    if validity_mask is not None:
+        validity_mask = np.asarray(validity_mask)
+        if validity_mask.dtype != np.bool_:
+            raise TypeError("validity_mask must be boolean")
+        allowed = {(factor_values.shape[0], factor_values.shape[1])}
+        if factor_values.ndim == 3:
+            allowed.add(factor_values.shape)
+        if validity_mask.shape not in allowed:
+            raise ValueError(f"validity_mask shape {validity_mask.shape} incompatible with {factor_values.shape}")
     # Handle 3D factor values
     if factor_values.ndim == 3:
         T, N, F = factor_values.shape
@@ -101,7 +113,7 @@ def construct_long_short_portfolio(
 
         for f in range(F):
             fv = factor_values[:, :, f]
-            vm = validity_mask[:, :, f] if validity_mask is not None else None
+            vm = (validity_mask if validity_mask.ndim == 2 else validity_mask[:, :, f]) if validity_mask is not None else None
             long_pos[:, :, f], short_pos[:, :, f] = construct_long_short_portfolio(
                 fv, long_threshold, short_threshold, vm,
                 min_bucket_size=min_bucket_size, strict=strict,
@@ -180,6 +192,12 @@ def compute_equal_weighted_returns(
     Returns:
         Portfolio returns (T,) or (T, F)
     """
+    positions = np.asarray(positions)
+    forward_returns = np.asarray(forward_returns, dtype=float)
+    if positions.dtype != np.bool_:
+        raise TypeError("positions must be boolean")
+    if positions.ndim not in (2, 3) or forward_returns.shape != positions.shape[:2]:
+        raise ValueError("positions/returns axes do not align")
     if positions.ndim == 3:
         T, N, F = positions.shape
         portfolio_returns = np.full((T, F), np.nan)
@@ -199,6 +217,8 @@ def compute_equal_weighted_returns(
         ret_t = forward_returns[t, :]
 
         # Valid positions with finite returns
+        if np.any(pos_t & ~np.isfinite(ret_t)):
+            continue  # Unknown held return cannot be removed then reweighted.
         valid_mask = pos_t & np.isfinite(ret_t)
         n_valid = np.sum(valid_mask)
 
@@ -229,6 +249,9 @@ def compute_cap_weighted_returns(
     Returns:
         Portfolio returns (T,) or (T, F)
     """
+    positions=np.asarray(positions); forward_returns=np.asarray(forward_returns,dtype=float); market_caps=np.asarray(market_caps,dtype=float)
+    if positions.dtype!=np.bool_: raise TypeError("positions must be boolean")
+    if positions.ndim not in (2,3) or forward_returns.shape!=positions.shape[:2] or market_caps.shape!=positions.shape[:2]: raise ValueError("positions/returns/caps axes do not align")
     if positions.ndim == 3:
         T, N, F = positions.shape
         portfolio_returns = np.full((T, F), np.nan)
@@ -251,6 +274,8 @@ def compute_cap_weighted_returns(
         cap_t = market_caps[t, :]
 
         # Valid positions with finite returns and caps
+        if np.any(pos_t & (~np.isfinite(ret_t) | ~np.isfinite(cap_t) | (cap_t <= 0))):
+            continue
         valid_mask = pos_t & np.isfinite(ret_t) & np.isfinite(cap_t) & (cap_t > 0)
         n_valid = np.sum(valid_mask)
 

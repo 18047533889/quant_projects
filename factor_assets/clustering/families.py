@@ -6,11 +6,12 @@ for community detection in correlation graphs, and hierarchical clustering
 with dendrogram cutting.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 from typing import Dict, List, Set, Optional, Tuple
 from collections import defaultdict
 import hashlib
+import math
 
 from factor_assets.contracts._canonical import canonical_digest
 from factor_assets.contracts._frozen import FrozenMapping
@@ -50,6 +51,97 @@ class SimilarityObservationState(Enum):
 
 
 @dataclass(frozen=True)
+class ClusterQualityPolicy:
+    """Explicitly calibrated cluster-quality floor, not a duplicate-deletion rule."""
+
+    min_medoid_affinity: float
+    policy_id: str
+    policy_version: str
+
+    def __post_init__(self):
+        if isinstance(self.min_medoid_affinity, bool) or not math.isfinite(self.min_medoid_affinity) or not 0 < self.min_medoid_affinity <= 1:
+            raise ValueError('min_medoid_affinity must be finite in (0, 1]')
+        if not self.policy_id.strip() or not self.policy_version.strip():
+            raise ValueError('quality policy requires explicit identity/version')
+
+
+def _cluster_quality(graph, assignments, policy):
+    """Sparse observed-edge quality; absent pairwise observations remain unknown.
+
+    A representative is an observed absolute-affinity medoid. A full star is
+    required to certify its weakest affinity; unknown edges never become zero.
+    Signed graph balance detects contradictory directions, not negative edges
+    themselves. Removing below-floor edges detects weak bridges without dense
+    all-pairs allocation or inventing missing correlations.
+    """
+    clusters = defaultdict(set)
+    for fid, cid in assignments.items():
+        clusters[cid].add(fid)
+    out = {}
+    for cid, members in clusters.items():
+        adjacency = {fid: sorted((n, c) for n, c in graph.neighbors(fid) if n in members)
+                     for fid in members}
+        complete = [fid for fid in members if len(adjacency[fid]) == len(members) - 1]
+        medoid = min(complete or members,
+                     key=lambda fid: (-sum(abs(c) for _, c in adjacency[fid]), fid))
+        observed = len(adjacency[medoid])
+        minimum = min((abs(c) for _, c in adjacency[medoid]), default=None)
+        directions, conflicts = {}, set()
+        for start in sorted(members):
+            if start in directions:
+                continue
+            directions[start] = 1
+            stack = [start]
+            while stack:
+                current = stack.pop()
+                for neighbor, correlation in adjacency[current]:
+                    if correlation == 0:
+                        continue
+                    direction = directions[current] * (1 if correlation > 0 else -1)
+                    if neighbor not in directions:
+                        directions[neighbor] = direction
+                        stack.append(neighbor)
+                    elif directions[neighbor] != direction:
+                        conflicts.add(tuple(sorted((current, neighbor))))
+        components = None
+        if policy is not None:
+            unseen = set(members)
+            components = 0
+            while unseen:
+                stack = [min(unseen)]
+                unseen.remove(stack[0])
+                components += 1
+                while stack:
+                    for neighbor, correlation in adjacency[stack.pop()]:
+                        if neighbor in unseen and abs(correlation) >= policy.min_medoid_affinity:
+                            unseen.remove(neighbor)
+                            stack.append(neighbor)
+        if policy is None:
+            status = 'UNCALIBRATED'
+        elif conflicts:
+            status = 'FAIL'
+        elif len(members) < 2 or observed != len(members) - 1:
+            status = 'INSUFFICIENT'
+        elif minimum < policy.min_medoid_affinity:
+            status = 'FAIL'
+        elif components is not None and components > 1:
+            status = 'INSUFFICIENT'
+        else:
+            status = 'PASS'
+        out[cid] = FrozenMapping({
+            'status': status, 'medoid': medoid, 'n_members': len(members),
+            'observed_medoid_pairs': observed, 'required_medoid_pairs': len(members) - 1,
+            'min_observed_medoid_affinity': minimum,
+            'direction_conflict_edges': tuple(sorted(conflicts)),
+            'high_affinity_components': components,
+            'policy_id': policy.policy_id if policy else None,
+            'policy_version': policy.policy_version if policy else None,
+            'min_medoid_affinity': policy.min_medoid_affinity if policy else None,
+        })
+    return FrozenMapping(out)
+
+
+@dataclass(frozen=True)
 class ClusterResult:
     """
     Result of a clustering operation.
@@ -74,6 +166,7 @@ class ClusterResult:
     graph_content_hash: Optional[str] = None
     #: ``"RESEARCH"`` or ``"PRODUCTION"`` — which gate authorises the run.
     execution_mode: str = "RESEARCH"
+    quality_evidence: Dict = field(default_factory=dict)
 
     @property
     def num_clusters(self) -> int:
@@ -128,6 +221,7 @@ class ClusterArtifact:
     certification_id: Optional[str] = None
     #: ``"RESEARCH"`` or ``"PRODUCTION"`` — which gate authorised the run.
     execution_mode: str = "RESEARCH"
+    quality_evidence: Dict = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if not self.graph_identity:
@@ -156,6 +250,10 @@ class ClusterArtifact:
         # artifact's assignments no longer block copy.deepcopy / hash.
         object.__setattr__(self, "assignments", FrozenMapping(dict(self.assignments)))
         object.__setattr__(self, "representatives", tuple(self.representatives))
+        quality = {int(cid): FrozenMapping(row) for cid, row in self.quality_evidence.items()}
+        if len(quality) != len(self.quality_evidence):
+            raise ValueError('duplicate cluster quality IDs')
+        object.__setattr__(self, "quality_evidence", FrozenMapping(quality))
         computed = self.recompute_content_hash()
         if not self.content_hash:
             object.__setattr__(self, "content_hash", computed)
@@ -178,7 +276,7 @@ class ClusterArtifact:
         ``str(value)``, so structurally equal nested values hash identically
         and equal-looking values of different types differ.
         """
-        return canonical_digest(
+        legacy_hash = canonical_digest(
             self.graph_identity,
             self.algorithm,
             self.snapshot_ref,
@@ -195,6 +293,10 @@ class ClusterArtifact:
             self.assignments,
             self.representatives,
         )
+        # Empty evidence preserves historical hashes; new evidence is bound to
+        # a new content identity and cannot be grafted onto old certification.
+        return canonical_digest(legacy_hash, self.quality_evidence, self.certification_id,
+                                self.execution_mode) if self.quality_evidence else legacy_hash
 
     def to_dict(self) -> Dict[str, object]:
         """Serializable dict form (provenance + hash retained)."""
@@ -215,6 +317,9 @@ class ClusterArtifact:
             "modularity": self.modularity,
             "stability": self.stability,
             "content_hash": self.content_hash,
+            "quality_evidence": {cid: dict(row) for cid, row in self.quality_evidence.items()},
+            "certification_id": self.certification_id,
+            "execution_mode": self.execution_mode,
         }
 
 
@@ -595,6 +700,7 @@ class LeidenClustering:
         min_cluster_policy: str = "KEEP_SMALL",
         execution_mode: ExecutionMode | str = ExecutionMode.RESEARCH,
         certification: Optional[CertifiedGraphArtifact] = None,
+        quality_policy: Optional[ClusterQualityPolicy] = None,
     ):
         """
         Args:
@@ -636,6 +742,9 @@ class LeidenClustering:
         self.min_cluster_policy = min_cluster_policy
         self.execution_mode = ExecutionMode.coerce(execution_mode)
         self.certification = certification
+        if quality_policy is not None and not isinstance(quality_policy, ClusterQualityPolicy):
+            raise TypeError('quality_policy must be ClusterQualityPolicy')
+        self.quality_policy = quality_policy
         # R55 P0-13: the gate runs in the constructor AND at every clustering
         # entry point, so a caller cannot escape it by holding a
         # research-constructed object and calling cluster() in production.
@@ -789,7 +898,7 @@ def _leiden_cluster_artifact(
     cluster_of: Dict[int, List[str]] = defaultdict(list)
     for fid, cid in result.assignments.items():
         cluster_of[cid].append(fid)
-    representatives = tuple(sorted(min(members) for members in cluster_of.values()))
+    representatives = tuple(sorted(row['medoid'] for row in result.quality_evidence.values()))
     return ClusterArtifact(
         graph_identity=self.graph.graph_identity,
         algorithm="leiden",
@@ -809,6 +918,7 @@ def _leiden_cluster_artifact(
             certified.certification_id if certified is not None else None
         ),
         execution_mode=self.execution_mode.value,
+        quality_evidence=result.quality_evidence,
     )
 
 
@@ -935,18 +1045,25 @@ def _leiden_finalize(self, assignments: Dict[str, int]) -> ClusterResult:
             members = [fid for fid, cid in renumbered.items() if cid == small_cid]
             if not members:
                 continue
-            # Find nearest cluster by sum of |corr| edge weights.
+            # Cluster affinity uses support across the small cluster, never a
+            # single strongest bridge edge that drags unrelated members.
             best_cid: Optional[int] = None
             best_weight = -1.0
+            support_by_target: Dict[int, Dict[str, List[float]]] = defaultdict(lambda: defaultdict(list))
             for fid in members:
                 for neighbor, corr in self.graph.neighbors(fid):
                     ncid = renumbered.get(neighbor)
                     if ncid is None or ncid == small_cid:
                         continue
-                    w = abs(corr)
-                    if w > best_weight:
-                        best_weight = w
-                        best_cid = ncid
+                    support_by_target[ncid][fid].append(abs(corr))
+            for ncid, per_member in sorted(support_by_target.items()):
+                if len(per_member) < len(members):
+                    continue
+                # Equal-weight each source member so a high-degree bridge
+                # cannot dominate the target affinity.
+                affinity = sum(sum(v) / len(v) for v in per_member.values()) / len(per_member)
+                if affinity > best_weight:
+                    best_weight, best_cid = affinity, ncid
             if best_cid is None:
                 continue
             for fid in members:
@@ -960,10 +1077,17 @@ def _leiden_finalize(self, assignments: Dict[str, int]) -> ClusterResult:
             [cid for cid, size in sizes.items() if size < self.min_cluster_size]
         )
 
+    quality = _cluster_quality(self.graph, renumbered, self.quality_policy)
+    failed_quality = {cid for cid, row in quality.items() if row['status'] != 'PASS'}
+    if self.execution_mode is ExecutionMode.PRODUCTION and failed_quality:
+        raise InvalidClusteringContract(
+            f'Leiden cluster quality gate failed for clusters {sorted(failed_quality)}; '
+            'explicit policy and sufficient coherent observed medoid evidence required')
     return ClusterResult(
         assignments=renumbered,
         cluster_sizes=dict(sizes),
         unstable_clusters=tuple(unstable),
+        quality_evidence=quality,
         certification_id=(
             self.certification.certification_id
             if self.certification is not None

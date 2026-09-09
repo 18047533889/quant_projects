@@ -13,6 +13,20 @@ psycopg2 is NOT installed, live PG tests keep skipping honestly).
 
 from __future__ import annotations
 
+
+def test_plain_sqlite_path_uses_persistent_sqlite_backend(tmp_path):
+    from quant_platform.app.composition import production_composition
+    from quant_platform.app.db import SqliteDb
+    path = tmp_path / 'metadata.sqlite'
+    composition = production_composition(dsn=str(path))
+    assert isinstance(composition.db, SqliteDb)
+    with composition.db.transaction():
+        composition.db.execute("INSERT INTO teams (team_id,name) VALUES ('persisted','test')")
+    composition.close()
+    reopened = production_composition(dsn=str(path))
+    assert reopened.db.query("SELECT team_id FROM teams")[0]['team_id'] == 'persisted'
+    reopened.close()
+
 import os
 import sys
 

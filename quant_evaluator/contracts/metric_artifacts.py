@@ -89,6 +89,12 @@ class FrozenMapping(Mapping):
     def __getitem__(self, key):
         return self._data[key]
 
+    def __setattr__(self, name, value):
+        raise TypeError("FrozenMapping is immutable")
+
+    def __delattr__(self, name):
+        raise TypeError("FrozenMapping is immutable")
+
     def __iter__(self):
         return iter(self._data)
 
@@ -138,9 +144,9 @@ def _freeze_value(value: Any) -> Any:
     if isinstance(value, (set, frozenset)):
         return frozenset(_freeze_value(v) for v in value)
     if isinstance(value, np.ndarray):
-        arr = np.array(value, copy=True, order="C")
-        arr.flags.writeable = False
-        return arr
+        return _freeze_array(value, "metadata")
+    if isinstance(value, np.generic) and (value.dtype.hasobject or value.dtype.fields is not None):
+        raise InvalidContractError("metadata requires an explicit scalar schema, not structured/object numpy scalars")
     if (
         isinstance(value, (str, bytes, int, float, bool))
         or value is None
@@ -272,9 +278,7 @@ def _freeze_array(
             # A caller that hands an ImmutableBufferRef into a production
             # artifact is asserting ownership, but another writable alias could
             # still alias the same memory; copy to guarantee isolation.
-            copied = np.array(array, copy=True, order="C")
-            copied.flags.writeable = False
-            return copied
+            return _freeze_array(array, name)
         try:
             # Research mode: adopt the caller's buffer read-only (zero-copy,
             # QE-P0-02). Only allowed when not production (P1-U).
@@ -293,8 +297,14 @@ def _freeze_array(
             f"got {type(value).__name__}"
         )
     array = np.array(value, copy=True, order="C")
-    array.flags.writeable = False
-    return array
+    if not array.dtype.hasobject:
+        # A read-only owning ndarray can re-enable WRITEABLE. An immutable
+        # bytes owner cannot, including through its exposed base/view chain.
+        return np.frombuffer(array.tobytes(order="C"), dtype=array.dtype).reshape(array.shape)
+    raise InvalidContractError(
+        f"MetricArtifact.{name} object arrays cannot provide immutable ownership; "
+        "use numeric/string arrays or explicit immutable scalar tuples"
+    )
 
 
 @dataclass(frozen=True, eq=False)

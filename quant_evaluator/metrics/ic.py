@@ -98,8 +98,8 @@ def _spearman_rank_correlation(x: np.ndarray, y: np.ndarray, min_obs: int = 10) 
 
     Returns:
         Rank correlation coefficient, or NaN if insufficient data,
-        constant, or too few distinct ranked levels to robustly estimate
-        a monotone relationship.
+        or constant. Statistical evidence strength is assessed separately;
+        a binary nonconstant signal has a mathematically defined Spearman IC.
     """
     mask = _pairwise_finite_mask(x, y)
     x_valid = x[mask]
@@ -115,12 +115,6 @@ def _spearman_rank_correlation(x: np.ndarray, y: np.ndarray, min_obs: int = 10) 
 
     # Constants (all values same)
     if x_levels.size == 1 or y_levels.size == 1:
-        return np.nan
-
-    # Too few distinct levels -> sparse ties; rank correlation cannot be
-    # robustly estimated. Conservative floor: max(min_obs//2, 2).
-    min_levels = max(min_obs // 2, 2)
-    if x_levels.size < min_levels or y_levels.size < min_levels:
         return np.nan
 
     # Use scipy's spearmanr with average tie handling

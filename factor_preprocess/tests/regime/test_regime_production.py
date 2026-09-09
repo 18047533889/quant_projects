@@ -194,8 +194,8 @@ def test_causal_detector_prefix_invariance():
 
     det = CausalRegimeDetector(window=20, n_regimes=2)
     det.fit(df.iloc[:120])
-    labels_full = det.detect(df.iloc[:120]).regime.values
-    labels_ext = det.detect(df.iloc[:121]).regime.values
+    labels_full = det.detect(df.iloc[:120], allow_historical_replay=True).regime.values
+    labels_ext = det.detect(df.iloc[:121], allow_historical_replay=True).regime.values
     # rows 0..118 must be identical after extending with row 120 (prefix
     # invariance). Row 119 is excluded because in the extended run it uses
     # data[99:120] including the appended row 120 boundary.

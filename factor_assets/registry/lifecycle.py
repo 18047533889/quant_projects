@@ -4,7 +4,7 @@ import logging
 from collections import deque
 from dataclasses import dataclass
 from threading import RLock
-from typing import Callable, Optional
+from typing import Callable, Optional, Protocol
 
 from factor_assets.contracts.asset import FactorAsset
 from factor_assets.contracts.evidence_ref import EvidenceBundleRef
@@ -32,6 +32,10 @@ class TransitionRequest:
     notes: Optional[str] = None
     expected_revision: Optional[int] = None
     evidence_bundle_ref: Optional[EvidenceBundleRef] = None
+    authorization_ref: Optional[str] = None
+
+class EvidenceAuthorizationResolver(Protocol):
+    def resolve(self, ref: str) -> object: ...
 
     def __post_init__(self):
         if not self.factor_id:
@@ -56,8 +60,10 @@ class TransitionResult:
 class LifecycleOrchestrator:
     """Validates requests, delegates commit authority, then runs observers."""
 
-    def __init__(self, repository: Optional[LifecycleRepository] = None):
+    def __init__(self, repository: Optional[LifecycleRepository] = None,
+                 authorization_resolver: Optional[EvidenceAuthorizationResolver] = None):
         self._repository = repository
+        self._authorization_resolver = authorization_resolver
         self._event_listeners: list[Callable[[StateEvent], None]] = []
         self._transition_hooks: dict[
             tuple[LifecycleState, LifecycleState], list[Callable[[StateEvent], None]]
@@ -81,6 +87,39 @@ class LifecycleOrchestrator:
                 f"Missing required evidence for {request.from_state.value} -> "
                 f"{request.to_state.value}: {sorted(missing)} (factor {request.factor_id})"
             )
+        if request.to_state in (LifecycleState.APPROVED, LifecycleState.PRODUCTION_READY):
+            if not request.authorization_ref or self._authorization_resolver is None:
+                raise LifecycleConflictError("typed trusted authorization is required for approval/production")
+            try:
+                artifact = self._authorization_resolver.resolve(request.authorization_ref)
+            except Exception as exc:
+                raise LifecycleConflictError("authorization could not be resolved") from exc
+            if getattr(artifact, "factor_id", None) != request.factor_id:
+                raise LifecycleConflictError("authorization factor mismatch")
+            current_asset = self._repository.get(request.factor_id) if self._repository is not None else None
+            authorized_recipe = (getattr(artifact, "recipe_hash", None)
+                                 or getattr(artifact, "canonical_hash", None)
+                                 or getattr(artifact, "factor_definition_hash", None))
+            if authorized_recipe is not None and (current_asset is None or authorized_recipe != current_asset.metadata.canonical_hash):
+                raise LifecycleConflictError("authorization recipe mismatch")
+            content_hash = getattr(artifact, "content_hash", None)
+            if content_hash != request.authorization_ref:
+                raise LifecycleConflictError("authorization content hash mismatch")
+            decision = getattr(getattr(artifact, "decision", None), "value", getattr(artifact, "decision", None))
+            status = getattr(getattr(artifact, "status", None), "value", getattr(artifact, "status", None))
+            if request.to_state is LifecycleState.APPROVED and decision != "APPROVED":
+                raise LifecycleConflictError("authorization decision is not APPROVED")
+            authorized_policy = getattr(artifact, "policy_version", None)
+            if authorized_policy is not None and authorized_policy != request.policy_version:
+                raise LifecycleConflictError("authorization policy version mismatch")
+            if request.to_state is LifecycleState.PRODUCTION_READY and status not in ("CERTIFIED", "APPROVED"):
+                raise LifecycleConflictError("production certification is not approved")
+            expires_at = getattr(artifact, "expires_at", None) or getattr(artifact, "frozen_until", None)
+            if expires_at:
+                from datetime import datetime, timezone
+                expiry = datetime.fromisoformat(str(expires_at).replace("Z", "+00:00"))
+                if expiry <= datetime.now(timezone.utc):
+                    raise LifecycleConflictError("authorization is expired")
 
     def execute_transition(self, request: TransitionRequest) -> TransitionResult:
         """Commit once in the repository, then invoke hooks and listeners."""

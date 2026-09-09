@@ -9,6 +9,25 @@ from factor_assets.selection import SelectionDecision, SelectionReason
 from types import MappingProxyType
 
 import pytest
+from types import SimpleNamespace
+
+
+def test_wrong_universe_snapshot_is_rejected_at_public_assembly_entry():
+    spec = make_spec("set-wrong-universe", "Wrong universe", "manual", universe_ref="universe:A")
+    wrong = SimpleNamespace(universe_ref="universe:B", snapshot_id="snapshot:B")
+    with pytest.raises(ValueError, match="does not match spec.universe_ref"):
+        FactorSetAssembler().assemble(spec, [make_asset("F1")], universe_snapshot=wrong)
+
+
+def test_assembly_binds_exact_universe_snapshot_to_lineage_and_hash():
+    spec = make_spec("set-dated", "Dated", "manual", universe_ref="universe:A")
+    first = SimpleNamespace(universe_ref="universe:A", snapshot_id="snapshot:A:2020")
+    second = SimpleNamespace(universe_ref="universe:A", snapshot_id="snapshot:A:2021")
+    a = FactorSetAssembler().assemble(spec, [make_asset("F1")], universe_snapshot=first)
+    b = FactorSetAssembler().assemble(spec, [make_asset("F1")], universe_snapshot=second)
+    assert a.universe_snapshot_ref == "snapshot:A:2020"
+    assert b.universe_snapshot_ref == "snapshot:A:2021"
+    assert a.assembly_hash != b.assembly_hash
 
 
 def make_asset(factor_id, *, frequency="daily", domains=("price",), state=LifecycleState.APPROVED):
@@ -41,6 +60,8 @@ def make_spec(set_id, name, policy, **kwargs):
     kwargs.setdefault("data_snapshot_ref", "snapshot:default")
     kwargs.setdefault("universe_ref", "universe:default")
     kwargs.setdefault("split_ref", "split:default")
+    kwargs.setdefault("recipe_ref", "recipe:default")
+    kwargs.setdefault("selection_as_of", "2026-01-01T00:00:00Z")
     return FactorSetSpec(set_id, name, policy, **kwargs)
 
 
@@ -270,13 +291,17 @@ def test_ranking_is_evidence_based_not_lexicographic():
     # despite the lexicographic order F1 < F2 being coincidentally aligned;
     # use F2 recent / F1 old so the two orderings genuinely disagree.
     spec = make_spec("set-1", "Ranked", "pareto_front", max_factors=1)
+    old = make_decision("F1", timestamp="2024-01-01T00:00:00Z")
+    recent = make_decision("F2", timestamp="2024-03-01T00:00:00Z")
+    object.__setattr__(old, "metadata", MappingProxyType({"objectives": {"quality": .1}}))
+    object.__setattr__(recent, "metadata", MappingProxyType({"objectives": {"quality": .2}}))
     result = FactorSetAssembler().assemble(
         spec,
         [make_asset("F1"), make_asset("F2")],
         selection_decisions=[
-            make_decision("F1", timestamp="2024-01-01T00:00:00Z"),
-            make_decision("F2", timestamp="2024-03-01T00:00:00Z"),
+            old, recent,
         ],
+        assembly_policy=AssemblyPolicy("pareto-test", "1", required_objectives=("quality",)),
     )
     assert result.factor_ids == ("F2",)
 
@@ -300,7 +325,7 @@ def test_unknown_selection_policy_fails_closed():
 
 
 def test_memberships_carry_decision_and_evidence_refs():
-    spec = make_spec("set-1", "Provenance", "pareto_front")
+    spec = make_spec("set-1", "Provenance", "family_robust")
     result = FactorSetAssembler().assemble(
         spec,
         [make_asset("F1")],
@@ -326,7 +351,7 @@ def test_manual_memberships_have_null_decision_refs():
 
 
 def test_assembly_hash_deterministic_and_content_sensitive():
-    spec = make_spec("set-1", "Hashed", "pareto_front")
+    spec = make_spec("set-1", "Hashed", "family_robust")
     decisions = [make_decision("F1"), make_decision("F2")]
     first = FactorSetAssembler().assemble(
         spec, [make_asset("F2"), make_asset("F1")],
@@ -350,7 +375,7 @@ def test_assembly_hash_deterministic_and_content_sensitive():
     assert changed.assembly_hash != first.assembly_hash
 
     # Changing the policy semantics changes the policy hash only.
-    other_spec = make_spec("set-2", "Hashed", "family_robust")
+    other_spec = make_spec("set-2", "Hashed", "family_robust", max_factors=1)
     other = FactorSetAssembler().assemble(
         other_spec, [make_asset("F1"), make_asset("F2")],
         selection_decisions=decisions, created_at="2024-02-01T00:00:00Z",
@@ -399,6 +424,9 @@ def test_assembly_hash_is_canonical_over_all_semantic_fields():
             reason="APPROVED",
             evidence_refs=("bundle-F1",),
             gate_results=("gate-1",),
+            universe_ref="universe:default", snapshot_ref="snapshot:default",
+            split_ref="split:default", recipe_ref="recipe:default",
+            data_as_of="2024-01-01T00:00:00Z", created_at="2024-01-01T00:00:00Z",
         )
 
     # Auto-treatment artifacts so production mode has a consume-only
@@ -446,7 +474,7 @@ def test_assembly_hash_is_canonical_over_all_semantic_fields():
     assert FactorSetAssembler().assemble(
         spec, [make_asset("F1")],
         admission_artifacts={"F1": admission(3, 1, "v2")},
-        treatment_selection_artifacts={"F1": treatment()},
+        treatment_selection_artifacts={"F1": treatment("v2")},
         production=True, created_at="2024-02-01T00:00:00Z",
     ).assembly_hash != prod.assembly_hash
 
@@ -581,6 +609,7 @@ def test_pareto_front_ranking_uses_dominance_not_recency():
             decided("F1", {"rank_ic": 0.01, "sharpe": 0.5}, "2024-06-01T00:00:00Z"),
             decided("F2", {"rank_ic": 0.05, "sharpe": 1.2}, "2024-01-01T00:00:00Z"),
         ],
+        assembly_policy=AssemblyPolicy("pareto-test", "1", required_objectives=("rank_ic", "sharpe")),
     )
     assert result.factor_ids == ("F2",)
 
@@ -602,30 +631,27 @@ def test_pareto_front_ranking_ignores_partial_objectives():
             decided("F1", {}, "2024-06-01T00:00:00Z"),
             decided("F2", {"rank_ic": 0.05}, "2024-01-01T00:00:00Z"),
         ],
+        assembly_policy=AssemblyPolicy("pareto-test", "1", required_objectives=("rank_ic",)),
     )
-    assert result.factor_ids == ("F1",)
+    assert result.factor_ids == ("F2",)
 
 
-def test_pareto_front_ranking_without_objectives_keeps_recency():
+def test_pareto_front_without_frozen_objectives_fails_closed():
     # Metadata-only decisions (no objectives anywhere): all points are
     # mutually non-dominated; ordering preserves the previous behaviour.
     spec = make_spec("set-1", "NoObj", "pareto_front", max_factors=1)
-    result = FactorSetAssembler().assemble(
-        spec,
-        [make_asset("F1"), make_asset("F2")],
-        selection_decisions=[
-            make_decision("F1", timestamp="2024-01-01T00:00:00Z"),
-            make_decision("F2", timestamp="2024-03-01T00:00:00Z"),
-        ],
-    )
-    assert result.factor_ids == ("F2",)
+    with pytest.raises(ValueError, match="policy-frozen required_objectives"):
+        FactorSetAssembler().assemble(
+            spec, [make_asset("F1"), make_asset("F2")],
+            selection_decisions=[make_decision("F1"), make_decision("F2")],
+        )
 
 
 def test_factor_set_artifact_round_trip_from_assembly():
     from factor_assets.contracts.factor_set import FactorSetArtifact
 
     spec = make_spec(
-        "set-1", "Artifact", "pareto_front",
+        "set-1", "Artifact", "family_robust",
         universe_ref="universe:ashare-v3", split_ref="split:oos-2024h1",
     )
     result = FactorSetAssembler().assemble(
@@ -741,7 +767,9 @@ def test_assembly_policy_max_per_macrocluster_is_enforced():
         ),
     )
     # At most one member from the "mom" macro bucket; F3 stays (its own bucket).
-    assert result.factor_ids == ("F1", "F3")
+    # No actual cluster-membership evidence: every unknown belongs to the
+    # shared UNKNOWN buckets and cannot evade the macro budget via factor_id.
+    assert result.factor_ids == ("F1",)
 
 
 def test_assembly_policy_capacity_budget_is_enforced():

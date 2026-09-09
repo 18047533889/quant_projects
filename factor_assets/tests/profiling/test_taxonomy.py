@@ -108,6 +108,21 @@ def _mech_names(art):
     return tuple(t.tag for t in art.mechanism_tags)
 
 
+def test_production_taxonomy_requires_catalog_and_preserves_field_roles():
+    analysis = _a(["neutralize"], ["prices.close", "fundamentals.market_cap"])
+    with pytest.raises(ValueError, match="requires canonical"):
+        classify_factor_taxonomy(analysis, production=True)
+    artifact = classify_factor_taxonomy(
+        analysis,
+        production=True,
+        field_taxonomy={"prices.close": ("PRICE",), "fundamentals.market_cap": ("SIZE",)},
+        field_roles={"prices.close": "alpha", "fundamentals.market_cap": "control"},
+    )
+    assert artifact.alpha_source_fields == ("prices.close",)
+    assert artifact.control_fields == ("fundamentals.market_cap",)
+    assert "SIZE" in artifact.data_domains
+
+
 # ---------------------------------------------------------------------------
 # 1. Typical DSL classification
 # ---------------------------------------------------------------------------
@@ -413,7 +428,21 @@ class TestPolicyRegistry:
     def test_current_policy_resolves(self):
         p = get_taxonomy_policy()
         assert p.policy_id == "CN_A_SHARE_DAILY_TAXONOMY_V1"
-        assert p.policy_version == "1.0.0"
+        assert p.policy_version == "2.0.0"
+        assert p.mechanism_sources == "alpha_only"
+
+    def test_legacy_policy_remains_resolvable(self):
+        p = get_taxonomy_policy(policy_version="1.0.0")
+        assert p.mechanism_sources == "all_fields_legacy"
+
+    def test_positional_policy_arguments_are_backward_compatible(self):
+        p = TaxonomyPolicy("custom", "1.0.0", "legacy", ("UNKNOWN_MECHANISM",))
+        assert p.mechanism_tag_vocab == ("UNKNOWN_MECHANISM",)
+        assert p.mechanism_sources == "all_fields_legacy"
+
+    def test_unknown_mechanism_source_rejected(self):
+        with pytest.raises(ValueError, match="mechanism_sources"):
+            TaxonomyPolicy("custom", "1", "", mechanism_sources="guess")
 
     def test_unknown_policy_fail_closed(self):
         with pytest.raises(KeyError):
@@ -426,7 +455,7 @@ class TestPolicyRegistry:
     def test_artifact_stamps_policy(self):
         art = _classify(["rank"], ["StockDailyBarAdj.close"])
         assert art.taxonomy_policy_id == "CN_A_SHARE_DAILY_TAXONOMY_V1"
-        assert art.taxonomy_policy_version == "1.0.0"
+        assert art.taxonomy_policy_version == "2.0.0"
 
     def test_policy_vocab_validated(self):
         with pytest.raises(ValueError):
@@ -451,7 +480,7 @@ class TestArtifactShape:
         d = art.to_dict()
         assert d["display_family"] == "PV_ONLY"
         assert d["mechanism_tags"][0]["tag"] == "UNKNOWN_MECHANISM"
-        assert d["taxonomy_policy_version"] == "1.0.0"
+        assert d["taxonomy_policy_version"] == "2.0.0"
         assert d["content_hash"] == art.content_hash
 
 

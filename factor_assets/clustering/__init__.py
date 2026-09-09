@@ -11,6 +11,7 @@ from factor_assets.clustering.families import (
         ConnectedComponents,
     ModularityClustering,
     ClusterResult,
+    ClusterQualityPolicy,
     SimilarityObservationState,
 )
 
@@ -58,11 +59,17 @@ from factor_assets.clustering.certification import (
     graph_summary,
 )
 from factor_assets.errors import ProductionClusterViolation
+from factor_assets.clustering.refresh_service import (
+    ClusterRefreshPolicy, ClusterRefreshEvidence, ClusterRefreshDecision,
+    ClusterRefreshRun, ClusterRefreshRegistry, evaluate_cluster_refresh,
+    execute_cluster_refresh,
+)
 
 __all__ = [
     "ConnectedComponents",
     "ModularityClustering",
     "ClusterResult",
+    "ClusterQualityPolicy",
     "SimilarityObservationState",
     "HierarchicalClustering",
     "Dendrogram",
@@ -90,4 +97,7 @@ __all__ = [
     "enforce_certified_graph",
     "graph_summary",
     "ProductionClusterViolation",
+    "ClusterRefreshPolicy", "ClusterRefreshEvidence", "ClusterRefreshDecision",
+    "ClusterRefreshRun", "ClusterRefreshRegistry", "evaluate_cluster_refresh",
+    "execute_cluster_refresh",
 ]

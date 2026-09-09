@@ -24,6 +24,9 @@ from factor_assets.selection.policy import (
     SelectionReason,
     SelectionPolicy,
 )
+from factor_assets.selection.decision import (CandidateEvidence, DecisionArtifact,
+    DecisionProvider, DecisionRequest, DecisionStatus, GateReceipt, MetricRule, ReplacementRoleRule,
+    JointUtilityEvidence, RawJointMetricEvidence, Relationship, SelectionPolicySpec, UtilityDirection)
 
 __all__ = [
     "GateResult",
@@ -42,4 +45,7 @@ __all__ = [
     "SelectionDecision",
     "SelectionReason",
     "SelectionPolicy",
+    "CandidateEvidence", "DecisionArtifact", "DecisionProvider", "DecisionRequest",
+    "DecisionStatus", "GateReceipt", "MetricRule", "ReplacementRoleRule", "JointUtilityEvidence", "RawJointMetricEvidence", "Relationship",
+    "SelectionPolicySpec", "UtilityDirection",
 ]

@@ -409,12 +409,17 @@ def test_recipe_materialize_rejects_full_sample_research_on_validation():
 def test_no_forbidden_package_imports():
     """The contract module must not import optimizer/evaluator/assets/platform."""
     import sys
-    import factor_preprocess.contracts.treatment_spec as ts
-    imported = {m.split(".")[0] for m in sys.modules}
-    forbidden = {
-        "factor_optimizer", "quant_evaluator", "factor_assets", "quant_platform",
-    }
-    assert not (imported & forbidden), imported & forbidden
+    import subprocess
+    # Inspect a clean interpreter, not imports performed by unrelated test
+    # modules during collection of a multi-package suite.
+    probe = subprocess.run([sys.executable, "-c", """
+import sys
+import factor_preprocess.contracts.treatment_spec
+imported = {name.split('.')[0] for name in sys.modules}
+forbidden = {'factor_optimizer', 'quant_evaluator', 'factor_assets', 'quant_platform'}
+assert not (imported & forbidden), imported & forbidden
+"""], capture_output=True, text=True, timeout=30)
+    assert probe.returncode == 0, probe.stdout + probe.stderr
 
 
 def test_top_level_public_api_exposes_identity_contracts():

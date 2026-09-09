@@ -188,6 +188,7 @@ def test_assembly_policy_replaces_magic_lambda():
 
 
 def test_assembly_policy_wired_into_diverse_assembler():
+    from factor_assets.contracts.assembly_evidence import AssemblyClusterMembership
     """The MMR diverse policy's magic lambda_weight=0.5 is replaced by the
     typed AssemblyPolicy (DLIB-FA-013)."""
     from factor_assets.assembly.engine import FactorSetAssembler
@@ -261,6 +262,11 @@ def test_assembly_policy_wired_into_diverse_assembler():
         ],
         similarity_provider=similarity,
         assembly_policy=AssemblyPolicy("pol1", "1.0", quality_weight=0.5, redundancy_weight=0.5),
+        cluster_memberships={
+            "F1": AssemblyClusterMembership("F1", "micro-1", "macro-1", "clusters-v1", evidence_ref="e:F1"),
+            "F2": AssemblyClusterMembership("F2", "micro-1", "macro-1", "clusters-v1", evidence_ref="e:F2"),
+            "F3": AssemblyClusterMembership("F3", "micro-2", "macro-1", "clusters-v1", evidence_ref="e:F3"),
+        },
     )
     # MMR picks F1 (highest quality) then F3 (diverse), not F2 (redundant).
     assert result.factor_ids == ("F1", "F3")

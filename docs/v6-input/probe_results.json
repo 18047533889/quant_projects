@@ -1,0 +1,220 @@
+{
+  "head": "2bac7209c00e302728b810513c91f5475ec6954f",
+  "test_scope": "isolated_expressions_only",
+  "count": 15,
+  "repository_tested": false,
+  "gpu_tested": false,
+  "results": [
+    {
+      "probe": "P01",
+      "issue": "X01",
+      "observed": {
+        "reported_size_mean": 0.0,
+        "reported_purity": 1.0,
+        "correlation_factor_equals_size": 1.0
+      },
+      "required_contract": "Factor exposure must depend on factor values or actual portfolio weights.",
+      "scope": "isolated_expression_not_repository_test"
+    },
+    {
+      "probe": "P02",
+      "issue": "X02",
+      "observed": {
+        "corr_a_b": 0.0,
+        "ic_a": 0.7071067811865475,
+        "ic_b": 0.7071067811865475,
+        "ic_combined": 0.9999999999999993,
+        "substitution_ratio": 1.4142135423730944,
+        "old_substitutable": true
+      },
+      "required_contract": "Improvement and redundancy are different relations; no one-sided >= ratio gate.",
+      "scope": "isolated_expression_not_repository_test"
+    },
+    {
+      "probe": "P03",
+      "issue": "X03",
+      "observed": {
+        "baseline_full_ic": -1.7347234933240424e-17,
+        "combined_overlap_ic": 0.9999999999999993,
+        "old_apparent_lift": 0.9999999999999993,
+        "common_support_lift": 0.0
+      },
+      "required_contract": "Compare on common support; separately evaluate availability/coverage information.",
+      "scope": "isolated_expression_not_repository_test"
+    },
+    {
+      "probe": "P04",
+      "issue": "X04",
+      "observed": {
+        "all_finite_before": 64,
+        "all_finite_after": 0,
+        "pairwise_n_unchanged": 64,
+        "pairwise_corr": 0.9999999999999998
+      },
+      "required_contract": "Appending an unrelated missing column must not invalidate a valid pair.",
+      "scope": "isolated_expression_not_repository_test"
+    },
+    {
+      "probe": "P05",
+      "issue": "X05",
+      "observed": {
+        "validation_before": [
+          0.08,
+          0.16
+        ],
+        "validation_after": [
+          0.08,
+          0.16,
+          0.08
+        ],
+        "empty_becomes": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "required_contract": "Reject mismatched factor IDs/shapes; never repeat measurements to align evidence.",
+      "scope": "isolated_expression_not_repository_test"
+    },
+    {
+      "probe": "P06",
+      "issue": "X06",
+      "observed": {
+        "two_factor_ci": [
+          -0.028561133032056985,
+          1.8285611330320568
+        ],
+        "repeated_rows_ci": [
+          0.834176046509233,
+          0.9658239534907672
+        ],
+        "width_ratio": 0.07088812050083367
+      },
+      "required_contract": "Per-factor temporal evidence cannot become more certain by duplicating factor rows.",
+      "scope": "isolated_expression_not_repository_test"
+    },
+    {
+      "probe": "P07",
+      "issue": "X07",
+      "observed": {
+        "old_ci": [
+          0.0,
+          0.0
+        ],
+        "nonzero_ratio_delta_se": 0.11547005383792515
+      },
+      "required_contract": "Zero numerator mean does not remove its uncertainty; this is algebra, not CI calibration.",
+      "scope": "isolated_expression_not_repository_test"
+    },
+    {
+      "probe": "P08",
+      "issue": "X08",
+      "observed": {
+        "same_sample_fitted_ic": 0.5189649755491063,
+        "independent_sample_ic": -0.011421817323711607
+      },
+      "required_contract": "Keep same-date partial association as diagnostic; OOS model delta is a separate artifact.",
+      "scope": "isolated_expression_not_repository_test"
+    },
+    {
+      "probe": "P09",
+      "issue": "X09",
+      "observed": {
+        "normal_equation_failed": true,
+        "rank": 2,
+        "projection_residual_matches": true
+      },
+      "required_contract": "Use a rank-aware existing solver; report redundancy and residual degrees of freedom.",
+      "scope": "isolated_expression_not_repository_test"
+    },
+    {
+      "probe": "P10",
+      "issue": "X10",
+      "observed": {
+        "effective_quality": {
+          "missing_quality": 3.0,
+          "measured_A": 0.9,
+          "measured_B": 0.8
+        },
+        "ranking": [
+          "missing_quality",
+          "measured_A",
+          "measured_B"
+        ]
+      },
+      "required_contract": "Missing quality is missing evidence, not candidate-count-sized quality.",
+      "scope": "isolated_expression_not_repository_test"
+    },
+    {
+      "probe": "P11",
+      "issue": "X11",
+      "observed": {
+        "input_candidates": [
+          "A",
+          "B"
+        ],
+        "output_candidates": [
+          "A"
+        ]
+      },
+      "required_contract": "Nonfinite/out-of-domain similarity must become an explicit error or unresolved state.",
+      "scope": "isolated_expression_not_repository_test"
+    },
+    {
+      "probe": "P12",
+      "issue": "X12",
+      "observed": {
+        "actual_calls_n20": 1330,
+        "full_rank_call_formula_n100000": 166666666650000,
+        "formula_only_not_100k_benchmark": true
+      },
+      "required_contract": "Stop after K feasible selections and maintain incremental max redundancy, about O(F*K).",
+      "scope": "isolated_expression_not_repository_test"
+    },
+    {
+      "probe": "P13",
+      "issue": "X13",
+      "observed": {
+        "full_ranking": [
+          "A",
+          "B",
+          "D",
+          "C"
+        ],
+        "late_constraints_top2": [
+          "A",
+          "D"
+        ],
+        "feasibility_aware_greedy_top2": [
+          "A",
+          "C"
+        ]
+      },
+      "required_contract": "Check constraints before adding a member to the set used for redundancy penalties.",
+      "scope": "isolated_expression_not_repository_test"
+    },
+    {
+      "probe": "P14",
+      "issue": "X14",
+      "observed": {
+        "stored_stage": "Tier1",
+        "supplied_stage": "Tier4",
+        "old_completed": true
+      },
+      "required_contract": "Reject outcomes for a stage that was not issued; deduplicate outcome IDs.",
+      "scope": "isolated_expression_not_repository_test"
+    },
+    {
+      "probe": "P15",
+      "issue": "X15",
+      "observed": {
+        "legal_parent_rejected_by_prefix": true,
+        "legal_destination": "model_representation:x",
+        "bad_destination": "factor_asset:alpha_v1",
+        "bad_destination_not_caught_by_parent_check": true
+      },
+      "required_contract": "Validate parent as source and destination as model representation; actual storage overwrite needs its own guard.",
+      "scope": "isolated_expression_not_repository_test"
+    }
+  ]
+}

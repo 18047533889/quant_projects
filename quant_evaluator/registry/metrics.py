@@ -5,6 +5,7 @@ Central registry of available metrics with status and tier metadata.
 """
 
 from dataclasses import dataclass
+from functools import partial
 from enum import Enum
 from types import MappingProxyType
 from typing import Any, Callable, Dict, List, Mapping, Optional, Set, Tuple
@@ -13,6 +14,10 @@ import hashlib
 import inspect
 
 import numpy as np
+from quant_evaluator.metrics.calendar_returns import (
+    compute_worst_calendar_month, compute_worst_calendar_quarter,
+    compute_worst_calendar_year, compute_worst_rolling_return,
+)
 
 from quant_evaluator.metrics.ic import compute_ic_std, compute_mean_ic_value
 from quant_evaluator.metrics.predictive import (
@@ -95,7 +100,10 @@ from quant_evaluator.metrics.portfolio_stats import (
     compute_sharpe_ratio,
     compute_sortino_ratio,
     compute_win_rate,
+    compute_maximum_drawdown,
+    compute_calmar_ratio,
 )
+from quant_evaluator.metrics.registry_adapters import build_daily_quantile_return_artifact
 from quant_evaluator.metrics.underwater import (
     compute_max_underwater_duration,
     compute_mean_underwater_duration,
@@ -133,6 +141,8 @@ from quant_evaluator.metrics.registry_adapters import (
     compute_pearson_ic_series_value,
     compute_pearson_ic_value,
     compute_quantile_returns_full_value,
+    compute_daily_quantile_monotonicity_series_value,
+    compute_daily_quantile_monotonicity_rate_value,
     compute_quantile_spread_value,
     compute_rank_ic_series_value,
     compute_rank_ic_value,
@@ -274,8 +284,19 @@ class MetricSpec:
     direction: str = "higher_is_better"
     missing_policy: str = "nan"
     numeric_policy: str = "finite"
+    # Conservative default: batch recomputation is not an exact per-Bar updater.
+    update_mode: str = "PERIODIC_RECOMPUTE"
+    label_maturation_required: bool = False
+    state_schema_version: str = "none"
+    merge_supported: bool = False
+    retract_supported: bool = False
+    required_portfolio_leg: Optional[str] = None
 
     def __post_init__(self):
+        if self.update_mode not in {"APPEND_EXACT", "ROLLING_EXACT", "APPROXIMATE", "PERIODIC_RECOMPUTE", "UNSUPPORTED"}:
+            raise ValueError("Unknown incremental metric update mode")
+        if self.update_mode in {"APPEND_EXACT", "ROLLING_EXACT", "APPROXIMATE"} and self.state_schema_version == "none":
+            raise ValueError("Incremental metrics require a versioned state schema")
         if self.requires is None:
             object.__setattr__(self, 'requires', [])
         if self.ic_method not in ("pearson", "spearman"):
@@ -619,6 +640,12 @@ def resolve_alias(metric_id: str) -> str:
 # dict on the way out and restore the read-only wrapper on the way back, so
 # read-only semantics are preserved everywhere.
 _CANONICAL_METRIC_ALIASES_DATA: Dict[str, str] = {
+    "ic_temporal_persistence": "half_life",
+    "rank_icir_raw": "ic_ir",
+    "rank_ic_ir": "ic_ir",
+    "rank_icir": "ic_ir",
+    "rankicir": "ic_ir",
+    "icir": "ic_ir",
     "ic.rank.daily": "rank_ic_series",
     "ic.rank.mean": "rank_ic",
     "ic.rank.median": "ic_median",
@@ -675,7 +702,7 @@ _REGISTRY.register(MetricSpec(
     metric_id="rank_ic",
     required_inputs={"factor", "forward_returns"},
     implementation_id="quant_evaluator.metrics.ic.compute_daily_ic",
-    metric_version="1.0.0",
+    metric_version="3.0.0",
     units="correlation",
     direction="higher_is_better",
     missing_policy="drop_pair",
@@ -684,6 +711,7 @@ _REGISTRY.register(MetricSpec(
 
 _REGISTRY.register(MetricSpec(
     name="ic_std",
+    metric_version="3.0.0",
     display_name="IC Standard Deviation",
     description=(
         "Standard deviation of the daily IC series per factor (canonical "
@@ -700,6 +728,7 @@ _REGISTRY.register(MetricSpec(
 
 _REGISTRY.register(MetricSpec(
     name="ic_ir",
+    metric_version="3.0.0",
     display_name="IC Information Ratio",
     description=(
         "Mean IC divided by IC standard deviation per factor (canonical "
@@ -720,12 +749,8 @@ _REGISTRY.register(MetricSpec(
     description=(
         "Time-averaged Pearson information coefficient: the time-mean of "
         "daily Pearson IC between factor values and labels (canonical alias "
-        "ic.pearson.mean). NOTE on observation_count: the public evaluate "
-        "facade reports the number of jointly valid (factor, label) panel "
-        "cells for this alias, whereas pearson_ic/ic.pearson.mean report "
-        "the number of finite daily IC days — same kernel, two documented "
-        "observation bases (kept for back-compat with the historical "
-        "facade behaviour)"
+        "ic.pearson.mean). Observation_count is the number of finite daily "
+        "IC observations under the same pair validity and minimum-assets policy."
     ),
     status=MetricStatus.STABLE,
     tier=MetricTier.CORE,
@@ -781,6 +806,10 @@ _REGISTRY.register(MetricSpec(
 
 _REGISTRY.register(MetricSpec(
     name="pearson_ic_series",
+    update_mode="APPEND_EXACT",
+    label_maturation_required=True,
+    state_schema_version="centered_moments.v2",
+    merge_supported=True,
     display_name="Daily Pearson IC Series",
     description=(
         "Daily Pearson IC per factor over time, shape (T, F) (canonical "
@@ -812,6 +841,7 @@ _REGISTRY.register(MetricSpec(
 
 _REGISTRY.register(MetricSpec(
     name="pearson_ic_ir",
+    metric_version="3.0.0",
     display_name="Pearson IC Information Ratio",
     description=(
         "Mean Pearson IC divided by Pearson IC standard deviation per factor "
@@ -828,6 +858,11 @@ _REGISTRY.register(MetricSpec(
 
 _REGISTRY.register(MetricSpec(
     name="rank_ic_series",
+    update_mode="APPEND_EXACT",
+    label_maturation_required=True,
+    state_schema_version="centered_moments.v2",
+    merge_supported=True,
+    metric_version="3.0.0",
     display_name="Daily Rank IC Series",
     description=(
         "Daily Spearman rank IC per factor over time, shape (T, F) "
@@ -843,6 +878,7 @@ _REGISTRY.register(MetricSpec(
 
 _REGISTRY.register(MetricSpec(
     name="ic_median",
+    metric_version="3.0.0",
     display_name="Median IC",
     description=(
         "Time-median of the daily IC series per factor (canonical alias "
@@ -866,6 +902,7 @@ _REGISTRY.register(MetricSpec(
     status=MetricStatus.STABLE,
     tier=MetricTier.EXTENDED,
     compute_fn=compute_hac_pvalue_value,
+    metric_version="4.0.0",
     requires=["ICSeriesArtifact"],
     min_periods=30,
     ic_method="spearman",
@@ -880,6 +917,7 @@ _REGISTRY.register(MetricSpec(
     compute_fn=compute_turnover_value,
     requires=["factor_batch"],
     min_periods=2,
+    metric_version="2.0.0",
 ))
 
 _REGISTRY.register(MetricSpec(
@@ -897,7 +935,7 @@ _REGISTRY.register(MetricSpec(
     metric_id="quantile_spread",
     required_inputs={"factor", "forward_returns"},
     implementation_id="quant_evaluator.metrics.quantile.compute_top_bottom_spread",
-    metric_version="1.0.0",
+    metric_version="3.0.0",
     units="return",
     direction="higher_is_better",
     missing_policy="nan",
@@ -912,6 +950,7 @@ _REGISTRY.register(MetricSpec(
     status=MetricStatus.STABLE,
     tier=MetricTier.EXTENDED,
     compute_fn=compute_hac_tstat_value,
+    metric_version="4.0.0",
     requires=["ICSeriesArtifact"],
     min_periods=30,
     ic_method="spearman",
@@ -930,6 +969,7 @@ _REGISTRY.register(MetricSpec(
 
 _REGISTRY.register(MetricSpec(
     name="ic_autocorr_lag1",
+    metric_version="2.0.0",
     display_name="IC Autocorrelation (Lag 1)",
     description="First-order autocorrelation of IC series",
     status=MetricStatus.STABLE,
@@ -941,6 +981,7 @@ _REGISTRY.register(MetricSpec(
 
 _REGISTRY.register(MetricSpec(
     name="rank_stability",
+    metric_version="2.0.0",
     display_name="Rank Stability",
     description="Spearman correlation of factor ranks across time",
     status=MetricStatus.STABLE,
@@ -952,8 +993,9 @@ _REGISTRY.register(MetricSpec(
 
 _REGISTRY.register(MetricSpec(
     name="half_life",
-    display_name="IC Half-Life",
-    description="Estimated half-life of IC decay via AR(1)",
+    metric_version="2.0.0",
+    display_name="IC Temporal Persistence Half-Life",
+    description="Centered AR(1) IC temporal persistence; not predictive horizon decay",
     status=MetricStatus.STABLE,
     tier=MetricTier.EXTENDED,
     compute_fn=compute_half_life_value,
@@ -969,6 +1011,7 @@ _REGISTRY.register(MetricSpec(
     status=MetricStatus.STABLE,
     tier=MetricTier.RESEARCH,
     compute_fn=compute_block_bootstrap_ci_value,
+    metric_version="2.0.0",
     requires=["ICSeriesArtifact"],
     min_periods=60,
 ))
@@ -982,6 +1025,7 @@ _REGISTRY.register(MetricSpec(
     compute_fn=compute_factor_turnover_rate_value,
     requires=["factor_batch"],
     min_periods=30,
+    metric_version="2.0.0",
 ))
 
 _REGISTRY.register(MetricSpec(
@@ -998,6 +1042,49 @@ _REGISTRY.register(MetricSpec(
     compute_fn=compute_quantile_returns_full_value,
     requires=["factor_batch", "label_bundle"],
     min_periods=20,
+))
+
+_REGISTRY.register(MetricSpec(
+    name="quantile_returns_daily",
+    display_name="Daily quantile returns and counts",
+    description="Unreduced T×Q×F diagnostic returns, counts and masks; no implicit scalar objective",
+    status=MetricStatus.EXPERIMENTAL,
+    tier=MetricTier.RESEARCH,
+    compute_fn=build_daily_quantile_return_artifact,
+    requires=["factor_batch", "label_bundle"],
+    metric_id="quantile_returns_daily",
+    metric_version="1.0.0",
+    implementation_id="quant_evaluator.metrics.registry_adapters.build_daily_quantile_return_artifact",
+))
+
+_REGISTRY.register(MetricSpec(
+    name="daily_quantile_monotonicity_series",
+    display_name="Daily Quantile Monotonicity Series",
+    description=("Per-date fraction of increasing finite adjacent quantile-return pairs. "
+        "This is daily-profile evidence, never the formal long-run mean-profile score."),
+    status=MetricStatus.EXPERIMENTAL, tier=MetricTier.EXTENDED,
+    compute_fn=compute_daily_quantile_monotonicity_series_value,
+    requires=["factor_batch", "label_bundle"], min_periods=1,
+    domain=Domain.QUANTILE_SHAPE, metric_id="daily_quantile_monotonicity_series",
+    required_inputs={"factor", "forward_returns"}, output_type="series",
+    implementation_id="quant_evaluator.metrics.registry_adapters.compute_daily_quantile_monotonicity_series_value",
+    metric_version="1.0.0", units="fraction", direction="higher_is_better",
+    missing_policy="nan", numeric_policy="finite",
+))
+
+_REGISTRY.register(MetricSpec(
+    name="daily_quantile_monotonicity_rate",
+    display_name="Daily Quantile Monotonicity Rate",
+    description=("Mean of valid per-date increasing-adjacent-pair fractions; missing "
+        "pairs and dates are excluded from declared denominators. Distinct from quantile_monotonicity."),
+    status=MetricStatus.EXPERIMENTAL, tier=MetricTier.EXTENDED,
+    compute_fn=compute_daily_quantile_monotonicity_rate_value,
+    requires=["factor_batch", "label_bundle"], min_periods=20,
+    domain=Domain.QUANTILE_SHAPE, metric_id="daily_quantile_monotonicity_rate",
+    required_inputs={"factor", "forward_returns"}, output_type="scalar",
+    implementation_id="quant_evaluator.metrics.registry_adapters.compute_daily_quantile_monotonicity_rate_value",
+    metric_version="1.0.0", units="fraction", direction="higher_is_better",
+    missing_policy="nan", numeric_policy="finite",
 ))
 
 
@@ -1062,7 +1149,7 @@ _REGISTRY.register(MetricSpec(
     required_inputs={"factor", "forward_returns"},
     output_type="timeseries",
     implementation_id="quant_evaluator.metrics.ic.compute_daily_ic",
-    metric_version="1.0.0",
+    metric_version="3.0.0",
     required_axes=("time",),
     units="correlation",
     direction="higher_is_better",
@@ -1080,7 +1167,7 @@ _REGISTRY.register(MetricSpec(
     required_inputs={"factor", "forward_returns"},
     output_type="series",
     implementation_id="quant_evaluator.metrics.ic.compute_daily_ic",
-    metric_version="1.0.0",
+    metric_version="3.0.0",
     required_axes=("time",),
     units="correlation",
     direction="higher_is_better",
@@ -1129,15 +1216,16 @@ _REGISTRY.register(MetricSpec(
 # ---- Domain DRAWDOWN ----
 _REGISTRY.register(MetricSpec(
     name="max_drawdown",
+    compute_fn=compute_maximum_drawdown,
     display_name="max_drawdown",
-    description="Maximum drawdown of the cumulative IC series",
+    description="Maximum compounded portfolio NAV drawdown including initial capital and default",
     status=MetricStatus.STABLE,
     tier=MetricTier.EXTENDED,
     domain=Domain.DRAWDOWN,
     metric_id="max_drawdown",
     required_inputs={"factor", "forward_returns"},
     implementation_id="quant_evaluator.metrics.portfolio_stats.compute_maximum_drawdown",
-    metric_version="1.0.0",
+    metric_version="2.0.0",
     units="fraction",
     direction="lower_is_better",
     missing_policy="nan",
@@ -1153,7 +1241,7 @@ _REGISTRY.register(MetricSpec(
     metric_id="drawdown_duration",
     required_inputs={"factor", "forward_returns"},
     implementation_id="quant_evaluator.metrics.risk.drawdown_analysis.compute_drawdown_duration",
-    metric_version="1.0.0",
+    metric_version="3.0.0",
     units="periods",
     direction="lower_is_better",
     missing_policy="nan",
@@ -1161,15 +1249,16 @@ _REGISTRY.register(MetricSpec(
 ))
 _REGISTRY.register(MetricSpec(
     name="calmar_ratio",
+    compute_fn=compute_calmar_ratio,
     display_name="calmar_ratio",
-    description="Calmar ratio: annualized return / max drawdown",
+    description="Calmar ratio: explicit arithmetic (legacy default) or CAGR annualization / max drawdown",
     status=MetricStatus.STABLE,
     tier=MetricTier.EXTENDED,
     domain=Domain.DRAWDOWN,
     metric_id="calmar_ratio",
     required_inputs={"factor", "forward_returns"},
     implementation_id="quant_evaluator.metrics.portfolio_stats.compute_calmar_ratio",
-    metric_version="1.0.0",
+    metric_version="2.0.0",
     units="ratio",
     direction="higher_is_better",
     missing_policy="nan",
@@ -1193,17 +1282,21 @@ _REGISTRY.register(MetricSpec(
     missing_policy="nan",
     numeric_policy="finite",
 ))
+from quant_evaluator.metrics.turnover_cost import compute_turnover_cost
 _REGISTRY.register(MetricSpec(
     name="turnover_cost",
     display_name="turnover_cost",
-    description="Estimated transaction cost from factor rebalancing",
+    description="Mean realized per-period declared execution cost drag in basis points",
+    compute_fn=compute_turnover_cost,
+    requires=["probe_pnl"],
+    required_portfolio_leg="cost_drag",
     status=MetricStatus.STABLE,
     tier=MetricTier.EXTENDED,
     domain=Domain.TURNOVER,
     metric_id="turnover_cost",
-    required_inputs={"factor", "transaction_costs"},
-    implementation_id="quant_evaluator.metrics.turnover.compute_weighted_turnover",
-    metric_version="1.0.0",
+    required_inputs={"probe_pnl"},
+    implementation_id="quant_evaluator.metrics.turnover_cost.compute_turnover_cost",
+    metric_version="3.0.0",
     units="bps",
     direction="lower_is_better",
     missing_policy="nan",
@@ -1269,7 +1362,7 @@ _REGISTRY.register(MetricSpec(
     metric_id="cvar_95",
     required_inputs={"forward_returns"},
     implementation_id="quant_evaluator.metrics.risk.var_cvar.compute_cvar",
-    metric_version="1.0.0",
+    metric_version="2.0.0",
     units="fraction",
     direction="lower_is_better",
     missing_policy="nan",
@@ -1285,7 +1378,7 @@ _REGISTRY.register(MetricSpec(
     metric_id="cvar_99",
     required_inputs={"forward_returns"},
     implementation_id="quant_evaluator.metrics.risk.var_cvar.compute_cvar",
-    metric_version="1.0.0",
+    metric_version="2.0.0",
     units="fraction",
     direction="lower_is_better",
     missing_policy="nan",
@@ -1546,7 +1639,7 @@ _REGISTRY.register(MetricSpec(
     required_inputs={"factor", "forward_returns"},
     output_type="timeseries",
     implementation_id="quant_evaluator.metrics.portfolio_stats.compute_long_short_returns",
-    metric_version="1.0.0",
+    metric_version="2.0.0",
     required_axes=("time",),
     units="return",
     direction="higher_is_better",
@@ -1572,7 +1665,8 @@ _REGISTRY.register(MetricSpec(
     required_inputs={"forward_returns"},
     output_type="scalar",
     implementation_id="quant_evaluator.metrics.portfolio_stats.compute_sharpe_ratio",
-    metric_version="1.0.0",
+    # v1.0.1 aligns CUDA invalid-observation RF accounting with the contract.
+    metric_version="1.0.1",
     units="ratio",
     direction="higher_is_better",
     missing_policy="nan",
@@ -1598,7 +1692,7 @@ _REGISTRY.register(MetricSpec(
     required_inputs={"forward_returns"},
     output_type="scalar",
     implementation_id="quant_evaluator.metrics.portfolio_stats.compute_sortino_ratio",
-    metric_version="1.0.0",
+    metric_version="2.0.0",
     units="ratio",
     direction="higher_is_better",
     missing_policy="nan",
@@ -1660,7 +1754,7 @@ _REGISTRY.register(MetricSpec(
     required_inputs={"ic_series"},
     output_type="scalar",
     implementation_id="quant_evaluator.metrics.predictive.compute_ic_positive_ratio",
-    metric_version="1.0.0",
+    metric_version="3.0.0",
     units="fraction",
     direction="higher_is_better",
     missing_policy="nan",
@@ -1684,7 +1778,7 @@ _REGISTRY.register(MetricSpec(
     required_inputs={"ic_series"},
     output_type="scalar",
     implementation_id="quant_evaluator.metrics.predictive.compute_rank_ic_positive_ratio",
-    metric_version="1.0.0",
+    metric_version="3.0.0",
     units="fraction",
     direction="higher_is_better",
     missing_policy="nan",
@@ -1708,7 +1802,7 @@ _REGISTRY.register(MetricSpec(
     required_inputs={"ic_series"},
     output_type="scalar",
     implementation_id="quant_evaluator.metrics.predictive.compute_yearly_rank_ic",
-    metric_version="1.0.0",
+    metric_version="3.0.0",
     units="correlation",
     direction="higher_is_better",
     missing_policy="nan",
@@ -1731,7 +1825,7 @@ _REGISTRY.register(MetricSpec(
     required_inputs={"ic_series"},
     output_type="scalar",
     implementation_id="quant_evaluator.metrics.predictive.compute_monthly_rank_ic",
-    metric_version="1.0.0",
+    metric_version="3.0.0",
     units="correlation",
     direction="higher_is_better",
     missing_policy="nan",
@@ -1754,7 +1848,7 @@ _REGISTRY.register(MetricSpec(
     required_inputs={"ic_series"},
     output_type="scalar",
     implementation_id="quant_evaluator.metrics.predictive.compute_quarterly_rank_ic",
-    metric_version="1.0.0",
+    metric_version="3.0.0",
     units="correlation",
     direction="higher_is_better",
     missing_policy="nan",
@@ -1778,7 +1872,7 @@ _REGISTRY.register(MetricSpec(
     required_inputs={"ic_series"},
     output_type="scalar",
     implementation_id="quant_evaluator.metrics.predictive.compute_rolling_rank_ic_mean",
-    metric_version="1.0.0",
+    metric_version="3.0.0",
     units="correlation",
     direction="higher_is_better",
     missing_policy="nan",
@@ -1802,7 +1896,7 @@ _REGISTRY.register(MetricSpec(
     required_inputs={"ic_series"},
     output_type="scalar",
     implementation_id="quant_evaluator.metrics.predictive.compute_rolling_rank_ic_ir",
-    metric_version="1.0.0",
+    metric_version="3.0.0",
     units="ratio",
     direction="higher_is_better",
     missing_policy="nan",
@@ -1826,7 +1920,7 @@ _REGISTRY.register(MetricSpec(
     required_inputs={"ic_series"},
     output_type="scalar",
     implementation_id="quant_evaluator.metrics.predictive.compute_recent_3m_rank_ic",
-    metric_version="1.0.0",
+    metric_version="3.0.0",
     units="correlation",
     direction="higher_is_better",
     missing_policy="nan",
@@ -1850,7 +1944,7 @@ _REGISTRY.register(MetricSpec(
     required_inputs={"ic_series"},
     output_type="scalar",
     implementation_id="quant_evaluator.metrics.predictive.compute_recent_6m_rank_ic",
-    metric_version="1.0.0",
+    metric_version="3.0.0",
     units="correlation",
     direction="higher_is_better",
     missing_policy="nan",
@@ -1874,7 +1968,7 @@ _REGISTRY.register(MetricSpec(
     required_inputs={"ic_series"},
     output_type="scalar",
     implementation_id="quant_evaluator.metrics.predictive.compute_recent_12m_rank_ic",
-    metric_version="1.0.0",
+    metric_version="3.0.0",
     units="correlation",
     direction="higher_is_better",
     missing_policy="nan",
@@ -1899,7 +1993,7 @@ _REGISTRY.register(MetricSpec(
     required_inputs={"ic_series"},
     output_type="scalar",
     implementation_id="quant_evaluator.metrics.predictive.compute_worst_year_rank_ic",
-    metric_version="1.0.0",
+    metric_version="3.0.0",
     units="correlation",
     direction="higher_is_better",
     missing_policy="nan",
@@ -1923,7 +2017,7 @@ _REGISTRY.register(MetricSpec(
     required_inputs={"ic_series"},
     output_type="scalar",
     implementation_id="quant_evaluator.metrics.predictive.compute_worst_quarter_rank_ic",
-    metric_version="1.0.0",
+    metric_version="3.0.0",
     units="correlation",
     direction="higher_is_better",
     missing_policy="nan",
@@ -1931,9 +2025,9 @@ _REGISTRY.register(MetricSpec(
 ))
 _REGISTRY.register(MetricSpec(
     name="rank_ic_decay_h01_h05_h10_h20",
-    display_name="Rank IC Decay (H01/H05/H10/H20)",
+    display_name="IC Serial Autocorrelation (lags 1/5/10/20; legacy ID)",
     description=(
-        "Mean IC autocorrelation across the decay horizons {1, 5, 10, 20} "
+        "Mean IC serial autocorrelation across lags {1, 5, 10, 20}; NOT predictive horizon decay. "
         "trading days, per factor. A single scalar summarising how quickly "
         "the IC series loses autocorrelation (decays) at increasing lags "
         "(spec §28)."
@@ -1949,11 +2043,22 @@ _REGISTRY.register(MetricSpec(
     required_inputs={"ic_series"},
     output_type="scalar",
     implementation_id="quant_evaluator.metrics.predictive.compute_rank_ic_decay",
-    metric_version="1.0.0",
+    metric_version="3.0.0",
     units="correlation",
     direction="neutral",
     missing_policy="nan",
     numeric_policy="finite",
+))
+_REGISTRY.register(MetricSpec(
+    name="ic_serial_autocorrelation_lags_1_5_10_20",
+    display_name="IC Serial Autocorrelation (lags 1/5/10/20)",
+    description="Mean serial autocorrelation of one IC series; not predictive IC across label horizons",
+    status=MetricStatus.EXPERIMENTAL,tier=MetricTier.EXTENDED,
+    compute_fn=compute_rank_ic_decay,requires=["ICSeriesArtifact"],min_periods=20,
+    ic_method="spearman",domain=Domain.PREDICTIVE,
+    metric_id="ic_serial_autocorrelation_lags_1_5_10_20",required_inputs={"ic_series"},output_type="scalar",
+    implementation_id="quant_evaluator.metrics.predictive.compute_rank_ic_decay",
+    metric_version="3.0.0",units="correlation",direction="neutral",missing_policy="nan",numeric_policy="finite",
 ))
 _REGISTRY.register(MetricSpec(
     name="ic_sign_consistency",
@@ -1974,7 +2079,7 @@ _REGISTRY.register(MetricSpec(
     required_inputs={"ic_series"},
     output_type="scalar",
     implementation_id="quant_evaluator.metrics.predictive.compute_ic_sign_consistency",
-    metric_version="1.0.0",
+    metric_version="3.0.0",
     units="fraction",
     direction="higher_is_better",
     missing_policy="nan",
@@ -2000,7 +2105,7 @@ _REGISTRY.register(MetricSpec(
     required_inputs={"ic_series"},
     output_type="scalar",
     implementation_id="quant_evaluator.metrics.predictive.compute_ic_recent_vs_history_delta",
-    metric_version="1.0.0",
+    metric_version="3.0.0",
     units="zscore",
     direction="higher_is_better",
     missing_policy="nan",
@@ -2026,7 +2131,7 @@ _REGISTRY.register(MetricSpec(
     required_inputs={"quantile_returns"},
     output_type="scalar",
     implementation_id="quant_evaluator.metrics.quantile_shape.compute_quantile_monotonicity",
-    metric_version="1.0.0",
+    metric_version="3.0.0",
     units="fraction",
     direction="higher_is_better",
     missing_policy="nan",
@@ -2194,7 +2299,7 @@ _REGISTRY.register(MetricSpec(
     required_inputs={"ic_series"},
     output_type="scalar",
     implementation_id="quant_evaluator.metrics.stability_regime.compute_year_consistency",
-    metric_version="1.0.0",
+    metric_version="3.0.0",
     units="fraction",
     direction="higher_is_better",
     missing_policy="nan",
@@ -2218,7 +2323,7 @@ _REGISTRY.register(MetricSpec(
     required_inputs={"ic_series"},
     output_type="scalar",
     implementation_id="quant_evaluator.metrics.stability_regime.compute_quarter_consistency",
-    metric_version="1.0.0",
+    metric_version="3.0.0",
     units="fraction",
     direction="higher_is_better",
     missing_policy="nan",
@@ -2242,7 +2347,7 @@ _REGISTRY.register(MetricSpec(
     required_inputs={"ic_series"},
     output_type="scalar",
     implementation_id="quant_evaluator.metrics.stability_regime.compute_month_consistency",
-    metric_version="1.0.0",
+    metric_version="3.0.0",
     units="fraction",
     direction="higher_is_better",
     missing_policy="nan",
@@ -2266,7 +2371,7 @@ _REGISTRY.register(MetricSpec(
     required_inputs={"ic_series"},
     output_type="scalar",
     implementation_id="quant_evaluator.metrics.stability_regime.compute_rolling_ic_volatility",
-    metric_version="1.0.0",
+    metric_version="3.0.0",
     units="correlation",
     direction="lower_is_better",
     missing_policy="nan",
@@ -2290,7 +2395,7 @@ _REGISTRY.register(MetricSpec(
     required_inputs={"ic_series"},
     output_type="scalar",
     implementation_id="quant_evaluator.metrics.stability_regime.compute_rolling_ic_drawdown",
-    metric_version="1.0.0",
+    metric_version="3.0.0",
     units="correlation",
     direction="higher_is_better",
     missing_policy="nan",
@@ -2314,7 +2419,7 @@ _REGISTRY.register(MetricSpec(
     required_inputs={"ic_series"},
     output_type="scalar",
     implementation_id="quant_evaluator.metrics.stability_regime.compute_ic_sign_flip_rate",
-    metric_version="1.0.0",
+    metric_version="3.0.0",
     units="fraction",
     direction="lower_is_better",
     missing_policy="nan",
@@ -2339,7 +2444,7 @@ _REGISTRY.register(MetricSpec(
     required_inputs={"ic_series"},
     output_type="scalar",
     implementation_id="quant_evaluator.metrics.stability_regime.compute_change_point_score",
-    metric_version="1.0.0",
+    metric_version="3.0.0",
     units="correlation",
     direction="lower_is_better",
     missing_policy="nan",
@@ -2364,7 +2469,7 @@ _REGISTRY.register(MetricSpec(
     required_inputs={"ic_series"},
     output_type="scalar",
     implementation_id="quant_evaluator.metrics.stability_regime.compute_cusum_break_score",
-    metric_version="1.0.0",
+    metric_version="3.0.0",
     units="zscore",
     direction="lower_is_better",
     missing_policy="nan",
@@ -2389,7 +2494,7 @@ _REGISTRY.register(MetricSpec(
     required_inputs={"ic_series"},
     output_type="scalar",
     implementation_id="quant_evaluator.metrics.stability_regime.compute_recent_degradation_score",
-    metric_version="1.0.0",
+    metric_version="3.0.0",
     units="zscore",
     direction="lower_is_better",
     missing_policy="nan",
@@ -2413,7 +2518,7 @@ _REGISTRY.register(MetricSpec(
     required_inputs={"ic_series"},
     output_type="scalar",
     implementation_id="quant_evaluator.metrics.stability_regime.compute_regime_conditional_ic",
-    metric_version="1.0.0",
+    metric_version="3.0.0",
     units="correlation",
     direction="higher_is_better",
     missing_policy="nan",
@@ -2437,7 +2542,7 @@ _REGISTRY.register(MetricSpec(
     required_inputs={"ic_series"},
     output_type="scalar",
     implementation_id="quant_evaluator.metrics.stability_regime.compute_regime_worst_ic",
-    metric_version="1.0.0",
+    metric_version="3.0.0",
     units="correlation",
     direction="higher_is_better",
     missing_policy="nan",
@@ -2462,7 +2567,7 @@ _REGISTRY.register(MetricSpec(
     required_inputs={"ic_series"},
     output_type="scalar",
     implementation_id="quant_evaluator.metrics.stability_regime.compute_regime_dispersion",
-    metric_version="1.0.0",
+    metric_version="3.0.0",
     units="correlation",
     direction="lower_is_better",
     missing_policy="nan",
@@ -2486,7 +2591,7 @@ _REGISTRY.register(MetricSpec(
     required_inputs={"ic_series"},
     output_type="scalar",
     implementation_id="quant_evaluator.metrics.stability_regime.compute_regime_sign_consistency",
-    metric_version="1.0.0",
+    metric_version="3.0.0",
     units="fraction",
     direction="higher_is_better",
     missing_policy="nan",
@@ -2772,7 +2877,7 @@ _REGISTRY.register(MetricSpec(
     required_inputs={"p_values"},
     output_type="scalar",
     implementation_id="quant_evaluator.metrics.multiple_testing.bonferroni_correction",
-    metric_version="1.0.0",
+    metric_version="4.0.0",
     units="pvalue",
     direction="lower_is_better",
     missing_policy="nan",
@@ -2795,7 +2900,7 @@ _REGISTRY.register(MetricSpec(
     required_inputs={"p_values"},
     output_type="scalar",
     implementation_id="quant_evaluator.metrics.multiple_testing.benjamini_hochberg_correction",
-    metric_version="1.0.0",
+    metric_version="4.0.0",
     units="pvalue",
     direction="lower_is_better",
     missing_policy="nan",
@@ -2818,7 +2923,7 @@ _REGISTRY.register(MetricSpec(
     required_inputs={"p_values"},
     output_type="scalar",
     implementation_id="quant_evaluator.metrics.multiple_testing.holm_bonferroni_correction",
-    metric_version="1.0.0",
+    metric_version="4.0.0",
     units="pvalue",
     direction="lower_is_better",
     missing_policy="nan",
@@ -2842,7 +2947,7 @@ _REGISTRY.register(MetricSpec(
     required_inputs={"p_values"},
     output_type="scalar",
     implementation_id="quant_evaluator.metrics.multiple_testing.sidak_correction",
-    metric_version="1.0.0",
+    metric_version="4.0.0",
     units="pvalue",
     direction="lower_is_better",
     missing_policy="nan",
@@ -2877,7 +2982,7 @@ _REGISTRY.register(MetricSpec(
     required_inputs={"probe_pnl"},
     output_type="scalar",
     implementation_id="quant_evaluator.metrics.underwater.compute_max_underwater_duration",
-    metric_version="1.0.0",
+    metric_version="3.0.0",
     units="periods",
     direction="lower_is_better",
     missing_policy="nan",
@@ -2900,7 +3005,7 @@ _REGISTRY.register(MetricSpec(
     required_inputs={"probe_pnl"},
     output_type="scalar",
     implementation_id="quant_evaluator.metrics.underwater.compute_mean_underwater_duration",
-    metric_version="1.0.0",
+    metric_version="3.0.0",
     units="periods",
     direction="lower_is_better",
     missing_policy="nan",
@@ -2911,9 +3016,8 @@ _REGISTRY.register(MetricSpec(
     display_name="Time to Recovery",
     description=(
         "Mean time (periods) from an underwater episode's trough back to a new "
-        "wealth high. Only completed recoveries are averaged; an ongoing "
-        "all-episode drawdown reports the observed lookback instead (not 0). "
-        "NaN when insufficient data."
+        "wealth high. Only completed recoveries are averaged; censored ages "
+        "are not recoveries. NaN for no completed event or unknown valuation."
     ),
     status=MetricStatus.EXPERIMENTAL,
     tier=MetricTier.EXTENDED,
@@ -2925,15 +3029,43 @@ _REGISTRY.register(MetricSpec(
     required_inputs={"probe_pnl"},
     output_type="scalar",
     implementation_id="quant_evaluator.metrics.underwater.compute_time_to_recovery",
-    metric_version="1.0.0",
+    metric_version="3.0.0",
     units="periods",
     direction="lower_is_better",
     missing_policy="nan",
     numeric_policy="finite",
 ))
+for _calendar_name, _calendar_fn in (
+    ("worst_calendar_month", compute_worst_calendar_month),
+    ("worst_calendar_quarter", compute_worst_calendar_quarter),
+    ("worst_calendar_year", compute_worst_calendar_year),
+):
+    _REGISTRY.register(MetricSpec(
+        name=_calendar_name, display_name=_calendar_name,
+        description="Worst calendar-period compounded probe return; explicit DA calendar and partial-period policy",
+        status=MetricStatus.STABLE, tier=MetricTier.EXTENDED, compute_fn=_calendar_fn,
+        domain=Domain.UNDERWATER, metric_id=_calendar_name,
+        required_inputs={"probe_pnl", "calendar_snapshot"}, output_type="scalar",
+        implementation_id=f"quant_evaluator.metrics.calendar_returns.{_calendar_fn.__name__}",
+        metric_version="1.0.0", units="return", direction="higher_is_better",
+        missing_policy="unknown", numeric_policy="finite",
+    ))
+for _rolling_window in (21, 63, 252):
+    _rolling_name = f"worst_rolling_{_rolling_window}d"
+    _REGISTRY.register(MetricSpec(
+        name=_rolling_name, display_name=f"Worst {_rolling_window} trading periods (rolling)",
+        description="Worst fully matured fixed-length compounded return; never a calendar period",
+        status=MetricStatus.STABLE, tier=MetricTier.EXTENDED,
+        compute_fn=partial(compute_worst_rolling_return, window=_rolling_window),
+        domain=Domain.UNDERWATER, metric_id=_rolling_name, required_inputs={"probe_pnl"},
+        output_type="scalar", implementation_id="quant_evaluator.metrics.calendar_returns.compute_worst_rolling_return",
+        metric_version="1.0.0", units="return", direction="higher_is_better",
+        missing_policy="unknown", numeric_policy="finite",
+    ))
+
 _REGISTRY.register(MetricSpec(
     name="worst_month",
-    display_name="Worst Month",
+    display_name="Worst Rolling 21 Periods (legacy ID)",
     description=(
         "Worst fixed 21-period (trading) block compounded return of the probe "
         "daily PnL series. Uses the codebase's fixed trading-period calendar "
@@ -2957,7 +3089,7 @@ _REGISTRY.register(MetricSpec(
 ))
 _REGISTRY.register(MetricSpec(
     name="worst_quarter",
-    display_name="Worst Quarter",
+    display_name="Worst Rolling 63 Periods (legacy ID)",
     description=(
         "Worst fixed 63-period (trading) block compounded return of the probe "
         "daily PnL series. NaN when the series is shorter than one block."
@@ -2980,7 +3112,7 @@ _REGISTRY.register(MetricSpec(
 ))
 _REGISTRY.register(MetricSpec(
     name="worst_12m",
-    display_name="Worst 12-Month",
+    display_name="Worst Rolling 252 Periods (legacy ID)",
     description=(
         "Worst fixed 252-period (trading) block compounded return of the probe "
         "daily PnL series. NaN when the series is shorter than one 12m block."
@@ -3019,7 +3151,7 @@ _REGISTRY.register(MetricSpec(
     required_inputs={"probe_pnl"},
     output_type="scalar",
     implementation_id="quant_evaluator.metrics.underwater.compute_rolling_sharpe_tail",
-    metric_version="1.0.0",
+    metric_version="2.0.0",
     units="ratio",
     direction="higher_is_better",
     missing_policy="nan",
@@ -3043,7 +3175,7 @@ _REGISTRY.register(MetricSpec(
     required_inputs={"probe_pnl"},
     output_type="scalar",
     implementation_id="quant_evaluator.metrics.underwater.compute_rolling_sharpe_tail",
-    metric_version="1.0.0",
+    metric_version="2.0.0",
     units="ratio",
     direction="higher_is_better",
     missing_policy="nan",
@@ -3054,8 +3186,7 @@ _REGISTRY.register(MetricSpec(
     display_name="Return Skew",
     description=(
         "Sample skewness of the probe daily PnL return series "
-        "(population convention, same statistic as the tail-risk "
-        "distribution.compute_skewness family). NaN when insufficient data "
+        "(adjusted Fisher-Pearson, bias=False). NaN when insufficient data "
         "or zero std."
     ),
     status=MetricStatus.EXPERIMENTAL,
@@ -3068,7 +3199,7 @@ _REGISTRY.register(MetricSpec(
     required_inputs={"probe_pnl"},
     output_type="scalar",
     implementation_id="quant_evaluator.metrics.underwater.compute_return_skew",
-    metric_version="1.0.0",
+    metric_version="2.0.0",
     units="dimensionless",
     direction="neutral",
     missing_policy="nan",
@@ -3116,7 +3247,7 @@ _REGISTRY.register(MetricSpec(
     required_inputs={"probe_pnl"},
     output_type="scalar",
     implementation_id="quant_evaluator.metrics.underwater.compute_cvar_expected_shortfall",
-    metric_version="1.0.0",
+    metric_version="2.0.0",
     units="fraction",
     direction="lower_is_better",
     missing_policy="nan",
@@ -3142,15 +3273,15 @@ _REGISTRY.register(MetricSpec(
     status=MetricStatus.EXPERIMENTAL,
     tier=MetricTier.EXTENDED,
     compute_fn=compute_industry_exposure,
-    requires=["exposure_panel"],
+    requires=["factor_values", "exposure_panel"],
     min_periods=None,
     domain=Domain.EXPOSURE,
     metric_id="industry_exposure",
-    required_inputs={"exposure_panel"},
+    required_inputs={"factor_values", "exposure_panel"},
     output_type="scalar",
     implementation_id="quant_evaluator.metrics.exposure_evidence.compute_industry_exposure",
-    metric_version="1.0.0",
-    units="exposure",
+    metric_version="4.0.0",
+    units="dimensionless",
     direction="neutral",
     missing_policy="nan",
     numeric_policy="finite",
@@ -3165,15 +3296,15 @@ _REGISTRY.register(MetricSpec(
     status=MetricStatus.EXPERIMENTAL,
     tier=MetricTier.EXTENDED,
     compute_fn=compute_size_exposure,
-    requires=["exposure_panel"],
+    requires=["factor_values", "exposure_panel"],
     min_periods=None,
     domain=Domain.EXPOSURE,
     metric_id="size_exposure",
-    required_inputs={"exposure_panel"},
+    required_inputs={"factor_values", "exposure_panel"},
     output_type="scalar",
     implementation_id="quant_evaluator.metrics.exposure_evidence.compute_size_exposure",
-    metric_version="1.0.0",
-    units="exposure",
+    metric_version="4.0.0",
+    units="dimensionless",
     direction="neutral",
     missing_policy="nan",
     numeric_policy="finite",
@@ -3188,15 +3319,15 @@ _REGISTRY.register(MetricSpec(
     status=MetricStatus.EXPERIMENTAL,
     tier=MetricTier.EXTENDED,
     compute_fn=compute_beta_exposure,
-    requires=["exposure_panel"],
+    requires=["factor_values", "exposure_panel"],
     min_periods=None,
     domain=Domain.EXPOSURE,
     metric_id="beta_exposure",
-    required_inputs={"exposure_panel"},
+    required_inputs={"factor_values", "exposure_panel"},
     output_type="scalar",
     implementation_id="quant_evaluator.metrics.exposure_evidence.compute_beta_exposure",
-    metric_version="1.0.0",
-    units="exposure",
+    metric_version="4.0.0",
+    units="dimensionless",
     direction="neutral",
     missing_policy="nan",
     numeric_policy="finite",
@@ -3211,15 +3342,15 @@ _REGISTRY.register(MetricSpec(
     status=MetricStatus.EXPERIMENTAL,
     tier=MetricTier.EXTENDED,
     compute_fn=compute_liquidity_exposure,
-    requires=["exposure_panel"],
+    requires=["factor_values", "exposure_panel"],
     min_periods=None,
     domain=Domain.EXPOSURE,
     metric_id="liquidity_exposure",
-    required_inputs={"exposure_panel"},
+    required_inputs={"factor_values", "exposure_panel"},
     output_type="scalar",
     implementation_id="quant_evaluator.metrics.exposure_evidence.compute_liquidity_exposure",
-    metric_version="1.0.0",
-    units="exposure",
+    metric_version="4.0.0",
+    units="dimensionless",
     direction="neutral",
     missing_policy="nan",
     numeric_policy="finite",
@@ -3234,15 +3365,15 @@ _REGISTRY.register(MetricSpec(
     status=MetricStatus.EXPERIMENTAL,
     tier=MetricTier.EXTENDED,
     compute_fn=compute_volatility_exposure,
-    requires=["exposure_panel"],
+    requires=["factor_values", "exposure_panel"],
     min_periods=None,
     domain=Domain.EXPOSURE,
     metric_id="volatility_exposure",
-    required_inputs={"exposure_panel"},
+    required_inputs={"factor_values", "exposure_panel"},
     output_type="scalar",
     implementation_id="quant_evaluator.metrics.exposure_evidence.compute_volatility_exposure",
-    metric_version="1.0.0",
-    units="exposure",
+    metric_version="4.0.0",
+    units="dimensionless",
     direction="neutral",
     missing_policy="nan",
     numeric_policy="finite",
@@ -3257,15 +3388,15 @@ _REGISTRY.register(MetricSpec(
     status=MetricStatus.EXPERIMENTAL,
     tier=MetricTier.EXTENDED,
     compute_fn=compute_momentum_exposure,
-    requires=["exposure_panel"],
+    requires=["factor_values", "exposure_panel"],
     min_periods=None,
     domain=Domain.EXPOSURE,
     metric_id="momentum_exposure",
-    required_inputs={"exposure_panel"},
+    required_inputs={"factor_values", "exposure_panel"},
     output_type="scalar",
     implementation_id="quant_evaluator.metrics.exposure_evidence.compute_momentum_exposure",
-    metric_version="1.0.0",
-    units="exposure",
+    metric_version="4.0.0",
+    units="dimensionless",
     direction="neutral",
     missing_policy="nan",
     numeric_policy="finite",
@@ -3281,15 +3412,15 @@ _REGISTRY.register(MetricSpec(
     status=MetricStatus.EXPERIMENTAL,
     tier=MetricTier.EXTENDED,
     compute_fn=compute_max_absolute_style_exposure,
-    requires=["exposure_panel"],
+    requires=["factor_values", "exposure_panel"],
     min_periods=None,
     domain=Domain.EXPOSURE,
     metric_id="max_absolute_style_exposure",
-    required_inputs={"exposure_panel"},
+    required_inputs={"factor_values", "exposure_panel"},
     output_type="scalar",
     implementation_id="quant_evaluator.metrics.exposure_evidence.compute_max_absolute_style_exposure",
-    metric_version="1.0.0",
-    units="exposure",
+    metric_version="4.0.0",
+    units="dimensionless",
     direction="neutral",
     missing_policy="nan",
     numeric_policy="finite",
@@ -3305,15 +3436,15 @@ _REGISTRY.register(MetricSpec(
     status=MetricStatus.EXPERIMENTAL,
     tier=MetricTier.EXTENDED,
     compute_fn=compute_exposure_drift,
-    requires=["exposure_panel"],
+    requires=["factor_values", "exposure_panel"],
     min_periods=2,
     domain=Domain.EXPOSURE,
     metric_id="exposure_drift",
-    required_inputs={"exposure_panel"},
+    required_inputs={"factor_values", "exposure_panel"},
     output_type="scalar",
     implementation_id="quant_evaluator.metrics.exposure_evidence.compute_exposure_drift",
-    metric_version="1.0.0",
-    units="exposure",
+    metric_version="4.0.0",
+    units="dimensionless",
     direction="lower_is_better",
     missing_policy="nan",
     numeric_policy="finite",
@@ -3338,7 +3469,7 @@ _REGISTRY.register(MetricSpec(
     required_inputs={"factor_values", "forward_returns", "exposure_panel"},
     output_type="scalar",
     implementation_id="quant_evaluator.metrics.exposure_evidence.compute_neutralized_rank_ic",
-    metric_version="1.0.0",
+    metric_version="4.0.0",
     units="correlation",
     direction="higher_is_better",
     missing_policy="nan",
@@ -3362,7 +3493,7 @@ _REGISTRY.register(MetricSpec(
     required_inputs={"factor_values", "forward_returns", "exposure_panel"},
     output_type="scalar",
     implementation_id="quant_evaluator.metrics.exposure_evidence.compute_residual_rank_ic",
-    metric_version="1.0.0",
+    metric_version="4.0.0",
     units="correlation",
     direction="higher_is_better",
     missing_policy="nan",
@@ -3372,21 +3503,21 @@ _REGISTRY.register(MetricSpec(
     name="purity_ratio",
     display_name="Purity Ratio",
     description=(
-        "Purity ratio = 1 - style-explained share of total exposure "
-        "dispersion. Higher = cleaner (the factor's own signal dominates its "
-        "style footprint). NaN when the panel has no valid style."
+        "Time mean of 1 - R-squared from same-support weighted factor-on-risk "
+        "regression with intercept. Constant factors and insufficient degrees "
+        "of freedom are undefined. SAME_DATE_DESCRIPTIVE, not OOS evidence."
     ),
     status=MetricStatus.EXPERIMENTAL,
     tier=MetricTier.EXTENDED,
     compute_fn=compute_purity_ratio,
-    requires=["exposure_panel"],
+    requires=["factor_values", "exposure_panel"],
     min_periods=None,
     domain=Domain.EXPOSURE,
     metric_id="purity_ratio",
-    required_inputs={"exposure_panel"},
+    required_inputs={"factor_values", "exposure_panel"},
     output_type="scalar",
     implementation_id="quant_evaluator.metrics.exposure_evidence.compute_purity_ratio",
-    metric_version="1.0.0",
+    metric_version="4.0.0",
     units="fraction",
     direction="higher_is_better",
     missing_policy="nan",
@@ -3466,22 +3597,23 @@ _REGISTRY.register(MetricSpec(
     name="adaptive_quantile_count",
     display_name="Adaptive Quantile Count",
     description=(
-        "ACTUAL quantile-bin count used to build the profile per factor "
-        "(plan §14.1 adaptive 20 -> (10, 5) fallback). Reads the artifact's "
-        "n_quantiles; consumers never assume 20. Integer-valued float. "
-        "NaN when no profile exists (never 0 bins)."
+        "Tie-aware ACTUAL fixed quantile-bin count feasible per factor on "
+        "every date (plan §14.1 adaptive 20 -> (10, 5) fallback). Uses the "
+        "canonical quantile assignment policy and records per-date distinct "
+        "levels, occupied-bucket minima, and fallback reasons. NaN when no "
+        "candidate is feasible (never 0 bins)."
     ),
     status=MetricStatus.EXPERIMENTAL,
     tier=MetricTier.EXTENDED,
     compute_fn=compute_adaptive_quantile_count,
-    requires=["QuantileReturnArtifact"],
+    requires=["factor_batch"],
     min_periods=20,
     domain=Domain.QUANTILE_SHAPE,
     metric_id="adaptive_quantile_count",
-    required_inputs={"quantile_returns"},
+    required_inputs={"factor"},
     output_type="scalar",
     implementation_id="quant_evaluator.metrics.shape_evidence.compute_adaptive_quantile_count",
-    metric_version="1.0.0",
+    metric_version="3.0.0",
     units="count",
     direction="neutral",
     missing_policy="nan",
@@ -3566,12 +3698,8 @@ _REGISTRY.register(MetricSpec(
     name="left_right_asymmetry",
     display_name="Left-Right Asymmetry",
     description=(
-        "Signed asymmetry of the quantile profile about the median quantile "
-        "per factor: (top-half rise) - (bottom-half rise). Positive = "
-        "upside tail stronger. Direction NEUTRAL (informative sign). NOTE: "
-        "on an even quantile count the drawn quantile grid itself is "
-        "asymmetric, so a perfectly symmetric latent U reports a small "
-        "positive value - compare across factors, never read absolute."
+        "Mean right-minus-left mirrored quantile contrast; symmetric U and "
+        "inverted-U are zero. Descriptive signed asymmetry, not curvature."
     ),
     status=MetricStatus.EXPERIMENTAL,
     tier=MetricTier.EXTENDED,
@@ -3583,7 +3711,7 @@ _REGISTRY.register(MetricSpec(
     required_inputs={"quantile_returns"},
     output_type="scalar",
     implementation_id="quant_evaluator.metrics.shape_evidence.compute_left_right_asymmetry",
-    metric_version="1.0.0",
+    metric_version="2.0.0",
     units="return",
     direction="neutral",
     missing_policy="nan",
@@ -3618,7 +3746,7 @@ _REGISTRY.register(MetricSpec(
     name="shape_stability",
     display_name="Shape Stability",
     description=(
-        "Mean Fisher-z window-vs-overall correlation of the quantile "
+        "Inverse-Fisher aggregated window-vs-leave-one-out correlation of the quantile "
         "profile across W windows per factor. Consumes a (W, n_quantiles, F) "
         "windowed profile panel. 1 = identical shape in every window. NaN "
         "for a single-window profile (stability is undefined - missing "
@@ -3634,7 +3762,7 @@ _REGISTRY.register(MetricSpec(
     required_inputs={"quantile_returns"},
     output_type="scalar",
     implementation_id="quant_evaluator.metrics.shape_evidence.compute_shape_stability",
-    metric_version="1.0.0",
+    metric_version="2.0.0",
     units="correlation",
     direction="higher_is_better",
     missing_policy="nan",
@@ -3644,7 +3772,7 @@ _REGISTRY.register(MetricSpec(
     name="shape_regime_stability",
     display_name="Shape Regime Stability",
     description=(
-        "Regime version of shape stability: mean Fisher-z correlation of "
+        "Regime version of shape stability: inverse-Fisher correlation of "
         "CONSECUTIVE window profiles per factor (W >= 3 windows). Drops a "
         "single common shape that is stable overall but regime-uncorrelated. "
         "NaN when fewer than 3 windows."
@@ -3659,7 +3787,7 @@ _REGISTRY.register(MetricSpec(
     required_inputs={"quantile_returns"},
     output_type="scalar",
     implementation_id="quant_evaluator.metrics.shape_evidence.compute_shape_regime_stability",
-    metric_version="1.0.0",
+    metric_version="2.0.0",
     units="correlation",
     direction="higher_is_better",
     missing_policy="nan",
@@ -3667,9 +3795,9 @@ _REGISTRY.register(MetricSpec(
 ))
 _REGISTRY.register(MetricSpec(
     name="shape_bootstrap_confidence",
-    display_name="Shape Bootstrap Confidence",
+    display_name="Shape Bootstrap Rank Agreement (legacy ID)",
     description=(
-        "Bootstrap confidence of the profile's quantile RANK ORDER per "
+        "Descriptive moving-block bootstrap RANK AGREEMENT, not U-shape probability, per "
         "factor: fraction of window-resamples whose order reproduces the "
         "overall mean profile order (W >= 3). 1 = shape ordering reproduced "
         "in every resample. Deterministic (seeded). NaN for single-window."
@@ -3684,11 +3812,20 @@ _REGISTRY.register(MetricSpec(
     required_inputs={"quantile_returns"},
     output_type="scalar",
     implementation_id="quant_evaluator.metrics.shape_evidence.compute_shape_bootstrap_confidence",
-    metric_version="1.0.0",
+    metric_version="2.0.0",
     units="fraction",
     direction="higher_is_better",
     missing_policy="nan",
     numeric_policy="finite",
+))
+_REGISTRY.register(MetricSpec(
+    name="shape_bootstrap_rank_agreement",display_name="Block Bootstrap Rank Agreement",
+    description="Descriptive moving-block resampling agreement with the observed mean rank profile; not U-family success probability",
+    status=MetricStatus.EXPERIMENTAL,tier=MetricTier.EXTENDED,
+    compute_fn=compute_shape_bootstrap_confidence,requires=["QuantileReturnArtifact"],min_periods=20,
+    domain=Domain.QUANTILE_SHAPE,metric_id="shape_bootstrap_rank_agreement",required_inputs={"quantile_returns"},output_type="scalar",
+    implementation_id="quant_evaluator.metrics.shape_evidence.compute_shape_bootstrap_confidence",
+    metric_version="2.0.0",units="fraction",direction="higher_is_better",missing_policy="nan",numeric_policy="finite",
 ))
 _REGISTRY.register(MetricSpec(
     name="top_quantile_cliff_robust",
@@ -3771,7 +3908,7 @@ _REGISTRY.register(MetricSpec(
     required_inputs={"factor_batch"},
     output_type="scalar",
     implementation_id="quant_evaluator.metrics.generalization_evidence.train_predictive_dimension",
-    metric_version="1.0.0",
+    metric_version="2.0.0",
     units="correlation",
     direction="neutral",
     missing_policy="nan",
@@ -3794,7 +3931,7 @@ _REGISTRY.register(MetricSpec(
     required_inputs={"factor_batch"},
     output_type="scalar",
     implementation_id="quant_evaluator.metrics.generalization_evidence.validation_predictive_dimension",
-    metric_version="1.0.0",
+    metric_version="2.0.0",
     units="correlation",
     direction="neutral",
     missing_policy="nan",
@@ -3821,7 +3958,7 @@ _REGISTRY.register(MetricSpec(
     required_inputs={"factor_batch"},
     output_type="scalar",
     implementation_id="quant_evaluator.metrics.generalization_evidence.compute_validation_retention_array",
-    metric_version="1.0.0",
+    metric_version="2.0.0",
     units="fraction",
     direction="higher_is_better",
     missing_policy="nan",
@@ -3845,7 +3982,7 @@ _REGISTRY.register(MetricSpec(
     required_inputs={"factor_batch"},
     output_type="scalar",
     implementation_id="quant_evaluator.metrics.generalization_evidence.compute_generalization_deltas",
-    metric_version="1.0.0",
+    metric_version="2.0.0",
     units="correlation",
     direction="neutral",
     missing_policy="nan",
@@ -3868,7 +4005,7 @@ _REGISTRY.register(MetricSpec(
     required_inputs={"factor_batch"},
     output_type="scalar",
     implementation_id="quant_evaluator.metrics.generalization_evidence.compute_generalization_deltas",
-    metric_version="1.0.0",
+    metric_version="2.0.0",
     units="ratio",
     direction="neutral",
     missing_policy="nan",
@@ -3891,7 +4028,7 @@ _REGISTRY.register(MetricSpec(
     required_inputs={"factor_batch"},
     output_type="scalar",
     implementation_id="quant_evaluator.metrics.generalization_evidence.compute_generalization_deltas",
-    metric_version="1.0.0",
+    metric_version="2.0.0",
     units="ratio",
     direction="neutral",
     missing_policy="nan",
@@ -3914,7 +4051,7 @@ _REGISTRY.register(MetricSpec(
     required_inputs={"factor_batch"},
     output_type="scalar",
     implementation_id="quant_evaluator.metrics.generalization_evidence.compute_generalization_deltas",
-    metric_version="1.0.0",
+    metric_version="2.0.0",
     units="score",
     direction="neutral",
     missing_policy="nan",
@@ -3939,9 +4076,32 @@ _REGISTRY.register(MetricSpec(
     required_inputs={"factor_batch"},
     output_type="scalar",
     implementation_id="quant_evaluator.metrics.generalization_evidence.compute_validation_retention",
-    metric_version="1.0.0",
+    metric_version="2.0.0",
     units="fraction",
     direction="higher_is_better",
     missing_policy="nan",
     numeric_policy="finite",
 ))
+
+# V5 long-only evidence: each metric consumes an explicitly tagged execution leg.
+from quant_evaluator.metrics.long_only import (
+    compute_tracking_error, compute_information_ratio,
+    compute_relative_max_drawdown, compute_mean_investment_fraction,
+)
+
+for _name, _fn, _leg, _units, _direction in (
+    ("tracking_error", compute_tracking_error, "active", "annualized_return", "lower_is_better"),
+    ("information_ratio", compute_information_ratio, "active", "annualized_ratio", "higher_is_better"),
+    ("relative_max_drawdown", compute_relative_max_drawdown, "relative_return", "fraction", "lower_is_better"),
+    ("mean_investment_fraction", compute_mean_investment_fraction, "investment_fraction", "fraction", "neutral"),
+):
+    _REGISTRY.register(MetricSpec(
+        name=_name, display_name=_name.replace("_", " ").title(),
+        description="Benchmark/invested-capital evidence from an explicitly bound execution trajectory leg",
+        status=MetricStatus.STABLE, tier=MetricTier.EXTENDED, compute_fn=_fn,
+        requires=["probe_pnl"], required_inputs={"probe_pnl"},
+        required_portfolio_leg=_leg, metric_version="1.0.0", units=_units,
+        direction=_direction, output_type="scalar",
+        implementation_id=f"quant_evaluator.metrics.long_only.{_fn.__name__}",
+    ))
+del _name, _fn, _leg, _units, _direction

@@ -48,10 +48,14 @@ def _healthy_refs():
 
 
 def _all_gates_pass():
-    return {gid: True for gid in INTEGRITY_GATE_IDS}
+    return tuple(
+        IntegrityGateResult(gid, True, evidence_ref=f"evidence://{gid}")
+        for gid in INTEGRITY_GATE_IDS
+    )
 
 
 def _build(refs=None, gates=None, policy=None):
+    selected_policy = policy or POLICY
     return build_health_card(
         factor_definition_id="F1",
         evaluation_ref="E1",
@@ -59,9 +63,10 @@ def _build(refs=None, gates=None, policy=None):
             factor_definition_id="F1",
             evaluation_ref="E1",
             metric_grade_refs=refs or _healthy_refs(),
+            policy=selected_policy,
         ),
         integrity_gates=gates if gates is not None else _all_gates_pass(),
-        policy=policy or POLICY,
+        policy=selected_policy,
     )
 
 
@@ -99,6 +104,16 @@ class TestDisplayVsAdmissionSeparation:
 
 
 class TestIntegrityHardGates:
+    def test_production_card_rejects_unresolved_metric_provenance(self):
+        with pytest.raises(ValueError, match="resolved factor/value"):
+            build_health_card(
+                factor_definition_id="F1",
+                evaluation_ref="E1",
+                dimension_grades=_build().dimension_grades,
+                integrity_gates=_all_gates_pass(),
+                production=True,
+            )
+
     def test_missing_integrity_evidence_fails_closed(self):
         card = _build(gates={gid: None for gid in INTEGRITY_GATE_IDS})
         assert card.admission_relevant.hard_gates_passed is False
@@ -116,6 +131,34 @@ class TestIntegrityHardGates:
     def test_all_passing_gates_pass(self):
         card = _build()
         assert card.admission_relevant.hard_gates_passed is True
+
+    def test_bare_bool_mapping_cannot_manufacture_evidence(self):
+        card = _build(gates={gid: True for gid in INTEGRITY_GATE_IDS})
+        assert card.admission_relevant.hard_gates_passed is False
+
+    def test_duplicate_gate_rejected(self):
+        gates = list(_all_gates_pass())
+        gates[-1] = gates[0]
+        with pytest.raises(ValueError, match="duplicate"):
+            _build(gates=gates)
+
+    def test_manual_card_rejects_foreign_dimension_context(self):
+        card = _build()
+        foreign = list(card.dimension_grades)
+        foreign[0] = foreign[0].__class__(
+            **{**foreign[0].__dict__, "factor_definition_id": "OTHER"}
+        )
+        with pytest.raises(ValueError, match="factor identity"):
+            FactorHealthCardArtifact(
+                **{**card.__dict__, "dimension_grades": tuple(foreign)}
+            )
+
+    def test_manual_card_rejects_false_gates_true_summary(self):
+        card = _build()
+        gates = list(card.integrity_gates)
+        gates[0] = IntegrityGateResult(gates[0].gate_id, False, "evidence://failed")
+        with pytest.raises(ValueError, match="contradicts"):
+            FactorHealthCardArtifact(**{**card.__dict__, "integrity_gates": tuple(gates)})
 
     def test_sequence_of_gate_results_accepted(self):
         gates = [IntegrityGateResult(gid, True, evidence_ref=f"ev:{gid}") for gid in INTEGRITY_GATE_IDS]
@@ -176,8 +219,10 @@ class TestDimensionFloorsAndHardGates:
                 require_all_dimensions_graded=False,
             ),
         )
-        card = _build(policy=loose)
-        assert card.admission_relevant.admissible is True
+        # Metric grades stamped by the default policy cannot be laundered
+        # through a different, looser policy during dimension assembly.
+        with pytest.raises(ValueError, match="policy identity/version mismatch"):
+            _build(policy=loose)
 
 
 class TestCardArtifactValidation:

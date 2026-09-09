@@ -89,7 +89,11 @@ def test_collect_dimension_metric_ids_with_registry_instance():
     registry = MetricRegistry()
     # A fresh empty registry knows no ids -> every dimension collects nothing.
     for dimension in DimensionName:
-        assert collect_dimension_metric_ids(dimension, registry=registry) == ()
+        if DIMENSION_METRICS.get(dimension):
+            with pytest.raises(ValueError, match="Missing required"):
+                collect_dimension_metric_ids(dimension, registry=registry)
+        else:
+            assert collect_dimension_metric_ids(dimension, registry=registry) == ()
 
 
 def test_complexity_is_separate_penalty_dimension():

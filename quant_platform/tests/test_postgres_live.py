@@ -18,12 +18,10 @@ gets exercised.
 
 FAIL-CLOSED POLICY (R55 #92/#99)
 --------------------------------
-psycopg2 is NOT a declared dependency anywhere in this repo: 0 hits for
-psycopg/psycopg2/asyncpg/pg8000 across every pyproject.toml and
-requirements-production.lock, and ``postgres_backend.py`` documents that rule
-("psycopg2 is NOT installed in this repo/venv and must not be blind-installed;
-project rule: only project-defined pinned deps").  Per #99 this repo therefore
-does NOT add psycopg2 to any dependency list on its own.  Consequence:
+The optional ``quant-platform[postgres-test]`` extra pins the test driver.
+It is not a default runtime dependency and should be installed into an isolated
+QA environment with a disposable database, never inferred to be production
+deployment authorization. Consequence:
 
 - no driver importable -> every live test SKIPS with an explicit reason string
   (a skip is reported as a skip, never recorded as a pass);
@@ -62,8 +60,8 @@ def _psycopg2_or_skip():
     except ImportError as exc:
         pytest.skip(
             "live PostgreSQL backend not exercised: psycopg2 is not installed "
-            "(not a project-pinned dependency; see quant_platform/app/db/"
-            "postgres_backend.py). Install psycopg2 and set QP_PG_DSN to run "
+            "(install the pinned postgres-test extra in an isolated test environment). "
+            "Set QP_PG_DSN to a disposable database to run "
             f"these tests for real. ({exc})",
             allow_module_level=False,
         )
@@ -89,7 +87,7 @@ def _connect() -> PostgresDb:
     return db
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture
 def pg() -> PostgresDb:
     _psycopg2_or_skip()
     db = _connect()
@@ -105,20 +103,9 @@ def pg() -> PostgresDb:
             "SELECT table_name FROM information_schema.tables "
             "WHERE table_schema = 'public'"
         )]
+        from quant_platform.app.db.schema import TABLE_NAMES
         for t in sorted(tables):
-            if t.startswith(("outbox_events", "inbox_events", "principals",
-                             "human_users", "workload_principals", "teams",
-                             "team_members", "roles", "permissions",
-                             "artifacts", "artifact_lineage", "jobs",
-                             "job_attempts", "job_results", "workflow_runs",
-                             "factor_candidates", "similarity_graph_versions",
-                             "cluster_set_versions", "logical_clusters",
-                             "cluster_versions", "cluster_memberships",
-                             "cluster_lineage", "factor_libraries",
-                             "factor_library_versions", "factor_library_members",
-                             "feature_sets", "feature_set_versions",
-                             "feature_set_members", "production_pointers",
-                             "sessions", "audit_logs")):
+            if t in TABLE_NAMES:
                 db.execute(f'DROP TABLE IF EXISTS "{t}" CASCADE')
         db._conn.commit()
     finally:
@@ -181,7 +168,7 @@ def test_live_schema_ddl_applies_to_postgres(pg: PostgresDb):
     created = {r["table_name"] for r in rows}
     missing = [t for t in TABLE_NAMES if t not in created]
     assert not missing, f"live PostgreSQL is missing platform tables: {missing}"
-    assert len(TABLE_NAMES) == 31
+    assert len(TABLE_NAMES) == len(set(TABLE_NAMES))
 
 
 def test_live_dialect_roundtrip_insert_select(pg: PostgresDb):
@@ -208,7 +195,7 @@ def test_live_insert_or_ignore_normalized_and_dedupes(pg: PostgresDb):
         "INSERT OR IGNORE INTO inbox_events "
         "(event_id, idempotency_key, status, retry_count, next_attempt_at, "
         " last_error, dead_letter, dead_letter_reason, processed_at) "
-        "VALUES (?, ?, 'PROCESSING', 0, NULL, NULL, 0, NULL, ?)",
+        "VALUES (?, ?, 'PROCESSING', 0, NULL, NULL, FALSE, NULL, ?)",
         ("ev-1", "idem-1", 1.0),
     )
     # Second identical insert must be ignored (no PK/unique violation raised).
@@ -216,7 +203,7 @@ def test_live_insert_or_ignore_normalized_and_dedupes(pg: PostgresDb):
         "INSERT OR IGNORE INTO inbox_events "
         "(event_id, idempotency_key, status, retry_count, next_attempt_at, "
         " last_error, dead_letter, dead_letter_reason, processed_at) "
-        "VALUES (?, ?, 'PROCESSING', 0, NULL, NULL, 0, NULL, ?)",
+        "VALUES (?, ?, 'PROCESSING', 0, NULL, NULL, FALSE, NULL, ?)",
         ("ev-1", "idem-1", 2.0),
     )
     pg._conn.commit()
@@ -276,9 +263,182 @@ def test_live_outbox_emit_claim_finish_end_to_end(pg: PostgresDb):
     )
     assert status and status[0]["status"] == "sent"
     published = outbox.publish_pending(limit=10)
-    assert published == 1, "the sent outbox row must be delivered exactly once"
+    assert published == 0, "an already acknowledged row must not be delivered again"
+    assert not publisher.delivered
+    with pg.transaction():
+        outbox.emit(event_type="FactorCandidateDiscovered", aggregate_type="FactorCandidate",
+                    aggregate_id="fc-live-2", correlation_id="corr-live-2",
+                    idempotency_key="outbox-live-2", payload={"stage":"DISCOVERED"})
+    assert outbox.publish_pending(limit=10) == 1
+    assert outbox.publish_pending(limit=10) == 0
     assert publisher.delivered and publisher.delivered[0]["event_type"] == \
         "FactorCandidateDiscovered"
+
+
+def test_live_generation_publish_and_gc_root(pg):
+    import hashlib
+    from datetime import datetime, timezone
+    from quant_platform.app.contracts import ArtifactRef, ARTIFACT_TYPE_FACTOR_CANDIDATE
+    from quant_platform.app.storage.generation_coordinator import DurableGenerationCoordinator
+
+    class Publisher:
+        def publish(self, artifact, data):
+            assert hashlib.sha256(data).hexdigest() == artifact.content_hash
+            return artifact
+
+    payload = b'postgres-generation-fixture'
+    artifact = ArtifactRef(artifact_id='pg-fixture-generation',
+        artifact_type=ARTIFACT_TYPE_FACTOR_CANDIDATE, schema_version='1',
+        content_hash=hashlib.sha256(payload).hexdigest(), storage_uri='test://pg-fixture',
+        size_bytes=len(payload), created_at=datetime(2026,1,1,tzinfo=timezone.utc),
+        producer_type='fixture', producer_version='1')
+    coordinator = DurableGenerationCoordinator(pg, Publisher())
+    generation = coordinator.stage(artifact, payload)
+    assert coordinator.resolve_active(artifact.artifact_id) is None
+    assert coordinator.outbox.publish_pending() == 1
+    assert coordinator.resolve_active(artifact.artifact_id)['status'] == 'COMPLETE'
+    coordinator.protect_gc_root('active_read', artifact.artifact_id, generation)
+    snapshot = coordinator.snapshot_for_gc()
+    assert (artifact.artifact_id, generation) in snapshot.active_read_roots
+    claim = coordinator.claim_gc_tombstone(artifact.artifact_id, generation,
+                                           expected_epoch=snapshot.epoch)
+    assert claim.status.value == 'ROOTED'
+
+
+def test_live_concurrent_first_delivery_runs_handler_once(pg):
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Barrier, Lock
+    barrier, lock = Barrier(2), Lock()
+    calls = []
+    connections = [PostgresDb(_dsn(), create=False) for _ in range(2)]
+    def consume(db):
+        barrier.wait(timeout=10)
+        return Inbox(db, handle).process(event)
+    def handle(event):
+        with lock:
+            calls.append(event['idempotency_key'])
+    event = {'event_id':'concurrent-first', 'idempotency_key':'concurrent-first', 'payload':{}}
+    try:
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            results = list(pool.map(consume, connections))
+        assert sorted(results) == [False, True]
+        assert calls == ['concurrent-first']
+    finally:
+        for db in connections:
+            db.close()
+
+
+@pytest.mark.parametrize("after_write", [False, True])
+def test_live_inbox_process_death_rolls_back_claim_and_effect(pg, after_write):
+    import subprocess
+    import sys
+    code = '''
+import os, sys
+from quant_platform.app.db import PostgresDb
+from quant_platform.app.outbox import Inbox
+db = PostgresDb(os.environ['QP_PG_DSN'], create=False)
+def die(event):
+    if sys.argv[1] == 'True':
+        db.execute("INSERT INTO teams (team_id,name) VALUES ('crash-effect','test')")
+    os._exit(71)
+Inbox(db, die).process({'event_id':'crash', 'idempotency_key':'crash'})
+'''
+    result = subprocess.run([sys.executable, '-c', code, str(after_write)],
+                            env={**os.environ, 'QP_PG_DSN': _dsn()}, timeout=20)
+    assert result.returncode == 71
+    assert pg.query("SELECT * FROM teams WHERE team_id = 'crash-effect'") == []
+    assert pg.query("SELECT * FROM inbox_events WHERE idempotency_key = 'crash'") == []
+    assert Inbox(pg, lambda event: None).process({'event_id':'crash', 'idempotency_key':'crash'})
+
+
+def test_live_inbox_sql_error_rolls_back_handler_savepoint(pg):
+    event = {'event_id':'sql-error', 'idempotency_key':'sql-error'}
+    def fail(event):
+        pg.execute("INSERT INTO teams (team_id,name) VALUES ('sql-effect','test')")
+        pg.execute("INSERT INTO teams (team_id,name) VALUES ('sql-effect','duplicate')")
+    with pytest.raises(Exception, match='duplicate key'):
+        Inbox(pg, fail).process(event)
+    assert pg.query("SELECT * FROM teams WHERE team_id = 'sql-effect'") == []
+    assert Inbox(pg, fail).status_of('sql-error') == 'FAILED'
+    assert Inbox(pg, lambda event: None).process(event)
+
+
+def test_live_outbox_death_after_delivery_replays_without_duplicate_db_effect(pg):
+    import subprocess
+    import sys
+    import time
+    with pg.transaction():
+        event_id = Outbox(pg, InMemoryPublisher()).emit(event_type='test', aggregate_type='test',
+            aggregate_id='1', correlation_id='1', idempotency_key='delivered-before-crash')
+    code = '''
+import os
+from quant_platform.app.db import PostgresDb
+from quant_platform.app.outbox import Inbox, Outbox
+sender = PostgresDb(os.environ['QP_PG_DSN'], create=False)
+receiver = PostgresDb(os.environ['QP_PG_DSN'], create=False)
+def handle(event):
+    receiver.execute("INSERT INTO teams (team_id,name) VALUES ('delivery-effect','once')")
+class Bus:
+    def publish(self, event):
+        assert Inbox(receiver, handle).process(event)
+        os._exit(72)
+Outbox(sender, Bus()).publish_pending()
+'''
+    result = subprocess.run([sys.executable, '-c', code],
+                            env={**os.environ, 'QP_PG_DSN': _dsn()}, timeout=20)
+    assert result.returncode == 72
+    assert pg.query("SELECT status FROM outbox_events WHERE id = ?", (event_id,))[0]['status'] == 'claimed'
+    calls = []
+    class ReplayBus:
+        def publish(self, event):
+            assert not Inbox(pg, lambda event: calls.append(event)).process(event)
+    outbox = Outbox(pg, ReplayBus())
+    assert outbox.recover_expired_claims(now=time.time() + 301, lease_seconds=300) == 1
+    # Recovery schedules availability at its supplied clock; use that same
+    # explicit fixture clock for the drain, rather than bypassing the backoff.
+    from unittest.mock import patch
+    with patch('quant_platform.app.outbox.time.time', return_value=time.time() + 302):
+        assert outbox.publish_pending() == 1
+    assert calls == []
+    assert len(pg.query("SELECT * FROM teams WHERE team_id='delivery-effect'")) == 1
+
+
+def test_live_public_production_composition_migrates_and_delivers(pg):
+    from quant_platform.app.composition import production_composition
+    calls = []
+    composition = production_composition(db=pg, handler=lambda event: calls.append(event))
+    with pg.transaction():
+        composition.outbox.emit(event_type='test', aggregate_type='test', aggregate_id='1',
+                               correlation_id='1', idempotency_key='composed-live')
+    assert composition.outbox.publish_pending() == 1
+    assert composition.inbox.process(composition.publisher.delivered[0])
+    assert len(calls) == 1
+    # Re-entering the public composition must replay migrations idempotently.
+    production_composition(db=pg)
+
+
+def test_live_migration_runner_and_explicit_epoch_upgrade(pg):
+    from quant_platform.app.db.migrations import apply_migrations, postgres_event_clock_migration
+    with pg.transaction() as tx:
+        tx.execute('DROP TABLE IF EXISTS pg_fixture_versions')
+        tx.execute('ALTER TABLE outbox_events ALTER COLUMN occurred_at TYPE TIMESTAMP WITHOUT TIME ZONE '
+                   "USING TIMESTAMP '1970-01-01' + occurred_at * INTERVAL '1 second'")
+        tx.execute('ALTER TABLE outbox_events ALTER COLUMN id DROP DEFAULT')
+        tx.execute("INSERT INTO outbox_events (id,event_type,aggregate_type,aggregate_id,correlation_id,"
+                   "idempotency_key,occurred_at) VALUES (42,'fixture','fixture','fixture','fixture',"
+                   "'old-clock', TIMESTAMP '2024-01-01 00:00:00.125')")
+    migration = postgres_event_clock_migration(legacy_timezone='UTC')
+    kwargs = dict(current_version_table='pg_fixture_versions', migrations=(migration,))
+    assert apply_migrations(pg, **kwargs) == (migration.id,)
+    assert apply_migrations(pg, **kwargs) == ()
+    value = pg.query("SELECT occurred_at FROM outbox_events WHERE id=42")[0]['occurred_at']
+    assert value == 1704067200.125
+    with pg.transaction():
+        event_id = Outbox(pg, InMemoryPublisher()).emit(event_type='fixture', aggregate_type='fixture',
+            aggregate_id='new',correlation_id='new',idempotency_key='new-clock')
+    assert event_id > 42
+    with pg.transaction() as tx:
+        tx.execute('DROP TABLE pg_fixture_versions')
 
 
 def test_live_inbox_idempotency_and_retry_on_postgres(pg: PostgresDb):
@@ -336,3 +496,55 @@ def test_live_schema_creation_is_idempotent(pg: PostgresDb):
         "WHERE table_schema='public'"
     )
     assert rows and int(rows[0]["n"]) >= 31
+
+
+def test_live_generation_identity_and_reordered_delivery(pg: PostgresDb):
+    from datetime import datetime, timezone
+    import hashlib
+    from quant_platform.app.contracts import ArtifactRef, ARTIFACT_TYPE_FACTOR_VALUE
+    from quant_platform.app.storage.generation_coordinator import DurableGenerationCoordinator
+
+    class Publisher:
+        def publish(self, artifact, data):
+            assert hashlib.sha256(data).hexdigest() == artifact.content_hash
+            return artifact
+
+    coordinator = DurableGenerationCoordinator(pg, Publisher())
+
+    def stage(aid, data):
+        digest = hashlib.sha256(data).hexdigest()
+        return coordinator.stage(ArtifactRef(
+            artifact_id=aid, artifact_type=ARTIFACT_TYPE_FACTOR_VALUE,
+            schema_version="1", content_hash=digest, storage_uri=f"test://{aid}/{digest}",
+            size_bytes=len(data), created_at=datetime.now(timezone.utc),
+            producer_type="test", producer_version="1",
+        ), data)
+
+    old = stage("stable", b"old")
+    other = stage("other", b"old")
+    new = stage("stable", b"new")
+    assert old != other
+    coordinator.publish({"payload": {"generation_id": new}})
+    coordinator.publish({"payload": {"generation_id": old}})
+    coordinator.outbox.publish_pending()
+    assert coordinator.resolve_active("stable")["generation_id"] == new
+    assert coordinator.resolve_active("other")["generation_id"] == other
+
+
+def test_live_targeted_outbox_recovery_preserves_unrelated_rows(pg: PostgresDb, monkeypatch):
+    monkeypatch.setattr("quant_platform.app.outbox.time.time", lambda: 1000.0)
+    outbox = Outbox(pg, InMemoryPublisher())
+    ids = {}
+    with pg.transaction():
+        for key in ("production-pending", "production-expired", "shadow-target"):
+            ids[key] = outbox.emit(event_type="test", aggregate_type="test", aggregate_id=key,
+                                   correlation_id="isolation", idempotency_key=key)
+        for key in ("production-expired", "shadow-target"):
+            assert outbox.claim(ids[key], worker_id="old-worker", claim_token=key, now=1.0)
+    before = [dict(row) for row in pg.query("SELECT * FROM outbox_events WHERE id != ? ORDER BY id", (ids["shadow-target"],))]
+    assert outbox.publish_pending(idempotency_key="missing-key") == 0
+    assert outbox.publish_pending(idempotency_key="shadow-target") == 1
+    assert outbox.publish_pending(idempotency_key="shadow-target") == 0
+    after = [dict(row) for row in pg.query("SELECT * FROM outbox_events WHERE id != ? ORDER BY id", (ids["shadow-target"],))]
+    assert after == before
+    assert not outbox.finish(ids["shadow-target"], claim_token="shadow-target")

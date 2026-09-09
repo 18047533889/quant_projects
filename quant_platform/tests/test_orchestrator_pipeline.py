@@ -54,12 +54,13 @@ from quant_platform.app.outbox import InMemoryPublisher
 from quant_platform.app.orchestrator import (
     CandidateEvaluation,
     Pipeline,
+    PipelineConfig,
     PipelineReport,
     PipelineStatusReason,
     build_with_evidence,
 )
 from quant_platform.app.storage.registry import ArtifactRegistry
-from quant_platform.app.worker.jobs import JobRunner
+from quant_platform.app.worker.jobs import ErrorClass, JobError, JobRunner
 from quant_platform.app.worker.publish import InMemoryOutbox, WorkerLoop
 
 
@@ -83,6 +84,8 @@ def _raw_candidate(
 ) -> dict:
     payload = {
         "semantic_id": semantic_id if semantic_id is not None else _h(f"sem:{factor_name}:{formula}"),
+        "semantic_ref": semantic_id if semantic_id is not None else _h(f"sem:{factor_name}:{formula}"),
+        "factor_definition_ref": _h(f"definition:{formula}"),
         "content_hash": _h(seed),
         "generator_type": "trailing_sma",
         "generator_version": "1.0",
@@ -111,6 +114,75 @@ def _library_snapshot(
         "library_version_id": library_version_ref,
         "member_refs": member_refs or [],
     }
+
+
+def test_bad_and_good_ingestion_records_reconcile_without_fake_hash():
+    pipeline = _make_pipeline(
+        evaluate_candidate=lambda candidate, context: build_with_evidence({
+            "candidate_ref": candidate.candidate_id, "rank_ic": 0.2,
+            "label_maturity": True, "evidence_status": "computed",
+            "return_basis": "vwap_to_vwap",
+        }),
+        admission_authority=_DelegatedAuthority(),
+    )
+    bad = _raw_candidate(seed="bad")
+    bad["content_hash"] = "not-a-hash"
+    report = pipeline.run(
+        [bad, _raw_candidate(seed="good")], library_snapshot=_library_snapshot()
+    )
+    assert report.num_normalization_failed == 1
+    assert len([state for state in report.states if state.content_hash is None]) == 1
+    assert report.num_approved == 1
+
+
+def test_rank_ic_not_applicable_reaches_domain_admission_authority():
+    captured = []
+
+    class Authority:
+        def decide(self, request):
+            captured.append(request)
+            return AdmissionVerdict(decision=DECISION_SHADOWED, reason_codes=("alternate_evidence_required",))
+
+    pipeline = _make_pipeline(
+        evaluate_candidate=lambda candidate, context: CandidateEvaluation(
+            candidate_ref=candidate.candidate_id,
+            rank_ic=None,
+            label_maturity=True,
+            evidence_status="computed",
+            return_basis="vwap_to_vwap",
+            evidence_ref="qe:nonlinear",
+        ),
+        admission_authority=Authority(),
+    )
+    report = pipeline.run([_raw_candidate(seed="nonlinear")], library_snapshot=_library_snapshot())
+    assert len(captured) == 1
+    assert report.num_shadowed == 1
+
+
+def test_retryable_failure_is_not_consumed_before_success():
+    attempts = {"count": 0}
+
+    def evaluate(candidate, context):
+        attempts["count"] += 1
+        if attempts["count"] == 1:
+            raise JobError(ErrorClass.RETRYABLE_INFRASTRUCTURE, "temporary")
+        return build_with_evidence({
+            "candidate_ref": candidate.candidate_id,
+            "rank_ic": 0.2,
+            "label_maturity": True,
+            "evidence_status": "computed",
+            "return_basis": "vwap_to_vwap",
+        })
+
+    pipeline = _make_pipeline(
+        evaluate_candidate=evaluate, admission_authority=_DelegatedAuthority()
+    )
+    raw = _raw_candidate(seed="retry")
+    first = pipeline.run([raw], library_snapshot=_library_snapshot())
+    second = pipeline.run([raw], library_snapshot=_library_snapshot())
+    assert first.num_evaluation_failed == 1
+    assert second.num_approved == 1
+    assert attempts["count"] == 2
 
 
 class _DelegatedAuthority:
@@ -187,6 +259,116 @@ def _eval_from(rank_ic: float | None, **extra) -> CandidateEvaluation:
     return build_with_evidence(evidence)
 
 
+def test_snapshot_public_caller_emits_model_ready_manifest_only_from_real_refs():
+    class Authority(_DelegatedAuthority):
+        def decide(self, request):
+            verdict = super().decide(request)
+            return AdmissionVerdict(
+                decision=verdict.decision, reason_codes=verdict.reason_codes,
+                policy_ref=verdict.policy_ref, authority=verdict.authority,
+                content_hash=verdict.content_hash,
+                detail={"treatment_selection_ref": "recipe:1",
+                        "preprocess_state_ref": "state:1",
+                        "cluster_version_ref": "cluster:C1@v3#abc",
+                        "dtype": "float64"},
+            )
+    pipeline = _make_pipeline(
+        evaluate_candidate=lambda c, x: _eval_from(0.1),
+        admission_authority=Authority(),
+    )
+    raw = _raw_candidate(seed="caller", factor_name="alpha")
+    raw["factor_value_ref"] = "value:alpha:1"
+    pipeline.run([raw], library_snapshot={"library_version_ref": "lib:v1"})
+    payload = pipeline.modeling_feature_manifests()[-1]
+    assert payload["model_ready"] is True
+    assert payload["fields"][0]["recipe_ref"] == "recipe:1"
+    assert payload["fields"][0]["state_ref"] == "state:1"
+    assert payload["fields"][0]["cluster_version_ref"] == "cluster:C1@v3#abc"
+
+
+def test_complete_execution_trace_uses_real_public_pipeline_refs():
+    raw = _raw_candidate(
+        seed="trace", factor_name="display-only-name", campaign_id="request:R1",
+        attempt_id="trial:T1", factor_value_ref="value:V1",
+    )
+    evaluation = build_with_evidence({
+        "candidate_ref": _normalize(raw).candidate_id, "rank_ic": 0.1,
+        "label_maturity": True, "evidence_status": "computed",
+        "return_basis": "vwap_to_vwap", "recipe_ref": "recipe:RP1",
+        "preprocess_state_ref": "state:S1", "factor_value_ref": "value:V1",
+        "evaluation_ref": "qe:E1", "metric_policy_ref": "qe-policy:MP1",
+    })
+
+    class Authority:
+        def decide(self, request):
+            return AdmissionVerdict(
+                decision=DECISION_APPROVED, reason_codes=("qualifies",),
+                policy_ref="fa-health-policy:HP1", authority="factor_assets.health",
+                content_hash=_h("health-verdict"),
+                detail={"treatment_selection_ref": "recipe:RP1",
+                        "preprocess_state_ref": "state:S1",
+                        "evaluation_ref": "qe:E1", "cluster_version_ref": "cluster:C1@v3",
+                        "treated_feature_ref": "treated:TF1", "dtype": "float64"},
+            )
+
+    pipeline = Pipeline(
+        evaluate_candidate=lambda candidate, context: evaluation,
+        admission_authority=Authority(),
+        config=PipelineConfig(scope="production", require_complete_execution_trace=True),
+    )
+    report = pipeline.run([raw], library_snapshot={"library_version_ref": "library:L1"})
+    assert report.num_approved == 1
+    manifest = pipeline.modeling_feature_manifests()[-1]
+    field = manifest["fields"][0]
+    lineage = manifest["lineage"][0]
+    assert lineage["factor_definition_ref"] == raw["factor_definition_ref"]
+    assert lineage["evaluation_ref"] == "qe:E1"
+    assert lineage["health_verdict_ref"] == _h("health-verdict")
+    trace_events = [row.event for row in pipeline.outbox.rows()
+                    if row.event.payload.get("milestone") == "FEATURE_SET_CREATED"]
+    assert len(trace_events) == 1
+    event = trace_events[0]
+    trace = event.payload["execution_trace"]
+    assert event.trace_id
+    assert trace["request_ref"] == "request:R1"
+    assert trace["parent_trial_ref"] == "trial:T1"
+    assert trace["definition_ref"] == raw["factor_definition_ref"]
+    assert trace["feature_manifest_ref"] == manifest["feature_set_version_ref"]
+    assert trace["library_version_ref"] == "library:L1"
+
+
+@pytest.mark.parametrize("broken", ["missing", "mismatch"])
+def test_complete_execution_trace_fails_closed_on_missing_or_mismatched_refs(broken):
+    raw = _raw_candidate(seed=f"trace-{broken}", campaign_id="request:R1",
+                         attempt_id="trial:T1", factor_value_ref="value:V1")
+    value_ref = None if broken == "missing" else "value:WRONG"
+    evaluation = build_with_evidence({
+        "candidate_ref": _normalize(raw).candidate_id, "rank_ic": 0.1,
+        "label_maturity": True, "evidence_status": "computed",
+        "return_basis": "vwap_to_vwap", "recipe_ref": "recipe:RP1",
+        "preprocess_state_ref": "state:S1", "factor_value_ref": value_ref,
+        "evaluation_ref": "qe:E1", "metric_policy_ref": "qe-policy:MP1",
+    })
+
+    class Authority:
+        def decide(self, request):
+            return AdmissionVerdict(
+                decision=DECISION_APPROVED, policy_ref="fa-health-policy:HP1",
+                authority="factor_assets.health", content_hash=_h("verdict"),
+                detail={"treatment_selection_ref": "recipe:RP1",
+                        "preprocess_state_ref": "state:S1", "evaluation_ref": "qe:E1"},
+            )
+
+    pipeline = Pipeline(
+        evaluate_candidate=lambda candidate, context: evaluation,
+        admission_authority=Authority(),
+        config=PipelineConfig(scope="production", require_complete_execution_trace=True),
+    )
+    with pytest.raises(ValueError, match="execution trace (missing|mismatched) refs"):
+        pipeline.run([raw], library_snapshot={"library_version_ref": "library:L1"})
+    assert pipeline._research_payloads == {}
+
+
 # --------------------------------------------------------------------------- #
 # happy path — 2 NEW candidates -> 1 approve / 1 reject -> registry 1 -> 5 events
 # --------------------------------------------------------------------------- #
@@ -256,8 +438,10 @@ def test_pipeline_happy_path_register_one_and_publishes_four_events():
     assert len(report.registered_artifacts) == 1
     artifact_id, content_hash = report.registered_artifacts[0]
     assert artifact_id.startswith("FC_")
-    assert content_hash == _h("good")
-    stored = registry.resolve(_h("good"))
+    assert content_hash != _h("good")  # source-spec hash is not object-byte hash
+    payload = pipeline._research_payloads[content_hash]
+    assert hashlib.sha256(payload).hexdigest() == content_hash
+    stored = registry.resolve(content_hash)
     assert stored is not None
     assert stored.artifact_type == ARTIFACT_TYPE_FACTOR_CANDIDATE
     assert registry.resolve(_h("bad")) is None
@@ -556,7 +740,8 @@ def test_admission_request_carries_domain_refs_only():
     assert len(request.content_hash) == 64
     # the carried semantic ref is the DOMAIN's digest (hex), untouched
     assert len(request.factor_definition_ref) == 64
-    assert request.semantic_ref == request.factor_definition_ref
+    assert len(request.semantic_ref) == 64
+    assert request.semantic_ref != request.factor_definition_ref
 
 
 def test_pipeline_rejection_path_no_registry_and_no_approved():
@@ -659,7 +844,7 @@ def test_pipeline_feature_snapshot_and_retrain_diff_across_rounds():
     # Second round with a DIFFERENT approved factor -> membership change ->
     # retrain.
     second = pipeline.run(
-        [_raw_candidate(seed="fs-b", factor_name="fsb")],
+        [_raw_candidate(seed="fs-b", factor_name="fsb", formula="rank(close, 5)")],
         library_snapshot=_library_snapshot(),
     )
     assert second.num_feature_snapshot_created == 1
@@ -669,6 +854,7 @@ def test_pipeline_feature_snapshot_and_retrain_diff_across_rounds():
         FeatureSetDiffCategory.FEATURE_MEMBERSHIP_CHANGE.value
     }
     assert len(pipeline.feature_snapshots()) == 2
+    assert len(pipeline.feature_snapshots()[-1].ordered_members) == 2
 
     # Same identity round -> no retrain.
     third = pipeline.run(
@@ -759,11 +945,12 @@ def test_pipeline_registry_register_idempotent_across_rounds():
     # Round 1 -> approved, registered.
     first = pipeline.run([raw], library_snapshot=_library_snapshot())
     assert first.num_registered == 1
-    assert len(registry.list_versions(f"FC_{_h('idem')[:16]}")) == 1
+    artifact_id = first.registered_artifacts[0][0]
+    assert len(registry.list_versions(artifact_id)) == 1
 
     # Round 2 with the same raw record is a duplicate replay -> the registry is
     # untouched (idempotent per (content_hash, artifact_type)).
     second = pipeline.run([raw], library_snapshot=_library_snapshot())
     assert second.num_replayed == 1
     assert second.num_registered == 0
-    assert len(registry.list_versions(f"FC_{_h('idem')[:16]}")) == 1
+    assert len(registry.list_versions(artifact_id)) == 1

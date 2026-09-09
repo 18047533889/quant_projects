@@ -12,6 +12,7 @@ from factor_assets.aggregation.specs import (
     AggregationFitArtifact,
 )
 from factor_assets.aggregation.representatives import (
+    ICEvidenceReceipt,
     RepresentativeSelectionMethod,
     RepresentativeSelection,
     FamilyRepresentativeSelector,
@@ -35,6 +36,7 @@ __all__ = [
     "RepresentativeSelectionMethod",
     "RepresentativeSelection",
     "FamilyRepresentativeSelector",
+    "ICEvidenceReceipt",
     "CompositeEvaluator",
     "CompactCompositeValue",
     "HorizonMapping",

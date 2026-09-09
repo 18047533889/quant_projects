@@ -347,6 +347,9 @@ def normalize_candidate(raw: Mapping[str, Any]) -> FactorCandidateManifest:
         semantic_family_hint=semantic_family_hint,
         campaign_id=raw.get("campaign_id"),
         attempt_id=raw.get("attempt_id"),
+        factor_definition_ref=raw.get("factor_definition_ref"),
+        semantic_ref=semantic_id,
+        factor_value_ref=raw.get("factor_value_ref"),
     )
 
 

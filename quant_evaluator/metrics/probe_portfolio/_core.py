@@ -1,4 +1,4 @@
-"""20 日 cohort 组合构建与真实 daily PnL 指标层（核心实现）。
+"""固定名义权重、独立 cohort 的研究 probe PnL（非实盘执行认证）。
 
 背景（AlphaPROBE 重构规范 §7/§13）
 ----------------------------------
@@ -36,8 +36,9 @@ std → annualize 会把高度自相关的重叠收益当作独立样本，严�
 ----
 - 分位 0  = 因子值最低组（bottom, D1），分位 NQ-1 = 因子值最高组（top, D10）。
   （与 QE 库 quantile.py 的 QE2-P0-001 编码一致）
-- 信号日为 t，入场日为 t+1（下一交易日 VWAP），持有 [t+1, t+H] 共 H 日
-  （含出场日；出场也在当日 VWAP 成交）。
+- 信号日 t，入场 t+1，持有 H 个入场后价格区间，计划退出 t+1+H。
+- 首个收益是 P_(t+2)/P_(t+1)-1；样本末尾不生成强制平仓。
+- 固定名义权重不等同买入持有股数账本；逐 cohort 毛成本不等同净额成交成本。
 - 出场也用当日 VWAP 成交（免滑点、gross 口径），成本以 per-side cost 扣除。
 - 每票每笔单边成本按成交名义额的比例扣减（默认 0 = gross 语义），并留存
   1x/2x/3x 成本情景接口。
@@ -49,6 +50,7 @@ from typing import Optional, Dict
 import numpy as np
 
 from quant_evaluator.metrics.quantile import assign_quantiles
+from quant_evaluator.contracts.portfolio_schedule import cohort_schedule
 
 EPS = 1e-12
 
@@ -105,6 +107,8 @@ def build_quantile_masks(
     factor_values: np.ndarray,
     n_quantiles: int = 10,
     min_bucket_size: int = 1,
+    *,
+    return_diagnostics: bool = False,
 ) -> np.ndarray:
     """每日 factor 分位 → 全分位成员矩阵（便于长期限诊断/对拍）。
 
@@ -112,6 +116,8 @@ def build_quantile_masks(
         masks : (n_quantiles, T, N) bool；masks[q, t, i] 表示第 t 日 i 票
         属于分位 q（0=最低组 D1 ... n_quantiles-1=最高组 D10）。
     """
+    if isinstance(min_bucket_size, (bool, np.bool_)) or not isinstance(min_bucket_size, (int, np.integer)) or min_bucket_size < 1:
+        raise ValueError("min_bucket_size must be a positive integer")
     factor_values = np.asarray(factor_values, dtype=np.float64)
     if factor_values.ndim != 2:
         raise ValueError(f"factor_values 必须为 (T, N) 二维数组，got ndim={factor_values.ndim}")
@@ -122,11 +128,15 @@ def build_quantile_masks(
     masks = np.zeros((n_quantiles, T, N), dtype=bool)
     for q in range(n_quantiles):
         masks[q] = quantile_ids == q
-    if min_bucket_size > 1:
-        counts = np.sum(quantile_ids >= 0, axis=1)
-        degenerate = counts < min_bucket_size
-        for q in range(n_quantiles):
-            masks[q] = masks[q] & (~degenerate[:, np.newaxis])
+    counts = np.sum(masks, axis=2)  # (Q,T): actual members, never total universe N.
+    valid = counts >= min_bucket_size
+    masks &= valid[:,:,None]
+    if return_diagnostics:
+        distinct = np.asarray([len(np.unique(row[np.isfinite(row)])) for row in factor_values])
+        return masks, {"bucket_counts": counts, "bucket_valid": valid,
+                       "distinct_levels": distinct, "actual_bucket_count": np.sum(counts > 0, axis=0),
+                       "degradation_reason": np.where(valid, "", "INSUFFICIENT_BUCKET_MEMBERS"),
+                       "policy_version": "quantile_members.v5.1"}
     return masks
 
 
@@ -164,8 +174,10 @@ def compute_cohort_pnl(
     per_side_cost: float = 0.0,
     min_bucket_size: int = 1,
     require_tradable: bool = True,
+    trade_eligibility=None,
+    terminal_position_policy: str = "ongoing",
 ) -> Dict[str, np.ndarray]:
-    """构造真实 cohort portfolio 并计算每个交易日的真实 PnL。
+    """构造研究用途的固定名义权重 cohort；不认证可执行市场中性或容量。
 
     Args:
         factor_values : (T, N) 因子值面板（行=交易日）。
@@ -181,6 +193,8 @@ def compute_cohort_pnl(
         per_side_cost : 每笔单边比例成本（默认 0 = gross）；扣在入场与出场各一次。
         min_bucket_size: 桶内最少成员数（< 该数的交易日整体跳过）。
         require_tradable: 若 True，入场日不可交易的票剔除；全不可交易则该 cohort 跳过。
+        terminal_position_policy: ``ongoing`` 保留未成熟尾部；
+                                  ``liquidate_at_end`` 在最后一日收取平仓成本。
 
     Returns:
         dict with keys:
@@ -208,9 +222,14 @@ def compute_cohort_pnl(
     _validate_2d("next_vwap", next_vwap, T, N)
     _validate_2d("next_open", next_open, T, N)
     _validate_2d("weight_matrix", weight_matrix, T, N)
+    if trade_eligibility is not None:
+        from quant_evaluator.contracts.portfolio_inputs import TradeEligibilityPanel
+        if not isinstance(trade_eligibility, TradeEligibilityPanel) or trade_eligibility.can_buy.shape != (T, N):
+            raise ValueError("trade_eligibility must be a matching TradeEligibilityPanel")
 
-    if holding < 1:
-        raise ValueError(f"holding 必须 >= 1，got {holding}")
+    entries, exits, matured = cohort_schedule(T, holding)
+    if terminal_position_policy not in {"ongoing", "liquidate_at_end"}:
+        raise ValueError("terminal_position_policy must be ongoing or liquidate_at_end")
     if not (0.0 <= per_side_cost < 1.0):
         raise ValueError(f"per_side_cost 必须在 [0, 1)，got {per_side_cost}")
 
@@ -258,13 +277,16 @@ def compute_cohort_pnl(
         # cohort 入场需下一交易日；没有下一日则无法入场。
         if start + 1 >= T:
             continue
-        entry_t = start + 1
+        entry_t = int(entries[start])
 
         long_t = long_mask[start]
         short_t = short_mask[start]
+        if trade_eligibility is not None:
+            long_t = long_t & trade_eligibility.can_buy[entry_t]
+            short_t = short_t & trade_eligibility.can_sell[entry_t] & trade_eligibility.borrowable[entry_t]
         n_long = int(np.sum(long_t))
         n_short = int(np.sum(short_t))
-        if n_long == 0 and n_short == 0:
+        if (long_weight != 0 and n_long < min_bucket_size) or (short_weight != 0 and n_short < min_bucket_size):
             continue
 
         if require_tradable:
@@ -272,7 +294,7 @@ def compute_cohort_pnl(
             short_t = short_t & tradable[entry_t]
             n_long = int(np.sum(long_t))
             n_short = int(np.sum(short_t))
-            if n_long == 0 and n_short == 0:
+            if (long_weight != 0 and n_long < min_bucket_size) or (short_weight != 0 and n_short < min_bucket_size):
                 continue
 
         # 票级目标权重：每侧合计 = weight（正/负），均分到桶内每票。
@@ -287,27 +309,37 @@ def compute_cohort_pnl(
         if side_notional <= EPS:
             continue
 
-        # 持有 H 个交易日（含出场日）：signal s 在 s+1 以 VWAP 入场，
-        # 在 s+H 以 VWAP 出场，持有期 [s+1, s+H] 共 H 日 → 每 cohort 共 H 天 PnL。
-        # 出场日（s+H）也计入当天收益（该持仓在当天收盘前仍持有，按当天 VWAP 卖出）。
-        exit_t = min(start + holding, T - 1)
-        # 入场/出场同日时只扣一次双边成本（holding=1 的退化情形）。
-        same_day = exit_t == entry_t
-        for t in range(entry_t, exit_t + 1):
+        # H 是入场后的价格区间数；未成熟尾部保留估值但不自动退出。
+        exit_t = int(exits[start])
+        if trade_eligibility is not None and exit_t < T:
+            if np.any(long_t & ~trade_eligibility.can_sell[exit_t]) or np.any(short_t & ~trade_eligibility.coverable[exit_t]):
+                raise ValueError("planned exit cannot execute; a fill-ledger simulator is required, probe cannot fabricate liquidation")
+        terminal_liquidation = terminal_position_policy == "liquidate_at_end" and exit_t >= T and entry_t < T - 1
+        if trade_eligibility is not None and terminal_liquidation:
+            if np.any(long_t & ~trade_eligibility.can_sell[T - 1]) or np.any(short_t & ~trade_eligibility.coverable[T - 1]):
+                raise ValueError("terminal liquidation cannot execute; a fill-ledger simulator is required")
+        entry_fee = side_notional * per_side_cost / holding
+        pnl_net[entry_t] -= entry_fee
+        entry_cost_series[entry_t] += entry_fee
+        if terminal_liquidation:
+            exit_cost_series[T - 1] += entry_fee
+            pnl_net[T - 1] -= entry_fee
+        # Entry quote belongs to the old position; first earned interval ends
+        # at entry+1. A truncated observation window never invents an exit.
+        for t in range(entry_t + 1, min(exit_t + 1, T)):
             ret_t = np.where(np.isfinite(next_ret[t]), next_ret[t], 0.0)
             # long 侧：+w*r；short 侧（w_short 为负）：做空收益 = -|w|*r。
             day_contrib = w_long * ret_t + w_short * ret_t
             # 成本：入场日扣入场成本，出场日扣出场成本（各自 per-side 一次）。
             cost = np.zeros(N)
             notional = np.abs(w_long) + np.abs(w_short)
-            if t == entry_t:
-                cost = cost + notional * per_side_cost
-            if t == exit_t and not same_day:
+            if t == exit_t:
                 cost = cost + notional * per_side_cost
             pnl_net[t] += np.sum(day_contrib - cost) / holding
-            if t == entry_t:
-                entry_cost_series[t] += np.sum(cost) / holding
-            if t == exit_t and not same_day:
+            if np.any((notional > EPS) & ~np.isfinite(next_ret[t])):
+                pnl_net[t] = np.nan
+                active_ret[t] = np.nan
+            if t == exit_t:
                 exit_cost_series[t] += np.sum(cost) / holding
             gross[t] += side_notional / holding
 
@@ -325,8 +357,8 @@ def compute_cohort_pnl(
         n_short_series[start] = n_short
 
         # 分位桶收益诊断（信号日对齐）。
-        lr = _bucket_mean(next_ret[entry_t], long_t) if n_long > 0 else np.nan
-        sr = _bucket_mean(next_ret[entry_t], short_t) if n_short > 0 else np.nan
+        lr = _bucket_mean(next_ret[entry_t + 1], long_t) if n_long > 0 and entry_t + 1 < T else np.nan
+        sr = _bucket_mean(next_ret[entry_t + 1], short_t) if n_short > 0 and entry_t + 1 < T else np.nan
         long_ret[start] = lr
         short_ret[start] = sr
         if n_long > 0 and n_short > 0 and np.isfinite(lr) and np.isfinite(sr):
@@ -344,6 +376,8 @@ def compute_cohort_pnl(
         "exit_cost": exit_cost_series,
         "n_long": n_long_series,
         "n_short": n_short_series,
+        "scheduled_exit": exits,
+        "matured": matured & (cohort_weight > 0),
     }
 
 

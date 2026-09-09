@@ -57,6 +57,8 @@ def compute_wealth_curve(
     values = np.asarray(returns, dtype=np.float64)
     if values.ndim != 1:
         raise ValueError(f"returns must be one-dimensional, got {values.ndim}D")
+    if np.any(values[np.isfinite(values)] < -1.0):
+        raise ValueError("returns below -100% require an explicit negative-capital contract")
     _validate_missing_return_policy(missing_return_policy)
     if missing_return_policy == "fail" and np.any(~np.isfinite(values)):
         raise ValueError("returns contains non-finite values and missing_return_policy='fail'")
@@ -79,6 +81,8 @@ def compute_aligned_wealth_curve(returns: np.ndarray) -> np.ndarray:
     values = np.asarray(returns, dtype=np.float64)
     if values.ndim != 1:
         raise ValueError(f"returns must be one-dimensional, got {values.ndim}D")
+    if np.any(values[np.isfinite(values)] < -1.0):
+        raise ValueError("returns below -100% require an explicit negative-capital contract")
     out = np.full(values.shape, np.nan, dtype=np.float64)
     wealth = 1.0
     for index, value in enumerate(values):
@@ -148,6 +152,8 @@ def apply_long_short_costs(
     if cost_rate < 0 or not np.isfinite(cost_rate):
         raise ValueError("cost_rate must be a finite non-negative fraction")
     long_ret, short_ret, long_to, short_to = arrays
+    if any(np.any(~np.isfinite(v) | (v < 0)) for v in (long_to, short_to)):
+        raise ValueError("turnover must be finite and non-negative on both legs")
     # Aggregate leg API assumes equal capital per leg (50% + 50%). For
     # unequal membership counts use equal_gross_long_short_returns instead.
     return .5 * (long_ret - short_ret - cost_rate * (long_to + short_to))
@@ -191,6 +197,7 @@ def compute_long_short_returns(
     short_threshold: float = 0.2,
     validity_mask: Optional[np.ndarray] = None,
     missing_return_policy: str = "zero_fill",
+    tie_policy: str = "max",
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
     Compute long/short portfolio returns based on factor quantiles.
@@ -220,6 +227,20 @@ def compute_long_short_returns(
         Each shape (T,) or (T, F) for time series of portfolio returns
     """
     _validate_missing_return_policy(missing_return_policy)
+    from .quantile import _searchsorted_bins
+    from quant_evaluator.contracts.quantile_policy import validate_tie_policy
+    policy = validate_tie_policy(tie_policy)
+    factor_values = np.asarray(factor_values)
+    forward_returns = np.asarray(forward_returns)
+    if factor_values.ndim not in (2, 3) or forward_returns.shape != factor_values.shape[:2]:
+        raise ValueError("factor_values must be (T,N[,F]) and forward_returns must match (T,N)")
+    if not (np.isfinite(short_threshold) and np.isfinite(long_threshold)
+            and 0 < short_threshold < long_threshold < 1):
+        raise ValueError("thresholds require 0 < short_threshold < long_threshold < 1")
+    if validity_mask is not None:
+        validity_mask = np.asarray(validity_mask)
+        if validity_mask.dtype != np.dtype(bool) or validity_mask.shape not in (factor_values.shape, factor_values.shape[:2]):
+            raise ValueError("validity_mask must be boolean with matching panel or factor shape")
     if missing_return_policy == "fail" and np.any(~np.isfinite(forward_returns)):
         n_missing = int(np.sum(~np.isfinite(forward_returns)))
         raise ValueError(
@@ -245,10 +266,11 @@ def compute_long_short_returns(
 
         for f in range(F):
             fv = factor_values[:, :, f]
-            vm = (validity_mask if validity_mask.ndim == 2 else validity_mask[:, :, f]) if validity_mask is not None else None
+            vm = (validity_mask[:, :, f] if validity_mask.ndim == 3 else validity_mask) if validity_mask is not None else None
             long_rets[:, f], short_rets[:, f], ls_rets[:, f] = compute_long_short_returns(
                 fv, forward_returns, long_threshold, short_threshold, vm,
                 missing_return_policy=missing_return_policy,
+                tie_policy=tie_policy,
             )
         return long_rets, short_rets, ls_rets
 
@@ -290,10 +312,10 @@ def compute_long_short_returns(
         short_cutoff = np.quantile(factor_valid, short_threshold)
 
         # Select long/short positions
-        long_mask = factor_valid >= long_cutoff
-        short_mask = factor_valid <= short_cutoff
-        if np.any(long_mask & short_mask):
-            continue
+        bins = _searchsorted_bins(np.array([short_cutoff, long_cutoff]), factor_valid, 3, policy)
+        long_mask = bins == 2
+        short_mask = bins == 0
+        # Ex-post missing labels affect measured return, never membership.
 
         if np.sum(long_mask) > 0:
             long_returns[t] = np.mean(ret_valid[long_mask])
@@ -367,37 +389,34 @@ def compute_sharpe_ratio(
 
 def compute_maximum_drawdown(
     returns: np.ndarray,
-    missing_return_policy: str = "zero_fill",
+    missing_return_policy: str = "unknown",
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
     Compute maximum drawdown from return series.
 
     This is the drawdown authority alongside
-    ``metrics/risk/drawdown_analysis.py``; both share the same wealth<=0
-    wipeout guard semantics.
+    ``metrics/risk/drawdown_analysis.py``; zero wealth is an absorbing 100%
+    loss and returns below -100% require a separate capital contract.
 
-    CAVEAT (silent zero fill): by default (``missing_return_policy=
-    "zero_fill"``) NaN returns are treated as flat days (0 return) for the
-    wealth curve. Pass ``missing_return_policy="fail"`` to raise instead
-    when any NaN is present.
+    Unknown valuation remains unknown by default. Explicit ``zero_fill`` is
+    a legacy research assumption; ``fail`` rejects a nonfinite return.
 
     Args:
         returns: Return series (T,) or (T, F)
-        missing_return_policy: "zero_fill" (default, back-compat) or "fail"
-            (raise ValueError on any NaN return)
+        missing_return_policy: "unknown", explicit "zero_fill", or "fail".
 
     Returns:
         (max_drawdown, drawdown_series, peak_indices)
         max_drawdown: Maximum drawdown magnitude (positive), shape () or (F,)
         drawdown_series: Drawdown at each time step, shape (T,) or (T, F);
-            -1 from the first nonpositive wealth onward (absorbing total loss)
+            -1 from the first zero wealth onward (observed default)
         peak_indices: Index of the PEAK (last index where the running
             maximum is attained at or before the maximum-drawdown trough),
             shape () or (F,); -1 denotes initial capital before the first return.
     """
-    if missing_return_policy not in ("zero_fill", "fail"):
+    if missing_return_policy not in ("unknown", "zero_fill", "fail"):
         raise ValueError(
-            f"missing_return_policy must be 'zero_fill' or 'fail', "
+            f"missing_return_policy must be 'unknown', 'zero_fill' or 'fail', "
             f"got {missing_return_policy!r}"
         )
 
@@ -416,32 +435,23 @@ def compute_maximum_drawdown(
             "missing_return_policy='fail'"
         )
 
-    # Replace NaN with 0 for cumulative product (documented caveat above).
-    returns_filled = np.where(np.isfinite(returns), returns, 0.0)
-
-    # Compute cumulative returns (wealth curve)
-    cum_returns = np.cumprod(1.0 + returns_filled, axis=0)
-
-    # Include initial capital so an initial loss is part of the drawdown.
-    running_max = np.maximum(1.0, np.maximum.accumulate(cum_returns, axis=0))
-
-    # Drawdown series with total-wipeout guard: from the first nonpositive
-    # wealth onward, drawdown is -1 (total loss) — a negative wealth
-    # times (1 + r) can flip positive again and fabricate a fake recovery.
-    invalid = np.maximum.accumulate(cum_returns <= 0, axis=0)
-    drawdown_series = np.full(cum_returns.shape, np.nan)
-    np.divide(
-        cum_returns - running_max,
-        running_max,
-        out=drawdown_series,
-        where=~invalid,
-    )
-    drawdown_series[invalid] = -1.0
+    if T == 0:
+        if squeeze:
+            return float("nan"), np.empty(0, dtype=np.float64), -1
+        return np.full(F, np.nan), np.empty((0, F)), np.full(F, -1, dtype=np.int64)
+    from .risk.drawdown_analysis import compute_drawdown_series
+    drawdown_series, cum_returns, running_max = compute_drawdown_series(returns)
+    if missing_return_policy == "unknown":
+        unknown = np.maximum.accumulate(~np.isfinite(returns), axis=0)
+        bankrupt = np.maximum.accumulate(returns == -1.0, axis=0)
+        drawdown_series = np.where(unknown & ~bankrupt, np.nan, drawdown_series)
 
     # Maximum drawdown per factor (most negative, converted to positive).
-    with np.errstate(invalid="ignore"):
-        max_dd = -np.nanmin(drawdown_series, axis=0)
+    max_dd = -np.min(np.where(np.isfinite(drawdown_series), drawdown_series, np.inf), axis=0)
     max_dd = np.where(np.isfinite(max_dd), max_dd, np.nan)
+    if missing_return_policy == "unknown":
+        max_dd = np.where(np.any(~np.isfinite(returns), axis=0), np.nan, max_dd)
+        max_dd = np.where(np.any(returns == -1.0, axis=0), 1.0, max_dd)
 
     # Trough index per factor: first occurrence of the minimum drawdown,
     # NaN-safe (an all-NaN column has no
@@ -471,9 +481,8 @@ def compute_maximum_drawdown(
             peak_indices[f] = 0
             continue
         trough_eff = int(finite_idx[-1])
-        at_max = np.isclose(
-            cum_returns[: trough_eff + 1, f], running_max[trough_eff, f]
-        )
+        # Exact high-water convention, identical to the drawdown magnitude.
+        at_max = cum_returns[: trough_eff + 1, f] == running_max[trough_eff, f]
         if not np.any(at_max):
             peak_indices[f] = -1
             continue
@@ -490,9 +499,11 @@ def compute_calmar_ratio(
     returns: np.ndarray,
     periods_per_year: int = 252,
     min_periods: int = 20,
+    annualization: str = "cagr",
+    missing_return_policy: str = "unknown",
 ) -> np.ndarray:
     """
-    Compute Calmar ratio (annualized return / maximum drawdown).
+    Compute Calmar ratio with explicit arithmetic (legacy) or CAGR numerator.
 
     Args:
         returns: Return series (T,) or (T, F)
@@ -502,6 +513,14 @@ def compute_calmar_ratio(
     Returns:
         Calmar ratio, scalar or shape (F,)
     """
+    if annualization not in {"arithmetic", "cagr"}:
+        raise ValueError("annualization must be arithmetic or cagr")
+    if missing_return_policy not in {"unknown", "zero_fill", "fail"}:
+        raise ValueError("invalid missing_return_policy")
+    if missing_return_policy == "fail" and np.any(~np.isfinite(returns)):
+        raise ValueError("nonfinite returns with missing_return_policy='fail'")
+    if not np.isfinite(periods_per_year) or periods_per_year <= 0:
+        raise ValueError("periods_per_year must be positive finite")
     if returns.ndim == 1:
         returns = returns[:, np.newaxis]
         squeeze = True
@@ -521,11 +540,20 @@ def compute_calmar_ratio(
 
         ret_valid = ret_f[valid]
 
+        if missing_return_policy == "unknown" and n_valid != T:
+            continue
+        if missing_return_policy == "zero_fill":
+            ret_valid = np.where(valid, ret_f, 0.0)
+            n_valid = T
+
         # Annualized return
-        ann_ret = compute_compound_annualized_return(ret_valid, periods_per_year, min_periods=min_periods)
+        mean_ret = np.mean(ret_valid)
+        ann_ret = mean_ret * periods_per_year
+        if annualization == "cagr":
+            ann_ret = np.prod(1.0 + ret_valid) ** (periods_per_year / n_valid) - 1.0
 
         # Maximum drawdown
-        max_dd, _, _ = compute_maximum_drawdown(ret_valid)
+        max_dd, _, _ = compute_maximum_drawdown(ret_valid, missing_return_policy=missing_return_policy)
 
         if not np.isfinite(max_dd) or max_dd <= 1e-12:
             continue
@@ -540,9 +568,18 @@ def compute_sortino_ratio(
     risk_free_rate: float = 0.0,
     periods_per_year: int = 252,
     min_periods: int = 20,
+    downside_denominator: str = "negative",
+    mar: float | None = None,
+    annualization: str = "sqrt_frequency",
 ) -> np.ndarray:
     """
-    Compute Sortino ratio (excess return / downside deviation).
+    Compute Sortino with explicit target, downside denominator and annualization.
+
+    ``mar`` is a periodic minimum acceptable return; ``risk_free_rate`` is
+    annual and converted arithmetically when MAR is absent. ``negative``
+    preserves the historical conditional RMS; ``all`` uses full-sample
+    semideviation. No observed downside always returns NaN, never a large
+    finite substitute. ``none`` returns periodic rather than annualized units.
 
     Args:
         returns: Return series (T,) or (T, F)
@@ -553,6 +590,16 @@ def compute_sortino_ratio(
     Returns:
         Sortino ratio, scalar or shape (F,)
     """
+    if downside_denominator not in {"negative", "all"}:
+        raise ValueError("downside_denominator must be negative or all")
+    if annualization not in {"sqrt_frequency", "none"}:
+        raise ValueError("annualization must be sqrt_frequency or none")
+    if not np.isfinite(periods_per_year) or periods_per_year <= 0:
+        raise ValueError("periods_per_year must be positive finite")
+    if not np.isfinite(risk_free_rate) or (mar is not None and not np.isfinite(mar)):
+        raise ValueError("target return must be finite")
+    if mar is not None and risk_free_rate != 0:
+        raise ValueError("supply periodic mar or annual risk_free_rate, not both")
     if returns.ndim == 1:
         returns = returns[:, np.newaxis]
         squeeze = True
@@ -562,7 +609,7 @@ def compute_sortino_ratio(
     T, F = returns.shape
     sortino = np.full(F, np.nan)
 
-    rf_per_period = risk_free_rate / periods_per_year
+    rf_per_period = risk_free_rate / periods_per_year if mar is None else mar
 
     for f in range(F):
         ret_f = returns[:, f]
@@ -582,13 +629,15 @@ def compute_sortino_ratio(
         if len(downside_ret) == 0:
             continue
 
-        downside_std = np.sqrt(np.mean(downside_ret ** 2))
+        denominator = len(downside_ret) if downside_denominator == "negative" else n_valid
+        downside_std = np.sqrt(np.sum(downside_ret ** 2) / denominator)
 
         if not np.isfinite(downside_std) or downside_std <= 1e-12:
             continue
 
         # Annualize
-        sortino[f] = mean_excess / downside_std * np.sqrt(periods_per_year)
+        scale = np.sqrt(periods_per_year) if annualization == "sqrt_frequency" else 1.0
+        sortino[f] = mean_excess / downside_std * scale
 
     return sortino[0] if squeeze else sortino
 

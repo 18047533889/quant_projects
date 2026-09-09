@@ -10,7 +10,7 @@ from factor_assets.registry.repository import (
     LifecycleRepository,
     CommittedTransition,
 )
-from factor_assets.registry.factory import create_repository
+from factor_assets.registry.factory import create_platform_lifecycle, create_repository
 from factor_assets.registry.sqlite_repository import SQLiteLifecycleRepository
 from factor_assets.registry.lifecycle import (
     LifecycleOrchestrator,
@@ -36,6 +36,7 @@ __all__ = [
     "LifecycleRepository",
     "CommittedTransition",
     "create_repository",
+    "create_platform_lifecycle",
     "SQLiteLifecycleRepository",
     "LifecycleOrchestrator",
     "TransitionRequest",

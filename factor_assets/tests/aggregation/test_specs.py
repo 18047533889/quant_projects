@@ -427,3 +427,50 @@ def test_aggregation_fit_oos_evaluation_carries_distinct_split():
     oos_ref = AggregationFitArtifact.make_oos_evaluation_ref(fit)
     assert oos_ref["fit_id"] == "fit-oos-1"
     assert oos_ref["fit_split_ref"] == "train/2024H1"
+
+def test_t102_same_spec_id_changed_weights_changes_bound_content_hash():
+    first=_fit_artifact(); second=AggregationFitArtifact(
+        fit_id=first.fit_id,spec=first.spec,fit_split_ref=first.fit_split_ref,
+        fit_window_ref=first.fit_window_ref,fit_snapshot_ref=first.fit_snapshot_ref,
+        fit_universe_ref=first.fit_universe_ref,fit_method=first.fit_method,
+        computed_weights=(.1,.9))
+    assert first.to_dict()["spec_id"] == second.to_dict()["spec_id"]
+    assert first.to_dict()["weights_content_hash"] != second.to_dict()["weights_content_hash"]
+
+def _typed_fit(**updates):
+    first=_fit_artifact()
+    values=dict(fit_id=first.fit_id,spec=first.spec,fit_split_ref=first.fit_split_ref,
+        fit_window_ref=first.fit_window_ref,fit_snapshot_ref=first.fit_snapshot_ref,
+        fit_universe_ref=first.fit_universe_ref,fit_method=first.fit_method,
+        computed_weights=first.computed_weights,fit_sample_ids=("a","b"),
+        fit_label_vintage="2024-07-01",fit_labels_matured=True)
+    values.update(updates); return AggregationFitArtifact(**values)
+
+def test_t102_unmatured_fit_or_evaluation_labels_fail_closed():
+    kwargs=dict(eval_split_ref="test",eval_sample_ids=("c","d"),eval_label_vintage="2025-01-01",eval_snapshot_ref="snap2")
+    with pytest.raises(ValueError,match="unmatured"):
+        AggregationFitArtifact.validate_oos_evaluation(_typed_fit(fit_labels_matured=False),**kwargs)
+    with pytest.raises(ValueError,match="unmatured"):
+        AggregationFitArtifact.validate_oos_evaluation(_typed_fit(),eval_labels_matured=False,**kwargs)
+
+def test_t102_authoritative_oos_rejects_missing_resolved_sample_vintage_coordinates():
+    with pytest.raises(ValueError,match="resolved fit sample/vintage"):
+        AggregationFitArtifact.validate_oos_evaluation(_fit_artifact(),eval_split_ref="test",
+            authoritative_coordinates=True)
+
+def test_t113_alias_reordering_and_snapshot_vintage_cannot_hide_sample_overlap():
+    fit=_typed_fit(fit_split_ref="train-alias")
+    resolver=lambda ref: {"train-alias":("a","b"),"test-alias":("b","a")}[ref]
+    with pytest.raises(ValueError,match="SAME split"):
+        AggregationFitArtifact.validate_oos_evaluation(fit,eval_split_ref="test-alias",split_resolver=resolver)
+    with pytest.raises(ValueError,match="overlap"):
+        AggregationFitArtifact.validate_oos_evaluation(fit,eval_split_ref="different-name",
+            eval_sample_ids=("b","a"),eval_label_vintage="2026-01-01",eval_snapshot_ref="new-snapshot")
+
+def test_t113_disjoint_matured_typed_coordinates_are_accepted_and_bound():
+    fit=_typed_fit()
+    assert AggregationFitArtifact.validate_oos_evaluation(fit,eval_split_ref="test",
+        eval_sample_ids=("c","d"),eval_label_vintage="2025-01-01",
+        eval_snapshot_ref="snap2",eval_labels_matured=True,authoritative_coordinates=True) == "test"
+    payload=fit.to_dict()
+    assert payload["fit_sample_ids"] == ["a","b"] and payload["fit_label_vintage"] == "2024-07-01"

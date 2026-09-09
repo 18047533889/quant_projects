@@ -463,7 +463,7 @@ def test_ewm_pairwise_window_two_minimum_matches_pandas():
     _assert_ewm(cov, _ewm_oracle(xs, ys, 2, corr=False))
 
 
-def test_ewm_pairwise_rejects_window_below_two():
+def test_ewm_pairwise_rejects_window_below_two_with_contract_documentation():
     """window < 2 fails closed (strict_integer minimum=2)."""
     x = pl.DataFrame({"a": [1.0, 2.0, 3.0]})
     y = pl.DataFrame({"a": [2.0, 3.0, 4.0]})
@@ -520,7 +520,7 @@ def test_ewm_pairwise_cov_is_unbiased_default_bias_false():
     _assert_ewm(cov, _ewm_oracle(xs, ys, 5, corr=False))
 
 
-def test_ewm_pairwise_rejects_window_below_two():
+def test_ewm_corr_and_cov_both_reject_window_below_two():
     x = pl.DataFrame({"a": [1.0, 2.0, 3.0]})
     y = pl.DataFrame({"a": [2.0, 3.0, 4.0]})
     for operator in (TSEwmCorrNative(), TSEwmCovNative()):
@@ -577,7 +577,10 @@ def test_ewm_pairwise_delegation_is_declared_not_polars_native():
         assert spec is not None, f"{cls.__name__} must declare _physical_spec"
         assert spec.execution_kind is not ExecutionKind.POLARS_NATIVE_EXPR
         assert spec.execution_kind is ExecutionKind.POLARS_PANDAS_DELEGATE
-        assert "pandas_ewm_span_adjustfalse" in spec.semantic_contract_hash
+        canonical = "ts_ewm_corr" if cls is TSEwmCorrNative else "ts_ewm_cov"
+        from factor_engine.backend.evidence_provenance import semantic_hashes_for
+        expected = semantic_hashes_for(canonical)["semantic_contract_hash"]
+        assert spec.semantic_contract_hash == expected
 
 
 def test_pairwise_matching_columns_retain_aligned_arithmetic():
@@ -588,7 +591,7 @@ def test_pairwise_matching_columns_retain_aligned_arithmetic():
 
 
 def test_bootstrap_module_list_selects_repaired_ts_cov_as_exact_authority():
-    import factor_engine.cleaned_operators
+    import factor_engine.cleaned_operators as cleaned_operators
     from factor_engine.cleaned_operators import load_all
     from factor_engine.cleaned_operators.common.polars_ts_rolling import TSCovNative as ExpectedTSCovNative
     from factor_engine.cleaned_operators.registry import OperatorRegistry
@@ -608,7 +611,7 @@ def test_bootstrap_module_list_selects_repaired_ts_cov_as_exact_authority():
 
 
 def test_bootstrap_module_list_activates_repaired_native_module():
-    import factor_engine.cleaned_operators
+    import factor_engine.cleaned_operators as cleaned_operators
     from factor_engine.cleaned_operators import load_all
     from factor_engine.cleaned_operators.registry import OperatorRegistry
 

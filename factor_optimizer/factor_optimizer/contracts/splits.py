@@ -10,7 +10,10 @@ the plan during evaluation.
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Any, Callable, Dict, Optional, Tuple, List
+import hashlib
+import json
+from types import MappingProxyType
+from typing import Any, Callable, Dict, Mapping, Optional, Tuple, List
 
 import numpy as np
 
@@ -136,6 +139,150 @@ class LabelBundle:
         )
 
 
+def _freeze_execution_value(value: Any) -> Any:
+    if isinstance(value, dict):
+        return MappingProxyType({
+            str(key): _freeze_execution_value(item)
+            for key, item in sorted(value.items(), key=lambda pair: str(pair[0]))
+        })
+    if isinstance(value, (list, tuple)):
+        return tuple(_freeze_execution_value(item) for item in value)
+    if isinstance(value, set):
+        return tuple(sorted((_freeze_execution_value(item) for item in value), key=repr))
+    return value
+
+
+def _plain_execution_value(value: Any) -> Any:
+    if isinstance(value, dict) or isinstance(value, MappingProxyType):
+        return {str(key): _plain_execution_value(item) for key, item in value.items()}
+    if isinstance(value, tuple):
+        return [_plain_execution_value(item) for item in value]
+    return value
+
+
+@dataclass(frozen=True)
+class SelectedExecutionSpec:
+    """Deeply frozen mathematical object authorized for sealed evaluation."""
+
+    trial_id: str
+    mutation_id: str
+    parent_factor_ids: Tuple[str, ...]
+    selection_evaluation_ref: str
+    sealed_split_hash: str
+    metadata: Any
+    spec_hash: str = ""
+
+    def __post_init__(self) -> None:
+        for name in ("trial_id", "mutation_id", "selection_evaluation_ref", "sealed_split_hash"):
+            value = getattr(self, name)
+            if not isinstance(value, str) or not value.strip():
+                raise ValueError(f"{name} must be a non-empty string")
+        object.__setattr__(self, "parent_factor_ids", tuple(self.parent_factor_ids))
+        object.__setattr__(self, "metadata", _freeze_execution_value(self.metadata))
+        payload = self.to_dict(include_hash=False)
+        actual = hashlib.sha256(
+            json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str).encode()
+        ).hexdigest()
+        if self.spec_hash and self.spec_hash != actual:
+            raise ValueError("SelectedExecutionSpec hash does not match its content")
+        object.__setattr__(self, "spec_hash", actual)
+
+    def to_dict(self, *, include_hash: bool = True) -> Dict[str, Any]:
+        result = {
+            "trial_id": self.trial_id,
+            "mutation_id": self.mutation_id,
+            "parent_factor_ids": list(self.parent_factor_ids),
+            "selection_evaluation_ref": self.selection_evaluation_ref,
+            "sealed_split_hash": self.sealed_split_hash,
+            "metadata": _plain_execution_value(self.metadata),
+        }
+        if include_hash:
+            result["spec_hash"] = self.spec_hash
+        return result
+
+    def validate_certification_complete(self) -> None:
+        execution = self.metadata.get("execution_spec") if hasattr(self.metadata, "get") else None
+        required = {
+            "canonical_recipe", "effective_parameters", "fit_state_ref",
+            "data_snapshot_ref", "operator_versions", "code_version",
+            "orientation", "model_input_ref",
+            "cost_model_ref",
+            "required_test_metrics",
+        }
+        if not hasattr(execution, "keys"):
+            raise ValueError("sealed certification requires metadata.execution_spec")
+        missing = required.difference(execution.keys())
+        if missing:
+            raise ValueError(
+                "sealed execution specification missing required fields: "
+                + ", ".join(sorted(missing))
+            )
+        recipe = execution["canonical_recipe"]
+        if not (
+            (isinstance(recipe, str) and recipe.strip())
+            or (hasattr(recipe, "keys") and len(recipe) > 0)
+        ):
+            raise ValueError("canonical_recipe must be a non-empty canonical DSL/ref")
+        if not hasattr(execution["effective_parameters"], "keys"):
+            raise ValueError("effective_parameters must be a frozen mapping")
+        for name in (
+            "fit_state_ref", "data_snapshot_ref", "code_version",
+            "model_input_ref", "cost_model_ref",
+        ):
+            value = execution[name]
+            if not isinstance(value, str) or not value.strip():
+                raise ValueError(f"{name} must be a non-empty immutable reference")
+        versions = execution["operator_versions"]
+        if not hasattr(versions, "keys") or not versions:
+            raise ValueError("operator_versions must be a non-empty frozen mapping")
+        if execution["orientation"] not in (-1, 1):
+            raise ValueError("orientation must be exactly -1 or 1")
+        metrics = execution["required_test_metrics"]
+        if (
+            isinstance(metrics, (str, bytes))
+            or not isinstance(metrics, tuple)
+            or not metrics
+            or any(not isinstance(name, str) or not name.strip() for name in metrics)
+        ):
+            raise ValueError("required_test_metrics must be a non-empty frozen sequence")
+
+    @property
+    def required_test_metrics(self) -> Tuple[str, ...]:
+        self.validate_certification_complete()
+        return tuple(self.metadata["execution_spec"]["required_test_metrics"])
+
+    @classmethod
+    def from_dict(cls, value: Dict[str, Any]) -> "SelectedExecutionSpec":
+        return cls(**dict(value))
+
+
+@dataclass(frozen=True)
+class SealedTestEvaluationOutcome:
+    """Typed evidence returned by the certified sealed-test evaluator."""
+
+    metrics: Mapping[str, float]
+    execution_spec_hash: str
+    dataset_identity: str
+    split_id: str
+    factor_identity: str
+    time_identity: str
+    cost_identity: str
+    test_evidence_ref: str
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.metrics, Mapping) or not self.metrics:
+            raise TypeError("metrics must be a non-empty mapping")
+        object.__setattr__(self, "metrics", MappingProxyType(dict(self.metrics)))
+        for name in (
+            "execution_spec_hash", "dataset_identity", "split_id",
+            "factor_identity", "time_identity", "cost_identity",
+            "test_evidence_ref",
+        ):
+            value = getattr(self, name)
+            if not isinstance(value, str) or not value.strip():
+                raise ValueError(f"{name} must be a non-empty string")
+
+
 @dataclass(frozen=True)
 class SealedTestHandle:
     """Immutable authority for one test-split evaluation of a frozen winner."""
@@ -145,9 +292,12 @@ class SealedTestHandle:
     split_id: str
     evaluation_ref: str
     frozen_at: datetime
+    execution_spec_hash: str = ""
 
     def __post_init__(self):
-        for name in ("search_session_id", "trial_id", "split_id", "evaluation_ref"):
+        for name in (
+            "search_session_id", "trial_id", "split_id", "evaluation_ref",
+        ):
             value = getattr(self, name)
             if not isinstance(value, str) or not value.strip():
                 raise ValueError(f"{name} must be a non-empty string")
@@ -160,16 +310,23 @@ class SealedTestResult:
     """Result produced by consuming a sealed handle through ``SearchSession``."""
 
     trial_id: str
-    test_metrics: Dict[str, float]
+    test_metrics: Mapping[str, float]
     frozen_at: datetime
     search_session_id: str
     split_id: str
     evaluation_ref: str
+    selection_evaluation_ref: str = ""
+    execution_spec_hash: str = ""
 
     def __post_init__(self):
-        if not isinstance(self.test_metrics, dict):
-            raise TypeError("test_metrics must be a dict")
-        for name in ("trial_id", "search_session_id", "split_id", "evaluation_ref"):
+        if not isinstance(self.test_metrics, Mapping):
+            raise TypeError("test_metrics must be a mapping")
+        object.__setattr__(
+            self, "test_metrics", MappingProxyType(dict(self.test_metrics))
+        )
+        for name in (
+            "trial_id", "search_session_id", "split_id", "evaluation_ref",
+        ):
             value = getattr(self, name)
             if not isinstance(value, str) or not value.strip():
                 raise ValueError(f"{name} must be a non-empty string")
@@ -353,24 +510,8 @@ def _validate_label_bundle_intervals(split_plan: SplitPlan, label_bundle: LabelB
         ("test", np.asarray(split_plan.test_mask, dtype=bool)),
     )
 
-    # Classify each sample by its segment.  A sample's own availability point
-    # is a legal boundary, so each segment's availability set excludes its own
-    # label windows.
     train_avail = availability[masks[0][1]]
     val_avail = availability[masks[1][1]]
-    test_avail = availability[masks[2][1]]
-
-    # Compute the union of other-segment availability points that must not
-    # fall inside any label window of this segment.  Using a sorted union
-    # plus binary search keeps this vectorized (O(N log N)), never O(N^2).
-    def _count_foreign_inside(starts_arr, ends_arr, foreign: np.ndarray) -> int:
-        if foreign.size == 0:
-            return 0
-        foreign = np.sort(foreign)
-        left = np.searchsorted(foreign, starts_arr, side="left")
-        right = np.searchsorted(foreign, ends_arr, side="right") - 1
-        hits = right >= left
-        return int(hits.sum())
 
     train_starts = starts[masks[0][1]]
     train_ends = ends[masks[0][1]]
@@ -379,28 +520,62 @@ def _validate_label_bundle_intervals(split_plan: SplitPlan, label_bundle: LabelB
     test_starts = starts[masks[2][1]]
     test_ends = ends[masks[2][1]]
 
-    # Train label interval ∩ Validation availability must be empty.
-    n_train_val = _count_foreign_inside(train_starts, train_ends, val_avail)
-    # Train label interval ∩ Test availability must be empty.
-    n_train_test = _count_foreign_inside(train_starts, train_ends, test_avail)
-    # Validation label interval ∩ Test availability must be empty.
-    n_val_test = _count_foreign_inside(val_starts, val_ends, test_avail)
+    def _interval_sets_overlap(left_starts, left_ends, right_starts, right_ends) -> bool:
+        """Return whether two sets of closed label intervals intersect."""
+        if left_starts.size == 0 or right_starts.size == 0:
+            return False
+        order = np.argsort(right_starts)
+        ordered_starts = right_starts[order]
+        prefix_max_end = np.maximum.accumulate(right_ends[order])
+        positions = np.searchsorted(ordered_starts, left_ends, side="right") - 1
+        eligible = positions >= 0
+        if not np.any(eligible):
+            return False
+        return bool(np.any(prefix_max_end[positions[eligible]] >= left_starts[eligible]))
+
+    # Purge is about the label intervals themselves.  A maturity timestamp is
+    # an information boundary; it cannot stand in for an interval endpoint.
+    n_train_val = _interval_sets_overlap(
+        train_starts, train_ends, val_starts, val_ends
+    )
+    n_train_test = _interval_sets_overlap(
+        train_starts, train_ends, test_starts, test_ends
+    )
+    n_val_test = _interval_sets_overlap(
+        val_starts, val_ends, test_starts, test_ends
+    )
 
     if n_train_val:
         raise ValueError(
-            "LabelBundle leakage: a train label interval overlaps validation "
-            "availability (train labels leak into the validation segment)"
+            "LabelBundle leakage: a train label interval overlaps validation label intervals"
         )
     if n_train_test:
         raise ValueError(
-            "LabelBundle leakage: a train label interval overlaps test "
-            "availability (train labels leak into the test segment)"
+            "LabelBundle leakage: a train label interval overlaps test label intervals"
         )
     if n_val_test:
         raise ValueError(
-            "LabelBundle leakage: a validation label interval overlaps test "
-            "availability (validation labels leak into the test segment)"
+            "LabelBundle leakage: a validation label interval overlaps test label intervals"
         )
+
+    protocol = str(split_plan.metadata.get("protocol", "")).strip().lower()
+    if protocol in {"forward_validation", "walk_forward", "strict_forward"}:
+        val_decisions = decisions[masks[1][1]]
+        test_decisions = decisions[masks[2][1]]
+        if train_avail.size and val_decisions.size:
+            fit_cutoff = np.min(val_decisions)
+            if np.any(train_avail > fit_cutoff):
+                raise ValueError(
+                    "LabelBundle leakage: a training label is not mature at the "
+                    "forward-validation fit cutoff"
+                )
+        if val_avail.size and test_decisions.size:
+            test_cutoff = np.min(test_decisions)
+            if np.any(val_avail > test_cutoff):
+                raise ValueError(
+                    "LabelBundle leakage: a validation label is not mature at "
+                    "the sealed-test decision boundary"
+                )
 
 
 def _validate_temporal_leakage(split_plan: SplitPlan, n_samples: int) -> None:
@@ -436,13 +611,16 @@ def _validate_temporal_leakage(split_plan: SplitPlan, n_samples: int) -> None:
     ):
         return
 
-    # Timestamp-based interval validation takes PRECEDENCE over the integer
-    # horizon fallback whenever the bundle carries real timestamps.
-    if label_bundle is not None and label_bundle.has_timestamps():
+    # Timestamp intervals and explicit positional purge/embargo are cumulative
+    # constraints.  Real timestamps replace only the label-horizon fallback.
+    has_timestamp_bundle = label_bundle is not None and label_bundle.has_timestamps()
+    if has_timestamp_bundle:
         _validate_label_bundle_intervals(split_plan, label_bundle)
-        return
 
     time_index = split_plan.time_index
+    positional_requested = purge or embargo or validation_embargo
+    if not positional_requested and has_timestamp_bundle:
+        return
     if time_index is None:
         raise ValueError(
             "purge/embargo/label_horizon/validation_embargo require a time_index; purely "
@@ -474,7 +652,7 @@ def _validate_temporal_leakage(split_plan: SplitPlan, n_samples: int) -> None:
 
     # Determine effective label_horizon: use label_bundle if provided
     effective_label_horizon = label_horizon
-    if label_bundle is not None:
+    if label_bundle is not None and not has_timestamp_bundle:
         # LabelBundle provides real timestamps; use its label_horizon as fallback
         effective_label_horizon = label_bundle.label_horizon
 
@@ -554,6 +732,7 @@ def create_split_aware_evaluation_fn(qe_adapter: Any, split_plan: SplitPlan) -> 
 
 __all__ = [
     "SplitType", "SplitPlan", "LabelBundle", "EvaluationProtocol", "SearchEvaluationResult",
+    "SelectedExecutionSpec",
     "SealedTestHandle", "SealedTestResult", "validate_split_plan",
     "create_split_aware_evaluation_fn",
 ]

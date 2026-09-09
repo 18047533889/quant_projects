@@ -1,8 +1,9 @@
 """
 Per-style exposure / purity evidence kernels (R61-FI-024, plan §13.11 + §16.2).
 
-These kernels compute *evidence about a factor's style exposure* from an
-injected exposure panel.  The exposure panel is the **DataAccess-authoritative
+These kernels compute factor-specific evidence by regressing an explicitly
+supplied factor on an injected risk panel. The panel alone is not a factor
+loading. The exposure panel is the **DataAccess-authoritative
 ref** (``ExposurePanel`` below): QE never fabricates exposure data, and the
 panel's ``source_ref`` / ``provider`` metadata record where the exposures
 came from (production wiring injects a DataAccess adapter; tests inject a
@@ -25,17 +26,17 @@ API):
       UNKNOWN).  This is the *style dimension vocabulary* — it is NOT a new
       evidence-status token (the status vocabulary stays the existing
       8-token ``EvidenceStatus`` in ``contracts/evidence_status.py``).
-    - ``compute_style_exposure_evidence`` — time-averaged mean per-style exposure
-      (absolute or signed), delegating to the existing
-      ``metrics/exposure.compute_factor_loadings`` for the signed regression
-      loadings where the caller supplies a (T, N) factor panel.
+    - ``FactorLoadingSeries`` — standardized WLS coefficients, raw coefficients,
+      same-fit R-squared, joint-support counts and provenance.
+    - ``PortfolioExposureSeries`` — actual supplied portfolio weights times risk.
+    - ``compute_style_exposure_evidence`` — time mean standardized WLS loading,
+      absolute or signed, from a FactorLoadingSeries or panel plus factor values.
     - ``compute_max_absolute_style_exposure`` — the style dimension with the
       largest mean *absolute* exposure.
     - ``compute_exposure_drift`` — mean absolute change of the per-style
       exposure series between adjacent periods (a persistence measure).
-    - ``compute_purity_ratio`` — 1 - (total style exposure variance share
-      explained) style-driven part; higher = cleaner (factor's own signal
-      dominates its style footprint).
+    - ``compute_purity_ratio`` — time mean of same-fit 1-R-squared; descriptive
+      residual variance share, not out-of-sample predictive utility.
     - ``compute_neutralized_rank_ic`` — cross-sectional OLS residual IC:
       regress the factor on the exposure panel per date, then Spearman IC of
       the residual against forward returns.  CPU reference implementation;
@@ -57,6 +58,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Dict, Mapping, Optional, Sequence, Tuple
+from types import MappingProxyType
+from hashlib import sha256
 
 import numpy as np
 
@@ -65,6 +68,11 @@ from quant_evaluator.metrics.ic import _spearman_rank_correlation  # rank-IC ker
 __all__ = [
     "ExposureStyle",
     "ExposurePanel",
+    "SecurityExposurePanel",
+    "FactorLoadingSeries",
+    "PortfolioExposureSeries",
+    "build_factor_loading_series",
+    "compute_portfolio_exposure",
     "StyleExposureEvidence",
     "compute_style_exposure_evidence",
     "compute_max_absolute_style_exposure",
@@ -135,6 +143,12 @@ class ExposurePanel:
     source_ref: str = ""
     provider: str = ""
     date_index: Tuple[Any, ...] = ()
+    security_ids: Tuple[Any, ...] = ()
+    factor_ids: Tuple[str, ...] = ()
+    universe_snapshot_ref: str = ""
+    validity: Optional[np.ndarray] = None
+    regression_weights: Optional[np.ndarray] = None
+    weight_ref: str = ""
 
     def __post_init__(self) -> None:
         arr = np.asarray(self.values, dtype=np.float64)
@@ -152,11 +166,41 @@ class ExposurePanel:
             )
         object.__setattr__(self, "style_names", tuple(self.style_names))
         object.__setattr__(self, "date_index", tuple(self.date_index))
+        object.__setattr__(self, "security_ids", tuple(self.security_ids))
+        object.__setattr__(self, "factor_ids", tuple(self.factor_ids))
+        if len(set(self.style_names))!=len(self.style_names) or not self.style_names:
+            raise ValueError("risk style names must be nonempty and unique")
+        for name in ("date_index","security_ids","factor_ids"):
+            axis=getattr(self,name)
+            if len(set(axis))!=len(axis):
+                raise ValueError(f"{name} must be unique")
         if self.date_index and len(self.date_index) != arr.shape[0]:
             raise ValueError(
                 f"ExposurePanel.date_index length {len(self.date_index)} does not "
                 f"match T={arr.shape[0]}"
             )
+        if self.security_ids and len(self.security_ids) != arr.shape[1]:
+            raise ValueError("ExposurePanel.security_ids must match N")
+        validity = self.validity
+        if validity is not None:
+            validity = np.asarray(validity)
+            if validity.dtype!=np.bool_:
+                raise TypeError("ExposurePanel.validity must be strict boolean")
+            if validity.shape != arr.shape:
+                raise ValueError("ExposurePanel.validity must match values (T,N,K)")
+            validity = np.array(validity, copy=True, order="C")
+            validity.flags.writeable = False
+        object.__setattr__(self, "validity", validity)
+        if self.regression_weights is None and self.weight_ref:
+            raise ValueError("weight_ref requires bound regression_weights")
+        if self.regression_weights is not None:
+            weights=np.asarray(self.regression_weights,dtype=float)
+            if weights.shape!=arr.shape[:2] or not np.isfinite(weights).all() or np.any(weights<0):
+                raise ValueError("regression weights must be finite nonnegative (T,N)")
+            if not self.weight_ref:
+                raise ValueError("explicit regression weights require weight_ref")
+            weights=np.array(weights,copy=True); weights.flags.writeable=False
+            object.__setattr__(self,"regression_weights",weights)
 
     def to_dict(self) -> Dict[str, Any]:
         """Serialize to a JSON-friendly plain dict (lossless ndarray codec)."""
@@ -167,8 +211,19 @@ class ExposurePanel:
             "style_names": list(self.style_names),
             "source_ref": self.source_ref,
             "provider": self.provider,
-            "date_index": list(self.date_index),
+            "date_index": encode_value(np.asarray(self.date_index)),
+            "security_ids": encode_value(self.security_ids),
+            "factor_ids": list(self.factor_ids),
+            "universe_snapshot_ref": self.universe_snapshot_ref,
+            "validity": encode_value(self.validity),
+            "regression_weights":encode_value(self.regression_weights),"weight_ref":self.weight_ref,
         }
+
+    @classmethod
+    def from_dict(cls, data):
+        """Restore typed axes, masks and weight binding using the shared codec."""
+        from quant_evaluator.contracts._ndarray_codec import decode_value
+        return cls(**{key:decode_value(value) for key,value in data.items()})
 
 
 @dataclass(frozen=True)
@@ -206,6 +261,9 @@ class StyleExposureEvidence:
         if cnt.size == 0:
             cnt = np.zeros(vals.shape[0], dtype=np.int64)
         cnt = np.array(cnt, copy=True, order="C")
+        if cnt.shape!=vals.shape or np.any(cnt<0):
+            raise ValueError("style counts must be nonnegative and align with styles")
+        cnt.flags.writeable=False
         object.__setattr__(self, "counts", cnt)
         object.__setattr__(self, "style_names", tuple(self.style_names))
 
@@ -221,6 +279,141 @@ class StyleExposureEvidence:
         }
 
 
+@dataclass(frozen=True)
+class FactorLoadingSeries:
+    """Single-factor standardized WLS loadings (T,K), not security exposures.
+
+    ``values`` are beta_k * sd(Z_k) / sd(factor) on the same weighted joint
+    sample. Raw coefficients and same-fit R² are retained separately. This
+    descriptive in-sample explanation is not OOS/model/portfolio evidence.
+    """
+    values: np.ndarray
+    raw_loadings: np.ndarray
+    r_squared: np.ndarray
+    counts: np.ndarray
+    style_names: Tuple[str,...]
+    factor_id: str
+    source_ref: str
+    provider: str
+    date_index: Tuple[Any,...]
+    common_support_ref: str
+    diagnostics: Tuple[Mapping[str,Any],...]
+    factor_value_ref: str
+    weight_ref: str = "equal_weight"
+    estimation_scope: str = "SAME_DATE_DESCRIPTIVE"
+    method_version: str = "factor_standardized_wls.v2"
+
+    def __post_init__(self):
+        if np.ndim(self.values)!=2:
+            raise ValueError("factor loadings require (T,K) values")
+        t,k=np.shape(self.values)
+        if not self.factor_id or not self.common_support_ref or not self.factor_value_ref:
+            raise ValueError("factor loading evidence requires factor and support identities")
+        if self.estimation_scope!="SAME_DATE_DESCRIPTIVE" or self.method_version!="factor_standardized_wls.v2":
+            raise ValueError("factor loading series cannot certify another estimation scope or method")
+        if len(set(self.style_names))!=k or len(set(self.date_index))!=t:
+            raise ValueError("factor loading axes must be unique")
+        counts=np.asarray(self.counts)
+        if counts.dtype.kind not in "iu" or np.any(counts<0):
+            raise ValueError("factor loading counts must be nonnegative integers")
+        r2=np.asarray(self.r_squared,dtype=float)
+        if np.isinf(r2).any() or np.any(np.isfinite(r2)&((r2 < -1e-12)|(r2 > 1+1e-12))):
+            raise ValueError("intercept regression R-squared must be missing or in [0,1]")
+        if len(self.style_names)!=k or len(self.date_index)!=t or len(self.diagnostics)!=t:
+            raise ValueError("factor loading series axes do not align")
+        for name,shape in (("values",(t,k)),("raw_loadings",(t,k)),("r_squared",(t,)),("counts",(t,))):
+            value=np.array(getattr(self,name),copy=True)
+            if value.shape!=shape:
+                raise ValueError(f"loading {name} axes do not align")
+            value.flags.writeable=False; object.__setattr__(self,name,value)
+        object.__setattr__(self,"style_names",tuple(self.style_names))
+        object.__setattr__(self,"date_index",tuple(self.date_index))
+        object.__setattr__(self,"diagnostics",tuple(MappingProxyType(dict(d)) for d in self.diagnostics))
+
+    def to_dict(self):
+        from quant_evaluator.contracts._ndarray_codec import encode_value
+        return {name:encode_value(getattr(self,name)) for name in (
+            "values","raw_loadings","r_squared","counts","style_names","factor_id",
+            "source_ref","provider","date_index","common_support_ref","factor_value_ref",
+            "weight_ref","estimation_scope","method_version")} | {
+            "date_index":encode_value(np.asarray(self.date_index)),
+            "diagnostics":[encode_value(dict(d)) for d in self.diagnostics]}
+
+
+@dataclass(frozen=True)
+class PortfolioExposureSeries:
+    """Actual supplied weights transposed times security risk exposures (T,K)."""
+    values: np.ndarray
+    style_names: Tuple[str,...]
+    date_index: Tuple[Any,...]
+    portfolio_ref: str
+    exposure_ref: str
+    estimation_scope: str = "PORTFOLIO_WEIGHTED_EXPOSURE"
+
+    def __post_init__(self):
+        values=np.array(self.values,dtype=float,copy=True)
+        if values.shape!=(len(self.date_index),len(self.style_names)) or not self.portfolio_ref:
+            raise ValueError("portfolio exposure requires matching axes and a portfolio ref")
+        values.flags.writeable=False; object.__setattr__(self,"values",values)
+        object.__setattr__(self,"style_names",tuple(self.style_names))
+        object.__setattr__(self,"date_index",tuple(self.date_index))
+
+
+SecurityExposurePanel=ExposurePanel
+
+
+def build_factor_loading_series(panel, factor_values, *, factor_id="research:single-factor", min_obs=10, weights=None):
+    if not isinstance(panel,ExposurePanel):
+        raise TypeError("factor regression requires a SecurityExposurePanel")
+    values=np.asarray(factor_values,dtype=float)
+    arr,valid=_panel_arrays(panel)
+    if values.ndim!=2 or values.shape!=arr.shape[:2]:
+        raise ValueError("factor_values must match risk time/security axes (T,N)")
+    if weights is not None and panel.regression_weights is not None:
+        raise ValueError("regression weights already bound by ExposurePanel")
+    w=panel.regression_weights if weights is None else np.asarray(weights,dtype=float)
+    if w is None: w=np.ones(values.shape)
+    if w.shape!=values.shape or not np.isfinite(w).all() or np.any(w<0):
+        raise ValueError("weights must be finite nonnegative (T,N)")
+    raw,r2,_,diagnostics=compute_factor_loadings(values,arr,min_obs=min_obs,weights=w,return_diagnostics=True)
+    standardized=np.full_like(raw[:,1:],np.nan)
+    joint=np.isfinite(values)&valid.all(axis=2)&(w>0)
+    for t in range(len(values)):
+        mask=joint[t]
+        if not mask.any() or not np.isfinite(r2[t]): continue
+        ww=w[t,mask]/np.max(w[t,mask]); ww=ww/ww.sum(); y=values[t,mask]; z=arr[t,mask]
+        yc=y-(y[0]+np.sum(ww*(y-y[0]))); zc=z-(z[0]+np.sum(ww[:,None]*(z-z[0]),axis=0))
+        sy=np.sqrt(np.sum(ww*yc*yc)); sz=np.sqrt(np.sum(ww[:,None]*zc*zc,axis=0))
+        if sy>0: standardized[t]=np.where(sz>0,raw[t,1:]*sz/sy,np.nan)
+    safe_diagnostics=tuple({k:v for k,v in d.items() if k!="coefficients"} for d in diagnostics)
+    return FactorLoadingSeries(standardized,raw[:,1:],r2,joint.sum(axis=1),tuple(panel.style_names),
+        factor_id,panel.source_ref,panel.provider,panel.date_index or tuple(range(len(values))),
+        "support:"+sha256(joint.tobytes()+w.tobytes()).hexdigest(),safe_diagnostics,
+        "factor-values:"+sha256(np.ascontiguousarray(values).tobytes()).hexdigest(),
+        panel.weight_ref or ("explicit_weight_array" if weights is not None else "equal_weight"))
+
+
+def compute_portfolio_exposure(panel, portfolio_weights, *, portfolio_ref):
+    arr,valid=_panel_arrays(panel); w=np.asarray(portfolio_weights,dtype=float)
+    if w.shape!=arr.shape[:2] or not np.isfinite(w).all():
+        raise ValueError("portfolio weights must be finite and axis-aligned (T,N)")
+    active=w!=0
+    known=(valid|~active[:,:,None]).all(axis=1)
+    values=np.sum(np.where(active[:,:,None]&valid,w[:,:,None]*arr,0.),axis=1)
+    values=np.where(known,values,np.nan)
+    return PortfolioExposureSeries(values,panel.style_names,panel.date_index or tuple(range(len(w))),portfolio_ref,panel.source_ref)
+
+
+def _as_factor_loadings(panel,factor_values=None,min_obs=10,weights=None):
+    if isinstance(panel,FactorLoadingSeries):
+        if factor_values is not None or weights is not None:
+            raise ValueError("factor loading evidence already binds factor and weights")
+        return panel
+    if factor_values is None:
+        raise TypeError("SecurityExposurePanel is not factor evidence; factor_values are required")
+    return build_factor_loading_series(panel,factor_values,min_obs=min_obs,weights=weights)
+
+
 def _panel_arrays(panel: ExposurePanel) -> Tuple[np.ndarray, np.ndarray]:
     """Validate a panel and return (values, finite-mask) — (T, N, K)."""
     arr = np.asarray(panel.values, dtype=np.float64)
@@ -228,30 +421,35 @@ def _panel_arrays(panel: ExposurePanel) -> Tuple[np.ndarray, np.ndarray]:
         raise ValueError(
             f"ExposurePanel.values must be (T, N, K), got {arr.ndim}D"
         )
-    return arr, np.isfinite(arr)
+    valid = np.isfinite(arr)
+    if panel.validity is not None:
+        valid &= panel.validity
+        arr = np.where(valid, arr, np.nan)
+    return arr, valid
 
 
 def compute_style_exposure_evidence(
-    panel: ExposurePanel,
+    panel: FactorLoadingSeries,
     absolute: bool = False,
+    *, factor_values=None, min_obs=10, weights=None,
 ) -> StyleExposureEvidence:
-    """Time-averaged mean per-style exposure from an injected panel.
+    """Time-averaged standardized loading from factor-specific WLS evidence.
 
     ``absolute=False`` returns the signed mean exposure per style (a positive
     value means the factor loads positively on that style dimension across
     the sample); ``absolute=True`` returns the mean of the absolute exposures
     (magnitude — how much of the factor's variance lives on the style).
 
-    When a (T, N) ``factor_values`` panel is also needed for regression-based
-    loadings, use ``metrics/exposure.compute_style_exposure`` directly; this
-    kernel is the panel-evidence entry point (mean of the panel values).
+    A security risk panel requires explicit (T,N) factor_values. Never average
+    the security risk panel itself as a proxy for the factor's style exposure.
     """
-    arr, _ = _panel_arrays(panel)
-    T, N, K = arr.shape
+    panel=_as_factor_loadings(panel,factor_values,min_obs,weights)
+    arr=panel.values
+    T,K=arr.shape
     out = np.full(K, np.nan)
     counts = np.zeros(K, dtype=np.int64)
     for k in range(K):
-        vals = arr[:, :, k]
+        vals = arr[:, k]
         finite = vals[np.isfinite(vals)]
         counts[k] = finite.size
         if finite.size == 0:
@@ -267,8 +465,9 @@ def compute_style_exposure_evidence(
 
 
 def compute_max_absolute_style_exposure(
-    panel: ExposurePanel,
+    panel: FactorLoadingSeries,
     min_finite: int = 5,
+    *, factor_values=None, min_obs=10, weights=None,
 ) -> Dict[str, Any]:
     """The style dimension with the largest mean *absolute* exposure.
 
@@ -277,6 +476,9 @@ def compute_max_absolute_style_exposure(
     ``value`` is the signed mean exposure of the winning style; NaN when no
     style has at least ``min_finite`` finite observations.
     """
+    panel=_as_factor_loadings(panel,factor_values,min_obs,weights)
+    if isinstance(min_finite,bool) or not isinstance(min_finite,(int,np.integer)) or min_finite<1:
+        raise ValueError("min_finite must be a positive integer")
     ev = compute_style_exposure_evidence(panel, absolute=True)
     valid = np.isfinite(ev.values) & (ev.counts >= min_finite)
     if not np.any(valid):
@@ -296,7 +498,7 @@ def compute_max_absolute_style_exposure(
     }
 
 
-def compute_exposure_drift(panel: ExposurePanel) -> float:
+def compute_exposure_drift(panel: FactorLoadingSeries, *, factor_values=None, min_obs=10, weights=None) -> float:
     """Mean absolute change of the per-style exposure series between adjacent
     periods (a persistence / stability measure).
 
@@ -304,8 +506,9 @@ def compute_exposure_drift(panel: ExposurePanel) -> float:
     adjacent cells.  NaN when the panel has fewer than 2 periods or no finite
     adjacent pair.
     """
-    arr, _ = _panel_arrays(panel)
-    T, N, K = arr.shape
+    panel=_as_factor_loadings(panel,factor_values,min_obs,weights)
+    arr=panel.values
+    T,K=arr.shape
     if T < 2:
         return np.nan
     diffs: list[float] = []
@@ -321,40 +524,18 @@ def compute_exposure_drift(panel: ExposurePanel) -> float:
     return float(np.mean(diffs))
 
 
-def compute_purity_ratio(panel: ExposurePanel, min_finite: int = 5) -> float:
-    """Purity ratio: 1 - style-explained share of total exposure dispersion.
+def compute_purity_ratio(panel: FactorLoadingSeries, min_finite: int = 5, *, factor_values=None, min_obs=10, weights=None) -> float:
+    """Time mean of residual/total weighted variance, exactly 1-R².
 
-    For each style k the cross-period mean exposure ``mu_k`` and its
-    contribution ``mu_k^2``; the style-driven share is
-    ``sum(mu_k^2) / sum(mu_k^2 + var_residual)`` where ``var_residual`` is the
-    pooled within-style variance of the exposure residuals around the style
-    mean.  Higher = cleaner (the factor's own signal dominates its style
-    footprint); NaN when the panel has no valid style.
-
-    This is a QE-side definition (plan §13.11); it does not replace FA's
-    canonical purity/health grading, it merely surfaces the style-dispersion
-    view from the exposure panel.
+    Same factor, joint support, weights and intercept regression as its
+    loadings. Constant factor, saturated model or no explanatory variation is
+    undefined, not perfect purity. This is in-sample descriptive evidence.
     """
-    arr, _ = _panel_arrays(panel)
-    T, N, K = arr.shape
-    mu: list[float] = []
-    resid: list[float] = []
-    for k in range(K):
-        vals = arr[:, :, k]
-        finite = vals[np.isfinite(vals)]
-        if finite.size < min_finite:
-            continue
-        m = float(np.mean(finite))
-        mu.append(m)
-        resid.append(float(np.mean((finite - m) ** 2)))
-    if not mu:
-        return np.nan
-    style_part = float(np.sum(np.square(mu)))
-    resid_part = float(np.sum(resid))
-    denom = style_part + resid_part
-    if denom <= EPS:
-        return np.nan
-    return float(1.0 - style_part / denom)
+    panel=_as_factor_loadings(panel,factor_values,min_obs,weights)
+    if isinstance(min_finite,bool) or not isinstance(min_finite,(int,np.integer)) or min_finite<1:
+        raise ValueError("min_finite must be a positive integer")
+    finite=panel.r_squared[np.isfinite(panel.r_squared)]
+    return float(np.mean(1.-finite)) if len(finite)>=min_finite else float("nan")
 
 
 def compute_neutralized_rank_ic(
@@ -384,14 +565,14 @@ def compute_neutralized_rank_ic(
         raise ValueError(
             f"factor_values {fv.shape} and forward_returns {fwd.shape} must match"
         )
-    arr = np.asarray(panel.values, dtype=np.float64)
+    arr, _ = _panel_arrays(panel)
     T, N, K = arr.shape
     if (T, N) != fv.shape:
         raise ValueError(
             f"panel (T,N)=({T},{N}) must match factor (T,N)={fv.shape}"
         )
     # Regress per date with intercept; residuals (T, N) — NaN where invalid.
-    _, _, residuals = compute_factor_loadings(fv, arr, intercept=True, min_obs=min_obs)
+    _, _, residuals = compute_factor_loadings(fv, arr, intercept=True, min_obs=min_obs,weights=panel.regression_weights)
 
     daily_ics: list[float] = []
     for t in range(T):
@@ -400,7 +581,11 @@ def compute_neutralized_rank_ic(
         joint = np.isfinite(y) & np.isfinite(resid)
         if np.sum(joint) < 2:
             continue
-        rho = _spearman_rank_correlation(resid[joint], y[joint], min_obs=max(2, min_obs // 2))
+        # ``min_obs`` is the declared per-date evidence floor for this metric,
+        # and applies to the final residual/label pair as well as the OLS fit.
+        rho = _spearman_rank_correlation(
+            resid[joint], y[joint], min_obs=min_obs
+        )
         if np.isfinite(rho):
             daily_ics.append(float(rho))
     if not daily_ics:
@@ -420,43 +605,43 @@ def compute_residual_rank_ic(
     )
 
 
-def _select_style(panel: ExposurePanel, style: str) -> float:
+def _select_style(panel: FactorLoadingSeries, style: str, **kwargs) -> float:
     """Signed mean exposure of one style dimension (NaN when absent)."""
-    ev = compute_style_exposure_evidence(panel, absolute=False)
+    ev = compute_style_exposure_evidence(panel, absolute=False,**kwargs)
     names = list(ev.style_names)
     if style not in names:
         return float("nan")
     return float(ev.values[names.index(style)])
 
 
-def compute_industry_exposure(panel: ExposurePanel) -> float:
+def compute_industry_exposure(panel: FactorLoadingSeries, *, factor_values=None, min_obs=10, weights=None) -> float:
     """Signed mean industry-style exposure of the factor (one typed field)."""
-    return _select_style(panel, "industry")
+    return _select_style(panel, "industry",factor_values=factor_values,min_obs=min_obs,weights=weights)
 
 
-def compute_size_exposure(panel: ExposurePanel) -> float:
+def compute_size_exposure(panel: FactorLoadingSeries, *, factor_values=None, min_obs=10, weights=None) -> float:
     """Signed mean size-style exposure of the factor (one typed field)."""
-    return _select_style(panel, "size")
+    return _select_style(panel, "size",factor_values=factor_values,min_obs=min_obs,weights=weights)
 
 
-def compute_beta_exposure(panel: ExposurePanel) -> float:
+def compute_beta_exposure(panel: FactorLoadingSeries, *, factor_values=None, min_obs=10, weights=None) -> float:
     """Signed mean beta-style exposure of the factor (one typed field)."""
-    return _select_style(panel, "beta")
+    return _select_style(panel, "beta",factor_values=factor_values,min_obs=min_obs,weights=weights)
 
 
-def compute_liquidity_exposure(panel: ExposurePanel) -> float:
+def compute_liquidity_exposure(panel: FactorLoadingSeries, *, factor_values=None, min_obs=10, weights=None) -> float:
     """Signed mean liquidity-style exposure of the factor (one typed field)."""
-    return _select_style(panel, "liquidity")
+    return _select_style(panel, "liquidity",factor_values=factor_values,min_obs=min_obs,weights=weights)
 
 
-def compute_volatility_exposure(panel: ExposurePanel) -> float:
+def compute_volatility_exposure(panel: FactorLoadingSeries, *, factor_values=None, min_obs=10, weights=None) -> float:
     """Signed mean volatility-style exposure of the factor (one typed field)."""
-    return _select_style(panel, "volatility")
+    return _select_style(panel, "volatility",factor_values=factor_values,min_obs=min_obs,weights=weights)
 
 
-def compute_momentum_exposure(panel: ExposurePanel) -> float:
+def compute_momentum_exposure(panel: FactorLoadingSeries, *, factor_values=None, min_obs=10, weights=None) -> float:
     """Signed mean momentum-style exposure of the factor (one typed field)."""
-    return _select_style(panel, "momentum")
+    return _select_style(panel, "momentum",factor_values=factor_values,min_obs=min_obs,weights=weights)
 
 
 def compute_exposure_evidence(
@@ -473,9 +658,10 @@ def compute_exposure_evidence(
         max_absolute_style_exposure / exposure_drift /
         neutralized_rank_ic / residual_rank_ic / purity_ratio
     """
-    ev = compute_style_exposure_evidence(panel, absolute=False)
+    loadings=build_factor_loading_series(panel,factor_values,min_obs=min_obs)
+    ev = compute_style_exposure_evidence(loadings, absolute=False)
     by_name = dict(zip(ev.style_names, ev.values))
-    max_abs = compute_max_absolute_style_exposure(panel)
+    max_abs = compute_max_absolute_style_exposure(loadings)
     neutralized = compute_neutralized_rank_ic(
         factor_values, forward_returns, panel, min_obs=min_obs
     )
@@ -487,8 +673,11 @@ def compute_exposure_evidence(
         "volatility_exposure": by_name.get("volatility", np.nan),
         "momentum_exposure": by_name.get("momentum", np.nan),
         "max_absolute_style_exposure": max_abs,
-        "exposure_drift": compute_exposure_drift(panel),
+        "exposure_drift": compute_exposure_drift(loadings),
         "neutralized_rank_ic": neutralized,
         "residual_rank_ic": neutralized,
-        "purity_ratio": compute_purity_ratio(panel),
+        "purity_ratio": compute_purity_ratio(loadings),
+        "factor_loading_series":loadings,
+        "estimation_scope":loadings.estimation_scope,
+        "method_version":loadings.method_version,
     }

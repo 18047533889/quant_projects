@@ -28,6 +28,7 @@ from modeling.learners.base import BaseLearner, FrozenModel, LearnerSpec
 
 __all__ = [
     "ModelArtifactManifest",
+    "ReplayContract",
     "PredictionContext",
     "ModelArtifact",
     "FrozenPreprocessing",
@@ -173,6 +174,26 @@ class PredictionContext:
 # §21 manifest
 # --------------------------------------------------------------------------- #
 @dataclass(frozen=True)
+class ReplayContract:
+    """All frozen dependencies required for offline, no-search reproduction."""
+
+    data_snapshot_ref: str
+    universe_snapshot_ref: str
+    execution_spec_ref: str
+    numeric_policy_ref: str
+    registry_version_ref: str
+    dependency_versions_ref: str
+    feature_state_ref: str
+
+    def __post_init__(self) -> None:
+        for name, value in self.__dict__.items():
+            if not isinstance(value, str) or not value:
+                raise ValueError(f"ReplayContract.{name} is required")
+
+    def to_dict(self) -> dict[str, str]:
+        return dict(self.__dict__)
+
+@dataclass(frozen=True)
 class ModelArtifactManifest:
     """Lineage manifest — every fact a frozen prediction needs to be auditable."""
 
@@ -203,6 +224,8 @@ class ModelArtifactManifest:
     decision_clock_id: str = "AFTER_CLOSE_TO_NEXT_VWAP"
     label_contract_id: str = "vwap_to_vwap"
     feature_schema_hash: str = ""
+    feature_manifest: Mapping[str, Any] = field(default_factory=dict)
+    replay_contract: Mapping[str, Any] = field(default_factory=dict)
     data_source_hash: str = ""
     universe_hash: str = ""
 
@@ -242,6 +265,24 @@ class ModelArtifactManifest:
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "hyperparameters", _freeze(self.hyperparameters))
+        object.__setattr__(self, "feature_manifest", _freeze(dict(self.feature_manifest)))
+        object.__setattr__(self, "replay_contract", _freeze(dict(self.replay_contract)))
+        if self.replay_contract:
+            ReplayContract(**dict(self.replay_contract))
+        if self.feature_manifest:
+            from modeling.dataset import FeatureField, FeatureSchema
+            fields = tuple(FeatureField(**dict(item)) for item in self.feature_manifest.get("fields", ()))
+            schema = FeatureSchema(
+                columns=tuple(self.feature_manifest.get("columns", ())),
+                fields=fields,
+                consumer_profile=str(self.feature_manifest.get("consumer_profile", "")),
+                feature_set_version_ref=str(self.feature_manifest.get("feature_set_version_ref", "")),
+                manifest_version=str(self.feature_manifest.get("manifest_version", "feature-manifest-v1")),
+            )
+            if not schema.is_complete:
+                raise ValueError("artifact feature_manifest must be complete")
+            if schema.fingerprint() != self.feature_schema_hash:
+                raise ValueError("feature_manifest does not match feature_schema_hash")
         if self.final_fit_end is None:
             object.__setattr__(self, "final_fit_end", self.train_end)
         if self.final_fit_start is None:
@@ -354,6 +395,8 @@ class ModelArtifactManifest:
             "decision_clock_id": self.decision_clock_id,
             "label_contract_id": self.label_contract_id,
             "feature_schema_hash": self.feature_schema_hash,
+            "feature_manifest": self.feature_manifest,
+            "replay_contract": self.replay_contract,
             "data_source_hash": self.data_source_hash,
             "universe_hash": self.universe_hash,
             "hyperparameters": self.hyperparameters,
@@ -732,6 +775,34 @@ class ModelArtifact:
             fit_info=data.get("fit_info", {}),
         )
 
+    @classmethod
+    def from_dict_for_replay(
+        cls,
+        data: dict[str, Any],
+        learner: BaseLearner,
+        *,
+        expected: ReplayContract,
+    ) -> "ModelArtifact":
+        """Load an offline replay artifact without registry/live-source fallback."""
+        if not isinstance(expected, ReplayContract):
+            raise TypeError("offline replay requires ReplayContract")
+        artifact = cls.from_dict(data, learner)
+        manifest = artifact.manifest
+        if not manifest.feature_manifest:
+            raise ValueError("offline replay requires a complete feature manifest")
+        actual = ReplayContract(**dict(manifest.replay_contract)) if manifest.replay_contract else None
+        if actual is None:
+            raise ValueError("offline replay requires frozen replay dependencies")
+        if actual != expected:
+            raise ValueError("offline replay dependency identity mismatch")
+        if manifest.preprocessing_state_hash != artifact.preprocessing.state_hash():
+            raise ValueError("offline replay preprocessing state hash mismatch")
+        if data.get("learner_name") != learner.name:
+            raise ValueError("offline replay learner implementation mismatch")
+        if artifact.frozen.learner_name != learner.name:
+            raise ValueError("offline replay frozen learner mismatch")
+        return artifact
+
     def save(self, path: Any) -> None:
         target = Path(path)
         target.parent.mkdir(parents=True, exist_ok=True)
@@ -770,6 +841,15 @@ class ModelArtifact:
                 LearnerSpec(data["learner_spec"]["learner_name"], data["learner_spec"]["family"])
             )
         return cls.from_dict(data, learner)
+
+    @classmethod
+    def load_for_replay(
+        cls, path: Any, learner: BaseLearner, *, expected: ReplayContract
+    ) -> "ModelArtifact":
+        """Strict offline load; caller must supply the frozen learner runtime."""
+        with open(path, "r", encoding="utf-8") as fh:
+            data = json.load(fh)
+        return cls.from_dict_for_replay(data, learner, expected=expected)
 
 
 def _cmp_less(a: Any, b: Any) -> bool:

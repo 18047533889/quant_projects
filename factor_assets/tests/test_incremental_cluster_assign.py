@@ -20,7 +20,7 @@ Covered:
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 import pytest
 
@@ -52,11 +52,15 @@ from factor_assets.clustering.incremental import (
     UNKNOWN_AFFINITY_FLOOR,
     IncrementalPolicy,
     IncrementalCandidate,
+    CertifiedPairwiseEvidence,
+    CertifiedWindowEvidence,
+    PairwiseEvidenceStatus,
     IncrementalLineageEdge,
     incremental_assign,
     build_incremental_cluster_version,
     build_incremental_lineage_edges,
 )
+from factor_assets.contracts._canonical import canonical_digest
 
 pytestmark = pytest.mark.skipif(not NUMPY_AVAILABLE, reason="numpy not available")
 
@@ -69,8 +73,28 @@ def _fp(fid: str, embedding: tuple[float, ...], spec: str = "specA") -> Similari
         snapshot="2026-08-27",
         universe="ASHARE",
         window="250d",
+        preprocessing_ref="preprocess-v1",
+        mask_policy="authoritative-usable-and-finite",
+        direction="signed",
+        aggregation_method="daily-cross-section-then-time-mean",
+        embedding_model_version="test-embedding-v1",
+        value_ref=f"values:{fid}",
+        profile_ref=f"profile:{fid}",
         content_hash="",  # derived
     )
+
+
+def _ann_identity(fingerprints, member_ids):
+    member_set_hash = canonical_digest(tuple(
+        (fid, fingerprints[fid].content_hash) for fid in sorted(member_ids)
+    ))
+    first = fingerprints[sorted(member_ids)[0]]
+    domain = (
+        first.embedding_spec, first.snapshot, first.universe, first.window,
+        first.preprocessing_ref, first.mask_policy, first.direction,
+        first.aggregation_method, first.embedding_model_version,
+    )
+    return member_set_hash, canonical_digest(domain)
 
 
 def _csv(cluster_set_version_id: str = "csv1") -> ClusterSetVersionArtifact:
@@ -181,8 +205,8 @@ def test_build_incremental_cluster_version_is_copy_on_write(small_universe):
     # Production still unchanged.
     assert _snapshot(cluster_versions) == before
     # New overlay artifacts live under csv2.
-    assert len(overlay) == 1
-    ov = overlay[0]
+    assert len(overlay) == len(cluster_versions)
+    ov = next(item for item in overlay if item.logical_cluster_id == "FAM_FAST")
     assert ov.logical_cluster_id == "FAM_FAST"
     assert ov.cluster_set_version_ref == "csv2"
     assert ov.member_factor_ids == ("F1", "FX")
@@ -219,7 +243,7 @@ def test_lineage_edges_record_parent_to_child_and_requested_by(small_universe):
 # ---------------------------------------------------------------------------
 
 
-def test_unmeasured_pair_is_never_zero_unknown_factor_pending(small_universe):
+def test_measured_low_pair_is_preserved_while_factor_stays_pending(small_universe):
     byid, cluster_versions = small_universe
     # A new factor whose nearest family affinity is BELOW the measure floor —
     # i.e. the pair is effectively unmeasured.  (Embeddings from the `_frozen`
@@ -234,16 +258,11 @@ def test_unmeasured_pair_is_never_zero_unknown_factor_pending(small_universe):
     assert assign.logical_cluster_id is None
     assert assign.affinity is None
 
-    # Every candidate in the batch is a REAL measurement, never 0.0 as a
-    # stand-in for "not measured" (a below-floor candidate is excluded, not
-    # materialised as a zero).
-    for cand in result.candidates:
-        if cand.similarity == 0.0:
-            pytest.fail(
-                "an unmeasured pair must never materialise as a computed 0.0 "
-                "(DLIB-FA-007) — got candidate "
-                f"{cand.factor_id}:{cand.similarity:.3f}"
-            )
+    # Cosine was actually computed: low/zero is MEASURED_LOW evidence,
+    # distinct from a pair that was never measured.
+    assert result.candidates
+    assert all(c.evidence_status is PairwiseEvidenceStatus.MEASURED_LOW
+               for c in result.candidates)
 
 
 def test_low_similarity_factor_is_not_assigned_by_silence(small_universe):
@@ -265,17 +284,15 @@ def test_candidate_affinities_are_all_measured(small_universe):
     byid, cluster_versions = small_universe
     new_f = _fp("FX", (0.98, 0.0, 0.0, 0.0))
     result = incremental_assign([new_f], cluster_versions, {**byid, "FX": new_f})
-    # FAM_FAST has a real measurement (F1); the other families have no
-    # measured pair (affinity ~0 < floor) and are NOT materialised as zero
-    # candidates — only the genuine measurement appears.
-    assert len(result.candidates) == 1
-    cand = result.candidates[0]
+    # Every exact cosine is retained as measured evidence. Only the high
+    # candidate participates in assignment; low values remain audit records.
+    assert len(result.candidates) == 3
+    cand = next(c for c in result.candidates if c.cluster_id == "FAM_FAST")
     assert cand.cluster_id == "FAM_FAST"
     assert cand.factor_id == "F1"
     assert cand.similarity > 0.9  # F1 is the same vector up to scaling
-    # None of the candidates is an unmeasured zero.
-    for c in result.candidates:
-        assert c.similarity != 0.0
+    assert all(c.evidence_status is PairwiseEvidenceStatus.MEASURED_LOW
+               for c in result.candidates if c.cluster_id != "FAM_FAST")
 
 
 # ---------------------------------------------------------------------------
@@ -377,12 +394,15 @@ def test_ann_approximate_matches_exact():
             representative_factor_id=members[0],
         )
     }
+    member_hash, spec_hash = _ann_identity(member_by_id, members)
     ann = ANNIndexArtifact(
         index_id="idx-1",
         backend="annoy",
         capability=ANNIndexCapability.APPROXIMATE,
         index_params={"n_trees": 4, "embedding_dim": 3},
         seed=7,
+        member_set_hash=member_hash,
+        embedding_spec_hash=spec_hash,
     )
     exact = incremental_assign(
         [new_f], cluster_versions, {**member_by_id, "NEW": new_f},
@@ -402,6 +422,22 @@ def test_ann_approximate_matches_exact():
     assert abs(float(exact.candidates[0].similarity) - float(approx.candidates[0].similarity)) < 0.05
     # Both agree the top member is M0.
     assert exact.candidates[0].factor_id == approx.candidates[0].factor_id
+
+
+def test_approximate_ann_rejects_incomplete_fingerprint_before_recall():
+    byid, cluster_versions = _kv_pair()
+    new_f = _fp("NEW", (1.0, 0.0))
+    incomplete = replace(new_f, profile_ref="", content_hash="")
+    ann = ANNIndexArtifact(
+        index_id="idx-incomplete", backend="annoy",
+        capability=ANNIndexCapability.APPROXIMATE,
+        index_params={"embedding_dim": 2},
+    )
+    with pytest.raises(ValueError, match="incomplete production fingerprint"):
+        incremental_assign(
+            [incomplete], cluster_versions, {**byid, "NEW": incomplete},
+            ann_index=ann,
+        )
 
 
 def test_exact_flat_index_is_not_called_ann():
@@ -441,9 +477,11 @@ def test_min_cluster_size_merge_policy_single_governance(small_universe):
         min_cluster_policy="MERGE_NEAREST",
     )
     (assign,) = result.assignments
-    assert assign.kind is IncrementalAssignmentKind.ASSIGNED
-    # Merged into FAM_MOM (size 2) rather than the singleton FAM_PV.
-    assert assign.logical_cluster_id == "FAM_MOM"
+    # FAM_MOM has no qualifying similarity evidence.  Size alone cannot
+    # redirect the factor while retaining FAM_PV's affinity.
+    assert assign.logical_cluster_id is None
+    assert assign.affinity is None
+    assert assign.kind is IncrementalAssignmentKind.PENDING_GLOBAL_REFRESH
 
     # KEEP_SMALL keeps the chosen (singleton-affinity) cluster.
     keep = incremental_assign(
@@ -485,7 +523,12 @@ def test_ambiguous_assignment_deferred(small_universe):
     overlay = build_incremental_cluster_version(
         cluster_versions, result.assignments, new_cluster_set_version_id="csv2"
     )
-    assert len(overlay) == 0
+    assert len(overlay) == len(cluster_versions)
+    assert all(
+        item.member_factor_ids
+        == cluster_versions[item.logical_cluster_id].member_factor_ids
+        for item in overlay
+    )
 
 
 def test_incremental_lineage_edge_validations():
@@ -496,3 +539,225 @@ def test_incremental_lineage_edge_validations():
     edge = IncrementalLineageEdge("CID", "p@csv1#aa", "n@csv2#bb", ("F1", "F2"), "reason-x")
     assert edge.content_hash
     assert edge.to_dict()["added_factor_ids"] == ["F1", "F2"]
+
+
+def _pair(member, new, value, *, status=PairwiseEvidenceStatus.CERTIFIED,
+          count=100, window="250d", universe="ASHARE", ci=None,
+          window_values=None):
+    if window_values is None:
+        window_values = [(window, value, count, 100, ci or (value, value))]
+    windows = tuple(CertifiedWindowEvidence(
+        ref, signed, PairwiseEvidenceStatus.CERTIFIED, pairs, days,
+        interval, "raw_correlation_hac_daily_corr",
+    ) for ref, signed, pairs, days, interval in window_values)
+    return CertifiedPairwiseEvidence(
+        member, new, value, status, count, window, universe, "qe-sample-1", windows
+    )
+
+
+def _single_support_policy(**changes):
+    return IncrementalPolicy(
+        cluster_support_k=1, min_cluster_support=1,
+        require_medoid_support=False, **changes,
+    )
+
+
+def test_certified_pairwise_replaces_approximation_and_preserves_sign(small_universe):
+    byid, clusters = small_universe
+    # Embedding points toward MOM, but formal QE evidence proves an inverse
+    # duplicate of F1. Explicit abs-affinity assigns FAST while retaining -0.99.
+    new = _fp("FX", (0.0, 0.99, 0.01, 0.0))
+    evidence = {("F1", "FX"): _pair("F1", "FX", -0.99)}
+    result = incremental_assign(
+        [new], clusters, {**byid, "FX": new},
+        policy=_single_support_policy(),
+        certified_pairwise=evidence,
+    )
+    assert result.assignments[0].logical_cluster_id == "FAM_FAST"
+    assert result.assignments[0].affinity == pytest.approx(0.99)
+    candidate, = result.candidates
+    assert candidate.evidence_status is PairwiseEvidenceStatus.CERTIFIED
+    assert candidate.signed_similarity == -0.99
+    assert candidate.pair_count == 100
+
+
+def test_certified_true_zero_is_measured_low_not_unmeasured(small_universe):
+    byid, clusters = small_universe
+    new = _fp("FX", (1.0, 0.0, 0.0, 0.0))
+    result = incremental_assign(
+        [new], clusters, {**byid, "FX": new},
+        policy=_single_support_policy(),
+        certified_pairwise={("FX", "F1"): _pair("FX", "F1", 0.0)},
+    )
+    assert result.assignments[0].kind is IncrementalAssignmentKind.PENDING_GLOBAL_REFRESH
+    candidate, = result.candidates
+    assert candidate.similarity == 0.0
+    assert candidate.evidence_status is PairwiseEvidenceStatus.MEASURED_LOW
+    assert candidate.signed_similarity == 0.0
+
+
+def test_unknown_or_incomparable_pairwise_never_becomes_zero(small_universe):
+    byid, clusters = small_universe
+    new = _fp("FX", (1.0, 0.0, 0.0, 0.0))
+    unknown = _pair("FX", "F1", None, status=PairwiseEvidenceStatus.UNMEASURED,
+                    count=1)
+    result = incremental_assign(
+        [new], clusters, {**byid, "FX": new},
+        policy=_single_support_policy(),
+        certified_pairwise={("FX", "F1"): unknown},
+    )
+    assert result.assignments[0].affinity is None
+    assert result.candidates == ()
+
+
+@pytest.mark.parametrize(
+    "window_values",
+    [
+        # Sign drift: high aggregate magnitude is not stable evidence.
+        [("H1", 0.9, 100, 50, (0.8, 0.95)),
+         ("H2", -0.9, 100, 50, (-0.95, -0.8))],
+        # Sparse second window cannot inherit the long window's grade.
+        [("H1", 0.9, 100, 50, (0.8, 0.95)),
+         ("H2", 0.9, 5, 5, (0.7, 0.98))],
+        # CI crosses the duplicate/assignment threshold.
+        [("H1", 0.6, 100, 50, (0.4, 0.8)),
+         ("H2", 0.65, 100, 50, (0.45, 0.82))],
+    ],
+)
+def test_window_drift_sparse_or_threshold_uncertainty_stays_pending(
+    small_universe, window_values,
+):
+    byid, clusters = small_universe
+    new = _fp("FX", (1.0, 0.0, 0.0, 0.0))
+    evidence = _pair("FX", "F1", 0.9, window_values=window_values)
+    result = incremental_assign(
+        [new], clusters, {**byid, "FX": new},
+        policy=_single_support_policy(min_certified_windows=2),
+        certified_pairwise={("FX", "F1"): evidence},
+    )
+    assert result.assignments[0].kind is IncrementalAssignmentKind.PENDING_GLOBAL_REFRESH
+    candidate, = result.candidates
+    assert candidate.evidence_status is PairwiseEvidenceStatus.UNCERTAIN
+
+
+def test_repeated_stable_anticorrelation_is_certified_with_signed_audit(small_universe):
+    byid, clusters = small_universe
+    new = _fp("FX", (1.0, 0.0, 0.0, 0.0))
+    evidence = _pair(
+        "FX", "F1", -0.95,
+        window_values=[
+            ("H1", -0.96, 100, 50, (-0.99, -0.91)),
+            ("H2", -0.94, 100, 50, (-0.98, -0.90)),
+        ],
+    )
+    result = incremental_assign(
+        [new], clusters, {**byid, "FX": new},
+        policy=_single_support_policy(min_certified_windows=2),
+        certified_pairwise={("FX", "F1"): evidence},
+    )
+    assert result.assignments[0].logical_cluster_id == "FAM_FAST"
+    candidate, = result.candidates
+    assert candidate.evidence_status is PairwiseEvidenceStatus.CERTIFIED
+    assert candidate.signed_similarity == -0.95
+
+    incomparable = _pair("FX", "F1", 0.99, window="60d")
+    result = incremental_assign(
+        [new], clusters, {**byid, "FX": new},
+        policy=_single_support_policy(),
+        certified_pairwise={("FX", "F1"): incomparable},
+    )
+    assert result.assignments[0].affinity is None
+    assert result.candidates == ()
+
+
+def _support_universe():
+    members = {
+        "A1": _fp("A1", (1.0, 0.0)), "A2": _fp("A2", (0.9, 0.1)),
+        "A3": _fp("A3", (0.8, 0.2)), "B1": _fp("B1", (0.0, 1.0)),
+        "B2": _fp("B2", (0.1, 0.9)),
+    }
+    clusters = {
+        "A": _cluster("A", ("A1", "A2", "A3")),
+        "B": _cluster("B", ("B1", "B2")),
+    }
+    return members, clusters
+
+
+def test_single_bridge_neighbor_cannot_certify_cluster_support():
+    byid, clusters = _support_universe()
+    new = _fp("NEW", (1.0, 0.0))
+    result = incremental_assign(
+        [new], clusters, {**byid, "NEW": new},
+        policy=IncrementalPolicy(cluster_support_k=3, min_cluster_support=2,
+                                 require_medoid_support=True),
+        certified_pairwise={("NEW", "A1"): _pair("NEW", "A1", 0.99)},
+    )
+    assert result.assignments[0].kind is IncrementalAssignmentKind.PENDING_GLOBAL_REFRESH
+    candidate, = result.candidates
+    assert candidate.support_count == 1
+    assert candidate.rejection_reason == "INSUFFICIENT_TOP_K_SUPPORT"
+
+
+def test_medoid_and_top_k_support_produce_conservative_cluster_affinity():
+    byid, clusters = _support_universe()
+    new = _fp("NEW", (1.0, 0.0))
+    evidence = {
+        ("NEW", "A1"): _pair("NEW", "A1", 0.80),
+        ("NEW", "A2"): _pair("NEW", "A2", 0.90),
+        ("NEW", "A3"): _pair("NEW", "A3", 0.70),
+    }
+    result = incremental_assign(
+        [new], clusters, {**byid, "NEW": new},
+        policy=IncrementalPolicy(cluster_support_k=3, min_cluster_support=2,
+                                 require_medoid_support=True),
+        certified_pairwise=evidence,
+    )
+    assert result.assignments[0].logical_cluster_id == "A"
+    candidate, = result.candidates
+    assert candidate.support_count == 3
+    assert candidate.medoid_supported is True
+    assert candidate.similarity == pytest.approx(0.80)
+
+
+def test_supported_cluster_ambiguity_is_independent_of_mapping_order():
+    byid, clusters = _support_universe()
+    new = _fp("NEW", (1.0, 0.0))
+    pairs = [
+        (("NEW", "A1"), _pair("NEW", "A1", 0.80)),
+        (("NEW", "A2"), _pair("NEW", "A2", 0.78)),
+        (("NEW", "B1"), _pair("NEW", "B1", 0.79)),
+        (("NEW", "B2"), _pair("NEW", "B2", 0.78)),
+    ]
+    policy = IncrementalPolicy(cluster_support_k=2, min_cluster_support=2,
+                               require_medoid_support=True, ambiguity_gap=0.02)
+    outputs = []
+    for ordered in (pairs, list(reversed(pairs))):
+        result = incremental_assign(
+            [new], clusters, {**byid, "NEW": new}, policy=policy,
+            certified_pairwise=dict(ordered),
+        )
+        outputs.append((result.assignments[0].logical_cluster_id,
+                        result.assignments[0].kind))
+    assert outputs == [("A", IncrementalAssignmentKind.AMBIGUOUS)] * 2
+
+
+def test_redirect_uses_supported_final_cluster_evidence():
+    byid, clusters = _support_universe()
+    new = _fp("NEW", (1.0, 0.0))
+    # A has the top supported affinity but is too small under this policy;
+    # B's own support is below threshold, so A's score cannot be reused for B.
+    evidence = {
+        ("NEW", "A1"): _pair("NEW", "A1", 0.95),
+        ("NEW", "A2"): _pair("NEW", "A2", 0.94),
+        ("NEW", "B1"): _pair("NEW", "B1", 0.40, ci=(0.3, 0.45)),
+        ("NEW", "B2"): _pair("NEW", "B2", 0.39, ci=(0.3, 0.44)),
+    }
+    result = incremental_assign(
+        [new], clusters, {**byid, "NEW": new},
+        policy=IncrementalPolicy(cluster_support_k=2, min_cluster_support=2,
+                                 require_medoid_support=True),
+        certified_pairwise=evidence, min_cluster_policy="MERGE_NEAREST",
+        min_cluster_size=4,
+    )
+    assert result.assignments[0].kind is IncrementalAssignmentKind.PENDING_GLOBAL_REFRESH
+    assert result.assignments[0].logical_cluster_id is None

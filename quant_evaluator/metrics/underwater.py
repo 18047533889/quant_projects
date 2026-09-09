@@ -63,97 +63,40 @@ _PERIODS_PER_YEAR = 252
 
 
 def _as_1d(returns: object, name: str = "returns") -> np.ndarray:
-    """Coerce to a finite-filtered 1-D float64 array (fail closed on ndim)."""
+    """Coerce without deleting positions from the original observation grid."""
     arr = np.asarray(returns, dtype=np.float64)
     if arr.ndim != 1:
         raise ValueError(f"{name} must be a one-dimensional series, got ndim={arr.ndim}")
-    return arr[np.isfinite(arr)]
+    return arr
 
 
-def _drawdown_curve(ret: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
-    """Return (drawdown_series, running_max) over the *compounded* wealth curve.
-
-    Reuses the same wealth-curve semantics as
-    ``portfolio_stats.compute_maximum_drawdown`` (zero-fill missing handled by
-    the caller's finite pre-filter; wealth<=0 wipeout guard: from the first
-    nonpositive wealth onward the drawdown is NaN so a negative wealth cannot
-    fabricate a fake recovery).
-    """
-    cum = np.cumprod(1.0 + ret)
-    running_max = np.maximum.accumulate(cum)
-    invalid = np.maximum.accumulate(cum <= 0).astype(bool)
-    dd = np.full(cum.shape, np.nan)
-    np.divide(cum - running_max, running_max, out=dd, where=~invalid)
-    return dd, running_max
-
-
-def _drawdown_episodes(returns: np.ndarray) -> np.ndarray:
-    """Return a boolean array marking periods that are *in* a drawdown.
-
-    A period is underwater when wealth is below its running maximum beyond a
-    tiny floating-point tolerance.  ``NaN`` drawdown (post-wipeout) counts as
-    in-drawdown (staying underwater).
-    """
-    dd, _ = _drawdown_curve(returns)
-    in_dd = np.isnan(dd) | (dd < -EPS)
-    return in_dd
+def _path_events(returns, min_periods):
+    from .risk.drawdown_analysis import drawdown_events
+    ret = _as_1d(returns)
+    if np.isfinite(ret).sum() < min_periods:
+        return None
+    events = drawdown_events(ret)
+    # Scalar APIs cannot express an interval estimate or unknown NAV path.
+    # Fail closed, while drawdown_events retains aligned censoring evidence.
+    if any(e["status"] == "INVALID_VALUATION" for e in events):
+        return None
+    return events
 
 
 def compute_max_underwater_duration(returns: np.ndarray, min_periods: int = 10) -> float:
-    """Longest continuous stretch of being underwater (periods).
-
-    An underwater episode is a maximal run of "wealth below running max" (or
-    post-wipeout NaN).  Returns NaN when fewer than ``min_periods`` finite
-    periods exist, 0.0 when the series is never underwater.
-
-    Like the existing ``drawdown_duration`` registry metric, duration is in
-    periods (trading days) of the *compounded* wealth curve.
-    """
-    ret = _as_1d(returns)
-    if ret.size < min_periods:
+    """Longest underwater grid span; unknown valuation paths return NaN."""
+    events = _path_events(returns, min_periods)
+    if events is None:
         return np.nan
-    in_dd = _drawdown_episodes(ret)
-    if not np.any(in_dd):
-        return 0.0
-    if np.all(in_dd):
-        return float(ret.size)
-    # Longest run of True in the boolean mask.
-    runs = np.diff(np.flatnonzero(np.concatenate(([False], in_dd, [False]))))
-    # The runs array alternates; odd-length entries are the True runs.  Simpler:
-    # count consecutive Trues.
-    best = 0
-    cur = 0
-    for flag in in_dd:
-        cur = cur + 1 if flag else 0
-        if cur > best:
-            best = cur
-    return float(best)
+    return float(max((e["duration"] for e in events), default=0))
 
 
 def compute_mean_underwater_duration(returns: np.ndarray, min_periods: int = 10) -> float:
-    """Mean length of underwater episodes, in periods.
-
-    Returns NaN when fewer than ``min_periods`` finite periods exist, 0.0 when
-    the series is never underwater.
-    """
-    ret = _as_1d(returns)
-    if ret.size < min_periods:
+    """Mean observed underwater span, including explicitly censored events."""
+    events = _path_events(returns, min_periods)
+    if events is None:
         return np.nan
-    in_dd = _drawdown_episodes(ret)
-    if not np.any(in_dd):
-        return 0.0
-    lengths: list[int] = []
-    cur = 0
-    for flag in in_dd:
-        if flag:
-            cur += 1
-        else:
-            if cur > 0:
-                lengths.append(cur)
-            cur = 0
-    if cur > 0:
-        lengths.append(cur)
-    return float(np.mean(lengths))
+    return float(np.mean([e["duration"] for e in events])) if events else 0.0
 
 
 def compute_time_to_recovery(
@@ -161,71 +104,28 @@ def compute_time_to_recovery(
     min_periods: int = 10,
     max_recovery_lookback: Optional[int] = None,
 ) -> float:
-    """Mean time (periods) from an underwater episode's trough back to a new high.
+    """Mean trough-to-recovery intervals of completed events only.
 
-    Recovery time is measured from the trough index to the first subsequent
-    index where wealth returns to (or exceeds) the running maximum that
-    preceded the episode.  For ongoing drawdowns with no recovery yet, only
-    *completed* recoveries are counted (episodes still underwater contribute
-    nothing — they are reported separately via ``max_underwater_duration``);
-    when *every* episode is ongoing, the value is the observed lookback (the
-    length of the ongoing episode), reflecting "not yet recovered".
-
-    Returns NaN when fewer than ``min_periods`` finite periods exist or when
-    the series is never underwater.  ``max_recovery_lookback`` caps the scan
-    (defaults to the series length).
+    Censored age is available separately in drawdown_events; it never becomes
+    a measured recovery. The optional limit is applied per completed event.
     """
-    ret = _as_1d(returns)
-    if ret.size < min_periods:
+    if max_recovery_lookback is not None and (
+        isinstance(max_recovery_lookback, bool)
+        or not isinstance(max_recovery_lookback, (int, np.integer))
+        or max_recovery_lookback < 1
+    ):
+        raise ValueError("max_recovery_lookback must be a positive integer")
+    events = _path_events(returns, min_periods)
+    if events is None:
         return np.nan
-    dd, running_max = _drawdown_curve(ret)
-    cum = np.cumprod(1.0 + ret)
-    n = ret.size
-    lookback = n if max_recovery_lookback is None else int(max_recovery_lookback)
-    in_dd = np.isnan(dd) | (dd < -EPS)
-
-    recovered: list[float] = []
-    ongoing_len: list[float] = []
-    i = 0
-    while i < n:
-        if not in_dd[i]:
-            i += 1
-            continue
-        # Find episode start (peak = last pre-episode index with wealth == running max).
-        start = i
-        while start > 0 and in_dd[start - 1]:
-            start -= 1
-        # Trough within [start, ...]
-        finite = np.isfinite(dd)
-        search = np.arange(start, min(n, start + lookback))
-        dd_vals = dd[search]
-        ok = finite[search]
-        if not np.any(ok):
-            ongoing_len.append(float(len(search)))
-            break
-        trough_idx = int(search[ok][int(np.argmin(dd_vals[ok]))])
-        peak_value = running_max[max(start - 1, 0)]
-        # Recovery = first index >= trough+1 with cum >= peak_value (finite).
-        rec = None
-        for j in range(trough_idx + 1, min(n, trough_idx + 1 + lookback)):
-            if np.isfinite(cum[j]) and cum[j] >= peak_value:
-                rec = j
-                break
-        if rec is not None:
-            recovered.append(float(max(rec - trough_idx, 1)))
-            i = rec + 1  # restart search after the recovery point
-        else:
-            # Episode never recovered within lookback — jump past it.
-            k = trough_idx + 1
-            while k < n and in_dd[k]:
-                k += 1
-            ongoing_len.append(float(k - trough_idx))
-            i = k
-    if recovered:
-        return float(np.mean(recovered))
-    if ongoing_len:
-        return float(np.mean(ongoing_len))
-    return 0.0
+    recovered = [
+        e["recovery_idx"] - e["trough_idx"] for e in events
+        if not e["censored"] and (
+            max_recovery_lookback is None
+            or e["recovery_idx"] - e["trough_idx"] <= max_recovery_lookback
+        )
+    ]
+    return float(np.mean(recovered)) if recovered else np.nan
 
 
 def compute_worst_period_return(
@@ -312,7 +212,7 @@ def compute_rolling_sharpe_tail(
     return float(np.quantile(roll, quantile))
 
 
-def compute_return_skew(returns: np.ndarray, min_periods: int = 20) -> float:
+def compute_return_skew(returns: np.ndarray, min_periods: int = 20, *, bias: bool = False) -> float:
     """Sample skewness of the return series (population ``scipy.stats.skew``
     convention, bias=False; for the tail-risk registry family the existing
     ``metrics/distribution.compute_skewness`` is the same statistic).
@@ -320,13 +220,15 @@ def compute_return_skew(returns: np.ndarray, min_periods: int = 20) -> float:
     NaN when fewer than ``min_periods`` finite returns or when std is 0.
     """
     ret = _as_1d(returns)
-    if ret.size < min_periods:
+    ret = ret[np.isfinite(ret)]
+    if ret.size < max(min_periods, 3):
         return np.nan
     mu = np.mean(ret)
     std = np.std(ret, ddof=0)
     if std <= EPS:
         return np.nan
-    return float(np.mean(((ret - mu) / std) ** 3))
+    skew = float(np.mean(((ret - mu) / std) ** 3))
+    return skew if bias else float(np.sqrt(ret.size * (ret.size - 1)) / (ret.size - 2) * skew)
 
 
 def compute_downside_deviation(
@@ -343,6 +245,7 @@ def compute_downside_deviation(
     finite returns or no negative excess returns.
     """
     ret = _as_1d(returns)
+    ret = ret[np.isfinite(ret)]
     if ret.size < min_periods:
         return np.nan
     rf_per = risk_free_rate / periods_per_year

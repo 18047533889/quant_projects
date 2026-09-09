@@ -39,6 +39,8 @@ from factor_preprocess.contracts.treatment_lineage import (
     ExistingTreatmentStatus,
     build_signature_from_lineage,
     map_fe_dsl_to_semantic,
+    OutputProperties,
+    derive_output_properties,
 )
 from factor_preprocess.contracts.lineage_policy import (
     LINEAGE_POLICY_VERSION,
@@ -114,6 +116,7 @@ from factor_preprocess.representation.policy import (
     CanonicalAssetOverwriteError,
     FeatureRepresentationArtifact,
     register_feature_representation,
+    write_feature_representation,
     NonInferiorityTolerance,
     NON_INFERIORITY_POLICY_VERSION,
     DEFAULT_NON_INFERIORITY_TOLERANCE,
@@ -173,6 +176,8 @@ __all__ = [
     "ExistingTreatmentStatus",
     "build_signature_from_lineage",
     "map_fe_dsl_to_semantic",
+    "OutputProperties",
+    "derive_output_properties",
     # Treatment lineage duplicate-guard policy (R61-FI-043)
     "LINEAGE_POLICY_VERSION",
     "IDEMPOTENT_SEMANTIC_CLASSES",
@@ -226,6 +231,7 @@ __all__ = [
     "CanonicalAssetOverwriteError",
     "FeatureRepresentationArtifact",
     "register_feature_representation",
+    "write_feature_representation",
     "NonInferiorityTolerance",
     "NON_INFERIORITY_POLICY_VERSION",
     "DEFAULT_NON_INFERIORITY_TOLERANCE",

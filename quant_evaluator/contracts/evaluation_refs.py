@@ -21,6 +21,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Any, Dict, Mapping, Optional
+from quant_evaluator.contracts.metric_artifacts import FrozenMapping
 
 __all__ = ["FactorValueRef", "LabelBundleRef"]
 
@@ -48,7 +49,7 @@ class FactorValueRef:
                 f"{self.factor_value_id!r}"
             )
         object.__setattr__(self, "factor_ids", tuple(self.factor_ids))
-        object.__setattr__(self, "metadata", dict(self.metadata or {}))
+        object.__setattr__(self, "metadata", FrozenMapping(self.metadata or {}))
 
     def to_dict(self) -> Dict[str, Any]:
         """Serialize to a plain, JSON-friendly dict."""
@@ -106,7 +107,7 @@ class LabelBundleRef:
                 f"LabelBundleRef.horizon must be a positive int or None, got "
                 f"{self.horizon!r}"
             )
-        object.__setattr__(self, "metadata", dict(self.metadata or {}))
+        object.__setattr__(self, "metadata", FrozenMapping(self.metadata or {}))
 
     def to_dict(self) -> Dict[str, Any]:
         """Serialize to a plain, JSON-friendly dict."""
