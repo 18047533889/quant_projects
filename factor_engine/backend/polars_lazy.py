@@ -35,16 +35,22 @@ def _collect_arrow_table(
     from data_access.read.query_budget import collect_polars_with_budget
     from data_access.read.scan_handle import ScanHandle
 
-    if approved_content_digest is not None:
-        _assert_approved_snapshot(
-            getattr(lf, "resolved_source_snapshot", None),
-            dataset=dataset,
-            approved_content_digest=approved_content_digest,
-        )
-    selected = lf.select(select_cols)
-    governed = selected if isinstance(selected, ScanHandle) else None
-    if governed is None and isinstance(lf, ScanHandle):
-        governed = lf.select(select_cols)
+    try:
+        if approved_content_digest is not None:
+            _assert_approved_snapshot(
+                getattr(lf, "resolved_source_snapshot", None),
+                dataset=dataset,
+                approved_content_digest=approved_content_digest,
+            )
+        selected = lf.select(select_cols)
+        governed = selected if isinstance(selected, ScanHandle) else None
+        if governed is None and isinstance(lf, ScanHandle):
+            governed = lf.select(select_cols)
+    except Exception:
+        close = getattr(lf, "close", None)
+        if callable(close):
+            close()
+        raise
     if governed is not None:
         result = governed.collect()
         _assert_approved_snapshot(

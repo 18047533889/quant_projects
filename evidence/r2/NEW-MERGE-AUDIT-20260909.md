@@ -3,8 +3,9 @@
 任务书：`FactorEngine_DataAccess_主代码合并审计与统一整改.md`，2026-09-09。
 唯一工作树：server-c `/home/sunhaiwei/quant_projects`，现有 main。
 基线 HEAD：`6b610d0c8be7a3e6a7516ee2f4f8de6b58765f4f`。
-本轮修改未提交；HEAD 不是修改后源码摘要。保留其他 AI 的并发修改。
-未 stage/commit/push、建分支/worktree、复制代码树、部署、重启 worker 或发布生产因子。
+实施期间外部将 HEAD 更新为 `53d19be4d6543caf40a820eef9b1e62045a6a92b`（V10 实现波），包含尚在验证的本轮改动；本任务未执行该提交，也未回退它。提交后仍有窄修，最终身份以具名回执源码hash为准，不能以该提交代表全部验收。
+本任务未 stage/commit/push、建分支/worktree、复制代码树、部署、重启 worker 或发布生产因子。
+外部提交状态与本任务权限/动作区分记录，保留其他 AI 和用户的改动。
 本文的 M01 等编号属于新49项，不等于相邻 `MAIN-MERGE-REMEDIATION-20260909.md` 的旧 M01–M22。
 
 ## 状态解释

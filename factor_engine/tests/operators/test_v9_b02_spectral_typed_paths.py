@@ -78,6 +78,18 @@ def test_explicit_return_kind_is_not_overwritten_by_inherited_adjusted_basis(mon
             _call("ts_detrended_level_spectral_entropy", ret_ref, window=20,
                   input_kind="PriceContinuous")
         )
+    pct_of_return = analyzer.lower(_call("ts_pct", ret_ref, d=1))
+    assert pct_of_return.ir.semantic_attrs["semantic_kind"] == "DailySeries"
+    assert "price_basis" not in pct_of_return.ir.semantic_attrs
+    with pytest.raises(TypedInputContractError):
+        analyzer.lower(
+            _call(
+                "ts_return_spectral_entropy",
+                _call("ts_pct", ret_ref, d=1),
+                window=20,
+                input_kind="ReturnDecimal",
+            )
+        )
 
 
 @pytest.mark.parametrize("alias", ["returns", "pct_change"])

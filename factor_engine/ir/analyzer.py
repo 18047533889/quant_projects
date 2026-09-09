@@ -1692,11 +1692,24 @@ class Analyzer:
                 source_basis = source_semantic.get("price_basis") or source_attrs.get(
                     "price_basis"
                 )
-                if source_kind in {"PriceRaw", "PriceContinuous"} or source_basis in {
-                    "RAW", "RAW_OFFICIAL_LIMIT", "ADJUSTED", "CONTINUOUS"
-                }:
+                is_explicit_price = source_kind in {"PriceRaw", "PriceContinuous"}
+                is_basis_refined_price = (
+                    source_kind in {None, "DailySeries", "UNKNOWN"}
+                    and source_basis in {
+                        "RAW", "RAW_OFFICIAL_LIMIT", "ADJUSTED", "CONTINUOUS"
+                    }
+                )
+                if is_explicit_price or is_basis_refined_price:
                     semantic["semantic_kind"] = "ReturnDecimal"
                     semantic["price_basis"] = "RETURN"
+                    semantic["unit"] = "ratio"
+                else:
+                    # A change rate of an already-return or another generic
+                    # series is not itself a financial return.  Do not inherit
+                    # the child's semantic kind/basis through the generic
+                    # lattice join.
+                    semantic["semantic_kind"] = "DailySeries"
+                    semantic.pop("price_basis", None)
                     semantic["unit"] = "ratio"
             # P0-30 / WS-C: derive the typed-IR semantic kind from the joined
             # attrs — only when the lattice left the kind unresolved (a

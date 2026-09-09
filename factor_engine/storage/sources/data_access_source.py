@@ -2520,6 +2520,7 @@ class DataAccessSource(DataSource):
         # collection. Numeric normalization follows this actual representation.
         use_lazy_read = bool(
             self._lazy_scan
+            and callable(getattr(store, "scan", None))
             and self.instrument_filter != []
         )
         logger.info(
@@ -2557,23 +2558,23 @@ class DataAccessSource(DataSource):
             observed_snapshot_id = lazy_identity.get("snapshot_id")
             if self._lazy_bundle is not None:
                 observed_snapshot_id = self._lazy_bundle.snapshot_id
-                if (
-                    resolved
-                    and observed_snapshot_id
-                    and (
-                        not request_snapshot_id
-                        or observed_snapshot_id != request_snapshot_id
-                    )
-                ):
-                    self.clear_cache(reset_snapshot=False)
-                    if previous_lazy_bundle is None:
-                        close = getattr(self._lazy_bundle, "close", None)
-                        if callable(close):
-                            close()
-                    raise ApprovedSnapshotMismatch(
-                        "request cache hits and lazy read belong to different snapshots"
-                    )
-                self._record_read_snapshot(observed_snapshot_id)
+            if (
+                resolved
+                and observed_snapshot_id
+                and (
+                    not request_snapshot_id
+                    or observed_snapshot_id != request_snapshot_id
+                )
+            ):
+                self.clear_cache(reset_snapshot=False)
+                if previous_lazy_bundle is None and self._lazy_bundle is not None:
+                    close = getattr(self._lazy_bundle, "close", None)
+                    if callable(close):
+                        close()
+                raise ApprovedSnapshotMismatch(
+                    "request cache hits and lazy read belong to different snapshots"
+                )
+            self._record_read_snapshot(observed_snapshot_id)
         else:
             # 引擎/结果形态交给 DataAccess 成本路由（read_auto 语义下沉到 DataAccess）。
             # #9/#12 单位归一化由 DataAccess 输出层完成（SemanticFieldCatalog scale），
@@ -2834,6 +2835,11 @@ class DataAccessSource(DataSource):
 
     def _prefetch_lazy_bundle(self, names: list[str]) -> None:
         request_approved_digest = getattr(self, "_approved_content_digest", None)
+        if request_approved_digest is not None and not callable(
+            getattr(_get_store(), "scan", None)
+        ):
+            self.load_columns(names)
+            return
         needed = [name for name in names if name not in self._column_cache]
         if not needed:
             return
