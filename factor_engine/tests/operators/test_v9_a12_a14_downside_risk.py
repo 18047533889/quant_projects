@@ -17,11 +17,6 @@ from factor_engine.cleaned_operators.common.polars_robust_stats import (
 )
 
 
-@pytest.fixture(scope="session", autouse=True)
-def strict_fiscal_parameter_domain_certification_guard():
-    return None
-
-
 def _frame(values, index, columns=("A",)):
     arr = np.asarray(values, dtype=float)
     if arr.ndim == 1:

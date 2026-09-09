@@ -15,11 +15,6 @@ from factor_engine.expr.cleaned_call import CleanedCall
 from factor_engine.ir.analyzer import Analyzer, TypedInputContractError, UnknownRawColumnError
 
 
-@pytest.fixture(scope="session", autouse=True)
-def strict_fiscal_parameter_domain_certification_guard():
-    return None
-
-
 def _call(canonical, leaf, **kwargs):
     return CleanedCall(canonical, (leaf,), tuple(kwargs.items()))
 

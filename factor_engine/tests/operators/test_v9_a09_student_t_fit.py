@@ -15,11 +15,6 @@ from factor_engine.cleaned_operators.advanced_topology import (
 )
 
 
-@pytest.fixture(scope="session", autouse=True)
-def strict_fiscal_parameter_domain_certification_guard():
-    return None
-
-
 def _ll(values, fit):
     df, mu, scale = fit
     return float(np.sum(student_t.logpdf(values, df=df, loc=mu, scale=scale)))
@@ -101,4 +96,3 @@ def test_fisher_shift_is_prefix_causal_and_uses_disjoint_prior_block():
         prior_window=30,
     )
     np.testing.assert_array_equal(full["A"].to_numpy(), extended["A"].iloc[:70].to_numpy())
-

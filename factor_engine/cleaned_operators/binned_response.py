@@ -143,11 +143,11 @@ def _binned_empirical_medians(yv: np.ndarray, xv: np.ndarray, bins: int) -> tupl
 
 
 def _monotonicity_series(y2d: np.ndarray, x2d: np.ndarray, window: int, bins: int, min_per_bin: int = 3) -> np.ndarray:
-    rows, cols = y2d.shape
-    out = np.full((rows, cols), np.nan, dtype=float)
     w, b, mpb = int(window), int(bins), int(min_per_bin)
     if w < b * mpb:
         raise ValueError("INFEASIBLE_PARAMETER_DOMAIN: window must be >= bins * min_per_bin")
+    rows, cols = y2d.shape
+    out = np.full((rows, cols), np.nan, dtype=float)
     for c in range(cols):
         for r in range(rows):
             i0 = max(0, r - w + 1)
@@ -167,11 +167,11 @@ def _monotonicity_series(y2d: np.ndarray, x2d: np.ndarray, window: int, bins: in
 
 
 def _curvature_series(y2d: np.ndarray, x2d: np.ndarray, window: int, bins: int, min_per_bin: int = 3) -> np.ndarray:
-    rows, cols = y2d.shape
-    out = np.full((rows, cols), np.nan, dtype=float)
     w, b, mpb = int(window), int(bins), int(min_per_bin)
     if w < b * mpb:
         raise ValueError("INFEASIBLE_PARAMETER_DOMAIN: window must be >= bins * min_per_bin")
+    rows, cols = y2d.shape
+    out = np.full((rows, cols), np.nan, dtype=float)
     for c in range(cols):
         for r in range(rows):
             i0 = max(0, r - w + 1)

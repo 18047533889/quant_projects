@@ -2520,6 +2520,7 @@ class DataAccessSource(DataSource):
         # collection. Numeric normalization follows this actual representation.
         use_lazy_read = bool(
             self._lazy_scan
+            and request_approved_digest is None
             and callable(getattr(store, "scan", None))
             and self.instrument_filter != []
         )
@@ -2828,16 +2829,14 @@ class DataAccessSource(DataSource):
         if not names:
             return
         self.refresh_snapshot()
-        if self._lazy_scan:
+        if self._lazy_scan and getattr(self, "_approved_content_digest", None) is None:
             self._prefetch_lazy_bundle(names)
         else:
             self.load_columns(names)
 
-    def _prefetch_lazy_bundle(self, names: list[str]) -> None:
-        request_approved_digest = getattr(self, "_approved_content_digest", None)
-        if request_approved_digest is not None and not callable(
-            getattr(_get_store(), "scan", None)
-        ):
+        if request_approved_digest is not None:
+            self.load_columns(names)
+            return
             self.load_columns(names)
             return
         needed = [name for name in names if name not in self._column_cache]
