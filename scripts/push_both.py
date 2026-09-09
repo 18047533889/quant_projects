@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import fcntl
 import json
 import os
 import re
@@ -170,7 +171,7 @@ def select_only(value: str | None) -> list[str]:
     return [exact]
 
 
-def main(argv=None) -> int:
+def _main(argv=None) -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--only")
     ap.add_argument("--dry-run", action="store_true")
@@ -260,6 +261,28 @@ def main(argv=None) -> int:
         except SyncError as exc:
             print(f"FATAL: {exc}", file=sys.stderr)
             raise SystemExit(1)
+
+
+def main(argv=None) -> int:
+    # Every invocation, including dry-runs, shares FETCH_HEAD and receipt paths.
+    # Refuse a concurrent publisher before touching either of those resources.
+    lock = None
+    try:
+        log_dir = ROOT / "logs"
+        log_dir.mkdir(parents=True, exist_ok=True)
+        lock = (log_dir / "push_both.lock").open("a+")
+        try:
+            fcntl.flock(lock.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            print("FATAL: another push_both invocation holds the publication lock", file=sys.stderr)
+            return 1
+        return _main(argv)
+    except OSError as exc:
+        print(f"FATAL: publication lock unavailable: {sanitize(str(exc))}", file=sys.stderr)
+        return 1
+    finally:
+        if lock is not None:
+            lock.close()
 
 
 if __name__ == "__main__":
