@@ -2896,11 +2896,11 @@ class DataAccessSource(DataSource):
                     old_bundle.close()
                 except Exception:
                     pass
-        self._record_read_snapshot(self._lazy_bundle.snapshot_id)
-        observed_snapshot = self._lazy_bundle.snapshot_id
         fetched = self._lazy_bundle.materialize_columns(
             physical, output_names=output_names or None
         )
+        observed_snapshot = self._lazy_bundle.snapshot_id
+        self._record_read_snapshot(observed_snapshot)
         self._normalize_contract_columns(
             fetched, needed, units_normalized=False,
         )
