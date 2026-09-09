@@ -1,5 +1,6 @@
 import importlib.util
 import json
+from types import SimpleNamespace
 from pathlib import Path
 
 import pytest
@@ -70,3 +71,20 @@ def test_rejects_ambiguous_duplicate_pin(tmp_path):
     p.write_text("typing_extensions==4.16.0\ntyping-extensions==4.16.0\n")
     with pytest.raises(ValueError):
         check.read_pins(p)
+
+
+def test_import_probe_isolated_from_checkout_and_pythonpath(monkeypatch):
+    calls = []
+    def run(args, **kwargs):
+        calls.append((args, kwargs))
+        return SimpleNamespace(returncode=0, stdout="[]")
+    monkeypatch.setattr(check.subprocess, "run", run)
+    assert check.isolated_import_errors(Path("/repo")) == []
+    assert "-I" in calls[0][0]
+    assert calls[0][1]["cwd"] == "/"
+
+
+def test_import_probe_rejects_wrong_source(monkeypatch):
+    monkeypatch.setattr(check.subprocess, "run", lambda *a, **k:
+                        SimpleNamespace(returncode=0, stdout='["quant_evaluator"]'))
+    assert check.isolated_import_errors(Path("/repo"))

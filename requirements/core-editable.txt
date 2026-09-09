@@ -1,9 +1,11 @@
+# Run from the quant_projects root. Flat-layout packages use default editable mode.
 -c core-py312-linux.txt
 -e ./data_access
 -e ./factor_engine
 -e ./quant_evaluator
--e ./factor_preprocess
--e ./factor_optimizer
+# Only these nested-layout packages require compatibility mode.
+-e ./factor_preprocess --config-settings editable_mode=compat
+-e ./factor_optimizer --config-settings editable_mode=compat
 -e ./factor_assets
 -e ./quant_platform
 -e ./modeling

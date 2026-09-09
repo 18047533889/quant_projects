@@ -1,0 +1,88 @@
+{
+  "timestamp": "2026-09-09T06:17:52.923659+00:00",
+  "success": true,
+  "main_unmodified": "e0c8fbfcd439028623a4b9a2bc50d71c545a8e18",
+  "retained_anchor": "f56de261192ccf41086dbd8c0535d5e3d2740de7",
+  "deleted": [
+    {
+      "ref": "refs/heads/agent/factor-cold-start-library-20260720",
+      "tip": "65146c1502a95d190c37dcb0930eba4f51d3f7ed",
+      "proof": "reachable_from_retained_anchor"
+    },
+    {
+      "ref": "refs/heads/agent/factor-cold-start-library-merge-staging",
+      "tip": "65146c1502a95d190c37dcb0930eba4f51d3f7ed",
+      "proof": "reachable_from_retained_anchor"
+    },
+    {
+      "ref": "refs/heads/agent/factorengine-consolidated-hardening-20260801",
+      "tip": "2383fde3fd362623ec18d473dc876f485fe18825",
+      "proof": "reachable_from_retained_anchor"
+    },
+    {
+      "ref": "refs/heads/agent/factorengine-consolidated-hardening-20260801-temp",
+      "tip": "f068bdb9b60240a735c72c5a9a555650247b367f",
+      "proof": "reachable_from_retained_anchor"
+    },
+    {
+      "ref": "refs/heads/agent/factorengine-production-completion-20260801",
+      "tip": "bbe7d5e356790d2d7ea51f3c806d971f0370b958",
+      "proof": "reachable_from_retained_anchor"
+    },
+    {
+      "ref": "refs/heads/agent/factorengine-production-hardening",
+      "tip": "0727f3cb7562f2dc2b8af5b4bf15cef068838800",
+      "proof": "reachable_from_retained_anchor"
+    },
+    {
+      "ref": "refs/heads/agent/harden-causal-operators",
+      "tip": "db15060ce473bf294bb7b00a2ad3d99b791f51e1",
+      "proof": "reachable_from_retained_anchor"
+    },
+    {
+      "ref": "refs/heads/agent/rename-data-access-to-dataaccess",
+      "tip": "86f9b115094782cc2321dd0e37782aee7b7b231c",
+      "proof": "reachable_from_retained_anchor"
+    },
+    {
+      "ref": "refs/heads/fix/dataaccess-factorengine-hardening",
+      "tip": "6ca811fa55043d1b1db92baae1a29e28671dd4ff",
+      "proof": "reachable_from_retained_anchor"
+    },
+    {
+      "ref": "refs/heads/sync/data-access-0.5.0",
+      "tip": "268ce9890d0e56fdbc880133f5a3077c3020ed85",
+      "proof": "reachable_from_retained_anchor"
+    },
+    {
+      "ref": "refs/heads/temp/factorengine-wheelhouse-20260802",
+      "tip": "158ef6fb70a8d2baf64af4f4aa481ea1e4fd1118",
+      "proof": "net_tree_equals_retained_base"
+    }
+  ],
+  "remaining_non_main_branches": [
+    "refs/heads/agent/autofactor-gtja185-evaluation",
+    "refs/heads/agent/autofactor-standalone-reconstruct",
+    "refs/heads/agent/expand-factor-cold-start-20260801",
+    "refs/heads/agent/factor-engine-composite-fastpath",
+    "refs/heads/agent/factor-engine-cos-contracts",
+    "refs/heads/agent/factor-engine-final-audit",
+    "refs/heads/agent/factor-engine-layer-governance",
+    "refs/heads/agent/factor-engine-operator-overhaul",
+    "refs/heads/agent/factor-engine-recipe-runtime",
+    "refs/heads/agent/factor-engine-semantic-hardening",
+    "refs/heads/agent/factorengine-production-routing-lqtp-20260731",
+    "refs/heads/agent/full-factorengine-operator-audit-20260719",
+    "refs/heads/agent/gtja191-production-complete",
+    "refs/heads/agent/harden-data-access-factor-engine",
+    "refs/heads/agent/import-autofactor-evaluation",
+    "refs/heads/agent/integrate-autofactor-evaluation",
+    "refs/heads/agent/lqtp-compat-v2-full-20260731",
+    "refs/heads/agent/operator-production-hardening",
+    "refs/heads/agent/operator-surface-cleanup",
+    "refs/heads/agent/sync-dataaccess-from-org",
+    "refs/heads/audit/operator-health-20260715",
+    "refs/heads/audit/operator-usage-20260715",
+    "refs/heads/r2-q-empty-authority-gates"
+  ]
+}

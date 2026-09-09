@@ -88,6 +88,32 @@ def receipt_errors(root: Path, receipt: dict) -> list[str]:
     return errors
 
 
+def isolated_import_errors(root: Path) -> list[str]:
+    # Repo cwd/PYTHONPATH can hide broken editable installs or stale wheel caches.
+    probe = """import importlib,json,pathlib,sys
+root=pathlib.Path(sys.argv[1]); failures=[]
+for name in sys.argv[2:]:
+    try:
+        path=getattr(importlib.import_module(name),'__file__',None)
+        if path is None or not pathlib.Path(path).resolve().is_relative_to(root/name):
+            failures.append(name)
+    except Exception:
+        failures.append(name)
+print(json.dumps(failures))
+"""
+    result = subprocess.run([sys.executable, "-I", "-c", probe, str(root), *CORE],
+                            cwd=root.anchor, capture_output=True, text=True)
+    if result.returncode:
+        return ["Isolated import probe failed"]
+    try:
+        failed = json.loads(result.stdout)
+        if not isinstance(failed, list) or any(n not in CORE for n in failed):
+            raise ValueError("invalid import report")
+    except (ValueError, TypeError):
+        return ["Isolated import probe returned invalid evidence"]
+    return [f"{name}: isolated import did not resolve to this checkout's source" for name in failed]
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source-only", action="store_true",
@@ -132,6 +158,7 @@ def main(argv=None) -> int:
         check = subprocess.run([sys.executable, "-m", "pip", "check"], capture_output=True, text=True)
         if check.returncode:
             errors.append("pip check failed (run it directly for package conflicts)")
+        errors.extend(isolated_import_errors(ROOT))
 
     scope = "SOURCE ONLY" if args.source_only else "CORE ENVIRONMENT AND SOURCE"
     print(f"{scope}: {'FAILED' if errors else 'PASSED'}")

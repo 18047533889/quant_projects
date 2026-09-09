@@ -10,20 +10,20 @@
 python3.12 -m venv .venv
 . .venv/bin/activate
 python -m pip install pip==26.2.1 setuptools==84.0.0 wheel==0.48.0
-python -m pip install --no-build-isolation \
-  --config-settings editable_mode=compat -r requirements.txt
+python -m pip install --no-build-isolation -r requirements.txt
 python scripts/check_team_environment.py
 ```
 
 `requirements.txt` 是统一入口；`requirements/core-editable.txt` 把全部内部库一起从当前源码安装，避免误取公共索引中的同名包。`requirements/core-py312-linux.txt` 精确约束核心外部传递依赖。相对源码路径以调用目录为准，因此不要在其他目录直接运行上述命令。
 
-锁使用已测核心环境版本作为基线，并通过真实联合依赖解析验证。**依赖解析成功不等于新的完整安装环境已经跑过此前 5,191 项回归。** 本轮没有替换 server-c 的现有 Python 环境，也没有为所有操作系统、GPU 或生产配置背书。锁固定版本但不包含全部发行文件哈希，不是供应链签名证明。
+安装入口仅对嵌套布局的 FactorPreprocess / FactorOptimizer 指定 editable compatibility 模式，其他平铺布局使用默认 editable finder。不要把 compatibility 参数全局套给全部库，否则可能在离开仓库目录后无法导入。
+
+锁使用已测核心环境版本作为基线，并通过真实联合依赖解析验证。**依赖解析成功不等于新的完整安装环境已经跑过此前 5,191 项回归。** 本轮在 server-c 原有开发环境中补装了缺失的依赖并校正内部源码安装，没有升级原有外部依赖，也没有为所有操作系统、GPU 或生产配置背书。锁固定版本但不包含全部发行文件哈希，不是供应链签名证明。
 
 可先执行不安装的解析检查：
 
 ```sh
-python -m pip install --dry-run --ignore-installed --no-build-isolation \
-  --config-settings editable_mode=compat -r requirements.txt
+python -m pip install --dry-run --ignore-installed --no-build-isolation -r requirements.txt
 ```
 
 环境检查器会核对完整核心外部版本、内部 8 库版本及 editable 来源目录、`pip check`、工作区是否干净，以及当前已提交的 13 个子目录内容树是否符合发布回执。回执本身入库后会有元数据提交，因此比较子目录树，而不是错误地要求当前 HEAD 必须等于回执的源码提交。该检查离线读取上次发布证据，不声称重新查询了 GitHub 实时状态。
@@ -33,6 +33,8 @@ python -m pip install --dry-run --ignore-installed --no-build-isolation \
 ```sh
 python scripts/check_team_environment.py --source-only
 ```
+
+完整检查还会在仓库目录之外，用隔离 Python 进程导入 8 个库，防止当前目录或旧 wheel 缓存掩盖安装路径问题。
 
 ## 其他环境分开安装
 
