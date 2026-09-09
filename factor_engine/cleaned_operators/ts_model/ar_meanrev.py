@@ -22,6 +22,7 @@ from factor_engine.cleaned_operators.ts_model._rolling_core import (
 )
 
 _CANONICALS: list[str] = []
+_AR_CONFIGURED_HISTORY_CANONICALS: list[str] = []
 
 # Model-audit Phase 4 (search-space hygiene): explicit ParamSpec declarations
 # for the AR model scalars.  ``window`` is the alpha horizon (HORIZON, searched);
@@ -46,6 +47,17 @@ _AR_PARAM_SPECS: dict[str, ParamSpec] = {
     "warmup_policy": ParamSpec(dtype=str, choices=(_AR_WARMUP_POLICY, _AR_FULL_WARMUP),
                                param_role=ParamRole.POLICY, searchable=False),
 }
+
+
+def validate_ar_configured_history(window: int, order: int, *, fit_lag: int = 0) -> int:
+    """Return required input rows or reject a window that can never fit AR(p)."""
+    required_window = 2 * int(order) + 2
+    if int(window) < required_window:
+        raise ValueError(
+            "INSUFFICIENT_CONFIGURED_HISTORY: "
+            f"window={window} requires at least {required_window} for order={order}"
+        )
+    return required_window + max(0, int(fit_lag))
 
 
 def _ar_fit(seg: np.ndarray, order: int) -> tuple[np.ndarray | None, np.ndarray]:
@@ -92,8 +104,9 @@ def _ar_apply(vals: np.ndarray, window: int, order: int, stat: str, *, fit_lag: 
     n = len(vals)
     out = np.full(n, np.nan, dtype=float)
     o = max(1, int(order))
-    w = max(o + 2, int(window))
+    w = int(window)
     lag = max(0, int(fit_lag))
+    validate_ar_configured_history(w, o, fit_lag=lag)
     k = max(0, int(stability_k))
     for row in range(n):
         fit_end = row - lag
@@ -145,6 +158,7 @@ def _ar_apply(vals: np.ndarray, window: int, order: int, stat: str, *, fit_lag: 
 
 
 def _ar_op(name: str, description: str, unit: str, stat: str, *, fit_lag: int = 0, stability_k: int = 0, cost: int = 4, diagnostic_only: bool = False):
+    _AR_CONFIGURED_HISTORY_CANONICALS.append(name)
     _desc = f"{description}（window=max lookback，非严格满窗；min_effective_obs=order+2；warmup_policy={_AR_WARMUP_POLICY} 渐进输出）"
 
     @register_operator(
@@ -155,6 +169,7 @@ def _ar_op(name: str, description: str, unit: str, stat: str, *, fit_lag: int = 
         source="ts_model.ar_meanrev",
         backend="pandas_numpy",
         status="experimental",
+        semantic_version="2.0",
     )
     class _ArOp(SeriesOperator):
         metadata = metadata(name, _desc, ["x", "window", "order", "warmup_policy"], unit=unit, cost=cost,
@@ -171,6 +186,10 @@ def _ar_op(name: str, description: str, unit: str, stat: str, *, fit_lag: int = 
                                         fit_lag=int(fit_lag), stability_k=int(stability_k),
                                         warmup_policy=str(warmup_policy))
             return frame_like(x, out)
+
+        def validate_params(self, x, window=60, order=1, warmup_policy="expanding", **_):
+            validate_ar_configured_history(window, order, fit_lag=fit_lag)
+            return True
 
     return _ArOp
 

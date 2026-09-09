@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="3" time="2.636" timestamp="2026-09-09T06:40:30.685935+08:00" hostname="qs-compute-gpu-hk-01"><testcase classname="factor_engine.tests.runtime.test_v6_bounded_pipeline" name="test_physical_preflight_error_is_root_local_and_valid_peers_share_one_wave" time="0.773" /><testcase classname="factor_engine.tests.runtime.test_v6_bounded_pipeline" name="test_default_writer_timeout_reconciles_known_generation_without_rewrite" time="0.760" /><testcase classname="factor_engine.tests.runtime.test_v6_bounded_pipeline" name="test_worker_quarantine_aborts_run_terminalizes_ordinals_and_writes_receipt" time="0.664"><failure message="RuntimeError: simulated cleanup failure">factor_engine/tests/runtime/test_v6_bounded_pipeline.py:225: in test_worker_quarantine_aborts_run_terminalizes_ordinals_and_writes_receipt
+    execute_run_many_durable(
+factor_engine/runtime/bounded_pipeline.py:2807: in execute_run_many_durable
+    raise failure
+factor_engine/runtime/bounded_pipeline.py:2740: in execute_run_many_durable
+    worker.close()
+factor_engine/tests/runtime/test_v6_bounded_pipeline.py:221: in close
+    raise RuntimeError("simulated cleanup failure")
+E   RuntimeError: simulated cleanup failure</failure></testcase></testsuite></testsuites>

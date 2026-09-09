@@ -191,7 +191,13 @@ def phase1_operator_signatures() -> dict[str, OperatorSignature]:
     for name in _WINDOW:
         out[name] = OperatorSignature(name, _W)
     for name, args in _WINDOW_EXTRA.items():
-        out[name] = OperatorSignature(name, args)
+        out[name] = OperatorSignature(
+            name,
+            args,
+            # Standard deviation has the same unit as its sole series input.
+            # Other window operators need their own explicit declarations.
+            output_unit="inherit" if name == "ts_std" else None,
+        )
     for name in _PAIR_WINDOW:
         out[name] = OperatorSignature(name, _W3)
     for name in _GROUP:

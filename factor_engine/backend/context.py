@@ -42,6 +42,15 @@ class ExecutionContext:
     # R21-P022: cost-optimizer selected backend — when set, prevents per-operator
     # reroute via BackendRouter.select(auto) so the whole-plan route is honored.
     selected_backend: str | None = None
+    # Optional caller-owned receipt identity. Appending these fields preserves
+    # the positional meaning of every pre-M11 ExecutionContext argument.
+    profile_id: str | None = None
+    run_id: str | None = None
+    task_id: str | None = None
+    factor_id: str | None = None
+    # Created only after the context reaches a worker-local execution boundary.
+    # The default None preserves existing cross-process pickle paths.
+    fit_failure_sink: Any | None = None
 
     def __post_init__(self) -> None:
         if not self.execution_id:

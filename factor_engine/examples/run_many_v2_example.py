@@ -27,6 +27,16 @@ artifacts and returns descriptors. The receipt includes per-factor terminal
 states; inspect failures rather than treating a completed call as all-success.
 The v2 implementation remains subject to its current evidence/admission gates.
 The script main guard is required by spawn; it is not a performance option.
+
+Revalidate a completed run without resubmitting its factor definitions::
+
+    if __name__ == "__main__":
+        receipt = revalidate_completed_run(previous_run_id)
+
+This retains the original run identity and checks previously committed bytes.
+It does not yet resume unfinished work: pending/uncertain commits are rejected
+until persisted worker ownership and exit can be proven. Keep the same approved
+profile and original artifacts; changing their identity is not a resume.
 """
 
 from factor_engine import get_engine
@@ -35,3 +45,8 @@ from factor_engine import get_engine
 def materialize_all(factors):
     with get_engine() as engine:
         return engine.run_many(factors)
+
+
+def revalidate_completed_run(run_id):
+    with get_engine() as engine:
+        return engine.run_many((), resume_run_id=run_id)

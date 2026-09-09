@@ -1,0 +1,39 @@
+schema: v9-integrated-verification-1
+date: '2026-09-09'
+git_sha: 118cd21c6262082336daa545ddc06b6f78def7b9
+workspace: /home/sunhaiwei/quant_projects
+source_state:
+  rolling_core_sha256: 3341881a4f013f67ea08f2e4783cd46bb05c8542b6dd6e07c9cb4935072bcbd5
+  research_spectral_sha256: 0af43f7f0fb45f2c01b2a990e25b01e0f4b069e6bbadca951d1745aa4e2156b3
+  batch_service_sha256: 85f12188d40b4ee9e644ca5520f241afb0b1feba2699fad70d33e84d373688de
+  bounded_pipeline_sha256: 2387e5d78e9c43aa673b19d478f70c7b246b2c611e8ddb5bb64dca8628c3900b
+tests:
+  all_v9:
+    result: 643 passed, 21 warnings, 122.25 seconds
+    junit: v9-wave6-owner-scale.xml
+  lifecycle_dataaccess_preservation:
+    result: 108 passed, 49 warnings, 102.85 seconds
+    junit: v9-m11-runtime-preservation.xml
+  default_auto80_policy_preservation:
+    result: 75 passed, 2 warnings, 27.10 seconds
+    junit: v9-auto80-preservation.xml
+    paths:
+      - factor_engine/tests/runtime/test_v6_default_execution_policy.py
+      - factor_engine/tests/runtime/test_v6_default_engine.py
+      - factor_engine/tests/runtime/test_v6_region_policy_wiring.py
+      - factor_engine/tests/runtime/test_v6_worker_resource_authority.py
+      - factor_engine/tests/runtime/test_v6_read_wave_safety.py
+  public_planner:
+    artifact: V9-PUBLIC-PLANNER-POST-M11AB.json
+    sha256: 917233cf7b363ac1a0b27df9db3bd9a7947469cf1cd8504a6e8f1f6fccf8e448
+    actual_api: Optimizer.optimize_with_pass_trace
+    optimizer_compile: UNAVAILABLE
+    checks: Six passes, rewrite invariants, legacy equivalence, typed mismatch and numeric-policy fail-closed.
+  scoped_compileall: PASS
+  scoped_git_diff_check: PASS
+limitations:
+  - These suites overlap; their counts must not be added as unique coverage.
+  - M11-C wire/durability changes remain stage-only and are excluded.
+  - Policy tests are not real auto80 allocation, GPU, 100k throughput or process-family OOM certification.
+  - Full repository CI, all-backend numerical parity and production release gates NOT_RUN.
+  - Existing warnings include unsupported Polars declarations, numerical edge probes and fork-from-threaded-process deprecations.

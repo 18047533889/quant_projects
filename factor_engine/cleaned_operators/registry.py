@@ -612,6 +612,19 @@ def _contract_hash(operator: Any) -> str:
     parts.append("aliases=" + ",".join(
         f"{k}->{v}" for k, v in sorted((getattr(meta, "param_aliases", None) or {}).items())
     ))
+    distinct_input_groups = tuple(
+        tuple(group) for group in (getattr(meta, "distinct_input_groups", ()) or ())
+    )
+    # Preserve every existing operator's contract hash.  Only operators that
+    # opt into this new semantic constraint gain a new hash component.
+    if distinct_input_groups:
+        parts.append("distinct_inputs=" + repr(distinct_input_groups))
+    same_unit_input_groups = tuple(
+        tuple(group) for group in (getattr(meta, "same_unit_input_groups", ()) or ())
+    )
+    # Preserve hashes for operators that do not opt into the new relationship.
+    if same_unit_input_groups:
+        parts.append("same_unit_inputs=" + repr(same_unit_input_groups))
     parts.append("in_units=" + ",".join(
         f"{k}->{v}" for k, v in sorted((getattr(meta, "input_units", None) or {}).items())
     ))
@@ -846,6 +859,8 @@ def _merge_param_names(
 _LOGICAL_CONTRACT_FIELDS: tuple[tuple[str, str], ...] = (
     ("param_specs", "dict"),
     ("param_aliases", "dict"),
+    ("distinct_input_groups", "tuple"),
+    ("same_unit_input_groups", "tuple"),
     ("relational_specs", "list"),
     ("param_types", "dict"),
     ("input_units", "dict"),
@@ -948,6 +963,12 @@ def _backfill_logical_contract(operator: Any, prev: dict[str, Any]) -> None:
         # Non-empty backend-declared value: must MATCH the canonical, or the
         # backend carries a contradictory logical contract (P0-23 fail-closed).
         if not _logical_field_equal(field, canonical, cur):
+            if field == "relational_specs":
+                raise ValueError(
+                    "logical-contract divergence for backend of canonical "
+                    f"{getattr(meta, 'name', '?')!r}: field {field!r} declares "
+                    f"{cur!r} but the canonical contract holds {canonical!r}"
+                )
             # Print warning instead of raising error for compatibility
             import sys
             print(f"WARNING: logical-contract divergence for backend of canonical "
@@ -985,6 +1006,8 @@ def _logical_field_equal(field: str, left: Any, right: Any) -> bool:
 _CANONICAL_CONTRACT_FIELDS: tuple[str, ...] = (
     "param_specs",
     "param_aliases",
+    "distinct_input_groups",
+    "same_unit_input_groups",
     "panel_params",
     "scalar_params",
     "input_units",
@@ -1557,6 +1580,50 @@ class OperatorRegistry:
                 cls._aliases.pop(canonical, None)
             else:
                 raise ValueError(f"canonical already declared as alias: {canonical!r}")
+        existing_ops = cls._operators.get(canonical, {})
+        # Relation-only preflight: resolve the first non-empty canonical
+        # declaration before publishing the new backend.  This also recovers
+        # the authority from an already-loaded pre-fix registry whose catalog
+        # omitted the field.  Conflicts fail transactionally: no operator,
+        # catalog entry, backend metadata, or registry version has changed.
+        _relational_authority = list(
+            (cls._catalog.get(canonical, {}) or {}).get("relational_specs") or ()
+        )
+        for _registered_operator in existing_ops.values():
+            _registered_relations = list(
+                getattr(
+                    getattr(_registered_operator, "metadata", None),
+                    "relational_specs",
+                    None,
+                )
+                or ()
+            )
+            if not _registered_relations:
+                continue
+            if not _relational_authority:
+                _relational_authority = _registered_relations
+            elif not _logical_field_equal(
+                "relational_specs", _relational_authority, _registered_relations
+            ):
+                raise ValueError(
+                    f"operator {canonical!r}: existing backends declare conflicting "
+                    "relational_specs"
+                )
+        _incoming_relations = list(
+            getattr(_meta, "relational_specs", None) or ()
+        )
+        if (
+            _relational_authority
+            and _incoming_relations
+            and not _logical_field_equal(
+                "relational_specs", _relational_authority, _incoming_relations
+            )
+        ):
+            raise ValueError(
+                f"operator {canonical!r}: logical-contract divergence for field "
+                f"'relational_specs': incoming {_incoming_relations!r} conflicts "
+                f"with canonical {_relational_authority!r}"
+            )
         existing_ops = cls._operators.setdefault(canonical, {})
         # P0-B1: once this canonical (or catalog) is registered, publish any
         # deferred aliases that pointed at it (polars_statistics's
@@ -1802,6 +1869,26 @@ class OperatorRegistry:
             "param_aliases": dict(
                 prev.get("param_aliases") or getattr(_metadata, "param_aliases", None) or {}
             ),
+            "relational_specs": list(
+                prev.get("relational_specs")
+                or _relational_authority
+                or getattr(_metadata, "relational_specs", None)
+                or ()
+            ),
+            "distinct_input_groups": tuple(
+                tuple(group) for group in (
+                    prev.get("distinct_input_groups")
+                    or getattr(_metadata, "distinct_input_groups", None)
+                    or ()
+                )
+            ),
+            "same_unit_input_groups": tuple(
+                tuple(group) for group in (
+                    prev.get("same_unit_input_groups")
+                    or getattr(_metadata, "same_unit_input_groups", None)
+                    or ()
+                )
+            ),
             "input_grain": _first_non_null(
                 prev.get("input_grain"),
                 getattr(_metadata, "input_grain", None),
@@ -1858,6 +1945,15 @@ class OperatorRegistry:
         # source.  New consumers must use backend_meta[backend].source.
         updated.pop("selected_source", None)
         cls._catalog[canonical] = updated
+        # A backend marker may be registered before the implementation that
+        # first declares the canonical relations.  Once that first non-empty
+        # declaration arrives, backfill every already-registered empty adapter
+        # so runtime snapshots remain independent of startup order.  A second,
+        # different non-empty declaration is rejected by the single-authority
+        # check in ``_backfill_logical_contract`` above.
+        if updated.get("relational_specs"):
+            for registered_operator in existing_ops.values():
+                _backfill_logical_contract(registered_operator, updated)
         for alias in aliases or []:
             if alias != canonical:
                 cls.register_alias(alias, canonical)
@@ -2035,6 +2131,8 @@ class OperatorRegistry:
         # canonical has no value for the field, the overlay value is preserved.
         param_specs: Optional[dict] = None,
         param_aliases: Optional[dict] = None,
+        distinct_input_groups: Optional[tuple] = None,
+        same_unit_input_groups: Optional[tuple] = None,
         panel_params: Optional[tuple] = None,
         scalar_params: Optional[tuple] = None,
         input_units: Optional[dict] = None,
@@ -2102,6 +2200,8 @@ class OperatorRegistry:
             overlay = {
                 "param_specs": param_specs,
                 "param_aliases": param_aliases,
+                "distinct_input_groups": distinct_input_groups,
+                "same_unit_input_groups": same_unit_input_groups,
                 "panel_params": panel_params,
                 "scalar_params": scalar_params,
                 "input_units": input_units,

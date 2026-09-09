@@ -1,0 +1,30 @@
+schema: factor_engine.v9_scoped_review.v1
+reviewed_at: '2026-09-09'
+issues:
+  V9-M31:
+    verdict: APPROVED_SCOPED
+    canonical: ts_causal_local_linear_smoother
+    finding: Missing observations retain physical row offsets; a missing query row is extrapolated to the current physical endpoint.
+    independent_oracle: An affine sequence with internal gaps and missing row 19 returns exactly 19.0.
+    limits: Does not certify every backend or production admission.
+  V9-M33:
+    verdict: APPROVED_SCOPED
+    canonicals:
+      - ts_matrix_profile_motif_frequency
+      - ts_matrix_profile_neighbor_dispersion
+    finding: The inclusive historical candidate count is history-L-floor(L/4)+1, so three candidates require history>=L+floor(L/4)+2.
+    independent_oracle: For L=20, history 25/26 yield one/two candidates and no frequency or dispersion; history 27 yields three and finite output.
+    limits: Missing candidate subsequences can still cause data-support NaN; this is not parameter infeasibility.
+  V9-M36:
+    verdict: APPROVED_SCOPED
+    canonical: ts_residualized_hsic
+    finding: The shorter purged test fold contains floor(window/2)-purge_gap rows; requiring six gives purge_gap<=floor(window/2)-6.
+    independent_oracle: Even and odd windows are finite at the exact boundary and NaN one step beyond it.
+    limits: Does not certify every backend or production admission.
+tests:
+  command: .venv/bin/python -m pytest -q test_v9_local_linear_endpoint.py test_v9_matrix_profile_support.py test_v9_hsic_solve_domain.py
+  result: 26 passed, 2 existing warnings
+artifacts:
+  probe: v9_review_probe.py
+  probe_output: probe_output.json
+  hashes: source_hashes.sha256

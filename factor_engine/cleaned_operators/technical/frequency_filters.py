@@ -24,9 +24,12 @@ from factor_engine.cleaned_operators.base import (
     OperatorMetadata,
     ParamSpec,
     ParamRole,
+    RelationalParamSpec,
     SeriesOperator,
     register_operator,
 )
+from factor_engine.backend.operator_errors import OperatorParameterError
+from factor_engine.cleaned_operators.common.strict_params import strict_int, strict_float, strict_enum
 
 _EPS = 1e-12
 
@@ -41,6 +44,7 @@ def _meta(
     *,
     unit: str,
     param_specs: dict[str, ParamSpec] | None = None,
+    relational_specs: list[RelationalParamSpec] | None = None,
 ) -> OperatorMetadata:
     """Metadata factory for frequency filter operators."""
     return OperatorMetadata(
@@ -62,30 +66,26 @@ def _meta(
             "frequency_filter",
         ],
         param_specs=param_specs or {},
+        relational_specs=relational_specs or [],
     )
 
 
-def _bessel_coeffs(order: int, cutoff: float) -> tuple[np.ndarray, np.ndarray]:
-    """Compute Bessel filter coefficients (normalized digital, causal IIR).
+def _bessel_sos(order: int, cutoff: float) -> np.ndarray:
+    """Phase-normalized digital Bessel sections, cutoff in cycles per bar.
 
-    Returns (b, a) where b are feedforward coeffs, a are feedback coeffs.
-    Cutoff is normalized frequency in (0, 0.5) where 0.5 = Nyquist.
+    Digital design prewarps the requested frequency and retains ZPK until SOS
+    formation.  In particular, no ill-conditioned high-order BA polynomial is
+    formed.  Phase normalization preserves the existing prototype convention;
+    for order > 1 its cutoff must not be interpreted as a -3 dB frequency.
     """
-    from scipy.signal import bessel, zpk2tf, bilinear
-
-    # Analog Bessel prototype
-    z, p, k = bessel(order, 2 * np.pi * cutoff, analog=True, output='zpk')
-    # Convert zpk to transfer function form
-    b_analog, a_analog = zpk2tf(z, p, k)
-    # Bilinear transform to digital
-    b, a = bilinear(b_analog, a_analog, fs=1.0)
-    return b, a
+    from scipy.signal import bessel
+    return bessel(order, cutoff, fs=1.0, norm="phase", output="sos")
 
 
-def _apply_iir_filter(x: np.ndarray, b: np.ndarray, a: np.ndarray) -> np.ndarray:
+def _apply_iir_filter(x: np.ndarray, sos: np.ndarray) -> np.ndarray:
     """Apply IIR filter causally (forward pass only, zero initial conditions)."""
-    from scipy.signal import lfilter
-    return lfilter(b, a, x, axis=0)
+    from scipy.signal import sosfilt
+    return sosfilt(sos, x, axis=0)
 
 
 def _fir_lowpass_window(ntaps: int, cutoff: float, window: str = "hamming") -> np.ndarray:
@@ -136,12 +136,17 @@ class BesselLowpassCausal(SeriesOperator):
         Filter order (1-8 recommended; higher = steeper rolloff).
     cutoff : float
         Normalized cutoff frequency (0, 0.5) where 0.5 = Nyquist.
+        Phase-normalized digital critical frequency (not generally -3 dB).
         Example: 0.05 = roughly 20-day period for daily data.
 
     Returns
     -------
     pd.DataFrame
-        Filtered panel, same shape as input. NaN until order bars.
+        Filtered panel, same shape as input. The first ``order`` finite
+        observations are masked. Missing/nonfinite observations freeze the SOS
+        state on an event clock and remain NaN; an observed zero still advances
+        state. Zero initial conditions are retained. Full-history replay is
+        required; a finite warmup is not a checkpoint substitute.
     """
 
     metadata = _meta(
@@ -158,10 +163,10 @@ class BesselLowpassCausal(SeriesOperator):
     def _calculate_series(
         self, x: pd.DataFrame, order: int = 4, cutoff: float = 0.05, **_: Any
     ) -> pd.DataFrame:
-        order = max(1, min(8, int(order)))
-        cutoff = float(np.clip(cutoff, 1e-4, 0.499))
+        order = strict_int(order, name="order", minimum=1, maximum=8)
+        cutoff = strict_float(cutoff, name="cutoff", minimum=1e-4, maximum=0.499)
 
-        b, a = _bessel_coeffs(order, cutoff)
+        sos = _bessel_sos(order, cutoff)
 
         out = pd.DataFrame(np.nan, index=x.index, columns=x.columns, dtype=float)
         for col in x.columns:
@@ -169,12 +174,13 @@ class BesselLowpassCausal(SeriesOperator):
             valid = np.isfinite(series)
             if not valid.any():
                 continue
-            # Filter only finite values
-            filtered = _apply_iir_filter(np.where(valid, series, 0.0), b, a)
-            # Mask out initial transient (order bars) and non-finite inputs
+            # Event-clock freeze: a missing price is not a zero-price event.
+            # Filtering the finite subsequence is exactly the same recurrence
+            # as retaining every SOS state across each missing physical row.
+            filtered = _apply_iir_filter(series[valid], sos)
+            # Warmup counts actual state updates, not missing physical rows.
             filtered[:order] = np.nan
-            filtered[~valid] = np.nan
-            out[col] = filtered
+            out.loc[valid, col] = filtered
         return out
 
 
@@ -208,7 +214,8 @@ class FIRLowpassCausal(SeriesOperator):
     Returns
     -------
     pd.DataFrame
-        Filtered panel, same shape as input. NaN until ntaps bars.
+        Filtered panel, same shape as input. The first valid row is ntaps-1.
+        Any nonfinite input invalidates the full trailing tap support.
     """
 
     metadata = _meta(
@@ -217,7 +224,9 @@ class FIRLowpassCausal(SeriesOperator):
         ["x", "ntaps", "cutoff", "window"],
         unit="price",
         param_specs={
-            "ntaps": ParamSpec(dtype=int, min=3, max=201, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+            "ntaps": ParamSpec(dtype=int, min=3, max=201, choices=tuple(range(3, 202, 2)),
+                               default=21, history_semantics="max_rows",
+                               param_role=ParamRole.ESTIMATOR_RESOLUTION),
             "cutoff": ParamSpec(dtype=float, min=1e-4, max=0.499, param_role=ParamRole.ECONOMIC),
             "window": ParamSpec(dtype=str, choices=("hamming", "hann", "blackman"), param_role=ParamRole.POLICY),
         },
@@ -226,12 +235,13 @@ class FIRLowpassCausal(SeriesOperator):
     def _calculate_series(
         self, x: pd.DataFrame, ntaps: int = 21, cutoff: float = 0.1, window: str = "hamming", **_: Any
     ) -> pd.DataFrame:
-        ntaps = max(3, int(ntaps))
+        ntaps = strict_int(ntaps, "ntaps", minimum=3, maximum=201)
         if ntaps % 2 == 0:
-            ntaps += 1  # Ensure odd for symmetric kernel
-        cutoff = float(np.clip(cutoff, 1e-4, 0.499))
+            raise OperatorParameterError("ntaps must be odd; no implicit tap expansion")
+        cutoff = strict_float(cutoff, "cutoff", minimum=1e-4, maximum=0.499)
+        window = strict_enum(window, "window", ("hamming", "hann", "blackman"))
 
-        h = _fir_lowpass_window(ntaps, cutoff, window=str(window))
+        h = _fir_lowpass_window(ntaps, cutoff, window=window)
 
         out = pd.DataFrame(np.nan, index=x.index, columns=x.columns, dtype=float)
         for col in x.columns:
@@ -240,17 +250,13 @@ class FIRLowpassCausal(SeriesOperator):
             if not valid.any():
                 continue
             if len(series) < ntaps:
-                # A causal FIR needs at least ``ntaps`` trailing samples; a
-                # shorter input (e.g. a prefix slice) cannot produce a valid
-                # output, so it stays all-NaN rather than letting
-                # ``np.convolve(mode='same')`` return a longer array that
-                # breaks the ``filtered[~valid]`` mask.
                 continue
-            # Convolve causally: each output uses trailing ntaps inputs
-            filtered = np.convolve(np.where(valid, series, 0.0), h, mode='same')
-            # Mask initial transient and non-finite inputs
-            filtered[:ntaps] = np.nan
-            filtered[~valid] = np.nan
+            # Full convolution's first N entries are the one-sided FIR: no
+            # centered alignment and no dependence on a future prefix length.
+            filtered = np.convolve(np.where(valid, series, 0.0), h, mode="full")[:len(series)]
+            support = np.convolve(valid.astype(np.int64), np.ones(ntaps, dtype=np.int64),
+                                  mode="full")[:len(series)]
+            filtered[support != ntaps] = np.nan
             out[col] = filtered
         return out
 
@@ -292,16 +298,21 @@ class SpectralLowpassTrailing(SeriesOperator):
         ["x", "window", "cutoff_freq"],
         unit="price",
         param_specs={
-            "window": ParamSpec(dtype=int, min=8, max=512, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+            "window": ParamSpec(dtype=int, min=8, max=512, history_semantics="max_rows",
+                                param_role=ParamRole.ESTIMATOR_RESOLUTION),
             "cutoff_freq": ParamSpec(dtype=int, min=1, max=256, param_role=ParamRole.ECONOMIC),
         },
+        relational_specs=[RelationalParamSpec("cutoff_freq <= window // 2",
+                                              "cutoff_freq exceeds the trailing window's Nyquist bin")],
     )
 
     def _calculate_series(
         self, x: pd.DataFrame, window: int = 64, cutoff_freq: int = 5, **_: Any
     ) -> pd.DataFrame:
-        window = max(8, int(window))
-        cutoff_freq = max(1, min(window // 2, int(cutoff_freq)))
+        window = strict_int(window, "window", minimum=8, maximum=512)
+        cutoff_freq = strict_int(cutoff_freq, "cutoff_freq", minimum=1, maximum=256)
+        if cutoff_freq > window // 2:
+            raise OperatorParameterError("cutoff_freq exceeds the trailing window's Nyquist bin")
 
         out = pd.DataFrame(np.nan, index=x.index, columns=x.columns, dtype=float)
         n = len(x)
@@ -370,18 +381,21 @@ class CausalSavGolEndpoint(SeriesOperator):
         ["x", "window", "polyorder"],
         unit="price",
         param_specs={
-            "window": ParamSpec(dtype=int, min=3, max=101, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+            "window": ParamSpec(dtype=int, min=3, max=101, history_semantics="max_rows",
+                                param_role=ParamRole.ESTIMATOR_RESOLUTION),
             "polyorder": ParamSpec(dtype=int, min=1, max=5, param_role=ParamRole.POLICY),
         },
+        relational_specs=[RelationalParamSpec("polyorder < window",
+                                              "polyorder must be smaller than the trailing window")],
     )
 
     def _calculate_series(
         self, x: pd.DataFrame, window: int = 21, polyorder: int = 2, **_: Any
     ) -> pd.DataFrame:
-        window = max(3, int(window))
-        polyorder = max(1, min(5, int(polyorder)))
+        window = strict_int(window, "window", minimum=3, maximum=101)
+        polyorder = strict_int(polyorder, "polyorder", minimum=1, maximum=5)
         if polyorder >= window:
-            polyorder = window - 1
+            raise OperatorParameterError("polyorder must be smaller than the trailing window")
 
         coeffs = _savgol_coeffs_causal(window, polyorder)
 
@@ -405,7 +419,14 @@ class CausalSavGolEndpoint(SeriesOperator):
 
 
 # ---------------------------------------------------------------------------
-# Polars backend stubs (dual backend contract)
+# Recursive history contract
 # ---------------------------------------------------------------------------
-# Polars implementations would go in cleaned_operators/technical/polars_frequency_filters.py
-# For now, operators are pandas_numpy only; polars backend to be added if needed.
+# The SOS state has unbounded history.  Until the runtime checkpoint adapter
+# owns its per-section state, a finite warmup must never stand in for replay.
+from factor_engine.runtime.execution_contract import declare_stateful
+
+declare_stateful(
+    "ts_bessel_lowpass_causal",
+    state_model="recursive",
+    chunking="required_full_history",
+)

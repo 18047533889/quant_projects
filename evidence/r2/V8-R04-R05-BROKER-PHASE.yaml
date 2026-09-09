@@ -1,0 +1,39 @@
+schema: factor_engine.v8.scoped_fix.v1
+git_sha: 118cd21c6262082336daa545ddc06b6f78def7b9
+date: '2026-09-08'
+target: server-c:/home/sunhaiwei/quant_projects
+issues: [V8-R04, V8-R05]
+status: SCOPED_PASS
+source_files:
+  factor_engine/runtime/resource_broker.py: 03e7a18d02ed02fc9d0a4059e6d4e0044bce5acfa23c034e5f15f98f8d8c8f23
+  factor_engine/runtime/supervised_worker.py: d78f511283a5b81ba684051aab5af14386735b2a41d996e5c5cffee68d152f70
+test_files:
+  factor_engine/tests/runtime/test_v8_resource_wait_fairness.py: c2d4cf9b2f6156d08b710efe1dd8ffdee52817d67f9462c6acd48bd36feb7e38
+  factor_engine/tests/runtime/test_v8_worker_phase_protocol.py: 7d1205154f629655feeaf0cd900c3df74e44307c640bc493b7f6c2b7f2042347
+  factor_engine/tests/r27/test_resource_broker.py: ea073325b5f73da69566cecbf242b46c07ae357854ef5dd93e935bd84f50ced8
+  factor_engine/tests/r38/test_p011_resource_broker_authority.py: 7b64b3c626806cb4c338411290156575ba961bfdf7344828fd146d3c89e9e440
+tests:
+  broader_broker_authority:
+    result: 37 passed
+    report: /tmp/v8-r05-broader.xml
+    report_sha256: 02d5f6e6436e9a6b554ff916d83dfbcdecbbd1e0235e9efa598220b92fa1a9e9
+  focused_phase_fairness:
+    result: 24 passed
+    report: /tmp/v8-r04-r05-focused.xml
+    report_sha256: a7534a24541eb15409cc8e59f981a1bf3c36500eca793a3f82f64b3d4414278e
+  independent_combined:
+    result: 61 passed
+    report: /tmp/v8-root-broker-phase-final.xml
+    report_sha256: 567b636d6b728008fa600f4755aace691c7ce1dd05b94128d844a687cbc59818
+coverage:
+  - strict per-ordinal COMPUTE to WRITE to VERIFY_DONE progress protocol
+  - parent request-dispatch monotonic lower bound and receive-time upper bound
+  - immutable timeout and cancellation phase snapshots
+  - FIFO protected-egress admission with condition revision and lost-wakeup protection
+  - bounded cancellation observation, expired-head pruning, and release notification
+boundaries:
+  - R05 proves broker waiting behavior; durable pipeline cancellation remains an integration property
+  - phase snapshots report observed protocol state, not durable artifact commit authority
+  - stable-budget test fixtures isolate accounting from shared-host live pressure
+  - no claim of native backend ownership release or safe same-PID worker epoch reuse
+commit_push_deploy: false

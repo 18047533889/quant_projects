@@ -170,13 +170,15 @@ def test_first_passage_scale_horizon_in_signature_and_identity():
     assert b20.bound.normalized_values["scale_horizon"] == 20
 
 
-def test_first_passage_unit_mismatch_raw_price_rejected():
-    """unit(scale) == unit(x): a raw price LEVEL with a return-vol scale raises."""
+def test_first_passage_raw_frames_do_not_guess_unit_identity():
+    """Bare research frames have no trustworthy unit identity; runtime allows them."""
     op = _op("ts_first_passage_bias")
     price = np.linspace(100.0, 159.0, 60)
     scale = np.full(60, 0.02)
-    with pytest.raises(ValueError, match="unit mismatch"):
-        op.calculate(_frame(price), _frame(scale), window=40, barrier=1.0, horizon=5, min_anchors=3)
+    result = op.calculate(
+        _frame(price), _frame(scale), window=40, barrier=1.0, horizon=5, min_anchors=3
+    )
+    assert result.shape == (60, 1)
 
 
 # ---------------------------------------------------------------------------

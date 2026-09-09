@@ -1,0 +1,31 @@
+schema: factor_engine.v8.scoped_fix.v1
+git_sha: 118cd21c6262082336daa545ddc06b6f78def7b9
+date: '2026-09-08'
+target: server-c:/home/sunhaiwei/quant_projects
+issue: V8-R02
+status: PARTIAL_FOUNDATION_PASS
+files:
+  factor_engine/runtime/resource_broker_ipc.py: de99f7b4957e91c689f0823a7a9c47862e130efe22ec509b4b61024b8d59711a
+  factor_engine/tests/runtime/test_v8_broker_epoch_protocol.py: 55b749ab5b03f3ed69761dc65941efbe8c745e3d965d4b680457679908fd4ad0
+implementation:
+  - parent-generated epoch identity and capability fence each opted-in client epoch
+  - every parent-owned lease token is tagged with its client epoch
+  - end_epoch refuses outstanding epoch leases and returns an HMAC-authenticated exact-zero receipt
+  - receipt verification rejects malformed types, Unicode, noncanonical hex, and nonpositive sequences
+  - legacy clients remain compatible but cannot receive epoch certification
+  - process-exit reclaim clears leases and active epoch without issuing a zero receipt
+tests:
+  result: 34 passed
+  report: /tmp/v8-r02-broker-epoch.xml
+  report_sha256: 6596cccd440b0ec1dd228243bfadd906f242e36d3fddba34576a576d1316a188
+  suites:
+    - factor_engine/tests/runtime/test_v8_broker_epoch_protocol.py
+    - factor_engine/tests/r27/test_resource_broker_ipc.py
+    - factor_engine/tests/runtime/test_v8_broker_ipc_quotas.py
+boundaries:
+  - receipt proves only historical broker-ledger exact zero for the named epoch
+  - receipt does not prove current client state, engine close, native allocator release, or process RSS release
+  - no pipeline or SpawnFactoryRuntime integration is included
+  - no backend, including Polars, is admitted for safe same-PID reuse
+  - safe reuse still requires explicit engine/backend close receipts and capability-gated native ownership proof
+commit_push_deploy: false

@@ -302,6 +302,12 @@ def _derive_contracts() -> None:
             "panel_params": tuple(catalog.get("panel_params") or ()),
             "scalar_params": tuple(catalog.get("scalar_params") or ()),
             "param_aliases": dict(catalog.get("param_aliases") or {}),
+            "distinct_input_groups": tuple(
+                tuple(group) for group in (catalog.get("distinct_input_groups") or ())
+            ),
+            "same_unit_input_groups": tuple(
+                tuple(group) for group in (catalog.get("same_unit_input_groups") or ())
+            ),
             "input_units": dict(catalog.get("input_units") or {}),
             "output_unit": catalog.get("output_unit"),
             "input_grain": catalog.get("input_grain"),

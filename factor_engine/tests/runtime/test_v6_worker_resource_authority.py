@@ -65,6 +65,12 @@ def test_real_prepared_read_charges_and_releases_parent_broker(tmp_path):
         hard_memory_limit=1024**3, safety_factor=0.8,
         min_host_reserve_gb=0, min_host_reserve_fraction=0,
     )
+    from factor_engine.runtime.auto_memory_budget import AutoMemoryBudget
+    parent._refresh_auto_budget = lambda: AutoMemoryBudget(
+        hard_memory_limit=1024**3, emergency_reserve=0,
+        safe_live_budget=128 * 1024**2, execution_budget=128 * 1024**2,
+        safety_factor=.8, measurement_state="TEST_INJECTED",
+    )
     ipc = ParentBrokerIPC(parent)
     proxy = ipc.create_proxy()
     coordinator = HostResourceCoordinator(broker=proxy)

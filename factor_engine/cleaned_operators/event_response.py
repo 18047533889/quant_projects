@@ -141,22 +141,45 @@ def _aligned(rv: np.ndarray, ev: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     return rv[ok], ev[ok]
 
 
-def _collapse_events(event_times: np.ndarray, refractory: int) -> np.ndarray:
+def _collapse_events(
+    event_times: np.ndarray,
+    refractory: int,
+    observed: np.ndarray | None = None,
+) -> np.ndarray:
     """First-event-of-episode collapse (P1, round 7).
 
     Consecutive events separated by fewer than ``refractory`` bars belong to one
     episode — 5 consecutive limit-ups must not count as 5 independent overlapping
     response paths.  Returns only the FIRST event of each episode.
     """
+    firsts, _ = _episode_firsts_and_unknown(event_times, refractory, observed)
+    return firsts
+
+
+def _episode_firsts_and_unknown(
+    event_times: np.ndarray,
+    refractory: int,
+    observed: np.ndarray | None = None,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Return proven episode starts and starts made unknowable by missing rows."""
     if refractory < 1 or event_times.size == 0:
-        return event_times
+        return event_times, np.asarray([], dtype=int)
     firsts: list[int] = []
+    unknown: list[int] = []
     prev = -10**9
     for s in event_times:
         if s - prev >= refractory:
-            firsts.append(int(s))
+            # Unknown event coverage cannot prove that ``s`` is the first event
+            # of an episode: a hidden event in the preceding refractory span
+            # could make it a continuation.  Restrict this check to the local
+            # predecessor span so one old NaN does not poison later episodes.
+            pred_lo = max(0, int(s) - refractory + 1)
+            if observed is None or np.all(observed[pred_lo:int(s)]):
+                firsts.append(int(s))
+            else:
+                unknown.append(int(s))
         prev = int(s)
-    return np.asarray(firsts, dtype=int)
+    return np.asarray(firsts, dtype=int), np.asarray(unknown, dtype=int)
 
 
 def _event_episode_metrics_series(
@@ -175,17 +198,32 @@ def _event_episode_metrics_series(
     refr = _strict_refractory(refractory)
     eff = np.full(n, np.nan)
     ovr = np.full(n, np.nan)
+    observed = np.isfinite(event)
     times = np.flatnonzero(np.isfinite(event) & (event != 0.0))
+    # Episode identity must be established before cohort filtering.  Otherwise
+    # an event just inside ``lo`` is incorrectly reinvented as an episode first
+    # when its preceding event lies just outside the rolling cohort.
+    episode_firsts, uncertain_firsts = _episode_firsts_and_unknown(
+        times, refr, observed=observed
+    )
     for t in range(n):
         lo = max(0, t - hw)
         last_event = t - H
         if last_event < lo:
             continue
+        # The raw denominator is unknowable if any row in the cohort has
+        # missing event coverage.  NaN is not a no-event observation.
+        if not np.all(observed[lo : last_event + 1]):
+            continue
+        if np.any((uncertain_firsts >= lo) & (uncertain_firsts <= last_event)):
+            continue
         ev = times[(times >= lo) & (times <= last_event)]
         if ev.size < 1:
             continue
         raw = int(ev.size)
-        firsts = _collapse_events(ev, refr) if refr > 0 else ev
+        firsts = episode_firsts[
+            (episode_firsts >= lo) & (episode_firsts <= last_event)
+        ]
         eff[t] = int(firsts.size)
         ovr[t] = 1.0 - firsts.size / raw
     return eff, ovr
@@ -208,18 +246,19 @@ def _horizon_response(
     me = _strict_min_events(min_events)
     refr = _strict_refractory(refractory)
     out = np.full(n, np.nan)
+    observed = np.isfinite(event)
     times = np.flatnonzero(np.isfinite(event) & (event != 0.0))
+    episode_firsts = (
+        _collapse_events(times, refr, observed=observed) if refr > 0 else times
+    )
     for t in range(n):
         lo = max(0, t - hw)
         last_event = t - H                 # need s + H <= t
         if last_event < lo:
             continue
-        ev = times[(times >= lo) & (times <= last_event)]
-        # P1 (round 7): episode collapse — consecutive events within
-        # ``refractory`` bars are one episode; only the first event's response
-        # path enters, so 5 consecutive limit-ups do not count 5 times.
-        if refr > 0:
-            ev = _collapse_events(ev, refr)
+        ev = episode_firsts[
+            (episode_firsts >= lo) & (episode_firsts <= last_event)
+        ]
         rs: list[float] = []
         for s in ev:
             window_vals = response[s + 1 : s + H + 1]
@@ -533,15 +572,19 @@ def _response_curve_stats_series(
     decay = np.full(n, np.nan)
     dispersion = np.full(n, np.nan)
     reversal = np.full(n, np.nan)
+    observed = np.isfinite(event)
     times = np.flatnonzero(np.isfinite(event) & (event != 0.0))
+    episode_firsts = (
+        _collapse_events(times, refr, observed=observed) if refr > 0 else times
+    )
     for t in range(n):
         lo = max(0, t - hw)
         last_event = t - H
         if last_event < lo:
             continue
-        ev = times[(times >= lo) & (times <= last_event)]
-        if refr > 0:
-            ev = _collapse_events(ev, refr)
+        ev = episode_firsts[
+            (episode_firsts >= lo) & (episode_firsts <= last_event)
+        ]
         curves: list[np.ndarray] = []
         totals: list[float] = []
         for s in ev:
@@ -560,8 +603,13 @@ def _response_curve_stats_series(
             half = max(1, H // 2)
             early = float(np.mean(m[:half])) if half > 0 else 0.0
             late = float(np.mean(m[half:])) if H - half > 0 else 0.0
-            if early * late < 0.0:
-                reversal[t] = float((late - early) / scale_curve)
+            # A non-degenerate, fully observed curve with two defined halves
+            # has reversal strength zero unless its halves actually change
+            # sign.  Keep H=1 undefined: it has no late half to compare.
+            if H - half > 0 and np.isfinite(early) and np.isfinite(late):
+                reversal[t] = 0.0
+                if early * late < 0.0:
+                    reversal[t] = float((late - early) / scale_curve)
             # decay via OLS of log(|m|+eps) on lag index
             y = np.log(np.abs(m) + _EPS)
             xs = np.arange(1.0, H + 1.0)

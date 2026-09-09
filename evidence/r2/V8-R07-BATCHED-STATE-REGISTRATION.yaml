@@ -1,0 +1,34 @@
+schema: factor_engine.v8.evidence.v1
+git_sha: 118cd21c6262082336daa545ddc06b6f78def7b9
+timestamp: '2026-09-09T00:53:00+08:00'
+status: PIPELINE_WIRING_MERGED_SCOPED_GREEN
+files:
+  factor_engine/runtime/persistent_run_state.py: 51ae47bfd2c99759d1e3670f2762b6f57780024f5436625f3b696b6d5e585380
+  factor_engine/runtime/bounded_pipeline.py: 975b2de2cdd0a27b4ffc0f78b8ed16d5b3f61ad3caf789e26e868a0fc6b48783
+  factor_engine/tests/runtime/test_v8_batched_state_registration.py: expanded
+changes:
+  - Pipeline streams initial outcome registration through transactions of at most512 records.
+  - Single and batched registration share exact ordinal/name binding checks and INSERT OR IGNORE semantics.
+  - Never update or reset existing attempt, terminal, error or artifact fields.
+  - Commit each completed page; roll back only failing current page; no whole-input list.
+tests:
+  red: '7 failed before new API; existing single-record probe exposed1000 commits for1000 records'
+  red_xml: /tmp/v8-registration-batch-red.xml
+  state_and_catalog: '46 passed in0.64s'
+  independent_review: 'v8_protocol source review and61 related tests passed'
+  strengthened: '10 passed; iterator and SQLite mid-page failures both roll back page and leave connection usable'
+  strengthened_xml: /tmp/v8-state-batch-ten.xml
+  pipeline_related: '49 passed,71 warnings in107.63s'
+  pipeline_xml: /tmp/v8-state-batch-pipeline-merged.xml
+synthetic_probe:
+  factors: 1000
+  single_record_commits: 1000
+  batched_commits: 2
+  single_record_seconds: 0.923480888013728
+  batched_seconds: 0.006628160015679896
+  boundary: one small control-plane comparison, not repeated statistical benchmark or end-to-end100k factor performance
+limitations:
+  - Caller-provided iterator must be finite; pipeline supplies its already-ingested SQLite manifest iterator.
+  - This does not change source factor ingestion or eliminate native/backend initialization overhead.
+  - Earlier610-pass/wheel checkpoint predates this change; next merged checkpoint required.
+  - Real-data/native/GPU/100k/performance and production acceptance NOT_RUN.

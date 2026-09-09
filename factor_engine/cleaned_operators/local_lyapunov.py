@@ -38,7 +38,10 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from factor_engine.cleaned_operators.base import OperatorMetadata, ParamRole, ParamSpec, SeriesOperator, register_operator
+from factor_engine.cleaned_operators.base import (
+    OperatorMetadata, ParamRole, ParamSpec, RelationalParamSpec,
+    SeriesOperator, register_operator,
+)
 from factor_engine.cleaned_operators.closure.strict_scalar import strict_bool, strict_int
 from factor_engine.cleaned_operators.rolling_pack import frame_like
 
@@ -70,6 +73,43 @@ def _embedding_matrix(series: np.ndarray, tau: int, dim: int) -> np.ndarray:
     return X
 
 
+def _embedding_geometry(
+    chunk: np.ndarray,
+    tau: int,
+    dim: int,
+    *,
+    physical_time: bool,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Return embedding rows and their true final-coordinate bar positions.
+
+    Physical mode constructs ``u_t`` on the original bar axis and rejects a row
+    if any required lag coordinate is missing.  Compressed mode deliberately
+    embeds the finite subsequence, but its rows are still labelled by the true
+    time of their final coordinate for Theiler exclusion.
+    """
+    span = (dim - 1) * tau
+    if physical_time:
+        vectors: list[np.ndarray] = []
+        anchors: list[int] = []
+        offsets = np.arange(dim - 1, -1, -1) * tau
+        for anchor in range(span, int(chunk.shape[0])):
+            values = chunk[anchor - offsets]
+            if np.all(np.isfinite(values)):
+                vectors.append(np.asarray(values, dtype=float))
+                anchors.append(anchor)
+        if not vectors:
+            return np.empty((0, dim), dtype=float), np.empty(0, dtype=int)
+        return np.stack(vectors), np.asarray(anchors, dtype=int)
+
+    finite = np.isfinite(chunk)
+    values = np.asarray(chunk[finite], dtype=float)
+    physical_positions = np.flatnonzero(finite)
+    embedded = _embedding_matrix(values, tau, dim)
+    if embedded.shape[0] == 0:
+        return embedded, np.empty(0, dtype=int)
+    return embedded, physical_positions[span:]
+
+
 def _physical_divergence(
     Z: np.ndarray,
     phys: np.ndarray,
@@ -87,34 +127,25 @@ def _physical_divergence(
     longer advance in lockstep.  This path scans ``k`` PHYSICAL bars forward
     from each trajectory's anchor position, so the k-th successor of anchor
     ``i`` (physical position ``phys[i]``) and neighbour ``j`` (physical position
-    ``phys[j]``) is the surviving embedded point whose anchor sits exactly
-    ``k`` physical bars later — the physical index advances even across dropped
-    rows.  A physical bar with no surviving point yields NaN for that ``k``.
-    Returns None when no ``k`` in ``1..horizon`` has a finite successor on both
-    trajectories (nothing to regress).
+    ``phys[j]``) is the embedded point whose anchor sits exactly ``k`` physical
+    bars later.  The whole ``0..horizon`` trajectory must exist; partial curves
+    are ineligible rather than silently changing the regression support.
     """
     H = int(horizon)
     div = np.full(H + 1, np.nan)
     div[0] = 0.0
-    # Map physical position -> compressed embedded index.  Only rows ``m < z_len``
-    # are valid anchors/successors (the trailing ``span`` physical positions have
-    # no complete future window).
     pos_to_idx = {int(phys[m]): m for m in range(z_len)}
     p = int(phys[i])
     q = int(phys[j])
-    found = 0
     for k in range(1, H + 1):
         ip = pos_to_idx.get(p + k)
         iq = pos_to_idx.get(q + k)
         if ip is None or iq is None:
-            continue
+            return None
         dk = float(np.sqrt(np.sum((Z[ip] - Z[iq]) ** 2)))
-        if not np.isfinite(dk) or dk <= _EPS:
-            continue
+        if not np.isfinite(dk):
+            return None
         div[k] = np.log(dk + _EPS) - np.log(d0j + _EPS)
-        found += 1
-    if found == 0:
-        return None
     return div
 
 
@@ -132,10 +163,11 @@ def _lyapunov_series(
     # value is a contract violation, never a value to silently coerce.  ``dim``
     # is kept in [2, 6] (the documented embedding contract).
     w = strict_int(window, "window", lower=2)
-    th = dim * strict_int(tau, "tau", lower=1)
+    tau = strict_int(tau, "tau", lower=1)
     H = strict_int(horizon, "horizon", lower=1)
     ma = strict_int(min_anchors, "min_anchors", lower=1)
     dim = strict_int(dim, "embedding_dim", lower=2, upper=6)
+    th = dim * tau
     out = np.full(n, np.nan)
     for t in range(n):
         lo = max(0, t - w + 1)
@@ -148,12 +180,9 @@ def _lyapunov_series(
         # "yesterday" factor leaking onto today.
         if not np.isfinite(series[t]):
             continue
-        finite = np.isfinite(chunk)
-        f = chunk[finite]
-        # phys[k] = the ORIGINAL (within-window) time position of the k-th
-        # surviving finite point.  Used below for real-time Theiler exclusion.
-        phys = np.nonzero(finite)[0]
-        X = _embedding_matrix(f, tau, dim)
+        X, anchor_times = _embedding_geometry(
+            chunk, tau, dim, physical_time=physical_time
+        )
         if X.shape[0] < 2:
             continue
         # Robust-normalise each embedding dimension over the finite window.
@@ -164,36 +193,45 @@ def _lyapunov_series(
             continue
         Z = (X - med) / scale
         z_len = Z.shape[0]
-        m_f = int(f.shape[0])
-        # Anchors must fit [i, i+H] inside the embedded finite window end.
-        last_anchor = m_f - 1 - H
-        if last_anchor < 1:
-            continue
-        if z_len < last_anchor + 1:
+        if physical_time:
+            position_to_index = {
+                int(position): index for index, position in enumerate(anchor_times)
+            }
+            eligible = np.asarray(
+                [
+                    i for i, position in enumerate(anchor_times)
+                    if all(int(position) + k in position_to_index for k in range(H + 1))
+                ],
+                dtype=int,
+            )
+        else:
+            # Compressed ordinal successors advance embedding-row indices.  The
+            # upper bound is based on z_len, never the pre-embedding finite count.
+            eligible = np.arange(max(0, z_len - H), dtype=int)
+        if eligible.size < 2:
             continue
         logs: list[np.ndarray] = []
-        n_anchors = 0
-        for i in range(last_anchor + 1):
-            d0 = np.sqrt(np.sum((Z - Z[i]) ** 2, axis=1))
-            d0[i] = np.inf
-            # R14 P1/P2 (Theiler in PHYSICAL time): after NaN rows are dropped,
-            # the compressed ordinal ``abs(j - i)`` no longer measures real time.
-            # Two points adjacent in the compressed index can be far apart in
-            # physical time (and vice versa).  Use the original positions of the
-            # surviving points so a NaN gap neither re-pairs temporal neighbours
-            # nor splits a physically-distant pair.
-            theiler = np.abs(phys[:z_len] - phys[i]) <= th
+        for i in eligible:
+            # Candidate eligibility is established BEFORE nearest-neighbour
+            # selection.  An incomplete nearest trajectory must not hide a
+            # slightly farther neighbour with a complete horizon.
+            d0 = np.full(z_len, np.inf, dtype=float)
+            d0[eligible] = np.sqrt(np.sum((Z[eligible] - Z[i]) ** 2, axis=1))
+            theiler = np.abs(anchor_times - anchor_times[i]) <= th
             d0[theiler] = np.inf
+            # Exact/near duplicate initial states do not define a usable local
+            # separation.  Exclude them before argmin so they cannot hide the
+            # next positive-distance complete trajectory.
+            d0[~np.isfinite(d0)] = np.inf
+            d0[d0 <= _EPS] = np.inf
             j = int(np.argmin(d0))
-            if not np.isfinite(d0[j]) or d0[j] <= _EPS:
+            if not np.isfinite(d0[j]):
                 continue
             d0j = float(d0[j])
             if physical_time:
-                # M-150: physical-clock divergence horizon.  The k-th successor
-                # is found by scanning k PHYSICAL bars forward from each
-                # trajectory's anchor position; a NaN row advances the physical
-                # index but contributes no successor point (NaN for that k).
-                div = _physical_divergence(Z, phys, z_len, i, j, H, d0j)
+                div = _physical_divergence(
+                    Z, anchor_times, z_len, i, j, H, d0j
+                )
                 if div is None:
                     continue
             else:
@@ -206,36 +244,22 @@ def _lyapunov_series(
                 div = np.zeros(H + 1)
                 for k in range(H + 1):
                     dk = float(np.sqrt(np.sum((Z[i + k] - Z[j + k]) ** 2)))
+                    if not np.isfinite(dk):
+                        div = None
+                        break
                     div[k] = np.log(dk + _EPS) - np.log(d0j + _EPS)
+                if div is None:
+                    continue
             logs.append(div)
-            n_anchors += 1
-        if n_anchors < ma:
+        if len(logs) < ma:
             continue
         Lstack = np.stack(logs)
-        if physical_time:
-            # M-150: physical-time path — some k steps may be unavailable for a
-            # given anchor (no surviving point at that physical offset), so the
-            # mean curve and the least-squares slope use only the k's with a
-            # finite mean over anchors.  The regressor IS physical elapsed bars:
-            # each k = exactly k physical bars forward from the anchor.
-            L = np.nanmean(Lstack, axis=0)
-            ks = np.arange(H + 1, dtype=float)
-            ok = np.isfinite(L)
-            if int(ok.sum()) < 2:
-                continue
-            kk = ks[ok]
-            LL = L[ok]
-            var_k = float(np.sum((kk - kk.mean()) ** 2))
-            if var_k <= _EPS:
-                continue
-            lam = float(np.sum((kk - kk.mean()) * (LL - LL.mean())) / var_k)
-        else:
-            L = np.mean(Lstack, axis=0)
-            ks = np.arange(H + 1, dtype=float)
-            var_k = float(np.sum((ks - ks.mean()) ** 2))
-            if var_k <= _EPS:
-                continue
-            lam = float(np.sum((ks - ks.mean()) * (L - L.mean())) / var_k)
+        L = np.mean(Lstack, axis=0)
+        ks = np.arange(H + 1, dtype=float)
+        var_k = float(np.sum((ks - ks.mean()) ** 2))
+        if var_k <= _EPS:
+            continue
+        lam = float(np.sum((ks - ks.mean()) * (L - L.mean())) / var_k)
         out[t] = lam
     return out
 
@@ -282,6 +306,20 @@ class TsLocalLyapunovExponent(SeriesOperator):
         "min_anchors": ParamSpec(dtype=int, min=1, searchable=False, param_role=ParamRole.SUPPORT_POLICY),
         "physical_time": ParamSpec(dtype=bool, default=False, searchable=False, param_role=ParamRole.POLICY),
     }
+    metadata.relational_specs = [
+        RelationalParamSpec(
+            "horizon + (2 * embedding_dim - 1) * tau + 2 <= window",
+            "window must contain two complete trajectories separated by the "
+            "Theiler interval; got window={window}, tau={tau}, "
+            "embedding_dim={embedding_dim}, horizon={horizon}",
+        ),
+        RelationalParamSpec(
+            "min_anchors <= window - (embedding_dim - 1) * tau - horizon",
+            "min_anchors exceeds the maximum complete embedding anchors in the "
+            "window; got min_anchors={min_anchors}, window={window}, tau={tau}, "
+            "embedding_dim={embedding_dim}, horizon={horizon}",
+        ),
+    ]
 
     def _calculate_series(
         self,

@@ -65,17 +65,14 @@ def _get(canonical: str):
 # ---------------------------------------------------------------------------
 
 def test_m150_physical_divergence_k_spans_physical_bars():
-    """The physical path's k-th successor sits exactly k PHYSICAL bars later.
+    """A physical trajectory is ineligible if any exact-bar successor is absent.
 
     Window chunk with an interior NaN at physical offset 2: surviving points sit
     at physical offsets [0,1,3,4,5,6,7].  Anchor 0 (offset 0) / neighbour 1
     (offset 1):
-      * physical step 1 -> anchor offset 1 (ok), neighbour offset 2 (missing) -> NaN
-      * physical step 2 -> anchor offset 2 (missing) -> NaN
-      * physical step 3 -> anchor offset 3 (index 2), neighbour offset 4 (index 3)
-        -> finite, and the regressed distance is against the true physical 3-bar
-        forward positions, NOT compressed steps (which would have paired offsets
-        1 and 2 at step 1).
+      * physical step 1 -> anchor offset 1 (ok), neighbour offset 2 (missing)
+      * therefore the pair is rejected as a whole; later isolated successors do
+        not create a partial regression curve with changing support.
     """
     from factor_engine.cleaned_operators.local_lyapunov import _physical_divergence
 
@@ -89,17 +86,7 @@ def test_m150_physical_divergence_k_spans_physical_bars():
     assert phys[:z_len].tolist() == [0, 1, 3, 4, 5, 6]
     d0j = float(np.sqrt(np.sum((Z[0] - Z[1]) ** 2)))
     div = _physical_divergence(Z, phys, z_len, 0, 1, 3, d0j)
-    assert div is not None
-    assert div[0] == pytest.approx(0.0)
-    # physical bar 1: neighbour offset 1+1=2 is NaN (no surviving point) -> NaN.
-    assert np.isnan(div[1])
-    # physical bar 2: anchor offset 0+2=2 is NaN -> NaN.
-    assert np.isnan(div[2])
-    # physical bar 3: anchor 0+3=3 (idx 2), neighbour 1+3=4 (idx 3) -> finite and
-    # exactly the 3-physical-bar distance (NOT a compressed-step-3 pairing).
-    assert np.isfinite(div[3])
-    expect = np.log(np.sqrt(np.sum((Z[2] - Z[3]) ** 2)) + 1e-12) - np.log(d0j + 1e-12)
-    assert div[3] == pytest.approx(expect)
+    assert div is None
 
 
 def test_m150_compressed_and_physical_differ_on_gapped_series():
@@ -124,15 +111,15 @@ def test_m150_compressed_and_physical_differ_on_gapped_series():
 
 
 def test_m150_physical_path_default_is_compressed():
-    """``physical_time`` defaults to False (compressed path preserved); the
-    compressed path still emits on the physical-Theiler fixture (R14)."""
+    """``physical_time`` defaults to False and matches the explicit policy."""
     from factor_engine.cleaned_operators.local_lyapunov import _lyapunov_series
 
-    x = np.array([1.0, np.nan, np.nan, 2.0, 3.0, 5.0])
-    out = _lyapunov_series(x, 6, 1, 2, 1, 1, physical_time=False)
-    assert np.isfinite(out[-1])  # physical-Theiler neighbour survives
-    out2 = _lyapunov_series(x, 6, 1, 2, 1, 1, physical_time=True)
-    assert isinstance(out2, np.ndarray)
+    x = np.random.default_rng(150).normal(size=40).cumsum()
+    x[17] = np.nan
+    implicit = _lyapunov_series(x, 24, 1, 2, 2, 1)
+    explicit = _lyapunov_series(x, 24, 1, 2, 2, 1, physical_time=False)
+    np.testing.assert_array_equal(implicit, explicit)
+    assert np.isfinite(explicit).any()
 
 
 def test_m150_operator_accepts_physical_time_flag():

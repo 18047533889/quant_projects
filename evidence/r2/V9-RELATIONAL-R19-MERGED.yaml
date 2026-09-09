@@ -1,0 +1,32 @@
+schema: v9-scoped-verification-1
+timestamp: '2026-09-09'
+git_sha: 118cd21c6262082336daa545ddc06b6f78def7b9
+workspace: /home/sunhaiwei/quant_projects
+scope: M33/M36 canonical relational export and R19 parameter authority alignment
+files:
+  factor_engine/cleaned_operators/registry.py: 2dad4938a702dff291d553c14bb43724b3d5250c90b3d512f553c2fa8e4159e2
+  factor_engine/backend/parameter_aliases.py: 44fc5f53be9a38733fa6aa8cf3089d96926eafd6744ca19f31176af41588eb2c
+  factor_engine/tests/operators/test_v9_m33_m36_relational_export.py: 537b730aad8a6766a7b08334a1e47606393bb94f14788aef5c83f041e375757a
+  factor_engine/tests/operators/test_r19_param_single_authority.py: c386659ee1a90bf4361c3b8e714220b9079c6c3fc724e30814266aa50ba2fa9e
+review:
+  - Relational conflicts rejected before backend publication; first nonempty authority backfills empty adapters regardless of startup order.
+  - Isolated subprocess tests verify source identity and unchanged registry/catalog/version after rejected registration.
+  - Metadata-backed ts_median and ts_zscore removed only from compat-only marker; actual planning fallback aliases preserved.
+  - Stale R19 tests updated for search-equivalence-v1 and strict integer rejection, without weakening implementation gates.
+tests:
+  actual_main:
+    command: PYTHONPATH=/home/sunhaiwei/quant_projects .venv/bin/python -m pytest -q factor_engine/tests/operators/test_v9_m33_m36_relational_export.py factor_engine/tests/operators/test_r19_param_single_authority.py --junitxml=evidence/r2/v9-relational-r19-main.xml
+    passed: 22
+    failed: 0
+    warnings: 3
+    seconds: 81.78
+  stage_bootstrap_comparison:
+    canonicals: 1756
+    backend_bindings: 4072
+    missing_or_added_names_and_bindings: []
+limitations:
+  - Scoped synthetic verification, not full repository or backend numerical certification.
+  - Warnings mark unsupported synthetic Polars implementations; no production eligibility relaxed.
+  - M11-C runtime transport and durability remain staged, not merged.
+  - Full compile/import, full backend parity, CI and production gates NOT_RUN for this checkpoint.
+  - No GitHub operations, commit, deployment, publication, or production-data changes.

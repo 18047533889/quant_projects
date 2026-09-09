@@ -1,0 +1,37 @@
+schema: factor_engine.v8.evidence.v1
+status: SCOPED_PASS
+git_sha: 118cd21c6262082336daa545ddc06b6f78def7b9
+date: '2026-09-08'
+target: server-c:/home/sunhaiwei/quant_projects
+issue: V8-R07
+finding: timed-out ingestion child could remain live while parent reopened its SQLite database
+files:
+  - factor_engine/runtime/finite_manifest.py
+  - factor_engine/tests/runtime/test_v8_manifest_retirement.py
+source_sha256: a92da77cf9815a57adcb6ae0a5792329f1e5ac315488879ccfa63bc778ca8ac4
+independent_review: v8_data; added partial-Popen/pid-None fault and exact quarantine process retention assertion
+changes:
+  - finite positive deadline validation before creating processes
+  - terminate then kill with finite OS-exit observation before database reopening
+  - uncertain exit or partially failed OS spawn quarantines without touching database
+  - finally closes both pipe endpoints and observed-dead Process descriptor
+  - child error control reply bounded to 2KiB UTF8 to avoid join-before-receive pipe blockage
+tests:
+  red: '6 failed, fake unproven retirement and invalid deadlines'
+  red_xml: /tmp/v8-manifest-retire-red.xml
+  intermediate: '27 passed, 41 warnings including existing v6 pipeline before final ambiguous-spawn hardening'
+  intermediate_xml: /tmp/v8-manifest-retire-green.xml
+  resume_integration: '45 passed, 1 warning in 2.53s before extra partial-Popen case'
+  resume_integration_xml: /tmp/v8-root-manifest-resume.xml
+  final: '81 passed, 26 warnings in 13.54s: retirement9 + supervisor compatibility/phase/ownership72'
+  final_xml: /tmp/v8-root-worker-manifest-integration.xml
+  final_added_transport_test: '10 passed, 2 warnings in 1.67s, including huge Unicode error reply'
+  final_added_transport_xml: /tmp/v8-manifest-retire-final.xml
+  real_process: SIGTERM-ignoring iterator force-killed; PID gone before parent returns incomplete1-factor manifest
+limitations:
+  - failed retirement is simulated; no actual unkillable OS process was created
+  - input serialization/startup itself not proven killable by these tests
+  - no worker ownership journal/pending resume integration in this change
+  - full merged runtime regression and isolated wheel will run after scheduler freeze
+  - real data, GPU, native parity, 100k and remote CI NOT_RUN
+github_commit_push_deploy: false

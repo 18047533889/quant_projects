@@ -150,7 +150,7 @@ def kalman_stateful_contract(canonical: str) -> dict[str, Any]:
     """
     return {
         "stateful": True,
-        "state_schema_version": f"{canonical}.v1",
+        "state_schema_version": f"{canonical}.v2",
         "checkpointable": False,
         "time_shard_safe": False,          # filter state spans the whole prefix
         "restore_strategy": "full_replay", # no checkpoint authority in the runtime
@@ -201,6 +201,31 @@ def _finite_variance(vals: np.ndarray) -> float | None:
     if finite.size < 2:
         return None
     return float(np.var(finite))
+
+
+class _OnlineMoments:
+    """Stable prefix population moments; missing observations do not advance it."""
+
+    __slots__ = ("count", "mean", "m2")
+
+    def __init__(self) -> None:
+        self.count = 0
+        self.mean = 0.0
+        self.m2 = 0.0
+
+    def update(self, value: float) -> float | None:
+        if np.isfinite(value):
+            self.count += 1
+            delta = float(value) - self.mean
+            self.mean += delta / self.count
+            self.m2 += delta * (float(value) - self.mean)
+        return self.variance
+
+    @property
+    def variance(self) -> float | None:
+        if self.count < 2 or not np.isfinite(self.m2) or self.m2 <= 0.0:
+            return None
+        return self.m2 / self.count
 
 
 def _apply_scale(
@@ -349,10 +374,7 @@ def _kalman_level(vals: np.ndarray, q: float, r: float, out_stat: str,
     # Dimensionless mode: incremental variance computation (PIT-safe).
     use_incremental_scale = (scale_mode == "dimensionless")
     if use_incremental_scale:
-        # Running statistics for incremental variance: sum, sum-of-squares, count
-        running_sum = 0.0
-        running_sumsq = 0.0
-        running_count = 0
+        moments = _OnlineMoments()
         # q_base and r_base are the dimensionless ratios (user-supplied q/r)
         q_base = float(q)
         r_base = float(r)
@@ -382,51 +404,15 @@ def _kalman_level(vals: np.ndarray, q: float, r: float, out_stat: str,
         x = vals[t]
 
         # Dimensionless mode: update incremental variance with each finite observation
-        if use_incremental_scale and np.isfinite(x):
-            running_sum += x
-            running_sumsq += x * x
-            running_count += 1
-            # Compute variance from the prefix vals[:t+1]
-            if running_count >= 2:
-                mean_t = running_sum / running_count
-                var_t = (running_sumsq / running_count) - (mean_t * mean_t)
-                if var_t > 0.0:
-                    # Scale q and r by the incremental variance
-                    q_eff = q_base * var_t
-                    r_eff = r_base * var_t
-                else:
-                    # Degenerate case: variance is zero or negative (numeric noise)
-                    # Emit NaN for this row (fail closed)
-                    mu[t] = np.nan
-                    p[t] = np.nan
-                    innov_z[t] = np.nan
-                    continue
-            else:
-                # Fewer than 2 finite observations: no meaningful variance yet
-                # Emit NaN (fail closed, never fabricate)
+        if use_incremental_scale:
+            var_t = moments.update(x)
+            if var_t is None:
                 mu[t] = np.nan
                 p[t] = np.nan
                 innov_z[t] = np.nan
                 continue
-        elif use_incremental_scale:
-            # Missing observation in dimensionless mode: can't update variance
-            # but can propagate the filter state if already initialized
-            if np.isfinite(mu_prev) and running_count >= 2:
-                mean_t = running_sum / running_count
-                var_t = (running_sumsq / running_count) - (mean_t * mean_t)
-                if var_t > 0.0:
-                    q_eff = q_base * var_t
-                    r_eff = r_base * var_t
-                else:
-                    mu[t] = np.nan
-                    p[t] = np.nan
-                    innov_z[t] = np.nan
-                    continue
-            else:
-                mu[t] = np.nan
-                p[t] = np.nan
-                innov_z[t] = np.nan
-                continue
+            q_eff = q_base * var_t
+            r_eff = r_base * var_t
         else:
             # Absolute mode: q and r are fixed
             q_eff = q_abs
@@ -495,9 +481,7 @@ def _kalman_trend_slope(vals: np.ndarray, q_level: float, q_trend: float, r: flo
     use_incremental_scale = (scale_mode == "dimensionless")
 
     if use_incremental_scale:
-        running_sum = 0.0
-        running_sumsq = 0.0
-        running_count = 0
+        moments = _OnlineMoments()
         q_level_base = float(q_level)
         q_trend_base = float(q_trend)
         r_base = float(r)
@@ -515,43 +499,21 @@ def _kalman_trend_slope(vals: np.ndarray, q_level: float, q_trend: float, r: flo
     slope = np.full(n, np.nan, dtype=float)
     level = np.nan
     trend = 0.0
+    # Legacy absolute covariance is the rank-one [[1, 1], [1, 1]] matrix.
     p11 = p12 = p22 = 1.0
 
     for t in range(n):
         x = vals[t]
 
         # Incremental variance update
-        if use_incremental_scale and np.isfinite(x):
-            running_sum += x
-            running_sumsq += x * x
-            running_count += 1
-            if running_count >= 2:
-                mean_t = running_sum / running_count
-                var_t = (running_sumsq / running_count) - (mean_t * mean_t)
-                if var_t > 0.0:
-                    q_level_eff = q_level_base * var_t
-                    q_trend_eff = q_trend_base * var_t
-                    r_eff = r_base * var_t
-                else:
-                    slope[t] = np.nan
-                    continue
-            else:
+        if use_incremental_scale:
+            var_t = moments.update(x)
+            if var_t is None:
                 slope[t] = np.nan
                 continue
-        elif use_incremental_scale:
-            if np.isfinite(level) and running_count >= 2:
-                mean_t = running_sum / running_count
-                var_t = (running_sumsq / running_count) - (mean_t * mean_t)
-                if var_t > 0.0:
-                    q_level_eff = q_level_base * var_t
-                    q_trend_eff = q_trend_base * var_t
-                    r_eff = r_base * var_t
-                else:
-                    slope[t] = np.nan
-                    continue
-            else:
-                slope[t] = np.nan
-                continue
+            q_level_eff = q_level_base * var_t
+            q_trend_eff = q_trend_base * var_t
+            r_eff = r_base * var_t
         else:
             q_level_eff = q_level_abs
             q_trend_eff = q_trend_abs
@@ -571,6 +533,10 @@ def _kalman_trend_slope(vals: np.ndarray, q_level: float, q_trend: float, r: flo
         if not np.isfinite(level):
             level = x
             trend = 0.0
+            # P(level), P(trend) carry squared input units (bar interval = 1).
+            if use_incremental_scale:
+                p11 = p22 = r_eff
+                p12 = r_eff
             slope[t] = 0.0
             continue
 
@@ -614,10 +580,12 @@ def _kalman_beta(y: np.ndarray, x: np.ndarray, q: float, r: float, out_stat: str
 
     ``min_warmup`` is the real warm-up gate (M-074): the filter stays NaN until
     ``min_warmup`` finite ``(y, x)`` pairs have been observed (default
-    :data:`_BETA_WARMUP`).  ``scale_mode="dimensionless"`` (M-071) rescales q/r
-    by the variance of the market/regressor input ``x``.
+    :data:`_BETA_WARMUP`).  In dimensionless mode, ``r`` has response-squared
+    units while ``q`` and ``P`` have beta-squared units, so they scale by
+    ``var(y)`` and ``var(y)/var(x)`` respectively.
 
-    PIT audit (2026-08-13): dimensionless mode uses incremental variance of x."""
+    PIT audit (2026-08-13): dimensionless scales use only finite pairs in the
+    observed prefix; future or one-sided observations never affect them."""
     if min_warmup is None:
         min_warmup = _BETA_WARMUP
 
@@ -625,9 +593,8 @@ def _kalman_beta(y: np.ndarray, x: np.ndarray, q: float, r: float, out_stat: str
     use_incremental_scale = (scale_mode == "dimensionless")
 
     if use_incremental_scale:
-        running_sum = 0.0
-        running_sumsq = 0.0
-        running_count = 0
+        x_moments = _OnlineMoments()
+        y_moments = _OnlineMoments()
         q_base = float(q)
         r_base = float(r)
         if not (np.isfinite(q_base) and np.isfinite(r_base) and q_base >= 0.0 and r_base > 0.0):
@@ -650,44 +617,28 @@ def _kalman_beta(y: np.ndarray, x: np.ndarray, q: float, r: float, out_stat: str
     for t in range(n):
         yv, xv = y[t], x[t]
 
-        # Incremental variance update (based on x, the regressor)
-        if use_incremental_scale and np.isfinite(xv):
-            running_sum += xv
-            running_sumsq += xv * xv
-            running_count += 1
-            if running_count >= 2:
-                mean_t = running_sum / running_count
-                var_t = (running_sumsq / running_count) - (mean_t * mean_t)
-                if var_t > 0.0:
-                    q_eff = q_base * var_t
-                    r_eff = r_base * var_t
-                else:
-                    beta[t] = np.nan
-                    change[t] = np.nan
-                    unc[t] = np.nan
-                    continue
+        # Only finite pairs define response/predictor scales and warmup support.
+        if use_incremental_scale:
+            if np.isfinite(yv) and np.isfinite(xv):
+                var_x = x_moments.update(xv)
+                var_y = y_moments.update(yv)
             else:
+                var_x = x_moments.variance
+                var_y = y_moments.variance
+            if var_x is None or var_y is None:
+                if (np.isfinite(yv) and np.isfinite(xv) and not np.isfinite(b)
+                        and len(warmup_y) < min_warmup):
+                    warmup_y.append(yv)
+                    warmup_x.append(xv)
                 beta[t] = np.nan
                 change[t] = np.nan
                 unc[t] = np.nan
                 continue
-        elif use_incremental_scale:
-            if np.isfinite(b) and running_count >= 2:
-                mean_t = running_sum / running_count
-                var_t = (running_sumsq / running_count) - (mean_t * mean_t)
-                if var_t > 0.0:
-                    q_eff = q_base * var_t
-                    r_eff = r_base * var_t
-                else:
-                    beta[t] = np.nan
-                    change[t] = np.nan
-                    unc[t] = np.nan
-                    continue
-            else:
-                beta[t] = np.nan
-                change[t] = np.nan
-                unc[t] = np.nan
+            beta_var = var_y / var_x
+            if not (np.isfinite(beta_var) and beta_var > 0.0):
                 continue
+            q_eff = q_base * beta_var
+            r_eff = r_base * var_y
         else:
             q_eff = q_abs
             r_eff = r_abs
@@ -701,18 +652,34 @@ def _kalman_beta(y: np.ndarray, x: np.ndarray, q: float, r: float, out_stat: str
 
         if not np.isfinite(b):
             # Warmup: accumulate pairs until min_warmup, then init via OLS
-            warmup_y.append(yv)
-            warmup_x.append(xv)
+            # The first pair may already have been retained while prefix
+            # variances were not yet identifiable.
+            if (len(warmup_y) < min_warmup and
+                    (not use_incremental_scale or len(warmup_y) < x_moments.count)):
+                warmup_y.append(yv)
+                warmup_x.append(xv)
             if len(warmup_y) >= min_warmup:
                 wy = np.asarray(warmup_y, dtype=float)
                 wx = np.asarray(warmup_x, dtype=float)
-                denom = float(np.dot(wx, wx))
-                if denom > 1e-12:
-                    b = float(np.dot(wx, wy) / denom)
-                    p = r_eff / max(denom, 1e-12)
+                if use_incremental_scale:
+                    # Exact degeneracy only: a change of predictor units must
+                    # not cross an absolute epsilon and select another prior.
+                    wx_ld = wx.astype(np.longdouble)
+                    wy_ld = wy.astype(np.longdouble)
+                    denom_ld = np.dot(wx_ld, wx_ld)
+                    if not (np.isfinite(denom_ld) and denom_ld > 0):
+                        continue
+                    b = float(np.dot(wx_ld, wy_ld) / denom_ld)
+                    p = float(np.longdouble(r_eff) / denom_ld)
                 else:
-                    b = 0.0  # diffuse prior fallback
-                    p = 1e3
+                    # Preserve the legacy absolute-parameter initialization.
+                    denom = float(np.dot(wx, wx))
+                    if denom > 1e-12:
+                        b = float(np.dot(wx, wy) / denom)
+                        p = r_eff / max(denom, 1e-12)
+                    else:
+                        b = 0.0
+                        p = 1e3
                 b_prev = b
                 beta[t] = b
                 unc[t] = p

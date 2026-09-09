@@ -1,0 +1,26 @@
+schema: factor_engine.v8.evidence.v1
+git_sha: 118cd21c6262082336daa545ddc06b6f78def7b9
+timestamp: '2026-09-09T00:20:00+08:00'
+status: MERGED_CAPPED_OUTPUT_OPTIONAL_LEASE_ONLY
+files:
+  factor_engine/runtime/finite_manifest.py: 930b072adf983b7587875f5b16cbf99e6182dc848541a1c36bc0160d46ae85dc
+  factor_engine/tests/runtime/test_v8_ingestion_serialization_buffer.py: added
+changes:
+  - Per-definition Pickler output capped to definition limit plus one byte of oversize evidence.
+  - DEFINITION_TOO_LARGE records observed lower bound rather than serializing entire oversized definition.
+  - Validate integer definition limit before process/context/resource allocation.
+  - Optional MANIFEST_BUFFER reservation before process construction, released after retirement; uncertainty retains lease.
+tests:
+  independent_complete_package_stage: '31 passed, 9 warnings in4.60s'
+  production_merge: '44 passed, 39 warnings in18.18s'
+  xml: /tmp/v8-capped-ingestion-merged.xml
+  primary_and_cleanup_composition: '33 passed, 9 warnings in4.63s'
+  primary_and_cleanup_xml: /tmp/v8-ingestion-primary-merged.xml
+  primary_and_cleanup_behavior: original failure retained; later endpoint/release errors appended, uncertain lease attached to primary
+limitations:
+  - Default pipeline does not yet pass serialization_broker; default ingestion lease wiring is NOT_IMPLEMENTED.
+  - Parent spawn still serializes the whole supplied iterable before child admission; live generator support remains OPEN.
+  - Fork substitution was rejected after reviewing initialized native/thread/lock risks; context unchanged.
+  - Controlled serialization reservation is not an RSS cap; excludes definitions, arbitrary reducers, memo and native allocations.
+  - Original error plus endpoint/release failure composition reviewed and merged; does not change spawn behavior.
+  - Mathematical/native/GPU/approved-data/100k/performance and production acceptance NOT_RUN.

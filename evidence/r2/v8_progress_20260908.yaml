@@ -1,0 +1,345 @@
+schema: factor_engine.v8.progress.v1
+status: IN_PROGRESS
+target: qs-server-c:/home/sunhaiwei/quant_projects
+baseline: 118cd21c6262082336daa545ddc06b6f78def7b9
+package: /tmp/fe-v8-review.GaPLlg
+preserved: prior nested-directory cleanup changes
+agents:
+  v8_data: SQLite retirement, single-authenticated-read, bounded resume action catalog and metadata bounds merged
+  v8_worker_lifecycle: SQLite foundation completed and merged in prior continuation
+  v8_protocol: default ingestion buffer lease merged; metadata/fixture independent reviews and descendant retirement audit complete
+  v8_model_preflight: WP2 M01-M04 scoped complete; independent review findings delivered
+wp1:
+  data_approval_snapshot_suite: '32 passed'
+  protocol_integrity_suite: '31 passed'
+  independent_protocol_before_final_boolean_guard: '17 passed'
+  root_concurrent_cache_fixture:
+    red: '2 failed: residency tests omitted an admitted cache authority'
+    fix: 'explicit test-only broker fixture; original assertions retained'
+    green: '22 passed combined concurrent and v8 data suite'
+root:
+  T01:
+    status: LOCAL_COMMAND_FIXED_AND_EXECUTED_REMOTE_CI_NOT_RUN
+    red: /tmp/v8-ci-red.log
+    green: /tmp/v8-ci-green-118cd21/report.json
+    roots_requested_accepted_committed: [1000, 1000, 1000]
+    numerical_disk_readback: all 1000 distinct scalar-plus-column factors, 256 rows each
+    seconds: 11.746264238958247
+    peak_process_rss_bytes: 419569664
+    queue_bytes: 67108864
+    boundary: synthetic old stream API pandas research; not v2 auto, real data, or 100k
+    workflow: .github/workflows/ci.yml local-only, no remote workflow dispatch
+  v2_default_contract:
+    test: factor_engine/tests/runtime/test_v8_default_api_contract.py
+    boundary: captures delegation only, not native execution
+  baseline_models:
+    report: /tmp/v8-before-models.json
+    scoped_controls: 17
+    counterexample_observations: 18
+    boundary: isolated source functions, not all current registry bindings
+  T03:
+    reference_environment: /tmp/fe-v8-arch-reference.J1VNya/venv
+    status: PINNED_REFERENCE_LOCAL_PASS_REMOTE_CI_NOT_RUN
+    initial_import_failure: arch7.2 with pandas3 deprecate_kwarg API incompatibility
+    resolution: isolated reference lane with arch7.2.0 and pandas2.2.3
+    passed: 11
+    skipped: 0
+    report: /tmp/fe-v8-arch-reference.J1VNya/reference-pinned.xml
+  outcome_ledger:
+    plugin: factor_engine/scripts/v8_pytest_evidence.py
+    regression: '3 passed; mixed outcomes, failed teardown and abrupt exit subprocess oracles'
+    boundary: raw phases plus final node records and required session footer; source hashes cover collected tests/plugin/config, not transitive production source
+    report: /tmp/v8-ledger-review-final.log
+  resumed_review:
+    sept9_continuation:
+      status: IN_PROGRESS
+      current_merged_baseline:
+        bounded_pipeline: 975b2de2cdd0a27b4ffc0f78b8ed16d5b3f61ad3caf789e26e868a0fc6b48783
+        finite_manifest: 378531b020da441db648d606b5fcb7c607d97e9f1e2a7a0cc586e47b7afd03b3
+        persistent_run_state: 51ae47bfd2c99759d1e3670f2762b6f57780024f5436625f3b696b6d5e585380
+        resume_action_catalog: ab4f66054ba300059b27308466d516312d54d3c9614d9b03f1fb7bed9571b354
+      default_ingestion_lease:
+        result: '65 passed in17.97s; same shared broker, finite absolute admission deadlines'
+        xml: /tmp/v8-default-ingestion-lease-merged.xml
+        boundary: controlled serialization buffers only; parent whole-iterable spawn pickle remains OPEN
+      resume_action_catalog:
+        result: '119 passed in1.84s; read-only bounded classification, not pending executor'
+        xml: /tmp/v8-resume-action-catalog-merged.xml
+      batched_state_registration:
+        result: '49 passed in107.63s; 1000 records use2 transactions instead of1000'
+        xml: /tmp/v8-state-batch-pipeline-merged.xml
+        boundary: transaction count and one synthetic timing probe are not end-to-end performance certification
+      descendant_retirement:
+        status: REPRODUCED_OPEN
+        result: direct worker exit and SQLite all_exited do not prove grandchild retirement
+        xml: /tmp/v8-descendant-audit.xml
+        boundary: pending resume remains disabled; no process-family safety certification
+      metadata_bounds:
+        status: MERGED_SCOPED_GREEN
+        finite_manifest: 4d8abb768d9d6bf6724f31dcc13c45a8f7acce2159fb2abbbff1e6ad1e3c7622
+        manifest_metadata_limits: 81c2570831699aef9e682a826305b705a9bd62b9a5aad5ab09b5958eca10556a
+        result: '77 passed in100.49s'
+        xml: /tmp/v8-metadata-pipeline-merged.xml
+        red: '2 failed,1 passed on prior production pipeline; invalid name and dependency isolation'
+        boundary: encoded metadata control only; arbitrary decoded-object/native memory not bounded by helper
+      baseline_regression:
+        result: '2 failed,651 passed,1 strict R02 xfail in608.78s'
+        xml: /tmp/v8-resumed-sept9-baseline.xml
+        ledger: /tmp/v8-resumed-sept9-baseline-outcomes.jsonl
+        footer: '654 collected/completed,2 failures,no incomplete nodes'
+        fixes: test-only result-memory fixture now admits input buffer; deadline test verifies actual absolute admission instead of obsolete helper spy
+        scoped_green: '5 passed in4.13s with original output rejection and deadline contracts preserved'
+        green_xml: /tmp/v8-fixture-admission-deadline-green.xml
+      current_regression: '680 passed,1 strict R02 xfail,187 warnings in314.11s'
+      current_regression_xml: /tmp/v8-sept9-meta-final.xml
+      current_regression_ledger: /tmp/v8-sept9-meta-final-outcomes.jsonl
+      current_regression_footer: '681 collected/completed,0 failures,no incomplete nodes'
+      runtime_source_freeze: all177 runtime Python file hashes identical before/after
+      checkpoint_evidence: evidence/r2/V8-SEPT9-METADATA-CHECKPOINT.yaml
+      wheel:
+        directory: /tmp/fe-v8-sept9-wheel.i0T1Fr
+        sha256: 5b29485c834777d58578cb99e104d4940d4f7633de5df6e365b66199ef1efaf6
+        result: clean1302-member wheel, no bytecode; isolated installed import and10-source verification passed
+        boundary: 1756bootstrap only, not operator math/native/GPU certification; no deployment
+      actual_approved_profile_gpu_real100k: NOT_RUN
+    ownership_cleanup_checkpoint:
+      result: '610 passed,1 strict R02 xfail,175 warnings in310.80s'
+      xml: /tmp/v8-ownership-cleanup-final.xml
+      ledger: /tmp/v8-ownership-cleanup-final-outcomes.jsonl
+      footer: '611 collected/completed; zero failures/incomplete'
+      freeze: six runtime hashes stable, bounded6f847f35 finite930b072a sqlite995b1b6f
+      evidence: evidence/r2/V8-OWNERSHIP-CLEANUP-CHECKPOINT.yaml
+      wheel: /tmp/fe-v8-ownershipfinal-wheel.Ooxy5R
+      wheel_sha256: b5d1601d667427f2a63a8baf1ec4f6091ebe0a4c346a8d08195b2dce6d3ef2a7
+      boundary: installed7-source verification and1756bootstrap; not real-data/native/GPU/100k certification; upcoming lease/resume stages excluded
+    cleanup_gate_checkpoint:
+      status: FROZEN_SCOPED_GREEN
+      result: '533 passed, 1 strict R02 xfail in267.59s'
+      report: /tmp/v8-cleanup-gate-freeze.xml
+      ledger: /tmp/v8-cleanup-gate-freeze-outcomes.jsonl
+      footer: '534 collected/completed; zero failures/incomplete nodes'
+      source_freeze: bounded0f4f7924, finitefbc83d2f, supervisor08af5cd9, ownership2449f0ed unchanged before/after
+      evidence: evidence/r2/V8-CLEANUP-GATE-CHECKPOINT.yaml
+      wheel: /tmp/fe-v8-cleanupgate-wheel.hLxJtF
+      wheel_sha256: b278f36067a1c1d2772c1038e4f1129baea310d12492ca7b94faaa6262eedf29
+      wheel_boundary: isolated installation and six source-hash checks;1756 bootstrap only; not deployment or math certification
+      boundary: later third resume-open validation quarantine test separately3pass; future ingestion ownership/SQLite not in snapshot
+    resume_cleanup_authority:
+      status: SCOPED_FIX_REVIEWED
+      green: '6 passed independently; runtime checkpoint 509 passed, 1 strict R02 xfail'
+      source: bounded_pipeline342fa563
+      report: /tmp/v8-resume-cleanup-final-six.xml
+      checkpoint_report: /tmp/v8-resume-authority-runtime.xml
+      checkpoint_ledger: /tmp/v8-resume-authority-runtime-outcomes.jsonl
+      checkpoint_footer: '510 collected/completed; zero failed/incomplete'
+      checkpoint_boundary: excludes later sixth cleanup test, initialization gate and ownership inspection changes
+      evidence: evidence/r2/V8-R07-RESUME-CLEANUP-AUTHORITY.yaml
+    worker_initialization_gate:
+      status: SCOPED_GREEN_INDEPENDENT_REVIEW_COMPLETE
+      red: 'native thread initialization observed before durable BOUND'
+      green: '80 passed including supervisor ownership, protocol and quotas'
+      report: /tmp/v8-worker-initialization-green.xml
+      boundary: explicit opt-in ownership workers only; spawn bootstrap imports are outside child target gate
+    retirement_inspection:
+      status: MERGED_INTEGRATION_GREEN
+      source: worker_ownership2449f0ed
+      changes: single event snapshot; strict EXITED identity types; bounded timestamps; current OS retirement inspection without journal rewrite
+      boundary: does not enable pending-work execution; JSON journal scalability still separate
+      green: '74 passed in5.60s'
+      report: /tmp/v8-worker-inspection-integrated.xml
+    iterator_cleanup:
+      status: MERGED_INTEGRATION_GREEN
+      source: finite_manifestfbc83d2f
+      green: '5 scoped tests;40pass cleanup/gate integration'
+      report: /tmp/v8-root-cleanup-gates-integrated.xml
+      evidence: evidence/r2/V8-R07-INGEST-ITERATOR-CLEANUP.yaml
+    resume_open_cleanup:
+      status: MERGED_INDEPENDENT_REVIEW_COMPLETE
+      green: '3 scoped tests;42pass related integration'
+      report: /tmp/v8-resume-open-cleanup-final.xml
+      evidence: evidence/r2/V8-R07-RESUME-OPEN-CLEANUP.yaml
+    next_ownership_integration:
+      sqlite: merged; 18 SQLite tests and 76 combined routing/store tests passed
+      ingestion: merged optional ownership gate; registration now precedes gate release; actual SQLite process integration2pass
+      role_coverage: merged all pipeline constructors and immutable sqlite-v1 identity; explicit direct roles only, not descendant closure; current full regression680pass and1 strict R02 xfail
+      evidence: evidence/r2/V8-R07-DEFAULT-OWNERSHIP-WIRING.yaml
+      input_boundedness: unsafe fork proposal rejected; capped per-definition output and default shared lease merged; parent aggregate spawn pickle and generic live generator support remain OPEN
+      pending_resume: DISABLED; SQLite current-OS retirement inspection and read-only bounded action catalog merged; process-family retirement remains open
+      sqlite_retirement: '50 related tests passed; result caps32 examples/64 reasons, 512-row pages; no synthetic EXITED'
+      sqlite_identity: authenticated mapping reused without second pathname read; stage2pass plus38compat; merged
+      ingestion_cap: 'per-definition capped output and default shared-broker lease merged; optional cleanup33pass; default integration65pass'
+      final_db_cleanup: '5 tests pass; uncertain state/manifest close retains lock and authorities, with and without primary'
+      latest_frozen_suite: /tmp/v8-sept9-meta-final.xml
+      latest_frozen_ledger: /tmp/v8-sept9-meta-final-outcomes.jsonl
+      inactive_stage_backup: /tmp/fe-v8-inactive-stages.Q2J6On/pipeline_ownership
+    full_runtime_integration:
+      status: CHECKPOINT_GREEN_REMAINING_R07_WORK_SEPARATE
+      red_result: '4 failed, 442 passed, 1 expected R02 failure, 104 warnings in 254.90s'
+      red_report: /tmp/v8-root-resumed-full-runtime.xml
+      result: '504 passed, 1 expected R02 failure, 106 warnings in 261.93s'
+      report: /tmp/v8-root-runtime-final-f575.xml
+      outcome_ledger: /tmp/v8-root-runtime-final-f575-outcomes.jsonl
+      source_freeze: nine runtime source hashes unchanged, bounded_pipelinef575ebdd
+      footer: '505 collected/completed, zero failed, no incomplete nodes'
+      evidence: evidence/r2/V8-RESUMED-RUNTIME-CHECKPOINT.yaml
+      defects:
+        - cursor override uninitialized on waves with no admitted factor, two real runtime regressions
+        - two inline-worker tests omit local broker global isolation in combined process
+      wheel_checkpoint: /tmp/fe-v8-runtimef575-wheel.VuRXzQ
+      wheel_sha256: 54d36c574d2a1c406d6751dbe337d955df4512f918c645ee5a54cd5527ff6e46
+      wheel_boundary: isolated build/install/import and source hash verification pass; no production deployment or all-operator certification
+    start_deadline_wiring:
+      green: '104 passed with strict record, start authority, stage deadline and resume regressions'
+      report: /tmp/v8-root-durable-deadline-green.xml
+      evidence: evidence/r2/V8-R07-START-DEADLINE.yaml
+      boundary: original computation deadline persisted; complete pending resume not enabled
+    resume_control_open:
+      red: '1 failed, 4 passed; open-time symlink substitution followed incorrectly'
+      green: '59 passed in 5.27s, including post-open replacement and exceptional fd cleanup'
+      report: /tmp/v8-resume-open-final.xml
+      evidence: evidence/r2/V8-R07-CONTROL-OPEN.yaml
+      boundary: atomic control JSON open only; pending resume remains disabled
+    manifest_retirement:
+      red: '6 failed: unknown child exit incorrectly allowed DB reopening; invalid deadlines reached process creation'
+      green: '81 passed with supervisor ownership/phase/transport regressions'
+      report: /tmp/v8-root-worker-manifest-integration.xml
+      evidence: evidence/r2/V8-R07-MANIFEST-RETIREMENT.yaml
+      boundary: real SIGTERM-resistant child killed and reaped; unkillable/partial spawn faults simulated
+    resumed_model_data:
+      green: '74 passed, 2 warnings in 25.32s'
+      report: /tmp/v8-root-resumed-model-data.xml
+      boundary: scoped model/storage/semantic/evidence helpers; not native/GPU or all-operator certification
+    cancellation_checkpoint:
+      green: '174 passed, 1 expected R02 failure, 78 warnings in 201.51 seconds'
+      report: /tmp/v8-root-runtime-cancellation-checkpoint.xml
+      evidence: evidence/r2/V8-CANCELLATION-CHECKPOINT.yaml
+      source_freeze: six runtime hashes identical before and after
+      wheel: /tmp/fe-v8-wheel-checkpoint.yIADIU/dist/factor_engine-0.3.1-py3-none-any.whl
+      wheel_sha256: 5671bb9a9d9a6ecd1a15aa85b5f042488d2418331fbc261fc724bcbfde8bcc23
+      boundary: snapshot before continuous-refill refactor and worker ownership journal
+    coordinator_ownership:
+      green: '5 passed, independent real-process lock and exceptional cleanup oracles'
+      report: /tmp/v8-coordinator-lock-errors.xml
+      evidence: evidence/r2/V8-R07-COORDINATOR-REVIEW.yaml
+      boundary: stable inode, live-owner exclusion, crash recovery, symlink rejection; not pending-work recovery
+      harness: initial run interrupted; cleanup deadlock fixed before completed rerun
+    resumed_runtime_integration:
+      green: '55 passed, 2 warnings in 33.40 seconds'
+      report: /tmp/v8-root-resumed-integration.xml
+      evidence: evidence/r2/V8-RESUMED-INTEGRATION.yaml
+      boundary: public facade mock, supervisor protocol, resume helper, ownership, broker fairness; not final cancellation integration
+      source_freeze: four runtime file hashes identical before and after tests
+    broker_and_phase_handoff:
+      agent_focused_green: '24 passed: R04 phase 17 and R05 fairness 7'
+      agent_focused_report: /tmp/v8-r04-r05-focused.xml
+      broader_green: '37 passed: r27 and r38 broker authority tests'
+      broader_report: /tmp/v8-r05-broader.xml
+      broader_fix: test-only deterministic budgets, explicit queue consumer release and isolated missing-broker supply
+      boundary: R05 broker-level cancellation; end-to-end durable cancellation still being integrated
+      root_independent_green: '61 passed in one process'
+      root_independent_report: /tmp/v8-root-broker-phase-final.xml
+      evidence: evidence/r2/V8-R04-R05-BROKER-PHASE.yaml
+    broker_epoch_foundation:
+      green: '34 passed including existing IPC regressions'
+      report: /tmp/v8-r02-broker-epoch.xml
+      evidence: evidence/r2/V8-R02-BROKER-EPOCH-FOUNDATION.yaml
+      boundary: exact-zero authenticated broker epoch only; no native-close proof or same-PID reuse enabled
+      root_independent_green: '34 passed in 5.95 seconds'
+      root_independent_report: /tmp/v8-root-epoch-ipc-final.xml
+    worker_ownership_foundation:
+      status: RUN_BOUND_FOUNDATION_SCOPED_PASS_NOT_INTEGRATED
+      red: 'actual cross-run journal replay incorrectly approved; 1 failed'
+      red_report: /tmp/v8-r07-cross-run-red.xml
+      fix: required RunOwnershipContext, identity.json SHA256, header and per-event run binding
+      green: '17 isolated foundation tests; 51 passed in root integrated helper/lock suite'
+      report: /tmp/v8-root-run-bound-ownership.xml
+      evidence: evidence/r2/V8-R07-RUN-BOUND-WORKER-FOUNDATION.yaml
+      boundary: not yet pending-work resume; missing historical binding cannot be retroactively approved
+    continuous_refill:
+      status: SCOPED_FIXED_AND_INTEGRATED
+      first_direction: A completes while B remains active, C starts; scoped pass
+      reverse_direction: A held while B/C/D/E sequentially persist and refill; scoped pass
+      expanded_oracles: '6 passed; invalid manifest entry, reverse refill, compile rejection and simultaneous completion/fatal included'
+      expanded_report: /tmp/v8-r03-final-six.xml
+      remaining: continuous refill scoped green; same-PID reuse and full unfinished-run recovery remain separate open capabilities
+      compile_cancel: asynchronous bounded observation and retained cleanup authority scoped tests passed
+      boundary: either of two compute slots continuously refills; per-wave PID retirement remains required; not real-data performance certification
+    obsolete_model_helpers:
+      green: '28 passed, 2 warnings'
+      red: '2 failed before source edit'
+      report: /tmp/v8-polars-cleanup-green.xml
+      evidence: evidence/r2/V8-M08-OBSOLETE-HELPER-CLEANUP.yaml
+      binding_ledger: evidence/r2/V8-M08-CLEANUP-BINDINGS.jsonl
+      boundary: removed uncalled helpers and corrected metadata; active numerical kernels unchanged
+    approval_normalization_race:
+      red: /tmp/v8-normalization-epoch-red.log
+      fix: recheck approval digest under cache lock immediately before normalized value publication
+      green: '25 passed across cache identity, refresh-lock and concurrent-cache suites'
+      report: /tmp/v8-cache-final.xml
+    panel_and_legacy_prefetch_identity:
+      red: /tmp/v8-panel-lazy-red.log
+      green: '31 passed including cache/refresh/concurrent/lazy bundle suites'
+      report: /tmp/v8-panel-lazy-final.xml
+      fixes:
+        - panel cache publication validates snapshot and approval after unstack
+        - approved legacy lazy requests use exact-identity-checked eager ReadHandle
+        - lazy prefetch publication rejects concurrent approval or snapshot changes
+      boundary: legacy lazy fallback only; no assertion of native approved-scan certification
+      fixture: single-collect residency test explicitly grants test cache leases; original assertions retained
+    v7_model_regression:
+      green: '24 passed'
+      report: /tmp/v8-root-v7-model-regression.xml
+    snapshot_regression:
+      green: '10 passed'
+      report: /tmp/v8-root-snapshot-regression.xml
+    root_helpers_contract_layout:
+      green: '14 passed'
+      report: /tmp/v8-root-review-final.xml
+      boundary: evidence helper, mocked default contract and layout tests; not actual runtime performance
+    integrated_cache_helpers_classification:
+      green: '96 passed in one process'
+      report: /tmp/v8-root-integrated.xml
+      raw_phases_and_session_footer: /tmp/v8-root-integrated-outcomes.jsonl
+      boundary: synthetic storage, evidence helpers, default delegation contract, layout and backend classifications; no real data or 100k certificate
+    prior_identity_regression:
+      green: '63 passed'
+      report: /tmp/v8-existing-identity.xml
+    wp3_semantic_versions:
+      changed: 34 canonical entries, including five Ridge entries v2 to v3
+      status: CENTRAL_AUTHORITY_AND_34_CATALOG_DECLARATIONS_ALIGNED
+      red: /tmp/v8-wp3-version-map.log
+      merged_model_green: '41 passed'
+      report: /tmp/v8-root-models-frozen.xml
+    resume_validation_helper:
+      status: HELPER_SCOPED_PASS_PIPELINE_INTEGRATION_PENDING
+      green: '29 passed'
+      report: /tmp/v8-resume-final-authority.xml
+      boundary: no input deserialization; identity and sealed manifest checks, state matrix, prior-success byte revalidation; coordinator lock and worker exit proof remain external obligations
+    isolated_wheel:
+      status: SNAPSHOT_BUILD_INSTALL_IMPORT_PASS_NOT_DEPLOYED
+      directory: /tmp/fe-v8-wheel.YYP8XV
+      wheel_sha256: cf496db9544603facbc7b29a6085eb4818720a895d628cd2885f7ced93315bb3
+      installed_import: /tmp/fe-v8-wheel.YYP8XV/site/factor_engine/__init__.py
+      canonical_bootstrap_count: 1756
+      boundary: isolated packaging/import/selected-version check; not all-operator numerical coverage, includes pre-final-R07 snapshot
+  semantic_identity:
+    source: factor_engine/runtime/factor_identity.py
+    change: use canonical semantic-version authority instead of constant1.0 when catalog omits version
+    red: '1 failed, 1 passed'
+    green: '2 passed'
+  dependency_ledger:
+    source: factor_engine/scripts/v8_binding_dependencies.py
+    boundary: concrete callable/helper/capture graph; unresolved dynamics explicit PARTIAL, not numerical certification
+    model_freeze_report: evidence/r2/V8-MODEL-BINDING-DEPENDENCIES.jsonl
+    sha256: 268efa1678fbdb3592d6c3622340e914aa5a81243ca52e0d9d8e435954526e79
+    canonical_count: 43
+    binding_count: 88
+    partial_bindings: 86
+    resolved_python_graph_only: 2
+real_profile:
+  environment_variable_set: false
+  scoped_search: factor_engine data_access config .factor_engine_service
+  approved_profile_found: false
+  user_path_requested_async: true
+  real_data_acceptance: NOT_RUN
+github_commit_push_deploy: false

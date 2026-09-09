@@ -1,0 +1,234 @@
+schema: v9-progress-checkpoint-1
+timestamp: '2026-09-09'
+git_sha: 118cd21c6262082336daa545ddc06b6f78def7b9
+workspace: /home/sunhaiwei/quant_projects
+scope: Preserved dirty server-c worktree; no commit, push, deployment, or publication.
+audit_package: /tmp/fe-v9-review.7Sqnlq
+issues:
+  V9-M01: MERGED_SCOPED_SHARED_HUBER_PASS
+  V9-M02: MERGED_SCOPED_PASS
+  V9-M03: MERGED_SCOPED_PASS_WITH_HONEST_CPU_BRIDGE
+  V9-M04: MERGED_SCOPED_DEFAULT_AND_EXPLICIT_CPU_BRIDGE_PASS
+  V9-M05: MERGED_SCOPED_DEFAULT_AND_EXPLICIT_CPU_BRIDGE_PASS
+  V9-M06: MERGED_DISCRETE_DOMAIN_CPU_BRIDGE_PASS_BROADER_BACKENDS_OPEN
+  V9-M07: MERGED_ZERO_TARGET_PUBLIC_SCOPED_PASS
+  V9-M08: MERGED_SPARSE_LP_SCOPED_PASS_RESOURCE_ADMISSION_OPEN
+  V9-M09: MERGED_CONSERVATIVE_IDENTIFIABILITY_CERTIFICATE_PASS
+  V9-M10: MERGED_SCOPED_NUMERICAL_PASS
+  V9-M11: MERGED_DURABLE_WAVE_SAMPLES_AND_PRESERVATION_PASS_FULL_PRODUCER_AND_PENDING_RESUME_OPEN
+  V9-M12: MERGED_SCOPED_PASS
+  V9-M13: MERGED_SCOPED_PASS
+  V9-M14: MERGED_SCOPED_PASS
+  V9-M15: MERGED_SCOPED_PASS
+  V9-M16: MERGED_SCOPED_PASS
+  V9-M17: MERGED_SCOPED_PASS
+  V9-M18: MERGED_NUMERICAL_PASS_RESOURCE_ACCOUNTING_OPEN
+  V9-M19: MERGED_REVIEWED_PUBLIC_REGRESSION_PASS
+  V9-M20: MERGED_REVIEWED_PUBLIC_REGRESSION_PASS
+  V9-M21: MERGED_SPARSE_GLOBAL_LAD_SCOPED_PASS_RESOURCE_RECEIPT_OPEN
+  V9-M22: MERGED_BLOCKWISE_NUMERICAL_PASS_RESOURCE_ADMISSION_OPEN
+  V9-M23: MERGED_EXPLICIT_DISCRETIZATION_PUBLIC_CPU_PASS_BACKEND_COVERAGE_OPEN
+  V9-M24: MERGED_SCOPED_PASS
+  V9-M25: MERGED_SCOPED_PASS
+  V9-M26: MERGED_COMMON_CENTER_CONDITIONED_BDS_PUBLIC_PASS
+  V9-M27: MERGED_FREQUENCY_FULL_REPLAY_AND_CPU_BRIDGES_PASS
+  V9-M28: MERGED_SCOPED_PASS
+  V9-M29: MERGED_SCOPED_PASS_RUNTIME_CHECKPOINT_PENDING
+  V9-M30: MERGED_EVENT_CLOCK_FREEZE_FULL_REPLAY_PASS_CHECKPOINT_OPEN
+  V9-M31: MERGED_INDEPENDENTLY_REVIEWED_SCOPED_PASS
+  V9-M32: MERGED_SCOPED_PANDAS_AND_POLARS_CPU_BRIDGE_PASS
+  V9-M33: MERGED_SCOPED_MATH_AND_RELATIONAL_EXPORT_PASS_FULL_BACKEND_COVERAGE_OPEN
+  V9-M34: MERGED_KERNEL_EQUIVALENCE_PASS_RESOURCE_ACCOUNTING_OPEN
+  V9-M35: MERGED_INTERCEPT_AND_EXTREME_SCALE_PUBLIC_PASS_RESOURCE_CERTIFICATION_OPEN
+  V9-M36: MERGED_SCOPED_MATH_RELATIONAL_EXPORT_AND_WORKSPACE_ADMISSION_PASS_FULL_RESOURCE_BACKEND_CERTIFICATION_OPEN
+  V9-M37: MERGED_TYPED_CONTRACT_PUBLIC_PLANNER_PASS
+  V9-M38: MERGED_SCOPED_PASS
+  V9-M39: MERGED_SCOPED_PASS
+  V9-M40: MERGED_SCOPED_PASS
+  V9-M41: MERGED_SCOPED_PASS
+  V9-M42: MERGED_SCOPED_PASS
+  V9-M43: MERGED_STABLE_EPISODES_LOCAL_UNKNOWN_COVERAGE_PUBLIC_HISTORY_PASS
+  V9-M44: MERGED_SCOPED_PASS
+  V9-M45: MERGED_SCOPED_PASS
+  V9-M46: MERGED_RING_LIFETIME_EQUIVALENCE_PASS_RESOURCE_ACCOUNTING_OPEN
+  V9-Q01: MERGED_LIVE_INVENTORY_FIX_COMPLETE_DEPENDENCY_CERTIFICATION_OPEN
+  V9-Q02: PUBLIC_PANEL_MATURITY_PREFIX_REPLAY_SCOPED_PASS_FULL_PIT_RESTART_OPEN
+  V9-Q03: SCOPED_DUCKDB_EXECUTION_ORACLES_PASS_FULL_NATIVE_CERTIFICATION_OPEN
+  V9-Q04: MERGED_SCOPED_PASS
+  V9-Q05: MERGED_SCOPED_PASS
+files:
+  - factor_engine/cleaned_operators/common/strict_params.py
+  - factor_engine/cleaned_operators/technical/frequency_filters.py
+  - factor_engine/cleaned_operators/first_passage.py
+  - factor_engine/cleaned_operators/group_spectrum.py
+  - factor_engine/cleaned_operators/group_ext.py
+  - factor_engine/cleaned_operators/cross_section/peer_ops.py
+  - factor_engine/cleaned_operators/event_response.py
+  - factor_engine/cleaned_operators/turnover_survival.py
+  - factor_engine/cleaned_operators/filter_smooth.py
+  - factor_engine/cleaned_operators/candle_state_space.py
+  - factor_engine/cleaned_operators/extreme_tail.py
+  - factor_engine/cleaned_operators/research_spectral.py
+  - factor_engine/cleaned_operators/advanced_expectile.py
+  - factor_engine/cleaned_operators/base.py
+  - factor_engine/cleaned_operators/registry.py
+  - factor_engine/cleaned_operators/contract_hardening.py
+  - factor_engine/ir/analyzer.py
+  - factor_engine/identity/serializer.py
+  - factor_engine/identity/api.py
+  - factor_engine/expr/canonical.py
+  - factor_engine/cleaned_operators/technical/convex_trend_filter.py
+  - factor_engine/cleaned_operators/technical/denoise_filter.py
+  - factor_engine/cleaned_operators/technical/polars_denoise_filter.py
+  - factor_engine/backend/operator_semantic_version.py
+  - factor_engine/tests/operators/test_v9_strict_integer_bounds.py
+  - factor_engine/tests/operators/test_v9_causal_fir_contract.py
+  - factor_engine/tests/operators/test_frequency_filters.py
+  - factor_engine/tests/operators/test_v9_m38_m40_m41.py
+tests:
+  m36_resource_main: {passed: 16, failed: 0, warnings: 2, seconds: 24.19, xml: evidence/r2/v9-m36-resource-focused-main.xml, manifest: evidence/r2/V9-M36-RESOURCE-MERGED.yaml}
+  wave8_durable_final: {passed: 717, failed: 0, warnings: 60, seconds: 187.84, xml: evidence/r2/v9-wave8-durable-final.xml}
+  m11c_preservation_final: {passed: 124, failed: 0, xfailed: 1, warnings: 70, seconds: 138.22, xml: evidence/r2/v9-m11c-preservation-final.xml, manifest: evidence/r2/V9-M11C-DURABLE-MERGED.yaml}
+  wave8_durable_initial: {passed: 716, failed: 1, warnings: 60, seconds: 188.57, xml: evidence/r2/v9-wave8-durable.xml, reason: Owner forwarding mock omitted newly required transport budget; root narrowly corrected call and added exact budget/evidence forwarding assertions.}
+  owner_forwarding_current: {passed: 10, failed: 0, seconds: 0.37, xml: evidence/r2/v9-m11c-owner-main.xml}
+  auto80_after_m11c: {passed: 75, failed: 0, warnings: 2, seconds: 26.02, xml: evidence/r2/v9-m11c-auto80-main.xml}
+  slot_actual_main_initial: {passed: 5, failed: 1, xfailed: 1, warnings: 12, seconds: 11.97, xml: evidence/r2/v9-m11c-slot-main.xml, reason: Main newer-slot test still expected CANCELLED; stage reportedly tested FAILED expectation not yet delivered. Main rerun is authoritative; follow-up under review.}
+  m11c_durable_main: {passed: 66, failed: 0, warnings: 35, seconds: 34.76, xml: evidence/r2/v9-m11c-durable-main.xml}
+  m11c_preservation_initial: {passed: 115, failed: 2, warnings: 59, seconds: 126.05, xml: evidence/r2/v9-m11c-preservation-main.xml, reason: Legacy compute fault injector targets old callable and old expected cancellation counts differ from actual failing-slot FAILED terminal. Narrow non-vacuous test alignment under review.}
+  wave7_targeted_before_runtime_durability: {passed: 691, failed: 0, warnings: 26, seconds: 180.83, xml: evidence/r2/v9-wave7-targeted.xml, scope: all test_v9 files plus test_fit_failure_evidence.py}
+  wave7_broad_collection_aborted: {status: INTERRUPTED_NOT_PASS, reason: Root interrupted broad tests-directory collection at 31.86 seconds and switched to explicit v9 filename selection; no test result claimed.}
+  relational_r19_main: {passed: 22, failed: 0, warnings: 3, seconds: 81.78, xml: evidence/r2/v9-relational-r19-main.xml, manifest: evidence/r2/V9-RELATIONAL-R19-MERGED.yaml}
+  bounded_fit_receipts_and_pinball_actual: {passed: 34, failed: 0, warnings: 2, xml: /tmp/v9-m11-primitive-merged.xml, core_sha256: 49356426a8a254fc0fda150da1d561954a847402f2958b6d6782e7a40b4ae217}
+  wave4_combined_before_m11_and_scale_followup: {passed: 593, failed: 0, warnings: 21, seconds: 121.67, xml: evidence/r2/v9-wave4-combined.xml, core_sha256: ea3f72b6dc53856fe89160ad26da88d99a2a9328346815108c4102ae8f1f3dcb, research_spectral_sha256: 01bda330e59781ede40a8165f9f157982f12754d720a0fc2c8ea42b238a4729e}
+  kernel_intercept_with_independent_kkt_actual: {passed: 52, failed: 0, warnings: 2, xml: /tmp/v9-m35-intercept-merged.xml}
+  kernel_intercept_old_model_oracle_mismatch: {passed: 43, failed: 9, warnings: 2, xml: /tmp/v9-m35-merged.xml, reason: Historical zero-intercept oracle no longer represents the declared M35 model. Replaced test oracle with independently reviewed augmented KKT; historical helper retained.}
+  sql_execution_and_event_complete_roles_actual: {passed: 72, failed: 0, warnings: 2, xml: /tmp/v9-q03-event-merged.xml}
+  latest_v8_preservation: {passed: 38, failed: 0, warnings: 28, xml: /tmp/v9-v8-latest-preservation.xml}
+  public_planner_post_m43: {json: evidence/r2/V9-PUBLIC-PLANNER-POST-M43.json, actual_api: Optimizer.optimize_with_pass_trace, legacy_and_invariant_and_numeric_policy: PASS}
+  bds_episodes_identity_actual: {passed: 125, failed: 0, warnings: 2, xml: /tmp/v9-m26-m43-merged.xml}
+  inventory_panel_identity_actual: {passed: 100, failed: 0, warnings: 2, xml: /tmp/v9-q01-q02-identity-merged.xml}
+  quantile_huber_ridge_hill_actual: {passed: 57, failed: 0, warnings: 12, xml: /tmp/v9-m08-m09-merged.xml}
+  binding_inventory_stage: {passed: 8, failed: 0, warnings: 1, xml: /tmp/v9-q01-inventory-stage.xml}
+  wave3_combined_before_te: {passed: 479, failed: 0, warnings: 21, xml: /tmp/v9-wave3-combined.xml}
+  te_discrete_and_repaired_existing_actual: {passed: 44, failed: 0, warnings: 2, xml: /tmp/v9-m23-merged.xml}
+  filters_actual_final: {passed: 57, failed: 0, warnings: 2, xml: /tmp/v9-filters-final-merged.xml}
+  distance_covariance_actual: {passed: 9, failed: 0, warnings: 2, xml: /tmp/v9-m22-merged.xml}
+  lad_actual: {passed: 21, failed: 0, warnings: 3, xml: /tmp/v9-m21-merged.xml}
+  huber_actual_merged: {passed: 26, failed: 0, warnings: 2, xml: /tmp/v9-m01-merged.xml}
+  bessel_missing_actual_merged: {passed: 89, failed: 0, warnings: 2, xml: /tmp/v9-m30-merged.xml}
+  wave3_identity_partial: {passed: 51, failed: 0, warnings: 2, xml: /tmp/v9-wave3-identity.xml}
+  butterworth_history_red: {passed: 0, failed: 1, xml: /tmp/v9-m27-history-red.xml}
+  butterworth_history_merged: {passed: 1, failed: 0, deselected: 13, xml: /tmp/v9-m27-history-merged.xml}
+  te_discrete_red: {passed: 1, failed: 5, xml: /tmp/v9-m23-red.xml}
+  te_discrete_stage: {passed: 6, failed: 0, xml: /tmp/v9-m23-stage.xml}
+  m10_wavelet_actual_merged: {passed: 25, failed: 0, warnings: 2, xml: /tmp/v9-m10-wavelet-merged.xml}
+  m27_red: {passed: 1, failed: 12, xml: /tmp/v9-m27-red.xml}
+  m27_stage: {passed: 13, failed: 0, xml: /tmp/v9-m27-stage-green.xml}
+  m27_main_pending_bridge:
+    passed: 47
+    failed: 1
+    xml: /tmp/v9-m27-merged.xml
+    reason: Actual batch1 Butterworth winner remains EMA placeholder; scoped repair in progress, not waived.
+  m30_red: {passed: 1, failed: 4, xml: /tmp/v9-m30-red.xml}
+  m30_stage: {passed: 5, failed: 0, xml: /tmp/v9-m30-stage-green.xml}
+  lyapunov_actual_merged: {passed: 105, failed: 0, warnings: 2, xml: /tmp/v9-lyapunov-merged.xml}
+  cross_bico_actual_merged: {passed: 83, failed: 0, warnings: 2, xml: /tmp/v9-m19-m20-merged.xml}
+  v8_preservation: {passed: 66, failed: 0, warnings: 10, xml: /tmp/v9-v8-preservation.xml}
+  bicoherence_and_prior_rbf_hsic_merged: {passed: 51, failed: 0, warnings: 2, xml: /tmp/v9-m20-bico-merged.xml}
+  wavelet_merged_initial:
+    passed: 76
+    failed: 1
+    warnings: 2
+    xml: /tmp/v9-wavelet-merged.xml
+    reason: Full startup overwrites spectral Polars window metadata with empty canonical specs; fix in progress, not waived.
+  m37_bridge_identity_merged: {passed: 57, failed: 0, warnings: 2, xml: /tmp/v9-m37-bridge-identity-merged.xml}
+  m46_red: {passed: 4, failed: 1, xml: /tmp/v9-m46-red.xml}
+  m46_merged: {passed: 15, failed: 0, warnings: 2, xml: /tmp/v9-m46-merged.xml}
+  public_planner:
+    json: /tmp/v9-public-planner.json
+    actual_api: Optimizer.optimize_with_pass_trace
+    optimizer_compile: UNAVAILABLE_IN_CURRENT_API
+    legacy_equivalence: PASS
+    typed_mismatch_and_invariant_and_numeric_policy_rejection: PASS
+  compileall_scoped:
+    exit_code: 0
+    paths: [cleaned_operators, ir, identity, planner, backend]
+    limitation: Syntax only; not complete import or registry certification.
+  wave2_combined: {passed: 292, failed: 0, warnings: 13, xml: /tmp/v9-wave2-combined.xml}
+  peer_linear_decimal_merged: {passed: 16, failed: 0, warnings: 3, xml: /tmp/v9-m25-linear-merged.xml}
+  peer_hill_backends: {passed: 13, failed: 0, warnings: 12, xml: /tmp/v9-m25-m32-backends-merged.xml}
+  expectile_actual_polars: {passed: 15, failed: 0, xml: /tmp/v9-m02-m03-polars-green.xml}
+  q04_red: {failed: 22, passed: 39, xml: /tmp/v9-q04-red.xml}
+  initial_fir_red:
+    failed: 13
+    passed: 3
+    caveat: One initial test incorrectly rejected public integral-float normalization; corrected.
+  filters_and_q04_merged: {passed: 112, failed: 0, xml: /tmp/v9-filters-q04-green.xml}
+  m38_m40_m41_merged: {passed: 11, failed: 0, xml: /tmp/v9-m38-m40-m41-merged.xml}
+  wave1_combined: {passed: 224, failed: 0, warnings: 3, xml: /tmp/v9-wave1-combined.xml}
+  robust_turnover_merged: {passed: 25, deselected: 4, failed: 0, xml: /tmp/v9-robust-turnover-merged.xml}
+  peer_fraction_oracle: {passed: 14, failed: 0, xml: /tmp/v9-peer-merged.xml}
+  convex_solver_merged: {passed: 18, failed: 0, xml: /tmp/v9-m13-m14-merged.xml}
+  m31_red: {failed: 4, passed: 2, xml: /tmp/v9-m31-red.xml}
+  m31_green: {passed: 6, failed: 0, xml: /tmp/v9-m31-green.xml}
+  existing_regressions_and_m33: {passed: 100, failed: 0, xml: /tmp/v9-existing-m33-green.xml}
+  m34_m36_red: {failed: 11, passed: 1, xml: /tmp/v9-m34-m36-red.xml}
+  m34_m36_green: {passed: 12, failed: 0, xml: /tmp/v9-m34-m36-green.xml}
+  identity_first_batch: {passed: 32, failed: 0, xml: /tmp/v9-contract-identity.xml}
+  m32_pandas_merged_native_mismatch: {passed: 6, failed: 1, xml: /tmp/v9-m32-merged.xml}
+  m39_identity_merged: {passed: 136, failed: 0, xml: /tmp/v9-m39-identity-merged.xml}
+  m18_m34_m36_extreme_merged: {passed: 19, failed: 0, xml: /tmp/v9-m18-m34-m36-extreme-green.xml}
+  m02_red: {failed: 5, passed: 2, xml: /tmp/v9-m02-red.xml}
+  m03_red: {failed: 6, passed: 0, xml: /tmp/v9-m03-red.xml}
+  m02_m03_merged: {passed: 13, failed: 0, xml: /tmp/v9-m02-m03-green.xml}
+performance:
+  knn_lifetime:
+    json: /tmp/v9-m46-lifetime.json
+    shape: [40, 64, 3]
+    lag: 1
+    k: 3
+    baseline_graphs: 40
+    current_graphs: 2
+    baseline_neighbor_array_payload_bytes: 1290240
+    current_neighbor_array_payload_bytes: 64512
+    outputs_exactly_equal: true
+    limitation: Read-only AST payload diagnostic; not RSS, broker admission or auto80 throughput.
+  hsic_synthetic_rows: 240
+  threads: 1
+  repeats: 3
+  original_median_seconds: 0.006167314015328884
+  optimized_median_seconds: 0.004169583902694285
+  original_python_traced_peak_bytes: 2542660
+  optimized_python_traced_peak_bytes: 2508722
+  reference: /tmp/v9-hsic-reference-perf.json
+  optimized: /tmp/v9-hsic-optimized-perf.json
+  note: Small kernel-only timing, not auto80 throughput or native-allocation coverage.
+reviews:
+  FIR_Q05: Independent v8_protocol scoped diff approved; not native backend certification.
+  M38_M40_M41: Root reviewed stage against current baseline hashes before copying; no global gates removed.
+limitations:
+  - M35 now explicitly compares two fixed regularized blocked-OOS models with train-only centered kernels and an unpenalized intercept; it is not a nested causal test. Independent KKT, constant control and synthetic predictive/block-permutation checks pass. Additional probes expose tiny/huge unit failures in Granger and tiny-unit HSIC; separate numerical-hardening candidate is in progress.
+  - M11 first candidate was mistakenly written to main before review. Root verified exact hashes, archived it and its new test in /tmp/v9-m11-stage.XeNcjm, then restored only those unreviewed edits to the known M08/Huber baseline ea3f72b6. Nothing was deleted. Existing OLS already publishes status; unpublished status concerns custom callables. Follow-up remains isolated and M11 OPEN.
+  - Q03 four real in-memory DuckDB emitter queries validate add/square/ts_sum and shared-window execution against handwritten oracles with a pandas-operator fallback tripwire. This is research-kernel execution only, not default auto/production/native-all-operator certification. Transfer-byte instrumentation remains open.
+  - This is an intermediate checkpoint, not closure of all 51 tasks or certification of 1756 operators.
+  - M37 now uses FieldSpec canonical units and explicitly unit-preserving ts_std signatures. Unknown derived units fail closed in production; log-price/return-vol derivation remains unsupported until authoritative units exist. M39 structural gate lives in Analyzer; FieldRef catalog hashes round-trip and affect identity.
+  - M43 merged. Under immediate-predecessor gap episode membership, refractory-1 extra bars before the earliest eligible anchor establish first status. Unknown predecessor coverage excludes unproven response anchors; unknown raw diagnostic cohorts remain NaN. Public/history/prefix/replay tests pass; this is not a persistent stateful checkpoint adapter.
+  - Bessel uses stable prewarped phase-normalized SOS and full-history replay; M30 freezes event-clock state across nonfinite input and masks the first order finite events,89 tests passed. Runtime SOS checkpoint remains NOT_RUN/unimplemented. Butterworth also declares full replay; false checkpointable tags removed and phase-delay metadata unified as variable.
+  - M25 overflow fallback now uses exact Decimal products/totals once, with O(N) leave-one-out subtraction; root Fraction oracle passed. This is not a universal throughput guarantee.
+  - M32 Polars registered winner depends on import order (ts_advanced_batch5 or polars_dynamics); batch5 now uses the authoritative Hill CPU kernel, and both startup orders have fresh-process tests. No native certification.
+  - M25 peer and M03 expectile Polars bridges have valid explicit CPU-delegation identities and both research/production classification tests. These are wrapper-content identities, not complete transitive-kernel or production certificates.
+  - First M01 Huber candidate rejected. Final60823f2e candidate merged after centered-scale, original-coefficient restoration, true MAD/std and ContextVar corrections;26 tests passed. Context-local status is not full task/window outcome identity (M11 OPEN). Default100 iterations is not a hardcap on explicitly supplied finite budgets.
+  - M16/M17 first stage rejected; corrected patch17c4c74c merged after independent reference and 105 actual-main tests. Zero future separation uses existing log(d+EPS), zero initial distance is excluded before argmin.
+  - HSIC timing checkpoint predates M18 RBF geometry and M35 intercept changes; retain its recorded source hash, do not attribute timing to later source or model.
+  - M13/M14 use bounded ADMM with one banded Cholesky per window; exhausting iterations raises typed convergence error. Full parameter-domain throughput not certified.
+  - Actual default/pandas semantic versions checked on four operators; expanded public contract identity tests ongoing.
+  - Actual Polars/DuckDB/GPU full parity, full compile/import, registry/duplicate authority, ABI/placeholder, CI and production gates NOT_RUN.
+  - Real approved-data auto80/100k throughput, memory, transfers and recovery NOT_RUN.
+  - Existing v8 descendant retirement and pending-resume limitations remain; no system delegation change authorized.
+  - Current tests use synthetic data; no existing production factors recomputed or removed.
+  - ENOSPC interrupted wavelet and M10 report writes; those runs are not PASS. Combined rerun25passed completed after removing one byte-identical 6177468564-byte temporary dataset copy from /tmp/v9-m37-stage only. Original data intact. About7GB free; no more full-repository staging copies.
+  - M27/Bessel batch1 placeholders now call the authoritative pandas reference;57 actual-main tests passed. Pre-startup method+helper closure hashes are verified in fresh processes. Registry startup normalizes both class-level spec hashes to a separate shared value; no claim that normalized value is a transitive-kernel certificate.
+  - M21 uses sparse HiGHS LP with maxiter10000/time_limit5s/local rowcap10000 and original-unit objective verification. The cap is not broker admission; lack of typed per-factor LAD failure receipts remains open.
+  - M08/M09 sparse quantile LP validates primal/dual feasibility, stationarity, objective restoration and a sufficient uniqueness certificate. Full-rank design alone is insufficient; conservative rejection is possible. Local row/nnz/time guards are not broker admission. Semantic version review remains pending.
+  - M22 pairwise distances use two-pass row blocks and linear workspace (roughly8MiB for typical n, not an absolute cap), same biased estimator. Covariance restored to sqrt(unit_x*unit_y). Broker allocation/real throughput not certified.
+  - M23 ordered categories retained when unique<=bins, otherwise deduplicated quantiles; default target bins include both causal current/successor states and peak uses full causal-window shared bins. Requested/effective bin counts are diagnostic, not receipts. Opposite-sign extreme quantile interpolation uses bounded fallback. Legacy information tests fixed to call binary signatures with feasible fixtures and finite basic outputs;44 actual tests pass. Native/alternate TE backends not certified.

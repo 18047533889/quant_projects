@@ -8,6 +8,11 @@ from __future__ import annotations
 
 import numpy as np
 
+from factor_engine.cleaned_operators.technical.convex_trend_filter import (
+    l1_trend_filter as _shared_l1_trend_filter,
+    total_variation_filter as _shared_total_variation_filter,
+)
+
 try:
     import polars as pl
 except ImportError:
@@ -52,34 +57,14 @@ def _wavelet_soft_threshold(x: np.ndarray, threshold: float) -> np.ndarray:
     return np.cumsum(denoised_coeffs) + x[0] - denoised_coeffs[0]
 
 
-def _total_variation_filter(x: np.ndarray, lambda_tv: float, max_iter: int = 50) -> np.ndarray:
-    """Total variation L1 filter (same as pandas version)."""
-    y = x.copy()
-    step = 0.5
-    for _ in range(max_iter):
-        grad = y - x
-        diff = np.diff(y, prepend=y[0])
-        soft_diff = np.sign(diff) * np.maximum(0, np.abs(diff) - lambda_tv * step)
-        y_new = y - step * grad
-        y_new = x + np.cumsum(soft_diff)
-        if np.allclose(y, y_new, atol=1e-6):
-            break
-        y = y_new
-    return y
+def _total_variation_filter(x: np.ndarray, lambda_tv: float, max_iter: int = 4000) -> np.ndarray:
+    """Total variation L1 filter shared with the pandas implementation."""
+    return _shared_total_variation_filter(x, lambda_tv, max_iter=max_iter)
 
 
-def _l1_trend_filter(x: np.ndarray, lambda_l1: float, max_iter: int = 50) -> np.ndarray:
-    """L1 trend filter (same as pandas version)."""
-    y = x.copy()
-    step = 0.1
-    for _ in range(max_iter):
-        d2y = np.diff(y, n=2, prepend=[y[0], y[1]])
-        soft_d2y = np.sign(d2y) * np.maximum(0, np.abs(d2y) - lambda_l1 * step)
-        y_new = x + np.cumsum(np.cumsum(soft_d2y - d2y))
-        if np.allclose(y, y_new, atol=1e-6):
-            break
-        y = y_new
-    return y
+def _l1_trend_filter(x: np.ndarray, lambda_l1: float, max_iter: int = 4000) -> np.ndarray:
+    """L1 trend filter shared with the pandas implementation."""
+    return _shared_l1_trend_filter(x, lambda_l1, max_iter=max_iter)
 
 
 def _rolling_apply_ssa(arr: np.ndarray, window: int, n_components: int) -> float:
@@ -116,6 +101,7 @@ def _rolling_apply_wavelet(arr: np.ndarray, threshold: float) -> float:
 
 def _rolling_apply_tv(arr: np.ndarray, lambda_tv: float) -> float:
     """Rolling TV for single point."""
+    arr = np.asarray(arr, dtype=float)
     if len(arr) < 3:
         return float(arr[-1]) if len(arr) > 0 else np.nan
     window_data = arr
@@ -131,6 +117,7 @@ def _rolling_apply_tv(arr: np.ndarray, lambda_tv: float) -> float:
 
 def _rolling_apply_l1(arr: np.ndarray, lambda_l1: float) -> float:
     """Rolling L1 trend for single point."""
+    arr = np.asarray(arr, dtype=float)
     if len(arr) < 5:
         return float(arr[-1]) if len(arr) > 0 else np.nan
     window_data = arr

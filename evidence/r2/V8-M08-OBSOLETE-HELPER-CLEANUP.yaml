@@ -1,0 +1,38 @@
+schema: factor_engine.v8.scoped_fix.v1
+git_sha: 118cd21c6262082336daa545ddc06b6f78def7b9
+date: '2026-09-08'
+target: server-c:/home/sunhaiwei/quant_projects
+issue: V8-M08
+status: SCOPED_PASS
+files:
+  - factor_engine/cleaned_operators/ts_model/polars_regression.py
+  - factor_engine/tests/operators/test_v8_polars_model_cleanup.py
+source_sha256: a103957826190634064af7796ca57c7249cffb33c6a13988390e295349a79e21
+changes:
+  - removed unregistered and uncalled _rolling_slope and its only helper _ols_beta
+  - distinguished native liquidity metadata from Python callback metadata
+  - preserved active liquidity numerical kernels and physical implementation specifications
+reference_search:
+  - tracked factor_engine sources and all Python tests contain no external call to these module helpers
+  - unrelated helpers with the same name in other modules preserved
+binding_ledger:
+  file: evidence/r2/V8-M08-CLEANUP-BINDINGS.jsonl
+  sha256: eb81dab0721c57bb159e0276ba0a71df3ee5732bfe6ffd823e9807caa6e701a6
+  bindings: 6
+  canonicals: 2
+  boundary: changed Polars dependencies explicitly mark prior certification stale; ledger is not numerical certification
+tests:
+  red: '2 failed before source edit'
+  red_report: /tmp/v8-polars-cleanup-red.xml
+  green: '28 passed, 2 warnings in 25.32 seconds'
+  green_report: /tmp/v8-polars-cleanup-green.xml
+  suites:
+    - tests/operators/test_v8_polars_model_cleanup.py
+    - tests/operators/test_v8_wp3_models.py
+    - tests/runtime/test_v8_semantic_version_identity.py
+limitations:
+  - metadata is descriptive and does not confer production certification
+  - no all-operator or all-backend numerical certification
+  - historical binding ledger remains a prior source snapshot
+recovery: removed helper definitions remain in repository HEAD; no git history changed
+commit_push_deploy: false

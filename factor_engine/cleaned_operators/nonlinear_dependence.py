@@ -95,23 +95,106 @@ def _double_center(a: np.ndarray) -> np.ndarray:
     return d - d.mean(axis=0, keepdims=True) - d.mean(axis=1, keepdims=True) + d.mean()
 
 
-def _distance_corr(a: np.ndarray, b: np.ndarray) -> tuple[float, float]:
-    """Return (distance_correlation, distance_covariance) in [0, 1] / level."""
+def _distance_corr(
+    a: np.ndarray, b: np.ndarray, *, _block_size: int | None = None,
+) -> tuple[float, float]:
+    """Return biased distance correlation/covariance with bounded workspace.
+
+    This preserves the existing doubly-centred, ``1/n**2`` (biased) estimator.
+    Each marginal is first expressed in a history-relative distance unit; the
+    dimensionless correlation is computed there and distance covariance is
+    restored to ``sqrt(unit(a) * unit(b))``.  Pairwise matrices are accumulated
+    in two blockwise passes, so temporary memory is O(n), not O(n**2).
+    ``_block_size`` is a private oracle/testing control; public callers use the
+    deterministic workspace budget below.
+    """
+    a = np.asarray(a, dtype=float)
+    b = np.asarray(b, dtype=float)
+    if a.ndim != 1 or b.ndim != 1:
+        return np.nan, np.nan
     n = a.size
-    if n < 4:
+    if n < 4 or b.size != n:
         return np.nan, np.nan
-    A = _double_center(a)
-    B = _double_center(b)
-    dcov2 = float(np.sum(A * B)) / float(n * n)
-    dvar_x2 = float(np.sum(A * A)) / float(n * n)
-    dvar_y2 = float(np.sum(B * B)) / float(n * n)
-    if dvar_x2 <= 1e-12 or dvar_y2 <= 1e-12:
+    if not (np.all(np.isfinite(a)) and np.all(np.isfinite(b))):
         return np.nan, np.nan
-    dcov = float(np.sqrt(max(dcov2, 0.0)))
+
+    def _scaled(values: np.ndarray) -> tuple[np.ndarray, float] | None:
+        if np.all(values == values[0]):
+            return None
+        with np.errstate(over="ignore", invalid="ignore"):
+            delta = values - values[0]
+        if np.all(np.isfinite(delta)):
+            scale = float(np.max(np.abs(delta)))
+            if scale <= 0.0 or not np.isfinite(scale):
+                return None
+            return delta / scale, float(np.log(scale))
+        # Opposite-sign finite extremes can overflow their direct difference.
+        # Divide first, then centre in a bounded coordinate system; retain the
+        # physical scale in log form so restoring covariance need not overflow.
+        raw_scale = float(np.max(np.abs(values)))
+        if raw_scale <= 0.0 or not np.isfinite(raw_scale):
+            return None
+        bounded = values / raw_scale
+        delta = bounded - bounded[0]
+        relative_scale = float(np.max(np.abs(delta)))
+        if relative_scale <= 0.0 or not np.isfinite(relative_scale):
+            return None
+        return delta / relative_scale, float(np.log(raw_scale) + np.log(relative_scale))
+
+    scaled_a = _scaled(a)
+    scaled_b = _scaled(b)
+    if scaled_a is None or scaled_b is None:
+        return np.nan, np.nan
+    x, log_scale_x = scaled_a
+    y, log_scale_y = scaled_b
+
+    # Target roughly 2 MiB per pairwise block while n permits it; above 262144
+    # even a single row grows linearly with n. Peak workspace is O(n), never
+    # O(n**2). This local bound is not runtime resource-broker admission.
+    if _block_size is None:
+        block = max(1, min(n, 262_144 // n))
+    else:
+        block = max(1, min(n, int(_block_size)))
+    row_x = np.empty(n, dtype=float)
+    row_y = np.empty(n, dtype=float)
+    for start in range(0, n, block):
+        stop = min(n, start + block)
+        row_x[start:stop] = np.sum(np.abs(x[start:stop, None] - x[None, :]), axis=1) / n
+        row_y[start:stop] = np.sum(np.abs(y[start:stop, None] - y[None, :]), axis=1) / n
+    grand_x = float(np.mean(row_x))
+    grand_y = float(np.mean(row_y))
+    cross_sum = 0.0
+    square_x_sum = 0.0
+    square_y_sum = 0.0
+    for start in range(0, n, block):
+        stop = min(n, start + block)
+        dx = np.abs(x[start:stop, None] - x[None, :])
+        dy = np.abs(y[start:stop, None] - y[None, :])
+        A = dx - row_x[start:stop, None] - row_x[None, :] + grand_x
+        B = dy - row_y[start:stop, None] - row_y[None, :] + grand_y
+        cross_sum += float(np.sum(A * B))
+        square_x_sum += float(np.sum(A * A))
+        square_y_sum += float(np.sum(B * B))
+    divisor = float(n * n)
+    dcov2 = cross_sum / divisor
+    dvar_x2 = square_x_sum / divisor
+    dvar_y2 = square_y_sum / divisor
+    if (not np.isfinite(dcov2) or not np.isfinite(dvar_x2)
+            or not np.isfinite(dvar_y2) or dvar_x2 <= 0.0 or dvar_y2 <= 0.0):
+        return np.nan, np.nan
+    normalized_dcov = float(np.sqrt(max(dcov2, 0.0)))
     denom = float(np.sqrt(np.sqrt(dvar_x2) * np.sqrt(dvar_y2)))
-    if denom <= 1e-12:
-        return np.nan, dcov
-    dcorr = float(min(1.0, max(0.0, dcov / denom)))
+    if not np.isfinite(denom) or denom <= 0.0:
+        return np.nan, np.nan
+    dcorr = float(min(1.0, max(0.0, normalized_dcov / denom)))
+    if normalized_dcov == 0.0:
+        dcov = 0.0
+    else:
+        log_dcov = (float(np.log(normalized_dcov))
+                    + 0.5 * (log_scale_x + log_scale_y))
+        dcov = float(np.exp(log_dcov))
+        if not np.isfinite(dcov):
+            dcov = np.nan
     return dcorr, dcov
 
 

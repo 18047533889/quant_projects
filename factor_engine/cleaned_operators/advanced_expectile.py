@@ -16,6 +16,7 @@ fail closed to NaN on degenerate windows.
 from __future__ import annotations
 
 from typing import Any
+import math
 
 import numpy as np
 import pandas as pd
@@ -77,8 +78,8 @@ def _metadata(
 def _expectile(vals: np.ndarray, tau: float, n_min: int = _DEFAULT_N_MIN) -> float:
     """Newey-Powell fixed-point expectile of a finite value array.
 
-    P1-16: only a CONVERGED fixed point (max |update| <= ``_CONV_TOL`` relative
-    within ``_MAX_ITER_EXPECTILE``) is emitted; otherwise NaN.
+    Only a fixed point with normalized update and estimating-score residual
+    at most 1e-12 within ``_MAX_ITER_EXPECTILE`` is emitted; otherwise NaN.
     P1-17: requires ``N_eff * min(tau, 1-tau) >= n_min`` effective tail
     observations, else the extreme-tail estimate is unstable -> NaN.
     """
@@ -89,21 +90,35 @@ def _expectile(vals: np.ndarray, tau: float, n_min: int = _DEFAULT_N_MIN) -> flo
     nmin = int(n_min)
     if v.size * min(tt, 1.0 - tt) < nmin:
         return np.nan
-    e = float(np.mean(v))
+    # A large level must not relax the stopping criterion.  Work in a shared
+    # centered, scale-normalized training coordinate system; the half-sum
+    # midpoint avoids overflow when the observed range spans both signs.
+    center = float(v.min() / 2.0 + v.max() / 2.0)
+    shifted = v - center
+    scale = float(np.max(np.abs(shifted)))
+    if scale == 0.0:
+        return center
+    if not np.isfinite(scale):
+        return np.nan
+    normalized = shifted / scale
+    e = float(np.mean(normalized))
     converged = False
     for _ in range(_MAX_ITER_EXPECTILE):
-        w = np.abs(tt - (v < e).astype(float))
+        w = np.abs(tt - (normalized < e).astype(float))
         s = float(w.sum())
         if s <= _EPS:
             converged = True
             break
-        e_new = float(np.sum(w * v)) / s
-        if abs(e_new - e) <= _CONV_TOL * max(1.0, abs(e)):
+        e_new = float(np.sum(w * normalized)) / s
+        residual = normalized - e_new
+        score = float(np.dot(np.where(residual >= 0.0, tt, 1.0 - tt), residual)) / s
+        if abs(e_new - e) <= 1e-12 and abs(score) <= 1e-12:
             e = e_new
             converged = True
             break
         e = e_new
-    return e if converged else np.nan
+    result = center + scale * e
+    return result if converged and np.isfinite(result) else np.nan
 
 
 def _expectile_chunk(chunk: np.ndarray, tau: float, n_min: int = _DEFAULT_N_MIN) -> float:
@@ -166,8 +181,8 @@ class TsExpectile(SeriesOperator):
 def _expectile_slope(yv: np.ndarray, xv: np.ndarray, tau: float, n_min: int = _DEFAULT_N_MIN) -> float:
     """IRLS asymmetric least-squares slope of y ~ a + b·x at expectile tau.
 
-    P1-16: only a CONVERGED IRLS iterate (max |beta update| <= ``_CONV_TOL``
-    relative within ``_MAX_ITER_IRLS``) is emitted; a near-singular /
+    Only an IRLS iterate with normalized prediction and score convergence
+    within ``_MAX_ITER_IRLS`` is emitted; a near-singular /
     high-leverage design that does not settle returns NaN instead of a bogus
     slope.
     P1-17: requires ``N_eff * min(tau, 1-tau) >= n_min`` effective tail
@@ -181,17 +196,26 @@ def _expectile_slope(yv: np.ndarray, xv: np.ndarray, tau: float, n_min: int = _D
     nmin = int(n_min)
     if n * min(tt, 1.0 - tt) < nmin:
         return np.nan
-    sx = float(np.std(xx))
-    if sx <= _EPS:
+    xcenter = float(xx.min() / 2.0 + xx.max() / 2.0)
+    ycenter = float(yy.min() / 2.0 + yy.max() / 2.0)
+    centered_x, centered_y = xx - xcenter, yy - ycenter
+    sx = float(np.max(np.abs(centered_x)))
+    sy = float(np.max(np.abs(centered_y)))
+    if sx == 0.0 or not np.isfinite(sx) or not np.isfinite(sy):
         return np.nan
-    A = np.vstack([xx, np.ones(n)]).T
+    if sy == 0.0:
+        return 0.0
+    target = centered_y / sy
+    A = np.column_stack((centered_x / sx, np.ones(n)))
     try:
-        beta = np.linalg.lstsq(A, yy, rcond=None)[0]
+        beta, _, rank, _ = np.linalg.lstsq(A, target, rcond=None)
     except np.linalg.LinAlgError:
+        return np.nan
+    if rank < 2:
         return np.nan
     converged = False
     for _ in range(_MAX_ITER_IRLS):
-        r = yy - A @ beta
+        r = target - A @ beta
         w = np.abs(tt - (r < 0.0).astype(float))
         sw = float(w.sum())
         if sw <= _EPS:
@@ -199,15 +223,32 @@ def _expectile_slope(yv: np.ndarray, xv: np.ndarray, tau: float, n_min: int = _D
             break
         W = np.sqrt(w)
         try:
-            beta_new = np.linalg.lstsq(A * W[:, None], yy * W, rcond=None)[0]
+            beta_new, _, rank, _ = np.linalg.lstsq(A * W[:, None], target * W, rcond=None)
         except np.linalg.LinAlgError:
             return np.nan
-        if float(np.max(np.abs(beta_new - beta))) <= _CONV_TOL * max(1.0, float(np.max(np.abs(beta)))):
+        if rank < 2 or not np.isfinite(beta_new).all():
+            return np.nan
+        residual = target - A @ beta_new
+        next_weights = np.where(residual >= 0.0, tt, 1.0 - tt)
+        score = A.T @ (next_weights * residual) / next_weights.sum()
+        prediction_change = np.max(np.abs(A @ (beta_new - beta)))
+        if prediction_change <= 1e-12 and np.max(np.abs(score)) <= 1e-12:
             beta = beta_new
             converged = True
             break
         beta = beta_new
-    return float(beta[0]) if converged else np.nan
+    if not converged:
+        return np.nan
+    # Restore slope units without an overflowing/underflowing intermediate
+    # ratio sy/sx when the final slope itself is representable.
+    mantissa, exponent = math.frexp(float(beta[0]))
+    my, ey = math.frexp(sy)
+    mx, ex = math.frexp(sx)
+    try:
+        result = math.ldexp(mantissa * my / mx, exponent + ey - ex)
+    except OverflowError:
+        return np.nan
+    return result if np.isfinite(result) else np.nan
 
 
 def _expectile_beta_chunk(yc: np.ndarray, xc: np.ndarray, tau: float, n_min: int = _DEFAULT_N_MIN) -> float:

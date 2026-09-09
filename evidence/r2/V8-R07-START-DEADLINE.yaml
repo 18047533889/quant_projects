@@ -1,0 +1,47 @@
+schema: factor_engine.v8.evidence.v1
+git_sha: 118cd21c6262082336daa545ddc06b6f78def7b9
+date: '2026-09-08'
+target: server-c:/home/sunhaiwei/quant_projects
+status: SCOPED_PASS_FULL_INTEGRATION_RUNNING
+issue: V8-R07
+files:
+  factor_engine/runtime/bounded_pipeline.py: f575ebdddc71e2307fd86d21c31e23049811412337cb3cfa350ad582eb179dec
+  factor_engine/runtime/run_deadline.py: 654b71ac96656e7ea6b2bff38091983c393ef681757aff18ed2f1ef85f30dc28
+  factor_engine/tests/runtime/test_v8_persisted_deadline.py: e2c58f30846ef99a454490d5aff8926c94abdeb549a65998cbbae21f1b0ee184
+  factor_engine/tests/runtime/test_v8_run_start_authority.py: 3470be6c61258244f1426b291db113f47cefacc1839575935c793e77d1bb55ce
+  factor_engine/tests/runtime/test_v8_durable_deadline_identity.py: 91d77b1600df82de876f1d716407e8751d411e19b822bad4b47287eb733016cd
+changes:
+  - new run acquires coordinator lock before any ingestion process or database writer starts
+  - ordinary startup error releases ownership; ingestion quarantine retains actual broker and lock
+  - original monotonic/realtime start captured once and strict run-bound deadline persisted in identity.json before ingestion
+  - every new-run stage uses restored absolute deadline from that same record
+  - terminal-only artifact revalidation does not rewrite original identity/deadline
+  - empty manifests do not start execution workers; supervised ingestion remains permitted
+  - nested startup cleanup quarantine upgrades uncertainty and retains broker/manifest/lock
+tests:
+  lock_red: '2 failed; ingestion ran before lock and quarantine lacked authority retention'
+  lock_red_xml: /tmp/v8-r07-run-start-red.xml
+  lock_green: '23 passed with coordinator/manifest/continuous-refill regressions'
+  lock_green_xml: /tmp/v8-root-preingest-lock-green.xml
+  deadline_red: '2 failed with valid policy; persisted job_deadline field absent'
+  deadline_red_xml: /tmp/v8-durable-deadline-valid-red.xml
+  deadline_fixture_correction: initial red included invalid job_min/job_max fixture; fixed before true missing-field reproduction
+  strict_record: '52 passed; includes real cross-process absolute-deadline preservation, null and integer overflow rejection'
+  strict_record_xml: /tmp/v8-persisted-deadline.xml
+  integrated: '104 passed, 13 warnings in 2.93s'
+  integrated_xml: /tmp/v8-root-durable-deadline-green.xml
+  extra_startup_red: '2 failed, empty run spawned3 execution workers and nested cleanup lost lock/manifest authority'
+  extra_startup_red_xml: /tmp/v8-empty-startup-red.xml
+  extra_startup_green: '15 passed with start/deadline/failure-slot/refill regressions'
+  extra_startup_green_xml: /tmp/v8-root-empty-cleanup-green.xml
+independent_review:
+  lock_branch: v8_data read-only review, no scoped blocker
+  deadline_record: root found null-fallback and huge-int overflow; fixed before integration
+  final_wiring: v8_protocol found nested startup quarantine gap; fixed and independently confirmed by v8_data
+limitations:
+  - pending same-run resume is still disabled
+  - worker ownership is not yet connected to every pipeline/ingestion process
+  - worker ownership journal capacity and restart reconciliation remain open
+  - boot change or backwards clocks cannot grant restored computation time
+  - real DataAccess profile/GPU/native parity/100k acceptance NOT_RUN
+github_commit_push_deploy: false

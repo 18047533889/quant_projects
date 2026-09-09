@@ -1,0 +1,71 @@
+issue_ids:
+  - V8-D01
+  - V8-D02
+status: FIXED_SCOPED_SYNTHETIC
+merged_review:
+  source_sha256: 744f8f53220532b8f189eb184ddded41d78e85f5be0a07ede7eb086d0d269f6c
+  primary_test_sha256: 154921a9eaf6663a249f01eef39b0f583afdcd11ab7eb7c9379c4947c5591cab
+  final_result: 42 passed
+  junit: /tmp/v8-data-merged-final.xml
+  log: /tmp/v8-data-merged-final.log
+  scope: cache identity, refresh lock, concurrent cache, legacy bundle, snapshot validity/exact epoch/unknown tests
+  additional_red_reports:
+    - /tmp/v8-normalization-epoch-red.log
+    - /tmp/v8-panel-lazy-red.log
+    - /tmp/v8-all-cache-epoch-red.log
+  additional_fixes:
+    - Refresh source I/O uses a separate single-flight lock; final publication rejects newer epochs.
+    - All-cache-hit return and post-normalization insertion recheck approval and snapshot.
+    - Panel conversion rechecks identity before panel cache publication.
+    - Legacy lazy prefetch checks approval and snapshot before publication.
+    - Approved legacy lazy reads route through checked eager ReadHandle; no claim that legacy bundle carries exact-content proof.
+  earlier_fixture_failures: Cache-residency and single-collect tests now inject explicit test-only cache authority; original residency assertions remain. Runtime zero-budget behavior was not weakened.
+git_sha: 118cd21c6262082336daa545ddc06b6f78def7b9
+timestamp: 2026-09-08T16:15:03+08:00
+winning_binding:
+  public_api: factor_engine.storage.sources.data_access_source.DataAccessSource.load_columns
+  eager_identity: data_access.read.read_handle.ReadHandle.read_identity
+owned_files:
+  - factor_engine/storage/sources/data_access_source.py
+  - factor_engine/tests/storage/test_v8_data_access_cache_identity.py
+  - evidence/r2/V8-D01-D02-DATAACCESS.yaml
+changes:
+  V8-D01: Cache hits are captured under the cache lock as request-owned strong references before miss I/O; return assembly no longer depends on cache residency after insertion/eviction.
+  V8-D02: The eager handle dataset and exact physical source_snapshot digest are checked before snapshot recording, Arrow conversion, normalization, or cache insertion; mismatch closes the handle and clears reusable caches.
+  snapshot_rule: A mixed hit/miss request rejects eager or lazy results whose observed snapshot differs from the snapshot owning its captured hits.
+  concurrency_rule: Snapshot recording, approval binding, and guarded cache insertion use one metadata lock; remote I/O and conversion do not hold it.
+  lifecycle_rule: All eager pre-conversion failures close the handle; first exact-content binding atomically discards caches created before approval.
+tests:
+  red:
+    command: .venv/bin/python -m pytest -q factor_engine/tests/storage/test_v8_data_access_cache_identity.py
+    result: 5 failed, 1 passed
+    observations:
+      - Hit plus miss at one-column capacity raised KeyError after the miss evicted the hit.
+      - Wrong, missing, and wrong-dataset eager read identities reached conversion without rejection.
+  green:
+    - command: .venv/bin/python -m pytest -q factor_engine/tests/storage/test_v8_data_access_cache_identity.py
+      result: 13 passed
+    - command: .venv/bin/python -m pytest -q factor_engine/tests/storage/test_v8_data_access_cache_identity.py factor_engine/tests/runtime/test_v7_approved_snapshot.py factor_engine/tests/test_data_access_source_snapshot_cache.py
+      result: 32 passed
+    - command: .venv/bin/python -m pytest -q factor_engine/tests/storage/test_data_access_source.py factor_engine/tests/storage/test_data_access_source_concurrent.py
+      result: 17 passed, 4 skipped, 2 failed
+      note: The two failures expect caching with the process default broker, but that broker declines the mocked Series ownership/budget; the dedicated governed-broker cache tests pass and these failures are outside the changed control flow.
+coverage:
+  - capacity one eviction and request order reversal
+  - cache-disabled existing public-path control
+  - concurrent eviction while miss I/O is in flight
+  - concurrent snapshot advance during conversion blocks stale late insertion
+  - exact-content approval race and pre-approval cache invalidation
+  - mixed-request snapshot change rejection and cache clearing
+  - unknown snapshot cache hit cannot mix with an identified eager read
+  - production missing-snapshot failure closes before conversion
+  - single-column reads use the same locked request path
+  - approved A to actual A control
+  - approved A to actual B, missing identity, and wrong dataset rejection before conversion
+not_run:
+  - Real local/COS object reads and production datasets
+  - Backend parity and full repository pytest
+  - Distinct same-file version, partition, and time-range object sets beyond their synthetic source_snapshot digest identity
+limitations:
+  - Exact-content approval is intentionally the physical source_snapshot digest; the immutable DataReadIdentity continues to model columns, time range, instruments, fields, calendar, universe, and availability separately.
+  - No production-readiness claim is made from these scoped synthetic tests.

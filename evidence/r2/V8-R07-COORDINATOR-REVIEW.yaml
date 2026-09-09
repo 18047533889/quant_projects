@@ -1,0 +1,34 @@
+schema: factor_engine.v8.scoped_review.v1
+git_sha: 118cd21c6262082336daa545ddc06b6f78def7b9
+date: '2026-09-08'
+target: server-c:/home/sunhaiwei/quant_projects
+status: SCOPED_PASS_REMAINING_RESUME_CAPABILITIES_OPEN
+files:
+  - factor_engine/tests/runtime/test_v8_coordinator_lock.py
+reviewed:
+  - factor_engine/runtime/bounded_pipeline.py
+tests:
+  command: PYTHONPATH=$PWD timeout 60 ../.venv/bin/python -m pytest tests/runtime/test_v8_coordinator_lock.py -q --junitxml=/tmp/v8-coordinator-lock-errors.xml
+  passed: 5
+  failed: 0
+  report: /tmp/v8-coordinator-lock-errors.xml
+  oracles:
+    - independent process cannot acquire while current owner holds flock
+    - killed owner releases kernel lock and next owner acquires the same inode
+    - release preserves lock path and inode
+    - symlink lock rejected without overwriting target
+    - unexpected acquisition error closes its descriptor
+    - unlock failure still closes descriptor and clears ownership
+test_harness_correction:
+  initial: interrupted SSH and test cleanup deadlock; no completed pass claimed
+  cause: setting multiprocessing.Event after killing its waiting process
+  fix: never reuse crashed-process synchronization primitive; bound whole test process
+review_findings_addressed_by_owner:
+  - close descriptor on non-contention flock errors and unlock errors
+  - cover verification worker constructor with coordinator cleanup
+  - release verification lease if deadline check fails before worker accepts ownership
+limitations:
+  - pending-work resume and persistent worker-exit proof remain open
+  - terminal resume is byte verification, not numerical recomputation
+  - worker epoch reuse and real-data acceptance NOT_RUN by this review
+commit_push_deploy: false

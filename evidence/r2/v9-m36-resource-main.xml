@@ -1,0 +1,139 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="1" failures="2" skipped="0" tests="19" time="25.313" timestamp="2026-09-09T07:10:05.644798+08:00" hostname="qs-compute-gpu-hk-01"><testcase classname="factor_engine.tests.backend.test_v9_m36_resource_admission" name="test_m36_workspace_default_quadratic_and_non_m36_unchanged" time="0.009" /><testcase classname="factor_engine.tests.backend.test_v9_m36_resource_admission" name="test_m36_workspace_invalid_and_extreme_integer_boundaries" time="0.001" /><testcase classname="factor_engine.tests.backend.test_v9_m36_resource_admission" name="test_nested_m36_workspaces_use_peak_not_sum" time="0.000" /><testcase classname="factor_engine.tests.backend.test_v9_m36_resource_admission" name="test_m36_fixed_window_adds_simultaneously_live_input_output_rows" time="0.000" /><testcase classname="factor_engine.tests.backend.test_v9_m36_resource_admission" name="test_m36_default_matches_canonical_param_default" time="24.696" /><testcase classname="factor_engine.tests.backend.test_v9_m36_resource_admission" name="test_scheduler_passes_flattened_rows_and_zero_instruments_to_lowerer" time="0.031" /><testcase classname="factor_engine.tests.backend.test_v9_m36_resource_admission" name="test_calibration_cannot_reduce_hard_workspace" time="0.003" /><testcase classname="factor_engine.tests.backend.test_v9_m36_resource_admission" name="test_m36_subunit_uncertainty_is_integer_safe[0.01]" time="0.000" /><testcase classname="factor_engine.tests.backend.test_v9_m36_resource_admission" name="test_m36_subunit_uncertainty_is_integer_safe[0.999999]" time="0.000" /><testcase classname="factor_engine.tests.backend.test_v9_m36_resource_admission" name="test_m36_subunit_uncertainty_is_integer_safe[2.2250738585072014e-308]" time="0.000" /><testcase classname="factor_engine.tests.backend.test_v9_m36_resource_admission" name="test_m36_invalid_calibration_uncertainty_falls_back_safely[nan]" time="0.000" /><testcase classname="factor_engine.tests.backend.test_v9_m36_resource_admission" name="test_m36_invalid_calibration_uncertainty_falls_back_safely[inf]" time="0.000" /><testcase classname="factor_engine.tests.backend.test_v9_m36_resource_admission" name="test_m36_invalid_calibration_uncertainty_falls_back_safely[0.0]" time="0.000" /><testcase classname="factor_engine.tests.backend.test_v9_m36_resource_admission" name="test_m36_invalid_calibration_uncertainty_falls_back_safely[-1.0]" time="0.000" /><testcase classname="factor_engine.tests.backend.test_v9_m36_resource_admission" name="test_non_m36_calibration_result_is_unchanged" time="0.000" /><testcase classname="factor_engine.tests.backend.test_v9_m36_resource_admission" name="test_physical_lowerer_contract_is_admitted_by_existing_broker" time="0.001" /><testcase classname="factor_engine.tests.backend.test_operator_cost_baseline" name="test_benchmark_cost_ignores_seed_defaults" time="0.001"><failure message="AssertionError: assert 'missing' == 'stale'&#10;  &#10;  - stale&#10;  + missing">def test_benchmark_cost_ignores_seed_defaults():
+        import factor_engine.backend.operator_cost as oc
+    
+        oc._BENCHMARK_CACHE = None
+        # Round-8 #354: the loader now returns (table, status) and treats a
+        # seed_defaults / non-measured baseline as stale instead of returning {}.
+        bench, status = oc._load_benchmark_costs()
+        assert bench is None
+&gt;       assert status == "stale"
+E       AssertionError: assert 'missing' == 'stale'
+E         
+E         - stale
+E         + missing
+
+factor_engine/tests/backend/test_operator_cost_baseline.py:14: AssertionError</failure></testcase><testcase classname="factor_engine.tests.backend.test_operator_cost_baseline" name="test_benchmark_cost_affects_fastpath_coverage" time="0.284"><error message="failed on teardown with &quot;AssertionError: P0-14: production registry was thawed during factor_engine/tests/backend/test_operator_cost_baseline.py::test_benchmark_cost_affects_fastpath_coverage (1 thaw call(s)); the global singleton must never be thawed after finalize in a normal test session.  Stacks:   File &quot;&lt;frozen runpy&gt;&quot;, line 198, in _run_module_as_main&#10;    File &quot;&lt;frozen runpy&gt;&quot;, line 88, in _run_code&#10;    File &quot;/home/sunhaiwei/quant_projects/.venv/lib/python3.12/site-packages/pytest/__main__.py&quot;, line 9, in &lt;module&gt;&#10;      raise SystemExit(_console_main())&#10;    File &quot;/home/sunhaiwei/quant_projects/.venv/lib/python3.12/site-packages/_pytest/config/__init__.py&quot;, line 253, in _console_main&#10;      code = _main(prog=_get_prog_name(sys.argv))&#10;    File &quot;/home/sunhaiwei/quant_projects/.venv/lib/python3.12/site-packages/_pytest/config/__init__.py&quot;, line 229, in _main&#10;      ret: ExitCode | int = config.hook.pytest_cmdline_main(config=config)&#10;    File &quot;/home/sunhaiwei/quant_projects/.venv/lib/python3.12/site-packages/pluggy/_hooks.py&quot;, line 512, in __call__&#10;      return self._hookexec(self.name, self._hookimpls.copy(), kwargs, firstresult)&#10;    File &quot;/home/sunhaiwei/quant_projects/.venv/lib/python3.12/site-packages/pluggy/_manager.py&quot;, line 120, in _hookexec&#10;      return self._inner_hookexec(hook_name, methods, kwargs, firstresult)&#10;    File &quot;/home/sunhaiwei/quant_projects/.venv/lib/python3.12/site-packages/pluggy/_callers.py&quot;, line 121, in _multicall&#10;      res = hook_impl.function(*args)&#10;    File &quot;/home/sunhaiwei/quant_projects/.venv/lib/python3.12/site-packages/_pytest/main.py&quot;, line 377, in pytest_cmdline_main&#10;      return wrap_session(config, _main)&#10;    File &quot;/home/sunhaiwei/quant_projects/.venv/lib/python3.12/site-packages/_pytest/main.py&quot;, line 330, in wrap_session&#10;      session.exitstatus = doit(config, session) or 0&#10;    File &quot;/home/sunhaiwei/quant_projects/.venv/lib/python3.12/site-packages/_pytest/main.py&quot;, line 384, in _main&#10;      config.hook.pytest_runtestloop(session=session)&#10;    File &quot;/home/sunhaiwei/quant_projects/.venv/lib/python3.12/site-packages/pluggy/_hooks.py&quot;, line 512, in __call__&#10;      return self._hookexec(self.name, self._hookimpls.copy(), kwargs, firstresult)&#10;    File &quot;/home/sunhaiwei/quant_projects/.venv/lib/python3.12/site-packages/pluggy/_manager.py&quot;, line 120, in _hookexec&#10;      return self._inner_hookexec(hook_name, methods, kwargs, firstresult)&#10;    File &quot;/home/sunhaiwei/quant_projects/.venv/lib/python3.12/site-packages/pluggy/_callers.py&quot;, line 121, in _multicall&#10;      res = hook_impl.function(*args)&#10;    File &quot;/home/sunhaiwei/quant_projects/.venv/lib/python3.12/site-packages/_pytest/main.py&quot;, line 408, in pytest_runtestloop&#10;      item.config.hook.pytest_runtest_protocol(item=item, nextitem=nextitem)&#10;    File &quot;/home/sunhaiwei/quant_projects/.venv/lib/python3.12/site-packages/pluggy/_hooks.py&quot;, line 512, in __call__&#10;      return self._hookexec(self.name, self._hookimpls.copy(), kwargs, firstresult)&#10;    File &quot;/home/sunhaiwei/quant_projects/.venv/lib/python3.12/site-packages/pluggy/_manager.py&quot;, line 120, in _hookexec&#10;      return self._inner_hookexec(hook_name, methods, kwargs, firstresult)&#10;    File &quot;/home/sunhaiwei/quant_projects/.venv/lib/python3.12/site-packages/pluggy/_callers.py&quot;, line 121, in _multicall&#10;      res = hook_impl.function(*args)&#10;    File &quot;/home/sunhaiwei/quant_projects/.venv/lib/python3.12/site-packages/_pytest/runner.py&quot;, line 118, in pytest_runtest_protocol&#10;      runtestprotocol(item, nextitem=nextitem)&#10;    File &quot;/home/sunhaiwei/quant_projects/.venv/lib/python3.12/site-packages/_pytest/runner.py&quot;, line 139, in runtestprotocol&#10;      reports.append(call_and_report(item, &quot;call&quot;, log))&#10;    File &quot;/home/sunhaiwei/quant_projects/.venv/lib/python3.12/site-packages/_pytest/runner.py&quot;, line 249, in call_and_report&#10;      call = CallInfo.from_call(&#10;    File &quot;/home/sunhaiwei/quant_projects/.venv/lib/python3.12/site-packages/_pytest/runner.py&quot;, line 361, in from_call&#10;      result: TResult | None = func()&#10;    File &quot;/home/sunhaiwei/quant_projects/.venv/lib/python3.12/site-packages/_pytest/runner.py&quot;, line 250, in &lt;lambda&gt;&#10;      lambda: runtest_hook(item=item, **kwds),&#10;    File &quot;/home/sunhaiwei/quant_projects/.venv/lib/python3.12/site-packages/pluggy/_hooks.py&quot;, line 512, in __call__&#10;      return self._hookexec(self.name, self._hookimpls.copy(), kwargs, firstresult)&#10;    File &quot;/home/sunhaiwei/quant_projects/.venv/lib/python3.12/site-packages/pluggy/_manager.py&quot;, line 120, in _hookexec&#10;      return self._inner_hookexec(hook_name, methods, kwargs, firstresult)&#10;    File &quot;/home/sunhaiwei/quant_projects/.venv/lib/python3.12/site-packages/pluggy/_callers.py&quot;, line 121, in _multicall&#10;      res = hook_impl.function(*args)&#10;    File &quot;/home/sunhaiwei/quant_projects/.venv/lib/python3.12/site-packages/_pytest/runner.py&quot;, line 184, in pytest_runtest_call&#10;      item.runtest()&#10;    File &quot;/home/sunhaiwei/quant_projects/.venv/lib/python3.12/site-packages/_pytest/python.py&quot;, line 1707, in runtest&#10;      self.ihook.pytest_pyfunc_call(pyfuncitem=self)&#10;    File &quot;/home/sunhaiwei/quant_projects/.venv/lib/python3.12/site-packages/pluggy/_hooks.py&quot;, line 512, in __call__&#10;      return self._hookexec(self.name, self._hookimpls.copy(), kwargs, firstresult)&#10;    File &quot;/home/sunhaiwei/quant_projects/.venv/lib/python3.12/site-packages/pluggy/_manager.py&quot;, line 120, in _hookexec&#10;      return self._inner_hookexec(hook_name, methods, kwargs, firstresult)&#10;    File &quot;/home/sunhaiwei/quant_projects/.venv/lib/python3.12/site-packages/pluggy/_callers.py&quot;, line 121, in _multicall&#10;      res = hook_impl.function(*args)&#10;    File &quot;/home/sunhaiwei/quant_projects/.venv/lib/python3.12/site-packages/_pytest/python.py&quot;, line 167, in pytest_pyfunc_call&#10;      result = testfunction(**testargs)&#10;    File &quot;/home/sunhaiwei/quant_projects/factor_engine/tests/backend/test_operator_cost_baseline.py&quot;, line 26, in test_benchmark_cost_affects_fastpath_coverage&#10;      register_sql_backends()&#10;    File &quot;/home/sunhaiwei/quant_projects/factor_engine/backend/sql_pushdown/sql_registry.py&quot;, line 151, in register_sql_backends&#10;      _Reg.thaw_for_bootstrap(_REG_BOOT_TOKEN)&#10;    File &quot;/home/sunhaiwei/quant_projects/factor_engine/tests/conftest.py&quot;, line 119, in _watched_thaw&#10;      cls._p014_thaw_calls.append(&quot;&quot;.join(traceback.format_stack()) + &quot;&quot;.join(traceback.format_stack(limit=6)))&#10;    File &quot;/home/sunhaiwei/quant_projects/.venv/lib/python3.12/site-packages/pluggy/_manager.py&quot;, line 120, in _hookexec&#10;      return self._inner_hookexec(hook_name, methods, kwargs, firstresult)&#10;    File &quot;/home/sunhaiwei/quant_projects/.venv/lib/python3.12/site-packages/pluggy/_callers.py&quot;, line 121, in _multicall&#10;      res = hook_impl.function(*args)&#10;    File &quot;/home/sunhaiwei/quant_projects/.venv/lib/python3.12/site-packages/_pytest/python.py&quot;, line 167, in pytest_pyfunc_call&#10;      result = testfunction(**testargs)&#10;    File &quot;/home/sunhaiwei/quant_projects/factor_engine/tests/backend/test_operator_cost_baseline.py&quot;, line 26, in test_benchmark_cost_affects_fastpath_coverage&#10;      register_sql_backends()&#10;    File &quot;/home/sunhaiwei/quant_projects/factor_engine/backend/sql_pushdown/sql_registry.py&quot;, line 151, in register_sql_backends&#10;      _Reg.thaw_for_bootstrap(_REG_BOOT_TOKEN)&#10;    File &quot;/home/sunhaiwei/quant_projects/factor_engine/tests/conftest.py&quot;, line 119, in _watched_thaw&#10;      cls._p014_thaw_calls.append(&quot;&quot;.join(traceback.format_stack()) + &quot;&quot;.join(traceback.format_stack(limit=6)))&#10;  &#10;assert not ['  File &quot;&lt;frozen runpy&gt;&quot;, line 198, in _run_module_as_main\n  File &quot;&lt;frozen runpy&gt;&quot;, line 88, in _run_code\n  File &quot;/...thaw\n    cls._p014_thaw_calls.append(&quot;&quot;.join(traceback.format_stack()) + &quot;&quot;.join(traceback.format_stack(limit=6)))\n']&quot;">request = &lt;SubRequest '_p014_registry_lifecycle_not_thawed' for &lt;Function test_benchmark_cost_affects_fastpath_coverage&gt;&gt;
+
+    @pytest.fixture(autouse=True)
+    def _p014_registry_lifecycle_not_thawed(request):
+        """Assert the production registry was never observed thawed after finalize.
+    
+        The production registry is only ever thawed by the few EXPLICIT governance
+        tests that exercise the token contract on purpose (they are recorded in
+        ``_ACCEPTANCE_EXCLUDED_TRACK``).  Every other test must see the registry
+        never leave the frozen/finalized state.
+        """
+        from factor_engine.cleaned_operators.registry import OperatorRegistry
+    
+        fil = os.path.basename(request.node.fspath)
+        is_explicit_governance = any(ex in fil for ex in _ACCEPTANCE_EXCLUDED_TRACK)
+    
+        thawed_before = list(OperatorRegistry.__dict__.get("_p014_thaw_calls") or [])
+        try:
+            yield
+        finally:
+            thawed_after = list(OperatorRegistry.__dict__.get("_p014_thaw_calls") or [])
+            if not is_explicit_governance:
+                new = thawed_after[len(thawed_before):]
+&gt;               assert not new, (
+                    f"P0-14: production registry was thawed during {request.node.nodeid} "
+                    f"({len(new)} thaw call(s)); the global singleton must never be "
+                    "thawed after finalize in a normal test session.  Stacks: "
+                    + "\n".join(new[:2])
+                )
+E               AssertionError: P0-14: production registry was thawed during factor_engine/tests/backend/test_operator_cost_baseline.py::test_benchmark_cost_affects_fastpath_coverage (1 thaw call(s)); the global singleton must never be thawed after finalize in a normal test session.  Stacks:   File "&lt;frozen runpy&gt;", line 198, in _run_module_as_main
+E                   File "&lt;frozen runpy&gt;", line 88, in _run_code
+E                   File "/home/sunhaiwei/quant_projects/.venv/lib/python3.12/site-packages/pytest/__main__.py", line 9, in &lt;module&gt;
+E                     raise SystemExit(_console_main())
+E                   File "/home/sunhaiwei/quant_projects/.venv/lib/python3.12/site-packages/_pytest/config/__init__.py", line 253, in _console_main
+E                     code = _main(prog=_get_prog_name(sys.argv))
+E                   File "/home/sunhaiwei/quant_projects/.venv/lib/python3.12/site-packages/_pytest/config/__init__.py", line 229, in _main
+E                     ret: ExitCode | int = config.hook.pytest_cmdline_main(config=config)
+E                   File "/home/sunhaiwei/quant_projects/.venv/lib/python3.12/site-packages/pluggy/_hooks.py", line 512, in __call__
+E                     return self._hookexec(self.name, self._hookimpls.copy(), kwargs, firstresult)
+E                   File "/home/sunhaiwei/quant_projects/.venv/lib/python3.12/site-packages/pluggy/_manager.py", line 120, in _hookexec
+E                     return self._inner_hookexec(hook_name, methods, kwargs, firstresult)
+E                   File "/home/sunhaiwei/quant_projects/.venv/lib/python3.12/site-packages/pluggy/_callers.py", line 121, in _multicall
+E                     res = hook_impl.function(*args)
+E                   File "/home/sunhaiwei/quant_projects/.venv/lib/python3.12/site-packages/_pytest/main.py", line 377, in pytest_cmdline_main
+E                     return wrap_session(config, _main)
+E                   File "/home/sunhaiwei/quant_projects/.venv/lib/python3.12/site-packages/_pytest/main.py", line 330, in wrap_session
+E                     session.exitstatus = doit(config, session) or 0
+E                   File "/home/sunhaiwei/quant_projects/.venv/lib/python3.12/site-packages/_pytest/main.py", line 384, in _main
+E                     config.hook.pytest_runtestloop(session=session)
+E                   File "/home/sunhaiwei/quant_projects/.venv/lib/python3.12/site-packages/pluggy/_hooks.py", line 512, in __call__
+E                     return self._hookexec(self.name, self._hookimpls.copy(), kwargs, firstresult)
+E                   File "/home/sunhaiwei/quant_projects/.venv/lib/python3.12/site-packages/pluggy/_manager.py", line 120, in _hookexec
+E                     return self._inner_hookexec(hook_name, methods, kwargs, firstresult)
+E                   File "/home/sunhaiwei/quant_projects/.venv/lib/python3.12/site-packages/pluggy/_callers.py", line 121, in _multicall
+E                     res = hook_impl.function(*args)
+E                   File "/home/sunhaiwei/quant_projects/.venv/lib/python3.12/site-packages/_pytest/main.py", line 408, in pytest_runtestloop
+E                     item.config.hook.pytest_runtest_protocol(item=item, nextitem=nextitem)
+E                   File "/home/sunhaiwei/quant_projects/.venv/lib/python3.12/site-packages/pluggy/_hooks.py", line 512, in __call__
+E                     return self._hookexec(self.name, self._hookimpls.copy(), kwargs, firstresult)
+E                   File "/home/sunhaiwei/quant_projects/.venv/lib/python3.12/site-packages/pluggy/_manager.py", line 120, in _hookexec
+E                     return self._inner_hookexec(hook_name, methods, kwargs, firstresult)
+E                   File "/home/sunhaiwei/quant_projects/.venv/lib/python3.12/site-packages/pluggy/_callers.py", line 121, in _multicall
+E                     res = hook_impl.function(*args)
+E                   File "/home/sunhaiwei/quant_projects/.venv/lib/python3.12/site-packages/_pytest/runner.py", line 118, in pytest_runtest_protocol
+E                     runtestprotocol(item, nextitem=nextitem)
+E                   File "/home/sunhaiwei/quant_projects/.venv/lib/python3.12/site-packages/_pytest/runner.py", line 139, in runtestprotocol
+E                     reports.append(call_and_report(item, "call", log))
+E                   File "/home/sunhaiwei/quant_projects/.venv/lib/python3.12/site-packages/_pytest/runner.py", line 249, in call_and_report
+E                     call = CallInfo.from_call(
+E                   File "/home/sunhaiwei/quant_projects/.venv/lib/python3.12/site-packages/_pytest/runner.py", line 361, in from_call
+E                     result: TResult | None = func()
+E                   File "/home/sunhaiwei/quant_projects/.venv/lib/python3.12/site-packages/_pytest/runner.py", line 250, in &lt;lambda&gt;
+E                     lambda: runtest_hook(item=item, **kwds),
+E                   File "/home/sunhaiwei/quant_projects/.venv/lib/python3.12/site-packages/pluggy/_hooks.py", line 512, in __call__
+E                     return self._hookexec(self.name, self._hookimpls.copy(), kwargs, firstresult)
+E                   File "/home/sunhaiwei/quant_projects/.venv/lib/python3.12/site-packages/pluggy/_manager.py", line 120, in _hookexec
+E                     return self._inner_hookexec(hook_name, methods, kwargs, firstresult)
+E                   File "/home/sunhaiwei/quant_projects/.venv/lib/python3.12/site-packages/pluggy/_callers.py", line 121, in _multicall
+E                     res = hook_impl.function(*args)
+E                   File "/home/sunhaiwei/quant_projects/.venv/lib/python3.12/site-packages/_pytest/runner.py", line 184, in pytest_runtest_call
+E                     item.runtest()
+E                   File "/home/sunhaiwei/quant_projects/.venv/lib/python3.12/site-packages/_pytest/python.py", line 1707, in runtest
+E                     self.ihook.pytest_pyfunc_call(pyfuncitem=self)
+E                   File "/home/sunhaiwei/quant_projects/.venv/lib/python3.12/site-packages/pluggy/_hooks.py", line 512, in __call__
+E                     return self._hookexec(self.name, self._hookimpls.copy(), kwargs, firstresult)
+E                   File "/home/sunhaiwei/quant_projects/.venv/lib/python3.12/site-packages/pluggy/_manager.py", line 120, in _hookexec
+E                     return self._inner_hookexec(hook_name, methods, kwargs, firstresult)
+E                   File "/home/sunhaiwei/quant_projects/.venv/lib/python3.12/site-packages/pluggy/_callers.py", line 121, in _multicall
+E                     res = hook_impl.function(*args)
+E                   File "/home/sunhaiwei/quant_projects/.venv/lib/python3.12/site-packages/_pytest/python.py", line 167, in pytest_pyfunc_call
+E                     result = testfunction(**testargs)
+E                   File "/home/sunhaiwei/quant_projects/factor_engine/tests/backend/test_operator_cost_baseline.py", line 26, in test_benchmark_cost_affects_fastpath_coverage
+E                     register_sql_backends()
+E                   File "/home/sunhaiwei/quant_projects/factor_engine/backend/sql_pushdown/sql_registry.py", line 151, in register_sql_backends
+E                     _Reg.thaw_for_bootstrap(_REG_BOOT_TOKEN)
+E                   File "/home/sunhaiwei/quant_projects/factor_engine/tests/conftest.py", line 119, in _watched_thaw
+E                     cls._p014_thaw_calls.append("".join(traceback.format_stack()) + "".join(traceback.format_stack(limit=6)))
+E                   File "/home/sunhaiwei/quant_projects/.venv/lib/python3.12/site-packages/pluggy/_manager.py", line 120, in _hookexec
+E                     return self._inner_hookexec(hook_name, methods, kwargs, firstresult)
+E                   File "/home/sunhaiwei/quant_projects/.venv/lib/python3.12/site-packages/pluggy/_callers.py", line 121, in _multicall
+E                     res = hook_impl.function(*args)
+E                   File "/home/sunhaiwei/quant_projects/.venv/lib/python3.12/site-packages/_pytest/python.py", line 167, in pytest_pyfunc_call
+E                     result = testfunction(**testargs)
+E                   File "/home/sunhaiwei/quant_projects/factor_engine/tests/backend/test_operator_cost_baseline.py", line 26, in test_benchmark_cost_affects_fastpath_coverage
+E                     register_sql_backends()
+E                   File "/home/sunhaiwei/quant_projects/factor_engine/backend/sql_pushdown/sql_registry.py", line 151, in register_sql_backends
+E                     _Reg.thaw_for_bootstrap(_REG_BOOT_TOKEN)
+E                   File "/home/sunhaiwei/quant_projects/factor_engine/tests/conftest.py", line 119, in _watched_thaw
+E                     cls._p014_thaw_calls.append("".join(traceback.format_stack()) + "".join(traceback.format_stack(limit=6)))
+E                 
+E               assert not ['  File "&lt;frozen runpy&gt;", line 198, in _run_module_as_main\n  File "&lt;frozen runpy&gt;", line 88, in _run_code\n  File "/...thaw\n    cls._p014_thaw_calls.append("".join(traceback.format_stack()) + "".join(traceback.format_stack(limit=6)))\n']
+
+factor_engine/tests/conftest.py:192: AssertionError</error></testcase><testcase classname="factor_engine.tests.backend.test_operator_cost_baseline" name="test_backend_cost_baseline_json_freshness" time="0.001"><failure message="AssertionError: missing baseline: /home/sunhaiwei/quant_projects/factor_engine/benchmarks/backend_cost_baseline.json&#10;assert False&#10; +  where False = is_file()&#10; +    where is_file = PosixPath('/home/sunhaiwei/quant_projects/factor_engine/benchmarks/backend_cost_baseline.json').is_file">def test_backend_cost_baseline_json_freshness():
+        """committed baseline 应含 ts_mean duckdb_sql 成本（CI freshness gate）。"""
+        import json
+        from pathlib import Path
+    
+        path = Path(__file__).resolve().parents[2] / "benchmarks" / "backend_cost_baseline.json"
+&gt;       assert path.is_file(), f"missing baseline: {path}"
+E       AssertionError: missing baseline: /home/sunhaiwei/quant_projects/factor_engine/benchmarks/backend_cost_baseline.json
+E       assert False
+E        +  where False = is_file()
+E        +    where is_file = PosixPath('/home/sunhaiwei/quant_projects/factor_engine/benchmarks/backend_cost_baseline.json').is_file
+
+factor_engine/tests/backend/test_operator_cost_baseline.py:37: AssertionError</failure></testcase></testsuite></testsuites>

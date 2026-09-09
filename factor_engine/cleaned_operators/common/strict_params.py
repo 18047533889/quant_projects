@@ -66,7 +66,7 @@ def strict_int(value: Any, name: str, *, minimum: int | None = None,
     if value is None:
         raise OperatorParameterError(f"{name} must be an integer, not None")
     if isinstance(value, (np.integer,)):
-        return int(value)
+        value = int(value)
     if not isinstance(value, int):
         raise OperatorParameterError(
             f"{name} must be an integer, not {type(value).__name__} ({value!r})"

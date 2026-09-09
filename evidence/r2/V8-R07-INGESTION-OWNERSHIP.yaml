@@ -1,0 +1,37 @@
+schema: factor_engine.v8.evidence.v1
+git_sha: 118cd21c6262082336daa545ddc06b6f78def7b9
+date: '2026-09-08'
+target: server-c:/home/sunhaiwei/quant_projects
+status: SCOPED_GREEN_NOT_YET_DEFAULT_WIRED
+files:
+  - factor_engine/runtime/finite_manifest.py
+  - factor_engine/tests/runtime/test_v8_manifest_ingestion_ownership.py
+source_sha256: a462c11fde6362b11dbe41a0ac44cb4376254c684c70556681a0227788f47f76
+changes:
+  - optional paired run ownership registers STARTING before spawn
+  - separate parent-to-child capability gate follows durable BOUND before child SQLite or iterator entry
+  - EXITED requires observed OS retirement; ambiguous append is never retried in finally
+  - partial spawn including KeyboardInterrupt retains exact process and owned endpoints
+  - unowned legacy quarantine still closes result endpoints and retains process authority
+tests:
+  stage: '9 passed in1.55s'
+  stage_xml: /tmp/v8-ingest-ownership-stage-v2.xml
+  integration_red: '3 failed,16 passed; legacy endpoint close contract changed'
+  integration_red_xml: /tmp/v8-ingest-owned-legacy-integration.xml
+  legacy_fix_green: '19 passed in2.53s; original assertions unchanged'
+  legacy_green_xml: /tmp/v8-ingest-owned-legacy-green.xml
+  production_owned: '9 passed in1.57s'
+  production_owned_xml: /tmp/v8-manifest-ingestion-ownership-prod.xml
+  combined_store_supervisor: '76 passed in30.24s'
+  combined_xml: /tmp/v8-ownership-stores-integrated.xml
+review:
+  author: v8_data
+  author_model: gpt-5.6-sol
+  reviewer: root
+  findings_repaired: BaseException spawn gap, repeated uncertain EXITED append, legacy endpoint cleanup contract
+limitations:
+  - optional API foundation; default pipeline wiring is being implemented separately
+  - STARTING-only crash gaps remain unproven; no fabricated EXITED
+  - child target gate does not cover spawn interpreter/bootstrap or argument unpickling
+  - no pending resume, numerical/native operator or real GPU/100k certification
+github_commit_push_deploy: false

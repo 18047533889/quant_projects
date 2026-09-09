@@ -52,14 +52,15 @@ PARAMETER_ALIASES: dict[str, dict[str, str]] = {
 # re-derives this set from the loaded registry and FAILS on drift (an entry that
 # gains metadata backing must be removed here, or the assertion breaks).
 #
-# ``ts_beta`` gained metadata ``param_aliases={"d": "window"}``
-# (R19-033..035 beta authority unification) so it is no longer compat-only; the
-# PARAMETER_ALIASES entry stays as a planning-before-load_all fallback, but the
-# compat marker excludes it.  ``ts_rank`` remains compat-only (its polars native
+# ``ts_beta``, ``ts_median``, and ``ts_zscore`` gained metadata
+# ``param_aliases={"d": "window"}``, so they are no longer compat-only; their
+# PARAMETER_ALIASES entries stay as planning-before-load_all fallbacks, but the
+# compat marker excludes them.  ``ts_rank`` remains compat-only (its polars native
 # contract explicitly rejects ``d`` as a runtime alias — see
 # test_rolling_parameter_contracts).
 _COMPAT_ONLY_ALIAS_CANONICALS: frozenset[str] = (
-    frozenset(PARAMETER_ALIASES.keys()) - frozenset({"ts_beta"})
+    frozenset(PARAMETER_ALIASES.keys())
+    - frozenset({"ts_beta", "ts_median", "ts_zscore"})
 )
 
 

@@ -1,0 +1,30 @@
+schema: factor_engine.v8.scoped_integration.v1
+git_sha: 118cd21c6262082336daa545ddc06b6f78def7b9
+date: '2026-09-08'
+target: server-c:/home/sunhaiwei/quant_projects
+status: SCOPED_PASS
+tests:
+  passed: 55
+  failed: 0
+  warnings: 2
+  elapsed_seconds: 33.40
+  report: /tmp/v8-root-resumed-integration.xml
+  files:
+    - factor_engine/tests/runtime/test_v8_default_api_contract.py
+    - factor_engine/tests/runtime/test_v8_worker_phase_protocol.py
+    - factor_engine/tests/runtime/test_v8_resume_validation.py
+    - factor_engine/tests/runtime/test_v8_coordinator_lock.py
+    - factor_engine/tests/runtime/test_v8_resource_wait_fairness.py
+source_sha256_before_and_after_identical:
+  factor_engine/runtime/bounded_pipeline.py: b7a1929d088ce322bf5f6b5c26b68f41a680c0a912bf0ed2085be1a8592ed387
+  factor_engine/runtime/supervised_worker.py: be9989d630477b8fca3175e69a9cc0ae298e3cf361e7e4f80ef03a25db979a1a
+  factor_engine/runtime/resource_broker.py: 03e7a18d02ed02fc9d0a4059e6d4e0044bce5acfa23c034e5f15f98f8d8c8f23
+  factor_engine/runtime/default_engine.py: 81d18557b740e02fc465cf9a4ab68ce2478676c8402d5d42ceb5836644a70135
+limitations:
+  - snapshot before further end-to-end cancellation and timestamp lower-bound work
+  - default facade test mocks execution; not real production data
+  - terminal resume does not implement pending-work recovery
+  - safe multi-wave process reuse and continuous refill remain open
+  - broader broker regression failures require classification
+  - real approved profile, GPU and 100k acceptance NOT_RUN
+commit_push_deploy: false

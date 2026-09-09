@@ -80,6 +80,7 @@ def _payload_to_expr(text: str) -> Expr:
                 canonical_name=payload.get("canonical_name", ""),
                 table=payload.get("table", ""),
                 source_name=payload.get("source_name", ""),
+                catalog_hash=payload.get("catalog_hash", ""),
             )
         if kind == "column":
             return ColumnRef(name=payload.get("name", ""))

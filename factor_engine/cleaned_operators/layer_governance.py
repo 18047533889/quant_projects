@@ -11,6 +11,14 @@ from factor_engine.factor_recipes.registry import FactorRecipeRegistry
 from factor_engine.research_tools.registry import ResearchToolRegistry
 from factor_engine.cleaned_operators.registry import OperatorRegistry
 
+
+def _canonical_semantic_version(canonical: str, fallback: str) -> str:
+    """Resolve the canonical version from the central monotonic authority."""
+    from factor_engine.backend.operator_semantic_version import OPERATOR_SEMANTIC_VERSIONS
+
+    version = OPERATOR_SEMANTIC_VERSIONS.get(canonical)
+    return f"{int(version)}.0" if version is not None else str(fallback)
+
 # Fields or obsolete ambiguous transforms that must not remain executable names.
 DELETE_CANONICALS = frozenset({
     "vwap",
@@ -245,7 +253,10 @@ def _enrich_catalog(daily: set[str]) -> None:
             "lifecycle_status": lifecycle_status,
             "backend_status": "implemented",
             "scope": scope,
-            "semantic_version": "2.0" if surface == "daily" else "1.0",
+            "semantic_version": _canonical_semantic_version(
+                canonical,
+                str(catalog.get("semantic_version") or ("2.0" if surface == "daily" else "1.0")),
+            ),
             "pit_safe": bool(policy.pit_safe) if policy is not None else False,
             "required_cutoff": cutoff,
             "earliest_trade_time": trade_time,
@@ -279,6 +290,10 @@ def _seal_registry() -> None:
         semantic_version: str = "1.0",
     ) -> None:
         canonical_name = canonical or operator.metadata.name
+        semantic_version = _canonical_semantic_version(
+            canonical_name,
+            str(cls._catalog.get(canonical_name, {}).get("semantic_version") or semantic_version),
+        )
         exists = backend in cls._operators.get(canonical_name, {})
         if exists and not replace:
             raise ValueError(
@@ -307,6 +322,7 @@ def _seal_registry() -> None:
             status=status,
             backend_explicit=backend_explicit,
             expected_old_source=expected_old_source,
+            semantic_version=semantic_version,
         )
         cls._catalog[canonical_name]["semantic_version"] = semantic_version
 

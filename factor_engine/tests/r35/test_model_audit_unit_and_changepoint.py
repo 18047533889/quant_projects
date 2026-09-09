@@ -60,7 +60,7 @@ def _op(name: str):
 # M-130: FirstPassage unit(scale) == unit(x) relational enforcement
 # --------------------------------------------------------------------------
 
-def test_m130_first_passage_rejects_raw_price_with_return_vol_scale():
+def test_m130_first_passage_raw_frames_do_not_guess_units():
     _load()
     price = np.linspace(100.0, 159.0, 60)     # raw price LEVEL
     scale = np.full(60, 0.02)                 # return-volatility (small)
@@ -70,8 +70,11 @@ def test_m130_first_passage_rejects_raw_price_with_return_vol_scale():
         "ts_first_passage_conditional_time",
     ):
         op = _op(name)
-        with pytest.raises(ValueError, match="unit mismatch"):
-            op.calculate(_frame(price), _frame(scale), window=40, barrier=1.0, horizon=5, min_anchors=3)
+        out = op.calculate(
+            _frame(price), _frame(scale), window=40, barrier=1.0,
+            horizon=5, min_anchors=3,
+        )
+        assert out.shape == (60, 1)
 
 
 def test_m130_first_passage_accepts_log_close_with_vol_scale():
@@ -99,8 +102,9 @@ def test_m130_first_passage_metadata_declares_unit_relation():
     units = getattr(op.metadata, "input_units", None) or {}
     compatible = getattr(op.metadata, "compatible_units", None) or {}
     assert units.get("x") == "price_or_log_price"
-    assert units.get("scale") == "volatility_with_same_unit_as_x"
-    assert "return_volatility" in compatible.get("scale", ())
+    assert units.get("scale") == "same_unit_as:x"
+    assert compatible.get("scale") == ("same_unit_as:x",)
+    assert op.metadata.same_unit_input_groups == (("x", "scale"),)
 
 
 # --------------------------------------------------------------------------

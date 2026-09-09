@@ -1,0 +1,23 @@
+schema: factor_engine.v8.evidence.v1
+git_sha: 118cd21c6262082336daa545ddc06b6f78def7b9
+timestamp: '2026-09-09T00:39:00+08:00'
+status: MERGED_READ_ONLY_HELPER_NOT_PENDING_EXECUTOR
+files:
+  factor_engine/runtime/resume_action_catalog.py: ab4f66054ba300059b27308466d516312d54d3c9614d9b03f1fb7bed9571b354
+  factor_engine/tests/runtime/test_v8_resume_action_catalog.py: 9e45cc66c444f87ff1902f4ece150853326c93965e98f2d595fc3f853dad489f
+changes:
+  - Page manifest ordinals and query bounded matching outcomes without a whole-run in-memory action list.
+  - Validate complete state/commit/attempt/generation matrix before classifying an action.
+  - Distinguish missing, new, remaining-attempt retry, exhausted budget, exact-generation reconcile and verified-artifact revalidation.
+  - Every existing terminal remains immutable, including terminal UNKNOWN/INTENT reconciliation candidates.
+  - Require an absolute deadline restored from original run identity; helper does not create a fresh budget.
+tests:
+  stage: '14 passed;61 compatibility passed'
+  production_related: '119 passed in1.84s'
+  xml: /tmp/v8-resume-action-catalog-merged.xml
+  root_review: initial intent-first classification accepted malformed states; fixed before merge with parameterized rejection oracles
+limitations:
+  - Read-only catalog, not execution or terminal-mutation authority; pending pipeline resume still disabled.
+  - Caller must hold coordinator lock, prove old workers retired, and authenticate original deadline before using this catalog.
+  - Earlier610-pass/wheel checkpoint predates this newly merged helper.
+  - Native/GPU/approved-data/100k/performance and production acceptance NOT_RUN.

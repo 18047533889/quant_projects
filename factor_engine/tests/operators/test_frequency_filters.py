@@ -13,6 +13,7 @@ import pytest
 import factor_engine.cleaned_operators.technical.frequency_filters  # noqa: F401
 
 from factor_engine.backend.cleaned_bridge import ensure_cleaned_loaded
+from factor_engine.backend.operator_errors import OperatorParameterError
 from factor_engine.cleaned_operators.registry import OperatorRegistry
 
 ensure_cleaned_loaded()
@@ -145,13 +146,13 @@ def test_initial_warmup_nan(name: str) -> None:
         min_warmup = 4
     elif name == "ts_fir_lowpass_causal":
         kwargs = {"ntaps": 21, "cutoff": 0.1, "window": "hamming"}
-        min_warmup = 21
+        min_warmup = 20
     elif name == "ts_spectral_lowpass_trailing":
         kwargs = {"window": 32, "cutoff_freq": 4}
-        min_warmup = 32
+        min_warmup = 31
     elif name == "ts_causal_savgol_endpoint":
         kwargs = {"window": 15, "polyorder": 2}
-        min_warmup = 15
+        min_warmup = 14
     else:
         kwargs = {}
         min_warmup = 1
@@ -161,6 +162,7 @@ def test_initial_warmup_nan(name: str) -> None:
     # First min_warmup bars should be NaN
     for col in panel.columns:
         assert out[col].iloc[:min_warmup].isna().all(), f"{name} warmup not NaN for {col}"
+        assert np.isfinite(out[col].iloc[min_warmup]), f"{name} first complete support missing"
         # At least some finite values after warmup
         assert out[col].iloc[min_warmup:].notna().any(), f"{name} all NaN after warmup for {col}"
 
@@ -295,17 +297,13 @@ def test_single_column(name: str) -> None:
 # parameter validation
 # ---------------------------------------------------------------------------
 def test_bessel_order_bounds() -> None:
-    """Bessel filter order is clamped to [1, 8]."""
+    """The declared Bessel order domain rejects out-of-range calls."""
     panel = _daily_panel(days=60, cols=1, seed=1)
     op = OperatorRegistry.get("ts_bessel_lowpass_causal")
 
-    # Order too high (should be clamped to 8)
-    out = op.calculate(panel, order=15, cutoff=0.05)
-    assert out.notna().any().any(), "Bessel with high order failed"
-
-    # Order too low (should be clamped to 1)
-    out = op.calculate(panel, order=0, cutoff=0.05)
-    assert out.notna().any().any(), "Bessel with low order failed"
+    for order in (0, 15):
+        with pytest.raises(OperatorParameterError):
+            op.calculate(panel, order=order, cutoff=0.05)
 
 
 def test_fir_ntaps_odd_enforcement() -> None:
@@ -313,19 +311,20 @@ def test_fir_ntaps_odd_enforcement() -> None:
     panel = _daily_panel(days=80, cols=1, seed=3)
     op = OperatorRegistry.get("ts_fir_lowpass_causal")
 
-    # Even ntaps (should be incremented to odd)
-    out = op.calculate(panel, ntaps=20, cutoff=0.1, window="hamming")
-    assert out.notna().any().any(), "FIR with even ntaps failed"
+    # Rejection preserves the requested parameter identity; no hidden increment.
+    with pytest.raises(OperatorParameterError):
+        op.calculate(panel, ntaps=20, cutoff=0.1, window="hamming")
 
 
-def test_savgol_polyorder_clamp() -> None:
-    """SavGol polyorder is clamped to < window."""
+def test_savgol_polyorder_domain() -> None:
+    """SavGol rejects invalid scalar and joint domains without clamping."""
     panel = _daily_panel(days=60, cols=1, seed=4)
     op = OperatorRegistry.get("ts_causal_savgol_endpoint")
 
-    # polyorder >= window (should be clamped)
-    out = op.calculate(panel, window=10, polyorder=12)
-    assert out.notna().any().any(), "SavGol with high polyorder failed"
+    with pytest.raises(OperatorParameterError):
+        op.calculate(panel, window=10, polyorder=12)
+    with pytest.raises(ValueError, match="polyorder must be smaller"):
+        op.calculate(panel, window=3, polyorder=3)
 
 
 # ---------------------------------------------------------------------------

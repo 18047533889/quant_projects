@@ -1,0 +1,48 @@
+schema: factor_engine.v8.evidence.v1
+git_sha: 118cd21c6262082336daa545ddc06b6f78def7b9
+timestamp: '2026-09-09T01:23:00+08:00'
+status: MERGED_SCOPED_GREEN
+target: server-c:/home/sunhaiwei/quant_projects
+files:
+  factor_engine/runtime/finite_manifest.py: 4d8abb768d9d6bf6724f31dcc13c45a8f7acce2159fb2abbbff1e6ad1e3c7622
+  factor_engine/runtime/manifest_metadata_limits.py: 81c2570831699aef9e682a826305b705a9bd62b9a5aad5ab09b5958eca10556a
+  tests:
+    - factor_engine/tests/runtime/test_v8_manifest_metadata_bounds.py
+    - factor_engine/tests/runtime/test_v8_metadata_pipeline_terminals.py
+changes:
+  - Factor and dependency names limited to1024 UTF-8 bytes, at most4096 dependency entries.
+  - Bounded UTF-8 measurement avoids complete oversized-name encoding.
+  - Invalid name/dependency access or iteration becomes ordinal-local rejection; no partial dependency rows.
+  - Ordinary dependency cleanup errors do not replace an original ingestion deadline exception.
+  - Records project bounded UTF-8 bytes via SQLite BLOB-length checks, including embedded NUL tails.
+  - Bounded wave reads enforce native SQLite row limits and validate definition bytes before pickle.loads.
+  - Serialization lease key uses canonical manifest path digest, distinct across runs for the same input object.
+tests:
+  red_pipeline:
+    result: '2 failed,1 passed in2.60s on finite378531b baseline'
+    xml: /tmp/v8-metadata-pipeline-red-real.xml
+    failures: invalid long-name accepted; dependency property failure prevents healthy sibling completion
+  staging:
+    result: '23 passed; independent reviewer separately23 passed'
+    xml: /tmp/v8-manifest-metadata-stage.xml
+    xml_sha256: 28ab4c9d6eba0e73f32f082225fcddd7141d8d1e6855da6c5b4d86974514d024
+  merged:
+    result: '77 passed,55 warnings in100.49s'
+    xml: /tmp/v8-metadata-pipeline-merged.xml
+    scope: metadata, real durable pipeline with synthetic engine, ingestion buffer/deadlines, initial seal and v6 bounded pipeline
+    verified: invalid ordinal REJECTED with0 attempts and NOT_STARTED; healthy peer SUCCEEDED and VERIFIED; legal32KiB definition seals and persists
+  review_corrections:
+    - Removed16KiB records connection-wide limit that incorrectly rejected legal unselected large definition BLOBs.
+    - Verified20KiB/128KiB legal definitions and paused-generator/nested-read limit restoration.
+    - Replaced text-character length with actual BLOB byte length to reject NUL-tail bypass.
+    - Guarded dependency close attribute access and preserved original timeout precedence.
+  initial_test_invocation_error: direct /tmp test collection encountered unrelated socket permissions; rerun under repository test directory, no data access workaround
+limitations:
+  - controlled_wave_buffer_bytes is a serialized-bytes estimate, not decoded Python/native RSS accounting; default wave caller lease integration remains OPEN.
+  - records projection bounds returned Python metadata, not all SQLite internal allocations or arbitrary corrupt database size.
+  - Legacy load_wave definition payload path is not newly hard-bounded.
+  - Existing DUPLICATE_FACTOR_NAME precedence is retained; one reported cause may supersede a dependency rejection.
+  - Parent aggregate spawn pickle, live generators, safe same-PID reuse and pending execution resume remain OPEN.
+  - No mathematical/native/GPU/all-operator/real100k certification from these control tests.
+  - Approved profile acceptance, remote CI, production gates and deployment NOT_RUN.
+  - No commit, push, service restart or production factor publication.

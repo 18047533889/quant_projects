@@ -1,0 +1,34 @@
+schema: v9-scoped-resource-admission-1
+timestamp: '2026-09-09'
+git_sha: 118cd21c6262082336daa545ddc06b6f78def7b9
+workspace: /home/sunhaiwei/quant_projects
+patch_sha256: 79c9f81c3bd9ae22948a617997020408b93d80efceaf808d7450e4940d466f35
+files:
+  factor_engine/backend/operator_cost.py: 9f71deb99510b66bb40abea2b415d22b82ece70e6027daba82e61c8592dadd8e
+  factor_engine/tests/backend/test_v9_m36_resource_admission.py: 5b9fae3431bb26d50ef9e026e404ecbd737c9e27f141e6f0d83d4fa7d7ae01b3
+finding: Existing runtime task admission omitted the window-squared workspace of ts_residualized_hsic despite a separate mining cost model describing quadratic memory.
+fix:
+  authority: Existing physical_lowerer to TaskResourceContract to ResourceBroker task reservation; no new broker or nested memory lease.
+  rows_unit: Flattened total observations from estimate_plan_rows and DataShape.estimated_rows; do not multiply instrument count again.
+  panel_floor_bytes: 4 * total_rows * 8
+  workspace_bytes: max_over_sequential_M36_nodes(12 * 8 * window**2)
+  combined_floor_bytes: min(sys.maxsize, max(ordinary_peak, panel_floor_bytes) + workspace_bytes)
+  coefficient_basis: Conservative allowance for retained cross-fit matrices, HSIC kernels and centering/product temporaries, median copies and solver workspace; not a measured exact peak.
+  calibration: M36 final admissible bytes protected by floor and positive finite uncertainty >=1; invalid uncertainty falls back to static contract. Non-M36 behavior preserved.
+tests:
+  actual_main: {passed: 16, failed: 0, warnings: 2, seconds: 24.19, xml: v9-m36-resource-focused-main.xml}
+  nonempty_chain: Valid three-column logical plan to lower_root_plan to task contract to existing broker; below-floor rejection and sufficient-headroom admission, no nested MemoryLease.
+  parameter_cases: Default matches current canonical; strict integer and saturation; fixed-window row scaling; sequential workspace maximum; subunit and invalid calibration; real scheduler rows argument capture.
+  syntax_and_diffcheck: PASS
+  public_planner: {result: PASS_SCOPED, artifact: V9-PUBLIC-PLANNER-POST-M36RESOURCE.json, actual_api: Optimizer.optimize_with_pass_trace, compile_method: UNAVAILABLE}
+  mixed_legacy_baseline_attempt:
+    result: 17 passed, 2 failed, 1 error, 2 warnings, 25.23 seconds
+    xml: v9-m36-resource-main.xml
+    details: Existing benchmark tests expect an absent baseline file and thaw the registry in the pytest parent. Independent baseline reproduction and test isolation are pending; no fabricated benchmark data or waived gate.
+limitations:
+  - Only M36 receives the declared workspace guard; M18/M34/M35 and other expensive kernels remain separate open work.
+  - This is an admission estimator and component-chain test, not an exact whole-DAG or process-family memory proof.
+  - Retained sibling outputs, conversion buffers and every native solver allocation are not independently profiled here.
+  - No actual data/GPU/100k throughput, fastest-backend or OOM-free certification.
+  - Public planner probe covers invariants, typed units, numeric policy and legacy equivalence, not full production execution; full CI NOT_RUN.
+  - No GitHub, commit, deployment, publication, or production-data mutation.

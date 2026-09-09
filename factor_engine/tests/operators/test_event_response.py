@@ -1,1002 +1,294 @@
 # -*- coding: utf-8 -*-
-"""Tests for event_response operators.
-
-Coverage of 9 operators:
-1. event_historical_response_mean
-2. event_historical_response_sign_balance
-3. event_hawkes_branching_ratio_proxy
-4. event_response_peak_lag
-5. event_response_decay_rate
-6. event_response_dispersion
-7. event_response_reversal_strength
-8. event_response_effective_events
-9. event_response_overlap_ratio
-"""
+"""Behavioral tests for the nine daily event-response operators."""
 from __future__ import annotations
 
 import numpy as np
 import pandas as pd
 import pytest
 
-from factor_engine.backend.cleaned_bridge import ensure_cleaned_loaded
+import factor_engine.cleaned_operators.event_response  # noqa: F401
 from factor_engine.cleaned_operators.registry import OperatorRegistry
 
-ensure_cleaned_loaded()
+CANONICALS = (
+    "event_historical_response_mean",
+    "event_historical_response_sign_balance",
+    "event_hawkes_branching_ratio_proxy",
+    "event_response_peak_lag",
+    "event_response_decay_rate",
+    "event_response_dispersion",
+    "event_response_reversal_strength",
+    "event_response_effective_events",
+    "event_response_overlap_ratio",
+)
 
 
-def _op(name: str, backend: str = "pandas_numpy"):
-    op = OperatorRegistry.get(name, backend)
-    assert op is not None, f"{name}/{backend}"
+def _op(name: str):
+    op = OperatorRegistry.get(name, "pandas_numpy")
+    assert op is not None, name
     return op
 
 
-
-# ---------------------------------------------------------------------------
-# 1. event_historical_response_mean
-# ---------------------------------------------------------------------------
-def test_event_historical_response_mean_basic() -> None:
-    """Basic functionality test."""
-    np.random.seed(42)
-    idx = pd.date_range("2024-01-01", periods=20)
-    cols = [f"S{i}" for i in range(10)]
-
-    # Create sample data
-    x = pd.DataFrame(np.random.randn(20, 10), index=idx, columns=cols)
-
-    op = _op("event_historical_response_mean")
-    # Get param names from metadata
-    meta = getattr(op, "metadata", None)
-
-    # Call with default parameters
-    try:
-        result = op.calculate(x)
-
-        # Basic shape check
-        assert result.shape == x.shape, f"{result.shape} != {x.shape}"
-        assert list(result.columns) == list(x.columns)
-        assert list(result.index) == list(x.index)
-
-        # Result should contain some finite values or be validly all-NaN
-        # (some operators may return all NaN for random data)
-    except Exception as e:
-        pytest.fail(f"{op} failed with {type(e).__name__}: {e}")
-
-
-def test_event_historical_response_mean_handles_nans() -> None:
-    """NaN handling test."""
-    idx = pd.date_range("2024-01-01", periods=10)
-    cols = ["A", "B", "C"]
-
-    # Data with NaNs
-    data = [[1.0, np.nan, 3.0]] * 10
-    x = pd.DataFrame(data, index=idx, columns=cols)
-
-    op = _op("event_historical_response_mean")
-
-    try:
-        result = op.calculate(x)
-
-        # Should not raise, should return DataFrame
-        assert isinstance(result, pd.DataFrame)
-        assert result.shape == x.shape
-    except Exception as e:
-        pytest.fail(f"{op} failed on NaN input: {e}")
-
-
-def test_event_historical_response_mean_handles_inf() -> None:
-    """Infinity handling test."""
-    idx = pd.date_range("2024-01-01", periods=10)
-    cols = ["A", "B"]
-
-    # Data with infinities
-    data = [[1.0, np.inf], [2.0, -np.inf], [3.0, 4.0]] * 3 + [[5.0, 6.0]]
-    x = pd.DataFrame(data, index=idx, columns=cols)
-
-    op = _op("event_historical_response_mean")
-
-    try:
-        result = op.calculate(x)
-
-        # Should handle inf gracefully (typically return NaN)
-        assert isinstance(result, pd.DataFrame)
-    except Exception as e:
-        pytest.fail(f"{op} failed on inf input: {e}")
-
-
-def test_event_historical_response_mean_empty_input() -> None:
-    """Empty input test."""
-    x = pd.DataFrame()
-
-    op = _op("event_historical_response_mean")
-
-    try:
-        result = op.calculate(x)
-
-        # Should return empty DataFrame
-        assert isinstance(result, pd.DataFrame)
-        assert result.empty
-    except Exception as e:
-        # Some operators may validly raise on empty input
-        pass
-
-
-def test_event_historical_response_mean_single_column() -> None:
-    """Single column test."""
-    idx = pd.date_range("2024-01-01", periods=20)
-    x = pd.DataFrame({"A": range(20)}, index=idx)
-
-    op = _op("event_historical_response_mean")
-
-    try:
-        result = op.calculate(x)
-
-        assert isinstance(result, pd.DataFrame)
-        assert result.shape[1] == 1
-    except Exception as e:
-        pytest.fail(f"{op} failed on single column: {e}")
-
-
-# ---------------------------------------------------------------------------
-# 2. event_historical_response_sign_balance
-# ---------------------------------------------------------------------------
-def test_event_historical_response_sign_balance_basic() -> None:
-    """Basic functionality test."""
-    np.random.seed(42)
-    idx = pd.date_range("2024-01-01", periods=20)
-    cols = [f"S{i}" for i in range(10)]
-
-    # Create sample data
-    x = pd.DataFrame(np.random.randn(20, 10), index=idx, columns=cols)
-
-    op = _op("event_historical_response_sign_balance")
-    # Get param names from metadata
-    meta = getattr(op, "metadata", None)
-
-    # Call with default parameters
-    try:
-        result = op.calculate(x)
-
-        # Basic shape check
-        assert result.shape == x.shape, f"{result.shape} != {x.shape}"
-        assert list(result.columns) == list(x.columns)
-        assert list(result.index) == list(x.index)
-
-        # Result should contain some finite values or be validly all-NaN
-        # (some operators may return all NaN for random data)
-    except Exception as e:
-        pytest.fail(f"{op} failed with {type(e).__name__}: {e}")
-
-
-def test_event_historical_response_sign_balance_handles_nans() -> None:
-    """NaN handling test."""
-    idx = pd.date_range("2024-01-01", periods=10)
-    cols = ["A", "B", "C"]
-
-    # Data with NaNs
-    data = [[1.0, np.nan, 3.0]] * 10
-    x = pd.DataFrame(data, index=idx, columns=cols)
-
-    op = _op("event_historical_response_sign_balance")
-
-    try:
-        result = op.calculate(x)
-
-        # Should not raise, should return DataFrame
-        assert isinstance(result, pd.DataFrame)
-        assert result.shape == x.shape
-    except Exception as e:
-        pytest.fail(f"{op} failed on NaN input: {e}")
-
-
-def test_event_historical_response_sign_balance_handles_inf() -> None:
-    """Infinity handling test."""
-    idx = pd.date_range("2024-01-01", periods=10)
-    cols = ["A", "B"]
-
-    # Data with infinities
-    data = [[1.0, np.inf], [2.0, -np.inf], [3.0, 4.0]] * 3 + [[5.0, 6.0]]
-    x = pd.DataFrame(data, index=idx, columns=cols)
-
-    op = _op("event_historical_response_sign_balance")
-
-    try:
-        result = op.calculate(x)
-
-        # Should handle inf gracefully (typically return NaN)
-        assert isinstance(result, pd.DataFrame)
-    except Exception as e:
-        pytest.fail(f"{op} failed on inf input: {e}")
-
-
-def test_event_historical_response_sign_balance_empty_input() -> None:
-    """Empty input test."""
-    x = pd.DataFrame()
-
-    op = _op("event_historical_response_sign_balance")
-
-    try:
-        result = op.calculate(x)
-
-        # Should return empty DataFrame
-        assert isinstance(result, pd.DataFrame)
-        assert result.empty
-    except Exception as e:
-        # Some operators may validly raise on empty input
-        pass
-
-
-def test_event_historical_response_sign_balance_single_column() -> None:
-    """Single column test."""
-    idx = pd.date_range("2024-01-01", periods=20)
-    x = pd.DataFrame({"A": range(20)}, index=idx)
-
-    op = _op("event_historical_response_sign_balance")
-
-    try:
-        result = op.calculate(x)
-
-        assert isinstance(result, pd.DataFrame)
-        assert result.shape[1] == 1
-    except Exception as e:
-        pytest.fail(f"{op} failed on single column: {e}")
-
-
-# ---------------------------------------------------------------------------
-# 3. event_hawkes_branching_ratio_proxy
-# ---------------------------------------------------------------------------
-def test_event_hawkes_branching_ratio_proxy_basic() -> None:
-    """Basic functionality test."""
-    np.random.seed(42)
-    idx = pd.date_range("2024-01-01", periods=20)
-    cols = [f"S{i}" for i in range(10)]
-
-    # Create sample data
-    x = pd.DataFrame(np.random.randn(20, 10), index=idx, columns=cols)
-
-    op = _op("event_hawkes_branching_ratio_proxy")
-    # Get param names from metadata
-    meta = getattr(op, "metadata", None)
-
-    # Call with default parameters
-    try:
-        result = op.calculate(x)
-
-        # Basic shape check
-        assert result.shape == x.shape, f"{result.shape} != {x.shape}"
-        assert list(result.columns) == list(x.columns)
-        assert list(result.index) == list(x.index)
-
-        # Result should contain some finite values or be validly all-NaN
-        # (some operators may return all NaN for random data)
-    except Exception as e:
-        pytest.fail(f"{op} failed with {type(e).__name__}: {e}")
-
-
-def test_event_hawkes_branching_ratio_proxy_handles_nans() -> None:
-    """NaN handling test."""
-    idx = pd.date_range("2024-01-01", periods=10)
-    cols = ["A", "B", "C"]
-
-    # Data with NaNs
-    data = [[1.0, np.nan, 3.0]] * 10
-    x = pd.DataFrame(data, index=idx, columns=cols)
-
-    op = _op("event_hawkes_branching_ratio_proxy")
-
-    try:
-        result = op.calculate(x)
-
-        # Should not raise, should return DataFrame
-        assert isinstance(result, pd.DataFrame)
-        assert result.shape == x.shape
-    except Exception as e:
-        pytest.fail(f"{op} failed on NaN input: {e}")
-
-
-def test_event_hawkes_branching_ratio_proxy_handles_inf() -> None:
-    """Infinity handling test."""
-    idx = pd.date_range("2024-01-01", periods=10)
-    cols = ["A", "B"]
-
-    # Data with infinities
-    data = [[1.0, np.inf], [2.0, -np.inf], [3.0, 4.0]] * 3 + [[5.0, 6.0]]
-    x = pd.DataFrame(data, index=idx, columns=cols)
-
-    op = _op("event_hawkes_branching_ratio_proxy")
-
-    try:
-        result = op.calculate(x)
-
-        # Should handle inf gracefully (typically return NaN)
-        assert isinstance(result, pd.DataFrame)
-    except Exception as e:
-        pytest.fail(f"{op} failed on inf input: {e}")
-
-
-def test_event_hawkes_branching_ratio_proxy_empty_input() -> None:
-    """Empty input test."""
-    x = pd.DataFrame()
-
-    op = _op("event_hawkes_branching_ratio_proxy")
-
-    try:
-        result = op.calculate(x)
-
-        # Should return empty DataFrame
-        assert isinstance(result, pd.DataFrame)
-        assert result.empty
-    except Exception as e:
-        # Some operators may validly raise on empty input
-        pass
-
-
-def test_event_hawkes_branching_ratio_proxy_single_column() -> None:
-    """Single column test."""
-    idx = pd.date_range("2024-01-01", periods=20)
-    x = pd.DataFrame({"A": range(20)}, index=idx)
-
-    op = _op("event_hawkes_branching_ratio_proxy")
-
-    try:
-        result = op.calculate(x)
-
-        assert isinstance(result, pd.DataFrame)
-        assert result.shape[1] == 1
-    except Exception as e:
-        pytest.fail(f"{op} failed on single column: {e}")
-
-
-# ---------------------------------------------------------------------------
-# 4. event_response_peak_lag
-# ---------------------------------------------------------------------------
-def test_event_response_peak_lag_basic() -> None:
-    """Basic functionality test."""
-    np.random.seed(42)
-    idx = pd.date_range("2024-01-01", periods=20)
-    cols = [f"S{i}" for i in range(10)]
-
-    # Create sample data
-    x = pd.DataFrame(np.random.randn(20, 10), index=idx, columns=cols)
-
-    op = _op("event_response_peak_lag")
-    # Get param names from metadata
-    meta = getattr(op, "metadata", None)
-
-    # Call with default parameters
-    try:
-        result = op.calculate(x)
-
-        # Basic shape check
-        assert result.shape == x.shape, f"{result.shape} != {x.shape}"
-        assert list(result.columns) == list(x.columns)
-        assert list(result.index) == list(x.index)
-
-        # Result should contain some finite values or be validly all-NaN
-        # (some operators may return all NaN for random data)
-    except Exception as e:
-        pytest.fail(f"{op} failed with {type(e).__name__}: {e}")
-
-
-def test_event_response_peak_lag_handles_nans() -> None:
-    """NaN handling test."""
-    idx = pd.date_range("2024-01-01", periods=10)
-    cols = ["A", "B", "C"]
-
-    # Data with NaNs
-    data = [[1.0, np.nan, 3.0]] * 10
-    x = pd.DataFrame(data, index=idx, columns=cols)
-
-    op = _op("event_response_peak_lag")
-
-    try:
-        result = op.calculate(x)
-
-        # Should not raise, should return DataFrame
-        assert isinstance(result, pd.DataFrame)
-        assert result.shape == x.shape
-    except Exception as e:
-        pytest.fail(f"{op} failed on NaN input: {e}")
-
-
-def test_event_response_peak_lag_handles_inf() -> None:
-    """Infinity handling test."""
-    idx = pd.date_range("2024-01-01", periods=10)
-    cols = ["A", "B"]
-
-    # Data with infinities
-    data = [[1.0, np.inf], [2.0, -np.inf], [3.0, 4.0]] * 3 + [[5.0, 6.0]]
-    x = pd.DataFrame(data, index=idx, columns=cols)
-
-    op = _op("event_response_peak_lag")
-
-    try:
-        result = op.calculate(x)
-
-        # Should handle inf gracefully (typically return NaN)
-        assert isinstance(result, pd.DataFrame)
-    except Exception as e:
-        pytest.fail(f"{op} failed on inf input: {e}")
-
-
-def test_event_response_peak_lag_empty_input() -> None:
-    """Empty input test."""
-    x = pd.DataFrame()
-
-    op = _op("event_response_peak_lag")
-
-    try:
-        result = op.calculate(x)
-
-        # Should return empty DataFrame
-        assert isinstance(result, pd.DataFrame)
-        assert result.empty
-    except Exception as e:
-        # Some operators may validly raise on empty input
-        pass
-
-
-def test_event_response_peak_lag_single_column() -> None:
-    """Single column test."""
-    idx = pd.date_range("2024-01-01", periods=20)
-    x = pd.DataFrame({"A": range(20)}, index=idx)
-
-    op = _op("event_response_peak_lag")
-
-    try:
-        result = op.calculate(x)
-
-        assert isinstance(result, pd.DataFrame)
-        assert result.shape[1] == 1
-    except Exception as e:
-        pytest.fail(f"{op} failed on single column: {e}")
-
-
-# ---------------------------------------------------------------------------
-# 5. event_response_decay_rate
-# ---------------------------------------------------------------------------
-def test_event_response_decay_rate_basic() -> None:
-    """Basic functionality test."""
-    np.random.seed(42)
-    idx = pd.date_range("2024-01-01", periods=20)
-    cols = [f"S{i}" for i in range(10)]
-
-    # Create sample data
-    x = pd.DataFrame(np.random.randn(20, 10), index=idx, columns=cols)
-
-    op = _op("event_response_decay_rate")
-    # Get param names from metadata
-    meta = getattr(op, "metadata", None)
-
-    # Call with default parameters
-    try:
-        result = op.calculate(x)
-
-        # Basic shape check
-        assert result.shape == x.shape, f"{result.shape} != {x.shape}"
-        assert list(result.columns) == list(x.columns)
-        assert list(result.index) == list(x.index)
-
-        # Result should contain some finite values or be validly all-NaN
-        # (some operators may return all NaN for random data)
-    except Exception as e:
-        pytest.fail(f"{op} failed with {type(e).__name__}: {e}")
-
-
-def test_event_response_decay_rate_handles_nans() -> None:
-    """NaN handling test."""
-    idx = pd.date_range("2024-01-01", periods=10)
-    cols = ["A", "B", "C"]
-
-    # Data with NaNs
-    data = [[1.0, np.nan, 3.0]] * 10
-    x = pd.DataFrame(data, index=idx, columns=cols)
-
-    op = _op("event_response_decay_rate")
-
-    try:
-        result = op.calculate(x)
-
-        # Should not raise, should return DataFrame
-        assert isinstance(result, pd.DataFrame)
-        assert result.shape == x.shape
-    except Exception as e:
-        pytest.fail(f"{op} failed on NaN input: {e}")
-
-
-def test_event_response_decay_rate_handles_inf() -> None:
-    """Infinity handling test."""
-    idx = pd.date_range("2024-01-01", periods=10)
-    cols = ["A", "B"]
-
-    # Data with infinities
-    data = [[1.0, np.inf], [2.0, -np.inf], [3.0, 4.0]] * 3 + [[5.0, 6.0]]
-    x = pd.DataFrame(data, index=idx, columns=cols)
-
-    op = _op("event_response_decay_rate")
-
-    try:
-        result = op.calculate(x)
-
-        # Should handle inf gracefully (typically return NaN)
-        assert isinstance(result, pd.DataFrame)
-    except Exception as e:
-        pytest.fail(f"{op} failed on inf input: {e}")
-
-
-def test_event_response_decay_rate_empty_input() -> None:
-    """Empty input test."""
-    x = pd.DataFrame()
-
-    op = _op("event_response_decay_rate")
-
-    try:
-        result = op.calculate(x)
-
-        # Should return empty DataFrame
-        assert isinstance(result, pd.DataFrame)
-        assert result.empty
-    except Exception as e:
-        # Some operators may validly raise on empty input
-        pass
-
-
-def test_event_response_decay_rate_single_column() -> None:
-    """Single column test."""
-    idx = pd.date_range("2024-01-01", periods=20)
-    x = pd.DataFrame({"A": range(20)}, index=idx)
-
-    op = _op("event_response_decay_rate")
-
-    try:
-        result = op.calculate(x)
-
-        assert isinstance(result, pd.DataFrame)
-        assert result.shape[1] == 1
-    except Exception as e:
-        pytest.fail(f"{op} failed on single column: {e}")
-
-
-# ---------------------------------------------------------------------------
-# 6. event_response_dispersion
-# ---------------------------------------------------------------------------
-def test_event_response_dispersion_basic() -> None:
-    """Basic functionality test."""
-    np.random.seed(42)
-    idx = pd.date_range("2024-01-01", periods=20)
-    cols = [f"S{i}" for i in range(10)]
-
-    # Create sample data
-    x = pd.DataFrame(np.random.randn(20, 10), index=idx, columns=cols)
-
-    op = _op("event_response_dispersion")
-    # Get param names from metadata
-    meta = getattr(op, "metadata", None)
-
-    # Call with default parameters
-    try:
-        result = op.calculate(x)
-
-        # Basic shape check
-        assert result.shape == x.shape, f"{result.shape} != {x.shape}"
-        assert list(result.columns) == list(x.columns)
-        assert list(result.index) == list(x.index)
-
-        # Result should contain some finite values or be validly all-NaN
-        # (some operators may return all NaN for random data)
-    except Exception as e:
-        pytest.fail(f"{op} failed with {type(e).__name__}: {e}")
-
-
-def test_event_response_dispersion_handles_nans() -> None:
-    """NaN handling test."""
-    idx = pd.date_range("2024-01-01", periods=10)
-    cols = ["A", "B", "C"]
-
-    # Data with NaNs
-    data = [[1.0, np.nan, 3.0]] * 10
-    x = pd.DataFrame(data, index=idx, columns=cols)
-
-    op = _op("event_response_dispersion")
-
-    try:
-        result = op.calculate(x)
-
-        # Should not raise, should return DataFrame
-        assert isinstance(result, pd.DataFrame)
-        assert result.shape == x.shape
-    except Exception as e:
-        pytest.fail(f"{op} failed on NaN input: {e}")
-
-
-def test_event_response_dispersion_handles_inf() -> None:
-    """Infinity handling test."""
-    idx = pd.date_range("2024-01-01", periods=10)
-    cols = ["A", "B"]
-
-    # Data with infinities
-    data = [[1.0, np.inf], [2.0, -np.inf], [3.0, 4.0]] * 3 + [[5.0, 6.0]]
-    x = pd.DataFrame(data, index=idx, columns=cols)
-
-    op = _op("event_response_dispersion")
-
-    try:
-        result = op.calculate(x)
-
-        # Should handle inf gracefully (typically return NaN)
-        assert isinstance(result, pd.DataFrame)
-    except Exception as e:
-        pytest.fail(f"{op} failed on inf input: {e}")
-
-
-def test_event_response_dispersion_empty_input() -> None:
-    """Empty input test."""
-    x = pd.DataFrame()
-
-    op = _op("event_response_dispersion")
-
-    try:
-        result = op.calculate(x)
-
-        # Should return empty DataFrame
-        assert isinstance(result, pd.DataFrame)
-        assert result.empty
-    except Exception as e:
-        # Some operators may validly raise on empty input
-        pass
-
-
-def test_event_response_dispersion_single_column() -> None:
-    """Single column test."""
-    idx = pd.date_range("2024-01-01", periods=20)
-    x = pd.DataFrame({"A": range(20)}, index=idx)
-
-    op = _op("event_response_dispersion")
-
-    try:
-        result = op.calculate(x)
-
-        assert isinstance(result, pd.DataFrame)
-        assert result.shape[1] == 1
-    except Exception as e:
-        pytest.fail(f"{op} failed on single column: {e}")
-
-
-# ---------------------------------------------------------------------------
-# 7. event_response_reversal_strength
-# ---------------------------------------------------------------------------
-def test_event_response_reversal_strength_basic() -> None:
-    """Basic functionality test."""
-    np.random.seed(42)
-    idx = pd.date_range("2024-01-01", periods=20)
-    cols = [f"S{i}" for i in range(10)]
-
-    # Create sample data
-    x = pd.DataFrame(np.random.randn(20, 10), index=idx, columns=cols)
-
-    op = _op("event_response_reversal_strength")
-    # Get param names from metadata
-    meta = getattr(op, "metadata", None)
-
-    # Call with default parameters
-    try:
-        result = op.calculate(x)
-
-        # Basic shape check
-        assert result.shape == x.shape, f"{result.shape} != {x.shape}"
-        assert list(result.columns) == list(x.columns)
-        assert list(result.index) == list(x.index)
-
-        # Result should contain some finite values or be validly all-NaN
-        # (some operators may return all NaN for random data)
-    except Exception as e:
-        pytest.fail(f"{op} failed with {type(e).__name__}: {e}")
-
-
-def test_event_response_reversal_strength_handles_nans() -> None:
-    """NaN handling test."""
-    idx = pd.date_range("2024-01-01", periods=10)
-    cols = ["A", "B", "C"]
-
-    # Data with NaNs
-    data = [[1.0, np.nan, 3.0]] * 10
-    x = pd.DataFrame(data, index=idx, columns=cols)
-
-    op = _op("event_response_reversal_strength")
-
-    try:
-        result = op.calculate(x)
-
-        # Should not raise, should return DataFrame
-        assert isinstance(result, pd.DataFrame)
-        assert result.shape == x.shape
-    except Exception as e:
-        pytest.fail(f"{op} failed on NaN input: {e}")
-
-
-def test_event_response_reversal_strength_handles_inf() -> None:
-    """Infinity handling test."""
-    idx = pd.date_range("2024-01-01", periods=10)
-    cols = ["A", "B"]
-
-    # Data with infinities
-    data = [[1.0, np.inf], [2.0, -np.inf], [3.0, 4.0]] * 3 + [[5.0, 6.0]]
-    x = pd.DataFrame(data, index=idx, columns=cols)
-
-    op = _op("event_response_reversal_strength")
-
-    try:
-        result = op.calculate(x)
-
-        # Should handle inf gracefully (typically return NaN)
-        assert isinstance(result, pd.DataFrame)
-    except Exception as e:
-        pytest.fail(f"{op} failed on inf input: {e}")
-
-
-def test_event_response_reversal_strength_empty_input() -> None:
-    """Empty input test."""
-    x = pd.DataFrame()
-
-    op = _op("event_response_reversal_strength")
-
-    try:
-        result = op.calculate(x)
-
-        # Should return empty DataFrame
-        assert isinstance(result, pd.DataFrame)
-        assert result.empty
-    except Exception as e:
-        # Some operators may validly raise on empty input
-        pass
-
-
-def test_event_response_reversal_strength_single_column() -> None:
-    """Single column test."""
-    idx = pd.date_range("2024-01-01", periods=20)
-    x = pd.DataFrame({"A": range(20)}, index=idx)
-
-    op = _op("event_response_reversal_strength")
-
-    try:
-        result = op.calculate(x)
-
-        assert isinstance(result, pd.DataFrame)
-        assert result.shape[1] == 1
-    except Exception as e:
-        pytest.fail(f"{op} failed on single column: {e}")
-
-
-# ---------------------------------------------------------------------------
-# 8. event_response_effective_events
-# ---------------------------------------------------------------------------
-def test_event_response_effective_events_basic() -> None:
-    """Basic functionality test."""
-    np.random.seed(42)
-    idx = pd.date_range("2024-01-01", periods=20)
-    cols = [f"S{i}" for i in range(10)]
-
-    # Create sample data
-    x = pd.DataFrame(np.random.randn(20, 10), index=idx, columns=cols)
-
-    op = _op("event_response_effective_events")
-    # Get param names from metadata
-    meta = getattr(op, "metadata", None)
-
-    # Call with default parameters
-    try:
-        result = op.calculate(x)
-
-        # Basic shape check
-        assert result.shape == x.shape, f"{result.shape} != {x.shape}"
-        assert list(result.columns) == list(x.columns)
-        assert list(result.index) == list(x.index)
-
-        # Result should contain some finite values or be validly all-NaN
-        # (some operators may return all NaN for random data)
-    except Exception as e:
-        pytest.fail(f"{op} failed with {type(e).__name__}: {e}")
-
-
-def test_event_response_effective_events_handles_nans() -> None:
-    """NaN handling test."""
-    idx = pd.date_range("2024-01-01", periods=10)
-    cols = ["A", "B", "C"]
-
-    # Data with NaNs
-    data = [[1.0, np.nan, 3.0]] * 10
-    x = pd.DataFrame(data, index=idx, columns=cols)
-
-    op = _op("event_response_effective_events")
-
-    try:
-        result = op.calculate(x)
-
-        # Should not raise, should return DataFrame
-        assert isinstance(result, pd.DataFrame)
-        assert result.shape == x.shape
-    except Exception as e:
-        pytest.fail(f"{op} failed on NaN input: {e}")
-
-
-def test_event_response_effective_events_handles_inf() -> None:
-    """Infinity handling test."""
-    idx = pd.date_range("2024-01-01", periods=10)
-    cols = ["A", "B"]
-
-    # Data with infinities
-    data = [[1.0, np.inf], [2.0, -np.inf], [3.0, 4.0]] * 3 + [[5.0, 6.0]]
-    x = pd.DataFrame(data, index=idx, columns=cols)
-
-    op = _op("event_response_effective_events")
-
-    try:
-        result = op.calculate(x)
-
-        # Should handle inf gracefully (typically return NaN)
-        assert isinstance(result, pd.DataFrame)
-    except Exception as e:
-        pytest.fail(f"{op} failed on inf input: {e}")
-
-
-def test_event_response_effective_events_empty_input() -> None:
-    """Empty input test."""
-    x = pd.DataFrame()
-
-    op = _op("event_response_effective_events")
-
-    try:
-        result = op.calculate(x)
-
-        # Should return empty DataFrame
-        assert isinstance(result, pd.DataFrame)
-        assert result.empty
-    except Exception as e:
-        # Some operators may validly raise on empty input
-        pass
-
-
-def test_event_response_effective_events_single_column() -> None:
-    """Single column test."""
-    idx = pd.date_range("2024-01-01", periods=20)
-    x = pd.DataFrame({"A": range(20)}, index=idx)
-
-    op = _op("event_response_effective_events")
-
-    try:
-        result = op.calculate(x)
-
-        assert isinstance(result, pd.DataFrame)
-        assert result.shape[1] == 1
-    except Exception as e:
-        pytest.fail(f"{op} failed on single column: {e}")
-
-
-# ---------------------------------------------------------------------------
-# 9. event_response_overlap_ratio
-# ---------------------------------------------------------------------------
-def test_event_response_overlap_ratio_basic() -> None:
-    """Basic functionality test."""
-    np.random.seed(42)
-    idx = pd.date_range("2024-01-01", periods=20)
-    cols = [f"S{i}" for i in range(10)]
-
-    # Create sample data
-    x = pd.DataFrame(np.random.randn(20, 10), index=idx, columns=cols)
-
-    op = _op("event_response_overlap_ratio")
-    # Get param names from metadata
-    meta = getattr(op, "metadata", None)
-
-    # Call with default parameters
-    try:
-        result = op.calculate(x)
-
-        # Basic shape check
-        assert result.shape == x.shape, f"{result.shape} != {x.shape}"
-        assert list(result.columns) == list(x.columns)
-        assert list(result.index) == list(x.index)
-
-        # Result should contain some finite values or be validly all-NaN
-        # (some operators may return all NaN for random data)
-    except Exception as e:
-        pytest.fail(f"{op} failed with {type(e).__name__}: {e}")
-
-
-def test_event_response_overlap_ratio_handles_nans() -> None:
-    """NaN handling test."""
-    idx = pd.date_range("2024-01-01", periods=10)
-    cols = ["A", "B", "C"]
-
-    # Data with NaNs
-    data = [[1.0, np.nan, 3.0]] * 10
-    x = pd.DataFrame(data, index=idx, columns=cols)
-
-    op = _op("event_response_overlap_ratio")
-
-    try:
-        result = op.calculate(x)
-
-        # Should not raise, should return DataFrame
-        assert isinstance(result, pd.DataFrame)
-        assert result.shape == x.shape
-    except Exception as e:
-        pytest.fail(f"{op} failed on NaN input: {e}")
-
-
-def test_event_response_overlap_ratio_handles_inf() -> None:
-    """Infinity handling test."""
-    idx = pd.date_range("2024-01-01", periods=10)
-    cols = ["A", "B"]
-
-    # Data with infinities
-    data = [[1.0, np.inf], [2.0, -np.inf], [3.0, 4.0]] * 3 + [[5.0, 6.0]]
-    x = pd.DataFrame(data, index=idx, columns=cols)
-
-    op = _op("event_response_overlap_ratio")
-
-    try:
-        result = op.calculate(x)
-
-        # Should handle inf gracefully (typically return NaN)
-        assert isinstance(result, pd.DataFrame)
-    except Exception as e:
-        pytest.fail(f"{op} failed on inf input: {e}")
-
-
-def test_event_response_overlap_ratio_empty_input() -> None:
-    """Empty input test."""
-    x = pd.DataFrame()
-
-    op = _op("event_response_overlap_ratio")
-
-    try:
-        result = op.calculate(x)
-
-        # Should return empty DataFrame
-        assert isinstance(result, pd.DataFrame)
-        assert result.empty
-    except Exception as e:
-        # Some operators may validly raise on empty input
-        pass
-
-
-def test_event_response_overlap_ratio_single_column() -> None:
-    """Single column test."""
-    idx = pd.date_range("2024-01-01", periods=20)
-    x = pd.DataFrame({"A": range(20)}, index=idx)
-
-    op = _op("event_response_overlap_ratio")
-
-    try:
-        result = op.calculate(x)
-
-        assert isinstance(result, pd.DataFrame)
-        assert result.shape[1] == 1
-    except Exception as e:
-        pytest.fail(f"{op} failed on single column: {e}")
-
-
-
-# ---------------------------------------------------------------------------
-# Metadata validation
-# ---------------------------------------------------------------------------
-def test_event_response_metadata() -> None:
-    """Verify all operators have correct metadata."""
-    operators = [
+def _panel() -> tuple[pd.DataFrame, pd.DataFrame]:
+    response = np.zeros(40, dtype=float)
+    event = np.zeros(40, dtype=float)
+    event[[5, 12, 20, 28]] = 1.0
+    response[6:9] = [1.0, 2.0, 3.0]
+    response[13:16] = [2.0, 4.0, 6.0]
+    response[21:24] = [-1.0, -2.0, -3.0]
+    response[29:32] = [3.0, 6.0, 9.0]
+    index = pd.date_range("2024-01-01", periods=40)
+    return (
+        pd.DataFrame({"A": response}, index=index),
+        pd.DataFrame({"A": event}, index=index),
+    )
+
+
+def _history_params() -> dict[str, int]:
+    return {"history_window": 30, "horizon": 3, "min_events": 2}
+
+
+def _calculate(
+    name: str, response: pd.DataFrame, event: pd.DataFrame
+) -> pd.DataFrame:
+    """Calculate one operator with a valid, non-vacuous family-specific call."""
+    if name == "event_hawkes_branching_ratio_proxy":
+        return _op(name).calculate(event, window=30, max_lag=3, min_events=2)
+    if name in {"event_response_effective_events", "event_response_overlap_ratio"}:
+        return _op(name).calculate(
+            event, history_window=30, horizon=3, refractory=5
+        )
+    return _op(name).calculate(response, event, **_history_params())
+
+
+def test_registered_metadata_and_declared_parameters() -> None:
+    expected_inputs = {
+        "event_historical_response_mean": ("response", "event"),
+        "event_historical_response_sign_balance": ("response", "event"),
+        "event_hawkes_branching_ratio_proxy": ("event",),
+        "event_response_peak_lag": ("response", "event"),
+        "event_response_decay_rate": ("response", "event"),
+        "event_response_dispersion": ("response", "event"),
+        "event_response_reversal_strength": ("response", "event"),
+        "event_response_effective_events": ("event",),
+        "event_response_overlap_ratio": ("event",),
+    }
+    for name in CANONICALS:
+        metadata = _op(name).metadata
+        assert metadata.name == name
+        assert tuple(metadata.param_names[: len(expected_inputs[name])]) == expected_inputs[name]
+        assert metadata.return_type == "series"
+
+
+@pytest.mark.parametrize("name", CANONICALS)
+def test_all_operators_are_deterministic_on_nonvacuous_inputs(name: str) -> None:
+    response, event = _panel()
+    first = _calculate(name, response, event)
+    second = _calculate(name, response, event)
+    assert np.isfinite(first.iloc[-1, 0])
+    pd.testing.assert_frame_equal(first, second, check_exact=True)
+
+
+@pytest.mark.parametrize("name", CANONICALS)
+def test_all_operators_preserve_two_column_axes(name: str) -> None:
+    response, event = _panel()
+    response = pd.concat([response, response * 2.0], axis=1)
+    event = pd.concat([event, event], axis=1)
+    response.columns = event.columns = ["A", "B"]
+
+    result = _calculate(name, response, event)
+    assert result.index.equals(response.index)
+    assert result.columns.equals(response.columns)
+    assert np.isfinite(result.iloc[-1]).all()
+
+
+def test_historical_mean_and_sign_balance_independent_oracle() -> None:
+    response, event = _panel()
+    params = _history_params()
+    mean_sum = _op("event_historical_response_mean").calculate(
+        response, event, mode="sum", **params
+    )
+    mean_mean = _op("event_historical_response_mean").calculate(
+        response, event, mode="mean", **params
+    )
+    sign = _op("event_historical_response_sign_balance").calculate(
+        response, event, **params
+    )
+
+    # At t=39 the cohort is [9, 36]: event totals are 12, -6, and 18.
+    totals = np.asarray([12.0, -6.0, 18.0])
+    assert mean_sum.iloc[-1, 0] == pytest.approx(float(totals.mean()))
+    assert mean_mean.iloc[-1, 0] == pytest.approx(float((totals / 3.0).mean()))
+    assert sign.iloc[-1, 0] == pytest.approx(float(np.sign(totals).mean()))
+
+
+def test_curve_statistics_independent_oracle() -> None:
+    response, event = _panel()
+    params = _history_params()
+    peak = _op("event_response_peak_lag").calculate(response, event, **params)
+    decay = _op("event_response_decay_rate").calculate(response, event, **params)
+    dispersion = _op("event_response_dispersion").calculate(response, event, **params)
+    reversal = _op("event_response_reversal_strength").calculate(response, event, **params)
+
+    curves = np.asarray([[2.0, 4.0, 6.0], [-1.0, -2.0, -3.0], [3.0, 6.0, 9.0]])
+    mean_curve = curves.mean(axis=0)
+    xs = np.arange(1.0, 4.0)
+    logged = np.log(np.abs(mean_curve) + 1e-12)
+    expected_decay = np.sum((xs - xs.mean()) * (logged - logged.mean())) / np.sum(
+        (xs - xs.mean()) ** 2
+    )
+    totals = curves.sum(axis=1)
+
+    assert peak.iloc[-1, 0] == 1.0
+    assert decay.iloc[-1, 0] == pytest.approx(expected_decay)
+    assert dispersion.iloc[-1, 0] == pytest.approx(
+        np.std(totals, ddof=1) / np.mean(np.abs(totals))
+    )
+    assert reversal.iloc[-1, 0] == 0.0
+
+
+def test_episode_diagnostics_and_hawkes_are_nonvacuous() -> None:
+    _, event = _panel()
+    effective = _op("event_response_effective_events").calculate(
+        event, history_window=30, horizon=3, refractory=5
+    )
+    overlap = _op("event_response_overlap_ratio").calculate(
+        event, history_window=30, horizon=3, refractory=5
+    )
+    hawkes = _op("event_hawkes_branching_ratio_proxy").calculate(
+        event, window=30, max_lag=3, min_events=2
+    )
+    assert effective.iloc[-1, 0] == 3.0
+    assert overlap.iloc[-1, 0] == 0.0
+    assert np.isfinite(hawkes.iloc[-1, 0])
+
+
+def test_clustered_episode_diagnostics_independent_counts() -> None:
+    event = np.zeros(20)
+    event[[4, 5, 6, 12]] = 1.0
+    frame = pd.DataFrame({"A": event})
+    effective = _op("event_response_effective_events").calculate(
+        frame, history_window=15, horizon=2, refractory=3
+    )
+    overlap = _op("event_response_overlap_ratio").calculate(
+        frame, history_window=15, horizon=2, refractory=3
+    )
+    assert effective.iloc[-1, 0] == 2.0
+    assert overlap.iloc[-1, 0] == pytest.approx(1.0 - 2.0 / 4.0)
+
+
+def test_missing_response_path_is_excluded_not_shortened() -> None:
+    response, event = _panel()
+    response.iloc[14, 0] = np.nan  # invalidates the entire event-12 path
+    params = _history_params()
+    mean = _op("event_historical_response_mean").calculate(
+        response, event, mode="sum", **params
+    )
+    dispersion = _op("event_response_dispersion").calculate(
+        response, event, **params
+    )
+    remaining = np.asarray([-6.0, 18.0])
+    assert mean.iloc[-1, 0] == pytest.approx(float(remaining.mean()))
+    assert dispersion.iloc[-1, 0] == pytest.approx(
+        np.std(remaining, ddof=1) / np.mean(np.abs(remaining))
+    )
+
+
+def test_missing_event_coverage_has_distinct_response_and_diagnostic_policy() -> None:
+    response, event = _panel()
+    event.iloc[27, 0] = np.nan  # predecessor coverage for event 28 is unknown
+    params = _history_params()
+    mean = _op("event_historical_response_mean").calculate(
+        response, event, mode="sum", refractory=3, **params
+    )
+    effective = _op("event_response_effective_events").calculate(
+        event, history_window=30, horizon=3, refractory=3
+    )
+    overlap = _op("event_response_overlap_ratio").calculate(
+        event, history_window=30, horizon=3, refractory=3
+    )
+
+    # Response estimation fail-closes by excluding only the uncertain anchor;
+    # diagnostics describe the whole raw cohort and stay NaN when its event
+    # coverage/denominator is unknown. These are intentionally different sample
+    # policies, not a claim that both operators use an identical denominator.
+    assert mean.iloc[-1, 0] == pytest.approx((12.0 - 6.0) / 2.0)
+    assert np.isnan(effective.iloc[-1, 0])
+    assert np.isnan(overlap.iloc[-1, 0])
+
+
+@pytest.mark.parametrize(
+    ("name", "arity"),
+    [
+        ("event_historical_response_mean", 2),
+        ("event_historical_response_sign_balance", 2),
+        ("event_hawkes_branching_ratio_proxy", 1),
+        ("event_response_peak_lag", 2),
+        ("event_response_decay_rate", 2),
+        ("event_response_dispersion", 2),
+        ("event_response_reversal_strength", 2),
+        ("event_response_effective_events", 1),
+        ("event_response_overlap_ratio", 1),
+    ],
+)
+def test_empty_inputs_return_empty_frame(name: str, arity: int) -> None:
+    empty = pd.DataFrame(index=pd.RangeIndex(0), columns=["A"], dtype=float)
+    result = _op(name).calculate(*([empty] * arity))
+    assert isinstance(result, pd.DataFrame)
+    assert result.shape == empty.shape
+    assert result.empty
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
         "event_historical_response_mean",
         "event_historical_response_sign_balance",
-        "event_hawkes_branching_ratio_proxy",
         "event_response_peak_lag",
         "event_response_decay_rate",
         "event_response_dispersion",
         "event_response_reversal_strength",
-        "event_response_effective_events",
-        "event_response_overlap_ratio"
-    ]
+    ],
+)
+def test_two_input_operators_preserve_single_column_axes(name: str) -> None:
+    response, event = _panel()
+    result = _op(name).calculate(response, event, **_history_params())
+    assert result.index.equals(response.index)
+    assert result.columns.equals(response.columns)
+    assert np.isfinite(result.iloc[-1, 0])
 
-    for op_name in operators:
-        op = _op(op_name)
-        meta = getattr(op, "metadata", None)
-        assert meta is not None, f"{op_name} missing metadata"
-        assert hasattr(meta, "tags"), f"{op_name} missing tags"
-        assert meta.name == op_name, f"{op_name} name mismatch"
+
+def test_nonfinite_event_rows_are_missing_not_events() -> None:
+    event = pd.DataFrame({"A": [0.0] * 12})
+    event.iloc[[2, 8], 0] = [np.inf, -np.inf]
+    event.iloc[5, 0] = 1.0
+    effective = _op("event_response_effective_events").calculate(
+        event, history_window=8, horizon=1, refractory=0
+    )
+    overlap = _op("event_response_overlap_ratio").calculate(
+        event, history_window=8, horizon=1, refractory=0
+    )
+    # Inf is non-finite event coverage, so the current diagnostic cohort is
+    # unknown rather than treating either value as an observed event or zero.
+    assert np.isnan(effective.iloc[-1, 0])
+    assert np.isnan(overlap.iloc[-1, 0])
+
+
+@pytest.mark.parametrize("name", CANONICALS)
+@pytest.mark.parametrize("missing", [np.nan, np.inf, -np.inf])
+def test_all_operator_nonfinite_input_roles(name, missing):
+    response, event = _panel()
+    # Preserve each original operator's NaN/Inf handling obligation, with valid
+    # arity and an observed control column rather than only return-type checks.
+    response["UNKNOWN"] = missing
+    event["UNKNOWN"] = missing
+    if name == "event_hawkes_branching_ratio_proxy":
+        result = _op(name).calculate(event, window=30, max_lag=3, min_events=2)
+    elif name in ("event_response_effective_events", "event_response_overlap_ratio"):
+        result = _op(name).calculate(event, history_window=30, horizon=3)
+    else:
+        result = _op(name).calculate(response, event, **_history_params())
+    assert result.index.equals(response.index)
+    assert result.columns.equals(response.columns)
+    assert np.isfinite(result["A"].iloc[-1])
+    assert result["UNKNOWN"].isna().all()
+    assert not np.isinf(result.to_numpy()).any()

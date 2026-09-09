@@ -61,8 +61,8 @@ def test_r19_140_hash_key_callable_and_deterministic():
     pc = ParameterCanonicalizer("custom_op")
     key = pc.hash_key({"window": 20})
     assert isinstance(key, tuple)
-    assert key[0] == "custom_op"
-    assert isinstance(key[1], tuple)
+    assert key[:2] == ("search-equivalence-v1", "custom_op")
+    assert isinstance(key[2], tuple) and key[2]
     # same params -> same key
     assert pc.hash_key({"window": 20}) == key
     # different semantic params -> different key
@@ -83,7 +83,10 @@ def test_r19_001_hash_key_no_str_plus_tuple_type_error():
     # The old ``(canonical or "") + tuple(...)`` raised TypeError at call time.
     pc = ParameterCanonicalizer("ts_mean")
     key = pc.hash_key({"window": 20})
-    assert isinstance(key[0], str) and isinstance(key[1], tuple)
+    assert key[0] == "search-equivalence-v1"
+    assert key[1] == "ts_mean"
+    assert isinstance(key[2], tuple) and key[2]
+    assert ParameterCanonicalizer("ts_sum").hash_key({"window": 20}) != key
     assert pc.canonicalize({"window": 20})  # canonicalize still works
 
 
@@ -250,8 +253,13 @@ def test_r19_139_numeric_string_binder_kernel_separation():
     for gate in (strict_int, strict_int_param, strict_int_runtime):
         with pytest.raises(OperatorParameterError):
             gate("20", "window")
-    # numeric values still accepted (incl. np scalars).
-    assert strict_int(20.0, "window") == 20
+    # Q04's type-strict authority rejects integral floats.  The older base
+    # compatibility helpers retain their documented integral-float coercion;
+    # this test must not weaken strict_int to match them.
+    with pytest.raises(OperatorParameterError):
+        strict_int(20.0, "window")
+    assert strict_int_param(20.0, "window") == 20
+    assert strict_int_runtime(20.0, "window") == 20
     assert strict_int(np.int64(20), "window") == 20
 
 

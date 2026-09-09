@@ -19,10 +19,14 @@
 from __future__ import annotations
 
 import logging
+import math
 import os
 import threading
+import time
+from collections import deque
+from contextlib import contextmanager
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Iterator
 
 from factor_engine.runtime.task_resource_contract import DEFAULT_UNCERTAINTY, TaskResourceContract
 
@@ -676,6 +680,15 @@ class MemoryLease:
         }
 
 
+@dataclass(eq=False)
+class _ProtectedEgressWaiter:
+    """One FIFO admission ticket, owned by the entering thread."""
+
+    lease_id: str
+    deadline: float
+    observed_revision: int
+
+
 class ResourceBroker:
     """live headroom + token admission 的统一资源代理（R27-174 API）。
 
@@ -732,6 +745,10 @@ class ResourceBroker:
         self._last_budget_sample_ms: float | None = None
         self._lease_counter = 0
         self._lock = threading.RLock()
+        self._resource_condition = threading.Condition(self._lock)
+        self._resource_revision = 0
+        self._protected_egress_waiters: deque[_ProtectedEgressWaiter] = deque()
+        self._protected_egress_waiter_local = threading.local()
         self._cached: ResourceSnapshot | None = None
         self._last_sample_ms = 0.0
         # P0-016：job/sink 的 live signals（由 scheduler 在 resource_decision() 时
@@ -1087,7 +1104,97 @@ class ResourceBroker:
     def _release_memory_locked(self, lease: MemoryLease) -> None:
         """内存租约释放原语（只在 ``MemoryLease.release`` 内幂等化）。"""
         with self._lock:
-            self._memory_leases.pop(lease.lease_id, None)
+            if self._memory_leases.pop(lease.lease_id, None) is not None:
+                self._notify_resource_change_locked()
+
+    def _notify_resource_change_locked(self) -> None:
+        """Publish an eligibility/resource transition while holding ``_lock``."""
+        self._resource_revision += 1
+        self._resource_condition.notify_all()
+
+    def _prune_expired_egress_waiters_locked(self, now: float) -> None:
+        """Drop stalled expired heads so they cannot indefinitely block FIFO."""
+        changed = False
+        while (
+            self._protected_egress_waiters
+            and self._protected_egress_waiters[0].deadline <= now
+        ):
+            self._protected_egress_waiters.popleft()
+            changed = True
+        if changed:
+            self._notify_resource_change_locked()
+
+    @contextmanager
+    def protected_egress_waiter(
+        self, lease_id: str, deadline: float
+    ) -> Iterator[None]:
+        """Enroll one protected-egress attempt in FIFO order.
+
+        ``deadline`` is an absolute ``time.monotonic()`` timestamp.  The
+        context must wrap the acquire/wait retry loop; cleanup in ``finally``
+        ensures a cancelled or failed head never blocks later waiters.
+        """
+        lid = str(lease_id)
+        end = float(deadline)
+        if not lid:
+            raise ValueError("protected egress waiter requires a lease_id")
+        if not math.isfinite(end):
+            raise ValueError("protected egress waiter requires a finite deadline")
+        if getattr(self._protected_egress_waiter_local, "ticket", None) is not None:
+            raise RuntimeError("nested protected egress waiter contexts are not supported")
+        with self._lock:
+            if any(ticket.lease_id == lid for ticket in self._protected_egress_waiters):
+                raise ValueError(f"duplicate protected egress waiter lease_id: {lid}")
+            ticket = _ProtectedEgressWaiter(lid, end, self._resource_revision)
+            self._protected_egress_waiters.append(ticket)
+            self._protected_egress_waiter_local.ticket = ticket
+        try:
+            yield
+        finally:
+            with self._lock:
+                was_head = bool(
+                    self._protected_egress_waiters
+                    and self._protected_egress_waiters[0] is ticket
+                )
+                try:
+                    self._protected_egress_waiters.remove(ticket)
+                except ValueError:
+                    pass
+                else:
+                    if was_head:
+                        self._notify_resource_change_locked()
+            self._protected_egress_waiter_local.ticket = None
+
+    def wait_for_resource_change(self, timeout_seconds: float) -> bool:
+        """Wait finitely for a broker revision visible to the active waiter.
+
+        The revision captured after a failed acquire closes the release-between-
+        acquire-and-wait race.  ``False`` means timeout/deadline (or a spurious
+        wake); request cancellation uses the existing typed exceptions.
+        """
+        timeout = float(timeout_seconds)
+        if not math.isfinite(timeout):
+            raise ValueError("resource wait timeout must be finite")
+        ticket = getattr(self._protected_egress_waiter_local, "ticket", None)
+        if ticket is None:
+            raise RuntimeError("resource wait requires protected_egress_waiter context")
+        from factor_engine.runtime.exceptions import get_active_cancellation_token
+
+        token = get_active_cancellation_token()
+        wait_deadline = min(ticket.deadline, time.monotonic() + max(0.0, timeout))
+        with self._lock:
+            while True:
+                if token is not None:
+                    token.raise_if_cancelled()
+                if self._resource_revision != ticket.observed_revision:
+                    ticket.observed_revision = self._resource_revision
+                    return True
+                remaining = wait_deadline - time.monotonic()
+                if remaining <= 0.0:
+                    return False
+                # CancellationToken owns an Event but not this Condition.  A
+                # short bounded slice makes cancellation observable promptly.
+                self._resource_condition.wait(min(remaining, 0.05))
 
     def current_read_budget(self) -> int:
         """P3/P4: read 类预算（SOURCE_READ + READ_WAVE 软池额度）。"""
@@ -1124,12 +1231,37 @@ class ResourceBroker:
         writer_bytes = int(writer_workspace_bytes)
         if queue_bytes <= 0 or writer_bytes <= 0 or not lease_id:
             return None
+        from factor_engine.runtime.exceptions import get_active_cancellation_token
+
+        token = get_active_cancellation_token()
+        if token is not None:
+            token.raise_if_cancelled()
         with self._lock:
+            if token is not None:
+                token.raise_if_cancelled()
+            now = time.monotonic()
+            self._prune_expired_egress_waiters_locked(now)
+            waiter = getattr(self._protected_egress_waiter_local, "ticket", None)
+            if waiter is not None and (
+                waiter.deadline <= now or waiter not in self._protected_egress_waiters
+            ):
+                return None
+            if self._protected_egress_waiters:
+                if waiter is None or self._protected_egress_waiters[0] is not waiter:
+                    if waiter is not None:
+                        waiter.observed_revision = self._resource_revision
+                    return None
+                if waiter.lease_id != lease_id:
+                    return None
             if self._lease_sum_bytes() + queue_bytes + writer_bytes > self.execution_budget():
+                if waiter is not None:
+                    waiter.observed_revision = self._resource_revision
                 return None
             qid = f"{lease_id}:result_queue"
             wid = f"{lease_id}:writer_workspace"
             if qid in self._memory_leases or wid in self._memory_leases:
+                if waiter is not None:
+                    waiter.observed_revision = self._resource_revision
                 return None
             q = MemoryLease(self, MemoryLeaseKind.RESULT_QUEUE, queue_bytes, qid)
             w = MemoryLease(self, MemoryLeaseKind.WRITER_BATCH, writer_bytes, wid)
@@ -1251,11 +1383,13 @@ class ResourceBroker:
 
     def _release_locked(self, task: TaskResourceContract, *, task_id: str) -> None:
         """租约/旧 API 共用的释放原语（只在 ``ReservationLease.release`` 内幂等化）。"""
-        reserved = self._running.pop(task_id, None)
-        if reserved is None:
-            return
-        self._cpu.release(reserved.cpu_tokens)
-        self._io.release(reserved.io_tokens)
+        with self._lock:
+            reserved = self._running.pop(task_id, None)
+            if reserved is None:
+                return
+            self._cpu.release(reserved.cpu_tokens)
+            self._io.release(reserved.io_tokens)
+            self._notify_resource_change_locked()
 
     def reserve(self, task: TaskResourceContract, *, task_id: str = "") -> bool:
         """向后兼容：返回 bool。内部经 ``try_reserve`` 拿到 lease 并持有，

@@ -92,14 +92,14 @@ def test_wavelet_entropy_current_nan_is_nan():
 # ---------------------------------------------------------------------------
 # item 56  wavelet: fixed power-of-two window anchor (no horizon jumps)
 # ---------------------------------------------------------------------------
-def test_wavelet_fixed_window_anchor_rounding():
+def test_wavelet_fixed_window_anchor_domain():
     assert _ws._fixed_window_anchor(32) == 32
     assert _ws._fixed_window_anchor(64) == 64
     assert _ws._fixed_window_anchor(128) == 128
     assert _ws._fixed_window_anchor(256) == 256
-    assert _ws._fixed_window_anchor(127) == 128  # no longer drops to 64
-    assert _ws._fixed_window_anchor(100) == 128
-    assert _ws._fixed_window_anchor(60) == 64
+    for unsupported in (60, 100, 127):
+        with pytest.raises(ValueError, match="window must be one of"):
+            _ws._fixed_window_anchor(unsupported)
 
 
 def test_wavelet_haar_requires_full_fixed_anchor():

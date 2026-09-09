@@ -58,6 +58,11 @@ docs/logging/
 .vscode/
 .idea/
 
+# V8 wave staging scratch dirs (landed copies live in factor_engine/runtime + tests)
+.v8_finite_stage/
+.v8_inspection_stage/
+.v8_ingest_ownership/
+
 # Misc
 coscli_output/
 factor_cold_start/

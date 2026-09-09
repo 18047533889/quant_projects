@@ -30,6 +30,8 @@ from factor_engine.cleaned_operators.base import (
     ParamRole,
 )
 from factor_engine.cleaned_operators.crossing import _crossing_acceleration_series
+from factor_engine.backend.contracts import ExecutionKind, PhysicalImplementationSpec
+from factor_engine.cleaned_operators.rolling_pack import _call_pandas_delegate
 
 
 # ============================================================================
@@ -429,47 +431,74 @@ class TSAlphaBetaFilterPolarsNative(SeriesOperator):
 
 @register_operator(name="ts_bessel_lowpass_causal", canonical="ts_bessel_lowpass_causal", backend="polars", replace=True, expected_old_source="pandas_bridge", replacement_reason="Consolidating polars native operators into ts_advanced_batch1")
 class TSBesselLowpassCausalPolarsNative(SeriesOperator):
-    """Bessel low-pass filter (causal, online)"""
+    """Exact Polars-to-Pandas bridge to the authoritative causal Bessel filter."""
 
     metadata = OperatorMetadata(
         name="ts_bessel_lowpass_causal",
         category="time_series",
-        description="Bessel low-pass filter (TODO: needs scipy signal implementation)",
-        param_names=["feature", "cutoff_freq", "order"],
+        description="Causal Bessel low-pass filter via the authoritative CPU reference",
+        param_names=["x", "order", "cutoff"],
         return_type="series",
-        tags=["time_series", "filter", "pit_safe"],
+        tags=["time_series", "filter", "pit_safe", "pandas_delegate"],
     )
-    # metadata.param_specs intentionally omitted - use canonical contract from pandas backend
+    metadata.param_specs = {
+        "order": ParamSpec(dtype=int, min=1, max=8, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+        "cutoff": ParamSpec(dtype=float, min=1e-4, max=0.499, param_role=ParamRole.ECONOMIC),
+    }
+    _physical_spec = PhysicalImplementationSpec(
+        canonical="ts_bessel_lowpass_causal", backend="polars",
+        execution_kind=ExecutionKind.POLARS_PANDAS_DELEGATE,
+        materializes_full_panel=True, requires_sorted=True,
+        supports_nulls=True, supports_nan=True, supports_inf=False,
+        implementation_source_hash="ba8df8f82a281c798b2c5c99379bd37726c91f3398b175c10c80d356097f2ce9",
+        emitter_identity="rolling_pack._call_pandas_delegate:polars_to_pandas_to_polars:v1",
+        kernel_identity="technical.frequency_filters:BesselLowpassCausal._calculate_series",
+        parameter_domain_hash="x:panel;order:int[1,8]:default4;cutoff:float[1e-4,.499]:default.05",
+        semantic_contract_hash="bessel:digital_phase_norm:event_clock_freeze:mask_first_order_finite:v9",
+        notes="Exact eager pandas-reference delegation; never a native Polars expression.",
+    )
 
-    def _calculate_series(self, feature, cutoff_freq=0.1, order=4, **kwargs):
-        # TODO: Implement Bessel filter using scipy.signal.bessel
-        # Placeholder: EMA approximation
-        span = int(1.0 / cutoff_freq) if cutoff_freq > 0 else 10
-        return feature.ewm(span=span, adjust=False).mean()
+    def _calculate_series(self, x, order=4, cutoff=0.05, **kwargs):
+        return _call_pandas_delegate(
+            "ts_bessel_lowpass_causal", (x,), {"order": order, "cutoff": cutoff, **kwargs}
+        )
 
 
 @register_operator(name="ts_butterworth_lowpass_causal", canonical="ts_butterworth_lowpass_causal", backend="polars")
 class TSButterworthLowpassCausalPolarsNative(SeriesOperator):
-    """Butterworth low-pass filter (causal, online)"""
+    """Exact Polars-to-Pandas bridge to the authoritative causal Butterworth filter."""
 
     metadata = OperatorMetadata(
         name="ts_butterworth_lowpass_causal",
         category="time_series",
-        description="Butterworth low-pass filter (TODO: needs scipy signal implementation)",
-        param_names=["feature", "cutoff_freq", "order"],
+        description="Causal Butterworth low-pass filter via the authoritative CPU reference",
+        param_names=["x", "cutoff_period", "order"],
         return_type="series",
-        tags=["time_series", "filter", "pit_safe"],
+        tags=["time_series", "filter", "pit_safe", "pandas_delegate"],
     )
     metadata.param_specs = {
-        "cutoff_freq": ParamSpec(dtype=float, min=0.0, max=0.5, default=0.1, param_role=ParamRole.ESTIMATOR_RESOLUTION),
-        "order": ParamSpec(dtype=int, min=1, max=10, default=4, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+        "cutoff_period": ParamSpec(dtype=int, min=3, default=20, history_semantics="max_rows", param_role=ParamRole.HORIZON),
+        "order": ParamSpec(dtype=int, min=1, max=10, default=2, param_role=ParamRole.MODEL_ORDER),
     }
+    _physical_spec = PhysicalImplementationSpec(
+        canonical="ts_butterworth_lowpass_causal", backend="polars",
+        execution_kind=ExecutionKind.POLARS_PANDAS_DELEGATE,
+        materializes_full_panel=True, requires_sorted=True,
+        supports_nulls=True, supports_nan=True, supports_inf=False,
+        implementation_source_hash="a25f1e964f3894969681ebadd67c4d766e4375a30824abd9cb86b2ad9ca933d0",
+        emitter_identity="rolling_pack._call_pandas_delegate:polars_to_pandas_to_polars:v1",
+        kernel_identity="filter_smooth:ButterworthLowpassCausalOperator._calculate_series",
+        parameter_domain_hash="x:panel;cutoff_period:int>=3:default20;order:int[1,10]:default2",
+        semantic_contract_hash="butterworth:digital_fc=1/period:fs=1:event_clock_state_freeze:v9",
+        notes="Exact eager pandas-reference delegation; never a native Polars expression.",
+    )
 
-    def _calculate_series(self, feature, cutoff_freq=0.1, order=4, **kwargs):
-        # TODO: Implement Butterworth filter using scipy.signal.butter
-        # Placeholder: EMA approximation
-        span = int(1.0 / cutoff_freq) if cutoff_freq > 0 else 10
-        return feature.ewm(span=span, adjust=False).mean()
+    def _calculate_series(self, x, cutoff_period=20, order=2, **kwargs):
+        return _call_pandas_delegate(
+            "ts_butterworth_lowpass_causal",
+            (x,),
+            {"cutoff_period": cutoff_period, "order": order, **kwargs},
+        )
 
 
 @register_operator(name="ts_causal_local_linear_smoother", canonical="ts_causal_local_linear_smoother", backend="polars")
@@ -2514,7 +2543,7 @@ class TSEvtThresholdStabilityPolarsNative(SeriesOperator):
 
 @register_operator(name="ts_expectile_beta", canonical="ts_expectile_beta", backend="polars")
 class TSExpectileBetaPolarsNative(SeriesOperator):
-    """Expectile-based beta (asymmetric regression)"""
+    """Eager CPU expectile-regression bridge; not a native Polars expression."""
 
     metadata = OperatorMetadata(
         name="ts_expectile_beta",
@@ -2522,18 +2551,43 @@ class TSExpectileBetaPolarsNative(SeriesOperator):
         description="Beta using expectile regression at given tau",
         param_names=["y", "x", "window", "tau", "n_min"],
         return_type="series",
-        tags=["time_series", "rolling", "expectile", "regression", "pit_safe"],
+        tags=["time_series", "rolling", "expectile", "regression", "pit_safe", "cpu_udf"],
     )
     # metadata.param_specs intentionally omitted - use canonical contract from pandas backend
 
-    def _calculate_series(self, y, x=None, window=20, tau=0.5, n_min=10, **kwargs):
-        # R4-100 parity: canonical (y, x, window, tau, n_min).
-        # TODO: Implement expectile regression (asymmetric least squares)
-        # For tau=0.5, reduces to OLS
-        # Placeholder: use regular rolling regression
-        cov_xy = x.rolling(window).cov(y) if x is not None else y.rolling(window).cov(y)
-        var_y = y.rolling(window).var()
-        return cov_xy / var_y.replace(0, np.nan)
+    from factor_engine.backend.contracts import ExecutionKind, PhysicalImplementationSpec
+    _physical_spec = PhysicalImplementationSpec(
+        canonical="ts_expectile_beta", backend="polars",
+        execution_kind=ExecutionKind.DELEGATE_PYTHON,
+        materializes_full_panel=True, requires_sorted=True,
+        supports_nulls=True, supports_nan=True, supports_inf=True,
+        implementation_source_hash="9c3c915c96358bb939147fcee8de51e129c30503f9ecd57aa21d7563acd02f65",
+        emitter_identity="polars.DataFrame.with_columns:python_pair_rolling_kernel",
+        kernel_identity="advanced_expectile._expectile_slope+rolling_pack.map_pair_rolling",
+        parameter_domain_hash="63e9baa85ffe00b26cf31e1af8275307a79f5dc47d82ae6fb42a9ee483b13aec",
+        semantic_contract_hash="703de65db62a7e1e648b4c37d50604dd127871e72d1bcde4c9e12b46f4b6eb53",
+        notes="Eager shared Python/NumPy asymmetric regression; production evidence not certified.",
+    )
+
+    def _calculate_series(self, y, x, window=60, tau=0.1, n_min=3, **kwargs):
+        from factor_engine.cleaned_operators.advanced_expectile import _expectile_slope
+        from factor_engine.cleaned_operators.rolling_pack import map_pair_rolling
+        from factor_engine.cleaned_operators.common._polars_bridge import align_cols
+        cols = align_cols(y, x)
+        if "stock_code" in y.columns and y["stock_code"].n_unique() > 1:
+            raise ValueError("expectile CPU bridge requires a wide or single-stock panel")
+        w, tt, nmin = int(window), float(tau), int(n_min)
+        if w < 4 or not 0.0 < tt < 1.0 or nmin < 1:
+            raise ValueError("expectile regression requires window>=4, 0<tau<1 and n_min>=1")
+        result = map_pair_rolling(
+            y.select(cols).to_numpy().astype(float),
+            x.select(cols).to_numpy().astype(float),
+            w, lambda a, b: _expectile_slope(a, b, tt, nmin),
+        )
+        return y.with_columns([
+            pl.Series(name, result[:, index], dtype=pl.Float64)
+            for index, name in enumerate(cols)
+        ])
 
 
 @register_operator(name="ts_expectile_beta_spread", canonical="ts_expectile_beta_spread", backend="polars")

@@ -99,6 +99,8 @@ def validate_plan_params(plan: PlanNode, *, production: bool = True) -> PlanNode
         if not param_names:
             return
         attrs = normalize_parameter_aliases(canonical, dict(node.attrs))
+        for ignored_name in getattr(meta, "deprecated_ignored_params", ()) or ():
+            attrs.pop(ignored_name, None)
         # Positionally-passed scalar parameters appear as ``literal`` child
         # inputs, NOT ``node.attrs`` (the runtime binds every evaluated input in
         # child order — panels and literals mixed — to the kernel signature, so
@@ -146,6 +148,34 @@ def validate_plan_params(plan: PlanNode, *, production: bool = True) -> PlanNode
         # same value set the kernel receives at runtime.
         bound = dict(defaults)
         bound.update(validated)
+
+        # V8-M06: reject configurations that can never accumulate the model's
+        # required design rows.  These named validators are shared with the
+        # runtime operator gate; no data source is touched during this walk.
+        try:
+            from factor_engine.cleaned_operators.ts_model import ar_meanrev
+            if canonical in ar_meanrev._AR_CONFIGURED_HISTORY_CANONICALS:
+                ar_meanrev.validate_ar_configured_history(bound["window"], bound["order"])
+            else:
+                from factor_engine.cleaned_operators.ts_model import dynamic_regression
+                if canonical in dynamic_regression._MULTI_CONFIGURED_HISTORY_CANONICALS:
+                    active_features = 0
+                    for feature_name in ("x1", "x2", "x3", "x4"):
+                        index = param_names.index(feature_name)
+                        if index >= len(node.inputs):
+                            continue
+                        child = node.inputs[index]
+                        if not (
+                            str(getattr(child, "op", "")) == "literal"
+                            and child.attrs.get("value") is None
+                        ):
+                            active_features += 1
+                    dynamic_regression.validate_multi_configured_history(
+                        bound["window"], bound["min_periods"], active_features,
+                        bound["add_intercept"],
+                    )
+        except ValueError as exc:
+            raise OperatorParameterError(f"{canonical}: {exc}") from exc
 
         try:
             # dead-knob / active_when rejection (same helper as runtime).
@@ -196,8 +226,11 @@ def canonicalize_parameter_values(
     """
     import math
 
-    _, _, param_specs, _ = (
+    _, metadata, param_specs, _ = (
         _operator_contract(canonical) if canonical is not None else (None, None, {}, {})
+    )
+    ignored_params = frozenset(
+        getattr(metadata, "deprecated_ignored_params", ()) or ()
     )
 
     def _is_declared_scale_equivalent(key: str) -> bool:
@@ -214,6 +247,8 @@ def canonicalize_parameter_values(
 
     out: dict[str, Any] = {}
     for key, value in attrs.items():
+        if key in ignored_params:
+            continue
         if isinstance(value, float) or (isinstance(value, int) and not isinstance(value, bool)):
             out[key] = _round_num(value)
             continue

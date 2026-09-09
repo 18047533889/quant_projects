@@ -1311,6 +1311,8 @@ class AdaptiveBatchScheduler:
             result, _path = _execute_root_with_path(
                 backend, plan, ctx, run_mode=getattr(ctx, "run_mode", None),
                 factor_name=task.factor_name,
+                task_id=task.task_id,
+                factor_id=task.factor_name,
             )
             return result
 
@@ -1970,6 +1972,8 @@ class AdaptiveBatchScheduler:
             result, _path = _execute_root_with_path(
                 backend, root, ctx, run_mode=getattr(ctx, "run_mode", None),
                 factor_name=task.factor_name,
+                task_id=task.task_id,
+                factor_id=task.factor_name,
             )
             return result
 

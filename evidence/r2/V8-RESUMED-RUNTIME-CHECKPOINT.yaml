@@ -1,0 +1,50 @@
+schema: factor_engine.v8.evidence.v1
+git_sha: 118cd21c6262082336daa545ddc06b6f78def7b9
+date: '2026-09-08'
+target: server-c:/home/sunhaiwei/quant_projects
+status: CHECKPOINT_SCOPED_PASS_NOT_ALL_V8_CLOSED
+sources:
+  bounded_pipeline.py: f575ebdddc71e2307fd86d21c31e23049811412337cb3cfa350ad582eb179dec
+  run_deadline.py: 654b71ac96656e7ea6b2bff38091983c393ef681757aff18ed2f1ef85f30dc28
+  supervised_worker.py: f45fb2c7f6e864365f1a4825e9930f70130f8460fbea7ab39ea246d18b715987
+  resource_broker.py: 03e7a18d02ed02fc9d0a4059e6d4e0044bce5acfa23c034e5f15f98f8d8c8f23
+  resource_broker_ipc.py: de99f7b4957e91c689f0823a7a9c47862e130efe22ec509b4b61024b8d59711a
+  resume_validation.py: 0edc3115ed5611c93f4851941d12e4f1fc55a99434825d240fbd4e00c31e707f
+  finite_manifest.py: a92da77cf9815a57adcb6ae0a5792329f1e5ac315488879ccfa63bc778ca8ac4
+  worker_ownership.py: e48269d722d2c77e3796be210e18f5c76e58c137672b48d494c767e37bc4351c
+  default_engine.py: 2fded409882e54c95e3d86c981b8c0e04278ab8cebf50aab92fa55178be9b41b
+tests:
+  full_runtime: '504 passed, 1 strict R02 xfail, 106 warnings in 261.93s'
+  scope: all current runtime test_v6/test_v7/test_v8 modules plus r27 broker and r38 authority modules
+  xml: /tmp/v8-root-runtime-final-f575.xml
+  phases_and_footer: /tmp/v8-root-runtime-final-f575-outcomes.jsonl
+  source_freeze: nine runtime hashes unchanged before and after run
+  completed_nodes: 505
+  mathematical_boundary: runtime correctness/negative/fault/fixture tests, not505 numerical/native operator certifications
+  model_data: '74 passed, 2 warnings in 25.32s in independent scoped model/storage/semantic/helper suite'
+  model_data_xml: /tmp/v8-root-resumed-model-data.xml
+wheel:
+  directory: /tmp/fe-v8-runtimef575-wheel.VuRXzQ
+  filename: factor_engine-0.3.1-py3-none-any.whl
+  sha256: 54d36c574d2a1c406d6751dbe337d955df4512f918c645ee5a54cd5527ff6e46
+  installed_import: /tmp/fe-v8-runtimef575-wheel.VuRXzQ/site/factor_engine/__init__.py
+  evidence: /tmp/fe-v8-runtimef575-wheel.VuRXzQ/installed-import.json
+  verification: isolated build/install/import, six installed runtime source hashes verified,1756 canonical bootstrap
+  boundary: not deployed; bootstrap count does not certify operator numerics
+delivered_behavior:
+  - either execution slot can finish/persist/retire and refill while its peer remains active
+  - compile rejection, simultaneous fatal completion, cancellation and failed-slot authority tested
+  - execution batch count matches actual dispatch; each live compute slot has a bounded quota and fresh PID
+  - control-file replacement race rejected and descriptor always closed
+  - ingestion writer must be observed exited before parent reopens database
+  - supervisor optional ownership lifecycle and invalid-config admission lock recovery
+  - original job deadline persisted and new-run lock held before ingestion
+  - empty runs suppress compute/compiler/reconciler startup; cleanup quarantine retains authority
+remaining:
+  - R02 native-safe same-PID reuse not implemented; its strict xfail remains expected and not PASS
+  - full pending same-run resume and scalable complete worker ownership ledger not integrated
+  - B descriptor loss remains conservative UNKNOWN/ABORTED rather than automatic unfinished-work recovery
+  - real approved DataAccess profile unavailable; real field parity/GPU/100k/performance conversion acceptance NOT_RUN
+  - independent read-only old-worker retirement inspection is being prepared separately, not part of this snapshot
+default_example: factor_engine/examples/run_many_v2_example.py
+github_commit_push_deploy: false

@@ -35,7 +35,11 @@ from enum import Enum
 from typing import Any
 
 # Import from unified contract authority (FE-P0-003, FE-P0-004)
-from factor_engine.backend.contracts import ExecutionKind, PhysicalImplementationSpec
+from factor_engine.backend.contracts import (
+    ExecutionKind,
+    PhysicalImplementationSpec,
+    is_physical_implementation_spec,
+)
 
 
 
@@ -124,7 +128,7 @@ def get_physical_spec(operator: Any) -> PhysicalImplementationSpec | None:
     """
     # Check for _physical_spec attribute
     spec = getattr(operator, "_physical_spec", None)
-    if isinstance(spec, PhysicalImplementationSpec):
+    if is_physical_implementation_spec(spec):
         return spec
 
     # Check for physical_spec() method
@@ -132,7 +136,7 @@ def get_physical_spec(operator: Any) -> PhysicalImplementationSpec | None:
     if callable(method):
         try:
             result = method()
-            if isinstance(result, PhysicalImplementationSpec):
+            if is_physical_implementation_spec(result):
                 return result
         except Exception:
             pass
@@ -164,19 +168,20 @@ def polars_backend_kind(
     # Try explicit declaration first
     spec = get_physical_spec(operator)
     if spec is not None:
+        execution_kind = getattr(spec.execution_kind, "value", spec.execution_kind)
         # Map ExecutionKind to PolarsImplementationKind (legacy compatibility)
-        if spec.execution_kind == ExecutionKind.POLARS_PANDAS_DELEGATE:
+        if execution_kind == ExecutionKind.POLARS_PANDAS_DELEGATE.value:
             return PolarsImplementationKind.POLARS_UDF_PANDAS_DELEGATE
-        elif spec.execution_kind in {
-            ExecutionKind.POLARS_NATIVE_EXPR,
-            ExecutionKind.POLARS_NUMPY_KERNEL,
+        elif execution_kind in {
+            ExecutionKind.POLARS_NATIVE_EXPR.value,
+            ExecutionKind.POLARS_NUMPY_KERNEL.value,
         }:
             return PolarsImplementationKind.POLARS_NATIVE
-        elif spec.execution_kind == ExecutionKind.PANDAS_REFERENCE:
+        elif execution_kind == ExecutionKind.PANDAS_REFERENCE.value:
             return PolarsImplementationKind.PANDAS_REFERENCE
-        elif spec.execution_kind in {
-            ExecutionKind.DUCKDB_NATIVE_SQL,
-            ExecutionKind.SQL_PYTHON_UDF,
+        elif execution_kind in {
+            ExecutionKind.DUCKDB_NATIVE_SQL.value,
+            ExecutionKind.SQL_PYTHON_UDF.value,
         }:
             return PolarsImplementationKind.SQL_NATIVE
         else:

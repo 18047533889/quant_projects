@@ -1,0 +1,30 @@
+schema: factor_engine.v8.evidence.v1
+git_sha: 118cd21c6262082336daa545ddc06b6f78def7b9
+date: '2026-09-08'
+target: server-c:/home/sunhaiwei/quant_projects
+status: SCOPED_GREEN_INTEGRATION_IN_PROGRESS
+files:
+  - factor_engine/runtime/finite_manifest.py
+  - factor_engine/tests/runtime/test_v8_finite_ingest_cleanup.py
+source_sha256: fbc83d2f8a5bd8ccc4a9e76366677944b245d862f68b695d73b0c41bbdfa1eed
+changes:
+  - protect iterator construction and close SQLite if it raises
+  - preserve primary iteration error and append cleanup failures
+  - close manifest when otherwise successful iteration has failed cleanup
+  - protect descriptor-based lookup of iterator.close as well as invoking it
+tests:
+  red: '3 failed against previous production source'
+  red_xml: /tmp/v8-finite-ingest-cleanup-red.xml
+  staged_green: '5 passed including close-property exceptions'
+  staged_green_xml: /tmp/v8-finite-ingest-cleanup-stage-v2.xml
+  production_import: test module adapted from isolated source load to actual factor_engine.runtime.finite_manifest import
+review:
+  author: v8_data
+  author_model: gpt-5.6-sol
+  reviewer: root
+  finding_repaired_before_merge: retrieving the close attribute could itself throw and mask primary
+limitations:
+  - public ingest resource cleanup only; supervised process retirement remains covered separately
+  - no numerical operator or real data performance certification
+  - GPU, real approved DataAccess and100k acceptance NOT_RUN
+github_commit_push_deploy: false

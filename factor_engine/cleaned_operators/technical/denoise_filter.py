@@ -18,6 +18,11 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
+from factor_engine.cleaned_operators.technical.convex_trend_filter import (
+    l1_trend_filter as _shared_l1_trend_filter,
+    total_variation_filter as _shared_total_variation_filter,
+)
+
 from factor_engine.cleaned_operators.base import (
     Operator,
     OperatorMetadata,
@@ -87,60 +92,14 @@ def _wavelet_soft_threshold(x: np.ndarray, threshold: float) -> np.ndarray:
     return np.cumsum(denoised_coeffs) + x[0] - denoised_coeffs[0]
 
 
-def _total_variation_filter(x: np.ndarray, lambda_tv: float, max_iter: int = 50) -> np.ndarray:
-    """Total variation L1 filter (iterative proximal gradient).
-
-    Solves: argmin_y (0.5 * ||y - x||^2 + lambda * ||Dy||_1)
-    where D is the discrete difference operator.
-    """
-    y = x.copy()
-    step = 0.5  # step size for gradient descent
-
-    for _ in range(max_iter):
-        # Data fidelity gradient
-        grad = y - x
-
-        # TV proximal step
-        diff = np.diff(y, prepend=y[0])
-        soft_diff = np.sign(diff) * np.maximum(0, np.abs(diff) - lambda_tv * step)
-
-        # Update
-        y_new = y - step * grad
-        y_new = x + np.cumsum(soft_diff)
-
-        # Early stopping
-        if np.allclose(y, y_new, atol=1e-6):
-            break
-        y = y_new
-
-    return y
+def _total_variation_filter(x: np.ndarray, lambda_tv: float, max_iter: int = 4000) -> np.ndarray:
+    """Solve ``.5||y-x||² + lambda_tv||Dy||₁`` with certification."""
+    return _shared_total_variation_filter(x, lambda_tv, max_iter=max_iter)
 
 
-def _l1_trend_filter(x: np.ndarray, lambda_l1: float, max_iter: int = 50) -> np.ndarray:
-    """L1 trend filter via iterative soft-thresholding.
-
-    Solves: argmin_y (0.5 * ||y - x||^2 + lambda * ||D^2 y||_1)
-    where D^2 is the second-order difference operator.
-    """
-    y = x.copy()
-    step = 0.1
-
-    for _ in range(max_iter):
-        # Second-order difference
-        d2y = np.diff(y, n=2, prepend=[y[0], y[1]])
-
-        # Soft-threshold
-        soft_d2y = np.sign(d2y) * np.maximum(0, np.abs(d2y) - lambda_l1 * step)
-
-        # Reconstruct via integration
-        y_new = x + np.cumsum(np.cumsum(soft_d2y - d2y))
-
-        # Early stopping
-        if np.allclose(y, y_new, atol=1e-6):
-            break
-        y = y_new
-
-    return y
+def _l1_trend_filter(x: np.ndarray, lambda_l1: float, max_iter: int = 4000) -> np.ndarray:
+    """Solve ``.5||y-x||² + lambda_l1||D²y||₁`` with certification."""
+    return _shared_l1_trend_filter(x, lambda_l1, max_iter=max_iter)
 
 
 # ---------------------------------------------------------------------------

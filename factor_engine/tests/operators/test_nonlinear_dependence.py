@@ -1,14 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Tests for nonlinear_dependence operators.
-
-Coverage of 6 operators:
-1. ts_distance_corr
-2. ts_distance_cov
-3. ts_mutual_information
-4. ts_lagged_mutual_information
-5. ts_upper_tail_coexceedance_probability
-6. ts_lower_tail_coexceedance_probability
-"""
+"""Public-contract tests for pairwise nonlinear-dependence operators."""
 from __future__ import annotations
 
 import numpy as np
@@ -20,313 +11,59 @@ from factor_engine.cleaned_operators.registry import OperatorRegistry
 
 ensure_cleaned_loaded()
 
+CASES = (
+    ("ts_distance_corr", {}),
+    ("ts_distance_cov", {}),
+    ("ts_mutual_information", {}),
+    ("ts_lagged_mutual_information", {"lag": 1}),
+    ("ts_upper_tail_coexceedance_probability", {"q": 0.8}),
+    ("ts_lower_tail_coexceedance_probability", {"q": 0.2}),
+)
 
-def _op(name: str, backend: str = "pandas_numpy"):
-    op = OperatorRegistry.get(name, backend)
-    assert op is not None, f"{name}/{backend}"
+
+def _op(name: str):
+    op = OperatorRegistry.get(name, "pandas_numpy")
+    assert op is not None, f"{name}/pandas_numpy"
     return op
 
 
-
-# ---------------------------------------------------------------------------
-# 1. ts_distance_corr
-# ---------------------------------------------------------------------------
-def test_ts_distance_corr_basic() -> None:
-    """Basic functionality test."""
-    np.random.seed(42)
-    idx = pd.date_range("2024-01-01", periods=20)
-    cols = [f"S{i}" for i in range(10)]
-    x = pd.DataFrame(np.random.randn(20, 10), index=idx, columns=cols)
-
-    op = _op("ts_distance_corr")
-    try:
-        result = op.calculate(x)
-        assert isinstance(result, pd.DataFrame)
-        assert result.shape == x.shape
-    except Exception as e:
-        pytest.fail(f"{op} basic test failed: {e}")
+def _paired_frames(rows=90, cols=3, seed=42):
+    rng = np.random.default_rng(seed)
+    index = pd.date_range("2024-01-01", periods=rows)
+    columns = [f"S{i}" for i in range(cols)]
+    x = pd.DataFrame(rng.normal(size=(rows, cols)), index=index, columns=columns)
+    y = pd.DataFrame(
+        0.4 * x.to_numpy() + rng.normal(size=(rows, cols)), index=index, columns=columns
+    )
+    return x, y
 
 
-def test_ts_distance_corr_handles_nans() -> None:
-    """NaN handling test."""
-    idx = pd.date_range("2024-01-01", periods=10)
-    x = pd.DataFrame([[1.0, np.nan, 3.0]] * 10, index=idx, columns=["A", "B", "C"])
-
-    op = _op("ts_distance_corr")
-    try:
-        result = op.calculate(x)
-        assert isinstance(result, pd.DataFrame)
-    except Exception as e:
-        pytest.fail(f"NaN test failed: {e}")
-
-
-def test_ts_distance_corr_deterministic() -> None:
-    """Determinism test - same input yields same output."""
-    np.random.seed(123)
-    idx = pd.date_range("2024-01-01", periods=15)
-    x = pd.DataFrame(np.random.randn(15, 5), index=idx, columns=list("ABCDE"))
-
-    op = _op("ts_distance_corr")
-    try:
-        result1 = op.calculate(x)
-        result2 = op.calculate(x)
-        pd.testing.assert_frame_equal(result1, result2, check_exact=False, rtol=1e-10)
-    except Exception:
-        pass  # Some operators may not be deterministic
+@pytest.mark.parametrize(("name", "extra"), CASES)
+def test_pairwise_operator_public_contract(name, extra):
+    x, y = _paired_frames()
+    result = _op(name).calculate(x=x, y=y, window=60, **extra)
+    assert isinstance(result, pd.DataFrame)
+    assert result.shape == x.shape
+    assert result.index.equals(x.index)
+    assert result.columns.equals(x.columns)
+    terminal = result.iloc[-1].to_numpy(dtype=float)
+    assert np.all(np.isfinite(terminal))
+    if "tail_coexceedance_probability" in name:
+        assert np.all((terminal >= 0.0) & (terminal <= 1.0))
 
 
-# ---------------------------------------------------------------------------
-# 2. ts_distance_cov
-# ---------------------------------------------------------------------------
-def test_ts_distance_cov_basic() -> None:
-    """Basic functionality test."""
-    np.random.seed(42)
-    idx = pd.date_range("2024-01-01", periods=20)
-    cols = [f"S{i}" for i in range(10)]
-    x = pd.DataFrame(np.random.randn(20, 10), index=idx, columns=cols)
-
-    op = _op("ts_distance_cov")
-    try:
-        result = op.calculate(x)
-        assert isinstance(result, pd.DataFrame)
-        assert result.shape == x.shape
-    except Exception as e:
-        pytest.fail(f"{op} basic test failed: {e}")
+@pytest.mark.parametrize(("name", "extra"), CASES)
+def test_pairwise_operator_nan_handling_is_deterministic(name, extra):
+    x, y = _paired_frames(seed=123)
+    x.iloc[25, 0] = np.nan
+    y.iloc[28, 1] = np.nan
+    first = _op(name).calculate(x=x, y=y, window=60, **extra)
+    second = _op(name).calculate(x=x, y=y, window=60, **extra)
+    pd.testing.assert_frame_equal(first, second, check_exact=False, rtol=1e-12, atol=1e-12)
 
 
-def test_ts_distance_cov_handles_nans() -> None:
-    """NaN handling test."""
-    idx = pd.date_range("2024-01-01", periods=10)
-    x = pd.DataFrame([[1.0, np.nan, 3.0]] * 10, index=idx, columns=["A", "B", "C"])
-
-    op = _op("ts_distance_cov")
-    try:
-        result = op.calculate(x)
-        assert isinstance(result, pd.DataFrame)
-    except Exception as e:
-        pytest.fail(f"NaN test failed: {e}")
-
-
-def test_ts_distance_cov_deterministic() -> None:
-    """Determinism test - same input yields same output."""
-    np.random.seed(123)
-    idx = pd.date_range("2024-01-01", periods=15)
-    x = pd.DataFrame(np.random.randn(15, 5), index=idx, columns=list("ABCDE"))
-
-    op = _op("ts_distance_cov")
-    try:
-        result1 = op.calculate(x)
-        result2 = op.calculate(x)
-        pd.testing.assert_frame_equal(result1, result2, check_exact=False, rtol=1e-10)
-    except Exception:
-        pass  # Some operators may not be deterministic
-
-
-# ---------------------------------------------------------------------------
-# 3. ts_mutual_information
-# ---------------------------------------------------------------------------
-def test_ts_mutual_information_basic() -> None:
-    """Basic functionality test."""
-    np.random.seed(42)
-    idx = pd.date_range("2024-01-01", periods=20)
-    cols = [f"S{i}" for i in range(10)]
-    x = pd.DataFrame(np.random.randn(20, 10), index=idx, columns=cols)
-
-    op = _op("ts_mutual_information")
-    try:
-        result = op.calculate(x)
-        assert isinstance(result, pd.DataFrame)
-        assert result.shape == x.shape
-    except Exception as e:
-        pytest.fail(f"{op} basic test failed: {e}")
-
-
-def test_ts_mutual_information_handles_nans() -> None:
-    """NaN handling test."""
-    idx = pd.date_range("2024-01-01", periods=10)
-    x = pd.DataFrame([[1.0, np.nan, 3.0]] * 10, index=idx, columns=["A", "B", "C"])
-
-    op = _op("ts_mutual_information")
-    try:
-        result = op.calculate(x)
-        assert isinstance(result, pd.DataFrame)
-    except Exception as e:
-        pytest.fail(f"NaN test failed: {e}")
-
-
-def test_ts_mutual_information_deterministic() -> None:
-    """Determinism test - same input yields same output."""
-    np.random.seed(123)
-    idx = pd.date_range("2024-01-01", periods=15)
-    x = pd.DataFrame(np.random.randn(15, 5), index=idx, columns=list("ABCDE"))
-
-    op = _op("ts_mutual_information")
-    try:
-        result1 = op.calculate(x)
-        result2 = op.calculate(x)
-        pd.testing.assert_frame_equal(result1, result2, check_exact=False, rtol=1e-10)
-    except Exception:
-        pass  # Some operators may not be deterministic
-
-
-# ---------------------------------------------------------------------------
-# 4. ts_lagged_mutual_information
-# ---------------------------------------------------------------------------
-def test_ts_lagged_mutual_information_basic() -> None:
-    """Basic functionality test."""
-    np.random.seed(42)
-    idx = pd.date_range("2024-01-01", periods=20)
-    cols = [f"S{i}" for i in range(10)]
-    x = pd.DataFrame(np.random.randn(20, 10), index=idx, columns=cols)
-
-    op = _op("ts_lagged_mutual_information")
-    try:
-        result = op.calculate(x)
-        assert isinstance(result, pd.DataFrame)
-        assert result.shape == x.shape
-    except Exception as e:
-        pytest.fail(f"{op} basic test failed: {e}")
-
-
-def test_ts_lagged_mutual_information_handles_nans() -> None:
-    """NaN handling test."""
-    idx = pd.date_range("2024-01-01", periods=10)
-    x = pd.DataFrame([[1.0, np.nan, 3.0]] * 10, index=idx, columns=["A", "B", "C"])
-
-    op = _op("ts_lagged_mutual_information")
-    try:
-        result = op.calculate(x)
-        assert isinstance(result, pd.DataFrame)
-    except Exception as e:
-        pytest.fail(f"NaN test failed: {e}")
-
-
-def test_ts_lagged_mutual_information_deterministic() -> None:
-    """Determinism test - same input yields same output."""
-    np.random.seed(123)
-    idx = pd.date_range("2024-01-01", periods=15)
-    x = pd.DataFrame(np.random.randn(15, 5), index=idx, columns=list("ABCDE"))
-
-    op = _op("ts_lagged_mutual_information")
-    try:
-        result1 = op.calculate(x)
-        result2 = op.calculate(x)
-        pd.testing.assert_frame_equal(result1, result2, check_exact=False, rtol=1e-10)
-    except Exception:
-        pass  # Some operators may not be deterministic
-
-
-# ---------------------------------------------------------------------------
-# 5. ts_upper_tail_coexceedance_probability
-# ---------------------------------------------------------------------------
-def test_ts_upper_tail_coexceedance_probability_basic() -> None:
-    """Basic functionality test."""
-    np.random.seed(42)
-    idx = pd.date_range("2024-01-01", periods=20)
-    cols = [f"S{i}" for i in range(10)]
-    x = pd.DataFrame(np.random.randn(20, 10), index=idx, columns=cols)
-
-    op = _op("ts_upper_tail_coexceedance_probability")
-    try:
-        result = op.calculate(x)
-        assert isinstance(result, pd.DataFrame)
-        assert result.shape == x.shape
-    except Exception as e:
-        pytest.fail(f"{op} basic test failed: {e}")
-
-
-def test_ts_upper_tail_coexceedance_probability_handles_nans() -> None:
-    """NaN handling test."""
-    idx = pd.date_range("2024-01-01", periods=10)
-    x = pd.DataFrame([[1.0, np.nan, 3.0]] * 10, index=idx, columns=["A", "B", "C"])
-
-    op = _op("ts_upper_tail_coexceedance_probability")
-    try:
-        result = op.calculate(x)
-        assert isinstance(result, pd.DataFrame)
-    except Exception as e:
-        pytest.fail(f"NaN test failed: {e}")
-
-
-def test_ts_upper_tail_coexceedance_probability_deterministic() -> None:
-    """Determinism test - same input yields same output."""
-    np.random.seed(123)
-    idx = pd.date_range("2024-01-01", periods=15)
-    x = pd.DataFrame(np.random.randn(15, 5), index=idx, columns=list("ABCDE"))
-
-    op = _op("ts_upper_tail_coexceedance_probability")
-    try:
-        result1 = op.calculate(x)
-        result2 = op.calculate(x)
-        pd.testing.assert_frame_equal(result1, result2, check_exact=False, rtol=1e-10)
-    except Exception:
-        pass  # Some operators may not be deterministic
-
-
-# ---------------------------------------------------------------------------
-# 6. ts_lower_tail_coexceedance_probability
-# ---------------------------------------------------------------------------
-def test_ts_lower_tail_coexceedance_probability_basic() -> None:
-    """Basic functionality test."""
-    np.random.seed(42)
-    idx = pd.date_range("2024-01-01", periods=20)
-    cols = [f"S{i}" for i in range(10)]
-    x = pd.DataFrame(np.random.randn(20, 10), index=idx, columns=cols)
-
-    op = _op("ts_lower_tail_coexceedance_probability")
-    try:
-        result = op.calculate(x)
-        assert isinstance(result, pd.DataFrame)
-        assert result.shape == x.shape
-    except Exception as e:
-        pytest.fail(f"{op} basic test failed: {e}")
-
-
-def test_ts_lower_tail_coexceedance_probability_handles_nans() -> None:
-    """NaN handling test."""
-    idx = pd.date_range("2024-01-01", periods=10)
-    x = pd.DataFrame([[1.0, np.nan, 3.0]] * 10, index=idx, columns=["A", "B", "C"])
-
-    op = _op("ts_lower_tail_coexceedance_probability")
-    try:
-        result = op.calculate(x)
-        assert isinstance(result, pd.DataFrame)
-    except Exception as e:
-        pytest.fail(f"NaN test failed: {e}")
-
-
-def test_ts_lower_tail_coexceedance_probability_deterministic() -> None:
-    """Determinism test - same input yields same output."""
-    np.random.seed(123)
-    idx = pd.date_range("2024-01-01", periods=15)
-    x = pd.DataFrame(np.random.randn(15, 5), index=idx, columns=list("ABCDE"))
-
-    op = _op("ts_lower_tail_coexceedance_probability")
-    try:
-        result1 = op.calculate(x)
-        result2 = op.calculate(x)
-        pd.testing.assert_frame_equal(result1, result2, check_exact=False, rtol=1e-10)
-    except Exception:
-        pass  # Some operators may not be deterministic
-
-
-
-# ---------------------------------------------------------------------------
-# Metadata validation
-# ---------------------------------------------------------------------------
-def test_nonlinear_dependence_metadata() -> None:
-    """Verify all operators have correct metadata."""
-    operators = [
-        "ts_distance_corr",
-        "ts_distance_cov",
-        "ts_mutual_information",
-        "ts_lagged_mutual_information",
-        "ts_upper_tail_coexceedance_probability",
-        "ts_lower_tail_coexceedance_probability"
-    ]
-
-    for op_name in operators:
-        op = _op(op_name)
-        meta = getattr(op, "metadata", None)
-        assert meta is not None, f"{op_name} missing metadata"
-        assert hasattr(meta, "tags"), f"{op_name} missing tags"
+def test_nonlinear_dependence_metadata_declares_both_inputs():
+    for name, _extra in CASES:
+        metadata = _op(name).metadata
+        assert metadata.param_names[:2] == ["x", "y"]
+        assert metadata.tags

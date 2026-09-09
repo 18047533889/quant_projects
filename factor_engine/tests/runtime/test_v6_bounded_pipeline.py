@@ -205,10 +205,13 @@ def test_worker_quarantine_aborts_run_terminalizes_ordinals_and_writes_receipt(t
 
     original_execute = SupervisedReusableWorker.execute
     original_close = SupervisedReusableWorker.close
+    quarantine_injected = {"done": False}
 
     def execute(self, function, *args, timeout_seconds, lease=None, **kwargs):
         inherited = getattr(self, "_function", None)
-        if isinstance(inherited, partial) and inherited.func is pipeline._compute_wave:
+        if (isinstance(inherited, partial)
+                and inherited.func is pipeline._compute_wave_worker):
+            quarantine_injected["done"] = True
             raise WorkerQuarantined("simulated compute quarantine", pid=123)
         return original_execute(
             self, function, *args, timeout_seconds=timeout_seconds, lease=lease, **kwargs
@@ -226,6 +229,7 @@ def test_worker_quarantine_aborts_run_terminalizes_ordinals_and_writes_receipt(t
             FakeEngine(), [FakeFactor("a"), FakeFactor("b")],
             policy=resolve_default_policy(), artifact_root=tmp_path,
         )
+    assert quarantine_injected["done"] is True
     receipt = json.loads(Path(raised.value.receipt_path).read_text())
     assert receipt["status"] == "ABORTED"
     assert receipt["counts"] == {"CANCELLED": 2}
@@ -313,18 +317,42 @@ def test_spawn_compute_exit_aborts_later_wave_without_reusing_proxy_binding(tmp_
     policy = replace(resolve_default_policy(), initial_lookahead_factors=1)
     with pytest.raises(WorkerTransportFailed) as raised:
         execute_run_many_durable(
-            None, [FakeFactor("first"), FakeFactor("later")],
+            None, [FakeFactor("first"), FakeFactor("prefetched"),
+                   FakeFactor("not_admitted")],
             policy=policy, artifact_root=tmp_path,
             run_kwargs={"broker": FakeBroker()},
             engine_factory=_build_exit_compute_engine, engine_factory_config={},
         )
     receipt = json.loads(Path(raised.value.receipt_path).read_text())
     assert receipt["status"] == "ABORTED"
-    assert receipt["counts"] == {"CANCELLED": 2}
+    assert receipt["counts"] == {"CANCELLED": 2, "FAILED": 1}
     db = sqlite3.connect(receipt["state_path"])
     assert db.execute(
-        "select name,attempts,state from outcomes order by ordinal"
-    ).fetchall() == [("first", 1, "CANCELLED"), ("later", 0, "CANCELLED")]
+        "select name,attempts,state,error_code,commit_state "
+        "from outcomes order by ordinal"
+    ).fetchall() == [
+        # Slot authority fails closed as protocol integrity, while the detail
+        # retains the underlying transport failure type for diagnosis.
+        ("first", 1, "FAILED", "WORKER_PROTOCOL_INTEGRITY", "UNKNOWN"),
+        # The paired slot is admitted before either compute starts. Once the
+        # fatal exit is observed, admission never advances past that pair.
+        ("prefetched", 1, "CANCELLED", "RUN_ABORTED", "UNKNOWN"),
+        ("not_admitted", 0, "CANCELLED", "RUN_ABORTED", "NOT_STARTED"),
+    ]
+    first_detail = db.execute(
+        "select error_detail from outcomes where name='first'"
+    ).fetchone()[0]
+    assert first_detail.startswith("WorkerTransportFailed:")
+    assert receipt["fit_failure_evidence"]["availability"] == "indexed"
+    assert receipt["fit_failure_evidence"]["observed_waves"] == 0
+    assert receipt["fit_failure_evidence"]["unavailable_waves"] == 1
+    evidence = db.execute(
+        "select availability,assignment_count from fit_failure_evidence"
+    ).fetchall()
+    assert evidence == [("UNAVAILABLE", 1)]
+    assert db.execute(
+        "select ordinal from fit_failure_evidence_assignments"
+    ).fetchall() == [(0,)]
 
 
 def _build_spawn_engine(config):
@@ -548,10 +576,14 @@ def test_spawn_factory_executes_without_pickling_engine(tmp_path):
     )
     construct_marker = tmp_path / "constructed.txt"
     close_marker = tmp_path / "closed.txt"
+    broker = FakeBroker()
+    # This oracle exercises spawn construction, not undersized read admission.
+    # Match the broker's declared 16 MiB resource decision for the source scan.
+    broker.current_read_budget = lambda: 16 * 1024 * 1024
     receipt = execute_run_many_durable(
         None, [Factor("spawn_a", col("close")), Factor("spawn_b", col("open"))],
         policy=resolve_default_policy(), artifact_root=tmp_path,
-        run_kwargs={"broker": FakeBroker()}, engine_factory=_build_spawn_engine,
+        run_kwargs={"broker": broker}, engine_factory=_build_spawn_engine,
         engine_factory_config={
             "close": pd.Series([1.0, 2.0, 3.0, 4.0], index=idx),
             "open": pd.Series([2.0, 3.0, 4.0, 5.0], index=idx),

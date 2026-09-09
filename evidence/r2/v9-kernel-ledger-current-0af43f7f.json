@@ -1,0 +1,197 @@
+{
+  "conversion_bytes": "NOT_INSTRUMENTED",
+  "probe_sha256": "8320b665df18aca6f199c71dae1ace7c7b4f4902f33f1619c6667d2803302fb6",
+  "records": [
+    {
+      "all_outputs_finite": true,
+      "n": 120,
+      "operator": "granger",
+      "repeats": 5,
+      "self_process_ru_maxrss_bytes": {
+        "max": 272113664,
+        "samples": [
+          272113664,
+          272093184,
+          272035840,
+          272052224,
+          271835136
+        ]
+      },
+      "wall_seconds": {
+        "max": 0.0020091889891773462,
+        "mean": 0.0018997861770913005,
+        "median": 0.0018615539884194732,
+        "min": 0.0018446139292791486,
+        "pstdev": 6.182384402389477e-05,
+        "samples": [
+          0.001927201054058969,
+          0.0018446139292791486,
+          0.0020091889891773462,
+          0.0018563729245215654,
+          0.0018615539884194732
+        ]
+      },
+      "workspace_analysis": {
+        "basis": {
+          "lag": 2,
+          "n": 120,
+          "train_rows": 82
+        },
+        "interpretation": "Analytical individual-array sizes, not an allocation trace or peak-live sum.",
+        "principal_2d_arrays": {
+          "distance_accumulator_float64_bytes": 53792,
+          "one_test_train_float64_bytes": 23616,
+          "one_train_kernel_float64_bytes": 53792,
+          "one_train_square_float64_bytes": 53792
+        }
+      }
+    },
+    {
+      "all_outputs_finite": true,
+      "n": 240,
+      "operator": "granger",
+      "repeats": 5,
+      "self_process_ru_maxrss_bytes": {
+        "max": 273899520,
+        "samples": [
+          273358848,
+          272818176,
+          273051648,
+          273371136,
+          273899520
+        ]
+      },
+      "wall_seconds": {
+        "max": 0.0045918700052425265,
+        "mean": 0.004497052822262049,
+        "median": 0.004546231008134782,
+        "min": 0.004323529079556465,
+        "pstdev": 0.00010414761043075926,
+        "samples": [
+          0.004323529079556465,
+          0.004590169992297888,
+          0.004433464026078582,
+          0.004546231008134782,
+          0.0045918700052425265
+        ]
+      },
+      "workspace_analysis": {
+        "basis": {
+          "lag": 2,
+          "n": 240,
+          "train_rows": 166
+        },
+        "interpretation": "Analytical individual-array sizes, not an allocation trace or peak-live sum.",
+        "principal_2d_arrays": {
+          "distance_accumulator_float64_bytes": 220448,
+          "one_test_train_float64_bytes": 95616,
+          "one_train_kernel_float64_bytes": 220448,
+          "one_train_square_float64_bytes": 220448
+        }
+      }
+    },
+    {
+      "all_outputs_finite": true,
+      "n": 120,
+      "operator": "hsic",
+      "repeats": 5,
+      "self_process_ru_maxrss_bytes": {
+        "max": 272609280,
+        "samples": [
+          272068608,
+          271695872,
+          272609280,
+          272318464,
+          272289792
+        ]
+      },
+      "wall_seconds": {
+        "max": 0.0021951230010017753,
+        "mean": 0.002157010207884014,
+        "median": 0.0021556640276685357,
+        "min": 0.0021313250763341784,
+        "pstdev": 2.1376992883990137e-05,
+        "samples": [
+          0.0021588639356195927,
+          0.0021556640276685357,
+          0.002144074998795986,
+          0.0021951230010017753,
+          0.0021313250763341784
+        ]
+      },
+      "workspace_analysis": {
+        "basis": {
+          "largest_train_rows": 60,
+          "n": 120,
+          "pooled_residual_rows": 114,
+          "purge_gap": 3
+        },
+        "interpretation": "Analytical individual-array sizes, not an allocation trace or peak-live sum.",
+        "principal_2d_arrays": {
+          "one_fold_test_train_float64_bytes": 27360,
+          "one_fold_train_square_float64_bytes": 28800,
+          "one_residual_square_float64_bytes": 103968
+        }
+      }
+    },
+    {
+      "all_outputs_finite": true,
+      "n": 240,
+      "operator": "hsic",
+      "repeats": 5,
+      "self_process_ru_maxrss_bytes": {
+        "max": 275492864,
+        "samples": [
+          275443712,
+          275484672,
+          275185664,
+          275492864,
+          275075072
+        ]
+      },
+      "wall_seconds": {
+        "max": 0.006373985088430345,
+        "mean": 0.0057005240116268395,
+        "median": 0.005639638053253293,
+        "min": 0.005210170987993479,
+        "pstdev": 0.0003755470892047578,
+        "samples": [
+          0.005639638053253293,
+          0.005210170987993479,
+          0.005641137948259711,
+          0.00563768798019737,
+          0.006373985088430345
+        ]
+      },
+      "workspace_analysis": {
+        "basis": {
+          "largest_train_rows": 120,
+          "n": 240,
+          "pooled_residual_rows": 234,
+          "purge_gap": 3
+        },
+        "interpretation": "Analytical individual-array sizes, not an allocation trace or peak-live sum.",
+        "principal_2d_arrays": {
+          "one_fold_test_train_float64_bytes": 112320,
+          "one_fold_train_square_float64_bytes": 115200,
+          "one_residual_square_float64_bytes": 438048
+        }
+      }
+    }
+  ],
+  "research_spectral_sha256": "0af43f7f0fb45f2c01b2a990e25b01e0f4b069e6bbadca951d1745aa4e2156b3",
+  "schema": "factor_engine.v9.kernel_cpu_ledger.v1",
+  "scope": [
+    "Current helper-kernel CPU measurements on synthetic fixed-seed arrays only.",
+    "Not an automatic backend or broker-admission benchmark.",
+    "Not GPU evidence and not a 100k-scale certification.",
+    "ru_maxrss is the worker self-process high-water mark including interpreter/imports; it is not process-family RSS and not kernel-only incremental memory.",
+    "Analytical workspace bytes describe principal 2D float64 arrays, not measured peak-live allocations."
+  ],
+  "thread_environment": {
+    "MKL_NUM_THREADS": "1",
+    "NUMEXPR_NUM_THREADS": "1",
+    "OMP_NUM_THREADS": "1",
+    "OPENBLAS_NUM_THREADS": "1"
+  }
+}

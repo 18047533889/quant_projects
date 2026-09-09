@@ -1,0 +1,24 @@
+schema: factor_engine.v8.evidence.v1
+status: SCOPED_PASS
+git_sha: 118cd21c6262082336daa545ddc06b6f78def7b9
+date: '2026-09-08'
+target: server-c:/home/sunhaiwei/quant_projects
+issue: V8-R07
+finding: control JSON pathname check/open race could follow a replaced symlink
+files:
+  - factor_engine/runtime/resume_validation.py
+  - factor_engine/tests/runtime/test_v8_resume_control_open.py
+fix: open with NOFOLLOW and NONBLOCK, validate regular bounded object via fstat, read and hash same descriptor bytes, always close descriptor
+tests:
+  red: '1 failed, 4 passed; actual replacement occurs immediately before open'
+  red_xml: /tmp/v8-resume-open-red.xml
+  green: '59 passed in 5.27s; control-open8, resume29, ownership17, coordinator5'
+  green_xml: /tmp/v8-resume-open-final.xml
+  added_after_review: fstat/read exceptions prove EBADF after cleanup; after-open replacement proves descriptor authority
+independent_review: v8_data source and original5 tests inspected; requested failure-close and after-open tests added
+limitations:
+  - Linux/server-c scoped control JSON hardening, not general hostile-filesystem certification
+  - Database pathname opening and ancestor replacement not certified by these tests
+  - Pending same-run resume remains disabled
+  - Real DataAccess, GPU, 100k and remote CI NOT_RUN
+github_commit_push_deploy: false

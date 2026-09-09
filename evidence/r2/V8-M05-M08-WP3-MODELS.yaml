@@ -1,0 +1,53 @@
+id: V8-M05-M08-WP3-MODELS
+status: COMPLETED_LOCAL
+date: 2026-09-08
+scope: V8-M05 through V8-M08 statistical estimation and joint parameter contracts
+source_refs:
+  - S10: factor_engine/cleaned_operators/sequence_complexity.py and ts_model/complexity.py
+  - S11: factor_engine/cleaned_operators/ts_model/ar_meanrev.py
+  - S12: factor_engine/cleaned_operators/ts_model/dynamic_regression.py
+  - S13: factor_engine/cleaned_operators/ts_model/polars_regression.py and polars_native/ts_advanced_batch5.py
+changes:
+  - SampEn A/B counts use the same extendable template-start cohort.
+  - AR and multi-regression reject impossible configured history before source I/O.
+  - Non-coefficient regression outputs accept but ignore the deprecated selector in execution, identity, and menus.
+  - Liquidity beta uses finite pairwise masking and centered Polars rolling covariance/variance with a positive finite variance guard.
+  - Genuine PhysicalImplementationSpec generations survive contracts-module reload by authoritative class identity; structural lookalikes fail closed.
+  - Canonical semantic versions resolve from the central monotonic map after bootstrap and cannot be downgraded by later backend registration.
+verification:
+  math_reference:
+    marker: MATH_REFERENCE
+    tests:
+      - extendable-cohort SampEn counterexamples and A=0/B=0 boundaries
+      - high-offset and tiny-scale centered liquidity-beta references
+      - pairwise finite masking, zero variance, and multi-asset shape preservation
+  configured_rejection:
+    marker: REJECTION_CONTRACT
+    tests:
+      - AR boundaries window/order 3/1 rejected, 4/1 accepted, 7/3 rejected, 8/3 accepted
+      - multi-regression boundaries window 9 rejected and 10 accepted for one feature plus intercept
+      - public Optimizer.lower_only rejects INSUFFICIENT_CONFIGURED_HISTORY before execution
+  compatibility_parity:
+    marker: PARITY_AND_IDENTITY
+    tests:
+      - ignored selector keyword and positional compatibility
+      - coefficient identities remain distinct; non-coefficient identities collapse
+      - unknown keyword remains rejected
+      - pre/post-reload genuine specs accepted; full-schema same-name lookalike and unrelated contract rejected
+      - all 34 affected catalog versions equal the central version authority after bootstrap
+  public_planner_serial:
+    marker: PUBLIC_PLANNER_VERIFY
+    api: Optimizer.optimize_with_pass_trace plus Optimizer.optimize and legacy reference
+    result: PASS
+    details:
+      - six stages reported with semantic/numeric equivalence and all invariants passing
+      - optimized, public optimize, and legacy-reference structural hashes equal
+      - forced invariant violation and production numeric-policy violation fail closed
+      - Optimizer.compile is not an available public API and was not claimed as tested
+  merged_regression:
+    command: .venv/bin/python -m pytest -q tests/operators/test_v8_wp3_models.py tests/operators/test_sequence_complexity.py tests/operators/test_ts_model_next_stage.py tests/r35/test_model_audit_regression_governance.py tests/planner/test_r13_optimizer_semantics_2026_08.py
+    result: PASS (166 passed, 2 known classification warnings)
+limitations:
+  - LOCAL ONLY; no commit, push, deployment, or production dataset run.
+  - Passing rejection and parity tests are not labeled as independent mathematical proof.
+  - No SQL implementation was added; complex model paths retain their existing backend admission gates.

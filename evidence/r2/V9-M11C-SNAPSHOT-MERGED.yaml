@@ -1,0 +1,41 @@
+schema: v9-scoped-merge-evidence-1
+date: '2026-09-09'
+git_sha: 118cd21c6262082336daa545ddc06b6f78def7b9
+workspace: /home/sunhaiwei/quant_projects
+issue: V9-M11
+status: BOUNDED_WIRE_SNAPSHOT_MERGED_RUNTIME_DURABILITY_STILL_STAGED
+initial_patch_sha256: 38af57d190098f3f5d42c11c35bb01e54e37592a2a51bd3d63d436a5c11f0166
+hardening_patch_sha256: 64b4aadc633ae972e8188d187b52ea729b44de652c3c35b1c9eb57cde35282af
+files:
+  factor_engine/runtime/fit_failure_evidence.py: 6447e867beef9cc2fc7f30e040d19033946a45b0dad8ea58546698ee88244ec1
+  factor_engine/tests/runtime/test_fit_failure_evidence.py: 3bc3899e0915246762fec715512c1cf2e30d199ea27bc8d8525248bb88b58dfe
+  factor_engine/tests/runtime/test_v9_m11c_snapshot_review.py: root-independent-tests
+tests:
+  latest_hardening: 40 passed, 0.57 seconds
+  latest_junit: v9-m11c-snapshot-hardening-main.xml
+  main: 52 passed, 2 warnings, 26.15 seconds
+  junit: v9-m11c-snapshot-main.xml
+  paths:
+    - factor_engine/tests/runtime/test_fit_failure_evidence.py
+    - factor_engine/tests/runtime/test_v9_m11c_snapshot_review.py
+    - factor_engine/tests/runtime/test_v9_m11ab_integration.py
+    - factor_engine/tests/operators/test_v9_m11_fit_receipts.py
+  historical_unmerged_candidate:
+    result: 3 failed, 1 passed
+    junit: v9-m11c-snapshot-initial-review.xml
+    findings: Nonfinite diagnostics aborted snapshot, existing sink eviction was not marked truncated, false factor_window label was accepted.
+  further_review: Valid nested core details at depths 4-6 originally exceeded wire depth; final snapshot drops detail explicitly while preserving summary.
+scope:
+  - Maximum encoded snapshot 262144 bytes, 128 groups, 64 sampled details.
+  - Existing sink eviction, overflow, structural and byte truncation are explicitly marked.
+  - Lock-held copying itself is bounded; serialization occurs after release.
+  - Detached JSON-safe values, not an immutable-wire claim.
+  - Nonfinite diagnostics use explicit tags, never bare JSON NaN.
+  - Exact schema and owned scope validation preserve pandas nanoseconds and mixed NumPy datetime units.
+  - Validation encodes incrementally and stops at the wire limit before building oversized full JSON.
+  - Duplicate failure groups and non-increasing detail sequences are rejected.
+  - Empty observed differs from missing; coverage only instrumented fit producers.
+limitations:
+  - This module is not yet wired through durable worker result envelopes on main.
+  - Runtime transport, SQLite evidence and resume changes remain in independent review.
+  - No full-operator failure coverage, real auto80/GPU/100k or production certification.

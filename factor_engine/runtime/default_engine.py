@@ -176,7 +176,7 @@ class DurableFactorEngine:
             raise DeploymentConfigurationError(detail="v2 cannot run through research mode")
         engine.default_execution_policy = policy
 
-    def run_many(self, factors):
+    def run_many(self, factors, *, resume_run_id=None, cancellation_token=None):
         from .bounded_pipeline import execute_run_many_durable
         from .resource_broker import heavy_run_guard
         business = self.deployment.to_dict()
@@ -191,6 +191,23 @@ class DurableFactorEngine:
             if observed != expected:
                 raise DeploymentConfigurationError(detail="approved source snapshot token does not match")
         with heavy_run_guard(timeout_seconds=self.policy.resource_wait_seconds):
+            run_identity = {
+                "deployment_digest": self.deployment.digest,
+                "profile_id": business["profile_id"],
+                "approval_id": business["approval_id"],
+                "execution_scope": {k: business[k] for k in
+                                    ("market", "calendar_id", "frequency", "universe_id",
+                                     "timezone", "adjustment")},
+                "source_identity": {
+                    "dataset": business["data_source"]["dataset"],
+                    "start_date": business["data_source"]["start_date"],
+                    "end_date": business["data_source"]["end_date"],
+                    "instrument_filter": business["data_source"]["instrument_filter"],
+                    "snapshot_token": business.get("expected_snapshot_token"),
+                    "snapshot_tokens": business.get("expected_source_snapshot_tokens", {}),
+                    "content_digests": business["expected_source_content_digests"],
+                },
+            }
             receipt = execute_run_many_durable(
                 self._engine, factors, policy=self.policy, artifact_root=root,
                 engine_factory=build_execution_core_from_worker_config,
@@ -200,9 +217,10 @@ class DurableFactorEngine:
                 run_kwargs={"auto_warmup": True, "trim_warmup": True,
                             "market": business["market"], "input_dq_check": True,
                             "input_dq_strict": True, "pit_enforce": True},
+                run_identity=run_identity,
+                resume_run_id=resume_run_id,
+                cancellation_token=cancellation_token,
             )
-        receipt["deployment_digest"] = self.deployment.digest
-        receipt["policy_digest"] = self.policy.digest
         return receipt
 
     def close(self):

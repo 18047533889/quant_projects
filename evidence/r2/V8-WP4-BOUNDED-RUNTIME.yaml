@@ -1,0 +1,101 @@
+schema_version: evidence.r2.v1
+issue_ids: [V8-R02, V8-R03, V8-R04, V8-R05, V8-R07]
+git_sha: 118cd21c6262082336daa545ddc06b6f78def7b9
+timestamp_utc: "2026-09-08T13:45:00Z"
+scope: bounded runtime continuation, continuous two-slot refill, deadline, cancellation, and protected-egress controls
+implemented:
+  V8-R04:
+    status: IMPLEMENTED_SCOPED
+    detail:
+      - One monotonic job deadline is created once and caps manifest ingestion, compile, compute, write, and reconcile supervisor waits.
+      - Deadline exhaustion aborts the run and persists remaining ordinal terminals without resetting attempts.
+      - Direct workers emit exact typed COMPUTE, WRITE, and VERIFY_DONE progress frames over the supervised IPC channel; malformed or stale frames retire the worker as transport-integrity failures.
+      - A timed-out worker is proven retired and reports its last validated phase. Missing manifests classify COMPUTE_TIMEOUT as NOT_STARTED and WRITE_TIMEOUT as UNKNOWN commit state.
+      - Zero CPU execution authority terminalizes every ordinal as RESOURCE_REQUIREMENT_EXCEEDS_BUDGET with zero attempts and without starting compile, compute, or reconcile processes.
+  V8-R05:
+    status: IMPLEMENTED_SCOPED
+    detail:
+      - Impossible egress bytes above the broker hard memory limit reject immediately.
+      - Temporary pressure waits on an optional broker resource-change event or bounded fallback interval until the lesser of resource and job deadlines; spurious wakeups retain bounded pacing.
+      - Waiting does not consume an execution attempt or create a new run/generation.
+      - Timeout and hard-size rejection produce distinct error codes and error groups.
+      - Real broker waits enroll one stable FIFO ticket around the entire retry loop; explicit request cancellation is bridged into the broker ContextVar and observed within bounded condition-wait slices.
+      - Cancellation before execution consumes zero attempts. During two-slot overlap both admitted handles are cancelled and proven retired before proxy reclamation; per-ordinal phase determines UNKNOWN versus NOT_STARTED commit state.
+  V8-R03:
+    status: IMPLEMENTED_CONTINUOUS_TWO_SLOT
+    source_sha256: b68f19b6aa2d2f12f025e6809fd7ce65c8467a87db3629c509e127e7dc7d6434
+    detail:
+      - Direct waves run under an await-any coordinator with at most two active compute/write slots. A completed slot is fully envelope/identity validated and durably terminalized before its exact worker/client is retired and the next ordinal is claimed.
+      - A monotonically advancing claim cursor is independent of completion order. With A held, B, C, D, and E each durably terminalize before the next starts; no completed-result successor chain is retained.
+      - Every compute dispatch receives a fresh PID and a fresh broker client/generation. Safe same-PID multi-wave epoch reuse is not claimed.
+      - Slots have immutable CPU/IO proxy quotas whose sum is the current parent target. The persistent supervised compile client remains an explicit broker-accounted baseline; refill does not create an uncounted native-thread authority.
+      - One parent egress lease is divided between slots; per-slot writer budgets sum to no more than the protected total.
+      - execution_batches increments exactly once per real compute dispatch. A compile-rejected factor remains attempt zero, does not increment execution_batches, and does not prevent the next valid ordinal from dispatching.
+      - Cancellation preserves a simultaneously completed, validated ACK but checks the token before any subsequent claim; the next ordinal remains attempt zero. Cancellation/quarantine retires all live slot authorities and retains broker, egress, state, manifest, and coordinator-lock references when cleanup is uncertain.
+      - A bad descriptor, generation, or other slot protocol failure stops admission before the next attempt is spent. The exception retains the exact failing slot identity and cleanup evidence.
+  V8-R07:
+    status: PARTIAL_TERMINAL_ONLY
+    detail:
+      - New runs atomically persist the exact manifest_identity seal after complete ingestion and before any worker starts;
+      - The explicit resume_run_id entrypoint reopens the canonical identity, sealed manifest, and persisted state without consuming the supplied factor iterable, creating a run, replacing a generation, or resetting attempts.
+      - A crash-visible coordinator lock rejects live owners and only replaces an exact PID/start identity after that process is proven absent.
+      - Every prior SUCCEEDED/REUSED artifact receives separately admitted, deadline-bounded exact manifest/chunk identity and hash revalidation before the same-run receipt is returned.
+      - Pending ACCEPTED/RUNNING/INTENT/UNKNOWN work fails closed because the legacy state lacks durable worker-exit identity; pending execution/reconciliation is not yet enabled.
+open_red_evidence:
+  V8-R02:
+    oracle: Existing test_real_engine_two_wave_default_uses_fresh_compute_pid proves conservative generation retirement; process reuse must not be enabled until zero native/broker ownership is demonstrated.
+  V8-R03:
+    oracle: Continuous two-slot scheduling, durable-before-refill, dispatch accounting, compile rejection, cancellation race, and failure-ownership assertions pass without xfail metadata. Evidence uses deterministic fake engines; real auto-operator throughput remains open.
+  V8-R07:
+    oracle: Explicit resume_run_id succeeds only for fully terminal sealed runs; the strict legacy manifest_path/state_path resume oracle remains xfailed and pending/stateful recovery remains open.
+two_slot_design:
+  - Use two supervised compute/write slot processes because the acceptance oracle blocks wave N before its sink call. Give each a distinct parent-broker client and an explicit partition of one shared CPU-token ceiling; never grant either a full backend thread pool.
+  - A coordinator-owned slot record binds run identity, wave ordinal range, generation map, estimated read/compute/output bytes, and leases.
+  - Slot A may be blocked in compute/write while slot B advances the next independent wave. Their CPU, IO, read, result, and writer leases remain disjoint entries in the same parent ledger, and summed backend threads must not exceed the one host target.
+  - Advance a slot only after exact envelope validation; retain result/native leases through verified write, then retire or explicitly prove zero outstanding ownership before reuse.
+  - Use bounded lookahead and byte estimates to group shared source/window regions; do not build a whole-manifest DAG or start a second full-thread backend.
+  - On any protocol fault, deadline, or uncertain commit, stop admission, retire the exact generation, reconcile only known generations, and cancel later slots.
+epoch_design:
+  - Preserve current fresh-PID default initially; measure startup, connection, registry, RSS/PSS, allocator retention, and broker leases per wave.
+  - Permit multi-wave epochs only behind a zero-outstanding-native-buffer and zero-broker-lease assertion plus an RSS ceiling; otherwise rotate the PID at the existing boundary.
+resume_design:
+  - Reopen identity.json, manifest, and state read-only first; require exact deployment/source/scope/policy identity before mutation.
+  - Resume the same run_id and persisted attempt counters; never create a replacement identity to regain attempts.
+  - Reconcile committed known generations before recompute; UNKNOWN generations remain fenced until the prior PID is proven dead.
+  - Add operator-specific checkpoint contracts before tiling: rolling overlap, complete state vectors for recursive models, and indivisible cross-sectional admission.
+tests:
+  - command: .venv/bin/python -m pytest -q factor_engine/tests/runtime/test_v8_continuous_refill_integrity.py
+    result: 6 passed in 19.64s; XML /tmp/v8-r03-final-six.xml sha256 006d6a960650f1ebce3fcdb5332e387c296124bae79dc8ed131dee91cd6ec871; test sha256 c805a62ceecd020e199d57a4a2eba7f6bb48448e5144520d5f7c90db8e6f443e
+  - command: .venv/bin/python -m pytest -q factor_engine/tests/runtime/test_v8_slot_failure_ownership.py
+    result: 3 passed in 7.26s; validates failing-slot identity, cleanup-pending authority retention, and append-only nested cleanup errors
+  - command: .venv/bin/python -m pytest -q factor_engine/tests/runtime/test_v8_bounded_deadline_egress.py
+    result: 15 passed
+  - command: .venv/bin/python -m pytest -q -rxX factor_engine/tests/runtime/test_v8_bounded_deadline_egress.py factor_engine/tests/runtime/test_v8_runtime_open_capabilities.py
+    result: 12 passed, 2 strict xfailed
+  - command: .venv/bin/python -m pytest -q factor_engine/tests/runtime/test_v8_bounded_deadline_egress.py factor_engine/tests/runtime/test_v8_receipt_protocol.py factor_engine/tests/runtime/test_v7_pipeline_integrity.py factor_engine/tests/runtime/test_v7_direct_artifact_pipeline.py factor_engine/tests/runtime/test_v6_default_engine.py
+    result: 74 passed, 1 strict xfailed
+  - command: .venv/bin/python -m pytest -q factor_engine/tests/runtime/test_v7_direct_artifact_pipeline.py factor_engine/tests/runtime/test_v7_direct_sink_recovery.py factor_engine/tests/runtime/test_v7_pipeline_integrity.py factor_engine/tests/runtime/test_v8_receipt_protocol.py factor_engine/tests/runtime/test_v8_bounded_deadline_egress.py
+    result: 54 passed
+  - command: .venv/bin/python -m pytest -q factor_engine/tests/runtime/test_v7_direct_artifact_pipeline.py factor_engine/tests/runtime/test_v7_direct_sink_recovery.py factor_engine/tests/runtime/test_v7_pipeline_integrity.py factor_engine/tests/runtime/test_v8_receipt_protocol.py factor_engine/tests/runtime/test_v8_bounded_deadline_egress.py factor_engine/tests/runtime/test_v8_broker_ipc_quotas.py factor_engine/tests/r27/test_resource_broker_ipc.py factor_engine/tests/runtime/test_v6_worker_resource_authority.py
+    result: 91 passed
+  - command: .venv/bin/python -m pytest -q factor_engine/tests/runtime/test_v7_direct_artifact_pipeline.py factor_engine/tests/runtime/test_v7_direct_sink_recovery.py factor_engine/tests/runtime/test_v7_pipeline_integrity.py factor_engine/tests/runtime/test_v8_receipt_protocol.py factor_engine/tests/runtime/test_v8_bounded_deadline_egress.py factor_engine/tests/runtime/test_v8_broker_ipc_quotas.py factor_engine/tests/runtime/test_v8_resume_validation.py factor_engine/tests/runtime/test_v8_runtime_open_capabilities.py
+    result: 116 passed, 2 strict xfailed
+  - command: .venv/bin/python -m pytest -q factor_engine/tests/runtime/test_v8_bounded_deadline_egress.py -k 'cancellation or precancelled or completed_descriptor' factor_engine/tests/runtime/test_v7_direct_artifact_pipeline.py::test_cancellation_retires_both_overlap_slots_and_preserves_per_factor_commit_state
+    result: 4 passed
+  - command: .venv/bin/python -m pytest -q factor_engine/tests/runtime/test_v6_bounded_pipeline.py factor_engine/tests/runtime/test_v6_worker_resource_authority.py factor_engine/tests/runtime/test_v7_direct_artifact_pipeline.py factor_engine/tests/runtime/test_v7_direct_sink_recovery.py factor_engine/tests/runtime/test_v7_pipeline_integrity.py factor_engine/tests/runtime/test_v8_receipt_protocol.py factor_engine/tests/runtime/test_v8_bounded_deadline_egress.py factor_engine/tests/runtime/test_v8_broker_ipc_quotas.py factor_engine/tests/runtime/test_v8_worker_phase_protocol.py factor_engine/tests/runtime/test_v8_resume_validation.py factor_engine/tests/runtime/test_v8_runtime_open_capabilities.py factor_engine/tests/runtime/test_v8_coordinator_lock.py factor_engine/tests/runtime/test_v8_default_api_contract.py factor_engine/tests/r27/test_resource_broker_ipc.py
+    result: 174 passed, 1 strict xfailed; followed by strengthened late-verified/prefetch-quarantine oracle 1 passed after the final egress-retention gate
+observed_overlap:
+  ordering: with A blocked, B_terminal < C_start, C_terminal < D_start, and D_terminal < E_start; A remains active until explicitly released
+  processes: peak active compute count is exactly two; five dispatched waves use five distinct fresh PIDs
+  dispatch_accounting: five valid roots at lookahead one report execution_batches=5 and attempts=1 each; a rejected compile reports attempt=0 and no batch, while the following valid root still dispatches
+  cpu: recorded per-slot proxy quotas sum to no more than parent hard CPU slots; the compile client is separately retained in the broker ledger rather than treated as resource-free because idle
+  egress: artifact manifest workspace budgets are each total_writer_bytes/2 and their sum does not exceed the single protected parent writer lease
+  failure_boundary: invalid B prevents C start and leaves C attempt=0; B descriptor/ACK loss aborts under its own slot identity, conservatively retaining uncertain commit authority rather than recovering it
+  boundary: deterministic blocking engines validate scheduling, persistence ordering, PID retirement, and ownership only; real default auto throughput and real-dataset performance are NOT_RUN
+limitations:
+  - Phase progress identifies the latest factor ordinal but does not provide sub-write checkpoints inside an atomic artifact writer.
+  - Multi-request FIFO fairness is broker-unit tested; full concurrent pipeline fairness remains NOT_RUN.
+  - Safe worker epoch reuse: NOT_RUN / OPEN
+  - B descriptor/ACK loss and other uncertain commits terminate conservatively as UNKNOWN/ABORTED; automatic recovery of that pending work is NOT_IMPLEMENTED.
+  - Pending same-run resume and per-operator tiling: NOT_IMPLEMENTED; terminal-only artifact revalidation is implemented.
+  - Real auto-operator/native-backend throughput, real datasets, and 100k-factor scale: NOT_RUN

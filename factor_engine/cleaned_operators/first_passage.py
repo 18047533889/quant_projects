@@ -13,6 +13,10 @@ probability and speed in one path-dependent stopping-time statistic.
   different semantic identities) even though both are "return volatility".
   ``scale_horizon`` is a first-class parameter, enters the operator signature /
   structural identity, and must be a positive integer.
+  Compiled production formulas must carry a proven same-unit relation; a
+  derived log-price/return-volatility pair remains unsupported until those
+  transforms declare authoritative output units.  Bare research frames do not
+  invent unit identity from their numeric values.
 * anchors ``s`` with ``s + horizon <= t`` only: no future information reaches
   ``t``.  The output is the mean of ``d_s * w_s`` over the *fully-observed*
   anchors in ``[t-W, t-horizon]``, where an anchor that never touches a barrier
@@ -91,8 +95,8 @@ def _metadata(
     # contract (adding return-vol to a price level); x = log(price) with
     # scale = return-volatility is consistent.  The typed grammar enforces this;
     # ``input_units`` documents the contract for the operator surface, and
-    # ``_check_scale_unit_consistency`` raises at runtime on the raw-price-style
-    # unit mismatch (M-130).
+    # ``same_unit_input_groups`` makes the analyzer enforce the relationship
+    # from typed expression metadata, before any panel is read (V9-M37).
     #
     # P1 (round 7) + model audit P0: ``scale_horizon`` makes the scale's
     # aggregation horizon explicit — a 1-day vs 20-day return volatility are
@@ -115,9 +119,10 @@ def _metadata(
         ],
         input_units={
             "x": "price_or_log_price",
-            "scale": "volatility_with_same_unit_as_x",
+            "scale": "same_unit_as:x",
         },
-        compatible_units={"scale": ("log_price_volatility", "return_volatility")},
+        compatible_units={"scale": ("same_unit_as:x",)},
+        same_unit_input_groups=(("x", "scale"),),
         relational_specs=list(relational_specs) if relational_specs else [],
         param_specs={k: v for k, v in (param_specs or {}).items() if k in params},
     )
@@ -134,58 +139,6 @@ def _check_barrier(barrier: Any) -> float:
     if not np.isfinite(b) or b <= 0.0:
         raise ValueError("barrier must be a finite positive number")
     return b
-
-
-def _check_scale_unit_consistency(x: pd.DataFrame, scale: pd.DataFrame, canonical: str, scale_horizon: int = 1) -> None:
-    """M-130: enforce the typed ``unit(scale) == unit(x)`` relational contract.
-
-    ``barrier * scale_s`` is added to ``x_s``, so the ``_metadata`` declarations
-    (``input_units``/``compatible_units``) already document that ``scale`` must
-    share ``x``'s unit.  Bare pandas frames carry no unit metadata at runtime,
-    however, so the declaration alone cannot stop the one silent failure mode: a
-    RAW PRICE ``x`` fed with a RETURN-VOLATILITY ``scale``.  ``barrier*scale`` is
-    then tiny relative to the price level and its daily moves, the barrier is
-    essentially never touched, and the factor is dead — exactly the
-    ``unit(scale) != unit(x)`` mismatch the typed grammar is meant to reject.
-
-    Detection: ``x`` is a strictly-positive price LEVEL (``min(x) > 0`` and
-    ``median|x| > 1``) whose typical day-over-day move is an order of magnitude
-    larger than the scale.  ``log(close)`` + return-vol stays valid: a log price's
-    day move IS the return, so ``scale ~ median|Δx|`` (same unit).  Returns and
-    mean-0 panels never enter the price-level branch.  This guard only raises — it
-    never alters a computed value, so valid-input behaviour is identical.
-
-    ``scale_horizon`` is validated separately (positive integer) and is part of
-    the operator signature: a 1-day vs 20-day return volatility are DIFFERENT
-    semantic identities even when both pass this unit check.
-    """
-    strict_int(scale_horizon, "scale_horizon", lower=1)
-    xv = np.asarray(x.to_numpy(dtype=float), dtype=float)
-    sv = np.asarray(scale.to_numpy(dtype=float), dtype=float)
-    xf = xv[np.isfinite(xv)]
-    sf = sv[np.isfinite(sv)]
-    if xf.size == 0 or sf.size == 0:
-        return
-    x_level = float(np.median(np.abs(xf)))
-    if not (float(xf.min()) > 0.0 and x_level > 1.0):
-        return  # not a price-like level (returns / log series with a negative leg)
-    dx = np.diff(xf)
-    if dx.size == 0:
-        return
-    dx_med = float(np.median(np.abs(dx)))
-    s_med = float(np.median(np.abs(sf)))
-    if dx_med <= 0.0 or s_med <= 0.0:
-        return
-    if s_med < 0.05 * dx_med:
-        raise ValueError(
-            f"{canonical}: unit mismatch — x looks like a raw price LEVEL "
-            f"(median|x|={x_level:.3g}, min(x)={float(xf.min()):.3g}) but scale is a "
-            f"small volatility (median|scale|={s_med:.3g}, < 5% of x's typical day "
-            f"move {dx_med:.3g}).  barrier*scale must share x's unit "
-            f"(unit(scale) == unit(x)): feed log(close)/return as x with a "
-            f"same-unit volatility scale, not a raw price level with a return "
-            f"volatility."
-        )
 
 
 def _first_passage_series(
@@ -219,26 +172,10 @@ def _first_passage_series(
             sc = scale[s]
             if not np.isfinite(xs) or not np.isfinite(sc) or sc <= 0.0:
                 continue
-            up = xs + b * sc
-            down = xs - b * sc
-            tau = 0
-            d = 0.0
-            fully_observed = True
-            for h in range(1, H + 1):
-                val = x[s + h]
-                if not np.isfinite(val):
-                    fully_observed = False
-                    break
-                if val >= up:
-                    tau = h
-                    d = 1.0
-                    break
-                if val <= down:
-                    tau = h
-                    d = -1.0
-                    break
-            if not fully_observed:
+            outcome = _first_passage_anchor_outcome(x, s, H, xs, sc, b)
+            if outcome is None:
                 continue  # no information: exclude the anchor entirely
+            d, tau = outcome
             if tau > 0:
                 wgt = (H + 1 - tau) / H
                 signs.append(d * wgt)
@@ -251,6 +188,34 @@ def _first_passage_series(
             continue
         out[t] = float(np.mean(signs))
     return out
+
+
+def _first_passage_anchor_outcome(
+    x: np.ndarray,
+    anchor: int,
+    horizon: int,
+    anchor_value: float,
+    anchor_scale: float,
+    barrier: float,
+) -> tuple[float, int] | None:
+    """Return one complete-horizon anchor outcome, or ``None`` if unknown.
+
+    Completeness is established before the first-hit scan.  A missing value
+    later in the horizon therefore invalidates the anchor even when a barrier
+    was touched earlier, matching the documented complete-horizon contract of
+    every public first-passage statistic.
+    """
+    seg = x[anchor + 1 : anchor + horizon + 1]
+    if seg.shape[0] != horizon or not np.all(np.isfinite(seg)):
+        return None
+    up = anchor_value + barrier * anchor_scale
+    down = anchor_value - barrier * anchor_scale
+    for offset, value in enumerate(seg, start=1):
+        if value >= up:
+            return 1.0, offset
+        if value <= down:
+            return -1.0, offset
+    return 0.0, 0
 
 
 @register_operator(
@@ -295,7 +260,6 @@ class TsFirstPassageBias(SeriesOperator):
         **_: Any,
     ) -> pd.DataFrame:
         _check_barrier(barrier)
-        _check_scale_unit_consistency(x, scale, "ts_first_passage_bias", scale_horizon)
         xv = x.to_numpy(dtype=float)
         sv = scale.to_numpy(dtype=float)
         rows, cols = xv.shape
@@ -353,23 +317,17 @@ def _fp_stats_series(
             sc = scale[s]
             if not np.isfinite(xs) or not np.isfinite(sc) or sc <= 0.0:
                 continue
-            # fully observed horizon path required for a determinate outcome
-            seg = x[s + 1 : s + H + 1]
-            if not np.all(np.isfinite(seg)):
+            outcome = _first_passage_anchor_outcome(x, s, H, xs, sc, b)
+            if outcome is None:
                 continue
             n_obs += 1
-            up = xs + b * sc
-            down = xs - b * sc
-            for h in range(H):
-                val = seg[h]
-                if val >= up:
-                    n_up += 1
-                    tau_up.append((h + 1) / H)
-                    break
-                if val <= down:
-                    n_dn += 1
-                    tau_dn.append((h + 1) / H)
-                    break
+            direction, tau = outcome
+            if direction > 0.0:
+                n_up += 1
+                tau_up.append(tau / H)
+            elif direction < 0.0:
+                n_dn += 1
+                tau_dn.append(tau / H)
         if n_obs < ma:
             continue
         up_frac[t] = n_up / n_obs
@@ -421,7 +379,6 @@ class TsFirstPassageHitProbability(SeriesOperator):
         **_: Any,
     ) -> pd.DataFrame:
         _check_barrier(barrier)
-        _check_scale_unit_consistency(x, scale, "ts_first_passage_hit_probability", scale_horizon)
         xv = x.to_numpy(dtype=float)
         sv = scale.to_numpy(dtype=float)
         rows, cols = xv.shape
@@ -473,7 +430,6 @@ class TsFirstPassageConditionalTime(SeriesOperator):
         **_: Any,
     ) -> pd.DataFrame:
         _check_barrier(barrier)
-        _check_scale_unit_consistency(x, scale, "ts_first_passage_conditional_time", scale_horizon)
         xv = x.to_numpy(dtype=float)
         sv = scale.to_numpy(dtype=float)
         rows, cols = xv.shape

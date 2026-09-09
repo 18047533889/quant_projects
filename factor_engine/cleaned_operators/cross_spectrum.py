@@ -94,6 +94,17 @@ def _cross_spectrum_window(
     # identically-1 coherence, so it is rejected up front).
     if n < 24:
         return None
+    if not (np.isfinite(x).all() and np.isfinite(y).all()):
+        return None
+    # Coherence and phase are invariant to positive changes of units. Scale
+    # once over the causal training window, not independently per segment
+    # (which would change the Welch ensemble's relative weights).
+    x_scale = float(np.max(np.abs(x)))
+    y_scale = float(np.max(np.abs(y)))
+    if x_scale == 0.0 or y_scale == 0.0:
+        return np.nan, np.nan
+    x = x / x_scale
+    y = y / y_scale
     seg_len = max(16, n // 2)
     hop = seg_len // 2
     n_seg = 1 + (n - seg_len) // hop
@@ -111,8 +122,10 @@ def _cross_spectrum_window(
         ys = y[i0 : i0 + seg_len]
         if not (np.all(np.isfinite(xs)) and np.all(np.isfinite(ys))):
             return None
-        xd = xs - np.polyval(np.polyfit(t, xs, 1), t)
-        yd = ys - np.polyval(np.polyfit(t, ys, 1), t)
+        # Exact constant segments have no detrended energy. Do not let the
+        # least-squares solver's roundoff invent a coherent signal for them.
+        xd = np.zeros_like(xs) if np.all(xs == xs[0]) else xs - np.polyval(np.polyfit(t, xs, 1), t)
+        yd = np.zeros_like(ys) if np.all(ys == ys[0]) else ys - np.polyval(np.polyfit(t, ys, 1), t)
         X = np.fft.rfft(xd * hann)
         Y = np.fft.rfft(yd * hann)
         Xf = X[1 : i_max + 1]
@@ -127,14 +140,16 @@ def _cross_spectrum_window(
     Syy_b = Syy[lo:hi]
     Sxy_b = Sxy[lo:hi]
     denom = Sxx_b * Syy_b
-    ok = denom > _EPS
+    # Relative roundoff floor, independent of the caller's physical units.
+    floor = np.finfo(float).eps * float(np.max(denom, initial=0.0))
+    ok = np.isfinite(denom) & (denom > floor)
     # P1-33: energy-weighted band coherence ``Σ|S_xy|² / Σ(S_xx·S_yy)`` over the
     # resolvable band frequencies — not a plain arithmetic mean of the ratios
     # (which weights every bin equally regardless of the energy actually at that
     # bin).  By Cauchy-Schwarz this stays in [0, 1].
     num_coh = float(np.sum(np.abs(Sxy_b)[ok] ** 2))
     den_coh = float(np.sum(denom[ok]))
-    mean_coh = num_coh / den_coh if den_coh > _EPS else np.nan
+    mean_coh = num_coh / den_coh if den_coh > 0.0 else np.nan
     if not np.isfinite(mean_coh):
         mean_coh = np.nan
     # R5 P1-08 / P1-14: at (near-)zero coherence the phase is a random angle —
@@ -142,10 +157,16 @@ def _cross_spectrum_window(
     # public phase operator now defaults to ``min_coherence=0.2`` so the gate
     # is on by default (a coherence too close to noise yields NaN, not a
     # spurious angle).
-    if mean_coh < float(min_coherence):
+    phase_vector = np.sum(Sxy_b[ok])
+    phase_mass = float(np.sum(np.abs(Sxy_b[ok])))
+    # A zero/cancelled circular resultant has no identifiable direction, even
+    # when individual bins are coherent. Use the same bins for both outputs.
+    if (not np.isfinite(mean_coh) or mean_coh < float(min_coherence)
+            or phase_mass <= 0.0
+            or abs(phase_vector) <= np.finfo(float).eps * max(1, int(ok.sum())) * phase_mass):
         total_phase = np.nan
     else:
-        total_phase = float(np.angle(np.sum(Sxy_b)))
+        total_phase = float(np.angle(phase_vector))
     return mean_coh, total_phase
 
 

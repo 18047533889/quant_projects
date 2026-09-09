@@ -1,0 +1,29 @@
+schema_version: evidence.r2.v1
+issue_ids: [V8-R01, V8-R06]
+git_sha: 118cd21c6262082336daa545ddc06b6f78def7b9
+timestamp_utc: "2026-09-08T08:06:49Z"
+scope: factor_engine runtime direct-artifact protocol and durable run identity
+owned_files:
+  - factor_engine/runtime/bounded_pipeline.py
+  - factor_engine/runtime/default_engine.py
+  - factor_engine/tests/runtime/test_v8_receipt_protocol.py
+changes:
+  - Validate schema, run, ordinal, factor, generation, and policy identities for the complete direct receipt envelope before terminal mutation.
+  - Treat identity faults as WorkerProtocolError scope aborts; never downgrade them to OUTPUT_INVALID.
+  - Reject conflicting identity returned by a writer instead of stamping expected values over it.
+  - Persist an atomic identity.json before ingestion/execution and carry the same identity into success, partial-failure, and ABORT receipts.
+red_evidence:
+  command: audited baseline function extracted from git show and invoked with a wrong string generation
+  observed: "RED_REPRO: audited baseline accepted wrong generation"
+green_tests:
+  - command: .venv/bin/python -m pytest -q factor_engine/tests/runtime/test_v8_receipt_protocol.py
+    result: 18 passed
+  - command: .venv/bin/python -m pytest -q factor_engine/tests/runtime/test_v8_receipt_protocol.py factor_engine/tests/runtime/test_v7_pipeline_integrity.py
+    result: 31 passed
+  - command: .venv/bin/python -m pytest -q factor_engine/tests/runtime/test_v7_direct_artifact_pipeline.py factor_engine/tests/runtime/test_v7_pipeline_integrity.py factor_engine/tests/runtime/test_v6_default_engine.py
+    result: 49 passed, 1 xfailed
+limitations:
+  - Full repository tests: NOT_RUN
+  - Real dataset and native backend validation: NOT_RUN
+  - Cross-wave overlap remains the pre-existing strict XFAIL and is outside V8-R01/R06.
+  - No deployment, publication, commit, staging, push, or remote mutation performed.

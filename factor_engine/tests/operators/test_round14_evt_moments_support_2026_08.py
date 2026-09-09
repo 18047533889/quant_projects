@@ -180,15 +180,18 @@ def test_lyapunov_current_row_nan_no_stale_value():
 
 def test_lyapunov_theiler_uses_physical_time():
     op = _op("ts_local_lyapunov_exponent")
-    # 6-row window with a NaN gap.  The surviving points [1,2,3,5] sit at
-    # physical offsets [0,3,4,5].  COMPRESSED indexing (after dropping the NaN)
-    # puts every pair inside the Theiler band (th = dim*tau = 2), excluding the
-    # only valid neighbour -> 0 usable anchors -> NaN.  PHYSICAL-time distance
-    # keeps the pair (offsets 0 and 3 are 3 apart > th) -> finite λ.
-    x = np.array([1.0, np.nan, np.nan, 2.0, 3.0, 5.0])[:, None]
-    out = op.calculate(_frame(x), window=6, tau=1, embedding_dim=2, horizon=1, min_anchors=1)
-    arr = out.to_numpy(dtype=float)
-    assert np.isfinite(arr[-1, 0])
+    # A gap changes true anchor spacing without compressing the physical clock.
+    # Both policies remain usable, but they need not select the same neighbours.
+    x = np.random.default_rng(14).normal(size=48).cumsum()
+    x[[18, 19]] = np.nan
+    common = dict(window=32, tau=1, embedding_dim=2, horizon=2, min_anchors=1)
+    compressed = op.calculate(_frame(x[:, None]), **common, physical_time=False)
+    physical = op.calculate(_frame(x[:, None]), **common, physical_time=True)
+    comp = compressed.to_numpy(dtype=float)[:, 0]
+    phys = physical.to_numpy(dtype=float)[:, 0]
+    assert np.isfinite(comp).any()
+    assert np.isfinite(phys).any()
+    assert not np.allclose(comp, phys, equal_nan=True)
 
 
 # ---------------------------------------------------------------------------

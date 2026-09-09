@@ -1,0 +1,42 @@
+schema: v9-scoped-merge-evidence-1
+date: '2026-09-09'
+git_sha: 118cd21c6262082336daa545ddc06b6f78def7b9
+workspace: /home/sunhaiwei/quant_projects
+issues: [V9-M18, V9-M34, V9-M35, V9-M36]
+status: EXTREME_SCALE_SCOPED_NUMERICAL_PASS_RESOURCE_ADMISSION_OPEN
+patch_sha256: 056aee54dd85ff719ed57969f4ae0b5788bbab82f4ca0aa423e032ccdf3d2597
+files:
+  factor_engine/cleaned_operators/research_spectral.py: 0af43f7f0fb45f2c01b2a990e25b01e0f4b069e6bbadca951d1745aa4e2156b3
+  factor_engine/tests/operators/test_v9_kernel_scale_safety.py: 489d74e88d2307efb1a677a6ebdd7fd8f33e4926f1c444d74d79737c1e71c15a
+tests:
+  main: 41 passed, 2 warnings, 26.67 seconds
+  junit: v9-m35-scale-main-merged.xml
+  paths:
+    - factor_engine/tests/operators/test_v9_kernel_scale_safety.py
+    - factor_engine/tests/operators/test_v9_kernel_intercepts.py
+    - factor_engine/tests/operators/test_v9_hsic_solve_domain.py
+    - factor_engine/tests/operators/test_v9_rbf_distance.py
+numerical_scope:
+  - Original-origin deviations and overflow-only normalization avoid absolute-unit thresholds.
+  - Training geometry never branches on test values.
+  - Exact constant target and holdout retain undefined log(0/0) as NaN.
+  - Finite moving holdout against identical intercept-only models has exact zero log-loss ratio.
+  - Nonfinite helper input is rejected before constant-target shortcut.
+  - Mixed train-constant feature extrapolation is explicitly unidentified and fails closed, not silently discarded.
+  - Entirely constant training feature block is a centered-kernel no-op.
+  - Public CPU winners tested at extreme units and with prefix equality.
+  - Independent augmented KKT model and original-coordinate references retained.
+performance_evidence:
+  script: v9-kernel-ledger-probe.py
+  script_sha256: 8320b665df18aca6f199c71dae1ace7c7b4f4902f33f1619c6667d2803302fb6
+  json: v9-kernel-ledger-current-0af43f7f.json
+  json_sha256: 95eab8daba6f035a0db2ead62200c25740d16a6c69084c02dcb874c7c58ad772
+  scope: Five independent single-thread subprocess samples per synthetic kernel/size, n=120/240.
+  conversion_bytes: NOT_INSTRUMENTED
+limitations:
+  - HSIC window normalization is retrospective algebraic scaling, not online predictive training.
+  - Granger compares fixed trace-normalized additive kernel models, not equal nested penalties or causal proof.
+  - ru_maxrss includes interpreter/imports and is not kernel-only or process-family RSS.
+  - Analytical individual-array bytes are not peak-live allocations or broker accounting.
+  - No fastest-backend, auto80, GPU, real-data, 100k, full registry or production certification claim.
+  - Broader backend parity, restart, full PIT and resource admission remain OPEN.

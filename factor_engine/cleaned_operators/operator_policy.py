@@ -1190,7 +1190,7 @@ _FINAL_PACK_POLICIES = {
     "ts_robust_ema": {"scope": "ts", "pit_safe": True, "min_periods": "span", "tags": ["stateful", "filter_role:low_pass"]},
     "ts_super_smoother": {"scope": "ts", "pit_safe": True, "tags": ["stateful", "checkpointable", "time_shard_safe:false", "filter_role:low_pass"]},
     "ts_kama": {"scope": "ts", "pit_safe": True, "tags": ["stateful", "checkpointable", "time_shard_safe:false", "filter_role:adaptive_low_pass"]},
-    "ts_butterworth_lowpass_causal": {"scope": "ts", "pit_safe": True, "tags": ["stateful", "checkpointable", "time_shard_safe:false", "filter_role:low_pass"]},
+    "ts_butterworth_lowpass_causal": {"scope": "ts", "pit_safe": True, "tags": ["stateful", "time_shard_safe:false", "filter_role:low_pass"]},
     "ts_causal_local_linear_smoother": {"scope": "ts", "pit_safe": True, "min_periods": 10, "tags": ["filter_role:low_pass"]},
     # Filter Layer: hysteresis and turnover control (2026-08-12 P0).
     "state_adaptive_deadband": {"scope": "ts", "pit_safe": True, "tags": ["stateful", "filter_role:hysteresis"]},

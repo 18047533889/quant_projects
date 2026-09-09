@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import os
 import threading
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 import pytest
 
@@ -38,7 +38,21 @@ from factor_engine.runtime.task_resource_contract import TaskResourceContract
 
 def _broker(hard_memory_limit: int = 8 * 1024**3, cpu_slots: int = 4) -> ResourceBroker:
     """隔离的 broker（硬上限固定，host/cgroup 信号不影响断言）。"""
-    return ResourceBroker(hard_memory_limit=hard_memory_limit, cpu_slots=cpu_slots)
+    broker = ResourceBroker(hard_memory_limit=hard_memory_limit, cpu_slots=cpu_slots)
+    snapshot = replace(
+        broker.snapshot(),
+        hard_memory_limit=hard_memory_limit,
+        cgroup_memory_current=0,
+        host_mem_available=hard_memory_limit,
+        process_rss=0,
+        process_family_rss=0,
+        process_family_pss=0,
+        host_mem_available_known=True,
+    )
+    broker._refresh = lambda force=False: snapshot
+    broker.execution_budget = lambda: int(hard_memory_limit * 0.8)
+    broker.pressure_stage = lambda: "NORMAL"
+    return broker
 
 
 def _lease_sum(broker: ResourceBroker) -> int:
@@ -207,7 +221,9 @@ def test_result_queue_release_returns_bytes_after_get():
     assert q.current_bytes == 40
     got = q.get()
     assert got is not None
-    assert q.current_bytes == 0  # 消费即归还
+    assert q.current_bytes == 40  # dequeue transfers ownership to the consumer
+    q.release(got)
+    assert q.current_bytes == 0
 
 
 def test_host_coordinator_production_require_broker(monkeypatch):
@@ -222,6 +238,15 @@ def test_host_coordinator_production_require_broker(monkeypatch):
 
 def test_adaptive_scheduler_production_require_broker(monkeypatch):
     monkeypatch.setenv("FACTOR_ENGINE_RUN_MODE", "production")
+    import factor_engine.service.queue as service_queue
+    import factor_engine.runtime.host_resource_coordinator as coordinator
+
+    monkeypatch.setattr(service_queue, "_get_service_broker", lambda: None)
+    monkeypatch.setattr(
+        coordinator,
+        "get_host_coordinator",
+        lambda: (_ for _ in ()).throw(RuntimeError("no coordinator")),
+    )
     from factor_engine.runtime.adaptive_batch_scheduler import AdaptiveBatchScheduler
 
     with pytest.raises(MissingResourceBroker):

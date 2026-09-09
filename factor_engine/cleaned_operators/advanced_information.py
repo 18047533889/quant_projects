@@ -3,8 +3,8 @@
 
 Every kernel is a deterministic, prefix-causal, pandas-numpy reference that
 returns a ``(TradeDate x Symbol)`` panel.  Randomness never appears in the
-output: surrogates use deterministic circular shifts and binning is quantile
-based, so repeated evaluation is bit-identical (the audit's determinism gate).
+output: surrogates use deterministic circular shifts and the same ordered-
+category/quantile binning policy, so repeated evaluation is bit-identical.
 
 * ``ts_transfer_entropy``            — directional conditional information
   ``I(X_{s+lag}; Y_s | X_s)`` in nats (P1).
@@ -23,6 +23,7 @@ based, so repeated evaluation is bit-identical (the audit's determinism gate).
 from __future__ import annotations
 
 from typing import Any
+from contextvars import ContextVar
 
 import numpy as np
 import pandas as pd
@@ -37,6 +38,26 @@ _ALPHA = 0.5          # Jeffreys smoothing, fixed (not a search parameter).
 # evaluation is bit-identical (the audit's determinism gate).
 _SURROGATE_OFFSETS = (7, 11, 17, 23, 31)
 _EPS = 1e-12
+
+# One deterministic discretization policy for real estimates and surrogates.
+# Small ordered alphabets retain every observed state; larger alphabets retain
+# the existing quantile cells with ties collapsed (never jitter/equal-width).
+_TE_BINNING_POLICY = "ordered_categories_if_unique_le_bins_else_quantile_v2"
+_TE_LAST_BINNING: ContextVar[tuple[int, int, int] | None] = ContextVar(
+    "te_last_binning", default=None,
+)
+
+
+def last_te_binning_status() -> dict[str, Any]:
+    """Context-local counts of the most recent transition-histogram binning.
+
+    This is a kernel diagnostic, not a per-factor/window result receipt.
+    Requested bins remain unchanged; effective counts size the actual joint.
+    """
+    counts = _TE_LAST_BINNING.get()
+    return {"policy": _TE_BINNING_POLICY, "requested_bins": counts[0] if counts else None,
+            "effective_x_bins": counts[1] if counts else None,
+            "effective_y_bins": counts[2] if counts else None}
 
 
 def _metadata(
@@ -61,6 +82,7 @@ def _metadata(
             "deterministic",
             f"signature:{','.join(params)}->series", f"domain:{domain}",
             f"unit:{unit}", f"cost:{cost}",
+            *([f"binning_policy:{_TE_BINNING_POLICY}"] if "transfer_entropy" in name else []),
         ],
     )
 
@@ -166,18 +188,32 @@ def _rolling_apply_2d_pair(a: np.ndarray, b: np.ndarray, window: int, fn: Any, m
 
 
 def _quantile_edges(values: np.ndarray, n_bins: int) -> np.ndarray:
-    """Deterministic quantile bin edges over a window (never degenerate)."""
+    """Ordered-category/quantile edges learned from a causal reference sample.
+
+    When the observed alphabet has at most n_bins values, retain one cell per
+    distinct state. Boundaries at the next state (left-closed) avoid midpoint
+    rounding/overflow even for adjacent floats. Otherwise keep tied quantiles.
+    Values beyond the fitted range map to the nearest outer cell, as before.
+    """
     finite = values[np.isfinite(values)]
     if finite.size == 0:
         return np.array([-np.inf, np.inf], dtype=float)
     if n_bins < 2:
         n_bins = 2
-    edges = np.unique(np.quantile(finite, np.linspace(0.0, 1.0, n_bins + 1)))
-    if edges.size == 1:
-        # Fully degenerate input: every value identical.  Callers already
-        # fail-closed on <2 distinct states, so this is only a well-defined
-        # two-cell fallback so digitization below never sees a scalar.
-        edges = np.array([edges[0] - 1.0, edges[0] + 1.0])
+    unique = np.unique(finite)
+    if unique.size <= n_bins:
+        # A constant has exactly one cell, so callers fail closed. Binary and
+        # ternary states no longer disappear through duplicate quantile edges.
+        return np.concatenate(([-np.inf], unique[1:], [np.inf]))
+    quantiles = np.linspace(0.0, 1.0, n_bins + 1)
+    with np.errstate(over="ignore", invalid="ignore"):
+        edges = np.quantile(finite, quantiles)
+    if not np.all(np.isfinite(edges)):
+        # Linear interpolation may overflow across opposite-sign finite
+        # extremes although the quantile itself is representable.
+        scale = float(np.max(np.abs(finite)))
+        edges = np.quantile(finite / scale, quantiles) * scale
+    edges = np.unique(edges)
     # Duplicate quantiles (heavy ties) collapse cells.  Do NOT re-expand them to
     # equal-width bins: that switches quantile -> equal-width discretization
     # mid-algorithm and makes the factor jump as ties appear (review P1-49).
@@ -228,16 +264,18 @@ def _te_from_transitions(
     caller can digitize several lagged samples against ONE shared reference
     binning (see ``_te_peak_window`` / ``_shared_bins`` — per-lag TE values are
     only comparable across lags when they share the same discretization).
-    When omitted, edges are derived from the given ``xs`` / ``ys`` as before,
-    so existing callers are unaffected.
+    When omitted, the target reference includes both current and successor
+    states in the accepted causal triples, and the source reference is ``ys``.
+    Thus a target state first seen at the window endpoint is not silently lost.
     """
     n = xs.shape[0]
     if n < 2:
         return np.nan
-    x_edges = _quantile_edges(xs, bins) if bins_x is None else bins_x
+    x_edges = _quantile_edges(np.concatenate((xs, x_next)), bins) if bins_x is None else bins_x
     y_edges = _quantile_edges(ys, bins) if bins_y is None else bins_y
     nxb = int(x_edges.size - 1)   # effective x cells = unique quantile edges - 1
     nyb = int(y_edges.size - 1)   # effective y cells
+    _TE_LAST_BINNING.set((int(bins), nxb, nyb))
     if nxb < 2 or nyb < 2:
         # Every cell collapsed to one: conditional information on a single-bin
         # marginal is undefined.  Fail closed instead of returning a spurious 0
@@ -321,7 +359,8 @@ def _transfer_entropy_window(
 class TsTransferEntropy(SeriesOperator):
     """时序传递熵 ``I(X_{s+lag}; Y_s | X_s)``（nats，方向为 source→target）。
 
-    窗口内对 ``(x', x, y)`` 三元组做分位数分箱（``bins``），加 Jeffreys 平滑
+    窗口内对 ``(x', x, y)`` 三元组分箱：不同值不超过 ``bins`` 时保留有序
+    离散状态，否则使用去重分位边界；不使用随机扰动。加 Jeffreys 平滑
     (alpha=0.5)，输出 ``sum p log( p(x',x,y) p(x) / (p(x',x) p(x,y)) )``，负
     数值误差 clip 到 0。确定性强：分箱用分位数，无任何随机扰动。
 

@@ -16,7 +16,7 @@ from factor_engine.cleaned_operators.common._polars_bridge import align_cols
 
 
 def _cols(df, *others):
-    cols = [c for c in df.columns if c != "date"]
+    cols = [c for c in df.columns if c not in {"date", "stock_code"}]
     for o in others:
         cols = [c for c in cols if c in o.columns]
     return cols
@@ -36,6 +36,20 @@ def _register(name: str, description: str, params: list[str], fn):
     )
     class _PeerPolars(SeriesOperator):
         metadata = _meta(name, description, params)
+        if name == "group_peer_beta_deviation":
+            from factor_engine.backend.contracts import ExecutionKind, PhysicalImplementationSpec
+            metadata.tags = [tag for tag in metadata.tags if tag != "native"] + ["cpu_udf"]
+            _physical_spec = PhysicalImplementationSpec(
+                canonical=name, backend="polars", execution_kind=ExecutionKind.DELEGATE_PYTHON,
+                materializes_full_panel=True, supports_nulls=True,
+                supports_nan=True, supports_inf=True,
+                implementation_source_hash="060d00a3a7155cced621bbd14a9e5097d7c90bf46c29c57a6a12e6e24467c78d",
+                emitter_identity="polars.DataFrame.with_columns:python_row_kernel",
+                kernel_identity="cross_section.peer_ops._peer_weighted_mean_ex_self_row",
+                parameter_domain_hash="7c9f11328591ac2cfc7984669d73849f8f6e6bac67c9982a365d358adf94bcbd",
+                semantic_contract_hash="21ef13190ef6cb03055cf5f5acb3048ed9661ac4c53946f24a80a436fbbdfb6f",
+                notes="Eager per-row authoritative Python kernel; no native-expression certification.",
+            )
 
         def _calculate_series(self, *args, **kwargs):
             return fn(*args, **kwargs)
@@ -83,27 +97,22 @@ _register(
 
 
 def _group_peer_beta_deviation(beta, group, weight):
-    """Polars per-row: weighted peer mean ex-self on beta."""
-    cols = _cols(beta, group, weight)
-    b = beta.select(cols).to_numpy()
+    """Polars container over the authoritative overflow-safe row kernel."""
+    from factor_engine.cleaned_operators.cross_section.peer_ops import (
+        _peer_weighted_mean_ex_self_row,
+    )
+
+    cols = align_cols(beta, group, weight)
+    if "stock_code" in beta.columns:
+        raise ValueError("peer CPU bridge requires a wide panel; long rows are not cross sections")
+    b = beta.select(cols).to_numpy().astype(float)
     g = group.select(cols).to_numpy()
-    w = weight.select(cols).to_numpy(dtype=float)
+    w = weight.select(cols).to_numpy().astype(float)
     n = beta.height
     out = np.full((n, len(cols)), np.nan, dtype=float)
     for row in range(n):
-        labels = {}
-        for i, col in enumerate(cols):
-            lbl = g[row, i]
-            labels.setdefault(lbl, []).append(i)
-        for lbl, idxs in labels.items():
-            if len(idxs) <= 1:
-                continue
-            tw = sum(w[row, i] for i in idxs)
-            twx = sum(w[row, i] * b[row, i] for i in idxs)
-            for j in idxs:
-                denom = tw - w[row, j]
-                if denom > 1e-12:
-                    out[row, j] = b[row, j] - (twx - w[row, j] * b[row, j]) / denom
+        peer = _peer_weighted_mean_ex_self_row(b[row], g[row], w[row])
+        out[row] = np.where(np.isfinite(peer), b[row] - peer, np.nan)
     return beta.with_columns([pl.Series(cols[i], out[:, i]) for i in range(len(cols))])
 
 

@@ -1,0 +1,50 @@
+schema: factor_engine.v8.evidence.v1
+git_sha: 118cd21c6262082336daa545ddc06b6f78def7b9
+timestamp: '2026-09-09T01:29:00+08:00'
+status: FROZEN_RUNTIME_SCOPED_GREEN_OPEN_CAPABILITIES_REMAIN
+target: server-c:/home/sunhaiwei/quant_projects
+tests:
+  result: '680 passed,1 strict R02 xfail,187 warnings in314.11s'
+  scope: runtime test_v6/test_v7/test_v8 plus r27 broker/IPC and r38 resource authority
+  xml: /tmp/v8-sept9-meta-final.xml
+  xml_sha256: 811ca82426a46245814d367e9ae29bab37232285231c396de23df0d04915fa38
+  ledger: /tmp/v8-sept9-meta-final-outcomes.jsonl
+  ledger_sha256: ff968d7f19662256fa5c4b7df0e0e139235072f5dad6eced3a80d64c29d0f33a
+  footer: '681 collected/completed,0 failures,no incomplete nodes,exitstatus0'
+  known_xfail: V8-R02 safe same-PID multi-wave epoch reuse is not implemented
+source_freeze:
+  result: all177 runtime Python file hashes identical before and after
+  before: /tmp/v8-sept9-meta-final-source-before.sha256
+  after: /tmp/v8-sept9-meta-final-source-after.sha256
+  sha256: bfa22879c4a5192fd59f3f538202922e51ba2a8ec3ed5f39ec8cfe3d5a2882fc
+  boundary: runtime Python files; test/plugin/config identity also recorded in collection ledger; not complete transitive dependency/environment freeze
+included_since_previous_610_checkpoint:
+  - Default controlled ingestion shared-broker lease and absolute deadlines.
+  - Read-only bounded resume action catalog, not pending executor.
+  - Batched persistent state registration.
+  - Manifest UTF-8 metadata bounds, dependency isolation and path-scoped lease identity.
+  - Test fixture contract adaptations preserving result-workspace rejection and original deadline enforcement.
+wheel:
+  status: CLEAN_BUILD_AND_ISOLATED_INSTALL_VERIFIED
+  directory: /tmp/fe-v8-sept9-wheel.i0T1Fr
+  artifact: dist/factor_engine-0.3.1-py3-none-any.whl
+  sha256: 5b29485c834777d58578cb99e104d4940d4f7633de5df6e365b66199ef1efaf6
+  members: 1302
+  bytecode_members: 0
+  installation: no-deps/no-compile into a new temporary target, not deployed
+  installed_verification: /tmp/fe-v8-sept9-wheel.i0T1Fr/installed-verification-final.json
+  installed_verification_sha256: 96eb91c0772fdfb6e392737486c943e104f039b695a0655f2df5902bd553c02b
+  source_hashes_verified: 10
+  canonical_bootstrap_count: 1756
+  default_facade: '(self, factors, *, resume_run_id=None, cancellation_token=None)'
+  boundary: actual installed import and10-source hash match; bootstrap count is not math/native certification
+  initial_smoke_invocation_error: missing required site argument caused IndexError; corrected explicit-site invocation rerun, not a wheel source defect
+  deployed: false
+limitations:
+  - Same-PID safe reuse and pending computation resume remain disabled.
+  - Explicit worker PID retirement is not proof of arbitrary descendant retirement; current account has no cgroup delegation.
+  - Parent aggregate spawn pickle and arbitrary live generators remain OPEN.
+  - Default wave caller metadata lease, decoded Python/native allocations and large-root tiling remain OPEN.
+  - Actual approved DataAccess profile, real HFQ/local-COS, GPU,100k and performance/conversion acceptance NOT_RUN.
+  - All-operator mathematical/PIT/native/Q certification, remote CI and production gates NOT_RUN.
+  - No commit, push, deployment, service restart or production factor publication.

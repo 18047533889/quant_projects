@@ -1,0 +1,41 @@
+schema: factor_engine.v8.evidence.v1
+git_sha: 118cd21c6262082336daa545ddc06b6f78def7b9
+date: '2026-09-08'
+target: server-c:/home/sunhaiwei/quant_projects
+status: SCOPED_REGRESSION_PASS_INDEPENDENT_REVIEW_COMPLETE
+files:
+  - factor_engine/runtime/bounded_pipeline.py
+  - factor_engine/tests/runtime/test_v8_resume_cleanup_authority.py
+source_sha256: 342fa563c9ab68a0795a9de31825079926f5a288187db4aa4d0518234333c55b
+defect:
+  primary: artifact verification rejects a corrupted chunk
+  secondary: worker close reports quarantine
+  before: original error survives but database authorities and coordinator lock are released
+  after: original error retains worker, broker, database references and exclusive coordinator lock
+  related:
+    - direct worker quarantine carries the same explicit authority references
+    - cleanup errors append without masking the primary verification exception
+    - uncertain database cleanup retains remaining authorities and lock
+    - failure of the normal verification close does not retry and erase uncertainty
+tests:
+  red: /tmp/v8-resume-cleanup-red.xml
+  first_green: '34 passed including resume validation, original deadline identity and empty startup cleanup'
+  first_green_xml: /tmp/v8-resume-cleanup-green.xml
+  expanded_green_before_final_close_guard: '5 passed in 6.25s'
+  expanded_green_xml: /tmp/v8-resume-cleanup-expanded.xml
+  final_green: '6 passed in 7.36s'
+  final_xml: /tmp/v8-resume-cleanup-final-six.xml
+  final_xml_sha256: ed506d37cbd50eb90e425be3b84c903c9e10d74412f9dc3100f576fc1a6396b3
+  test_sha256: 6ade46880eea6a5aedd841f9a278c3ffc3ea589733c36725527523b77a3e82d4
+review:
+  agent: v8_data
+  model: gpt-5.6-sol
+  result: scoped production handler reviewed and six independent regression cases green
+limitations:
+  - uses a real spawned verifier and real artifact corruption plus injected cleanup failures
+  - injected quarantine after observed process death is not proof of an unkillable OS process
+  - referenced database objects may already be closed when a later database close fails
+  - does not enable pending same-run execution or native-safe same-PID reuse
+  - real approved DataAccess, GPU and 100k acceptance NOT_RUN
+  - complete numerical/native operator certification NOT_RUN
+github_commit_push_deploy: false

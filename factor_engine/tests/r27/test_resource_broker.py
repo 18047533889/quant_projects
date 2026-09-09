@@ -2,6 +2,10 @@
 """R27-022..044/236..238/241..243: ResourceBroker live headroom + token admission。"""
 from __future__ import annotations
 
+from types import SimpleNamespace
+
+import pytest
+
 from factor_engine.runtime.resource_broker import (
     STAGE_CRITICAL,
     STAGE_NORMAL,
@@ -10,6 +14,41 @@ from factor_engine.runtime.resource_broker import (
 )
 from factor_engine.runtime.resource_governor import ExecutionResourcePlan, live_memory_headroom_bytes
 from factor_engine.runtime.task_resource_contract import TaskResourceContract, panel_bytes
+
+
+_STABLE_BUDGET_TESTS = {
+    "test_memory_token_admission_caps_concurrency",
+    "test_cpu_token_admission",
+    "test_pressure_stage_external_awareness",
+    "test_duplicate_task_id_rejected",
+    "test_reserve_backward_compat_duplicate_idempotent",
+    "test_idempotent_release_via_lease",
+    "test_idempotent_release_via_api",
+    "test_unknown_release_does_not_release_real_running_tokens",
+    "test_protected_egress_is_atomic_and_duplicate_id_fails_closed",
+    "test_token_accounting_exact_reserve_release_cycles",
+    "test_concurrent_reserve_release_same_id",
+}
+
+
+@pytest.fixture(autouse=True)
+def _stable_budget_for_accounting_tests(monkeypatch, request):
+    """Keep accounting tests independent of live shared-host pressure."""
+    if request.node.name not in _STABLE_BUDGET_TESTS:
+        return
+
+    def stable_snapshot(broker, *, force=False):
+        del force
+        return SimpleNamespace(
+            live_headroom=broker.hard_memory_limit,
+            hard_memory_limit=broker.hard_memory_limit,
+        )
+
+    monkeypatch.setattr(ResourceBroker, "_refresh", stable_snapshot)
+    monkeypatch.setattr(ResourceBroker, "pressure_stage", lambda self: STAGE_NORMAL)
+    monkeypatch.setattr(
+        ResourceBroker, "execution_budget", lambda self: int(self.hard_memory_limit * 0.8)
+    )
 
 
 def _task(peak: int, *, cpu: int = 1, io: int = 0, spill: int = 0,

@@ -384,6 +384,46 @@ jobs:
           path: scale-execution-status.json
           if-no-files-found: error
 
+  V8_ARCH_REFERENCE:
+    name: V8_ARCH_72_FIXED_PARAMETER_REFERENCE
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: [SUPPLY_CHAIN]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - run: bash scripts/ci_smoke.sh
+      # arch 7.2 imports a pandas decorator removed/changed in pandas 3.
+      # Keep this reference-only lock out of minimum runtime dependencies.
+      - run: python3 -m pip install 'arch==7.2.0' 'pandas==2.2.3' pytest
+      - name: Required reference dependency and numerical lane
+        env:
+          PYTHONPATH: .
+        run: |
+          python3 -c 'import arch; assert arch.__version__ == "7.2.0"'
+          python3 -m pip freeze > "$RUNNER_TEMP/v8-arch-dependencies.txt"
+          python3 -m pytest -q factor_engine/tests/operators/test_v7_volatility_contracts.py \
+            -p factor_engine.scripts.v8_pytest_evidence --v8-report="$RUNNER_TEMP/v8-arch-outcomes.jsonl" \
+            --junitxml="$RUNNER_TEMP/v8-arch.xml"
+          python3 scripts/verify_junit_execution.py "$RUNNER_TEMP/v8-arch.xml"
+          python3 - "$RUNNER_TEMP/v8-arch.xml" <<'PY'
+          import sys
+          import xml.etree.ElementTree as ET
+          cases = list(ET.parse(sys.argv[1]).getroot().iter("testcase"))
+          assert cases and not any(c.find("skipped") is not None for c in cases)
+          assert sum("fixed_parameters_match_arch_7_2" in c.get("name", "") for c in cases) == 4
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: v8-arch-reference-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/v8-arch.xml
+            ${{ runner.temp }}/v8-arch-dependencies.txt
+            ${{ runner.temp }}/v8-arch-outcomes.jsonl
+
   FE_EXECUTE_PERSIST_SYNTHETIC:
     name: FE_EXECUTE_PERSIST_SYNTHETIC_1K
     runs-on: ubuntu-latest
@@ -395,20 +435,43 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
       - run: bash scripts/ci_smoke.sh
+      - name: Default v2 API contract (not a native or real-data execution certificate)
+        env:
+          PYTHONPATH: .
+        run: >-
+          python3 -m pytest -q factor_engine/tests/runtime/test_v8_default_api_contract.py
+          -p factor_engine.scripts.v8_pytest_evidence
+          --v8-report="${{ runner.temp }}/fe-default-api-outcomes.jsonl"
+          --junitxml="${{ runner.temp }}/fe-default-api.xml"
       - name: Actual unique factor execution, sink and exact disk oracle (not lake publication certification)
         env:
           PYTHONPATH: .
           POLARS_MAX_THREADS: "2"
           OPENBLAS_NUM_THREADS: "1"
           OMP_NUM_THREADS: "1"
-        run: >-
-          python3 benchmarks/benchmark_run_many_streaming_20260906.py
-          --roots 1000 --wave-size 128 --workers 2 --assets 32 --stream-api
-          --output "$RUNNER_TEMP/fe-scale-1k"
+        run: |
+          mkdir -p "$RUNNER_TEMP/fe-scale-1k-logs"
+          python3 --version > "$RUNNER_TEMP/fe-scale-1k-logs/python.txt" 2>&1
+          python3 -m pip freeze > "$RUNNER_TEMP/fe-scale-1k-logs/dependencies.txt"
+          set +e
+          (
+            set -x
+            python3 benchmarks/benchmark_run_many_streaming_20260906.py \
+              --roots 1000 --wave-size 128 --workers 2 --assets 32 --stream-api \
+              --sink-queue-mib 64 --output "$RUNNER_TEMP/fe-scale-1k"
+          ) > "$RUNNER_TEMP/fe-scale-1k-logs/stdout.txt" 2> "$RUNNER_TEMP/fe-scale-1k-logs/stderr.txt"
+          benchmark_status=$?
+          printf '%s\n' "$benchmark_status" > "$RUNNER_TEMP/fe-scale-1k-logs/exit-code.txt"
+          exit "$benchmark_status"
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: fe-execute-persist-1k-${{ github.sha }}
-          path: ${{ runner.temp }}/fe-scale-1k/*.json*
+          path: |
+            ${{ runner.temp }}/fe-scale-1k/*.json*
+            ${{ runner.temp }}/fe-scale-1k-logs/
+            ${{ runner.temp }}/fe-default-api.xml
+            ${{ runner.temp }}/fe-default-api-outcomes.jsonl
           if-no-files-found: error
 
   manual_100k:
@@ -438,6 +501,7 @@ jobs:
           if [ "$COMPONENT" = FE_EXECUTE_PERSIST_SYNTHETIC ]; then
             python3 benchmarks/benchmark_run_many_streaming_20260906.py \
               --roots 100000 --wave-size 128 --workers 2 --assets 32 --stream-api \
+              --sink-queue-mib 64 \
               --output "$RUNNER_TEMP/fe-scale-100k"
           else
             python3 -m pytest \

@@ -1,0 +1,40 @@
+schema: factor_engine.v8.evidence.v1
+git_sha: 118cd21c6262082336daa545ddc06b6f78def7b9
+date: '2026-09-08'
+target: server-c:/home/sunhaiwei/quant_projects
+status: CHECKPOINT_SCOPED_PASS_NOT_ALL_V8_CLOSED
+sources:
+  bounded_pipeline.py: 0f4f7924b05d64e43938d0b80beb2fd5b02cde66ecd4bebb03daf0ea18dff4d5
+  finite_manifest.py: fbc83d2f8a5bd8ccc4a9e76366677944b245d862f68b695d73b0c41bbdfa1eed
+  supervised_worker.py: 08af5cd9d191e8e9774441318531470b17601d6a9fb61bf393a6b3e60a7d84fe
+  worker_ownership.py: 2449f0ed24399ce98e73dc333f4235cf1dabd14784c8f84b200172ab365ffa73
+tests:
+  runtime: '533 passed, 1 strict R02 xfail, 135 warnings in267.59s'
+  xml: /tmp/v8-cleanup-gate-freeze.xml
+  phases_and_footer: /tmp/v8-cleanup-gate-freeze-outcomes.jsonl
+  scope: runtime test_v6/test_v7/test_v8 plus r27 resource broker/IPC and r38 authority
+  boundary: collected534 nodes; third resume-open pre-manifest quarantine test added after collection and separately passed
+  independent_resume_open: '3 passed in2.53s'
+  independent_resume_open_xml: /tmp/v8-resume-open-cleanup-final.xml
+  source_freeze: four changed production runtime hashes unchanged before/after checkpoint
+wheel:
+  directory: /tmp/fe-v8-cleanupgate-wheel.hLxJtF
+  filename: factor_engine-0.3.1-py3-none-any.whl
+  sha256: b278f36067a1c1d2772c1038e4f1129baea310d12492ca7b94faaa6262eedf29
+  installed_import: /tmp/fe-v8-cleanupgate-wheel.hLxJtF/site/factor_engine/__init__.py
+  verification_script: /tmp/fe-v8-cleanupgate-wheel.hLxJtF/verify_installed_v8.py
+  result: isolated no-deps build/install/import succeeded; six runtime hashes verified;1756 canonical bootstrap; facade signature unchanged
+  boundary: interpreter executed outside source cwd; not deployed or numerical/native certification
+delivered:
+  - terminal verification and initial resume-open exceptions preserve exact original failure
+  - cleanup uncertainty retains appropriate worker/broker/database/lock authority without fabricating unopened handles
+  - iterator construction, close invocation and close-property failure close manifest without masking primary
+  - owned supervisor blocks child native initialization until durable BOUND permission
+  - read-only current OS retirement inspection uses a single strict event snapshot and never writes EXITED
+remaining:
+  - indexed SQLite ownership store remains isolated pending independent review
+  - complete pipeline role registration and ingestion gate not integrated
+  - pending same-run execution and native-safe same-PID reuse not enabled
+  - real approved DataAccess profile not supplied; real GPU/100k/performance-conversion acceptance NOT_RUN
+  - no claim of all1756 operator numerical or backend certification
+github_commit_push_deploy: false

@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="1" tests="7" time="12.058" timestamp="2026-09-09T06:49:55.998011+08:00" hostname="qs-compute-gpu-hk-01"><testcase classname="factor_engine.tests.runtime.test_v8_slot_failure_ownership" name="test_refill_ack_loss_while_a_is_held_keeps_b_slot_identity" time="2.359"><failure message="AssertionError: assert [('a', 'CANCE...', 'UNKNOWN')] == [('a', 'CANCE...', 'UNKNOWN')]&#10;  &#10;  At index 1 diff: ('b', 'FAILED', 'UNKNOWN') != ('b', 'CANCELLED', 'UNKNOWN')&#10;  Use -v to get more diff">tmp_path = PosixPath('/tmp/pytest-of-sunhaiwei/pytest-2970/test_refill_ack_loss_while_a_i0')
+
+    def test_refill_ack_loss_while_a_is_held_keeps_b_slot_identity(tmp_path):
+        with pytest.raises(BaseException) as raised:
+            execute_run_many_durable(
+                None,
+                [Factor("a"), Factor("b")],
+                policy=resolve_default_policy({
+                    "initial_lookahead_factors": 1,
+                    "cooperative_cancel_grace_seconds": 0.01,
+                    "worker_exit_observation_seconds": 0.5,
+                    "job_unknown_seconds": 5,
+                    "job_min_seconds": 5,
+                    "job_max_seconds": 5,
+                }),
+                artifact_root=tmp_path / "artifacts",
+                run_kwargs={"broker": Broker()},
+                engine_factory=build_held_a_refill_ack_loss_engine,
+                engine_factory_config={
+                    "marker": str(tmp_path), "modes": str(tmp_path / "modes")
+                },
+            )
+    
+        exc = raised.value
+        slot = getattr(exc, "failing_slot", None)
+        assert slot is not None, "await-any failure lost its worker/proxy/wave owner"
+        assert slot.names == ["b"]
+        assert [factor.name for _ordinal, factor in slot.admitted] == ["b"]
+        assert set(slot.assignments) == {"b"}
+        assert slot.worker is not None and slot.proxy is not None and slot.handle is not None
+        assert getattr(exc, "direct_slot_fatal", False) is True
+        assert (tmp_path / "b.artifact-written").is_file()
+    
+        receipt = json.loads(Path(exc.receipt_path).read_text())
+        with sqlite3.connect(receipt["state_path"]) as db:
+            rows = db.execute(
+                "select name,state,commit_state from outcomes order by ordinal"
+            ).fetchall()
+&gt;       assert rows == [
+            ("a", "CANCELLED", "UNKNOWN"),
+            ("b", "CANCELLED", "UNKNOWN"),
+        ]
+E       AssertionError: assert [('a', 'CANCE...', 'UNKNOWN')] == [('a', 'CANCE...', 'UNKNOWN')]
+E         
+E         At index 1 diff: ('b', 'FAILED', 'UNKNOWN') != ('b', 'CANCELLED', 'UNKNOWN')
+E         Use -v to get more diff
+
+factor_engine/tests/runtime/test_v8_slot_failure_ownership.py:99: AssertionError</failure></testcase><testcase classname="factor_engine.tests.runtime.test_v8_continuous_refill_integrity" name="test_simultaneous_done_valid_new_slot_cannot_refill_before_old_fatal" time="2.441" /><testcase classname="factor_engine.tests.runtime.test_v8_runtime_open_capabilities" name="test_multi_wave_epoch_reuses_pid_only_after_ownership_proof" time="2.372"><skipped type="pytest.xfail" message="V8-R02: safe multi-wave worker epoch reuse is not implemented" /></testcase><testcase classname="factor_engine.tests.runtime.test_v8_runtime_open_capabilities" name="test_existing_identity_manifest_and_state_resume_same_run" time="1.320" /><testcase classname="factor_engine.tests.runtime.test_v8_runtime_open_capabilities" name="test_explicit_resume_reopens_same_terminal_run_without_consuming_input" time="1.164" /><testcase classname="factor_engine.tests.runtime.test_v8_runtime_open_capabilities" name="test_explicit_resume_rejects_changed_artifact_bytes_and_releases_lock" time="1.210" /><testcase classname="factor_engine.tests.runtime.test_v8_runtime_open_capabilities" name="test_explicit_resume_pending_intent_fails_without_attempt_or_generation_change" time="0.785" /></testsuite></testsuites>

@@ -1,0 +1,22 @@
+schema: factor_engine.v8.evidence.v1
+git_sha: 118cd21c6262082336daa545ddc06b6f78def7b9
+timestamp: '2026-09-09T00:20:00+08:00'
+status: MERGED_SCOPED_GREEN
+files:
+  factor_engine/runtime/worker_ownership_sqlite.py: 01e3d597e0dd433c306ad2a8ce393e7ded73f08e885a0fa8c825fb93d506f235
+  factor_engine/tests/runtime/test_v8_sqlite_worker_retirement.py: f4adce2699c8b754257580654281ce451c43bf38ab03fbbbe602eb8cdfd0a856
+changes:
+  - Read-only current-OS retirement proof for a SQLite ownership snapshot; never writes EXITED.
+  - STARTING remains unknown; BOUND may be retired by exact host/namespace/boot/PID/starttime evidence.
+  - Reject malformed probe output, canonical schema mismatch and boolean EXITED PID.
+  - Read 512 instances per page; cap returned examples at32 and reasons at64 with explicit truncation.
+tests:
+  stage: '9 passed; compatibility28 passed'
+  merged: '50 passed, 28 warnings in40.06s'
+  xml: /tmp/v8-sqlite-retirement-merged.xml
+  independent_review: root found exact-type and unbounded-result defects; agent corrected with dedicated oracles before merge
+limitations:
+  - Pending-work resume is not enabled by this helper.
+  - Current OS evidence is distinct from complete persisted lifecycle history.
+  - Cooperative locking only; not an adversarial pathname ABA guarantee.
+  - Real data, native/GPU/100k/performance, all-operator math and production acceptance NOT_RUN.

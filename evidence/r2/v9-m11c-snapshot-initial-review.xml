@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="3" skipped="0" tests="4" time="0.262" timestamp="2026-09-09T05:58:21.170358+08:00" hostname="qs-compute-gpu-hk-01"><testcase classname="test_v9_m11c_snapshot_review" name="test_nonfinite_numerical_failure_details_remain_observable" time="0.000"><failure message="ValueError: non-finite float is not valid fit-failure evidence">def test_nonfinite_numerical_failure_details_remain_observable():
+        sink = rc.BoundedFitFailureSink()
+        status = rc.FitStatus(False, "numerical_failure", (
+            ("scale", float("inf")), ("residual", float("nan")),
+            ("complex_diagnostic", complex(float("-inf"), 1)),
+        ))
+        sink.record(rc.FitResult(None, status))
+&gt;       snapshot = snapshot_fit_failures(sink)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+/tmp/v9-root-int.hnqQYz/test_v9_m11c_snapshot_review.py:23: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/tmp/v9-m11c-stage/factor_engine/runtime/fit_failure_evidence.py:128: in snapshot_fit_failures
+    details = [_detail_wire(receipt) for receipt in receipts]
+               ^^^^^^^^^^^^^^^^^^^^^
+/tmp/v9-m11c-stage/factor_engine/runtime/fit_failure_evidence.py:99: in _detail_wire
+    "details": _tag(status.details),
+               ^^^^^^^^^^^^^^^^^^^^
+/tmp/v9-m11c-stage/factor_engine/runtime/fit_failure_evidence.py:77: in _tag
+    "items": [_tag(item, depth=depth + 1, budget=budget) for item in value]}
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/tmp/v9-m11c-stage/factor_engine/runtime/fit_failure_evidence.py:77: in _tag
+    "items": [_tag(item, depth=depth + 1, budget=budget) for item in value]}
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+value = inf, depth = 2, budget = [16380]
+
+    def _tag(value: Any, *, depth: int = 0, budget: list[int] | None = None) -&gt; Any:
+        if budget is None:
+            budget = [_MAX_NODES]
+        budget[0] -= 1
+        if budget[0] &lt; 0 or depth &gt; _MAX_DEPTH:
+            raise ValueError("fit-failure value exceeds structural budget")
+        if value is None or type(value) is bool:
+            return value
+        if isinstance(value, np.generic):
+            return {"$type": "numpy_scalar", "dtype": str(value.dtype),
+                    "value": _tag(value.item(), depth=depth + 1, budget=budget)}
+        if type(value) is int:
+            if value.bit_length() &gt; _MAX_INTEGER_BITS:
+                raise ValueError("fit-failure integer exceeds bit bound")
+            return value
+        if type(value) is float:
+            if not np.isfinite(value):
+&gt;               raise ValueError("non-finite float is not valid fit-failure evidence")
+E               ValueError: non-finite float is not valid fit-failure evidence
+
+/tmp/v9-m11c-stage/factor_engine/runtime/fit_failure_evidence.py:55: ValueError</failure></testcase><testcase classname="test_v9_m11c_snapshot_review" name="test_preexisting_sink_eviction_and_group_overflow_are_explicit" time="0.000"><failure message="assert False is True">def test_preexisting_sink_eviction_and_group_overflow_are_explicit():
+        sink = rc.BoundedFitFailureSink(detail_capacity=1, group_capacity=1)
+        sink.record(rc.FitResult(None, rc.FitStatus(False, "singular")))
+        sink.record(rc.FitResult(None, rc.FitStatus(False, "insufficient_sample")))
+        snapshot = snapshot_fit_failures(sink)
+        assert snapshot["dropped_details"] == 1
+        assert snapshot["overflow_group_count"] == 1
+&gt;       assert snapshot["truncated"] is True
+E       assert False is True
+
+/tmp/v9-root-int.hnqQYz/test_v9_m11c_snapshot_review.py:39: AssertionError</failure></testcase><testcase classname="test_v9_m11c_snapshot_review" name="test_high_detail_load_is_truncated_without_losing_summary" time="0.185" /><testcase classname="test_v9_m11c_snapshot_review" name="test_unowned_receipt_cannot_be_promoted_by_changing_wire_label" time="0.000"><failure message="Failed: DID NOT RAISE any of (TypeError, ValueError)">def test_unowned_receipt_cannot_be_promoted_by_changing_wire_label():
+        sink = rc.BoundedFitFailureSink()
+        sink.record(rc.FitResult(None, rc.FitStatus(False, "singular")))
+        invalid = copy.deepcopy(snapshot_fit_failures(sink))
+        invalid["details"][0]["scope_kind"] = "factor_window"
+&gt;       with pytest.raises((TypeError, ValueError)):
+E       Failed: DID NOT RAISE any of (TypeError, ValueError)
+
+/tmp/v9-root-int.hnqQYz/test_v9_m11c_snapshot_review.py:62: Failed</failure></testcase></testsuite></testsuites>

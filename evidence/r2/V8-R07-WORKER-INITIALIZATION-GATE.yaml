@@ -1,0 +1,32 @@
+schema: factor_engine.v8.evidence.v1
+git_sha: 118cd21c6262082336daa545ddc06b6f78def7b9
+date: '2026-09-08'
+target: server-c:/home/sunhaiwei/quant_projects
+status: SCOPED_GREEN_INDEPENDENT_REVIEW_COMPLETE
+files:
+  - factor_engine/runtime/supervised_worker.py
+  - factor_engine/tests/runtime/test_v8_worker_initialization_gate.py
+  - factor_engine/tests/runtime/test_v8_worker_initialization_gate_edges.py
+source_sha256: 08af5cd9d191e8e9774441318531470b17601d6a9fb61bf393a6b3e60a7d84fe
+change: explicit ownership workers wait for a bounded generation-matched parent BOUND frame before native initialization
+tests:
+  red: '1 failed: real fork child reaches observed threadpool initialization before parent durable binding'
+  red_xml: /tmp/v8-worker-initialization-red.xml
+  green: '80 passed in 12.76s'
+  green_xml: /tmp/v8-worker-initialization-green.xml
+  scope: initialization gate, supervisor ownership, existing supervisor, worker phase protocol, broker IPC quotas
+  later_inspection_integration: '74 passed in 5.60s'
+  later_inspection_xml: /tmp/v8-worker-inspection-integrated.xml
+  independent_edges: '6 passed in 1.03s'
+  independent_edges_xml: /tmp/v8-worker-init-gate-review.xml
+review:
+  agent: v8_data
+  model: gpt-5.6-sol
+  checked: bind failure, forged gate, wrong generation, unowned compatibility and send-failure retirement before transport close
+limitations:
+  - initialization oracle observes the threadpoolctl boundary using a fork-inherited event
+  - does not prove all native libraries release memory or enable same-PID reuse
+  - spawn interpreter/bootstrap imports happen before the target gate
+  - ownership remains optional until all runtime roles and ingestion are wired to a scalable store
+  - pending resume, real approved DataAccess, GPU and100k acceptance NOT_RUN
+github_commit_push_deploy: false

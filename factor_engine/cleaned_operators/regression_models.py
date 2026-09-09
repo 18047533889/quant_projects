@@ -30,6 +30,7 @@ from factor_engine.cleaned_operators.base import OperatorMetadata, ParamRole, Pa
 from factor_engine.cleaned_operators.common.daily_panel import _aligned
 from factor_engine.cleaned_operators.ts_model._rolling_core import (
     _HUBER_DELTA,
+    huber_fit,
     pinball_quantile_fit,
     ridge_fit,
 )
@@ -194,6 +195,8 @@ def _regression_resid(
             return np.nan
     elif method == "huber":
         beta = _huber_fit(design, ys)
+        if beta is None:
+            return np.nan
     else:
         raise ValueError(f"unknown method: {method}")
     # 当前样本残差（最后一行）
@@ -204,28 +207,15 @@ def _regression_resid(
     return float(y_cur - (beta[0] + beta[1] * x_cur))
 
 
-def _huber_fit(design: np.ndarray, ys: np.ndarray, *, delta: float = _HUBER_DELTA, iterations: int = 5) -> np.ndarray:
-    beta, *_ = np.linalg.lstsq(design, ys, rcond=None)
-    for _ in range(iterations):
-        resid = ys - design @ beta
-        scale = 1.4826 * np.median(np.abs(resid - np.median(resid)))
-        if scale <= 0.0:
-            scale = np.std(resid)
-        if scale <= 0.0:
-            break
-        z = resid / scale
-        abs_z = np.abs(z)
-        with np.errstate(divide="ignore", invalid="ignore"):
-            weight = np.where(abs_z <= delta, 1.0, delta / abs_z)
-        # Huber IRLS minimizes sum(w_i e_i^2).  Weighted least squares solves
-        # the normal equations with sqrt(w_i) applied to both design and
-        # response (same convention as ``daily_panel._ols_residual``).
-        # Weighting design/y by w (not sqrt(w)) minimized sum(w_i^2 e_i^2),
-        # which over-shrinks outlier rows (review P0-01).
-        root_w = np.sqrt(weight)
-        wdesign = design * root_w[:, None]
-        beta, *_ = np.linalg.lstsq(wdesign, ys * root_w, rcond=None)
-    return beta
+def _huber_fit(
+    design: np.ndarray,
+    ys: np.ndarray,
+    *,
+    delta: float = _HUBER_DELTA,
+    iterations: int = 100,
+) -> np.ndarray | None:
+    """Compatibility wrapper around the single shared Huber kernel."""
+    return huber_fit(design, ys, delta=delta, iterations=iterations)
 
 
 @register_operator(

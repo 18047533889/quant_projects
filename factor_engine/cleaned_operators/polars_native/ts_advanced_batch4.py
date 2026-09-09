@@ -5,12 +5,17 @@ This batch covers advanced time series operators from ts_run_strength through ts
 Includes: roughness metrics, RQA features, state/regime detection, spectral analysis,
 volatility measures, wavelet features, and weighted statistics.
 
-All operators use pure Polars lazy API for maximum performance.
+Most operators use the Polars API. ``ts_spectral_low_frequency_ratio`` and
+``ts_wavelet_energy_slope`` are explicit eager Python/NumPy CPU bridges: their
+FFT/Haar kernels are not native Polars expressions and are not production
+eligible.
 """
 
 import polars as pl
 import numpy as np
 from typing import Optional, Union
+
+from factor_engine.backend.contracts import ExecutionKind, PhysicalImplementationSpec
 
 from factor_engine.cleaned_operators.base import (
     SeriesOperator,
@@ -19,6 +24,35 @@ from factor_engine.cleaned_operators.base import (
     ParamSpec,
     ParamRole,
 )
+from factor_engine.cleaned_operators.ts_model.wavelet_spectral import (
+    _fixed_window_anchor,
+    _spectral_low_ratio,
+    _wavelet_stats,
+)
+
+
+def _wavelet_spectral_cpu_wide(feature: pl.DataFrame, kernel) -> pl.DataFrame:
+    """Apply the shared CPU kernel to a wide/single-stock Polars panel."""
+    if not isinstance(feature, pl.DataFrame):
+        raise TypeError("wavelet/spectral Polars CPU bridge requires a DataFrame")
+    if "stock_code" in feature.columns and feature["stock_code"].drop_nulls().n_unique() > 1:
+        raise ValueError(
+            "wavelet/spectral Polars CPU bridge requires a wide panel or a "
+            "single-stock long frame"
+        )
+    metadata_columns = {"date", "stock_code"}
+    data = {}
+    for name in feature.columns:
+        if name in metadata_columns:
+            data[name] = feature[name]
+            continue
+        values = np.asarray(feature[name].to_numpy(), dtype=float)
+        data[name] = pl.Series(
+            name,
+            [kernel(values[: row + 1]) for row in range(values.size)],
+            dtype=pl.Float64,
+        )
+    return pl.DataFrame(data).select(feature.columns)
 
 # ============================================================================
 # Run and Persistence Operators
@@ -216,21 +250,37 @@ class TSSpectralLowFrequencyRatioPolarsNative(SeriesOperator):
         name="ts_spectral_low_frequency_ratio",
         category="time_series",
         description="Ratio of low frequency power to total power",
-        param_names=["feature", "window"],
+        param_names=["x", "window"],
         return_type="series",
         tags=["time_series", "rolling", "spectral", "pit_safe"],
     )
     metadata.param_specs = {
-        "window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
+        "window": ParamSpec(dtype=int, min=1, default=128, param_role=ParamRole.HORIZON),
     }
+    _physical_spec = PhysicalImplementationSpec(
+        canonical="ts_spectral_low_frequency_ratio",
+        backend="polars",
+        execution_kind=ExecutionKind.DELEGATE_PYTHON,
+        supports_lazy=False,
+        supports_streaming=False,
+        materializes_full_panel=True,
+        requires_sorted=True,
+        supports_nulls=True,
+        supports_nan=True,
+        supports_inf=False,
+        implementation_source_hash="dfa7014e737daecb08e71ca36994d089f8866afede64e6f8cedc2ff82bb37d84",
+        emitter_identity="872943b99e1cab97c777b6fe15dd1977955b4f170ecb21a33ea9a4b7c0618c5e",
+        kernel_identity="726ba24f12ffb5ed6df9c633f5522bd477082c84d1d981329338dffbf2235255",
+        parameter_domain_hash="f2570464677530a8e35d8ba155ab66f727f182a73e32c9a724d86b56f9c4d4de",
+        semantic_contract_hash="146b116c57ac43e3744767ee83a87914be77a253d4262894afb7049b0444f660",
+        notes="Eager wide-panel Python/NumPy FFT bridge; not a native Polars expression and not production-certified.",
+    )
 
-    def _calculate_series(self, feature, window, **kwargs):
-        # TODO: Implement proper FFT-based frequency analysis
-        # Placeholder: use smoothed signal as proxy for low frequency
-        smoothed = feature.rolling_mean(window)
-        total_power = (feature ** 2).rolling_mean(window)
-        low_freq_power = (smoothed ** 2)
-        return np.where((total_power + 1e-8) != 0, (low_freq_power) / ((total_power + 1e-8)), np.nan)
+    def _calculate_series(self, x, window=128, **kwargs):
+        return _wavelet_spectral_cpu_wide(
+            x,
+            lambda values: _spectral_low_ratio(values, window),
+        )
 
 
 @register_operator(name="ts_spectral_lowpass_trailing", canonical="ts_spectral_lowpass_trailing", backend="polars")
@@ -1835,94 +1885,131 @@ class TSWaveletEnergySlopePolarsNative(SeriesOperator):
         name="ts_wavelet_energy_slope",
         category="time_series",
         description="Slope of wavelet energy across scales",
-        param_names=["feature", "window"],
+        param_names=["x", "window"],
         return_type="series",
         tags=["time_series", "rolling", "wavelet", "pit_safe"],
     )
     metadata.param_specs = {
-        "window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
+        "window": ParamSpec(dtype=int, choices=(32, 64, 128, 256), default=128, param_role=ParamRole.HORIZON),
     }
+    _physical_spec = PhysicalImplementationSpec(
+        canonical="ts_wavelet_energy_slope",
+        backend="polars",
+        execution_kind=ExecutionKind.DELEGATE_PYTHON,
+        supports_lazy=False,
+        supports_streaming=False,
+        materializes_full_panel=True,
+        requires_sorted=True,
+        supports_nulls=True,
+        supports_nan=True,
+        supports_inf=False,
+        implementation_source_hash="a6d2e5d18e89676ea626926565e6eba9f83fcfce79b7b481d2c889d09bb1a81c",
+        emitter_identity="872943b99e1cab97c777b6fe15dd1977955b4f170ecb21a33ea9a4b7c0618c5e",
+        kernel_identity="ce0944fbb6047fdc2541326f601a68b8af03c03bb9e5ec4b27f35327e3215f93",
+        parameter_domain_hash="b363212dd0cdf41c2feeaa4dc5092354f3210e3bd5822565a656ae5df823e2a0",
+        semantic_contract_hash="757b9d7572769e2d16729838a645025419a8ef98b836d8de1d25450fbd8bfe37",
+        notes="Eager wide-panel Python/NumPy Haar bridge; not a native Polars expression and not production-certified.",
+    )
 
-    def _calculate_series(self, feature, window, **kwargs):
-        # TODO: Implement proper wavelet decomposition
-        # Placeholder: energy at different scales using rolling operations
-        energy_short = (feature.rolling_std(window // 2) ** 2)
-        energy_long = (feature.rolling_std(window) ** 2)
-        return np.where((energy_short + 1e-8) != 0, ((energy_long - energy_short)) / ((energy_short + 1e-8)), np.nan)
+    def _calculate_series(self, x, window=128, **kwargs):
+        w = _fixed_window_anchor(window)
+        return _wavelet_spectral_cpu_wide(
+            x,
+            lambda values: _wavelet_stats(values, w, "slope"),
+        )
 
 
 @register_operator(name="ts_wavelet_entropy", canonical="ts_wavelet_entropy", backend="polars")
 class TSWaveletEntropyPolarsNative(SeriesOperator):
-    """Entropy of wavelet coefficient distribution"""
+    """Eager CPU Haar-band entropy bridge; not a native Polars expression."""
 
     metadata = OperatorMetadata(
         name="ts_wavelet_entropy",
         category="time_series",
         description="Entropy of wavelet coefficient distribution",
-        param_names=["feature", "window"],
+        param_names=["x", "window"],
         return_type="series",
-        tags=["time_series", "rolling", "wavelet", "entropy", "pit_safe"],
+        tags=["time_series", "rolling", "wavelet", "entropy", "pit_safe", "cpu_udf"],
     )
     metadata.param_specs = {
-        "window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
+        "window": ParamSpec(dtype=int, choices=(32, 64, 128, 256), default=128, param_role=ParamRole.HORIZON),
     }
+    _physical_spec = PhysicalImplementationSpec(
+        canonical="ts_wavelet_entropy", backend="polars", execution_kind=ExecutionKind.DELEGATE_PYTHON,
+        materializes_full_panel=True, requires_sorted=True, supports_nulls=True, supports_nan=True,
+        implementation_source_hash="0fc5db9a347c621730ce24af3a39cdbb818d42fc2350993537c11976144d5208",
+        emitter_identity="polars.DataFrame:wide_cpu_bridge:v1",
+        kernel_identity="wavelet_spectral._wavelet_stats:entropy:v9",
+        parameter_domain_hash="window:int:{32,64,128,256};wide_or_single_stock",
+        semantic_contract_hash="haar:detail_total_energy:positive_band_shannon_normalized:v9",
+        notes="Eager shared Python/NumPy Haar bridge; not native Polars and not production-eligible.",
+    )
 
-    def _calculate_series(self, feature, window, **kwargs):
-        # TODO: Implement proper wavelet entropy
-        # Placeholder: normalized variance as entropy proxy
-        var = feature.rolling_var(window)
-        mean_sq = (feature.rolling_mean(window) ** 2)
-        return np.where((mean_sq + 1e-8) != 0, (var) / ((mean_sq + 1e-8)), np.nan)
+    def _calculate_series(self, x, window=128, **kwargs):
+        w = _fixed_window_anchor(window)
+        return _wavelet_spectral_cpu_wide(x, lambda values: _wavelet_stats(values, w, "entropy"))
 
 
 @register_operator(name="ts_wavelet_high_frequency_ratio", canonical="ts_wavelet_high_frequency_ratio", backend="polars")
 class TSWaveletHighFrequencyRatioPolarsNative(SeriesOperator):
-    """Ratio of high frequency wavelet energy to total"""
+    """Eager CPU fine-scale Haar-energy bridge; not a native Polars expression."""
 
     metadata = OperatorMetadata(
         name="ts_wavelet_high_frequency_ratio",
         category="time_series",
         description="Ratio of high frequency energy",
-        param_names=["feature", "window"],
+        param_names=["x", "window"],
         return_type="series",
-        tags=["time_series", "rolling", "wavelet", "pit_safe"],
+        tags=["time_series", "rolling", "wavelet", "pit_safe", "cpu_udf"],
     )
     metadata.param_specs = {
-        "window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
+        "window": ParamSpec(dtype=int, choices=(32, 64, 128, 256), default=128, param_role=ParamRole.HORIZON),
     }
+    _physical_spec = PhysicalImplementationSpec(
+        canonical="ts_wavelet_high_frequency_ratio", backend="polars", execution_kind=ExecutionKind.DELEGATE_PYTHON,
+        materializes_full_panel=True, requires_sorted=True, supports_nulls=True, supports_nan=True,
+        implementation_source_hash="ce43f2b0e98bbe668f740c49bf4e02f00284675de3372bb7577691bbead453db",
+        emitter_identity="polars.DataFrame:wide_cpu_bridge:v1",
+        kernel_identity="wavelet_spectral._wavelet_stats:high:v9",
+        parameter_domain_hash="window:int:{32,64,128,256};wide_or_single_stock",
+        semantic_contract_hash="haar:finest_detail_total_energy_ratio:v9",
+        notes="Eager shared Python/NumPy Haar bridge; not native Polars and not production-eligible.",
+    )
 
-    def _calculate_series(self, feature, window, **kwargs):
-        # TODO: Implement proper wavelet decomposition
-        # Placeholder: high frequency = residual from smoothing
-        smoothed = feature.rolling_mean(window)
-        high_freq = feature - smoothed
-        total_energy = (feature ** 2).rolling_mean(window)
-        high_freq_energy = (high_freq ** 2).rolling_mean(window)
-        return np.where((total_energy + 1e-8) != 0, (high_freq_energy) / ((total_energy + 1e-8)), np.nan)
+    def _calculate_series(self, x, window=128, **kwargs):
+        w = _fixed_window_anchor(window)
+        return _wavelet_spectral_cpu_wide(x, lambda values: _wavelet_stats(values, w, "high"))
 
 
 @register_operator(name="ts_wavelet_low_frequency_ratio", canonical="ts_wavelet_low_frequency_ratio", backend="polars")
 class TSWaveletLowFrequencyRatioPolarsNative(SeriesOperator):
-    """Ratio of low frequency wavelet energy to total"""
+    """Eager CPU coarse-scale Haar-energy bridge; not a native Polars expression."""
 
     metadata = OperatorMetadata(
         name="ts_wavelet_low_frequency_ratio",
         category="time_series",
         description="Ratio of low frequency energy",
-        param_names=["feature", "window"],
+        param_names=["x", "window"],
         return_type="series",
-        tags=["time_series", "rolling", "wavelet", "pit_safe"],
+        tags=["time_series", "rolling", "wavelet", "pit_safe", "cpu_udf"],
     )
     metadata.param_specs = {
-        "window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
+        "window": ParamSpec(dtype=int, choices=(32, 64, 128, 256), default=128, param_role=ParamRole.HORIZON),
     }
+    _physical_spec = PhysicalImplementationSpec(
+        canonical="ts_wavelet_low_frequency_ratio", backend="polars", execution_kind=ExecutionKind.DELEGATE_PYTHON,
+        materializes_full_panel=True, requires_sorted=True, supports_nulls=True, supports_nan=True,
+        implementation_source_hash="c28f5c4f617498cdd41ff4d2618c50008355660f867689c50ab9d29b204984a4",
+        emitter_identity="polars.DataFrame:wide_cpu_bridge:v1",
+        kernel_identity="wavelet_spectral._wavelet_stats:low:v9",
+        parameter_domain_hash="window:int:{32,64,128,256};wide_or_single_stock",
+        semantic_contract_hash="haar:coarsest_detail_total_energy_ratio:v9",
+        notes="Eager shared Python/NumPy Haar bridge; not native Polars and not production-eligible.",
+    )
 
-    def _calculate_series(self, feature, window, **kwargs):
-        # Low frequency = smoothed component
-        smoothed = feature.rolling_mean(window)
-        total_energy = (feature ** 2).rolling_mean(window)
-        low_freq_energy = (smoothed ** 2)
-        return np.where((total_energy + 1e-8) != 0, (low_freq_energy) / ((total_energy + 1e-8)), np.nan)
+    def _calculate_series(self, x, window=128, **kwargs):
+        w = _fixed_window_anchor(window)
+        return _wavelet_spectral_cpu_wide(x, lambda values: _wavelet_stats(values, w, "low"))
 
 
 @register_operator(name="ts_wavelet_lowpass_reconstruct", canonical="ts_wavelet_lowpass_reconstruct", backend="polars")
@@ -2155,4 +2242,3 @@ class TSWeightedTimeCentroidPolarsNative(SeriesOperator):
 # Many complex algorithms (SSA, wavelets, transfer entropy, topology) are
 # implemented as skeletons with TODO markers for proper implementation.
 # All operators are registered with backend="polars" and use lazy evaluation.
-

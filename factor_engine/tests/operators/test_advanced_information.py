@@ -28,6 +28,28 @@ def _op(name: str, backend: str = "pandas_numpy"):
     return op
 
 
+_TRANSFER_ENTROPY_NAMES = {
+    "ts_transfer_entropy",
+    "ts_effective_transfer_entropy",
+    "ts_transfer_entropy_peak_strength",
+    "ts_transfer_entropy_peak_lag",
+    "ts_transfer_entropy_peak_excess",
+}
+
+
+def _calculate_with_real_inputs(op, x: pd.DataFrame) -> pd.DataFrame:
+    """Call each operator with its actual arity and a feasible small domain."""
+    name = op.metadata.name
+    if name in _TRANSFER_ENTROPY_NAMES:
+        return op.calculate(
+            x, x, window=32, bins=2,
+            min_transitions=2, min_cells_ratio=0.25,
+        )
+    if name == "ts_score_rank_weighted_mean":
+        return op.calculate(x, x, window=20)
+    return op.calculate(x)
+
+
 
 # ---------------------------------------------------------------------------
 # 1. ts_transfer_entropy
@@ -45,12 +67,13 @@ def test_ts_transfer_entropy_basic() -> None:
     # Get param names from metadata
     meta = getattr(op, "metadata", None)
 
-    # Call with default parameters
+    # Call with valid fixture parameters
     try:
-        result = op.calculate(x)
+        result = _calculate_with_real_inputs(op, x)
 
         # Basic shape check
         assert result.shape == x.shape, f"{result.shape} != {x.shape}"
+        assert np.isfinite(result.to_numpy()).any()
         assert list(result.columns) == list(x.columns)
         assert list(result.index) == list(x.index)
 
@@ -72,7 +95,7 @@ def test_ts_transfer_entropy_handles_nans() -> None:
     op = _op("ts_transfer_entropy")
 
     try:
-        result = op.calculate(x)
+        result = _calculate_with_real_inputs(op, x)
 
         # Should not raise, should return DataFrame
         assert isinstance(result, pd.DataFrame)
@@ -93,7 +116,7 @@ def test_ts_transfer_entropy_handles_inf() -> None:
     op = _op("ts_transfer_entropy")
 
     try:
-        result = op.calculate(x)
+        result = _calculate_with_real_inputs(op, x)
 
         # Should handle inf gracefully (typically return NaN)
         assert isinstance(result, pd.DataFrame)
@@ -108,7 +131,7 @@ def test_ts_transfer_entropy_empty_input() -> None:
     op = _op("ts_transfer_entropy")
 
     try:
-        result = op.calculate(x)
+        result = _calculate_with_real_inputs(op, x)
 
         # Should return empty DataFrame
         assert isinstance(result, pd.DataFrame)
@@ -126,7 +149,7 @@ def test_ts_transfer_entropy_single_column() -> None:
     op = _op("ts_transfer_entropy")
 
     try:
-        result = op.calculate(x)
+        result = _calculate_with_real_inputs(op, x)
 
         assert isinstance(result, pd.DataFrame)
         assert result.shape[1] == 1
@@ -150,12 +173,13 @@ def test_ts_effective_transfer_entropy_basic() -> None:
     # Get param names from metadata
     meta = getattr(op, "metadata", None)
 
-    # Call with default parameters
+    # Call with valid fixture parameters
     try:
-        result = op.calculate(x)
+        result = _calculate_with_real_inputs(op, x)
 
         # Basic shape check
         assert result.shape == x.shape, f"{result.shape} != {x.shape}"
+        assert np.isfinite(result.to_numpy()).any()
         assert list(result.columns) == list(x.columns)
         assert list(result.index) == list(x.index)
 
@@ -177,7 +201,7 @@ def test_ts_effective_transfer_entropy_handles_nans() -> None:
     op = _op("ts_effective_transfer_entropy")
 
     try:
-        result = op.calculate(x)
+        result = _calculate_with_real_inputs(op, x)
 
         # Should not raise, should return DataFrame
         assert isinstance(result, pd.DataFrame)
@@ -198,7 +222,7 @@ def test_ts_effective_transfer_entropy_handles_inf() -> None:
     op = _op("ts_effective_transfer_entropy")
 
     try:
-        result = op.calculate(x)
+        result = _calculate_with_real_inputs(op, x)
 
         # Should handle inf gracefully (typically return NaN)
         assert isinstance(result, pd.DataFrame)
@@ -213,7 +237,7 @@ def test_ts_effective_transfer_entropy_empty_input() -> None:
     op = _op("ts_effective_transfer_entropy")
 
     try:
-        result = op.calculate(x)
+        result = _calculate_with_real_inputs(op, x)
 
         # Should return empty DataFrame
         assert isinstance(result, pd.DataFrame)
@@ -231,7 +255,7 @@ def test_ts_effective_transfer_entropy_single_column() -> None:
     op = _op("ts_effective_transfer_entropy")
 
     try:
-        result = op.calculate(x)
+        result = _calculate_with_real_inputs(op, x)
 
         assert isinstance(result, pd.DataFrame)
         assert result.shape[1] == 1
@@ -255,12 +279,13 @@ def test_ts_score_rank_weighted_mean_basic() -> None:
     # Get param names from metadata
     meta = getattr(op, "metadata", None)
 
-    # Call with default parameters
+    # Call with valid fixture parameters
     try:
-        result = op.calculate(x)
+        result = _calculate_with_real_inputs(op, x)
 
         # Basic shape check
         assert result.shape == x.shape, f"{result.shape} != {x.shape}"
+        assert np.isfinite(result.to_numpy()).any()
         assert list(result.columns) == list(x.columns)
         assert list(result.index) == list(x.index)
 
@@ -282,7 +307,7 @@ def test_ts_score_rank_weighted_mean_handles_nans() -> None:
     op = _op("ts_score_rank_weighted_mean")
 
     try:
-        result = op.calculate(x)
+        result = _calculate_with_real_inputs(op, x)
 
         # Should not raise, should return DataFrame
         assert isinstance(result, pd.DataFrame)
@@ -303,7 +328,7 @@ def test_ts_score_rank_weighted_mean_handles_inf() -> None:
     op = _op("ts_score_rank_weighted_mean")
 
     try:
-        result = op.calculate(x)
+        result = _calculate_with_real_inputs(op, x)
 
         # Should handle inf gracefully (typically return NaN)
         assert isinstance(result, pd.DataFrame)
@@ -318,7 +343,7 @@ def test_ts_score_rank_weighted_mean_empty_input() -> None:
     op = _op("ts_score_rank_weighted_mean")
 
     try:
-        result = op.calculate(x)
+        result = _calculate_with_real_inputs(op, x)
 
         # Should return empty DataFrame
         assert isinstance(result, pd.DataFrame)
@@ -336,7 +361,7 @@ def test_ts_score_rank_weighted_mean_single_column() -> None:
     op = _op("ts_score_rank_weighted_mean")
 
     try:
-        result = op.calculate(x)
+        result = _calculate_with_real_inputs(op, x)
 
         assert isinstance(result, pd.DataFrame)
         assert result.shape[1] == 1
@@ -360,12 +385,13 @@ def test_report_benford_js_divergence_basic() -> None:
     # Get param names from metadata
     meta = getattr(op, "metadata", None)
 
-    # Call with default parameters
+    # Call with valid fixture parameters
     try:
-        result = op.calculate(x)
+        result = _calculate_with_real_inputs(op, x)
 
         # Basic shape check
         assert result.shape == x.shape, f"{result.shape} != {x.shape}"
+        assert np.isfinite(result.to_numpy()).any()
         assert list(result.columns) == list(x.columns)
         assert list(result.index) == list(x.index)
 
@@ -387,7 +413,7 @@ def test_report_benford_js_divergence_handles_nans() -> None:
     op = _op("report_benford_js_divergence")
 
     try:
-        result = op.calculate(x)
+        result = _calculate_with_real_inputs(op, x)
 
         # Should not raise, should return DataFrame
         assert isinstance(result, pd.DataFrame)
@@ -408,7 +434,7 @@ def test_report_benford_js_divergence_handles_inf() -> None:
     op = _op("report_benford_js_divergence")
 
     try:
-        result = op.calculate(x)
+        result = _calculate_with_real_inputs(op, x)
 
         # Should handle inf gracefully (typically return NaN)
         assert isinstance(result, pd.DataFrame)
@@ -423,7 +449,7 @@ def test_report_benford_js_divergence_empty_input() -> None:
     op = _op("report_benford_js_divergence")
 
     try:
-        result = op.calculate(x)
+        result = _calculate_with_real_inputs(op, x)
 
         # Should return empty DataFrame
         assert isinstance(result, pd.DataFrame)
@@ -441,7 +467,7 @@ def test_report_benford_js_divergence_single_column() -> None:
     op = _op("report_benford_js_divergence")
 
     try:
-        result = op.calculate(x)
+        result = _calculate_with_real_inputs(op, x)
 
         assert isinstance(result, pd.DataFrame)
         assert result.shape[1] == 1
@@ -465,12 +491,13 @@ def test_ts_transfer_entropy_peak_strength_basic() -> None:
     # Get param names from metadata
     meta = getattr(op, "metadata", None)
 
-    # Call with default parameters
+    # Call with valid fixture parameters
     try:
-        result = op.calculate(x)
+        result = _calculate_with_real_inputs(op, x)
 
         # Basic shape check
         assert result.shape == x.shape, f"{result.shape} != {x.shape}"
+        assert np.isfinite(result.to_numpy()).any()
         assert list(result.columns) == list(x.columns)
         assert list(result.index) == list(x.index)
 
@@ -492,7 +519,7 @@ def test_ts_transfer_entropy_peak_strength_handles_nans() -> None:
     op = _op("ts_transfer_entropy_peak_strength")
 
     try:
-        result = op.calculate(x)
+        result = _calculate_with_real_inputs(op, x)
 
         # Should not raise, should return DataFrame
         assert isinstance(result, pd.DataFrame)
@@ -513,7 +540,7 @@ def test_ts_transfer_entropy_peak_strength_handles_inf() -> None:
     op = _op("ts_transfer_entropy_peak_strength")
 
     try:
-        result = op.calculate(x)
+        result = _calculate_with_real_inputs(op, x)
 
         # Should handle inf gracefully (typically return NaN)
         assert isinstance(result, pd.DataFrame)
@@ -528,7 +555,7 @@ def test_ts_transfer_entropy_peak_strength_empty_input() -> None:
     op = _op("ts_transfer_entropy_peak_strength")
 
     try:
-        result = op.calculate(x)
+        result = _calculate_with_real_inputs(op, x)
 
         # Should return empty DataFrame
         assert isinstance(result, pd.DataFrame)
@@ -546,7 +573,7 @@ def test_ts_transfer_entropy_peak_strength_single_column() -> None:
     op = _op("ts_transfer_entropy_peak_strength")
 
     try:
-        result = op.calculate(x)
+        result = _calculate_with_real_inputs(op, x)
 
         assert isinstance(result, pd.DataFrame)
         assert result.shape[1] == 1
@@ -570,12 +597,13 @@ def test_ts_transfer_entropy_peak_lag_basic() -> None:
     # Get param names from metadata
     meta = getattr(op, "metadata", None)
 
-    # Call with default parameters
+    # Call with valid fixture parameters
     try:
-        result = op.calculate(x)
+        result = _calculate_with_real_inputs(op, x)
 
         # Basic shape check
         assert result.shape == x.shape, f"{result.shape} != {x.shape}"
+        assert np.isfinite(result.to_numpy()).any()
         assert list(result.columns) == list(x.columns)
         assert list(result.index) == list(x.index)
 
@@ -597,7 +625,7 @@ def test_ts_transfer_entropy_peak_lag_handles_nans() -> None:
     op = _op("ts_transfer_entropy_peak_lag")
 
     try:
-        result = op.calculate(x)
+        result = _calculate_with_real_inputs(op, x)
 
         # Should not raise, should return DataFrame
         assert isinstance(result, pd.DataFrame)
@@ -618,7 +646,7 @@ def test_ts_transfer_entropy_peak_lag_handles_inf() -> None:
     op = _op("ts_transfer_entropy_peak_lag")
 
     try:
-        result = op.calculate(x)
+        result = _calculate_with_real_inputs(op, x)
 
         # Should handle inf gracefully (typically return NaN)
         assert isinstance(result, pd.DataFrame)
@@ -633,7 +661,7 @@ def test_ts_transfer_entropy_peak_lag_empty_input() -> None:
     op = _op("ts_transfer_entropy_peak_lag")
 
     try:
-        result = op.calculate(x)
+        result = _calculate_with_real_inputs(op, x)
 
         # Should return empty DataFrame
         assert isinstance(result, pd.DataFrame)
@@ -651,7 +679,7 @@ def test_ts_transfer_entropy_peak_lag_single_column() -> None:
     op = _op("ts_transfer_entropy_peak_lag")
 
     try:
-        result = op.calculate(x)
+        result = _calculate_with_real_inputs(op, x)
 
         assert isinstance(result, pd.DataFrame)
         assert result.shape[1] == 1
@@ -675,12 +703,13 @@ def test_ts_transfer_entropy_peak_excess_basic() -> None:
     # Get param names from metadata
     meta = getattr(op, "metadata", None)
 
-    # Call with default parameters
+    # Call with valid fixture parameters
     try:
-        result = op.calculate(x)
+        result = _calculate_with_real_inputs(op, x)
 
         # Basic shape check
         assert result.shape == x.shape, f"{result.shape} != {x.shape}"
+        assert np.isfinite(result.to_numpy()).any()
         assert list(result.columns) == list(x.columns)
         assert list(result.index) == list(x.index)
 
@@ -702,7 +731,7 @@ def test_ts_transfer_entropy_peak_excess_handles_nans() -> None:
     op = _op("ts_transfer_entropy_peak_excess")
 
     try:
-        result = op.calculate(x)
+        result = _calculate_with_real_inputs(op, x)
 
         # Should not raise, should return DataFrame
         assert isinstance(result, pd.DataFrame)
@@ -723,7 +752,7 @@ def test_ts_transfer_entropy_peak_excess_handles_inf() -> None:
     op = _op("ts_transfer_entropy_peak_excess")
 
     try:
-        result = op.calculate(x)
+        result = _calculate_with_real_inputs(op, x)
 
         # Should handle inf gracefully (typically return NaN)
         assert isinstance(result, pd.DataFrame)
@@ -738,7 +767,7 @@ def test_ts_transfer_entropy_peak_excess_empty_input() -> None:
     op = _op("ts_transfer_entropy_peak_excess")
 
     try:
-        result = op.calculate(x)
+        result = _calculate_with_real_inputs(op, x)
 
         # Should return empty DataFrame
         assert isinstance(result, pd.DataFrame)
@@ -756,7 +785,7 @@ def test_ts_transfer_entropy_peak_excess_single_column() -> None:
     op = _op("ts_transfer_entropy_peak_excess")
 
     try:
-        result = op.calculate(x)
+        result = _calculate_with_real_inputs(op, x)
 
         assert isinstance(result, pd.DataFrame)
         assert result.shape[1] == 1

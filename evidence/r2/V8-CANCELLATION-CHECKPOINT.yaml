@@ -1,0 +1,55 @@
+schema: factor_engine.v8.checkpoint.v1
+git_sha: 118cd21c6262082336daa545ddc06b6f78def7b9
+date: '2026-09-08'
+target: server-c:/home/sunhaiwei/quant_projects
+status: SCOPED_PASS_WITH_OPEN_CAPABILITIES
+tests:
+  passed: 174
+  xfailed: 1
+  warnings: 78
+  elapsed_seconds: 201.51
+  report: /tmp/v8-root-runtime-cancellation-checkpoint.xml
+  expected_failure: safe same-PID worker epoch reuse not implemented
+  suites:
+    - tests/runtime/test_v6_bounded_pipeline.py
+    - tests/runtime/test_v6_worker_resource_authority.py
+    - tests/runtime/test_v7_direct_artifact_pipeline.py
+    - tests/runtime/test_v7_direct_sink_recovery.py
+    - tests/runtime/test_v7_pipeline_integrity.py
+    - tests/runtime/test_v8_receipt_protocol.py
+    - tests/runtime/test_v8_bounded_deadline_egress.py
+    - tests/runtime/test_v8_broker_ipc_quotas.py
+    - tests/runtime/test_v8_worker_phase_protocol.py
+    - tests/runtime/test_v8_resume_validation.py
+    - tests/runtime/test_v8_runtime_open_capabilities.py
+    - tests/runtime/test_v8_coordinator_lock.py
+    - tests/runtime/test_v8_default_api_contract.py
+    - tests/r27/test_resource_broker_ipc.py
+source_sha256_before_and_after_identical:
+  runtime/bounded_pipeline.py: 422a3381c96c3cd4ebe2b03a891565599b73b7faa1c5252486f6fa4d318f7627
+  runtime/default_engine.py: 2fded409882e54c95e3d86c981b8c0e04278ab8cebf50aab92fa55178be9b41b
+  runtime/supervised_worker.py: d78f511283a5b81ba684051aab5af14386735b2a41d996e5c5cffee68d152f70
+  runtime/resource_broker.py: 03e7a18d02ed02fc9d0a4059e6d4e0044bce5acfa23c034e5f15f98f8d8c8f23
+  runtime/resource_broker_ipc.py: de99f7b4957e91c689f0823a7a9c47862e130efe22ec509b4b61024b8d59711a
+  runtime/resume_validation.py: edd3f82c4ce6644925217dd3151fcd196d9ae72056abb13bbcf1235495fe2673
+packaging:
+  directory: /tmp/fe-v8-wheel-checkpoint.yIADIU
+  wheel: dist/factor_engine-0.3.1-py3-none-any.whl
+  sha256: 5671bb9a9d9a6ecd1a15aa85b5f042488d2418331fbc261fc724bcbfde8bcc23
+  installed_import: /tmp/fe-v8-wheel-checkpoint.yIADIU/site/factor_engine/__init__.py
+  canonical_bootstrap_count: 1756
+  facade_keywords: [resume_run_id, cancellation_token]
+  import_log: /tmp/fe-v8-wheel-checkpoint.yIADIU/wheel-installed-import.log
+  harness_correction: first import was source-shadowed by staging cwd and rejected; rerun from dist verified installed path
+race_oracle:
+  parent_state_barrier: current factor persisted SUCCEEDED and VERIFIED before cancellation
+  prefetched_worker: real process, cleanup uncertainty injected after proven retirement
+  asserted: current success preserved; prefetched commit UNKNOWN; coordinator lock and egress leases retained
+  boundary: synthetic post-retirement uncertainty is not a real unkillable-process acceptance test
+limits:
+  - checkpoint before R03 continuous-refill refactor and R07 worker journal foundation
+  - pending-work resume and native safe process reuse remain open
+  - real approved DataAccess profile, GPU and 100k acceptance NOT_RUN
+  - registry bootstrap count is not all-operator numerical certification
+  - fork compatibility warnings remain; default factory path uses spawn
+commit_push_deploy: false

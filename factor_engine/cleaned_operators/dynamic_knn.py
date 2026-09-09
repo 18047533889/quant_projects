@@ -53,6 +53,7 @@ pretend exists.
 """
 from __future__ import annotations
 
+from collections import deque
 from typing import Any
 
 import numpy as np
@@ -331,7 +332,10 @@ class CsKnnPeerMeanExSelf(SeriesOperator):
 def _retention_series(feats: np.ndarray, k: int, lag: int) -> np.ndarray:
     rows, n, d = feats.shape
     out = np.full((rows, n), np.nan, dtype=float)
-    neighbor_sets: list[list[np.ndarray]] = []
+    # Only t and t-lag are consumed.  Keep the full tie-inclusive graph for
+    # these physical bars, including empty graphs on unknown dates; filtering
+    # out such dates would silently turn lag into an observation clock.
+    neighbor_sets: deque[list[np.ndarray]] = deque(maxlen=lag + 1)
     for t in range(rows):
         U, valid = _rank_features(feats, t)
         sets: list[np.ndarray] = []
@@ -343,7 +347,7 @@ def _retention_series(feats: np.ndarray, k: int, lag: int) -> np.ndarray:
         neighbor_sets.append(sets)
         if t < lag:
             continue
-        prev_sets = neighbor_sets[t - lag]
+        prev_sets = neighbor_sets[0]
         for i in range(n):
             cur = sets[i]
             prev = prev_sets[i]
@@ -354,6 +358,10 @@ def _retention_series(feats: np.ndarray, k: int, lag: int) -> np.ndarray:
             if union <= 0.0:
                 continue
             out[t, i] = float(inter / union)
+        # Do not keep a second reference to the oldest graph across eviction.
+        del prev_sets
+        if n:
+            del prev, cur
     return out
 
 

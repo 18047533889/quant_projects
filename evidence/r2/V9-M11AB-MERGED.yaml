@@ -1,0 +1,39 @@
+schema: v9-scoped-merge-evidence-1
+date: '2026-09-09'
+git_sha: 118cd21c6262082336daa545ddc06b6f78def7b9
+workspace: /home/sunhaiwei/quant_projects
+issue: V9-M11
+status: OWNER_BRIDGE_AND_PUBLIC_PRODUCER_INTEGRATED_DURABLE_TRANSPORT_OPEN
+patch_sha256: 43b71567e899f591468401963d205fb1e1436e551cb6dd3739609397fac02bb7
+integration_test_patch_sha256: 7e16715cef911e9f5a6f5ce735f411f720d602c99ddab438ce0dd1da5f65c1da
+files:
+  factor_engine/backend/context.py: 1cfd5f48847e79b424b66bad2281732972236ed27548c3ede4ddabe67d4a1045
+  factor_engine/backend/cleaned_bridge.py: b7c36cd71a79adc5c3a1049330d2b2b1029988528a68b99009c1f1a88f64c452
+  factor_engine/runtime/batch_service.py: 85f12188d40b4ee9e644ca5520f241afb0b1feba2699fad70d33e84d373688de
+  factor_engine/runtime/adaptive_batch_scheduler.py: 647ba605923a6fe7d28939bc8fa6b00f10c126c114de4b1ba9e7becb308b92d7
+  factor_engine/runtime/engine.py: de738accda94324e62bd087cdc9c890ffb945805d23f72cad989caa787672b2c
+  factor_engine/runtime/bounded_pipeline.py: 2387e5d78e9c43aa673b19d478f70c7b246b2c611e8ddb5bb64dca8628c3900b
+  factor_engine/cleaned_operators/ts_model/_rolling_core.py: 3341881a4f013f67ea08f2e4783cd46bb05c8542b6dd6e07c9cb4935072bcbd5
+  factor_engine/tests/operators/test_v9_m11_integer_bounds.py: 8369f900ee371d934c17290f8974eb014d86c5f060a2395e0c2d1a5cc6401ec7
+tests:
+  main_focused: 33 passed, 2 warnings, 25.62 seconds
+  junit: v9-m11ab-main-merged.xml
+  integer_bounds_baseline: 2 failed, 1 passed
+  integer_bounds_candidate: 3 passed
+  scope:
+    - Legacy context positional arguments retain meaning.
+    - Exceptions restore outer receipt scope and sink.
+    - Barrier-interleaved threaded roots do not exchange task or factor identities.
+    - Actual scheduler entry creates the worker-local bounded sink.
+    - Real root-to-bridge-to-registry regression yields GOOD slope 3 and BAD singular receipts.
+    - Real shared subplan remains factor-unowned.
+    - Oversized integer details are summarized before decimal conversion; invalid scope integers removed.
+review:
+  independent_agent: GPT-5.6-sol
+  result: Approved revised A overlay and integer bounds; merged hashes match reviewed overlay.
+limitations:
+  - Runtime factor identity here is the admitted Factor.name namespace, not arbitrary external materialization IDs.
+  - Phase C worker envelope and durable evidence persistence remain OPEN.
+  - Missing owner fields remain kernel_only, not invented factor attribution.
+  - Real auto80, GPU, process-family resource certification and 100k run NOT_RUN.
+  - Full planner/import/ABI/backend/PIT/CI/production certification NOT_RUN by this focused suite.

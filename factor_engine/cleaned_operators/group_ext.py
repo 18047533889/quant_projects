@@ -414,7 +414,7 @@ def _huber_irls_fit(xs: np.ndarray, ys: np.ndarray, add_intercept: bool, max_ite
     else:  # no convergence in max_iter -> statistical failure -> NaN
         return None
     if add_intercept:
-        return float(beta[1]), float(beta[0])
+        return float(beta[0]), float(beta[1])
     return 0.0, float(beta[0])
 
 
@@ -456,43 +456,146 @@ def _lad_coordinate_descent(xs: np.ndarray, ys: np.ndarray, add_intercept: bool,
 
 
 def _lad_fit(xs: np.ndarray, ys: np.ndarray, add_intercept: bool) -> tuple[float, float] | None:
-    """L1 regression fit of one cross-section.
+    """Solve LAD globally as a bounded sparse LP, or fail closed.
 
-    Uses ``scipy.optimize.minimize`` (Nelder-Mead on ``sum |resid|``) with a
-    median-based init when scipy is available, else the iterated weighted
-    median.  Returns ``(intercept, slope)`` or ``None`` on statistical failure.
+    The 10,000-row ceiling is an explicit local allocation guard for this
+    helper, not a substitute for runtime resource-broker admission.
     """
-    n = xs.size
-    if n < 2:
+    try:
+        x = np.asarray(xs, dtype=float)
+        y = np.asarray(ys, dtype=float)
+    except (TypeError, ValueError, OverflowError):
         return None
-    if not add_intercept:
-        if np.all(np.abs(xs) < 1e-12):
+    if (x.ndim != 1 or y.ndim != 1 or x.shape != y.shape or x.size < 2
+            or not np.all(np.isfinite(x)) or not np.all(np.isfinite(y))):
+        return None
+    n = x.size
+    if n > 10_000:
+        return None
+
+    x_max = float(np.max(np.abs(x)))
+    y_max = float(np.max(np.abs(y)))
+    if x_max == 0.0:
+        return None
+    if y_max == 0.0:
+        y_max = 1.0
+
+    def _origin_coordinates(values: np.ndarray) -> tuple[np.ndarray, float]:
+        with np.errstate(over="ignore", invalid="ignore"):
+            delta = values - values[0]
+        if np.all(np.isfinite(delta)):
+            base_scale = float(np.max(np.abs(delta)))
+            if base_scale == 0.0:
+                return np.zeros_like(values), 0.0
+            return delta / base_scale, base_scale
+        absolute_scale = float(np.max(np.abs(values)))
+        normalized_values = values / absolute_scale
+        normalized_delta = normalized_values - normalized_values[0]
+        return normalized_delta, absolute_scale
+
+    if add_intercept:
+        x_delta, x_base_scale = _origin_coordinates(x)
+        x_center = float(np.mean(x_delta))
+        x_centered = x_delta - x_center
+        x_spread = float(np.max(np.abs(x_centered)))
+        if x_base_scale == 0.0 or x_spread == 0.0:
             return None
-        ratios = ys / xs
-        weights = np.abs(xs)
-        order = np.argsort(ratios)
-        cw = np.cumsum(weights[order])
-        mid = 0.5 * cw[-1]
-        return 0.0, float(ratios[order[min(int(np.searchsorted(cw, mid)), n - 1)]])
-    try:
-        b_ols = np.polyfit(xs, ys, 1)
-        beta0 = np.array([float(b_ols[1]), float(b_ols[0])])  # (intercept, slope)
-    except Exception:
-        return None
-    if not np.all(np.isfinite(beta0)):
-        return None
-    try:
-        from scipy.optimize import minimize
+        feature = x_centered / x_spread
 
-        def _obj(beta: np.ndarray) -> float:
-            return float(np.sum(np.abs(ys - (beta[0] + beta[1] * xs))))
+        y_delta, y_base_scale = _origin_coordinates(y)
+        y_center = float(np.mean(y_delta))
+        y_centered = y_delta - y_center
+        y_spread = float(np.max(np.abs(y_centered)))
+        if y_base_scale == 0.0 or y_spread == 0.0:
+            y_base_scale = y_max
+            y_spread = 1.0
+            target = np.zeros_like(y)
+        else:
+            target = y_centered / y_spread
+        design = np.column_stack([np.ones(n), feature])
+    else:
+        x_base_scale = x_max
+        x_spread = 1.0
+        y_base_scale = y_max
+        y_spread = 1.0
+        feature = x / x_max
+        target = y / y_max
+        design = feature.reshape(-1, 1)
 
-        res = minimize(_obj, beta0, method="Nelder-Mead", options={"maxiter": 2000, "xatol": 1e-8, "fatol": 1e-10})
-        if res.success and np.all(np.isfinite(res.x)):
-            return float(res.x[0]), float(res.x[1])
-        return _lad_coordinate_descent(xs, ys, add_intercept)
-    except ImportError:  # scipy unavailable -> pure-numpy iterated median
-        return _lad_coordinate_descent(xs, ys, add_intercept)
+    p = design.shape[1]
+    try:
+        from scipy.optimize import linprog
+        from scipy.sparse import csr_matrix, eye, hstack, vstack
+        sparse_design = csr_matrix(design)
+        identity = eye(n, format="csr")
+        constraints = vstack([
+            hstack([sparse_design, -identity], format="csr"),
+            hstack([-sparse_design, -identity], format="csr"),
+        ], format="csr")
+        rhs = np.concatenate([target, -target])
+        objective = np.concatenate([np.zeros(p), np.ones(n)])
+        bounds = [(None, None)] * p + [(0.0, None)] * n
+        result = linprog(
+            objective, A_ub=constraints, b_ub=rhs, bounds=bounds,
+            method="highs", options={"maxiter": 10_000, "time_limit": 5.0})
+    except (ImportError, MemoryError, RuntimeError, ValueError, OverflowError):
+        return None
+    if (not result.success or result.status != 0 or result.x is None
+            or result.fun is None or not np.isfinite(result.fun)):
+        return None
+    beta = np.asarray(result.x[:p], dtype=float)
+    slack = np.asarray(result.x[p:], dtype=float)
+    if (beta.shape != (p,) or slack.shape != (n,)
+            or not np.all(np.isfinite(beta)) or not np.all(np.isfinite(slack))):
+        return None
+
+    normalized_residual = target - design @ beta
+    certificate_tol = 1e-8 * max(1.0, float(np.max(np.abs(target))))
+    if (np.any(slack < -certificate_tol)
+            or np.max(np.abs(normalized_residual) - slack) > certificate_tol
+            or abs(float(np.sum(slack)) - float(result.fun)) > certificate_tol * n):
+        return None
+
+    def _scaled_ratio(
+        value: float,
+        numerator_a: float,
+        numerator_b: float,
+        denominator_a: float,
+        denominator_b: float = 1.0,
+    ) -> float:
+        vm, ve = np.frexp(value)
+        am, ae = np.frexp(numerator_a)
+        bm, be = np.frexp(numerator_b)
+        cm, ce = np.frexp(denominator_a)
+        dm, de = np.frexp(denominator_b)
+        return float(np.ldexp(
+            (vm * am * bm) / (cm * dm), ve + ae + be - ce - de))
+
+    if add_intercept:
+        slope = _scaled_ratio(
+            float(beta[1]), y_base_scale, y_spread, x_base_scale, x_spread)
+        with np.errstate(over="ignore", invalid="ignore"):
+            intercept_residual = y - slope * x
+        if not np.all(np.isfinite(intercept_residual)):
+            return None
+        intercept = float(np.median(intercept_residual))
+    else:
+        slope = _scaled_ratio(float(beta[0]), y_max, 1.0, x_max)
+        intercept = 0.0
+    if not np.all(np.isfinite([intercept, slope])):
+        return None
+
+    with np.errstate(over="ignore", invalid="ignore"):
+        original_residual = y - (intercept + slope * x)
+    if not np.all(np.isfinite(original_residual)):
+        return None
+    restored_residual = (original_residual / y_base_scale) / y_spread
+    restored_objective = float(np.sum(np.abs(restored_residual)))
+    objective_tol = 5e-7 * max(1.0, float(result.fun))
+    if (not np.isfinite(restored_objective)
+            or abs(restored_objective - float(result.fun)) > objective_tol):
+        return None
+    return float(intercept), float(slope)
 
 
 def _cs_robust_resid(y: pd.DataFrame, x: pd.DataFrame, fit_fn: Any, add_intercept: bool) -> pd.DataFrame:
@@ -522,11 +625,12 @@ def _cs_robust_resid(y: pd.DataFrame, x: pd.DataFrame, fit_fn: Any, add_intercep
         if coefs is None:
             continue  # statistical failure -> NaN for this row
         intercept, slope = coefs
-        if add_intercept:
-            fitted = intercept + slope * xv[row]
-        else:
-            fitted = slope * xv[row]
-        out[row] = yv[row] - fitted
+        with np.errstate(over="ignore", invalid="ignore"):
+            fitted = intercept + slope * xs if add_intercept else slope * xs
+            residual = ys - fitted
+        finite_output = np.isfinite(fitted) & np.isfinite(residual)
+        valid_positions = np.flatnonzero(valid)
+        out[row, valid_positions[finite_output]] = residual[finite_output]
     return _frame_like(y, out)
 
 
@@ -828,4 +932,3 @@ try:
     extend_extended_only(["group_multi_resid"])
 except ImportError:  # pragma: no cover
     pass
-

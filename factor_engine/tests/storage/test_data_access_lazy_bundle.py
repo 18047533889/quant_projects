@@ -6,9 +6,10 @@ from unittest.mock import MagicMock, patch
 
 import pandas as pd
 import pytest
+from factor_engine.tests.storage.test_data_access_source_concurrent import admitted_cache
 
 
-def test_prefetch_lazy_bundle_single_collect():
+def test_prefetch_lazy_bundle_single_collect(admitted_cache):
     pytest.importorskip("polars")
 
     from factor_engine.storage.sources.data_access_source import DataAccessSource

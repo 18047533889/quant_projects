@@ -1,0 +1,25 @@
+schema: factor_engine.v8.evidence.v1
+git_sha: 118cd21c6262082336daa545ddc06b6f78def7b9
+timestamp: '2026-09-09T00:29:00+08:00'
+status: MERGED_SCOPED_GREEN
+files:
+  factor_engine/runtime/bounded_pipeline.py: 6f847f35e08b8c0650a55f90c1095fed42abebbfffbfc97451bfa8a8430bf660
+  factor_engine/tests/runtime/test_v8_empty_startup_cleanup.py: expanded
+defect: Final database cleanup ignored cleanup_pending, released coordinator lock and lost remaining authority references.
+changes:
+  - Stop closing later authorities after an uncertain state/manifest close.
+  - Retain lock, broker, state, manifest and existing primary error; append cleanup failures.
+tests:
+  checkpoint_before_fix: '1 failed,586 passed,1 strict R02 xfail in318.29s'
+  checkpoint_xml: /tmp/v8-all-role-seal-fixed.xml
+  deterministic_red: '1 failed,2 passed; fake manifest updated to honor new registration interface, preserving prior authority assertions'
+  deterministic_red_xml: /tmp/v8-seal-close-quarantine-red.xml
+  related_green: '17 passed,29 warnings in17.69s'
+  related_xml: /tmp/v8-seal-close-quarantine-green.xml
+  independent_review: v8_protocol reviewed source and ran3 scoped tests
+  strengthened_green: '5 passed in0.95s; state.close uncertainty forbids manifest.close, tested with and without an original primary'
+  strengthened_xml: /tmp/v8-final-db-close-five.xml
+limitations:
+  - A state reference may already be closed when a subsequent manifest close becomes uncertain.
+  - This retains cleanup authority; it does not certify arbitrary native allocation reclamation.
+  - Mathematical/native/GPU/approved-data/100k/performance and production acceptance NOT_RUN.

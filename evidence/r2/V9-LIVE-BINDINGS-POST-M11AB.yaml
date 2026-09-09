@@ -1,0 +1,38 @@
+schema: v9-live-binding-export-evidence-1
+date: '2026-09-09'
+git_sha: 118cd21c6262082336daa545ddc06b6f78def7b9
+workspace: /home/sunhaiwei/quant_projects
+issue: V9-Q01
+status: MAIN_CURRENT_WINNER_EXPORT_DEPENDENCY_CERTIFICATION_PARTIAL
+export:
+  path: V9-LIVE-BINDINGS-POST-M11AB-0af43f7f.jsonl
+  sha256: 48e202f05fbc40ed5675173de944e1a0292e62c7ce95030061006ef65a7669db
+  bytes: 41509680
+  rows: 4072
+  canonicals: 1756
+  backend_rows: {pandas_numpy: 1754, polars: 1755, sql: 563}
+  empty_callable_entrypoints: 0
+  coverage: {PARTIAL: 4072}
+  mathematical_certification: {NOT_CLAIMED: 4072}
+source_state:
+  rolling_core_sha256: 3341881a4f013f67ea08f2e4783cd46bb05c8542b6dd6e07c9cb4935072bcbd5
+  research_spectral_sha256: 0af43f7f0fb45f2c01b2a990e25b01e0f4b069e6bbadca951d1745aa4e2156b3
+command: >-
+  OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 PYTHONPATH=.
+  .venv/bin/python factor_engine/scripts/v8_binding_dependencies.py --all-canonicals
+  --output evidence/r2/V9-LIVE-BINDINGS-POST-M11AB-0af43f7f.jsonl
+limits: {max_nodes_per_binding: 256, max_values_per_binding: 4096}
+selected_default_snapshot:
+  path: V9-SELECTED-BINDINGS-POST-M11AB-0af43f7f.jsonl
+  sha256: 14779d59705869e2b0172f93b704484b0060615178eeeda6aa0b3e8212d6f2f3
+  canonicals: 56
+  records: 224
+  default_lookup_errors: 0
+  sql_lookup_errors: 56
+  scope: Default registry plus explicit pandas_numpy/polars/sql declarations; not RegionPlanner auto execution.
+limitations:
+  - Bounded callable dependency traversal records unresolved dynamic lookup and SQL emitter paths.
+  - Registered declaration is not actual backend execution, native certification, or numerical correctness.
+  - Missing advertised bindings fail the export rather than silently creating empty evidence.
+  - This replaces overlay-only export as main-source evidence at the named hashes.
+  - Future source changes require revalidation; no all-operator PASS claim.

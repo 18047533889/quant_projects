@@ -1,0 +1,27 @@
+schema: factor_engine.v8.evidence.v1
+git_sha: 118cd21c6262082336daa545ddc06b6f78def7b9
+timestamp: '2026-09-09T00:49:00+08:00'
+status: DEFAULT_WIRING_MERGED_SCOPED_GREEN
+files:
+  factor_engine/runtime/bounded_pipeline.py: 4b3024fe268eb31f30e7dff70f092685194899b138fdc5456f2af5dd86f58d82
+  factor_engine/runtime/finite_manifest.py: 378531b020da441db648d606b5fcb7c607d97e9f1e2a7a0cc586e47b7afd03b3
+  factor_engine/tests/runtime/test_v8_bounded_ingestion_lease.py: 74c2e7847142febe64b6123dee38f30895d2780526279fdaf74b752d2bd57d0d
+changes:
+  - Default pipeline passes a view of the same shared broker to ingestion for controlled-output memory admission.
+  - Before/after acquisition checks use original absolute job/input/resource deadlines and cancellation.
+  - Late or cancelled grant releases its lease; release uncertainty retains exact lease on original error.
+  - Child input timeout and parent join use remaining original absolute input budget; admission wait cannot reset it.
+  - Stable distinct JOB_DEADLINE_EXCEEDED, INPUT_INGESTION_TIMEOUT and RESOURCE_WAIT_EXHAUSTED reasons.
+  - Validate standalone and supervised integer limits and finite positive timeouts before opening DB/process resources.
+tests:
+  agent_final_stage: '55 passed in5.77s'
+  production_related: '65 passed,40 warnings in17.97s'
+  xml: /tmp/v8-default-ingestion-lease-merged.xml
+  root_review_fixes: before/after grant deadline and cancellation; lease cleanup authority; no misuse of egress FIFO; distinct deadline reasons
+limitations:
+  - Generic memory wait uses bounded50ms polling, not egress-specific notifications or generic FIFO fairness.
+  - Only controlled per-definition pickle output/copy/frame is reserved; not full process RSS, memo, native internals or source objects.
+  - Parent aggregate spawn pickle and generic live generator support remain OPEN; no fork substitution.
+  - Oversized names/dependency metadata remain separate OPEN work in an isolated stage.
+  - Earlier610-pass/wheel checkpoint predates this default wiring; subsequent batch-registration patch changes bounded source again.
+  - Real-data/GPU/100k/complete-native/performance and production acceptance NOT_RUN.

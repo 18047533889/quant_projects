@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="2" skipped="0" tests="3" time="0.999" timestamp="2026-09-09T05:37:31.598270+08:00" hostname="qs-compute-gpu-hk-01"><testcase classname="test_v9_m11_integer_bounds" name="test_huge_integer_diagnostic_values_and_keys_are_not_retained" time="0.000"><failure message="KeyError: 'value'">def test_huge_integer_diagnostic_values_and_keys_are_not_retained():
+        huge = 1 &lt;&lt; 100000
+        status = rc.FitStatus(False, "singular", (("value", huge), (huge, 2)))
+        details = dict(status.details)
+&gt;       assert details["value"] == "&lt;oversized_integer&gt;"
+               ^^^^^^^^^^^^^^^^
+E       KeyError: 'value'
+
+/tmp/v9-root-int.hnqQYz/test_v9_m11_integer_bounds.py:9: KeyError</failure></testcase><testcase classname="test_v9_m11_integer_bounds" name="test_huge_integer_scope_cannot_create_owned_receipt" time="0.000"><failure message="AssertionError: assert &lt;[ValueError('Exceeds the limit (4300 digits) for integer string conversion; use sys.set_int_max_str_digits() to increase the limit') raised in repr()] int object at 0x2485f940&gt; is None&#10; +  where &lt;[ValueError('Exceeds the limit (4300 digits) for integer string conversion; use sys.set_int_max_str_digits() to increase the limit') raised in repr()] int object at 0x2485f940&gt; = &lt;[ValueError('Exceeds the limit (4300 digits) for integer string conversion; use sys.set_int_max_str_digits() to increase the limit') raised in repr()] FitScope object at 0x7e2560cb2f30&gt;.instrument">def test_huge_integer_scope_cannot_create_owned_receipt():
+        huge = 1 &lt;&lt; 100000
+        scope = rc.FitScope(canonical="op", instrument=huge, window_start=huge)
+        with rc.fit_receipt_scope(scope):
+            sanitized = rc.current_fit_scope()
+&gt;           assert sanitized.instrument is None
+E           AssertionError: assert &lt;[ValueError('Exceeds the limit (4300 digits) for integer string conversion; use sys.set_int_max_str_digits() to increase the limit') raised in repr()] int object at 0x2485f940&gt; is None
+E            +  where &lt;[ValueError('Exceeds the limit (4300 digits) for integer string conversion; use sys.set_int_max_str_digits() to increase the limit') raised in repr()] int object at 0x2485f940&gt; = &lt;[ValueError('Exceeds the limit (4300 digits) for integer string conversion; use sys.set_int_max_str_digits() to increase the limit') raised in repr()] FitScope object at 0x7e2560cb2f30&gt;.instrument
+
+/tmp/v9-root-int.hnqQYz/test_v9_m11_integer_bounds.py:19: AssertionError</failure></testcase><testcase classname="test_v9_m11_integer_bounds" name="test_normal_integer_diagnostics_and_nanosecond_coordinates_are_preserved" time="0.000" /></testsuite></testsuites>

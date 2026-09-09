@@ -31,6 +31,7 @@ def _register(name: str, description: str, params: list[str], unit: str, fn, cos
         source="ts_model.complexity",
         backend="pandas_numpy",
         status="experimental",
+        semantic_version="2.0" if name == "ts_pseudocount_sample_entropy" else "",
     )
     class _ComplexityOp(SeriesOperator):
         metadata = metadata(name, description, params, unit=unit, cost=cost,
@@ -114,10 +115,14 @@ def _sample_entropy(vals: np.ndarray, m: int, r_scale: float, window: int) -> fl
         return np.nan
     n = len(finite)
 
+    # A and B must use the same starts that have an (m+1)th observation.
+    # The terminal length-m-only template is not an extendable trial.
+    extendable_starts = n - m
+
     def _count(pattern_len: int) -> int:
         count = 0
-        for i in range(n - pattern_len):
-            for j in range(i + 1, n - pattern_len + 1):
+        for i in range(extendable_starts - 1):
+            for j in range(i + 1, extendable_starts):
                 d = np.max(np.abs(finite[i : i + pattern_len] - finite[j : j + pattern_len]))
                 if d < r:
                     count += 1
@@ -136,10 +141,6 @@ def _sample_entropy(vals: np.ndarray, m: int, r_scale: float, window: int) -> fl
     return float(-np.log(a / b))
 
 
-_register("ts_sample_entropy", "样本熵（相似子序列继续保持相似的概率）。", ["x", "m", "r", "window"], "level",
-           lambda x, m=2, r=0.2, window=200: _apply(x, lambda v: _sample_entropy(v, int(m), float(r), int(window))), cost=9)
-
-
 def _pseudocount_sample_entropy(vals: np.ndarray, m: int, r_scale: float, window: int) -> float:
     seg = vals[-int(window):]
     # P1-91: physical time axis only — the embedding never bridges a gap.
@@ -151,10 +152,12 @@ def _pseudocount_sample_entropy(vals: np.ndarray, m: int, r_scale: float, window
         return np.nan
     n = len(finite)
 
+    extendable_starts = n - m
+
     def _count(pattern_len: int) -> int:
         count = 0
-        for i in range(n - pattern_len):
-            for j in range(i + 1, n - pattern_len + 1):
+        for i in range(extendable_starts - 1):
+            for j in range(i + 1, extendable_starts):
                 d = np.max(np.abs(finite[i : i + pattern_len] - finite[j : j + pattern_len]))
                 if d < r:
                     count += 1
@@ -365,18 +368,28 @@ def _regime_filter(vals: np.ndarray, window: int, stat: str, transition_prob: fl
     )
     p_hi = 0.5  # stationary of the symmetric P
     p_hi_hist: list[float] = []
+    # Long-double log scores keep the relative tail evidence representable even
+    # when both ordinary Gaussian densities underflow to zero in float64.
+    sigma_hi_ld = np.longdouble(sigma_hi)
+    sigma_lo_ld = np.longdouble(sigma_lo)
     for x in r:
-        like_hi = np.exp(-0.5 * (x / sigma_hi) ** 2) / sigma_hi
-        like_lo = np.exp(-0.5 * (x / sigma_lo) ** 2) / sigma_lo
         p_lo = 1.0 - p_hi
         # prediction: pi_{t|t-1} = P^T · pi_{t-1|t-1}
         pred_lo = P[0, 0] * p_lo + P[1, 0] * p_hi
         pred_hi = P[0, 1] * p_lo + P[1, 1] * p_hi
-        # update: pi_t proportional to likelihood_t ⊙ pi_{t|t-1}
-        post_lo = like_lo * pred_lo
-        post_hi = like_hi * pred_hi
-        z = post_lo + post_hi
-        p_hi = min(max(post_hi / max(z, 1e-300), 1e-6), 1.0 - 1e-6)
+        # update in log space: pi_t proportional to likelihood_t * prediction.
+        # The normalizing logaddexp preserves the transition prediction when
+        # emissions are identical instead of fabricating a clipped low state.
+        x_ld = np.longdouble(x)
+        log_hi = (np.log(np.longdouble(pred_hi)) - np.log(sigma_hi_ld)
+                  - np.longdouble(0.5) * (x_ld / sigma_hi_ld) ** 2)
+        log_lo = (np.log(np.longdouble(pred_lo)) - np.log(sigma_lo_ld)
+                  - np.longdouble(0.5) * (x_ld / sigma_lo_ld) ** 2)
+        log_norm = np.logaddexp(log_hi, log_lo)
+        if not np.isfinite(log_norm):
+            return np.nan
+        p_hi = float(np.exp(log_hi - log_norm))
+        p_hi = min(max(p_hi, 1e-6), 1.0 - 1e-6)
         p_hi_hist.append(p_hi)
     if stat == "prob":
         return float(p_hi_hist[-1])

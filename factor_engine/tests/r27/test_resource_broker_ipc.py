@@ -16,10 +16,18 @@ def _acquire_in_child(proxy, nbytes, output, release_event):
 
 
 def _broker():
-    return ResourceBroker(
+    from factor_engine.runtime.auto_memory_budget import AutoMemoryBudget
+    broker = ResourceBroker(
         hard_memory_limit=8 * 1024**3, cpu_slots=4,
         min_host_reserve_gb=0, min_host_reserve_fraction=0,
     )
+    budget = 1024**3
+    broker._refresh_auto_budget = lambda: AutoMemoryBudget(
+        hard_memory_limit=8 * 1024**3, emergency_reserve=0,
+        safe_live_budget=budget, execution_budget=budget,
+        safety_factor=.8, measurement_state="TEST_INJECTED",
+    )
+    return broker
 
 
 def test_spawn_children_compete_for_one_parent_budget():

@@ -948,7 +948,31 @@ def make_cleaned_kernel(eval_fn: Callable[[PlanNode, ExecutionContext], Any], op
             _record_uncertified(
                 canonical, f"{type(exc).__name__}: {exc} (research degradation)", ctx=ctx
             )
-        result = _call_cleaned_operator(canonical, operator, call_args, kw)
+        # M11: transport only caller-owned execution identity across the public
+        # operator boundary.  Instrument/window coordinates remain the model
+        # producer's responsibility; absent authority stays None.
+        from factor_engine.cleaned_operators.ts_model._rolling_core import (
+            FitScope,
+            fit_failure_receipts,
+            fit_receipt_scope,
+        )
+
+        receipt_scope = FitScope(
+            canonical=canonical,
+            backend=backend,
+            profile=getattr(ctx, "profile_id", None),
+            execution_id=getattr(ctx, "execution_id", None),
+            run_id=getattr(ctx, "run_id", None),
+            task_id=getattr(ctx, "task_id", None),
+            factor_id=getattr(ctx, "factor_id", None),
+        )
+        with fit_receipt_scope(receipt_scope):
+            sink = getattr(ctx, "fit_failure_sink", None)
+            if sink is None:
+                result = _call_cleaned_operator(canonical, operator, call_args, kw)
+            else:
+                with fit_failure_receipts(sink):
+                    result = _call_cleaned_operator(canonical, operator, call_args, kw)
         # Keep literal-only arithmetic scalar.  Promoting an intermediate such as
         # ``floor(window / 2) + 1`` to a panel makes it an invalid lag/window
         # argument when it is later consumed by a time-series operator.

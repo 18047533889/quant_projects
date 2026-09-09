@@ -210,9 +210,10 @@ def test_ssa_parameter_validation():
     result = op.calculate(panel, window=15, n_components=3)
     assert result.shape == panel.shape
 
-    # Window too small (should clamp)
-    result = op.calculate(panel, window=3, n_components=2)
-    assert result.shape == panel.shape
+    # The declared minimum is authoritative; no silent window replacement.
+    from factor_engine.backend.operator_errors import OperatorParameterError
+    with pytest.raises(OperatorParameterError):
+        op.calculate(panel, window=3, n_components=2)
 
 
 def test_wavelet_parameter_validation():
@@ -338,11 +339,20 @@ def test_l1_trend_smoothness():
 
     result = op.calculate(panel, window=40, lambda_l1=0.2)
 
-    # Extracted trend should be smoother (lower second derivative)
-    original_d2 = np.abs(np.diff(panel["S0"].values, n=2)).mean()
-    trend_d2 = np.abs(np.diff(result["S0"].values[40:], n=2)).mean()
-
-    assert trend_d2 < original_d2
+    # The objective constrains each fitted window, not the concatenation of
+    # endpoints from different fits. Check the last window's KKT conditions
+    # independently and connect its certified endpoint to the public output.
+    from factor_engine.cleaned_operators.technical.denoise_filter import _l1_trend_filter
+    x = signal[-40:]
+    fitted = _l1_trend_filter(x, .2)
+    d = np.diff(np.eye(40), n=2, axis=0)
+    dual = np.linalg.lstsq(d.T, x - fitted, rcond=None)[0]
+    np.testing.assert_allclose(fitted - x + d.T @ dual, 0., atol=3e-6)
+    assert np.max(np.abs(dual)) <= .2 + 3e-6
+    active = np.abs(d @ fitted) > 3e-6
+    np.testing.assert_allclose(dual[active], .2 * np.sign((d @ fitted)[active]), atol=3e-6)
+    assert np.abs(d @ fitted).sum() <= np.abs(d @ x).sum() + 1e-6
+    assert result.iloc[-1, 0] == pytest.approx(fitted[-1], abs=1e-10)
 
 
 # ---------------------------------------------------------------------------

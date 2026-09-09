@@ -1,0 +1,32 @@
+schema: v9-integrated-verification-1
+date: '2026-09-09'
+git_sha: 118cd21c6262082336daa545ddc06b6f78def7b9
+workspace: /home/sunhaiwei/quant_projects
+source_state:
+  registry_sha256: 2dad4938a702dff291d553c14bb43724b3d5250c90b3d512f553c2fa8e4159e2
+  snapshot_sha256: 6447e867beef9cc2fc7f30e040d19033946a45b0dad8ea58546698ee88244ec1
+  bounded_pipeline_sha256: 2387e5d78e9c43aa673b19d478f70c7b246b2c611e8ddb5bb64dca8628c3900b
+  parameter_aliases_sha256: 44fc5f53be9a38733fa6aa8cf3089d96926eafd6744ca19f31176af41588eb2c
+tests:
+  v9_files_and_generic_snapshot:
+    command: find factor_engine/tests -name 'test_v9*.py' -print0 | xargs -0 .venv/bin/python -m pytest -q factor_engine/tests/runtime/test_fit_failure_evidence.py --junitxml=evidence/r2/v9-wave7-targeted.xml
+    result: 691 passed, 26 warnings, 180.83 seconds
+  relational_r19:
+    result: 22 passed, 3 warnings, 81.78 seconds
+    junit: v9-relational-r19-main.xml
+  public_planner:
+    result: PASS_SCOPED
+    artifact: V9-PUBLIC-PLANNER-WAVE7.json
+    sha256: 917233cf7b363ac1a0b27df9db3bd9a7947469cf1cd8504a6e8f1f6fccf8e448
+    actual_api: Optimizer.optimize_with_pass_trace
+    optimizer_compile: UNAVAILABLE
+    checks: Six passes, invariant checks, legacy equivalence, typed-unit and numeric-policy rejection.
+  touched_files_syntax_and_diff_check: PASS
+  broad_collection_attempt:
+    status: INTERRUPTED_NOT_PASS
+    detail: Broad tests-directory collection was interrupted at 31.86s and replaced with explicit v9 test filenames; no test execution result claimed.
+limitations:
+  - This checkpoint excludes the still-staged M11-C runtime transport/durability patch.
+  - Test counts overlap and are not additive operator/backend coverage.
+  - Full repository CI, real auto80/GPU/100k throughput, process-family OOM proof and all-backend numerical certification NOT_RUN.
+  - No GitHub, commit, publication, production deployment, or production-data mutation.

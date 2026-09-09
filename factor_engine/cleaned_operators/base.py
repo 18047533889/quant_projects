@@ -761,6 +761,16 @@ class OperatorMetadata:
     # explicit, catalog-visible declaration so the strict unknown-kwarg gate can
     # reject genuinely hidden parameters without breaking documented aliases.
     param_aliases: Dict[str, str] = field(default_factory=dict)
+    # Backward-compatible parameters accepted by the kernel but intentionally
+    # excluded from effective numerical identity and search/menu generation.
+    deprecated_ignored_params: tuple[str, ...] = ()
+    # Named input groups whose expressions must be pairwise structurally
+    # distinct.  This is an analyzer-time contract: runtimes must not infer
+    # expression identity from panel values.
+    distinct_input_groups: tuple[tuple[str, ...], ...] = ()
+    # Named inputs that must carry the exact same proven canonical unit.  The
+    # analyzer enforces this contract without inspecting runtime values.
+    same_unit_input_groups: tuple[tuple[str, ...], ...] = ()
     # WS4 P0-07: time-frequency grain contract.  A ``SessionAggregationOperator``
     # (or any operator that changes frequency — e.g. minute panel -> daily panel)
     # declares its input/output grain here so the catalog and policy layer can
@@ -2027,14 +2037,17 @@ def bind_operator_call(
         metadata, processed_args, processed_kwargs
     )
     active, inactive = _enforce_active_when(metadata, (), bound, defaults)
+    ignored = frozenset(getattr(metadata, "deprecated_ignored_params", ()) or ())
+    scalar_params = {k: v for k, v in scalar_params.items() if k not in ignored}
+    effective_bound = {k: v for k, v in bound.items() if k not in ignored}
     bound_obj = NormalizedBoundParameters(
         panel_inputs=panel_inputs,
         panel_param_names=panel_param_names,  # R30 §11: name-bound broadcast
         scalar_params=scalar_params,
         canonical_aliases_resolved=alias_resolved,
         defaults_applied=dict(defaults or {}),
-        inactive_params=frozenset(inactive),
-        normalized_values=dict(bound),
+        inactive_params=frozenset(inactive) | ignored,
+        normalized_values=effective_bound,
     )
     return BoundOperatorCall(
         metadata=metadata,
@@ -2196,6 +2209,7 @@ def register_operator(
     source: str = "",
     backend: str | None = None,
     status: str = "implemented",
+    semantic_version: str = "",
     replace: bool = False,
     replacement_reason: str = "",
     expected_old_source: str = "",
@@ -2253,6 +2267,7 @@ def register_operator(
             source=source or "factor_dsl_np",
             aliases=name_aliases,
             status=status,
+            semantic_version=semantic_version,
             backend_explicit=backend_explicit,
             replace=replace,
             replacement_reason=replacement_reason,

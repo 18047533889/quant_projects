@@ -33,6 +33,7 @@ Complex algorithms are implemented as skeletons with TODO markers.
 """
 
 import polars as pl
+from factor_engine.backend.contracts import ExecutionKind, PhysicalImplementationSpec
 import numpy as np
 from typing import Optional, Union
 
@@ -429,7 +430,6 @@ class TSGPDShapePWMPolarsNative(SeriesOperator):
         "side": ParamSpec(dtype=str, default="both", param_role=ParamRole.POLICY),
         "tail_fraction": ParamSpec(dtype=float, default=0.1, param_role=ParamRole.ESTIMATOR_RESOLUTION),
     }
-
     def _calculate_series(self, x, window=120, side="both", tail_fraction=0.1,
                           min_tail_count=10, **kwargs):
         # R4-100 parity: canonical (x, window, side, tail_fraction,
@@ -600,19 +600,72 @@ class TSHillTailIndexPolarsNative(SeriesOperator):
         description="Hill estimator of tail thickness parameter",
         param_names=["x","window","side","tail_fraction","min_tail_count"],
         return_type="series",
-        tags=["time_series", "rolling", "extreme_tail", "pit_safe"],
+        tags=["time_series", "rolling", "extreme_tail", "pit_safe", "polars", "cpu_udf"],
     )
     metadata.param_specs = {
         "window": ParamSpec(dtype=int, min=20, param_role=ParamRole.HORIZON),
         "tail_fraction": ParamSpec(dtype=float, min=0.01, max=0.5, param_role=ParamRole.STATE_THRESHOLD),
     }
+    _physical_spec = PhysicalImplementationSpec(
+        canonical="ts_hill_tail_index",
+        backend="polars",
+        execution_kind=ExecutionKind.DELEGATE_PYTHON,
+        supports_lazy=False,
+        supports_streaming=False,
+        materializes_full_panel=True,
+        requires_sorted=True,
+        supports_nulls=True,
+        supports_nan=True,
+        supports_inf=True,
+        implementation_source_hash="polars_native.ts_advanced_batch5:hill_shared_numpy:v1",
+        emitter_identity="polars.DataFrame.with_columns:python_numpy_udf",
+        kernel_identity="extreme_tail._hill_series:classic_hill:v1",
+        parameter_domain_hash="window>=20;side=upper|lower;0.01<=tail_fraction<=0.5;min_tail_count>=3",
+        semantic_contract_hash="classic_hill:positive_threshold:mirrored_lower:shared_cpu_kernel:v1",
+        notes="Eager per-column Python/NumPy UDF; explicitly not a native Polars expression.",
+    )
 
-    def _calculate_series(self, feature, window, tail_fraction=0.1, **kwargs):
-        # TODO: Implement proper Hill estimator
-        # Placeholder: tail quantile ratio
-        q95 = feature.abs().rolling_quantile(0.95, window_size=window)
-        q50 = feature.abs().rolling_quantile(0.50, window_size=window)
-        return q95 / (q50 + 1e-8)
+    def _calculate_series(
+        self,
+        feature,
+        window=120,
+        side="upper",
+        tail_fraction=0.2,
+        min_tail_count=10,
+        **kwargs,
+    ):
+        """Run the authoritative Hill kernel without a pandas round trip."""
+        from factor_engine.cleaned_operators.extreme_tail import _hill_series
+
+        side_k = str(side).lower()
+        if side_k not in {"upper", "lower"}:
+            raise ValueError("ts_hill_tail_index requires side in {'upper','lower'}")
+        if "stock_code" in feature.columns and feature["stock_code"].drop_nulls().n_unique() > 1:
+            raise ValueError(
+                "ts_hill_tail_index Polars CPU UDF requires a wide panel or a single-stock "
+                "long frame; multi-stock long input must be isolated by stock_code first"
+            )
+
+        value_columns = [
+            name for name in feature.columns if name not in {"date", "stock_code"}
+        ]
+        results = []
+        for name in value_columns:
+            values = feature.select(name).to_series().to_numpy().astype(np.float64)
+            results.append(
+                pl.Series(
+                    name=name,
+                    values=_hill_series(
+                        values,
+                        window,
+                        side_k,
+                        tail_fraction,
+                        min_tail_count,
+                    ),
+                    dtype=pl.Float64,
+                )
+            )
+        return feature.with_columns(results)
 
 
 @register_operator(name="ts_hsic", canonical="ts_hsic", backend="polars", status="research_only")
@@ -844,7 +897,7 @@ class TSHysteresisStatePolarsNative(SeriesOperator):
 # Industry and Market Liquidity Betas
 # ============================================================================
 
-@register_operator(name="ts_industry_liquidity_beta", canonical="ts_industry_liquidity_beta", backend="polars")
+@register_operator(name="ts_industry_liquidity_beta", canonical="ts_industry_liquidity_beta", backend="polars", semantic_version="2.0")
 class TSIndustryLiquidityBetaPolarsNative(SeriesOperator):
     """Beta to industry-level liquidity factor (rolling regression)"""
 
@@ -852,23 +905,35 @@ class TSIndustryLiquidityBetaPolarsNative(SeriesOperator):
         name="ts_industry_liquidity_beta",
         category="time_series",
         description="Rolling beta to industry liquidity factor",
-        param_names=["feature", "industry_liquidity", "window"],
+        param_names=["own_return", "industry_liquidity", "window"],
         return_type="series",
-        tags=["time_series", "rolling", "regression", "liquidity", "pit_safe"],
+        tags=["time_series", "rolling", "regression", "liquidity", "pit_safe", "native"],
     )
     metadata.param_specs = {
         "window": ParamSpec(dtype=int, min=20, param_role=ParamRole.HORIZON),
     }
+    _physical_spec = PhysicalImplementationSpec(
+        canonical="ts_industry_liquidity_beta", backend="polars",
+        execution_kind=ExecutionKind.POLARS_NATIVE_EXPR, supports_lazy=False,
+        materializes_full_panel=True, requires_sorted=True, supports_nulls=True,
+        supports_nan=True, supports_inf=True,
+        implementation_source_hash="polars_native.ts_advanced_batch5:industry_liquidity_beta:v2",
+        kernel_identity="polars.diff+rolling_cov_ddof0/rolling_var_ddof0:centered-origin:v2",
+        parameter_domain_hash="window:int:min=20",
+        semantic_contract_hash="liquidity_beta:on_liquidity_change:pairwise_finite:v2",
+    )
 
-    def _calculate_series(self, feature, industry_liquidity, window, **kwargs):
-        # Rolling beta = cov(feature, industry) / var(industry)
-        cov = (feature * industry_liquidity).rolling_mean(window) - \
-              (feature.rolling_mean(window) * industry_liquidity.rolling_mean(window))
-        var = industry_liquidity.rolling_var(window)
-        return cov / (var + 1e-8)
+    def _calculate_series(self, own_return, industry_liquidity, window, **kwargs):
+        from factor_engine.cleaned_operators.ts_model.polars_regression import (
+            _liquidity_delta, _pairwise_rolling,
+        )
+        w = int(window)
+        return _pairwise_rolling(
+            own_return, _liquidity_delta(industry_liquidity), w, max(3, w // 5)
+        )
 
 
-@register_operator(name="ts_market_liquidity_beta", canonical="ts_market_liquidity_beta", backend="polars")
+@register_operator(name="ts_market_liquidity_beta", canonical="ts_market_liquidity_beta", backend="polars", semantic_version="2.0")
 class TSMarketLiquidityBetaPolarsNative(SeriesOperator):
     """Beta to market-wide liquidity factor"""
 
@@ -876,20 +941,32 @@ class TSMarketLiquidityBetaPolarsNative(SeriesOperator):
         name="ts_market_liquidity_beta",
         category="time_series",
         description="Rolling beta to market liquidity factor",
-        param_names=["feature", "market_liquidity", "window"],
+        param_names=["own_return", "market_liquidity", "window"],
         return_type="series",
-        tags=["time_series", "rolling", "regression", "liquidity", "pit_safe"],
+        tags=["time_series", "rolling", "regression", "liquidity", "pit_safe", "native"],
     )
     metadata.param_specs = {
         "window": ParamSpec(dtype=int, min=20, param_role=ParamRole.HORIZON),
     }
+    _physical_spec = PhysicalImplementationSpec(
+        canonical="ts_market_liquidity_beta", backend="polars",
+        execution_kind=ExecutionKind.POLARS_NATIVE_EXPR, supports_lazy=False,
+        materializes_full_panel=True, requires_sorted=True, supports_nulls=True,
+        supports_nan=True, supports_inf=True,
+        implementation_source_hash="polars_native.ts_advanced_batch5:market_liquidity_beta:v2",
+        kernel_identity="polars.diff+rolling_cov_ddof0/rolling_var_ddof0:centered-origin:v2",
+        parameter_domain_hash="window:int:min=20",
+        semantic_contract_hash="liquidity_beta:on_liquidity_change:pairwise_finite:v2",
+    )
 
-    def _calculate_series(self, feature, market_liquidity, window, **kwargs):
-        # Rolling beta
-        cov = (feature * market_liquidity).rolling_mean(window) - \
-              (feature.rolling_mean(window) * market_liquidity.rolling_mean(window))
-        var = market_liquidity.rolling_var(window)
-        return cov / (var + 1e-8)
+    def _calculate_series(self, own_return, market_liquidity, window, **kwargs):
+        from factor_engine.cleaned_operators.ts_model.polars_regression import (
+            _liquidity_delta, _pairwise_rolling,
+        )
+        w = int(window)
+        return _pairwise_rolling(
+            own_return, _liquidity_delta(market_liquidity), w, max(3, w // 5)
+        )
 
 
 # ============================================================================

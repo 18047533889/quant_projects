@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import logging
+import math
+import numbers
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -610,6 +613,36 @@ _TIER_WORK_WEIGHT = {0: 1.0, 1: 10.0, 2: 3.0, 3: 8.0}
 _MEMORY_FACTOR = {"high": 3.0, "medium": 2.0, "low": 1.0}
 _DEFAULT_PLAN_ROWS = 500_000
 
+_M36_HSIC_DEFAULT_WINDOW = 120
+_M36_HSIC_LIVE_MATRIX_EQUIVALENTS = 12
+
+
+def _declared_kernel_workspace_bytes(op: str, attrs: object) -> int:
+    """Hard workspace floor for the live M36 residualized-HSIC kernel.
+
+    The final phase still references the second cross-fit's Kzz/Kzte/prediction
+    locals while holding Kx/Ky and their centred outputs.  Centering expression
+    temporaries, pairwise-median copies, and the dense solver's copy/workspace
+    are also live transiently.  Twelve float64 ``window x window`` equivalents
+    are an intentionally conservative bound, not a claim of a profiled exact
+    peak.
+    Nested plan nodes execute sequentially, so callers take the maximum across
+    nodes rather than summing mutually exclusive kernel workspaces.
+    """
+    if _resolve_canonical_name(op) != "ts_residualized_hsic":
+        return 0
+    values = attrs if isinstance(attrs, dict) else dict(attrs or {})
+    window = values.get("window", _M36_HSIC_DEFAULT_WINDOW)
+    if isinstance(window, bool) or not isinstance(window, numbers.Integral):
+        raise ValueError("ts_residualized_hsic.window must be an integer")
+    window = int(window)
+    if window < 1:
+        raise ValueError("ts_residualized_hsic.window must be positive")
+    bytes_per_window_squared = _M36_HSIC_LIVE_MATRIX_EQUIVALENTS * 8
+    if window > math.isqrt(sys.maxsize // bytes_per_window_squared):
+        return sys.maxsize
+    return bytes_per_window_squared * window * window
+
 
 def estimate_plan_cost(plan: object, *, rows: int | None = None) -> dict[str, object]:
     """计算逻辑计划子树代价摘要（节点数 + 最大 tier + 估真实 Work/峰值内存）。
@@ -630,6 +663,7 @@ def estimate_plan_cost(plan: object, *, rows: int | None = None) -> dict[str, ob
     total_work = 0.0
     max_mem_factor = 1.0
     max_mat_multiplier = 1.0
+    declared_workspace_bytes = 0
 
     row_count = rows or _DEFAULT_PLAN_ROWS
     rows_coeff = max(1.0, row_count / float(_DEFAULT_PLAN_ROWS))
@@ -637,6 +671,7 @@ def estimate_plan_cost(plan: object, *, rows: int | None = None) -> dict[str, ob
     def walk(node: object) -> None:
         """递归遍历计划子树并累计代价统计。"""
         nonlocal max_tier, node_count, total_work, max_mem_factor, max_mat_multiplier
+        nonlocal declared_workspace_bytes
         node_count += 1
         shared_ids.add(id(node))
         op = str(getattr(node, "op", "") or "")
@@ -650,17 +685,42 @@ def estimate_plan_cost(plan: object, *, rows: int | None = None) -> dict[str, ob
             spec = _cost_spec_for_registered(_resolve_canonical_name(op))
             if spec is not None:
                 max_mat_multiplier = max(max_mat_multiplier, spec.materialization_multiplier)
+            declared_workspace_bytes = max(
+                declared_workspace_bytes,
+                _declared_kernel_workspace_bytes(op, getattr(node, "attrs", {})),
+            )
         for child in getattr(node, "inputs", []) or []:
             walk(child)
 
     walk(plan)
-    peak_bytes = max(1, row_count) * 8 * max_mem_factor * max_mat_multiplier
+    ordinary_peak_bytes = max(1, row_count) * 8 * max_mem_factor * max_mat_multiplier
+    # M36 holds x/y/z and its output while the per-window dense kernel workspace
+    # is live. ``rows`` is the scheduler's flattened total-observation count
+    # (dates*instruments), so four float64 values per observation cover those
+    # panels. Do not multiply by ``instruments`` again; that argument is only a
+    # calibration-key dimension. The ordinary backend estimate can still
+    # dominate the panel component before the simultaneous workspace is added.
+    panel_input_output_floor_bytes = min(sys.maxsize, max(1, row_count) * 4 * 8)
+    if declared_workspace_bytes:
+        hard_peak_floor_bytes = min(
+            sys.maxsize,
+            max(ordinary_peak_bytes, panel_input_output_floor_bytes)
+            + declared_workspace_bytes,
+        )
+    else:
+        hard_peak_floor_bytes = 0
+    peak_bytes = max(ordinary_peak_bytes, hard_peak_floor_bytes)
     return {
         "node_count": node_count,
         "max_tier": max_tier,
         "expensive_ops": sorted(set(expensive)),
         "total_work": round(total_work * rows_coeff, 3),
         "peak_live_memory_bytes": int(peak_bytes),
+        "declared_workspace_bytes": int(declared_workspace_bytes),
+        "panel_input_output_floor_bytes": int(
+            panel_input_output_floor_bytes if declared_workspace_bytes else 0
+        ),
+        "hard_peak_floor_bytes": int(hard_peak_floor_bytes),
         "shared_node_count": len(shared_ids),
         "routing_basis": benchmark_status(),
     }
@@ -730,6 +790,7 @@ def calibrated_plan_peak_bytes(
     """
     summary = estimate_plan_cost(plan, rows=rows)
     static_peak = int(summary.get("peak_live_memory_bytes", 0))
+    hard_peak_floor = int(summary.get("hard_peak_floor_bytes", 0))
     try:
         from factor_engine.runtime.runtime_calibration import (
             calibration_key,
@@ -745,6 +806,19 @@ def calibrated_plan_peak_bytes(
             market=market,
             frequency=frequency,
         )
-        return calibrated_peak_bytes(static_peak, key)
+        calibrated, uncertainty = calibrated_peak_bytes(static_peak, key)
+        # TaskResourceContract applies uncertainty *after* this function.  For
+        # M36, clamp a finite sub-unit uncertainty to 1 so the final admissible
+        # bytes cannot undercut the hard input/output+workspace floor.  This
+        # avoids a float ceil/multiply round-trip losing the last byte.
+        # Invalid calibration uncertainty fails closed to the ordinary static
+        # contract behavior rather than manufacturing a negative/NaN budget.
+        if hard_peak_floor:
+            uncertainty = float(uncertainty)
+            if not math.isfinite(uncertainty) or uncertainty <= 0.0:
+                return static_peak, 1.30
+            uncertainty = max(1.0, uncertainty)
+            return max(int(calibrated), hard_peak_floor), uncertainty
+        return calibrated, uncertainty
     except Exception:
         return static_peak, 1.30

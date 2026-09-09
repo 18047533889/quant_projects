@@ -127,14 +127,6 @@ def _column_stats(
         length = prices.shape[0]
         if length < 1:
             continue
-        price_ok = np.isfinite(prices)
-        n_valid = int(price_ok.sum())
-        if n_valid < min_periods:
-            continue
-        current = price[t]
-        if not np.isfinite(current) or current <= 0.0:
-            continue
-
         # P0-033: a missing turnover is UNKNOWN, never a real zero-turnover
         # day.  A suspension is a genuine no-trade event, but a provider gap is
         # not; since the operator cannot tell them apart it must fail closed and
@@ -147,6 +139,30 @@ def _column_stats(
         # (whole row NaN) instead of clamping.
         if np.any(turns < 0.0):
             continue
+        # The residual old-mass diagnostic depends only on the strictly-past
+        # turnover path.  Compute it before any price/cost-distribution gate so
+        # no-trade windows correctly report 1 and unknown prices do not erase a
+        # separately identifiable turnover-only diagnostic.
+        u = turns
+        surv = np.exp(-u)
+        r = np.cumprod(surv[::-1])
+        suf = np.empty(length + 1)
+        suf[length] = 1.0
+        suf[:length] = r[::-1]
+        if length >= min_periods and np.isfinite(suf[0]):
+            old_mass[t] = float(suf[0])
+
+        # Price-cost outputs require strictly positive historical costs.
+        # A zero/negative price with positive turnover is unknown traded cost,
+        # exactly like a missing/Inf price; zero-turnover invalid prices carry
+        # no acquisition mass and may be ignored by the cost distribution.
+        price_ok = np.isfinite(prices) & (prices > 0.0)
+        n_valid = int(price_ok.sum())
+        if n_valid < min_periods:
+            continue
+        current = price[t]
+        if not np.isfinite(current) or current <= 0.0:
+            continue
         # R3-143: a day with POSITIVE turnover but a missing price means chips
         # changed hands at an UNKNOWN cost.  Dropping that mass and
         # renormalising the rest to 100% fabricates a full-cost distribution, so
@@ -158,16 +174,8 @@ def _column_stats(
         # hard-clipping to [0, 1-eps] made any >100% turnover erase every old
         # chip in a single day.  With a Poisson hazard the per-day survival
         # factor is exp(-u): u=1 -> 36.8% survive, u=2 -> 13.5%, u=3 -> 5.0%.
-        u = turns
-        surv = np.exp(-u)
-
-        # suffix survival: suf[k] = prod_{m=k}^{L-1} exp(-u[m]); suf[L] = 1.
-        r = np.cumprod(surv[::-1])
-        suf = np.empty(length + 1)
-        suf[length] = 1.0
-        suf[:length] = r[::-1]
         # raw weight at lag k: fraction replaced that day x still-held since.
-        w = (1.0 - surv) * suf[1 : length + 1]
+        w = (-np.expm1(-u)) * suf[1 : length + 1]
         w = np.where(price_ok, w, 0.0)
 
         total = float(w.sum())
@@ -180,7 +188,6 @@ def _column_stats(
         # it.  The raw old mass is ALWAYS recorded as a diagnostic (even when
         # the fail-closed threshold trips) so callers can see how much of the
         # float was window-truncated.
-        old_mass[t] = float(suf[0])
         if float(suf[0]) > _MAX_OLD_MASS:
             continue
         wn = w / total

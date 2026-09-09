@@ -1,0 +1,33 @@
+issue: V8-R07
+status: VALIDATION_HELPER_SCOPED_PASS_ORCHESTRATION_IN_PROGRESS
+baseline: 118cd21c6262082336daa545ddc06b6f78def7b9
+source: factor_engine/runtime/resume_validation.py
+source_sha256: edd3f82c4ce6644925217dd3151fcd196d9ae72056abb13bbcf1235495fe2673
+tests: factor_engine/tests/runtime/test_v8_resume_validation.py
+result: 29 passed
+junit: /tmp/v8-resume-final-authority.xml
+implemented:
+  - Read-only SQLite validation never deserializes factor definitions.
+  - Complete sealed manifest content is bound to an independently persisted manifest_identity record and immutable run identity.
+  - Definitions are hashed in bounded chunks under a finite verification deadline.
+  - Policy, deployment, business scope and JSON scalar types are compared exactly.
+  - State/attempt/commit-generation combinations are validated without modifying attempts.
+  - Pending and previously successful artifact obligations are streamed separately.
+  - Previous success requires persisted SUCCEEDED or REUSED plus VERIFIED commitment and an exact stored receipt.
+  - Artifact manifest and file bytes are checked against that previously verified receipt with exact run, ordinal, name, generation and policy identity.
+  - A caller-created receipt for a pending artifact cannot self-approve that artifact.
+controls:
+  - Actual verified Parquet writer output is accepted without recomputation.
+  - Manifest mutation and same-length chunk corruption are rejected.
+  - Corrupt state matrices, retry budgets, definitions, missing seals and bool/int identity aliases are rejected.
+not_claimed:
+  - Coordinator exclusivity or proof that previous worker PIDs exited.
+  - Automatic execution of pending work or safe worker epoch reuse.
+  - Mathematical re-certification from byte integrity checks.
+  - Real DataAccess, GPU, 100k factors or production performance acceptance.
+integration_requirements:
+  - Persist the seal once after complete ingestion and before first execution; never retrofit a missing seal at resume time.
+  - Hold the run coordinator lock across validation and execution.
+  - Hold admitted verification workspace and supervise I/O in a killable worker.
+  - Verify every previous-success obligation even when pending_count is zero.
+  - Prove old worker exit before reconciling or executing pending intents; preserve their attempt budgets and existing generations.

@@ -39,6 +39,7 @@ def canonical_ast_payload(node: Expr) -> dict[str, Any]:
             "canonical_name": node.canonical_name,
             "table": node.table,
             "source_name": node.source_name,
+            "catalog_hash": node.catalog_hash,
         }
     if isinstance(node, ColumnRef):
         return {"kind": "column", "name": node.name}

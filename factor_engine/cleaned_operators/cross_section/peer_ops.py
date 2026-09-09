@@ -7,6 +7,8 @@ are free-float capitalisation panels.  All kernels are causal.
 """
 from __future__ import annotations
 
+import math
+from decimal import Decimal, localcontext
 from typing import Any
 
 import numpy as np
@@ -74,6 +76,70 @@ def _aligned(*frames: pd.DataFrame) -> tuple[pd.DataFrame, ...]:
 
 
 def _peer_weighted_mean_ex_self_row(x_row: np.ndarray, g_row: np.ndarray, w_row: np.ndarray) -> np.ndarray:
+    """Weighted peer mean without forming ``group total - own``.
+
+    Prefix/suffix compensated sums keep the excluded value out of both
+    accumulations.  This avoids losing small peers when one member has a much
+    larger finite weighted value, while retaining linear work per group.
+    """
+    def _compensated_prefix(
+        values: np.ndarray,
+    ) -> tuple[np.ndarray, np.ndarray] | None:
+        totals = np.empty(values.size + 1, dtype=float)
+        errors = np.empty(values.size + 1, dtype=float)
+        totals[0] = errors[0] = 0.0
+        total = correction = 0.0
+        for position, value in enumerate(values, start=1):
+            updated = total + float(value)
+            if not np.isfinite(updated):
+                return None
+            if abs(total) >= abs(value):
+                correction += (total - updated) + float(value)
+            else:
+                correction += (float(value) - updated) + total
+            total = updated
+            if not np.isfinite(correction):
+                return None
+            totals[position] = total
+            errors[position] = correction
+        return totals, errors
+
+    def _decimal_leave_one_out(
+        values: np.ndarray, weights: np.ndarray
+    ) -> np.ndarray:
+        """Exact-domain fallback for explicitly detected float overflow.
+
+        This path is linear in group size.  At precision covering the complete
+        finite-binary64 product exponent span plus ``log10(N)`` guard digits,
+        Decimal products and totals are exact; leave-one-out values can
+        therefore use exact total-minus-own without losing a small peer.
+        """
+        result = np.full(values.size, np.nan, dtype=float)
+        with localcontext() as context:
+            # Exact finite binary64 products span roughly decimal exponents
+            # -2148 through +617.  Preserve that full ~2765-digit span, plus
+            # log10(N) guard digits, so cancellation cannot erase a tiny peer.
+            context.prec = 3200 + len(str(values.size))
+            decimal_values = [Decimal.from_float(float(v)) for v in values]
+            decimal_weights = [Decimal.from_float(float(w)) for w in weights]
+            decimal_products = [
+                weight * value
+                for value, weight in zip(decimal_values, decimal_weights)
+            ]
+            total_weight = sum(decimal_weights, Decimal(0))
+            total_product = sum(decimal_products, Decimal(0))
+            minimum_denominator = Decimal.from_float(float(_EPS))
+            for excluded, (own_weight, own_product) in enumerate(
+                zip(decimal_weights, decimal_products)
+            ):
+                denominator = total_weight - own_weight
+                if denominator > minimum_denominator:
+                    numerator = total_product - own_product
+                    candidate = float(numerator / denominator)
+                    if np.isfinite(candidate):
+                        result[excluded] = candidate
+        return result
+
     out = np.full(x_row.shape, np.nan, dtype=float)
     labels = pd.unique(g_row)
     for label in labels:
@@ -81,14 +147,53 @@ def _peer_weighted_mean_ex_self_row(x_row: np.ndarray, g_row: np.ndarray, w_row:
         count = int(np.sum(idx))
         if count <= 1:
             continue
-        total_w = float(np.sum(w_row[idx]))
-        total_wx = float(np.sum(w_row[idx] * x_row[idx]))
-        for j in np.flatnonzero(g_row == label):
-            if not np.isfinite(x_row[j]) or not np.isfinite(w_row[j]) or w_row[j] <= 0:
-                continue
-            denom = total_w - w_row[j]
+        members = np.flatnonzero(idx)
+        weights = w_row[members]
+        values = x_row[members]
+        with np.errstate(over="ignore", invalid="ignore"):
+            weighted_values = weights * values
+        prefixes = None
+        if np.all(np.isfinite(weighted_values)):
+            prefixes = (
+                _compensated_prefix(weights),
+                _compensated_prefix(weighted_values),
+                _compensated_prefix(weights[::-1]),
+                _compensated_prefix(weighted_values[::-1]),
+            )
+            if any(prefix is None for prefix in prefixes):
+                prefixes = None
+        if prefixes is None:
+            out[members] = _decimal_leave_one_out(values, weights)
+            continue
+        (
+            (weight_left, weight_left_error),
+            (value_left, value_left_error),
+            (weight_right, weight_right_error),
+            (value_right, value_right_error),
+        ) = prefixes
+        for position, j in enumerate(members):
+            reverse_count = count - position - 1
+            denominator_terms = [
+                weight_left[position], weight_left_error[position],
+                weight_right[reverse_count], weight_right_error[reverse_count],
+            ]
+            numerator_terms = [
+                value_left[position], value_left_error[position],
+                value_right[reverse_count], value_right_error[reverse_count],
+            ]
+            # All terms are finite by construction; fsum can only overflow
+            # when their exact intermediate result exceeds binary64.  In that
+            # explicitly detected arithmetic case, recompute in Decimal.
+            try:
+                denom = math.fsum(denominator_terms)
+                numerator = math.fsum(numerator_terms)
+            except OverflowError:
+                out[members] = _decimal_leave_one_out(values, weights)
+                break
             if denom > _EPS:
-                out[j] = (total_wx - w_row[j] * x_row[j]) / denom
+                value = numerator / denom
+                if np.isfinite(value):
+                    out[j] = value
     return out
 
 

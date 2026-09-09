@@ -1827,7 +1827,10 @@ def _search_grades(canonical: str) -> dict[str, str]:
         meta = getattr(op, "metadata", None)
         if meta is None:
             return grades
+        ignored = frozenset(getattr(meta, "deprecated_ignored_params", ()) or ())
         for name in getattr(meta, "param_names", None) or ():
+            if name in ignored:
+                continue
             grade = param_search_grade(meta, name)
             if grade:
                 grades[name] = str(grade)

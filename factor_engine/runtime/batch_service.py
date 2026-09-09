@@ -479,6 +479,25 @@ _ROOT_LOCAL_TELEMETRY_KEYS = (
 )
 
 
+def _ensure_worker_local_fit_failure_sink(ctx: Any) -> Any:
+    """Create the bounded M11 sink only after entering local execution."""
+    if getattr(ctx, "fit_failure_sink", None) is None:
+        from factor_engine.cleaned_operators.ts_model._rolling_core import (
+            BoundedFitFailureSink,
+        )
+
+        ctx.fit_failure_sink = BoundedFitFailureSink()
+    return ctx.fit_failure_sink
+
+
+def _attach_fit_failure_snapshot(output: dict[str, Any], ctx: Any, enabled: bool) -> None:
+    if enabled:
+        from factor_engine.runtime.fit_failure_evidence import snapshot_fit_failures
+
+        output["_fit_failure_snapshot"] = snapshot_fit_failures(
+            getattr(ctx, "fit_failure_sink", None))
+
+
 def _assert_no_native_certified_fallback(
     plan: Any,
     local_ctx: Any,
@@ -572,6 +591,8 @@ def _execute_root_with_path(
     *,
     run_mode: str | None = None,
     factor_name: str = "",
+    task_id: str | None = None,
+    factor_id: str | None = None,
     physical_optimization: Any = None,
     physical_root_id: str | None = None,
 ) -> tuple[Any, dict[str, Any]]:
@@ -616,6 +637,10 @@ def _execute_root_with_path(
     local_ctx = replace(
         ctx,
         runtime_stats=local_runtime,
+        task_id=task_id,
+        # At this execution boundary factor_id is the admitted Factor.name.
+        # Shared/materialized subplans intentionally call without this owner.
+        factor_id=factor_id,
         **overlays,
     )
     if physical_optimization is None:
@@ -1097,6 +1122,8 @@ def _execute_run_many_scheduler(
     input_dq_strict: bool = True,
     input_dq_thresholds=None,
     isolate_physical_errors: bool = False,
+    execution_owner: dict[str, str] | None = None,
+    collect_fit_failure_snapshot: bool = False,
 ) -> dict[str, Any]:
     """R31-P0-001：**默认生产执行链** = BatchCompiler → PhysicalPlanner →
     AdaptiveBatchScheduler → StreamingSink。
@@ -1117,7 +1144,10 @@ def _execute_run_many_scheduler(
     from factor_engine.runtime.adaptive_batch_scheduler import AdaptiveBatchScheduler
     from factor_engine.runtime.resource_telemetry import record_resource_telemetry
 
-    ctx = engine_to_use._make_context(shared_result_cache={}, perf=perf)
+    ctx = engine_to_use._make_context(
+        shared_result_cache={}, perf=perf, execution_owner=execution_owner
+    )
+    _ensure_worker_local_fit_failure_sink(ctx)
     ctx.selected_backend = (
         str(getattr(engine_to_use.backend, "runtime_backend_label", "") or "") or None
     )
@@ -1175,13 +1205,15 @@ def _execute_run_many_scheduler(
         factors = [factor for factor in factors if factor.name in valid_names]
         analyses = {name: value for name, value in analyses.items() if name in valid_names}
         if not factors:
-            return {
+            empty_out = {
                 "results": {}, "physical_preflight_errors": physical_preflight_errors,
                 "physical_preflight": {
                     "prepare_count": physical_preflight.prepare_count,
                     "unique_source_count": physical_preflight.unique_source_count,
                 },
             }
+            _attach_fit_failure_snapshot(empty_out, ctx, collect_fit_failure_snapshot)
+            return empty_out
     # This entry point dispatches closures over one shared context/cache. Its
     # payload is not process-serializable, and CSE mutations must stay visible
     # to every root. Generic schedulers may still use worker-local process jobs.
@@ -1332,6 +1364,8 @@ def _execute_run_many_scheduler(
             ctx,
             run_mode=run_mode,
             factor_name=task.factor_name,
+            task_id=task.task_id,
+            factor_id=task.factor_name,
             physical_optimization=physical_by_factor.get(task.factor_name),
             physical_root_id=task.factor_name,
         )
@@ -1496,6 +1530,7 @@ def _execute_run_many_scheduler(
         batch_out["lazy_cache_summary"] = lazy_cache
     ctx.runtime_stats = record_resource_telemetry(ctx.runtime_stats, finalize=True)
     batch_out["resource_telemetry"] = dict(ctx.runtime_stats.get("resource") or {})
+    _attach_fit_failure_snapshot(batch_out, ctx, collect_fit_failure_snapshot)
     return batch_out
 
 
@@ -1699,7 +1734,8 @@ def execute_run_many(
 
     def _run_root(fp) -> tuple[Any, Any]:
         result, path = _execute_root_with_path(
-            engine_to_use.backend, fp.root, ctx, run_mode=run_mode, factor_name=fp.factor_name
+            engine_to_use.backend, fp.root, ctx, run_mode=run_mode,
+            factor_name=fp.factor_name, factor_id=fp.factor_name,
         )
         if per_windows and fp.factor_name in per_windows:
             result = _trim_batch_result(
@@ -1909,6 +1945,7 @@ def execute_run_many_iter(
                 result, path = _execute_root_with_path(
                     engine_to_use.backend, fp.root, ctx, run_mode=run_mode,
                     factor_name=fp.factor_name,
+                    factor_id=fp.factor_name,
                     physical_optimization=physical_by_factor.get(fp.factor_name),
                     physical_root_id=fp.factor_name,
                 )
@@ -1925,6 +1962,7 @@ def execute_run_many_iter(
             result, path = _execute_root_with_path(
                 engine_to_use.backend, fp.root, ctx, run_mode=run_mode,
                 factor_name=fp.factor_name,
+                factor_id=fp.factor_name,
                 physical_optimization=physical_by_factor.get(fp.factor_name),
                 physical_root_id=fp.factor_name,
             )
@@ -1954,6 +1992,8 @@ def execute_run_many_parallel(
     result_policy: str = "return",
     sink: Any = None,
     isolate_physical_errors: bool = False,
+    _execution_owner: dict[str, str] | None = None,
+    _collect_fit_failure_snapshot: bool = False,
 ) -> dict[str, Any]:
     """``FactorEngine.run_many_parallel`` 实现体：根节点层内并行。
 
@@ -2125,6 +2165,8 @@ def execute_run_many_parallel(
                 input_dq_thresholds=input_dq_thresholds,
                 n_jobs=workers,
                 isolate_physical_errors=isolate_physical_errors,
+                execution_owner=_execution_owner,
+                collect_fit_failure_snapshot=_collect_fit_failure_snapshot,
             )
             batch_out["legacy_union_prefetch_count"] = legacy_union_prefetch
             batch_out["control_plane"] = control_plane
@@ -2132,7 +2174,10 @@ def execute_run_many_parallel(
         finally:
             _exit_scope()
 
-    ctx = engine_to_use._make_context(shared_result_cache={}, perf=perf)
+    ctx = engine_to_use._make_context(
+        shared_result_cache={}, perf=perf, execution_owner=_execution_owner
+    )
+    _ensure_worker_local_fit_failure_sink(ctx)
     from factor_engine.runtime.resource_telemetry import record_resource_telemetry
 
     ctx.runtime_stats = record_resource_telemetry(ctx.runtime_stats)
@@ -2144,7 +2189,8 @@ def execute_run_many_parallel(
 
     def _one(fp):
         result, path = _execute_root_with_path(
-            engine_to_use.backend, fp.root, ctx, run_mode=run_mode, factor_name=fp.factor_name
+            engine_to_use.backend, fp.root, ctx, run_mode=run_mode,
+            factor_name=fp.factor_name, factor_id=fp.factor_name,
         )
         if per_windows and fp.factor_name in per_windows:
             result = _trim_batch_result(
@@ -2176,7 +2222,8 @@ def execute_run_many_parallel(
                 if len(fps) <= 1:
                     for fp in fps:
                         result, path = _execute_root_with_path(
-                            engine_to_use.backend, fp.root, ctx, run_mode=run_mode, factor_name=fp.factor_name
+                            engine_to_use.backend, fp.root, ctx, run_mode=run_mode,
+                            factor_name=fp.factor_name, factor_id=fp.factor_name,
                         )
                         if per_windows and fp.factor_name in per_windows:
                             result = _trim_batch_result(
@@ -2200,7 +2247,8 @@ def execute_run_many_parallel(
             for fp in dag.roots:
                 if fp.factor_name not in results and fp.factor_name not in backend_paths:
                     result, path = _execute_root_with_path(
-                        engine_to_use.backend, fp.root, ctx, run_mode=run_mode, factor_name=fp.factor_name
+                        engine_to_use.backend, fp.root, ctx, run_mode=run_mode,
+                        factor_name=fp.factor_name, factor_id=fp.factor_name,
                     )
                     if per_windows and fp.factor_name in per_windows:
                         result = _trim_batch_result(
@@ -2240,4 +2288,5 @@ def execute_run_many_parallel(
 
     ctx.runtime_stats = record_resource_telemetry(ctx.runtime_stats, finalize=True)
     parallel_out["resource_telemetry"] = dict(ctx.runtime_stats.get("resource") or {})
+    _attach_fit_failure_snapshot(parallel_out, ctx, _collect_fit_failure_snapshot)
     return parallel_out

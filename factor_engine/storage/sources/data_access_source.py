@@ -899,6 +899,7 @@ class DataAccessSource(DataSource):
         self._corrupted_state: str | None = None
         # 并发修复：保护 cache/字节计数/snapshot 更新的读写锁。
         self._cache_lock = RLock()
+        self._snapshot_refresh_lock = RLock()
 
     def _validate_semantic_contract(self) -> None:
         """Apply COS panel/event and required-filter policy at construction.
@@ -1958,10 +1959,22 @@ class DataAccessSource(DataSource):
         if (not isinstance(digest, str) or len(digest) not in (32, 64) or
                 any(ch not in "0123456789abcdef" for ch in digest)):
             raise ValueError("approved source content digest must be lowercase hex")
-        previous = getattr(self, "_approved_content_digest", None)
-        if previous is not None and previous != digest:
-            raise ApprovedSnapshotMismatch("approved source content digest cannot be rebound")
-        self._approved_content_digest = digest
+        lock = getattr(self, "_cache_lock", None)
+        if lock is None:  # compatibility for minimal test doubles
+            previous = getattr(self, "_approved_content_digest", None)
+            if previous is not None and previous != digest:
+                raise ApprovedSnapshotMismatch("approved source content digest cannot be rebound")
+            self._approved_content_digest = digest
+            return
+        with lock:
+            previous = getattr(self, "_approved_content_digest", None)
+            if previous is not None and previous != digest:
+                raise ApprovedSnapshotMismatch("approved source content digest cannot be rebound")
+            if previous is None:
+                # Values cached before exact-content approval have no proof that
+                # they belong to the newly approved object set.
+                self._clear_cache_locked(reset_snapshot=False)
+            self._approved_content_digest = digest
 
     def assert_prepared_snapshot_approved(self, prepared_read) -> None:
         """Compare the frozen exact object set, not a mutable live manifest token."""
@@ -1973,6 +1986,20 @@ class DataAccessSource(DataSource):
                 getattr(frozen, "content_digest", None) != expected):
             raise ApprovedSnapshotMismatch(
                 "prepared source snapshot does not match approved content digest")
+
+    def assert_read_handle_approved(self, handle) -> None:
+        """Validate the exact source identity carried by an eager read handle."""
+        expected = getattr(self, "_approved_content_digest", None)
+        if expected is None:
+            return
+        identity = getattr(handle, "read_identity", None)
+        if (
+            getattr(identity, "dataset", None) != self.dataset
+            or getattr(identity, "source_snapshot", None) != expected
+        ):
+            raise ApprovedSnapshotMismatch(
+                "eager read handle does not match approved content digest"
+            )
 
     def assert_approved_snapshot(self) -> None:
         expected = getattr(self, "_approved_snapshot_token", None)
@@ -1986,10 +2013,11 @@ class DataAccessSource(DataSource):
         self.assert_approved_snapshot()
         if not snapshot_id:
             return
-        if self._data_snapshot_id and snapshot_id != self._data_snapshot_id:
-            self.clear_cache(reset_snapshot=False)
-        self._data_snapshot_id = snapshot_id
-        self._snapshot_checked_at = time.monotonic()
+        with self._cache_lock:
+            if self._data_snapshot_id and snapshot_id != self._data_snapshot_id:
+                self._clear_cache_locked(reset_snapshot=False)
+            self._data_snapshot_id = snapshot_id
+            self._snapshot_checked_at = time.monotonic()
 
     def _query_scoped_snapshot_token(self, store) -> str | None:
         """廉价 query-scoped snapshot token：优先读 ``_manifest.json`` sidecar。
@@ -2012,7 +2040,7 @@ class DataAccessSource(DataSource):
     def refresh_snapshot(self, *, force: bool = False) -> str | None:
         """proactive 快照刷新（TTL 内短路）。
 
-        并发修复：用 _cache_lock 保护 snapshot 检查和更新，避免多线程同时触发昂贵的 describe_dataset。
+        独立 single-flight 锁串行化远程刷新；缓存元数据锁不覆盖网络 I/O。
         """
         self._assert_open()
         expected = getattr(self, "_approved_snapshot_token", None)
@@ -2027,51 +2055,73 @@ class DataAccessSource(DataSource):
         ):
             return self._data_snapshot_id
 
-        # 需要刷新：获取锁避免多线程重复查询
-        with self._cache_lock:
-            # Double-check: 可能另一个线程已经刷新
-            if (
-                not force
-                and self._data_snapshot_id is not None
-                and now - self._snapshot_checked_at < self._snapshot_ttl_seconds
-            ):
-                return self._data_snapshot_id
-
+        # Only the refresh single-flight lock spans remote I/O. Cache readers,
+        # lease finalizers and clear_cache remain able to acquire _cache_lock.
+        with self._snapshot_refresh_lock:
+            with self._cache_lock:
+                self._assert_open()
+                now = time.monotonic()
+                expected = getattr(self, "_approved_snapshot_token", None)
+                force = force or expected is not None
+                if (
+                    not force
+                    and self._data_snapshot_id is not None
+                    and now - self._snapshot_checked_at < self._snapshot_ttl_seconds
+                ):
+                    return self._data_snapshot_id
+                observed = (
+                    self._data_snapshot_id, self._manifest_token,
+                    self._snapshot_checked_at,
+                    getattr(self, "_approved_content_digest", None),
+                    getattr(self, "_approved_snapshot_token", None),
+                )
             store = _get_store()
             token = self._query_scoped_snapshot_token(store)
-            if token is not None:
-                # 廉价路径：manifest 版本变了才清缓存（token 与真实 snapshot id 分开跟踪）
-                if self._manifest_token is not None and token != self._manifest_token:
-                    logger.info(
-                        "data_access manifest version changed dataset=%s old=%s new=%s; clearing caches",
-                        self.dataset,
-                        self._manifest_token,
-                        token,
-                    )
-                    self._clear_cache_locked(reset_snapshot=False)
-                self._manifest_token = token
-            else:
-                # 无 manifest：回退全量 describe（旧行为，仅此路径昂贵）
-                self._manifest_token = None
+            current = None
+            if token is None:
                 snapshot = store.describe_dataset(
                     self.dataset,
                     params=dict(self.params),
                     instrument_filter=self.instrument_filter,
                 )
                 current = snapshot.snapshot_id
-                if self._data_snapshot_id and current != self._data_snapshot_id:
-                    logger.info(
-                        "data_access snapshot changed dataset=%s old=%s new=%s; clearing caches",
-                        self.dataset,
-                        self._data_snapshot_id,
-                        current,
+            with self._cache_lock:
+                self._assert_open()
+                if observed != (
+                    self._data_snapshot_id, self._manifest_token,
+                    self._snapshot_checked_at,
+                    getattr(self, "_approved_content_digest", None),
+                    getattr(self, "_approved_snapshot_token", None),
+                ):
+                    raise ApprovedSnapshotMismatch(
+                        "source identity changed during snapshot refresh"
                     )
-                    self._clear_cache_locked(reset_snapshot=False)
-                self._data_snapshot_id = current
-            if expected is not None and self.snapshot_token != expected:
-                raise ApprovedSnapshotMismatch("approved source snapshot token does not match")
-            self._snapshot_checked_at = now
-            return self._data_snapshot_id
+                self._publish_refreshed_snapshot(token, current, expected, now)
+                return self._data_snapshot_id
+
+    def _publish_refreshed_snapshot(self, token, current, expected, now) -> None:
+        """Apply an observed refresh under _cache_lock, without source I/O."""
+        if token is not None:
+            # Manifest tokens and frozen read snapshot ids are separate identities.
+            if self._manifest_token is not None and token != self._manifest_token:
+                logger.info(
+                    "data_access manifest version changed dataset=%s old=%s new=%s; clearing caches",
+                    self.dataset, self._manifest_token, token,
+                )
+                self._clear_cache_locked(reset_snapshot=False)
+            self._manifest_token = token
+        else:
+            self._manifest_token = None
+            if self._data_snapshot_id and current != self._data_snapshot_id:
+                logger.info(
+                    "data_access snapshot changed dataset=%s old=%s new=%s; clearing caches",
+                    self.dataset, self._data_snapshot_id, current,
+                )
+                self._clear_cache_locked(reset_snapshot=False)
+            self._data_snapshot_id = current
+        if expected is not None and self.snapshot_token != expected:
+            raise ApprovedSnapshotMismatch("approved source snapshot token does not match")
+        self._snapshot_checked_at = now
 
     def revalidate_for_long_collect(self) -> None:
         """#收官轮 P0：polars-long 受控 collect 前的快照 revalidation。
@@ -2372,10 +2422,7 @@ class DataAccessSource(DataSource):
         return DataSourceReadSession(self)
 
     def load_column(self, name: str):
-        self.refresh_snapshot()
-        if name in self._column_cache:
-            self._column_cache.move_to_end(name)
-            return self._column_cache[name]
+        # Keep the cache lookup/pinning semantics in one locked implementation.
         return self.load_columns([name])[name]
 
     def _adapter_options(self, store):
@@ -2421,11 +2468,29 @@ class DataAccessSource(DataSource):
 
     def load_columns(self, names: list[str]) -> dict[str, Any]:
         self.refresh_snapshot()
-        needed = [name for name in names if name not in self._column_cache]
+        # Resolve cache hits into request-owned strong references before doing I/O.
+        # Cache eviction may remove the mapping, but cannot invalidate a value that
+        # this request (and its buffer-backed lease finalizers) still owns.
+        with self._cache_lock:
+            request_snapshot_id = self._data_snapshot_id
+            request_approved_digest = getattr(self, "_approved_content_digest", None)
+            resolved = {
+                name: self._column_cache[name]
+                for name in names
+                if name in self._column_cache
+            }
+            needed = [name for name in names if name not in resolved]
         if not needed:
-            for name in names:
-                self._column_cache.move_to_end(name)
-            return {name: self._column_cache[name] for name in names}
+            with self._cache_lock:
+                if (getattr(self, "_approved_content_digest", None) != request_approved_digest
+                        or self._data_snapshot_id != request_snapshot_id):
+                    raise ApprovedSnapshotMismatch(
+                        "source identity changed before cached request could be returned"
+                    )
+                for name in names:
+                    if name in self._column_cache:
+                        self._column_cache.move_to_end(name)
+                return {name: resolved[name] for name in names}
 
         # LQTP 平台口径：StockDailyBar 裸 ``volume`` = Volume / Factor（后复权量）。
         # ``_normalize_contract_columns`` 需要同一批读到 Factor 列才能做除法；若不
@@ -2444,13 +2509,15 @@ class DataAccessSource(DataSource):
             self.dataset,
             needed,
             self._time_range(),
-            self._lazy_scan,
+            self._lazy_scan and request_approved_digest is None,
         )
+        observed_snapshot_id = None
 
-        if self._lazy_scan:
+        if self._lazy_scan and request_approved_digest is None:
             # 显式 polars-lazy 优化（collect 前表达式仍在 DuckDB 内下推）
             from factor_engine.backend.polars_lazy import scan_dataset_columns
 
+            previous_lazy_bundle = self._lazy_bundle
             fetched = scan_dataset_columns(
                 store,
                 self.dataset,
@@ -2469,7 +2536,24 @@ class DataAccessSource(DataSource):
                 filters=self.semantic_filters or None,
             )
             if self._lazy_bundle is not None:
-                self._record_read_snapshot(self._lazy_bundle.snapshot_id)
+                observed_snapshot_id = self._lazy_bundle.snapshot_id
+                if (
+                    resolved
+                    and observed_snapshot_id
+                    and (
+                        not request_snapshot_id
+                        or observed_snapshot_id != request_snapshot_id
+                    )
+                ):
+                    self.clear_cache(reset_snapshot=False)
+                    if previous_lazy_bundle is None:
+                        close = getattr(self._lazy_bundle, "close", None)
+                        if callable(close):
+                            close()
+                    raise ApprovedSnapshotMismatch(
+                        "request cache hits and lazy read belong to different snapshots"
+                    )
+                self._record_read_snapshot(observed_snapshot_id)
         else:
             # 引擎/结果形态交给 DataAccess 成本路由（read_auto 语义下沉到 DataAccess）。
             # #9/#12 单位归一化由 DataAccess 输出层完成（SemanticFieldCatalog scale），
@@ -2495,15 +2579,44 @@ class DataAccessSource(DataSource):
                 run_mode=self.run_mode,
                 **{k: v for k, v in self.params.items() if k != "run_mode"},
             )
-            self._record_read_snapshot(getattr(handle.snapshot, "snapshot_id", None))
-            # R26-P0-023：production 读必须带可证明 snapshot（provenance envelope）——
-            # 裸 pandas 不能在中间层悄悄丢 provenance 后继续 publish。
-            if self.production and not self._data_snapshot_id:
-                raise RuntimeError(
-                    "FactorEngine production read 缺少可证明 data snapshot"
-                    "（R26-P0-023）：DataAccess 读必须返回受管 ReadHandle 且记录 "
-                    "snapshot_id；无法证明「读了什么 source / 用什么 PIT」时禁止继续。"
-                )
+            try:
+                # The handle identity is the actual frozen object set.  A live
+                # manifest token can return to the approved value after an ABA
+                # replacement, so it is not a substitute for this check.
+                self.assert_read_handle_approved(handle)
+                observed_snapshot_id = getattr(handle.snapshot, "snapshot_id", None)
+                if (
+                    resolved
+                    and observed_snapshot_id
+                    and (
+                        not request_snapshot_id
+                        or observed_snapshot_id != request_snapshot_id
+                    )
+                ):
+                    self.clear_cache(reset_snapshot=False)
+                    raise ApprovedSnapshotMismatch(
+                        "request cache hits and eager read belong to different snapshots"
+                    )
+                self._record_read_snapshot(observed_snapshot_id)
+                # Production provenance failure is also a pre-conversion handle
+                # failure and must release the handle through this try/except.
+                if self.production and not self._data_snapshot_id:
+                    raise RuntimeError(
+                        "FactorEngine production read 缺少可证明 data snapshot"
+                        "（R26-P0-023）：DataAccess 读必须返回受管 ReadHandle 且记录 "
+                        "snapshot_id；无法证明「读了什么 source / 用什么 PIT」时禁止继续。"
+                    )
+            except ApprovedSnapshotMismatch:
+                self.clear_cache(reset_snapshot=False)
+                close = getattr(handle, "close", None)
+                if callable(close):
+                    close()
+                raise
+            except Exception:
+                close = getattr(handle, "close", None)
+                if callable(close):
+                    close()
+                raise
             fetched = arrow_table_to_multiindex_columns(
                 handle.to_arrow(),
                 timestamp_column=ds.time_column,
@@ -2513,6 +2626,18 @@ class DataAccessSource(DataSource):
                 normalize_timestamp=normalize,
                 timestamp_unit=unit,
             )
+
+        # A concurrent request may advance the source while Arrow conversion is
+        # running.  Detect that epoch change before semantic transformation.
+        with self._cache_lock:
+            if getattr(self, "_approved_content_digest", None) != request_approved_digest:
+                raise ApprovedSnapshotMismatch(
+                    "approved content changed before request results were transformed"
+                )
+            if observed_snapshot_id and self._data_snapshot_id != observed_snapshot_id:
+                raise ApprovedSnapshotMismatch(
+                    "source snapshot changed before request results were transformed"
+                )
 
         # DataAccess exposes raw COS values for ``load_columns``.  FactorEngine
         # must use the semantic contract before caching a logical factor input;
@@ -2528,13 +2653,29 @@ class DataAccessSource(DataSource):
                     "adjusted volume is missing its same-read Factor dependency"
                 )
             fetched[lqtp_extra_factor] = fetched[factor_output]
+        with self._cache_lock:
+            if getattr(self, "_approved_content_digest", None) != request_approved_digest:
+                raise ApprovedSnapshotMismatch(
+                    "approved content changed before request results were cached"
+                )
+            if observed_snapshot_id and self._data_snapshot_id != observed_snapshot_id:
+                raise ApprovedSnapshotMismatch(
+                    "source snapshot changed before request results could be published"
+                )
         self._normalize_contract_columns(fetched, needed)
-        for name in needed:
-            self._put_cache(self._column_cache, name, fetched[name])
-        return {
-            name: self._column_cache[name] if name in self._column_cache else fetched[name]
-            for name in names
-        }
+        resolved.update((name, fetched[name]) for name in needed)
+        with self._cache_lock:
+            if getattr(self, "_approved_content_digest", None) != request_approved_digest:
+                raise ApprovedSnapshotMismatch(
+                    "approved content changed before normalized results could be cached"
+                )
+            if observed_snapshot_id and self._data_snapshot_id != observed_snapshot_id:
+                raise ApprovedSnapshotMismatch(
+                    "source snapshot changed before request results could be cached"
+                )
+            for name in needed:
+                self._put_cache(self._column_cache, name, fetched[name])
+        return {name: resolved[name] for name in names}
 
     def _normalize_contract_columns(self, fetched: dict[str, Any], names: list[str]) -> None:
         """Normalize every registered logical field before it enters the cache.
@@ -2652,12 +2793,17 @@ class DataAccessSource(DataSource):
         if not names:
             return
         self.refresh_snapshot()
-        if self._lazy_scan:
+        if self._lazy_scan and getattr(self, "_approved_content_digest", None) is None:
             self._prefetch_lazy_bundle(names)
         else:
             self.load_columns(names)
 
     def _prefetch_lazy_bundle(self, names: list[str]) -> None:
+        # This legacy bundle has no exact ReadHandle content proof. Approved
+        # reads use the checked eager route, not an unverified lazy cache fill.
+        if getattr(self, "_approved_content_digest", None) is not None:
+            self.load_columns(names)
+            return
         needed = [name for name in names if name not in self._column_cache]
         if not needed:
             return
@@ -2677,9 +2823,14 @@ class DataAccessSource(DataSource):
                 fetched = self._lazy_bundle.materialize_columns(
                     physical, output_names=output_names or None
                 )
+                observed_snapshot = self._lazy_bundle.snapshot_id
                 self._normalize_contract_columns(fetched, needed)
-                for name in needed:
-                    self._put_cache(self._column_cache, name, fetched[name])
+                with self._cache_lock:
+                    if (getattr(self, "_approved_content_digest", None) is not None
+                            or self._data_snapshot_id != observed_snapshot):
+                        raise ApprovedSnapshotMismatch("source identity changed during lazy prefetch")
+                    for name in needed:
+                        self._put_cache(self._column_cache, name, fetched[name])
                 return
 
         # 资源泄漏修复：关闭旧 bundle 再创建新的
@@ -2707,32 +2858,56 @@ class DataAccessSource(DataSource):
                 except Exception:
                     pass
         self._record_read_snapshot(self._lazy_bundle.snapshot_id)
+        observed_snapshot = self._lazy_bundle.snapshot_id
         fetched = self._lazy_bundle.materialize_columns(
             physical, output_names=output_names or None
         )
         self._normalize_contract_columns(fetched, needed)
-        for name in needed:
-            self._put_cache(self._column_cache, name, fetched[name])
+        with self._cache_lock:
+            if (getattr(self, "_approved_content_digest", None) is not None
+                    or self._data_snapshot_id != observed_snapshot):
+                raise ApprovedSnapshotMismatch("source identity changed during lazy prefetch")
+            for name in needed:
+                self._put_cache(self._column_cache, name, fetched[name])
 
     def prefetch_panels(self, names: list[str]) -> None:
         self.refresh_snapshot()
-        needed = [name for name in names if name not in self._panel_cache]
+        with self._cache_lock:
+            epoch = (self._data_snapshot_id, getattr(self, "_approved_content_digest", None))
+            needed = [name for name in names if name not in self._panel_cache]
         if not needed:
             return
         batch = self.load_columns(needed)
+        panels = {}
         for name, series in batch.items():
             level = series.index.names[-1] or "instrument"
-            self._put_cache(self._panel_cache, name, series.unstack(level=level))
+            panels[name] = series.unstack(level=level)
+        with self._cache_lock:
+            self._publish_panels_for_epoch(panels, epoch)
+
+    def _publish_panels_for_epoch(self, panels, epoch):
+        """Called under cache lock; never relabel old panels as a new epoch."""
+        current = (self._data_snapshot_id, getattr(self, "_approved_content_digest", None))
+        if current[1] != epoch[1] or (epoch[0] is not None and current[0] != epoch[0]):
+            raise ApprovedSnapshotMismatch("source identity changed during panel conversion")
+        # A first successful read can discover a previously unknown snapshot.
+        # Return that checked read, but do not cache without an exact old epoch.
+        if current == epoch:
+            for name, panel in panels.items():
+                self._put_cache(self._panel_cache, name, panel)
 
     def load_column_panel(self, name: str):
         self.refresh_snapshot()
-        if name in self._panel_cache:
-            self._panel_cache.move_to_end(name)
-            return self._panel_cache[name]
+        with self._cache_lock:
+            epoch = (self._data_snapshot_id, getattr(self, "_approved_content_digest", None))
+            if name in self._panel_cache:
+                self._panel_cache.move_to_end(name)
+                return self._panel_cache[name]
         series = self.load_column(name)
         level = series.index.names[-1] or "instrument"
         panel = series.unstack(level=level)
-        self._put_cache(self._panel_cache, name, panel)
+        with self._cache_lock:
+            self._publish_panels_for_epoch({name: panel}, epoch)
         return panel
 
     def dataset_axis_columns(self) -> tuple[str, str]:

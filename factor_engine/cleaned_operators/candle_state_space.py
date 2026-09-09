@@ -198,11 +198,47 @@ def _mahalanobis_series(
                 )
                 continue
             z = cur.astype(float)
-            # R6-147: a feature constant over the history has zero variance and
-            # a meaningless covariance column — standardising it with sd=1 makes
-            # the distance depend on the feature's raw unit.  Drop constant
-            # dimensions from both the history and the query before estimating.
-            keep_cols = np.where(np.std(valid, axis=0) > _EPS)[0]
+            # M10: centre on a HISTORY observation, then precondition by the
+            # largest historical deviation.  Unlike max(abs(level)), this does
+            # not discard representable variation riding on a large offset.
+            # Direct subtraction is preferred (Sterbenz-exact for nearby
+            # floats); only an overflowing opposite-sign range uses a bounded
+            # max-abs-normalised subtraction fallback.
+            transformed: list[np.ndarray] = []
+            transformed_query: list[float] = []
+            keep: list[int] = []
+            preprocessing_failed = False
+            for feature_index in range(p):
+                column = valid[:, feature_index]
+                if np.all(column == column[0]):
+                    continue  # exact constant: covariance direction unidentified
+                with np.errstate(over="ignore", invalid="ignore"):
+                    delta = column - column[0]
+                    query_delta = float(z[feature_index] - column[0])
+                if not (np.all(np.isfinite(delta)) and np.isfinite(query_delta)):
+                    raw_scale = float(np.max(np.abs(column)))
+                    if not np.isfinite(raw_scale) or raw_scale <= 0.0:
+                        preprocessing_failed = True
+                        break
+                    bounded = column / raw_scale
+                    delta = bounded - bounded[0]
+                    query_delta = float(z[feature_index] / raw_scale - bounded[0])
+                deviation_scale = float(np.max(np.abs(delta)))
+                if (not np.isfinite(deviation_scale) or deviation_scale <= 0.0
+                        or not np.isfinite(query_delta)):
+                    preprocessing_failed = True
+                    break
+                transformed.append(delta / deviation_scale)
+                transformed_query.append(query_delta / deviation_scale)
+                keep.append(feature_index)
+            if preprocessing_failed:
+                _set_mahalanobis_telemetry(
+                    p_effective=None, N_effective=int(valid.shape[0]),
+                    condition_number=None, dropped_constant_dims=None,
+                    failure_reason="nonfinite_preconditioning",
+                )
+                continue
+            keep_cols = np.asarray(keep, dtype=int)
             dropped = p - int(keep_cols.size)
             N_eff = int(valid.shape[0])
             p_eff = int(keep_cols.size)
@@ -223,8 +259,15 @@ def _mahalanobis_series(
                     failure_reason="insufficient_sample",
                 )
                 continue
-            valid = valid[:, keep_cols]
-            z = z[keep_cols]
+            valid = np.stack(transformed, axis=1)
+            z = np.asarray(transformed_query, dtype=float)
+            if not np.all(np.isfinite(z)):
+                _set_mahalanobis_telemetry(
+                    p_effective=p_eff, N_effective=N_eff,
+                    condition_number=None, dropped_constant_dims=dropped,
+                    failure_reason="nonfinite_scaled_query",
+                )
+                continue
             # R11 round-3 #65: estimator consistency — a Mahalanobis distance
             # must pair ONE estimator family.  The old code centred with the
             # robust median but used the classical covariance (a half-robust /
@@ -233,15 +276,78 @@ def _mahalanobis_series(
             # covariance is out of scope here).
             mu = valid.mean(axis=0)
             cov = np.atleast_2d(np.cov(valid, rowvar=False, ddof=1))
-            cov = np.nan_to_num(cov, nan=0.0, posinf=0.0, neginf=0.0)
+            if not np.all(np.isfinite(cov)):
+                _set_mahalanobis_telemetry(
+                    p_effective=p_eff, N_effective=N_eff,
+                    condition_number=None, dropped_constant_dims=dropped,
+                    failure_reason="nonfinite_covariance",
+                )
+                continue
             shrunk = (1.0 - lam) * cov + lam * np.diag(np.diag(cov))
             try:
-                cond = float(np.linalg.cond(shrunk))
+                eigenvalues, eigenvectors = np.linalg.eigh(shrunk)
             except (np.linalg.LinAlgError, ValueError):
-                cond = float("inf")
-            prec = np.linalg.pinv(shrunk + _EPS * np.eye(keep_cols.size))
+                _set_mahalanobis_telemetry(
+                    p_effective=p_eff, N_effective=N_eff,
+                    condition_number=None, dropped_constant_dims=dropped,
+                    failure_reason="covariance_decomposition_failed",
+                )
+                continue
+            if not (np.all(np.isfinite(shrunk)) and np.all(np.isfinite(eigenvalues))):
+                _set_mahalanobis_telemetry(
+                    p_effective=p_eff, N_effective=N_eff,
+                    condition_number=None, dropped_constant_dims=dropped,
+                    failure_reason="nonfinite_covariance",
+                )
+                continue
+            largest = float(np.max(eigenvalues, initial=0.0))
+            eig_tol = np.finfo(float).eps * max(1, p_eff) * largest
+            if largest <= 0.0 or np.any(eigenvalues < -eig_tol):
+                _set_mahalanobis_telemetry(
+                    p_effective=p_eff, N_effective=N_eff,
+                    condition_number=None, dropped_constant_dims=dropped,
+                    failure_reason="invalid_covariance",
+                )
+                continue
+            positive = eigenvalues > eig_tol
+            if not np.any(positive):
+                _set_mahalanobis_telemetry(
+                    p_effective=p_eff, N_effective=N_eff,
+                    condition_number=None, dropped_constant_dims=dropped,
+                    failure_reason="zero_covariance_rank",
+                )
+                continue
             d = z - mu
-            D = float(np.sqrt(max(0.0, float(d @ prec @ d))))
+            coordinates = eigenvectors.T @ d
+            # With no arbitrary ridge, covariance-null directions are not
+            # learned by the history.  A query component in that null space is
+            # therefore unidentifiable: fail closed instead of silently giving
+            # it zero cost via a pseudoinverse.
+            null_values = np.abs(coordinates[~positive])
+            null_component = (float(np.hypot.reduce(null_values))
+                              if null_values.size else 0.0)
+            d_abs = np.abs(d)
+            d_norm = float(np.hypot.reduce(d_abs)) if d_abs.size else 0.0
+            null_tol = np.sqrt(np.finfo(float).eps) * max(1.0, d_norm)
+            if not np.isfinite(null_component) or null_component > null_tol:
+                _set_mahalanobis_telemetry(
+                    p_effective=p_eff, N_effective=N_eff,
+                    condition_number=float("inf"),
+                    dropped_constant_dims=dropped,
+                    failure_reason="query_in_covariance_nullspace",
+                )
+                continue
+            standardized = coordinates[positive] / np.sqrt(eigenvalues[positive])
+            D = float(np.hypot.reduce(np.abs(standardized)))
+            if not np.isfinite(D):
+                _set_mahalanobis_telemetry(
+                    p_effective=p_eff, N_effective=N_eff,
+                    condition_number=None, dropped_constant_dims=dropped,
+                    failure_reason="nonfinite_distance",
+                )
+                continue
+            cond = (float("inf") if not np.all(positive)
+                    else float(largest / np.min(eigenvalues[positive])))
             out[r, c] = D
             _set_mahalanobis_telemetry(
                 p_effective=p_eff, N_effective=N_eff, condition_number=cond,
@@ -590,7 +696,12 @@ class TsMatrixProfileMotifFrequency(SeriesOperator):
         unit="ratio",
         cost=8,
         param_specs=_MATRIX_PROFILE_PARAM_SPECS,
-        relational_specs=_MATRIX_PROFILE_RELATIONAL_SPECS,
+        relational_specs=_MATRIX_PROFILE_RELATIONAL_SPECS + [
+            RelationalParamSpec(
+                "history >= subsequence_length + subsequence_length // 4 + 2",
+                "motif frequency requires at least three historical candidates",
+            ),
+        ],
     )
 
     def _calculate_series(
@@ -624,7 +735,12 @@ class TsMatrixProfileNeighborDispersion(SeriesOperator):
         unit="ratio",
         cost=8,
         param_specs=_MATRIX_PROFILE_PARAM_SPECS,
-        relational_specs=_MATRIX_PROFILE_RELATIONAL_SPECS,
+        relational_specs=_MATRIX_PROFILE_RELATIONAL_SPECS + [
+            RelationalParamSpec(
+                "history >= subsequence_length + subsequence_length // 4 + 2",
+                "neighbor dispersion requires at least three historical candidates",
+            ),
+        ],
     )
 
     def _calculate_series(

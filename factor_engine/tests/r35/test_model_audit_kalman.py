@@ -95,7 +95,7 @@ def test_stateful_contract_has_all_required_fields():
         c = kalman_stateful_contract(canonical)
         assert c["stateful"] is True, canonical
         assert isinstance(c["state_schema_version"], str), canonical
-        assert c["state_schema_version"] == f"{canonical}.v1", canonical
+        assert c["state_schema_version"] == f"{canonical}.v2", canonical
         # P0 (2026-08-11): honest degradation — no Kalman checkpoint authority
         # in StatefulCheckpointRegistry / stateful_runtime, so the contract must
         # NOT claim checkpointable; execution model is full-history replay.

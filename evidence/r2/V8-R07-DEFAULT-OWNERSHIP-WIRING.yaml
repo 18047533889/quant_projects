@@ -1,0 +1,35 @@
+schema: factor_engine.v8.evidence.v1
+git_sha: 118cd21c6262082336daa545ddc06b6f78def7b9
+timestamp: '2026-09-09T00:05:00+08:00'
+status: MERGED_SCOPED_GREEN_BROADER_FOUND_SEAL_DEFECT_FIXED_SEPARATELY
+target: server-c:/home/sunhaiwei/quant_projects
+files:
+  factor_engine/runtime/bounded_pipeline.py: e06e259622b1662cfa294cfead8ce7827191a420fe248f4b14df0dcd19cb1f23
+  factor_engine/runtime/resume_validation.py: 970db3805fa7119371127629109e69d57e7c49772cc8c9b6b47170e90b5fa1be
+  factor_engine/runtime/finite_manifest.py: 95d5c89bda2b8f4592309bd0163b98331e57b273cc27fc9ebdbf8367d95c3063
+  factor_engine/runtime/supervised_worker.py: be288e3d39c7926e5bb342f8f203d408a9fa14612a817a6de4d8a0bd9d5e790e
+  factor_engine/tests/runtime/test_v8_pipeline_ownership.py: 6123ae42bc67c6b3bc45909b9b1e06823dcdc2a8089a3d58ca4de3ccac67e147
+changes:
+  - New runs durably select sqlite-v1 and all-durable-pipeline-os-processes-v1 before ingestion.
+  - Initialize ownership store under coordinator lock; bind all actual pipeline child roles.
+  - Register heavy worker before releasing native-initialization or ingestion gate.
+  - Resume carries exact authenticated identity digest without rewriting old identity.
+  - Only identities with both ownership markers absent qualify for legacy fallback.
+tests:
+  staged_roles_and_invalid_markers: '11 passed'
+  staged_compatibility: '24 passed'
+  independent_registration_failure_injection: '2 passed'
+  independent_registration_failure_xml: /tmp/v8-registration-failure-gate-review.xml
+  production_roles_registration_real_sqlite: '15 passed, 30 warnings in 14.72s'
+  production_xml: /tmp/v8-roles-merged.xml
+  broader_runtime: '583 passed, 2 failed, 1 strict R02 xfail; see V8-R07-INITIAL-SEAL-TERMINALS.yaml for subsequent fix'
+limitations:
+  - Pending computation resume remains disabled; terminal artifact revalidation only.
+  - Same-PID native-safe reuse remains unavailable.
+  - New ingestion generator/fork/capped-pickle proposal is staged only, not included.
+  - Fork warnings expose multi-threaded parent deadlock risk; no universal fork safety claim.
+  - Child target gate does not cover spawn bootstrap/import/unpickling.
+  - Cooperative ownership locking is not adversarial pathname ABA security.
+  - Real approved DataAccess profile, GPU, 100k and performance acceptance NOT_RUN.
+  - All-operator math, native parity, PIT, Q runtime, remote CI and production gates NOT_RUN.
+  - No commit, push, deployment, restart or production publication.

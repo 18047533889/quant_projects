@@ -3011,6 +3011,7 @@ class FactorEngine:
         perf: PerfConfig | None = None,
         cache_scope: str | None = None,
         cache_allowed: bool = True,
+        execution_owner: dict[str, str] | None = None,
     ) -> ExecutionContext:
         """构造单次执行上下文，注入缓存会话与 query budget。
 
@@ -3050,6 +3051,11 @@ class FactorEngine:
             with_scope = getattr(plan_cache, "with_scope", None)
             if callable(with_scope):
                 plan_cache = with_scope(cache_scope)
+        owner = dict(execution_owner or {})
+        if set(owner) - {"profile_id", "run_id"}:
+            raise ValueError("execution_owner contains unsupported identity fields")
+        if any(type(value) is not str or not value for value in owner.values()):
+            raise ValueError("execution_owner identities must be nonempty strings")
         base = ExecutionContext(
             data_source=self.data_source,
             run_mode=self.run_mode,
@@ -3068,6 +3074,8 @@ class FactorEngine:
             perf=effective_perf,
             query_budget=effective_perf.build_query_budget(),
             runtime_stats={},
+            profile_id=owner.get("profile_id"),
+            run_id=owner.get("run_id"),
         )
         if self.cache is None and shared_result_cache is None:
             return base
@@ -3944,6 +3952,8 @@ class FactorEngine:
         pit_forbid_forward_fill: bool = False,
         result_policy: str = "return",
         sink: Any | None = None,
+        _execution_owner: dict[str, str] | None = None,
+        _collect_fit_failure_snapshot: bool = False,
     ) -> dict[str, Any]:
         """多因子求值：共享子树串行、因子根并行。
 
@@ -3982,6 +3992,8 @@ class FactorEngine:
             pit_forbid_forward_fill=pit_forbid_forward_fill,
             result_policy=result_policy,
             sink=sink,
+            _execution_owner=_execution_owner,
+            _collect_fit_failure_snapshot=_collect_fit_failure_snapshot,
         )
 
     def run_many_stream(

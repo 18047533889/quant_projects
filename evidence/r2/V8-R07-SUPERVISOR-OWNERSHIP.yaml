@@ -1,0 +1,42 @@
+schema: factor_engine.v8.scoped_fix.v1
+git_sha: 118cd21c6262082336daa545ddc06b6f78def7b9
+timestamp: '2026-09-08T21:08:30+08:00'
+target: server-c:/home/sunhaiwei/quant_projects
+issue: V8-R07
+status: FOUNDATION_SCOPED_PASS_NOT_INTEGRATED
+owned_modified_files:
+  factor_engine/runtime/supervised_worker.py: f45fb2c7f6e864365f1a4825e9930f70130f8460fbea7ab39ea246d18b715987
+  factor_engine/tests/runtime/test_v8_supervisor_ownership.py: 36592460749a7e29b680843ba799b750264f0b5f649f72f4e8024d6d27ccfcb8
+changes:
+  - optional explicit ownership_run_dir, ownership_context and ownership_role supervisor configuration
+  - durable STARTING before process creation and parent-observed BOUND before request dispatch
+  - real process and transport retirement precedes one idempotent EXITED transition
+  - binding ambiguity retires the child, quarantines the supervisor and leaves the journal incomplete
+  - EXITED journal failure quarantines and prevents lease release or silent worker reuse
+  - invalid progress configuration is rejected before single-call admission is acquired
+  - process-constructor failure closes both pre-spawn pipe endpoints
+  - binding failure distinguishes observed retirement from unproven cleanup and retains cleanup details
+tests:
+  command: >-
+    cd factor_engine && PYTHONPATH=. ../.venv/bin/python -m pytest -q
+    tests/runtime/test_v8_supervisor_ownership.py
+    tests/runtime/test_v6_supervised_worker.py
+    tests/runtime/test_v8_worker_phase_protocol.py
+    tests/runtime/test_v8_worker_ownership.py
+  result: 72 passed, 25 warnings in 11.74s
+  coverage:
+    - real process start, bind, dispatch ordering, close and duplicate-close behavior
+    - post-retirement restart creates a distinct owned worker instance
+    - timeout and asynchronous cancellation retirement
+    - STARTING, BOUND and EXITED journal failure injection
+    - conservative validation of incomplete journals
+    - existing transport, quota, progress-phase and ownership compatibility
+    - invalid-call recovery and concurrent single-request admission semantics
+    - pre-spawn process-constructor endpoint cleanup and unproven-retirement diagnostics
+limitations:
+  - supervisor ownership is opt-in and is not wired into bounded_pipeline or default_engine
+  - ingestion child ownership and coordinator locking before ingestion remain pending
+  - pending-work resume remains disabled; native same-PID epoch reuse remains disabled
+  - 1MiB journal, 10000-record and 16KiB-line bounds with full reread per operation are foundation capacity, not 100k-factor acceptance
+  - full compile/import, backend parity, PIT poison, CI and production gates are NOT_RUN
+commit_push_deploy: false

@@ -16,6 +16,15 @@ import hashlib
 import json
 from typing import TYPE_CHECKING
 
+# ``importlib.reload`` reuses the module dictionary.  Preserve the exact class
+# objects issued by this authority before the definitions below replace the
+# current names; classifiers can then accept genuine pre-reload instances by
+# identity without accepting structural lookalikes.
+_physical_spec_generations = tuple(globals().get("_physical_spec_generations", ()))
+_prior_physical_spec = globals().get("PhysicalImplementationSpec")
+if isinstance(_prior_physical_spec, type) and _prior_physical_spec not in _physical_spec_generations:
+    _physical_spec_generations += (_prior_physical_spec,)
+
 if TYPE_CHECKING:
     from typing import Literal
 
@@ -28,6 +37,7 @@ __all__ = [
     "CapabilityLevel",
     "PhysicalImplementationID",
     "PhysicalImplementationSpec",
+    "is_physical_implementation_spec",
     "Accelerator",
     # Canonical string vocabulary + validation
     "CANONICAL_BACKEND_STRINGS",
@@ -342,3 +352,12 @@ class PhysicalImplementationSpec:
             ExecutionKind.CLICKHOUSE_NATIVE_SQL,
             ExecutionKind.Q_NATIVE,
         }
+
+
+if PhysicalImplementationSpec not in _physical_spec_generations:
+    _physical_spec_generations += (PhysicalImplementationSpec,)
+
+
+def is_physical_implementation_spec(value: object) -> bool:
+    """Return whether *value* was issued by this contracts module generation."""
+    return type(value) in _physical_spec_generations

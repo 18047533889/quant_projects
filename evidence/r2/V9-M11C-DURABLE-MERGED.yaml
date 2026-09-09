@@ -1,0 +1,44 @@
+schema: v9-scoped-runtime-verification-1
+timestamp: '2026-09-09'
+git_sha: 118cd21c6262082336daa545ddc06b6f78def7b9
+workspace: /home/sunhaiwei/quant_projects
+patch_sha256: 5596a4870ad45fcbd54ca4e359540a176705125884a3ebeb492adc69fbce3dc4
+preservation_tests_patch_sha256: c7cf4e6537615ad021129daf1f4092e95ebcdadff84c78b970c69433989272d3
+files:
+  factor_engine/runtime/batch_service.py: 7bae6f96973ef11ef0c89ce2844caf95074a658ae0d523403cfc5d8d721d0c82
+  factor_engine/runtime/engine.py: 6d2a070757f1a494ec0e4e7bb1af3e322abaf94cda0d19a66310e35026b67d61
+  factor_engine/runtime/bounded_pipeline.py: a07194d0e6c50cb0e46338cf9ae11c83e7b2804b49c648271d1c27d5256a6057
+  factor_engine/runtime/persistent_run_state.py: 3397822c28c0d214114f6642f62fd2cf512a955a50caab8ac98fb96f82d5de79
+  factor_engine/runtime/resume_validation.py: 57435feaa6a099274b43df7cc6ce0f9460a6cd0b9103c7e2fe812d09e6dd5267
+  factor_engine/tests/runtime/test_v9_m11c_runtime_evidence.py: 7eceed7359233e4a2f478bbc19b6d7802f7f3ecce7531c64f3fb242145e9df16
+behavior:
+  - Private opt-in snapshot plumbing preserves default public result shape and accepts exact legacy envelopes.
+  - Parent-generated wave evidence IDs; snapshot run/factor ownership validated against actual assignments.
+  - Snapshot wire bytes charged to transport before ordinary result admission; direct artifact descriptors also budget-checked.
+  - Evidence persists before success terminalization; unavailable is distinct from observed empty and cannot overwrite observed evidence.
+  - Ordinal link table and ordered streaming digest avoid unbounded assignment JSON and preserve legal large waves.
+  - Per-record payload length checked before fetch; evidence pages capped at 1MiB charged wire size and 512 rows.
+  - Resume validates schema markers, references, payloads, digests, manifest names, link counts and orphan links.
+  - Missing receipt does not by itself invalidate a new evidence schema; real legacy repeated terminal-artifact resumes remain unavailable.
+  - Actual failed slot owns FAILED/UNKNOWN terminalization and evidence; other slots are not incorrectly reconciled.
+tests:
+  full_v9_main_at_m11c_sources: {passed: 717, failed: 0, warnings: 60, seconds: 187.84, xml: v9-wave8-durable-final.xml}
+  snapshot_and_runtime_main: {passed: 66, failed: 0, warnings: 35, seconds: 34.76, xml: v9-m11c-durable-main.xml}
+  default_auto80_policy_main: {passed: 75, failed: 0, warnings: 2, seconds: 26.02, xml: v9-m11c-auto80-main.xml}
+  owner_forwarding_main: {passed: 10, failed: 0, seconds: 0.37, xml: v9-m11c-owner-main.xml}
+  final_preservation: {passed: 124, failed: 0, xfailed: 1, warnings: 70, seconds: 138.22, xml: v9-m11c-preservation-final.xml}
+  touched_source_compileall_and_diffcheck: PASS
+historical_failures:
+  - v9-m11c-preservation-main.xml records 115pass/2fail before old fault-injection and cancellation-expectation tests were aligned.
+  - v9-m11c-slot-main.xml records 5pass/1fail/1xfail; staged slot test had not yet been delivered. Main result overrides earlier overlay claims.
+  - v9-wave8-durable.xml records 716pass/1fail before owner mock explicitly supplied and verified transport budget.
+limitations:
+  - Only instrumented model producers; bounded wave samples, not a complete every-factor/every-window failure ledger.
+  - A wave's failure reason code records loss of slot protocol authority; error_detail retains the underlying typed worker exception.
+  - Same-run pending execution remains fail-closed until persisted worker-exit proof is implemented. Terminal-artifact resume is not full auto-resume.
+  - With no receipt, coordinated deletion of all evidence and link rows is indistinguishable from a run that dispatched no wave; no externally attested completeness claim.
+  - Page wire bound is not exact decoded Python RSS. No real-data/GPU/100k throughput or OOM certification.
+  - Full repository CI, full native-backend parity and production publication gates NOT_RUN.
+  - Existing fork-from-threaded-process warnings and unsupported synthetic Polars classifications are retained, not waived by relabeling.
+  - No GitHub, commit, deployment, publication, or production-data mutation.
+usage: V9-DEFAULT-CALL-AND-FAILURE-EVIDENCE.md

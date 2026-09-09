@@ -1,0 +1,147 @@
+{
+  "scope": "synthetic public planner; no IO or execution certification",
+  "optimizer_compile": "UNAVAILABLE",
+  "actual_entry": "Optimizer.optimize_with_pass_trace",
+  "optimized_op": "ts_first_passage_bias",
+  "optimized_hash": "435ffd3b38ee027a1088d99518ac2d7a688f929000b02f802d6d04fc44d97cb2",
+  "legacy_trace_equivalent": true,
+  "passes": [
+    {
+      "name": "literal_fold",
+      "input_ir": "logical_query_graph",
+      "output_ir": "logical_query_graph",
+      "semantic_equivalence": "value_preserving",
+      "numeric_equivalence": "EXACT_VALUE",
+      "invariants": [
+        {
+          "name": "ROOT_SEMANTICS_PRESERVED",
+          "passed": true
+        },
+        {
+          "name": "SOURCE_DEPENDENCIES_PRESERVED",
+          "passed": true
+        },
+        {
+          "name": "LEAF_COLUMNS_PRESERVED",
+          "passed": true
+        }
+      ]
+    },
+    {
+      "name": "parameter_validation",
+      "input_ir": "logical_query_graph",
+      "output_ir": "logical_query_graph",
+      "semantic_equivalence": "value_preserving",
+      "numeric_equivalence": "EXACT_VALUE",
+      "invariants": [
+        {
+          "name": "ROOT_SEMANTICS_PRESERVED",
+          "passed": true
+        },
+        {
+          "name": "SOURCE_DEPENDENCIES_PRESERVED",
+          "passed": true
+        },
+        {
+          "name": "LEAF_COLUMNS_PRESERVED",
+          "passed": true
+        }
+      ]
+    },
+    {
+      "name": "composite_lowering",
+      "input_ir": "logical_query_graph",
+      "output_ir": "logical_query_graph",
+      "semantic_equivalence": "value_preserving",
+      "numeric_equivalence": "EXACT_VALUE",
+      "invariants": [
+        {
+          "name": "ROOT_SEMANTICS_PRESERVED",
+          "passed": true
+        },
+        {
+          "name": "SOURCE_DEPENDENCIES_PRESERVED",
+          "passed": true
+        },
+        {
+          "name": "LEAF_COLUMNS_PRESERVED",
+          "passed": true
+        }
+      ]
+    },
+    {
+      "name": "post_lowering_literal_fold",
+      "input_ir": "logical_query_graph",
+      "output_ir": "logical_query_graph",
+      "semantic_equivalence": "value_preserving",
+      "numeric_equivalence": "EXACT_VALUE",
+      "invariants": [
+        {
+          "name": "ROOT_SEMANTICS_PRESERVED",
+          "passed": true
+        },
+        {
+          "name": "SOURCE_DEPENDENCIES_PRESERVED",
+          "passed": true
+        },
+        {
+          "name": "LEAF_COLUMNS_PRESERVED",
+          "passed": true
+        }
+      ]
+    },
+    {
+      "name": "fastpath_rewrite",
+      "input_ir": "logical_query_graph",
+      "output_ir": "logical_query_graph",
+      "semantic_equivalence": "value_preserving",
+      "numeric_equivalence": "IEEE_EQUIVALENT",
+      "invariants": [
+        {
+          "name": "ROOT_SEMANTICS_PRESERVED",
+          "passed": true
+        },
+        {
+          "name": "SOURCE_DEPENDENCIES_PRESERVED",
+          "passed": true
+        },
+        {
+          "name": "LEAF_COLUMNS_PRESERVED",
+          "passed": true
+        }
+      ]
+    },
+    {
+      "name": "parameter_canonicalization",
+      "input_ir": "logical_query_graph",
+      "output_ir": "optimized_logical_graph",
+      "semantic_equivalence": "identity",
+      "numeric_equivalence": "EXACT_VALUE",
+      "invariants": [
+        {
+          "name": "ROOT_SEMANTICS_PRESERVED",
+          "passed": true
+        },
+        {
+          "name": "SOURCE_DEPENDENCIES_PRESERVED",
+          "passed": true
+        },
+        {
+          "name": "LEAF_COLUMNS_PRESERVED",
+          "passed": true
+        }
+      ]
+    }
+  ],
+  "fail_closed": {
+    "typed_unit_mismatch": "ts_first_passage_bias: same-unit input contract violated (x='CNY/share', scale='ratio')",
+    "lost_leaf_invariant": {
+      "type": "PassInvariantError",
+      "reason": "pass lost_leaf_invariant invariant failure: ROOT_SEMANTICS_PRESERVED: root semantic_attrs changed; LEAF_COLUMNS_PRESERVED: before=[(('cardinality', 'many_to_one'), ('domain', 'price_volume'), ('dtype', 'float64'), ('field', 'close'), ('field_id', 'StockDailyBarAdj.close'), ('field_registry_hash', 'cb816ec142cc2acf18413f110397415a544c1bf84ec369fec8f069df8893fb18'), ('frequency', 'daily'), ('name', 'close'), ('pit_safe', True), ('price_basis', 'ADJUSTED'), ('source_field', 'AdjClose'), ('source_table', 'StockDailyBarAdj'), ('temporal_model', 'exact'), ('unit', 'CNY/share'))], after=[]"
+    },
+    "production_numeric_policy": {
+      "type": "PassLegalityError",
+      "reason": "pass production_numeric_policy requires RESEARCH_APPROXIMATE, policy allows through IEEE_EQUIVALENT"
+    }
+  }
+}

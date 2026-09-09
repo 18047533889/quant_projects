@@ -599,34 +599,23 @@ class TSCausalLocalLinearSmoother(SeriesOperator):
                 # FL-P0-005: Build position array preserving physical time offsets
                 # WRONG: positions = np.arange(len(finite_values))  # compresses time
                 # RIGHT: positions = indices_where_finite  # preserves gaps
-                n = len(finite_values)
                 window_indices = np.arange(len(window_data), dtype=float)
                 positions = window_indices[finite_mask]  # physical bar offsets
 
-                # OLS: y = a + b * position
-                # Normal equations:
-                #   a * n + b * sum(pos) = sum(y)
-                #   a * sum(pos) + b * sum(pos^2) = sum(pos * y)
-                sum_pos = positions.sum()
-                sum_pos2 = (positions ** 2).sum()
-                sum_y = finite_values.sum()
-                sum_pos_y = (positions * finite_values).sum()
-
-                # Solve 2x2 system
-                denom = n * sum_pos2 - sum_pos * sum_pos
-                if abs(denom) < 1e-14:
-                    # Degenerate case: perfectly collinear positions (shouldn't happen)
-                    # Fall back to mean
-                    out[row, col] = finite_values.mean()
-                    continue
-
-                a = (sum_pos2 * sum_y - sum_pos * sum_pos_y) / denom
-                b = (n * sum_pos_y - sum_pos * sum_y) / denom
-
-                # FL-P0-005: Endpoint fitted value at the PHYSICAL position of current bar
-                # The last position in the window is positions[-1] (not n-1 after compression)
-                y_t = a + b * positions[-1]
-                out[row, col] = y_t
+                # Center the design and scale the response before reductions;
+                # normal-equation differences lose precision at large offsets.
+                center = positions.mean()
+                centered = positions - center
+                scale = float(np.max(np.abs(finite_values)))
+                scaled = finite_values / scale if scale > 0.0 else finite_values
+                mean = scaled.mean()
+                slope = np.dot(centered, scaled - mean) / np.dot(centered, centered)
+                # This is a current-endpoint prediction, even when that query
+                # bar is missing.  Never stamp the last observed bar onto t.
+                with np.errstate(over="ignore", invalid="ignore"):
+                    y_t = (mean + slope * (len(window_data) - 1 - center)) * scale
+                if np.isfinite(y_t):
+                    out[row, col] = y_t
 
         from factor_engine.cleaned_operators.rolling_pack import frame_like
         return frame_like(x, out)
@@ -651,8 +640,8 @@ class ButterworthLowpassCausalOperator(SeriesOperator):
 
     Mathematical formulation:
         cutoff_freq = 1.0 / cutoff_period
-        b, a = scipy.signal.butter(order, cutoff_freq, btype='low', output='ba')
-        sos = scipy.signal.tf2sos(b, a)
+        sos = scipy.signal.butter(order, cutoff_freq, fs=1.0,
+                                  btype='low', output='sos')
 
         Forward-only recursive filtering through cascaded second-order sections.
         Each section maintains 2 historical inputs + 2 historical outputs.
@@ -663,10 +652,10 @@ class ButterworthLowpassCausalOperator(SeriesOperator):
 
     Execution contract:
         - Stateful: recursive filter depends on full finite prefix
-        - Checkpointable: state is SOS history (zi) — serializable
-        - Time shard UNSAFE: requires checkpoint restore across shards
+        - No runtime checkpoint adapter: full-history replay is mandatory
+        - Independent time shards are unsafe; replay the prefix before slicing
         - Strictly causal: forward-only (no filtfilt)
-        - Warmup: minimal (initialized with zero state)
+        - Initial state: steady state of the first finite observation
 
     Parameters:
         x: Input signal series
@@ -709,10 +698,10 @@ class ButterworthLowpassCausalOperator(SeriesOperator):
         causal=True,
         uses_current_observation=True,
         stateful=True,
-        checkpointable=True,
+        checkpointable=False,
         time_shard_safe=False,
-        warmup=0,  # cutoff_period is effective warmup
-        lag_class="zero",
+        warmup=0,  # output warmup only; history authority requires full replay
+        lag_class="variable",  # group delay depends on frequency and parameters
         jump_policy=JumpPreservationPolicy.PRESERVE_ALL_FINITE_JUMPS,
         turnover_control=False,
     )
@@ -747,7 +736,9 @@ class ButterworthLowpassCausalOperator(SeriesOperator):
                 f"cutoff_period must be > 2 (cutoff_freq={cutoff_freq:.3f} >= Nyquist=0.5), got {cutoff_period}"
             )
 
-        sos = sp_signal.butter(order, cutoff_freq, btype='low', analog=False, output='sos')
+        # cutoff_freq is cycles/bar, not a fraction of Nyquist. Without fs,
+        # scipy interprets it relative to Nyquist and halves the cutoff.
+        sos = sp_signal.butter(order, cutoff_freq, fs=1.0, btype='low', analog=False, output='sos')
 
         xv = x.to_numpy(dtype=float)
         rows, cols = xv.shape
@@ -794,6 +785,16 @@ class ButterworthLowpassCausalOperator(SeriesOperator):
 
 
 _CANONICALS.append("ts_butterworth_lowpass_causal")
+
+# The recurrence is not a finite-window transform. Do not let cutoff_period
+# masquerade as sufficient history until the runtime owns an SOS checkpoint.
+from factor_engine.runtime.execution_contract import declare_stateful
+
+declare_stateful(
+    "ts_butterworth_lowpass_causal",
+    state_model="recursive",
+    chunking="required_full_history",
+)
 
 
 def filter_smooth_contract(canonical: str) -> FilterContract:
@@ -843,10 +844,10 @@ def filter_smooth_contract(canonical: str) -> FilterContract:
             causal=True,
             uses_current_observation=True,
             stateful=True,
-            checkpointable=True,
+            checkpointable=False,
             time_shard_safe=False,
-            warmup=0,  # cutoff_period via min_periods
-            lag_class="one",  # IIR has some phase lag
+            warmup=0,  # output warmup only; history authority requires full replay
+            lag_class="variable",  # group delay depends on frequency and parameters
             jump_policy=JumpPreservationPolicy.PRESERVE_ALL_FINITE_JUMPS,
             turnover_control=False,
         )
@@ -879,4 +880,3 @@ def _register_surface() -> None:
 
 
 _register_surface()
-

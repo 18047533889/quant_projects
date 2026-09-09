@@ -24,6 +24,7 @@ import pandas as pd
 
 from factor_engine.cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
 from factor_engine.cleaned_operators.rolling_pack import frame_like
+from factor_engine.cleaned_operators.ts_model._rolling_core import pinball_quantile_fit
 
 _EPS = 1e-12
 
@@ -167,18 +168,14 @@ def _hill_series(series: np.ndarray, window: int, side: str, tail_fraction: floa
             continue
         # ONE kernel for both sides: upper operates on x, lower on the mirrored
         # series z = -x.  HillLower(x) == HillUpper(-x) exactly — there is no
-        # separate lower-tail code path to drift.  The log-ratio needs every
-        # exceedance to share the sign of the threshold and a non-zero
-        # threshold, which holds on BOTH mirrors:
-        #   * centred signed series, lower: z = -x, u = Q(-x, 1-frac) > 0,
-        #     exceedances z > u > 0  (the old ``u <= 0`` guard spuriously NaN'd
-        #     this case because it tested Q(x, frac) < 0 instead);
-        #   * positive-magnitude series, lower: z = -mag < 0, u = -Q(mag, frac)
-        #     < 0, exceedances z > u are likewise < 0 — same sign, ratio
-        #     positive, identical to the direct x-space computation.
-        # Only an exact zero / non-finite threshold is degenerate (division by
-        # zero / no defined ratio); a mixed-sign exceedance set falls out as NaN
-        # through the ``np.isfinite(xi)`` guard below.
+        # separate lower-tail code path to drift.  After mirroring, the same
+        # classic-Hill domain applies to both sides: a strictly-positive
+        # threshold and strictly-positive observations above it.
+        # Classic Hill is defined only for a strictly-positive threshold and
+        # strictly-positive exceedance values.  A negative upper-tail threshold
+        # (for example an all-negative window) is not rescued by a positive
+        # ratio: its resulting negative estimate is outside the estimator's
+        # domain.  The lower side uses the same rule after mirroring ``z=-x``.
         # R26-060..062: the LOWER tail is only a valid Hill problem on SIGNED
         # data (returns / residuals / downside losses), whose negative values
         # mirror onto positive, unbounded-above loss magnitudes.  A window with
@@ -191,8 +188,8 @@ def _hill_series(series: np.ndarray, window: int, side: str, tail_fraction: floa
         z = valid if side == "upper" else -valid
         u = float(np.quantile(z, 1.0 - frac))
         exc = z[z > u]
-        if not np.isfinite(u) or u == 0.0:
-            continue  # log-ratio is undefined for a zero / non-finite threshold
+        if not np.isfinite(u) or u <= 0.0:
+            continue  # Hill requires a finite, strictly-positive threshold
         if exc.size < mtc:
             continue
         # R16-140: classic Hill is defined on a STRICTLY-POSITIVE tail magnitude.
@@ -200,10 +197,19 @@ def _hill_series(series: np.ndarray, window: int, side: str, tail_fraction: floa
         # ``log(negative)`` into the mean; that is undefined, not a valid
         # estimator.  Every ratio ``x_i / u`` must be strictly positive (same
         # sign, same as the threshold) — otherwise the window is NaN.
-        ratios = exc / u
-        if np.any(ratios <= 0.0) or not np.all(np.isfinite(ratios)):
+        if np.any(~np.isfinite(exc)) or np.any(exc <= u):
             continue
-        xi = float(np.mean(np.log(ratios)))
+        # Compute log(exc/u) without forming a potentially overflowing ratio.
+        # log1p preserves nextafter-sized exceedances close to the threshold;
+        # log differences cover the full finite dynamic range farther away.
+        delta = exc - u
+        near = delta <= u
+        log_ratios = np.empty(exc.size, dtype=float)
+        log_ratios[near] = np.log1p(delta[near] / u)
+        log_ratios[~near] = np.log(exc[~near]) - np.log(u)
+        if not np.all(np.isfinite(log_ratios)):
+            continue
+        xi = float(np.mean(log_ratios))
         if np.isfinite(xi):
             out[t] = xi
     return out
@@ -267,37 +273,11 @@ def _frame_like_result(template: pd.DataFrame, values: np.ndarray) -> pd.DataFra
 # ---------------------------------------------------------------------------
 
 def _quantile_beta(x: np.ndarray, y: np.ndarray, q: float) -> float:
-    n = x.shape[0]
-    if n < 3:
+    design = np.column_stack([np.ones(x.shape[0]), x])
+    beta = pinball_quantile_fit(design, y, q)
+    if beta is None:
         return np.nan
-    xc = x - x.mean()
-    if float(np.sum(xc * xc)) <= _EPS:
-        return np.nan
-    from scipy.optimize import linprog
-
-    # variables: [alpha, beta, u_1..u_n, v_1..v_n];  alpha + beta x_i + u_i - v_i = y_i
-    dim = 2 + 2 * n
-    c = np.zeros(dim)
-    c[2 : 2 + n] = q
-    c[2 + n :] = 1.0 - q
-    A_eq = np.zeros((n, dim))
-    for i in range(n):
-        A_eq[i, 0] = 1.0
-        A_eq[i, 1] = x[i]
-        A_eq[i, 2 + i] = 1.0
-        A_eq[i, 2 + n + i] = -1.0
-    bounds = [(None, None), (None, None)] + [(0.0, None)] * (2 * n)
-    try:
-        result = linprog(c, A_eq=A_eq, b_eq=y, bounds=bounds, method="highs")
-    except Exception:
-        return np.nan
-    if result is None or result.status != 0 or result.x is None:
-        return np.nan
-    beta = float(result.x[1])
-    if not np.isfinite(beta):
-        return np.nan
-    return beta
-
+    return float(beta[1])
 
 def _quantile_beta_series(y: np.ndarray, x: np.ndarray, window: int, q: float) -> np.ndarray:
     rows, cols = y.shape

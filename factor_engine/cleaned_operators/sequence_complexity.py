@@ -402,9 +402,11 @@ def _sample_entropy(run: np.ndarray, m: int, r: float) -> float:
             vj = run[j : j + m + 1]
             if np.max(np.abs(vi - vj)) <= r:
                 matches_m_plus_1 += 1
-    for i in range(n - m):
+    # B uses the same extendable template starts as A; the terminal length-m
+    # template has no following observation and cannot enter the denominator.
+    for i in range(n - m - 1):
         vi = run[i : i + m]
-        for j in range(i + 1, n - m + 1):
+        for j in range(i + 1, n - m):
             vj = run[j : j + m]
             if np.max(np.abs(vi - vj)) <= r:
                 matches_m += 1
@@ -418,6 +420,7 @@ def _sample_entropy(run: np.ndarray, m: int, r: float) -> float:
     category="complexity",
     business_category="sequence_complexity",
     canonical="ts_sample_entropy",
+    semantic_version="2.0",
     source="sequence_complexity")
 class TsSampleEntropy(SeriesOperator):
     """样本熵：容差 = tolerance_scale × 窗口标准差；无匹配对或常数窗口返回 NaN。window 上限 120。"""

@@ -1,0 +1,16 @@
+schema: factor_engine.v8.evidence.v1
+git_sha: 118cd21c6262082336daa545ddc06b6f78def7b9
+timestamp: '2026-09-09T00:34:26+08:00'
+status: MERGED_FROZEN_SCOPED_GREEN
+files:
+  factor_engine/runtime/worker_ownership_sqlite.py: 995b1b6fe2d57d8ecca6f4d5c47b63a788141c8e7109cc2dd2864512ee447e65
+  factor_engine/tests/runtime/test_v8_sqlite_identity_one_read.py: 2234912e85c6cb4799d25950fb21c02d51179441f4866c11722bbbfb498f7a31
+defect: SQLite selector reread the pathname without a bound after authenticating identity from a bounded safe descriptor.
+fix: Reuse the exact authenticated mapping returned by the existing verifier; no second pathname read.
+tests:
+  stage: '2 passed;38 related passed'
+  oracle: real store initialization opens identity once with safe flags; Path.read_bytes forbidden
+  frozen_runtime_checkpoint: '610 passed,1 strict R02 xfail; see V8-OWNERSHIP-CLEANUP-CHECKPOINT.yaml'
+limitations:
+  - This fixes identity rereading only, not adversarial SQLite pathname ABA.
+  - Pending execution, native/GPU/approved-data/100k and production acceptance NOT_RUN.

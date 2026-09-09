@@ -1,0 +1,32 @@
+schema: factor_engine.v8.evidence.v1
+git_sha: 118cd21c6262082336daa545ddc06b6f78def7b9
+timestamp: '2026-09-09T01:23:00+08:00'
+status: TEST_CONTRACT_ADAPTATION_GREEN
+target: server-c:/home/sunhaiwei/quant_projects
+production_runtime_modified_for_this_adaptation: false
+files:
+  factor_engine/tests/runtime/test_v7_direct_artifact_pipeline.py: 416c22f5113518cb4e39cf0f2e8e1794337b28cbddaae30e2f5360a439f554c4
+  factor_engine/tests/runtime/test_v8_durable_deadline_identity.py: f9929a67944c5aa1d2ae91186025013991fb965b3bbc1ca7e241163b481fef91
+baseline:
+  result: '2 failed,651 passed,1 strict R02 xfail in608.78s'
+  xml: /tmp/v8-resumed-sept9-baseline.xml
+  ledger: /tmp/v8-resumed-sept9-baseline-outcomes.jsonl
+  footer: '654 collected/completed,2 failures,no incomplete nodes'
+  causes:
+    - Result-workspace denial fixture denied newly required MANIFEST_BUFFER and timed out before compute.
+    - Deadline fixture spied on an obsolete relative-time helper instead of the now-wired absolute deadline.
+changes:
+  - Allow only input MANIFEST_BUFFER in denial fixture, retain rejection of WRITER_BATCH and other extra memory.
+  - Preserve original failed status, resource requirement reason and absence of artifacts assertions.
+  - Add assertions for actual input admission, actual WRITER_BATCH request and compute engine receiving sink policy.
+  - Check persisted original deadline against actual ingestion and admission absolute deadlines.
+  - Test both shorter input deadline and shorter job deadline; expire actual admission checker.
+verification:
+  independent_review: GPT-5.6-sol compared local candidates with server baseline; original contracts preserved
+  result: '5 passed,1 warning in4.13s'
+  xml: /tmp/v8-fixture-admission-deadline-green.xml
+limitations:
+  - Test fixture compatibility, not a change weakening production admission.
+  - Full merged regression recorded separately; these five checks are not complete runtime certification.
+  - Safe same-PID worker reuse remains a strict expected failure.
+  - Actual approved data/GPU/100k/performance acceptance and remote CI NOT_RUN.

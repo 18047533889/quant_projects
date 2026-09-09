@@ -1,0 +1,59 @@
+id: V8-M01-M04-KALMAN-REGIME
+status: COMPLETED_LOCAL
+date: 2026-09-08
+git_sha: 118cd21c6262082336daa545ddc06b6f78def7b9
+scope: V8-M01 through V8-M04 model mathematics
+owned_files:
+  - factor_engine/cleaned_operators/ts_model/state_space.py
+  - factor_engine/cleaned_operators/ts_model/complexity.py (regime section only)
+  - factor_engine/tests/operators/test_v8_kalman_regime.py
+  - factor_engine/tests/r35/test_model_audit_kalman.py
+  - factor_engine/tests/r35/test_model_audit_kalman_stateful.py
+changes:
+  - Stable Welford prefix population moments replace sum/sum-square subtraction.
+  - Dimensionless trend scales the legacy rank-one initial covariance matrix;
+    absolute fixed-q/r recursion remains unchanged.
+  - Dimensionless through-origin beta uses finite-pair prefix scales: r*var(y)
+    and q*var(y)/var(x); P is beta-squared covariance, not standard error.
+  - Dimensionless beta initialization uses an exact long-double degeneracy gate,
+    so predictor unit changes cannot cross an absolute epsilon or select a new prior.
+  - Regime emissions update in long-double log space with logaddexp normalization;
+    the fixed zero-mean emission, transition matrix, clipping, and heuristic remain.
+semantic_versions_v2:
+  - ts_kalman_level
+  - ts_kalman_innovation_z
+  - ts_kalman_trend
+  - ts_kalman_beta
+  - ts_kalman_beta_change
+  - ts_kalman_beta_uncertainty
+  - ts_two_state_regime_probability
+  - ts_regime_duration
+  - ts_change_point_probability
+state_schema_versions_v2:
+  - ts_kalman_level
+  - ts_kalman_innovation_z
+  - ts_kalman_trend
+  - ts_kalman_beta
+  - ts_kalman_beta_change
+  - ts_kalman_beta_uncertainty
+verification:
+  focused:
+    command: ../.venv/bin/python -m pytest tests/operators/test_v8_kalman_regime.py tests/r35/test_model_audit_kalman.py tests/r35/test_model_audit_kalman_stateful.py -q
+    result: PASS (46 passed)
+    coverage:
+      - independent long-double online-moment and log-regime references
+      - offsets 0, 1e6, 1e8, 1e10 and missing prefix observations
+      - trend scale 0.01 and 100 plus absolute legacy recursion oracle
+      - beta joint, predictor-only, and response-only unit transforms
+      - predictor scale 1e-8 crossing the prior absolute epsilon threshold
+      - beta covariance transforms in beta-squared units
+      - actual winning OperatorRegistry public calls
+  broader_model_regression:
+    command: ../.venv/bin/python -m pytest tests/operators/test_r11_round3_complexity.py tests/operators/r28/test_garch_kalman_causality.py tests/operators/r28/test_model_causality_gates.py tests/operators/test_v8_kalman_regime.py -q
+    result: PASS (71 passed, 6 skipped)
+    detail: Skips are declared unavailable DMD bindings and fail-closed transfer-entropy fixtures.
+limitations:
+  - LOCAL ONLY; no commit, push, deployment, production factor, or full dataset run.
+  - Kalman remains checkpointable=false, time_shard_safe=false, full-history replay.
+  - No new native/SQL backend was added; affected production admission remains gated.
+  - Full repository pytest and real A-share production-data validation are NOT_RUN.

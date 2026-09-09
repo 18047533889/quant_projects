@@ -1,0 +1,34 @@
+schema_version: evidence.r2.v1
+issue_ids: [V8-R02, V8-R07]
+timestamp_utc: "2026-09-08T14:45:00Z"
+scope: read-only worker ownership inspection and fail-closed current-process retirement evidence
+production:
+  file: factor_engine/runtime/worker_ownership.py
+  sha256: 2449f0ed24399ce98e73dc333f4235cf1dabd14784c8f84b200172ab365ffa73
+implemented:
+  status: IMPLEMENTED_SCOPED
+  detail:
+    - Inspection reads one run-bound journal snapshot and passes that same immutable event list to the shared strict validator and current-process evidence evaluator.
+    - The existing strict validator semantics remain the journal-completeness authority; current OS evidence is reported separately and never repairs, completes, or appends to the journal.
+    - STARTING-only history remains unknown. BOUND history is retired only by a different OS boot, an absent PID, or a present PID with a different kernel starttime on the same machine and PID namespace.
+    - Missing, empty, corrupt, oversized, permission-inaccessible, cross-host, cross-PID-namespace, and unknown process probes fail closed.
+    - EXITED identity fields use exact JSON types, including rejecting boolean PID values that compare equal to integers in Python.
+    - Extremely large JSON integer timestamps fail closed instead of escaping validation through OverflowError.
+tests:
+  - command: PYTHONPATH=/tmp/v8stagepkg python -m pytest --rootdir=/tmp/v8stagepkg -p no:cacheprovider -q tests/test_inspection.py
+    result: 10 passed in 0.10s on Linux inspection stage before production merge
+  - command: root-owned production integration of worker ownership, inspection, supervisor gate, resume, and coordinator-lock suites
+    result: 74 passed in 5.60s; XML /tmp/v8-worker-inspection-integrated.xml
+observed_boundaries:
+  real_process:
+    - A spawned child was bound to its real PID/starttime, terminated, joined, and then reported retired without changing journal bytes, size, mtime, or directory entries.
+    - A live bound child remained not retired, and a forged EXITED record conflicting with the live OS identity remained fail closed.
+  simulated_identity:
+    - PID reuse and boot-change branches use injected process-starttime or boot-id observations; they validate decision logic but are not evidence of an actual host reboot or naturally occurring PID reuse.
+  read_only:
+    - Missing and corrupt journal inspection does not create worker-ownership.lock or any replacement authority.
+limitations:
+  - This inspection does not enable pending same-run resume, recomputation, reconciliation, lease release, or worker epoch reuse.
+  - Cross-host and cross-PID-namespace identities remain unprovable from the inspecting host and therefore return not retired.
+  - Simulated PID reuse and reboot tests are not production observations of those events.
+  - SQLite-backed lifecycle scalability and adapter semantics are reviewed separately and are not claimed by this JSONL inspection evidence.

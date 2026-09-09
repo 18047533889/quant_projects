@@ -9,6 +9,19 @@ import pytest
 from factor_engine.runtime import bounded_pipeline as pipeline
 
 
+@contextmanager
+def _isolated_worker_broker_globals(monkeypatch):
+    import factor_engine.runtime.resource_broker as broker_module
+
+    with monkeypatch.context() as isolated:
+        for name in (
+            "_V2_BROKER", "_V2_BROKER_PID", "_V2_BROKER_POLICY_KEY",
+            "_V2_WORKER_PROXY",
+        ):
+            isolated.setattr(broker_module, name, None)
+        yield
+
+
 def test_protocol_invalid_direct_receipt_is_wave_error(tmp_path, monkeypatch):
     idx = pd.MultiIndex.from_tuples(
         [(pd.Timestamp("2025-01-02"), "A")], names=["time", "instrument"]
@@ -64,9 +77,10 @@ def test_reconciler_disables_nested_retries(monkeypatch):
         "factor_engine.runtime.durable_artifact_sink.reconcile_factor_artifact",
         lambda *args, **kwargs: {"verified": True},
     )
-    assert reconciler(None, {}, "/tmp", "r", object(), 0, "a", 1, "a" * 32) == {
-        "verified": True
-    }
+    with _isolated_worker_broker_globals(monkeypatch):
+        assert reconciler(None, {}, "/tmp", "r", object(), 0, "a", 1, "a" * 32) == {
+            "verified": True
+        }
 
 
 def test_compute_exit_precedes_reclaim_and_quarantine_blocks_reclaim():

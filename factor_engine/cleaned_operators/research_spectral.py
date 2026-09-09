@@ -17,9 +17,10 @@ stay out of the default production grammar:
   ``window``/``n_segments``/``max_freq``, so a searchable config cannot chase
   the estimator's finite-sample bias; genuine quadratic phase coupling yields a
   positive excess.
-* ``ts_kernel_granger_score`` — kernel-ridge predictive improvement of ``x``
-  for ``y`` under *blocked* out-of-sample evaluation: ``ln(MSE_restricted /
-  MSE_full)``.  Fixed RBF kernel / ridge; no training-residual cheating.
+* ``ts_kernel_granger_score`` — blocked out-of-sample loss comparison between
+  a Y-lag RBF model and a fixed trace-normalized additive Y/X-lag RBF model:
+  ``ln(MSE_restricted / MSE_full)``.  This is a modeled diagnostic, not a
+  causal or conditional-information proof.
 
 Timing honesty — BLOCKED_HISTORICAL_EVALUATION (M-9xx)
 -------------------------------------------------------
@@ -30,8 +31,9 @@ is split into a contiguous train block and a later test block
 the RBF bandwidths (median pairwise distance) are fitted on the TRAINING block
 only — the test block never touches any fit statistic, so
 ``ln(MSE_restricted/MSE_full)`` carries no in-sample / training-residual
-leakage.  The output describes "how much predictive information X adds within
-this trailing window", NOT a next-bar forecast.  The same blocked-cross-fit
+leakage.  The output compares those two fixed regularized models within this
+trailing window; it is NOT a next-bar forecast or a causal hypothesis test.
+The same blocked-cross-fit
 discipline applies to ``ts_residualized_hsic`` (contiguous train / purge gap /
 test blocks, both directions).
 * ``ts_residualized_hsic`` — HSIC between kernel-ridge residualisations of
@@ -142,8 +144,39 @@ _SR_RELATIONAL_SPECS = [
 
 
 def _rbf(a: np.ndarray, b: np.ndarray, sigma: float) -> np.ndarray:
-    d2 = np.sum(a * a, axis=1)[:, None] + np.sum(b * b, axis=1)[None, :] - 2.0 * a @ b.T
-    return np.exp(-d2 / (2.0 * sigma * sigma + _EPS))
+    # Direct pairwise differences avoid catastrophic cancellation in
+    # ||a||² + ||b||² - 2<a,b>.  Both train and query retain one coordinate
+    # system; separate centering would change cross-kernel geometry.
+    # Normalize differences, not large coordinates, before squaring.  This
+    # retains close-point precision and prevents finite bandwidths squaring
+    # into inf.  hypot preserves the existing additive EPS bandwidth exactly
+    # in real arithmetic.  Temporary pairwise buffers are bounded by row tiles.
+    a = np.asarray(a, dtype=float)
+    b = np.asarray(b, dtype=float)
+    if a.ndim != 2 or b.ndim != 2 or a.shape[1] != b.shape[1]:
+        raise ValueError("RBF inputs must be two-dimensional with matching feature widths")
+    bandwidth = np.hypot(float(sigma), np.sqrt(_EPS / 2.0))
+    d2 = np.zeros((a.shape[0], b.shape[0]), dtype=float)
+    with np.errstate(over="ignore", invalid="ignore", divide="ignore"):
+        for start in range(0, a.shape[0], 32):
+            stop = min(start + 32, a.shape[0])
+            for column in range(a.shape[1]):
+                left = a[start:stop, column, None]
+                right = b[None, :, column]
+                difference = left - right
+                overflow = np.isinf(difference) & np.isfinite(left) & np.isfinite(right)
+                difference /= bandwidth
+                if np.any(overflow):
+                    # Only opposite-sign finite operands can overflow a
+                    # subtraction. Scaling those operands first is safe and
+                    # cannot hide a close-point cancellation.
+                    fallback = left / bandwidth - right / bandwidth
+                    difference[overflow] = fallback[overflow]
+                np.square(difference, out=difference)
+                d2[start:stop] += difference
+        d2 *= -0.5
+        np.exp(d2, out=d2)
+    return d2
 
 
 # ---------------------------------------------------------------------------
@@ -164,6 +197,14 @@ def _bicoherence_values(v: np.ndarray, n_segments: int) -> list[float]:
     # trailing ``n % ns`` samples — the NEWEST data.  Use the last ns*seg
     # samples so the window's latest information is never discarded.
     v = v[-seg * ns:]
+    if not np.isfinite(v).all():
+        return []
+    magnitude = float(np.max(np.abs(v)))
+    if magnitude == 0.0:
+        return []
+    # One causal-window normalization preserves relative segment powers and
+    # the degree-six numerator/denominator ratio without unit under/overflow.
+    v = v / magnitude
     max_freq = min(32, seg // 2)
     B_sum = np.zeros((max_freq, max_freq), dtype=complex)
     # P_sum[f1,f2] = Σ_s |X_s(f1)·X_s(f2)|²  — the standard bicoherence
@@ -178,7 +219,8 @@ def _bicoherence_values(v: np.ndarray, n_segments: int) -> list[float]:
         if not np.all(np.isfinite(chunk)):
             return []
         t = np.arange(seg, dtype=float)
-        chunk = chunk - np.polyval(np.polyfit(t, chunk, 1), t)
+        chunk = (np.zeros_like(chunk) if np.all(chunk == chunk[0])
+                 else chunk - np.polyval(np.polyfit(t, chunk, 1), t))
         hann = 0.5 * (1.0 - np.cos(2.0 * np.pi * t / (seg - 1.0))) if seg > 1 else np.ones(seg)
         X = np.fft.rfft(chunk * hann)
         Xf = X[1 : max_freq + 1]
@@ -190,11 +232,17 @@ def _bicoherence_values(v: np.ndarray, n_segments: int) -> list[float]:
                 B_sum[f1 - 1, f2 - 1] += x1 * Xf[f2 - 1] * np.conj(Xf[f1 + f2 - 1])
                 P_sum[f1 - 1, f2 - 1] += p1 * pwr[f2 - 1]
         S_sum += pwr
+    denominators = [
+        P_sum[f1 - 1, f2 - 1] * S_sum[f1 + f2 - 1]
+        for f1 in range(1, max_freq + 1)
+        for f2 in range(1, max_freq - f1 + 1)
+    ]
+    energy_floor = np.finfo(float).eps * max(denominators, default=0.0)
     vals: list[float] = []
     for f1 in range(1, max_freq + 1):
         for f2 in range(1, max_freq - f1 + 1):
             denom = P_sum[f1 - 1, f2 - 1] * S_sum[f1 + f2 - 1]
-            if denom <= _EPS:
+            if denom <= energy_floor:
                 continue
             b2 = abs(B_sum[f1 - 1, f2 - 1]) ** 2 / denom
             if np.isfinite(b2):
@@ -280,6 +328,14 @@ def _bicoherence_top_decile_excess(v: np.ndarray, n_segments: int, n_surrogates:
     choice, while genuine quadratic phase coupling survives the phase scramble
     and gives a positive excess.
     """
+    if not np.isfinite(v).all() or v.size == 0:
+        return np.nan
+    magnitude = float(np.max(np.abs(v)))
+    if magnitude == 0.0:
+        return np.nan
+    # The excess is dimensionless too. Normalize before surrogate FFTs so
+    # their intermediate spectrum cannot overflow solely from physical units.
+    v = v / magnitude
     real = _bicoherence_top_decile_mean(v, n_segments)
     if not np.isfinite(real):
         return np.nan
@@ -321,11 +377,104 @@ def _ts_bicoherence_top_decile_excess(
 # ---------------------------------------------------------------------------
 # kernel Granger (blocked OOS)
 # ---------------------------------------------------------------------------
+def _safe_train_standardize(
+    train: np.ndarray, test: np.ndarray, *, preserve_constant_test: bool = False
+) -> tuple[np.ndarray, np.ndarray]:
+    """Train-only affine coordinates without absolute-scale thresholds."""
+    train = np.asarray(train, dtype=float)
+    test = np.asarray(test, dtype=float)
+    was_vector = train.ndim == 1
+    train_2d = train.reshape(-1, 1) if was_vector else train
+    test_2d = test.reshape(-1, 1) if was_vector else test
+    train_out = np.empty_like(train_2d)
+    test_out = np.empty_like(test_2d)
+    block_is_constant = bool(np.all(train_2d == train_2d[0]))
+    for column in range(train_2d.shape[1]):
+        tr = train_2d[:, column]
+        te = test_2d[:, column]
+        origin = tr[0]
+        with np.errstate(over="ignore", invalid="ignore"):
+            tr_dev = tr - origin
+        # Coordinate choice is a training-only decision.  A hostile holdout may
+        # fail closed later, but can never change fitted training geometry.
+        if not np.all(np.isfinite(tr_dev)):
+            magnitude = float(np.max(np.abs(tr)))
+            if not np.isfinite(magnitude) or magnitude == 0.0:
+                train_out[:, column] = 0.0
+                test_out[:, column] = 0.0
+                continue
+            bounded_tr = tr / magnitude
+            bounded_te = te / magnitude
+            tr_dev = bounded_tr - bounded_tr[0]
+            te_dev = bounded_te - bounded_tr[0]
+        else:
+            with np.errstate(over="ignore", invalid="ignore"):
+                te_dev = te - origin
+        scale = float(np.max(np.abs(tr_dev)))
+        if not np.isfinite(scale) or scale == 0.0:
+            train_out[:, column] = 0.0
+            if preserve_constant_test:
+                level_scale = abs(float(origin))
+                if not np.isfinite(level_scale) or level_scale == 0.0:
+                    level_scale = 1.0
+                test_out[:, column] = te_dev / level_scale
+            elif block_is_constant:
+                # Every training vector is identical, so the centered train and
+                # cross kernels are zero regardless of the holdout coordinates.
+                test_out[:, column] = 0.0
+            else:
+                # A moved holdout value in only one train-constant coordinate
+                # changes a mixed-dimensional RBF cross kernel, but training
+                # data provide no unit for that extrapolation.  Fail closed.
+                test_out[:, column] = np.where(te == origin, 0.0, np.nan)
+            continue
+        tr_scaled = tr_dev / scale
+        with np.errstate(over="ignore", invalid="ignore"):
+            te_scaled = te_dev / scale
+        mean = float(np.mean(tr_scaled))
+        sd = float(np.std(tr_scaled))
+        if not np.isfinite(sd) or sd == 0.0:
+            train_out[:, column] = 0.0
+            test_out[:, column] = 0.0
+            continue
+        train_out[:, column] = (tr_scaled - mean) / sd
+        test_out[:, column] = (te_scaled - mean) / sd
+    if was_vector:
+        return train_out[:, 0], test_out[:, 0]
+    return train_out, test_out
+
+
+def _center_train_test_kernel(
+    K_tr: np.ndarray, K_te: np.ndarray
+) -> tuple[np.ndarray, np.ndarray]:
+    """Center a train Gram and test-to-train Gram using training geometry."""
+    train_col_mean = K_tr.mean(axis=0, keepdims=True)
+    train_mean = float(K_tr.mean())
+    K_tr_c = K_tr - train_col_mean - train_col_mean.T + train_mean
+    K_te_c = K_te - K_te.mean(axis=1, keepdims=True) - train_col_mean + train_mean
+    return K_tr_c, K_te_c
+
+
+def _kernel_ridge_with_intercept(
+    K_tr_c: np.ndarray,
+    target: np.ndarray,
+    K_te_c: np.ndarray,
+    lam: float,
+) -> np.ndarray:
+    """Kernel ridge prediction with an unpenalized, train-only intercept."""
+    target_mean = np.mean(target, axis=0)
+    centered_target = target - target_mean
+    alpha = np.linalg.solve(K_tr_c + lam * np.eye(K_tr_c.shape[0]), centered_target)
+    return target_mean + K_te_c @ alpha
+
+
 def _kernel_granger_score(y: np.ndarray, x: np.ndarray, lag: int) -> float:
     """BLOCKED_HISTORICAL_EVALUATION: contiguous train/test blocks, scaler and
     RBF bandwidths fitted on the TRAINING block only (never the test block), so
     the output is a predictive-diagnostic score, not a next-bar forecast."""
     n = y.shape[0]
+    if not np.all(np.isfinite(y)) or not np.all(np.isfinite(x)):
+        return np.nan
     lg = max(1, int(lag))
     n_avail = n - lg
     if n_avail < 24:
@@ -344,36 +493,30 @@ def _kernel_granger_score(y: np.ndarray, x: np.ndarray, lag: int) -> float:
     # raw ``X`` lags (e.g. volume ~1e7) would let the full model's distance be
     # dominated by ``X``.  Both lag blocks are standardised with STATS FITTED ON
     # THE TRAINING BLOCK ONLY (never the test block), so no OOS contamination.
-    def _standardize(tr: np.ndarray, te: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-        mu = tr.mean(axis=0)
-        sd = tr.std(axis=0)
-        sd = np.where(np.isfinite(sd) & (sd > _EPS), sd, 1.0)
-        return (tr - mu) / sd, (te - mu) / sd
+    Yl_tr, Yl_te = _safe_train_standardize(Ylags[:train_n], Ylags[train_n:])
+    Xl_tr, Xl_te = _safe_train_standardize(Xlags[:train_n], Xlags[train_n:])
+    target_is_constant = bool(np.all(Ytr == Ytr[0]))
+    constant_target_holdout_moves = target_is_constant and bool(np.any(Yte != Ytr[0]))
+    Ytr, Yte = _safe_train_standardize(Ytr, Yte, preserve_constant_test=True)
+    if target_is_constant:
+        # Both fitted models reduce exactly to the same unpenalized intercept;
+        # unequal finite holdout values give equal positive losses.  If the
+        # holdout is also constant, both losses are zero and log(0/0) is undefined.
+        return 0.0 if constant_target_holdout_moves else np.nan
 
-    Yl_tr, Yl_te = _standardize(Ylags[:train_n], Ylags[train_n:])
-    Xl_tr, Xl_te = _standardize(Xlags[:train_n], Xlags[train_n:])
-
-    # R9-OP-029 (regularisation fairness): ``lam`` MUST be defined from the
-    # RESTRICTED training kernel only and shared verbatim by both models.  The
-    # old ``_kridge`` recomputed ``lam = 1e-3·trace(K)/n`` *inside* each call —
-    # restricted used K=Kr but full used K=Kr+0.5·Kx, so lambda_r != lambda_f
-    # and ``MSE_R/MSE_F`` absorbed a regularisation change on top of "adding X".
-    # R6-207 (model fairness): the restricted and full models share the same
-    # Y-lag RBF bandwidth, so log(MSE_R/MSE_F) measures "how much predictive
-    # information X adds" and nothing else.  P1-11/P1-12 refine the full kernel:
-    # the X kernel uses X's OWN bandwidth (P1-11) and the sum is trace-normalised
-    # by (1+eta) so trace(K_F) == trace(K_R) (P1-12) — "adding X" (with a fair
-    # kernel and fair regularisation) is the only change.
+    # Both blocked models use training-only geometry and the same numeric ridge
+    # coefficient.  They are nevertheless different fixed RKHS models, so the
+    # resulting OOS loss ratio is a modeled predictive diagnostic rather than a
+    # nested likelihood test or a pure causal-information measure.
     def _median_bandwidth(tr: np.ndarray) -> float:
         # median pairwise distance over the TRAINING block only (never the
         # test block, so no OOS contamination).
-        d2 = (
-            np.sum(tr[:, None, :] ** 2, axis=2)
-            + np.sum(tr[None, :, :] ** 2, axis=2)
-            - 2.0 * tr @ tr.T
-        )
-        sigma = float(np.median(np.sqrt(np.maximum(d2, 0.0))))
-        if not np.isfinite(sigma) or sigma <= _EPS:
+        distance = np.zeros((tr.shape[0], tr.shape[0]), dtype=float)
+        for column in range(tr.shape[1]):
+            delta = tr[:, column, None] - tr[None, :, column]
+            distance = np.hypot(distance, delta)
+        sigma = float(np.median(distance))
+        if not np.isfinite(sigma) or sigma == 0.0:
             sigma = 1.0
         return sigma
 
@@ -383,35 +526,33 @@ def _kernel_granger_score(y: np.ndarray, x: np.ndarray, lag: int) -> float:
     sigma_y = _median_bandwidth(Yl_tr)
     sigma_x = _median_bandwidth(Xl_tr)
 
-    Kr = _rbf(Yl_tr, Yl_tr, sigma_y)
+    Kr, Kte_r = _center_train_test_kernel(
+        _rbf(Yl_tr, Yl_tr, sigma_y), _rbf(Yl_te, Yl_tr, sigma_y)
+    )
     ntr = Kr.shape[0]
-    lambda_shared = 1e-3 * float(np.trace(Kr)) / ntr
-
-    def _kridge(K_tr, target, K_te, lam):
-        alpha = np.linalg.solve(K_tr + lam * np.eye(ntr), target)
-        return K_te @ alpha
-
-    Kte_r = _rbf(Yl_te, Yl_tr, sigma_y)
-    pred_r = _kridge(Kr, Ytr, Kte_r, lambda_shared)
+    trace_r = float(np.trace(Kr))
+    reference_trace = trace_r if trace_r > _EPS else float(ntr)
+    lambda_shared = 1e-3 * reference_trace / ntr
+    pred_r = _kernel_ridge_with_intercept(Kr, Ytr, Kte_r, lambda_shared)
     mse_r = float(np.mean((Yte - pred_r) ** 2))
 
-    # Full model: K_F = (K_Y + eta·K_X)/(1+eta) evaluated with X's OWN
-    # bandwidth ``sigma_x`` and the SAME shared ridge ``lambda_shared``.
-    # P1-12 (fairness): an RBF Gram matrix has all diagonal entries 1, so
-    # ``trace(K_Y) = trace(K_X) = ntr`` and the old ``K_F = K_Y + eta·K_X`` had
-    # ``trace(K_F) = (1+eta)·trace(K_R)`` — the full model was regularised ~1.5x
-    # weaker relative to its own kernel magnitude, so ``log(MSE_R/MSE_F)`` mixed
-    # in a regularisation change on top of "adding X".  Normalising the SUM by
-    # ``(1+eta)`` makes ``trace(K_F) == trace(K_R)`` exactly, so the shared
-    # ridge regularises both models equally and the score measures "how much
-    # predictive information X adds" and nothing else.
-    Kx_tr = _rbf(Xl_tr, Xl_tr, sigma_x)
-    Kte_x = _rbf(Xl_te, Xl_tr, sigma_x)
+    # The full model is a separately fixed additive-kernel model.  Center and
+    # trace-normalize the nonconstant X component on training data, then retain
+    # the historical eta=.5 mixture scale.  A constant X has zero centered
+    # trace and is an exact no-op.  This compares two blocked OOS models; it is
+    # not a nested-hypothesis test or proof that X carries causal information.
+    Kx_tr, Kte_x = _center_train_test_kernel(
+        _rbf(Xl_tr, Xl_tr, sigma_x), _rbf(Xl_te, Xl_tr, sigma_x)
+    )
     eta = 0.5
-    scale = 1.0 + eta
-    Kf = (Kr + eta * Kx_tr) / scale
-    Kte_f = (Kte_r + eta * Kte_x) / scale
-    pred_f = _kridge(Kf, Ytr, Kte_f, lambda_shared)
+    trace_x = float(np.trace(Kx_tr))
+    if trace_x <= _EPS:
+        Kf, Kte_f = Kr, Kte_r
+    else:
+        component_scale = reference_trace / trace_x
+        Kf = (Kr + eta * component_scale * Kx_tr) / (1.0 + eta)
+        Kte_f = (Kte_r + eta * component_scale * Kte_x) / (1.0 + eta)
+    pred_f = _kernel_ridge_with_intercept(Kf, Ytr, Kte_f, lambda_shared)
     mse_f = float(np.mean((Yte - pred_f) ** 2))
 
     if mse_r <= _EPS or mse_f <= _EPS:
@@ -448,6 +589,10 @@ def _residualized_hsic(x: np.ndarray, y: np.ndarray, z: np.ndarray, purge_gap: i
     n = x.shape[0]
     if n < 24:
         return np.nan
+    # Response/residual geometry belongs to this complete retrospective window;
+    # affine normalization makes HSIC unit-safe without reaching beyond it.
+    x, _ = _safe_train_standardize(x, x)
+    y, _ = _safe_train_standardize(y, y)
     purge = max(1, int(purge_gap))
     # R6-209 (blocked cross-fitting) + P1-13 (purged CONTIGUOUS blocks): the
     # original code fit the kernel smoother x~z and y~z on the FULL window and
@@ -472,17 +617,22 @@ def _residualized_hsic(x: np.ndarray, y: np.ndarray, z: np.ndarray, purge_gap: i
     rx_all = np.full(n, np.nan)
     ry_all = np.full(n, np.nan)
     for tr_idx, te_idx in ((fwd_tr, fwd_te), (bwd_tr, bwd_te)):
-        ztr = z[tr_idx].reshape(-1, 1)
-        zte = z[te_idx].reshape(-1, 1)
-        sigma = float(np.median(np.abs(z[tr_idx][:, None] - z[tr_idx][None, :])))
-        if not np.isfinite(sigma) or sigma <= _EPS:
+        ztr, zte = _safe_train_standardize(z[tr_idx], z[te_idx])
+        ztr = ztr.reshape(-1, 1)
+        zte = zte.reshape(-1, 1)
+        sigma = float(np.median(np.abs(ztr[:, None, 0] - ztr[None, :, 0])))
+        if not np.isfinite(sigma) or sigma == 0.0:
             sigma = 1.0
-        Kzz = _rbf(ztr, ztr, sigma)
-        Kzte = _rbf(zte, ztr, sigma)
-        lam = 1e-3 * np.trace(Kzz) / tr_idx.size
-        smooth = Kzte @ np.linalg.solve(Kzz + lam * np.eye(tr_idx.size), np.eye(tr_idx.size))
-        rx_all[te_idx] = x[te_idx] - smooth @ x[tr_idx]
-        ry_all[te_idx] = y[te_idx] - smooth @ y[tr_idx]
+        Kzz, Kzte = _center_train_test_kernel(
+            _rbf(ztr, ztr, sigma), _rbf(zte, ztr, sigma)
+        )
+        trace_z = float(np.trace(Kzz))
+        lam = 1e-3 * (trace_z / tr_idx.size if trace_z > _EPS else 1.0)
+        predictions = _kernel_ridge_with_intercept(
+            Kzz, np.column_stack((x[tr_idx], y[tr_idx])), Kzte, lam
+        )
+        rx_all[te_idx] = x[te_idx] - predictions[:, 0]
+        ry_all[te_idx] = y[te_idx] - predictions[:, 1]
     fin = np.isfinite(rx_all) & np.isfinite(ry_all)
     rx = rx_all[fin]
     ry = ry_all[fin]
@@ -490,11 +640,14 @@ def _residualized_hsic(x: np.ndarray, y: np.ndarray, z: np.ndarray, purge_gap: i
     if m < 12:
         return np.nan
 
+    rx, _ = _safe_train_standardize(rx, rx)
+    ry, _ = _safe_train_standardize(ry, ry)
+
     sigma_x = float(np.median(np.abs(rx[:, None] - rx[None, :])))
     sigma_y = float(np.median(np.abs(ry[:, None] - ry[None, :])))
-    if not np.isfinite(sigma_x) or sigma_x <= _EPS:
+    if not np.isfinite(sigma_x) or sigma_x == 0.0:
         sigma_x = 1.0
-    if not np.isfinite(sigma_y) or sigma_y <= _EPS:
+    if not np.isfinite(sigma_y) or sigma_y == 0.0:
         sigma_y = 1.0
     Kx = _rbf(rx.reshape(-1, 1), rx.reshape(-1, 1), sigma_x)
     Ky = _rbf(ry.reshape(-1, 1), ry.reshape(-1, 1), sigma_y)
@@ -512,10 +665,11 @@ def _residualized_hsic(x: np.ndarray, y: np.ndarray, z: np.ndarray, purge_gap: i
     # > 0 under any (non-linear) dependence.  (A true unbiased U-statistic
     # estimator is tracked separately; this canonical now measures what its
     # name claims.)
-    H = np.eye(m) - np.ones((m, m)) / m
-    KxH = Kx @ H
-    HKyH = H @ Ky @ H
-    hsic = float(np.trace(KxH @ HKyH)) / float((m - 1) * (m - 1))
+    # For these symmetric kernels, double centering and a Frobenius product
+    # equal the trace above without any dense centering-matrix multiplies.
+    Kxc = Kx - Kx.mean(axis=0, keepdims=True) - Kx.mean(axis=1, keepdims=True) + Kx.mean()
+    Kyc = Ky - Ky.mean(axis=0, keepdims=True) - Ky.mean(axis=1, keepdims=True) + Ky.mean()
+    hsic = float(np.sum(Kxc * Kyc)) / float((m - 1) * (m - 1))
     return hsic if np.isfinite(hsic) else np.nan
 
 
@@ -547,12 +701,40 @@ def _ts_residualized_hsic(
 # ---------------------------------------------------------------------------
 # BDS statistic
 # ---------------------------------------------------------------------------
+def _bds_common_center_probability(v: np.ndarray, eps: float) -> float:
+    """Probability that two distinct points neighbor one common center."""
+    n = v.shape[0]
+    if n < 3:
+        return np.nan
+    degree = np.zeros(n, dtype=np.int64)
+    for i in range(n):
+        for j in range(i + 1, n):
+            if abs(v[i] - v[j]) < eps:
+                degree[i] += 1
+                degree[j] += 1
+    return float(np.sum(degree * (degree - 1))) / float(n * (n - 1) * (n - 2))
+
+
 def _bds_statistic(v: np.ndarray, m: int, distance_multiplier: float) -> float:
     n = v.shape[0]
-    if n < 30 or m < 1:
+    if n < 30 or m < 1 or m >= n:
         return np.nan
+    # Preserve every representable original-unit deviation.  Only fall back to
+    # bounded coordinates when subtracting opposite-sign extremes overflows.
+    with np.errstate(over="ignore", invalid="ignore"):
+        deviations = v - v[0]
+    if not np.all(np.isfinite(deviations)):
+        magnitude = float(np.max(np.abs(v)))
+        if not np.isfinite(magnitude) or magnitude == 0.0:
+            return np.nan
+        bounded = v / magnitude
+        deviations = bounded - bounded[0]
+    scale = float(np.max(np.abs(deviations)))
+    if not np.isfinite(scale) or scale == 0.0:
+        return np.nan
+    v = deviations / scale
     eps = float(distance_multiplier) * float(np.std(v))
-    if not np.isfinite(eps) or eps <= _EPS:
+    if not np.isfinite(eps) or eps <= 0.0:
         return np.nan
 
     def _c_integral(dim: int) -> float:
@@ -577,34 +759,33 @@ def _bds_statistic(v: np.ndarray, m: int, distance_multiplier: float) -> float:
                         count += 1
         return 2.0 * count / (N_m * (N_m - 1))
 
-    c1 = _c_integral(1)
+    # Standard conditioned BDS convention: the effect compares C_m on N_m
+    # embedded vectors with C_1 on the matching suffix v[m-1:].  The asymptotic
+    # variance remains defined from the full one-dimensional indicator matrix.
+    N_m = n - m + 1
+    c1_variance = _c_integral(1)
+    suffix = v[m - 1 :]
+    suffix_count = 0
+    for i in range(N_m):
+        for j in range(i + 1, N_m):
+            if abs(suffix[i] - suffix[j]) < eps:
+                suffix_count += 1
+    c1_effect = 2.0 * suffix_count / (N_m * (N_m - 1))
     cm = _c_integral(m)
-    if c1 <= _EPS or cm < 0.0:
+    if c1_variance <= _EPS or c1_effect <= _EPS or cm < 0.0:
         return np.nan
-    # triple correlation K: fraction of 3-index subsets with all pairwise < eps
-    sv = np.sort(v)
-    k_count = 0
-    rptr = 0
-    for i in range(n):
-        if rptr < i:
-            rptr = i
-        while rptr + 1 < n and sv[rptr + 1] - sv[i] < eps:
-            rptr += 1
-        cnt = rptr - i
-        k_count += cnt * (cnt - 1) // 2
-    triples = n * (n - 1) * (n - 2) / 6.0
-    K = k_count / triples if triples > 0 else 0.0
+    K = _bds_common_center_probability(v, eps)
     if K <= _EPS:
         return np.nan
     sigma2 = 4.0 * (
         K ** m
-        + 2.0 * sum(c1 ** (2 * j) * K ** (m - j) for j in range(1, m))
-        + (m - 1) ** 2 * c1 ** (2 * m)
-        - m ** 2 * K * c1 ** (2 * m - 2)
+        + 2.0 * sum(c1_variance ** (2 * j) * K ** (m - j) for j in range(1, m))
+        + (m - 1) ** 2 * c1_variance ** (2 * m)
+        - m ** 2 * K * c1_variance ** (2 * m - 2)
     )
     if sigma2 <= _EPS:
         return np.nan
-    return float(np.sqrt(n) * (cm - c1 ** m) / np.sqrt(sigma2))
+    return float(np.sqrt(N_m) * (cm - c1_effect ** m) / np.sqrt(sigma2))
 
 
 def _ts_bds_statistic(x: pd.DataFrame, window: int = 250, embedding_dim: int = 2, distance_multiplier: float = 1.5) -> pd.DataFrame:
@@ -743,6 +924,12 @@ _SPECS: dict[str, dict[str, Any]] = {
         "tags_extra": [],
         "output_unit": "level",
         "param_specs": _HSIC_SPEC,
+        "relational_specs": [
+            RelationalParamSpec(
+                "purge_gap <= window // 2 - 6",
+                "HSIC purge_gap must leave at least six test rows in both folds",
+            ),
+        ],
     },
     "ts_bds_statistic": {
         "fn": _ts_bds_statistic,

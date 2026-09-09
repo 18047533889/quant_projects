@@ -1,0 +1,29 @@
+schema_version: evidence.r2.v1
+issue_ids: [V8-R02, V8-R03]
+git_sha: 118cd21c6262082336daa545ddc06b6f78def7b9
+timestamp_utc: "2026-09-08T10:10:00Z"
+scope: spawn-worker per-client CPU/IO quota prerequisite
+modified_files:
+  - factor_engine/runtime/resource_broker_ipc.py
+  - factor_engine/runtime/supervised_worker.py
+  - factor_engine/tests/runtime/test_v8_broker_ipc_quotas.py
+  - factor_engine/tests/r27/test_resource_broker_ipc.py
+  - factor_engine/tests/runtime/test_v6_worker_resource_authority.py
+implemented:
+  - Optional proxy quotas preserve behavior for all existing unqualified callers.
+  - Partitioned proxies freeze positive shares whose sums equal current parent CPU and IO targets.
+  - Parent dispatch enforces cumulative per-client CPU and IO reservations before the unchanged global broker admission.
+  - Spawned worker environment accepts only positive limits for known backend thread variables and installs them before inherited engine construction.
+  - A lifetime threadpoolctl limit constrains already initialized BLAS pools; an already initialized oversized Polars pool fails closed instead of advertising a false quota.
+  - The real default-engine factory module import path is exercised under spawn and reaches its expected validated-config gate without preinitializing an oversized Polars pool.
+tests:
+  - command: .venv/bin/python -m pytest -q factor_engine/tests/runtime/test_v8_broker_ipc_quotas.py factor_engine/tests/runtime/test_v6_supervised_worker.py
+    result: 41 passed
+  - command: .venv/bin/python -m pytest -q factor_engine/tests/r27/test_resource_broker_ipc.py factor_engine/tests/runtime/test_v6_worker_resource_authority.py
+    result: Initial observation was execution_budget=0; after explicit TEST_INJECTED positive resource observations, combined legacy and quota suite passed 23 tests
+  - command: .venv/bin/python -m pytest -q factor_engine/tests/runtime/test_v8_broker_ipc_quotas.py
+    result: 24 passed, including phase-frame retirement and default-engine spawn bootstrap oracles
+limitations:
+  - Two-slot orchestration is not enabled while the current parent target cannot provide two positive partitions.
+  - The native probe covers Polars and threadpoolctl-visible BLAS pools; DuckDB execution telemetry and real dataset throughput remain NOT_RUN.
+  - Full repository and real dataset runs: NOT_RUN

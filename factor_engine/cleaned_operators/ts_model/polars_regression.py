@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
-"""Polars backends for next-stage time-series model operators (genuine).
+"""Polars containers with explicitly classified model implementations.
 
-Rolling regression / AR kernels use Polars ``rolling_map`` with NumPy vector
-kernels shared with the pandas reference, so they remain genuine Polars
-expressions (no pandas delegation).
+Liquidity beta uses native rolling expressions. Other rolling model kernels
+use Python/NumPy callbacks and are not Polars-native execution merely because
+their input and output containers are Polars objects.
 """
 from __future__ import annotations
 
@@ -26,7 +26,11 @@ def _cols(df, *others):
 def _meta(name: str, description: str, params: list[str]) -> OperatorMetadata:
     return OperatorMetadata(
         name=name, category="time_series_regression", description=description, param_names=params,
-        return_type="series", tags=["time_series_regression", "polars", "native", "typed_v2"],
+        return_type="series", tags=[
+            "time_series_regression", "polars", "typed_v2",
+            "native" if name in {"ts_market_liquidity_beta", "ts_industry_liquidity_beta"}
+            else "python_callback",
+        ],
     )
 
 
@@ -35,36 +39,37 @@ def _register(name: str, description: str, params: list[str], fn):
         name=name, category="time_series_regression", business_category="time_series_regression",
         canonical=name, source="ts_model.polars_regression",
         backend="polars",
+        semantic_version="2.0" if name in {"ts_market_liquidity_beta", "ts_industry_liquidity_beta"} else "",
         replace=True,
         expected_old_source="factor_dsl_np",
         replacement_reason="Consolidating polars native operators into polars_regression"
     )
     class _TsPolars(SeriesOperator):
+        if name in {"ts_market_liquidity_beta", "ts_industry_liquidity_beta"}:
+            def physical_spec(self):
+                # Construct from the live contract module: registry bootstrap may
+                # reload contract classes while preserving operator instances.
+                from factor_engine.backend.polars_backend_kind import get_physical_spec
+                authority = get_physical_spec.__globals__
+                spec_type = authority["PhysicalImplementationSpec"]
+                kind_type = authority["ExecutionKind"]
+                return spec_type(
+                    canonical=name, backend="polars",
+                    execution_kind=kind_type.POLARS_NATIVE_EXPR,
+                    supports_lazy=False, materializes_full_panel=True,
+                    requires_sorted=True, supports_nulls=True, supports_nan=True,
+                    supports_inf=True,
+                    implementation_source_hash=f"ts_model.polars_regression:{name}:v2",
+                    kernel_identity="polars.diff+rolling_cov_ddof0/rolling_var_ddof0:centered-origin:v2",
+                    parameter_domain_hash="window:int:min=3",
+                    semantic_contract_hash="liquidity_beta:on_liquidity_change:pairwise_finite:v2",
+                )
         metadata = _meta(name, description, params)
 
         def _calculate_series(self, *args, **kwargs):
             return fn(*args, **kwargs)
 
     return _TsPolars
-
-
-def _ols_beta(vals):
-    arr = np.asarray(vals, dtype=float)
-    finite = arr[np.isfinite(arr)]
-    if len(finite) < 3:
-        return float("nan")
-    t = np.arange(len(finite), dtype=float)
-    if np.var(t) <= 1e-12 or np.var(finite) <= 1e-12:
-        return float("nan")
-    return float(np.cov(t, finite)[0, 1] / np.var(t))
-
-
-def _rolling_slope(x, window, min_periods):
-    w = max(3, int(window))
-    mp = max(3, int(min_periods))
-    return x.with_columns(
-        [x[c].rolling_map(_ols_beta, window_size=w, min_samples=mp).alias(c) for c in _cols(x)]
-    )
 
 
 def _variance_ratio_slope(vals, max_q):
@@ -188,17 +193,23 @@ def _pairwise_rolling(y, x, window, min_periods):
         both = y[c].is_finite() & x[c].is_finite()
         ym = pl.when(both).then(y[c]).otherwise(None)
         xm = pl.when(both).then(x[c]).otherwise(None)
-        mean_ab = (ym * xm).rolling_mean(window_size=w, min_samples=mp)
-        mean_a = ym.rolling_mean(window_size=w, min_samples=mp)
-        mean_b = xm.rolling_mean(window_size=w, min_samples=mp)
-        mean_b2 = (xm * xm).rolling_mean(window_size=w, min_samples=mp)
         n = ym.is_not_null().cast(pl.Float64).rolling_sum(window_size=w, min_samples=mp)
-        pop_cov = mean_ab - mean_a * mean_b
-        pop_var = mean_b2 - mean_b * mean_b
+        # Delegate to Polars' centered rolling covariance/variance kernels.
+        # Raw-moment subtraction loses all low-order bits for high-offset,
+        # low-variance inputs and can turn a valid denominator non-positive.
+        # Remove a column-level finite origin first.  Covariance is translation
+        # invariant, while this keeps the rolling kernel away from huge offsets.
+        x0 = x[c].filter(both).first()
+        y0 = y[c].filter(both).first()
+        xc, yc = xm - x0, ym - y0
+        pop_cov = pl.rolling_cov(yc, xc, window_size=w, min_samples=mp, ddof=0)
+        pop_var = xc.rolling_var(window_size=w, min_samples=mp, ddof=0)
         # R35-P0-M12: population cov/var (ddof=0/0), exactly matching the
         # ``np.mean`` / ``np.sum((b-xbar)**2)`` pandas reference.  ``n`` guards
         # the degenerate 1-row window only.
-        slope = pl.when(n > 1).then(pop_cov / pop_var).otherwise(None)
+        slope = pl.when((n > 1) & pop_var.is_finite() & (pop_var > 0)).then(
+            pop_cov / pop_var
+        ).otherwise(None)
         out.append(slope.alias(c))
     return y.with_columns(out)
 

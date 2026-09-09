@@ -327,6 +327,7 @@ class OperatorSemanticContractDigest:
             implementation_hashes_for,
         )
         from factor_engine.backend.production_signature import signature_for
+        from factor_engine.backend.operator_semantic_version import semantic_version
 
         resolved = OperatorRegistry.resolve_canonical(canonical)
         catalog = OperatorRegistry._catalog.get(resolved, {})
@@ -344,7 +345,10 @@ class OperatorSemanticContractDigest:
             impl_hash = {}
         return cls(
             canonical=resolved,
-            semantic_version=str(catalog.get("semantic_version") or "1.0"),
+            # Shared-kernel semantic bumps must invalidate factor/plan identity
+            # even when the generated wrapper and catalog row are unchanged.
+            semantic_version=str(catalog.get("semantic_version") or
+                                 f"{semantic_version(resolved)}.0"),
             policy_hash=compute_payload_hash(
                 infer_operator_policy(resolved, canonical=resolved).to_dict()
             ),

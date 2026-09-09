@@ -13,6 +13,31 @@ import pytest
 from factor_engine.storage.sources.data_access_source import DataAccessSource
 
 
+@pytest.fixture
+def admitted_cache(monkeypatch):
+    """Cache residency tests need an explicit authority granting their leases.
+
+    The unconfigured production broker may correctly grant zero cache bytes;
+    these tests exercise cache concurrency, not machine-wide resource discovery.
+    """
+    class Broker:
+        def current_read_budget(self):
+            return 64 * 1024 * 1024
+
+        def acquire_memory(self, *args, **kwargs):
+            class Lease:
+                def release(self):
+                    pass
+            return Lease()
+
+    broker = Broker()
+    monkeypatch.setattr(
+        "factor_engine.storage.sources.data_access_source._data_cache_authority",
+        lambda: broker,
+    )
+    return broker
+
+
 class TestConcurrentCacheSafety:
     """测试并发缓存访问的安全性和一致性。"""
 
@@ -52,7 +77,7 @@ class TestConcurrentCacheSafety:
             assert mock_store.describe_dataset.call_count <= 2, \
                 f"Expected ≤2 calls, got {mock_store.describe_dataset.call_count}"
 
-    def test_concurrent_load_columns_cache_bytes_accurate(self):
+    def test_concurrent_load_columns_cache_bytes_accurate(self, admitted_cache):
         """验证并发 load_columns 时 _cache_bytes 计数准确。"""
         with patch("factor_engine.storage.sources.data_access_source._get_store") as mock_get_store:
             mock_store = MagicMock()
@@ -101,7 +126,7 @@ class TestConcurrentCacheSafety:
                 # 验证：所有列都成功缓存
                 assert len(source._column_cache) == len(columns)
 
-    def test_concurrent_enable_lazy_scan_no_cache_clear(self):
+    def test_concurrent_enable_lazy_scan_no_cache_clear(self, admitted_cache):
         """验证并发 enable_lazy_scan 不会清空共享 cache。"""
         with patch("factor_engine.storage.sources.data_access_source._get_store") as mock_get_store:
             mock_store = MagicMock()

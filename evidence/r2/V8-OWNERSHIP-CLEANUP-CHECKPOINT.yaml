@@ -1,0 +1,44 @@
+schema: factor_engine.v8.evidence.v1
+git_sha: 118cd21c6262082336daa545ddc06b6f78def7b9
+timestamp: '2026-09-09T00:34:26+08:00'
+status: FROZEN_SCOPED_GREEN_OPEN_CAPABILITIES_REMAIN
+target: server-c:/home/sunhaiwei/quant_projects
+files:
+  factor_engine/runtime/bounded_pipeline.py: 6f847f35e08b8c0650a55f90c1095fed42abebbfffbfc97451bfa8a8430bf660
+  factor_engine/runtime/resume_validation.py: 4cff1ff43d73c6020a0df627d399c7ed445901c38fbf403abc1c1e219db46459
+  factor_engine/runtime/finite_manifest.py: 930b072adf983b7587875f5b16cbf99e6182dc848541a1c36bc0160d46ae85dc
+  factor_engine/runtime/supervised_worker.py: be288e3d39c7926e5bb342f8f203d408a9fa14612a817a6de4d8a0bd9d5e790e
+  factor_engine/runtime/worker_ownership.py: fe1ee1bb282c11669bc89b46616be4efbac21b7450689f87e47622b924460a7b
+  factor_engine/runtime/worker_ownership_sqlite.py: 995b1b6fe2d57d8ecca6f4d5c47b63a788141c8e7109cc2dd2864512ee447e65
+tests:
+  result: '610 passed,1 strict R02 xfail,175 warnings in310.80s'
+  xml: /tmp/v8-ownership-cleanup-final.xml
+  xml_sha256: e7689cb58610a06dc597eeaa00bd53b03230a0bcb11f0bc4cbcb34c7df8ebfab
+  raw_ledger: /tmp/v8-ownership-cleanup-final-outcomes.jsonl
+  ledger_sha256: c25b11303a974062e34f20a986f2790fd299f74192e8f84525db2ecfbcb844f0
+  footer: '611 collected/completed; zero failures; no incomplete nodes'
+  freeze: six runtime source hashes identical before/after
+  scope: runtime test_v6/test_v7/test_v8 plus r27 broker/IPC and r38 resource authority
+  known_xfail: V8-R02 safe same-PID multi-wave reuse is not implemented
+wheel:
+  directory: /tmp/fe-v8-ownershipfinal-wheel.Ooxy5R
+  artifact: dist/factor_engine-0.3.1-py3-none-any.whl
+  sha256: b5d1601d667427f2a63a8baf1ec4f6091ebe0a4c346a8d08195b2dce6d3ef2a7
+  clean_build_members: 1300
+  bytecode_members: 0
+  isolated_install: no-deps/no-compile to temporary site directory
+  verification: actual installed import outside repository cwd, seven runtime source hashes verified, unchanged default facade signature
+  canonical_bootstrap_count: 1756
+  boundary: bootstrap and installed source evidence only; not math/native certification or deployment
+limitations:
+  - Default ingestion controlled-buffer lease adapter is still staged; parent whole-iterable spawn pickle remains OPEN.
+  - Generic live generators are not currently supported by default spawn ingestion; unsafe fork substitution was not merged.
+  - Bounded resume action catalog is in development; pending computation resume remains disabled.
+  - Same-PID safe reuse remains disabled and intentionally xfailed.
+  - Fork warnings remain on legacy/test fork paths; no universal native lock/allocator safety claim.
+  - Real approved DataAccess profile, GPU, real100k and performance/conversion acceptance NOT_RUN.
+  - Full registry math/PIT/native parity/Q certification, remote CI and production gates NOT_RUN.
+  - No commit, push, deployment, service restart or production factor publication.
+recoverable_cleanup:
+  inactive_pipeline_stage: /tmp/fe-v8-inactive-stages.Q2J6On/pipeline_ownership
+  removed_production_files: none

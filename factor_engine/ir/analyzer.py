@@ -1034,6 +1034,152 @@ class ProductionMarketContextRequiredError(ValueError):
     must fail closed instead of silently resolving leaves A-share-bound."""
 
 
+class DistinctInputContractError(ValueError):
+    """A declared pairwise-distinct expression-input contract was violated."""
+
+
+class SameUnitInputContractError(ValueError):
+    """A declared same-unit input relationship could not be proven."""
+
+
+def _proven_canonical_unit(node: IRNode) -> str | None:
+    """Return an authoritative unit, or ``None`` when propagation is unknown.
+
+    Leaf units come from FieldSpec.  Only operators with an established
+    unit-preserving mathematical contract are followed; the generic semantic
+    lattice's single-input inheritance is intentionally insufficient evidence
+    because transforms such as log-return change units.
+    """
+    from factor_engine.fields.units import UnknownUnitError, canonical_unit_known
+
+    if node.op == "column":
+        raw = (node.attrs or {}).get("unit")
+    else:
+        from factor_engine.backend.operator_types import OPERATOR_SIGNATURES
+
+        signature = OPERATOR_SIGNATURES.get(node.op)
+        if signature is not None and signature.output_unit == "inherit" and node.inputs:
+            return _proven_canonical_unit(node.inputs[0])
+        return None
+    if raw is None:
+        return None
+    try:
+        return str(canonical_unit_known(raw))
+    except UnknownUnitError:
+        return None
+
+
+def _validate_same_unit_inputs(
+    canonical: str,
+    implementation: Any,
+    visited_inputs: list[tuple[IRNode, int]],
+    *,
+    production: bool,
+) -> None:
+    """Enforce declared same-unit groups from typed IR, never panel values."""
+    metadata = getattr(implementation, "metadata", None)
+    groups = tuple(getattr(metadata, "same_unit_input_groups", ()) or ())
+    if not groups:
+        return
+    names = tuple(getattr(metadata, "param_names", ()) or ())
+    bound = {
+        name: visited_inputs[index][0]
+        for index, name in enumerate(names)
+        if index < len(visited_inputs)
+    }
+    for group in groups:
+        missing = [name for name in group if name not in names or name not in bound]
+        if missing:
+            raise SameUnitInputContractError(
+                f"{canonical}: same-unit contract cannot bind {missing!r}"
+            )
+        units = {name: _proven_canonical_unit(bound[name]) for name in group}
+        unknown = [name for name, unit in units.items() if unit is None]
+        if unknown:
+            if production:
+                raise SameUnitInputContractError(
+                    f"{canonical}: unit is unknown for {unknown!r}; production "
+                    "requires proven typed units for same-unit inputs"
+                )
+            continue
+        distinct = set(units.values())
+        if len(distinct) != 1:
+            detail = ", ".join(f"{name}={units[name]!r}" for name in group)
+            raise SameUnitInputContractError(
+                f"{canonical}: same-unit input contract violated ({detail})"
+            )
+
+
+def _canonical_expression_identity(node: Expr) -> str:
+    """Return semantic structural identity without inspecting runtime values.
+
+    Operator and keyword aliases are normalized by their existing authorities;
+    the shared identity canonicalizer then performs only its documented safe
+    AST rewrites before stable serialization.
+    """
+    from factor_engine.backend.parameter_aliases import normalize_parameter_aliases
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
+    from factor_engine.identity.canonicalizer import canonicalize
+    from factor_engine.identity.serializer import canonical_ast_text
+
+    def normalize(expr: Expr) -> Expr:
+        if not isinstance(expr, CleanedCall):
+            return expr
+        canonical = OperatorRegistry.resolve_canonical_strict(expr.op)
+        kwargs = normalize_parameter_aliases(canonical, dict(expr.kwargs))
+        normalized_kwargs = tuple(
+            sorted(
+                (key, normalize(value) if isinstance(value, Expr) else value)
+                for key, value in kwargs.items()
+            )
+        )
+        return CleanedCall(
+            op=canonical,
+            args=tuple(normalize(arg) for arg in expr.args),
+            kwargs=normalized_kwargs,
+        )
+
+    return canonical_ast_text(canonicalize(normalize(node)))
+
+
+def _validate_distinct_inputs(node: CleanedCall, canonical: str, implementation: Any) -> None:
+    """Validate named structural-identity groups before visiting input leaves."""
+    metadata = getattr(implementation, "metadata", None)
+    groups = tuple(getattr(metadata, "distinct_input_groups", ()) or ())
+    if not groups:
+        return
+    names = tuple(getattr(metadata, "param_names", ()) or ())
+    from factor_engine.backend.parameter_aliases import normalize_parameter_aliases
+
+    keyword_values = normalize_parameter_aliases(canonical, dict(node.kwargs))
+    bound: dict[str, Any] = {
+        name: value for name, value in zip(names, node.args)
+    }
+    for name, value in keyword_values.items():
+        bound.setdefault(name, value)
+    for group in groups:
+        missing = [name for name in group if name not in names or name not in bound]
+        if missing:
+            raise DistinctInputContractError(
+                f"{canonical}: distinct-input contract cannot bind {missing!r}"
+            )
+        seen: dict[str, str] = {}
+        for name in group:
+            value = bound[name]
+            if not isinstance(value, Expr):
+                raise DistinctInputContractError(
+                    f"{canonical}: distinct input {name!r} is not an expression"
+                )
+            identity = _canonical_expression_identity(value)
+            previous = seen.get(identity)
+            if previous is not None:
+                raise DistinctInputContractError(
+                    f"{canonical}: inputs {previous!r} and {name!r} are the same "
+                    "structural expression; distinct feature expressions are required"
+                )
+            seen[identity] = name
+
+
 class Analyzer:
     """Lower Expr trees to IR and derive deterministic causal history."""
 
@@ -1249,6 +1395,7 @@ class Analyzer:
                 )
             canonical = OperatorRegistry.resolve_canonical_strict(node.op)
             implementation = OperatorRegistry.get(canonical)
+            _validate_distinct_inputs(node, canonical, implementation)
 
             # R40 #176: the declared AxisEffectContract is the single authority
             # for has_ts/has_cs.  Production REJECTS an undeclared operator
@@ -1320,6 +1467,12 @@ class Analyzer:
                 pass
 
             visited_inputs = [visit(argument) for argument in node.args]
+            _validate_same_unit_inputs(
+                canonical,
+                implementation,
+                visited_inputs,
+                production=effective_production,
+            )
             inputs = tuple(item[0] for item in visited_inputs)
             deepest_child = max((item[1] for item in visited_inputs), default=0)
             attrs: dict[str, Any] = {}

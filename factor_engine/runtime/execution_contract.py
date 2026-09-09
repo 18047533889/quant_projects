@@ -812,9 +812,21 @@ def _event_response_extension(canonical: str, params: Mapping[str, Any]) -> int 
     specs = _specs(canonical)
     w = _w1(params, specs, "history_window", canonical=canonical)
     horizon = _w0(params, specs, "horizon", canonical=canonical)
-    if _UNKNOWN in (w, horizon):
+    # Episode-first status for the earliest event in the cohort depends only on
+    # whether an event occurred in the preceding ``refractory - 1`` rows.  The
+    # diagnostic operators define refractory=None as horizon; response kernels
+    # default to zero.
+    if canonical in {
+        "event_response_effective_events", "event_response_overlap_ratio"
+    } and params.get("refractory") is None:
+        refractory = horizon
+    else:
+        refractory = _w0(
+            params, specs, "refractory", canonical=canonical
+        )
+    if _UNKNOWN in (w, horizon, refractory):
         return _UNKNOWN
-    return w + horizon
+    return w + horizon + max(0, int(refractory or 0) - 1)
 
 
 def _stochastic_d_extension(canonical: str, params: Mapping[str, Any]) -> int | object:
@@ -982,6 +994,9 @@ for _canon in ("volume_autocorr", "turnover_autocorr", "ts_autocorr"):
 for _canon in (
     "event_historical_response_mean",
     "event_historical_response_sign_balance",
+    "event_response_dispersion",
+    "event_response_effective_events",
+    "event_response_overlap_ratio",
 ):
     _HISTORY_TRANSFORMS[_canon] = _compound_transform(_event_response_extension)
 

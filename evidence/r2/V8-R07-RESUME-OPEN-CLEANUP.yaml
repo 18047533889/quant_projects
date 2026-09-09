@@ -1,0 +1,32 @@
+schema: factor_engine.v8.evidence.v1
+git_sha: 118cd21c6262082336daa545ddc06b6f78def7b9
+date: '2026-09-08'
+target: server-c:/home/sunhaiwei/quant_projects
+status: SCOPED_FIX_INDEPENDENTLY_REVIEWED
+files:
+  - factor_engine/runtime/bounded_pipeline.py
+  - factor_engine/tests/runtime/test_v8_resume_open_cleanup.py
+source_sha256: 0f4f7924b05d64e43938d0b80beb2fd5b02cde66ecd4bebb03daf0ea18dff4d5
+test_sha256: 960f262f7ca91029a71cdb5d24c883eeb106bcee8314ed37f0f34c7c13142762
+changes:
+  - initial resume validation and database-open exceptions survive secondary cleanup failures
+  - ordinary cleanup errors append while coordinator lock is released
+  - cleanup_pending retains broker and lock, plus manifest only if actually opened
+  - unopened state and manifest authorities are never fabricated
+tests:
+  red: '2 failed on prior source342fa563'
+  red_xml: /tmp/v8-resume-open-cleanup-red.xml
+  integrated_green: '42 passed across open cleanup, verification cleanup, resume validation and coordinator lock'
+  integrated_xml: /tmp/v8-resume-both-cleanup-green.xml
+  final_independent: '3 passed in2.53s'
+  final_xml: /tmp/v8-resume-open-cleanup-final.xml
+  final_xml_sha256: 44a3750723f0e26cf2d9c3c36f2e416b78491dcaef2db51773e537c835cf03f1
+review:
+  agent: v8_data
+  model: gpt-5.6-sol
+  result: primary preservation, exact authority references, open-database access and real lock exclusion verified
+limitations:
+  - fault injection around real persisted run and actual coordinator lock
+  - full pending execution, native-safe reuse and all-role ownership wiring remain separate
+  - numerical/native operator, real DataAccess, GPU and100k acceptance NOT_RUN
+github_commit_push_deploy: false

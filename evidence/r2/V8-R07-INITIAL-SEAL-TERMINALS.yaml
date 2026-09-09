@@ -1,0 +1,31 @@
+schema: factor_engine.v8.evidence.v1
+git_sha: 118cd21c6262082336daa545ddc06b6f78def7b9
+timestamp: '2026-09-09T00:09:47+08:00'
+status: MERGED_SCOPED_GREEN
+files:
+  factor_engine/runtime/bounded_pipeline.py: ad2357434660c9c627af4c3141d2135b698f15674fdf9414e0e0e8beee5dd591
+  factor_engine/runtime/resume_validation.py: 4cff1ff43d73c6020a0df627d399c7ed445901c38fbf403abc1c1e219db46459
+  factor_engine/tests/runtime/test_v8_initial_seal_failure.py: added
+defect: Initial manifest sealing could exhaust the original deadline before outcome registration and abort receipt handling.
+changes:
+  - Seal after registering ingested ordinals inside the main exception state machine, before worker start.
+  - Initial seal failure persists CANCELLED and NOT_STARTED outcomes with zero attempts and an ABORTED receipt.
+  - ResumeValidationTimeout preserves ResumeIdentityError compatibility while exposing TimeoutError classification.
+tests:
+  integration_red: '2 failed, 583 passed, 1 strict R02 xfail, 173 warnings in 312.54s'
+  integration_red_xml: /tmp/v8-all-role-merged.xml
+  integration_red_ledger: /tmp/v8-all-role-merged-outcomes.jsonl
+  integration_red_footer: '586 collected/completed; 2 failed; no incomplete nodes'
+  deterministic_red: '2 failed: missing receipt and incorrect timeout type'
+  deterministic_red_xml: /tmp/v8-seal-failure-red.xml
+  related_green: '70 passed, 67 warnings in 25.58s'
+  related_green_xml: /tmp/v8-seal-failure-green.xml
+  independent_review: v8_protocol reviewed exact state-registration, seal, worker-start and exception ordering
+  strengthened_no_start_oracle: '2 passed; fail-if-called supervisor start; actual persisted outcomes inspected'
+  strengthened_xml: /tmp/v8-seal-failure-no-start.xml
+limitations:
+  - Original run deadline is unchanged; no deadline extension or skipped seal validation.
+  - Pending computation resume and same-PID safe reuse remain disabled.
+  - No generic arbitrary Iterable boundedness claim; spawn aggregate serialization remains open.
+  - Full native, mathematical, GPU, approved-data, 100k, performance and production acceptance NOT_RUN.
+  - No deployment, commit, push or production publication.

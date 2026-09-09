@@ -1,0 +1,72 @@
+schema_version: factor_engine.r07_sqlite_ownership_store_evidence.v1
+git_sha: 118cd21c6262082336daa545ddc06b6f78def7b9
+target: server-c:/home/sunhaiwei/quant_projects
+timestamp: "2026-09-08T23:38:36+08:00"
+status: "integrated_explicit_opt_in_not_pipeline_enabled"
+
+production_sources:
+  factor_engine/runtime/worker_ownership_sqlite.py:
+    sha256: "a83aad39c120e4edd4c998a289b82c1ab67ae22f6273e5c3b5138bb260dda144"
+    reviewed_stage_sha256: "a83aad39c120e4edd4c998a289b82c1ab67ae22f6273e5c3b5138bb260dda144"
+    correspondence: "exact"
+  factor_engine/runtime/worker_ownership.py:
+    sha256: "fe1ee1bb282c11669bc89b46616be4efbac21b7450689f87e47622b924460a7b"
+    purpose: "central JSON/SQLite routing selected by verified identity ownership_store"
+
+validation:
+  sqlite_store_focused:
+    result: "18 passed"
+    scope:
+      - "SQLite store initialization and canonical STARTING/BOUND/EXITED lifecycle"
+      - "strict shared ownership-event validation and snapshot/table consistency"
+      - "counter, schema, index, partial-predicate, payload, lock, and coexistence fail-closed checks"
+      - "64 KiB native SQLite cell limit and bounded 512-instance event pages"
+      - "10,000 synthetic control-ledger records with deterministic indexed-query-plan assertions"
+    test_source: "factor_engine/tests/runtime/test_v8_worker_ownership_sqlite.py"
+    test_source_sha256: "3a1842beb286c11886da4895f371935636e6f3dfe7fd8daf71337bdcabe67bd5"
+  ownership_stores_integrated:
+    result: "76 passed in 30.24s"
+    includes: "18 SQLite store tests plus integrated ownership routing/regression scope"
+    junitxml: "/tmp/v8-ownership-stores-integrated.xml"
+    junitxml_sha256: "cb1b5d6efcac82e820cc713ad4ee1a3ebf664eb4de5b00c802df546da20732a3"
+
+independent_read_only_review:
+  integration_test: "factor_engine/tests/runtime/test_v8_sqlite_worker_integration.py"
+  integration_test_sha256: "bae8a73180296fd45d547f9993d9b889e3b45488af2eece13dca6ec839c66b2f"
+  staged_and_production_test_correspondence: "exact"
+  reviewed_coverage:
+    - "spawn supervisor explicitly selects SQLite and records STARTING/BOUND before EXITED on close"
+    - "spawn ingestion explicitly selects SQLite and returns only after EXITED"
+    - "both cases assert that the legacy JSONL authority is absent"
+  execution_status: "2 passed in1.11s, separately executed by root; not included in the76-pass claim"
+  junitxml: /tmp/v8-real-sqlite-worker-integration.xml
+
+scale_claim:
+  demonstrated: "10,000 synthetic ownership-control records"
+  interpretation: "control-ledger behavior and indexed control queries only"
+  explicitly_not_demonstrated:
+    - "100,000-worker production acceptance"
+    - "end-to-end worker payload throughput"
+    - "a production memory or latency service-level objective"
+
+threat_boundary:
+  covered:
+    - "cooperating readers and writers honor finite nonblocking descriptor locks"
+    - "legacy JSONL/SQLite coexistence is rejected, including a transaction-boundary recheck"
+    - "database size, SQLite cell size, counters, pages, and per-instance event cardinality are bounded"
+    - "critical schema, unique indexes, columns, and partial-index predicate are validated before payload reads"
+  not_claimed:
+    - "strong resistance to an adversarial SQLite pathname or realpath reopen/ABA attack"
+    - "security against a process that ignores the cooperative lock protocol"
+    - "an immutable or descriptor-deserialized database snapshot"
+  note: "No unbudgeted Connection.deserialize copy is used."
+
+activation:
+  selection: "explicit identity.json ownership_store: sqlite-v1 only"
+  legacy_migration: "none"
+  pending_resume_enabled: false
+  default_pipeline_wiring_enabled: false
+not_run:
+  - real approved DataAccess/GPU/100k acceptance
+  - all-operator numerical/native certification
+github_commit_push_deploy: false

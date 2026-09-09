@@ -1,0 +1,39 @@
+schema: factor_engine.v8.scoped_fix.v1
+git_sha: 118cd21c6262082336daa545ddc06b6f78def7b9
+date: '2026-09-08'
+target: server-c:/home/sunhaiwei/quant_projects
+issue: V8-R07
+status: FOUNDATION_SCOPED_PASS_NOT_INTEGRATED
+files:
+  factor_engine/runtime/worker_ownership.py: e48269d722d2c77e3796be210e18f5c76e58c137672b48d494c767e37bc4351c
+  factor_engine/tests/runtime/test_v8_worker_ownership.py: adc47fa0017f8af53318ff9bd9879ffdfa58a7722af28b11ef6ffe64a0307974
+red:
+  result: 1 failed in 0.41 seconds
+  report: /tmp/v8-r07-cross-run-red.xml
+  sha256: 6bc884ae9d6ed8d18cc47ee8d65bdd9b244b6740617353c834ed5bd477d097ee
+  oracle: copied complete journal incorrectly approved a different run with unfinished STARTING work
+changes:
+  - required immutable RunOwnershipContext with exact run_id and identity.json SHA256
+  - mandatory matching header and per-event run binding; never retrofit an old unbound journal
+  - bounded serialized STARTING, parent-observed BOUND and explicitly observed EXITED transitions
+  - stable host and PID namespace plus boot and PID starttime identities
+  - missing proc record requires explicit ESRCH; unknown and permission errors never prove death
+  - strict JSON and transition validation, finite locks, symlink and FIFO rejection
+  - read-only validation checks current OS evidence and supplied run context
+tests:
+  isolated_foundation: 17 passed in 2.33 seconds
+  root_repo_integrated: 51 passed in 5.33 seconds
+  root_report: /tmp/v8-root-run-bound-ownership.xml
+  suites:
+    - tests/runtime/test_v8_worker_ownership.py
+    - tests/runtime/test_v8_resume_validation.py
+    - tests/runtime/test_v8_coordinator_lock.py
+  oracle_review: malformed and binding mutations start from completed positive controls and assert specific rejection reasons
+limitations:
+  - not wired into supervisor or pipeline lifecycle; pending-work resume remains disabled
+  - existing runs lacking bound ownership records cannot gain exit proof retroactively
+  - 1MiB journal, 10000 record and 16KiB line bounds are foundation capacity, not 100k-factor acceptance
+  - journal completeness and lifecycle registration before process creation remain caller integration obligations
+  - process exit evidence is not native backend ownership release certification
+  - no real approved profile, GPU or production acceptance in this suite
+commit_push_deploy: false

@@ -1,0 +1,45 @@
+schema: v9-live-binding-export-evidence-1
+date: '2026-09-09'
+git_sha: 118cd21c6262082336daa545ddc06b6f78def7b9
+workspace: /home/sunhaiwei/quant_projects
+issue: V9-Q01-M33-M36
+status: MAIN_CURRENT_WINNER_EXPORT_DEPENDENCY_CERTIFICATION_PARTIAL
+export:
+  path: V9-LIVE-BINDINGS-POST-M33M36-2dad4938.jsonl
+  sha256: 18a3603122ff7863464886e5d17ea88e45eb034a93c87266df4c7584d61a4277
+  bytes: 41510994
+  rows: 4072
+  canonicals: 1756
+  backend_rows: {pandas_numpy: 1754, polars: 1755, sql: 563}
+  empty_callable_entrypoints: 0
+  missing_canonicals_vs_registry: 0
+  missing_backend_bindings_vs_registry: 0
+  coverage: {PARTIAL: 4072}
+  mathematical_certification: {NOT_CLAIMED: 4072}
+source_state:
+  registry_sha256: 2dad4938a702dff291d553c14bb43724b3d5250c90b3d512f553c2fa8e4159e2
+  export_script_sha256: b7cfba056d41bdb1c94d97f1ccd9ec457e53fa6c3761121ccaa632e8c70ae7bf
+command: >-
+  OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 PYTHONPATH=.
+  .venv/bin/python factor_engine/scripts/v8_binding_dependencies.py --all-canonicals
+  --output evidence/r2/V9-LIVE-BINDINGS-POST-M33M36-2dad4938.jsonl
+limits: {max_nodes_per_binding: 256, max_values_per_binding: 4096}
+selected_default_snapshot:
+  path: V9-SELECTED-BINDINGS-POST-M33M36-2dad4938-v2.jsonl
+  sha256: 0fc42a5511908c1233c9b34441c4d7f5df7c24c5070b9853160197104afc5391
+  bytes: 171993
+  canonicals: 56
+  records: 224
+  requested_slots: {default: 56, pandas_numpy: 56, polars: 56, sql: 56}
+  default_lookup_errors: 0
+  pandas_lookup_errors: 0
+  polars_lookup_errors: 0
+  sql_lookup_errors: 56
+  scope: Default registry plus explicit pandas_numpy/polars/sql declarations; not RegionPlanner auto execution.
+limitations:
+  - Bounded callable dependency traversal reports PARTIAL coverage for every binding.
+  - Mathematical certification is explicitly NOT_CLAIMED for every binding.
+  - Registered declaration is not backend execution, native certification, or numerical correctness.
+  - Missing advertised live bindings fail the export rather than producing empty evidence.
+  - SQL lookup errors in the selected snapshot record absent explicit SQL slots; they are not advertised live bindings.
+  - Future source changes require revalidation; no all-operator PASS claim.

@@ -1,0 +1,39 @@
+schema: factor_engine.v8.evidence.v1
+git_sha: 118cd21c6262082336daa545ddc06b6f78def7b9
+timestamp: '2026-09-09T01:15:00+08:00'
+status: REPRODUCED_OPEN_NOT_FIXED
+target: server-c:/home/sunhaiwei/quant_projects
+production_files_modified: []
+tests:
+  result: '1 passed in1.32s; counterexample observation, not safety certification'
+  file: /tmp/v8-descendant-audit.bqlRUw/factor_engine/tests/runtime/test_v8_worker_descendant_boundary.py
+  test_sha256: d90b0724f0a543cb3493d5812fefa6ff1f2460d3fbe257a9f791d101621b57fa
+  xml: /tmp/v8-descendant-audit.xml
+  xml_sha256: 880cb5e1841c3c09588b288538cd5f22d986120063061b5d3318a72c80013e53
+  root_verification: remote test and XML hashes independently checked
+observations:
+  - Direct supervised worker created a subprocess descendant with a new session.
+  - Direct worker retired; SQLite reported all explicit workers exited.
+  - A second heavy-run guard acquired while the descendant remained alive.
+  - Descendant wrote an isolated artifact after its parent retired.
+  - Test finally terminated its isolated process group and verified no residual PID.
+source_sha256:
+  factor_engine/runtime/supervised_worker.py: be288e3d39c7926e5bb342f8f203d408a9fa14612a817a6de4d8a0bd9d5e790e
+  factor_engine/runtime/resource_broker.py: 03e7a18d02ed02fc9d0a4059e6d4e0044bce5acfa23c034e5f15f98f8d8c8f23
+  factor_engine/runtime/worker_ownership_sqlite.py: 995b1b6fe2d57d8ecca6f4d5c47b63a788141c8e7109cc2dd2864512ee447e65
+deployment_prerequisite_read_only:
+  uid: 1008
+  current_cgroup: /system.slice/ssh.service
+  cgroup_root_owner: root
+  ssh_service_cgroup_owner: root
+  ssh_service_delegate: 'no'
+  root_verification: uid, cgroup membership, filesystem ownership and systemd Delegate queried independently
+  current_user_can_create_per_run_delegated_cgroup: false
+  action_taken: none; no cgroup creation, service change, privilege escalation or production process termination
+  prerequisite: administrator-provided delegated cgroup or separately authorized privileged launcher
+limitations:
+  - all-durable-pipeline-os-processes-v1 covers explicitly registered roles, not arbitrary descendants.
+  - Direct PID retirement and all_exited are not sufficient process-family retirement proof.
+  - Pending computation resume remains disabled; no marker or production behavior changed.
+  - Actual approved DataAccess/GPU/100k/performance acceptance NOT_RUN.
+  - No commit, push, deployment, service restart, or production factor publication.

@@ -1,0 +1,28 @@
+schema: v9-scoped-merge-evidence-1
+date: '2026-09-09'
+git_sha: 118cd21c6262082336daa545ddc06b6f78def7b9
+workspace: /home/sunhaiwei/quant_projects
+issue: V9-M11
+status: PUBLIC_PRODUCER_MERGED_OWNER_AND_TRANSPORT_PENDING
+files:
+  factor_engine/cleaned_operators/ts_model/_rolling_core.py: a6c424245c6389a7386fafa3ea363cb172287ce8b7f77c1ecbab2a23a04fbc0f
+  factor_engine/cleaned_operators/ts_model/dynamic_regression.py: 6d94d101f5e1ede4935d09ad9d92d7d298c7f22e099b3b4b7610da608099e129
+  factor_engine/tests/operators/test_v9_m11b_dynamic_receipts.py: 6eb84060ff7a84735ca1b8420c13a2151356d7f67e3a98ebdae8b2a06e92c2e3
+patch_sha256: 377b01a45685e010c88696bdacbbd267ab1f6040e16e21f5efa3f11fe1ca4b32
+main_tests:
+  result: 18 passed, 2 warnings
+  duration_seconds: 25.54
+  junit: v9-m11b-main-merged.xml
+  paths:
+    - factor_engine/tests/operators/test_v9_m11_fit_receipts.py
+    - factor_engine/tests/operators/test_v9_m11b_dynamic_receipts.py
+scope:
+  - Public regression producer captures immediate fit results and actual instrument/window coordinates.
+  - Ordinary Python date indexes retain receipt coordinates alongside pandas DatetimeIndex.
+  - Owner-bound tests explicitly bind their context; automatic runtime attribution is not yet merged.
+  - Stability fits record main and subfit coordinates without changing numerical output policy.
+not_run_or_open:
+  - Automatic root/bridge ownership integration is staged and under independent review.
+  - Worker transport, durable receipts, restart equivalence remain open.
+  - Full operator/backend coverage and real auto80/GPU/100k certification NOT_RUN.
+preservation: Baseline hashes verified before narrow merge; no GitHub operations or production publication.

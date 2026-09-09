@@ -8,6 +8,7 @@ _r38_spool/
 cleaned_operators.zip
 
 # Build artifacts
+*.egg-info/
 build/
 __pycache__/
 *.pyc

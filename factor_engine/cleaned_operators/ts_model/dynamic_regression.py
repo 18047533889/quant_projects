@@ -28,12 +28,16 @@ from factor_engine.cleaned_operators.base import ParamRole, ParamSpec, SeriesOpe
 from factor_engine.cleaned_operators.ts_model._rolling_core import (
     aligned,
     build_design,
+    FitResult,
+    FitStatus,
+    fit_result,
     frame_like,
     huber_fit,
     metadata,
     ols_fit,
     pinball_quantile_fit,
     quantile_fit,
+    record_current_fit,
     ridge_fit,
     rolling_fit,
 )
@@ -45,6 +49,7 @@ from factor_engine.cleaned_operators.ts_model._rolling_core import (
 from factor_engine.cleaned_operators.ts_model._rolling_core import expectile_fit  # noqa: E402
 
 _CANONICALS: list[str] = []
+_MULTI_CONFIGURED_HISTORY_CANONICALS: list[str] = []
 
 # Model-audit Phase 4 (search-space hygiene): explicit ParamSpec declarations.
 # ``window`` is the alpha horizon (HORIZON, searched); ``coefficient_index`` is
@@ -72,6 +77,21 @@ _MULTI_FULL_WARMUP = "full"
 # fitting a 4-feature model on 6 observations (overfitting risk). User can override
 # via explicit min_periods if needed.
 _MULTI_MIN_EFFECTIVE_OBS_EXPR = "max(min_periods, 5 * n_coeffs)"
+
+
+def validate_multi_configured_history(
+    window: int, min_periods: int, feature_count: int, add_intercept: bool,
+    *, fit_lag: int = 0,
+) -> int:
+    n_coeffs = int(feature_count) + (1 if add_intercept else 0)
+    required_window = max(int(min_periods), 5 * n_coeffs)
+    if int(window) < required_window:
+        raise ValueError(
+            "INSUFFICIENT_CONFIGURED_HISTORY: "
+            f"window={window} requires at least {required_window} for "
+            f"feature_count={feature_count}, add_intercept={bool(add_intercept)}"
+        )
+    return required_window + max(0, int(fit_lag))
 
 # P1 (no-intercept R² definition governance): the R² reported by every
 # ``ts_*_regression_r2*`` canonical uses the CENTERED total sum of squares
@@ -166,7 +186,7 @@ def _multi_regression(
     rows, cols = yv.shape
     xs = [f.to_numpy(dtype=float) for f in feats]
     n_coeffs = len(feats) + (1 if add_intercept else 0)
-    if coeff_index < 0 or coeff_index >= n_coeffs:
+    if stat == "coeff" and (coeff_index < 0 or coeff_index >= n_coeffs):
         raise ValueError(f"coefficient_index {coeff_index} out of range [0, {n_coeffs})")
     if stability_k > 0 and stat != "coeff":
         raise ValueError("stability_k>0 requires stat='coeff'")
@@ -177,7 +197,24 @@ def _multi_regression(
     # fit on 6 obs). User min_periods still honored if set higher.
     mp = max(int(min_periods), 5 * n_coeffs)
     lag = max(0, int(fit_lag))
+    validate_multi_configured_history(
+        w, min_periods, len(feats), add_intercept, fit_lag=lag
+    )
     k = max(0, int(stability_k))
+
+    def record(
+        result: FitResult, *, col: int, start: int, fit_end: int, row: int,
+    ) -> None:
+        record_current_fit(
+            result,
+            instrument=y.columns[col],
+            window_start=y.index[start],
+            window_end=y.index[fit_end],
+            output_row=y.index[row],
+            fit_cutoff=y.index[fit_end],
+            maturity_cutoff=y.index[fit_end],
+        )
+
     for col in range(cols):
         ycol = yv[:, col]
         xcols = [x[:, col] for x in xs]
@@ -195,13 +232,19 @@ def _multi_regression(
             for x in seg_xs:
                 valid &= np.isfinite(x)
             if valid.sum() < mp:
+                record(FitResult(None, FitStatus(False, "insufficient_sample")),
+                       col=col, start=start, fit_end=fit_end, row=row)
                 continue
             vy = seg_y[valid]
             vxs = [x[valid] for x in seg_xs]
             if any(np.std(vx) <= 0.0 for vx in vxs):
+                record(FitResult(None, FitStatus(False, "singular")),
+                       col=col, start=start, fit_end=fit_end, row=row)
                 continue
             design = build_design(vxs, add_intercept)
-            b = fit(design, vy)
+            result = fit_result(fit, design, vy)
+            record(result, col=col, start=start, fit_end=fit_end, row=row)
+            b = result.value
             if b is None:
                 continue
             with np.errstate(over="ignore", invalid="ignore"):
@@ -221,13 +264,19 @@ def _multi_regression(
                         for x in sx:
                             v2 &= np.isfinite(x)
                         if v2.sum() < mp:
+                            record(FitResult(None, FitStatus(False, "insufficient_sample")),
+                                   col=col, start=s2, fit_end=fe, row=row)
                             break
                         vy2 = sy[v2]
                         vx2 = [x[v2] for x in sx]
                         if any(np.std(vx2) <= 0.0 for vx2 in vx2):
+                            record(FitResult(None, FitStatus(False, "singular")),
+                                   col=col, start=s2, fit_end=fe, row=row)
                             break
                         d2 = build_design(vx2, add_intercept)
-                        b2 = fit(d2, vy2)
+                        result2 = fit_result(fit, d2, vy2)
+                        record(result2, col=col, start=s2, fit_end=fe, row=row)
+                        b2 = result2.value
                         if b2 is None:
                             break
                         coeffs.append(float(b2[coeff_index]))
@@ -308,7 +357,8 @@ def _register_multi(name: str, description: str, fit_fn: Callable[..., Any], ext
                     input_units: dict[str, str] | None = None,
                     output_unit: str | None = None,
                     diagnostic_only: bool = False):
-    _desc = f"{description}（window=max lookback，非严格满窗；min_effective_obs=max(min_periods, 特征数+1)；warmup_policy={_MULTI_WARMUP_POLICY} 渐进输出）"
+    _MULTI_CONFIGURED_HISTORY_CANONICALS.append(name)
+    _desc = f"{description}（window=max lookback，非严格满窗；min_effective_obs=max(min_periods, 5*系数数)；warmup_policy={_MULTI_WARMUP_POLICY} 渐进输出）"
     if stat in ("r2", "r2_adj"):
         _desc += f"（R² 定义 versioned：{_R2_DEFINITION}，加截距与不加截距统一 centered SS_tot）"
 
@@ -320,6 +370,7 @@ def _register_multi(name: str, description: str, fit_fn: Callable[..., Any], ext
         source="ts_model.dynamic_regression",
         backend="pandas_numpy",
         status="experimental",
+        semantic_version="3.0" if name.startswith("ts_ridge_regression_") else "2.0",
     )
     class _MultiOp(SeriesOperator):
         metadata = metadata(
@@ -333,6 +384,8 @@ def _register_multi(name: str, description: str, fit_fn: Callable[..., Any], ext
         )
         # P1: window = max lookback (documented, machine-readable contract).
         metadata.window_semantics = _MULTI_WINDOW_SEMANTICS
+        if stat != "coeff":
+            metadata.deprecated_ignored_params = ("coefficient_index",)
 
         def _calculate_series(self, y, x1=None, x2=None, x3=None, x4=None,
                               window=60, coefficient_index=1, min_periods=10, add_intercept=True,
@@ -344,6 +397,15 @@ def _register_multi(name: str, description: str, fit_fn: Callable[..., Any], ext
                 fit_lag=int(fit_lag), stability_k=int(stability_k),
                 warmup_policy=str(warmup_policy),
             )
+
+        def validate_params(self, y, x1=None, x2=None, x3=None, x4=None,
+                            window=60, coefficient_index=1, min_periods=10,
+                            add_intercept=True, warmup_policy="expanding", **_):
+            feature_count = sum(x is not None for x in (x1, x2, x3, x4))
+            validate_multi_configured_history(
+                window, min_periods, feature_count, add_intercept, fit_lag=fit_lag
+            )
+            return True
 
     return _MultiOp
 
