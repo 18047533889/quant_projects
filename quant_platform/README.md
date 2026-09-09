@@ -129,7 +129,8 @@ FastAPI `create_app()`（注入 Db + server secret），4 条路由：
 ```bash
 git clone https://github.com/HKUST-QUANT-SOCIETY/quant_platform.git
 cd quant_platform
-pip install -e .
+pip install -r requirements.txt
+# 可选 PostgreSQL QA：pip install -e ".[postgres-test]"
 # 测试须从 monorepo 根跑（否则 quant_platform 包不可导入，4 个收集 ERROR）：
 cd /repo-root && python3 -m pytest quant_platform/tests/ -q   # 367 passed + 8 skipped
 ```

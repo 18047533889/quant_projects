@@ -1,0 +1,5 @@
+# Run only after: cd factor_engine
+# pyproject.toml is the sole package dependency authority.
+# Preinstall internal dependencies from the pinned monorepo source checkout.
+# Team third-party pins come from the repository-root requirements/constraints.
+-e .

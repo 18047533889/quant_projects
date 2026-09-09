@@ -5,6 +5,7 @@ import { ResourceListPage } from '../components/ResourceListPage';
 import { Table } from '../components/Table';
 import { useClusters } from '../hooks';
 import { formatDate } from '../lib';
+import { registryViewRow } from '../api/viewRows';
 
 interface ClusterRow {
   ref: string;
@@ -43,7 +44,7 @@ export function ClustersPage() {
         name="Clusters"
         resource="clusters"
         query={clusters}
-        tableState={<Table columns={columns} data={(clusters.data as ClusterRow[]) ?? []} />}
+        tableState={<Table columns={columns} data={(clusters.data ?? []).map(registryViewRow)} />}
       />
     </div>
   );

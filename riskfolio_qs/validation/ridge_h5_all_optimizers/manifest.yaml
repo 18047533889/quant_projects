@@ -1,0 +1,34 @@
+status: passed
+optimizer_count: 9
+optimizers:
+- minvar_enhance_index
+- meanvar_enhance_index
+- minvar_enhance_barra_precomputed
+- meanvar_enhance_barra_precomputed
+- minvar_enhance_hist
+- meanvar_enhance_hist
+- meanvar_absolute_return
+- topn_long_only_equal_weight
+- topn_long_short_equal_weight
+dates:
+- '2025-12-18'
+- '2025-12-19'
+- '2025-12-22'
+- '2025-12-23'
+- '2025-12-24'
+asset_count: 488
+index_symbol: 000905.SH
+benchmark_retained_weight_coverage:
+  '2025-12-18': 0.971502564769171
+  '2025-12-19': 0.971502564769171
+  '2025-12-22': 0.971502564769171
+  '2025-12-23': 0.971502564769171
+  '2025-12-24': 0.971502564769171
+alpha_input_type: expected_return
+alpha_horizon_days: 5
+prediction_path: D:\quantsociety\whh_local_workspace\outputs\Ridge_h5_pred.parquet
+prediction_sha256: 72a2b9f190d0a60a3d8cde89e0ea6723001195ca6fa75145796db5e1e4b63ae9
+barra_root: D:\quantsociety\whh_local_workspace\v1_sbi_fullA
+market_data_root: D:\quantsociety\whh_local_workspace\lqtp_data
+raw_barra_specific_return_method: StockDailyBar.Return/10000 - exposure @ factor_return
+test_purpose: optimizer acceptance, not performance backtest

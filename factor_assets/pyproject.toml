@@ -62,6 +62,7 @@ packages = [
     "factor_assets.lifecycle",
     "factor_assets.novelty",
     "factor_assets.optimizer",
+    "factor_assets.profiling",
     "factor_assets.registry",
     "factor_assets.seen_index",
     "factor_assets.selection",

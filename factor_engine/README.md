@@ -25,11 +25,17 @@
 ## 安装与第一个因子
 
 ```bash
+# Python >= 3.10；团队源码安装先准备匹配版本的内部依赖
 git clone https://github.com/HKUST-QUANT-SOCIETY/factor_engine.git
+git clone https://github.com/HKUST-QUANT-SOCIETY/data_access.git
+python -m pip install --no-deps -e ./data_access
 cd factor_engine
-pip install -e .
-# 推荐同时装读数层：pip install -e ../data_access
+python -m pip install -e .
 ```
+
+`data-access>=0.10.2` 是运行时硬依赖。先用 `--no-deps` 绑定同级私有源码库，
+可避免 pip 从公共索引解析内部同名包；随后安装 Factor Engine 时再由统一
+constraints/bootstrap 解析外部依赖。
 
 ```python
 from factor_engine.api import col, rank, ts_mean

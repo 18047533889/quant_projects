@@ -21,9 +21,11 @@
 ## 安装与第一次评估
 
 ```bash
+# Python >= 3.10
 git clone https://github.com/HKUST-QUANT-SOCIETY/quant_evaluator.git
 cd quant_evaluator
-pip install -e ".[full]"        # 或 [polars] / [stats] / [reporting]
+python -m pip install -e .               # core runtime
+python -m pip install -e ".[full]"      # 可选：或 [polars] / [stats] / [reporting]
 ```
 
 ```python

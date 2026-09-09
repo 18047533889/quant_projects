@@ -5,6 +5,7 @@ import { ResourceListPage } from '../components/ResourceListPage';
 import { Table } from '../components/Table';
 import { useFeatureSets } from '../hooks';
 import { formatDate } from '../lib';
+import { featureSetViewRow } from '../api/viewRows';
 
 interface FeatureSetRow {
   feature_set_id: string;
@@ -44,7 +45,7 @@ export function FeatureSetsPage() {
         name="Feature sets"
         resource="feature sets"
         query={featureSets}
-        tableState={<Table columns={columns} data={(featureSets.data as FeatureSetRow[]) ?? []} />}
+        tableState={<Table columns={columns} data={(featureSets.data ?? []).map(featureSetViewRow)} />}
       />
     </div>
   );

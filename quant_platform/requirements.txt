@@ -1,0 +1,3 @@
+# Canonical core dependencies live in pyproject.toml.
+# Optional live PostgreSQL QA: pip install -e ".[postgres-test]"
+-e .

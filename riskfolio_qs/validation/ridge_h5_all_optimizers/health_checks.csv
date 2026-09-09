@@ -1,0 +1,10 @@
+optimizer,passed,finite_weights,fallback_used,exposure_ok,position_bounds_ok,status_ok,statuses,max_constraint_violation,external_v1_te_max
+minvar_enhance_index,True,True,False,True,True,True,optimal,3.0771012907854223e-15,7.14863870084853e-11
+meanvar_enhance_index,True,True,False,True,True,True,optimal,1.6129698116110203e-06,0.024640986585450334
+minvar_enhance_barra_precomputed,True,True,False,True,True,True,optimal,1.058658369301746e-14,3.611413379430114e-09
+meanvar_enhance_barra_precomputed,True,True,False,True,True,True,optimal,3.0989958414023855e-07,0.030000309899584146
+minvar_enhance_hist,True,True,False,True,True,True,optimal,1.1102230246251565e-16,5.049865821189575e-09
+meanvar_enhance_hist,True,True,False,True,True,True,optimal,1.255523155961613e-07,0.039228368367563014
+meanvar_absolute_return,True,True,False,True,True,True,optimal,2.7723499911314065e-06,0.1013662207481992
+topn_long_only_equal_weight,True,True,False,True,True,True,rule,0.0,0.11271590473642099
+topn_long_short_equal_weight,True,True,False,True,True,True,rule,0.0,0.2398965801582998

@@ -88,6 +88,17 @@ data/factor_pools（10 池 parquet）→ merge → feature matrix → factor_pre
 | outputs/rankic_report.md | predictions_adj vs fwd_adj_neu，2020-01-06..2026-08-10 共 1598 截面日 | 平均 IC=0.1118、平均 rankIC=0.0997、IC>0 比例 76.2% | |
 | snapshots/final_20260826_1.758 | 早期快照（修复前） | sharpe=1.758 | ⚠️ MISTAKES 手册指出旧 mu/cov 用未来收益虚高 |
 
+## 安装
+
+```bash
+cd /home/sunhaiwei/quant_projects/lightgbm_qs
+pip install -r requirements.txt
+```
+
+GPU 训练需要另行安装与机器 CUDA/OpenCL 驱动匹配的 LightGBM 构建；基础依赖清单
+不强制 GPU wheel，脚本保留 CPU fallback。平台库从 monorepo 根按源码安装，禁止从
+PyPI 猜测同名内部包。
+
 ## 测试
 
 ```bash

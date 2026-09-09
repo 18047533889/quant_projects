@@ -5,6 +5,7 @@ import { ResourceListPage } from '../components/ResourceListPage';
 import { Table } from '../components/Table';
 import { useCampaigns } from '../hooks';
 import { formatDate } from '../lib';
+import { registryViewRow } from '../api/viewRows';
 
 interface CampaignRow {
   ref: string;
@@ -34,7 +35,7 @@ export function CampaignsPage() {
         name="Campaigns"
         resource="campaigns"
         query={campaigns}
-        tableState={<Table columns={columns} data={(campaigns.data as CampaignRow[]) ?? []} />}
+        tableState={<Table columns={columns} data={(campaigns.data ?? []).map(registryViewRow)} />}
       />
     </div>
   );

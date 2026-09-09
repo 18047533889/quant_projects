@@ -5,6 +5,7 @@ import { ResourceListPage } from '../components/ResourceListPage';
 import { Table } from '../components/Table';
 import { useModels } from '../hooks';
 import { formatDate } from '../lib';
+import { modelViewRow } from '../api/viewRows';
 
 interface ModelRow {
   model_id: string;
@@ -44,7 +45,7 @@ export function ModelsPage() {
         name="Models"
         resource="models"
         query={models}
-        tableState={<Table columns={columns} data={(models.data as ModelRow[]) ?? []} />}
+        tableState={<Table columns={columns} data={(models.data ?? []).map(modelViewRow)} />}
       />
     </div>
   );

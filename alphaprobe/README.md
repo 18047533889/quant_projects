@@ -151,6 +151,16 @@ data_collection（fetch_baostock / qlib_dump_bin）、utils（llm 带限次重�
 
 ## 环境
 
+```bash
+cd /home/sunhaiwei/quant_projects/alphaprobe
+pip install -r requirements.txt
+```
+
+依赖由嵌套 `pyproject.toml` 与现有 `pdm.lock` 共同锁定。本项目使用独立的
+Python 3.11 / CUDA 12.1 环境，torch/torchvision/torchaudio 均为对应 CPython 3.11
+专用 wheel；不得把该环境与平台默认 Python 3.12 环境混装。切换 CPU 或其他 CUDA
+版本前必须先正式重锁 `pdm.lock`。
+
 Python 3.11、torch 2.4.0+cu121、gymnasium、stable-baselines3、sb3-contrib、torchgfn、
 torch-geometric、pyqlib、transformers 4.56、openai 1.55.1、sentence-transformers 3.3.1。
 LLM key 在 `.env`（禁止提交）。

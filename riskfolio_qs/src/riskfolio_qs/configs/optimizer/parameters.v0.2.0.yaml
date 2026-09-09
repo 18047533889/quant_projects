@@ -1,0 +1,261 @@
+parameter_version: "v0.2.4"
+
+global:
+  budget: 1.0
+  long_only: true
+  gross_exposure_cap: 1.0
+  rebalance_frequency: D
+  risk_mode_default_index: barra_precomputed
+  risk_mode_default_abs: historical_cov
+  fallback_policy_default: fail_fast
+  enforce_tradable_mask: true
+  allow_new_asset_with_zero_prev: true
+  min_alpha_coverage: 0.80
+  min_benchmark_coverage: 0.95
+  min_exposure_coverage: 0.95
+  min_prev_positions_coverage: 1.0
+  soft_cost_scale: 0.05
+  score_return_scale_bps: 10.0
+  default_linear_cost_bps: 5.0
+  default_impact_cost: 0.0
+  enforce_tracking_error_cap: false
+  tracking_error_cap_annual: null
+
+risk:
+  hist_cov_lookback_days: 60
+  barra_cov_lookback_days: 252
+  specific_risk_lookback_days: 252
+  cov_shrinkage: 0.05
+  hist_cov_method: ewma
+  hist_cov_halflife_days: 20
+  hist_cov_min_observations: 20
+  covariance_variance_floor: 1.0e-6
+  covariance_eigenvalue_floor: 1.0e-8
+  precomputed_factor_eigenvalue_floor: 1.0e-12
+  precomputed_specific_variance_floor: 1.0e-8
+  precomputed_symmetry_tolerance: 1.0e-10
+
+solver:
+  backend: riskfolio_backend
+  solver_name: CLARABEL
+  max_iters: 5000
+  solver_tol: 1.0e-6
+  on_solve_failure: fail_fast
+
+optimizers:
+  minvar_enhance_index:
+    objective_id: OBJ_MINVAR_ACTIVE
+    solver_tol: 1.0e-7
+    max_iters: 10000
+    single_name_max: 0.03
+    active_weight_abs_max: 0.02
+    turnover_cap: 0.20
+    turnover_penalty: 0.0
+    linear_cost_penalty: 1.0
+    impact_cost_penalty: 0.0
+    enable_impact_cost: false
+    industry_neutral_mode: strict
+    style_neutral_mode: band
+    style_band: 0.10
+    mcap_neutral_mode: band
+    mcap_band: 0.10
+    enforce_tracking_error_cap: true
+    tracking_error_cap_annual: 0.03
+
+  minvar_enhance_hist:
+    objective_id: OBJ_MINVAR_ACTIVE
+    solver_tol: 1.0e-7
+    max_iters: 10000
+    single_name_max: 0.03
+    active_weight_abs_max: 0.02
+    turnover_cap: 0.20
+    turnover_penalty: 0.0
+    linear_cost_penalty: 1.0
+    impact_cost_penalty: 1.0
+    enable_impact_cost: false
+    industry_neutral_mode: "off"
+    style_neutral_mode: "off"
+    mcap_neutral_mode: "off"
+    enforce_tracking_error_cap: true
+    tracking_error_cap_annual: 0.03
+
+  meanvar_enhance_index:
+    objective_id: OBJ_MEANVAR_ACTIVE
+    solver_tol: 1.0e-7
+    max_iters: 10000
+    alpha_weight: 1.0
+    risk_weight: 1.0
+    single_name_max: 0.03
+    active_weight_abs_max: 0.02
+    turnover_cap: 0.20
+    turnover_penalty: 0.0
+    linear_cost_penalty: 1.0
+    impact_cost_penalty: 0.0
+    enable_impact_cost: false
+    industry_neutral_mode: strict
+    style_neutral_mode: band
+    style_band: 0.10
+    mcap_neutral_mode: band
+    mcap_band: 0.10
+    enforce_tracking_error_cap: true
+    tracking_error_cap_annual: 0.03
+
+  minvar_enhance_barra_precomputed:
+    objective_id: OBJ_MINVAR_ACTIVE
+    solver_tol: 1.0e-7
+    max_iters: 10000
+    single_name_max: 0.03
+    active_weight_abs_max: 0.02
+    turnover_cap: 0.20
+    turnover_penalty: 0.0
+    linear_cost_penalty: 1.0
+    impact_cost_penalty: 0.0
+    enable_impact_cost: false
+    industry_neutral_mode: strict
+    style_neutral_mode: band
+    style_band: 0.10
+    mcap_neutral_mode: "off"
+    enforce_tracking_error_cap: true
+    tracking_error_cap_annual: 0.03
+
+  meanvar_enhance_barra_precomputed:
+    objective_id: OBJ_MEANVAR_ACTIVE
+    solver_tol: 1.0e-7
+    max_iters: 10000
+    alpha_weight: 1.0
+    risk_weight: 1.0
+    single_name_max: 0.03
+    active_weight_abs_max: 0.02
+    turnover_cap: 0.20
+    turnover_penalty: 0.0
+    linear_cost_penalty: 1.0
+    impact_cost_penalty: 0.0
+    enable_impact_cost: false
+    industry_neutral_mode: strict
+    style_neutral_mode: band
+    style_band: 0.10
+    mcap_neutral_mode: "off"
+    enforce_tracking_error_cap: true
+    tracking_error_cap_annual: 0.03
+
+  meanvar_enhance_hist:
+    objective_id: OBJ_MEANVAR_ACTIVE
+    solver_tol: 1.0e-7
+    max_iters: 10000
+    alpha_weight: 1.0
+    risk_weight: 1.0
+    single_name_max: 0.03
+    active_weight_abs_max: 0.02
+    turnover_cap: 0.20
+    turnover_penalty: 0.0
+    linear_cost_penalty: 1.0
+    impact_cost_penalty: 1.0
+    enable_impact_cost: false
+    industry_neutral_mode: "off"
+    style_neutral_mode: "off"
+    mcap_neutral_mode: "off"
+    enforce_tracking_error_cap: true
+    tracking_error_cap_annual: 0.03
+
+  meanvar_absolute_return:
+    objective_id: OBJ_MEANVAR_ABS
+    alpha_weight: 1.0
+    risk_weight: 1.0
+    single_name_max: 0.05
+    turnover_cap: 0.25
+    turnover_penalty: 0.0
+    linear_cost_penalty: 1.0
+    impact_cost_penalty: 0.0
+    enable_impact_cost: false
+
+  topn_long_only_equal_weight:
+    objective_id: OBJ_TOPN_LONG_ONLY
+    topn_n: 50
+    topn_weight_mode: equal
+    single_name_max: 0.05
+    enforce_tradable_mask: false
+
+  topn_long_short_equal_weight:
+    objective_id: OBJ_TOPN_LS_EQUAL
+    long_n: 10
+    short_n: 10
+    long_weight: 0.05
+    short_weight: -0.05
+    enforce_tradable_mask: false
+
+overrides_whitelist:
+  - top_n
+  - single_name_max
+  - active_weight_abs_max
+  - turnover_cap
+  - turnover_penalty
+  - industry_neutral_mode
+  - style_neutral_mode
+  - style_band
+  - mcap_band
+  - alpha_weight
+  - risk_weight
+  - impact_cost_penalty
+  - enable_impact_cost
+  - solver_name
+  - max_iters
+  - solver_tol
+  - on_solve_failure
+  - soft_cost_scale
+  - score_return_scale_bps
+  - default_linear_cost_bps
+  - default_impact_cost
+  - hist_cov_method
+  - hist_cov_halflife_days
+  - hist_cov_min_observations
+  - enforce_tracking_error_cap
+  - tracking_error_cap_annual
+
+validation_rules:
+  top_n:
+    gt: 0
+  single_name_max:
+    gt: 0.0
+    le: 1.0
+  active_weight_abs_max:
+    ge: 0.0
+    le: 1.0
+  turnover_cap:
+    ge: 0.0
+    le: 1.0
+  industry_neutral_mode:
+    in: ["off", "strict", "band"]
+  style_neutral_mode:
+    in: ["off", "strict", "band"]
+  style_band:
+    ge: 0.0
+  mcap_band:
+    ge: 0.0
+  alpha_weight:
+    ge: 0.0
+  risk_weight:
+    ge: 0.0
+  max_iters:
+    gt: 0
+  solver_tol:
+    gt: 0.0
+  on_solve_failure:
+    in: [fail_fast, carry_forward, equal_weight]
+  soft_cost_scale:
+    ge: 0.0
+  score_return_scale_bps:
+    gt: 0.0
+  default_linear_cost_bps:
+    ge: 0.0
+  default_impact_cost:
+    ge: 0.0
+  hist_cov_method:
+    in: [sample, ewma]
+  hist_cov_halflife_days:
+    gt: 0
+  hist_cov_min_observations:
+    gt: 1
+  tracking_error_cap_annual:
+    gt: 0.0
+  enforce_tracking_error_cap:
+    in: [true, false]

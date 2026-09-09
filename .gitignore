@@ -89,3 +89,9 @@ evidence/r2/runmany_*/values.npy
 !vectorbt_qs/mvp/data/*.py
 !vectorbt_qs/vectorbt/vectorbt/data/
 !vectorbt_qs/vectorbt/vectorbt/data/*.py
+
+# Source directories named data/lib must ship to both root and HKUST mirrors.
+!alphaprobe/ashare/alphaprobe-dev/src/shared/alphagen/data/
+!alphaprobe/ashare/alphaprobe-dev/src/shared/alphagen/data/*.py
+!platform_web/src/lib/
+!platform_web/src/lib/*.ts

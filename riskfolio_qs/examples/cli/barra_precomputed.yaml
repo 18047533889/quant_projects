@@ -1,0 +1,48 @@
+# riskfolio_qs CLI configuration v1.
+# Relative paths are resolved from this YAML file, not from the shell cwd.
+config_version: 1
+
+adapter:
+  type: barra_precomputed
+  risk_root: ../../../v1_sbi_fullA
+  # Business choice only; weights are read from data_access.
+  benchmark_index: 000905.SH
+  minimum_benchmark_weight_coverage: 0.95
+  alpha_input_type: expected_return
+  alpha_horizon_days: 5
+  calendar_name: XSHG
+  # Use 0 only when the same-day snapshot is available before decision_time.
+  risk_data_lag_periods: 1
+  exposure_data_lag_periods: 1
+  annualization_factor: 252
+  load_factor_returns: false
+
+inputs:
+  # Long-format parquet: one row per TradeDate-Symbol.
+  alpha:
+    path: ../../../outputs/Ridge_h5_pred.parquet
+    layout: long
+    date_column: TradeDate
+    asset_column: Symbol
+    value_column: pred
+    start_date: 2025-12-24
+    end_date: 2025-12-24
+
+smoother:
+  mode: never
+
+run:
+  # Use either optimizer_name or scenario, not both.
+  optimizer_name: meanvar_enhance_barra_precomputed
+  data_version_hash: ridge_h5_2025-12-24
+  allow_fallback: false
+  runtime_overrides:
+    tracking_error_cap_annual: 0.03
+    turnover_cap: 0.20
+    single_name_max: 0.03
+    active_weight_abs_max: 0.02
+    style_band: 0.10
+
+output:
+  directory: output
+  overwrite: false

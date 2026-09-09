@@ -1,0 +1,3 @@
+# Canonical dependencies and version bounds live in pyproject.toml.
+# Install from this directory.
+-e .

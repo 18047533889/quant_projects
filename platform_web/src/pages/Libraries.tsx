@@ -5,6 +5,7 @@ import { ResourceListPage } from '../components/ResourceListPage';
 import { Table } from '../components/Table';
 import { useLibraries } from '../hooks';
 import { formatDate } from '../lib';
+import { libraryViewRow } from '../api/viewRows';
 
 interface LibraryRow {
   library_version_id: string;
@@ -43,7 +44,7 @@ export function LibrariesPage() {
         name="Libraries"
         resource="libraries"
         query={libraries}
-        tableState={<Table columns={columns} data={(libraries.data as LibraryRow[]) ?? []} />}
+        tableState={<Table columns={columns} data={(libraries.data ?? []).map(libraryViewRow)} />}
       />
     </div>
   );

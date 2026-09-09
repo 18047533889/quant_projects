@@ -1,0 +1,9 @@
+-c core-py312-linux.txt
+-e ./data_access
+-e ./factor_engine
+-e ./quant_evaluator
+-e ./factor_preprocess
+-e ./factor_optimizer
+-e ./factor_assets
+-e ./quant_platform
+-e ./modeling

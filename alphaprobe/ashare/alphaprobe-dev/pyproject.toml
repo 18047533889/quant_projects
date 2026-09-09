@@ -43,3 +43,7 @@ build-backend = "pdm.backend"
 
 [tool.pdm]
 distribution = true
+
+[tool.pdm.build]
+package-dir = "src"
+includes = ["src/alphaprobe", "src/baselines", "src/shared"]

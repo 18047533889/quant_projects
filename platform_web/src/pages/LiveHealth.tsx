@@ -5,6 +5,7 @@ import { ResourceListPage } from '../components/ResourceListPage';
 import { Table } from '../components/Table';
 import { useLiveHealth } from '../hooks';
 import { formatDate } from '../lib';
+import { registryViewRow } from '../api/viewRows';
 
 interface LiveHealthRow {
   ref: string;
@@ -43,7 +44,7 @@ export function LiveHealthPage() {
         name="Live health"
         resource="live-health factors"
         query={liveHealth}
-        tableState={<Table columns={columns} data={(liveHealth.data as LiveHealthRow[]) ?? []} />}
+        tableState={<Table columns={columns} data={(liveHealth.data ?? []).map(registryViewRow)} />}
       />
     </div>
   );

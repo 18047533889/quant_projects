@@ -76,10 +76,18 @@ TreatmentDecisionPolicy 八步处理决策、TrialLedger 失败分类、预算�
 ## 安装
 
 ```bash
+# Python >= 3.10
 git clone https://github.com/HKUST-QUANT-SOCIETY/factor_optimizer.git
 cd factor_optimizer
-pip install -e .                     # core
-pip install -e ".[factor_engine,quant_evaluator]"   # 可选适配器
+python -m pip install -e .                                  # core
+```
+
+可选适配器需要匹配的内部源码库。先 clone 并安装 Factor Engine 的
+`data_access` 依赖，然后在本目录执行：
+
+```bash
+python -m pip install --no-deps -e ../factor_engine -e ../quant_evaluator
+python -m pip install -e ".[factor_engine,quant_evaluator]"
 ```
 
 ```python

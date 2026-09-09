@@ -1,0 +1,53 @@
+# Grid-tuning pipeline configuration v1.
+# All relative paths are resolved from this YAML file.
+config_version: 1
+
+riskfolio:
+  base_config: meanvar_barra_h10_base.yaml
+
+  # These define the strategy口径 and remain identical across all trials.
+  fixed_overrides:
+    alpha_weight: 1.0
+    single_name_max: 0.05
+    active_weight_abs_max: null
+    industry_neutral_mode: "off"
+    style_neutral_mode: "off"
+    enforce_tracking_error_cap: false
+    soft_cost_scale: 0.05
+    solver_name: CLARABEL
+    solver_tol: 1.0e-7
+    max_iters: 10000
+    on_solve_failure: fail_fast
+
+  # 5 x 3 x 4 = 60 deterministic trials.
+  grid:
+    risk_weight: [3.0, 10.0, 30.0, 100.0, 300.0]
+    turnover_cap: [0.05, 0.10, 0.20]
+    turnover_penalty: [0.0, 0.01, 0.02, 0.04]
+
+backtest:
+  # Frozen profile: 000852.SH, VWAP, 1D, accurate execution.
+  profile: standard_accurate_benchmark_v1
+  data_root: ../../../lqtp_data
+  barra_root: ../../../v1_sbi_fullA
+  start: 2024-01-03
+  end: 2025-12-31
+
+selection:
+  metric: Information Ratio
+  ascending: false
+
+execution:
+  output_directory: ../../../outputs/meanvar_barra_h10_grid
+  max_trials: 60
+  # Each process independently loads Alpha, Barra and market data.
+  # About 6-10 GB peak memory per worker; use 1 on a 16 GB machine.
+  workers: 2
+  resume: true
+  overwrite: false
+  on_trial_error: continue
+
+reports:
+  enabled: true
+  top_n: 3
+  on_error: continue

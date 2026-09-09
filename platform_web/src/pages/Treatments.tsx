@@ -5,6 +5,7 @@ import { ResourceListPage } from '../components/ResourceListPage';
 import { Table } from '../components/Table';
 import { useTreatments } from '../hooks';
 import { formatDate } from '../lib';
+import { registryViewRow } from '../api/viewRows';
 
 interface TreatmentRow {
   ref: string;
@@ -37,7 +38,7 @@ export function TreatmentsPage() {
         name="Treatments"
         resource="treatments"
         query={treatments}
-        tableState={<Table columns={columns} data={(treatments.data as TreatmentRow[]) ?? []} />}
+        tableState={<Table columns={columns} data={(treatments.data ?? []).map(registryViewRow)} />}
       />
     </div>
   );

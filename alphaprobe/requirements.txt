@@ -1,0 +1,7 @@
+# Canonical dependencies live in the nested AlphaPROBE pyproject.toml.
+# Install from the alphaprobe repository root.
+-e ../factor_engine
+-e ../quant_evaluator
+-e ../factor_assets
+-e ../modeling
+-e ./ashare/alphaprobe-dev

@@ -1,0 +1,67 @@
+# Python bytecode and caches
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Test and lint caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# Notebook and editor artifacts
+.ipynb_checkpoints/
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Local data and generated outputs
+artifacts/
+*.log
+
+# Large local datasets and model artifacts
+*.parquet
+*.pq
+*.feather
+*.arrow
+*.h5
+*.hdf5
+*.npy
+*.npz
+*.pkl
+*.pickle
+*.joblib
+*.onnx
+*.pt
+*.pth
+*.ckpt
+*.duckdb
+
+# CLI and backtest runtime outputs
+output/
+outputs/
+riskfolio_output/
+cli_smoke_output/
+validation/**/meanvar_*/
+validation/**/minvar_*/
+validation/**/topn_*/
+
+# Optional local env files
+.env
+.env.*

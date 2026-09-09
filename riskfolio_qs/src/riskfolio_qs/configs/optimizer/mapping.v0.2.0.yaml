@@ -1,0 +1,209 @@
+mapping_version: "v0.2.4"
+default_optimizer_set:
+  - minvar_enhance_index
+  - meanvar_enhance_index
+  - minvar_enhance_barra_precomputed
+  - meanvar_enhance_barra_precomputed
+  - minvar_enhance_hist
+  - meanvar_enhance_hist
+  - meanvar_absolute_return
+  - topn_long_only_equal_weight
+
+default_routing:
+  index_enhancement: meanvar_enhance_barra_precomputed
+  conservative_index_enhancement: minvar_enhance_barra_precomputed
+  absolute_return: meanvar_absolute_return
+  fallback: topn_long_only_equal_weight
+
+optimizers:
+  minvar_enhance_index:
+    status: active
+    objective_id: OBJ_MINVAR_ACTIVE
+    hard_constraint_set: HC_INDEX_ENHANCE_CORE
+    soft_constraint_set: SC_TC_TURNOVER
+    risk_mode: barra_factor
+    backend: riskfolio_backend
+    solver_default: CLARABEL
+    fallback_policy: degrade_to_optimizer
+    fallback_optimizer: minvar_enhance_hist
+    required_inputs:
+      strong:
+        - alpha
+        - benchmark
+        - prev_positions
+        - F
+        - G
+        - F_mcap
+        - F_ret
+        - F_spec
+        - tradable
+        - style
+      weak:
+        - cost_impact
+
+  meanvar_enhance_index:
+    status: active
+    objective_id: OBJ_MEANVAR_ACTIVE
+    hard_constraint_set: HC_INDEX_ENHANCE_CORE
+    soft_constraint_set: SC_TC_TURNOVER
+    risk_mode: barra_factor
+    backend: riskfolio_backend
+    solver_default: CLARABEL
+    fallback_policy: degrade_to_optimizer
+    fallback_optimizer: meanvar_enhance_hist
+    required_inputs:
+      strong:
+        - alpha
+        - benchmark
+        - prev_positions
+        - F
+        - G
+        - F_mcap
+        - F_ret
+        - F_spec
+        - tradable
+        - style
+      weak:
+        - cost_impact
+
+  minvar_enhance_barra_precomputed:
+    status: active
+    objective_id: OBJ_MINVAR_ACTIVE
+    hard_constraint_set: HC_INDEX_ENHANCE_BARRA_PRECOMPUTED
+    soft_constraint_set: SC_TC_TURNOVER
+    risk_mode: barra_precomputed
+    backend: riskfolio_backend
+    solver_default: CLARABEL
+    fallback_policy: fail_fast
+    required_inputs:
+      strong:
+        - alpha
+        - benchmark
+        - prev_positions
+        - F
+        - factor_cov
+        - specific_var
+        - G
+        - tradable
+        - style
+      weak:
+        - F_mcap
+        - cost_impact
+
+  meanvar_enhance_barra_precomputed:
+    status: active
+    objective_id: OBJ_MEANVAR_ACTIVE
+    hard_constraint_set: HC_INDEX_ENHANCE_BARRA_PRECOMPUTED
+    soft_constraint_set: SC_TC_TURNOVER
+    risk_mode: barra_precomputed
+    backend: riskfolio_backend
+    solver_default: CLARABEL
+    fallback_policy: fail_fast
+    required_inputs:
+      strong:
+        - alpha
+        - benchmark
+        - prev_positions
+        - F
+        - factor_cov
+        - specific_var
+        - G
+        - tradable
+        - style
+      weak:
+        - F_mcap
+        - cost_impact
+
+  minvar_enhance_hist:
+    status: active
+    objective_id: OBJ_MINVAR_ACTIVE
+    hard_constraint_set: HC_INDEX_ENHANCE_HIST
+    soft_constraint_set: SC_TC_TURNOVER
+    risk_mode: historical_cov
+    backend: riskfolio_backend
+    solver_default: CLARABEL
+    fallback_policy: fail_fast
+    required_inputs:
+      strong:
+        - alpha
+        - market
+        - benchmark
+        - prev_positions
+        - tradable
+      weak:
+        - G
+        - F_mcap
+        - style
+        - cost_impact
+
+  meanvar_enhance_hist:
+    status: active
+    objective_id: OBJ_MEANVAR_ACTIVE
+    hard_constraint_set: HC_INDEX_ENHANCE_HIST
+    soft_constraint_set: SC_TC_TURNOVER
+    risk_mode: historical_cov
+    backend: riskfolio_backend
+    solver_default: CLARABEL
+    fallback_policy: fail_fast
+    required_inputs:
+      strong:
+        - alpha
+        - market
+        - benchmark
+        - prev_positions
+        - tradable
+      weak:
+        - G
+        - F_mcap
+        - style
+        - cost_impact
+
+  meanvar_absolute_return:
+    status: active
+    objective_id: OBJ_MEANVAR_ABS
+    hard_constraint_set: HC_LONG_ONLY_CORE
+    soft_constraint_set: SC_TC_TURNOVER
+    risk_mode: historical_cov
+    backend: riskfolio_backend
+    solver_default: CLARABEL
+    fallback_policy: fail_fast
+    required_inputs:
+      strong:
+        - alpha
+        - market
+        - prev_positions
+        - tradable
+      weak:
+        - cost_impact
+
+  topn_long_only_equal_weight:
+    status: active
+    objective_id: OBJ_TOPN_LONG_ONLY
+    hard_constraint_set: HC_TOPN_LONG_ONLY
+    soft_constraint_set: SC_NONE
+    risk_mode: none
+    backend: rule_backend
+    solver_default: none
+    fallback_policy: degrade_to_rule
+    required_inputs:
+      strong:
+        - alpha
+      weak:
+        - benchmark
+        - prev_positions
+
+  topn_long_short_equal_weight:
+    status: draft
+    objective_id: OBJ_TOPN_LS_EQUAL
+    hard_constraint_set: HC_TOPN_LONG_SHORT
+    soft_constraint_set: SC_NONE
+    risk_mode: none
+    backend: rule_backend
+    solver_default: none
+    fallback_policy: degrade_to_rule
+    required_inputs:
+      strong:
+        - alpha
+      weak:
+        - benchmark
+        - prev_positions

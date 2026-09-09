@@ -82,10 +82,17 @@ REGISTERED → EVALUATED → APPROVED → PRODUCTION_READY → DEPRECATED / RETI
 ## 安装与第一步
 
 ```bash
+# Python >= 3.10
 git clone https://github.com/HKUST-QUANT-SOCIETY/factor_assets.git
 cd factor_assets
-pip install -e .                     # core（零重依赖）
-pip install -e ".[adapters]"         # + quant_evaluator / factor_engine / data_access
+python -m pip install -e .            # core（含 numpy/scipy）
+```
+
+全部适配器依赖内部项目的匹配版本。先 clone 同级源码库，再从本目录执行：
+
+```bash
+python -m pip install --no-deps -e ../data_access -e ../factor_engine -e ../quant_evaluator
+python -m pip install -e ".[adapters]"
 ```
 
 ```python

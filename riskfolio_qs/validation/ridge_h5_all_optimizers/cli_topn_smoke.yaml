@@ -1,0 +1,24 @@
+# Alpha-only TopN smoke test. It deliberately has no adapter data paths.
+config_version: 1
+
+adapter:
+  type: auto
+  alpha_input_type: expected_return
+  alpha_horizon_days: 5
+
+inputs:
+  alpha:
+    path: alpha_expected_return_5d.parquet
+    layout: wide
+
+smoother:
+  mode: never
+
+run:
+  optimizer_name: topn_long_only_equal_weight
+  data_version_hash: ridge_h5_alpha_only_topn_smoke
+  allow_fallback: false
+
+output:
+  directory: cli_topn_smoke_output
+  overwrite: false

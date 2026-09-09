@@ -9,7 +9,7 @@ import { DashboardSections } from '../components/KpiCard';
 import { PageChrome } from '../components/PageChrome';
 import { useDashboard } from '../hooks';
 import type { QueryViewState } from '../lib';
-import { classifyState, hasData } from '../lib';
+import { classifyState } from '../lib';
 
 export function OverviewPage() {
   const dashboard = useDashboard();
@@ -46,7 +46,7 @@ export function OverviewPage() {
       ) : null}
       {state === 'stale' ? <StatePanel state="stale" resource="dashboard" /> : null}
 
-      {hasData(dashboard.data) ? <DashboardSections summary={dashboard.data} /> : null}
+      {dashboard.data != null ? <DashboardSections summary={dashboard.data} /> : null}
     </div>
   );
 }

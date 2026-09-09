@@ -1,0 +1,39 @@
+# Ready-to-run CLI smoke test using the previously validated Ridge/v1 inputs.
+# Benchmark and tradability are resolved from data_access at runtime.
+config_version: 1
+
+adapter:
+  type: barra_precomputed
+  risk_root: ../../../v1_sbi_fullA
+  benchmark_index: 000905.SH
+  minimum_benchmark_weight_coverage: 0.95
+  alpha_input_type: expected_return
+  alpha_horizon_days: 5
+  calendar_name: XSHG
+  risk_data_lag_periods: 0
+  exposure_data_lag_periods: 0
+  annualization_factor: 252
+  load_factor_returns: false
+
+inputs:
+  alpha:
+    path: alpha_expected_return_5d.parquet
+    layout: wide
+
+smoother:
+  mode: never
+
+run:
+  optimizer_name: meanvar_enhance_barra_precomputed
+  data_version_hash: ridge_h5_v1_cli_smoke_2025_12
+  allow_fallback: false
+  runtime_overrides:
+    tracking_error_cap_annual: 0.03
+    turnover_cap: 0.20
+    single_name_max: 0.03
+    active_weight_abs_max: 0.02
+    style_band: 0.10
+
+output:
+  directory: cli_smoke_output
+  overwrite: false

@@ -1,0 +1,2 @@
+# Team core: CPython 3.12.3/Linux; optional stacks are separate.
+-r requirements/core-editable.txt

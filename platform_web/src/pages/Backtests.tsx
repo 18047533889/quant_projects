@@ -5,6 +5,7 @@ import { ResourceListPage } from '../components/ResourceListPage';
 import { Table } from '../components/Table';
 import { useBacktests } from '../hooks';
 import { formatDate } from '../lib';
+import { backtestViewRow } from '../api/viewRows';
 
 interface BacktestRow {
   backtest_id: string;
@@ -50,7 +51,7 @@ export function BacktestsPage() {
         name="Backtests"
         resource="backtests"
         query={backtests}
-        tableState={<Table columns={columns} data={(backtests.data as BacktestRow[]) ?? []} />}
+        tableState={<Table columns={columns} data={(backtests.data ?? []).map(backtestViewRow)} />}
       />
     </div>
   );

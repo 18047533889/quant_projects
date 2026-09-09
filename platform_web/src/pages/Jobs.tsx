@@ -5,6 +5,7 @@ import { ResourceListPage } from '../components/ResourceListPage';
 import { Table } from '../components/Table';
 import { useJobs } from '../hooks';
 import { formatDate } from '../lib';
+import { registryViewRow } from '../api/viewRows';
 
 interface JobRow {
   ref: string;
@@ -48,7 +49,7 @@ export function JobsPage() {
     { header: 'Error Class', accessorKey: 'error_class' },
   ];
 
-  const frame = { data: jobs.data as JobRow[] | null | undefined, evidence: undefined };
+  const frame = { data: jobs.data, evidence: undefined };
 
   return (
     <div>
@@ -62,7 +63,7 @@ export function JobsPage() {
         query={jobs}
         frame={frame}
         requiredPermission="job:read"
-        tableState={<Table columns={columns} data={(jobs.data as JobRow[]) ?? []} />}
+        tableState={<Table columns={columns} data={(jobs.data ?? []).map(registryViewRow)} />}
       />
     </div>
   );

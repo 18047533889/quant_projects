@@ -1,0 +1,45 @@
+analysis_version: 1
+
+input:
+  optimization_dir: ../../../outputs/my_backtest_result
+
+validation:
+  reconstruction_tolerance: 1.0e-10
+  comparison_tolerance: 1.0e-8
+  binding_tolerance: 1.0e-6
+  provenance_policy: strict
+  allow_partial_enrichment: true
+
+position:
+  weight_epsilon: 1.0e-8
+  topk: [5, 10, 20]
+  include_full_universe: true
+  concentration: true
+  turnover: true
+  holding_persistence: true
+
+benchmark:
+  mode: auto
+  source: manifest
+
+barra:
+  mode: auto
+  source: manifest
+  analyze_absolute_risk: true
+  analyze_active_risk: true
+
+liquidity:
+  mode: 'off'
+  portfolio_notional: null
+  adv_window_days: 20
+  maximum_adv_participation: 0.10
+
+report:
+  html: true
+  top_holdings: 20
+  top_trades: 20
+
+output:
+  directory: ../../../outputs/my_backtest_result/analysis
+  parquet: true
+  overwrite: false

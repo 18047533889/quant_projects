@@ -113,6 +113,15 @@ select_best_validation（§28 rank_ic 目标）→ refit → freeze ModelArtifac
 `evidence.py`、`monitoring.py`（漂移：PSI、production drift metrics）、`ledger.py`、
 `benchmark.py`、`trainer_governance.py`、`dsl_bridge.py`、`legacy.py`。
 
+## 安装
+
+```bash
+cd /home/sunhaiwei/quant_projects/modeling
+pip install -r requirements.txt
+```
+
+依赖版本以 `pyproject.toml` 为唯一来源；`requirements.txt` 只提供源码目录安装入口。
+
 ## 示例
 
 ```python

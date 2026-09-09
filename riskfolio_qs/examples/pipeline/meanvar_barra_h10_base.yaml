@@ -1,0 +1,42 @@
+# Base riskfolio_qs configuration used by the grid-tuning pipeline.
+# Relative paths are resolved from this file before trial configs are written.
+config_version: 1
+
+adapter:
+  type: barra_precomputed
+  risk_root: ../../../v1_sbi_fullA
+  benchmark_index: 000852.SH
+  minimum_benchmark_weight_coverage: 0.95
+  alpha_input_type: expected_return
+  alpha_horizon_days: 10
+  calendar_name: XSHG
+  risk_data_lag_periods: 1
+  exposure_data_lag_periods: 1
+  annualization_factor: 252
+  load_factor_returns: false
+
+inputs:
+  alpha:
+    path: ../../../factor_pool179_lgbm_handoff_20260727/signals/lightgbm/horizon=10/oos_signal.parquet
+    layout: long
+    date_column: TradeDate
+    asset_column: Symbol
+    value_column: prediction
+    # v1_sbi_fullA starts on 2024-01-02. Lag 1 therefore requires starting
+    # optimization no earlier than the next trading day.
+    start_date: 2024-01-03
+    end_date: 2025-12-31
+
+smoother:
+  mode: never
+
+run:
+  optimizer_name: meanvar_enhance_barra_precomputed
+  data_version_hash: lgbm_h10__barra_v1_sbi_fullA
+  allow_fallback: false
+  runtime_overrides: {}
+
+# The tuning pipeline replaces this directory for every trial.
+output:
+  directory: output
+  overwrite: false

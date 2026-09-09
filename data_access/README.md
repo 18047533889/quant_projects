@@ -29,9 +29,12 @@ ClickHouse 面板、查询预算治理、安全授权、HTTP 服务。
 ## 安装与第一个读
 
 ```bash
+# Python >= 3.10
 git clone https://github.com/HKUST-QUANT-SOCIETY/data_access.git
 cd data_access
-pip install -e ".[all]"
+python -m pip install -e .              # 运行时
+python -m pip install -e ".[service]"  # 可选：uvicorn HTTP server
+python -m pip install -e ".[dev]"      # 可选：开发/测试
 ```
 
 ```python

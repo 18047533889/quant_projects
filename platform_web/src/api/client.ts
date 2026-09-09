@@ -27,9 +27,9 @@ import type {
   FeatureSetVersion,
   JobRecord,
   JobSpec,
-  JobStatus,
   ModelVersion,
 } from './types';
+import type { JobStatus } from './enums';
 
 export const DEFAULT_API_BASE_URL = '/api/v1';
 

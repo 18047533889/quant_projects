@@ -1,0 +1,45 @@
+# One-trial end-to-end timing configuration.
+config_version: 1
+
+riskfolio:
+  base_config: meanvar_barra_h10_base.yaml
+  fixed_overrides:
+    alpha_weight: 1.0
+    single_name_max: 0.05
+    active_weight_abs_max: null
+    industry_neutral_mode: "off"
+    style_neutral_mode: "off"
+    enforce_tracking_error_cap: false
+    soft_cost_scale: 0.05
+    solver_name: CLARABEL
+    solver_tol: 1.0e-7
+    max_iters: 10000
+    on_solve_failure: fail_fast
+  grid:
+    risk_weight: [30.0]
+    turnover_cap: [0.10]
+    turnover_penalty: [0.02]
+
+backtest:
+  profile: standard_accurate_benchmark_v1
+  data_root: ../../../lqtp_data
+  barra_root: ../../../v1_sbi_fullA
+  start: 2024-01-03
+  end: 2025-12-31
+
+selection:
+  metric: Information Ratio
+  ascending: false
+
+execution:
+  output_directory: ../../../outputs/meanvar_barra_h10_smoke_run5
+  max_trials: 1
+  workers: 1
+  resume: true
+  overwrite: false
+  on_trial_error: raise
+
+reports:
+  enabled: true
+  top_n: 1
+  on_error: continue

@@ -45,9 +45,13 @@ A 股默认只做多（各行权重和 ≤ 1）。
 ```bash
 git clone https://github.com/HKUST-QUANT-SOCIETY/vectorbt_qs.git
 cd vectorbt_qs
-pip install -r requirements.txt && pip install -e .
-# 数据层（推荐同时装）：pip install -e ../data_access
 ```
+
+> **安装阻塞：** 外层 `requirements.txt` 声明 `numpy<2`、`pandas<3`、`numba<0.61`，
+> vendored `vectorbt/pyproject.toml` 则声明 `numpy>=2.4.6`、`pandas>=3.0.3`、
+> `numba>=0.66`，两套元数据互斥且当前没有经过验证的统一安装组合。`--no-deps`
+> 只能绕过解析，不能证明运行兼容。协调并验证约束前，不推荐默认一键安装；后续应在
+> 独立环境完成依赖求解，再按需安装 data_access 与 GPU/Rust 可选依赖。
 
 ### CLI（`python -m vectorbt_qs`）
 

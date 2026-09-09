@@ -24,10 +24,19 @@
 ## 安装与第一步
 
 ```bash
+# Python >= 3.10
 git clone https://github.com/HKUST-QUANT-SOCIETY/factor_preprocess.git
 cd factor_preprocess
-pip install -e .                # 依赖 numpy/pandas/scipy/statsmodels/PyWavelets
-pip install -e ".[fast]"        # + numba / bottleneck / polars 加速内核
+python -m pip install -e .                # core
+python -m pip install -e ".[fast]"       # 可选：加速内核
+```
+
+生产路由需要匹配的 `factor-engine>=0.3.1`。团队源码安装应先按 Factor Engine
+README 安装其 `data_access` 依赖，再执行：
+
+```bash
+python -m pip install --no-deps -e ../factor_engine
+python -m pip install -e ".[production]"
 ```
 
 ```python

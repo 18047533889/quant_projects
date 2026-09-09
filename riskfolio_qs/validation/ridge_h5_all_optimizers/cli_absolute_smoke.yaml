@@ -1,0 +1,30 @@
+# Absolute-return CLI smoke test. No Barra package or benchmark is required.
+config_version: 1
+
+adapter:
+  type: data_access
+  alpha_input_type: expected_return
+  alpha_horizon_days: 5
+  calendar_name: XSHG
+  risk_data_lag_periods: 0
+  annualization_factor: 252
+
+inputs:
+  alpha:
+    path: alpha_expected_return_5d.parquet
+    layout: wide
+
+smoother:
+  mode: never
+
+run:
+  optimizer_name: meanvar_absolute_return
+  data_version_hash: ridge_h5_data_access_absolute_smoke
+  allow_fallback: false
+  runtime_overrides:
+    turnover_cap: 0.25
+    single_name_max: 0.05
+
+output:
+  directory: cli_absolute_smoke_output
+  overwrite: false
