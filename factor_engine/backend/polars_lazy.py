@@ -353,6 +353,21 @@ def scan_dataset_columns(
     FE read_mode / semantic_filters 贯穿到 DataAccess scan。
     """
     if bundle is not None:
+        if approved_content_digest is not None and (
+            bundle.dataset != dataset
+            or bundle.approved_content_digest != approved_content_digest
+        ):
+            close = getattr(bundle.lf, "close", None)
+            if callable(close):
+                close()
+            from factor_engine.storage.sources.data_access_source import ApprovedSnapshotMismatch
+
+            raise ApprovedSnapshotMismatch("lazy bundle authority changed before reuse")
+        _assert_approved_snapshot(
+            getattr(bundle.lf, "resolved_source_snapshot", None),
+            dataset=dataset,
+            approved_content_digest=approved_content_digest,
+        )
         missing = bundle.missing_physical(list(physical_columns))
         if missing:
             raise ValueError(

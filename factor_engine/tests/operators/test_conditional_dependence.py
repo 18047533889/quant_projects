@@ -23,6 +23,23 @@ def _op(name: str, backend: str = "pandas_numpy"):
     return op
 
 
+def _calculate(op, x: pd.DataFrame) -> pd.DataFrame:
+    """Call the real multi-input signature with small feasible parameters."""
+    name = op.metadata.name
+    if name == "ts_conditional_transfer_entropy":
+        source = x.shift(1).fillna(0.0)
+        condition = pd.DataFrame(
+            np.tile(np.arange(len(x))[:, None] % 2, (1, x.shape[1])),
+            index=x.index,
+            columns=x.columns,
+        )
+        return op.calculate(x, source, condition, window=49, bins=2, lag=1)
+    if name == "ts_modwt_band_corr":
+        y = x * 2.0
+        return op.calculate(x, y, window=9, level=1, band=1)
+    raise AssertionError(f"unhandled operator fixture: {name}")
+
+
 
 # ---------------------------------------------------------------------------
 # 1. ts_conditional_transfer_entropy
@@ -42,7 +59,7 @@ def test_ts_conditional_transfer_entropy_basic() -> None:
 
     # Call with default parameters
     try:
-        result = op.calculate(x)
+        result = _calculate(op, x)
 
         # Basic shape check
         assert result.shape == x.shape, f"{result.shape} != {x.shape}"
@@ -67,7 +84,7 @@ def test_ts_conditional_transfer_entropy_handles_nans() -> None:
     op = _op("ts_conditional_transfer_entropy")
 
     try:
-        result = op.calculate(x)
+        result = _calculate(op, x)
 
         # Should not raise, should return DataFrame
         assert isinstance(result, pd.DataFrame)
@@ -88,7 +105,7 @@ def test_ts_conditional_transfer_entropy_handles_inf() -> None:
     op = _op("ts_conditional_transfer_entropy")
 
     try:
-        result = op.calculate(x)
+        result = _calculate(op, x)
 
         # Should handle inf gracefully (typically return NaN)
         assert isinstance(result, pd.DataFrame)
@@ -103,7 +120,7 @@ def test_ts_conditional_transfer_entropy_empty_input() -> None:
     op = _op("ts_conditional_transfer_entropy")
 
     try:
-        result = op.calculate(x)
+        result = _calculate(op, x)
 
         # Should return empty DataFrame
         assert isinstance(result, pd.DataFrame)
@@ -121,7 +138,7 @@ def test_ts_conditional_transfer_entropy_single_column() -> None:
     op = _op("ts_conditional_transfer_entropy")
 
     try:
-        result = op.calculate(x)
+        result = _calculate(op, x)
 
         assert isinstance(result, pd.DataFrame)
         assert result.shape[1] == 1
@@ -147,7 +164,7 @@ def test_ts_modwt_band_corr_basic() -> None:
 
     # Call with default parameters
     try:
-        result = op.calculate(x)
+        result = _calculate(op, x)
 
         # Basic shape check
         assert result.shape == x.shape, f"{result.shape} != {x.shape}"
@@ -172,7 +189,7 @@ def test_ts_modwt_band_corr_handles_nans() -> None:
     op = _op("ts_modwt_band_corr")
 
     try:
-        result = op.calculate(x)
+        result = _calculate(op, x)
 
         # Should not raise, should return DataFrame
         assert isinstance(result, pd.DataFrame)
@@ -193,7 +210,7 @@ def test_ts_modwt_band_corr_handles_inf() -> None:
     op = _op("ts_modwt_band_corr")
 
     try:
-        result = op.calculate(x)
+        result = _calculate(op, x)
 
         # Should handle inf gracefully (typically return NaN)
         assert isinstance(result, pd.DataFrame)
@@ -208,7 +225,7 @@ def test_ts_modwt_band_corr_empty_input() -> None:
     op = _op("ts_modwt_band_corr")
 
     try:
-        result = op.calculate(x)
+        result = _calculate(op, x)
 
         # Should return empty DataFrame
         assert isinstance(result, pd.DataFrame)
@@ -226,13 +243,49 @@ def test_ts_modwt_band_corr_single_column() -> None:
     op = _op("ts_modwt_band_corr")
 
     try:
-        result = op.calculate(x)
+        result = _calculate(op, x)
 
         assert isinstance(result, pd.DataFrame)
         assert result.shape[1] == 1
     except Exception as e:
         pytest.fail(f"{op} failed on single column: {e}")
 
+
+
+def test_conditional_transfer_entropy_detects_directed_binary_signal() -> None:
+    rng = np.random.default_rng(20260909)
+    rows = 100
+    source_values = rng.integers(0, 2, size=rows).astype(float)
+    target_values = np.zeros(rows, dtype=float)
+    target_values[1:] = source_values[:-1]
+    condition_values = rng.integers(0, 2, size=rows).astype(float)
+    index = pd.date_range("2024-01-01", periods=rows)
+    target = pd.DataFrame({"A": target_values}, index=index)
+    source = pd.DataFrame({"A": source_values}, index=index)
+    condition = pd.DataFrame({"A": condition_values}, index=index)
+    result = _op("ts_conditional_transfer_entropy").calculate(
+        target, source, condition, window=60, bins=2, lag=1
+    )
+    assert np.isfinite(result.iloc[-1, 0])
+    assert result.iloc[-1, 0] > 0.0
+
+
+def test_modwt_band_corr_identical_series_is_one_on_interior_window() -> None:
+    index = pd.date_range("2024-01-01", periods=24)
+    x = pd.DataFrame({"A": np.sin(np.arange(24, dtype=float))}, index=index)
+    result = _op("ts_modwt_band_corr").calculate(
+        x, x.copy(), window=9, level=1, band=1
+    )
+    assert result.iloc[-1, 0] == pytest.approx(1.0, abs=1e-12)
+
+
+@pytest.mark.parametrize(
+    "name", ["ts_conditional_transfer_entropy", "ts_modwt_band_corr"]
+)
+def test_conditional_dependence_missing_required_inputs_rejects(name: str) -> None:
+    x = pd.DataFrame({"A": np.arange(60, dtype=float)})
+    with pytest.raises(TypeError):
+        _op(name).calculate(x)
 
 
 # ---------------------------------------------------------------------------

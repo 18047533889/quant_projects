@@ -28,6 +28,43 @@ def _op(name: str, backend: str = "pandas_numpy"):
     return op
 
 
+def _aligned_fixture(x: pd.DataFrame, *, kind: str) -> pd.DataFrame:
+    """Build a same-shape companion input required by the real signature."""
+    rows, cols = x.shape
+    if kind == "group":
+        values = np.full((rows, cols), "G", dtype=object)
+    elif kind == "subgroup":
+        values = np.tile(np.arange(cols) % 2, (rows, 1))
+    elif kind == "weight":
+        values = np.tile(np.arange(1, cols + 1, dtype=float), (rows, 1))
+    elif kind == "exposure":
+        values = (
+            np.arange(cols, dtype=float)[None, :]
+            + 0.01 * np.arange(rows, dtype=float)[:, None]
+        )
+    else:  # pragma: no cover - test helper misuse
+        raise AssertionError(kind)
+    return pd.DataFrame(values, index=x.index, columns=x.columns)
+
+
+def _calculate(op, x: pd.DataFrame) -> pd.DataFrame:
+    """Call each operator with its declared, semantically valid inputs."""
+    name = op.metadata.name
+    group = _aligned_fixture(x, kind="group")
+    if name == "group_ex_self_mean":
+        return op.calculate(x, group)
+    if name == "group_ex_self_weighted_mean":
+        return op.calculate(x, _aligned_fixture(x, kind="weight"), group)
+    if name == "hierarchical_group_neutralize":
+        return op.calculate(x, group, _aligned_fixture(x, kind="subgroup"))
+    exposure = _aligned_fixture(x, kind="exposure")
+    if name in {"cs_trimmed_ols_resid", "cs_huber_resid", "cs_lad_resid"}:
+        return op.calculate(x, exposure)
+    if name == "group_multi_resid":
+        return op.calculate(x, group, exposure)
+    raise AssertionError(f"unhandled operator fixture: {name}")
+
+
 
 # ---------------------------------------------------------------------------
 # 1. group_ex_self_mean
@@ -47,7 +84,7 @@ def test_group_ex_self_mean_basic() -> None:
 
     # Call with default parameters
     try:
-        result = op.calculate(x)
+        result = _calculate(op, x)
 
         # Basic shape check
         assert result.shape == x.shape, f"{result.shape} != {x.shape}"
@@ -72,7 +109,7 @@ def test_group_ex_self_mean_handles_nans() -> None:
     op = _op("group_ex_self_mean")
 
     try:
-        result = op.calculate(x)
+        result = _calculate(op, x)
 
         # Should not raise, should return DataFrame
         assert isinstance(result, pd.DataFrame)
@@ -93,7 +130,7 @@ def test_group_ex_self_mean_handles_inf() -> None:
     op = _op("group_ex_self_mean")
 
     try:
-        result = op.calculate(x)
+        result = _calculate(op, x)
 
         # Should handle inf gracefully (typically return NaN)
         assert isinstance(result, pd.DataFrame)
@@ -108,7 +145,7 @@ def test_group_ex_self_mean_empty_input() -> None:
     op = _op("group_ex_self_mean")
 
     try:
-        result = op.calculate(x)
+        result = _calculate(op, x)
 
         # Should return empty DataFrame
         assert isinstance(result, pd.DataFrame)
@@ -126,7 +163,7 @@ def test_group_ex_self_mean_single_column() -> None:
     op = _op("group_ex_self_mean")
 
     try:
-        result = op.calculate(x)
+        result = _calculate(op, x)
 
         assert isinstance(result, pd.DataFrame)
         assert result.shape[1] == 1
@@ -152,7 +189,7 @@ def test_group_ex_self_weighted_mean_basic() -> None:
 
     # Call with default parameters
     try:
-        result = op.calculate(x)
+        result = _calculate(op, x)
 
         # Basic shape check
         assert result.shape == x.shape, f"{result.shape} != {x.shape}"
@@ -177,7 +214,7 @@ def test_group_ex_self_weighted_mean_handles_nans() -> None:
     op = _op("group_ex_self_weighted_mean")
 
     try:
-        result = op.calculate(x)
+        result = _calculate(op, x)
 
         # Should not raise, should return DataFrame
         assert isinstance(result, pd.DataFrame)
@@ -198,7 +235,7 @@ def test_group_ex_self_weighted_mean_handles_inf() -> None:
     op = _op("group_ex_self_weighted_mean")
 
     try:
-        result = op.calculate(x)
+        result = _calculate(op, x)
 
         # Should handle inf gracefully (typically return NaN)
         assert isinstance(result, pd.DataFrame)
@@ -213,7 +250,7 @@ def test_group_ex_self_weighted_mean_empty_input() -> None:
     op = _op("group_ex_self_weighted_mean")
 
     try:
-        result = op.calculate(x)
+        result = _calculate(op, x)
 
         # Should return empty DataFrame
         assert isinstance(result, pd.DataFrame)
@@ -231,7 +268,7 @@ def test_group_ex_self_weighted_mean_single_column() -> None:
     op = _op("group_ex_self_weighted_mean")
 
     try:
-        result = op.calculate(x)
+        result = _calculate(op, x)
 
         assert isinstance(result, pd.DataFrame)
         assert result.shape[1] == 1
@@ -257,7 +294,7 @@ def test_hierarchical_group_neutralize_basic() -> None:
 
     # Call with default parameters
     try:
-        result = op.calculate(x)
+        result = _calculate(op, x)
 
         # Basic shape check
         assert result.shape == x.shape, f"{result.shape} != {x.shape}"
@@ -282,7 +319,7 @@ def test_hierarchical_group_neutralize_handles_nans() -> None:
     op = _op("hierarchical_group_neutralize")
 
     try:
-        result = op.calculate(x)
+        result = _calculate(op, x)
 
         # Should not raise, should return DataFrame
         assert isinstance(result, pd.DataFrame)
@@ -303,7 +340,7 @@ def test_hierarchical_group_neutralize_handles_inf() -> None:
     op = _op("hierarchical_group_neutralize")
 
     try:
-        result = op.calculate(x)
+        result = _calculate(op, x)
 
         # Should handle inf gracefully (typically return NaN)
         assert isinstance(result, pd.DataFrame)
@@ -318,7 +355,7 @@ def test_hierarchical_group_neutralize_empty_input() -> None:
     op = _op("hierarchical_group_neutralize")
 
     try:
-        result = op.calculate(x)
+        result = _calculate(op, x)
 
         # Should return empty DataFrame
         assert isinstance(result, pd.DataFrame)
@@ -336,7 +373,7 @@ def test_hierarchical_group_neutralize_single_column() -> None:
     op = _op("hierarchical_group_neutralize")
 
     try:
-        result = op.calculate(x)
+        result = _calculate(op, x)
 
         assert isinstance(result, pd.DataFrame)
         assert result.shape[1] == 1
@@ -362,7 +399,7 @@ def test_cs_trimmed_ols_resid_basic() -> None:
 
     # Call with default parameters
     try:
-        result = op.calculate(x)
+        result = _calculate(op, x)
 
         # Basic shape check
         assert result.shape == x.shape, f"{result.shape} != {x.shape}"
@@ -387,7 +424,7 @@ def test_cs_trimmed_ols_resid_handles_nans() -> None:
     op = _op("cs_trimmed_ols_resid")
 
     try:
-        result = op.calculate(x)
+        result = _calculate(op, x)
 
         # Should not raise, should return DataFrame
         assert isinstance(result, pd.DataFrame)
@@ -408,7 +445,7 @@ def test_cs_trimmed_ols_resid_handles_inf() -> None:
     op = _op("cs_trimmed_ols_resid")
 
     try:
-        result = op.calculate(x)
+        result = _calculate(op, x)
 
         # Should handle inf gracefully (typically return NaN)
         assert isinstance(result, pd.DataFrame)
@@ -423,7 +460,7 @@ def test_cs_trimmed_ols_resid_empty_input() -> None:
     op = _op("cs_trimmed_ols_resid")
 
     try:
-        result = op.calculate(x)
+        result = _calculate(op, x)
 
         # Should return empty DataFrame
         assert isinstance(result, pd.DataFrame)
@@ -441,7 +478,7 @@ def test_cs_trimmed_ols_resid_single_column() -> None:
     op = _op("cs_trimmed_ols_resid")
 
     try:
-        result = op.calculate(x)
+        result = _calculate(op, x)
 
         assert isinstance(result, pd.DataFrame)
         assert result.shape[1] == 1
@@ -467,7 +504,7 @@ def test_cs_huber_resid_basic() -> None:
 
     # Call with default parameters
     try:
-        result = op.calculate(x)
+        result = _calculate(op, x)
 
         # Basic shape check
         assert result.shape == x.shape, f"{result.shape} != {x.shape}"
@@ -492,7 +529,7 @@ def test_cs_huber_resid_handles_nans() -> None:
     op = _op("cs_huber_resid")
 
     try:
-        result = op.calculate(x)
+        result = _calculate(op, x)
 
         # Should not raise, should return DataFrame
         assert isinstance(result, pd.DataFrame)
@@ -513,7 +550,7 @@ def test_cs_huber_resid_handles_inf() -> None:
     op = _op("cs_huber_resid")
 
     try:
-        result = op.calculate(x)
+        result = _calculate(op, x)
 
         # Should handle inf gracefully (typically return NaN)
         assert isinstance(result, pd.DataFrame)
@@ -528,7 +565,7 @@ def test_cs_huber_resid_empty_input() -> None:
     op = _op("cs_huber_resid")
 
     try:
-        result = op.calculate(x)
+        result = _calculate(op, x)
 
         # Should return empty DataFrame
         assert isinstance(result, pd.DataFrame)
@@ -546,7 +583,7 @@ def test_cs_huber_resid_single_column() -> None:
     op = _op("cs_huber_resid")
 
     try:
-        result = op.calculate(x)
+        result = _calculate(op, x)
 
         assert isinstance(result, pd.DataFrame)
         assert result.shape[1] == 1
@@ -572,7 +609,7 @@ def test_cs_lad_resid_basic() -> None:
 
     # Call with default parameters
     try:
-        result = op.calculate(x)
+        result = _calculate(op, x)
 
         # Basic shape check
         assert result.shape == x.shape, f"{result.shape} != {x.shape}"
@@ -597,7 +634,7 @@ def test_cs_lad_resid_handles_nans() -> None:
     op = _op("cs_lad_resid")
 
     try:
-        result = op.calculate(x)
+        result = _calculate(op, x)
 
         # Should not raise, should return DataFrame
         assert isinstance(result, pd.DataFrame)
@@ -618,7 +655,7 @@ def test_cs_lad_resid_handles_inf() -> None:
     op = _op("cs_lad_resid")
 
     try:
-        result = op.calculate(x)
+        result = _calculate(op, x)
 
         # Should handle inf gracefully (typically return NaN)
         assert isinstance(result, pd.DataFrame)
@@ -633,7 +670,7 @@ def test_cs_lad_resid_empty_input() -> None:
     op = _op("cs_lad_resid")
 
     try:
-        result = op.calculate(x)
+        result = _calculate(op, x)
 
         # Should return empty DataFrame
         assert isinstance(result, pd.DataFrame)
@@ -651,7 +688,7 @@ def test_cs_lad_resid_single_column() -> None:
     op = _op("cs_lad_resid")
 
     try:
-        result = op.calculate(x)
+        result = _calculate(op, x)
 
         assert isinstance(result, pd.DataFrame)
         assert result.shape[1] == 1
@@ -677,7 +714,7 @@ def test_group_multi_resid_basic() -> None:
 
     # Call with default parameters
     try:
-        result = op.calculate(x)
+        result = _calculate(op, x)
 
         # Basic shape check
         assert result.shape == x.shape, f"{result.shape} != {x.shape}"
@@ -702,7 +739,7 @@ def test_group_multi_resid_handles_nans() -> None:
     op = _op("group_multi_resid")
 
     try:
-        result = op.calculate(x)
+        result = _calculate(op, x)
 
         # Should not raise, should return DataFrame
         assert isinstance(result, pd.DataFrame)
@@ -723,7 +760,7 @@ def test_group_multi_resid_handles_inf() -> None:
     op = _op("group_multi_resid")
 
     try:
-        result = op.calculate(x)
+        result = _calculate(op, x)
 
         # Should handle inf gracefully (typically return NaN)
         assert isinstance(result, pd.DataFrame)
@@ -738,7 +775,7 @@ def test_group_multi_resid_empty_input() -> None:
     op = _op("group_multi_resid")
 
     try:
-        result = op.calculate(x)
+        result = _calculate(op, x)
 
         # Should return empty DataFrame
         assert isinstance(result, pd.DataFrame)
@@ -756,13 +793,71 @@ def test_group_multi_resid_single_column() -> None:
     op = _op("group_multi_resid")
 
     try:
-        result = op.calculate(x)
+        result = _calculate(op, x)
 
         assert isinstance(result, pd.DataFrame)
         assert result.shape[1] == 1
     except Exception as e:
         pytest.fail(f"{op} failed on single column: {e}")
 
+
+
+def test_group_mean_and_weighted_mean_have_expected_peer_math() -> None:
+    idx = pd.date_range("2024-01-01", periods=1)
+    x = pd.DataFrame([[1.0, 3.0, 8.0]], index=idx, columns=list("ABC"))
+    group = pd.DataFrame([["G", "G", "G"]], index=idx, columns=x.columns)
+    plain = _op("group_ex_self_mean").calculate(x, group)
+    np.testing.assert_allclose(plain.iloc[0], [5.5, 4.5, 2.0])
+
+    weight = pd.DataFrame([[1.0, 2.0, 3.0]], index=idx, columns=x.columns)
+    weighted = _op("group_ex_self_weighted_mean").calculate(x, weight, group)
+    np.testing.assert_allclose(weighted.iloc[0], [6.0, 6.25, 7.0 / 3.0])
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "cs_trimmed_ols_resid",
+        "cs_huber_resid",
+        "cs_lad_resid",
+        "group_multi_resid",
+    ],
+)
+def test_cross_sectional_residuals_remove_exact_linear_exposure(name: str) -> None:
+    idx = pd.date_range("2024-01-01", periods=2)
+    columns = [f"S{i}" for i in range(12)]
+    exposure = pd.DataFrame(
+        np.tile(np.linspace(-2.0, 2.0, len(columns)), (len(idx), 1)),
+        index=idx,
+        columns=columns,
+    )
+    y = 2.0 + 3.0 * exposure
+    op = _op(name)
+    if name == "group_multi_resid":
+        group = pd.DataFrame("G", index=idx, columns=columns)
+        result = op.calculate(y, group, exposure)
+    else:
+        result = op.calculate(y, exposure)
+    assert np.isfinite(result.to_numpy()).all()
+    np.testing.assert_allclose(result, 0.0, atol=1e-7)
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "group_ex_self_mean",
+        "group_ex_self_weighted_mean",
+        "hierarchical_group_neutralize",
+        "cs_trimmed_ols_resid",
+        "cs_huber_resid",
+        "cs_lad_resid",
+        "group_multi_resid",
+    ],
+)
+def test_group_ext_missing_required_companion_inputs_rejects(name: str) -> None:
+    x = pd.DataFrame([[1.0, 2.0]], columns=["A", "B"])
+    with pytest.raises(TypeError):
+        _op(name).calculate(x)
 
 
 # ---------------------------------------------------------------------------
