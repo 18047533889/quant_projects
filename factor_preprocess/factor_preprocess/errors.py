@@ -118,11 +118,6 @@ class MissingFittedStateError(DataError):
     pass
 
 
-class MissingFittedStateError(DataError):
-    """Required fitted state is missing or unavailable."""
-    pass
-
-
 class StaleFittedStateError(DataError):
     """Fitted state is outdated or bound to wrong fit window."""
     pass

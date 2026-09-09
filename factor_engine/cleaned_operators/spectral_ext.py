@@ -56,62 +56,17 @@ _OUTPUT_UNITS: dict[str, str] = {
     "ts_dominant_cycle_period": "bars",
 }
 
-# Review #27 (P0): the return spectrum and the detrended-level spectrum are two
-# DIFFERENT statistical objects.  The return canonical must fail closed on a
-# nonstationary price level; the detrended-level canonical must fail closed on a
-# stationary centred return-like series.  The numeric discriminator follows the
-# repo's price-vs-return heuristic (cf. extreme_tail._reject_price_level): a
-# price level path is nonstationary (sd(level)/sd(diff) >> 1), a return series
-# is stationary, centred near zero and takes both signs.
-_PRICE_LEVEL_RATIO_THRESHOLD = 5.0
-_MIN_JUDGE_ROWS = 8
+def _require_input_kind(canonical: str, input_kind: str | None) -> None:
+    """Read the typed contract, never infer financial units from sample values.
 
-
-def _looks_like_price_level(vals: np.ndarray) -> bool:
-    finite = vals[np.isfinite(vals)]
-    if finite.size < _MIN_JUDGE_ROWS:
-        return False  # too short to judge; the kernel's min-window fails closed
-    sd_level = float(np.std(finite))
-    if not np.isfinite(sd_level) or sd_level <= _EPS:
-        return False  # constant / degenerate -> not a level path
-    sd_diff = float(np.std(np.diff(finite)))
-    return sd_level / max(sd_diff, _EPS) > _PRICE_LEVEL_RATIO_THRESHOLD
-
-
-def _looks_like_return(vals: np.ndarray) -> bool:
-    finite = vals[np.isfinite(vals)]
-    if finite.size < _MIN_JUDGE_ROWS:
-        return False
-    sd_level = float(np.std(finite))
-    if not np.isfinite(sd_level) or sd_level <= _EPS:
-        return False  # constant -> neither a return nor a level
-    sd_diff = float(np.std(np.diff(finite)))
-    ratio = sd_level / max(sd_diff, _EPS)
-    centred = abs(float(np.mean(finite))) <= 0.5 * sd_level
-    both_signs = float(np.min(finite)) < 0.0 < float(np.max(finite))
-    return ratio <= _PRICE_LEVEL_RATIO_THRESHOLD and centred and both_signs
-
-
-def _reject_price_level(x: pd.DataFrame, canonical: str) -> None:
-    for col in x.columns:
-        if _looks_like_price_level(x[col].to_numpy(dtype=float)):
-            raise ValueError(
-                f"{canonical} accepts return-typed input only; received a "
-                "nonstationary price level.  The detrended price-level spectrum "
-                "is the separate canonical ts_detrended_level_spectral_entropy "
-                "(review #27 / typed input_units contract, fail-closed)"
-            )
-
-
-def _reject_return(x: pd.DataFrame, canonical: str) -> None:
-    for col in x.columns:
-        if _looks_like_return(x[col].to_numpy(dtype=float)):
-            raise ValueError(
-                f"{canonical} accepts a (log)price-level input only; received a "
-                "return-like series.  The return spectrum is the separate "
-                "canonical ts_return_spectral_entropy "
-                "(review #27 / typed input_units contract, fail-closed)"
-            )
+    The analyzer supplies the immediate child's semantic kind. Direct research
+    callers must explicitly declare their assumption with ``input_kind``;
+    unknown input is not silently certified from its observed price path.
+    """
+    from factor_engine.ir.types import OPERATOR_INPUT_TYPE_CONTRACTS
+    allowed = OPERATOR_INPUT_TYPE_CONTRACTS[canonical][0].allowed_semantic_kinds
+    if input_kind not in allowed:
+        raise ValueError(f"{canonical} requires input_kind in {sorted(allowed)}; got {input_kind!r}")
 
 
 def _check_window(w: int) -> int:
@@ -204,19 +159,22 @@ def _dominant_cycle_period_series(
     return out
 
 
-def _ts_return_spectral_entropy(x: pd.DataFrame, window: int = 60, **_: Any) -> pd.DataFrame:
+def _ts_return_spectral_entropy(x: pd.DataFrame, window: int = 60, *,
+                                input_kind: str | None = None, **_: Any) -> pd.DataFrame:
     w = _check_window(int(window))
-    _reject_price_level(x, "ts_return_spectral_entropy")
+    _require_input_kind("ts_return_spectral_entropy", input_kind)
     return _frame_like(x, _spectral_entropy_series(x.to_numpy(dtype=float), w))
 
 
 def _ts_detrended_level_spectral_entropy(
     x: pd.DataFrame,
     window: int = 60,
+    *,
+    input_kind: str | None = None,
     **_: Any,
 ) -> pd.DataFrame:
     w = _check_window(int(window))
-    _reject_return(x, "ts_detrended_level_spectral_entropy")
+    _require_input_kind("ts_detrended_level_spectral_entropy", input_kind)
     return _frame_like(x, _spectral_entropy_series(x.to_numpy(dtype=float), w))
 
 
@@ -258,9 +216,9 @@ _KERNELS: dict[str, Callable[..., pd.DataFrame]] = {
 }
 
 _PARAMS: dict[str, list[str]] = {
-    "ts_return_spectral_entropy": ["x", "window"],
-    "ts_spectral_entropy": ["x", "window"],
-    "ts_detrended_level_spectral_entropy": ["x", "window"],
+    "ts_return_spectral_entropy": ["x", "window", "input_kind"],
+    "ts_spectral_entropy": ["x", "window", "input_kind"],
+    "ts_detrended_level_spectral_entropy": ["x", "window", "input_kind"],
     "ts_dominant_cycle_period": ["x", "window", "min_peak_share"],
 }
 
@@ -339,7 +297,11 @@ def _register() -> None:
                 window_semantics=_WINDOW_SEMANTICS[canonical],
                 input_units=_INPUT_UNITS[canonical],
                 output_unit=output_unit,
-                param_specs={"window": window_spec},
+                param_specs={"window": window_spec, **({"input_kind": PandasParamSpec(
+                    dtype=str, searchable=False,
+                    choices=("PriceContinuous",) if canonical == "ts_detrended_level_spectral_entropy"
+                    else ("ReturnDecimal",),
+                )} if "input_kind" in params else {})},
             )
 
             _HANDLES_CALL_CONTRACT = True  # R5-02: routes through validate_operator_call

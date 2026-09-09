@@ -27,7 +27,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from factor_engine.cleaned_operators.base import OperatorMetadata, ParamSpec, ParamRole, SeriesOperator, register_operator
+from factor_engine.cleaned_operators.base import OperatorMetadata, ParamSpec, ParamRole, RelationalParamSpec, SeriesOperator, register_operator
 from factor_engine.cleaned_operators.rolling_pack import (
     aligned_pairs,
     check_window,
@@ -60,6 +60,12 @@ def _metadata(
             f"unit:{unit}", f"cost:{cost}",
         ],
         param_specs=dict(param_specs) if param_specs else {},
+        relational_specs=[RelationalParamSpec(
+            expression="window >= bins * min_per_bin",
+            message="INFEASIBLE_PARAMETER_DOMAIN: window must be >= bins * min_per_bin",
+        )] if name in {
+            "ts_binned_response_monotonicity", "ts_binned_response_curvature"
+        } else [],
     )
 
 
@@ -140,6 +146,8 @@ def _monotonicity_series(y2d: np.ndarray, x2d: np.ndarray, window: int, bins: in
     rows, cols = y2d.shape
     out = np.full((rows, cols), np.nan, dtype=float)
     w, b, mpb = int(window), int(bins), int(min_per_bin)
+    if w < b * mpb:
+        raise ValueError("INFEASIBLE_PARAMETER_DOMAIN: window must be >= bins * min_per_bin")
     for c in range(cols):
         for r in range(rows):
             i0 = max(0, r - w + 1)
@@ -162,6 +170,8 @@ def _curvature_series(y2d: np.ndarray, x2d: np.ndarray, window: int, bins: int, 
     rows, cols = y2d.shape
     out = np.full((rows, cols), np.nan, dtype=float)
     w, b, mpb = int(window), int(bins), int(min_per_bin)
+    if w < b * mpb:
+        raise ValueError("INFEASIBLE_PARAMETER_DOMAIN: window must be >= bins * min_per_bin")
     for c in range(cols):
         for r in range(rows):
             i0 = max(0, r - w + 1)

@@ -54,6 +54,7 @@ packages = [
     "quant_evaluator.kernels.gpu",
     "quant_evaluator.metrics",
     "quant_evaluator.metrics.interactions",
+    "quant_evaluator.metrics.probe_portfolio",
     "quant_evaluator.metrics.risk",
     "quant_evaluator.metrics.stats",
     "quant_evaluator.planner",
@@ -74,6 +75,7 @@ packages = [
 "quant_evaluator.kernels.gpu" = "kernels/gpu"
 "quant_evaluator.metrics" = "metrics"
 "quant_evaluator.metrics.interactions" = "metrics/interactions"
+"quant_evaluator.metrics.probe_portfolio" = "metrics/probe_portfolio"
 "quant_evaluator.metrics.risk" = "metrics/risk"
 "quant_evaluator.metrics.stats" = "metrics/stats"
 "quant_evaluator.planner" = "planner"

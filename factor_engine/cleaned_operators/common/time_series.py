@@ -1629,8 +1629,8 @@ class MovingSkew(SeriesOperator):
 # canonical=ts_std backend=pandas_numpy selected=ts_std source=time_series/ts_ops.py
 
 # helper for ts_std
-class TSStdDev(SeriesOperator):
-    """滚动标准差（``ts_std`` 基类）。"""
+class _PandasTSStdDev(SeriesOperator):
+    """Pandas-only base for the registered ts_std implementation."""
 
     metadata = OperatorMetadata(
         name="ts_std_dev", category="time_series",
@@ -1654,7 +1654,7 @@ class TSStdDev(SeriesOperator):
         return x.rolling(window=window, min_periods=1).std()
 
 @register_operator(name="ts_std", category="time_series", business_category="time_series", canonical="ts_std", source="factor_dsl_np")
-class TSStd(TSStdDev):
+class TSStd(_PandasTSStdDev):
     """滚动标准差（``ts_std`` canonical）。"""
 
     _physical_spec = PhysicalImplementationSpec(

@@ -17,7 +17,13 @@ class Artifact:
 def provenance(**updates):
     value = {"resampling_plan_ref": "plan", "replicate_ids": ("r1", "r2"),
              "clock_ref": "clock", "time_ids": ("t1", "t2"),
-             "factor_ids": ("factor", "other")}
+             "factor_ids": ("factor", "other"), "recipe_hash":"recipe",
+             "fitted_state_hash":"state", "data_snapshot_hash":"data",
+             "universe_hash":"universe", "label_hash":"label",
+             "value_artifact_hash":"values",
+             "resampling_plan_content_hash":"plan-content",
+             "sample_identity_hash":"samples","time_identity_hash":"times",
+             "common_mask_hash":"mask"}
     value.update(updates)
     return value
 

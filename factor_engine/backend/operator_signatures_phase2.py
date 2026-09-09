@@ -459,10 +459,11 @@ def phase2_operator_signatures() -> dict[str, OperatorSignature]:
             ArgSpec("f1", _F), ArgSpec("f2", _F), ArgSpec("f3", _F),
             ArgSpec("window", _W), ArgSpec("recent_window", _W), ArgSpec("prior_window", _W),
         )
-    signatures["ts_beta_break_score"] = _sig(
+    signatures["ts_beta_break_score"] = OperatorSignature(
         "ts_beta_break_score",
-        ArgSpec("y", _F), ArgSpec("x", _F), ArgSpec("window", _W),
-        ArgSpec("recent_window", _W), ArgSpec("prior_window", _W),
+        (ArgSpec("y", _F), ArgSpec("x", _F),
+         ArgSpec("recent_window", _W), ArgSpec("prior_window", _W)),
+        output=_F, output_unit="dimensionless",
     )
     # F. Conditional / band dependence.
     signatures["ts_conditional_transfer_entropy"] = _sig(
@@ -578,9 +579,17 @@ def phase2_operator_signatures() -> dict[str, OperatorSignature]:
         ArgSpec("x", _F), ArgSpec("y", _F), ArgSpec("condition", _B),
         ArgSpec("window", _W), ArgSpec("min_periods", _INT),
     )
-    signatures["ts_spectral_entropy"] = _sig(
-        "ts_spectral_entropy", ArgSpec("x", _F), ArgSpec("window", _W)
-    )
+    for _name in (
+        "ts_return_spectral_entropy",
+        "ts_spectral_entropy",
+        "ts_detrended_level_spectral_entropy",
+    ):
+        signatures[_name] = _sig(
+            _name,
+            ArgSpec("x", _F),
+            ArgSpec("window", _W),
+            ArgSpec("input_kind", _ANY, required=False),
+        )
     signatures["ts_dominant_cycle_period"] = _sig(
         "ts_dominant_cycle_period",
         ArgSpec("x", _F), ArgSpec("window", _W), ArgSpec("min_peak_share", _FLT),

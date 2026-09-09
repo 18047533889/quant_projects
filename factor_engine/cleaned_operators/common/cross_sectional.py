@@ -333,7 +333,7 @@ class CrossSectionalNeutralize(SeriesOperator):
 # canonical=rank backend=pandas_numpy selected=rank source=cross_sectional/c_ops.py
 
 # helper for rank
-class CrossSectionalRank(SeriesOperator):
+class _PandasCrossSectionalRank(SeriesOperator):
     """截面 pandas 百分位排名（rank/count）。
 
     R19-088: 该 semantic 与 ``cs_rank_01`` 不同 —— 它是 pandas ``rank(pct=True)``
@@ -385,7 +385,7 @@ class Rank(SeriesOperator):
 )
 # R19-067: ``rank_pct`` 与 ``cs_pct_rank`` 是 exact duplicate（同一实现
 # CrossSectionalRank._calculate_series = x.rank(pct=True)）。
-class RankPct(CrossSectionalRank):
+class RankPct(_PandasCrossSectionalRank):
     """截面 pandas 百分位排名 rank/count（与 cs_pct_rank exact duplicate）"""
     metadata = OperatorMetadata(
         name="rank_pct",
@@ -427,7 +427,7 @@ class CsQuantile(CrossSectionalPercentile):
     canonical="cs_pct_rank",
     source="factor_dsl_np",
 )
-class CsPctRank(CrossSectionalRank):
+class CsPctRank(_PandasCrossSectionalRank):
     """截面百分位排名（与 rank_pct exact duplicate）"""
     metadata = OperatorMetadata(
         name="cs_pct_rank",
@@ -818,7 +818,7 @@ class RowVar(SeriesOperator):
 # canonical=scale backend=pandas_numpy selected=scale source=cross_sectional/c_ops.py
 
 # helper for scale
-class CrossSectionalScale(SeriesOperator):
+class _PandasCrossSectionalScale(SeriesOperator):
     """截面缩放"""
 
     metadata = OperatorMetadata(
@@ -836,7 +836,7 @@ class CrossSectionalScale(SeriesOperator):
         return x.mul(to / abs_sum, axis=0)
 
 @register_operator(name="scale", category="cross_sectional", business_category="cross_sectional", canonical="scale", source="factor_dsl_np")
-class Scale(CrossSectionalScale):
+class Scale(_PandasCrossSectionalScale):
     """缩放数据使sum(abs(x))=指定值（与c_scale相同）"""
 
     metadata = OperatorMetadata(
@@ -856,7 +856,7 @@ class Scale(CrossSectionalScale):
 # canonical=zscore backend=pandas_numpy selected=zscore source=cross_sectional/c_ops.py
 
 # helper for zscore
-class CrossSectionalZscore(SeriesOperator):
+class _PandasCrossSectionalZscore(SeriesOperator):
     """截面Z-Score标准化"""
 
     metadata = OperatorMetadata(
@@ -876,7 +876,7 @@ class CrossSectionalZscore(SeriesOperator):
         return (x.sub(mean, axis=0)).div(std, axis=0)
 
 @register_operator(name="zscore", category="cross_sectional", business_category="cross_sectional", canonical="zscore", source="factor_dsl_np")
-class Zscore(CrossSectionalZscore):
+class Zscore(_PandasCrossSectionalZscore):
     """截面Z-Score（zscore的别名）"""
 
     metadata = OperatorMetadata(

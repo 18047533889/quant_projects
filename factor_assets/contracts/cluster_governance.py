@@ -98,6 +98,7 @@ class IncrementalAssignmentKind(Enum):
     """Outcome of an incremental cluster assignment (DLIB-FA-010)."""
 
     ASSIGNED = "ASSIGNED"
+    RESEARCH_PROPOSED = "RESEARCH_PROPOSED"
     AMBIGUOUS = "AMBIGUOUS"
     BRIDGE = "BRIDGE"
     SINGLETON = "SINGLETON"
@@ -356,6 +357,8 @@ class ClusterVersionArtifact:
     representative_factor_id: Optional[str] = None
     scale: ClusterScale = ClusterScale.MICRO_CLUSTER
     content_hash: str = ""
+    membership_qualification_domain: str = "UNVERIFIED"
+    membership_evidence_refs: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if not self.logical_cluster_id:
@@ -367,14 +370,34 @@ class ClusterVersionArtifact:
         object.__setattr__(self, "member_factor_ids", tuple(self.member_factor_ids))
         if len(set(self.member_factor_ids)) != len(self.member_factor_ids):
             raise ValueError("member_factor_ids must be unique")
+        if (self.representative_factor_id is not None and
+                self.representative_factor_id not in self.member_factor_ids):
+            raise ValueError("representative_factor_id must be a cluster member")
         if not isinstance(self.scale, ClusterScale):
             raise TypeError("scale must be a ClusterScale")
+        if self.membership_qualification_domain not in {
+            "UNVERIFIED", "FULL_REFRESH_CERTIFIED", "CERTIFIED_PAIRWISE_SUPPORT",
+            "CERTIFIED_MIXED_SUPPORT", "RESEARCH_APPROXIMATE",
+        }:
+            raise ValueError("unknown membership_qualification_domain")
+        object.__setattr__(self, "membership_evidence_refs",
+                           tuple(self.membership_evidence_refs))
+        if len(set(self.membership_evidence_refs)) != len(self.membership_evidence_refs):
+            raise ValueError("membership_evidence_refs must be unique")
+        if (self.membership_qualification_domain in {
+                "FULL_REFRESH_CERTIFIED", "CERTIFIED_PAIRWISE_SUPPORT",
+                "CERTIFIED_MIXED_SUPPORT",
+            } and
+                not self.membership_evidence_refs):
+            raise ValueError("certified cluster membership requires evidence refs")
         computed = canonical_digest(
             self.logical_cluster_id,
             self.cluster_set_version_ref,
             self.member_factor_ids,
             self.representative_factor_id,
             self.scale.value,
+            self.membership_qualification_domain,
+            self.membership_evidence_refs,
         )
         if not self.content_hash:
             object.__setattr__(self, "content_hash", computed)
@@ -392,6 +415,8 @@ class ClusterVersionArtifact:
             "member_factor_ids": list(self.member_factor_ids),
             "representative_factor_id": self.representative_factor_id,
             "scale": self.scale.value,
+            "membership_qualification_domain": self.membership_qualification_domain,
+            "membership_evidence_refs": list(self.membership_evidence_refs),
             "content_hash": self.content_hash,
         }
 
@@ -562,6 +587,8 @@ class IncrementalClusterAssignment:
     cluster_set_version_ref: str
     affinity: Optional[float] = None
     parent_cluster_set_hash: str = ""
+    qualification_domain: str = "RESEARCH_APPROXIMATE"
+    formal_evidence_refs: tuple[str, ...] = ()
     content_hash: str = ""
 
     def __post_init__(self) -> None:
@@ -571,8 +598,24 @@ class IncrementalClusterAssignment:
             raise TypeError("kind must be an IncrementalAssignmentKind")
         if not self.cluster_set_version_ref:
             raise ValueError("cluster_set_version_ref is required")
-        if self.kind is IncrementalAssignmentKind.ASSIGNED and not self.parent_cluster_set_hash:
-            raise ValueError("ASSIGNED outcomes require parent_cluster_set_hash for CAS")
+        if self.kind in (IncrementalAssignmentKind.ASSIGNED,
+                         IncrementalAssignmentKind.RESEARCH_PROPOSED) and not self.parent_cluster_set_hash:
+            raise ValueError("cluster-targeting outcomes require parent_cluster_set_hash for CAS")
+        if self.qualification_domain not in {
+            "RESEARCH_APPROXIMATE", "CERTIFIED_PAIRWISE_SUPPORT",
+        }:
+            raise ValueError("unknown assignment qualification_domain")
+        object.__setattr__(self, "formal_evidence_refs", tuple(self.formal_evidence_refs))
+        if len(set(self.formal_evidence_refs)) != len(self.formal_evidence_refs):
+            raise ValueError("formal_evidence_refs must be unique")
+        if self.kind is IncrementalAssignmentKind.ASSIGNED:
+            if self.qualification_domain != "CERTIFIED_PAIRWISE_SUPPORT":
+                raise ValueError("ASSIGNED requires certified pairwise support")
+            if not self.formal_evidence_refs or any(not ref for ref in self.formal_evidence_refs):
+                raise ValueError("ASSIGNED requires non-empty formal_evidence_refs")
+        elif self.qualification_domain == "CERTIFIED_PAIRWISE_SUPPORT":
+            if not self.formal_evidence_refs:
+                raise ValueError("certified qualification requires formal evidence refs")
         if self.affinity is not None:
             if isinstance(self.affinity, bool) or not isinstance(self.affinity, (int, float)):
                 raise TypeError("affinity must be a non-boolean number or None")
@@ -587,6 +630,8 @@ class IncrementalClusterAssignment:
             self.cluster_set_version_ref,
             self.affinity,
             self.parent_cluster_set_hash,
+            self.qualification_domain,
+            self.formal_evidence_refs,
         )
         if not self.content_hash:
             object.__setattr__(self, "content_hash", computed)
@@ -605,6 +650,8 @@ class IncrementalClusterAssignment:
             "cluster_set_version_ref": self.cluster_set_version_ref,
             "affinity": self.affinity,
             "parent_cluster_set_hash": self.parent_cluster_set_hash,
+            "qualification_domain": self.qualification_domain,
+            "formal_evidence_refs": list(self.formal_evidence_refs),
             "content_hash": self.content_hash,
         }
 

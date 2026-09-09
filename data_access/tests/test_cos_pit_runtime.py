@@ -12,7 +12,7 @@ from data_access.core.exceptions import ValidationError
 from data_access.cos_contract import require_cos_contract, validate_event_filters
 from data_access.cos_runtime import _read_cos_events, _read_cos_events_asof
 from data_access.read.session_calendar import MarketCalendar, build_us_session
-from store import _period_selection_sql
+from data_access.store import _period_selection_sql
 
 
 class _Dataset:

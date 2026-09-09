@@ -11,7 +11,8 @@ FactorEngine **backend-audited V9** 冷启动因子库，供 AlphaPROBE / Factor
 
 | 文件 | 说明 |
 |---|---|
-| `data/ashare/backend_v9_core.yaml` | AlphaPROBE 冷启动 yaml（`expr/topic/description` + 预计算 metrics） |
+| `library/production_default_core_v9.json` | 随 Python 包交付的默认 A 股、日频、core、V9 validated 冷启动池 |
+| `data/ashare/backend_v9_core.yaml` | 可选的 AlphaPROBE 预计算 yaml；只有显式生成/配置后才使用 |
 | `data/ashare/backend_v9_metrics.jsonl` | 逐条执行 / IC 明细 |
 | `data/ashare/expand_generated.json` | expand_v1 新增因子底稿 |
 | `library/production_default_core_v9.json` | V9 原始审计库 |
@@ -23,8 +24,12 @@ data:
   fe_profile: ashare_pv_valuation   # 价量 + pe/pb/turnover/market_cap
 mining:
   cold_start_sample_size: 100
-  cold_start_library: ~/quant_projects/cold_start_library/data/ashare/backend_v9_core.yaml
+    cold_start_library: ~/quant_projects/cold_start_library/data/ashare/backend_v9_core.yaml
 ```
+
+不传路径时，运行时只加载随包交付的
+`library/production_default_core_v9.json`，不会在缺文件时自动改用 extended、US
+或其他审计层级。显式传入 `.yaml`/`.yml` 仍保留原 AlphaPROBE 格式。
 
 ## 扩充算子覆盖 + 增量预计算
 

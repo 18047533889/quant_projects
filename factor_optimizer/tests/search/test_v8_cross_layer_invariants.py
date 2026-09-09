@@ -30,20 +30,28 @@ from tests.search.test_v8_qe_fa_fo_integration import (
 def _candidates_from_qe_runs(context, qualification, plan, named_runs):
     """Canonical-align production QE outputs from arbitrary factor shards."""
     by_id = {}
+    pairing_by_id = {}
     for values, candidate_ids in named_runs:
         artifact = compute_joint_block_bootstrap(values, plan, candidate_ids)
         assert artifact.provenance["resampling_plan_ref"] == plan.content_hash
         assert artifact.provenance["replicate_ids"] == plan.replicate_ids
+        pairing = tuple(artifact.provenance[name] for name in (
+            "resampling_plan_content_hash", "sample_identity_hash",
+            "time_identity_hash", "common_mask_hash"))
         for column, candidate_id in enumerate(candidate_ids):
             by_id[candidate_id] = tuple(float(v) for v in artifact.samples[:, column])
+            pairing_by_id[candidate_id] = pairing
 
     candidates = []
     for candidate_id in sorted(by_id):
         values = by_id[candidate_id]
+        pairing = pairing_by_id[candidate_id]
         samples = tuple((((value,),),) for value in values)
+        identity=(candidate_id,"recipe","state","data","universe","label","values:"+candidate_id)
         semantic = {
             "context": context,
             "plan": plan.content_hash,
+            "pairing": pairing,
             "replicates": plan.replicate_ids,
             "metrics": ("alpha",),
             "metric_units": ("ratio",),
@@ -52,6 +60,7 @@ def _candidates_from_qe_runs(context, qualification, plan, named_runs):
             "samples": json.loads(json.dumps(samples)),
             "qualification": "scope:v8",
             "execution": ("source", "impl", "qe.runtime", "cpu", "domain", "metric-instance"),
+            "candidate": identity,
         }
         evidence = RawJointMetricEvidence(
             f"qe:{candidate_id}", _digest(semantic), context, plan.content_hash,
@@ -59,6 +68,10 @@ def _candidates_from_qe_runs(context, qualification, plan, named_runs):
             source_tree_hash="source", implementation_hash="impl", route="qe.runtime",
             backend="cpu", parameter_domain_hash="domain",
             metric_instance_hash="metric-instance", metric_units=("ratio",),
+            candidate_id=candidate_id,recipe_hash="recipe",fitted_state_hash="state",data_snapshot_hash="data",
+            universe_hash="universe",label_hash="label",value_artifact_hash="values:"+candidate_id,
+            resampling_plan_content_hash=pairing[0], sample_identity_hash=pairing[1],
+            time_identity_hash=pairing[2], common_mask_hash=pairing[3],
         )
         qe_ref = _digest({"candidate": candidate_id, "plan": plan.content_hash, "samples": values})
         candidates.append(CandidateEvidence(
@@ -66,6 +79,7 @@ def _candidates_from_qe_runs(context, qualification, plan, named_runs):
             "FULL_VALIDATION", {}, {"alpha": float(np.mean(values))}, 1.0,
             "scope:v8", qualification_ref=qualification.content_hash,
             qualification_requirements=_requirements(), raw_joint_metric_evidence=evidence,
+            health_evidence_ref="health:"+candidate_id,health_candidate_id=candidate_id,health_coverage=1.0,evidence_bundle_ref=qe_ref,
         ))
     return tuple(candidates)
 

@@ -15,6 +15,18 @@ from urllib.parse import unquote, urlparse
 ROOT = Path(__file__).resolve().parents[1]
 CORE = ("data_access", "factor_engine", "quant_evaluator", "factor_preprocess",
         "factor_optimizer", "factor_assets", "quant_platform", "modeling")
+CRITICAL_IMPORTS = CORE + (
+    "quant_evaluator.metrics.probe_portfolio",
+    "quant_evaluator.metrics.probe_portfolio.costs",
+    "quant_evaluator.metrics.probe_portfolio.sharpe",
+    "quant_evaluator.runtime.gpu_executor",
+    "quant_evaluator.contracts.qualification",
+    "factor_assets.selection.decision",
+    "factor_assets.clustering.incremental",
+    "factor_engine.backend.operator_capability",
+    "factor_engine.backend.numba_kernels.rolling",
+    "factor_optimizer.search.runner",
+)
 MIRRORS = set(CORE) | {"vectorbt_qs", "riskfolio_qs", "alphaprobe", "platform_web", "lightgbm_qs"}
 SHA = re.compile(r"[0-9a-f]{40}")
 
@@ -95,30 +107,65 @@ root=pathlib.Path(sys.argv[1]); failures=[]
 for name in sys.argv[2:]:
     try:
         path=getattr(importlib.import_module(name),'__file__',None)
-        if path is None or not pathlib.Path(path).resolve().is_relative_to(root/name):
+        if path is None or not pathlib.Path(path).resolve().is_relative_to(root/name.split(".")[0]):
             failures.append(name)
     except Exception:
         failures.append(name)
 print(json.dumps(failures))
 """
-    result = subprocess.run([sys.executable, "-I", "-c", probe, str(root), *CORE],
+    result = subprocess.run([sys.executable, "-I", "-c", probe, str(root), *CRITICAL_IMPORTS],
                             cwd=root.anchor, capture_output=True, text=True)
     if result.returncode:
         return ["Isolated import probe failed"]
     try:
         failed = json.loads(result.stdout)
-        if not isinstance(failed, list) or any(n not in CORE for n in failed):
+        if not isinstance(failed, list) or any(n not in CRITICAL_IMPORTS for n in failed):
             raise ValueError("invalid import report")
     except (ValueError, TypeError):
         return ["Isolated import probe returned invalid evidence"]
     return [f"{name}: isolated import did not resolve to this checkout's source" for name in failed]
 
 
+def runtime_identity():
+    """Fresh isolated process identity; does not attest external live workers."""
+    probe = """import importlib,hashlib,json,marshal,sys,functools,inspect
+modules={}
+for name in sys.argv[1:]:
+    module=importlib.import_module(name)
+    modules[name]=getattr(module,"__file__",None)
+from quant_evaluator.registry.metrics import catalog_snapshot
+registry={}
+for key,spec in sorted(catalog_snapshot().items()):
+    fn=spec.compute_fn
+    if isinstance(fn,functools.partial): fn=fn.func
+    fn=getattr(fn,"py_func",fn)
+    code=getattr(fn,"__code__",None)
+    registry[key]={"implementation":spec.implementation_id,
+        "loaded_code_sha256":hashlib.sha256(marshal.dumps(code)).hexdigest() if code else None,
+        "contract_hash":spec.implementation_hash}
+print(json.dumps({"executable":sys.executable,"modules":modules,"registry":registry,
+    "scope":"fresh isolated probe only","existing_worker_identity":"NOT_OBSERVED",
+    "production_deployed":False},sort_keys=True))
+"""
+    result = subprocess.run([sys.executable, "-I", "-c", probe, *CRITICAL_IMPORTS],
+                            cwd=ROOT.anchor, capture_output=True, text=True)
+    if result.returncode:
+        raise ValueError("Isolated runtime identity probe failed: " + result.stderr[-2000:])
+    return json.loads(result.stdout)
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source-only", action="store_true",
                         help="Check clean source and publication receipt only; does not certify dependencies")
+    parser.add_argument("--runtime-only", action="store_true",
+                        help="Inspect a fresh isolated process, not publication or existing workers")
     args = parser.parse_args(argv)
+    if args.runtime_only:
+        report = runtime_identity()
+        report["import_errors"] = isolated_import_errors(ROOT)
+        print(json.dumps(report, sort_keys=True))
+        return int(bool(report["import_errors"]))
     errors = []
     try:
         if git(ROOT, "status", "--porcelain", "--untracked-files=normal"):

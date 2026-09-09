@@ -1,0 +1,844 @@
+{
+  "executable": "/home/sunhaiwei/quant_projects/.venv/bin/python",
+  "existing_worker_identity": "NOT_OBSERVED",
+  "modules": {
+    "data_access": "/home/sunhaiwei/quant_projects/data_access/__init__.py",
+    "factor_assets": "/home/sunhaiwei/quant_projects/factor_assets/__init__.py",
+    "factor_assets.clustering.incremental": "/home/sunhaiwei/quant_projects/factor_assets/clustering/incremental.py",
+    "factor_assets.selection.decision": "/home/sunhaiwei/quant_projects/factor_assets/selection/decision.py",
+    "factor_engine": "/home/sunhaiwei/quant_projects/factor_engine/__init__.py",
+    "factor_engine.backend.numba_kernels.rolling": "/home/sunhaiwei/quant_projects/factor_engine/backend/numba_kernels/rolling.py",
+    "factor_engine.backend.operator_capability": "/home/sunhaiwei/quant_projects/factor_engine/backend/operator_capability.py",
+    "factor_optimizer": "/home/sunhaiwei/quant_projects/factor_optimizer/factor_optimizer/__init__.py",
+    "factor_optimizer.search.runner": "/home/sunhaiwei/quant_projects/factor_optimizer/factor_optimizer/search/runner.py",
+    "factor_preprocess": "/home/sunhaiwei/quant_projects/factor_preprocess/factor_preprocess/__init__.py",
+    "modeling": "/home/sunhaiwei/quant_projects/modeling/__init__.py",
+    "quant_evaluator": "/home/sunhaiwei/quant_projects/quant_evaluator/__init__.py",
+    "quant_evaluator.contracts.qualification": "/home/sunhaiwei/quant_projects/quant_evaluator/contracts/qualification.py",
+    "quant_evaluator.metrics.probe_portfolio": "/home/sunhaiwei/quant_projects/quant_evaluator/metrics/probe_portfolio/__init__.py",
+    "quant_evaluator.metrics.probe_portfolio.costs": "/home/sunhaiwei/quant_projects/quant_evaluator/metrics/probe_portfolio/costs.py",
+    "quant_evaluator.metrics.probe_portfolio.sharpe": "/home/sunhaiwei/quant_projects/quant_evaluator/metrics/probe_portfolio/sharpe.py",
+    "quant_evaluator.runtime.gpu_executor": "/home/sunhaiwei/quant_projects/quant_evaluator/runtime/gpu_executor.py",
+    "quant_platform": "/home/sunhaiwei/quant_projects/quant_platform/__init__.py"
+  },
+  "production_deployed": false,
+  "registry": {
+    "adaptive_quantile_count": {
+      "contract_hash": "7f0bfd6757710178",
+      "implementation": "quant_evaluator.metrics.shape_evidence.compute_adaptive_quantile_count",
+      "loaded_code_sha256": "9db5d1cc69455c065fa0eea7f1afa0b30e6c2fc3f15fa5e1f94692b264fcba46"
+    },
+    "autocorrelation_ic": {
+      "contract_hash": "24e04d791f0b18b4",
+      "implementation": "quant_evaluator.metrics.temporal.compute_ic_autocorrelation",
+      "loaded_code_sha256": null
+    },
+    "benjamini_hochberg_correction": {
+      "contract_hash": "95d18c8ef3e0bbf1",
+      "implementation": "quant_evaluator.metrics.multiple_testing.benjamini_hochberg_correction",
+      "loaded_code_sha256": "0ccd3ed5e7b9d9acc80e0a261a0d3b0c7194725bd3487ea8715371f402026728"
+    },
+    "beta_exposure": {
+      "contract_hash": "934cd5be26e7099f",
+      "implementation": "quant_evaluator.metrics.exposure_evidence.compute_beta_exposure",
+      "loaded_code_sha256": "ec01081c09b88833f05fd423f676c9fe3aabbbdaaf4d6e27af730f28901c68d1"
+    },
+    "block_bootstrap_ci": {
+      "contract_hash": "4ff54a65d3542bdf",
+      "implementation": "block_bootstrap_ci",
+      "loaded_code_sha256": "983aa1bfb0ef9b4829b6064a725a5f819ac769dbab9bef776b165921de8596c4"
+    },
+    "bonferroni_correction": {
+      "contract_hash": "739cab795312d5ec",
+      "implementation": "quant_evaluator.metrics.multiple_testing.bonferroni_correction",
+      "loaded_code_sha256": "d9beb8738d5a8ee8d8160beff4e528944bc77557d192887bb547ef4702404df0"
+    },
+    "bottom_quantile_cliff": {
+      "contract_hash": "d3156da6d3084f20",
+      "implementation": "quant_evaluator.metrics.quantile_shape.compute_bottom_quantile_cliff",
+      "loaded_code_sha256": "09a2efad828db749bf4462600f5b17de26a041acdeea8daeff21cadddc92d42e"
+    },
+    "bottom_quantile_cliff_robust": {
+      "contract_hash": "b40974b655118076",
+      "implementation": "quant_evaluator.metrics.shape_evidence.compute_bottom_quantile_cliff_robust",
+      "loaded_code_sha256": "f9c732fe625a231118f9d91c0c880e56171539426806349801c6f8f3546b7041"
+    },
+    "bottom_tail_slope": {
+      "contract_hash": "3f29ad6717f21e4a",
+      "implementation": "quant_evaluator.metrics.shape_evidence.compute_bottom_tail_slope",
+      "loaded_code_sha256": "fde3647ef3a91e6075be2033913624774f526156ef211c2a7eb679a93b7dcbb1"
+    },
+    "calmar_ratio": {
+      "contract_hash": "db236c7fb7e80d20",
+      "implementation": "quant_evaluator.metrics.portfolio_stats.compute_calmar_ratio",
+      "loaded_code_sha256": "3733ab9c1ac65e3d51188308aef719f4e0ff2764816f6187a135ff98205cb339"
+    },
+    "change_point_score": {
+      "contract_hash": "284066f728e4510c",
+      "implementation": "quant_evaluator.metrics.stability_regime.compute_change_point_score",
+      "loaded_code_sha256": "3a09a82fc3a4db5a92a3bf17129366b51805ea3609e6ce747a6ec7d12c5b44ea"
+    },
+    "coverage": {
+      "contract_hash": "c3a3091b9d32267d",
+      "implementation": "coverage",
+      "loaded_code_sha256": "5ec5b9acccb4394f0cd4392112145386b0fc36222291d6ff004ae4d94cb5169b"
+    },
+    "coverage_stability": {
+      "contract_hash": "09b8a1e933176393",
+      "implementation": "quant_evaluator.metrics.quality.compute_per_time_coverage",
+      "loaded_code_sha256": null
+    },
+    "cross_section_cardinality": {
+      "contract_hash": "261611c93c6e0f20",
+      "implementation": "quant_evaluator.metrics.data_quality.compute_cross_section_cardinality",
+      "loaded_code_sha256": "ce2b21cdd18ac3cdbadb898bb1eda58d29693efca6eeba5c1a0d4b700405f3d5"
+    },
+    "cusum_break_score": {
+      "contract_hash": "02372f8b7232781b",
+      "implementation": "quant_evaluator.metrics.stability_regime.compute_cusum_break_score",
+      "loaded_code_sha256": "4e0d13e5b20d76f4138587fe37c584aa4c33ac6eabdb380324591e67ad87f904"
+    },
+    "cvar_95": {
+      "contract_hash": "275d3457ecb2da9a",
+      "implementation": "quant_evaluator.metrics.risk.var_cvar.compute_cvar",
+      "loaded_code_sha256": null
+    },
+    "cvar_99": {
+      "contract_hash": "275d3457ecb2da9a",
+      "implementation": "quant_evaluator.metrics.risk.var_cvar.compute_cvar",
+      "loaded_code_sha256": null
+    },
+    "cvar_expected_shortfall": {
+      "contract_hash": "519872ce8b13f72a",
+      "implementation": "quant_evaluator.metrics.underwater.compute_cvar_expected_shortfall",
+      "loaded_code_sha256": "2c593b76b32b3663882f097a0213c53ea407914422e7d107a710120d7eaea38f"
+    },
+    "daily_quantile_monotonicity_rate": {
+      "contract_hash": "3830c8a470ac77a2",
+      "implementation": "quant_evaluator.metrics.registry_adapters.compute_daily_quantile_monotonicity_rate_value",
+      "loaded_code_sha256": "4d31cd02886430e79fefac59088415a0c5fc5e2c1983183e6d0462c0be6514fe"
+    },
+    "daily_quantile_monotonicity_series": {
+      "contract_hash": "ebf8f30ef67ce06f",
+      "implementation": "quant_evaluator.metrics.registry_adapters.compute_daily_quantile_monotonicity_series_value",
+      "loaded_code_sha256": "39313c455739001f0014095aff5e8fa4e552069d61576677adc5fcd38ce03e43"
+    },
+    "distinct_level_ratio": {
+      "contract_hash": "01ed3b143936ada0",
+      "implementation": "quant_evaluator.metrics.data_quality.compute_distinct_level_ratio",
+      "loaded_code_sha256": "f19ef87f51fe0bc6dcad2ef8033fd15b9e5d19230cadbdb75b5763164c1e303b"
+    },
+    "downside_deviation": {
+      "contract_hash": "3511adf878dc65c6",
+      "implementation": "quant_evaluator.metrics.underwater.compute_downside_deviation",
+      "loaded_code_sha256": "75ef9334c5ae623c79f2f63381f955a8adec5ea96bfed40e1ebf51e55a81d94d"
+    },
+    "drawdown_duration": {
+      "contract_hash": "e83b1357b47cb532",
+      "implementation": "quant_evaluator.metrics.risk.drawdown_analysis.compute_drawdown_duration",
+      "loaded_code_sha256": null
+    },
+    "effective_n": {
+      "contract_hash": "5b6afb777e57f8ac",
+      "implementation": "quant_evaluator.metrics.data_quality.compute_effective_n",
+      "loaded_code_sha256": "a51850e65e08dd49a895319dcf2120fdda1d4b588b1e736092b9e33d2340a8c6"
+    },
+    "exposure_drift": {
+      "contract_hash": "f1d5e73a1f50aa4d",
+      "implementation": "quant_evaluator.metrics.exposure_evidence.compute_exposure_drift",
+      "loaded_code_sha256": "c0c6d56f8e1f1a339ae83b686804d703ea87cca51a7bef2b988c53681e6561b3"
+    },
+    "factor_coverage": {
+      "contract_hash": "218e7576f2a6476e",
+      "implementation": "quant_evaluator.metrics.quality.compute_coverage",
+      "loaded_code_sha256": null
+    },
+    "factor_turnover_rate": {
+      "contract_hash": "fc370826c8e1e1f6",
+      "implementation": "factor_turnover_rate",
+      "loaded_code_sha256": "67f59d31c62949dfc8be43362e166e815108ec485aadf3cf76a077bccc0cf258"
+    },
+    "hac_pvalue": {
+      "contract_hash": "3854732fbfd77f7d",
+      "implementation": "hac_pvalue",
+      "loaded_code_sha256": "008394676f841be354e252062ca91d0b6ecefc746d5dbe95aa3221f3a8a2fe0f"
+    },
+    "hac_tstat": {
+      "contract_hash": "945fa553d3961a17",
+      "implementation": "hac_tstat",
+      "loaded_code_sha256": "3ab83a446bf4e25a8f3112b87a74db07e200e0b6ac78a6e15e1911125873ac21"
+    },
+    "half_life": {
+      "contract_hash": "10adf758daca12c4",
+      "implementation": "half_life",
+      "loaded_code_sha256": "4a9909d1b46930025d3e6499881461dc5b93486c265dff730e2552f6a95df784"
+    },
+    "hhi_concentration": {
+      "contract_hash": "c2adfcbac0732e3f",
+      "implementation": "quant_evaluator.metrics.exposure.compute_concentration_hhi",
+      "loaded_code_sha256": null
+    },
+    "hhi_effective_n": {
+      "contract_hash": "c2adfcbac0732e3f",
+      "implementation": "quant_evaluator.metrics.exposure.compute_concentration_hhi",
+      "loaded_code_sha256": null
+    },
+    "holm_bonferroni_correction": {
+      "contract_hash": "653ce7787c814b12",
+      "implementation": "quant_evaluator.metrics.multiple_testing.holm_bonferroni_correction",
+      "loaded_code_sha256": "1a99ae9157ac0742aa2d9b645c723059b2acdec0c8bbef8480e3dbd723942c24"
+    },
+    "ic_autocorr_lag1": {
+      "contract_hash": "4a6241ba0721f29b",
+      "implementation": "ic_autocorr_lag1",
+      "loaded_code_sha256": "2bf22bb6aa1920a0417acd66c8a2fe6654bc3b9f3a074d6af30bd7054f5c5ceb"
+    },
+    "ic_decay": {
+      "contract_hash": "84f808a1310dd979",
+      "implementation": "quant_evaluator.metrics.ic_summary.compute_ic_decay",
+      "loaded_code_sha256": null
+    },
+    "ic_ir": {
+      "contract_hash": "3560e1c5dfaa889c",
+      "implementation": "ic_ir",
+      "loaded_code_sha256": "b8b27a6e92bb2a5decb809785a68678c6ddc3eead10a5ff6f9057127a2071497"
+    },
+    "ic_median": {
+      "contract_hash": "26c5f8529dee0ee0",
+      "implementation": "ic_median",
+      "loaded_code_sha256": "5b4e944d0e86ca5676674b32a6e0700e7bc237c97f39be1ff769125fd77587d5"
+    },
+    "ic_positive_ratio": {
+      "contract_hash": "87105b687fd064c8",
+      "implementation": "quant_evaluator.metrics.predictive.compute_ic_positive_ratio",
+      "loaded_code_sha256": "f488548ee30e44bbe93e2481a08a62ebbd066d4ea6a4c1607f9eb9d7ce515361"
+    },
+    "ic_recent_vs_history_delta": {
+      "contract_hash": "2a52416a89cb2306",
+      "implementation": "quant_evaluator.metrics.predictive.compute_ic_recent_vs_history_delta",
+      "loaded_code_sha256": "484e39bde0f89ed19c363f687ee3d4f709692414739d7c90141e44fc8b63fca5"
+    },
+    "ic_serial_autocorrelation_lags_1_5_10_20": {
+      "contract_hash": "280b2d27ddd85f60",
+      "implementation": "quant_evaluator.metrics.predictive.compute_rank_ic_decay",
+      "loaded_code_sha256": "efcf2a9681a2f0389a888d0a527e095661a1367873ae4d12d1af21a19bc7500e"
+    },
+    "ic_sign_consistency": {
+      "contract_hash": "b7b127601217761b",
+      "implementation": "quant_evaluator.metrics.predictive.compute_ic_sign_consistency",
+      "loaded_code_sha256": "c8438c507a81590f9dfc0e44bb866ee55348b6c386bacc319962d640c8fd9ae7"
+    },
+    "ic_sign_flip_rate": {
+      "contract_hash": "e7a3bdbaa24710a8",
+      "implementation": "quant_evaluator.metrics.stability_regime.compute_ic_sign_flip_rate",
+      "loaded_code_sha256": "38dff5fa1c452b23ffd30d048d07d8de83e8043c7a4ca7512e623a9a9f5744e3"
+    },
+    "ic_stability": {
+      "contract_hash": "60503f69e934043a",
+      "implementation": "quant_evaluator.metrics.ic_summary.compute_ic_stability",
+      "loaded_code_sha256": null
+    },
+    "ic_std": {
+      "contract_hash": "5bb8afdb0c11a028",
+      "implementation": "ic_std",
+      "loaded_code_sha256": "4604f4530f31ea0e2b0f6ce8e74220df9559a939054334df9d36d7e2b8334450"
+    },
+    "ic_summary": {
+      "contract_hash": "980ae8fd18831adc",
+      "implementation": "quant_evaluator.metrics.ic_summary.compute_rolling_ic_stats",
+      "loaded_code_sha256": null
+    },
+    "industry_exposure": {
+      "contract_hash": "ea819b635ceb4c43",
+      "implementation": "quant_evaluator.metrics.exposure_evidence.compute_industry_exposure",
+      "loaded_code_sha256": "832719ded78b75ca2b740b8c8083eb3b615212250df342cae056247ee735ef1f"
+    },
+    "information_ratio": {
+      "contract_hash": "01f68eafcbef9bd3",
+      "implementation": "quant_evaluator.metrics.long_only.compute_information_ratio",
+      "loaded_code_sha256": "c9efc58f52674566c2d1b34038f33545c0c5271618ff5c08a1faf90327fad091"
+    },
+    "inverted_u_score": {
+      "contract_hash": "e2c8ade547e54be7",
+      "implementation": "quant_evaluator.metrics.shape_evidence.compute_inverted_u_score",
+      "loaded_code_sha256": "6b567c1716174a6c45febc1666968a32c738c4d7839c31df4d9e96ff5d33024f"
+    },
+    "joint_coverage": {
+      "contract_hash": "31d83660eaf9c293",
+      "implementation": "quant_evaluator.metrics.quality.compute_coverage_per_factor",
+      "loaded_code_sha256": null
+    },
+    "kurtosis": {
+      "contract_hash": "5aee9f22488ba0c2",
+      "implementation": "quant_evaluator.metrics.distribution.compute_kurtosis",
+      "loaded_code_sha256": null
+    },
+    "label_maturity": {
+      "contract_hash": "25e1789f602174fa",
+      "implementation": "quant_evaluator.metrics.data_quality.compute_label_maturity",
+      "loaded_code_sha256": "341407c6c87a2cff252aeb94cdeffbedc3195668d2568e51529607899b23ff58"
+    },
+    "left_right_asymmetry": {
+      "contract_hash": "7e7227f80d95eb96",
+      "implementation": "quant_evaluator.metrics.shape_evidence.compute_left_right_asymmetry",
+      "loaded_code_sha256": "487118ec487ec1502e97f6f4b84fdf78d7faad91f1270fa40168c8cf952b7143"
+    },
+    "linear_trend_score": {
+      "contract_hash": "e85ed54b08f42e19",
+      "implementation": "quant_evaluator.metrics.shape_evidence.compute_linear_trend_score",
+      "loaded_code_sha256": "b07eb1a87844520da4907065fe7383796452dfbb639542f49d1c781865417a23"
+    },
+    "liquidity_exposure": {
+      "contract_hash": "5513c5b186ff3457",
+      "implementation": "quant_evaluator.metrics.exposure_evidence.compute_liquidity_exposure",
+      "loaded_code_sha256": "84b84dea1e245704d4a6792ebfc7fd3273b4c513b043c24eb2431fe4bd58eaa6"
+    },
+    "long_short_returns": {
+      "contract_hash": "b15c9e787ecfc8a6",
+      "implementation": "quant_evaluator.metrics.portfolio_stats.compute_long_short_returns",
+      "loaded_code_sha256": "d287f5eb4354f095673138107b8882cf46b0753deabe38845934357b98626223"
+    },
+    "max_absolute_style_exposure": {
+      "contract_hash": "15b9952302594c9f",
+      "implementation": "quant_evaluator.metrics.exposure_evidence.compute_max_absolute_style_exposure",
+      "loaded_code_sha256": "71ba121a7762fab228774cb6057cee0b9601a287252fe11f3c9b35901203d6fd"
+    },
+    "max_drawdown": {
+      "contract_hash": "e7b6a87c1f0d6fed",
+      "implementation": "quant_evaluator.metrics.portfolio_stats.compute_maximum_drawdown",
+      "loaded_code_sha256": "b5ab08f1bc5d37a8904b49d6db99625b5cb56879d9b0c3aebbd12c7e800a413e"
+    },
+    "max_underwater_duration": {
+      "contract_hash": "48c6a4192c3526c2",
+      "implementation": "quant_evaluator.metrics.underwater.compute_max_underwater_duration",
+      "loaded_code_sha256": "3cbd340cf100949f6cb92f782edbb101d33bab9e94cecceda7e4b26df3492c81"
+    },
+    "mean_ic": {
+      "contract_hash": "2b65d58cab52313e",
+      "implementation": "mean_ic",
+      "loaded_code_sha256": "5a38b2f8b28efce9cb843d6faa41c54f1814502fcf79e6e6b6eba3e9b81e38e0"
+    },
+    "mean_investment_fraction": {
+      "contract_hash": "bc0a1cb7c8221c47",
+      "implementation": "quant_evaluator.metrics.long_only.compute_mean_investment_fraction",
+      "loaded_code_sha256": "592ae3ccf71a4428a994f0fbd5e58144c3624676cb5d3034fb78282b3bb2bf57"
+    },
+    "mean_underwater_duration": {
+      "contract_hash": "2f44074c85ee67d9",
+      "implementation": "quant_evaluator.metrics.underwater.compute_mean_underwater_duration",
+      "loaded_code_sha256": "830c6c7df4040ed9770aa03678aac80afb0c85c7bcd208ceab677e6f3894c3ba"
+    },
+    "missing_ratio": {
+      "contract_hash": "871d45acefb342ff",
+      "implementation": "quant_evaluator.metrics.data_quality.compute_missing_ratio",
+      "loaded_code_sha256": "3da951c50b35e104d654078200c84d491d10cbf8bedebfcfa906da991f22e145"
+    },
+    "missing_timeline": {
+      "contract_hash": "c0cff08a33acd877",
+      "implementation": "quant_evaluator.metrics.data_quality.compute_missing_timeline",
+      "loaded_code_sha256": "ff75e07e554cc1db6655353df65af288ab68c6d27fa3565fdd07145acc4539c4"
+    },
+    "momentum_exposure": {
+      "contract_hash": "c5078441cc215e6f",
+      "implementation": "quant_evaluator.metrics.exposure_evidence.compute_momentum_exposure",
+      "loaded_code_sha256": "ec46865822dd423fe773559b07324dbc1be1b0d7236482dc3a19b5a1aac790fa"
+    },
+    "month_consistency": {
+      "contract_hash": "2c79dbd0ddcf736e",
+      "implementation": "quant_evaluator.metrics.stability_regime.compute_month_consistency",
+      "loaded_code_sha256": "fa6959322c3148eed9526666b3cb76acda52ded1e8938e39c02df7f2db490dbb"
+    },
+    "monthly_rank_ic": {
+      "contract_hash": "a6e984e1fc9c59fa",
+      "implementation": "quant_evaluator.metrics.predictive.compute_monthly_rank_ic",
+      "loaded_code_sha256": "59e7058980ef9820c7193cb13b78357f77f14733b473cc8fb5c21ec154c617a6"
+    },
+    "neutralized_rank_ic": {
+      "contract_hash": "ed4246d3d600378b",
+      "implementation": "quant_evaluator.metrics.exposure_evidence.compute_neutralized_rank_ic",
+      "loaded_code_sha256": "0b1395aada582efbe2c3d26b3f4df70ed7d996f4303ecd5f9fe6d4cda418c3f6"
+    },
+    "outlier_ratio": {
+      "contract_hash": "9576371b1fd816f8",
+      "implementation": "quant_evaluator.metrics.data_quality.compute_outlier_ratio",
+      "loaded_code_sha256": "cc4ce0686398a8096d231c5ca218622e1885decb38d1b3c7f638b4dc15aa68c4"
+    },
+    "parameter_generalization": {
+      "contract_hash": "fdd1e30f2fff85f1",
+      "implementation": "quant_evaluator.metrics.generalization_evidence.compute_validation_retention",
+      "loaded_code_sha256": "146021f85c0a8bd96edf96cb908c17216497b568e29ea81b12da67ee8ebdcfdf"
+    },
+    "pearson_ic": {
+      "contract_hash": "0889972bc438620f",
+      "implementation": "quant_evaluator.metrics.ic.compute_daily_ic",
+      "loaded_code_sha256": "5778c40742e5ec2f303285822ba897e5262afaa12ded7693dee8326e2bdcb018"
+    },
+    "pearson_ic_ir": {
+      "contract_hash": "f49a7b095a8760b9",
+      "implementation": "pearson_ic_ir",
+      "loaded_code_sha256": "b8b27a6e92bb2a5decb809785a68678c6ddc3eead10a5ff6f9057127a2071497"
+    },
+    "pearson_ic_series": {
+      "contract_hash": "ae7dd9d927f88051",
+      "implementation": "pearson_ic_series",
+      "loaded_code_sha256": "98a56bab75ddf9a57c686f144a502a384d1f02952bdbfa68ae75894b5d3ce42e"
+    },
+    "pearson_ic_std": {
+      "contract_hash": "2c5f213d5ca354d3",
+      "implementation": "pearson_ic_std",
+      "loaded_code_sha256": "4604f4530f31ea0e2b0f6ce8e74220df9559a939054334df9d36d7e2b8334450"
+    },
+    "purity_ratio": {
+      "contract_hash": "b01183a02223bebe",
+      "implementation": "quant_evaluator.metrics.exposure_evidence.compute_purity_ratio",
+      "loaded_code_sha256": "52b220db06b3046564f5e3035d5ec10ef81728e51672473f4d378f12f4141fe1"
+    },
+    "quantile_adjacent_spread": {
+      "contract_hash": "f3e3fda8dd344430",
+      "implementation": "quant_evaluator.metrics.quantile_shape.compute_quantile_adjacent_spread",
+      "loaded_code_sha256": "0dc10b24c77c0e5932a85baf555cb0da9a1995ee47f594ffe551a30ea2c36726"
+    },
+    "quantile_curvature": {
+      "contract_hash": "2637122d22ab9cee",
+      "implementation": "quant_evaluator.metrics.quantile_shape.compute_quantile_curvature",
+      "loaded_code_sha256": "b2fe83282eb23da46888c27b40ee7e52578199426a2303c4f925534bd5e08272"
+    },
+    "quantile_extreme_cliff": {
+      "contract_hash": "08cd8f8e8941a4ac",
+      "implementation": "quant_evaluator.metrics.quantile_shape.compute_quantile_extreme_cliff",
+      "loaded_code_sha256": "1171adc9b24dfea9afed954cf8c1126e9f2167dccfcdf43bc5d81f1f8bbc8d63"
+    },
+    "quantile_monotonicity": {
+      "contract_hash": "ae5f8fd8b089edb9",
+      "implementation": "quant_evaluator.metrics.quantile_shape.compute_quantile_monotonicity",
+      "loaded_code_sha256": "c359c7bafa8ebcff19211492ea68b2b78d042f0bf21d27261c40d6253175f707"
+    },
+    "quantile_returns": {
+      "contract_hash": "35786ab8d7a2b119",
+      "implementation": "quant_evaluator.metrics.quantile.compute_quantile_returns",
+      "loaded_code_sha256": null
+    },
+    "quantile_returns_daily": {
+      "contract_hash": "b47c1bea95662523",
+      "implementation": "quant_evaluator.metrics.registry_adapters.build_daily_quantile_return_artifact",
+      "loaded_code_sha256": "6ea326d210ee881276184fe5960036a1a8c633a570e1cc6167d8f1cdf4ac8f40"
+    },
+    "quantile_returns_full": {
+      "contract_hash": "16f4b270cfdcd798",
+      "implementation": "quantile_returns_full",
+      "loaded_code_sha256": "8b18cf11c7d46fa79e1eb3e7eff0513823c1c7300baf57d43085b6a2047efacd"
+    },
+    "quantile_spread": {
+      "contract_hash": "a32d6fca350b9904",
+      "implementation": "quant_evaluator.metrics.quantile.compute_top_bottom_spread",
+      "loaded_code_sha256": "c794ceb26fcc4fad6efed0a127b13df984963b63f5af20991e3a4370b15047a1"
+    },
+    "quantile_stability": {
+      "contract_hash": "60503f69e934043a",
+      "implementation": "quant_evaluator.metrics.ic_summary.compute_ic_stability",
+      "loaded_code_sha256": null
+    },
+    "quantile_tail_asymmetry": {
+      "contract_hash": "a31a23c11ef4c3dc",
+      "implementation": "quant_evaluator.metrics.quantile_shape.compute_quantile_tail_asymmetry",
+      "loaded_code_sha256": "a47174fdb773f185ed506d7dae396394420af62c4243cd936586abdd2e184ae1"
+    },
+    "quarter_consistency": {
+      "contract_hash": "187cd519f25bd49e",
+      "implementation": "quant_evaluator.metrics.stability_regime.compute_quarter_consistency",
+      "loaded_code_sha256": "14709a406820a957c84373f00f82ee74bdd02319b8eae7f8d2e18351ae6d00aa"
+    },
+    "quarterly_rank_ic": {
+      "contract_hash": "1a9dfbe060affefe",
+      "implementation": "quant_evaluator.metrics.predictive.compute_quarterly_rank_ic",
+      "loaded_code_sha256": "b9df8c490a594d85a856d7d53a4eb27a38b6bcfc191f42b5bec6fcd62e05ca93"
+    },
+    "rank_ic": {
+      "contract_hash": "0889972bc438620f",
+      "implementation": "quant_evaluator.metrics.ic.compute_daily_ic",
+      "loaded_code_sha256": "18da882f8aa081fdea56f3a299914bbd5f731c53f5204723d23af19e7a113130"
+    },
+    "rank_ic_cross_section": {
+      "contract_hash": "0889972bc438620f",
+      "implementation": "quant_evaluator.metrics.ic.compute_daily_ic",
+      "loaded_code_sha256": null
+    },
+    "rank_ic_decay_h01_h05_h10_h20": {
+      "contract_hash": "280b2d27ddd85f60",
+      "implementation": "quant_evaluator.metrics.predictive.compute_rank_ic_decay",
+      "loaded_code_sha256": "efcf2a9681a2f0389a888d0a527e095661a1367873ae4d12d1af21a19bc7500e"
+    },
+    "rank_ic_positive_ratio": {
+      "contract_hash": "7905589aa79a4663",
+      "implementation": "quant_evaluator.metrics.predictive.compute_rank_ic_positive_ratio",
+      "loaded_code_sha256": "544cd0b29e6d8d6ad40a26bcc6b0952bb1416cb549f8cae1b605d07f09a6c4e9"
+    },
+    "rank_ic_series": {
+      "contract_hash": "391c5a26f61685e3",
+      "implementation": "rank_ic_series",
+      "loaded_code_sha256": "6c6fd089c02f647a88cb44296a96e755466ce9791293283f9c01f86adf3e62bf"
+    },
+    "rank_ic_time_series": {
+      "contract_hash": "0889972bc438620f",
+      "implementation": "quant_evaluator.metrics.ic.compute_daily_ic",
+      "loaded_code_sha256": null
+    },
+    "rank_stability": {
+      "contract_hash": "a32f5d4c5d766a92",
+      "implementation": "rank_stability",
+      "loaded_code_sha256": "e630a5d44dc85ee4be590aab06c1562d6d82b2935c1779a768db92bdefb6e9a2"
+    },
+    "recent_12m_rank_ic": {
+      "contract_hash": "a76ae49a3fb6a8be",
+      "implementation": "quant_evaluator.metrics.predictive.compute_recent_12m_rank_ic",
+      "loaded_code_sha256": "bd91d382a8fe08d8256cc4b3e5df9cf40cdffe5ed96f76cb80f29ae7e771320a"
+    },
+    "recent_3m_rank_ic": {
+      "contract_hash": "1ddf63013eeb2ab9",
+      "implementation": "quant_evaluator.metrics.predictive.compute_recent_3m_rank_ic",
+      "loaded_code_sha256": "dd9f929d2d7d8e1bab510e445085ec196f9321dffdc49348a5c395d08be5959a"
+    },
+    "recent_6m_rank_ic": {
+      "contract_hash": "b927918437fdb0bd",
+      "implementation": "quant_evaluator.metrics.predictive.compute_recent_6m_rank_ic",
+      "loaded_code_sha256": "0a2d50aeccee5c97377b4cbf217b70abafad61f357233b4a05d6830ce7beaf67"
+    },
+    "recent_degradation_score": {
+      "contract_hash": "7911778dd13a55c0",
+      "implementation": "quant_evaluator.metrics.stability_regime.compute_recent_degradation_score",
+      "loaded_code_sha256": "1385569c72eb090599a7811ca3ea7e02c24f095adf6fcb73f86325faa4e8cebf"
+    },
+    "regime_conditional_ic": {
+      "contract_hash": "4253814cc1d283e6",
+      "implementation": "quant_evaluator.metrics.stability_regime.compute_regime_conditional_ic",
+      "loaded_code_sha256": "286099e4b26d2de95c86082618469dd0f777b42005d63ddd248b88d55345406b"
+    },
+    "regime_dispersion": {
+      "contract_hash": "de03491015727383",
+      "implementation": "quant_evaluator.metrics.stability_regime.compute_regime_dispersion",
+      "loaded_code_sha256": "acb541787e2fee749b056aedeefc7b669a08ec2945ea5d2a5f284c9fbba7a3fe"
+    },
+    "regime_sign_consistency": {
+      "contract_hash": "d355f29e53ddb98c",
+      "implementation": "quant_evaluator.metrics.stability_regime.compute_regime_sign_consistency",
+      "loaded_code_sha256": "103fb0b8e0d46bbd89f7703f9de4a2d7377b7bca7e46ce0af7c2beaa2359ce8d"
+    },
+    "regime_worst_ic": {
+      "contract_hash": "675b9d8a34fea45d",
+      "implementation": "quant_evaluator.metrics.stability_regime.compute_regime_worst_ic",
+      "loaded_code_sha256": "a4d56c24e745cab32d370df783520aed289c2122517751ddf54eb71a15420ed6"
+    },
+    "relative_max_drawdown": {
+      "contract_hash": "eb3d7b8671b0a5c0",
+      "implementation": "quant_evaluator.metrics.long_only.compute_relative_max_drawdown",
+      "loaded_code_sha256": "dbdcbccbc200066d747174dd1ecd937de4548243c8dbd7ae922c9dc23e0b418c"
+    },
+    "residual_rank_ic": {
+      "contract_hash": "09aad67312389509",
+      "implementation": "quant_evaluator.metrics.exposure_evidence.compute_residual_rank_ic",
+      "loaded_code_sha256": "6c9c8f1e1f0d289e5987a92b924c9d8caf55723a1b7e3320ddb10ed9ec61a318"
+    },
+    "return_coverage": {
+      "contract_hash": "218e7576f2a6476e",
+      "implementation": "quant_evaluator.metrics.quality.compute_coverage",
+      "loaded_code_sha256": null
+    },
+    "return_skew": {
+      "contract_hash": "f0e421a6ef3f6bae",
+      "implementation": "quant_evaluator.metrics.underwater.compute_return_skew",
+      "loaded_code_sha256": "bf92f76b8ee09b3a1fb4df499a35086ff88224a6343ee190971068879daeead8"
+    },
+    "rolling_1y_sharpe_min": {
+      "contract_hash": "3652032540e8d943",
+      "implementation": "quant_evaluator.metrics.underwater.compute_rolling_sharpe_tail",
+      "loaded_code_sha256": "9c7fb2ce92951e00ae22eab6c16c26baabfe5b1551c63b74e82618c75b23fa54"
+    },
+    "rolling_1y_sharpe_q10": {
+      "contract_hash": "3652032540e8d943",
+      "implementation": "quant_evaluator.metrics.underwater.compute_rolling_sharpe_tail",
+      "loaded_code_sha256": "9c7fb2ce92951e00ae22eab6c16c26baabfe5b1551c63b74e82618c75b23fa54"
+    },
+    "rolling_ic": {
+      "contract_hash": "980ae8fd18831adc",
+      "implementation": "quant_evaluator.metrics.ic_summary.compute_rolling_ic_stats",
+      "loaded_code_sha256": null
+    },
+    "rolling_ic_drawdown": {
+      "contract_hash": "5d1ad2f56ad99e47",
+      "implementation": "quant_evaluator.metrics.stability_regime.compute_rolling_ic_drawdown",
+      "loaded_code_sha256": "ee6f997c6ceed3ffd44f997a9b852a18710d9c23b2e2afd05468d5255b502c60"
+    },
+    "rolling_ic_volatility": {
+      "contract_hash": "29bd7910d5a925bc",
+      "implementation": "quant_evaluator.metrics.stability_regime.compute_rolling_ic_volatility",
+      "loaded_code_sha256": "cd1b79b541b7c6d75327216b30e11ed25ddc5c6c19fae3b6b1ffeba8a0461ba1"
+    },
+    "rolling_rank_ic_ir": {
+      "contract_hash": "74f4b626fb231280",
+      "implementation": "quant_evaluator.metrics.predictive.compute_rolling_rank_ic_ir",
+      "loaded_code_sha256": "b3c0bcc11033ab3b156a0eac5a54d3a42dc5cc787630efd5e4388677454b0c29"
+    },
+    "rolling_rank_ic_mean": {
+      "contract_hash": "5d6c380eeb1f6f33",
+      "implementation": "quant_evaluator.metrics.predictive.compute_rolling_rank_ic_mean",
+      "loaded_code_sha256": "dc2c47b4a52826279828910771a07e85b7fe960b286ef106d40c43cc3ed9ec08"
+    },
+    "shape_bootstrap_confidence": {
+      "contract_hash": "0ce8598f7a096c93",
+      "implementation": "quant_evaluator.metrics.shape_evidence.compute_shape_bootstrap_confidence",
+      "loaded_code_sha256": "32b765f07c59696f4208ddfa1b168afaf769280bf944e3dcb5a8f98903727742"
+    },
+    "shape_bootstrap_rank_agreement": {
+      "contract_hash": "0ce8598f7a096c93",
+      "implementation": "quant_evaluator.metrics.shape_evidence.compute_shape_bootstrap_confidence",
+      "loaded_code_sha256": "32b765f07c59696f4208ddfa1b168afaf769280bf944e3dcb5a8f98903727742"
+    },
+    "shape_regime_stability": {
+      "contract_hash": "73daf1073dbf67ad",
+      "implementation": "quant_evaluator.metrics.shape_evidence.compute_shape_regime_stability",
+      "loaded_code_sha256": "d8881cd2b737aff734a2ebb031e8d57c5fb8aee022177988b96e04c0eee929ee"
+    },
+    "shape_stability": {
+      "contract_hash": "18a128298e79646c",
+      "implementation": "quant_evaluator.metrics.shape_evidence.compute_shape_stability",
+      "loaded_code_sha256": "5e5f0ad2f007e03d3f094dee91a1bb4108e7b9b350da7798b1f69396a7aeb5f0"
+    },
+    "sharpe_ratio": {
+      "contract_hash": "41bc76d690e3a728",
+      "implementation": "quant_evaluator.metrics.portfolio_stats.compute_sharpe_ratio",
+      "loaded_code_sha256": "518115ad180ceb6c9c5ce97e5c0a6299821dcb68fc0f7458501a44fb0e263ba3"
+    },
+    "sidak_correction": {
+      "contract_hash": "e5590f2d705ff40d",
+      "implementation": "quant_evaluator.metrics.multiple_testing.sidak_correction",
+      "loaded_code_sha256": "55a2deedd02b8b79d207980b967215ee9855deb19aa3ccb9546f7b1adf6d5f2b"
+    },
+    "size_exposure": {
+      "contract_hash": "e648ced17ef1695a",
+      "implementation": "quant_evaluator.metrics.exposure_evidence.compute_size_exposure",
+      "loaded_code_sha256": "f9a6735c694b5f9a65ea66d4d7e5b155cbc757b26601f003a8810908aa8e05fa"
+    },
+    "skewness": {
+      "contract_hash": "7f1235ddb9033da1",
+      "implementation": "quant_evaluator.metrics.distribution.compute_skewness",
+      "loaded_code_sha256": null
+    },
+    "sortino_ratio": {
+      "contract_hash": "bbd960c12652cb5f",
+      "implementation": "quant_evaluator.metrics.portfolio_stats.compute_sortino_ratio",
+      "loaded_code_sha256": "2e4fbd2c53ddc9216ad62029404997863cf1b792717da62f21de033a84fb311e"
+    },
+    "spearman_ic": {
+      "contract_hash": "0889972bc438620f",
+      "implementation": "quant_evaluator.metrics.ic.compute_daily_ic",
+      "loaded_code_sha256": null
+    },
+    "staleness": {
+      "contract_hash": "431aac845b1751dc",
+      "implementation": "quant_evaluator.metrics.data_quality.compute_staleness",
+      "loaded_code_sha256": "fdde046a415e863972f25afa46f953a8d2153ed66e627a196b25deed2659558c"
+    },
+    "subsample_stability": {
+      "contract_hash": "cd2985f48610d725",
+      "implementation": "subsample_stability",
+      "loaded_code_sha256": "9e7421ed10f296a1fc0edb8a22bf87ba771ab52afc80bc2e786bad41491e7322"
+    },
+    "tail_vs_middle_contrast": {
+      "contract_hash": "75127025146c50a3",
+      "implementation": "quant_evaluator.metrics.shape_evidence.compute_tail_vs_middle_contrast",
+      "loaded_code_sha256": "3e06c10a9fb52d80ae519a91e7cf6bfab5256ab22671a382fbcc7e240f73f9a8"
+    },
+    "tie_ratio": {
+      "contract_hash": "93f9246d715f474b",
+      "implementation": "quant_evaluator.metrics.data_quality.compute_tie_ratio",
+      "loaded_code_sha256": "1b5673cae00c1185e0c6d8374144cb3b058f0105ce6b7750dcb96856599766fb"
+    },
+    "time_to_recovery": {
+      "contract_hash": "5655220e4f8a52ac",
+      "implementation": "quant_evaluator.metrics.underwater.compute_time_to_recovery",
+      "loaded_code_sha256": "f9964e8298550820023df804ac8afdcdd99f4c0b3cedb7e715cd53194bfe978e"
+    },
+    "top_quantile_cliff": {
+      "contract_hash": "db034c2d0c0fd3b2",
+      "implementation": "quant_evaluator.metrics.quantile_shape.compute_top_quantile_cliff",
+      "loaded_code_sha256": "5b18ffe7e7b9a77de944f515fb9912d112fcc41b0262409a7f2923ec004f92fc"
+    },
+    "top_quantile_cliff_robust": {
+      "contract_hash": "4d95c4356f769ad1",
+      "implementation": "quant_evaluator.metrics.shape_evidence.compute_top_quantile_cliff_robust",
+      "loaded_code_sha256": "0cdfd3df88916b7398d0f2617f9aadcf6146e7f313d3c6aad0516a654c3431af"
+    },
+    "top_tail_slope": {
+      "contract_hash": "8a97dde64d9820e1",
+      "implementation": "quant_evaluator.metrics.shape_evidence.compute_top_tail_slope",
+      "loaded_code_sha256": "5a2520ac001aa90d30ab8140ba19de9ce0cfea029730f3fe40a06efc5297b661"
+    },
+    "tracking_error": {
+      "contract_hash": "09e0bcef68398100",
+      "implementation": "quant_evaluator.metrics.long_only.compute_tracking_error",
+      "loaded_code_sha256": "9c6e5b01d15e734b57658284b9f3e6496f97f966321aebf751804b3dec8e4124"
+    },
+    "tradable_coverage": {
+      "contract_hash": "f013fdc1537fe739",
+      "implementation": "quant_evaluator.metrics.data_quality.compute_tradable_coverage",
+      "loaded_code_sha256": "be87ce9e6130a19edbf9b6a03bab15a6afe1b508eb68b9f30a9c496e58f2f5ac"
+    },
+    "train_predictive_dimension": {
+      "contract_hash": "a3cefdf91bcc7506",
+      "implementation": "quant_evaluator.metrics.generalization_evidence.train_predictive_dimension",
+      "loaded_code_sha256": "280c78437a08fb3048b6f510f5fe4eed30fe955541ef47cf3bf7f603556c19a6"
+    },
+    "train_validation_icir_delta": {
+      "contract_hash": "9ac216392077e2bf",
+      "implementation": "quant_evaluator.metrics.generalization_evidence.compute_generalization_deltas",
+      "loaded_code_sha256": "f16724a978b833ce2421623ff96c9a08e068402c3cdbb165cda40e283cb9bfe7"
+    },
+    "train_validation_rankic_delta": {
+      "contract_hash": "9ac216392077e2bf",
+      "implementation": "quant_evaluator.metrics.generalization_evidence.compute_generalization_deltas",
+      "loaded_code_sha256": "2363fc502e73bea938f7a3b4360eb784edb5b254918dc85f3f4d76ba72be5e07"
+    },
+    "train_validation_shape_delta": {
+      "contract_hash": "9ac216392077e2bf",
+      "implementation": "quant_evaluator.metrics.generalization_evidence.compute_generalization_deltas",
+      "loaded_code_sha256": "08546fbbe9fc2c838a3584dbe0259306aa836ba708c254f621dc0037cf95f1e2"
+    },
+    "train_validation_sharpe_delta": {
+      "contract_hash": "9ac216392077e2bf",
+      "implementation": "quant_evaluator.metrics.generalization_evidence.compute_generalization_deltas",
+      "loaded_code_sha256": "fbdedf6937b9f429144e7a5ce0bdb0f763e5345b0fb5766827451d5c579f5150"
+    },
+    "turnover": {
+      "contract_hash": "10de4146d82c62ea",
+      "implementation": "turnover",
+      "loaded_code_sha256": "be27483cb5d88c01a21533a224a590e31eede6b5507bb2c5eda4d117d5d8b5b1"
+    },
+    "turnover_adjusted_ic": {
+      "contract_hash": "8ff0a6233b91e73f",
+      "implementation": "quant_evaluator.metrics.turnover.compute_turnover_contribution",
+      "loaded_code_sha256": null
+    },
+    "turnover_cost": {
+      "contract_hash": "41ac237b6f2ab524",
+      "implementation": "quant_evaluator.metrics.turnover_cost.compute_turnover_cost",
+      "loaded_code_sha256": "a13a816a459cc9322f16673bc8eba02c2cf1d58cf7ed2879c457c6c52d4ebb35"
+    },
+    "turnover_rate": {
+      "contract_hash": "80e7924960f10614",
+      "implementation": "quant_evaluator.metrics.turnover.compute_turnover",
+      "loaded_code_sha256": null
+    },
+    "turnover_stability": {
+      "contract_hash": "80e7924960f10614",
+      "implementation": "quant_evaluator.metrics.turnover.compute_turnover",
+      "loaded_code_sha256": null
+    },
+    "u_shape_score": {
+      "contract_hash": "4a12f2596ba9c0dd",
+      "implementation": "quant_evaluator.metrics.shape_evidence.compute_u_shape_score",
+      "loaded_code_sha256": "b39a0dc3b3b37a5c70a9498d4e9055e36069e462c2b57c10ce53a895af1694e8"
+    },
+    "universe_churn": {
+      "contract_hash": "af1642c91a43e7ee",
+      "implementation": "quant_evaluator.metrics.data_quality.compute_universe_churn",
+      "loaded_code_sha256": "8cb19cc8e1bcd44cbecd243bca28e7f51d513e250085dbfd20f47512da5e6537"
+    },
+    "validation_predictive_dimension": {
+      "contract_hash": "af1412359e7fbff4",
+      "implementation": "quant_evaluator.metrics.generalization_evidence.validation_predictive_dimension",
+      "loaded_code_sha256": "96f3c55be34362a3bf2a087083b5316b5959227086ef0200e8d5ab58b6f192a4"
+    },
+    "validation_retention": {
+      "contract_hash": "627c0f314548383f",
+      "implementation": "quant_evaluator.metrics.generalization_evidence.compute_validation_retention_array",
+      "loaded_code_sha256": "bf8f4ea085e829fdd08f33ad79699233bbc4b942c461a135919326466a7cd0ac"
+    },
+    "var_95": {
+      "contract_hash": "795e62000ee54c05",
+      "implementation": "quant_evaluator.metrics.risk.var_cvar.compute_var",
+      "loaded_code_sha256": null
+    },
+    "var_99": {
+      "contract_hash": "795e62000ee54c05",
+      "implementation": "quant_evaluator.metrics.risk.var_cvar.compute_var",
+      "loaded_code_sha256": null
+    },
+    "volatility_exposure": {
+      "contract_hash": "68fb6c231f56fe16",
+      "implementation": "quant_evaluator.metrics.exposure_evidence.compute_volatility_exposure",
+      "loaded_code_sha256": "e6f3ca2ed34f0cc1d5df2d85c4634a6a43b99d809dacfd613f4d93defe8eb335"
+    },
+    "win_rate": {
+      "contract_hash": "a88fd5c534fa0f4e",
+      "implementation": "quant_evaluator.metrics.portfolio_stats.compute_win_rate",
+      "loaded_code_sha256": "9fc99360274a93522887e74f35f2dd08d42d2a944b733bf6c8dee5573129428b"
+    },
+    "worst_12m": {
+      "contract_hash": "bf89b353c03fe645",
+      "implementation": "quant_evaluator.metrics.underwater.compute_worst_period_return",
+      "loaded_code_sha256": "e32e9dd8bc7e633af86653eca84906426b2ee3f580ce26d4ea5962983a39b18f"
+    },
+    "worst_calendar_month": {
+      "contract_hash": "98c2d9ab72bb0f01",
+      "implementation": "quant_evaluator.metrics.calendar_returns.compute_worst_calendar_month",
+      "loaded_code_sha256": "9d1ec055a8141048cb962ff6ea3a3ca37c7d6abc7002b7a472ab7a09045c4e11"
+    },
+    "worst_calendar_quarter": {
+      "contract_hash": "d37221acf4396c86",
+      "implementation": "quant_evaluator.metrics.calendar_returns.compute_worst_calendar_quarter",
+      "loaded_code_sha256": "ff57a5f5deb453c3f26f720956ddec4e2a513507bccf79105fdd8c507feb23a1"
+    },
+    "worst_calendar_year": {
+      "contract_hash": "9b1a182dddc696a7",
+      "implementation": "quant_evaluator.metrics.calendar_returns.compute_worst_calendar_year",
+      "loaded_code_sha256": "ece2c2360b9abbd3b851d00362996b4469dca920a6d789871af225a8f1265c0e"
+    },
+    "worst_month": {
+      "contract_hash": "bf89b353c03fe645",
+      "implementation": "quant_evaluator.metrics.underwater.compute_worst_period_return",
+      "loaded_code_sha256": "e32e9dd8bc7e633af86653eca84906426b2ee3f580ce26d4ea5962983a39b18f"
+    },
+    "worst_quarter": {
+      "contract_hash": "bf89b353c03fe645",
+      "implementation": "quant_evaluator.metrics.underwater.compute_worst_period_return",
+      "loaded_code_sha256": "e32e9dd8bc7e633af86653eca84906426b2ee3f580ce26d4ea5962983a39b18f"
+    },
+    "worst_quarter_rank_ic": {
+      "contract_hash": "d149c35137497c47",
+      "implementation": "quant_evaluator.metrics.predictive.compute_worst_quarter_rank_ic",
+      "loaded_code_sha256": "be188a9220dfcb611cfca7132e190dc4b856d1814d2ac5750a0ed2e3d2a24337"
+    },
+    "worst_rolling_21d": {
+      "contract_hash": "9cdb2181f1d3b20a",
+      "implementation": "quant_evaluator.metrics.calendar_returns.compute_worst_rolling_return",
+      "loaded_code_sha256": "f2758cff5e29405073cb0f433366e8586e2ee870dd275d0eb0f7e4ec9465e4fa"
+    },
+    "worst_rolling_252d": {
+      "contract_hash": "9cdb2181f1d3b20a",
+      "implementation": "quant_evaluator.metrics.calendar_returns.compute_worst_rolling_return",
+      "loaded_code_sha256": "f2758cff5e29405073cb0f433366e8586e2ee870dd275d0eb0f7e4ec9465e4fa"
+    },
+    "worst_rolling_63d": {
+      "contract_hash": "9cdb2181f1d3b20a",
+      "implementation": "quant_evaluator.metrics.calendar_returns.compute_worst_rolling_return",
+      "loaded_code_sha256": "f2758cff5e29405073cb0f433366e8586e2ee870dd275d0eb0f7e4ec9465e4fa"
+    },
+    "worst_year_rank_ic": {
+      "contract_hash": "65dc498a09ec27a7",
+      "implementation": "quant_evaluator.metrics.predictive.compute_worst_year_rank_ic",
+      "loaded_code_sha256": "2c709f59005956205672872146e3d266f7f74f3fbf93b7ecd2cde58ce0439685"
+    },
+    "year_consistency": {
+      "contract_hash": "d070eca0c2b9ef7f",
+      "implementation": "quant_evaluator.metrics.stability_regime.compute_year_consistency",
+      "loaded_code_sha256": "2e8d2df0f2fc0559af8aa0bd4899ad359edd75fd5231ba4c9e83e4a508f2d059"
+    },
+    "yearly_rank_ic": {
+      "contract_hash": "bcd69542445832f8",
+      "implementation": "quant_evaluator.metrics.predictive.compute_yearly_rank_ic",
+      "loaded_code_sha256": "74645f63c6c7f7824c8f9b161368e60abc21c4a9a6f3a443230abe00951cc700"
+    }
+  },
+  "scope": "fresh isolated probe only",
+  "import_errors": []
+}

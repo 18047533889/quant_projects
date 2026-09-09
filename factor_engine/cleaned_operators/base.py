@@ -415,12 +415,15 @@ class ParamSpec:
 
 # Review-8 #462: relational expressions are parsed with :mod:`ast` and executed
 # by a restricted interpreter — never free-form ``eval``.  The allowed grammar
-# is: numeric literals, parameter names, arithmetic (``+ - * / **``), comparison
-# (``< <= > >= == !=``), boolean (``and/or/not``) and unary sign.  Function
+# is: numeric/None literals, parameter names, arithmetic (``+ - * / **``),
+# comparison (``< <= > >= == !=``, ``is/is not None``), boolean
+# (``and/or/not``), conditional expressions and unary sign.  Function
 # calls, attributes, subscripting, comprehensions and container literals are
 # rejected at parse time.  ``search`` grammar and runtime share this object.
 _ALLOWED_REL_BINOPS = (ast.Add, ast.Sub, ast.Mult, ast.Div, ast.FloorDiv, ast.Pow)
-_ALLOWED_REL_CMPOPS = (ast.Lt, ast.LtE, ast.Gt, ast.GtE, ast.Eq, ast.NotEq)
+_ALLOWED_REL_CMPOPS = (
+    ast.Lt, ast.LtE, ast.Gt, ast.GtE, ast.Eq, ast.NotEq, ast.Is, ast.IsNot,
+)
 _ALLOWED_REL_BOOLOPS = (ast.And, ast.Or)
 _ALLOWED_REL_UNARYOPS = (ast.USub, ast.UAdd, ast.Not)
 
@@ -454,6 +457,8 @@ def parse_relational_expression(expression: str) -> tuple[ast.AST, frozenset[str
                 referenced.add(node.id)
             continue
         if isinstance(node, ast.Constant):
+            if node.value is None:
+                continue
             if isinstance(node.value, (int, float)) and not isinstance(node.value, bool):
                 continue
             raise ValueError(
@@ -474,6 +479,8 @@ def parse_relational_expression(expression: str) -> tuple[ast.AST, frozenset[str
                     f"boolean operator {type(node.op).__name__}"
                 )
             continue
+        if isinstance(node, ast.IfExp):
+            continue
         if isinstance(node, ast.UnaryOp):
             if type(node.op) not in _ALLOWED_REL_UNARYOPS:
                 raise ValueError(
@@ -487,6 +494,17 @@ def parse_relational_expression(expression: str) -> tuple[ast.AST, frozenset[str
                     f"relational expression {expression!r} uses an unsupported "
                     f"comparison operator"
                 )
+            left_node = node.left
+            for op, right_node in zip(node.ops, node.comparators):
+                if isinstance(op, (ast.Is, ast.IsNot)):
+                    left_none = isinstance(left_node, ast.Constant) and left_node.value is None
+                    right_none = isinstance(right_node, ast.Constant) and right_node.value is None
+                    if not (left_none or right_none):
+                        raise ValueError(
+                            f"relational expression {expression!r} may use identity "
+                            "comparison only with None"
+                        )
+                left_node = right_node
             continue
         raise ValueError(
             f"relational expression {expression!r} uses unsupported node "
@@ -543,6 +561,13 @@ def _eval_rel_ast(node: ast.AST, ns: dict[str, Any]) -> Any:
                     return True
             return False
         raise ValueError("unsupported boolop")
+    if isinstance(node, ast.IfExp):
+        # Evaluate only the selected branch. Besides matching Python's
+        # conditional semantics, laziness lets optional-parameter guards
+        # protect arithmetic from ``None`` without weakening fail-closed
+        # behavior for the branch that is actually selected.
+        branch = node.body if _eval_rel_ast(node.test, ns) else node.orelse
+        return _eval_rel_ast(branch, ns)
     if isinstance(node, ast.Compare):
         left = _eval_rel_ast(node.left, ns)
         for op, comparator in zip(node.ops, node.comparators):
@@ -565,6 +590,12 @@ def _eval_rel_ast(node: ast.AST, ns: dict[str, Any]) -> Any:
                     return False
             elif optype is ast.NotEq:
                 if not (left != right):
+                    return False
+            elif optype is ast.Is:
+                if not (left is right):
+                    return False
+            elif optype is ast.IsNot:
+                if not (left is not right):
                     return False
             else:  # pragma: no cover - rejected at parse time
                 raise ValueError(f"unsupported comparison {optype.__name__}")

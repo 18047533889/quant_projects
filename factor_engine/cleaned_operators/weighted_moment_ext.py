@@ -103,28 +103,42 @@ def _ts_weighted_standardized_moment(
             # data (finite-observation trailing window).
             if np.any(~np.isfinite(ws)):
                 continue
-            valid = np.isfinite(xs)
+            valid = np.isfinite(xs) & (ws > 0.0)
             n = int(valid.sum())
             if n < min_samples:
                 continue
             xa = xs[valid].astype(float)
             wa = ws[valid].astype(float)
-            sw = float(wa.sum())
-            if sw <= _EPS:
-                continue
+            # Positive rescaling of weights cannot change support or moments.
+            wa /= float(np.max(wa))
+            wa /= float(wa.sum())
             # Effective sample size N_eff = (Σw)²/Σw²: a window where ~all weight
             # sits on one observation (N_eff ≈ 1) must not masquerade as an
             # n-sample moment estimate.
-            n_eff = (sw * sw) / (float(np.sum(wa * wa)) + _EPS)
+            n_eff = 1.0 / float(np.dot(wa, wa))
             if n_eff < float(min_samples) - 1e-9:
                 continue
-            mu = float((wa * xa).sum() / sw)
-            dev = xa - mu
-            var_w = float((wa * dev * dev).sum() / sw)
-            if var_w <= _EPS:
+            # Prefer subtraction before scaling to retain representable small
+            # differences around a large common offset. Normalize first only
+            # when opposite-sign extremes would overflow the subtraction.
+            with np.errstate(over="ignore", invalid="ignore"):
+                normalized = xa - xa[0]
+            if not np.all(np.isfinite(normalized)):
+                normalized = xa / float(np.max(np.abs(xa)))
+                normalized -= normalized[0]
+            magnitude = float(np.max(np.abs(normalized)))
+            if magnitude == 0.0:
                 continue
-            sigma = np.sqrt(var_w)
-            m_p = float((wa * dev**p).sum() / sw) / (sigma**p + _EPS)
+            normalized /= magnitude
+            dev = normalized - float(np.dot(wa, normalized))
+            spread = float(np.max(np.abs(dev)))
+            if spread == 0.0:
+                continue
+            dev /= spread
+            var_w = float(np.dot(wa, dev * dev))
+            if var_w <= 0.0:
+                continue
+            m_p = float(np.dot(wa, dev**p)) / var_w**(p / 2.0)
             out[r, c] = m_p
     return _frame_like(x, out)
 

@@ -95,6 +95,18 @@ def _qn_scale(v: np.ndarray) -> float:
     return float(_QN_D_INF * _qn_dn(n) * order_stat)
 
 
+def _finite_midpoint(a, b):
+    """Finite binary64 midpoint, avoiding both overflow and tiny-value halving."""
+    a, b = np.broadcast_arrays(np.asarray(a, dtype=float), np.asarray(b, dtype=float))
+    direct = ((np.signbit(a) != np.signbit(b)) |
+              ((np.abs(a) <= np.finfo(float).max / 2) &
+               (np.abs(b) <= np.finfo(float).max / 2)))
+    result = np.empty(a.shape, dtype=float)
+    result[direct] = (a[direct] + b[direct]) / 2
+    result[~direct] = a[~direct] / 2 + b[~direct] / 2
+    return result
+
+
 def _hodges_lehmann(v: np.ndarray) -> float:
     n = v.shape[0]
     if n < 2:
@@ -104,9 +116,13 @@ def _hodges_lehmann(v: np.ndarray) -> float:
     idx = 0
     for i in range(n):
         seg = v[i:]
-        mids[idx : idx + seg.shape[0]] = (seg + v[i]) / 2.0
+        mids[idx : idx + seg.shape[0]] = _finite_midpoint(seg, v[i])
         idx += seg.shape[0]
-    return float(np.median(mids))
+    middle = mids.size // 2
+    if mids.size % 2:
+        return float(np.partition(mids, middle)[middle])
+    central = np.partition(mids, (middle - 1, middle))[middle - 1:middle + 1]
+    return float(_finite_midpoint(central[0], central[1]))
 
 
 def _ts_qn_scale(x: pd.DataFrame, window: int = 60, min_periods: int = 8) -> pd.DataFrame:

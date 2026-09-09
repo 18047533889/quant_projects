@@ -1126,7 +1126,7 @@ class Imag(SeriesOperator):
 # canonical=inv backend=pandas_numpy selected=inv source=math/elementary.py
 
 # helper for inv
-class Reciprocal(SeriesOperator):
+class _InvReciprocalBase(SeriesOperator):
     """倒数"""
 
     metadata = OperatorMetadata(
@@ -1143,7 +1143,7 @@ class Reciprocal(SeriesOperator):
         return 1 / x
 
 @register_operator(name="inv", category="math", business_category="elementwise_math", canonical="inv", source="factor_dsl_np")
-class Inv(Reciprocal):
+class Inv(_InvReciprocalBase):
     """倒数（inv的别名）"""
 
     metadata = OperatorMetadata(

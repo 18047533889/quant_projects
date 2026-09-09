@@ -47,6 +47,10 @@ level (``p / origin - 1`` and ``origin * (1 ± theta)``), so the input panel is
 declared ``input_units={"x": "price"}`` and the kernel FAILS CLOSED on any
 non-positive price (``<= 0``) instead of silently computing garbage from an
 arbitrary signed numeric field (returns, spreads).
+Validation scope is ATOMIC INPUT PANEL, not a per-row mask: adding any invalid
+price may reject the whole call. Prefix-causality describes accepted valid
+inputs only. This legacy rejection policy is preserved explicitly; it must not
+be silently replaced by a local-mask estimator in another backend.
 
 Initial-extrema seeding (review "Directional Change initial extrema"): the
 undecided state (before the first confirmation) tracks the pre-confirmation
@@ -89,7 +93,7 @@ def _metadata(
         return_type="series",
         tags=[
             "directional_change", "daily", "pit_safe", "causal", "typed_v2",
-            "deterministic", *extra_tags,
+            "deterministic", "validation_scope:atomic_input_panel", *extra_tags,
             f"signature:{','.join(params)}->series", f"domain:{domain}",
             f"unit:{unit}", f"cost:{cost}",
         ],

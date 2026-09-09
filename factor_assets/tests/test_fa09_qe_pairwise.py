@@ -69,7 +69,8 @@ def test_legacy_qe_similarity_consumer_refuses_aggregate_only_bypass():
 
     window = PairwiseWindowEvidence(
         "250d", -0.95, PairwiseMeasurementStatus.COMPUTED, 100, 25,
-        (4,) * 25, (-0.99, -0.90),
+        (4,) * 25, (-0.99, -0.90), start_index=0, end_index=25,
+        universe_ref="ASHARE", sample_ref="S",
     )
     typed = PairwiseCorrelationArtifact(
         "FX", "F1", -0.95, PairwiseMeasurementStatus.COMPUTED,

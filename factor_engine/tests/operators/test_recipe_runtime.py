@@ -5,6 +5,19 @@ from types import SimpleNamespace
 import pandas as pd
 import pytest
 
+
+@pytest.fixture(autouse=True)
+def _explicit_research_recipe_expansion(monkeypatch):
+    """Exercise recipe structure without claiming production certification."""
+    monkeypatch.setenv("FACTOR_ENGINE_EXPAND_RECIPE_USAGE", "1")
+
+
+def test_production_recipe_without_backend_evidence_fails_closed(monkeypatch) -> None:
+    monkeypatch.delenv("FACTOR_ENGINE_EXPAND_RECIPE_USAGE", raising=False)
+    monkeypatch.delenv("FACTOR_ENGINE_CERTIFY_RECIPE_EVIDENCE", raising=False)
+    with pytest.raises(RecipeExpansionError, match="three-backend production evidence"):
+        FactorRecipeRegistry.expand("momentum", {"x": "close", "window": 20})
+
 from factor_engine.backend.sql_pushdown.sql_registry import is_sql_capable
 from factor_engine.cleaned_operators import load_all
 from factor_engine.factor_recipes.compiler import RecipeCompiler, RecipeExpansionError

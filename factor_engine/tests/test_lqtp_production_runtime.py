@@ -193,7 +193,8 @@ def test_pandas_first_production_is_independent_from_duckdb() -> None:
     from factor_engine.cleaned_operators.operator_spec import build_operator_spec
     assert registry.get("ts_quantile", "pandas_numpy") is not None
     spec = build_operator_spec("ts_quantile")
-    assert spec is not None and spec.allow_in_production is True
+    assert spec is not None and spec.allow_in_production is False
+    assert spec.production_policy == "denied"
     assert backend_certification("ts_quantile").pandas_numpy == "production"
 
 
@@ -201,4 +202,5 @@ def test_recursive_sma_is_production_hardened() -> None:
     _loaded_registry()
     from factor_engine.cleaned_operators.operator_spec import build_operator_spec
     spec = build_operator_spec("ts_sma_cn")
-    assert spec is not None and spec.status == "production" and spec.allow_in_production is True
+    assert spec is not None and spec.status == "experimental"
+    assert spec.allow_in_production is False and spec.production_policy == "denied"

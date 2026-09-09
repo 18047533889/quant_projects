@@ -6,9 +6,14 @@
 from factor_engine import get_engine
 
 # factors 为已经构造好的 Factor 对象或其迭代器，可一次提交。
-with get_engine() as engine:
-    receipt = engine.run_many(factors)
-    max_attempts = engine.policy.work_item_max_attempts
+def materialize_all(factors):
+    with get_engine() as engine:
+        receipt = engine.run_many(factors)
+        return receipt, engine.policy.work_item_max_attempts
+
+# 独立脚本必须有 main guard；不要在模块导入时启动 spawn 工作进程。
+if __name__ == "__main__":
+    receipt, max_attempts = materialize_all(factors)
 ```
 
 不需要逐次指定后端、并行数或内存比例。默认策略为区域后端 `auto`、有效剩余内存的 80% 统一池。策略与接口回归通过不等于真实十万因子/GPU吞吐认证，也不承诺所有算子都有原生后端。

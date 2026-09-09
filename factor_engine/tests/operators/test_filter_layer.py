@@ -686,7 +686,8 @@ def test_super_smoother_registration_contract_metadata(registry):
     assert contract.role.value == "low_pass"
     assert contract.causal is True
     assert contract.stateful is True
-    assert contract.checkpointable is True
+    # No serializer/restore kernel exists yet; the runtime requires full replay.
+    assert contract.checkpointable is False
     assert contract.time_shard_safe is False
 
 
@@ -859,7 +860,8 @@ def test_kama_registration(registry):
     assert contract.role.value == "adaptive_low_pass"
     assert contract.causal is True
     assert contract.stateful is True
-    assert contract.checkpointable is True
+    # KAMA restoration needs both recursive output and ER input-ring history.
+    assert contract.checkpointable is False
 
 
 def test_kama_high_er_follows_fast(registry):

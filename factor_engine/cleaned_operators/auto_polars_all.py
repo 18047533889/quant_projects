@@ -193,7 +193,7 @@ class AtrPolars(SeriesOperator):
     backend="polars",
     source="auto_generated.polars_bridges",
 )
-class BetaPolars(SeriesOperator):
+class BetaCanonicalPolars(SeriesOperator):
     """Auto-generated Polars bridge for Beta.
 
     Execution delegated to polars_registry_bridge (long-table map_groups).
@@ -438,7 +438,7 @@ class HmaPolars(SeriesOperator):
     backend="polars",
     source="auto_generated.polars_bridges",
 )
-class InterceptPolars(SeriesOperator):
+class InterceptCanonicalPolars(SeriesOperator):
     """Auto-generated Polars bridge for Intercept.
 
     Execution delegated to polars_registry_bridge (long-table map_groups).
@@ -762,7 +762,7 @@ class RsxPolars(SeriesOperator):
     backend="polars",
     source="auto_generated.polars_bridges",
 )
-class ResidualPolars(SeriesOperator):
+class ResidualCanonicalPolars(SeriesOperator):
     """Auto-generated Polars bridge for Residual.
 
     Execution delegated to polars_registry_bridge (long-table map_groups).
@@ -816,7 +816,7 @@ class SkewPolars(SeriesOperator):
     backend="polars",
     source="auto_generated.polars_bridges",
 )
-class SlopePolars(SeriesOperator):
+class SlopeCanonicalPolars(SeriesOperator):
     """Auto-generated Polars bridge for Slope.
 
     Execution delegated to polars_registry_bridge (long-table map_groups).

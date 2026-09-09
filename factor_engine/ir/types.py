@@ -1972,6 +1972,15 @@ class ArgumentTypeContract:
 
 
 OPERATOR_INPUT_TYPE_CONTRACTS: dict[str, tuple[ArgumentTypeContract, ...]] = {
+    "ts_return_spectral_entropy": (
+        ArgumentTypeContract("x", frozenset({"ReturnDecimal"})),
+    ),
+    "ts_spectral_entropy": (
+        ArgumentTypeContract("x", frozenset({"ReturnDecimal"})),
+    ),
+    "ts_detrended_level_spectral_entropy": (
+        ArgumentTypeContract("x", frozenset({"PriceContinuous"})),
+    ),
     "dollar_volume_zscore": (
         ArgumentTypeContract("close", frozenset({
             "PriceRaw", "PriceContinuous", "PositiveLevel", "OfficialLimitPrice",

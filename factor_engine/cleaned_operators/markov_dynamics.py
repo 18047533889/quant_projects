@@ -145,6 +145,19 @@ _MIN_HISTORY_RELATIONAL = [
     )
 ]
 
+_AIS_PARAM_SPECS = {
+    **_MARKOV_PARAM_SPECS,
+    "bins": ParamSpec(dtype=int, choices=(2, 3), param_role=ParamRole.ESTIMATOR_RESOLUTION, searchable=False),
+    "history_length": ParamSpec(dtype=int, choices=(1, 2), param_role=ParamRole.MODEL_ORDER, searchable=False),
+}
+_AIS_RELATIONAL = [
+    RelationalParamSpec(
+        "window - history_length >= 5 * bins ** (history_length + 1)",
+        "AIS window cannot supply five observations per joint cell; got "
+        "window={window}, bins={bins}, history_length={history_length}",
+    )
+]
+
 
 def _metadata(
     name: str,
@@ -194,11 +207,16 @@ def _quantile_edges(values: np.ndarray, n_bins: int) -> np.ndarray:
     B = max(2, int(n_bins))
     if finite.size == 0:
         return np.linspace(-1.0, 1.0, B + 1)
-    raw = np.quantile(finite, np.linspace(0.0, 1.0, B + 1))
-    if np.ptp(raw) <= _EPS:
-        v = float(raw[0])
-        return np.linspace(v - 1.0, v + 1.0, B + 1)
-    return raw
+    lo = float(np.min(finite))
+    hi = float(np.max(finite))
+    if lo == hi:
+        return np.full(B + 1, lo, dtype=float)
+    # Quantile in a translated/scaled coordinate system.  This preserves rank
+    # resolution for ordinary small-unit data and avoids overflow for large offsets.
+    scale = hi - lo
+    normalized = (finite - lo) / scale
+    q = np.quantile(normalized, np.linspace(0.0, 1.0, B + 1))
+    return lo + scale * q
 
 
 def _bin_centers(values: np.ndarray, states: np.ndarray, edges: np.ndarray, B: int) -> np.ndarray:
@@ -506,6 +524,7 @@ def _run_kernel(
     min_count: int,
     min_state_support: int = 3,
     min_history: int = 10,
+    outputs: set[str] | frozenset[str] | None = None,
 ) -> dict[str, np.ndarray]:
     w = strict_int(window, "window", lower=2)
     b = strict_int(bins, "bins", lower=2)
@@ -532,18 +551,29 @@ def _run_kernel(
     if int(lag) not in _KM_LAG_GRID:
         raise ValueError(f"lag must be in {_KM_LAG_GRID}, got {lag!r}")
     cols = x.shape[1]
-    keys = ["state", "P", "counts", "pi", "pi_empirical", "N_obs", "D1", "D2", "centers", "total_trans", "edges", "n_states_obs"]
-    gathered: dict[str, list[np.ndarray]] = {k: [] for k in keys}
+    all_keys = frozenset({
+        "state", "P", "counts", "pi", "pi_empirical", "N_obs", "D1", "D2",
+        "centers", "total_trans", "edges", "n_states_obs",
+    })
+    selected = all_keys if outputs is None else frozenset(outputs)
+    unknown = selected - all_keys
+    if unknown:
+        raise ValueError(f"unknown state-dynamics outputs: {sorted(unknown)}")
+    if not selected:
+        return {}
+    # A15: materialize only consumer-selected tensors across columns.  The full
+    # per-column kernel result is short-lived, so scalar consumers no longer
+    # retain T x N x B^2 arrays for P/N_obs they never read.
+    gathered: dict[str, list[np.ndarray]] = {key: [] for key in selected}
     xv = x.to_numpy(dtype=float)
     for c in range(cols):
-        res = _state_dynamics_series(xv[:, c], w, b, lg, mc, mss, mh)
-        for k in keys:
-            gathered[k].append(res[k])
+        column_result = _state_dynamics_series(xv[:, c], w, b, lg, mc, mss, mh)
+        for key in selected:
+            gathered[key].append(column_result[key])
     out: dict[str, np.ndarray] = {}
-    for k in keys:
-        arrs = gathered[k]
-        # 1-D per column (state, total_trans) -> (n, cols); 2-D/3-D -> stack axis 1.
-        out[k] = np.column_stack(arrs) if arrs[0].ndim == 1 else np.stack(arrs, axis=1)
+    for key in selected:
+        arrs = gathered[key]
+        out[key] = np.column_stack(arrs) if arrs[0].ndim == 1 else np.stack(arrs, axis=1)
     return out
 
 
@@ -613,7 +643,7 @@ class TsMarkovPersistence(SeriesOperator):
         self, x: pd.DataFrame, window: int = 60, bins: int = 3, lag: int = 1, min_count: int = 3,
         min_state_support: int = 3, min_history: int = 10, **_: Any
     ) -> pd.DataFrame:
-        res = _run_kernel(x, window, bins, lag, min_count, min_state_support, min_history)
+        res = _run_kernel(x, window, bins, lag, min_count, min_state_support, min_history, outputs={"state", "P", "counts", "N_obs", "n_states_obs"})
         xv = x.to_numpy(dtype=float)
         cols = x.shape[1]
         mss = strict_int(min_state_support, "min_state_support", lower=1)
@@ -692,7 +722,7 @@ class TsMarkovStateEntropy(SeriesOperator):
         self, x: pd.DataFrame, window: int = 60, bins: int = 3, lag: int = 1, min_count: int = 3,
         min_state_support: int = 3, min_history: int = 10, **_: Any
     ) -> pd.DataFrame:
-        res = _run_kernel(x, window, bins, lag, min_count, min_state_support, min_history)
+        res = _run_kernel(x, window, bins, lag, min_count, min_state_support, min_history, outputs={"state", "P", "counts", "N_obs", "n_states_obs"})
         xv = x.to_numpy(dtype=float)
         cols = x.shape[1]
         b = strict_int(bins, "bins", lower=2)
@@ -768,7 +798,7 @@ class TsMarkovTransitionSurprisal(SeriesOperator):
         self, x: pd.DataFrame, window: int = 60, bins: int = 3, lag: int = 1, min_count: int = 3,
         min_state_support: int = 3, min_history: int = 10, **_: Any
     ) -> pd.DataFrame:
-        res = _run_kernel(x, window, bins, lag, min_count, min_state_support, min_history)
+        res = _run_kernel(x, window, bins, lag, min_count, min_state_support, min_history, outputs={"edges", "P", "counts", "N_obs", "n_states_obs"})
         xv = x.to_numpy(dtype=float)
         cols = x.shape[1]
         lg = strict_int(lag, "lag", lower=1)
@@ -853,7 +883,7 @@ class TsMarkovEntropyProduction(SeriesOperator):
         self, x: pd.DataFrame, window: int = 60, bins: int = 3, lag: int = 1, min_periods: int = 5,
         min_history: int = 10, **_: Any
     ) -> pd.DataFrame:
-        res = _run_kernel(x, window, bins, lag, 1, 3, min_history)
+        res = _run_kernel(x, window, bins, lag, 1, 3, min_history, outputs={"P", "pi", "N_obs", "total_trans", "n_states_obs"})
         cols = x.shape[1]
         mp = strict_int(min_periods, "min_periods", lower=1)
         out = np.column_stack([_entropy_production_series(res, c, mp) for c in range(cols)])
@@ -922,7 +952,7 @@ class TsKramersMoyalLocalStability(SeriesOperator):
         self, x: pd.DataFrame, window: int = 60, bins: int = 5, lag: int = 1, min_count: int = 3,
         min_state_support: int = 3, min_history: int = 10, **_: Any
     ) -> pd.DataFrame:
-        res = _run_kernel(x, window, bins, lag, min_count, min_state_support, min_history)
+        res = _run_kernel(x, window, bins, lag, min_count, min_state_support, min_history, outputs={"P", "D1", "centers", "state", "counts"})
         cols = x.shape[1]
         mss = strict_int(min_state_support, "min_state_support", lower=1)
         out = np.column_stack([_local_stability_series(res, c, mss) for c in range(cols)])
@@ -1014,8 +1044,8 @@ class TsActiveInformationStorage(SeriesOperator):
         ["x", "window", "bins", "history_length", "min_history"],
         unit="nats",
         cost=7,
-        relational_specs=_MIN_HISTORY_RELATIONAL,
-        param_specs=_MARKOV_PARAM_SPECS,
+        relational_specs=_MIN_HISTORY_RELATIONAL + _AIS_RELATIONAL,
+        param_specs=_AIS_PARAM_SPECS,
     )
 
     def _calculate_series(
@@ -1131,7 +1161,7 @@ class TsMarkovCommittor(SeriesOperator):
         self, x: pd.DataFrame, window: int = 60, bins: int = 3, lag: int = 1, min_count: int = 3,
         min_state_support: int = 3, min_history: int = 10, **_: Any
     ) -> pd.DataFrame:
-        res = _run_kernel(x, window, bins, lag, min_count, min_state_support, min_history)
+        res = _run_kernel(x, window, bins, lag, min_count, min_state_support, min_history, outputs={"P", "state", "counts", "N_obs", "n_states_obs"})
         cols = x.shape[1]
         mss = strict_int(min_state_support, "min_state_support", lower=1)
         out = np.column_stack([_committor_series(res, c, mss) for c in range(cols)])
@@ -1236,7 +1266,7 @@ class TsMarkovMeanFirstPassageTime(SeriesOperator):
         min_count: int = 3, min_state_support: int = 3, min_history: int = 10,
         target: str = "upper", **_: Any
     ) -> pd.DataFrame:
-        res = _run_kernel(x, window, bins, lag, min_count, min_state_support, min_history)
+        res = _run_kernel(x, window, bins, lag, min_count, min_state_support, min_history, outputs={"P", "state", "counts", "N_obs", "n_states_obs"})
         cols = x.shape[1]
         mss = strict_int(min_state_support, "min_state_support", lower=1)
         lg = strict_int(lag, "lag", lower=1)
@@ -1306,7 +1336,7 @@ class TsMarkovSpectralGap(SeriesOperator):
         self, x: pd.DataFrame, window: int = 120, bins: int = 3, lag: int = 1, min_periods: int = 5,
         min_history: int = 10, **_: Any
     ) -> pd.DataFrame:
-        res = _run_kernel(x, window, bins, lag, min_periods, 3, min_history)
+        res = _run_kernel(x, window, bins, lag, min_periods, 3, min_history, outputs={"P", "total_trans", "n_states_obs"})
         cols = x.shape[1]
         mp = strict_int(min_periods, "min_periods", lower=1)
         out = np.column_stack([_spectral_gap_series(res, c, mp) for c in range(cols)])
@@ -1376,7 +1406,7 @@ class TsMarkovStationarySurprisal(SeriesOperator):
         self, x: pd.DataFrame, window: int = 60, bins: int = 3, lag: int = 1, min_count: int = 3,
         min_state_support: int = 3, min_history: int = 10, **_: Any
     ) -> pd.DataFrame:
-        res = _run_kernel(x, window, bins, lag, min_count, min_state_support, min_history)
+        res = _run_kernel(x, window, bins, lag, min_count, min_state_support, min_history, outputs={"pi", "state", "counts", "N_obs", "n_states_obs"})
         cols = x.shape[1]
         mss = strict_int(min_state_support, "min_state_support", lower=1)
         out = np.column_stack([_stationary_surprisal_series(res, c, mss) for c in range(cols)])
@@ -1410,17 +1440,30 @@ def _equilibrium_distance_series(
         if not np.all(np.isfinite(d1)) or not np.all(np.isfinite(c)):
             continue
         B = d1.shape[0]
-        xstar = None
+        roots: list[float] = []
+        # Non-zero downward sign crossings are linearly interpolated.
         for m in range(B - 1):
             a, b = d1[m], d1[m + 1]
-            if np.isnan(a) or np.isnan(b):
-                continue
             if a > 0.0 and b < 0.0:
-                denom = a - b
-                xstar = c[m] + (c[m + 1] - c[m]) * (a / denom) if abs(denom) > _EPS else c[m]
-                break
-        if xstar is None:
-            continue  # no stable fixed point in window
+                roots.append(float(c[m] + (c[m + 1] - c[m]) * (a / (a - b))))
+        # Exact zero plateaus are stable only when bracketed by positive drift
+        # on the left and negative drift on the right.  Their root is the
+        # midpoint of the plateau centers; boundary plateaus are not identifiable.
+        m = 0
+        while m < B:
+            if d1[m] != 0.0:
+                m += 1
+                continue
+            start = m
+            while m + 1 < B and d1[m + 1] == 0.0:
+                m += 1
+            end = m
+            if start > 0 and end + 1 < B and d1[start - 1] > 0.0 and d1[end + 1] < 0.0:
+                roots.append(float(0.5 * (c[start] + c[end])))
+            m += 1
+        if not roots:
+            continue  # no identifiable stable fixed point in window
+        xstar = min(roots, key=lambda root: abs(root - c[k]))
         lo = max(0, t - w)
         past = series[lo:t]
         finite = past[np.isfinite(past)]
@@ -1472,7 +1515,7 @@ class TsKmEquilibriumDistance(SeriesOperator):
         self, x: pd.DataFrame, window: int = 60, bins: int = 5, lag: int = 1, min_count: int = 3,
         min_state_support: int = 3, min_history: int = 10, **_: Any
     ) -> pd.DataFrame:
-        res = _run_kernel(x, window, bins, lag, min_count, min_state_support, min_history)
+        res = _run_kernel(x, window, bins, lag, min_count, min_state_support, min_history, outputs={"state", "counts", "D1", "centers"})
         xv = x.to_numpy(dtype=float)
         cols = x.shape[1]
         w = strict_int(window, "window", lower=2)
@@ -1545,7 +1588,7 @@ class TsKmDiffusionGradient(SeriesOperator):
         self, x: pd.DataFrame, window: int = 60, bins: int = 5, lag: int = 1, min_count: int = 3,
         min_state_support: int = 3, min_history: int = 10, **_: Any
     ) -> pd.DataFrame:
-        res = _run_kernel(x, window, bins, lag, min_count, min_state_support, min_history)
+        res = _run_kernel(x, window, bins, lag, min_count, min_state_support, min_history, outputs={"state", "counts", "D2", "centers"})
         cols = x.shape[1]
         mss = strict_int(min_state_support, "min_state_support", lower=1)
         out = np.column_stack([_diffusion_gradient_series(res, c, mss) for c in range(cols)])
@@ -1599,9 +1642,9 @@ def _quasipotential_depth_series(res: dict[str, np.ndarray], col: int, min_state
         right = [m for m in maxs if m > well]
         levels: list[float] = []
         if left:
-            levels.append(float(max(U[m] for m in left)))
+            levels.append(float(U[max(left)]))
         if right:
-            levels.append(float(max(U[m] for m in right)))
+            levels.append(float(U[min(right)]))
         if not levels:
             continue
         depth = float(min(levels)) - float(U[well])
@@ -1641,7 +1684,7 @@ class TsKmQuasipotentialDepth(SeriesOperator):
         self, x: pd.DataFrame, window: int = 120, bins: int = 5, lag: int = 1, min_count: int = 3,
         min_state_support: int = 3, min_history: int = 10, **_: Any
     ) -> pd.DataFrame:
-        res = _run_kernel(x, window, bins, lag, min_count, min_state_support, min_history)
+        res = _run_kernel(x, window, bins, lag, min_count, min_state_support, min_history, outputs={"state", "counts", "D1", "D2", "centers"})
         cols = x.shape[1]
         mss = strict_int(min_state_support, "min_state_support", lower=1)
         out = np.column_stack([_quasipotential_depth_series(res, c, mss) for c in range(cols)])

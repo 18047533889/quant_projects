@@ -550,10 +550,12 @@ class FeatureBundle:
                     raise InvalidContractError(
                         f"missing_reason_plane.{name} shape must equal primary feature shape"
                     )
-            # Snapshot the authority object by reconstructing its immutable
-            # type; this prevents caller-owned aliases crossing the boundary.
+            # A caller-supplied duck type may skip every provenance invariant.
+            # Reconstruct the one DA authority, never the caller's constructor.
             try:
-                snap = type(plane)(
+                from data_access.core.missingness import MissingReasonPlane
+
+                snap = MissingReasonPlane(
                     reasons=plane.reasons,
                     original_missing=plane.original_missing,
                     filled=plane.filled,

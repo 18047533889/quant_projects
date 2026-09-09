@@ -36,3 +36,11 @@ awk '
 echo "==> installing $(grep -c '==' "$TMP_REQ") third-party lock deps (--require-hashes)"
 "$PY" -m pip install -q --require-hashes -r "$TMP_REQ"
 echo "==> lock deps installed"
+
+if [[ "${CI_TEST_DEPS:-0}" == "1" ]]; then
+  TEST_LOCK="$REPO/requirements/ci-test.txt"
+  test -f "$TEST_LOCK" || { echo "FATAL: CI test lock missing at $TEST_LOCK"; exit 2; }
+  echo "==> installing exact CI test deps"
+  "$PY" -m pip install -q -r "$TEST_LOCK"
+  "$PY" -m pytest --version
+fi

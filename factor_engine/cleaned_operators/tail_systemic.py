@@ -34,10 +34,65 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from factor_engine.cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
+from factor_engine.cleaned_operators.base import (
+    OperatorMetadata,
+    ParamRole,
+    ParamSpec,
+    RelationalParamSpec,
+    SeriesOperator,
+    register_operator,
+)
 from factor_engine.cleaned_operators.rolling_pack import frame_like, register_polars_udf
 
 _EPS = 1e-12
+
+
+def _tail_param_specs(*, include_lag: bool = False) -> dict[str, ParamSpec]:
+    specs = {
+        "x": ParamSpec(dtype=None, searchable=False),
+        "group_id": ParamSpec(dtype=None, searchable=False),
+        "window": ParamSpec(
+            dtype=int, min=5, default=120, history_semantics="max_rows",
+            history_formula="2 * (window - 1)", param_role=ParamRole.HORIZON,
+        ),
+        "quantile": ParamSpec(
+            dtype=float, min=np.nextafter(0.0, 1.0), max=0.5, default=0.1,
+            param_role=ParamRole.STATE_THRESHOLD,
+        ),
+        "side": ParamSpec(
+            dtype=str, choices=("lower", "upper"), default="lower",
+            param_role=ParamRole.POLICY,
+        ),
+        "min_periods": ParamSpec(
+            dtype=int, min=1, default=10, searchable=False,
+            param_role=ParamRole.SUPPORT_POLICY,
+        ),
+        "prior_threshold": ParamSpec(
+            dtype=bool, default=True, searchable=False,
+            param_role=ParamRole.SUPPORT_POLICY,
+        ),
+    }
+    if include_lag:
+        specs.update({
+            "lag": ParamSpec(
+                dtype=int, min=1, default=1, history_semantics="exact_rows",
+                param_role=ParamRole.HORIZON,
+            ),
+            "min_conditioning_events": ParamSpec(
+                dtype=int, min=1, default=5, searchable=False,
+                param_role=ParamRole.SUPPORT_POLICY,
+            ),
+        })
+    return specs
+
+
+_PRIOR_SUPPORT_RELATION = RelationalParamSpec(
+    expression="not prior_threshold or min_periods <= window - 1",
+    message=(
+        "INFEASIBLE_PARAMETER_DOMAIN: prior_threshold=True requires "
+        "min_periods <= window - 1"
+    ),
+)
 
 
 def _metadata(
@@ -184,6 +239,8 @@ class GroupTailCentrality(SeriesOperator):
         unit="probability",
         cost=6,
     )
+    metadata.param_specs = _tail_param_specs()
+    metadata.relational_specs = [_PRIOR_SUPPORT_RELATION]
 
     def _calculate_series(
         self,
@@ -210,6 +267,11 @@ class GroupTailCentrality(SeriesOperator):
             raise ValueError("group_tail_centrality requires window >= 5")
         if not 1 <= mp <= w:
             raise ValueError("group_tail_centrality requires 1 <= min_periods <= window")
+        if bool(prior_threshold) and mp > w - 1:
+            raise ValueError(
+                "INFEASIBLE_PARAMETER_DOMAIN: prior_threshold=True requires "
+                "min_periods <= window - 1"
+            )
         return frame_like(
             x,
             _tail_centrality_series(x.to_numpy(dtype=float), group_id.to_numpy(dtype=object), w, q, side, mp, bool(prior_threshold)),
@@ -349,6 +411,14 @@ class GroupTailLeadScore(SeriesOperator):
         unit="signed_probability_difference",
         cost=7,
     )
+    metadata.param_specs = _tail_param_specs(include_lag=True)
+    metadata.relational_specs = [
+        _PRIOR_SUPPORT_RELATION,
+        RelationalParamSpec(
+            expression="window >= lag + 2",
+            message="INFEASIBLE_PARAMETER_DOMAIN: window must be >= lag + 2",
+        ),
+    ]
 
     def _calculate_series(
         self,
@@ -378,6 +448,11 @@ class GroupTailLeadScore(SeriesOperator):
             raise ValueError("group_tail_lead_score requires window >= lag + 2")
         if not 1 <= mp <= w:
             raise ValueError("group_tail_lead_score requires 1 <= min_periods <= window")
+        if bool(prior_threshold) and mp > w - 1:
+            raise ValueError(
+                "INFEASIBLE_PARAMETER_DOMAIN: prior_threshold=True requires "
+                "min_periods <= window - 1"
+            )
         if mce < 1:
             raise ValueError("group_tail_lead_score requires min_conditioning_events >= 1")
         return frame_like(

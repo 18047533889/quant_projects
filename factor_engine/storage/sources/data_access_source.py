@@ -734,6 +734,11 @@ class ApprovedSnapshotMismatch(ValueError):
     reason_code = "APPROVED_SOURCE_SNAPSHOT_MISMATCH"
 
 
+# Persistent source identity and warm-cache epoch. Increment only when unit
+# transformation semantics change; this invalidates the affected source rather
+# than flushing unrelated process caches.
+UNIT_NORMALIZATION_ALGORITHM_ID = "fe-unit-normalization-v2-single-application"
+
 class DataAccessSource(DataSource):
     """FactorEngine DataAccess source with snapshot-bound caches and preflight."""
 
@@ -891,6 +896,7 @@ class DataAccessSource(DataSource):
         self._cache_broker = _data_cache_authority()
         self._max_cache_bytes = _default_data_cache_budget(self._cache_broker)
         self._cache_bytes = 0
+        self._cache_normalization_identity = UNIT_NORMALIZATION_ALGORITHM_ID
         self._cache_finalizers: dict[tuple[int, str], tuple[weakref.finalize, ...]] = {}
         self._live_cache_leases: dict[int, Any] = {}
         self._closed = False
@@ -1864,6 +1870,7 @@ class DataAccessSource(DataSource):
                 "manifest_token": self._manifest_token,
                 "plans": plans,
                 "params": dict(self.params),
+                "unit_normalization_algorithm": UNIT_NORMALIZATION_ALGORITHM_ID,
             },
             sort_keys=True,
             default=str,
@@ -2468,6 +2475,10 @@ class DataAccessSource(DataSource):
 
     def load_columns(self, names: list[str]) -> dict[str, Any]:
         self.refresh_snapshot()
+        with self._cache_lock:
+            if self._cache_normalization_identity != UNIT_NORMALIZATION_ALGORITHM_ID:
+                self._clear_cache_locked(reset_snapshot=False)
+                self._cache_normalization_identity = UNIT_NORMALIZATION_ALGORITHM_ID
         # Resolve cache hits into request-owned strong references before doing I/O.
         # Cache eviction may remove the mapping, but cannot invalidate a value that
         # this request (and its buffer-backed lease finalizers) still owns.
@@ -2504,20 +2515,27 @@ class DataAccessSource(DataSource):
             physical = list(physical) + [lqtp_extra_factor]
         store = _get_store()
         ds, normalize, unit = self._adapter_options(store)
+        # Freeze the actual representation for this request. Approved lazy reads
+        # stay governed by ScanHandle and are identity-checked before and after
+        # collection. Numeric normalization follows this actual representation.
+        use_lazy_read = bool(
+            self._lazy_scan
+            and self.instrument_filter != []
+        )
         logger.info(
             "data_access dataset=%s columns=%s time_range=%s lazy=%s",
             self.dataset,
             needed,
             self._time_range(),
-            self._lazy_scan and request_approved_digest is None,
+            use_lazy_read,
         )
         observed_snapshot_id = None
 
-        if self._lazy_scan and request_approved_digest is None:
-            # 显式 polars-lazy 优化（collect 前表达式仍在 DuckDB 内下推）
+        if use_lazy_read:
             from factor_engine.backend.polars_lazy import scan_dataset_columns
 
             previous_lazy_bundle = self._lazy_bundle
+            lazy_identity: dict[str, Any] = {}
             fetched = scan_dataset_columns(
                 store,
                 self.dataset,
@@ -2531,10 +2549,12 @@ class DataAccessSource(DataSource):
                 timestamp_unit=unit,
                 params=dict(self.params),
                 bundle=self._lazy_bundle,
-                # #收官轮 P0：read_mode / semantic_filters 贯穿到 DataAccess scan。
                 mode=self.read_mode,
                 filters=self.semantic_filters or None,
+                approved_content_digest=request_approved_digest,
+                identity_out=lazy_identity,
             )
+            observed_snapshot_id = lazy_identity.get("snapshot_id")
             if self._lazy_bundle is not None:
                 observed_snapshot_id = self._lazy_bundle.snapshot_id
                 if (
@@ -2662,7 +2682,9 @@ class DataAccessSource(DataSource):
                 raise ApprovedSnapshotMismatch(
                     "source snapshot changed before request results could be published"
                 )
-        self._normalize_contract_columns(fetched, needed)
+        self._normalize_contract_columns(
+            fetched, needed, units_normalized=not use_lazy_read,
+        )
         resolved.update((name, fetched[name]) for name in needed)
         with self._cache_lock:
             if getattr(self, "_approved_content_digest", None) != request_approved_digest:
@@ -2677,7 +2699,13 @@ class DataAccessSource(DataSource):
                 self._put_cache(self._column_cache, name, fetched[name])
         return {name: resolved[name] for name in names}
 
-    def _normalize_contract_columns(self, fetched: dict[str, Any], names: list[str]) -> None:
+    def _normalize_contract_columns(
+        self,
+        fetched: dict[str, Any],
+        names: list[str],
+        *,
+        units_normalized: bool | None = None,
+    ) -> None:
         """Normalize every registered logical field before it enters the cache.
 
         #9/#12（P0-11）：scale 归一化读取 ``_ensure_field_plans`` 产出的**同一个**
@@ -2696,6 +2724,12 @@ class DataAccessSource(DataSource):
         silently caching the raw vendor value (which would contaminate every
         downstream operator with a 10000× or 100× error).
         """
+        if units_normalized is None:
+            # Backward compatibility for direct private-method callers. All
+            # production read paths pass the actual request representation.
+            units_normalized = not self._lazy_scan
+        elif type(units_normalized) is not bool:
+            raise TypeError("units_normalized must be a bool")
         plans = self._ensure_field_plans(names)
 
         normalized: set[str] = set()
@@ -2707,7 +2741,7 @@ class DataAccessSource(DataSource):
                     # the catalog scale, so nothing to do.  Lazy scan path
                     # (``store.scan`` / ``scan_polars``) does NOT apply the output-layer
                     # unit normalization, so apply the catalog scale here.
-                    if self._lazy_scan and plan.is_scale_applicable:
+                    if not units_normalized and plan.is_scale_applicable:
                         fetched[name] = fetched[name] * float(plan.scale)
                     # #收官轮 P0：catalog 覆盖的字段一律进 ``normalized``。否则下方
                     # COS compatibility fallback 会把 A股 Return 再乘一次
@@ -2793,17 +2827,13 @@ class DataAccessSource(DataSource):
         if not names:
             return
         self.refresh_snapshot()
-        if self._lazy_scan and getattr(self, "_approved_content_digest", None) is None:
+        if self._lazy_scan:
             self._prefetch_lazy_bundle(names)
         else:
             self.load_columns(names)
 
     def _prefetch_lazy_bundle(self, names: list[str]) -> None:
-        # This legacy bundle has no exact ReadHandle content proof. Approved
-        # reads use the checked eager route, not an unverified lazy cache fill.
-        if getattr(self, "_approved_content_digest", None) is not None:
-            self.load_columns(names)
-            return
+        request_approved_digest = getattr(self, "_approved_content_digest", None)
         needed = [name for name in names if name not in self._column_cache]
         if not needed:
             return
@@ -2824,9 +2854,11 @@ class DataAccessSource(DataSource):
                     physical, output_names=output_names or None
                 )
                 observed_snapshot = self._lazy_bundle.snapshot_id
-                self._normalize_contract_columns(fetched, needed)
+                self._normalize_contract_columns(
+                    fetched, needed, units_normalized=False,
+                )
                 with self._cache_lock:
-                    if (getattr(self, "_approved_content_digest", None) is not None
+                    if (getattr(self, "_approved_content_digest", None) != request_approved_digest
                             or self._data_snapshot_id != observed_snapshot):
                         raise ApprovedSnapshotMismatch("source identity changed during lazy prefetch")
                     for name in needed:
@@ -2842,6 +2874,7 @@ class DataAccessSource(DataSource):
             time_column=ds.time_column,
             instrument_column=ds.instrument_column,
             time_range=self._time_range(),
+            approved_content_digest=request_approved_digest,
             instrument_filter=self.instrument_filter,
             output_names=merged_output or None,
             normalize_timestamp=normalize,
@@ -2862,9 +2895,11 @@ class DataAccessSource(DataSource):
         fetched = self._lazy_bundle.materialize_columns(
             physical, output_names=output_names or None
         )
-        self._normalize_contract_columns(fetched, needed)
+        self._normalize_contract_columns(
+            fetched, needed, units_normalized=False,
+        )
         with self._cache_lock:
-            if (getattr(self, "_approved_content_digest", None) is not None
+            if (getattr(self, "_approved_content_digest", None) != request_approved_digest
                     or self._data_snapshot_id != observed_snapshot):
                 raise ApprovedSnapshotMismatch("source identity changed during lazy prefetch")
             for name in needed:

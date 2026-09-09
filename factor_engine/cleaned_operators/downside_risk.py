@@ -7,13 +7,20 @@ daily-panel transforms.
 """
 from __future__ import annotations
 
+import hashlib
 import math
+from datetime import date, datetime
 from typing import Any
 
 import numpy as np
 import pandas as pd
 
-from factor_engine.cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
+from factor_engine.cleaned_operators.base import (
+    OperatorMetadata,
+    RelationalParamSpec,
+    SeriesOperator,
+    register_operator,
+)
 
 
 def _check_int(value: Any, name: str, minimum: int) -> int:
@@ -364,6 +371,27 @@ def _circular_block_permute(arr: np.ndarray, block: int, rng: np.random.Generato
     return np.concatenate([blocks[i] for i in order])[:n]
 
 
+def _stable_surrogate_seed(
+    user_seed: int,
+    absolute_time: Any,
+    security_key: Any,
+    canonical_identity: str,
+) -> int:
+    """Derive a process-independent RNG seed from the result-cell identity."""
+    digest = hashlib.sha256()
+    for value in (canonical_identity, int(user_seed), absolute_time, security_key):
+        if isinstance(value, (pd.Timestamp, np.datetime64, datetime, date)):
+            timestamp = pd.Timestamp(value)
+            token = f"datetime_ns:{timestamp.value}:{timestamp.tz!s}".encode("utf-8")
+        else:
+            token = (
+                f"{type(value).__module__}.{type(value).__qualname__}:{value!r}"
+            ).encode("utf-8")
+        digest.update(len(token).to_bytes(8, "big"))
+        digest.update(token)
+    return int.from_bytes(digest.digest()[:8], "big", signed=False)
+
+
 def _best_lag_corr_excess(
     x: np.ndarray,
     y: np.ndarray,
@@ -372,7 +400,7 @@ def _best_lag_corr_excess(
     max_lag: int,
     *,
     n_surrogates: int = 20,
-    seed: int = 42,
+    identity_seed: int,
     block_frac: float = 0.1,
 ) -> float:
     """max_real - E[max_surrogate] under a circular-block-permutation null.
@@ -380,8 +408,9 @@ def _best_lag_corr_excess(
     ``x`` is the leading/source series, ``y`` the trailing/target series.  The
     surrogate source is the longest trailing window of ``x`` any lag touches
     (``max_lag + window`` bars); each surrogate is a deterministic circular
-    block permutation of it (``block = ceil(0.1 * n)``, ``n_surrogates=20``,
-    per-row ``seed``).  Independent x,y -> excess ~ 0; a true lag dependence ->
+    block permutation of it (``block = ceil(0.1 * n)``, ``n_surrogates=20``).
+    Its RNG is bound to canonical/version, user seed, absolute time, and
+    security identity.  Independent x,y -> excess ~ 0; a true lag dependence ->
     the real peak survives the permutation while surrogate peaks do not ->
     excess > 0.
     """
@@ -392,7 +421,7 @@ def _best_lag_corr_excess(
     x_source = x[src_lo : row + 1]
     n = len(x_source)
     block = max(1, int(math.ceil(block_frac * n)))
-    rng = np.random.default_rng(seed + row)
+    rng = np.random.default_rng(identity_seed)
     surr_maxes = np.empty(n_surrogates, dtype=float)
     for j in range(n_surrogates):
         surr = _circular_block_permute(x_source, block, rng)
@@ -500,10 +529,46 @@ class TsBestLagCorrExcess(SeriesOperator):
         yv = y.to_numpy(dtype=float)
         rows, cols = xv.shape
         out = np.full((rows, cols), np.nan, dtype=float)
+        if y.index.has_duplicates:
+            raise ValueError("absolute time coordinate must be unique")
+        if y.columns.has_duplicates:
+            raise ValueError("security coordinate must be unique")
+        from factor_engine.backend.operator_semantic_version import versioned_name
+
+        canonical_identity = versioned_name("ts_best_lag_corr_excess")
         for col in range(cols):
             for row in range(rows):
-                out[row, col] = _best_lag_corr_excess(xv[:, col], yv[:, col], row, w, ml)
+                if y.index[row] is None or y.index[row] is pd.NaT:
+                    continue
+                identity_seed = _stable_surrogate_seed(
+                    42, y.index[row], y.columns[col], canonical_identity
+                )
+                out[row, col] = _best_lag_corr_excess(
+                    xv[:, col], yv[:, col], row, w, ml,
+                    identity_seed=identity_seed,
+                )
         return _frame_like(y, out)
+
+
+def _scaled_full_rank_rss(design: np.ndarray, response: np.ndarray) -> float | None:
+    """Return intercept-regression RSS using a scaled, full-rank SVD."""
+    yc = response - np.mean(response)
+    xc = design - np.mean(design, axis=0)
+    scales = np.linalg.norm(xc, axis=0)
+    if np.any(~np.isfinite(scales)) or np.any(scales == 0.0):
+        return None
+    z = xc / scales
+    try:
+        u, singular, _ = np.linalg.svd(z, full_matrices=False)
+    except np.linalg.LinAlgError:
+        return None
+    if singular.size != z.shape[1] or singular[0] <= 0.0:
+        return None
+    rank_tol = np.finfo(float).eps * max(z.shape) * singular[0]
+    if np.count_nonzero(singular > rank_tol) != z.shape[1]:
+        return None
+    residual = yc - u @ (u.T @ yc)
+    return float(residual @ residual)
 
 
 def _price_delay_model(
@@ -529,9 +594,7 @@ def _price_delay_model(
     y = stock[ts]
     bench_values = bench[ts]
     lagged = np.column_stack([bench[ts - lag] for lag in range(max_lag + 1)])
-    X_full = np.column_stack([np.ones(len(ts)), lagged])
-    X_restricted = np.column_stack([np.ones(len(ts)), bench_values])
-    valid = np.isfinite(y) & np.all(np.isfinite(X_full), axis=1)
+    valid = np.isfinite(y) & np.all(np.isfinite(lagged), axis=1)
     # R11 #162: the full model has ~max_lag+2 parameters; with N ~ P the in-sample
     # R² is mechanically inflated.  Require a real DOF margin (at least 2x the
     # parameter count) and a well-conditioned design before trusting the fit.
@@ -540,24 +603,16 @@ def _price_delay_model(
     if valid.sum() < required:
         return np.nan
     yv = y[valid]
-    xr = X_restricted[valid]
-    xf = X_full[valid]
+    xr = bench_values[valid, None]
+    xf = lagged[valid]
     sst = float(np.sum((yv - np.mean(yv)) ** 2))
     if sst <= 0.0:
         return np.nan
-    # Condition-number gate: a near-singular lagged design makes R²_full
-    # meaningless (exact collinearity between the restricted and lagged columns).
-    try:
-        cond = float(np.linalg.cond(xf))
-    except Exception:
-        cond = float("inf")
-    if not np.isfinite(cond) or cond > 1e10:
+    rss_r = _scaled_full_rank_rss(xr, yv)
+    rss_f = _scaled_full_rank_rss(xf, yv)
+    if rss_r is None or rss_f is None:
         return np.nan
-    beta_r, *_ = np.linalg.lstsq(xr, yv, rcond=None)
-    rss_r = float(np.sum((yv - xr @ beta_r) ** 2))
     r2_r = 1.0 - rss_r / sst
-    beta_f, *_ = np.linalg.lstsq(xf, yv, rcond=None)
-    rss_f = float(np.sum((yv - xf @ beta_f) ** 2))
     r2_f = 1.0 - rss_f / sst
     if r2_f <= 0.0:
         return np.nan
@@ -585,6 +640,13 @@ class TsPriceDelay(SeriesOperator):
         domain="price_volume",
         unit="ratio",
     )
+    metadata.relational_specs = [
+        RelationalParamSpec(
+            "window >= 2 * (max_lag + 2)",
+            "STATIC_DOMAIN_INFEASIBLE: window must be >= 2*(max_lag+2) "
+            "(window={window}, max_lag={max_lag})",
+        )
+    ]
 
     def _calculate_series(
         self,
@@ -601,6 +663,10 @@ class TsPriceDelay(SeriesOperator):
         mp = _check_int(min_periods, "min_periods", 3)
         if ml >= w:
             raise ValueError("max_lag must be < window")
+        if w < 2 * (ml + 2):
+            raise ValueError(
+                "STATIC_DOMAIN_INFEASIBLE: window must be >= 2*(max_lag+2)"
+            )
         if mp > w:
             raise ValueError("min_periods must be <= window")
         sv = stock_return.to_numpy(dtype=float)

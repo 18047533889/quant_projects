@@ -596,6 +596,7 @@ from factor_assets.contracts.factor_set import (  # noqa: E402
     FactorSetArtifact,
     FactorSetSpec,
 )
+from factor_assets.contracts import AssemblyPolicy  # noqa: E402
 from factor_assets.contracts.lifecycle import LifecycleState  # noqa: E402
 from factor_assets.contracts.lineage import LineageRef  # noqa: E402
 from factor_assets.selection import SelectionDecision, SelectionReason  # noqa: E402
@@ -648,6 +649,9 @@ def _decision(factor_id: str) -> SelectionDecision:
         policy_version="1.0",
         evidence_refs=("evidence-1",),
         gate_results=("gate-1",),
+        # Frozen Pareto fixture: dimensionless, higher-is-better quality.
+        # Missing values are rejected, never imputed.
+        metadata={"objectives": {"quality": 1.0}},
     )
 
 
@@ -682,8 +686,28 @@ class TestFactorSetAssemblyHashContract:
             pareto,
             [_asset("F1"), _asset("F2")],
             selection_decisions=[_decision("F1"), _decision("F2")],
+            assembly_policy=AssemblyPolicy(
+                "xpkg-pareto-quality-max-dimensionless-reject-missing",
+                "1.0",
+                required_objectives=("quality",),
+            ),
         )
         assert a.assembly_hash != b.assembly_hash
+
+    def test_pareto_policy_rejects_missing_required_objective(self):
+        missing = _decision("F2")
+        object.__setattr__(missing, "metadata", {"objectives": {}})
+        with pytest.raises(ValueError, match="no factor assets match"):
+            FactorSetAssembler().assemble(
+                _spec("S1", "pareto_front"),
+                [_asset("F2")],
+                selection_decisions=[missing],
+                assembly_policy=AssemblyPolicy(
+                    "xpkg-pareto-quality-max-dimensionless-reject-missing",
+                    "1.0",
+                    required_objectives=("quality",),
+                ),
+            )
 
     def test_deterministic_roundtrip(self):
         # Same set_id/name/spec => same hash across runs (content-addressed).

@@ -50,6 +50,7 @@ def _metadata(
     cost: int,
     extra_tags: tuple[str, ...] = (),
     param_specs: dict | None = None,
+    output_unit: str | None = None,
 ) -> OperatorMetadata:
     return OperatorMetadata(
         name=name,
@@ -64,6 +65,7 @@ def _metadata(
             f"unit:{unit}", f"cost:{cost}",
         ],
         param_specs=dict(param_specs) if param_specs else {},
+        output_unit=output_unit,
     )
 
 
@@ -372,16 +374,45 @@ def _true_beta(yy: np.ndarray, xx: np.ndarray, min_pairs: int) -> float | None:
         return None
     yy = yy[ok]
     xx = xx[ok]
-    vx = float(np.var(xx))
-    if vx <= _EPS:
+    xm = float(np.max(np.abs(xx)))
+    ym = float(np.max(np.abs(yy))) or 1.0
+    if xm == 0.0:
         return None
-    return float(np.cov(yy, xx, ddof=0)[0, 1] / vx)
+    dx, dy = xx / xm, yy / ym
+    dx -= dx[0]
+    dy -= dy[0]
+    dx -= float(dx.mean())
+    dy -= float(dy.mean())
+    sx, sy = float(np.max(np.abs(dx))), float(np.max(np.abs(dy)))
+    if sx == 0.0:
+        return None
+    if sy == 0.0:
+        return 0.0
+    dx, dy = dx / sx, dy / sy
+    slope = float(np.dot(dx, dy) / np.dot(dx, dx))
+    # Restore original beta units without overflowing intermediate ratios.
+    mantissas, exponents = np.frexp([slope, sy, ym, sx, xm])
+    with np.errstate(over="ignore", under="ignore", invalid="ignore"):
+        beta = np.ldexp(np.prod(mantissas[:3]) / np.prod(mantissas[3:]),
+                        int(sum(exponents[:3]) - sum(exponents[3:])))
+    return float(beta) if np.isfinite(beta) else None
 
 
 def _beta_break_chunk(yc, xc, recent: int, prior: int, min_pairs: int) -> float:
     n = yc.shape[0]
     if n < recent + prior:
         return np.nan
+    # One shared coordinate system for prior, recent and recent subwindows.
+    # This preserves true beta ratios (not independent-window correlations),
+    # even when original-unit coefficients would overflow or underflow.
+    pair = np.isfinite(yc) & np.isfinite(xc)
+    if not np.any(pair):
+        return np.nan
+    xm = float(np.max(np.abs(xc[pair])))
+    ym = float(np.max(np.abs(yc[pair]))) or 1.0
+    if xm == 0.0:
+        return np.nan
+    yc, xc = yc / ym, xc / xm
     yr = yc[n - recent :]
     xr = xc[n - recent :]
     yp = yc[n - recent - prior : n - recent]
@@ -402,13 +433,15 @@ def _beta_break_chunk(yc, xc, recent: int, prior: int, min_pairs: int) -> float:
             b = _true_beta(yr[s : s + sub], xr[s : s + sub], min_pairs)
             if b is not None:
                 abs_betas.append(abs(b))
-    if abs_betas:
-        scale = abs(bp) + float(np.median(abs_betas))
-    else:
-        scale = abs(bp) + abs(br)
-    if not np.isfinite(scale) or scale <= _EPS:
+    magnitude = max([abs(bp), abs(br), *abs_betas])
+    if magnitude == 0.0 or not np.isfinite(magnitude):
         return np.nan
-    return float((br - bp) / scale)
+    recent_scale = (float(np.median(np.asarray(abs_betas) / magnitude))
+                    if abs_betas else abs(br) / magnitude)
+    scale = abs(bp) / magnitude + recent_scale
+    if scale == 0.0:
+        return np.nan
+    return float((br / magnitude - bp / magnitude) / scale)
 
 
 @register_operator(
@@ -585,7 +618,8 @@ class TsBetaBreakScore(SeriesOperator):
         "recent vs prior 真实 beta=Cov(y,x)/Var(x) 变化 (Δβ)/(|β_prior|+median|β_recent|)。",
         ["y", "x", "recent_window", "prior_window"],
         domain="price_volume",
-        unit="unit(y)/unit(x)",
+        unit="dimensionless",
+        output_unit="dimensionless",
         cost=5,
     )
 

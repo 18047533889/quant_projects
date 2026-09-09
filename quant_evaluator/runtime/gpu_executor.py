@@ -66,6 +66,29 @@ class GPUExecutor:
         self.exposure_regression_weights = None
         self.exposure_style_names = ()
         self.exposure_kernel_dispatches = 0
+        self._portfolio_column_map = {}
+        self._host_result_bytes = 0
+
+    @property
+    def portfolio_factor_ids(self):
+        return self._portfolio_factor_ids
+
+    @portfolio_factor_ids.setter
+    def portfolio_factor_ids(self, ids):
+        ids = tuple(ids)
+        if len(set(ids)) != len(ids):
+            raise ValueError("portfolio factor identities must be unique")
+        self._portfolio_factor_ids = ids
+        self._portfolio_column_map = {fid: i for i, fid in enumerate(ids)}
+
+    def _reserve_host_result(self, nbytes):
+        total = self._host_result_bytes + int(nbytes)
+        limit = self.session.policy.max_host_result_bytes
+        if total > limit:
+            raise MemoryError(
+                f"worker host result budget exceeded: {total} > {limit}; "
+                "reduce the queued factor batch and persist each completed batch via DataAccess")
+        self._host_result_bytes = total
 
     def build_probe_pnl_tiled(self, factor_batch, holding_returns, portfolio_spec, trade_eligibility=None):
         """Build the canonical research-probe trajectory on CUDA by factor tile."""
@@ -73,6 +96,7 @@ class GPUExecutor:
         from quant_evaluator.kernels.gpu.portfolio import compute_cohort_pnl_batch_gpu
         values = factor_batch.values
         T, N, F = values.shape
+        self._reserve_host_result(T * F * np.dtype(np.float64).itemsize)
         tile_size = min(F, self.session.estimate_tile(("probe_pnl",), T, N, values.dtype.itemsize))
         holding_dev = self.session.stage_holding_returns(holding_returns)
         permission = (None if trade_eligibility is None
@@ -83,21 +107,29 @@ class GPUExecutor:
         out = np.empty((T, F), dtype=np.float64)
         options = {key: value for key, value in portfolio_spec.to_dict().items()
                    if key not in {"purpose", "missing_return_policy"}}
-        for start in range(0, F, tile_size):
+        start = 0
+        while start < F:
             stop = min(start + tile_size, F)
             chunk = values[:, :, start:stop]
             if factor_batch.validity is not None:
                 chunk = np.where(factor_batch.validity[:, :, start:stop], chunk, np.nan)
-            staged = self.session.stage_factors(chunk, factor_batch.factor_ids[start:stop], layout="T,N,F")
             try:
+                staged = self.session.stage_factors(chunk, factor_batch.factor_ids[start:stop], layout="T,N,F")
                 pnl = compute_cohort_pnl_batch_gpu(
                     staged, self.session._staged_holding_returns[holding_dev],
                     require_tradable=False, trade_eligibility=permission, **options)["pnl_net"]
                 host = _to_cpu(pnl); out[:, start:stop] = host
                 self.session._d2h_bytes += host.nbytes
                 self.probe_tiles_processed += 1
+            except cp.cuda.memory.OutOfMemoryError:
+                if not self.session.policy.oom_retile or stop - start <= 1:
+                    raise
+                tile_size = self.session.retile_on_oom(stop - start)
+                continue
             finally:
+                staged = pnl = None
                 self.session.release_factor_tile()
+            start = stop
         return out
 
     def run_grouped_compounding(self, returns, row_groups, included_periods=None):
@@ -105,6 +137,7 @@ class GPUExecutor:
         cp = _import_cp()
         from quant_evaluator.kernels.gpu.drawdown import compute_grouped_compounded_returns_batch
         host = np.asarray(returns)
+        self._reserve_host_result((2 * len(row_groups) + 2) * host.shape[1] * 8)
         tile = min(host.shape[1], self.session.estimate_tile(None, host.shape[0], 1, host.dtype.itemsize))
         outputs = [np.empty((len(row_groups), host.shape[1]), dtype=np.float64),
                    np.empty((len(row_groups), host.shape[1]), dtype=np.int64),
@@ -124,6 +157,7 @@ class GPUExecutor:
         cp = _import_cp()
         from quant_evaluator.kernels.gpu.drawdown import compute_worst_rolling_compounded_return_batch
         host = np.asarray(returns)
+        self._reserve_host_result(2 * host.shape[1] * 8)
         tile = min(host.shape[1], self.session.estimate_tile(None, host.shape[0], 1, host.dtype.itemsize))
         host_values = np.empty(host.shape[1], dtype=np.float64)
         host_counts = np.empty(host.shape[1], dtype=np.int64)
@@ -178,6 +212,7 @@ class GPUExecutor:
                     if arr.ndim == 0 or arr.shape[-1] != stop - start:
                         raise ValueError(f"GPU metric {name!r} has no trailing factor axis")
                     if name not in destination:
+                        self._reserve_host_result(int(np.prod(arr.shape[:-1])) * F * arr.dtype.itemsize)
                         destination[name] = np.empty((*arr.shape[:-1], F), dtype=arr.dtype)
                     destination[name][..., start:stop] = arr
                     self.session._d2h_bytes += arr.nbytes
@@ -185,6 +220,8 @@ class GPUExecutor:
             count += 1
         out.metadata = self.session.metadata()
         out.metadata["factor_tiles_processed"] = count
+        out.metadata["host_result_bytes_reserved"] = self._host_result_bytes
+        out.metadata["host_result_budget_bytes"] = self.session.policy.max_host_result_bytes
         out.metadata["shape_kernel_dispatches"] = self.shape_kernel_dispatches
         out.metadata["shape_kernel_backend"] = "cuda_strict" if self.shape_kernel_dispatches else None
         out.metadata["shape_kernel_no_fallback"] = bool(self.shape_kernel_dispatches)
@@ -245,8 +282,8 @@ class GPUExecutor:
                     )
             if m in {"sharpe_ratio", "sortino_ratio", "win_rate", "max_drawdown", "calmar_ratio"}:
                 if self.prebuilt_portfolio_pnl is not None and portfolio_pnl is None:
-                    columns = [self.portfolio_factor_ids.index(fid) for fid in factor_ids]
-                    portfolio_pnl = self.prebuilt_portfolio_pnl[:, columns]
+                    columns = [self._portfolio_column_map[fid] for fid in factor_ids]
+                    portfolio_pnl = cp.asarray(self.prebuilt_portfolio_pnl[:, columns])
                 if portfolio_pnl is None and (self.holding_return_id is None or self.portfolio_spec is None):
                     raise ValueError("GPU portfolio metrics require independent HoldingReturnPanel and PortfolioSpec; labels are forbidden")
                 if portfolio_pnl is None:

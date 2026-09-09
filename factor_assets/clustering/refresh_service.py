@@ -21,6 +21,18 @@ class ClusterRefreshPolicy:
     migration_share_trigger: float = .10
     min_quality_failures: int = 1
 
+    def __post_init__(self) -> None:
+        if not self.policy_ref:
+            raise ValueError("policy_ref is required")
+        for name in ("local_review_days", "global_review_days", "min_quality_failures"):
+            value = getattr(self, name)
+            if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+                raise ValueError(f"{name} must be a non-negative integer")
+        for name in ("pending_share_trigger", "migration_share_trigger"):
+            value = getattr(self, name)
+            if isinstance(value, bool) or not isinstance(value, (int, float)) or not 0 <= value <= 1:
+                raise ValueError(f"{name} must be in [0, 1]")
+
 
 @dataclass(frozen=True)
 class ClusterRefreshEvidence:
@@ -35,6 +47,24 @@ class ClusterRefreshEvidence:
     horizon_changed: bool = False
     fingerprint_semantics_changed: bool = False
     evidence_refs: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        if not self.observed_at:
+            raise ValueError("observed_at is required")
+        object.__setattr__(self, "evidence_refs", tuple(self.evidence_refs))
+        if not self.evidence_refs or any(not ref for ref in self.evidence_refs):
+            raise ValueError("refresh evidence requires non-empty evidence_refs")
+        if len(set(self.evidence_refs)) != len(self.evidence_refs):
+            raise ValueError("refresh evidence_refs must be unique")
+        for name in ("days_since_local_review", "days_since_global_review",
+                     "persistent_quality_failures"):
+            value = getattr(self, name)
+            if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+                raise ValueError(f"{name} must be a non-negative integer")
+        for name in ("pending_share", "migration_share"):
+            value = getattr(self, name)
+            if isinstance(value, bool) or not isinstance(value, (int, float)) or not 0 <= value <= 1:
+                raise ValueError(f"{name} must be in [0, 1]")
 
 
 @dataclass(frozen=True)
@@ -113,6 +143,22 @@ def execute_cluster_refresh(
     if decision.kind != "GLOBAL_REFRESH":
         raise ValueError("only a GLOBAL_REFRESH decision can execute clustering")
     candidate, current = cluster_builder()  # existing clustering service/callback authority
+    if not current:
+        raise ValueError("global refresh must produce at least one cluster")
+    if not candidate.refresh_trigger_ref:
+        raise ValueError("candidate cluster set must bind refresh trigger evidence")
+    if not candidate.downstream_validation_ref:
+        raise ValueError("candidate cluster set must bind downstream/model compatibility review")
+    member_owner: dict[str, str] = {}
+    for key, cluster in current.items():
+        if key != cluster.logical_cluster_id:
+            raise ValueError("current cluster mapping key/logical id mismatch")
+        if cluster.cluster_set_version_ref != candidate.cluster_set_version_id:
+            raise ValueError("current cluster version does not match candidate cluster set")
+        for factor_id in cluster.member_factor_ids:
+            previous_owner = member_owner.setdefault(factor_id, key)
+            if previous_owner != key:
+                raise ValueError("a factor cannot belong to multiple refreshed clusters")
     lineage = tuple((matcher or ClusterVersionMatcher()).match(previous_clusters, current))
     draft = ClusterRefreshRun(
         decision, candidate, lineage, registry_event_ref="PENDING_APPEND",

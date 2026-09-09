@@ -240,9 +240,12 @@ class FeOperatorExecutor:
 class FeRecipeExecutor:
     """Execute an all-FE stateless TreatmentRecipe with one panel boundary."""
 
-    def __init__(self, recipe, registry):
+    def __init__(self, recipe, registry, *, execution_context=None, backend=None, allow_research=False):
         self.recipe = recipe
         self.registry = registry
+        self.execution_context = execution_context
+        self.backend = backend
+        self.allow_research = bool(allow_research)
         self.runtime_stats: Dict[str, Any] = {}
 
     def __call__(self, values, *, value_col="value", time_col="date", asset_col="asset_id"):
@@ -265,7 +268,11 @@ class FeRecipeExecutor:
                 params.pop("pct")
             steps.append((meta.fe_operator_id, params))
         from factor_engine.backend.cleaned_bridge import execute_operator_recipe
-        out = execute_operator_recipe(panel, tuple(steps), runtime_stats=self.runtime_stats)
+        out = execute_operator_recipe(
+            panel, tuple(steps), runtime_stats=self.runtime_stats,
+            execution_context=self.execution_context, backend=self.backend,
+            allow_research=self.allow_research,
+        )
         return _stack_back(out, values, time_col, asset_col, value_col)
 
 

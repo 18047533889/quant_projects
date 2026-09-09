@@ -326,6 +326,20 @@ class StatefulCheckpointRegistry:
             raise StatefulContractError(
                 f"segmented execution of {canonical} is unsupported without a native checkpoint"
             )
+        if spec is None and not starts_at_dataset_origin:
+            # A recursive operator can honestly declare required_full_history
+            # without pretending that a serializer/restore kernel exists in
+            # this registry. Such a declaration must still fail closed at a
+            # segment boundary: absence from the registry is not permission to
+            # restart recursive state from the middle.
+            from factor_engine.runtime.execution_contract import execution_contract
+
+            contract = execution_contract(canonical)
+            if contract.is_stateful or contract.requires_full_history:
+                raise StatefulContractError(
+                    f"segmented execution of {canonical} is unsupported without "
+                    "a native checkpoint"
+                )
         if spec is None or not spec.checkpoint_required_for_segmented:
             return
         if starts_at_dataset_origin:

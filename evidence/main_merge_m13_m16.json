@@ -1,0 +1,51 @@
+{
+  "snapshot": "6b610d0c8be7a3e6a7516ee2f4f8de6b58765f4f",
+  "scope": ["M13", "M14", "M15", "M16"],
+  "recorded_at": "2026-09-09",
+  "historical_pre_followup_validation": {
+    "command": ".venv/bin/python -m pytest factor_assets/tests -q",
+    "result": {"passed": 1495, "warnings": 46},
+    "note": "Executed before the final M14 window-identity and cold-start import cleanup; retained as historical evidence only."
+  },
+  "final_affected_validation": {
+    "command": ".venv/bin/python -m pytest factor_assets/tests/test_incremental_cluster_assign.py factor_assets/tests/test_fa09_qe_pairwise.py quant_evaluator/tests/test_pairwise_artifact_v3.py factor_assets/tests/test_dlib_fa_004_011_cluster_governance.py factor_assets/tests/test_v5_cluster_lifecycle.py factor_assets/tests/test_v7_fa_n10_n13_r28.py -q",
+    "result": {"passed": 73, "warnings": 3}
+  },
+  "final_cold_start_validation": {
+    "command": ".venv/bin/python -m pytest -c cold_start_library/pyproject.toml --confcutdir=cold_start_library/tests cold_start_library/tests -q",
+    "result": {"passed": 4, "warnings": 2}
+  },
+  "cold_start_packaging": {
+    "sdist_to_wheel_pipeline": "authoritative JSON -> bounded sdist -> wheel",
+    "wheel_sha256": "e21346bc51c313b1aab07fb6022553c9662419e8dd7de38744f781bf2d026b99",
+    "separate_wheel_install_check_path_observed": "/tmp/cold-target-3PwQnM/cold_start_library/library/production_default_core_v9.json",
+    "installed_catalog_exists": true,
+    "installed_default_sample_count": 7
+  },
+  "source_sha256": {
+    "factor_assets/clustering/incremental.py": "d60438316589843f20b7178622a99800551a83b69400295931428b29b083418f",
+    "factor_assets/clustering/refresh_service.py": "5cc5957479a8e6e09966ea12edbf76fa9adbf7ab8e70a0f74dc1709bebe6d84e",
+    "factor_assets/contracts/cluster_governance.py": "59891a6acd52eb9d7a3fb16f5b8cc86728a0de7fc7b5623c177314ef77e4a9b7",
+    "quant_evaluator/metrics/interactions/pairwise.py": "93cfb37632deffe0703db8cb0826c96468b8a893c1bfe23c651928bb5463871b",
+    "cold_start_library/src/cold_start_library/runtime/loader.py": "eaa20b5ea51b9b1d51736ef27033daac58539fcde6854f5736d3671eabccf880",
+    "cold_start_library/src/cold_start_library/runtime/paths.py": "86286559ed2ddbd964205c051bdb4bb4da923a1c3d7ce13fb71afd9c23599fa2",
+    "cold_start_library/src/cold_start_library/runtime/dsl.py": "f2b91771c71a0bc9962cf137320cfe9225f176babc19e007382e8380c99085fc",
+    "cold_start_library/pyproject.toml": "545245c4d0b693927b76923f3e601d0b450eb264e12a25a8f80100b165185fa3",
+    "cold_start_library/setup.py": "7ecc5c4a4e770c714769adad9908024f11c100064868da3c315558a7e5fa28ad",
+    "cold_start_library/MANIFEST.in": "a6f9cb2649659b1858f3d01bc7ad7b74f08b3e3d4d90953eb6d592f8ed1868a9"
+  },
+  "temporary_artifacts": {
+    "remaining_matching_paths": [],
+    "explicitly_cleaned": ["/tmp/cold-wheel-VgDMGf"]
+  },
+  "status": {
+    "M13": "IMPLEMENTED_AND_TESTED",
+    "M14": "IMPLEMENTED_AND_TESTED",
+    "M15": "FAIL_CLOSED_NO_TRUSTED_PRODUCTION_PUBLICATION_RESOLVER",
+    "M16": "IMPLEMENTED_AND_TESTED_RESEARCH_REFRESH_LIFECYCLE"
+  },
+  "limits": [
+    "No production cluster publication was performed.",
+    "The repository has no final cluster-set production publication consumer that resolves QE qualification references; production overlay construction raises NotImplementedError rather than trusting caller-supplied strings."
+  ]
+}

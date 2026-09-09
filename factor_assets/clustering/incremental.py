@@ -113,6 +113,37 @@ class CertifiedWindowEvidence:
     n_days: int
     confidence_interval: Tuple[Optional[float], Optional[float]]
     uncertainty_scale: str
+    window_identity: str = ""
+    universe_ref: str = ""
+    sample_ref: str = ""
+
+    def __post_init__(self) -> None:
+        if not self.window_ref:
+            raise ValueError("window_ref is required")
+        if not isinstance(self.status, PairwiseEvidenceStatus):
+            raise TypeError("status must be a PairwiseEvidenceStatus")
+        for name in ("pair_count", "n_days"):
+            value = getattr(self, name)
+            minimum = 1 if self.status is PairwiseEvidenceStatus.CERTIFIED else 0
+            if isinstance(value, bool) or not isinstance(value, int) or value < minimum:
+                raise ValueError(f"{name} has an invalid count for window status")
+        if self.uncertainty_scale != "raw_correlation_hac_daily_corr":
+            raise ValueError("uncertainty_scale must declare raw-correlation HAC semantics")
+        if not self.window_identity or not self.universe_ref or not self.sample_ref:
+            raise ValueError("window identity, universe_ref, and sample_ref are required")
+        lo, hi = self.confidence_interval
+        if self.status is PairwiseEvidenceStatus.CERTIFIED:
+            if self.signed_similarity is None:
+                raise ValueError("CERTIFIED window requires signed_similarity")
+            values = (self.signed_similarity, lo, hi)
+            if any(value is None or not np.isfinite(float(value)) for value in values):
+                raise ValueError("CERTIFIED window values and interval must be finite")
+            if not all(-1.0 <= float(value) <= 1.0 for value in values):
+                raise ValueError("window similarity and interval must be in [-1, 1]")
+            if float(lo) > float(hi):
+                raise ValueError("confidence_interval lower bound exceeds upper bound")
+        elif self.signed_similarity is not None or lo is not None or hi is not None:
+            raise ValueError("non-certified window cannot carry certified values")
 
 
 @dataclass(frozen=True)
@@ -134,7 +165,8 @@ class CertifiedPairwiseEvidence:
             raise ValueError("pairwise evidence requires two distinct factor IDs")
         if not isinstance(self.status, PairwiseEvidenceStatus):
             raise TypeError("status must be a PairwiseEvidenceStatus")
-        if self.pair_count < 0:
+        if (isinstance(self.pair_count, bool) or not isinstance(self.pair_count, int) or
+                self.pair_count < 0):
             raise ValueError("pair_count must be non-negative")
         if not self.window_ref or not self.universe_ref or not self.sample_ref:
             raise ValueError("window_ref, universe_ref, and sample_ref are required")
@@ -148,6 +180,17 @@ class CertifiedPairwiseEvidence:
         elif self.signed_similarity is not None:
             raise ValueError("unmeasured/approximate evidence cannot carry certified similarity")
         object.__setattr__(self, "windows", tuple(self.windows))
+        if any(not isinstance(window, CertifiedWindowEvidence) for window in self.windows):
+            raise TypeError("windows must contain CertifiedWindowEvidence")
+        window_refs = [window.window_ref for window in self.windows]
+        if len(set(window_refs)) != len(window_refs):
+            raise ValueError("certified window identities must be unique")
+        identities = [window.window_identity for window in self.windows]
+        if len(set(identities)) != len(identities):
+            raise ValueError("certified canonical window identities must be unique")
+        if any(window.universe_ref != self.universe_ref or
+               window.sample_ref != self.sample_ref for window in self.windows):
+            raise ValueError("windows must match pairwise universe/sample identity")
 
 
 @dataclass(frozen=True)
@@ -330,8 +373,15 @@ class IncrementalAssignResult:
         }
 
 
-def _as_touchable(kind: IncrementalAssignmentKind) -> bool:
-    return kind is IncrementalAssignmentKind.ASSIGNED
+def _as_touchable(kind: IncrementalAssignmentKind, admission_scope: str) -> bool:
+    if admission_scope == "PRODUCTION":
+        return kind is IncrementalAssignmentKind.ASSIGNED
+    if admission_scope == "RESEARCH":
+        return kind in (
+            IncrementalAssignmentKind.ASSIGNED,
+            IncrementalAssignmentKind.RESEARCH_PROPOSED,
+        )
+    raise ValueError("admission_scope must be RESEARCH or PRODUCTION")
 
 
 # ---------------------------------------------------------------------------
@@ -564,6 +614,7 @@ def _classify(
     runner_sim: Optional[float],
     policy: IncrementalPolicy,
     any_measured: bool,
+    formally_certified: bool,
 ) -> tuple[Optional[str], IncrementalAssignmentKind]:
     """Classify per DLIB-FA-010."""
     if not any_measured:
@@ -574,7 +625,8 @@ def _classify(
         return None, IncrementalAssignmentKind.PENDING_GLOBAL_REFRESH
     if runner_sim is not None and (top_sim - runner_sim) < float(policy.ambiguity_gap):
         return chosen, IncrementalAssignmentKind.AMBIGUOUS
-    return chosen, IncrementalAssignmentKind.ASSIGNED
+    return chosen, (IncrementalAssignmentKind.ASSIGNED if formally_certified
+                    else IncrementalAssignmentKind.RESEARCH_PROPOSED)
 
 
 def _formal_candidates(
@@ -885,18 +937,17 @@ def incremental_assign(
                 fp, cluster_versions, fingerprints_by_id,
                 certified_pairwise, policy,
             )
-            if (policy.cluster_support_k > 1 or policy.min_cluster_support > 1
-                    or policy.require_medoid_support):
-                best, support_audit = _aggregate_cluster_support(
-                    best, cluster_versions, policy,
-                )
-                candidates_out.extend(support_audit)
-                candidates_out.extend(
-                    candidate for candidate in audited
-                    if candidate.evidence_status is not PairwiseEvidenceStatus.CERTIFIED
-                )
-            else:
-                candidates_out.extend(audited)
+            # Every formal path is reduced to one logical-cluster summary,
+            # including k=1.  Member evidence remains in the audit payload but
+            # can never occupy both the winner and runner-up slots.
+            best, support_audit = _aggregate_cluster_support(
+                best, cluster_versions, policy,
+            )
+            candidates_out.extend(support_audit)
+            candidates_out.extend(
+                candidate for candidate in audited
+                if candidate.evidence_status is not PairwiseEvidenceStatus.CERTIFIED
+            )
             any_measured = bool(audited)
         else:
             candidates_out.extend(best)
@@ -926,10 +977,26 @@ def incremental_assign(
                 runner_sim = runner.similarity if runner else None
             top_sim = top.similarity if chosen == top.cluster_id else None
             chosen, kind = _classify(
-                chosen, top_sim, runner_sim, policy, any_measured
+                chosen, top_sim, runner_sim, policy, any_measured,
+                certified_pairwise is not None,
             )
         else:
-            chosen, kind = _classify(None, None, None, policy, any_measured)
+            chosen, kind = _classify(
+                None, None, None, policy, any_measured,
+                certified_pairwise is not None,
+            )
+        formal_refs: tuple[str, ...] = ()
+        if kind is IncrementalAssignmentKind.ASSIGNED and chosen is not None:
+            chosen_candidate = next(c for c in best_sorted if c.cluster_id == chosen)
+            refs = chosen_candidate.support_evidence_refs or ((
+                chosen_candidate.factor_id,
+                chosen_candidate.window_ref,
+                chosen_candidate.sample_ref,
+            ),)
+            formal_refs = tuple(
+                f"qe-pairwise:{member}:{window}:{sample}"
+                for member, window, sample in refs
+            )
         assignments.append(
             IncrementalClusterAssignment(
                 factor_id=fp.factor_id,
@@ -943,8 +1010,17 @@ def incremental_assign(
                     ) if chosen is not None else None
                 ),
                 parent_cluster_set_hash=(
-                    parent_set_hash if kind is IncrementalAssignmentKind.ASSIGNED else ""
+                    parent_set_hash if kind in (
+                        IncrementalAssignmentKind.ASSIGNED,
+                        IncrementalAssignmentKind.RESEARCH_PROPOSED,
+                    ) else ""
                 ),
+                qualification_domain=(
+                    "CERTIFIED_PAIRWISE_SUPPORT"
+                    if kind is IncrementalAssignmentKind.ASSIGNED
+                    else "RESEARCH_APPROXIMATE"
+                ),
+                formal_evidence_refs=formal_refs,
             )
         )
     return IncrementalAssignResult(
@@ -978,6 +1054,7 @@ def build_incremental_cluster_version(
     *,
     new_cluster_set_version_id: str,
     overlay_suffix: str = "inc",
+    admission_scope: str = "RESEARCH",
 ) -> tuple[ClusterVersionArtifact, ...]:
     """Copy-on-write overlay cluster versions (QRP-P6-INC6).
 
@@ -994,6 +1071,11 @@ def build_incremental_cluster_version(
     :returns: tuple of NEW ClusterVersionArtifact (one per ASSIGNED cluster),
         sorted by logical_cluster_id.
     """
+    if admission_scope == "PRODUCTION":
+        raise NotImplementedError(
+            "production overlay publication requires a trusted QE qualification "
+            "resolver; caller-supplied evidence references are not publication authority"
+        )
     if not production_version_artifacts:
         raise ValueError("production_version_artifacts must be non-empty")
     if not new_cluster_set_version_id:
@@ -1010,11 +1092,12 @@ def build_incremental_cluster_version(
             raise ValueError("production cluster mapping key/logical id mismatch")
 
     touched: dict[str, list[str]] = {}
+    touched_assignments: dict[str, list[IncrementalClusterAssignment]] = {}
     assigned_to: dict[str, str] = {}
     for a in assignments:
         if a.cluster_set_version_ref != base_version:
             raise ValueError("stale incremental assignment parent version (CAS mismatch)")
-        if not _as_touchable(a.kind):
+        if not _as_touchable(a.kind, admission_scope):
             continue
         if a.parent_cluster_set_hash != parent_set_hash:
             raise ValueError("stale incremental assignment parent content hash (CAS mismatch)")
@@ -1031,11 +1114,30 @@ def build_incremental_cluster_version(
         if previous != a.logical_cluster_id:
             raise ValueError("a factor cannot be assigned to multiple partition clusters")
         touched.setdefault(a.logical_cluster_id, []).append(a.factor_id)
+        touched_assignments.setdefault(a.logical_cluster_id, []).append(a)
 
     out: list[ClusterVersionArtifact] = []
     for cid in sorted(production_version_artifacts):
         prod = production_version_artifacts[cid]
         added = tuple(sorted(set(touched.get(cid, ()))))
+        applied = touched_assignments.get(cid, [])
+        qualification_domain = prod.membership_qualification_domain
+        evidence_refs = prod.membership_evidence_refs
+        if applied:
+            if prod.membership_qualification_domain == "UNVERIFIED":
+                qualification_domain = "UNVERIFIED"
+            elif (prod.membership_qualification_domain == "RESEARCH_APPROXIMATE" or
+                    any(a.kind is IncrementalAssignmentKind.RESEARCH_PROPOSED
+                        for a in applied)):
+                qualification_domain = "RESEARCH_APPROXIMATE"
+            elif prod.membership_qualification_domain == "FULL_REFRESH_CERTIFIED":
+                qualification_domain = "CERTIFIED_MIXED_SUPPORT"
+            evidence_refs = tuple(sorted(
+                set(prod.membership_evidence_refs).union(
+                    ref for assignment in applied
+                    for ref in assignment.formal_evidence_refs
+                )
+            ))
         new_members = tuple(prod.member_factor_ids) + added
         if len(set(new_members)) != len(new_members):
             raise ValueError("overlay collision: a new member already in the cluster")
@@ -1046,6 +1148,8 @@ def build_incremental_cluster_version(
                 member_factor_ids=new_members,
                 representative_factor_id=prod.representative_factor_id,
                 scale=prod.scale,
+                membership_qualification_domain=qualification_domain,
+                membership_evidence_refs=evidence_refs,
                 content_hash="",  # derived in __post_init__
             )
         )
@@ -1113,6 +1217,7 @@ def build_incremental_lineage_edges(
     assignments: Sequence[IncrementalClusterAssignment],
     *,
     requested_by: str = "incremental_assign",
+    admission_scope: str = "RESEARCH",
 ) -> tuple[IncrementalLineageEdge, ...]:
     """Build copy-on-write lineage edges parent_production -> new_overlay.
 
@@ -1124,7 +1229,7 @@ def build_incremental_lineage_edges(
         raise ValueError("production_version_artifacts must be non-empty")
     touch: dict[str, set[str]] = {}
     for a in assignments:
-        if _as_touchable(a.kind) and a.logical_cluster_id:
+        if _as_touchable(a.kind, admission_scope) and a.logical_cluster_id:
             touch.setdefault(a.logical_cluster_id, set()).add(a.factor_id)
 
     overlay_by_id: dict[str, ClusterVersionArtifact] = {}

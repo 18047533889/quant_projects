@@ -170,12 +170,18 @@ def test_cluster_version_artifact_hash_and_immutability():
         representative_factor_id="F1",
     )
     assert cva.content_hash
+    assert cva.membership_qualification_domain == "UNVERIFIED"
     assert cva.member_factor_ids == ("F1", "F2", "F3")
     with pytest.raises(Exception):
         cva.member_factor_ids = ("F9",)  # type: ignore
     # Duplicate members rejected.
     with pytest.raises(ValueError, match="unique"):
         ClusterVersionArtifact("CL_B", "csv1", ("F1", "F1"), "F1")
+    with pytest.raises(ValueError, match="evidence refs"):
+        ClusterVersionArtifact(
+            "CL_B", "csv1", ("F1",), "F1",
+            membership_qualification_domain="FULL_REFRESH_CERTIFIED",
+        )
 
 
 def test_cluster_membership():
@@ -232,6 +238,8 @@ def test_incremental_assignment_never_mutates_cluster_set_version():
         cluster_set_version_ref="csv1",
         affinity=0.8,
         parent_cluster_set_hash="parent-content-hash",
+        qualification_domain="CERTIFIED_PAIRWISE_SUPPORT",
+        formal_evidence_refs=("qe-pairwise:F9:250d:sample",),
     )
     assert incremental.kind is IncrementalAssignmentKind.ASSIGNED
     assert incremental.cluster_set_version_ref == "csv1"

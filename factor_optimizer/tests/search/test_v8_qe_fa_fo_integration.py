@@ -3,6 +3,7 @@ import json
 
 import pytest
 import numpy as np
+from types import SimpleNamespace
 
 from factor_assets.selection import (
     CandidateEvidence, DecisionProvider, DecisionRequest, DecisionStatus,
@@ -32,6 +33,13 @@ class _Resolver:
 
     def resolve(self, ref):
         return self.receipts[ref]
+    def resolve_evidence(self, ref, *, candidate):
+        raw=candidate.raw_joint_metric_evidence
+        return SimpleNamespace(candidate_id=candidate.candidate_id,raw_content_hash=raw.content_hash,
+            recipe_hash=raw.recipe_hash,fitted_state_hash=raw.fitted_state_hash,data_snapshot_hash=raw.data_snapshot_hash,
+            universe_hash=raw.universe_hash,label_hash=raw.label_hash,value_artifact_hash=raw.value_artifact_hash,
+            dimensions=candidate.dimensions,coverage=candidate.coverage,metric_instance_hash=raw.metric_instance_hash,
+            parameter_domain_hash=raw.parameter_domain_hash,metric_directions={"alpha":"higher_is_better"})
 
 
 def _qualification(assertion="PASS"):
@@ -46,24 +54,32 @@ def _qualification(assertion="PASS"):
 def _requirements():
     return dict(source_tree_hash="source", implementation_hash="impl",
                 route="qe.runtime", backend="cpu", parameter_domain_hash="domain",
-                metric_instance_hash="metric-instance")
+                metric_instance_hash="metric-instance",suite_id="qe.standard.v1",
+                required_assertions="T123")
 
 
 def _policy():
     return SelectionPolicySpec(
-        "selection-v8", "1", (MetricRule("alpha", UtilityDirection.HIGHER_IS_BETTER, 1, 0, 1),),
-        {}, minimum_coverage=.8, noninferiority_margin=.01,
+        "selection-v8", "1", (MetricRule("alpha", UtilityDirection.HIGHER_IS_BETTER, 1, 0, 1,unit="ratio"),),
+        {}, minimum_coverage=.8, noninferiority_margin=.01,required_qualification_assertions=("T123",),
     )
 
 
 def _raw(candidate_id, context, values, qualification):
     samples = tuple((({"value": value},),) for value in ())  # shape documented below
     samples = tuple((( (float(value),), ),) for value in values)
+    identity=(candidate_id,"recipe","state","data","universe","label","values:"+candidate_id)
+    pairing = ("bootstrap-plan-content", "controlled-samples",
+               "controlled-times", "controlled-common-mask")
+    pairing = ("bootstrap-plan-content", "controlled-samples",
+               "controlled-times", "controlled-common-mask")
     semantic = {
         "context": context, "plan": "bootstrap-plan", "replicates": tuple(f"r{i}" for i in range(len(values))),
+        "pairing": pairing,
         "metrics": ("alpha",), "metric_units": ("ratio",), "window_ids": ("window",), "scenario_ids": ("scenario",),
         "samples": json.loads(json.dumps(samples)), "qualification": "scope:v8",
         "execution": ("source", "impl", "qe.runtime", "cpu", "domain", "metric-instance"),
+        "candidate": identity,
     }
     evidence = RawJointMetricEvidence(
         f"qe:{candidate_id}", _digest(semantic), context, "bootstrap-plan",
@@ -71,12 +87,17 @@ def _raw(candidate_id, context, values, qualification):
         source_tree_hash="source", implementation_hash="impl", route="qe.runtime",
         backend="cpu", parameter_domain_hash="domain", metric_instance_hash="metric-instance",
         metric_units=("ratio",),
+        candidate_id=candidate_id,recipe_hash="recipe",fitted_state_hash="state",data_snapshot_hash="data",
+        universe_hash="universe",label_hash="label",value_artifact_hash="values:"+candidate_id,
+        resampling_plan_content_hash=pairing[0], sample_identity_hash=pairing[1],
+        time_identity_hash=pairing[2], common_mask_hash=pairing[3],
     )
     return CandidateEvidence(
         candidate_id, (evidence.evidence_id, qualification.content_hash), "FULL_VALIDATION",
         {}, {"alpha": sum(values) / len(values)}, 1.0, "scope:v8",
         qualification_ref=qualification.content_hash,
         qualification_requirements=_requirements(), raw_joint_metric_evidence=evidence,
+        health_evidence_ref="health:"+candidate_id,health_candidate_id=candidate_id,health_coverage=1.0,evidence_bundle_ref=evidence.evidence_id,
     )
 
 
@@ -93,6 +114,12 @@ def _real_qe_candidates(context, qualification):
     qe_ref = _digest({"metric_id": qe_artifact.metric_id, "plan": plan.content_hash,
                       "samples": qe_artifact.samples.tolist()})
     candidates = []
+    pairing = tuple(qe_artifact.provenance[name] for name in (
+        "resampling_plan_content_hash", "sample_identity_hash",
+        "time_identity_hash", "common_mask_hash"))
+    pairing = tuple(qe_artifact.provenance[name] for name in (
+        "resampling_plan_content_hash", "sample_identity_hash",
+        "time_identity_hash", "common_mask_hash"))
     for column, candidate_id in enumerate(("RAW", "VAR")):
         values = tuple(float(value) for value in qe_artifact.samples[:, column])
         candidate = _raw(candidate_id, context, values, qualification)
@@ -100,12 +127,15 @@ def _real_qe_candidates(context, qualification):
         # replicate identities; no independently sampled candidate draws.
         old = candidate.raw_joint_metric_evidence
         samples = tuple((((value,),),) for value in values)
+        identity=(candidate_id,"recipe","state","data","universe","label","values:"+candidate_id)
         semantic = {
             "context": context, "plan": plan.content_hash,
+            "pairing": pairing,
             "replicates": plan.replicate_ids, "metrics": ("alpha",), "metric_units": ("ratio",),
             "window_ids": ("window",), "scenario_ids": ("scenario",),
             "samples": json.loads(json.dumps(samples)), "qualification": "scope:v8",
             "execution": ("source", "impl", "qe.runtime", "cpu", "domain", "metric-instance"),
+            "candidate": identity,
         }
         evidence = RawJointMetricEvidence(
             old.evidence_id, _digest(semantic), context, plan.content_hash,
@@ -113,6 +143,10 @@ def _real_qe_candidates(context, qualification):
             source_tree_hash="source", implementation_hash="impl", route="qe.runtime",
             backend="cpu", parameter_domain_hash="domain", metric_instance_hash="metric-instance",
             metric_units=("ratio",),
+            candidate_id=candidate_id,recipe_hash="recipe",fitted_state_hash="state",data_snapshot_hash="data",
+            universe_hash="universe",label_hash="label",value_artifact_hash="values:"+candidate_id,
+            resampling_plan_content_hash=pairing[0], sample_identity_hash=pairing[1],
+            time_identity_hash=pairing[2], common_mask_hash=pairing[3],
         )
         candidates.append(CandidateEvidence(
             candidate_id, (qe_ref, evidence.content_hash,
@@ -135,6 +169,8 @@ def _request(
             c.qualification_scope, qualification_ref=c.qualification_ref,
             qualification_requirements=c.qualification_requirements,
             raw_joint_metric_evidence=c.raw_joint_metric_evidence,
+            health_evidence_ref=c.health_evidence_ref,health_candidate_id=c.health_candidate_id,
+            health_coverage=c.health_coverage,evidence_bundle_ref=c.evidence_bundle_ref,
         ) for c in candidates
     )
     bound_baseline = baseline or adjusted[0].candidate_id

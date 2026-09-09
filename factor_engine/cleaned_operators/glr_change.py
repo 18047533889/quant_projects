@@ -145,6 +145,24 @@ _GLR_RELATIONAL_SPECS = [
 ]
 
 
+def _dimensionless_center(v: np.ndarray) -> np.ndarray | None:
+    """One within-window coordinate system for every candidate split."""
+    if not v.size or not np.all(np.isfinite(v)):
+        return None
+    with np.errstate(over="ignore", invalid="ignore"):
+        shifted = v - v[0]
+    if not np.all(np.isfinite(shifted)):
+        # Opposite-sign finite extremes: normalize before subtraction.
+        shifted = v / float(np.max(np.abs(v)))
+        shifted -= shifted[0]
+    magnitude = float(np.max(np.abs(shifted)))
+    if magnitude == 0.0:
+        return None
+    shifted /= magnitude
+    shifted -= float(shifted.mean())
+    return shifted
+
+
 def _mean_shift_score(v: np.ndarray, min_segment: int) -> float:
     n = v.shape[0]
     if n < 2 * min_segment + 2:
@@ -155,12 +173,13 @@ def _mean_shift_score(v: np.ndarray, min_segment: int) -> float:
     # mean first keeps the centred values ~0-mean, so the prefix SS is computed
     # in a numerically stable regime and GLR(x) == GLR(x + 1e9) holds
     # (metamorphic translation invariance).
-    c = float(np.sum(v)) / n
-    vc = v - c
+    vc = _dimensionless_center(v)
+    if vc is None:
+        return np.nan
     ps = np.concatenate(([0.0], np.cumsum(vc)))
     pss = np.concatenate(([0.0], np.cumsum(vc * vc)))
     full_ss = pss[n]
-    if not np.isfinite(full_ss) or full_ss <= _EPS:
+    if not np.isfinite(full_ss) or full_ss <= 0.0:
         return np.nan
     floor = _ss_noise_floor(full_ss, n)
     best = 0.0
@@ -199,12 +218,13 @@ def _variance_shift_score(v: np.ndarray, min_segment: int) -> float:
     # R26-065..067: recentered prefix moments (same rationale as
     # ``_mean_shift_score``) — the variance LLR ratios pooled SS terms that must
     # be computed without catastrophic cancellation at large levels.
-    c = float(np.sum(v)) / n
-    vc = v - c
+    vc = _dimensionless_center(v)
+    if vc is None:
+        return np.nan
     ps = np.concatenate(([0.0], np.cumsum(vc)))
     pss = np.concatenate(([0.0], np.cumsum(vc * vc)))
     full_ss = pss[n]
-    if not np.isfinite(full_ss) or full_ss <= _EPS:
+    if not np.isfinite(full_ss) or full_ss <= 0.0:
         return np.nan
     floor = _ss_noise_floor(full_ss, n)
     best = 0.0

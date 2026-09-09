@@ -42,6 +42,18 @@ from factor_engine.cleaned_operators.rolling_pack import aligned_pairs, frame_li
 _EPS = 1e-12
 
 
+def _normalize_nonnegative_weights(weights: np.ndarray) -> np.ndarray | None:
+    """Probability weights without an absolute mass floor or squared raw mass."""
+    weights = np.asarray(weights, dtype=float)
+    if weights.size == 0 or not np.all(np.isfinite(weights)) or np.any(weights < 0):
+        return None
+    maximum = float(np.max(weights))
+    if maximum == 0.0:
+        return None
+    scaled = weights / maximum
+    return scaled / float(scaled.sum())
+
+
 def _weighted_quantile(
     values: np.ndarray, weights: np.ndarray, quantile: float
 ) -> float:
@@ -56,12 +68,17 @@ def _weighted_quantile(
     below-first-value extrapolation).
     """
     qq = float(quantile)
+    weights = _normalize_nonnegative_weights(weights)
+    if weights is None:
+        return np.nan
+    positive = weights > 0.0
+    values, weights = values[positive], weights[positive]
     order = np.argsort(values, kind="stable")
     cs = values[order]
     cw = weights[order]
     cdf = np.cumsum(cw)
     total = float(cdf[-1])
-    if total <= _EPS:
+    if total <= 0.0:
         return np.nan
     cdf = cdf / total
     if qq <= float(cdf[0]):
@@ -86,14 +103,21 @@ def _weighted_es_tail(
     interpolation).  When the cutoff lands inside a group of identical values,
     the tied group enters with FRACTIONAL weight so the tail holds exactly the
     requested mass fraction (mirrors ``group_topk_mean``).  Returns NaN when the
-    effective tail has fewer than ``min_tail`` members.
+    selected positive-mass tail has fewer than ``min_tail`` fractional members
+    OR Kish effective samples. Both tests apply after fractional tie selection;
+    whole-window Kish is not a substitute. Zero-mass rows never create support.
     """
     qq = float(quantile)
+    weights = _normalize_nonnegative_weights(weights)
+    if weights is None:
+        return np.nan
+    positive = weights > 0.0
+    values, weights = values[positive], weights[positive]
     order = np.argsort(values, kind="stable")
     sv = values[order]
     sw = weights[order]
     total = float(sw.sum())
-    if total <= _EPS:
+    if total <= 0.0:
         return np.nan
     cdf = np.cumsum(sw)
     if side == "lower":
@@ -112,16 +136,23 @@ def _weighted_es_tail(
         need = qq * total - float(sw[keep_mask].sum())
     tie_mask = sv == vstar
     w_tie = float(sw[tie_mask].sum())
-    frac = (need / w_tie) if w_tie > _EPS else 0.0
+    frac = (need / w_tie) if w_tie > 0.0 else 0.0
     frac = min(max(frac, 0.0), 1.0)
     n_eff = float(keep_mask.sum()) + frac * float(tie_mask.sum())
-    if n_eff < min_tail:
+    if n_eff < min_tail - 1e-9:
         return np.nan
-    num = float(np.sum(sw[keep_mask] * sv[keep_mask])) + frac * float(np.sum(sw[tie_mask] * sv[tie_mask]))
-    den = float(sw[keep_mask].sum()) + frac * w_tie
-    if den <= _EPS:
+    selected = np.where(keep_mask, sw, np.where(tie_mask, frac * sw, 0.0))
+    normalized = _normalize_nonnegative_weights(selected)
+    if normalized is None:
         return np.nan
-    return num / den
+    kish = 1.0 / float(np.dot(normalized, normalized))
+    if kish < min_tail - 1e-9:
+        return np.nan
+    active = normalized > 0.0
+    magnitude = float(np.max(np.abs(sv[active])))
+    if magnitude == 0.0:
+        return 0.0
+    return float(np.dot(normalized[active], sv[active] / magnitude) * magnitude)
 
 
 def _stratified_stratum_mean(xs: np.ndarray, ss: np.ndarray, n_take: int, *, top: bool) -> float:
@@ -310,11 +341,11 @@ class TsWeightedSemivariance(SeriesOperator):
                 return np.nan
             if xv.size < mp:
                 return np.nan
-            total = float(wv.sum())
-            if total <= _EPS:
+            wv = _normalize_nonnegative_weights(wv)
+            if wv is None:
                 return np.nan
             below = np.maximum(tgt - xv, 0.0)
-            return float(np.sum(wv * below * below) / total)
+            return float(np.sum(wv * below * below))
 
         return frame_like(
             x,
@@ -368,11 +399,11 @@ class TsWeightedDownsideDeviation(SeriesOperator):
                 return np.nan
             if xv.size < mp:
                 return np.nan
-            total = float(wv.sum())
-            if total <= _EPS:
+            wv = _normalize_nonnegative_weights(wv)
+            if wv is None:
                 return np.nan
             below = np.maximum(tgt - xv, 0.0)
-            return float(np.sqrt(np.sum(wv * below * below) / total))
+            return float(np.sqrt(np.sum(wv * below * below)))
 
         return frame_like(
             x,
@@ -444,15 +475,7 @@ class TsWeightedExpectedShortfall(SeriesOperator):
                 return np.nan
             if xv.size < max(min_tail, 3):
                 return np.nan
-            # R16-097: member-count alone cannot gate a WEIGHTED tail — one
-            # huge weight + many tiny weights passes a size gate while carrying
-            # ~no effective tail mass.  Kish effective-N ``(sum w)^2 / sum w^2``
-            # is the honest sample-size; a too-small Kish is NaN.
-            sw = float(wv.sum())
-            sw2 = float(np.sum(wv * wv))
-            kish = (sw * sw) / sw2 if sw2 > 0.0 else 0.0
-            if kish < min_tail:
-                return np.nan
+            # Selected-tail fractional member count and Kish live in one kernel.
             return _weighted_es_tail(xv, wv, q, kind, min_tail)
 
         return frame_like(
@@ -522,10 +545,10 @@ class TsWeightedDrawdownArea(SeriesOperator):
                 dd[i] = max(0.0, 1.0 - a[i] / peak)
             wv = np.where(np.isfinite(b), b, 0.0)
             valid = price_ok & np.isfinite(b)
-            total = float(wv[valid].sum())
-            if total <= _EPS:
+            normalized = _normalize_nonnegative_weights(wv[valid])
+            if normalized is None:
                 return np.nan
-            return float(np.sum(wv[valid] * dd[valid]) / total)
+            return float(np.dot(normalized, dd[valid]))
 
         return frame_like(
             x,

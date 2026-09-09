@@ -39,6 +39,9 @@ admission. NumericalQualificationReceipt is independent of this inventory.
 from __future__ import annotations
 
 import csv
+import hashlib
+import inspect
+from pathlib import Path
 import importlib
 import os
 import re
@@ -50,6 +53,54 @@ _ARTIFACT_CLASS_RE = re.compile(
 )
 
 _METRIC_MENTION_RE = re.compile(r"[A-Za-z0-9_\.]+")
+
+
+def canonical_entrypoint_inventory():
+    """M22 source/registry/package/consumer graph, explicitly not certification.
+
+    Use the real registry binding (including parameterized partials); keep
+    static test references separate from independently executed golden runs.
+    """
+    import functools
+    import tomllib
+    from quant_evaluator.registry.metrics import catalog_snapshot
+    root = Path(_pkg_root())
+    repo = root.parent
+    packages = set(tomllib.loads((root / "pyproject.toml").read_text())["tool"]["setuptools"]["packages"])
+    test_roots = [root / "tests", repo / "integration_tests",
+                  repo / "factor_assets/tests", repo / "factor_optimizer/tests",
+                  repo / "factor_preprocess/tests"]
+    texts = {str(p.relative_to(repo)): p.read_text(errors="replace")
+             for folder in test_roots if folder.exists() for p in folder.rglob("test_*.py")}
+    rows = []
+    for metric_id, spec in sorted(catalog_snapshot().items()):
+        fn = spec.compute_fn
+        if fn is None:
+            rows.append({"metric_id": metric_id, "status": "NO_BOUND_IMPLEMENTATION",
+                         "golden_execution_status": "NOT_RUN"})
+            continue
+        base = fn.func if isinstance(fn, functools.partial) else fn
+        base = getattr(base, "py_func", base)
+        source = Path(inspect.getsourcefile(base)).resolve()
+        module = base.__module__
+        references = sorted(path for path, text in texts.items()
+                            if metric_id in text or base.__name__ in text)
+        rows.append({
+            "metric_id": metric_id, "public_entry": "quant_evaluator.evaluate",
+            "implementation": module + "." + base.__qualname__,
+            "source_path": str(source.relative_to(repo)),
+            "source_sha256": hashlib.sha256(source.read_bytes()).hexdigest(),
+            "registry_implementation_hash": spec.implementation_hash,
+            "parameter_contract": str(inspect.signature(fn)),
+            "bound_parameters": dict(fn.keywords or {}) if isinstance(fn, functools.partial) else {},
+            "packaged": module.rpartition(".")[0] in packages,
+            "wheel_path": module.replace(".", "/") + ".py",
+            "static_test_references": references,
+            "golden_execution_status": "NOT_RUN",
+            "consumer_execution_status": "NOT_RUN",
+            "status": "INVENTORY_ONLY",
+        })
+    return rows
 
 
 def _pkg_root() -> str:

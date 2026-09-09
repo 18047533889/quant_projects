@@ -86,3 +86,53 @@ def test_n10_trigger_executes_existing_cluster_callback_records_lineage_but_not_
     assert run.status == "RESEARCH_CANDIDATE_NOT_PRODUCTION"
     assert run.production_cluster_set_ref == "csv-production-1"
     assert registry.runs == (run,)
+
+
+def test_global_refresh_supports_cold_start_and_records_new_lineage():
+    evidence = ClusterRefreshEvidence(
+        observed_at="2026-04-01T00:00:00Z", days_since_local_review=0,
+        days_since_global_review=90, pending_share=0, migration_share=0,
+        persistent_quality_failures=0, evidence_refs=("bootstrap:universe:1",),
+    )
+    decision = evaluate_cluster_refresh(evidence, ClusterRefreshPolicy("refresh-policy:v1"))
+
+    def cold_start_builder():
+        cluster_set = ClusterSetVersionArtifact(
+            "csv1", "u1", "graph1", "leiden", "igraph", "1", 1, 1.0,
+            "policy:v1", "assignment:1", "2026-04-01T00:00:00Z",
+            refresh_trigger_ref="bootstrap:universe:1",
+            downstream_validation_ref="modeling:feature_set_trial:pending",
+        )
+        return cluster_set, {"new": _v("new", "csv1", "ab")}
+
+    run = execute_cluster_refresh(
+        decision=decision, previous_clusters={}, cluster_builder=cold_start_builder,
+        registry=ClusterRefreshRegistry(), production_cluster_set_ref="",
+    )
+    assert [(edge.to_cluster_id, edge.match) for edge in run.lineage_edges] == [
+        ("new", ClusterVersionMatch.NEW)
+    ]
+    assert run.status == "RESEARCH_CANDIDATE_NOT_PRODUCTION"
+
+
+def test_global_refresh_reconciles_version_and_partition_identity():
+    evidence = ClusterRefreshEvidence(
+        observed_at="2026-04-01T00:00:00Z", days_since_local_review=0,
+        days_since_global_review=90, pending_share=0, migration_share=0,
+        persistent_quality_failures=0, evidence_refs=("refresh:1",),
+    )
+    decision = evaluate_cluster_refresh(evidence, ClusterRefreshPolicy("p"))
+
+    def bad_builder():
+        cluster_set = ClusterSetVersionArtifact(
+            "csv2", "u", "g", "leiden", "igraph", "1", 1, 1.0,
+            "p", "a", "2026-04-01T00:00:00Z",
+            refresh_trigger_ref="refresh:1", downstream_validation_ref="model:trial",
+        )
+        return cluster_set, {"A": _v("A", "wrong-version", "ab")}
+
+    with pytest.raises(ValueError, match="candidate cluster set"):
+        execute_cluster_refresh(
+            decision=decision, previous_clusters={}, cluster_builder=bad_builder,
+            registry=ClusterRefreshRegistry(), production_cluster_set_ref="",
+        )

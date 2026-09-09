@@ -14,6 +14,7 @@ import pandas as pd
 
 from factor_engine.cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
 from factor_engine.cleaned_operators.common.daily_panel import _aligned
+from factor_engine.cleaned_operators.ts_model._rolling_core import huber_fit
 
 # R11 #137: cross-section minimum breadth.  An industry/group regression on
 # ~3 names is not a meaningful fit — require at least ``_MIN_BREADTH`` valid
@@ -373,7 +374,7 @@ _register_trimmed_ols_honest_rename()
 # and emit NaN for a statistical failure (degenerate x / non-convergence).
 
 
-def _huber_irls_fit(xs: np.ndarray, ys: np.ndarray, add_intercept: bool, max_iter: int = 60, tol: float = 1e-8) -> tuple[float, float] | None:
+def _huber_irls_fit(xs: np.ndarray, ys: np.ndarray, add_intercept: bool, max_iter: int = 60, tol: float = 1e-6) -> tuple[float, float] | None:
     """Huber M-estimator fit of one cross-section via IRLS.
 
     Minimises ``sum rho(r)`` with Huber's ``rho`` (``delta = 1.345 * scale``,
@@ -381,37 +382,21 @@ def _huber_irls_fit(xs: np.ndarray, ys: np.ndarray, add_intercept: bool, max_ite
     (``intercept == 0`` when ``add_intercept`` is False) or ``None`` when the
     fit cannot be established (degenerate design / non-convergence).
     """
-    n = xs.size
-    if n < 2:
-        return None
-    design = np.column_stack([np.ones(n), xs]) if add_intercept else xs.reshape(-1, 1)
     try:
-        beta = np.linalg.lstsq(design, ys, rcond=None)[0]
-    except np.linalg.LinAlgError:
+        x = np.asarray(xs, dtype=float)
+        y = np.asarray(ys, dtype=float)
+    except (TypeError, ValueError, OverflowError):
         return None
-    if not np.all(np.isfinite(beta)):
+    if x.ndim != 1 or y.ndim != 1 or x.size != y.size:
         return None
-    for _ in range(max_iter):
-        fitted = design @ beta
-        r = ys - fitted
-        med = float(np.median(r))
-        mad = float(np.median(np.abs(r - med)) / 0.6745)
-        std = float(np.std(r))
-        scale = mad if (np.isfinite(mad) and mad > 0.0) else (std if np.isfinite(std) and std > 0.0 else 1.0)
-        delta = 1.345 * scale
-        w = np.where(np.abs(r) <= delta, 1.0, delta / np.maximum(np.abs(r), 1e-12))
-        sqrt_w = np.sqrt(np.maximum(w, 1e-12))
-        try:
-            beta_new = np.linalg.lstsq(design * sqrt_w[:, None], ys * sqrt_w, rcond=None)[0]
-        except np.linalg.LinAlgError:
-            return None
-        if not np.all(np.isfinite(beta_new)):
-            return None
-        if np.max(np.abs(beta_new - beta)) <= tol * max(1.0, float(np.max(np.abs(beta)))):
-            beta = beta_new
-            break
-        beta = beta_new
-    else:  # no convergence in max_iter -> statistical failure -> NaN
+    design = (
+        np.column_stack([np.ones(x.size), x])
+        if add_intercept else x.reshape(-1, 1)
+    )
+    beta = huber_fit(
+        design, y, delta=1.345, iterations=max_iter, tolerance=tol,
+    )
+    if beta is None:
         return None
     if add_intercept:
         return float(beta[0]), float(beta[1])

@@ -7,7 +7,7 @@ Production backend selection is evidence constrained and workload-cost aware.
 from __future__ import annotations
 
 import hashlib
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any, Callable
 
 import numpy as np
@@ -59,19 +59,42 @@ def compile_operator_recipe(steps) -> PlanNode:
     return node
 
 
-def execute_operator_recipe(panel, steps, *, runtime_stats=None):
-    """Execute a multi-step recipe through one PlanNode/PandasBackend session."""
+def execute_operator_recipe(
+    panel, steps, *, runtime_stats=None, execution_context=None,
+    backend=None, allow_research: bool = False,
+):
+    """Execute a recipe using caller-owned authority and physical backend."""
     if not isinstance(panel, pd.DataFrame):
         raise TypeError("recipe panel must be a pandas DataFrame")
     source = _RecipePanelSource(panel)
     stats = runtime_stats if runtime_stats is not None else {}
-    plan = compile_operator_recipe(steps)
-    from factor_engine.backend.pandas_backend import PandasBackend
-
-    ctx = ExecutionContext(data_source=source, run_mode="research", runtime_stats=stats)
-    result = PandasBackend().execute(plan, ctx)
+    frozen_steps = tuple(steps)
+    plan = compile_operator_recipe(frozen_steps)
+    if execution_context is None:
+        if not allow_research:
+            raise ValueError("recipe execution requires an approved ExecutionContext")
+        from factor_engine.backend.pandas_backend import PandasBackend
+        ctx = ExecutionContext(data_source=source, run_mode="research", runtime_stats=stats)
+        selected = PandasBackend() if backend is None else backend
+        stats["recipe_execution_authority"] = "research_local"
+    else:
+        if not isinstance(execution_context, ExecutionContext):
+            raise TypeError("execution_context must be an ExecutionContext")
+        ctx = replace(execution_context, data_source=source, runtime_stats=stats)
+        if ctx.run_mode == "production" and backend is None:
+            raise ValueError("production recipe execution requires caller-selected backend")
+        if backend is None:
+            if not allow_research or ctx.run_mode != "research":
+                raise ValueError("recipe backend authority is missing")
+            from factor_engine.backend.pandas_backend import PandasBackend
+            selected = PandasBackend()
+        else:
+            selected = backend
+        stats["recipe_execution_authority"] = f"supplied_{ctx.run_mode}"
+    stats["recipe_backend"] = type(selected).__name__
+    result = selected.execute(plan, ctx)
     stats["recipe_input_load_count"] = source.load_count
-    stats["recipe_operator_count"] = len(tuple(steps))
+    stats["recipe_operator_count"] = len(frozen_steps)
     if isinstance(result, pd.Series) and isinstance(result.index, pd.MultiIndex):
         return result.unstack(level=-1)
     if isinstance(result, pd.DataFrame):

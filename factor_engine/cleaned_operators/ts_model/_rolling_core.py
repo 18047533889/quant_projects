@@ -690,7 +690,17 @@ def huber_fit(
         used = 0
         for used in range(1, max_iter + 1):
             resid = yn - z @ gamma
-            scale = 1.4826 * float(np.median(np.abs(resid - np.median(resid))))
+            centered_resid = resid - np.median(resid)
+            mad = float(np.median(np.abs(centered_resid)))
+            residual_extent = float(np.max(np.abs(centered_resid)))
+            if (np.isfinite(mad) and residual_extent > exact_floor
+                    and mad <= 64.0 * eps * residual_extent):
+                _set_fit_status(
+                    False, "scale_degenerate", iterations=used,
+                    mad=mad, residual_extent=residual_extent,
+                )
+                return None
+            scale = 1.4826 * mad
             if not np.isfinite(scale) or scale == 0.0:
                 scale = _stable_std(resid)
             if not np.isfinite(scale) or scale <= 0.0:
@@ -720,7 +730,17 @@ def huber_fit(
             gamma = gamma_new
 
             final_resid = yn - z @ gamma
-            final_scale = 1.4826 * float(np.median(np.abs(final_resid - np.median(final_resid))))
+            centered_final = final_resid - np.median(final_resid)
+            final_mad = float(np.median(np.abs(centered_final)))
+            final_extent = float(np.max(np.abs(centered_final)))
+            if (np.isfinite(final_mad) and final_extent > exact_floor
+                    and final_mad <= 64.0 * eps * final_extent):
+                _set_fit_status(
+                    False, "scale_degenerate", iterations=used,
+                    mad=final_mad, residual_extent=final_extent,
+                )
+                return None
+            final_scale = 1.4826 * final_mad
             if not np.isfinite(final_scale) or final_scale == 0.0:
                 final_scale = _stable_std(final_resid)
             if not np.isfinite(final_scale) or final_scale <= 0.0:

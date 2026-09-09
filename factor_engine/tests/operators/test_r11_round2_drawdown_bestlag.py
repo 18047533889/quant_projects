@@ -53,11 +53,13 @@ def strict_fiscal_parameter_domain_certification_guard():
 
 
 def _frame(values: np.ndarray) -> pd.DataFrame:
-    return pd.DataFrame({"A": np.asarray(values, dtype=float)})
+    index = pd.date_range("2020-01-01", periods=len(values))
+    return pd.DataFrame({"A": np.asarray(values, dtype=float)}, index=index)
 
 
 def _pl_frame(values: np.ndarray) -> pl.DataFrame:
-    return pl.DataFrame({"A": np.asarray(values, dtype=float)})
+    dates = pd.date_range("2020-01-01", periods=len(values)).to_pydatetime()
+    return pl.DataFrame({"date": dates, "A": np.asarray(values, dtype=float)})
 
 
 # ---------------------------------------------------------------------------

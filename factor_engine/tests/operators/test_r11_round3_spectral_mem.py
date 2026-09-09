@@ -155,7 +155,7 @@ def test_wavelet_entropy_single_band_is_zero():
 def test_spectral_entropy_no_partial_warmup():
     rng = np.random.default_rng(3)
     ret = rng.normal(0.0, 1.0, 100)
-    out = _calc("ts_return_spectral_entropy", ret, window=60)
+    out = _calc("ts_return_spectral_entropy", ret, window=60, input_kind="ReturnDecimal")
     assert np.isnan(out[:59]).all(), "startup rows must be NaN (no partial spectrum)"
     assert np.isfinite(out[59])
 

@@ -15,6 +15,7 @@ import numpy as np
 import polars as pl
 
 from factor_engine.cleaned_operators.base_polars import OperatorMetadata, SeriesOperator, register_operator
+from factor_engine.backend.contracts import ExecutionKind, PhysicalImplementationSpec
 
 _SKIP = frozenset({"date", "stock_code"})
 
@@ -363,57 +364,6 @@ def _best_lag_corr_raw(xv, yv, row, window, max_lag):
     return float(best)
 
 
-def _circular_block_permute(arr, block, rng):
-    """Deterministic circular block permutation (polars twin of the pandas one)."""
-    n = len(arr)
-    if n <= 1:
-        return arr.copy()
-    b = max(1, min(int(block), n))
-    off = int(rng.integers(0, n))
-    rotated = np.concatenate([arr[off:], arr[:off]])
-    blocks = [rotated[i * b : (i + 1) * b] for i in range(int(np.ceil(n / b)))]
-    order = list(range(len(blocks)))
-    rng.shuffle(order)
-    return np.concatenate([blocks[i] for i in order])[:n]
-
-
-def _best_lag_corr_excess(xv, yv, row, window, max_lag, n_surrogates=20, seed=42, block_frac=0.1):
-    """max_real - E[max_surrogate] under a circular-block-permutation null."""
-    real = _best_lag_corr_raw(xv, yv, row, window, max_lag)
-    if not np.isfinite(real):
-        return np.nan
-    src_lo = max(0, row + 1 - max_lag - window)
-    x_source = xv[src_lo : row + 1]
-    n = len(x_source)
-    block = max(1, int(np.ceil(block_frac * n)))
-    rng = np.random.default_rng(seed + row)
-    surr_maxes = np.empty(n_surrogates, dtype=float)
-    for j in range(n_surrogates):
-        surr = _circular_block_permute(x_source, block, rng)
-        best = -1.0
-        for lag in range(0, max_lag + 1):
-            end = row + 1 - lag
-            start = max(0, end - window)
-            if end - start < 2:
-                continue
-            offset = start - src_lo
-            length = end - start
-            xs = surr[offset : offset + length]
-            ys = yv[start + lag : row + 1]
-            valid = np.isfinite(xs) & np.isfinite(ys)
-            if valid.sum() < 2:
-                continue
-            if np.std(xs[valid]) > 0 and np.std(ys[valid]) > 0:
-                value = abs(float(np.corrcoef(xs[valid], ys[valid])[0, 1]))
-                if value > best:
-                    best = value
-        surr_maxes[j] = best if best >= 0 else np.nan
-    finite = surr_maxes[np.isfinite(surr_maxes)]
-    if finite.size == 0:
-        return np.nan
-    return real - float(np.mean(finite))
-
-
 def ts_best_lag_corr_raw(y, x, window, max_lag=5):
     w = _pi(window, "window", 2)
     ml = max(0, int(max_lag))
@@ -430,17 +380,40 @@ def ts_best_lag_corr_raw(y, x, window, max_lag=5):
 
 
 def ts_best_lag_corr_excess(y, x, window, max_lag=5):
+    """CPU-kernel bridge with explicit absolute-time/security RNG identity."""
     w = _pi(window, "window", 2)
     ml = max(0, int(max_lag))
     if ml >= w:
         raise ValueError("max_lag must be < window")
+    if "date" not in y.columns or "date" not in x.columns:
+        raise ValueError("ts_best_lag_corr_excess requires an explicit date coordinate")
+    time_keys = y["date"].to_list()
+    if time_keys != x["date"].to_list():
+        raise ValueError("x and y date coordinates must match exactly")
+    finite_time_keys = [key for key in time_keys if key is not None]
+    if len(set(finite_time_keys)) != len(finite_time_keys):
+        raise ValueError("date coordinate must be unique")
+    from factor_engine.backend.operator_semantic_version import versioned_name
+    from factor_engine.cleaned_operators.downside_risk import (
+        _best_lag_corr_excess,
+        _stable_surrogate_seed,
+    )
+
+    canonical_identity = versioned_name("ts_best_lag_corr_excess")
     cols = _cols(x, y)
     rows = x.height
     out = np.full((rows, len(cols)), np.nan, dtype=float)
     for i, c in enumerate(cols):
         xv, yv = _arr(x, c), _arr(y, c)
         for t in range(rows):
-            out[t, i] = _best_lag_corr_excess(xv, yv, t, w, ml)
+            if time_keys[t] is None:
+                continue
+            identity_seed = _stable_surrogate_seed(
+                42, time_keys[t], c, canonical_identity
+            )
+            out[t, i] = _best_lag_corr_excess(
+                xv, yv, t, w, ml, identity_seed=identity_seed
+            )
     return _make(y, cols, out)
 
 
@@ -776,22 +749,48 @@ _SPECS: tuple[tuple[str, tuple[str, ...], Callable, str], ...] = (
 
 
 def _register(name: str, params: tuple[str, ...], function: Callable, description: str) -> None:
+    is_cpu_bridge = name == "ts_best_lag_corr_excess"
     metadata = OperatorMetadata(
         name=name,
         category="robust_statistics",
         description=description,
         param_names=list(params),
         return_type="series",
-        tags=["pit_safe", "causal", "polars", "native"],
+        tags=["pit_safe", "causal", "polars", "bridge", "cpu_kernel"]
+        if is_cpu_bridge else ["pit_safe", "causal", "polars", "native"],
     )
 
     def _calculate_series(self, *args, **kwargs):
         return function(*args, **kwargs)
 
+    class_attrs = {
+        "metadata": metadata,
+        "_calculate_series": _calculate_series,
+        "__module__": __name__,
+    }
+    if is_cpu_bridge:
+        class_attrs["_physical_spec"] = PhysicalImplementationSpec(
+            canonical=name,
+            backend="polars",
+            execution_kind=ExecutionKind.DELEGATE_PYTHON,
+            supports_lazy=False,
+            supports_streaming=False,
+            materializes_full_panel=True,
+            requires_sorted=True,
+            stateful=False,
+            supports_nulls=True,
+            supports_nan=True,
+            supports_inf=False,
+            implementation_source_hash="downside_risk:_best_lag_corr_excess:stable_identity:v2",
+            emitter_identity="polars_robust_stats:cpu_bridge:v2",
+            parameter_domain_hash="window:int>=2,max_lag:int>=0,max_lag<window,date:required_unique",
+            semantic_contract_hash="ts_best_lag_corr_excess:circular_block_null:stable_cell_identity:v2",
+            notes="Materializes columns and delegates to the single deterministic NumPy resampling kernel.",
+        )
     cls = type(
         f"PolarsRobustStats_{name}",
         (SeriesOperator,),
-        {"metadata": metadata, "_calculate_series": _calculate_series, "__module__": __name__},
+        class_attrs,
     )
     register_operator(
         name=name,

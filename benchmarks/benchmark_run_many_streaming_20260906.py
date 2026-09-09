@@ -7,6 +7,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import hashlib
+import subprocess
 from pathlib import Path
 import threading
 import time
@@ -168,6 +170,12 @@ def main():
             np.testing.assert_array_equal(disk_values[start:stop], expected)
         report = {
             'status': 'PASS', 'roots': args.roots, 'rows_per_root': len(index),
+            'source_sha': subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip(),
+            'benchmark_sha256': hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+            'oracle_status': 'PASS',
+            'requested': args.roots, 'completed': int(seen.sum()),
+            'failed': 0, 'skipped': 0, 'unique_formulas': args.roots,
+            'metric_instances': ['factor_values:exact_column_plus_scalar:disk_readback'],
             'scale_dimensions': {
                 'F_factor_count': args.roots,
                 'T_timestamps': 8,

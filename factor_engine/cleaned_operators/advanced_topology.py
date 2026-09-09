@@ -38,6 +38,7 @@ most ``_MAX_POINTS`` points (``_SAMPLING_POLICY``) — never by lexicographic
 """
 from __future__ import annotations
 
+from contextvars import ContextVar
 from math import lgamma, log as mlog, sqrt as msqrt
 from typing import Any
 
@@ -58,6 +59,9 @@ _EPS = 1e-12
 _MAX_POINTS = 12              # hard deterministic cap on the Rips point cloud.
 _DF_GRID = (2.1, 3.0, 4.0, 5.0, 6.0, 8.0, 10.0, 15.0, 20.0, 30.0)
 _DF_STEP = 0.05
+_LAST_T_FIT_STATUS: ContextVar[dict[str, Any]] = ContextVar(
+    "advanced_topology_t_fit_status", default={"reason": "not_run"}
+)
 # M-3xx: versioned sampling policy for the Takens point cloud.
 #
 #   "stable_unique_first_occurrence + time_decimation"
@@ -469,33 +473,81 @@ def _t_logpdf_vec(v: np.ndarray, df: float, mu: float, scale: float) -> np.ndarr
     return _t_logpdf_const(df) - mlog(scale) - 0.5 * (df + 1.0) * np.log1p(z * z / df)
 
 
-def _t_fit(vals: np.ndarray) -> tuple[float, float, float] | None:
-    """Fast profile-likelihood Student-t fit over a fixed df grid (deterministic)."""
+def last_t_fit_status() -> dict[str, Any]:
+    """Return a copy of the context-local diagnostic for the latest t fit."""
+    return dict(_LAST_T_FIT_STATUS.get())
+
+
+def _t_fit(
+    vals: np.ndarray,
+    *,
+    max_iter: int = 200,
+    score_tol: float = 1e-7,
+) -> tuple[float, float, float] | None:
+    """Profile Student-t MLE on a fixed df grid in block-normalized units."""
     v = vals[np.isfinite(vals)]
     if v.size < 8:
+        _LAST_T_FIT_STATUS.set({"reason": "insufficient_sample", "n": int(v.size)})
         return None
+    center = float(np.median(v))
+    centered = v - center
+    spread = float(np.median(np.abs(centered))) * 1.4826
+    if not np.isfinite(spread) or spread == 0.0:
+        spread = float(np.std(centered))
+    if not np.isfinite(spread) or spread == 0.0:
+        _LAST_T_FIT_STATUS.set({"reason": "degenerate_scale", "n": int(v.size)})
+        return None
+    q = centered / spread
+    from scipy.optimize import minimize
+
     best: tuple[float, float, float, float] | None = None
     for df in _DF_GRID:
-        mu = float(np.median(v))
-        mad = float(np.median(np.abs(v - mu))) * 1.4826
-        scale = mad if mad > _EPS else float(np.std(v))
-        if not (np.isfinite(scale) and scale > _EPS):
-            return None
-        for _ in range(15):
-            z = (v - mu) / scale
-            w = (df + 1.0) / (df + z * z)
-            den = float(np.sum(w))
-            if den <= _EPS:
-                break
-            mu = float(np.sum(w * v) / den)
-            scale = msqrt(max(float(np.mean(w * (v - mu) ** 2)), 1e-12))
-            if not (np.isfinite(scale) and scale > _EPS):
-                return None
-        ll = float(np.sum(_t_logpdf_vec(v, df, mu, scale)))
-        if best is None or ll > best[0]:
-            best = (ll, df, mu, scale)
+        def objective(theta: np.ndarray) -> tuple[float, np.ndarray]:
+            mu_n, log_scale_n = float(theta[0]), float(theta[1])
+            scale_n = float(np.exp(log_scale_n))
+            if not np.isfinite(scale_n) or scale_n == 0.0:
+                return float("inf"), np.array([np.nan, np.nan])
+            z = (q - mu_n) / scale_n
+            ll_vec = _t_logpdf_vec(q, df, mu_n, scale_n)
+            score_mu = np.sum((df + 1.0) * z / (df + z * z)) / scale_n
+            score_ls = np.sum(df * (z * z - 1.0) / (df + z * z))
+            return -float(np.sum(ll_vec)), -np.array([score_mu, score_ls])
+
+        starts = (
+            np.array([float(np.median(q)), 0.0]),
+            np.array([float(np.mean(q)), mlog(float(np.std(q)))]),
+        )
+        for start in starts:
+            result = minimize(
+                objective,
+                start,
+                method="BFGS",
+                jac=True,
+                options={"gtol": score_tol * v.size, "maxiter": int(max_iter)},
+            )
+            if not result.success or not np.all(np.isfinite(result.x)):
+                continue
+            nll, gradient = objective(result.x)
+            mean_score = float(np.max(np.abs(gradient))) / v.size
+            if not np.isfinite(nll) or mean_score > score_tol:
+                continue
+            mu_n, log_scale_n = map(float, result.x)
+            scale_n = float(np.exp(log_scale_n))
+            mu = center + spread * mu_n
+            scale = spread * scale_n
+            if not (np.isfinite(mu) and np.isfinite(scale) and scale > 0.0):
+                continue
+            ll = -nll - v.size * mlog(spread)
+            if best is None or ll > best[0]:
+                best = (ll, df, mu, scale)
     if best is None:
+        _LAST_T_FIT_STATUS.set(
+            {"reason": "NON_CONVERGED", "n": int(v.size), "max_iter": int(max_iter)}
+        )
         return None
+    _LAST_T_FIT_STATUS.set(
+        {"reason": "converged", "n": int(v.size), "df": best[1], "log_likelihood": best[0]}
+    )
     return best[1], best[2], best[3]
 
 

@@ -78,15 +78,17 @@ def _euclidean_pairs(a: np.ndarray, b: np.ndarray) -> np.ndarray:
 
 
 def _energy_distance(X: np.ndarray, Y: np.ndarray) -> float:
-    """U-stat energy distance between two multivariate samples (R3-139).
+    """Nonnegative clipped-U energy score between two multivariate samples.
 
     The classical V-statistic ``2 E|X-Y| - E|X-X'| - E|Y-Y'|`` includes the
     diagonal zeros and divides the within-sample terms by ``m^2`` / ``n^2``, so
     its finite-N bias differs between the two sides whenever ``recent_window !=
     prior_window`` — a purely mechanical bias that changes the baseline.  This
-    implementation uses the UNBIASED U-stat form: the within-sample terms
-    exclude the diagonal and divide by ``m*(m-1)`` / ``n*(n-1)``, so the
-    estimator is unbiased at every finite sample size on both sides.
+    implementation first uses the U-stat form: within-sample terms exclude
+    the diagonal and divide by ``m*(m-1)`` / ``n*(n-1)``. That raw statistic
+    can be negative. The PUBLIC policy then returns max(raw_U, 0): clipping
+    introduces finite-sample bias, so this returned score is NOT an unbiased
+    estimator. Clipping is preserved for compatibility, not silently removed.
     """
     m, n = X.shape[0], Y.shape[0]
     if m < 2 or n < 2:

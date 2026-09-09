@@ -39,6 +39,7 @@ from quant_evaluator.contracts.evaluation_artifact import (
     EvaluationResultContentHash,
     EvaluationSpecIdentity,
 )
+from quant_evaluator.contracts.qualification import NumericalQualificationReceipt, UseAdmissionReceipt
 
 __all__ = [
     "FactorBatch",
@@ -76,4 +77,6 @@ __all__ = [
     "EvaluationSpecIdentity",
     "EvaluationResultContentHash",
     "ArtifactEnvelopeIdentity",
+    "NumericalQualificationReceipt",
+    "UseAdmissionReceipt",
 ]

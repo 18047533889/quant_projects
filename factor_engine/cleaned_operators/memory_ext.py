@@ -10,8 +10,8 @@ Two complements:
   (x_t - xbar)(x_{t+k} - xbar), rho_k = gamma_k / gamma_0`` (audit #60) over the
   *trailing contiguous finite window* (review R4-57: the same cohort for the
   mean, gamma_0 and every lag-k numerator — never a re-connected axis); the
-  robust monotone partial-sum sequence replaces the fragile "stop at the first
-  negative ACF" rule.  The sum is NOT divided by ``max_lag``, so white noise
+  cumulative-minimum sequence of positive pairs ``P_k=rho_(2k)+rho_(2k+1)``
+  gives ``tau=-1+2 sum(P)``. The sum is NOT divided by ``max_lag``, so white noise
   gives ``~1`` bar regardless of ``max_lag``.  The precise spelling
   ``ts_integrated_autocorrelation_time`` is an alias of this canonical.
   ``ts_autocorrelation_time_initial_positive_sequence`` exposes the simpler
@@ -100,70 +100,66 @@ def _sample_acf(contig: np.ndarray, max_lag: int) -> np.ndarray:
     n = int(contig.size)
     if n < 3:
         return np.empty(0, dtype=float)
-    mu = float(np.mean(contig))
-    gamma0 = float(np.sum((contig - mu) ** 2)) / float(n)
-    if not np.isfinite(gamma0) or gamma0 <= 1e-12:
+    magnitude = float(np.max(np.abs(contig)))
+    if not np.isfinite(magnitude) or magnitude == 0.0:
+        return np.empty(0, dtype=float)
+    with np.errstate(over="ignore", invalid="ignore"):
+        centered = contig - contig[0]
+    if not np.all(np.isfinite(centered)):
+        centered = contig / magnitude
+        centered -= centered[0]
+    centered /= float(np.max(np.abs(centered))) or 1.0
+    centered -= float(np.mean(centered))
+    spread = float(np.max(np.abs(centered)))
+    if spread == 0.0:
+        return np.empty(0, dtype=float)
+    centered /= spread
+    gamma0 = float(np.dot(centered, centered)) / float(n)
+    if not np.isfinite(gamma0) or gamma0 <= 0.0:
         return np.empty(0, dtype=float)
     m = min(int(max_lag), n - 1)
     rho = np.empty(m + 1, dtype=float)
     rho[0] = 1.0
     for k in range(1, m + 1):
-        num = float(np.sum((contig[: n - k] - mu) * (contig[k:] - mu)))
+        num = float(np.dot(centered[: n - k], centered[k:]))
         gamma_k = num / float(n - k)
         rho[k] = gamma_k / gamma0
     return rho
 
 
-def _geyer_ims_tau(rho: np.ndarray) -> float:
-    """Geyer (1992) initial-MONOTONE-sequence integrated autocorrelation time.
+def _geyer_positive_pairs(rho: np.ndarray) -> np.ndarray | None:
+    """Initial positive prefix of P_k = rho_(2k) + rho_(2k+1).
 
-    Audit #61: the old "stop at the first negative ACF" truncation is fragile —
-    one noisy negative lag-2 autocorrelation truncates a genuinely long-memory
-    tail.  The initial monotone sequence monotonises the *partial sums* (the
-    standard emcee formulation)::
-
-        g[0] = 2 rho_0 = 2
-        g[1] = 2 rho_1
-        g[i] = 2 * min(rho_i, (g[i-1] + g[i-2]) / 2)     for i >= 2
-        stop at the first i with g[i] <= 0
-        tau  = sum(g) - 1
-
-    White noise (rho_1 ~ 0) still gives tau ~ 1 bar; a genuine long-memory tail
-    is not cut short by a single early non-positive sample value.
+    Discard an unpaired final even lag. Nonfinite ACF is undefined. The
+    N-k sample covariance policy is unchanged; no clipping forces a noisy
+    finite-sample estimate to be a positive theoretical population value.
     """
-    if rho.size == 0:
+    rho = np.asarray(rho, dtype=float)
+    if rho.ndim != 1 or rho.size < 2 or not np.all(np.isfinite(rho)):
+        return None
+    count = rho.size // 2
+    pairs = rho[:2*count].reshape(count, 2).sum(axis=1)
+    stop = np.flatnonzero(pairs <= 0.0)
+    return pairs[:int(stop[0])] if stop.size else pairs
+
+
+def _geyer_ims_tau(rho: np.ndarray) -> float:
+    """Geyer initial monotone sequence: cumulative minima of positive pairs.
+
+    tau = -1 + 2 * sum(P_k); this is not truncation of individual rho_k.
+    The theoretical shape properties assume a stationary reversible process;
+    applying the estimator to financial data does not certify that assumption.
+    """
+    pairs = _geyer_positive_pairs(rho)
+    if pairs is None:
         return np.nan
-    g = np.empty(rho.size, dtype=float)
-    g[0] = 2.0 * rho[0]  # 2.0
-    if rho.size == 1:
-        return float(g[0] - 1.0)
-    g[1] = 2.0 * rho[1]
-    stop = 1
-    if g[1] > 0.0:
-        for i in range(2, rho.size):
-            g[i] = 2.0 * min(rho[i], 0.5 * (g[i - 1] + g[i - 2]))
-            stop = i
-            if g[i] <= 0.0:
-                break
-    return float(np.sum(g[: stop + 1]) - 1.0)
+    return float(-1.0 + 2.0 * np.minimum.accumulate(pairs).sum())
 
 
 def _geyer_ips_tau(rho: np.ndarray) -> float:
-    """Geyer (1992) initial-POSITIVE-sequence estimator (audit #61).
-
-    ``tau = 1 + 2 * sum_{k=1..K} rho_k`` truncated at the first non-positive
-    autocorrelation.  This is the simpler of Geyer's pair; the robust preferred
-    estimator is the initial monotone sequence (``_geyer_ims_tau``).  Exposed as
-    its own canonical for completeness / research use.
-    """
-    if rho.size == 0:
-        return np.nan
-    s = 0.0
-    for i in range(1, rho.size):
-        if rho[i] <= 0.0:
-            break
-        s += rho[i]
-    return float(1.0 + 2.0 * s)
+    """Geyer initial positive paired sequence, without monotone adjustment."""
+    pairs = _geyer_positive_pairs(rho)
+    return np.nan if pairs is None else float(-1.0 + 2.0 * pairs.sum())
 
 
 def _autocorrelation_time(chunk: np.ndarray, max_lag: int) -> float:
@@ -281,9 +277,9 @@ def _fractional_difference_series(x2d: np.ndarray, fd: float, cutoff: int) -> np
 class TsAutocorrelationTime(SeriesOperator):
     """积分自相关时间（Geyer 初始单调序列估计量），单位 bars。
 
-    Audit #61: 使用 Geyer (1992) initial-monotone-sequence 估计量（emcee 形式：
-    ``g0=2, g1=2rho_1, gi=2*min(rho_i,(g_{i-1}+g_{i-2})/2)``，首个 gi<=0 停止，
-    ``tau=sum(g)-1``）替代脆弱的"首个负 ACF 即停止"。Audit #60: 每个滞后使用
+    使用 Geyer initial-monotone-sequence：``P_k=rho_(2k)+rho_(2k+1)``，
+    取首个非正配对之前的正前缀，再做累积最小值，``tau=-1+2*sum(P)``。
+    丢弃未配对的最后滞后；不把单个负 ACF 当成终止点。每个滞后使用
     标准有限样本分母 ``rho_k = gamma_k/gamma_0``（``gamma_k`` 以 N-k 归一），
     消除随 k 增长的有限样本偏差。输出**不除以 max_lag**（R4-56）：白噪声 →
     τ≈1 bar，与 max_lag 无关。大 -> 强序列依赖；小 -> 近白噪声。统计量在
@@ -292,7 +288,7 @@ class TsAutocorrelationTime(SeriesOperator):
 
     metadata = _metadata(
         "ts_autocorrelation_time",
-        "积分自相关时间（bars，正自相关累加，不除以 max_lag）。",
+        "积分自相关时间（bars，Geyer 正配对前缀的单调化，不除以 max_lag）。",
         ["x", "window", "max_lag"],
         unit="bars",
         cost=3,
@@ -322,14 +318,14 @@ class TsAutocorrelationTimeInitialPositive(SeriesOperator):
     """积分自相关时间（Geyer 初始正序列估计量），单位 bars。
 
     Audit #61: 标准 Geyer initial-positive-sequence 估计量
-    ``tau = 1 + 2*sum_{k=1..K} rho_k``，在第一个非正自相关处截断。稳健的首选
-    是初始单调序列（``ts_autocorrelation_time``）；本拼写为完整性/研究保留。
+    ``P_k=rho_(2k)+rho_(2k+1), tau=-1+2*sum(P)``，在首个非正配对之前截断。
+    单调版本另见 ``ts_autocorrelation_time``；本拼写为完整性/研究保留。
     Audit #60: 自相关使用标准有限样本分母（``rho_k = gamma_k/gamma_0``）。P1。
     """
 
     metadata = _metadata(
         "ts_autocorrelation_time_initial_positive_sequence",
-        "Geyer 初始正序列积分自相关时间（bars，rho>0 累加）。",
+        "Geyer 初始正配对序列积分自相关时间（bars，P_k>0 前缀）。",
         ["x", "window", "max_lag"],
         unit="bars",
         cost=3,

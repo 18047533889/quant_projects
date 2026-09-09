@@ -88,15 +88,10 @@ __all__ = [
 
 
 def __getattr__(name: str):
-    """Lazy shim for legacy names from the historical flat module.
+    """One-way aliases to historical research-only portfolio diagnostics.
 
-    ``metrics/__init__.py`` imports ``construct_long_short_portfolio`` et al.
-    from ``quant_evaluator.metrics.probe_portfolio``.  The old flat module
-    (``metrics/probe_portfolio.py``) is still present on disk and provides
-    these names; importing it directly would recurse into ``metrics/__init__``
-    when it imports its own ``portfolio_stats`` siblings.  Load it through the
-    already-imported ``metrics`` package (whose namespace is fully populated
-    by the time this shim runs) and return the requested attribute.
+    These forward-label diagnostics are not cohort execution evidence. The
+    canonical daily-PnL and costs implementations live in this package.
     """
     if name not in {
         "construct_long_short_portfolio",
@@ -110,8 +105,6 @@ def __getattr__(name: str):
     }:
         raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
     import importlib
-    import quant_evaluator.metrics as _metrics_pkg
-
     mod = importlib.import_module("quant_evaluator.metrics.probe_portfolio_legacy")
     return getattr(mod, name)
 

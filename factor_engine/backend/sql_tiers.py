@@ -970,21 +970,6 @@ def is_sql_parity_verified(canon: str) -> bool:
     return name in SQL_PARITY_VERIFIED_CANONICALS
 
 
-def is_sql_production_safe(canon: str) -> bool:
-    """判断 canonical 是否在静态 SQL production-safe 白名单内。
-
-    参数:
-        canon: 算子 canonical 名称或别名。
-
-    返回:
-        是否在 ``SQL_PRODUCTION_SAFE_CANONICALS`` 内（不含运行时降级）。
-    """
-    from factor_engine.cleaned_operators.registry import OperatorRegistry
-
-    name = OperatorRegistry._aliases.get(canon, canon)
-    return name in SQL_PRODUCTION_SAFE_CANONICALS
-
-
 class _BoundedLRU:
     """R40 #64：entry/byte 双界 LRU 缓存（``max_entries`` + ``max_bytes``）。
 

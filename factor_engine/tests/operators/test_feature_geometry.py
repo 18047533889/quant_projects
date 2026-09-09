@@ -38,7 +38,7 @@ def test_ts_feature_mode_share_basic() -> None:
 
     op = _op("ts_feature_mode_share")
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, x.shift(1), x.shift(2))
         assert isinstance(result, pd.DataFrame)
         assert result.shape == x.shape
     except Exception as e:
@@ -52,7 +52,7 @@ def test_ts_feature_mode_share_handles_nans() -> None:
 
     op = _op("ts_feature_mode_share")
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, x.shift(1), x.shift(2))
         assert isinstance(result, pd.DataFrame)
     except Exception as e:
         pytest.fail(f"NaN test failed: {e}")
@@ -85,7 +85,7 @@ def test_ts_feature_effective_rank_basic() -> None:
 
     op = _op("ts_feature_effective_rank")
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, x.shift(1), x.shift(2))
         assert isinstance(result, pd.DataFrame)
         assert result.shape == x.shape
     except Exception as e:
@@ -99,7 +99,7 @@ def test_ts_feature_effective_rank_handles_nans() -> None:
 
     op = _op("ts_feature_effective_rank")
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, x.shift(1), x.shift(2))
         assert isinstance(result, pd.DataFrame)
     except Exception as e:
         pytest.fail(f"NaN test failed: {e}")
@@ -132,7 +132,7 @@ def test_ts_feature_subspace_rotation_basic() -> None:
 
     op = _op("ts_feature_subspace_rotation")
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, x.shift(1), x.shift(2))
         assert isinstance(result, pd.DataFrame)
         assert result.shape == x.shape
     except Exception as e:
@@ -146,7 +146,7 @@ def test_ts_feature_subspace_rotation_handles_nans() -> None:
 
     op = _op("ts_feature_subspace_rotation")
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, x.shift(1), x.shift(2))
         assert isinstance(result, pd.DataFrame)
     except Exception as e:
         pytest.fail(f"NaN test failed: {e}")
@@ -179,7 +179,7 @@ def test_ts_beta_break_score_basic() -> None:
 
     op = _op("ts_beta_break_score")
     try:
-        result = op.calculate(x)
+        result = op.calculate(2*x+x*x/10, x, recent_window=5, prior_window=5)
         assert isinstance(result, pd.DataFrame)
         assert result.shape == x.shape
     except Exception as e:
@@ -193,7 +193,7 @@ def test_ts_beta_break_score_handles_nans() -> None:
 
     op = _op("ts_beta_break_score")
     try:
-        result = op.calculate(x)
+        result = op.calculate(2*x+x*x/10, x, recent_window=5, prior_window=5)
         assert isinstance(result, pd.DataFrame)
     except Exception as e:
         pytest.fail(f"NaN test failed: {e}")

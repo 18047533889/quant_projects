@@ -84,16 +84,17 @@ _INTRINSIC_PARAM_SPECS: dict[str, ParamSpec] = {
         param_role=ParamRole.ESTIMATOR_RESOLUTION, searchable=False, default=None,
     ),
 }
-# M-2xx: relational feasibility — the window must be able to produce at least
-# ``k + 1`` delay embeddings, i.e. ``window - (embedding_dim-1)*delay >= k+1``.
-# Below that the kernel is guaranteed to emit all-NaN, so the combination is
-# rejected at binding instead of running then failing.
+# B06: endpoint feasibility must include the Theiler exclusion. Requiring the
+# endpoint to have ``k`` candidates is the necessary boundary; demanding that
+# every interior anchor have ``k`` candidates would incorrectly reject windows
+# that still contain usable endpoint anchors.
 _INTRINSIC_RELATIONAL_SPECS: list[RelationalParamSpec] = [
     RelationalParamSpec(
-        "window - (embedding_dim - 1) * delay >= k + 1",
-        "ts_delay_intrinsic_dimension requires window-(embedding_dim-1)*delay "
-        ">= k+1 embeddings (window={window}, embedding_dim={embedding_dim}, "
-        "delay={delay}, k={k})",
+        "window - (embedding_dim - 1) * delay >= k + "
+        "(embedding_dim * delay if theiler_window is None else theiler_window) + 1",
+        "ts_delay_intrinsic_dimension requires N_embed >= k + effective_theiler + 1 "
+        "(window={window}, embedding_dim={embedding_dim}, delay={delay}, k={k}, "
+        "theiler_window={theiler_window})",
     ),
 ]
 
@@ -128,23 +129,45 @@ def _distinct_count_scale_robust(pts: np.ndarray, rel_tol: float = 1e-8) -> int:
     The historic ``np.unique(pts.round(10), axis=0)`` merged points at a fixed
     absolute decimal precision, so ``x``, ``1000*x`` and ``1e-6*x`` reported
     different duplicate counts (which corrupts the ``n_unique >= k+1`` gate and
-    the intrinsic-dimension estimate).  Here every embedding dimension is first
-    normalised by its robust per-dimension scale (median absolute deviation,
-    with a standard-deviation fallback for near-constant dimensions) and points
-    are then considered duplicates when their MAD-normalised co-ordinates agree
-    to a relative tolerance ``rel_tol``.  Because MAD (and the fallback)
-    rescale linearly, the count is invariant to a global rescaling of the
-    series.
+    the intrinsic-dimension estimate).  Here the cloud is centered with a
+    finite midrange and divided by one bounded common scale before quantizing
+    at ``rel_tol``.  This avoids overflow in variance-based fallbacks, preserves
+    the Euclidean geometry used by the estimator, and makes the count invariant
+    to a finite nonzero global rescaling of the series.
     """
     if pts.shape[0] == 0:
         return 0
-    med = np.median(pts, axis=0)
-    mad = np.median(np.abs(pts - med), axis=0)
-    scale = np.where(mad > 0.0, mad, pts.std(axis=0))
-    scale = np.where(scale > 0.0, scale, 1.0)
-    norm = (pts - med) / scale
+    norm = _common_scale_points(pts)
+    if norm is None:
+        return 1
     grid = np.rint(norm / rel_tol)
     return int(np.unique(grid, axis=0).shape[0])
+
+
+def _finite_midpoint(a: np.ndarray, b: np.ndarray) -> np.ndarray:
+    """Finite binary64 midpoint without same-sign overflow."""
+    direct = (
+        (np.signbit(a) != np.signbit(b))
+        | ((np.abs(a) <= np.finfo(float).max / 2.0)
+           & (np.abs(b) <= np.finfo(float).max / 2.0))
+    )
+    out = np.empty_like(a, dtype=float)
+    out[direct] = (a[direct] + b[direct]) / 2.0
+    out[~direct] = a[~direct] / 2.0 + b[~direct] / 2.0
+    return out
+
+
+def _common_scale_points(pts: np.ndarray) -> np.ndarray | None:
+    """Center with a stable midrange and apply one scalar Euclidean scale."""
+    lo = np.min(pts, axis=0)
+    hi = np.max(pts, axis=0)
+    center = _finite_midpoint(lo, hi)
+    shifted = pts - center
+    scale = float(np.max(np.abs(shifted)))
+    if not np.isfinite(scale) or scale <= 0.0:
+        return None
+    normalized = shifted / scale
+    return normalized if np.isfinite(normalized).all() else None
 
 
 def _delay_intrinsic_dim(chunk: np.ndarray, dim: int, k: int, delay: int, theiler_window: int) -> float:
@@ -163,8 +186,12 @@ def _delay_intrinsic_dim(chunk: np.ndarray, dim: int, k: int, delay: int, theile
         return np.nan
     if n_pts < k + 1:
         return np.nan
-    d = np.sqrt(np.maximum(((pts[:, None, :] - pts[None, :, :]) ** 2).sum(-1), 0.0))
-    np.fill_diagonal(d, np.inf)
+    # One common scalar preserves the Euclidean metric. Stable midrange
+    # centering also preserves it under translations and avoids letting a large
+    # level offset erase representable differences during normalization.
+    metric_pts = _common_scale_points(pts)
+    if metric_pts is None:
+        return np.nan
     # Round-7 P0 (review §29): Theiler window.  Takens-embedded points that are
     # close in *time* share most coordinates and are artificially-near nearest
     # neighbours; they must not count as state-space neighbours or the local
@@ -174,26 +201,31 @@ def _delay_intrinsic_dim(chunk: np.ndarray, dim: int, k: int, delay: int, theile
     # ordinal), so real-time distance is the sole criterion.  Default
     # (``embedding_dim * delay``) is the embedding span recommended by the
     # review.
-    if theiler_window > 0:
-        temporal = np.abs(orig_time[:, None] - orig_time[None, :]) <= theiler_window
-        np.fill_diagonal(temporal, False)
-        d[temporal] = np.inf
-    d_sorted = np.sort(d, axis=1)[:, :k]          # T_1..T_k per point, ascending
-    t_k = d_sorted[:, -1]                          # T_k
-    t_j = d_sorted[:, :-1]                         # T_1..T_{k-1}
-    valid = (
-        (t_k > 0.0)
-        & (t_j[:, 0] > 0.0)
-        & np.isfinite(t_k)
-        & np.isfinite(t_j).all(axis=1)
-    )
-    if not valid.any():
-        return np.nan
-    t_k_v = t_k[valid]
-    t_j_v = t_j[valid]
-    log_term = np.sum(np.log(t_k_v[:, None] / t_j_v), axis=1)
-    dims = (k - 1) / log_term
-    dims = dims[np.isfinite(dims) & (dims > 0.0)]
+    # Keep one anchor's distances plus its top-k selection in memory. This
+    # avoids the old unbudgeted N×N×dim broadcast while preserving original-
+    # time Theiler exclusion and the exact common-scale Euclidean metric.
+    local_dims: list[float] = []
+    for anchor in range(n_pts):
+        candidates = np.flatnonzero(
+            np.abs(orig_time - orig_time[anchor]) > theiler_window
+        )
+        if candidates.size < k:
+            continue
+        delta = metric_pts[candidates] - metric_pts[anchor]
+        distances = np.sqrt(np.sum(delta * delta, axis=1))
+        distances = distances[np.isfinite(distances) & (distances > 0.0)]
+        if distances.size < k:
+            continue
+        nearest = np.partition(distances, k - 1)[:k]
+        nearest.sort()
+        log_term = float(
+            np.sum(np.log(nearest[-1]) - np.log(nearest[:-1]))
+        )
+        if np.isfinite(log_term) and log_term > 0.0:
+            estimate = (k - 1) / log_term
+            if np.isfinite(estimate) and estimate > 0.0:
+                local_dims.append(float(estimate))
+    dims = np.asarray(local_dims, dtype=float)
     if dims.size == 0:
         return np.nan
     return float(np.median(dims))
@@ -229,7 +261,7 @@ class TsDelayIntrinsicDimension(SeriesOperator):
         "ts_delay_intrinsic_dimension",
         "Takens 延迟嵌入的 Levina-Bickel 局部维度中位数。"
         "参数全部 ParamSpec（embedding_dim/k/delay/theiler_window=ESTIMATOR_RESOLUTION"
-        "，searchable=False）；window-(embedding_dim-1)*delay >= k+1 的关系可行"
+        "，searchable=False）；N_embed >= k + effective_theiler + 1 的关系可行"
         "性在绑定期强制（不满足 raise，不做 int() 截断）。",
         ["x", "window", "embedding_dim", "k", "delay", "theiler_window"],
         unit="dim",
@@ -259,6 +291,13 @@ class TsDelayIntrinsicDimension(SeriesOperator):
         # a point's temporal neighbours within that span are excluded from its
         # state-space neighbour set so time-adjacency is not read as proximity.
         tw = strict_int(theiler_window, "theiler_window", lower=0) if theiler_window is not None else dim * dl
+        n_embed = w - (dim - 1) * dl
+        if n_embed < kk + tw + 1:
+            raise ValueError(
+                "ts_delay_intrinsic_dimension requires N_embed >= "
+                "k + effective_theiler + 1 "
+                f"(N_embed={n_embed}, k={kk}, effective_theiler={tw})"
+            )
         return frame_like(x, _intrinsic_dim_series(x.to_numpy(dtype=float), w, dim, kk, dl, tw))
 
 

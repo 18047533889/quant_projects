@@ -416,21 +416,6 @@ def _float_attr(node: PlanNode, *keys: str, default: float) -> float:
     return default
 
 
-def _int_attr(node: PlanNode, *keys: str, default: int) -> int:
-    """从 attrs 中按候选键读取整数参数（严格解析，无静默截断/钳制）。
-
-    #357：整数直接用；非整数（float 5.9 / 字符串）→ raise ``PlanParamError``。
-    需要的钳制（如 ``max(1, ...)``）由调用点显式完成——emitter 参数已
-    canonicalize，非整数出现说明上游 bug，应 fail。
-    """
-    from factor_engine.backend.plan_params import parse_positive_int_literal
-
-    for key in keys:
-        if key in node.attrs and node.attrs[key] is not None:
-            return parse_positive_int_literal(node.attrs[key], label=key)
-    return default
-
-
 def _literal_positional(node: PlanNode, index: int, *, default: float | None = None) -> float | None:
     """读取 positional literal 参数（``clip(x, lo, hi)`` 等）。"""
     pos = index + 1

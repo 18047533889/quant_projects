@@ -24,6 +24,8 @@ import hashlib
 import inspect
 import marshal
 import base64
+import math
+import numbers
 
 from factor_preprocess.errors import GovernanceError
 from factor_preprocess.contracts._deep_freeze import deep_freeze, as_plain
@@ -48,33 +50,75 @@ ALL_FAMILY_TAGS = frozenset({
 })
 
 
-def _source_of(func: Callable) -> str:
-    """Best-effort stable source of a callable (may not exist for builtins)."""
-    code = getattr(func, "__code__", None)
-    try:
-        source = inspect.getsource(func)
-    except (TypeError, OSError, IOError):
-        source = ""
-    if code is not None:
-        if code is None:
-            raise ValueError(
-                f"callable {func!r} has no stable inspectable implementation; "
-                "it cannot receive a production implementation hash"
-            )
-        closure_values = []
-        for cell in (getattr(func, "__closure__", None) or ()):
-            value = cell.cell_contents
-            if isinstance(value, (dict, list, set, bytearray)):
-                raise ValueError("mutable closure state cannot be content-certified")
-            closure_values.append(repr(value))
-        payload = base64.b64encode(marshal.dumps(code)).decode("ascii")
-        return source + "|code=" + payload + "|closure=" + "|".join(closure_values)
-    if source:
-        return source
-    raise ValueError(
-        f"callable {func!r} has no stable inspectable implementation; "
-        "it cannot receive a production implementation hash"
+def _immutable_identity(value: Any, *, seen: Optional[Set[int]] = None) -> str:
+    """Typed recursive identity; mutable or opaque captured state is rejected."""
+    seen = set() if seen is None else seen
+    if value is None or isinstance(value, (bool, int, str, bytes)):
+        return f"{type(value).__name__}:{value!r}"
+    if isinstance(value, float):
+        return f"float:{value.hex()}" if math.isfinite(value) else f"float:{value!r}"
+    if isinstance(value, tuple):
+        return "tuple:[" + ",".join(_immutable_identity(v, seen=seen) for v in value) + "]"
+    if isinstance(value, frozenset):
+        return "frozenset:{" + ",".join(sorted(
+            _immutable_identity(v, seen=seen) for v in value
+        )) + "}"
+    if isinstance(value, (dict, list, set, bytearray, memoryview)):
+        raise ValueError("mutable closure or default state cannot be content-certified")
+    if dataclasses.is_dataclass(value) and not isinstance(value, type):
+        params = getattr(type(value), "__dataclass_params__", None)
+        if not params or not params.frozen:
+            raise ValueError("mutable dataclass state cannot be content-certified")
+        fields = tuple((f.name, getattr(value, f.name)) for f in dataclasses.fields(value))
+        return f"dataclass:{type(value).__module__}.{type(value).__qualname__}:" + _immutable_identity(fields, seen=seen)
+    if inspect.isfunction(value):
+        return "function:" + _source_of(value, seen=seen)
+    raise ValueError(f"state of type {type(value).__name__} cannot be content-certified")
+
+
+def _canonical_code(code):
+    """Strip deployment paths recursively while retaining code and constants."""
+    constants = tuple(
+        _canonical_code(value) if inspect.iscode(value) else value
+        for value in code.co_consts
     )
+    return code.replace(co_filename="", co_firstlineno=0, co_consts=constants)
+
+
+def _source_of(func: Callable, *, seen: Optional[Set[int]] = None) -> str:
+    """Stable implementation identity including defaults, closure, and helpers."""
+    code = getattr(func, "__code__", None)
+    if code is None:
+        raise ValueError(
+            f"callable {func!r} has no stable inspectable implementation; "
+            "it cannot receive a production implementation hash"
+        )
+    seen = set() if seen is None else seen
+    marker = id(func)
+    if marker in seen:
+        return f"recursive:{func.__module__}.{func.__qualname__}"
+    seen.add(marker)
+    try:
+        closure = tuple(
+            (name, cell.cell_contents)
+            for name, cell in zip(code.co_freevars, getattr(func, "__closure__", None) or ())
+        )
+        helper_globals = []
+        namespace = getattr(func, "__globals__", {})
+        for name in sorted(set(code.co_names)):
+            value = namespace.get(name)
+            if inspect.isfunction(value):
+                helper_globals.append((name, value))
+        payload = base64.b64encode(marshal.dumps(_canonical_code(code))).decode("ascii")
+        state = _immutable_identity((
+            getattr(func, "__defaults__", None),
+            tuple(sorted((getattr(func, "__kwdefaults__", None) or {}).items())),
+            closure,
+            tuple(helper_globals),
+        ), seen=seen)
+        return "code=" + payload + "|state=" + state
+    finally:
+        seen.remove(marker)
 
 
 def _hash_bytes(text: str) -> str:
@@ -370,15 +414,7 @@ class TransformMetadata:
         ])
         return _hash_bytes(payload)[:16]
 
-    def bind_parameters(self, parameters: Dict[str, Any]) -> None:
-        """Validate configured keyword parameters against the callable signature."""
-        signature = inspect.signature(self.func)
-        try:
-            signature.bind_partial(**parameters)
-        except TypeError as exc:
-            raise ValueError(
-                f"Transform '{self.name}' has invalid parameters: {exc}"
-            ) from exc
+    def _validate_bound_parameters(self, parameters: Dict[str, Any]) -> None:
         for name, domain in self.parameter_domain.items():
             if name not in parameters:
                 continue
@@ -386,6 +422,12 @@ class TransformMetadata:
             if not isinstance(domain, (tuple, list)) or len(domain) != 2:
                 raise ValueError(f"Transform '{self.name}' has invalid domain for {name!r}")
             lower, upper = domain
+            if not isinstance(value, numbers.Real) or (
+                isinstance(value, numbers.Real) and not math.isfinite(float(value))
+            ):
+                raise ValueError(
+                    f"Transform '{self.name}' parameter {name!r} must be finite numeric"
+                )
             if lower is not None and value < lower:
                 raise ValueError(
                     f"Transform '{self.name}' parameter {name!r}={value!r} is below {lower!r}"
@@ -394,6 +436,27 @@ class TransformMetadata:
                 raise ValueError(
                     f"Transform '{self.name}' parameter {name!r}={value!r} is above {upper!r}"
                 )
+
+    def bind_parameters(self, parameters: Dict[str, Any]) -> None:
+        """Validate a partial configured keyword mapping."""
+        signature = inspect.signature(self.func)
+        try:
+            bound = signature.bind_partial(**parameters)
+            bound.apply_defaults()
+        except TypeError as exc:
+            raise ValueError(f"Transform '{self.name}' has invalid parameters: {exc}") from exc
+        self._validate_bound_parameters(bound.arguments)
+
+    def bind_call(self, *args, **kwargs) -> inspect.BoundArguments:
+        """Bind and validate one complete runtime call before execution."""
+        signature = inspect.signature(self.func)
+        try:
+            bound = signature.bind(*args, **kwargs)
+            bound.apply_defaults()
+        except TypeError as exc:
+            raise ValueError(f"Transform '{self.name}' has invalid parameters: {exc}") from exc
+        self._validate_bound_parameters(bound.arguments)
+        return bound
 
 
 class _ValidatedExecutor:
@@ -404,10 +467,11 @@ class _ValidatedExecutor:
         self.executor = executor
 
     def __call__(self, *args, **kwargs):
-        # Positional values are validated by the implementation signature;
-        # keyword parameters are checked here before backend dispatch.
-        contract_kwargs = {k: v for k, v in kwargs.items() if k != "exposure_cols"}
-        self.metadata.bind_parameters(contract_kwargs)
+        self.metadata.bind_call(*args, **kwargs)
+        if self.metadata._compute_implementation_hash() != self.metadata.implementation_hash:
+            raise GovernanceError(
+                f"Transform '{self.metadata.name}' implementation changed after registration"
+            )
         return self.executor(*args, **kwargs)
 
     def __getattr__(self, name):
@@ -766,6 +830,9 @@ class TransformRegistry:
                 executor = get_fe_executor(meta.fe_operator_id, fallback=meta.func)
                 if executor is not None:
                     return _ValidatedExecutor(self._transforms[name], executor)
+            raise GovernanceError(
+                f"FE operator authority unavailable for {name!r}; no implicit FP-native fallback"
+            )
         return _ValidatedExecutor(self._transforms[name], self._transforms[name].func)
 
     def get_function(self, name: str) -> Optional[Callable]:
@@ -773,11 +840,27 @@ class TransformRegistry:
         metadata = self._transforms.get(name)
         return metadata.func if metadata else None
 
-    def get_recipe_execution(self, recipe):
-        """Compile an all-FE stateless recipe into one panel execution session."""
-        recipe.compile(self)
+    def get_recipe_execution(
+        self, recipe, *, execution_context=None, backend=None,
+        fitted_state_refs=(), allow_research=False,
+    ):
+        """Compile an FE recipe with explicit execution authority."""
+        recipe.compile(self, fitted_state_refs=fitted_state_refs)
+        for step in recipe.ordered_steps:
+            metadata = self.get(step.implementation_ref)
+            if metadata.requires_fit != bool(step.requires_fit):
+                raise GovernanceError(
+                    f"recipe step {step.step_id!r} fit requirement disagrees with registry"
+                )
+            if metadata.requires_fit:
+                raise GovernanceError("FE recipe execution cannot bypass fitted-state application")
+        if execution_context is None and not allow_research:
+            raise GovernanceError("recipe execution requires approved context or explicit research mode")
         from factor_preprocess.adapters.fe_operator import FeRecipeExecutor
-        return FeRecipeExecutor(recipe, self)
+        return FeRecipeExecutor(
+            recipe, self, execution_context=execution_context, backend=backend,
+            allow_research=allow_research,
+        )
 
     def list_by_category(self, category: TransformCategory) -> List[TransformMetadata]:
         """List isolated deep-frozen transform metadata snapshots in a category."""
@@ -881,40 +964,42 @@ def create_default_registry() -> TransformRegistry:
     from factor_preprocess.transforms.event_decay import event_decay
 
     registry = TransformRegistry()
-    # Built-ins predate evidence-aware admission. Preserve their reviewed
-    # status while making every external/new registration fail-safe by default.
-    registry._allow_legacy_builtin_admission = True
+
+    def register_builtin(*args, **kwargs):
+        # Built-in admission is explicit and confined to this bootstrap scope.
+        kwargs.setdefault("admission", "PRODUCTION")
+        return registry.register(*args, **kwargs)
 
     # Cross-sectional transforms
-    registry.register(
+    register_builtin(
         "cs_rank", cs_rank, TransformCategory.CROSS_SECTIONAL,
         version="1.0.0",
         description="Cross-sectional rank with tie handling",
         tags={"rank", "normalization", "cs"},
         causal_safe=True,
     )
-    registry.register(
+    register_builtin(
         "cs_zscore", cs_zscore, TransformCategory.CROSS_SECTIONAL,
         version="1.0.0",
         description="Cross-sectional z-score normalization",
         tags={"zscore", "normalization", "cs"},
         causal_safe=True,
     )
-    registry.register(
+    register_builtin(
         "cs_demean", cs_demean, TransformCategory.CROSS_SECTIONAL,
         version="1.0.0",
         description="Cross-sectional demean",
         tags={"demean", "normalization", "cs"},
         causal_safe=True,
     )
-    registry.register(
+    register_builtin(
         "cs_winsor", cs_winsor, TransformCategory.CROSS_SECTIONAL,
         version="1.0.0",
         description="Cross-sectional winsorization",
         tags={"winsor", "outlier", "cs"},
         causal_safe=True,
     )
-    registry.register(
+    register_builtin(
         "cs_scale", cs_scale, TransformCategory.CROSS_SECTIONAL,
         version="1.0.0",
         description="Cross-sectional scaling to target std",
@@ -949,28 +1034,28 @@ def create_default_registry() -> TransformRegistry:
                     numeric_policy="scale_factor_cs", output_channels=("transformed",))
 
     # Temporal transforms
-    registry.register(
+    register_builtin(
         "rolling_mean", rolling_mean, TransformCategory.TEMPORAL,
         version="1.0.0",
         description="Rolling window mean",
         tags={"rolling", "mean", "temporal"},
         causal_safe=True,
     )
-    registry.register(
+    register_builtin(
         "rolling_std", rolling_std, TransformCategory.TEMPORAL,
         version="1.0.0",
         description="Rolling window standard deviation",
         tags={"rolling", "std", "temporal"},
         causal_safe=True,
     )
-    registry.register(
+    register_builtin(
         "rolling_zscore", rolling_zscore, TransformCategory.TEMPORAL,
         version="1.0.0",
         description="Rolling z-score normalization",
         tags={"rolling", "zscore", "temporal"},
         causal_safe=True,
     )
-    registry.register(
+    register_builtin(
         "ewma", ewma, TransformCategory.TEMPORAL,
         version="1.0.0",
         description="Exponentially weighted moving average",
@@ -978,42 +1063,42 @@ def create_default_registry() -> TransformRegistry:
         causal_safe=True,
     )
     # Causal one-sided signal smoothers (strictly <= t - 1 information).
-    registry.register(
+    register_builtin(
         "trailing_sma", trailing_sma, TransformCategory.TEMPORAL,
         version="1.0.0",
         description="Lagged trailing simple moving average",
         tags={"smoothing", "sma", "temporal"},
         causal_safe=True,
     )
-    registry.register(
+    register_builtin(
         "trailing_median", trailing_median, TransformCategory.TEMPORAL,
         version="1.0.0",
         description="Lagged trailing rolling median (robust to spikes)",
         tags={"smoothing", "median", "robust", "temporal"},
         causal_safe=True,
     )
-    registry.register(
+    register_builtin(
         "robust_ewma", robust_ewma, TransformCategory.TEMPORAL,
         version="1.0.0",
         description="Lagged EWMA on winsorized values",
         tags={"smoothing", "ewma", "robust", "temporal"},
         causal_safe=True,
     )
-    registry.register(
+    register_builtin(
         "kama", kama, TransformCategory.TEMPORAL,
         version="1.0.0",
         description="Kaufman adaptive moving average, recursive forward only",
         tags={"smoothing", "kama", "adaptive", "temporal"},
         causal_safe=True,
     )
-    registry.register(
+    register_builtin(
         "one_sided_iir_lowpass", one_sided_iir_lowpass, TransformCategory.TEMPORAL,
         version="1.0.0",
         description="One-pole IIR low-pass applied forward only",
         tags={"smoothing", "iir", "lowpass", "temporal"},
         causal_safe=True,
     )
-    registry.register(
+    register_builtin(
         "kalman_local_level", kalman_local_level, TransformCategory.TEMPORAL,
         version="1.0.0",
         description="One-sided Kalman local-level filter",
@@ -1022,21 +1107,21 @@ def create_default_registry() -> TransformRegistry:
     )
 
     # Volatility transforms
-    registry.register(
+    register_builtin(
         "volatility_scale", volatility_scale, TransformCategory.VOLATILITY,
         version="1.0.0",
         description="Scale by realized volatility",
         tags={"volatility", "scale"},
         causal_safe=True,
     )
-    registry.register(
+    register_builtin(
         "volatility_scale_returns", volatility_scale_returns, TransformCategory.VOLATILITY,
         version="1.0.0",
         description="Scale returns by volatility",
         tags={"volatility", "returns", "scale"},
         causal_safe=True,
     )
-    registry.register(
+    register_builtin(
         "realized_volatility", realized_volatility, TransformCategory.VOLATILITY,
         version="1.0.0",
         description="Compute realized volatility",
@@ -1045,35 +1130,35 @@ def create_default_registry() -> TransformRegistry:
     )
 
     # Missingness transforms
-    registry.register(
+    register_builtin(
         "forward_fill", forward_fill, TransformCategory.MISSINGNESS,
         version="1.0.0",
         description="Forward fill missing values",
         tags={"missing", "fill"},
         causal_safe=True,
     )
-    registry.register(
+    register_builtin(
         "missing_indicator", missing_indicator, TransformCategory.MISSINGNESS,
         version="1.0.0",
         description="Binary missing data indicator",
         tags={"missing", "indicator"},
         causal_safe=True,
     )
-    registry.register(
+    register_builtin(
         "missing_run_length", missing_run_length, TransformCategory.MISSINGNESS,
         version="1.0.0",
         description="Consecutive missing observation count",
         tags={"missing", "run_length"},
         causal_safe=True,
     )
-    registry.register(
+    register_builtin(
         "missing_rate", missing_rate, TransformCategory.MISSINGNESS,
         version="1.0.0",
         description="Rolling missing data rate",
         tags={"missing", "rate"},
         causal_safe=True,
     )
-    registry.register(
+    register_builtin(
         "impute_with_fallback", impute_with_fallback, TransformCategory.MISSINGNESS,
         version="1.0.0",
         description="Full-sample mean/median fallback is research-only",
@@ -1084,7 +1169,7 @@ def create_default_registry() -> TransformRegistry:
 
     # Correlation-regime boundaries are fit over the full sample. Keep this
     # implementation available for research while failing closed in production.
-    registry.register(
+    register_builtin(
         "detect_correlation_regime", detect_correlation_regime, TransformCategory.TEMPORAL,
         version="1.0.0",
         description="Full-sample correlation regime detector; research-only",
@@ -1094,28 +1179,28 @@ def create_default_registry() -> TransformRegistry:
     )
 
     # Freshness transforms
-    registry.register(
+    register_builtin(
         "days_since_update", days_since_update, TransformCategory.FRESHNESS,
         version="1.0.0",
         description="Days since last non-missing update",
         tags={"freshness", "staleness"},
         causal_safe=True,
     )
-    registry.register(
+    register_builtin(
         "observation_age", observation_age, TransformCategory.FRESHNESS,
         version="1.0.0",
         description="Age of observation in days",
         tags={"freshness", "age"},
         causal_safe=True,
     )
-    registry.register(
+    register_builtin(
         "freshness_score", freshness_score, TransformCategory.FRESHNESS,
         version="1.0.0",
         description="Continuous freshness score [0, 1]",
         tags={"freshness", "score"},
         causal_safe=True,
     )
-    registry.register(
+    register_builtin(
         "stale_data_indicator", stale_data_indicator, TransformCategory.FRESHNESS,
         version="1.0.0",
         description="Binary stale data indicator",
@@ -1124,7 +1209,7 @@ def create_default_registry() -> TransformRegistry:
     )
 
     # Neutralization transforms
-    registry.register(
+    register_builtin(
         "ols_neutralize", ols_neutralize, TransformCategory.NEUTRALIZATION,
         version="1.0.0",
         description="OLS residual neutralization",
@@ -1141,7 +1226,7 @@ def create_default_registry() -> TransformRegistry:
         cost_class="cross_sectional_fit",
         output_channels=("residual",),
     )
-    registry.register(
+    register_builtin(
         "compute_exposures", compute_exposures, TransformCategory.NEUTRALIZATION,
         version="1.0.0",
         description="Compute factor exposures",
@@ -1156,7 +1241,7 @@ def create_default_registry() -> TransformRegistry:
     # DLIB-FP-014 / DLIB-FP-020: event-decay and freshness-aware fill are real,
     # executable transforms so the eligibility engine's proposals resolve to
     # canonical registry entries (no second hand-written catalog).
-    registry.register(
+    register_builtin(
         "event_decay", event_decay, TransformCategory.TEMPORAL,
         version="1.0.0",
         description="Causal short-halflife event decay persistence",
@@ -1173,7 +1258,7 @@ def create_default_registry() -> TransformRegistry:
         cost_class="per_asset_recursive",
         output_channels=("transformed",),
     )
-    registry.register(
+    register_builtin(
         "freshness_aware_fill", freshness_aware_fill, TransformCategory.FRESHNESS,
         version="1.0.0",
         description="Freshness-aware forward fill with exponential decay",
@@ -1196,7 +1281,7 @@ def create_default_registry() -> TransformRegistry:
     # aliases bound to that kernel via NeutralizationSpec, NOT independent
     # duplicated implementations. They resolve here so the eligibility engine's
     # proposals are canonical; their semantics are formalized by the spec.
-    registry.register(
+    register_builtin(
         "industry_neutral", ols_neutralize, TransformCategory.NEUTRALIZATION,
         version="1.0.0",
         description="Industry-neutralization semantic alias (kernel=ols_neutralize)",
@@ -1212,7 +1297,7 @@ def create_default_registry() -> TransformRegistry:
         cost_class="cross_sectional_fit",
         output_channels=("residual",),
     )
-    registry.register(
+    register_builtin(
         "size_neutral", ols_neutralize, TransformCategory.NEUTRALIZATION,
         version="1.0.0",
         description="Size-neutralization semantic alias (kernel=ols_neutralize)",
@@ -1228,7 +1313,7 @@ def create_default_registry() -> TransformRegistry:
         cost_class="cross_sectional_fit",
         output_channels=("residual",),
     )
-    registry.register(
+    register_builtin(
         "dual_neutral", ols_neutralize, TransformCategory.NEUTRALIZATION,
         version="1.0.0",
         description="Industry+size neutralization semantic alias (kernel=ols_neutralize)",
@@ -1267,7 +1352,7 @@ def create_default_registry() -> TransformRegistry:
     ]:
         if func is None:
             continue
-        registry.register(
+        register_builtin(
             name, func, TransformCategory.TEMPORAL,
             version="1.0.0",
             description="Full-series decomposition; offline/research use only",

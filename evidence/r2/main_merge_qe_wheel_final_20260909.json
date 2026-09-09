@@ -1,0 +1,25 @@
+{
+  "date": "2026-09-09",
+  "working_tree_modified": true,
+  "scope": "M01 final QE archive byte payload and isolated two-assets/two-legs/H1 golden",
+  "verification": {
+    "chunk_id": "194563",
+    "wall_time_seconds": 1.9663319590000001,
+    "exit_code": 0,
+    "original_token_count": 213,
+    "output": "{\"python_files\": 158, \"resources\": 1, \"status\": \"PASS\", \"wheel_sha256\": \"971329a73712190f2de84d975a65d4f2b1171ff41959b6de8665126ad313a1d5\"}\n{\"status\": \"PASS\", \"implementation\": \"/home/sunhaiwei/quant_projects/quant_evaluator/metrics/probe_portfolio/__init__.py\", \"cohort_pnl\": [0.0, -0.001, 0.013000000000000001, 0.013000000000000001, 0.013000000000000001], \"trade_costs\": [0.00030000000000000003, 0.0006000000000000001], \"scope\": \"two-assets/two-legs/holding-1/known-costs\"}\n{\"status\": \"PASS\", \"implementation\": \"/tmp/main-merge-wheel.BSJMRQ/quant_evaluator-0.0.1a1-py3-none-any.whl/quant_evaluator/metrics/probe_portfolio/__init__.py\", \"cohort_pnl\": [0.0, -0.001, 0.013000000000000001, 0.013000000000000001, 0.013000000000000001], \"trade_costs\": [0.00030000000000000003, 0.0006000000000000001], \"scope\": \"two-assets/two-legs/holding-1/known-costs\"}\n"
+  },
+  "ci_completeness_script": {
+    "chunk_id": "8e13e7",
+    "wall_time_seconds": 0.19818325,
+    "exit_code": 0,
+    "original_token_count": 55,
+    "output": "[quant_evaluator] wheel=quant_evaluator-0.0.1a1-py3-none-any.whl size=539188 py-in-wheel=156 py-in-source=156\n[quant_evaluator] COMPLETE: wheel payload == source tree (156 modules), no tests, no bytecode, integrity ok\n"
+  },
+  "limitations": [
+    "Exact CI completeness script executed locally; remote GitHub Actions NOT_RUN.",
+    "Archive-only Python -I golden uses NUMBA_DISABLE_JIT=1 because Numba cannot create an on-disk cache for zipimport .whl; source golden uses ordinary JIT.",
+    "Not an installed-wheel clean-CI process or production deployment.",
+    "Temporary build/archive removed after receipt preservation; rebuild is possible from formal source."
+  ]
+}

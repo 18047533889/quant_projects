@@ -807,7 +807,7 @@ def _truthy_condition(condition: pd.Series | pd.DataFrame) -> pd.Series | pd.Dat
 
 
 @register_operator(name="if_else", category="signal", business_category="technical_signal", canonical="if_else", source="factor_dsl_np")
-class IfElse(SeriesOperator):
+class IfElseCanonical(SeriesOperator):
     """条件选择"""
 
     metadata = OperatorMetadata(
@@ -1197,4 +1197,3 @@ class Where(IfElse):
     )
 
 # aliases: IIF, WHERE, if, iif
-

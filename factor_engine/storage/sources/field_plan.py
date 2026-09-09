@@ -234,12 +234,6 @@ def _table_current_snapshot_only(
     return bool(table_spec is not None and getattr(table_spec, "current_snapshot_only", False))
 
 
-def _table_current_snapshot_only(table: str | None, market: str | None) -> bool:
-    """Look up a table's ``current_snapshot_only`` within one market."""
-    table_spec = _resolve_table_spec(table, market)
-    return bool(table_spec is not None and getattr(table_spec, "current_snapshot_only", False))
-
-
 def _market_from_dataset(dataset: str | None) -> str | None:
     """Infer the market from a physical dataset name when no explicit market.
 

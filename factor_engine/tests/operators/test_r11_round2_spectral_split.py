@@ -72,8 +72,8 @@ def test_return_and_detrended_level_entropies_differ():
     price = _deterministic_price_level()
     ret = _log_returns_of(price)
 
-    return_ent = _op("ts_return_spectral_entropy").calculate(ret, window=_WINDOW)
-    level_ent = _op("ts_detrended_level_spectral_entropy").calculate(price, window=_WINDOW)
+    return_ent = _op("ts_return_spectral_entropy").calculate(ret, window=_WINDOW, input_kind="ReturnDecimal")
+    level_ent = _op("ts_detrended_level_spectral_entropy").calculate(price, window=_WINDOW, input_kind="PriceContinuous")
 
     v_ret = return_ent["A"].dropna()
     v_lvl = level_ent["A"].dropna()
@@ -96,8 +96,8 @@ def test_legacy_ts_spectral_entropy_matches_return_direction():
     """
     ret = _log_returns_of(_deterministic_price_level())
 
-    legacy = _op("ts_spectral_entropy").calculate(ret, window=_WINDOW)
-    canonical = _op("ts_return_spectral_entropy").calculate(ret, window=_WINDOW)
+    legacy = _op("ts_spectral_entropy").calculate(ret, window=_WINDOW, input_kind="ReturnDecimal")
+    canonical = _op("ts_return_spectral_entropy").calculate(ret, window=_WINDOW, input_kind="ReturnDecimal")
     assert np.allclose(
         legacy.to_numpy(dtype=float),
         canonical.to_numpy(dtype=float),
@@ -115,17 +115,17 @@ def test_legacy_ts_spectral_entropy_matches_return_direction():
 # ---------------------------------------------------------------------------
 def test_return_canonical_rejects_price_level_input():
     price = _deterministic_price_level()
-    with pytest.raises(ValueError, match="return-typed input only"):
-        _op("ts_return_spectral_entropy").calculate(price, window=_WINDOW)
+    with pytest.raises(ValueError, match="input_kind"):
+        _op("ts_return_spectral_entropy").calculate(price, window=_WINDOW, input_kind="PriceContinuous")
     # the legacy return spelling fails closed too
-    with pytest.raises(ValueError, match="return-typed input only"):
-        _op("ts_spectral_entropy").calculate(price, window=_WINDOW)
+    with pytest.raises(ValueError, match="input_kind"):
+        _op("ts_spectral_entropy").calculate(price, window=_WINDOW, input_kind="PriceContinuous")
 
 
 def test_detrended_level_canonical_rejects_return_input():
     ret = _log_returns_of(_deterministic_price_level())
-    with pytest.raises(ValueError, match="price-level input only"):
-        _op("ts_detrended_level_spectral_entropy").calculate(ret, window=_WINDOW)
+    with pytest.raises(ValueError, match="input_kind"):
+        _op("ts_detrended_level_spectral_entropy").calculate(ret, window=_WINDOW, input_kind="ReturnDecimal")
 
 
 # ---------------------------------------------------------------------------
@@ -135,7 +135,7 @@ def test_both_finite_on_normal_data():
     rng = np.random.default_rng(0)
     returns_like = _frame(rng.normal(0.0, 1.0, 120))
 
-    out_ret = _op("ts_return_spectral_entropy").calculate(returns_like, window=_WINDOW)
+    out_ret = _op("ts_return_spectral_entropy").calculate(returns_like, window=_WINDOW, input_kind="ReturnDecimal")
     v_ret = out_ret["A"].dropna()
     assert v_ret.size > 0
     assert np.all(np.isfinite(v_ret.values))
@@ -143,7 +143,7 @@ def test_both_finite_on_normal_data():
 
     # a random-walk price level is a valid level input (and finite output)
     rw = _frame(100.0 * np.exp(np.cumsum(rng.normal(0.0, 0.01, 120))))
-    out_lvl = _op("ts_detrended_level_spectral_entropy").calculate(rw, window=_WINDOW)
+    out_lvl = _op("ts_detrended_level_spectral_entropy").calculate(rw, window=_WINDOW, input_kind="PriceContinuous")
     v_lvl = out_lvl["A"].dropna()
     assert v_lvl.size > 0
     assert np.all(np.isfinite(v_lvl.values))
@@ -151,7 +151,7 @@ def test_both_finite_on_normal_data():
 
     # a LOG-price level is equally valid (the canonical accepts (log)price-level)
     log_price = _frame(np.log(rw["A"].to_numpy(dtype=float)))
-    out_log = _op("ts_detrended_level_spectral_entropy").calculate(log_price, window=_WINDOW)
+    out_log = _op("ts_detrended_level_spectral_entropy").calculate(log_price, window=_WINDOW, input_kind="PriceContinuous")
     v_log = out_log["A"].dropna()
     assert v_log.size > 0
     assert np.all(np.isfinite(v_log.values))

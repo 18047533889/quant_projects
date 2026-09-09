@@ -9,9 +9,8 @@ _DSL_CALL_RE = re.compile(r"([A-Za-z_][A-Za-z0-9_]*)\s*\(")
 
 def extract_dsl_operator_names(dsl: str) -> tuple[str, ...]:
     from cold_start_library.runtime.paths import ensure_factor_engine_importable
-    from api.operator_registry import build_dsl_allowlist
-
     ensure_factor_engine_importable()
+    from factor_engine.api.operator_registry import build_dsl_allowlist
     allow = set(build_dsl_allowlist().keys())
     found: list[str] = []
     for match in _DSL_CALL_RE.finditer(str(dsl)):
@@ -25,7 +24,7 @@ def validate_factor_engine_dsl(dsl: str) -> tuple[bool, str]:
     from cold_start_library.runtime.paths import ensure_factor_engine_importable
 
     ensure_factor_engine_importable()
-    from api.dsl_parser import DSLParseError, parse_expr
+    from factor_engine.api.dsl_parser import DSLParseError, parse_expr
 
     text = str(dsl).strip()
     if not text:

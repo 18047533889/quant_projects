@@ -358,11 +358,21 @@ def _modwt_band_corr_chunk(xc: np.ndarray, yc: np.ndarray, level: int, band: int
         return np.nan
     xx = dx[ok]
     yy = dy[ok]
-    vx = float(np.var(xx))
-    vy = float(np.var(yy))
-    if vx <= _EPS or vy <= _EPS:
+    # Correlation is dimensionless: center first, then normalize each centered
+    # vector by one scalar before products.  This prevents square underflow/
+    # overflow without changing the correlation or inventing an absolute floor.
+    xx = xx - np.mean(xx)
+    yy = yy - np.mean(yy)
+    sx = float(np.max(np.abs(xx)))
+    sy = float(np.max(np.abs(yy)))
+    if sx == 0.0 or sy == 0.0 or not np.isfinite(sx) or not np.isfinite(sy):
         return np.nan
-    return float(np.corrcoef(xx, yy)[0, 1])
+    xn = xx / sx
+    yn = yy / sy
+    denom = float(np.sqrt(np.dot(xn, xn) * np.dot(yn, yn)))
+    if denom == 0.0 or not np.isfinite(denom):
+        return np.nan
+    return float(np.clip(np.dot(xn, yn) / denom, -1.0, 1.0))
 
 
 @register_operator(

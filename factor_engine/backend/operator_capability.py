@@ -588,8 +588,26 @@ def _json_contract_value(value: Any) -> Any:
     if isinstance(value, enum.Enum):
         return value.value
     if dataclasses.is_dataclass(value) and not isinstance(value, type):
-        from factor_engine.cleaned_operators.base import MISSING, ParamSpec
+        from factor_engine.cleaned_operators.base import (
+            MISSING,
+            ParamSpec,
+            RelationalParamSpec,
+        )
 
+        if isinstance(value, RelationalParamSpec):
+            # M02: relational constraints are executable contract semantics,
+            # not prose.  Keep an explicit type/schema marker so this payload
+            # cannot collide with an unrelated two-field dataclass.  The
+            # validated expression and its referenced parameter scope both
+            # participate in capability/cache identity.  ``message`` is also
+            # retained: callers expose it as the rejection contract.
+            return {
+                "__contract_type__": "RelationalParamSpec",
+                "schema_version": 1,
+                "expression": value.expression,
+                "param_names": sorted(value.param_names),
+                "message": value.message,
+            }
         if not isinstance(value, ParamSpec):
             raise CapabilityInfrastructureError(
                 f"registry contract carries unsupported dataclass "

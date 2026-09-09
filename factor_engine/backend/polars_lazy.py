@@ -7,16 +7,63 @@ from dataclasses import dataclass, field
 from typing import Any
 
 
-def _collect_arrow_table(lf: Any, *, select_cols: list[str]) -> Any:
-    """ScanHandle / LazyFrame 统一 collect → Arrow Table。"""
+def _assert_approved_snapshot(
+    snapshot: Any, *, dataset: str | None, approved_content_digest: str | None
+) -> None:
+    if approved_content_digest is None:
+        return
+    if (
+        getattr(snapshot, "dataset", None) != dataset
+        or getattr(snapshot, "content_digest", None) != approved_content_digest
+    ):
+        from factor_engine.storage.sources.data_access_source import ApprovedSnapshotMismatch
+
+        raise ApprovedSnapshotMismatch(
+            "governed lazy scan does not match approved content digest"
+        )
+
+
+def _collect_arrow_table(
+    lf: Any,
+    *,
+    select_cols: list[str],
+    dataset: str | None = None,
+    approved_content_digest: str | None = None,
+    identity_out: dict[str, Any] | None = None,
+) -> Any:
+    """Collect through ScanHandle, checking frozen and observed object identity."""
     from data_access.read.query_budget import collect_polars_with_budget
     from data_access.read.scan_handle import ScanHandle
 
+    if approved_content_digest is not None:
+        _assert_approved_snapshot(
+            getattr(lf, "resolved_source_snapshot", None),
+            dataset=dataset,
+            approved_content_digest=approved_content_digest,
+        )
     selected = lf.select(select_cols)
-    if isinstance(selected, ScanHandle):
-        return selected.collect().table
-    if isinstance(lf, ScanHandle):
-        return lf.select(select_cols).collect().table
+    governed = selected if isinstance(selected, ScanHandle) else None
+    if governed is None and isinstance(lf, ScanHandle):
+        governed = lf.select(select_cols)
+    if governed is not None:
+        result = governed.collect()
+        _assert_approved_snapshot(
+            result.snapshot,
+            dataset=dataset,
+            approved_content_digest=approved_content_digest,
+        )
+        if identity_out is not None:
+            identity_out["snapshot_id"] = getattr(result.snapshot, "snapshot_id", None)
+            identity_out["content_digest"] = getattr(
+                result.snapshot, "content_digest", None
+            )
+        return result.table
+    if approved_content_digest is not None:
+        from factor_engine.storage.sources.data_access_source import ApprovedSnapshotMismatch
+
+        raise ApprovedSnapshotMismatch(
+            "approved lazy read requires a governed ScanHandle"
+        )
     return collect_polars_with_budget(selected)
 
 
@@ -118,6 +165,8 @@ class LazyColumnBundle:
     normalize_timestamp: bool
     timestamp_unit: str | None
     snapshot_id: str | None = None
+    dataset: str | None = None
+    approved_content_digest: str | None = None
     _materialized: dict[str, Any] = field(default_factory=dict)
     _materialized_budget: int = 0
 
@@ -178,7 +227,16 @@ class LazyColumnBundle:
                     [self.time_column, self.instrument_column, *pending]
                 )
             )
-            table = _collect_arrow_table(self.lf, select_cols=select_cols)
+            identity: dict[str, Any] = {}
+            table = _collect_arrow_table(
+                self.lf,
+                select_cols=select_cols,
+                dataset=self.dataset,
+                approved_content_digest=self.approved_content_digest,
+                identity_out=identity,
+            )
+            if identity.get("snapshot_id") is not None:
+                self.snapshot_id = identity["snapshot_id"]
             reverse = {src: tgt for src, tgt in (output_names or self.output_names).items()}
             fetched = arrow_table_to_multiindex_columns(
                 table,
@@ -228,6 +286,7 @@ def build_lazy_column_bundle(
     params: dict[str, Any] | None,
     mode: str = "auto",
     filters: Any = None,
+    approved_content_digest: str | None = None,
 ) -> LazyColumnBundle:
     """构建 LazyFrame bundle（不 collect）。
 
@@ -257,6 +316,8 @@ def build_lazy_column_bundle(
         output_names=dict(output_names or {}),
         normalize_timestamp=normalize_timestamp,
         timestamp_unit=timestamp_unit,
+        dataset=dataset,
+        approved_content_digest=approved_content_digest,
         snapshot_id=_snapshot_id_from_scan(scan_obj),
     )
 
@@ -275,6 +336,8 @@ def scan_dataset_columns(
     timestamp_unit: str | None,
     params: dict[str, Any] | None,
     bundle: LazyColumnBundle | None = None,
+    approved_content_digest: str | None = None,
+    identity_out: dict[str, Any] | None = None,
     mode: str = "auto",
     filters: Any = None,
 ) -> dict[str, Any]:
@@ -311,7 +374,13 @@ def scan_dataset_columns(
         read_kwargs["filters"] = filters
 
     scan_obj = _store_scan(store, dataset, read_kwargs)
-    table = _collect_arrow_table(scan_obj, select_cols=all_cols)
+    table = _collect_arrow_table(
+        scan_obj,
+        select_cols=all_cols,
+        dataset=dataset,
+        approved_content_digest=approved_content_digest,
+        identity_out=identity_out,
+    )
     reverse_names = {src: tgt for src, tgt in (output_names or {}).items()}
     fetched = arrow_table_to_multiindex_columns(
         table,

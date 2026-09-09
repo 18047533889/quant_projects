@@ -158,13 +158,28 @@ class SelectionPolicySpec:
     window_ids: tuple[str,...] = ("window",)
     scenario_ids: tuple[str,...] = ("scenario",)
     replacement_role_rules: tuple[ReplacementRoleRule,...] = ()
+    minimum_gain: float = 0.0
+    effect_estimand: str = "weighted_window_scenario_mean_within_replicate"
+    qualification_suite_id: str = "qe.standard.v1"
+    required_qualification_assertions: tuple[str,...] = ("golden",)
     def __post_init__(self):
         if not self.policy_id or not self.version or not self.metric_rules: raise ValueError("complete policy required")
         if len({r.metric_id for r in self.metric_rules}) != len(self.metric_rules): raise ValueError("duplicate metric rules")
         if len(set(self.required_dimensions)) != len(self.required_dimensions): raise ValueError("duplicate required dimensions")
         if sum(r.weight for r in self.metric_rules) <= 0: raise ValueError("positive total metric weight required")
         if not 0 <= _number(self.minimum_coverage,"minimum_coverage") <= 1: raise ValueError("coverage outside [0,1]")
-        if _number(self.noninferiority_margin,"noninferiority_margin") < 0 or _number(self.equivalence_margin,"equivalence_margin") < 0: raise ValueError("margins must be nonnegative")
+        if (_number(self.noninferiority_margin,"noninferiority_margin") < 0
+                or _number(self.equivalence_margin,"equivalence_margin") < 0
+                or _number(self.minimum_gain,"minimum_gain") < 0): raise ValueError("margins and gain must be nonnegative")
+        if self.effect_estimand != "weighted_window_scenario_mean_within_replicate": raise ValueError("unsupported effect estimand")
+        if not self.qualification_suite_id or not self.required_qualification_assertions: raise ValueError("qualification suite policy required")
+        assertions=tuple(self.required_qualification_assertions)
+        if len(set(assertions))!=len(assertions) or any(not isinstance(x,str) or not x for x in assertions): raise ValueError("valid unique qualification assertions required")
+        object.__setattr__(self,"required_qualification_assertions",assertions)
+        for dimension in self.required_dimensions:
+            if not isinstance(dimension,str) or not dimension: raise ValueError("valid required dimension ids required")
+        for dimension,floor in self.dimension_floors.items():
+            if floor not in self._valid_grades(): raise ValueError("unknown dimension floor")
         object.__setattr__(self,"metric_rules",tuple(self.metric_rules)); object.__setattr__(self,"required_dimensions",tuple(self.required_dimensions)); object.__setattr__(self,"window_weights",tuple(self.window_weights)); object.__setattr__(self,"scenario_weights",tuple(self.scenario_weights)); object.__setattr__(self,"window_ids",tuple(self.window_ids)); object.__setattr__(self,"scenario_ids",tuple(self.scenario_ids))
         object.__setattr__(self,"replacement_role_rules",tuple(self.replacement_role_rules))
         metric_by_id={m.metric_id:m for m in self.metric_rules}
@@ -182,7 +197,11 @@ class SelectionPolicySpec:
             if not 0 < _number(getattr(self,name),name) < 1: raise ValueError(f"{name} must be in (0,1)")
     @property
     def content_hash(self):
-        return _digest({"id":self.policy_id,"version":self.version,"rules":[{**asdict(r),"direction":r.direction.value} for r in self.metric_rules],"floors":dict(sorted(self.dimension_floors.items())),"coverage":self.minimum_coverage,"ni":self.noninferiority_margin,"eq":self.equivalence_margin,"dimensions":sorted(self.required_dimensions),"blocks":dict(sorted(self.block_weights.items())),"windows":tuple(zip(self.window_ids,self.window_weights)),"scenarios":tuple(zip(self.scenario_ids,self.scenario_weights)),"formula":(self.balanced_arithmetic_weight,self.scenario_mean_weight,self.window_mean_weight,self.lower_tail_mass,self.conservative_quantile),"replacement_roles":[{**asdict(r),"direction":r.direction.value} for r in self.replacement_role_rules]})
+        return _digest({"id":self.policy_id,"version":self.version,"rules":[{**asdict(r),"direction":r.direction.value} for r in self.metric_rules],"floors":dict(sorted(self.dimension_floors.items())),"coverage":self.minimum_coverage,"ni":self.noninferiority_margin,"eq":self.equivalence_margin,"gain":self.minimum_gain,"estimand":self.effect_estimand,"qualification_suite":(self.qualification_suite_id,self.required_qualification_assertions),"dimensions":sorted(self.required_dimensions),"blocks":dict(sorted(self.block_weights.items())),"windows":tuple(zip(self.window_ids,self.window_weights)),"scenarios":tuple(zip(self.scenario_ids,self.scenario_weights)),"formula":(self.balanced_arithmetic_weight,self.scenario_mean_weight,self.window_mean_weight,self.lower_tail_mass,self.conservative_quantile),"replacement_roles":[{**asdict(r),"direction":r.direction.value} for r in self.replacement_role_rules]})
+
+    @staticmethod
+    def _valid_grades():
+        return frozenset(("NONE","NOT_APPLICABLE","NOT_READY","D","C","B","B+","A","A+","S","S+"))
 
 @dataclass(frozen=True)
 class RawJointMetricEvidence:
@@ -192,10 +211,17 @@ class RawJointMetricEvidence:
     source_tree_hash: str = ""; implementation_hash: str = ""; route: str = ""; backend: str = ""
     parameter_domain_hash: str = ""; metric_instance_hash: str = ""
     metric_units: tuple[str,...] = ()
+    candidate_id: str = ""; recipe_hash: str = ""; fitted_state_hash: str = ""
+    data_snapshot_hash: str = ""; universe_hash: str = ""; label_hash: str = ""
+    value_artifact_hash: str = ""
+    resampling_plan_content_hash: str = ""
+    sample_identity_hash: str = ""
+    time_identity_hash: str = ""
+    common_mask_hash: str = ""
     def __post_init__(self):
         object.__setattr__(self,"replicate_ids",tuple(self.replicate_ids)); object.__setattr__(self,"metric_ids",tuple(self.metric_ids)); object.__setattr__(self,"window_ids",tuple(self.window_ids)); object.__setattr__(self,"scenario_ids",tuple(self.scenario_ids))
         object.__setattr__(self,"metric_units",tuple(self.metric_units))
-        if not all((self.evidence_id,self.content_hash,self.comparison_context_hash,self.resampling_plan_ref,self.replicate_ids,self.metric_ids,self.qualification_scope,self.source_tree_hash,self.implementation_hash,self.route,self.backend,self.parameter_domain_hash,self.metric_instance_hash)): raise ValueError("complete raw joint evidence and execution identity required")
+        if not all((self.evidence_id,self.content_hash,self.comparison_context_hash,self.resampling_plan_ref,self.replicate_ids,self.metric_ids,self.qualification_scope,self.source_tree_hash,self.implementation_hash,self.route,self.backend,self.parameter_domain_hash,self.metric_instance_hash,self.candidate_id,self.recipe_hash,self.fitted_state_hash,self.data_snapshot_hash,self.universe_hash,self.label_hash,self.value_artifact_hash,self.resampling_plan_content_hash,self.sample_identity_hash,self.time_identity_hash,self.common_mask_hash)): raise ValueError("complete raw joint evidence, candidate, pairing, data, and execution identity required")
         if len(set(self.replicate_ids))!=len(self.replicate_ids) or len(set(self.metric_ids))!=len(self.metric_ids): raise ValueError("duplicate raw joint axes")
         if len(self.metric_units)!=len(self.metric_ids) or any(not unit for unit in self.metric_units): raise ValueError("one metric unit per raw metric required")
         if len(self.replicate_ids)<2: raise ValueError("at least two raw joint replicates required")
@@ -208,7 +234,7 @@ class RawJointMetricEvidence:
                 for scenario in window:
                     if len(scenario)!=len(self.metric_ids): raise ValueError("metric axis mismatch")
                     for value in scenario: _number(value,"raw joint metric")
-        semantic={"context":self.comparison_context_hash,"plan":self.resampling_plan_ref,"replicates":self.replicate_ids,"metrics":self.metric_ids,"metric_units":self.metric_units,"window_ids":self.window_ids,"scenario_ids":self.scenario_ids,"samples":canonical,"qualification":self.qualification_scope,"execution":(self.source_tree_hash,self.implementation_hash,self.route,self.backend,self.parameter_domain_hash,self.metric_instance_hash)}
+        semantic={"context":self.comparison_context_hash,"plan":self.resampling_plan_ref,"pairing":(self.resampling_plan_content_hash,self.sample_identity_hash,self.time_identity_hash,self.common_mask_hash),"replicates":self.replicate_ids,"metrics":self.metric_ids,"metric_units":self.metric_units,"window_ids":self.window_ids,"scenario_ids":self.scenario_ids,"samples":canonical,"qualification":self.qualification_scope,"execution":(self.source_tree_hash,self.implementation_hash,self.route,self.backend,self.parameter_domain_hash,self.metric_instance_hash),"candidate":(self.candidate_id,self.recipe_hash,self.fitted_state_hash,self.data_snapshot_hash,self.universe_hash,self.label_hash,self.value_artifact_hash)}
         if _digest(semantic)!=self.content_hash: raise ValueError("raw joint evidence content hash mismatch")
 
 @dataclass(frozen=True)
@@ -229,11 +255,18 @@ class CandidateEvidence:
     qualification_ref: Optional[str] = None
     qualification_requirements: Optional[Mapping[str,str]] = None
     raw_joint_metric_evidence: Optional[RawJointMetricEvidence] = None
+    health_evidence_ref: Optional[str] = None
+    health_candidate_id: Optional[str] = None
+    health_coverage: Optional[float] = None
+    use_admission_ref: Optional[str] = None
+    evidence_bundle_ref: Optional[str] = None
     def __post_init__(self):
         if not self.candidate_id: raise ValueError("candidate_id required")
         object.__setattr__(self,"dimensions",MappingProxyType(dict(self.dimensions)))
+        if any(value not in SelectionPolicySpec._valid_grades() for value in self.dimensions.values()): raise ValueError("unknown dimension grade")
         object.__setattr__(self,"metrics",MappingProxyType({key:_number(value,f"metric {key}") for key,value in self.metrics.items()}))
         if not 0 <= _number(self.coverage,"coverage") <= 1: raise ValueError("coverage outside [0,1]")
+        if self.health_coverage is not None and not 0 <= _number(self.health_coverage,"health coverage") <= 1: raise ValueError("health coverage outside [0,1]")
         if self.conservative_utility is not None: _number(self.conservative_utility,"conservative utility")
         if self.paired_effect is not None: _number(self.paired_effect,"paired effect")
         if self.paired_interval is not None and _number(self.paired_interval[0],"interval") > _number(self.paired_interval[1],"interval"): raise ValueError("reversed paired interval")
@@ -264,7 +297,9 @@ class DecisionRequest:
     def candidate_set_hash(self):
         return _digest(sorted((c.candidate_id, c.raw_joint_metric_evidence.content_hash if c.raw_joint_metric_evidence else None,
                                sorted(c.evidence_refs), sorted(c.metrics.items()), sorted(c.dimensions.items()), c.coverage,
-                               c.fidelity, c.qualification_scope) for c in self.candidates))
+                               c.fidelity, c.qualification_scope,c.qualification_ref,
+                               sorted((c.qualification_requirements or {}).items()),c.health_evidence_ref,
+                               c.health_candidate_id,c.health_coverage,c.use_admission_ref,c.evidence_bundle_ref) for c in self.candidates))
     @property
     def content_hash(self):
         return _digest({"policy":self.policy_id,"policy_hash":self.policy_content_hash,"context":self.comparison_context_hash,"purpose":self.purpose,"level":self.decision_level,"baseline":self.baseline_ref,"original_raw":self.original_raw_ref,"candidate_set":self.candidate_set_hash,"fidelity":self.required_final_fidelity,"family":self.hypothesis_family_ref})
@@ -280,19 +315,47 @@ class DecisionArtifact:
     point_utility: Mapping[str,Optional[float]]; conservative_utility: Mapping[str,Optional[float]]; relationship: Mapping[str,Relationship]
     effect_refs: Mapping[str,Optional[str]]; qualification_scope: Mapping[str,Optional[str]]; reasons: tuple[str,...]
     replacement_role: Mapping[str,Optional[str]]; winner_id: Optional[str]; retained_ids: tuple[str,...]; final_fidelity: str
+    qualification_identities: Mapping[str,Optional[str]]
+    @property
+    def eligible_ids(self):
+        return tuple(sorted(k for k,v in self.eligibility.items() if v))
 
 class DecisionProvider:
     _GRADES={"NONE":-1,"D":0,"C":1,"B":2,"B+":3,"A":4,"A+":5,"S":6,"S+":7}
-    def __init__(self, policy, qualification_resolver=None):
+    _PURPOSES={"RESEARCH","VARIANT","VARIANT-SELECTION","REPRESENTATION","DIAGNOSTIC","PRODUCTION","LIVE","DEPLOY","PUBLISH","PRODUCTION_TRADING"}
+    def __init__(self, policy, qualification_resolver=None, evidence_resolver=None):
         self.policy=policy
         self.qualification_resolver=qualification_resolver
+        self.evidence_resolver=evidence_resolver or (qualification_resolver if hasattr(qualification_resolver,"resolve_evidence") else None)
     def decide(self, request):
         if request.policy_id!=self.policy.policy_id or request.policy_content_hash!=self.policy.content_hash: raise ValueError("request policy binding mismatch")
-        receipts=[]; eligible={}; point={}; conservative={}; mapped_evidence={}
+        if request.purpose.upper() not in self._PURPOSES: raise ValueError("unknown decision purpose")
+        receipts=[]; eligible={}; point={}; conservative={}; mapped_evidence={}; qualification_ids={}
         for c in request.candidates:
             failures=[]
             if c.fidelity!=request.required_final_fidelity: failures.append("final_fidelity")
             if not c.evidence_refs: failures.append("evidence")
+            if not c.evidence_bundle_ref or self.evidence_resolver is None:
+                failures.append("trusted_evidence")
+            else:
+                try:
+                    trusted=self.evidence_resolver.resolve_evidence(c.evidence_bundle_ref,candidate=c)
+                    raw=c.raw_joint_metric_evidence
+                    expected=(c.candidate_id,raw.content_hash if raw else None,raw.recipe_hash if raw else None,
+                        raw.fitted_state_hash if raw else None,raw.data_snapshot_hash if raw else None,
+                        raw.universe_hash if raw else None,raw.label_hash if raw else None,
+                        raw.value_artifact_hash if raw else None)
+                    actual=(trusted.candidate_id,trusted.raw_content_hash,trusted.recipe_hash,
+                        trusted.fitted_state_hash,trusted.data_snapshot_hash,trusted.universe_hash,
+                        trusted.label_hash,trusted.value_artifact_hash)
+                    if (actual!=expected or dict(trusted.dimensions)!=dict(c.dimensions)
+                            or not math.isclose(trusted.coverage,c.coverage,abs_tol=1e-12)
+                            or trusted.metric_instance_hash!=raw.metric_instance_hash
+                            or trusted.parameter_domain_hash!=raw.parameter_domain_hash
+                            or dict(trusted.metric_directions)!={r.metric_id:r.direction.value for r in self.policy.metric_rules if r.metric_id in raw.metric_ids}):
+                        failures.append("trusted_evidence_binding")
+                except (KeyError,ValueError,TypeError,AttributeError):
+                    failures.append("trusted_evidence")
             if not c.qualification_scope: failures.append("qualification_scope")
             if not c.qualification_ref or c.raw_joint_metric_evidence is None or self.qualification_resolver is None:
                 failures.append("numerical_qualification")
@@ -304,15 +367,40 @@ class DecisionProvider:
                         implementation_hash=raw.implementation_hash,route=raw.route,
                         backend=raw.backend,parameter_domain_hash=raw.parameter_domain_hash,
                         metric_instance_hash=raw.metric_instance_hash)
+                    receipt.require_assertion_suite(suite_id=self.policy.qualification_suite_id,
+                        required_assertions=self.policy.required_qualification_assertions)
+                    identities=[getattr(receipt,"content_hash",c.qualification_ref)]
+                    if self._requires_use_admission(request.purpose):
+                        if not c.use_admission_ref: raise ValueError("purpose-scoped use admission required")
+                        admission=self.qualification_resolver.resolve(c.use_admission_ref)
+                        admission.require_use_admission(purpose=request.purpose,candidate_id=c.candidate_id,
+                            evidence_bundle_ref=c.evidence_bundle_ref,
+                            current_time=self.qualification_resolver.current_time,
+                            current_revocation_epoch=self.qualification_resolver.current_revocation_epoch)
+                        identities.append(getattr(admission,"content_hash",c.use_admission_ref))
+                    qualification_ids[c.candidate_id]=_digest(identities)
                 except (KeyError,ValueError,TypeError,AttributeError):
                     failures.append("numerical_qualification")
             if c.raw_joint_metric_evidence is None: failures.append("raw_joint_metric_evidence")
+            elif c.raw_joint_metric_evidence.candidate_id != c.candidate_id: failures.append("candidate_identity")
             elif c.raw_joint_metric_evidence.comparison_context_hash != request.comparison_context_hash: failures.append("joint_context")
             elif (c.raw_joint_metric_evidence.window_ids != self.policy.window_ids
                   or c.raw_joint_metric_evidence.scenario_ids != self.policy.scenario_ids): failures.append("joint_named_axes")
+            if c.raw_joint_metric_evidence is not None:
+                raw_units=dict(zip(c.raw_joint_metric_evidence.metric_ids,c.raw_joint_metric_evidence.metric_units))
+                allowed={r.metric_id for r in self.policy.metric_rules}
+                required={r.metric_id for r in self.policy.metric_rules if r.required or r.weight>0}
+                if not required.issubset(raw_units) or not set(raw_units).issubset(allowed): failures.append("joint_metric_axes")
+                for rule in self.policy.metric_rules:
+                    if rule.metric_id in raw_units and raw_units[rule.metric_id]!=rule.unit:
+                        failures.append(f"metric:{rule.metric_id}:unit")
             if c.coverage<self.policy.minimum_coverage: failures.append("coverage")
+            if self.policy.required_dimensions or self.policy.minimum_coverage:
+                if (not c.health_evidence_ref or c.health_candidate_id!=c.candidate_id
+                        or c.health_coverage is None or not math.isclose(c.coverage,c.health_coverage,abs_tol=1e-12)):
+                    failures.append("health_evidence_identity")
             for d in self.policy.required_dimensions:
-                if d not in c.dimensions: failures.append(f"dimension:{d}:missing")
+                if c.dimensions.get(d) in (None,"NONE","NOT_APPLICABLE","NOT_READY"): failures.append(f"dimension:{d}:missing")
             for d,floor in self.policy.dimension_floors.items():
                 if self._GRADES.get(c.dimensions.get(d,"NONE"),-2)<self._GRADES.get(floor,99): failures.append(f"dimension:{d}:below_floor")
             for rule in self.policy.metric_rules:
@@ -330,8 +418,8 @@ class DecisionProvider:
             eligible[c.candidate_id]=not failures
             receipts.extend(GateReceipt(c.candidate_id,x,False,x) for x in failures)
             receipts.append(GateReceipt(c.candidate_id,"eligibility",not failures,"passed" if not failures else "hard gate failure"))
-            integrity_failures={"evidence","qualification_scope","numerical_qualification","joint_context","raw_joint_metric_evidence","final_fidelity"}
-            if c.raw_joint_metric_evidence is not None and not integrity_failures.intersection(failures):
+            integrity_failures={"evidence","trusted_evidence","trusted_evidence_binding","qualification_scope","numerical_qualification","joint_context","joint_named_axes","joint_metric_axes","raw_joint_metric_evidence","candidate_identity","final_fidelity","health_evidence_identity"}
+            if c.raw_joint_metric_evidence is not None and not integrity_failures.intersection(failures) and not any(x.endswith(":unit") for x in failures):
                 mapped_evidence[c.candidate_id]=self._map_raw_evidence(c.raw_joint_metric_evidence)
             if failures: point[c.candidate_id]=conservative[c.candidate_id]=None; continue
             mapped=mapped_evidence[c.candidate_id]
@@ -342,18 +430,27 @@ class DecisionProvider:
         for c in request.candidates:
             effects[c.candidate_id]=None
             rel=Relationship.INCONCLUSIVE
-            if (baseline and c.candidate_id!=baseline.candidate_id and c.candidate_id in mapped_evidence
+            if (eligible.get(c.candidate_id,False) and baseline and c.candidate_id!=baseline.candidate_id and c.candidate_id in mapped_evidence
                     and baseline.candidate_id in mapped_evidence):
                 left,right=mapped_evidence[c.candidate_id],mapped_evidence[baseline.candidate_id]
-                if (left.replicate_ids != right.replicate_ids or left.resampling_plan_ref != right.resampling_plan_ref
+                if (set(left.replicate_ids) != set(right.replicate_ids) or left.resampling_plan_ref != right.resampling_plan_ref
+                        or self._pairing_identity(c.raw_joint_metric_evidence)!=self._pairing_identity(baseline.raw_joint_metric_evidence)
                         or left.window_ids != right.window_ids or left.scenario_ids != right.scenario_ids):
-                    raise ValueError("paired candidates require identical plan and replicate ids")
-                differences=sorted(a-b for a,b in zip(left.replicate_scores(),right.replicate_scores()))
+                    # Individually valid evidence from another sample/plan is
+                    # incomparable, not an exception that aborts valid peers.
+                    receipts.append(GateReceipt(c.candidate_id, "paired_comparison", False,
+                        "paired candidates require identical data, plan, samples and axes"))
+                    relation[c.candidate_id] = Relationship.INCONCLUSIVE
+                    replacement_roles[c.candidate_id] = None
+                    continue
+                left_scores=dict(zip(left.replicate_ids,left.replicate_scores()))
+                right_scores=dict(zip(right.replicate_ids,right.replicate_scores()))
+                differences=sorted(left_scores[rep]-right_scores[rep] for rep in left.replicate_ids)
                 lo=_quantile(differences,.05)
                 hi=_quantile(differences,.95)
-                effects[c.candidate_id]=_digest({"candidate":left.content_hash,"baseline":right.content_hash,"differences":differences})
-                if lo>0: rel=Relationship.REPAIRED if not eligible.get(baseline.candidate_id,False) else Relationship.SUPERIOR
-                elif lo>=-self.policy.noninferiority_margin and hi<=self.policy.equivalence_margin: rel=Relationship.EQUIVALENT
+                effects[c.candidate_id]=_digest({"candidate":left.content_hash,"baseline":right.content_hash,"effect_estimand":self.policy.effect_estimand,"replicate_differences":differences,"interval_quantiles":(.05,.95)})
+                if lo>self.policy.minimum_gain: rel=Relationship.REPAIRED if not eligible.get(baseline.candidate_id,False) else Relationship.SUPERIOR
+                elif lo>=-self.policy.equivalence_margin and hi<=self.policy.equivalence_margin: rel=Relationship.EQUIVALENT
                 elif lo>=-self.policy.noninferiority_margin: rel=Relationship.NONINFERIOR
             relation[c.candidate_id]=rel
             replacement_roles[c.candidate_id]=self._replacement_role(c,baseline,rel) if baseline else None
@@ -362,19 +459,23 @@ class DecisionProvider:
         # superiority; a repaired candidate may replace only an illegal RAW.
         if baseline is not None and eligible.get(baseline.candidate_id,False):
             raw=next((c for c in request.candidates if c.candidate_id==(request.original_raw_ref or request.baseline_ref)),baseline)
-            qualified=[c for c in selected if (relation.get(c.candidate_id) is Relationship.SUPERIOR or replacement_roles.get(c.candidate_id) is not None) and self._passes_raw_guards(c,(baseline,raw))]
+            qualified=[c for c in selected if (relation.get(c.candidate_id) is Relationship.SUPERIOR or replacement_roles.get(c.candidate_id) is not None) and all(x.candidate_id in mapped_evidence for x in (baseline,raw)) and self._passes_raw_guards(c,(baseline,raw))]
             winner=max(qualified,key=lambda c:(conservative[c.candidate_id],c.candidate_id)) if qualified else baseline
         elif baseline is not None:
             raw=next((c for c in request.candidates if c.candidate_id==(request.original_raw_ref or request.baseline_ref)),baseline)
-            qualified=[c for c in selected if relation.get(c.candidate_id) in (Relationship.SUPERIOR,Relationship.REPAIRED) and self._passes_raw_guards(c,(baseline,raw))]
+            qualified=[c for c in selected if relation.get(c.candidate_id) in (Relationship.SUPERIOR,Relationship.REPAIRED) and all(x.candidate_id in mapped_evidence for x in (baseline,raw)) and self._passes_raw_guards(c,(baseline,raw))]
             winner=max(qualified,key=lambda c:(conservative[c.candidate_id],c.candidate_id)) if qualified else None
         else:
             winner=max(selected,key=lambda c:(conservative[c.candidate_id],c.candidate_id)) if selected else None
-        waiting=any(any(r.candidate_id==c.candidate_id and r.gate_id in ("evidence","numerical_qualification","raw_joint_metric_evidence") for r in receipts) for c in request.candidates)
+        waiting=any(any(r.candidate_id==c.candidate_id and r.gate_id in ("evidence","trusted_evidence","trusted_evidence_binding","numerical_qualification","raw_joint_metric_evidence") for r in receipts) for c in request.candidates)
         status=DecisionStatus.SELECTED if winner else (DecisionStatus.WAIT if waiting else DecisionStatus.INCOMPARABLE)
-        semantic={"request":request.content_hash,"policy":self.policy.content_hash,"context":request.comparison_context_hash,"candidates":request.candidate_set_hash,"status":status.value,"winner":winner.candidate_id if winner else None,"eligible":dict(sorted(eligible.items())),"point":dict(sorted(point.items())),"conservative":dict(sorted(conservative.items())),"relationship":{k:v.value for k,v in sorted(relation.items())},"replacement_role":dict(sorted(replacement_roles.items()))}
+        semantic={"request":request.content_hash,"policy":self.policy.content_hash,"context":request.comparison_context_hash,"candidates":request.candidate_set_hash,"status":status.value,"winner":winner.candidate_id if winner else None,"eligible":dict(sorted(eligible.items())),"point":dict(sorted(point.items())),"conservative":dict(sorted(conservative.items())),"relationship":{k:v.value for k,v in sorted(relation.items())},"replacement_role":dict(sorted(replacement_roles.items())),"qualification_identities":dict(sorted(qualification_ids.items()))}
         content_hash=_digest(semantic)
-        return DecisionArtifact(request.request_id,request.content_hash,self.policy.policy_id,self.policy.content_hash,request.comparison_context_hash,request.candidate_set_hash,"decision:"+content_hash,content_hash,status,MappingProxyType(eligible),tuple(receipts),MappingProxyType(point),MappingProxyType(conservative),MappingProxyType(relation),MappingProxyType(effects),MappingProxyType({c.candidate_id:c.qualification_scope for c in request.candidates}),tuple(r.reason for r in receipts if not r.passed),MappingProxyType(replacement_roles),winner.candidate_id if winner else None,tuple(sorted(c.candidate_id for c in selected)),request.required_final_fidelity)
+        return DecisionArtifact(request.request_id,request.content_hash,self.policy.policy_id,self.policy.content_hash,request.comparison_context_hash,request.candidate_set_hash,"decision:"+content_hash,content_hash,status,MappingProxyType(eligible),tuple(receipts),MappingProxyType(point),MappingProxyType(conservative),MappingProxyType(relation),MappingProxyType(effects),MappingProxyType({c.candidate_id:c.qualification_scope for c in request.candidates}),tuple(r.reason for r in receipts if not r.passed),MappingProxyType(replacement_roles),winner.candidate_id if winner else None,((winner.candidate_id,) if winner else ()),request.required_final_fidelity,MappingProxyType(qualification_ids))
+
+    @staticmethod
+    def _requires_use_admission(purpose):
+        return purpose.upper() in {"PRODUCTION","LIVE","DEPLOY","PUBLISH","PRODUCTION_TRADING"}
 
     def _map_raw_evidence(self, evidence):
         positions={name:i for i,name in enumerate(evidence.metric_ids)}
@@ -412,18 +513,22 @@ class DecisionProvider:
         positions={m:i for i,m in enumerate(left.metric_ids)}
         for reference in references:
             right=reference.raw_joint_metric_evidence
-            if right is None or (left.replicate_ids,left.window_ids,left.scenario_ids)!=(right.replicate_ids,right.window_ids,right.scenario_ids): return False
+            if right is None or left.comparison_context_hash!=right.comparison_context_hash or left.resampling_plan_ref!=right.resampling_plan_ref or self._pairing_identity(left)!=self._pairing_identity(right) or set(left.replicate_ids)!=set(right.replicate_ids) or (left.window_ids,left.scenario_ids)!=(right.window_ids,right.scenario_ids): return False
             if left.metric_ids!=right.metric_ids or left.metric_units!=right.metric_units: return False
+            right_replicates=dict(zip(right.replicate_ids,right.samples))
             for rule in self.policy.metric_rules:
                 if rule.metric_id not in positions: continue
                 idx=positions[rule.metric_id]
                 if left.metric_units[idx]!=rule.unit: return False
                 diffs=[]
-                for lr,rr in zip(left.samples,right.samples):
-                    for lw,rw in zip(lr,rr):
-                        for ls,rs in zip(lw,rw):
+                for replicate_id,lr in zip(left.replicate_ids,left.samples):
+                    rr=right_replicates[replicate_id]
+                    effect=0.
+                    for window_weight,lw,rw in zip(self.policy.window_weights,lr,rr):
+                        for scenario_weight,ls,rs in zip(self.policy.scenario_weights,lw,rw):
                             delta=ls[idx]-rs[idx]
-                            diffs.append(delta if rule.direction is UtilityDirection.HIGHER_IS_BETTER else -delta)
+                            effect += window_weight*scenario_weight*(delta if rule.direction is UtilityDirection.HIGHER_IS_BETTER else -delta)
+                    diffs.append(effect)
                 if _quantile(diffs,.05) < -rule.noninferiority_delta: return False
         return True
 
@@ -435,10 +540,22 @@ class DecisionProvider:
             idx=left.metric_ids.index(role.metric_id); diffs=[]
             rule=next(r for r in self.policy.metric_rules if r.metric_id==role.metric_id)
             if left.metric_units[idx]!=rule.unit or right.metric_units[idx]!=rule.unit: continue
-            for lr,rr in zip(left.samples,right.samples):
-                for lw,rw in zip(lr,rr):
-                    for ls,rs in zip(lw,rw):
+            if (left.comparison_context_hash!=right.comparison_context_hash
+                    or left.resampling_plan_ref!=right.resampling_plan_ref
+                    or self._pairing_identity(left)!=self._pairing_identity(right)
+                    or set(left.replicate_ids)!=set(right.replicate_ids)): continue
+            right_replicates=dict(zip(right.replicate_ids,right.samples))
+            for replicate_id,lr in zip(left.replicate_ids,left.samples):
+                rr=right_replicates[replicate_id]; effect=0.
+                for window_weight,lw,rw in zip(self.policy.window_weights,lr,rr):
+                    for scenario_weight,ls,rs in zip(self.policy.scenario_weights,lw,rw):
                         delta=ls[idx]-rs[idx]
-                        diffs.append(delta if role.direction is UtilityDirection.HIGHER_IS_BETTER else -delta)
+                        effect += window_weight*scenario_weight*(delta if role.direction is UtilityDirection.HIGHER_IS_BETTER else -delta)
+                diffs.append(effect)
             if _quantile(diffs,.05)>=role.minimum_improvement: return role.role
         return None
+
+    @staticmethod
+    def _pairing_identity(raw):
+        return (raw.resampling_plan_content_hash,raw.sample_identity_hash,raw.time_identity_hash,
+            raw.common_mask_hash,raw.data_snapshot_hash,raw.universe_hash,raw.label_hash)

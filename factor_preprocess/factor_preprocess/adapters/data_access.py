@@ -5,6 +5,10 @@ Provides protocol-based boundary for fetching exposure context (industry, sector
 used in neutralization and feature engineering. Fails gracefully if not available.
 """
 
+from copy import deepcopy
+from collections.abc import Mapping
+from types import MappingProxyType
+import pandas as pd
 from typing import Protocol, Dict, Any, Optional, List
 import numpy as np
 
@@ -38,7 +42,49 @@ REQUIRED_PROVENANCE_KEYS = (
 )
 
 
-def _validate_exposure_bundle(bundle: Any, exposure_type: str) -> Dict[str, Any]:
+def _freeze_provenance(value):
+    """Detach nested provider state; never retain a live metadata alias."""
+    if isinstance(value, Mapping):
+        return MappingProxyType({key: _freeze_provenance(item) for key, item in value.items()})
+    if isinstance(value, (list, tuple)):
+        return tuple(_freeze_provenance(item) for item in value)
+    if isinstance(value, np.ndarray):
+        return _freeze_provenance(value.tolist())
+    if value is None or isinstance(value, (str, int, float, bool, np.generic)):
+        return value.item() if isinstance(value, np.generic) else value
+    raise ValueError(f"Unsupported mutable exposure metadata type: {type(value).__name__}")
+
+
+def _freeze_array(value):
+    value = np.asarray(value)
+    if value.dtype.hasobject:
+        # Provider object arrays commonly contain string axes/categories.
+        # Arbitrary object payloads cannot be certified immutable by NumPy flags.
+        if all(isinstance(item, str) for item in value.flat):
+            value = value.astype(str)
+        else:
+            raise ValueError("Exposure object arrays require scalar string values")
+    return np.frombuffer(value.tobytes(order="C"), dtype=value.dtype).reshape(value.shape)
+
+
+def _market_identity(value):
+    normalized = str(value).strip().lower()
+    return {"cn": "ashare", "a-share": "ashare", "a_share": "ashare"}.get(normalized, normalized)
+
+
+def _utc_dates(value, label):
+    try:
+        dates = pd.to_datetime(value, utc=True, errors="raise")
+        if np.asarray(pd.isna(dates)).any():
+            raise ValueError("NaT")
+        return dates
+    except (ValueError, TypeError, OverflowError) as exc:
+        raise ValueError(f"Invalid exposure {label}") from exc
+
+
+def _validate_exposure_bundle(bundle: Any, exposure_type: str, *,
+                              market=None, start_date=None, end_date=None,
+                              assets=None, classification=None) -> Dict[str, Any]:
     """Validate an exposure bundle carries mandatory provenance metadata.
 
     Fail-closed: a bundle without the required provenance keys is rejected
@@ -47,12 +93,13 @@ def _validate_exposure_bundle(bundle: Any, exposure_type: str) -> Dict[str, Any]
     Raises:
         ValueError: if the bundle is malformed or missing provenance.
     """
+    request_assets = assets
     if not isinstance(bundle, dict):
         raise ValueError(
             f"Exposure provider returned non-dict for '{exposure_type}': {type(bundle).__name__}"
         )
     metadata = bundle.get("metadata")
-    if not isinstance(metadata, dict):
+    if not isinstance(metadata, Mapping):
         raise ValueError(
             f"Exposure bundle for '{exposure_type}' missing 'metadata' dict"
         )
@@ -62,8 +109,8 @@ def _validate_exposure_bundle(bundle: Any, exposure_type: str) -> Dict[str, Any]
             f"Exposure bundle for '{exposure_type}' missing required provenance "
             f"keys: {missing}"
         )
-    for key in ("knowledge_time", "effective_time", "snapshot_ref", "market", "universe_ref"):
-        if metadata[key] in (None, "", "unknown"):
+    for key in REQUIRED_PROVENANCE_KEYS:
+        if not isinstance(metadata[key], str) or metadata[key].strip().lower() in ("", "unknown"):
             raise ValueError(
                 f"Exposure bundle for '{exposure_type}' has unresolved provenance {key!r}"
             )
@@ -81,12 +128,39 @@ def _validate_exposure_bundle(bundle: Any, exposure_type: str) -> Dict[str, Any]
         )
     if len(set(dates.tolist())) != len(dates) or len(set(assets.tolist())) != len(assets):
         raise ValueError(f"Exposure bundle for '{exposure_type}' axes must be unique")
+    # Request identity is checked before copying or reordering any values.
+    if market is not None and _market_identity(metadata["market"]) != _market_identity(market):
+        raise ValueError("Exposure market does not match request")
+    if classification not in (None, "default"):
+        if bundle.get("classification") != classification:
+            raise ValueError("Exposure classification does not match request")
+    requested_assets = request_assets
+    if requested_assets is not None and list(assets) != list(requested_assets):
+        raise ValueError("Exposure assets/order do not match request; explicit coverage alignment required")
+    if market is not None or start_date is not None or end_date is not None:
+        actual_dates = _utc_dates(dates, "dates")
+        if not actual_dates.is_monotonic_increasing:
+            raise ValueError("Exposure dates must be ordered")
+        if start_date is not None and (actual_dates < _utc_dates(start_date, "start_date")).any():
+            raise ValueError("Exposure dates precede requested start_date")
+        if end_date is not None and (actual_dates > _utc_dates(end_date, "end_date")).any():
+            raise ValueError("Exposure dates exceed requested end_date")
+        # Scalar times are only dataset-level bounds, NOT row-level PIT proof.
+        # Reject known-future bundles; a provider must supply per-cell authority
+        # before historical point-in-time certification can be claimed.
+        if len(actual_dates):
+            latest = actual_dates[-1]
+            for key in ("knowledge_time", "effective_time"):
+                observed_time = _utc_dates(metadata[key], key)
+                if not isinstance(observed_time, pd.Timestamp):
+                    raise ValueError(f"Exposure {key} requires declared scalar-bound schema")
+                if observed_time > latest:
+                    raise ValueError(f"Exposure {key} is later than returned date range")
     # Snapshot at the boundary: callers cannot mutate provider buffers after validation.
-    result = dict(bundle)
+    result = {key: deepcopy(value) for key, value in bundle.items() if key != "metadata"}
+    result["metadata"] = _freeze_provenance(metadata)
     for key in ("values", "dates", "assets"):
-        frozen = np.array(bundle[key], copy=True)
-        frozen.flags.writeable = False
-        result[key] = frozen
+        result[key] = _freeze_array(bundle[key])
     result["layout"] = "TN"
     result["dtype"] = str(result["values"].dtype)
     return result
@@ -298,6 +372,7 @@ class DataAccessAdapter:
             ValueError: If the provider returns a bundle without mandatory
                 provenance metadata (fail-closed).
         """
+        assets = tuple(assets) if assets is not None else None
         bundle = self._provider.get_industry_exposure(
             market=market,
             start_date=start_date,
@@ -305,7 +380,9 @@ class DataAccessAdapter:
             assets=assets,
             industry_classification=industry_classification,
         )
-        return _validate_exposure_bundle(bundle, "industry")
+        return _validate_exposure_bundle(bundle, "industry", market=market,
+            start_date=start_date, end_date=end_date, assets=assets,
+            classification=industry_classification)
 
     def fetch_size_exposure(
         self,
@@ -333,6 +410,7 @@ class DataAccessAdapter:
             ValueError: If the provider returns a bundle without mandatory
                 provenance metadata (fail-closed).
         """
+        assets = tuple(assets) if assets is not None else None
         bundle = self._provider.get_size_exposure(
             market=market,
             start_date=start_date,
@@ -340,7 +418,8 @@ class DataAccessAdapter:
             assets=assets,
             size_metric=size_metric,
         )
-        return _validate_exposure_bundle(bundle, "size")
+        return _validate_exposure_bundle(bundle, "size", market=market,
+            start_date=start_date, end_date=end_date, assets=assets)
 
     def fetch_multi_exposure(
         self,
@@ -371,6 +450,7 @@ class DataAccessAdapter:
                 provider returns a bundle without mandatory provenance metadata
                 (fail-closed).
         """
+        assets = tuple(assets) if assets is not None else None
         result = {}
 
         for exp_type in exposure_types:
@@ -393,6 +473,7 @@ class DataAccessAdapter:
                         market, start_date, end_date, assets
                     ),
                     "sector",
+                    market=market, start_date=start_date, end_date=end_date, assets=assets,
                 )
             elif exp_type == "beta":
                 result["beta"] = _validate_exposure_bundle(
@@ -400,6 +481,7 @@ class DataAccessAdapter:
                         market, start_date, end_date, assets
                     ),
                     "beta",
+                    market=market, start_date=start_date, end_date=end_date, assets=assets,
                 )
             else:
                 # Custom exposure
@@ -413,6 +495,7 @@ class DataAccessAdapter:
                         **kwargs,
                     ),
                     exp_type,
+                    market=market, start_date=start_date, end_date=end_date, assets=assets,
                 )
 
         return result

@@ -188,7 +188,7 @@ def test_incremental_assign_production_version_unchanged(small_universe):
     (assign,) = result.assignments
     assert assign.factor_id == "FX"
     assert assign.logical_cluster_id == "FAM_FAST"
-    assert assign.kind is IncrementalAssignmentKind.ASSIGNED
+    assert assign.kind is IncrementalAssignmentKind.RESEARCH_PROPOSED
     assert assign.cluster_set_version_ref == "csv1"
     assert assign.affinity is not None and assign.affinity >= 0.9
 
@@ -329,6 +329,7 @@ def test_incremental_matches_full_recluster_membership_overlap():
     assert assign.kind in (
         IncrementalAssignmentKind.ASSIGNED,
         IncrementalAssignmentKind.AMBIGUOUS,
+        IncrementalAssignmentKind.RESEARCH_PROPOSED,
     )
     assert assign.logical_cluster_id == "FAM_FAST"
 
@@ -456,7 +457,7 @@ def test_exact_flat_index_is_not_called_ann():
     )
     (assign,) = result.assignments
     assert assign.logical_cluster_id == "FAM_FAST"
-    assert assign.kind is IncrementalAssignmentKind.ASSIGNED
+    assert assign.kind is IncrementalAssignmentKind.RESEARCH_PROPOSED
 
 
 # ---------------------------------------------------------------------------
@@ -547,8 +548,11 @@ def _pair(member, new, value, *, status=PairwiseEvidenceStatus.CERTIFIED,
     if window_values is None:
         window_values = [(window, value, count, 100, ci or (value, value))]
     windows = tuple(CertifiedWindowEvidence(
-        ref, signed, PairwiseEvidenceStatus.CERTIFIED, pairs, days,
-        interval, "raw_correlation_hac_daily_corr",
+        ref, signed, (PairwiseEvidenceStatus.CERTIFIED if signed is not None
+                      else PairwiseEvidenceStatus.UNMEASURED), pairs, days,
+        (interval if signed is not None else (None, None)),
+        "raw_correlation_hac_daily_corr",
+        f"qe-window:{ref}", universe, "qe-sample-1",
     ) for ref, signed, pairs, days, interval in window_values)
     return CertifiedPairwiseEvidence(
         member, new, value, status, count, window, universe, "qe-sample-1", windows
@@ -579,6 +583,31 @@ def test_certified_pairwise_replaces_approximation_and_preserves_sign(small_univ
     assert candidate.evidence_status is PairwiseEvidenceStatus.CERTIFIED
     assert candidate.signed_similarity == -0.99
     assert candidate.pair_count == 100
+    overlay = build_incremental_cluster_version(
+        clusters, result.assignments, new_cluster_set_version_id="csv2",
+    )
+    fast = next(c for c in overlay if c.logical_cluster_id == "FAM_FAST")
+    assert fast.membership_qualification_domain == "UNVERIFIED"
+    assert fast.membership_evidence_refs == result.assignments[0].formal_evidence_refs
+    assert fast.to_dict()["membership_evidence_refs"]
+    with pytest.raises(NotImplementedError, match="trusted QE qualification resolver"):
+        build_incremental_cluster_version(
+            clusters, result.assignments, new_cluster_set_version_id="csv2",
+            admission_scope="PRODUCTION",
+        )
+    research_parents = {
+        cid: replace(cluster, membership_qualification_domain="RESEARCH_APPROXIMATE",
+                     content_hash="")
+        for cid, cluster in clusters.items()
+    }
+    rebound = incremental_assign(
+        [new], research_parents, {**byid, "FX": new},
+        policy=_single_support_policy(), certified_pairwise=evidence,
+    )
+    research_child = build_incremental_cluster_version(
+        research_parents, rebound.assignments, new_cluster_set_version_id="csv2",
+    )
+    assert next(c for c in research_child if c.logical_cluster_id == "FAM_FAST").membership_qualification_domain == "RESEARCH_APPROXIMATE"
 
 
 def test_certified_true_zero_is_measured_low_not_unmeasured(small_universe):
@@ -761,3 +790,65 @@ def test_redirect_uses_supported_final_cluster_evidence():
     )
     assert result.assignments[0].kind is IncrementalAssignmentKind.PENDING_GLOBAL_REFRESH
     assert result.assignments[0].logical_cluster_id is None
+
+
+def test_single_support_competes_by_distinct_logical_cluster(small_universe):
+    byid, clusters = small_universe
+    new = _fp("FX", (1.0, 0.0, 0.0, 0.0))
+    evidence = {
+        ("FX", "M1"): _pair("FX", "M1", .95),
+        ("FX", "M2"): _pair("FX", "M2", .94),
+    }
+    result = incremental_assign(
+        [new], clusters, {**byid, "FX": new},
+        policy=_single_support_policy(ambiguity_gap=.05),
+        certified_pairwise=evidence,
+    )
+    assert result.assignments[0].kind is IncrementalAssignmentKind.ASSIGNED
+    assert result.assignments[0].logical_cluster_id == "FAM_MOM"
+    assert len([c for c in result.candidates if c.cluster_id == "FAM_MOM"]) == 1
+
+
+def test_certified_window_contract_rejects_bad_or_duplicate_windows():
+    with pytest.raises(ValueError, match="lower bound"):
+        CertifiedWindowEvidence("H1", .95, PairwiseEvidenceStatus.CERTIFIED,
+                                100, 50, (.99, .91), "raw_correlation_hac_daily_corr",
+                                "id:H1", "ASHARE", "sample")
+    with pytest.raises(ValueError, match="\\[-1, 1\\]"):
+        CertifiedWindowEvidence("H1", 1.1, PairwiseEvidenceStatus.CERTIFIED,
+                                100, 50, (.9, 1.1), "raw_correlation_hac_daily_corr",
+                                "id:H1", "ASHARE", "sample")
+    window = CertifiedWindowEvidence("H1", .95, PairwiseEvidenceStatus.CERTIFIED,
+                                     100, 50, (.9, .99), "raw_correlation_hac_daily_corr",
+                                     "id:H1", "ASHARE", "sample")
+    with pytest.raises(ValueError, match="unique"):
+        CertifiedPairwiseEvidence(
+            "F1", "F2", .95, PairwiseEvidenceStatus.CERTIFIED, 100,
+            "250d", "ASHARE", "sample", (window, window),
+        )
+    alias = replace(window, window_ref="same-window-alias")
+    with pytest.raises(ValueError, match="canonical window identities"):
+        CertifiedPairwiseEvidence(
+            "F1", "F2", .95, PairwiseEvidenceStatus.CERTIFIED, 100,
+            "250d", "ASHARE", "sample", (window, alias),
+        )
+
+
+def test_research_assignment_serializes_but_production_overlay_rejects(small_universe):
+    byid, clusters = small_universe
+    new = _fp("FX", (.98, 0.0, 0.0, 0.0))
+    result = incremental_assign([new], clusters, {**byid, "FX": new})
+    assignment = result.assignments[0]
+    assert assignment.kind is IncrementalAssignmentKind.RESEARCH_PROPOSED
+    assert assignment.to_dict()["qualification_domain"] == "RESEARCH_APPROXIMATE"
+    research = build_incremental_cluster_version(
+        clusters, result.assignments, new_cluster_set_version_id="csv2",
+    )
+    fast = next(c for c in research if c.logical_cluster_id == "FAM_FAST")
+    assert fast.membership_qualification_domain == "UNVERIFIED"
+    assert fast.to_dict()["membership_qualification_domain"] == "UNVERIFIED"
+    with pytest.raises(NotImplementedError, match="trusted QE qualification resolver"):
+        build_incremental_cluster_version(
+            clusters, result.assignments, new_cluster_set_version_id="csv2",
+            admission_scope="PRODUCTION",
+        )

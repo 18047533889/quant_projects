@@ -1060,23 +1060,6 @@ def _validate_sealed_binding(
     return spec
 
 
-def _sealed_test_evaluation_ref(
-    session: SearchSession,
-    execution_spec: SelectedExecutionSpec,
-    split_plan: SplitPlan,
-) -> str:
-    payload = {
-        "search_session_id": session.session_id,
-        "split_id": split_plan.split_id,
-        "execution_spec_hash": execution_spec.spec_hash,
-        "frozen_at": session.frozen_at.isoformat() if session.frozen_at else None,
-    }
-    digest = hashlib.sha256(
-        json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
-    ).hexdigest()
-    return f"sealed_test_evaluation:{digest}"
-
-
 def _is_improvement(
     score: float, best_score: float, direction: str
 ) -> bool:

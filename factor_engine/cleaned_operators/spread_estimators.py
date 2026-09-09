@@ -16,6 +16,10 @@ and fail-closed to NaN when the required pairs are invalid.  Both smooth/cov
 windows are coverage-gated (R5 P1-44): a spread labelled "20d" must actually be
 estimated from a meaningful share of the window, not from a handful of valid
 points — missing/suspended bars reduce coverage and push the output to NaN.
+For ts_roll_effective_spread the positive-price gate has ATOMIC COLUMN scope:
+a non-positive observed price invalidates that whole input column, including
+earlier outputs. Prefix-causality applies to valid accepted columns; this is
+not a per-row masking policy and remains distinct from OHLC pair validation.
 """
 from __future__ import annotations
 

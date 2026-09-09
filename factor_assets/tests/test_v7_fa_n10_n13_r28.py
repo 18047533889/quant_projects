@@ -46,6 +46,8 @@ def _assignment(fid="new", cid="C", version="cs1", parent_hash="fixture-parent-h
         cluster_set_version_ref=version,
         affinity=0.95,
         parent_cluster_set_hash=parent_hash,
+        qualification_domain="CERTIFIED_PAIRWISE_SUPPORT",
+        formal_evidence_refs=(f"qe-pairwise:{fid}:w:s",),
     )
 
 

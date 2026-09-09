@@ -17,8 +17,15 @@ def test_multi_step_recipe_uses_one_input_load_and_existing_plan_nodes():
     assert plan.inputs[0].op == "ffill_limit"
     assert plan.inputs[0].inputs[0].op == "column"
     stats = {}
-    result = execute_operator_recipe(panel, steps, runtime_stats=stats)
+    result = execute_operator_recipe(
+        panel, steps, runtime_stats=stats, allow_research=True,
+    )
     assert result.shape == panel.shape
+    # Forward-filled A remains below B on every date; canonical rank is 0..1.
+    np.testing.assert_array_equal(result.to_numpy(), [[0., 1.]] * 3)
+    assert result.index.equals(panel.index)
+    assert result.columns.equals(panel.columns)
+    assert stats["recipe_execution_authority"] == "research_local"
     assert stats["recipe_input_load_count"] == 1
     assert stats["recipe_operator_count"] == 2
 

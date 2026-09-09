@@ -53,8 +53,14 @@ class GPUExecutionPolicy:
     oom_retile: bool = True
     strict_backend: bool = False
     required_capabilities: Tuple[str, ...] = ()
+    # One worker's materialized results, not the entire queued factor universe.
+    max_host_result_bytes: int = 256 * 1024 * 1024
 
     def __post_init__(self) -> None:
+        if (isinstance(self.max_host_result_bytes, bool)
+                or not isinstance(self.max_host_result_bytes, int)
+                or self.max_host_result_bytes <= 0):
+            raise ValueError("max_host_result_bytes must be a positive integer")
         if not 0.0 < self.max_vram_fraction <= 1.0:
             raise ValueError(
                 f"max_vram_fraction must be in (0,1], got {self.max_vram_fraction}"

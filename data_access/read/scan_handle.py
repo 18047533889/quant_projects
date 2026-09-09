@@ -90,6 +90,13 @@ class ScanHandle:
     _store: Any = None
     _prepared: Any = None  # R26-P0-004：PreparedRead（governor reservation / snapshot）
 
+
+    @property
+    def resolved_source_snapshot(self) -> Any:
+        """Immutable exact object set bound by the prepared read."""
+        if self._prepared is None:
+            return None
+        return getattr(self._prepared, "resolved_source_snapshot", None)
     def _pipeline_verify_before(self) -> None:
         if self._store is not None and self._prepared is not None:
             self._store._pipeline.verify_before(

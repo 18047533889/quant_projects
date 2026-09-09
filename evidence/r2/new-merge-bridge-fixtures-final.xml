@@ -1,0 +1,2273 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="37" skipped="0" tests="75" time="91.266" timestamp="2026-09-09T21:48:27.171178+08:00" hostname="qs-compute-gpu-hk-01"><testcase classname="factor_engine.tests.operators.test_b09_modwt_scale" name="test_modwt_band_corr_public_is_scale_invariant[1e-200]" time="0.071" /><testcase classname="factor_engine.tests.operators.test_b09_modwt_scale" name="test_modwt_band_corr_public_is_scale_invariant[1.0]" time="0.005" /><testcase classname="factor_engine.tests.operators.test_b09_modwt_scale" name="test_modwt_band_corr_public_is_scale_invariant[1e+200]" time="0.005" /><testcase classname="factor_engine.tests.operators.test_b09_modwt_scale" name="test_modwt_band_corr_sign_and_zero_energy_contract" time="0.001" /><testcase classname="factor_engine.tests.operators.test_b09_modwt_scale" name="test_modwt_band_corr_missing_clock_and_support_unchanged_by_scale" time="0.001" /><testcase classname="factor_engine.tests.operators.test_group_ext" name="test_group_ex_self_mean_basic" time="0.001"><failure message="Failed: group_ex_self_mean: 组内除自身外其余成员的均值。 failed with TypeError: GroupExSelfMean._calculate_series() missing 1 required positional argument: 'group'">def test_group_ex_self_mean_basic() -&gt; None:
+        """Basic functionality test."""
+        np.random.seed(42)
+        idx = pd.date_range("2024-01-01", periods=20)
+        cols = [f"S{i}" for i in range(10)]
+    
+        # Create sample data
+        x = pd.DataFrame(np.random.randn(20, 10), index=idx, columns=cols)
+    
+        op = _op("group_ex_self_mean")
+        # Get param names from metadata
+        meta = getattr(op, "metadata", None)
+    
+        # Call with default parameters
+        try:
+&gt;           result = op.calculate(x)
+                     ^^^^^^^^^^^^^^^
+
+factor_engine/tests/operators/test_group_ext.py:50: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = &lt;Operator: group_ex_self_mean&gt;
+args = (                  S0        S1        S2  ...        S7        S8        S9
+2024-01-01  0.496714 -0.138264  0.647689 ....846794 -1.514847
+2024-01-20 -0.446515  0.856399  0.214094  ...  0.153725  0.058209 -1.142970
+
+[20 rows x 10 columns],)
+kwargs = {}
+
+    def calculate(self, *args, **kwargs) -&gt; pd.DataFrame:
+        processed_args, processed_kwargs = self._prepare_call(args, kwargs)
+&gt;       return self._calculate_series(*processed_args, **processed_kwargs)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: GroupExSelfMean._calculate_series() missing 1 required positional argument: 'group'
+
+factor_engine/cleaned_operators/base.py:2200: TypeError
+
+During handling of the above exception, another exception occurred:
+
+    def test_group_ex_self_mean_basic() -&gt; None:
+        """Basic functionality test."""
+        np.random.seed(42)
+        idx = pd.date_range("2024-01-01", periods=20)
+        cols = [f"S{i}" for i in range(10)]
+    
+        # Create sample data
+        x = pd.DataFrame(np.random.randn(20, 10), index=idx, columns=cols)
+    
+        op = _op("group_ex_self_mean")
+        # Get param names from metadata
+        meta = getattr(op, "metadata", None)
+    
+        # Call with default parameters
+        try:
+            result = op.calculate(x)
+    
+            # Basic shape check
+            assert result.shape == x.shape, f"{result.shape} != {x.shape}"
+            assert list(result.columns) == list(x.columns)
+            assert list(result.index) == list(x.index)
+    
+            # Result should contain some finite values or be validly all-NaN
+            # (some operators may return all NaN for random data)
+        except Exception as e:
+&gt;           pytest.fail(f"{op} failed with {type(e).__name__}: {e}")
+E           Failed: group_ex_self_mean: 组内除自身外其余成员的均值。 failed with TypeError: GroupExSelfMean._calculate_series() missing 1 required positional argument: 'group'
+
+factor_engine/tests/operators/test_group_ext.py:60: Failed</failure></testcase><testcase classname="factor_engine.tests.operators.test_group_ext" name="test_group_ex_self_mean_handles_nans" time="0.001"><failure message="Failed: group_ex_self_mean: 组内除自身外其余成员的均值。 failed on NaN input: GroupExSelfMean._calculate_series() missing 1 required positional argument: 'group'">def test_group_ex_self_mean_handles_nans() -&gt; None:
+        """NaN handling test."""
+        idx = pd.date_range("2024-01-01", periods=10)
+        cols = ["A", "B", "C"]
+    
+        # Data with NaNs
+        data = [[1.0, np.nan, 3.0]] * 10
+        x = pd.DataFrame(data, index=idx, columns=cols)
+    
+        op = _op("group_ex_self_mean")
+    
+        try:
+&gt;           result = op.calculate(x)
+                     ^^^^^^^^^^^^^^^
+
+factor_engine/tests/operators/test_group_ext.py:75: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = &lt;Operator: group_ex_self_mean&gt;
+args = (              A   B    C
+2024-01-01  1.0 NaN  3.0
+2024-01-02  1.0 NaN  3.0
+2024-01-03  1.0 NaN  3.0
+2024-01-04  1.0 N...-06  1.0 NaN  3.0
+2024-01-07  1.0 NaN  3.0
+2024-01-08  1.0 NaN  3.0
+2024-01-09  1.0 NaN  3.0
+2024-01-10  1.0 NaN  3.0,)
+kwargs = {}
+
+    def calculate(self, *args, **kwargs) -&gt; pd.DataFrame:
+        processed_args, processed_kwargs = self._prepare_call(args, kwargs)
+&gt;       return self._calculate_series(*processed_args, **processed_kwargs)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: GroupExSelfMean._calculate_series() missing 1 required positional argument: 'group'
+
+factor_engine/cleaned_operators/base.py:2200: TypeError
+
+During handling of the above exception, another exception occurred:
+
+    def test_group_ex_self_mean_handles_nans() -&gt; None:
+        """NaN handling test."""
+        idx = pd.date_range("2024-01-01", periods=10)
+        cols = ["A", "B", "C"]
+    
+        # Data with NaNs
+        data = [[1.0, np.nan, 3.0]] * 10
+        x = pd.DataFrame(data, index=idx, columns=cols)
+    
+        op = _op("group_ex_self_mean")
+    
+        try:
+            result = op.calculate(x)
+    
+            # Should not raise, should return DataFrame
+            assert isinstance(result, pd.DataFrame)
+            assert result.shape == x.shape
+        except Exception as e:
+&gt;           pytest.fail(f"{op} failed on NaN input: {e}")
+E           Failed: group_ex_self_mean: 组内除自身外其余成员的均值。 failed on NaN input: GroupExSelfMean._calculate_series() missing 1 required positional argument: 'group'
+
+factor_engine/tests/operators/test_group_ext.py:81: Failed</failure></testcase><testcase classname="factor_engine.tests.operators.test_group_ext" name="test_group_ex_self_mean_handles_inf" time="0.001"><failure message="Failed: group_ex_self_mean: 组内除自身外其余成员的均值。 failed on inf input: GroupExSelfMean._calculate_series() missing 1 required positional argument: 'group'">def test_group_ex_self_mean_handles_inf() -&gt; None:
+        """Infinity handling test."""
+        idx = pd.date_range("2024-01-01", periods=10)
+        cols = ["A", "B"]
+    
+        # Data with infinities
+        data = [[1.0, np.inf], [2.0, -np.inf], [3.0, 4.0]] * 3 + [[5.0, 6.0]]
+        x = pd.DataFrame(data, index=idx, columns=cols)
+    
+        op = _op("group_ex_self_mean")
+    
+        try:
+&gt;           result = op.calculate(x)
+                     ^^^^^^^^^^^^^^^
+
+factor_engine/tests/operators/test_group_ext.py:96: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = &lt;Operator: group_ex_self_mean&gt;
+args = (              A    B
+2024-01-01  1.0  inf
+2024-01-02  2.0 -inf
+2024-01-03  3.0  4.0
+2024-01-04  1.0  inf
+2024-01-05  2.0 -inf
+2024-01-06  3.0  4.0
+2024-01-07  1.0  inf
+2024-01-08  2.0 -inf
+2024-01-09  3.0  4.0
+2024-01-10  5.0  6.0,)
+kwargs = {}
+
+    def calculate(self, *args, **kwargs) -&gt; pd.DataFrame:
+        processed_args, processed_kwargs = self._prepare_call(args, kwargs)
+&gt;       return self._calculate_series(*processed_args, **processed_kwargs)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: GroupExSelfMean._calculate_series() missing 1 required positional argument: 'group'
+
+factor_engine/cleaned_operators/base.py:2200: TypeError
+
+During handling of the above exception, another exception occurred:
+
+    def test_group_ex_self_mean_handles_inf() -&gt; None:
+        """Infinity handling test."""
+        idx = pd.date_range("2024-01-01", periods=10)
+        cols = ["A", "B"]
+    
+        # Data with infinities
+        data = [[1.0, np.inf], [2.0, -np.inf], [3.0, 4.0]] * 3 + [[5.0, 6.0]]
+        x = pd.DataFrame(data, index=idx, columns=cols)
+    
+        op = _op("group_ex_self_mean")
+    
+        try:
+            result = op.calculate(x)
+    
+            # Should handle inf gracefully (typically return NaN)
+            assert isinstance(result, pd.DataFrame)
+        except Exception as e:
+&gt;           pytest.fail(f"{op} failed on inf input: {e}")
+E           Failed: group_ex_self_mean: 组内除自身外其余成员的均值。 failed on inf input: GroupExSelfMean._calculate_series() missing 1 required positional argument: 'group'
+
+factor_engine/tests/operators/test_group_ext.py:101: Failed</failure></testcase><testcase classname="factor_engine.tests.operators.test_group_ext" name="test_group_ex_self_mean_empty_input" time="0.001" /><testcase classname="factor_engine.tests.operators.test_group_ext" name="test_group_ex_self_mean_single_column" time="0.001"><failure message="Failed: group_ex_self_mean: 组内除自身外其余成员的均值。 failed on single column: GroupExSelfMean._calculate_series() missing 1 required positional argument: 'group'">def test_group_ex_self_mean_single_column() -&gt; None:
+        """Single column test."""
+        idx = pd.date_range("2024-01-01", periods=20)
+        x = pd.DataFrame({"A": range(20)}, index=idx)
+    
+        op = _op("group_ex_self_mean")
+    
+        try:
+&gt;           result = op.calculate(x)
+                     ^^^^^^^^^^^^^^^
+
+factor_engine/tests/operators/test_group_ext.py:129: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = &lt;Operator: group_ex_self_mean&gt;
+args = (             A
+2024-01-01   0
+2024-01-02   1
+2024-01-03   2
+2024-01-04   3
+2024-01-05   4
+2024-01-06   5
+2024-01-07  ...24-01-13  12
+2024-01-14  13
+2024-01-15  14
+2024-01-16  15
+2024-01-17  16
+2024-01-18  17
+2024-01-19  18
+2024-01-20  19,)
+kwargs = {}
+
+    def calculate(self, *args, **kwargs) -&gt; pd.DataFrame:
+        processed_args, processed_kwargs = self._prepare_call(args, kwargs)
+&gt;       return self._calculate_series(*processed_args, **processed_kwargs)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: GroupExSelfMean._calculate_series() missing 1 required positional argument: 'group'
+
+factor_engine/cleaned_operators/base.py:2200: TypeError
+
+During handling of the above exception, another exception occurred:
+
+    def test_group_ex_self_mean_single_column() -&gt; None:
+        """Single column test."""
+        idx = pd.date_range("2024-01-01", periods=20)
+        x = pd.DataFrame({"A": range(20)}, index=idx)
+    
+        op = _op("group_ex_self_mean")
+    
+        try:
+            result = op.calculate(x)
+    
+            assert isinstance(result, pd.DataFrame)
+            assert result.shape[1] == 1
+        except Exception as e:
+&gt;           pytest.fail(f"{op} failed on single column: {e}")
+E           Failed: group_ex_self_mean: 组内除自身外其余成员的均值。 failed on single column: GroupExSelfMean._calculate_series() missing 1 required positional argument: 'group'
+
+factor_engine/tests/operators/test_group_ext.py:134: Failed</failure></testcase><testcase classname="factor_engine.tests.operators.test_group_ext" name="test_group_ex_self_weighted_mean_basic" time="0.001"><failure message="Failed: group_ex_self_weighted_mean: 组内除自身外其余成员的权重加权均值。 failed with TypeError: GroupExSelfWeightedMean._calculate_series() missing 2 required positional arguments: 'weight' and 'group'">def test_group_ex_self_weighted_mean_basic() -&gt; None:
+        """Basic functionality test."""
+        np.random.seed(42)
+        idx = pd.date_range("2024-01-01", periods=20)
+        cols = [f"S{i}" for i in range(10)]
+    
+        # Create sample data
+        x = pd.DataFrame(np.random.randn(20, 10), index=idx, columns=cols)
+    
+        op = _op("group_ex_self_weighted_mean")
+        # Get param names from metadata
+        meta = getattr(op, "metadata", None)
+    
+        # Call with default parameters
+        try:
+&gt;           result = op.calculate(x)
+                     ^^^^^^^^^^^^^^^
+
+factor_engine/tests/operators/test_group_ext.py:155: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = &lt;Operator: group_ex_self_weighted_mean&gt;
+args = (                  S0        S1        S2  ...        S7        S8        S9
+2024-01-01  0.496714 -0.138264  0.647689 ....846794 -1.514847
+2024-01-20 -0.446515  0.856399  0.214094  ...  0.153725  0.058209 -1.142970
+
+[20 rows x 10 columns],)
+kwargs = {}
+
+    def calculate(self, *args, **kwargs) -&gt; pd.DataFrame:
+        processed_args, processed_kwargs = self._prepare_call(args, kwargs)
+&gt;       return self._calculate_series(*processed_args, **processed_kwargs)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: GroupExSelfWeightedMean._calculate_series() missing 2 required positional arguments: 'weight' and 'group'
+
+factor_engine/cleaned_operators/base.py:2200: TypeError
+
+During handling of the above exception, another exception occurred:
+
+    def test_group_ex_self_weighted_mean_basic() -&gt; None:
+        """Basic functionality test."""
+        np.random.seed(42)
+        idx = pd.date_range("2024-01-01", periods=20)
+        cols = [f"S{i}" for i in range(10)]
+    
+        # Create sample data
+        x = pd.DataFrame(np.random.randn(20, 10), index=idx, columns=cols)
+    
+        op = _op("group_ex_self_weighted_mean")
+        # Get param names from metadata
+        meta = getattr(op, "metadata", None)
+    
+        # Call with default parameters
+        try:
+            result = op.calculate(x)
+    
+            # Basic shape check
+            assert result.shape == x.shape, f"{result.shape} != {x.shape}"
+            assert list(result.columns) == list(x.columns)
+            assert list(result.index) == list(x.index)
+    
+            # Result should contain some finite values or be validly all-NaN
+            # (some operators may return all NaN for random data)
+        except Exception as e:
+&gt;           pytest.fail(f"{op} failed with {type(e).__name__}: {e}")
+E           Failed: group_ex_self_weighted_mean: 组内除自身外其余成员的权重加权均值。 failed with TypeError: GroupExSelfWeightedMean._calculate_series() missing 2 required positional arguments: 'weight' and 'group'
+
+factor_engine/tests/operators/test_group_ext.py:165: Failed</failure></testcase><testcase classname="factor_engine.tests.operators.test_group_ext" name="test_group_ex_self_weighted_mean_handles_nans" time="0.001"><failure message="Failed: group_ex_self_weighted_mean: 组内除自身外其余成员的权重加权均值。 failed on NaN input: GroupExSelfWeightedMean._calculate_series() missing 2 required positional arguments: 'weight' and 'group'">def test_group_ex_self_weighted_mean_handles_nans() -&gt; None:
+        """NaN handling test."""
+        idx = pd.date_range("2024-01-01", periods=10)
+        cols = ["A", "B", "C"]
+    
+        # Data with NaNs
+        data = [[1.0, np.nan, 3.0]] * 10
+        x = pd.DataFrame(data, index=idx, columns=cols)
+    
+        op = _op("group_ex_self_weighted_mean")
+    
+        try:
+&gt;           result = op.calculate(x)
+                     ^^^^^^^^^^^^^^^
+
+factor_engine/tests/operators/test_group_ext.py:180: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = &lt;Operator: group_ex_self_weighted_mean&gt;
+args = (              A   B    C
+2024-01-01  1.0 NaN  3.0
+2024-01-02  1.0 NaN  3.0
+2024-01-03  1.0 NaN  3.0
+2024-01-04  1.0 N...-06  1.0 NaN  3.0
+2024-01-07  1.0 NaN  3.0
+2024-01-08  1.0 NaN  3.0
+2024-01-09  1.0 NaN  3.0
+2024-01-10  1.0 NaN  3.0,)
+kwargs = {}
+
+    def calculate(self, *args, **kwargs) -&gt; pd.DataFrame:
+        processed_args, processed_kwargs = self._prepare_call(args, kwargs)
+&gt;       return self._calculate_series(*processed_args, **processed_kwargs)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: GroupExSelfWeightedMean._calculate_series() missing 2 required positional arguments: 'weight' and 'group'
+
+factor_engine/cleaned_operators/base.py:2200: TypeError
+
+During handling of the above exception, another exception occurred:
+
+    def test_group_ex_self_weighted_mean_handles_nans() -&gt; None:
+        """NaN handling test."""
+        idx = pd.date_range("2024-01-01", periods=10)
+        cols = ["A", "B", "C"]
+    
+        # Data with NaNs
+        data = [[1.0, np.nan, 3.0]] * 10
+        x = pd.DataFrame(data, index=idx, columns=cols)
+    
+        op = _op("group_ex_self_weighted_mean")
+    
+        try:
+            result = op.calculate(x)
+    
+            # Should not raise, should return DataFrame
+            assert isinstance(result, pd.DataFrame)
+            assert result.shape == x.shape
+        except Exception as e:
+&gt;           pytest.fail(f"{op} failed on NaN input: {e}")
+E           Failed: group_ex_self_weighted_mean: 组内除自身外其余成员的权重加权均值。 failed on NaN input: GroupExSelfWeightedMean._calculate_series() missing 2 required positional arguments: 'weight' and 'group'
+
+factor_engine/tests/operators/test_group_ext.py:186: Failed</failure></testcase><testcase classname="factor_engine.tests.operators.test_group_ext" name="test_group_ex_self_weighted_mean_handles_inf" time="0.001"><failure message="Failed: group_ex_self_weighted_mean: 组内除自身外其余成员的权重加权均值。 failed on inf input: GroupExSelfWeightedMean._calculate_series() missing 2 required positional arguments: 'weight' and 'group'">def test_group_ex_self_weighted_mean_handles_inf() -&gt; None:
+        """Infinity handling test."""
+        idx = pd.date_range("2024-01-01", periods=10)
+        cols = ["A", "B"]
+    
+        # Data with infinities
+        data = [[1.0, np.inf], [2.0, -np.inf], [3.0, 4.0]] * 3 + [[5.0, 6.0]]
+        x = pd.DataFrame(data, index=idx, columns=cols)
+    
+        op = _op("group_ex_self_weighted_mean")
+    
+        try:
+&gt;           result = op.calculate(x)
+                     ^^^^^^^^^^^^^^^
+
+factor_engine/tests/operators/test_group_ext.py:201: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = &lt;Operator: group_ex_self_weighted_mean&gt;
+args = (              A    B
+2024-01-01  1.0  inf
+2024-01-02  2.0 -inf
+2024-01-03  3.0  4.0
+2024-01-04  1.0  inf
+2024-01-05  2.0 -inf
+2024-01-06  3.0  4.0
+2024-01-07  1.0  inf
+2024-01-08  2.0 -inf
+2024-01-09  3.0  4.0
+2024-01-10  5.0  6.0,)
+kwargs = {}
+
+    def calculate(self, *args, **kwargs) -&gt; pd.DataFrame:
+        processed_args, processed_kwargs = self._prepare_call(args, kwargs)
+&gt;       return self._calculate_series(*processed_args, **processed_kwargs)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: GroupExSelfWeightedMean._calculate_series() missing 2 required positional arguments: 'weight' and 'group'
+
+factor_engine/cleaned_operators/base.py:2200: TypeError
+
+During handling of the above exception, another exception occurred:
+
+    def test_group_ex_self_weighted_mean_handles_inf() -&gt; None:
+        """Infinity handling test."""
+        idx = pd.date_range("2024-01-01", periods=10)
+        cols = ["A", "B"]
+    
+        # Data with infinities
+        data = [[1.0, np.inf], [2.0, -np.inf], [3.0, 4.0]] * 3 + [[5.0, 6.0]]
+        x = pd.DataFrame(data, index=idx, columns=cols)
+    
+        op = _op("group_ex_self_weighted_mean")
+    
+        try:
+            result = op.calculate(x)
+    
+            # Should handle inf gracefully (typically return NaN)
+            assert isinstance(result, pd.DataFrame)
+        except Exception as e:
+&gt;           pytest.fail(f"{op} failed on inf input: {e}")
+E           Failed: group_ex_self_weighted_mean: 组内除自身外其余成员的权重加权均值。 failed on inf input: GroupExSelfWeightedMean._calculate_series() missing 2 required positional arguments: 'weight' and 'group'
+
+factor_engine/tests/operators/test_group_ext.py:206: Failed</failure></testcase><testcase classname="factor_engine.tests.operators.test_group_ext" name="test_group_ex_self_weighted_mean_empty_input" time="0.001" /><testcase classname="factor_engine.tests.operators.test_group_ext" name="test_group_ex_self_weighted_mean_single_column" time="0.001"><failure message="Failed: group_ex_self_weighted_mean: 组内除自身外其余成员的权重加权均值。 failed on single column: GroupExSelfWeightedMean._calculate_series() missing 2 required positional arguments: 'weight' and 'group'">def test_group_ex_self_weighted_mean_single_column() -&gt; None:
+        """Single column test."""
+        idx = pd.date_range("2024-01-01", periods=20)
+        x = pd.DataFrame({"A": range(20)}, index=idx)
+    
+        op = _op("group_ex_self_weighted_mean")
+    
+        try:
+&gt;           result = op.calculate(x)
+                     ^^^^^^^^^^^^^^^
+
+factor_engine/tests/operators/test_group_ext.py:234: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = &lt;Operator: group_ex_self_weighted_mean&gt;
+args = (             A
+2024-01-01   0
+2024-01-02   1
+2024-01-03   2
+2024-01-04   3
+2024-01-05   4
+2024-01-06   5
+2024-01-07  ...24-01-13  12
+2024-01-14  13
+2024-01-15  14
+2024-01-16  15
+2024-01-17  16
+2024-01-18  17
+2024-01-19  18
+2024-01-20  19,)
+kwargs = {}
+
+    def calculate(self, *args, **kwargs) -&gt; pd.DataFrame:
+        processed_args, processed_kwargs = self._prepare_call(args, kwargs)
+&gt;       return self._calculate_series(*processed_args, **processed_kwargs)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: GroupExSelfWeightedMean._calculate_series() missing 2 required positional arguments: 'weight' and 'group'
+
+factor_engine/cleaned_operators/base.py:2200: TypeError
+
+During handling of the above exception, another exception occurred:
+
+    def test_group_ex_self_weighted_mean_single_column() -&gt; None:
+        """Single column test."""
+        idx = pd.date_range("2024-01-01", periods=20)
+        x = pd.DataFrame({"A": range(20)}, index=idx)
+    
+        op = _op("group_ex_self_weighted_mean")
+    
+        try:
+            result = op.calculate(x)
+    
+            assert isinstance(result, pd.DataFrame)
+            assert result.shape[1] == 1
+        except Exception as e:
+&gt;           pytest.fail(f"{op} failed on single column: {e}")
+E           Failed: group_ex_self_weighted_mean: 组内除自身外其余成员的权重加权均值。 failed on single column: GroupExSelfWeightedMean._calculate_series() missing 2 required positional arguments: 'weight' and 'group'
+
+factor_engine/tests/operators/test_group_ext.py:239: Failed</failure></testcase><testcase classname="factor_engine.tests.operators.test_group_ext" name="test_hierarchical_group_neutralize_basic" time="0.001"><failure message="Failed: hierarchical_group_neutralize: 按 (group, subgroup) 组合键去均值（真 nested 中性化；子组码跨父组重复时不再串组）。 failed with TypeError: HierarchicalGroupNeutralize._calculate_series() missing 2 required positional arguments: 'group' and 'subgroup'">def test_hierarchical_group_neutralize_basic() -&gt; None:
+        """Basic functionality test."""
+        np.random.seed(42)
+        idx = pd.date_range("2024-01-01", periods=20)
+        cols = [f"S{i}" for i in range(10)]
+    
+        # Create sample data
+        x = pd.DataFrame(np.random.randn(20, 10), index=idx, columns=cols)
+    
+        op = _op("hierarchical_group_neutralize")
+        # Get param names from metadata
+        meta = getattr(op, "metadata", None)
+    
+        # Call with default parameters
+        try:
+&gt;           result = op.calculate(x)
+                     ^^^^^^^^^^^^^^^
+
+factor_engine/tests/operators/test_group_ext.py:260: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = &lt;Operator: hierarchical_group_neutralize&gt;
+args = (                  S0        S1        S2  ...        S7        S8        S9
+2024-01-01  0.496714 -0.138264  0.647689 ....846794 -1.514847
+2024-01-20 -0.446515  0.856399  0.214094  ...  0.153725  0.058209 -1.142970
+
+[20 rows x 10 columns],)
+kwargs = {}
+
+    def calculate(self, *args, **kwargs) -&gt; pd.DataFrame:
+        processed_args, processed_kwargs = self._prepare_call(args, kwargs)
+&gt;       return self._calculate_series(*processed_args, **processed_kwargs)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: HierarchicalGroupNeutralize._calculate_series() missing 2 required positional arguments: 'group' and 'subgroup'
+
+factor_engine/cleaned_operators/base.py:2200: TypeError
+
+During handling of the above exception, another exception occurred:
+
+    def test_hierarchical_group_neutralize_basic() -&gt; None:
+        """Basic functionality test."""
+        np.random.seed(42)
+        idx = pd.date_range("2024-01-01", periods=20)
+        cols = [f"S{i}" for i in range(10)]
+    
+        # Create sample data
+        x = pd.DataFrame(np.random.randn(20, 10), index=idx, columns=cols)
+    
+        op = _op("hierarchical_group_neutralize")
+        # Get param names from metadata
+        meta = getattr(op, "metadata", None)
+    
+        # Call with default parameters
+        try:
+            result = op.calculate(x)
+    
+            # Basic shape check
+            assert result.shape == x.shape, f"{result.shape} != {x.shape}"
+            assert list(result.columns) == list(x.columns)
+            assert list(result.index) == list(x.index)
+    
+            # Result should contain some finite values or be validly all-NaN
+            # (some operators may return all NaN for random data)
+        except Exception as e:
+&gt;           pytest.fail(f"{op} failed with {type(e).__name__}: {e}")
+E           Failed: hierarchical_group_neutralize: 按 (group, subgroup) 组合键去均值（真 nested 中性化；子组码跨父组重复时不再串组）。 failed with TypeError: HierarchicalGroupNeutralize._calculate_series() missing 2 required positional arguments: 'group' and 'subgroup'
+
+factor_engine/tests/operators/test_group_ext.py:270: Failed</failure></testcase><testcase classname="factor_engine.tests.operators.test_group_ext" name="test_hierarchical_group_neutralize_handles_nans" time="0.001"><failure message="Failed: hierarchical_group_neutralize: 按 (group, subgroup) 组合键去均值（真 nested 中性化；子组码跨父组重复时不再串组）。 failed on NaN input: HierarchicalGroupNeutralize._calculate_series() missing 2 required positional arguments: 'group' and 'subgroup'">def test_hierarchical_group_neutralize_handles_nans() -&gt; None:
+        """NaN handling test."""
+        idx = pd.date_range("2024-01-01", periods=10)
+        cols = ["A", "B", "C"]
+    
+        # Data with NaNs
+        data = [[1.0, np.nan, 3.0]] * 10
+        x = pd.DataFrame(data, index=idx, columns=cols)
+    
+        op = _op("hierarchical_group_neutralize")
+    
+        try:
+&gt;           result = op.calculate(x)
+                     ^^^^^^^^^^^^^^^
+
+factor_engine/tests/operators/test_group_ext.py:285: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = &lt;Operator: hierarchical_group_neutralize&gt;
+args = (              A   B    C
+2024-01-01  1.0 NaN  3.0
+2024-01-02  1.0 NaN  3.0
+2024-01-03  1.0 NaN  3.0
+2024-01-04  1.0 N...-06  1.0 NaN  3.0
+2024-01-07  1.0 NaN  3.0
+2024-01-08  1.0 NaN  3.0
+2024-01-09  1.0 NaN  3.0
+2024-01-10  1.0 NaN  3.0,)
+kwargs = {}
+
+    def calculate(self, *args, **kwargs) -&gt; pd.DataFrame:
+        processed_args, processed_kwargs = self._prepare_call(args, kwargs)
+&gt;       return self._calculate_series(*processed_args, **processed_kwargs)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: HierarchicalGroupNeutralize._calculate_series() missing 2 required positional arguments: 'group' and 'subgroup'
+
+factor_engine/cleaned_operators/base.py:2200: TypeError
+
+During handling of the above exception, another exception occurred:
+
+    def test_hierarchical_group_neutralize_handles_nans() -&gt; None:
+        """NaN handling test."""
+        idx = pd.date_range("2024-01-01", periods=10)
+        cols = ["A", "B", "C"]
+    
+        # Data with NaNs
+        data = [[1.0, np.nan, 3.0]] * 10
+        x = pd.DataFrame(data, index=idx, columns=cols)
+    
+        op = _op("hierarchical_group_neutralize")
+    
+        try:
+            result = op.calculate(x)
+    
+            # Should not raise, should return DataFrame
+            assert isinstance(result, pd.DataFrame)
+            assert result.shape == x.shape
+        except Exception as e:
+&gt;           pytest.fail(f"{op} failed on NaN input: {e}")
+E           Failed: hierarchical_group_neutralize: 按 (group, subgroup) 组合键去均值（真 nested 中性化；子组码跨父组重复时不再串组）。 failed on NaN input: HierarchicalGroupNeutralize._calculate_series() missing 2 required positional arguments: 'group' and 'subgroup'
+
+factor_engine/tests/operators/test_group_ext.py:291: Failed</failure></testcase><testcase classname="factor_engine.tests.operators.test_group_ext" name="test_hierarchical_group_neutralize_handles_inf" time="0.001"><failure message="Failed: hierarchical_group_neutralize: 按 (group, subgroup) 组合键去均值（真 nested 中性化；子组码跨父组重复时不再串组）。 failed on inf input: HierarchicalGroupNeutralize._calculate_series() missing 2 required positional arguments: 'group' and 'subgroup'">def test_hierarchical_group_neutralize_handles_inf() -&gt; None:
+        """Infinity handling test."""
+        idx = pd.date_range("2024-01-01", periods=10)
+        cols = ["A", "B"]
+    
+        # Data with infinities
+        data = [[1.0, np.inf], [2.0, -np.inf], [3.0, 4.0]] * 3 + [[5.0, 6.0]]
+        x = pd.DataFrame(data, index=idx, columns=cols)
+    
+        op = _op("hierarchical_group_neutralize")
+    
+        try:
+&gt;           result = op.calculate(x)
+                     ^^^^^^^^^^^^^^^
+
+factor_engine/tests/operators/test_group_ext.py:306: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = &lt;Operator: hierarchical_group_neutralize&gt;
+args = (              A    B
+2024-01-01  1.0  inf
+2024-01-02  2.0 -inf
+2024-01-03  3.0  4.0
+2024-01-04  1.0  inf
+2024-01-05  2.0 -inf
+2024-01-06  3.0  4.0
+2024-01-07  1.0  inf
+2024-01-08  2.0 -inf
+2024-01-09  3.0  4.0
+2024-01-10  5.0  6.0,)
+kwargs = {}
+
+    def calculate(self, *args, **kwargs) -&gt; pd.DataFrame:
+        processed_args, processed_kwargs = self._prepare_call(args, kwargs)
+&gt;       return self._calculate_series(*processed_args, **processed_kwargs)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: HierarchicalGroupNeutralize._calculate_series() missing 2 required positional arguments: 'group' and 'subgroup'
+
+factor_engine/cleaned_operators/base.py:2200: TypeError
+
+During handling of the above exception, another exception occurred:
+
+    def test_hierarchical_group_neutralize_handles_inf() -&gt; None:
+        """Infinity handling test."""
+        idx = pd.date_range("2024-01-01", periods=10)
+        cols = ["A", "B"]
+    
+        # Data with infinities
+        data = [[1.0, np.inf], [2.0, -np.inf], [3.0, 4.0]] * 3 + [[5.0, 6.0]]
+        x = pd.DataFrame(data, index=idx, columns=cols)
+    
+        op = _op("hierarchical_group_neutralize")
+    
+        try:
+            result = op.calculate(x)
+    
+            # Should handle inf gracefully (typically return NaN)
+            assert isinstance(result, pd.DataFrame)
+        except Exception as e:
+&gt;           pytest.fail(f"{op} failed on inf input: {e}")
+E           Failed: hierarchical_group_neutralize: 按 (group, subgroup) 组合键去均值（真 nested 中性化；子组码跨父组重复时不再串组）。 failed on inf input: HierarchicalGroupNeutralize._calculate_series() missing 2 required positional arguments: 'group' and 'subgroup'
+
+factor_engine/tests/operators/test_group_ext.py:311: Failed</failure></testcase><testcase classname="factor_engine.tests.operators.test_group_ext" name="test_hierarchical_group_neutralize_empty_input" time="0.001" /><testcase classname="factor_engine.tests.operators.test_group_ext" name="test_hierarchical_group_neutralize_single_column" time="0.001"><failure message="Failed: hierarchical_group_neutralize: 按 (group, subgroup) 组合键去均值（真 nested 中性化；子组码跨父组重复时不再串组）。 failed on single column: HierarchicalGroupNeutralize._calculate_series() missing 2 required positional arguments: 'group' and 'subgroup'">def test_hierarchical_group_neutralize_single_column() -&gt; None:
+        """Single column test."""
+        idx = pd.date_range("2024-01-01", periods=20)
+        x = pd.DataFrame({"A": range(20)}, index=idx)
+    
+        op = _op("hierarchical_group_neutralize")
+    
+        try:
+&gt;           result = op.calculate(x)
+                     ^^^^^^^^^^^^^^^
+
+factor_engine/tests/operators/test_group_ext.py:339: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = &lt;Operator: hierarchical_group_neutralize&gt;
+args = (             A
+2024-01-01   0
+2024-01-02   1
+2024-01-03   2
+2024-01-04   3
+2024-01-05   4
+2024-01-06   5
+2024-01-07  ...24-01-13  12
+2024-01-14  13
+2024-01-15  14
+2024-01-16  15
+2024-01-17  16
+2024-01-18  17
+2024-01-19  18
+2024-01-20  19,)
+kwargs = {}
+
+    def calculate(self, *args, **kwargs) -&gt; pd.DataFrame:
+        processed_args, processed_kwargs = self._prepare_call(args, kwargs)
+&gt;       return self._calculate_series(*processed_args, **processed_kwargs)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: HierarchicalGroupNeutralize._calculate_series() missing 2 required positional arguments: 'group' and 'subgroup'
+
+factor_engine/cleaned_operators/base.py:2200: TypeError
+
+During handling of the above exception, another exception occurred:
+
+    def test_hierarchical_group_neutralize_single_column() -&gt; None:
+        """Single column test."""
+        idx = pd.date_range("2024-01-01", periods=20)
+        x = pd.DataFrame({"A": range(20)}, index=idx)
+    
+        op = _op("hierarchical_group_neutralize")
+    
+        try:
+            result = op.calculate(x)
+    
+            assert isinstance(result, pd.DataFrame)
+            assert result.shape[1] == 1
+        except Exception as e:
+&gt;           pytest.fail(f"{op} failed on single column: {e}")
+E           Failed: hierarchical_group_neutralize: 按 (group, subgroup) 组合键去均值（真 nested 中性化；子组码跨父组重复时不再串组）。 failed on single column: HierarchicalGroupNeutralize._calculate_series() missing 2 required positional arguments: 'group' and 'subgroup'
+
+factor_engine/tests/operators/test_group_ext.py:344: Failed</failure></testcase><testcase classname="factor_engine.tests.operators.test_group_ext" name="test_cs_trimmed_ols_resid_basic" time="0.001"><failure message="Failed: cs_trimmed_ols_resid: 横截面残差（trimmed-OLS：截尾两端后最小二乘，非 Huber/LAD 稳健回归）。R11 #136：canonical 名现为 cs_trimmed_ols_resid（诚实命名），cs_robust_resid 为 deprecated alias；输出残差单位为 unit(y)（§37-D unit-algebra）。 failed with TypeError: CsRobustResid._calculate_series() missing 1 required positional argument: 'x'">def test_cs_trimmed_ols_resid_basic() -&gt; None:
+        """Basic functionality test."""
+        np.random.seed(42)
+        idx = pd.date_range("2024-01-01", periods=20)
+        cols = [f"S{i}" for i in range(10)]
+    
+        # Create sample data
+        x = pd.DataFrame(np.random.randn(20, 10), index=idx, columns=cols)
+    
+        op = _op("cs_trimmed_ols_resid")
+        # Get param names from metadata
+        meta = getattr(op, "metadata", None)
+    
+        # Call with default parameters
+        try:
+&gt;           result = op.calculate(x)
+                     ^^^^^^^^^^^^^^^
+
+factor_engine/tests/operators/test_group_ext.py:365: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = &lt;Operator: cs_trimmed_ols_resid&gt;
+args = (                  S0        S1        S2  ...        S7        S8        S9
+2024-01-01  0.496714 -0.138264  0.647689 ....846794 -1.514847
+2024-01-20 -0.446515  0.856399  0.214094  ...  0.153725  0.058209 -1.142970
+
+[20 rows x 10 columns],)
+kwargs = {}
+
+    def calculate(self, *args, **kwargs) -&gt; pd.DataFrame:
+        processed_args, processed_kwargs = self._prepare_call(args, kwargs)
+&gt;       return self._calculate_series(*processed_args, **processed_kwargs)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: CsRobustResid._calculate_series() missing 1 required positional argument: 'x'
+
+factor_engine/cleaned_operators/base.py:2200: TypeError
+
+During handling of the above exception, another exception occurred:
+
+    def test_cs_trimmed_ols_resid_basic() -&gt; None:
+        """Basic functionality test."""
+        np.random.seed(42)
+        idx = pd.date_range("2024-01-01", periods=20)
+        cols = [f"S{i}" for i in range(10)]
+    
+        # Create sample data
+        x = pd.DataFrame(np.random.randn(20, 10), index=idx, columns=cols)
+    
+        op = _op("cs_trimmed_ols_resid")
+        # Get param names from metadata
+        meta = getattr(op, "metadata", None)
+    
+        # Call with default parameters
+        try:
+            result = op.calculate(x)
+    
+            # Basic shape check
+            assert result.shape == x.shape, f"{result.shape} != {x.shape}"
+            assert list(result.columns) == list(x.columns)
+            assert list(result.index) == list(x.index)
+    
+            # Result should contain some finite values or be validly all-NaN
+            # (some operators may return all NaN for random data)
+        except Exception as e:
+&gt;           pytest.fail(f"{op} failed with {type(e).__name__}: {e}")
+E           Failed: cs_trimmed_ols_resid: 横截面残差（trimmed-OLS：截尾两端后最小二乘，非 Huber/LAD 稳健回归）。R11 #136：canonical 名现为 cs_trimmed_ols_resid（诚实命名），cs_robust_resid 为 deprecated alias；输出残差单位为 unit(y)（§37-D unit-algebra）。 failed with TypeError: CsRobustResid._calculate_series() missing 1 required positional argument: 'x'
+
+factor_engine/tests/operators/test_group_ext.py:375: Failed</failure></testcase><testcase classname="factor_engine.tests.operators.test_group_ext" name="test_cs_trimmed_ols_resid_handles_nans" time="0.001"><failure message="Failed: cs_trimmed_ols_resid: 横截面残差（trimmed-OLS：截尾两端后最小二乘，非 Huber/LAD 稳健回归）。R11 #136：canonical 名现为 cs_trimmed_ols_resid（诚实命名），cs_robust_resid 为 deprecated alias；输出残差单位为 unit(y)（§37-D unit-algebra）。 failed on NaN input: CsRobustResid._calculate_series() missing 1 required positional argument: 'x'">def test_cs_trimmed_ols_resid_handles_nans() -&gt; None:
+        """NaN handling test."""
+        idx = pd.date_range("2024-01-01", periods=10)
+        cols = ["A", "B", "C"]
+    
+        # Data with NaNs
+        data = [[1.0, np.nan, 3.0]] * 10
+        x = pd.DataFrame(data, index=idx, columns=cols)
+    
+        op = _op("cs_trimmed_ols_resid")
+    
+        try:
+&gt;           result = op.calculate(x)
+                     ^^^^^^^^^^^^^^^
+
+factor_engine/tests/operators/test_group_ext.py:390: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = &lt;Operator: cs_trimmed_ols_resid&gt;
+args = (              A   B    C
+2024-01-01  1.0 NaN  3.0
+2024-01-02  1.0 NaN  3.0
+2024-01-03  1.0 NaN  3.0
+2024-01-04  1.0 N...-06  1.0 NaN  3.0
+2024-01-07  1.0 NaN  3.0
+2024-01-08  1.0 NaN  3.0
+2024-01-09  1.0 NaN  3.0
+2024-01-10  1.0 NaN  3.0,)
+kwargs = {}
+
+    def calculate(self, *args, **kwargs) -&gt; pd.DataFrame:
+        processed_args, processed_kwargs = self._prepare_call(args, kwargs)
+&gt;       return self._calculate_series(*processed_args, **processed_kwargs)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: CsRobustResid._calculate_series() missing 1 required positional argument: 'x'
+
+factor_engine/cleaned_operators/base.py:2200: TypeError
+
+During handling of the above exception, another exception occurred:
+
+    def test_cs_trimmed_ols_resid_handles_nans() -&gt; None:
+        """NaN handling test."""
+        idx = pd.date_range("2024-01-01", periods=10)
+        cols = ["A", "B", "C"]
+    
+        # Data with NaNs
+        data = [[1.0, np.nan, 3.0]] * 10
+        x = pd.DataFrame(data, index=idx, columns=cols)
+    
+        op = _op("cs_trimmed_ols_resid")
+    
+        try:
+            result = op.calculate(x)
+    
+            # Should not raise, should return DataFrame
+            assert isinstance(result, pd.DataFrame)
+            assert result.shape == x.shape
+        except Exception as e:
+&gt;           pytest.fail(f"{op} failed on NaN input: {e}")
+E           Failed: cs_trimmed_ols_resid: 横截面残差（trimmed-OLS：截尾两端后最小二乘，非 Huber/LAD 稳健回归）。R11 #136：canonical 名现为 cs_trimmed_ols_resid（诚实命名），cs_robust_resid 为 deprecated alias；输出残差单位为 unit(y)（§37-D unit-algebra）。 failed on NaN input: CsRobustResid._calculate_series() missing 1 required positional argument: 'x'
+
+factor_engine/tests/operators/test_group_ext.py:396: Failed</failure></testcase><testcase classname="factor_engine.tests.operators.test_group_ext" name="test_cs_trimmed_ols_resid_handles_inf" time="0.001"><failure message="Failed: cs_trimmed_ols_resid: 横截面残差（trimmed-OLS：截尾两端后最小二乘，非 Huber/LAD 稳健回归）。R11 #136：canonical 名现为 cs_trimmed_ols_resid（诚实命名），cs_robust_resid 为 deprecated alias；输出残差单位为 unit(y)（§37-D unit-algebra）。 failed on inf input: CsRobustResid._calculate_series() missing 1 required positional argument: 'x'">def test_cs_trimmed_ols_resid_handles_inf() -&gt; None:
+        """Infinity handling test."""
+        idx = pd.date_range("2024-01-01", periods=10)
+        cols = ["A", "B"]
+    
+        # Data with infinities
+        data = [[1.0, np.inf], [2.0, -np.inf], [3.0, 4.0]] * 3 + [[5.0, 6.0]]
+        x = pd.DataFrame(data, index=idx, columns=cols)
+    
+        op = _op("cs_trimmed_ols_resid")
+    
+        try:
+&gt;           result = op.calculate(x)
+                     ^^^^^^^^^^^^^^^
+
+factor_engine/tests/operators/test_group_ext.py:411: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = &lt;Operator: cs_trimmed_ols_resid&gt;
+args = (              A    B
+2024-01-01  1.0  inf
+2024-01-02  2.0 -inf
+2024-01-03  3.0  4.0
+2024-01-04  1.0  inf
+2024-01-05  2.0 -inf
+2024-01-06  3.0  4.0
+2024-01-07  1.0  inf
+2024-01-08  2.0 -inf
+2024-01-09  3.0  4.0
+2024-01-10  5.0  6.0,)
+kwargs = {}
+
+    def calculate(self, *args, **kwargs) -&gt; pd.DataFrame:
+        processed_args, processed_kwargs = self._prepare_call(args, kwargs)
+&gt;       return self._calculate_series(*processed_args, **processed_kwargs)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: CsRobustResid._calculate_series() missing 1 required positional argument: 'x'
+
+factor_engine/cleaned_operators/base.py:2200: TypeError
+
+During handling of the above exception, another exception occurred:
+
+    def test_cs_trimmed_ols_resid_handles_inf() -&gt; None:
+        """Infinity handling test."""
+        idx = pd.date_range("2024-01-01", periods=10)
+        cols = ["A", "B"]
+    
+        # Data with infinities
+        data = [[1.0, np.inf], [2.0, -np.inf], [3.0, 4.0]] * 3 + [[5.0, 6.0]]
+        x = pd.DataFrame(data, index=idx, columns=cols)
+    
+        op = _op("cs_trimmed_ols_resid")
+    
+        try:
+            result = op.calculate(x)
+    
+            # Should handle inf gracefully (typically return NaN)
+            assert isinstance(result, pd.DataFrame)
+        except Exception as e:
+&gt;           pytest.fail(f"{op} failed on inf input: {e}")
+E           Failed: cs_trimmed_ols_resid: 横截面残差（trimmed-OLS：截尾两端后最小二乘，非 Huber/LAD 稳健回归）。R11 #136：canonical 名现为 cs_trimmed_ols_resid（诚实命名），cs_robust_resid 为 deprecated alias；输出残差单位为 unit(y)（§37-D unit-algebra）。 failed on inf input: CsRobustResid._calculate_series() missing 1 required positional argument: 'x'
+
+factor_engine/tests/operators/test_group_ext.py:416: Failed</failure></testcase><testcase classname="factor_engine.tests.operators.test_group_ext" name="test_cs_trimmed_ols_resid_empty_input" time="0.001" /><testcase classname="factor_engine.tests.operators.test_group_ext" name="test_cs_trimmed_ols_resid_single_column" time="0.001"><failure message="Failed: cs_trimmed_ols_resid: 横截面残差（trimmed-OLS：截尾两端后最小二乘，非 Huber/LAD 稳健回归）。R11 #136：canonical 名现为 cs_trimmed_ols_resid（诚实命名），cs_robust_resid 为 deprecated alias；输出残差单位为 unit(y)（§37-D unit-algebra）。 failed on single column: CsRobustResid._calculate_series() missing 1 required positional argument: 'x'">def test_cs_trimmed_ols_resid_single_column() -&gt; None:
+        """Single column test."""
+        idx = pd.date_range("2024-01-01", periods=20)
+        x = pd.DataFrame({"A": range(20)}, index=idx)
+    
+        op = _op("cs_trimmed_ols_resid")
+    
+        try:
+&gt;           result = op.calculate(x)
+                     ^^^^^^^^^^^^^^^
+
+factor_engine/tests/operators/test_group_ext.py:444: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = &lt;Operator: cs_trimmed_ols_resid&gt;
+args = (             A
+2024-01-01   0
+2024-01-02   1
+2024-01-03   2
+2024-01-04   3
+2024-01-05   4
+2024-01-06   5
+2024-01-07  ...24-01-13  12
+2024-01-14  13
+2024-01-15  14
+2024-01-16  15
+2024-01-17  16
+2024-01-18  17
+2024-01-19  18
+2024-01-20  19,)
+kwargs = {}
+
+    def calculate(self, *args, **kwargs) -&gt; pd.DataFrame:
+        processed_args, processed_kwargs = self._prepare_call(args, kwargs)
+&gt;       return self._calculate_series(*processed_args, **processed_kwargs)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: CsRobustResid._calculate_series() missing 1 required positional argument: 'x'
+
+factor_engine/cleaned_operators/base.py:2200: TypeError
+
+During handling of the above exception, another exception occurred:
+
+    def test_cs_trimmed_ols_resid_single_column() -&gt; None:
+        """Single column test."""
+        idx = pd.date_range("2024-01-01", periods=20)
+        x = pd.DataFrame({"A": range(20)}, index=idx)
+    
+        op = _op("cs_trimmed_ols_resid")
+    
+        try:
+            result = op.calculate(x)
+    
+            assert isinstance(result, pd.DataFrame)
+            assert result.shape[1] == 1
+        except Exception as e:
+&gt;           pytest.fail(f"{op} failed on single column: {e}")
+E           Failed: cs_trimmed_ols_resid: 横截面残差（trimmed-OLS：截尾两端后最小二乘，非 Huber/LAD 稳健回归）。R11 #136：canonical 名现为 cs_trimmed_ols_resid（诚实命名），cs_robust_resid 为 deprecated alias；输出残差单位为 unit(y)（§37-D unit-algebra）。 failed on single column: CsRobustResid._calculate_series() missing 1 required positional argument: 'x'
+
+factor_engine/tests/operators/test_group_ext.py:449: Failed</failure></testcase><testcase classname="factor_engine.tests.operators.test_group_ext" name="test_cs_huber_resid_basic" time="0.001"><failure message="Failed: cs_huber_resid: 横截面残差（Huber M-估计量，IRLS，delta≈1.345·MAD；对离群点稳健，非 trimmed-OLS）。输出残差单位为 unit(y)（§37-D unit-algebra）。 failed with TypeError: CsHuberResid._calculate_series() missing 1 required positional argument: 'x'">def test_cs_huber_resid_basic() -&gt; None:
+        """Basic functionality test."""
+        np.random.seed(42)
+        idx = pd.date_range("2024-01-01", periods=20)
+        cols = [f"S{i}" for i in range(10)]
+    
+        # Create sample data
+        x = pd.DataFrame(np.random.randn(20, 10), index=idx, columns=cols)
+    
+        op = _op("cs_huber_resid")
+        # Get param names from metadata
+        meta = getattr(op, "metadata", None)
+    
+        # Call with default parameters
+        try:
+&gt;           result = op.calculate(x)
+                     ^^^^^^^^^^^^^^^
+
+factor_engine/tests/operators/test_group_ext.py:470: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = &lt;Operator: cs_huber_resid&gt;
+args = (                  S0        S1        S2  ...        S7        S8        S9
+2024-01-01  0.496714 -0.138264  0.647689 ....846794 -1.514847
+2024-01-20 -0.446515  0.856399  0.214094  ...  0.153725  0.058209 -1.142970
+
+[20 rows x 10 columns],)
+kwargs = {}
+
+    def calculate(self, *args, **kwargs) -&gt; pd.DataFrame:
+        processed_args, processed_kwargs = self._prepare_call(args, kwargs)
+&gt;       return self._calculate_series(*processed_args, **processed_kwargs)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: CsHuberResid._calculate_series() missing 1 required positional argument: 'x'
+
+factor_engine/cleaned_operators/base.py:2200: TypeError
+
+During handling of the above exception, another exception occurred:
+
+    def test_cs_huber_resid_basic() -&gt; None:
+        """Basic functionality test."""
+        np.random.seed(42)
+        idx = pd.date_range("2024-01-01", periods=20)
+        cols = [f"S{i}" for i in range(10)]
+    
+        # Create sample data
+        x = pd.DataFrame(np.random.randn(20, 10), index=idx, columns=cols)
+    
+        op = _op("cs_huber_resid")
+        # Get param names from metadata
+        meta = getattr(op, "metadata", None)
+    
+        # Call with default parameters
+        try:
+            result = op.calculate(x)
+    
+            # Basic shape check
+            assert result.shape == x.shape, f"{result.shape} != {x.shape}"
+            assert list(result.columns) == list(x.columns)
+            assert list(result.index) == list(x.index)
+    
+            # Result should contain some finite values or be validly all-NaN
+            # (some operators may return all NaN for random data)
+        except Exception as e:
+&gt;           pytest.fail(f"{op} failed with {type(e).__name__}: {e}")
+E           Failed: cs_huber_resid: 横截面残差（Huber M-估计量，IRLS，delta≈1.345·MAD；对离群点稳健，非 trimmed-OLS）。输出残差单位为 unit(y)（§37-D unit-algebra）。 failed with TypeError: CsHuberResid._calculate_series() missing 1 required positional argument: 'x'
+
+factor_engine/tests/operators/test_group_ext.py:480: Failed</failure></testcase><testcase classname="factor_engine.tests.operators.test_group_ext" name="test_cs_huber_resid_handles_nans" time="0.001"><failure message="Failed: cs_huber_resid: 横截面残差（Huber M-估计量，IRLS，delta≈1.345·MAD；对离群点稳健，非 trimmed-OLS）。输出残差单位为 unit(y)（§37-D unit-algebra）。 failed on NaN input: CsHuberResid._calculate_series() missing 1 required positional argument: 'x'">def test_cs_huber_resid_handles_nans() -&gt; None:
+        """NaN handling test."""
+        idx = pd.date_range("2024-01-01", periods=10)
+        cols = ["A", "B", "C"]
+    
+        # Data with NaNs
+        data = [[1.0, np.nan, 3.0]] * 10
+        x = pd.DataFrame(data, index=idx, columns=cols)
+    
+        op = _op("cs_huber_resid")
+    
+        try:
+&gt;           result = op.calculate(x)
+                     ^^^^^^^^^^^^^^^
+
+factor_engine/tests/operators/test_group_ext.py:495: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = &lt;Operator: cs_huber_resid&gt;
+args = (              A   B    C
+2024-01-01  1.0 NaN  3.0
+2024-01-02  1.0 NaN  3.0
+2024-01-03  1.0 NaN  3.0
+2024-01-04  1.0 N...-06  1.0 NaN  3.0
+2024-01-07  1.0 NaN  3.0
+2024-01-08  1.0 NaN  3.0
+2024-01-09  1.0 NaN  3.0
+2024-01-10  1.0 NaN  3.0,)
+kwargs = {}
+
+    def calculate(self, *args, **kwargs) -&gt; pd.DataFrame:
+        processed_args, processed_kwargs = self._prepare_call(args, kwargs)
+&gt;       return self._calculate_series(*processed_args, **processed_kwargs)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: CsHuberResid._calculate_series() missing 1 required positional argument: 'x'
+
+factor_engine/cleaned_operators/base.py:2200: TypeError
+
+During handling of the above exception, another exception occurred:
+
+    def test_cs_huber_resid_handles_nans() -&gt; None:
+        """NaN handling test."""
+        idx = pd.date_range("2024-01-01", periods=10)
+        cols = ["A", "B", "C"]
+    
+        # Data with NaNs
+        data = [[1.0, np.nan, 3.0]] * 10
+        x = pd.DataFrame(data, index=idx, columns=cols)
+    
+        op = _op("cs_huber_resid")
+    
+        try:
+            result = op.calculate(x)
+    
+            # Should not raise, should return DataFrame
+            assert isinstance(result, pd.DataFrame)
+            assert result.shape == x.shape
+        except Exception as e:
+&gt;           pytest.fail(f"{op} failed on NaN input: {e}")
+E           Failed: cs_huber_resid: 横截面残差（Huber M-估计量，IRLS，delta≈1.345·MAD；对离群点稳健，非 trimmed-OLS）。输出残差单位为 unit(y)（§37-D unit-algebra）。 failed on NaN input: CsHuberResid._calculate_series() missing 1 required positional argument: 'x'
+
+factor_engine/tests/operators/test_group_ext.py:501: Failed</failure></testcase><testcase classname="factor_engine.tests.operators.test_group_ext" name="test_cs_huber_resid_handles_inf" time="0.001"><failure message="Failed: cs_huber_resid: 横截面残差（Huber M-估计量，IRLS，delta≈1.345·MAD；对离群点稳健，非 trimmed-OLS）。输出残差单位为 unit(y)（§37-D unit-algebra）。 failed on inf input: CsHuberResid._calculate_series() missing 1 required positional argument: 'x'">def test_cs_huber_resid_handles_inf() -&gt; None:
+        """Infinity handling test."""
+        idx = pd.date_range("2024-01-01", periods=10)
+        cols = ["A", "B"]
+    
+        # Data with infinities
+        data = [[1.0, np.inf], [2.0, -np.inf], [3.0, 4.0]] * 3 + [[5.0, 6.0]]
+        x = pd.DataFrame(data, index=idx, columns=cols)
+    
+        op = _op("cs_huber_resid")
+    
+        try:
+&gt;           result = op.calculate(x)
+                     ^^^^^^^^^^^^^^^
+
+factor_engine/tests/operators/test_group_ext.py:516: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = &lt;Operator: cs_huber_resid&gt;
+args = (              A    B
+2024-01-01  1.0  inf
+2024-01-02  2.0 -inf
+2024-01-03  3.0  4.0
+2024-01-04  1.0  inf
+2024-01-05  2.0 -inf
+2024-01-06  3.0  4.0
+2024-01-07  1.0  inf
+2024-01-08  2.0 -inf
+2024-01-09  3.0  4.0
+2024-01-10  5.0  6.0,)
+kwargs = {}
+
+    def calculate(self, *args, **kwargs) -&gt; pd.DataFrame:
+        processed_args, processed_kwargs = self._prepare_call(args, kwargs)
+&gt;       return self._calculate_series(*processed_args, **processed_kwargs)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: CsHuberResid._calculate_series() missing 1 required positional argument: 'x'
+
+factor_engine/cleaned_operators/base.py:2200: TypeError
+
+During handling of the above exception, another exception occurred:
+
+    def test_cs_huber_resid_handles_inf() -&gt; None:
+        """Infinity handling test."""
+        idx = pd.date_range("2024-01-01", periods=10)
+        cols = ["A", "B"]
+    
+        # Data with infinities
+        data = [[1.0, np.inf], [2.0, -np.inf], [3.0, 4.0]] * 3 + [[5.0, 6.0]]
+        x = pd.DataFrame(data, index=idx, columns=cols)
+    
+        op = _op("cs_huber_resid")
+    
+        try:
+            result = op.calculate(x)
+    
+            # Should handle inf gracefully (typically return NaN)
+            assert isinstance(result, pd.DataFrame)
+        except Exception as e:
+&gt;           pytest.fail(f"{op} failed on inf input: {e}")
+E           Failed: cs_huber_resid: 横截面残差（Huber M-估计量，IRLS，delta≈1.345·MAD；对离群点稳健，非 trimmed-OLS）。输出残差单位为 unit(y)（§37-D unit-algebra）。 failed on inf input: CsHuberResid._calculate_series() missing 1 required positional argument: 'x'
+
+factor_engine/tests/operators/test_group_ext.py:521: Failed</failure></testcase><testcase classname="factor_engine.tests.operators.test_group_ext" name="test_cs_huber_resid_empty_input" time="0.001" /><testcase classname="factor_engine.tests.operators.test_group_ext" name="test_cs_huber_resid_single_column" time="0.001"><failure message="Failed: cs_huber_resid: 横截面残差（Huber M-估计量，IRLS，delta≈1.345·MAD；对离群点稳健，非 trimmed-OLS）。输出残差单位为 unit(y)（§37-D unit-algebra）。 failed on single column: CsHuberResid._calculate_series() missing 1 required positional argument: 'x'">def test_cs_huber_resid_single_column() -&gt; None:
+        """Single column test."""
+        idx = pd.date_range("2024-01-01", periods=20)
+        x = pd.DataFrame({"A": range(20)}, index=idx)
+    
+        op = _op("cs_huber_resid")
+    
+        try:
+&gt;           result = op.calculate(x)
+                     ^^^^^^^^^^^^^^^
+
+factor_engine/tests/operators/test_group_ext.py:549: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = &lt;Operator: cs_huber_resid&gt;
+args = (             A
+2024-01-01   0
+2024-01-02   1
+2024-01-03   2
+2024-01-04   3
+2024-01-05   4
+2024-01-06   5
+2024-01-07  ...24-01-13  12
+2024-01-14  13
+2024-01-15  14
+2024-01-16  15
+2024-01-17  16
+2024-01-18  17
+2024-01-19  18
+2024-01-20  19,)
+kwargs = {}
+
+    def calculate(self, *args, **kwargs) -&gt; pd.DataFrame:
+        processed_args, processed_kwargs = self._prepare_call(args, kwargs)
+&gt;       return self._calculate_series(*processed_args, **processed_kwargs)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: CsHuberResid._calculate_series() missing 1 required positional argument: 'x'
+
+factor_engine/cleaned_operators/base.py:2200: TypeError
+
+During handling of the above exception, another exception occurred:
+
+    def test_cs_huber_resid_single_column() -&gt; None:
+        """Single column test."""
+        idx = pd.date_range("2024-01-01", periods=20)
+        x = pd.DataFrame({"A": range(20)}, index=idx)
+    
+        op = _op("cs_huber_resid")
+    
+        try:
+            result = op.calculate(x)
+    
+            assert isinstance(result, pd.DataFrame)
+            assert result.shape[1] == 1
+        except Exception as e:
+&gt;           pytest.fail(f"{op} failed on single column: {e}")
+E           Failed: cs_huber_resid: 横截面残差（Huber M-估计量，IRLS，delta≈1.345·MAD；对离群点稳健，非 trimmed-OLS）。输出残差单位为 unit(y)（§37-D unit-algebra）。 failed on single column: CsHuberResid._calculate_series() missing 1 required positional argument: 'x'
+
+factor_engine/tests/operators/test_group_ext.py:554: Failed</failure></testcase><testcase classname="factor_engine.tests.operators.test_group_ext" name="test_cs_lad_resid_basic" time="0.001"><failure message="Failed: cs_lad_resid: 横截面残差（LAD / L1 中位数回归，对离群点稳健；非 trimmed-OLS）。输出残差单位为 unit(y)（§37-D unit-algebra）。 failed with TypeError: CsLadResid._calculate_series() missing 1 required positional argument: 'x'">def test_cs_lad_resid_basic() -&gt; None:
+        """Basic functionality test."""
+        np.random.seed(42)
+        idx = pd.date_range("2024-01-01", periods=20)
+        cols = [f"S{i}" for i in range(10)]
+    
+        # Create sample data
+        x = pd.DataFrame(np.random.randn(20, 10), index=idx, columns=cols)
+    
+        op = _op("cs_lad_resid")
+        # Get param names from metadata
+        meta = getattr(op, "metadata", None)
+    
+        # Call with default parameters
+        try:
+&gt;           result = op.calculate(x)
+                     ^^^^^^^^^^^^^^^
+
+factor_engine/tests/operators/test_group_ext.py:575: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = &lt;Operator: cs_lad_resid&gt;
+args = (                  S0        S1        S2  ...        S7        S8        S9
+2024-01-01  0.496714 -0.138264  0.647689 ....846794 -1.514847
+2024-01-20 -0.446515  0.856399  0.214094  ...  0.153725  0.058209 -1.142970
+
+[20 rows x 10 columns],)
+kwargs = {}
+
+    def calculate(self, *args, **kwargs) -&gt; pd.DataFrame:
+        processed_args, processed_kwargs = self._prepare_call(args, kwargs)
+&gt;       return self._calculate_series(*processed_args, **processed_kwargs)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: CsLadResid._calculate_series() missing 1 required positional argument: 'x'
+
+factor_engine/cleaned_operators/base.py:2200: TypeError
+
+During handling of the above exception, another exception occurred:
+
+    def test_cs_lad_resid_basic() -&gt; None:
+        """Basic functionality test."""
+        np.random.seed(42)
+        idx = pd.date_range("2024-01-01", periods=20)
+        cols = [f"S{i}" for i in range(10)]
+    
+        # Create sample data
+        x = pd.DataFrame(np.random.randn(20, 10), index=idx, columns=cols)
+    
+        op = _op("cs_lad_resid")
+        # Get param names from metadata
+        meta = getattr(op, "metadata", None)
+    
+        # Call with default parameters
+        try:
+            result = op.calculate(x)
+    
+            # Basic shape check
+            assert result.shape == x.shape, f"{result.shape} != {x.shape}"
+            assert list(result.columns) == list(x.columns)
+            assert list(result.index) == list(x.index)
+    
+            # Result should contain some finite values or be validly all-NaN
+            # (some operators may return all NaN for random data)
+        except Exception as e:
+&gt;           pytest.fail(f"{op} failed with {type(e).__name__}: {e}")
+E           Failed: cs_lad_resid: 横截面残差（LAD / L1 中位数回归，对离群点稳健；非 trimmed-OLS）。输出残差单位为 unit(y)（§37-D unit-algebra）。 failed with TypeError: CsLadResid._calculate_series() missing 1 required positional argument: 'x'
+
+factor_engine/tests/operators/test_group_ext.py:585: Failed</failure></testcase><testcase classname="factor_engine.tests.operators.test_group_ext" name="test_cs_lad_resid_handles_nans" time="0.001"><failure message="Failed: cs_lad_resid: 横截面残差（LAD / L1 中位数回归，对离群点稳健；非 trimmed-OLS）。输出残差单位为 unit(y)（§37-D unit-algebra）。 failed on NaN input: CsLadResid._calculate_series() missing 1 required positional argument: 'x'">def test_cs_lad_resid_handles_nans() -&gt; None:
+        """NaN handling test."""
+        idx = pd.date_range("2024-01-01", periods=10)
+        cols = ["A", "B", "C"]
+    
+        # Data with NaNs
+        data = [[1.0, np.nan, 3.0]] * 10
+        x = pd.DataFrame(data, index=idx, columns=cols)
+    
+        op = _op("cs_lad_resid")
+    
+        try:
+&gt;           result = op.calculate(x)
+                     ^^^^^^^^^^^^^^^
+
+factor_engine/tests/operators/test_group_ext.py:600: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = &lt;Operator: cs_lad_resid&gt;
+args = (              A   B    C
+2024-01-01  1.0 NaN  3.0
+2024-01-02  1.0 NaN  3.0
+2024-01-03  1.0 NaN  3.0
+2024-01-04  1.0 N...-06  1.0 NaN  3.0
+2024-01-07  1.0 NaN  3.0
+2024-01-08  1.0 NaN  3.0
+2024-01-09  1.0 NaN  3.0
+2024-01-10  1.0 NaN  3.0,)
+kwargs = {}
+
+    def calculate(self, *args, **kwargs) -&gt; pd.DataFrame:
+        processed_args, processed_kwargs = self._prepare_call(args, kwargs)
+&gt;       return self._calculate_series(*processed_args, **processed_kwargs)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: CsLadResid._calculate_series() missing 1 required positional argument: 'x'
+
+factor_engine/cleaned_operators/base.py:2200: TypeError
+
+During handling of the above exception, another exception occurred:
+
+    def test_cs_lad_resid_handles_nans() -&gt; None:
+        """NaN handling test."""
+        idx = pd.date_range("2024-01-01", periods=10)
+        cols = ["A", "B", "C"]
+    
+        # Data with NaNs
+        data = [[1.0, np.nan, 3.0]] * 10
+        x = pd.DataFrame(data, index=idx, columns=cols)
+    
+        op = _op("cs_lad_resid")
+    
+        try:
+            result = op.calculate(x)
+    
+            # Should not raise, should return DataFrame
+            assert isinstance(result, pd.DataFrame)
+            assert result.shape == x.shape
+        except Exception as e:
+&gt;           pytest.fail(f"{op} failed on NaN input: {e}")
+E           Failed: cs_lad_resid: 横截面残差（LAD / L1 中位数回归，对离群点稳健；非 trimmed-OLS）。输出残差单位为 unit(y)（§37-D unit-algebra）。 failed on NaN input: CsLadResid._calculate_series() missing 1 required positional argument: 'x'
+
+factor_engine/tests/operators/test_group_ext.py:606: Failed</failure></testcase><testcase classname="factor_engine.tests.operators.test_group_ext" name="test_cs_lad_resid_handles_inf" time="0.001"><failure message="Failed: cs_lad_resid: 横截面残差（LAD / L1 中位数回归，对离群点稳健；非 trimmed-OLS）。输出残差单位为 unit(y)（§37-D unit-algebra）。 failed on inf input: CsLadResid._calculate_series() missing 1 required positional argument: 'x'">def test_cs_lad_resid_handles_inf() -&gt; None:
+        """Infinity handling test."""
+        idx = pd.date_range("2024-01-01", periods=10)
+        cols = ["A", "B"]
+    
+        # Data with infinities
+        data = [[1.0, np.inf], [2.0, -np.inf], [3.0, 4.0]] * 3 + [[5.0, 6.0]]
+        x = pd.DataFrame(data, index=idx, columns=cols)
+    
+        op = _op("cs_lad_resid")
+    
+        try:
+&gt;           result = op.calculate(x)
+                     ^^^^^^^^^^^^^^^
+
+factor_engine/tests/operators/test_group_ext.py:621: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = &lt;Operator: cs_lad_resid&gt;
+args = (              A    B
+2024-01-01  1.0  inf
+2024-01-02  2.0 -inf
+2024-01-03  3.0  4.0
+2024-01-04  1.0  inf
+2024-01-05  2.0 -inf
+2024-01-06  3.0  4.0
+2024-01-07  1.0  inf
+2024-01-08  2.0 -inf
+2024-01-09  3.0  4.0
+2024-01-10  5.0  6.0,)
+kwargs = {}
+
+    def calculate(self, *args, **kwargs) -&gt; pd.DataFrame:
+        processed_args, processed_kwargs = self._prepare_call(args, kwargs)
+&gt;       return self._calculate_series(*processed_args, **processed_kwargs)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: CsLadResid._calculate_series() missing 1 required positional argument: 'x'
+
+factor_engine/cleaned_operators/base.py:2200: TypeError
+
+During handling of the above exception, another exception occurred:
+
+    def test_cs_lad_resid_handles_inf() -&gt; None:
+        """Infinity handling test."""
+        idx = pd.date_range("2024-01-01", periods=10)
+        cols = ["A", "B"]
+    
+        # Data with infinities
+        data = [[1.0, np.inf], [2.0, -np.inf], [3.0, 4.0]] * 3 + [[5.0, 6.0]]
+        x = pd.DataFrame(data, index=idx, columns=cols)
+    
+        op = _op("cs_lad_resid")
+    
+        try:
+            result = op.calculate(x)
+    
+            # Should handle inf gracefully (typically return NaN)
+            assert isinstance(result, pd.DataFrame)
+        except Exception as e:
+&gt;           pytest.fail(f"{op} failed on inf input: {e}")
+E           Failed: cs_lad_resid: 横截面残差（LAD / L1 中位数回归，对离群点稳健；非 trimmed-OLS）。输出残差单位为 unit(y)（§37-D unit-algebra）。 failed on inf input: CsLadResid._calculate_series() missing 1 required positional argument: 'x'
+
+factor_engine/tests/operators/test_group_ext.py:626: Failed</failure></testcase><testcase classname="factor_engine.tests.operators.test_group_ext" name="test_cs_lad_resid_empty_input" time="0.001" /><testcase classname="factor_engine.tests.operators.test_group_ext" name="test_cs_lad_resid_single_column" time="0.001"><failure message="Failed: cs_lad_resid: 横截面残差（LAD / L1 中位数回归，对离群点稳健；非 trimmed-OLS）。输出残差单位为 unit(y)（§37-D unit-algebra）。 failed on single column: CsLadResid._calculate_series() missing 1 required positional argument: 'x'">def test_cs_lad_resid_single_column() -&gt; None:
+        """Single column test."""
+        idx = pd.date_range("2024-01-01", periods=20)
+        x = pd.DataFrame({"A": range(20)}, index=idx)
+    
+        op = _op("cs_lad_resid")
+    
+        try:
+&gt;           result = op.calculate(x)
+                     ^^^^^^^^^^^^^^^
+
+factor_engine/tests/operators/test_group_ext.py:654: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = &lt;Operator: cs_lad_resid&gt;
+args = (             A
+2024-01-01   0
+2024-01-02   1
+2024-01-03   2
+2024-01-04   3
+2024-01-05   4
+2024-01-06   5
+2024-01-07  ...24-01-13  12
+2024-01-14  13
+2024-01-15  14
+2024-01-16  15
+2024-01-17  16
+2024-01-18  17
+2024-01-19  18
+2024-01-20  19,)
+kwargs = {}
+
+    def calculate(self, *args, **kwargs) -&gt; pd.DataFrame:
+        processed_args, processed_kwargs = self._prepare_call(args, kwargs)
+&gt;       return self._calculate_series(*processed_args, **processed_kwargs)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: CsLadResid._calculate_series() missing 1 required positional argument: 'x'
+
+factor_engine/cleaned_operators/base.py:2200: TypeError
+
+During handling of the above exception, another exception occurred:
+
+    def test_cs_lad_resid_single_column() -&gt; None:
+        """Single column test."""
+        idx = pd.date_range("2024-01-01", periods=20)
+        x = pd.DataFrame({"A": range(20)}, index=idx)
+    
+        op = _op("cs_lad_resid")
+    
+        try:
+            result = op.calculate(x)
+    
+            assert isinstance(result, pd.DataFrame)
+            assert result.shape[1] == 1
+        except Exception as e:
+&gt;           pytest.fail(f"{op} failed on single column: {e}")
+E           Failed: cs_lad_resid: 横截面残差（LAD / L1 中位数回归，对离群点稳健；非 trimmed-OLS）。输出残差单位为 unit(y)（§37-D unit-algebra）。 failed on single column: CsLadResid._calculate_series() missing 1 required positional argument: 'x'
+
+factor_engine/tests/operators/test_group_ext.py:659: Failed</failure></testcase><testcase classname="factor_engine.tests.operators.test_group_ext" name="test_group_multi_resid_basic" time="0.001"><failure message="Failed: group_multi_resid: 组内多元线性回归残差（支持多个自变量的组内 OLS 残差） failed with TypeError: GroupMultiResid._calculate_series() missing 2 required positional arguments: 'group' and 'x1'">def test_group_multi_resid_basic() -&gt; None:
+        """Basic functionality test."""
+        np.random.seed(42)
+        idx = pd.date_range("2024-01-01", periods=20)
+        cols = [f"S{i}" for i in range(10)]
+    
+        # Create sample data
+        x = pd.DataFrame(np.random.randn(20, 10), index=idx, columns=cols)
+    
+        op = _op("group_multi_resid")
+        # Get param names from metadata
+        meta = getattr(op, "metadata", None)
+    
+        # Call with default parameters
+        try:
+&gt;           result = op.calculate(x)
+                     ^^^^^^^^^^^^^^^
+
+factor_engine/tests/operators/test_group_ext.py:680: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = &lt;Operator: group_multi_resid&gt;
+args = (                  S0        S1        S2  ...        S7        S8        S9
+2024-01-01  0.496714 -0.138264  0.647689 ....846794 -1.514847
+2024-01-20 -0.446515  0.856399  0.214094  ...  0.153725  0.058209 -1.142970
+
+[20 rows x 10 columns],)
+kwargs = {}
+
+    def calculate(self, *args, **kwargs) -&gt; pd.DataFrame:
+        processed_args, processed_kwargs = self._prepare_call(args, kwargs)
+&gt;       return self._calculate_series(*processed_args, **processed_kwargs)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: GroupMultiResid._calculate_series() missing 2 required positional arguments: 'group' and 'x1'
+
+factor_engine/cleaned_operators/base.py:2200: TypeError
+
+During handling of the above exception, another exception occurred:
+
+    def test_group_multi_resid_basic() -&gt; None:
+        """Basic functionality test."""
+        np.random.seed(42)
+        idx = pd.date_range("2024-01-01", periods=20)
+        cols = [f"S{i}" for i in range(10)]
+    
+        # Create sample data
+        x = pd.DataFrame(np.random.randn(20, 10), index=idx, columns=cols)
+    
+        op = _op("group_multi_resid")
+        # Get param names from metadata
+        meta = getattr(op, "metadata", None)
+    
+        # Call with default parameters
+        try:
+            result = op.calculate(x)
+    
+            # Basic shape check
+            assert result.shape == x.shape, f"{result.shape} != {x.shape}"
+            assert list(result.columns) == list(x.columns)
+            assert list(result.index) == list(x.index)
+    
+            # Result should contain some finite values or be validly all-NaN
+            # (some operators may return all NaN for random data)
+        except Exception as e:
+&gt;           pytest.fail(f"{op} failed with {type(e).__name__}: {e}")
+E           Failed: group_multi_resid: 组内多元线性回归残差（支持多个自变量的组内 OLS 残差） failed with TypeError: GroupMultiResid._calculate_series() missing 2 required positional arguments: 'group' and 'x1'
+
+factor_engine/tests/operators/test_group_ext.py:690: Failed</failure></testcase><testcase classname="factor_engine.tests.operators.test_group_ext" name="test_group_multi_resid_handles_nans" time="0.001"><failure message="Failed: group_multi_resid: 组内多元线性回归残差（支持多个自变量的组内 OLS 残差） failed on NaN input: GroupMultiResid._calculate_series() missing 2 required positional arguments: 'group' and 'x1'">def test_group_multi_resid_handles_nans() -&gt; None:
+        """NaN handling test."""
+        idx = pd.date_range("2024-01-01", periods=10)
+        cols = ["A", "B", "C"]
+    
+        # Data with NaNs
+        data = [[1.0, np.nan, 3.0]] * 10
+        x = pd.DataFrame(data, index=idx, columns=cols)
+    
+        op = _op("group_multi_resid")
+    
+        try:
+&gt;           result = op.calculate(x)
+                     ^^^^^^^^^^^^^^^
+
+factor_engine/tests/operators/test_group_ext.py:705: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = &lt;Operator: group_multi_resid&gt;
+args = (              A   B    C
+2024-01-01  1.0 NaN  3.0
+2024-01-02  1.0 NaN  3.0
+2024-01-03  1.0 NaN  3.0
+2024-01-04  1.0 N...-06  1.0 NaN  3.0
+2024-01-07  1.0 NaN  3.0
+2024-01-08  1.0 NaN  3.0
+2024-01-09  1.0 NaN  3.0
+2024-01-10  1.0 NaN  3.0,)
+kwargs = {}
+
+    def calculate(self, *args, **kwargs) -&gt; pd.DataFrame:
+        processed_args, processed_kwargs = self._prepare_call(args, kwargs)
+&gt;       return self._calculate_series(*processed_args, **processed_kwargs)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: GroupMultiResid._calculate_series() missing 2 required positional arguments: 'group' and 'x1'
+
+factor_engine/cleaned_operators/base.py:2200: TypeError
+
+During handling of the above exception, another exception occurred:
+
+    def test_group_multi_resid_handles_nans() -&gt; None:
+        """NaN handling test."""
+        idx = pd.date_range("2024-01-01", periods=10)
+        cols = ["A", "B", "C"]
+    
+        # Data with NaNs
+        data = [[1.0, np.nan, 3.0]] * 10
+        x = pd.DataFrame(data, index=idx, columns=cols)
+    
+        op = _op("group_multi_resid")
+    
+        try:
+            result = op.calculate(x)
+    
+            # Should not raise, should return DataFrame
+            assert isinstance(result, pd.DataFrame)
+            assert result.shape == x.shape
+        except Exception as e:
+&gt;           pytest.fail(f"{op} failed on NaN input: {e}")
+E           Failed: group_multi_resid: 组内多元线性回归残差（支持多个自变量的组内 OLS 残差） failed on NaN input: GroupMultiResid._calculate_series() missing 2 required positional arguments: 'group' and 'x1'
+
+factor_engine/tests/operators/test_group_ext.py:711: Failed</failure></testcase><testcase classname="factor_engine.tests.operators.test_group_ext" name="test_group_multi_resid_handles_inf" time="0.001"><failure message="Failed: group_multi_resid: 组内多元线性回归残差（支持多个自变量的组内 OLS 残差） failed on inf input: GroupMultiResid._calculate_series() missing 2 required positional arguments: 'group' and 'x1'">def test_group_multi_resid_handles_inf() -&gt; None:
+        """Infinity handling test."""
+        idx = pd.date_range("2024-01-01", periods=10)
+        cols = ["A", "B"]
+    
+        # Data with infinities
+        data = [[1.0, np.inf], [2.0, -np.inf], [3.0, 4.0]] * 3 + [[5.0, 6.0]]
+        x = pd.DataFrame(data, index=idx, columns=cols)
+    
+        op = _op("group_multi_resid")
+    
+        try:
+&gt;           result = op.calculate(x)
+                     ^^^^^^^^^^^^^^^
+
+factor_engine/tests/operators/test_group_ext.py:726: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = &lt;Operator: group_multi_resid&gt;
+args = (              A    B
+2024-01-01  1.0  inf
+2024-01-02  2.0 -inf
+2024-01-03  3.0  4.0
+2024-01-04  1.0  inf
+2024-01-05  2.0 -inf
+2024-01-06  3.0  4.0
+2024-01-07  1.0  inf
+2024-01-08  2.0 -inf
+2024-01-09  3.0  4.0
+2024-01-10  5.0  6.0,)
+kwargs = {}
+
+    def calculate(self, *args, **kwargs) -&gt; pd.DataFrame:
+        processed_args, processed_kwargs = self._prepare_call(args, kwargs)
+&gt;       return self._calculate_series(*processed_args, **processed_kwargs)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: GroupMultiResid._calculate_series() missing 2 required positional arguments: 'group' and 'x1'
+
+factor_engine/cleaned_operators/base.py:2200: TypeError
+
+During handling of the above exception, another exception occurred:
+
+    def test_group_multi_resid_handles_inf() -&gt; None:
+        """Infinity handling test."""
+        idx = pd.date_range("2024-01-01", periods=10)
+        cols = ["A", "B"]
+    
+        # Data with infinities
+        data = [[1.0, np.inf], [2.0, -np.inf], [3.0, 4.0]] * 3 + [[5.0, 6.0]]
+        x = pd.DataFrame(data, index=idx, columns=cols)
+    
+        op = _op("group_multi_resid")
+    
+        try:
+            result = op.calculate(x)
+    
+            # Should handle inf gracefully (typically return NaN)
+            assert isinstance(result, pd.DataFrame)
+        except Exception as e:
+&gt;           pytest.fail(f"{op} failed on inf input: {e}")
+E           Failed: group_multi_resid: 组内多元线性回归残差（支持多个自变量的组内 OLS 残差） failed on inf input: GroupMultiResid._calculate_series() missing 2 required positional arguments: 'group' and 'x1'
+
+factor_engine/tests/operators/test_group_ext.py:731: Failed</failure></testcase><testcase classname="factor_engine.tests.operators.test_group_ext" name="test_group_multi_resid_empty_input" time="0.001" /><testcase classname="factor_engine.tests.operators.test_group_ext" name="test_group_multi_resid_single_column" time="0.001"><failure message="Failed: group_multi_resid: 组内多元线性回归残差（支持多个自变量的组内 OLS 残差） failed on single column: GroupMultiResid._calculate_series() missing 2 required positional arguments: 'group' and 'x1'">def test_group_multi_resid_single_column() -&gt; None:
+        """Single column test."""
+        idx = pd.date_range("2024-01-01", periods=20)
+        x = pd.DataFrame({"A": range(20)}, index=idx)
+    
+        op = _op("group_multi_resid")
+    
+        try:
+&gt;           result = op.calculate(x)
+                     ^^^^^^^^^^^^^^^
+
+factor_engine/tests/operators/test_group_ext.py:759: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = &lt;Operator: group_multi_resid&gt;
+args = (             A
+2024-01-01   0
+2024-01-02   1
+2024-01-03   2
+2024-01-04   3
+2024-01-05   4
+2024-01-06   5
+2024-01-07  ...24-01-13  12
+2024-01-14  13
+2024-01-15  14
+2024-01-16  15
+2024-01-17  16
+2024-01-18  17
+2024-01-19  18
+2024-01-20  19,)
+kwargs = {}
+
+    def calculate(self, *args, **kwargs) -&gt; pd.DataFrame:
+        processed_args, processed_kwargs = self._prepare_call(args, kwargs)
+&gt;       return self._calculate_series(*processed_args, **processed_kwargs)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: GroupMultiResid._calculate_series() missing 2 required positional arguments: 'group' and 'x1'
+
+factor_engine/cleaned_operators/base.py:2200: TypeError
+
+During handling of the above exception, another exception occurred:
+
+    def test_group_multi_resid_single_column() -&gt; None:
+        """Single column test."""
+        idx = pd.date_range("2024-01-01", periods=20)
+        x = pd.DataFrame({"A": range(20)}, index=idx)
+    
+        op = _op("group_multi_resid")
+    
+        try:
+            result = op.calculate(x)
+    
+            assert isinstance(result, pd.DataFrame)
+            assert result.shape[1] == 1
+        except Exception as e:
+&gt;           pytest.fail(f"{op} failed on single column: {e}")
+E           Failed: group_multi_resid: 组内多元线性回归残差（支持多个自变量的组内 OLS 残差） failed on single column: GroupMultiResid._calculate_series() missing 2 required positional arguments: 'group' and 'x1'
+
+factor_engine/tests/operators/test_group_ext.py:764: Failed</failure></testcase><testcase classname="factor_engine.tests.operators.test_group_ext" name="test_group_ext_metadata" time="0.000" /><testcase classname="factor_engine.tests.operators.test_conditional_dependence" name="test_ts_conditional_transfer_entropy_basic" time="0.001"><failure message="Failed: ts_conditional_transfer_entropy: 条件传递熵 I(T_{s+lag}; S_s | T_s, C_s) nats。 failed with TypeError: TsConditionalTransferEntropy._calculate_series() missing 2 required positional arguments: 'source' and 'condition'">def test_ts_conditional_transfer_entropy_basic() -&gt; None:
+        """Basic functionality test."""
+        np.random.seed(42)
+        idx = pd.date_range("2024-01-01", periods=20)
+        cols = [f"S{i}" for i in range(10)]
+    
+        # Create sample data
+        x = pd.DataFrame(np.random.randn(20, 10), index=idx, columns=cols)
+    
+        op = _op("ts_conditional_transfer_entropy")
+        # Get param names from metadata
+        meta = getattr(op, "metadata", None)
+    
+        # Call with default parameters
+        try:
+&gt;           result = op.calculate(x)
+                     ^^^^^^^^^^^^^^^
+
+factor_engine/tests/operators/test_conditional_dependence.py:45: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = &lt;Operator: ts_conditional_transfer_entropy&gt;
+args = (                  S0        S1        S2  ...        S7        S8        S9
+2024-01-01  0.496714 -0.138264  0.647689 ....846794 -1.514847
+2024-01-20 -0.446515  0.856399  0.214094  ...  0.153725  0.058209 -1.142970
+
+[20 rows x 10 columns],)
+kwargs = {}
+
+    def calculate(self, *args, **kwargs) -&gt; pd.DataFrame:
+        processed_args, processed_kwargs = self._prepare_call(args, kwargs)
+&gt;       return self._calculate_series(*processed_args, **processed_kwargs)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: TsConditionalTransferEntropy._calculate_series() missing 2 required positional arguments: 'source' and 'condition'
+
+factor_engine/cleaned_operators/base.py:2200: TypeError
+
+During handling of the above exception, another exception occurred:
+
+    def test_ts_conditional_transfer_entropy_basic() -&gt; None:
+        """Basic functionality test."""
+        np.random.seed(42)
+        idx = pd.date_range("2024-01-01", periods=20)
+        cols = [f"S{i}" for i in range(10)]
+    
+        # Create sample data
+        x = pd.DataFrame(np.random.randn(20, 10), index=idx, columns=cols)
+    
+        op = _op("ts_conditional_transfer_entropy")
+        # Get param names from metadata
+        meta = getattr(op, "metadata", None)
+    
+        # Call with default parameters
+        try:
+            result = op.calculate(x)
+    
+            # Basic shape check
+            assert result.shape == x.shape, f"{result.shape} != {x.shape}"
+            assert list(result.columns) == list(x.columns)
+            assert list(result.index) == list(x.index)
+    
+            # Result should contain some finite values or be validly all-NaN
+            # (some operators may return all NaN for random data)
+        except Exception as e:
+&gt;           pytest.fail(f"{op} failed with {type(e).__name__}: {e}")
+E           Failed: ts_conditional_transfer_entropy: 条件传递熵 I(T_{s+lag}; S_s | T_s, C_s) nats。 failed with TypeError: TsConditionalTransferEntropy._calculate_series() missing 2 required positional arguments: 'source' and 'condition'
+
+factor_engine/tests/operators/test_conditional_dependence.py:55: Failed</failure></testcase><testcase classname="factor_engine.tests.operators.test_conditional_dependence" name="test_ts_conditional_transfer_entropy_handles_nans" time="0.001"><failure message="Failed: ts_conditional_transfer_entropy: 条件传递熵 I(T_{s+lag}; S_s | T_s, C_s) nats。 failed on NaN input: TsConditionalTransferEntropy._calculate_series() missing 2 required positional arguments: 'source' and 'condition'">def test_ts_conditional_transfer_entropy_handles_nans() -&gt; None:
+        """NaN handling test."""
+        idx = pd.date_range("2024-01-01", periods=10)
+        cols = ["A", "B", "C"]
+    
+        # Data with NaNs
+        data = [[1.0, np.nan, 3.0]] * 10
+        x = pd.DataFrame(data, index=idx, columns=cols)
+    
+        op = _op("ts_conditional_transfer_entropy")
+    
+        try:
+&gt;           result = op.calculate(x)
+                     ^^^^^^^^^^^^^^^
+
+factor_engine/tests/operators/test_conditional_dependence.py:70: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = &lt;Operator: ts_conditional_transfer_entropy&gt;
+args = (              A   B    C
+2024-01-01  1.0 NaN  3.0
+2024-01-02  1.0 NaN  3.0
+2024-01-03  1.0 NaN  3.0
+2024-01-04  1.0 N...-06  1.0 NaN  3.0
+2024-01-07  1.0 NaN  3.0
+2024-01-08  1.0 NaN  3.0
+2024-01-09  1.0 NaN  3.0
+2024-01-10  1.0 NaN  3.0,)
+kwargs = {}
+
+    def calculate(self, *args, **kwargs) -&gt; pd.DataFrame:
+        processed_args, processed_kwargs = self._prepare_call(args, kwargs)
+&gt;       return self._calculate_series(*processed_args, **processed_kwargs)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: TsConditionalTransferEntropy._calculate_series() missing 2 required positional arguments: 'source' and 'condition'
+
+factor_engine/cleaned_operators/base.py:2200: TypeError
+
+During handling of the above exception, another exception occurred:
+
+    def test_ts_conditional_transfer_entropy_handles_nans() -&gt; None:
+        """NaN handling test."""
+        idx = pd.date_range("2024-01-01", periods=10)
+        cols = ["A", "B", "C"]
+    
+        # Data with NaNs
+        data = [[1.0, np.nan, 3.0]] * 10
+        x = pd.DataFrame(data, index=idx, columns=cols)
+    
+        op = _op("ts_conditional_transfer_entropy")
+    
+        try:
+            result = op.calculate(x)
+    
+            # Should not raise, should return DataFrame
+            assert isinstance(result, pd.DataFrame)
+            assert result.shape == x.shape
+        except Exception as e:
+&gt;           pytest.fail(f"{op} failed on NaN input: {e}")
+E           Failed: ts_conditional_transfer_entropy: 条件传递熵 I(T_{s+lag}; S_s | T_s, C_s) nats。 failed on NaN input: TsConditionalTransferEntropy._calculate_series() missing 2 required positional arguments: 'source' and 'condition'
+
+factor_engine/tests/operators/test_conditional_dependence.py:76: Failed</failure></testcase><testcase classname="factor_engine.tests.operators.test_conditional_dependence" name="test_ts_conditional_transfer_entropy_handles_inf" time="0.001"><failure message="Failed: ts_conditional_transfer_entropy: 条件传递熵 I(T_{s+lag}; S_s | T_s, C_s) nats。 failed on inf input: TsConditionalTransferEntropy._calculate_series() missing 2 required positional arguments: 'source' and 'condition'">def test_ts_conditional_transfer_entropy_handles_inf() -&gt; None:
+        """Infinity handling test."""
+        idx = pd.date_range("2024-01-01", periods=10)
+        cols = ["A", "B"]
+    
+        # Data with infinities
+        data = [[1.0, np.inf], [2.0, -np.inf], [3.0, 4.0]] * 3 + [[5.0, 6.0]]
+        x = pd.DataFrame(data, index=idx, columns=cols)
+    
+        op = _op("ts_conditional_transfer_entropy")
+    
+        try:
+&gt;           result = op.calculate(x)
+                     ^^^^^^^^^^^^^^^
+
+factor_engine/tests/operators/test_conditional_dependence.py:91: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = &lt;Operator: ts_conditional_transfer_entropy&gt;
+args = (              A    B
+2024-01-01  1.0  inf
+2024-01-02  2.0 -inf
+2024-01-03  3.0  4.0
+2024-01-04  1.0  inf
+2024-01-05  2.0 -inf
+2024-01-06  3.0  4.0
+2024-01-07  1.0  inf
+2024-01-08  2.0 -inf
+2024-01-09  3.0  4.0
+2024-01-10  5.0  6.0,)
+kwargs = {}
+
+    def calculate(self, *args, **kwargs) -&gt; pd.DataFrame:
+        processed_args, processed_kwargs = self._prepare_call(args, kwargs)
+&gt;       return self._calculate_series(*processed_args, **processed_kwargs)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: TsConditionalTransferEntropy._calculate_series() missing 2 required positional arguments: 'source' and 'condition'
+
+factor_engine/cleaned_operators/base.py:2200: TypeError
+
+During handling of the above exception, another exception occurred:
+
+    def test_ts_conditional_transfer_entropy_handles_inf() -&gt; None:
+        """Infinity handling test."""
+        idx = pd.date_range("2024-01-01", periods=10)
+        cols = ["A", "B"]
+    
+        # Data with infinities
+        data = [[1.0, np.inf], [2.0, -np.inf], [3.0, 4.0]] * 3 + [[5.0, 6.0]]
+        x = pd.DataFrame(data, index=idx, columns=cols)
+    
+        op = _op("ts_conditional_transfer_entropy")
+    
+        try:
+            result = op.calculate(x)
+    
+            # Should handle inf gracefully (typically return NaN)
+            assert isinstance(result, pd.DataFrame)
+        except Exception as e:
+&gt;           pytest.fail(f"{op} failed on inf input: {e}")
+E           Failed: ts_conditional_transfer_entropy: 条件传递熵 I(T_{s+lag}; S_s | T_s, C_s) nats。 failed on inf input: TsConditionalTransferEntropy._calculate_series() missing 2 required positional arguments: 'source' and 'condition'
+
+factor_engine/tests/operators/test_conditional_dependence.py:96: Failed</failure></testcase><testcase classname="factor_engine.tests.operators.test_conditional_dependence" name="test_ts_conditional_transfer_entropy_empty_input" time="0.001" /><testcase classname="factor_engine.tests.operators.test_conditional_dependence" name="test_ts_conditional_transfer_entropy_single_column" time="0.001"><failure message="Failed: ts_conditional_transfer_entropy: 条件传递熵 I(T_{s+lag}; S_s | T_s, C_s) nats。 failed on single column: TsConditionalTransferEntropy._calculate_series() missing 2 required positional arguments: 'source' and 'condition'">def test_ts_conditional_transfer_entropy_single_column() -&gt; None:
+        """Single column test."""
+        idx = pd.date_range("2024-01-01", periods=20)
+        x = pd.DataFrame({"A": range(20)}, index=idx)
+    
+        op = _op("ts_conditional_transfer_entropy")
+    
+        try:
+&gt;           result = op.calculate(x)
+                     ^^^^^^^^^^^^^^^
+
+factor_engine/tests/operators/test_conditional_dependence.py:124: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = &lt;Operator: ts_conditional_transfer_entropy&gt;
+args = (             A
+2024-01-01   0
+2024-01-02   1
+2024-01-03   2
+2024-01-04   3
+2024-01-05   4
+2024-01-06   5
+2024-01-07  ...24-01-13  12
+2024-01-14  13
+2024-01-15  14
+2024-01-16  15
+2024-01-17  16
+2024-01-18  17
+2024-01-19  18
+2024-01-20  19,)
+kwargs = {}
+
+    def calculate(self, *args, **kwargs) -&gt; pd.DataFrame:
+        processed_args, processed_kwargs = self._prepare_call(args, kwargs)
+&gt;       return self._calculate_series(*processed_args, **processed_kwargs)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: TsConditionalTransferEntropy._calculate_series() missing 2 required positional arguments: 'source' and 'condition'
+
+factor_engine/cleaned_operators/base.py:2200: TypeError
+
+During handling of the above exception, another exception occurred:
+
+    def test_ts_conditional_transfer_entropy_single_column() -&gt; None:
+        """Single column test."""
+        idx = pd.date_range("2024-01-01", periods=20)
+        x = pd.DataFrame({"A": range(20)}, index=idx)
+    
+        op = _op("ts_conditional_transfer_entropy")
+    
+        try:
+            result = op.calculate(x)
+    
+            assert isinstance(result, pd.DataFrame)
+            assert result.shape[1] == 1
+        except Exception as e:
+&gt;           pytest.fail(f"{op} failed on single column: {e}")
+E           Failed: ts_conditional_transfer_entropy: 条件传递熵 I(T_{s+lag}; S_s | T_s, C_s) nats。 failed on single column: TsConditionalTransferEntropy._calculate_series() missing 2 required positional arguments: 'source' and 'condition'
+
+factor_engine/tests/operators/test_conditional_dependence.py:129: Failed</failure></testcase><testcase classname="factor_engine.tests.operators.test_conditional_dependence" name="test_ts_modwt_band_corr_basic" time="0.001"><failure message="Failed: ts_modwt_band_corr: Haar MODWT 频带细节系数窗口相关 Corr(D_band x, D_band y)，无量纲相关系数。 failed with TypeError: TsModwtBandCorr._calculate_series() missing 1 required positional argument: 'y'">def test_ts_modwt_band_corr_basic() -&gt; None:
+        """Basic functionality test."""
+        np.random.seed(42)
+        idx = pd.date_range("2024-01-01", periods=20)
+        cols = [f"S{i}" for i in range(10)]
+    
+        # Create sample data
+        x = pd.DataFrame(np.random.randn(20, 10), index=idx, columns=cols)
+    
+        op = _op("ts_modwt_band_corr")
+        # Get param names from metadata
+        meta = getattr(op, "metadata", None)
+    
+        # Call with default parameters
+        try:
+&gt;           result = op.calculate(x)
+                     ^^^^^^^^^^^^^^^
+
+factor_engine/tests/operators/test_conditional_dependence.py:150: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = &lt;Operator: ts_modwt_band_corr&gt;
+args = (                  S0        S1        S2  ...        S7        S8        S9
+2024-01-01  0.496714 -0.138264  0.647689 ....846794 -1.514847
+2024-01-20 -0.446515  0.856399  0.214094  ...  0.153725  0.058209 -1.142970
+
+[20 rows x 10 columns],)
+kwargs = {}
+
+    def calculate(self, *args, **kwargs) -&gt; pd.DataFrame:
+        processed_args, processed_kwargs = self._prepare_call(args, kwargs)
+&gt;       return self._calculate_series(*processed_args, **processed_kwargs)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: TsModwtBandCorr._calculate_series() missing 1 required positional argument: 'y'
+
+factor_engine/cleaned_operators/base.py:2200: TypeError
+
+During handling of the above exception, another exception occurred:
+
+    def test_ts_modwt_band_corr_basic() -&gt; None:
+        """Basic functionality test."""
+        np.random.seed(42)
+        idx = pd.date_range("2024-01-01", periods=20)
+        cols = [f"S{i}" for i in range(10)]
+    
+        # Create sample data
+        x = pd.DataFrame(np.random.randn(20, 10), index=idx, columns=cols)
+    
+        op = _op("ts_modwt_band_corr")
+        # Get param names from metadata
+        meta = getattr(op, "metadata", None)
+    
+        # Call with default parameters
+        try:
+            result = op.calculate(x)
+    
+            # Basic shape check
+            assert result.shape == x.shape, f"{result.shape} != {x.shape}"
+            assert list(result.columns) == list(x.columns)
+            assert list(result.index) == list(x.index)
+    
+            # Result should contain some finite values or be validly all-NaN
+            # (some operators may return all NaN for random data)
+        except Exception as e:
+&gt;           pytest.fail(f"{op} failed with {type(e).__name__}: {e}")
+E           Failed: ts_modwt_band_corr: Haar MODWT 频带细节系数窗口相关 Corr(D_band x, D_band y)，无量纲相关系数。 failed with TypeError: TsModwtBandCorr._calculate_series() missing 1 required positional argument: 'y'
+
+factor_engine/tests/operators/test_conditional_dependence.py:160: Failed</failure></testcase><testcase classname="factor_engine.tests.operators.test_conditional_dependence" name="test_ts_modwt_band_corr_handles_nans" time="0.001"><failure message="Failed: ts_modwt_band_corr: Haar MODWT 频带细节系数窗口相关 Corr(D_band x, D_band y)，无量纲相关系数。 failed on NaN input: TsModwtBandCorr._calculate_series() missing 1 required positional argument: 'y'">def test_ts_modwt_band_corr_handles_nans() -&gt; None:
+        """NaN handling test."""
+        idx = pd.date_range("2024-01-01", periods=10)
+        cols = ["A", "B", "C"]
+    
+        # Data with NaNs
+        data = [[1.0, np.nan, 3.0]] * 10
+        x = pd.DataFrame(data, index=idx, columns=cols)
+    
+        op = _op("ts_modwt_band_corr")
+    
+        try:
+&gt;           result = op.calculate(x)
+                     ^^^^^^^^^^^^^^^
+
+factor_engine/tests/operators/test_conditional_dependence.py:175: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = &lt;Operator: ts_modwt_band_corr&gt;
+args = (              A   B    C
+2024-01-01  1.0 NaN  3.0
+2024-01-02  1.0 NaN  3.0
+2024-01-03  1.0 NaN  3.0
+2024-01-04  1.0 N...-06  1.0 NaN  3.0
+2024-01-07  1.0 NaN  3.0
+2024-01-08  1.0 NaN  3.0
+2024-01-09  1.0 NaN  3.0
+2024-01-10  1.0 NaN  3.0,)
+kwargs = {}
+
+    def calculate(self, *args, **kwargs) -&gt; pd.DataFrame:
+        processed_args, processed_kwargs = self._prepare_call(args, kwargs)
+&gt;       return self._calculate_series(*processed_args, **processed_kwargs)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: TsModwtBandCorr._calculate_series() missing 1 required positional argument: 'y'
+
+factor_engine/cleaned_operators/base.py:2200: TypeError
+
+During handling of the above exception, another exception occurred:
+
+    def test_ts_modwt_band_corr_handles_nans() -&gt; None:
+        """NaN handling test."""
+        idx = pd.date_range("2024-01-01", periods=10)
+        cols = ["A", "B", "C"]
+    
+        # Data with NaNs
+        data = [[1.0, np.nan, 3.0]] * 10
+        x = pd.DataFrame(data, index=idx, columns=cols)
+    
+        op = _op("ts_modwt_band_corr")
+    
+        try:
+            result = op.calculate(x)
+    
+            # Should not raise, should return DataFrame
+            assert isinstance(result, pd.DataFrame)
+            assert result.shape == x.shape
+        except Exception as e:
+&gt;           pytest.fail(f"{op} failed on NaN input: {e}")
+E           Failed: ts_modwt_band_corr: Haar MODWT 频带细节系数窗口相关 Corr(D_band x, D_band y)，无量纲相关系数。 failed on NaN input: TsModwtBandCorr._calculate_series() missing 1 required positional argument: 'y'
+
+factor_engine/tests/operators/test_conditional_dependence.py:181: Failed</failure></testcase><testcase classname="factor_engine.tests.operators.test_conditional_dependence" name="test_ts_modwt_band_corr_handles_inf" time="0.001"><failure message="Failed: ts_modwt_band_corr: Haar MODWT 频带细节系数窗口相关 Corr(D_band x, D_band y)，无量纲相关系数。 failed on inf input: TsModwtBandCorr._calculate_series() missing 1 required positional argument: 'y'">def test_ts_modwt_band_corr_handles_inf() -&gt; None:
+        """Infinity handling test."""
+        idx = pd.date_range("2024-01-01", periods=10)
+        cols = ["A", "B"]
+    
+        # Data with infinities
+        data = [[1.0, np.inf], [2.0, -np.inf], [3.0, 4.0]] * 3 + [[5.0, 6.0]]
+        x = pd.DataFrame(data, index=idx, columns=cols)
+    
+        op = _op("ts_modwt_band_corr")
+    
+        try:
+&gt;           result = op.calculate(x)
+                     ^^^^^^^^^^^^^^^
+
+factor_engine/tests/operators/test_conditional_dependence.py:196: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = &lt;Operator: ts_modwt_band_corr&gt;
+args = (              A    B
+2024-01-01  1.0  inf
+2024-01-02  2.0 -inf
+2024-01-03  3.0  4.0
+2024-01-04  1.0  inf
+2024-01-05  2.0 -inf
+2024-01-06  3.0  4.0
+2024-01-07  1.0  inf
+2024-01-08  2.0 -inf
+2024-01-09  3.0  4.0
+2024-01-10  5.0  6.0,)
+kwargs = {}
+
+    def calculate(self, *args, **kwargs) -&gt; pd.DataFrame:
+        processed_args, processed_kwargs = self._prepare_call(args, kwargs)
+&gt;       return self._calculate_series(*processed_args, **processed_kwargs)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: TsModwtBandCorr._calculate_series() missing 1 required positional argument: 'y'
+
+factor_engine/cleaned_operators/base.py:2200: TypeError
+
+During handling of the above exception, another exception occurred:
+
+    def test_ts_modwt_band_corr_handles_inf() -&gt; None:
+        """Infinity handling test."""
+        idx = pd.date_range("2024-01-01", periods=10)
+        cols = ["A", "B"]
+    
+        # Data with infinities
+        data = [[1.0, np.inf], [2.0, -np.inf], [3.0, 4.0]] * 3 + [[5.0, 6.0]]
+        x = pd.DataFrame(data, index=idx, columns=cols)
+    
+        op = _op("ts_modwt_band_corr")
+    
+        try:
+            result = op.calculate(x)
+    
+            # Should handle inf gracefully (typically return NaN)
+            assert isinstance(result, pd.DataFrame)
+        except Exception as e:
+&gt;           pytest.fail(f"{op} failed on inf input: {e}")
+E           Failed: ts_modwt_band_corr: Haar MODWT 频带细节系数窗口相关 Corr(D_band x, D_band y)，无量纲相关系数。 failed on inf input: TsModwtBandCorr._calculate_series() missing 1 required positional argument: 'y'
+
+factor_engine/tests/operators/test_conditional_dependence.py:201: Failed</failure></testcase><testcase classname="factor_engine.tests.operators.test_conditional_dependence" name="test_ts_modwt_band_corr_empty_input" time="0.001" /><testcase classname="factor_engine.tests.operators.test_conditional_dependence" name="test_ts_modwt_band_corr_single_column" time="0.001"><failure message="Failed: ts_modwt_band_corr: Haar MODWT 频带细节系数窗口相关 Corr(D_band x, D_band y)，无量纲相关系数。 failed on single column: TsModwtBandCorr._calculate_series() missing 1 required positional argument: 'y'">def test_ts_modwt_band_corr_single_column() -&gt; None:
+        """Single column test."""
+        idx = pd.date_range("2024-01-01", periods=20)
+        x = pd.DataFrame({"A": range(20)}, index=idx)
+    
+        op = _op("ts_modwt_band_corr")
+    
+        try:
+&gt;           result = op.calculate(x)
+                     ^^^^^^^^^^^^^^^
+
+factor_engine/tests/operators/test_conditional_dependence.py:229: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = &lt;Operator: ts_modwt_band_corr&gt;
+args = (             A
+2024-01-01   0
+2024-01-02   1
+2024-01-03   2
+2024-01-04   3
+2024-01-05   4
+2024-01-06   5
+2024-01-07  ...24-01-13  12
+2024-01-14  13
+2024-01-15  14
+2024-01-16  15
+2024-01-17  16
+2024-01-18  17
+2024-01-19  18
+2024-01-20  19,)
+kwargs = {}
+
+    def calculate(self, *args, **kwargs) -&gt; pd.DataFrame:
+        processed_args, processed_kwargs = self._prepare_call(args, kwargs)
+&gt;       return self._calculate_series(*processed_args, **processed_kwargs)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: TsModwtBandCorr._calculate_series() missing 1 required positional argument: 'y'
+
+factor_engine/cleaned_operators/base.py:2200: TypeError
+
+During handling of the above exception, another exception occurred:
+
+    def test_ts_modwt_band_corr_single_column() -&gt; None:
+        """Single column test."""
+        idx = pd.date_range("2024-01-01", periods=20)
+        x = pd.DataFrame({"A": range(20)}, index=idx)
+    
+        op = _op("ts_modwt_band_corr")
+    
+        try:
+            result = op.calculate(x)
+    
+            assert isinstance(result, pd.DataFrame)
+            assert result.shape[1] == 1
+        except Exception as e:
+&gt;           pytest.fail(f"{op} failed on single column: {e}")
+E           Failed: ts_modwt_band_corr: Haar MODWT 频带细节系数窗口相关 Corr(D_band x, D_band y)，无量纲相关系数。 failed on single column: TsModwtBandCorr._calculate_series() missing 1 required positional argument: 'y'
+
+factor_engine/tests/operators/test_conditional_dependence.py:234: Failed</failure></testcase><testcase classname="factor_engine.tests.operators.test_conditional_dependence" name="test_conditional_dependence_metadata" time="0.001" /><testcase classname="factor_engine.tests.operators.test_feature_geometry" name="test_ts_feature_mode_share_basic" time="0.058" /><testcase classname="factor_engine.tests.operators.test_feature_geometry" name="test_ts_feature_mode_share_handles_nans" time="0.002" /><testcase classname="factor_engine.tests.operators.test_feature_geometry" name="test_ts_feature_mode_share_deterministic" time="0.001" /><testcase classname="factor_engine.tests.operators.test_feature_geometry" name="test_ts_feature_effective_rank_basic" time="0.061" /><testcase classname="factor_engine.tests.operators.test_feature_geometry" name="test_ts_feature_effective_rank_handles_nans" time="0.002" /><testcase classname="factor_engine.tests.operators.test_feature_geometry" name="test_ts_feature_effective_rank_deterministic" time="0.001" /><testcase classname="factor_engine.tests.operators.test_feature_geometry" name="test_ts_feature_subspace_rotation_basic" time="0.001" /><testcase classname="factor_engine.tests.operators.test_feature_geometry" name="test_ts_feature_subspace_rotation_handles_nans" time="0.001" /><testcase classname="factor_engine.tests.operators.test_feature_geometry" name="test_ts_feature_subspace_rotation_deterministic" time="0.001" /><testcase classname="factor_engine.tests.operators.test_feature_geometry" name="test_ts_beta_break_score_basic" time="0.016" /><testcase classname="factor_engine.tests.operators.test_feature_geometry" name="test_ts_beta_break_score_handles_nans" time="0.002" /><testcase classname="factor_engine.tests.operators.test_feature_geometry" name="test_ts_beta_break_score_deterministic" time="0.001" /><testcase classname="factor_engine.tests.operators.test_feature_geometry" name="test_feature_geometry_metadata" time="0.000" /><testcase classname="factor_engine.tests.backend.test_operator_recipe_execution_v3" name="test_multi_step_recipe_uses_one_input_load_and_existing_plan_nodes" time="0.001"><failure message="ValueError: recipe execution requires an approved ExecutionContext">def test_multi_step_recipe_uses_one_input_load_and_existing_plan_nodes():
+        panel = pd.DataFrame(
+            [[1.0, 3.0], [np.nan, 5.0], [7.0, 9.0]],
+            index=pd.date_range("2024-01-01", periods=3), columns=["A", "B"],
+        )
+        steps = (("ffill_limit", {"max_periods": 1}), ("rank", {}))
+        plan = compile_operator_recipe(steps)
+        assert plan.op == "rank"
+        assert plan.inputs[0].op == "ffill_limit"
+        assert plan.inputs[0].inputs[0].op == "column"
+        stats = {}
+&gt;       result = execute_operator_recipe(panel, steps, runtime_stats=stats)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+factor_engine/tests/backend/test_operator_recipe_execution_v3.py:20: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+panel =               A    B
+2024-01-01  1.0  3.0
+2024-01-02  NaN  5.0
+2024-01-03  7.0  9.0
+steps = (('ffill_limit', {'max_periods': 1}), ('rank', {})), runtime_stats = {}
+execution_context = None, backend = None, allow_research = False
+
+    def execute_operator_recipe(
+        panel, steps, *, runtime_stats=None, execution_context=None,
+        backend=None, allow_research: bool = False,
+    ):
+        """Execute a recipe using caller-owned authority and physical backend."""
+        if not isinstance(panel, pd.DataFrame):
+            raise TypeError("recipe panel must be a pandas DataFrame")
+        source = _RecipePanelSource(panel)
+        stats = runtime_stats if runtime_stats is not None else {}
+        frozen_steps = tuple(steps)
+        plan = compile_operator_recipe(frozen_steps)
+        if execution_context is None:
+            if not allow_research:
+&gt;               raise ValueError("recipe execution requires an approved ExecutionContext")
+E               ValueError: recipe execution requires an approved ExecutionContext
+
+factor_engine/backend/cleaned_bridge.py:75: ValueError</failure></testcase><testcase classname="factor_engine.tests.backend.test_operator_recipe_execution_v3" name="test_unknown_recipe_operator_fails_before_execution" time="0.000" /><testcase classname="factor_engine.tests.operators.test_v9_m33_m36_relational_export" name="test_m33_m36_relations_survive_catalog_and_public_agent_snapshot" time="1.039" /><testcase classname="factor_engine.tests.operators.test_v9_m33_m36_relational_export" name="test_m33_planner_enforces_three_candidate_support[ts_matrix_profile_motif_frequency]" time="0.001" /><testcase classname="factor_engine.tests.operators.test_v9_m33_m36_relational_export" name="test_m33_planner_enforces_three_candidate_support[ts_matrix_profile_neighbor_dispersion]" time="0.001" /><testcase classname="factor_engine.tests.operators.test_v9_m33_m36_relational_export" name="test_m33_novelty_keeps_one_candidate_boundary" time="0.000" /><testcase classname="factor_engine.tests.operators.test_v9_m33_m36_relational_export" name="test_m36_planner_enforces_even_and_odd_purge_boundaries[30]" time="0.001" /><testcase classname="factor_engine.tests.operators.test_v9_m33_m36_relational_export" name="test_m36_planner_enforces_even_and_odd_purge_boundaries[31]" time="0.001" /><testcase classname="factor_engine.tests.operators.test_v9_m33_m36_relational_export" name="test_public_snapshot_is_order_independent_when_adapter_registers_first" time="30.960" /><testcase classname="factor_engine.tests.operators.test_v9_m33_m36_relational_export" name="test_first_nonempty_relation_is_single_authority_on_conflict" time="30.604" /></testsuite></testsuites>

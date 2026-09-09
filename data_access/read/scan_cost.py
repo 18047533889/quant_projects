@@ -428,27 +428,6 @@ def _calibrated_factor(dataset: str) -> float:
         return _calibration.get(dataset, 1.0)
 
 
-def record_scan_actual(
-    dataset: str,
-    *,
-    estimated_score: float,
-    actual_elapsed_ms: float,
-) -> None:
-    """#27 估算 vs 实际：EMA 调整每数据集的校准乘子。
-
-    实际时间显著高于估算 → 乘子上调（后续路由更保守/更倾向 stream）；
-    显著低于 → 下调。只在有意义的样本上更新，避免抖动。
-    """
-    if estimated_score <= 0 or actual_elapsed_ms <= 0:
-        return
-    ratio = actual_elapsed_ms / max(1.0, estimated_score / 1e6)
-    # ratio 理论上接近常数；偏离 1 太多说明估算系统性偏差
-    correction = max(0.1, min(10.0, ratio))
-    with _calibration_lock:
-        cur = _calibration.get(dataset, 1.0)
-        _calibration[dataset] = cur + _EMA_ALPHA * (correction - cur)
-
-
 def reset_calibration() -> None:
     with _calibration_lock:
         _calibration.clear()

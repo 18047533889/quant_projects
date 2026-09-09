@@ -16,6 +16,7 @@ import numpy as np
 from typing import Optional, Union
 
 from factor_engine.backend.contracts import ExecutionKind, PhysicalImplementationSpec
+from factor_engine.cleaned_operators.rolling_pack import _call_pandas_delegate
 
 from factor_engine.cleaned_operators.base import (
     SeriesOperator,
@@ -662,27 +663,43 @@ class TSStudentTKalmanFilterPolarsNative(SeriesOperator):
 
 @register_operator(name="ts_super_smoother", canonical="ts_super_smoother", backend="polars")
 class TSSuperSmootherPolarsNative(SeriesOperator):
-    """Super smoother filter (low-pass filter)"""
+    """Exact Polars-to-Pandas bridge to the authoritative Ehlers filter."""
 
     metadata = OperatorMetadata(
         name="ts_super_smoother",
         category="time_series",
-        description="Super smoother low-pass filter",
-        param_names=["feature", "window"],
+        description="Ehlers two-pole Super Smoother via the CPU reference",
+        param_names=["x", "period"],
         return_type="series",
-        tags=["time_series", "rolling", "smoothing", "pit_safe"],
+        tags=["time_series", "smoothing", "pit_safe", "pandas_delegate"],
     )
     metadata.param_specs = {
-        "window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
+        "period": ParamSpec(
+            dtype=int, min=3, default=10, history_semantics="max_rows",
+            param_role=ParamRole.HORIZON,
+        ),
     }
+    _physical_spec = PhysicalImplementationSpec(
+        canonical="ts_super_smoother",
+        backend="polars",
+        execution_kind=ExecutionKind.POLARS_PANDAS_DELEGATE,
+        stateful=True,
+        materializes_full_panel=True,
+        requires_sorted=True,
+        supports_nulls=True,
+        supports_nan=True,
+        supports_inf=False,
+        emitter_identity="rolling_pack._call_pandas_delegate:polars_to_pandas_to_polars:v1",
+        kernel_identity="filter_smooth:TSSuperSmoother._calculate_series",
+        parameter_domain_hash="x:panel;period:int>=3:default10",
+        semantic_contract_hash="super_smoother:ehlers_2pole:avg_x_and_x_prev:freeze_on_missing:v2",
+        notes="Exact eager pandas-reference delegation; never a native Polars expression.",
+    )
 
-    def _calculate_series(self, feature, window, **kwargs):
-        # TODO: Implement proper super smoother (Ehlers)
-        # Placeholder: double exponential smoothing
-        span = (window) / 2.0 if 2.0 != 0 else np.nan
-        smooth1 = feature.ewm_mean(span=span, ignore_nulls=True)
-        smooth2 = smooth1.ewm_mean(span=span, ignore_nulls=True)
-        return smooth2
+    def _calculate_series(self, x, period=10, **kwargs):
+        return _call_pandas_delegate(
+            "ts_super_smoother", (x,), {"period": period, **kwargs}
+        )
 
 
 @register_operator(name="ts_support_break", canonical="ts_support_break", backend="polars")

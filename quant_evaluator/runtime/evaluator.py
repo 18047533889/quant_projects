@@ -1595,7 +1595,8 @@ def evaluate(
                                 "calendar_source_version": calendar_snapshot.source_version},
                         }
             if portfolio_returns is not None:
-                executor.prebuilt_portfolio_pnl = session.stage_context("portfolio_pnl", portfolio_returns.values)
+                # Stage only each factor tile, not the whole job's trajectory.
+                executor.prebuilt_portfolio_pnl = portfolio_returns.values
                 executor.portfolio_factor_ids = tuple(portfolio_returns.factor_ids)
             executor.metric_parameters = {_resolve_alias(k): dict(v) for k, v in (metric_parameters or {}).items()}
             if holding_returns is not None:

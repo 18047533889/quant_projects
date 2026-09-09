@@ -119,10 +119,16 @@ def _jump_z(v: np.ndarray) -> float:
     n = int(v.size)
     if n < 2:
         return np.nan
+    magnitude = float(np.max(np.abs(v)))
+    if not np.all(np.isfinite(v)) or magnitude == 0.0:
+        return np.nan
+    # The declared BNS ratio is homogeneous of degree zero. Normalize within
+    # this window before squaring/fourth powers, never add a units-based floor.
+    v = v / magnitude
     rv = float(np.sum(v * v))
     bv = float((np.pi / 2.0) * np.sum(np.abs(v[1:]) * np.abs(v[:-1])))
     rq4 = float(np.sum(v ** 4))  # raw quarticity sum Σr⁴
-    denom2 = max(_THETA_MINUS_2 / 3.0 * rq4, _EPS)
+    denom2 = _THETA_MINUS_2 / 3.0 * rq4
     return float((rv - bv) / np.sqrt(denom2))
 
 

@@ -174,12 +174,20 @@ def test_ts_corr_requires_exact_aligned_panels():
 # ---------------------------------------------------------------------------
 
 
-def test_ts_beta_min_periods_default_is_five_and_declared():
+def test_ts_beta_min_periods_default_is_bounded_five_and_declared():
     op = _get("ts_beta")
     assert "min_periods" in op.metadata.param_names
     spec = op.metadata.param_specs["min_periods"]
-    assert spec.dtype is int and spec.min == 2 and spec.default == 5
+    # None is the declared dynamic default min(5, window), not an explicit 5
+    # that would make every legitimate window below five fail the binder.
+    assert spec.dtype is int and spec.min == 2 and spec.default is None
     assert not spec.searchable
+    x = _frame([1., 2., 3., 4., 5., 6.], cols=["A"])
+    y = 2 * x
+    short = op.calculate(y, x, 3)["A"].to_numpy()
+    long = op.calculate(y, x, 6)["A"].to_numpy()
+    assert np.isnan(short[:2]).all() and np.isclose(short[2], 2.)
+    assert np.isnan(long[:4]).all() and np.isclose(long[4], 2.)
 
 
 def test_ts_beta_uses_paired_finite_mask():

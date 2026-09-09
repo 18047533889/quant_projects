@@ -348,7 +348,10 @@ def test_cs_huber_resid_robust_to_outliers() -> None:
     """cs_huber_resid 应对 y 端离群点稳健（Huber M-估计量）。"""
     idx = pd.date_range("2024-01-01", periods=1)
     x_vals = list(range(1, 21))
-    y_vals = [2.0 * v for v in x_vals]
+    # Nonzero inlier noise gives the adaptive-MAD estimator a defined scale.
+    # An exactly linear inlier majority plus one outlier is scale-degenerate
+    # and intentionally fails closed (covered by the M01 shared-kernel tests).
+    y_vals = [2.0 * v + 0.05 * np.sin(v) for v in x_vals]
     y_vals[0] = 100.0  # y outlier at x=1
     x = pd.DataFrame([x_vals], index=idx)
     y = pd.DataFrame([y_vals], index=idx)
@@ -560,4 +563,3 @@ def test_ts_event_spacing_mean_cv() -> None:
     out_cv = op_cv.calculate(condition, window=12, min_events=3)
     # 间隔完全一致 (3, 3, 3)，CV 应为 0.0
     assert out_cv.iloc[-1, 0] == pytest.approx(0.0, abs=1e-9)
-

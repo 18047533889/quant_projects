@@ -36,8 +36,8 @@ OPERATOR_SEMANTIC_VERSIONS: dict[str, int] = {
     "ts_transfer_entropy_peak_excess": 2,
     "ts_distance_corr": 2,  # v9: relative-unit blockwise biased distance geometry
     "ts_distance_cov": 2,
-    "ts_huber_regression_in_sample_resid": 2,  # v9: shared score/restoration-certified Huber fit
-    "ts_huber_regression_predictive_resid": 2,
+    "ts_huber_regression_in_sample_resid": 3,  # v3: explicit scale-degenerate failure
+    "ts_huber_regression_predictive_resid": 3,
     "ts_vector_state_mahalanobis": 2,  # v9: relative covariance geometry and explicit nullspace failure
     "ts_butterworth_lowpass_causal": 2,  # v9: cutoff is cycles/bar, not Nyquist fraction
     "ts_local_lyapunov_exponent": 2,  # v9: true-bar embeddings and complete successor candidates
@@ -59,6 +59,76 @@ OPERATOR_SEMANTIC_VERSIONS: dict[str, int] = {
     "ts_matrix_profile_neighbor_dispersion": 2,
     "ts_residualized_hsic": 2,  # v9: explicit jointly feasible purged folds
     "ts_causal_local_linear_smoother": 2,  # v9: predict current physical endpoint
+    # v2: canonical Ehlers recurrence averages current and previous input.
+    "ts_super_smoother": 2,
+    # v2: pairwise midpoints and the final even median avoid overflow and
+    # subnormal-loss from premature addition.
+    "ts_hodges_lehmann_location": 2,
+    # v2: the static feasible domain requires enough rows to populate bins.
+    "ts_binned_response_monotonicity": 2,
+    "ts_binned_response_curvature": 2,
+    # v2: dimensionless max-absolute window scaling; zero variation undefined.
+    "intraday_jump_test_stat": 2,
+    # v2: normalized weights/Kish moments preserve unit invariance.
+    "ts_weighted_standardized_moment": 2,
+    # v2: nested threshold + aggregation windows require 2*(window-1) history;
+    # prior thresholds reject the impossible min_periods == window boundary.
+    "group_tail_centrality": 2,
+    "group_tail_lead_score": 2,
+    # v2: normalized ACF with Geyer paired-positive prefix; IMS applies cummin.
+    "ts_autocorrelation_time": 2,
+    "ts_autocorrelation_time_initial_positive_sequence": 2,
+    # v2: input kind is explicit/typed; unknown or wrong domains fail closed.
+    "ts_return_spectral_entropy": 2,
+    "ts_spectral_entropy": 2,
+    "ts_detrended_level_spectral_entropy": 2,
+    # v2: max-scaled probability weights; expected shortfall also requires
+    # positive selected-tail mass and retained fractional member support.
+    "ts_weighted_semivariance": 2,
+    "ts_weighted_downside_deviation": 2,
+    "ts_weighted_expected_shortfall": 2,
+    "ts_weighted_drawdown_area": 2,
+    # v2: shared quantile edges are numerically stable and use the corrected
+    # Markov/Kramers-Moyal state discretization contract.
+    "ts_markov_persistence": 2,
+    "ts_markov_state_entropy": 2,
+    "ts_markov_transition_surprisal": 2,
+    "ts_markov_entropy_production": 2,
+    "ts_kramers_moyal_local_stability": 2,
+    "ts_markov_committor": 2,
+    "ts_markov_mean_first_passage_time": 2,
+    "ts_markov_spectral_gap": 2,
+    "ts_markov_stationary_surprisal": 2,
+    "ts_km_equilibrium_distance": 2,  # v2: corrected equilibrium state semantics
+    "ts_km_diffusion_gradient": 2,
+    "ts_km_quasipotential_depth": 2,  # v2: corrected quasipotential geometry
+    "ts_active_information_storage": 2,  # v2: corrected AIS state probabilities
+    # v2: stable true beta with a common-scale, dimensionless break ratio.
+    "ts_beta_break_score": 2,
+    # v2: scaled SVD/common mask and a joint window feasibility guard.
+    "ts_price_delay": 2,
+    # v2: stable SHA-256 absolute-time seed and canonical semantic identity.
+    "ts_best_lag_corr_excess": 2,
+    # v2: within-window dimensionless centering preserves the GLR split grid.
+    "ts_glr_mean_shift_score": 2,
+    "ts_glr_variance_shift_score": 2,
+    # v2: Theiler-aware feasible domain and common-scale stable Euclidean KNN.
+    "ts_delay_intrinsic_dimension": 2,
+    # v2: independent per-scale coverage caps and common-unit scale fitting.
+    "ts_vol_pvariation_roughness": 2,
+    "ts_vol_scaling_break": 2,
+    # v2: squared-mass intraday summaries are stable, zero mass is undefined,
+    # and minute cross-session row semantics are explicit. RV scale cohorts
+    # remain preserved independently rather than intersected.
+    "intraday_volatility_time_centroid": 2,
+    "intraday_volatility_concentration": 2,
+    "intraday_volatility_entropy": 2,
+    "intraday_realized_semivariance_balance": 2,
+    "intraday_rv_signature_curvature": 2,
+    # v2: corrected MODWT band conditional-dependence semantics.
+    "ts_modwt_band_corr": 2,
+    # v2: profile optimization requires certified BFGS convergence.
+    "ts_fisher_information_shift": 2,
     # v9: actual convex first/second-difference L1 objectives and bounded solve.
     "ts_total_variation_filter_trailing": 2,
     "ts_l1_trend_filter_trailing": 2,
@@ -66,7 +136,7 @@ OPERATOR_SEMANTIC_VERSIONS: dict[str, int] = {
     # v9: stable prewarped phase-normalized Bessel SOS (gap policy unchanged).
     "ts_bessel_lowpass_causal": 2,
     # v9: correct robust-fit coefficient order and one finite fit/query cohort.
-    "cs_huber_resid": 2,
+    "cs_huber_resid": 3,  # v3: shared stable kernel + explicit scale-degenerate failure
     "cs_lad_resid": 2,
     # v9: complete first-passage horizons and physical-bar breadth history.
     "ts_first_passage_bias": 2,

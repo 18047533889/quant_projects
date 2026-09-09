@@ -537,6 +537,11 @@ _SPECTRAL_FAMILY = frozenset({
     "ts_spectral_low_frequency_ratio", "ts_periodogram_energy",
 })
 
+# These kernels are fractional/log return transformations only when their
+# immediate input is an authoritative price level.  ``ts_pct`` is also a
+# generic change-rate operator, so generic numeric inputs must not be promoted.
+_RETURN_FROM_PRICE_CANONICALS = frozenset({"ts_pct", "ts_log_return", "log_returns"})
+
 
 class TypedInputContractError(ValueError):
     pass
@@ -1518,6 +1523,55 @@ class Analyzer:
                 elif signature.output.value == "Series[Datetime]":
                     attrs["dtype"] = "datetime64[ns]"
 
+            if canonical in {"ts_return_spectral_entropy", "ts_spectral_entropy",
+                             "ts_detrended_level_spectral_entropy"}:
+                # Actual immediate expression type overrides any caller stamp.
+                # No full-panel numeric discriminator may inspect future rows.
+                immediate = visited_inputs[0][0] if visited_inputs else None
+                immediate_semantic = (immediate.semantic_attrs or {}) if immediate else {}
+                immediate_attrs = (immediate.attrs or {}) if immediate else {}
+                actual_kind = immediate_semantic.get("semantic_kind")
+                # Catalog price_basis is authoritative.  Adjusted price is a
+                # continuous level for spectral typing even when the generic
+                # semantic lattice only propagated the coarse DailySeries kind.
+                if (
+                    actual_kind in {None, "DailySeries"}
+                    and immediate_semantic.get("price_basis") in {"ADJUSTED", "CONTINUOUS"}
+                ):
+                    actual_kind = "PriceContinuous"
+                allowed = OPERATOR_INPUT_TYPE_CONTRACTS[canonical][0].allowed_semantic_kinds
+                if (
+                    not effective_production
+                    and not immediate_attrs.get("field_id")
+                    and actual_kind in {None, "DailySeries"}
+                ):
+                    # An unresolved research ColumnRef has only a generic
+                    # DailySeries fallback, not an authoritative financial kind.
+                    # Its explicit assumption is allowed; production rejects the
+                    # same unknown leaf before reaching this branch.
+                    actual_kind = attrs.get("input_kind")
+                if actual_kind not in allowed:
+                    raise TypedInputContractError(
+                        f"{canonical} requires typed input in {sorted(allowed)}; "
+                        f"got {actual_kind!r}")
+                attrs["input_kind"] = actual_kind
+                if immediate is not None and actual_kind != immediate_semantic.get(
+                    "semantic_kind"
+                ):
+                    # Keep the corrected kind on the immediate spectral edge so
+                    # the later uniform input-contract pass validates the same
+                    # authority used above.  This is scoped to these canonicals;
+                    # the underlying field/child node is otherwise unchanged.
+                    corrected_semantic = dict(immediate_semantic)
+                    corrected_semantic["semantic_kind"] = actual_kind
+                    corrected_immediate = IRNode(
+                        op=immediate.op,
+                        inputs=immediate.inputs,
+                        attrs=immediate.attrs,
+                        semantic_attrs=corrected_semantic,
+                    )
+                    inputs = (corrected_immediate, *inputs[1:])
+
             # P0-60: return-decomposition operators carry the authoritative
             # shared ``price_basis`` on attrs so the runtime kernel forwards it
             # (kw = node.attrs).  Without this stamp the basis is re-derived at
@@ -1631,6 +1685,19 @@ class Analyzer:
                     semantic["lattice"] = joined_lattice
             if signature is not None and signature.output_unit and signature.output_unit != "inherit":
                 semantic["unit"] = signature.output_unit
+            if canonical in _RETURN_FROM_PRICE_CANONICALS and inputs:
+                source_semantic = inputs[0].semantic_attrs or {}
+                source_attrs = inputs[0].attrs or {}
+                source_kind = source_semantic.get("semantic_kind")
+                source_basis = source_semantic.get("price_basis") or source_attrs.get(
+                    "price_basis"
+                )
+                if source_kind in {"PriceRaw", "PriceContinuous"} or source_basis in {
+                    "RAW", "RAW_OFFICIAL_LIMIT", "ADJUSTED", "CONTINUOUS"
+                }:
+                    semantic["semantic_kind"] = "ReturnDecimal"
+                    semantic["price_basis"] = "RETURN"
+                    semantic["unit"] = "ratio"
             # P0-30 / WS-C: derive the typed-IR semantic kind from the joined
             # attrs — only when the lattice left the kind unresolved (a
             # single-kind join already pinned it; a mixed join stays unresolved).

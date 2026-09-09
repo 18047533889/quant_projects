@@ -196,20 +196,24 @@ class TSSuperSmoother(SeriesOperator):
         c3 = -a²
         c1 = 1 - c2 - c3  # Ensures DC gain = 1
 
-        y_t = c1 * x_t + c2 * y_{t-1} + c3 * y_{t-2}
+        y_t = c1 * (x_t + x_{t-1}) / 2 + c2 * y_{t-1} + c3 * y_{t-2}
 
-    The filter requires TWO historical states (y_{t-1}, y_{t-2}), initialized as:
+    The recurrence requires THREE historical states
+    (x_{t-1}, y_{t-1}, y_{t-2}), initialized as:
         y_0 = x_0 (first finite observation)
         y_1 = x_1 (second finite observation)
+        x_prev = x_1
 
     Certified parameters:
         period: [5, 10, 20, 40] (HORIZON role, searchable)
 
     Execution contract:
         - Stateful: recursive filter depends on full finite prefix
-        - Checkpointable: state is (y_{t-1}, y_{t-2}) — serializable
-        - Time shard UNSAFE: requires checkpoint restore across shards
+        - Checkpoint unavailable: the runtime has no serializer/restore kernel
+          for (x_{t-1}, y_{t-1}, y_{t-2})
+        - Time shard UNSAFE: requires full-history replay
         - Min periods: period (warm-up for stable filter response)
+        - Missing clock: non-finite rows emit NaN and freeze all three states
 
     Parameters:
         x: Input signal series
@@ -233,7 +237,7 @@ class TSSuperSmoother(SeriesOperator):
         causal=True,
         uses_current_observation=True,
         stateful=True,
-        checkpointable=True,
+        checkpointable=False,
         time_shard_safe=False,
         warmup=0,
         lag_class="zero",
@@ -354,7 +358,8 @@ def ts_kama(
     - Role: adaptive_low_pass
     - Causal: strictly causal (ER computed from historical data only)
     - Stateful: recursive (depends on y_{t-1})
-    - Checkpointable: single float per instrument
+    - Checkpoint unavailable: restoration also needs the ER input ring/history;
+      until that kernel exists the runtime must replay full history
     - Warmup: er_window + 1 contiguous bars
     - Lag: variable (adapts to market regime)
 
@@ -494,7 +499,7 @@ class TSKama(TsKamaOperator):
     )
 
     stateful = True
-    checkpointable = True
+    checkpointable = False
     time_shard_safe = False
 
     filter_contract = FilterContract(
@@ -502,7 +507,7 @@ class TSKama(TsKamaOperator):
         causal=True,
         uses_current_observation=True,
         stateful=True,
-        checkpointable=True,
+        checkpointable=False,
         time_shard_safe=False,
         warmup=10,
         lag_class="variable",
@@ -841,6 +846,18 @@ declare_stateful(
     chunking="required_full_history",
 )
 
+declare_stateful(
+    "ts_super_smoother",
+    state_model="recursive",
+    chunking="required_full_history",
+)
+
+declare_stateful(
+    "ts_kama",
+    state_model="recursive",
+    chunking="required_full_history",
+)
+
 
 def filter_smooth_contract(canonical: str) -> FilterContract:
     """返回 filter_smooth 模块算子的 FilterContract。"""
@@ -863,7 +880,7 @@ def filter_smooth_contract(canonical: str) -> FilterContract:
             causal=True,
             uses_current_observation=True,
             stateful=True,
-            checkpointable=True,
+            checkpointable=False,
             time_shard_safe=False,
             warmup=11,  # er_window + 1 默认值
             lag_class="variable",  # 自适应滞后
@@ -876,7 +893,7 @@ def filter_smooth_contract(canonical: str) -> FilterContract:
             causal=True,
             uses_current_observation=True,
             stateful=True,
-            checkpointable=True,
+            checkpointable=False,
             time_shard_safe=False,
             warmup=0,  # period via min_periods
             lag_class="zero",

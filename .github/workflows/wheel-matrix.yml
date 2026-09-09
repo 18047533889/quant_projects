@@ -202,6 +202,11 @@ jobs:
               "workspace_data", "schemas", "examples", "legacy",
               "learning_logs", "jobs", "runs", "data", "tests_colocated",
           }
+          # QE explicitly ships its scripts package. Enumerate that declared
+          # source as well; pruning it would falsely report seven extra files
+          # after the missing probe_portfolio package has been restored.
+          if pkg == "quant_evaluator":
+              PRUNE_DIRS.remove("scripts")
           src_pys = set()
           for dirpath, dirnames, filenames in os.walk(src_root):
               dirnames[:] = [
@@ -286,6 +291,20 @@ jobs:
           print(f"[{pkg}] COMPLETE: wheel payload == source tree "
                 f"({len(wheel_rel)} modules), no tests, no bytecode, integrity ok")
           PY
+        shell: bash -e {0}
+
+      - name: QE source-byte and installed cohort golden
+        if: env.NOT_BUILT == '0' && matrix.pkg == 'quant_evaluator'
+        run: |
+          set -euo pipefail
+          wheels=("$RUNNER_TEMP/wheels/${{ matrix.dist }}"/*.whl)
+          test "${#wheels[@]}" -eq 1
+          python3 scripts/verify_wheel_payload.py quant_evaluator "${wheels[0]}"
+          python3 -m pip install -e ./quant_evaluator
+          python3 -I scripts/check_qe_portfolio_install.py
+          python3 -m pip install --force-reinstall --no-deps "${wheels[0]}"
+          cd "$RUNNER_TEMP"
+          python3 -I "$GITHUB_WORKSPACE/scripts/check_qe_portfolio_install.py" --wheel-only
         shell: bash -e {0}
 
       - name: Append to job summary

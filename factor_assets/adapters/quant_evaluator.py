@@ -189,6 +189,9 @@ class QEEvidenceProvider:
                 n_days=window.n_days,
                 confidence_interval=window.confidence_interval,
                 uncertainty_scale=window.uncertainty_scale,
+                window_identity=window.window_identity,
+                universe_ref=window.universe_ref,
+                sample_ref=window.sample_ref,
             ) for window in artifact.windows
         )
         return CertifiedPairwiseEvidence(

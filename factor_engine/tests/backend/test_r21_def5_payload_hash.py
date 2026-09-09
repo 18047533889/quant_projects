@@ -22,7 +22,7 @@ from factor_engine.backend.operator_capability import (
     _safe_payload_hash,
     _sql_contract,
 )
-from factor_engine.cleaned_operators.base import ParamSpec
+from factor_engine.cleaned_operators.base import ParamSpec, RelationalParamSpec
 from factor_engine.cleaned_operators.registry import OperatorRegistry
 
 
@@ -139,6 +139,46 @@ def test_unknown_live_object_still_fail_closed() -> None:
         _json_contract_value(_Foreign())
     with pytest.raises(CapabilityInfrastructureError):
         _json_contract_value({"nested": {"bad": _Foreign()}})
+
+
+@pytest.mark.parametrize(
+    ("canonical", "expression", "param_names", "message"),
+    [
+        ("ts_causal_savgol_endpoint", "polyorder < window", ["polyorder", "window"],
+         "polyorder must be smaller than the trailing window"),
+        ("ts_spectral_lowpass_trailing", "cutoff_freq <= window // 2", ["cutoff_freq", "window"],
+         "cutoff_freq exceeds the trailing window Nyquist bin"),
+    ],
+)
+def test_relational_specs_have_typed_stable_json_contract(
+    canonical: str, expression: str, param_names: list[str], message: str
+) -> None:
+    """M02: every catalog relation is a typed, scoped identity component."""
+    contract = _sql_contract(canonical)
+    relations = contract["relational_specs"]
+    assert len(relations) == 1
+    relation = relations[0]
+    assert {
+        "__contract_type__": "RelationalParamSpec",
+        "schema_version": 1,
+        "expression": expression,
+        "param_names": param_names,
+    }.items() <= relation.items()
+    assert isinstance(relation["message"], str) and relation["message"]
+    json.dumps(relations, sort_keys=True)
+    assert _safe_payload_hash(contract) == _safe_payload_hash(_sql_contract(canonical))
+
+
+def test_relational_semantic_change_changes_contract_hash() -> None:
+    less = _json_contract_value(RelationalParamSpec("polyorder < window"))
+    less_equal = _json_contract_value(RelationalParamSpec("polyorder <= window"))
+    assert _safe_payload_hash(less) != _safe_payload_hash(less_equal)
+
+
+def test_relational_constraint_still_rejects_invalid_values() -> None:
+    relation = RelationalParamSpec("polyorder < window")
+    assert relation.check({"polyorder": 2, "window": 5}) is True
+    assert relation.check({"polyorder": 5, "window": 5}) is False
 
 
 def test_json_contract_value_plain_passthrough() -> None:

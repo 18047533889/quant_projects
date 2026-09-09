@@ -2,9 +2,10 @@
 """Intraday realized-volatility *shape* operators (2026-08 geometry/math
 expansion).
 
-Beyond the level of realized variance these describe *where inside the trading
-day* volatility is concentrated and how the realized-volatility estimator
-responds to sampling frequency:
+These are trailing minute-ROW statistics, potentially crossing trading sessions.
+They describe where volatility lies inside the requested rolling window, NOT
+"today so far" or exchange-session aggregates. Missing slots must already have
+authoritative coordinates; this module does not infer a calendar or grant data access.
 
 * ``intraday_volatility_time_centroid`` — early/late timing of the squared-return
   mass: ``TC = 2*sum(tau_m * r_m^2)/sum(r_m^2) - 1``, ``tau_m = m/(N-1)``.
@@ -13,16 +14,16 @@ responds to sampling frequency:
 * ``intraday_volatility_entropy`` — base-e Shannon entropy of the same
   distribution normalized by ``log N``.
 * ``intraday_realized_semivariance_balance`` — upside vs downside realized
-  semivariance balance ``(RSV+ - RSV-)/(RSV+ + RSV- + eps)``.
+  semivariance balance ``(RSV+ - RSV-)/(RSV+ + RSV-)``; zero variation is undefined.
 * ``intraday_rv_signature_curvature`` — curvature ``c`` of the volatility
   signature ``log RV(Delta) = a + b*log Delta + c*(log Delta)^2``.
 
 All operators are trailing-window, prefix-causal and deterministic.
-Session-slot aware (review R4-21): the real minute-slot axis is preserved —
+Row-slot preserving (review R4-21): the supplied minute-slot axis is preserved —
 missing slots keep their coordinate and their return contributes no RV mass
 (shape operators), and the RV-signature operator fails closed on an interior
 gap because block aggregation across a gap is meaningless.  A leading NaN
-prefix (session warm-up) is dropped to the trailing contiguous finite run.
+prefix is dropped to the trailing contiguous finite run for the RV signature.
 Windows with fewer than 5 finite returns emit NaN, and degenerate windows
 (zero variance, insufficient scales) emit NaN.
 """
@@ -45,12 +46,16 @@ def _metadata(name: str, description: str, params: list[str], *, unit: str, cost
     return OperatorMetadata(
         name=name,
         category="intraday_microstructure",
-        description=description,
+        description="跨交易日滚动分钟行（非当日会话聚合）：" + description,
         param_names=params,
         return_type="series",
+        input_grain="minute",
+        output_grain="minute",
         tags=[
-            "intraday_microstructure", "daily", "pit_safe", "causal", "typed_v2",
-            "deterministic",
+            "intraday_microstructure", "minute", "pit_safe", "causal", "typed_v2",
+            "deterministic", "rolling_cross_session", "not_session_aggregate",
+            *(("rv_signature_cohort:per_scale_left_complete_blocks_v1",)
+              if name == "intraday_rv_signature_curvature" else ()),
             f"signature:{','.join(params)}->series", "domain:intraday_volatility_shape",
             f"unit:{unit}", f"cost:{cost}",
         ],
@@ -58,9 +63,9 @@ def _metadata(name: str, description: str, params: list[str], *, unit: str, cost
 
 
 def _rolling_returns(returns: np.ndarray, window: int, fn: Callable[[np.ndarray], float]) -> np.ndarray:
-    """Trailing-window per-column reduction over a minute-return panel.
+    """Trailing-row per-column reduction; no exchange-session reset.
 
-    Session-slot aware (review R4-21): the raw window slice (missing minutes
+    Row-slot preserving (review R4-21): the raw window slice (missing minutes
     kept as NaN at their true slot positions) is passed to ``fn``.  Shape
     kernels mask missing slots (their return contributes no RV mass) while
     ``_rv_curvature`` fails closed on an interior gap.  Never drop-and-reconnect.
@@ -79,14 +84,39 @@ def _rolling_returns(returns: np.ndarray, window: int, fn: Callable[[np.ndarray]
     return out
 
 
+def _squared_mass(v: np.ndarray) -> np.ndarray | None:
+    """Squared returns in bounded common units, with missing slots preserved."""
+    finite = np.isfinite(v)
+    if not np.any(finite):
+        return None
+    magnitude = float(np.max(np.abs(v[finite])))
+    if magnitude == 0.0:
+        return None
+    weights = np.zeros(v.shape, dtype=float)
+    weights[finite] = (v[finite] / magnitude)**2
+    return weights
+
+
+def _rv_scale_cohorts(n: int) -> tuple[tuple[int, int, int], ...]:
+    """Declared legacy cohort: each scale uses its own left complete blocks.
+
+    The end may differ across scales for a non-divisible window. This is NOT
+    a shared observation interval. Changing to a common right-aligned cohort
+    would change the estimator and requires a separate policy/version.
+    Returns (scale, first_row, exclusive_end_row) relative to finite suffix.
+    """
+    return tuple((s, 0, (n//s)*s) for s in _RV_SCALES if n >= s)
+
+
 def _time_centroid(v: np.ndarray) -> float:
     n = int(v.size)
     if n < 2:
         return np.nan
-    finite = np.isfinite(v)
-    w = np.where(finite, v * v, 0.0)
+    w = _squared_mass(v)
+    if w is None:
+        return np.nan
     total = float(np.sum(w))
-    if not np.isfinite(total) or total <= _EPS:
+    if not np.isfinite(total) or total <= 0.0:
         return np.nan
     # Real minute-slot positions within the session window (0..n-1).  A missing
     # slot keeps its coordinate and contributes zero RV mass — the centroid is
@@ -96,10 +126,11 @@ def _time_centroid(v: np.ndarray) -> float:
 
 
 def _concentration(v: np.ndarray) -> float:
-    finite = np.isfinite(v)
-    w = np.where(finite, v * v, 0.0)
+    w = _squared_mass(v)
+    if w is None:
+        return np.nan
     rv = float(np.sum(w))
-    if not np.isfinite(rv) or rv <= _EPS:
+    if not np.isfinite(rv) or rv <= 0.0:
         return np.nan
     p = w / rv
     return float(np.sum(p * p))
@@ -110,9 +141,11 @@ def _entropy(v: np.ndarray) -> float:
     n_finite = int(finite.sum())
     if n_finite < 2:
         return np.nan
-    w = np.where(finite, v * v, 0.0)
+    w = _squared_mass(v)
+    if w is None:
+        return np.nan
     rv = float(np.sum(w))
-    if not np.isfinite(rv) or rv <= _EPS:
+    if not np.isfinite(rv) or rv <= 0.0:
         return np.nan
     p = w / rv
     with np.errstate(divide="ignore", invalid="ignore"):
@@ -122,10 +155,12 @@ def _entropy(v: np.ndarray) -> float:
 
 
 def _semi_balance(v: np.ndarray) -> float:
-    finite = np.isfinite(v)
-    pos = float(np.sum(v[finite & (v > 0.0)] ** 2))
-    neg = float(np.sum(v[finite & (v < 0.0)] ** 2))
-    return float((pos - neg) / (pos + neg + _EPS))
+    weights = _squared_mass(v)
+    if weights is None:
+        return np.nan
+    pos = float(np.sum(weights[v > 0.0]))
+    neg = float(np.sum(weights[v < 0.0]))
+    return float((pos - neg) / (pos + neg))
 
 
 def _rv_curvature(v: np.ndarray) -> float:
@@ -139,17 +174,16 @@ def _rv_curvature(v: np.ndarray) -> float:
     if np.any(~finite[first:]):
         return np.nan
     v = v[first:]
+    magnitude = float(np.max(np.abs(v)))
+    if magnitude == 0.0:
+        return np.nan
+    v = v / magnitude
     n = int(v.size)
     pts: list[tuple[float, float]] = []
-    for s in _RV_SCALES:
-        if n < s:
-            continue
-        nblocks = n // s
-        if nblocks < 1:
-            continue
-        agg = v[: nblocks * s].reshape(nblocks, s).sum(axis=1)
+    for s, start, stop in _rv_scale_cohorts(n):
+        agg = v[start:stop].reshape(-1, s).sum(axis=1)
         rv = float(np.sum(agg * agg))
-        if np.isfinite(rv) and rv > _EPS:
+        if np.isfinite(rv) and rv > 0.0:
             pts.append((float(np.log(s)), float(np.log(rv))))
     if len(pts) < 3:
         return np.nan

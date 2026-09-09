@@ -364,6 +364,12 @@ jobs:
     needs: [scale, FE_EXECUTE_PERSIST_SYNTHETIC, manual_100k]
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        if: needs.FE_EXECUTE_PERSIST_SYNTHETIC.result == 'success'
+        with:
+          name: fe-execute-persist-1k-${{ github.sha }}
+          path: scale-input/fe
       - name: Record actual execution state, not production certification
         env:
           RESULTS: ${{ toJSON(needs) }}
@@ -373,8 +379,44 @@ jobs:
           import json, os
           states = {"success": "PASS", "failure": "FAIL", "cancelled": "NOT_RUN", "skipped": "NOT_RUN"}
           needs = json.loads(os.environ["RESULTS"])
-          payload = {"source_sha": os.environ["SOURCE_SHA"], "production_certification": "NOT_RUN",
-                     "jobs": {k: {"status": states[v["result"]], "job_result": v["result"]} for k, v in needs.items()}}
+          jobs = {k: {"status": states[v["result"]], "job_result": v["result"]} for k, v in needs.items()}
+          # Scope and scale units are authoritative and intentionally distinct.
+          # The matrix aggregate is not split into FE/QE component receipts, so
+          # it cannot certify either 100k capability here.
+          evidence = [
+              {"job": "scale", "scope": "row_scale", "scale": 100000,
+               "scale_unit": "rows", "backend": "cpu",
+               "real_data": False, "cuda": False,
+               "status": jobs["scale"]["status"]},
+              {"job": "FE_EXECUTE_PERSIST_SYNTHETIC", "scope": "factor_scale",
+               "scale": 1000, "scale_unit": "unique_factors", "backend": "cpu",
+               "real_data": False, "cuda": False,
+               "status": jobs["FE_EXECUTE_PERSIST_SYNTHETIC"]["status"]},
+              {"job": "manual_100k", "scope": "factor_scale", "scale": 100000,
+               "scale_unit": "unique_factors", "backend": "cpu",
+               "real_data": False, "cuda": False, "status": "NOT_RUN"},
+              {"job": None, "scope": "gpu_cuda", "scale": 0,
+               "scale_unit": "unique_factors", "backend": "cuda",
+               "real_data": False, "cuda": True, "status": "NOT_RUN"},
+              {"job": None, "scope": "real_data_shadow", "scale": 0,
+               "scale_unit": "unique_factors", "backend": "NOT_RUN",
+               "real_data": True, "cuda": False, "status": "NOT_RUN"},
+          ]
+          payload = {"source_sha": os.environ["SOURCE_SHA"],
+                     "collector_status": "PASS", "production_certification": "NOT_RUN",
+                     "jobs": jobs, "evidence": evidence}
+          # This collector has job conclusions, not authenticated numerical
+          # artifacts. Keep them visible, but the capability gate must not
+          # treat these records as verified execution receipts.
+          for item in evidence:
+              item["source_sha"] = os.environ["SOURCE_SHA"]
+              item["execution_verified"] = False
+              item["execution_evidence_status"] = "NOT_RESOLVED"
+          from pathlib import Path
+          from scripts.scale_scope_gate import verified_factor_execution
+          reports = list(Path("scale-input/fe").rglob("report.json"))
+          if jobs["FE_EXECUTE_PERSIST_SYNTHETIC"]["status"] == "PASS" and len(reports) == 1:
+              payload["evidence"].append(verified_factor_execution(reports[0], os.environ["SOURCE_SHA"]))
           with open("scale-execution-status.json", "w") as stream:
               json.dump(payload, stream, indent=2)
           PY
@@ -434,7 +476,10 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
-      - run: bash scripts/ci_smoke.sh
+      - name: Install production lock and exact CI test lock
+        env:
+          CI_TEST_DEPS: "1"
+        run: bash scripts/ci_smoke.sh
       - name: Default v2 API contract (not a native or real-data execution certificate)
         env:
           PYTHONPATH: .

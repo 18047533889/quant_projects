@@ -1021,7 +1021,7 @@ class StateL1TurnoverProx(SeriesOperator):
         return_type="series",
         tags=[
             "signal_filter", "daily", "pit_safe", "causal", "stateful",
-            "checkpointable", "typed_v2", "filter_role:rate_limit",
+            "full_history", "typed_v2", "filter_role:rate_limit",
             "signature:x,lambda_turnover->series",
             "domain:signal_processing", "unit:level", "cost:1",
         ],
@@ -1039,7 +1039,7 @@ class StateL1TurnoverProx(SeriesOperator):
         causal=True,
         uses_current_observation=True,
         stateful=True,
-        checkpointable=True,
+        checkpointable=False,
         time_shard_safe=False,
         warmup=0,
         lag_class="variable",
@@ -1124,7 +1124,7 @@ class StateL2PartialAdjustment(SeriesOperator):
         return_type="series",
         tags=[
             "signal_filter", "daily", "pit_safe", "causal", "stateful",
-            "checkpointable", "typed_v2", "filter_role:rate_limit",
+            "full_history", "typed_v2", "filter_role:rate_limit",
             "signature:x,lambda_smooth->series",
             "domain:signal_processing", "unit:level", "cost:1",
         ],
@@ -1142,7 +1142,7 @@ class StateL2PartialAdjustment(SeriesOperator):
         causal=True,
         uses_current_observation=True,
         stateful=True,
-        checkpointable=True,
+        checkpointable=False,
         time_shard_safe=False,
         warmup=0,
         lag_class="variable",
@@ -1189,6 +1189,18 @@ class StateL2PartialAdjustment(SeriesOperator):
         return frame_like(x, out)
 
 
+from factor_engine.runtime.execution_contract import declare_stateful
+
+declare_stateful(
+    "state_l1_turnover_prox",
+    state_model="recursive",
+    chunking="required_full_history",
+)
+declare_stateful(
+    "state_l2_partial_adjustment",
+    state_model="recursive",
+    chunking="required_full_history",
+)
 
 
 def _register_surface() -> None:

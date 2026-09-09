@@ -58,7 +58,7 @@ def source_for(monkeypatch, handle, fetched):
         SimpleNamespace(time_column="time", instrument_column="instrument"), False, None
     )
     source._resolve_columns = lambda names: (list(names), {})
-    source._normalize_contract_columns = lambda values, names: None
+    source._normalize_contract_columns = lambda values, names, **kwargs: None
     store = SimpleNamespace(read=lambda *args, **kwargs: handle)
     monkeypatch.setattr(module, "_get_store", lambda: store)
     monkeypatch.setattr(
@@ -233,7 +233,7 @@ def test_load_column_uses_locked_multi_column_path(monkeypatch):
 def test_approval_binding_during_normalization_blocks_cache_publication(monkeypatch):
     source, _ = source_for(monkeypatch, Handle("b" * 32), {"close": series(10.0)})
 
-    def normalize(values, names):
+    def normalize(values, names, **kwargs):
         source.bind_approved_content_digest("a" * 32)
 
     source._normalize_contract_columns = normalize
@@ -283,3 +283,23 @@ def test_all_cached_read_rechecks_approval_before_return(monkeypatch):
     source._column_cache = Cache(close=series(10.0))
     with pytest.raises(ApprovedSnapshotMismatch, match="cached request"):
         source.load_columns(["close"])
+
+
+def test_normalization_algorithm_changes_persistent_source_identity(monkeypatch):
+    source, _ = source_for(monkeypatch, Handle("a" * 32), {})
+    before = source.source_dependency_hash()
+    monkeypatch.setattr(module, "UNIT_NORMALIZATION_ALGORITHM_ID", "test-next-algorithm")
+    assert source.source_dependency_hash() != before
+
+
+def test_normalization_algorithm_change_invalidates_only_source_warm_cache(monkeypatch):
+    source, _ = source_for(monkeypatch, Handle("a" * 32), {"close": series(11.0)})
+    stale = series(10.0)
+    source._column_cache["close"] = stale
+    monkeypatch.setattr(module, "UNIT_NORMALIZATION_ALGORITHM_ID", "test-next-algorithm")
+
+    result = source.load_columns(["close"])
+
+    assert result["close"].iloc[0] == 11.0
+    assert result["close"] is not stale
+    assert source._cache_normalization_identity == "test-next-algorithm"

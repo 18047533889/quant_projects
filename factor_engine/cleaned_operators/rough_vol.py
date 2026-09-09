@@ -205,7 +205,7 @@ def _scale_passes_gate(
         return False
     if coverage < min_pair_fraction:
         return False
-    if not (np.isfinite(sp) and sp > _EPS):
+    if not (np.isfinite(sp) and sp > 0.0):
         return False
     return True
 
@@ -213,19 +213,31 @@ def _scale_passes_gate(
 def _coverages_balanced(covs: list[float], imbalance_bound: float, min_pair_fraction: float) -> bool:
     """Per-scale coverages must not be severely imbalanced across used scales.
 
-    The imbalance ceiling is the strictest of the fixed structural bound and
-    the caller-visible coverage floor: ``1/min_pair_fraction``.  When
-    ``min_pair_fraction`` is LOOSENED (smaller), the ceiling rises and a window
-    that would previously have been rejected may now be estimated; when it is
-    TIGHTENED (closer to 1), the ceiling drops below the structural bound and
-    MORE windows are rejected.  ``min_pair_fraction`` therefore genuinely
-    gates the fit (R50 parameter injectivity), while the default
-    ``min_pair_fraction=0.5`` reproduces the legacy behaviour exactly
-    (ceiling = max(4, 2) = 4).
+    The structural ceiling is independent of the per-scale coverage floor.
+    Widening it to max(bound, 1/min_fraction) makes this gate tautological for
+    every admitted scale; lowering coverage requirements must not do that.
     """
-    caller_bound = 1.0 / float(min_pair_fraction) if float(min_pair_fraction) > 0.0 else float("inf")
-    ceiling = max(float(imbalance_bound), caller_bound)
-    return max(covs) / min(covs) <= ceiling
+    return bool(covs) and min(covs) > 0.0 and max(covs) / min(covs) <= float(imbalance_bound)
+
+
+def _dimensionless_path(v: np.ndarray) -> np.ndarray | None:
+    """Shared scale for all lag pairs; keep missing slots in place."""
+    finite = np.isfinite(v)
+    if not np.any(finite):
+        return None
+    original = np.asarray(v, dtype=float)
+    values = original[finite]
+    with np.errstate(over="ignore", invalid="ignore"):
+        shifted = values - values[0]
+    if not np.all(np.isfinite(shifted)):
+        shifted = values / float(np.max(np.abs(values)))
+        shifted -= shifted[0]
+    magnitude = float(np.max(np.abs(shifted)))
+    if magnitude == 0.0:
+        return None
+    out = np.full(original.shape, np.nan)
+    out[finite] = shifted / magnitude
+    return out
 
 
 def _pv_roughness(
@@ -236,6 +248,9 @@ def _pv_roughness(
     min_pair_fraction: float,
     imbalance_bound: float,
 ) -> float:
+    v = _dimensionless_path(v)
+    if v is None:
+        return np.nan
     pts: list[tuple[float, float]] = []
     covs: list[float] = []
     for d in scales:
@@ -262,6 +277,9 @@ def _scaling_break(
     min_pair_fraction: float,
     imbalance_bound: float,
 ) -> float:
+    v = _dimensionless_path(v)
+    if v is None:
+        return np.nan
     n = int(v.size)
     if n < _LONG_LAG + 1:
         return np.nan

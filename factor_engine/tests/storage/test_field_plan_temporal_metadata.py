@@ -5,6 +5,7 @@ history) from NOT_APPLICABLE (economically not applicable)."""
 from __future__ import annotations
 
 import pytest
+from types import SimpleNamespace
 
 from factor_engine.storage.sources.field_plan import (
     MissingSemantic,
@@ -87,3 +88,19 @@ def test_financial_nan_is_unknown() -> None:
         logical_concept="revenue", temporal_model="financial_pit", role="feature"
     )
     assert missing_semantic_for_plan(plan) == MissingSemantic.UNKNOWN
+
+
+def test_current_snapshot_lookup_unpacks_resolver_result(monkeypatch):
+    from factor_engine.storage.sources import field_plan as module
+    monkeypatch.setattr(module, "_resolve_table_spec", lambda *a, **k:
+        (SimpleNamespace(current_snapshot_only=True), module.TableResolutionStatus.RESOLVED))
+    assert module._table_current_snapshot_only("table", "ashare", production=True)
+
+
+@pytest.mark.parametrize("state", ["REGISTRY_ERROR", "AMBIGUOUS"])
+def test_snapshot_lookup_does_not_turn_resolution_failure_into_false(monkeypatch, state):
+    from factor_engine.storage.sources import field_plan as module
+    monkeypatch.setattr(module, "_resolve_table_spec", lambda *a, **k:
+        (None, getattr(module.TableResolutionStatus, state)))
+    with pytest.raises(RuntimeError):
+        module._table_current_snapshot_only("table", "ashare", production=True)

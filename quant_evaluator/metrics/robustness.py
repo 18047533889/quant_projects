@@ -349,6 +349,8 @@ def compute_joint_block_bootstrap(ic_series, plan, factor_ids):
     """
     from quant_evaluator.contracts.resampling import ResamplingPlan
     from quant_evaluator.contracts.metric_artifacts import DistributionMetricArtifact
+    from quant_evaluator.contracts._hashutil import stable_content_hex
+    import hashlib
     if not isinstance(plan, ResamplingPlan):
         raise TypeError("joint bootstrap requires a ResamplingPlan")
     values = np.asarray(ic_series, dtype=float)
@@ -356,13 +358,34 @@ def compute_joint_block_bootstrap(ic_series, plan, factor_ids):
     if values.shape != (len(plan.time_ids), len(ids)) or len(set(ids)) != len(ids) or not ids:
         raise ValueError("joint bootstrap axes mismatch")
     samples = np.full((plan.num_replicates, len(ids)), np.nan)
-    valid = np.isfinite(values).all(axis=0)
-    for repeat, index in enumerate(plan.indices()):
+    finite = np.isfinite(values)
+    valid = finite.all(axis=0)
+    indices = np.asarray(plan.indices(), dtype="<i8", order="C")
+    # Hash the actual draws used below, not a caller-selected plan label.
+    # A memoryview avoids a second full draw-array byte copy.
+    time_identity = stable_content_hex(tag="qe.joint_time_grid.v1", fields={
+        "time_ids": plan.time_ids, "clock_ref": plan.clock_ref,
+        "segment_ids": plan.segment_ids})
+    sample_identity = stable_content_hex(tag="qe.joint_draws.v1", fields={
+        "time_identity_hash": time_identity, "shape": indices.shape,
+        "dtype": indices.dtype.str,
+        "draw_bytes_sha256": hashlib.sha256(memoryview(indices).cast("B")).hexdigest()})
+    # Only complete columns are computed. Invalid columns retain NaN evidence;
+    # they cannot change the observation set of a valid batch companion.
+    common_mask = finite[:, valid].all(axis=1) if valid.any() else np.zeros(len(values), dtype=bool)
+    common_mask_hash = stable_content_hex(tag="qe.joint_common_mask.v1", fields={
+        "time_identity_hash": time_identity, "observed": common_mask})
+    for repeat, index in enumerate(indices):
         samples[repeat, valid] = np.mean(values[index][:, valid], axis=0)
     return DistributionMetricArtifact(
         metric_id="ic_mean_joint_moving_block.v1", domain="robustness",
         samples=samples, stat_names=ids,
         provenance={"resampling_plan_ref": plan.content_hash,
+                    "resampling_plan_content_hash": plan.content_hash,
+                    "sample_identity_hash": sample_identity,
+                    "time_identity_hash": time_identity,
+                    "common_mask_hash": common_mask_hash,
+                    "pairing_scope": "ic_series_complete_time_grid",
                     "replicate_ids": plan.replicate_ids, "clock_ref": plan.clock_ref,
                     "time_ids": plan.time_ids, "factor_ids": ids,
                     "missing_policy": "complete_common_grid_or_insufficient",

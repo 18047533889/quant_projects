@@ -1,13 +1,25 @@
 import pytest, hashlib, json
+from types import SimpleNamespace
 from factor_assets.selection import (CandidateEvidence, DecisionProvider,
     DecisionRequest, DecisionStatus, MetricRule, Relationship,
     JointUtilityEvidence, RawJointMetricEvidence, ReplacementRoleRule,
     SelectionPolicySpec, UtilityDirection)
 class Receipt:
     def require_scope(self, **kwargs): return None
+    def require_assertion_suite(self, **kwargs): return None
 class Resolver:
+    def __init__(self, policy=None): self.policy=policy
     def resolve(self, ref): return Receipt()
-def provider(p): return DecisionProvider(p, Resolver())
+    def resolve_evidence(self, ref, *, candidate):
+        raw=candidate.raw_joint_metric_evidence
+        return SimpleNamespace(candidate_id=candidate.candidate_id,raw_content_hash=raw.content_hash,
+            recipe_hash=raw.recipe_hash,fitted_state_hash=raw.fitted_state_hash,data_snapshot_hash=raw.data_snapshot_hash,
+            universe_hash=raw.universe_hash,label_hash=raw.label_hash,value_artifact_hash=raw.value_artifact_hash,
+            dimensions=candidate.dimensions,coverage=candidate.coverage,metric_instance_hash=raw.metric_instance_hash,
+            parameter_domain_hash=raw.parameter_domain_hash,
+            metric_directions={r.metric_id:r.direction.value for r in self.policy.metric_rules if r.metric_id in raw.metric_ids})
+def provider(p):
+    resolver=Resolver(p); return DecisionProvider(p,resolver,resolver)
 
 def policy():
     return SelectionPolicySpec("p","1",(MetricRule("ic",UtilityDirection.HIGHER_IS_BETTER,1,0,.1,hard_floor=0),),{"quality":"B"},minimum_coverage=.5,required_dimensions=("quality",))
@@ -16,10 +28,12 @@ def candidate(name, grade="B", coverage=.8, evidence=("ev",), utility=None, **kw
     bump=.02 if name=="fixed" else 0
     samples=(((([.08+bump][0],),),),((([.06+bump][0],),),))
     execution=("s","i","r","cpu","p","m")
-    semantic={"context":"ctx","plan":"plan","replicates":["r1","r2"],"metrics":["ic"],"metric_units":["dimensionless"],"window_ids":["window"],"scenario_ids":["scenario"],"samples":json.loads(json.dumps(samples)),"qualification":"research","execution":execution}
+    identity=(name,"recipe","state","data","universe","label","values:"+name)
+    pairing=("plan-content","samples","times","mask")
+    semantic={"context":"ctx","plan":"plan","pairing":pairing,"replicates":["r1","r2"],"metrics":["ic"],"metric_units":["dimensionless"],"window_ids":["window"],"scenario_ids":["scenario"],"samples":json.loads(json.dumps(samples)),"qualification":"research","execution":execution,"candidate":identity}
     digest=hashlib.sha256(json.dumps(semantic,sort_keys=True,separators=(",", ":")).encode()).hexdigest()
-    raw=RawJointMetricEvidence("joint",digest,"ctx","plan",("r1","r2"),("ic",),samples,"research",source_tree_hash="s",implementation_hash="i",route="r",backend="cpu",parameter_domain_hash="p",metric_instance_hash="m",metric_units=("dimensionless",))
-    return CandidateEvidence(name,evidence,"FINAL",{"quality":grade},{"ic":.07+bump},coverage,"research",raw_joint_metric_evidence=raw,qualification_ref="q",qualification_requirements={"source_tree_hash":"s","implementation_hash":"i","route":"r","backend":"cpu","parameter_domain_hash":"p","metric_instance_hash":"m"},**kw)
+    raw=RawJointMetricEvidence("joint",digest,"ctx","plan",("r1","r2"),("ic",),samples,"research",source_tree_hash="s",implementation_hash="i",route="r",backend="cpu",parameter_domain_hash="p",metric_instance_hash="m",metric_units=("dimensionless",),candidate_id=name,recipe_hash="recipe",fitted_state_hash="state",data_snapshot_hash="data",universe_hash="universe",label_hash="label",value_artifact_hash="values:"+name,resampling_plan_content_hash=pairing[0],sample_identity_hash=pairing[1],time_identity_hash=pairing[2],common_mask_hash=pairing[3])
+    return CandidateEvidence(name,evidence,"FINAL",{"quality":grade},{"ic":.07+bump},coverage,"research",raw_joint_metric_evidence=raw,qualification_ref="q",qualification_requirements={"source_tree_hash":"s","implementation_hash":"i","route":"r","backend":"cpu","parameter_domain_hash":"p","metric_instance_hash":"m"},health_evidence_ref="health:"+name,health_candidate_id=name,health_coverage=coverage,evidence_bundle_ref=evidence[0] if evidence else None,**kw)
 
 def request(p, candidates, request_id="r"):
     candidates=tuple(candidates)
@@ -77,9 +91,11 @@ def test_t68_original_unit_cumulative_raw_guard_rejects_laundered_steps():
     def item(name, benefit, risk):
         samples=((((benefit,risk),),),(((benefit,risk),),))
         execution=("s","i","r","cpu","p","m")
-        semantic={"context":"ctx","plan":"plan","replicates":["r1","r2"],"metrics":["benefit","risk"],"metric_units":["return","drawdown"],"window_ids":["window"],"scenario_ids":["scenario"],"samples":json.loads(json.dumps(samples)),"qualification":"research","execution":execution}
+        identity=(name,"recipe","state","data","universe","label","values:"+name)
+        pairing=("plan-content","samples","times","mask")
+        semantic={"context":"ctx","plan":"plan","pairing":pairing,"replicates":["r1","r2"],"metrics":["benefit","risk"],"metric_units":["return","drawdown"],"window_ids":["window"],"scenario_ids":["scenario"],"samples":json.loads(json.dumps(samples)),"qualification":"research","execution":execution,"candidate":identity}
         digest=hashlib.sha256(json.dumps(semantic,sort_keys=True,separators=(",", ":")).encode()).hexdigest()
-        joint=RawJointMetricEvidence("e:"+name,digest,"ctx","plan",("r1","r2"),("benefit","risk"),samples,"research",source_tree_hash="s",implementation_hash="i",route="r",backend="cpu",parameter_domain_hash="p",metric_instance_hash="m",metric_units=("return","drawdown"))
+        joint=RawJointMetricEvidence("e:"+name,digest,"ctx","plan",("r1","r2"),("benefit","risk"),samples,"research",source_tree_hash="s",implementation_hash="i",route="r",backend="cpu",parameter_domain_hash="p",metric_instance_hash="m",metric_units=("return","drawdown"),candidate_id=name,recipe_hash="recipe",fitted_state_hash="state",data_snapshot_hash="data",universe_hash="universe",label_hash="label",value_artifact_hash="values:"+name,resampling_plan_content_hash=pairing[0],sample_identity_hash=pairing[1],time_identity_hash=pairing[2],common_mask_hash=pairing[3])
         return CandidateEvidence(name,("ev",),"FINAL",{}, {"benefit":benefit,"risk":risk},1,"research",raw_joint_metric_evidence=joint)
     raw,a,b=item("raw",.2,.20),item("a",.5,.24),item("b",.8,.28)
     provider_=DecisionProvider(p,Resolver())
@@ -87,19 +103,25 @@ def test_t68_original_unit_cumulative_raw_guard_rejects_laundered_steps():
     assert provider_._passes_raw_guards(b,(a,raw)) is False
 
 def _raw_candidate(name, metric_ids, metric_units, samples, dimensions=None, metrics=None,
-                   window_ids=("window",), scenario_ids=("scenario",)):
+                   window_ids=("window",), scenario_ids=("scenario",), plan="plan", context="ctx",
+                   pairing=None, data_snapshot="data"):
     samples=tuple(samples); execution=("s","i","r","cpu","p","m")
-    semantic={"context":"ctx","plan":"plan","replicates":["r1","r2"],
+    identity=(name,"recipe","state",data_snapshot,"universe","label","values:"+name)
+    pairing=pairing or ("plan-content:"+plan,"samples","times","mask")
+    semantic={"context":context,"plan":plan,"pairing":pairing,"replicates":["r1","r2"],
         "metrics":list(metric_ids),"metric_units":list(metric_units),
         "window_ids":list(window_ids),"scenario_ids":list(scenario_ids),
-        "samples":json.loads(json.dumps(samples)),"qualification":"research","execution":execution}
+        "samples":json.loads(json.dumps(samples)),"qualification":"research","execution":execution,"candidate":identity}
     digest=hashlib.sha256(json.dumps(semantic,sort_keys=True,separators=(",", ":")).encode()).hexdigest()
-    raw=RawJointMetricEvidence("joint:"+name,digest,"ctx","plan",("r1","r2"),tuple(metric_ids),
+    raw=RawJointMetricEvidence("joint:"+name,digest,context,plan,("r1","r2"),tuple(metric_ids),
         samples,"research",window_ids=tuple(window_ids),scenario_ids=tuple(scenario_ids),
         source_tree_hash="s",implementation_hash="i",route="r",backend="cpu",
-        parameter_domain_hash="p",metric_instance_hash="m",metric_units=tuple(metric_units))
+        parameter_domain_hash="p",metric_instance_hash="m",metric_units=tuple(metric_units),
+        candidate_id=name,recipe_hash="recipe",fitted_state_hash="state",data_snapshot_hash=data_snapshot,
+        universe_hash="universe",label_hash="label",value_artifact_hash="values:"+name,
+        resampling_plan_content_hash=pairing[0],sample_identity_hash=pairing[1],time_identity_hash=pairing[2],common_mask_hash=pairing[3])
     return CandidateEvidence(name,("ev",),"FINAL",dimensions or {},metrics or {},1.,"research",
-        raw_joint_metric_evidence=raw,qualification_ref="q")
+        raw_joint_metric_evidence=raw,qualification_ref="q",evidence_bundle_ref="ev")
 
 def test_t02_required_dimension_ids_are_unique_and_empty_means_no_dimension_gate():
     rule=MetricRule("ic",UtilityDirection.HIGHER_IS_BETTER,1,0,1)
@@ -179,3 +201,112 @@ def test_gate_statistic_is_explicit_hashed_and_does_not_equate_caller_scalar_to_
     p=SelectionPolicySpec("gate-stat","1",(base,),{})
     c=_raw_candidate("raw",("ic",),("dimensionless",),((((.6,),),),(((.8,),),)),metrics={"ic":999})
     assert provider(p).decide(request(p,[c])).winner_id == "raw"
+
+def test_m05_swapped_candidate_bound_raw_evidence_is_rejected_before_scoring():
+    p=SelectionPolicySpec("identity","1",(MetricRule("ic",UtilityDirection.HIGHER_IS_BETTER,1,0,1),),{})
+    a=_raw_candidate("a",("ic",),("dimensionless",),((((.6,),),),(((.7,),),)))
+    b=CandidateEvidence("b",a.evidence_refs,a.fidelity,a.dimensions,a.metrics,a.coverage,
+        a.qualification_scope,raw_joint_metric_evidence=a.raw_joint_metric_evidence,qualification_ref="q")
+    result=provider(p).decide(request(p,[a,b]))
+    assert result.eligibility["b"] is False
+    assert any(r.candidate_id=="b" and r.gate_id=="candidate_identity" for r in result.gate_receipts)
+
+def test_m06_unit_mismatch_disqualifies_even_a_lone_baseline():
+    p=SelectionPolicySpec("units","1",(MetricRule("ic",UtilityDirection.HIGHER_IS_BETTER,1,0,1,unit="fraction"),),{})
+    raw=_raw_candidate("raw",("ic",),("percent",),((((.6,),),),(((.7,),),)))
+    result=provider(p).decide(request(p,[raw]))
+    assert result.winner_id is None and not result.eligibility["raw"]
+
+def test_m07_equivalence_uses_equivalence_band_not_ni_margin():
+    p=SelectionPolicySpec("eq","1",(MetricRule("ic",UtilityDirection.HIGHER_IS_BETTER,1,0,1),),{},
+        noninferiority_margin=.20,equivalence_margin=.01)
+    raw=_raw_candidate("raw",("ic",),("dimensionless",),((((.7,),),),(((.7,),),)))
+    down=_raw_candidate("down",("ic",),("dimensionless",),((((.6,),),),(((.65,),),)))
+    result=provider(p).decide(request(p,[raw,down]))
+    assert result.relationship["down"] is Relationship.NONINFERIOR
+
+def test_m08_bad_named_axes_is_isolated_without_aborting_batch():
+    p=SelectionPolicySpec("axes","1",(MetricRule("ic",UtilityDirection.HIGHER_IS_BETTER,1,0,1),),{})
+    raw=_raw_candidate("raw",("ic",),("dimensionless",),((((.7,),),),(((.7,),),)))
+    bad=_raw_candidate("bad",("ic",),("dimensionless",),((((.8,),),),(((.8,),),)),window_ids=("other",))
+    result=provider(p).decide(request(p,[raw,bad]))
+    assert result.winner_id=="raw" and result.point_utility["bad"] is None
+
+def test_m09_original_raw_guard_requires_exact_context_and_plan():
+    p=SelectionPolicySpec("pair","1",(MetricRule("ic",UtilityDirection.HIGHER_IS_BETTER,1,0,1,noninferiority_delta=.2),),{})
+    left=_raw_candidate("left",("ic",),("dimensionless",),((((.7,),),),(((.7,),),)),plan="P")
+    other=_raw_candidate("other",("ic",),("dimensionless",),((((.6,),),),(((.6,),),)),plan="Q")
+    assert provider(p)._passes_raw_guards(left,(other,)) is False
+
+def test_m09_same_plan_ref_and_replicate_names_cannot_hide_different_plan_content():
+    p=SelectionPolicySpec("pair-content","1",(MetricRule("ic",UtilityDirection.HIGHER_IS_BETTER,1,0,1),),{})
+    samples=((((.7,),),),(((.7,),),))
+    left=_raw_candidate("left",("ic",),("dimensionless",),samples,pairing=("content:P","samples","times","mask"))
+    right=_raw_candidate("right",("ic",),("dimensionless",),samples,pairing=("content:Q","samples","times","mask"))
+    assert provider(p)._passes_raw_guards(left,(right,)) is False
+
+def test_m09_same_pair_draws_cannot_compare_different_data_snapshot():
+    p=SelectionPolicySpec("pair-data","1",(MetricRule("ic",UtilityDirection.HIGHER_IS_BETTER,1,0,1),),{})
+    samples=((((.7,),),),(((.7,),),))
+    left=_raw_candidate("left",("ic",),("dimensionless",),samples,data_snapshot="data:A")
+    right=_raw_candidate("right",("ic",),("dimensionless",),samples,data_snapshot="data:B")
+    assert provider(p)._passes_raw_guards(left,(right,)) is False
+
+def test_m10_raw_guard_uses_policy_weighted_effect_within_replicate():
+    p=SelectionPolicySpec("estimand","1",(MetricRule("ic",UtilityDirection.HIGHER_IS_BETTER,1,0,1,noninferiority_delta=0),),{},
+        window_ids=("main","stress"),window_weights=(.99,.01))
+    left=_raw_candidate("left",("ic",),("dimensionless",),
+        ((((.02,),),((-1.,),)),(((.02,),),((-1.,),))),window_ids=("main","stress"))
+    right=_raw_candidate("right",("ic",),("dimensionless",),
+        ((((0.,),),((0.,),)),(((0.,),),((0.,),))),window_ids=("main","stress"))
+    assert provider(p)._passes_raw_guards(left,(right,)) is True
+
+def test_m11_required_grade_and_health_identity_are_evidence_bound():
+    with pytest.raises(ValueError,match="unknown dimension grade"):
+        CandidateEvidence("x",("e",),"FINAL",{"quality":"invented"},{},1,"research")
+    p=policy(); raw=candidate("raw")
+    spoof=CandidateEvidence(raw.candidate_id,raw.evidence_refs,raw.fidelity,raw.dimensions,raw.metrics,.99,
+        raw.qualification_scope,raw_joint_metric_evidence=raw.raw_joint_metric_evidence,qualification_ref="q",
+        health_evidence_ref="health",health_candidate_id="raw",health_coverage=.5)
+    assert provider(p).decide(request(p,[spoof])).winner_id is None
+
+def test_m12_qualification_ref_changes_request_identity_and_retained_is_not_eligible():
+    p=policy(); raw=candidate("raw"); challenger=candidate("zzz")
+    changed=CandidateEvidence(raw.candidate_id,raw.evidence_refs,raw.fidelity,raw.dimensions,raw.metrics,raw.coverage,
+        raw.qualification_scope,raw_joint_metric_evidence=raw.raw_joint_metric_evidence,qualification_ref="q2",
+        health_evidence_ref=raw.health_evidence_ref,health_candidate_id="raw",health_coverage=raw.health_coverage)
+    assert request(p,[raw]).candidate_set_hash != request(p,[changed]).candidate_set_hash
+    result=provider(p).decide(request(p,[raw,challenger]))
+    assert result.eligible_ids == ("raw","zzz") and result.retained_ids == ("raw",)
+
+def test_policy_hash_binds_frozen_estimand_and_qualification_suite():
+    rule=(MetricRule("ic",UtilityDirection.HIGHER_IS_BETTER,1,0,1),)
+    assertions=["golden"]
+    base=SelectionPolicySpec("hash","1",rule,{},required_qualification_assertions=assertions)
+    before=base.content_hash
+    assertions.append("late")
+    assert base.required_qualification_assertions==("golden",) and base.content_hash==before
+    suite=SelectionPolicySpec("hash","1",rule,{},qualification_suite_id="qe.other.v1")
+    changed=SelectionPolicySpec("hash","1",rule,{},effect_estimand="weighted_window_scenario_mean_within_replicate",
+        required_qualification_assertions=("golden","parity"))
+    assert len({before,suite.content_hash,changed.content_hash})==3
+
+def test_m12_production_requires_separate_purpose_scoped_use_admission():
+    class Admission:
+        content_hash="admission-hash"
+        def require_use_admission(self, *, purpose, candidate_id, **kwargs):
+            if (purpose,candidate_id)!=("PRODUCTION","raw"): raise ValueError("wrong scope")
+    class ProductionResolver(Resolver):
+        current_time="2026-09-09T00:00:00Z"
+        current_revocation_epoch=1
+        def resolve(self, ref): return Admission() if ref=="admit" else Receipt()
+    p=policy(); raw=candidate("raw")
+    production=DecisionRequest("prod",p.policy_id,p.content_hash,"ctx","PRODUCTION","final","raw",(raw,),"FINAL","family")
+    assert DecisionProvider(p,ProductionResolver(p),ProductionResolver(p)).decide(production).winner_id is None
+    admitted=CandidateEvidence(raw.candidate_id,raw.evidence_refs,raw.fidelity,raw.dimensions,raw.metrics,raw.coverage,
+        raw.qualification_scope,raw_joint_metric_evidence=raw.raw_joint_metric_evidence,qualification_ref="q",
+        health_evidence_ref=raw.health_evidence_ref,health_candidate_id="raw",health_coverage=raw.health_coverage,
+        use_admission_ref="admit",evidence_bundle_ref=raw.evidence_bundle_ref)
+    production=DecisionRequest("prod",p.policy_id,p.content_hash,"ctx","PRODUCTION","final","raw",(admitted,),"FINAL","family")
+    resolver=ProductionResolver(p)
+    assert DecisionProvider(p,resolver,resolver).decide(production).winner_id=="raw"

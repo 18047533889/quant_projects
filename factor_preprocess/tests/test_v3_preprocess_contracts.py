@@ -183,7 +183,7 @@ def test_public_recipe_execution_uses_single_panel_boundary():
             RecipeStep("rank", "CS_RANK:pct", "cs_rank", "representation", parameters={"pct": True}),
         ),
     )
-    executor = get_default_registry().get_recipe_execution(recipe)
+    executor = get_default_registry().get_recipe_execution(recipe, allow_research=True)
     result = executor(frame)
     assert result.notna().all()
     assert executor.runtime_stats["recipe_input_load_count"] == 1

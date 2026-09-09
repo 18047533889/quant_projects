@@ -10,6 +10,7 @@ from enum import Enum
 from typing import Iterable, Mapping, Optional, Tuple
 import numpy as np
 from itertools import combinations
+import hashlib
 
 from quant_evaluator.contracts.factor_batch import FactorBatch
 
@@ -61,10 +62,20 @@ class PairwiseWindowEvidence:
     daily_pair_counts: Tuple[int, ...]
     confidence_interval: Tuple[Optional[float], Optional[float]]
     uncertainty_scale: str = "raw_correlation_hac_daily_corr"
+    start_index: Optional[int] = None
+    end_index: Optional[int] = None
+    universe_ref: str = ""
+    sample_ref: str = ""
 
     def __post_init__(self) -> None:
         if not self.window_ref:
             raise ValueError("window_ref is required")
+        if (isinstance(self.start_index, bool) or isinstance(self.end_index, bool) or
+                not isinstance(self.start_index, int) or not isinstance(self.end_index, int) or
+                self.start_index < 0 or self.start_index >= self.end_index):
+            raise ValueError("window requires valid non-boolean [start_index, end_index)")
+        if not self.universe_ref or not self.sample_ref:
+            raise ValueError("window universe_ref and sample_ref are required")
         if self.uncertainty_scale != "raw_correlation_hac_daily_corr":
             raise ValueError("uncertainty_scale must declare raw-correlation HAC semantics")
         object.__setattr__(self, "daily_pair_counts", tuple(self.daily_pair_counts))
@@ -78,6 +89,12 @@ class PairwiseWindowEvidence:
                 raise ValueError("confidence interval must be ordered or wholly unavailable")
         elif self.correlation is not None or lo is not None or hi is not None:
             raise ValueError("non-computed window cannot carry value or uncertainty")
+
+    @property
+    def window_identity(self) -> str:
+        payload = "\x1f".join((self.universe_ref, self.sample_ref,
+                               str(self.start_index), str(self.end_index)))
+        return "qe-window:" + hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
 @dataclass(frozen=True)
@@ -104,7 +121,10 @@ class PairwiseCorrelationArtifact:
             raise ValueError("method must be 'pearson' or 'spearman'")
         if not self.window_ref or not self.universe_ref or not self.sample_ref:
             raise ValueError("window_ref, universe_ref, and sample_ref are required")
-        if self.pair_count < 0 or self.n_days < 0:
+        if (isinstance(self.pair_count, bool) or isinstance(self.n_days, bool) or
+                not isinstance(self.pair_count, (int, np.integer)) or
+                not isinstance(self.n_days, (int, np.integer)) or
+                self.pair_count < 0 or self.n_days < 0):
             raise ValueError("pair_count and n_days must be non-negative")
         object.__setattr__(self, "daily_pair_counts", tuple(self.daily_pair_counts))
         if sum(self.daily_pair_counts) != self.pair_count:
@@ -121,6 +141,11 @@ class PairwiseCorrelationArtifact:
         object.__setattr__(self, "windows", tuple(self.windows))
         if len({window.window_ref for window in self.windows}) != len(self.windows):
             raise ValueError("pairwise window refs must be unique")
+        if len({window.window_identity for window in self.windows}) != len(self.windows):
+            raise ValueError("pairwise windows must have unique time/sample identities")
+        if any(window.universe_ref != self.universe_ref or window.sample_ref != self.sample_ref
+               for window in self.windows):
+            raise ValueError("pairwise windows must match parent universe/sample identity")
 
 
 def _measure_pair(x: np.ndarray, y: np.ndarray, method: str, min_obs: int):
@@ -204,6 +229,8 @@ def compute_pairwise_artifacts(
                 window_evidence.append(PairwiseWindowEvidence(
                     ref, wcorr, wstatus, int(wmask.sum()),
                     sum(v > 0 for v in wcounts), wcounts, ci,
+                    start_index=start, end_index=end,
+                    universe_ref=universe_ref, sample_ref=sample_ref,
                 ))
             artifacts.append(PairwiseCorrelationArtifact(
                 factor_batch.factor_ids[i], factor_batch.factor_ids[j], corr, status,

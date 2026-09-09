@@ -32,7 +32,15 @@ def test_huber_no_intercept_control_and_outlier_robustness():
     x = np.arange(1.0, 31.0)
     y = 2.0 * x
     np.testing.assert_allclose(_huber_irls_fit(x, y, False), (0.0, 2.0), atol=1e-12)
-    contaminated = 3.0 + 2.0 * x
+    # With 29 exact inliers and one outlier, adaptive MAD is zero and the
+    # estimating equation has no positive-scale solution: fail closed.
+    degenerate = 3.0 + 2.0 * x
+    degenerate[-1] += 500.0
+    assert _huber_irls_fit(x, degenerate, True) is None
+
+    # A deterministic noisy cross-section has a defined positive MAD and keeps
+    # the intended Huber robustness contract.
+    contaminated = 3.0 + 2.0 * x + 0.05 * np.sin(x)
     contaminated[-1] += 500.0
     intercept, slope = _huber_irls_fit(x, contaminated, True)
     ols_slope = float(np.polyfit(x, contaminated, 1)[0])
