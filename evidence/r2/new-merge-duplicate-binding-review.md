@@ -1,6 +1,8 @@
 # G12 duplicate top-level binding review
 
-Date: 2026-09-09. Formal tree: `/home/sunhaiwei/quant_projects`; scan snapshot HEAD `d561be0670ae5eb7af8a1113d2d9fc7900fc1861`.
+Date: 2026-09-09. Formal tree: `/home/sunhaiwei/quant_projects`.
+Correction: the initially transcribed scan HEAD was not a resolvable Git object and is not used as evidence. Root independently repeated the authoritative-source scan on HEAD `87c69f5e0dabc3d56f915097b56cf84b7a405f84`.
+`new-merge-duplicate-recheck.json` retains actual per-file hashes: 1,626 files, zero parse errors, zero duplicate top-level definitions; source-tree SHA256 `f4c2645d200ba2e73781ae902a165d3f5e9e00e0c86645ace2514a2a5ed690e6`. Three invalid-escape SyntaxWarnings were printed, not parse failures. Generated-build observations below are from the earlier bounded review, not the root recheck.
 
 This was a read-only AST scan of Python source under FactorEngine, DataAccess, and FactorPreprocess. Tests, virtual environments, caches, distributions, and egg metadata were excluded. No definition was mechanically deleted.
 

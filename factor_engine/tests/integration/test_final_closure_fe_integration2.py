@@ -23,15 +23,18 @@
 """
 from __future__ import annotations
 
+import hashlib
 import numpy as np
 import pandas as pd
 import pytest
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from data_access.core.exceptions import ValidationError as DAValidationError
 
 from factor_engine.storage.data_scope import compute_data_scope
 from factor_engine.storage.materializer import ParquetMaterializer
+from factor_engine.storage.materialize import lake_publish as lake_publish_module
 from factor_engine.storage.materialize.lake_publish import publish_factor_lake
 from factor_engine.storage.sources.composite_source import CompositeDataSource
 from factor_engine.storage.sources.data_access_source import (
@@ -427,12 +430,70 @@ def _published_lake(tmp_path):
     return pub
 
 
+def _publish_identity(published_dir, factor_id):
+    """Create identity and coverage proof through the production producers."""
+    from factor_engine.runtime import materialize_batch as mb
+
+    inventory = lake_publish_module._factor_inventory(published_dir)
+    manifest_digest = lake_publish_module._inventory_digest(inventory)
+    frame = pd.read_parquet(published_dir / "part.parquet")
+    run_id = f"fixture-run-{manifest_digest[:16]}"
+    generation_id = hashlib.sha256(
+        f"{factor_id}:{run_id}:{manifest_digest}".encode("utf-8")
+    ).hexdigest()
+    interval = {
+        "start": pd.Timestamp(frame["datetime"].min()).tz_localize("UTC").isoformat(),
+        "end": pd.Timestamp(frame["datetime"].max()).tz_localize("UTC").isoformat(),
+        "expected_rows": len(frame),
+        "observed_rows": len(frame),
+    }
+    receipt = mb.WriteReceipt(
+        generation_id=generation_id,
+        expected_items=(factor_id,),
+        items={factor_id: mb.WriteItemReceipt(
+            factor_id,
+            state=mb.WriteState.COMMITTED,
+            rows=len(frame),
+            run_id=run_id,
+            inventory_digest=manifest_digest,
+            inventory=inventory,
+        )},
+        manifest_digest=f"fixture-dependency-{manifest_digest}",
+        idempotency_key=generation_id,
+    ).to_dict()
+    receipt = lake_publish_module.produce_coverage_receipt(
+        factor_id=factor_id,
+        materialization_receipt=receipt,
+        expected_keys=(
+            (row.datetime, row.asset) for row in frame.itertuples(index=False)
+        ),
+        universe_snapshot="fixture-universe",
+        calendar_id="fixture-calendar",
+        market_timezone="UTC",
+        frequency="1d",
+        coverage_intervals=[interval],
+    )
+    return lake_publish_module.write_staging_identity(
+        factor_id=factor_id,
+        materialization_receipt=receipt,
+        coverage_intervals=[interval],
+        coverage_complete=True,
+        frequency="1d",
+    )
+
+
 class _PublishStore:
     """fake DA store：resolve_dataset_path + 可选失败的 publish_from_staging。"""
 
     def __init__(self, published_dir, *, fail_publish=False):
         self._dir = published_dir
         self._fail = fail_publish
+
+    def get_dataset(self, dataset):
+        return SimpleNamespace(
+            name=dataset,
+            storage={"type": "local", "root": str(self._dir)},
+        )
 
     def resolve_dataset_path(self, dataset, factor_id=None):
         return self._dir
@@ -459,6 +520,7 @@ def test_publish_failure_keeps_watermark_unchanged(tmp_path):
     pub = _published_lake(tmp_path)
     fake = _PublishStore(pub, fail_publish=True)
     with patch("data_access.get_store", return_value=fake):
+        identity = _publish_identity(pub, "wm_fail")
         with pytest.raises(RuntimeError, match="publish failed"):
             publish_factor_lake(
                 factor_id="wm_fail",
@@ -466,6 +528,11 @@ def test_publish_failure_keeps_watermark_unchanged(tmp_path):
                 approve=True,
                 sync_from_local=False,
                 reconcile=False,
+                expected_staging_generation=identity["generation_id"],
+                expected_manifest_digest=identity["manifest_digest"],
+                expected_run_id=identity["run_id"],
+                frequency="1d",
+                universe_snapshot="fixture-universe",
             )
     # staging 成功但 publish 失败 → 权威水位线 unchanged（None）
     assert mat.catalog.get_watermark("wm_fail") is None
@@ -476,16 +543,27 @@ def test_publish_success_advances_watermark_exactly_once(tmp_path):
     pub = _published_lake(tmp_path)
     fake = _PublishStore(pub, fail_publish=False)
     with patch("data_access.get_store", return_value=fake):
+        identity = _publish_identity(pub, "wm_ok")
         result = publish_factor_lake(
             factor_id="wm_ok",
             lake_root=tmp_path,
             approve=True,
             sync_from_local=False,
             reconcile=False,
+            expected_staging_generation=identity["generation_id"],
+            expected_manifest_digest=identity["manifest_digest"],
+            expected_run_id=identity["run_id"],
+            frequency="1d",
+            universe_snapshot="fixture-universe",
         )
         wm = result["watermark"]
         assert wm is not None
-        assert wm["start_date"] <= "2024-01-15" <= wm["end_date"]
+        target_date = pd.Timestamp("2024-01-15", tz="UTC")
+        assert (
+            pd.Timestamp(wm["start_date"])
+            <= target_date
+            <= pd.Timestamp(wm["end_date"])
+        )
         assert wm["row_count"] == 2
         # 再 publish 一次：幂等，不重复推进（start/end/row_count 一致，仅
         # last_updated 更新）
@@ -495,11 +573,38 @@ def test_publish_success_advances_watermark_exactly_once(tmp_path):
             approve=True,
             sync_from_local=False,
             reconcile=False,
+            expected_staging_generation=identity["generation_id"],
+            expected_manifest_digest=identity["manifest_digest"],
+            expected_run_id=identity["run_id"],
+            frequency="1d",
+            universe_snapshot="fixture-universe",
         )
         wm2 = result2["watermark"]
         assert wm2 is not None
         for key in ("start_date", "end_date", "row_count"):
             assert wm2[key] == wm[key], f"watermark {key} 被重复推进：{wm} → {wm2}"
+
+
+def test_publish_rejects_wrong_expected_staging_identity(tmp_path):
+    mat = _register_factor(tmp_path, "wm_wrong_identity")
+    pub = _published_lake(tmp_path)
+    fake = _PublishStore(pub, fail_publish=False)
+    with patch("data_access.get_store", return_value=fake):
+        identity = _publish_identity(pub, "wm_wrong_identity")
+        with pytest.raises(ValueError, match="stale staging generation"):
+            publish_factor_lake(
+                factor_id="wm_wrong_identity",
+                lake_root=tmp_path,
+                approve=True,
+                sync_from_local=False,
+                reconcile=False,
+                expected_staging_generation=identity["generation_id"] + "-wrong",
+                expected_manifest_digest=identity["manifest_digest"],
+                expected_run_id=identity["run_id"],
+                frequency="1d",
+                universe_snapshot="fixture-universe",
+            )
+    assert mat.catalog.get_watermark("wm_wrong_identity") is None
 
 
 # ---------------------------------------------------------------------------

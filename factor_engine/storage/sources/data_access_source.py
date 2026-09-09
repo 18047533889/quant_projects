@@ -2515,13 +2515,12 @@ class DataAccessSource(DataSource):
             physical = list(physical) + [lqtp_extra_factor]
         store = _get_store()
         ds, normalize, unit = self._adapter_options(store)
-        # Freeze the actual representation for this request. Approved lazy reads
-        # stay governed by ScanHandle and are identity-checked before and after
-        # collection. Numeric normalization follows this actual representation.
+        # Freeze the actual representation for this request. Approved reads
+        # retain the checked eager ReadHandle route until lazy results expose
+        # equivalent exact content identity. Unapproved lazy keeps its adapter.
         use_lazy_read = bool(
             self._lazy_scan
             and request_approved_digest is None
-            and callable(getattr(store, "scan", None))
             and self.instrument_filter != []
         )
         logger.info(
@@ -2537,7 +2536,6 @@ class DataAccessSource(DataSource):
             from factor_engine.backend.polars_lazy import scan_dataset_columns
 
             previous_lazy_bundle = self._lazy_bundle
-            lazy_identity: dict[str, Any] = {}
             fetched = scan_dataset_columns(
                 store,
                 self.dataset,
@@ -2553,29 +2551,26 @@ class DataAccessSource(DataSource):
                 bundle=self._lazy_bundle,
                 mode=self.read_mode,
                 filters=self.semantic_filters or None,
-                approved_content_digest=request_approved_digest,
-                identity_out=lazy_identity,
             )
-            observed_snapshot_id = lazy_identity.get("snapshot_id")
             if self._lazy_bundle is not None:
                 observed_snapshot_id = self._lazy_bundle.snapshot_id
-            if (
-                resolved
-                and observed_snapshot_id
-                and (
-                    not request_snapshot_id
-                    or observed_snapshot_id != request_snapshot_id
-                )
-            ):
-                self.clear_cache(reset_snapshot=False)
-                if previous_lazy_bundle is None and self._lazy_bundle is not None:
-                    close = getattr(self._lazy_bundle, "close", None)
-                    if callable(close):
-                        close()
-                raise ApprovedSnapshotMismatch(
-                    "request cache hits and lazy read belong to different snapshots"
-                )
-            self._record_read_snapshot(observed_snapshot_id)
+                if (
+                    resolved
+                    and observed_snapshot_id
+                    and (
+                        not request_snapshot_id
+                        or observed_snapshot_id != request_snapshot_id
+                    )
+                ):
+                    self.clear_cache(reset_snapshot=False)
+                    if previous_lazy_bundle is None:
+                        close = getattr(self._lazy_bundle, "close", None)
+                        if callable(close):
+                            close()
+                    raise ApprovedSnapshotMismatch(
+                        "request cache hits and lazy read belong to different snapshots"
+                    )
+                self._record_read_snapshot(observed_snapshot_id)
         else:
             # 引擎/结果形态交给 DataAccess 成本路由（read_auto 语义下沉到 DataAccess）。
             # #9/#12 单位归一化由 DataAccess 输出层完成（SemanticFieldCatalog scale），
@@ -2834,9 +2829,9 @@ class DataAccessSource(DataSource):
         else:
             self.load_columns(names)
 
+    def _prefetch_lazy_bundle(self, names: list[str]) -> None:
+        request_approved_digest = getattr(self, "_approved_content_digest", None)
         if request_approved_digest is not None:
-            self.load_columns(names)
-            return
             self.load_columns(names)
             return
         needed = [name for name in names if name not in self._column_cache]
@@ -2879,7 +2874,6 @@ class DataAccessSource(DataSource):
             time_column=ds.time_column,
             instrument_column=ds.instrument_column,
             time_range=self._time_range(),
-            approved_content_digest=request_approved_digest,
             instrument_filter=self.instrument_filter,
             output_names=merged_output or None,
             normalize_timestamp=normalize,

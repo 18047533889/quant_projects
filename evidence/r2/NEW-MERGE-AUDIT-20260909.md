@@ -86,3 +86,29 @@
 真实读取/吞吐验收需要已批准业务profile及明确只读/非生产输出目标；旧worker生效需要排空/重启授权。B10需要确认统计cohort政策，不能由性能目标代替数学决策。G08/G09及生产持久资格链仍有实际接线工作，不能称为仅缺测试或全部完成。
 
 所有修改保留在唯一正式主代码区。剩余磁盘约786GB（2026-09-09本轮检查），没有删除正式数据或未裁决历史代码。
+
+## 最终附录：以后置实际回执为准
+
+1. **核心综合回归：607 passed、1 xfailed、93 warnings**。精确42文件命令、源码全清单及前后摘要：`main_merge_20260909/new49_frozen.json`，实际日志同名 `.log`。该运行无 `-k`，新增数学/桥接/关系/存储/缺失原因/跨包和11个默认资源、resume测试文件整文件执行。运行期间唯一变更为**未列入该命令**的 `factor_engine/tests/integration/test_final_closure_fe_integration2.py` 夹具，运行源码未变化；回执如实为 SOURCE_CHANGED_DURING_RUN，不能说整棵树不可变。
+2. **FP全套最终：406 passed、1 xfailed、4 warnings**，`new-merge-fp-frozen.log/.xml`。`new-merge-fp-frozen-before.json` 与 `new-merge-fp-frozen-after.json` 逐字一致，含源码摘要及清单。两轮相同用例不相加为独立覆盖率。
+3. 两项 xfail 各自保留原因：FE safe multi-wave worker epoch reuse 尚未实现（`test_multi_wave_epoch_reuses_pid_only_after_ownership_proof`）；FP `hp_filter` 全 lagged sample 离线目标非prefix-causal，已标 OFFLINE_ONLY、禁止生产（`test_hp_filter_is_prefix_invariant`）。都不是通过或已完成能力。
+4. 保留失败历史：`new-merge-bridge-fixtures-final.log` 的37 failed/38 passed是旧多输入夹具及隐式research调用；修复后同类夹具63 passed并进入上述607范围。`main_merge_20260909/new49_final.log` 的1 failed/521 passed抓到D02撤销遗留的 `callable(store.scan)` 分支条件，已删除，非批准路径保留原lazy adapter兼容，最终607通过。未删失败条件或放松生产门。
+5. 三份新增测试曾覆盖中央 `strict_fiscal_parameter_domain_certification_guard`；root复核后已删除这些no-op覆盖。`logs/v9-owned-tests-with-central-guard.log` 是66 passed/74 deselected的独立选定回归，最终607运行没有这个名称筛选并使用原中央guard。此前较小范围日志不冒充完整认证。
+6. D01最终实现在 `data_access_source.py`，SHA256 `a0662e6f2ee48fcdac56fb754351d410b3a54eecbc66ea9abe92a754e394fcf9`：请求实际单位状态、空筛选typed schema、`UNIT_NORMALIZATION_ALGORITHM_ID` 纳入持久source_dependency_hash，算法身份变化只清理该source的缓存，保留snapshot。新冷暖identity测试进入607范围；未全局清空历史数据。
+7. **D02未完成，且未半开默认路径**。真实 `ScanHandle.collect()` 返回的 `ReadResult.snapshot` 是 `DataSnapshot`，没有 `ResolvedSourceSnapshot.content_digest`；早期mock后置校验不能用于实际读取。这轮D02实验helpers已窄撤，`polars_lazy.py`/`scan_handle.py` 相对进入时6b610d无新增变化；本轮失败实验测试移除，不计通过。批准内容路径维持eager ReadHandle精确检查。后续需把真实DataReadIdentity或经过验证的文件集映射完整接入，而非给测试snapshot塞假摘要。
+8. B02最终IR权威 SHA256 `109d79c2a2885fc02e584c4892feda05bae22af981a7a626aefdba0240af53a9`：真实catalog复权价格→returns/pct_change→ReturnDecimal已贯通；泛化数值变化/对收益再pct不冒充金融收益，明确类型不被遗留price_basis覆盖。测试不代表真实批准profile执行。
+9. B12私有核也在结果数组分配前拒绝不可能参数组合，新增2个allocation-negative测试进入607范围；没有为参数错误先分配整面板。
+10. G11证据的正确路径是 `new-merge-g11-pareto-contract-review.md`（表内简写链接以此为准）。74个具名合同测试范围不等于不存在的FO→FA生产assembler接线。
+11. G12 root独立复查：`new-merge-duplicate-recheck.json`，1,626文件、0解析错误、0重复顶层函数/类，带实际全文件hash。先前人工抄录的无效Git对象已在 `new-merge-duplicate-binding-review.md` 纠正，没有把错误身份作为关闭证据。陈旧build目录候选仅列账，不误删正式源码/历史独有代码。
+12. `new-merge-operator-manifest.json` 经当前真实bootstrap重新导出，**1,756 entries**、约3.8MB。导出基线87c69f5e，实际工作树仍dirty；metadata是目录声明，不是1,756算子的独立数学/所有后端认证。环境版本见 `new-merge-environment.json`。
+13. 外部在实施期间连续产生“V10实现波/尾随”提交；本任务未执行。当前回执记录基线 `87c69f5e0dabc3d56f915097b56cf84b7a405f84`，之后的窄修留在同一main工作树；保留外部提交，不回退、不推送。
+14. 本轮自建小补丁已清理，正式代码和有界日志保留。没有复制仓库/数据集，也没有删除生产数据。大规模COS/真实数据/worker重启仍未执行。
+
+退出边界仍以49项表中的PARTIAL/EXTERNAL_NOT_RUN为准：D02工程接线、G08逐行PIT与版本批准、G09全链路逐单元原因、G10真实批准上下文执行、G11真实消费者、G12历史语义与旧worker、R01完整跨波恢复、Q01逐算子数学/后端、P01真实100K性能，以及B10统计政策均未被这批局部通过替代。
+
+### 发布夹具最后复核与稳定身份
+
+`main_merge_20260909/new49_publish_final.json`：发布整文件+D01实际单位及缓存身份两文件，**48 passed、4 warnings**，无筛选；源码前后摘要一致：`2ae74b5d3609bc8753dea77e5fe8946c5f4d425a04f2f4363a93819bed48cbc5`，status=PASS。
+发布fixture显式声明LOCAL storage，使用真实临时Parquet及正式 `produce_coverage_receipt` / `write_staging_identity` 生成coverage/manifest/generation身份，补齐expected参数；没有手写假coverage proof或禁用发布校验。保留失败watermark不变、成功幂等与错误generation拒绝断言。数据源仅测试fake store，不是生产发布/COS/真实数据认证。
+初次缺get_dataset的三失败及时间字符串格式的一失败分别保留在 `new-merge-publish-fixture-final.log`、`new-merge-publish-fixture-postfix-rerun.log`；聚焦3 passed在 `new-merge-publish-fixture-final-pass.log`，最终整文件由48项回执覆盖。不把重跑/重叠范围相加为唯一测试数。
+最终本任务未commit/push；基线87c69f5e及dirty源码摘要均记录。自身临时小补丁清理完成，未删除正式数据/历史独有代码。未完成工作仍如上表，不能宣称49项全部关闭。
