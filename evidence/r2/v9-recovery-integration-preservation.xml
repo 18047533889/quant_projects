@@ -1,0 +1,537 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="3" skipped="0" tests="80" time="231.044" timestamp="2026-09-09T12:59:31.235737+08:00" hostname="qs-compute-gpu-hk-01"><testcase classname="factor_engine.tests.runtime.test_v6_bounded_pipeline" name="test_physical_preflight_error_is_root_local_and_valid_peers_share_one_wave" time="0.845" /><testcase classname="factor_engine.tests.runtime.test_v6_bounded_pipeline" name="test_default_writer_timeout_reconciles_known_generation_without_rewrite" time="0.766" /><testcase classname="factor_engine.tests.runtime.test_v6_bounded_pipeline" name="test_worker_quarantine_aborts_run_terminalizes_ordinals_and_writes_receipt" time="0.092" /><testcase classname="factor_engine.tests.runtime.test_v6_bounded_pipeline" name="test_second_spawn_worker_start_failure_closes_first_and_aborts_all" time="1.588" /><testcase classname="factor_engine.tests.runtime.test_v6_bounded_pipeline" name="test_lost_writer_ack_reconciles_existing_generation_without_rewrite" time="1.340" /><testcase classname="factor_engine.tests.runtime.test_v6_bounded_pipeline" name="test_spawn_compute_exit_aborts_later_wave_without_reusing_proxy_binding" time="1.775" /><testcase classname="factor_engine.tests.runtime.test_v6_bounded_pipeline" name="test_manifest_duplicate_is_per_ordinal_rejection" time="0.012" /><testcase classname="factor_engine.tests.runtime.test_v6_bounded_pipeline" name="test_blocking_iterator_is_process_supervised" time="0.059" /><testcase classname="factor_engine.tests.runtime.test_v6_bounded_pipeline" name="test_retry_budget_is_persistent_and_shared" time="0.016" /><testcase classname="factor_engine.tests.runtime.test_v6_bounded_pipeline" name="test_durable_pipeline_executes_real_engine_path_and_artifact" time="0.761" /><testcase classname="factor_engine.tests.runtime.test_v6_bounded_pipeline" name="test_invalid_definition_does_not_abort_valid_ordinal" time="0.814" /><testcase classname="factor_engine.tests.runtime.test_v6_bounded_pipeline" name="test_actual_factor_engine_admits_two_root_wave_and_injects_scope" time="0.678" /><testcase classname="factor_engine.tests.runtime.test_v6_bounded_pipeline" name="test_actual_pandas_engine_writes_two_verified_numeric_artifacts" time="25.816" /><testcase classname="factor_engine.tests.runtime.test_v6_bounded_pipeline" name="test_oom_wave_is_not_blindly_retried" time="0.133" /><testcase classname="factor_engine.tests.runtime.test_v6_bounded_pipeline" name="test_uncontrolled_sink_timeout_is_failed_unknown_commit" time="1.453" /><testcase classname="factor_engine.tests.runtime.test_v6_bounded_pipeline" name="test_one_bad_output_does_not_fail_two_good_outputs" time="0.796" /><testcase classname="factor_engine.tests.runtime.test_v6_bounded_pipeline" name="test_ingestion_timeout_returns_partial_receipt" time="0.818" /><testcase classname="factor_engine.tests.runtime.test_v6_bounded_pipeline" name="test_spawn_factory_executes_without_pickling_engine" time="58.086" /><testcase classname="factor_engine.tests.runtime.test_v6_bounded_pipeline" name="test_large_result_is_rejected_before_pipe_and_small_peer_succeeds" time="0.808" /><testcase classname="factor_engine.tests.runtime.test_v6_bounded_pipeline" name="test_existing_state_paths_are_preserved_fail_closed" time="0.004" /><testcase classname="factor_engine.tests.runtime.test_v6_bounded_pipeline" name="test_lookahead_is_definition_byte_bounded" time="0.837" /><testcase classname="factor_engine.tests.runtime.test_v8_slot_failure_ownership" name="test_refill_ack_loss_while_a_is_held_keeps_b_slot_identity" time="2.485" /><testcase classname="factor_engine.tests.runtime.test_v8_slot_failure_ownership" name="test_cleanup_pending_primary_retains_broker_and_egress_when_final_close_succeeds" time="2.389" /><testcase classname="factor_engine.tests.runtime.test_v8_slot_failure_ownership" name="test_final_cleanup_errors_append_to_existing_slot_cleanup_errors" time="2.368" /><testcase classname="factor_engine.tests.runtime.test_v7_direct_artifact_pipeline" name="test_default_spawn_sinks_values_and_lost_descriptor_ack_exactly_reconciles" time="1.773"><failure message="factor_engine.runtime.supervised_worker.WorkerTransportFailed: worker transport failed after proven retirement: EOFError:">def exchange():
+        nonlocal request_dispatched_at
+        try:
+            if self._function is None:
+                payload = pickle.dumps((function, args, kwargs))
+            else:
+                payload = pickle.dumps(((function,) + args, kwargs))
+            request_dispatched_at = time.monotonic()
+            self._connection.send((request_id, payload))
+            del payload
+            while True:
+&gt;               rid, generation, ok, payload = self._connection.recv()
+                                               ^^^^^^^^^^^^^^^^^^^^^^^
+
+factor_engine/runtime/supervised_worker.py:549: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/usr/lib/python3.12/multiprocessing/connection.py:250: in recv
+    buf = self._recv_bytes()
+          ^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.12/multiprocessing/connection.py:430: in _recv_bytes
+    buf = self._recv(4)
+          ^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = &lt;multiprocessing.connection.Connection object at 0x775168970b00&gt;
+size = 4, read = &lt;built-in function read&gt;
+
+    def _recv(self, size, read=_read):
+        buf = io.BytesIO()
+        handle = self._handle
+        remaining = size
+        while remaining &gt; 0:
+            chunk = read(handle, remaining)
+            n = len(chunk)
+            if n == 0:
+                if remaining == size:
+&gt;                   raise EOFError
+E                   EOFError
+
+/usr/lib/python3.12/multiprocessing/connection.py:399: EOFError
+
+The above exception was the direct cause of the following exception:
+
+tmp_path = PosixPath('/tmp/pytest-of-sunhaiwei/pytest-3038/test_default_spawn_sinks_value0')
+
+    def test_default_spawn_sinks_values_and_lost_descriptor_ack_exactly_reconciles(tmp_path):
+        marker = tmp_path / "ack-lost"
+        modes = tmp_path / "modes"
+&gt;       receipt = execute_run_many_durable(
+            None,
+            [Factor("direct")],
+            policy=resolve_default_policy(),
+            artifact_root=tmp_path,
+            run_kwargs={"broker": Broker()},
+            engine_factory=build_ack_loss_engine,
+            engine_factory_config={"marker": str(marker), "modes": str(modes)},
+        )
+
+factor_engine/tests/runtime/test_v7_direct_artifact_pipeline.py:303: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+factor_engine/runtime/bounded_pipeline.py:2063: in execute_run_many_durable
+    winner, worker_result = _await_any_direct_slot(
+factor_engine/runtime/bounded_pipeline.py:627: in _await_any_direct_slot
+    return slot, slot.handle.result()
+                 ^^^^^^^^^^^^^^^^^^^^
+factor_engine/runtime/supervised_worker.py:228: in result
+    raise self._error
+factor_engine/runtime/supervised_worker.py:201: in invoke
+    self._result = worker._execute_async_entry(
+factor_engine/runtime/supervised_worker.py:472: in _execute_async_entry
+    return self._execute(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = &lt;factor_engine.runtime.supervised_worker.SupervisedReusableWorker object at 0x77516a188260&gt;
+function = [&lt;test_v7_direct_artifact_pipeline.Factor object at 0x77516a1890d0&gt;]
+args = ({}, 2097152, {'root': PosixPath('/tmp/pytest-of-sunhaiwei/pytest-3038/test_default_spawn_sinks_value0'), 'run_id': 'b...h=False), 'assignments': {'direct': (0, '21b637c329194aa3acaab32298d1ef3e')}, ...}, '83c8bf74043a469fbd9f37bf38942b70')
+kwargs = {}, timeout_seconds = 900.0, lease = None
+cancel_event = &lt;threading.Event at 0x77516a189340: unset&gt;
+expected_progress_ordinals = frozenset({0})
+
+    def _execute(self, function, args, kwargs, timeout_seconds, lease, cancel_event,
+                 expected_progress_ordinals):
+        try:
+            self.start()
+        except BaseException:
+            # Admission was transferred by execute(), including startup. A
+            # spawn/pickling failure must not leak it; a partially started or
+            # untracked process must still be observed dead before release.
+            if self.quarantined:
+                raise
+            if self._process is not None and self._process.pid is not None:
+                self._retire()
+            if lease is not None:
+                lease.release()
+            raise
+        assert self._process is not None
+        request_id = uuid.uuid4().hex
+        completed = threading.Event()
+        response = {}
+        progress_phases: dict[int, str] = {}
+        progress_times: dict[int, float] = {}
+        request_dispatched_at = 0.0
+        # A reusable worker must never attribute an earlier request's phase to
+        # a later request that times out before emitting its first frame.
+        self.last_progress = None
+    
+        def exchange():
+            nonlocal request_dispatched_at
+            try:
+                if self._function is None:
+                    payload = pickle.dumps((function, args, kwargs))
+                else:
+                    payload = pickle.dumps(((function,) + args, kwargs))
+                request_dispatched_at = time.monotonic()
+                self._connection.send((request_id, payload))
+                del payload
+                while True:
+                    rid, generation, ok, payload = self._connection.recv()
+                    if ok == "progress":
+                        received_at = time.monotonic()
+                        if (rid != request_id or generation != self.generation
+                                or type(payload) is not dict
+                                or set(payload) != {"phase", "ordinal", "monotonic"}
+                                or payload.get("phase") not in {"COMPUTE", "WRITE", "VERIFY_DONE"}
+                                or type(payload.get("ordinal")) is not int
+                                or payload.get("ordinal") &lt; 0
+                                or type(payload.get("monotonic")) not in (int, float)
+                                or not math.isfinite(payload.get("monotonic"))
+                                or payload.get("monotonic") &lt; request_dispatched_at
+                                or payload.get("monotonic") &gt; received_at):
+                            raise RuntimeError("invalid worker progress frame")
+                        ordinal = payload["ordinal"]
+                        phase = payload["phase"]
+                        if expected_progress_ordinals is None or ordinal not in expected_progress_ordinals:
+                            raise RuntimeError("worker progress ordinal is not assigned to this request")
+                        expected_phase = {
+                            None: "COMPUTE", "COMPUTE": "WRITE", "WRITE": "VERIFY_DONE",
+                        }.get(progress_phases.get(ordinal))
+                        if phase != expected_phase:
+                            raise RuntimeError("invalid worker progress phase transition")
+                        previous_time = progress_times.get(ordinal)
+                        if previous_time is not None and payload["monotonic"] &lt; previous_time:
+                            raise RuntimeError("worker progress timestamp moved backwards")
+                        progress_phases[ordinal] = phase
+                        progress_times[ordinal] = payload["monotonic"]
+                        self.last_progress = dict(payload)
+                        continue
+                    response["result"] = (rid, generation, ok, pickle.loads(payload))
+                    break
+            except BaseException as exc:
+                response["error"] = exc
+            finally:
+                completed.set()
+    
+        # poll() only guarantees a header, not a complete message. Supervise
+        # the full serialization/send/receive/decode operation instead.
+        self._transport = threading.Thread(target=exchange, daemon=True,
+                                           name="factor-v2-worker-ipc")
+        self._transport.start()
+        deadline = time.monotonic() + timeout_seconds
+        while not completed.is_set() and not cancel_event.is_set():
+            completed.wait(min(0.05, max(0.0, deadline - time.monotonic())))
+            if time.monotonic() &gt;= deadline:
+                break
+        if completed.is_set():
+            self._transport.join()
+            if "error" in response:
+                self._retire()
+                if lease is not None:
+                    lease.release()
+                error = response["error"]
+&gt;               raise WorkerTransportFailed(
+                    f"worker transport failed after proven retirement: {type(error).__name__}: {error}"
+                ) from error
+E               factor_engine.runtime.supervised_worker.WorkerTransportFailed: worker transport failed after proven retirement: EOFError:
+
+factor_engine/runtime/supervised_worker.py:603: WorkerTransportFailed</failure></testcase><testcase classname="factor_engine.tests.runtime.test_v7_direct_artifact_pipeline" name="test_bounded_root_queue_overlaps_next_compute_with_current_sink" time="0.011" /><testcase classname="factor_engine.tests.runtime.test_v7_direct_artifact_pipeline" name="test_large_default_spawn_output_bypasses_result_pickle_queue" time="1.761" /><testcase classname="factor_engine.tests.runtime.test_v7_direct_artifact_pipeline" name="test_atomic_large_output_is_rejected_before_write_without_extra_lease" time="1.790" /><testcase classname="factor_engine.tests.runtime.test_v7_direct_artifact_pipeline" name="test_two_default_spawn_waves_retire_pid_and_bind_fresh_generation" time="2.393" /><testcase classname="factor_engine.tests.runtime.test_v7_direct_artifact_pipeline" name="test_default_two_slot_pipeline_overlaps_previous_write_with_next_compute" time="3.178" /><testcase classname="factor_engine.tests.runtime.test_v7_direct_artifact_pipeline" name="test_real_engine_two_wave_default_uses_fresh_compute_pid" time="59.656" /><testcase classname="factor_engine.tests.runtime.test_v7_direct_artifact_pipeline" name="test_two_slot_egress_is_partitioned_and_prefetched_compile_is_not_repeated" time="4.234" /><testcase classname="factor_engine.tests.runtime.test_v7_direct_artifact_pipeline" name="test_direct_timeout_reports_last_worker_phase[compute-COMPUTE_TIMEOUT-NOT_STARTED]" time="2.665"><failure message="factor_engine.runtime.supervised_worker.WorkerTimedOut: worker generation e9ac6362739848ec8ceb4cbd45bdfe5c terminated after deadline">tmp_path = PosixPath('/tmp/pytest-of-sunhaiwei/pytest-3038/test_direct_timeout_reports_la0')
+phase = 'compute', code = 'COMPUTE_TIMEOUT', commit_state = 'NOT_STARTED'
+
+    @pytest.mark.parametrize("phase,code,commit_state", [
+        ("compute", "COMPUTE_TIMEOUT", "NOT_STARTED"),
+        ("write", "WRITE_TIMEOUT", "UNKNOWN"),
+    ])
+    def test_direct_timeout_reports_last_worker_phase(tmp_path, phase, code, commit_state):
+        marker = tmp_path / phase
+&gt;       receipt = execute_run_many_durable(
+            None, [Factor("timed")],
+            policy=resolve_default_policy({
+                "compute_unknown_seconds": 1,
+                "job_unknown_seconds": 3,
+                "job_min_seconds": 3,
+                "job_max_seconds": 3,
+                "cooperative_cancel_grace_seconds": .01,
+                "worker_exit_observation_seconds": .5,
+            }),
+            artifact_root=tmp_path / "artifacts",
+            run_kwargs={"broker": Broker()},
+            engine_factory=build_phase_hang_engine,
+            engine_factory_config={"marker": str(marker), "modes": str(tmp_path / "modes")},
+        )
+
+factor_engine/tests/runtime/test_v7_direct_artifact_pipeline.py:489: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+factor_engine/runtime/bounded_pipeline.py:2063: in execute_run_many_durable
+    winner, worker_result = _await_any_direct_slot(
+factor_engine/runtime/bounded_pipeline.py:627: in _await_any_direct_slot
+    return slot, slot.handle.result()
+                 ^^^^^^^^^^^^^^^^^^^^
+factor_engine/runtime/supervised_worker.py:228: in result
+    raise self._error
+factor_engine/runtime/supervised_worker.py:201: in invoke
+    self._result = worker._execute_async_entry(
+factor_engine/runtime/supervised_worker.py:472: in _execute_async_entry
+    return self._execute(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = &lt;factor_engine.runtime.supervised_worker.SupervisedReusableWorker object at 0x77516a1bea80&gt;
+function = [&lt;test_v7_direct_artifact_pipeline.Factor object at 0x775169bb3ad0&gt;]
+args = ({}, 2097152, {'root': PosixPath('/tmp/pytest-of-sunhaiwei/pytest-3038/test_direct_timeout_reports_la0/artifacts'), 'r...sh=False), 'assignments': {'timed': (0, 'f44e978f8cdc4e46a706cded8dcadd71')}, ...}, 'fd0b38a4aad94d8996ec70e768a6f2d4')
+kwargs = {}, timeout_seconds = 1.0, lease = None
+cancel_event = &lt;threading.Event at 0x775169bb1a60: unset&gt;
+expected_progress_ordinals = frozenset({0})
+
+    def _execute(self, function, args, kwargs, timeout_seconds, lease, cancel_event,
+                 expected_progress_ordinals):
+        try:
+            self.start()
+        except BaseException:
+            # Admission was transferred by execute(), including startup. A
+            # spawn/pickling failure must not leak it; a partially started or
+            # untracked process must still be observed dead before release.
+            if self.quarantined:
+                raise
+            if self._process is not None and self._process.pid is not None:
+                self._retire()
+            if lease is not None:
+                lease.release()
+            raise
+        assert self._process is not None
+        request_id = uuid.uuid4().hex
+        completed = threading.Event()
+        response = {}
+        progress_phases: dict[int, str] = {}
+        progress_times: dict[int, float] = {}
+        request_dispatched_at = 0.0
+        # A reusable worker must never attribute an earlier request's phase to
+        # a later request that times out before emitting its first frame.
+        self.last_progress = None
+    
+        def exchange():
+            nonlocal request_dispatched_at
+            try:
+                if self._function is None:
+                    payload = pickle.dumps((function, args, kwargs))
+                else:
+                    payload = pickle.dumps(((function,) + args, kwargs))
+                request_dispatched_at = time.monotonic()
+                self._connection.send((request_id, payload))
+                del payload
+                while True:
+                    rid, generation, ok, payload = self._connection.recv()
+                    if ok == "progress":
+                        received_at = time.monotonic()
+                        if (rid != request_id or generation != self.generation
+                                or type(payload) is not dict
+                                or set(payload) != {"phase", "ordinal", "monotonic"}
+                                or payload.get("phase") not in {"COMPUTE", "WRITE", "VERIFY_DONE"}
+                                or type(payload.get("ordinal")) is not int
+                                or payload.get("ordinal") &lt; 0
+                                or type(payload.get("monotonic")) not in (int, float)
+                                or not math.isfinite(payload.get("monotonic"))
+                                or payload.get("monotonic") &lt; request_dispatched_at
+                                or payload.get("monotonic") &gt; received_at):
+                            raise RuntimeError("invalid worker progress frame")
+                        ordinal = payload["ordinal"]
+                        phase = payload["phase"]
+                        if expected_progress_ordinals is None or ordinal not in expected_progress_ordinals:
+                            raise RuntimeError("worker progress ordinal is not assigned to this request")
+                        expected_phase = {
+                            None: "COMPUTE", "COMPUTE": "WRITE", "WRITE": "VERIFY_DONE",
+                        }.get(progress_phases.get(ordinal))
+                        if phase != expected_phase:
+                            raise RuntimeError("invalid worker progress phase transition")
+                        previous_time = progress_times.get(ordinal)
+                        if previous_time is not None and payload["monotonic"] &lt; previous_time:
+                            raise RuntimeError("worker progress timestamp moved backwards")
+                        progress_phases[ordinal] = phase
+                        progress_times[ordinal] = payload["monotonic"]
+                        self.last_progress = dict(payload)
+                        continue
+                    response["result"] = (rid, generation, ok, pickle.loads(payload))
+                    break
+            except BaseException as exc:
+                response["error"] = exc
+            finally:
+                completed.set()
+    
+        # poll() only guarantees a header, not a complete message. Supervise
+        # the full serialization/send/receive/decode operation instead.
+        self._transport = threading.Thread(target=exchange, daemon=True,
+                                           name="factor-v2-worker-ipc")
+        self._transport.start()
+        deadline = time.monotonic() + timeout_seconds
+        while not completed.is_set() and not cancel_event.is_set():
+            completed.wait(min(0.05, max(0.0, deadline - time.monotonic())))
+            if time.monotonic() &gt;= deadline:
+                break
+        if completed.is_set():
+            self._transport.join()
+            if "error" in response:
+                self._retire()
+                if lease is not None:
+                    lease.release()
+                error = response["error"]
+                raise WorkerTransportFailed(
+                    f"worker transport failed after proven retirement: {type(error).__name__}: {error}"
+                ) from error
+            rid, generation, ok, value = response["result"]
+            if rid != request_id or generation != self.generation:
+                self._retire()
+                if lease is not None:
+                    lease.release()
+                raise WorkerStaleResponse("stale worker response rejected; worker retirement proven")
+            if lease is not None:
+                lease.release()
+            if ok:
+                return WorkerResult(value, generation)
+            if not isinstance(value, BaseException):
+                raise RuntimeError("invalid worker exception response")
+            raise value
+        # Cooperative phase: invalidate write authority before termination.
+        cancelled = cancel_event.is_set()
+        old_generation = self.generation
+        self.generation = uuid.uuid4().hex
+        completed.wait(self.cancel_grace_seconds)
+        # Even a late cooperative reply belongs to the expired generation.
+        # Retire it rather than reusing a process with a stale generation.
+        self._retire()
+        response.clear()
+        if lease is not None:
+            lease.release()
+        if cancelled:
+            stage = str((self.last_progress or {}).get("phase") or "UNKNOWN")
+            raise WorkerCancelled(
+                f"worker generation {old_generation} cancelled after proven retirement",
+                stage=stage,
+                phases=progress_phases,
+            )
+        stage = str((self.last_progress or {}).get("phase") or "UNKNOWN")
+&gt;       raise WorkerTimedOut(
+            f"worker generation {old_generation} terminated after deadline",
+            stage=stage,
+            phases=progress_phases,
+        )
+E       factor_engine.runtime.supervised_worker.WorkerTimedOut: worker generation e9ac6362739848ec8ceb4cbd45bdfe5c terminated after deadline
+
+factor_engine/runtime/supervised_worker.py:638: WorkerTimedOut</failure></testcase><testcase classname="factor_engine.tests.runtime.test_v7_direct_artifact_pipeline" name="test_direct_timeout_reports_last_worker_phase[write-WRITE_TIMEOUT-UNKNOWN]" time="2.635"><failure message="factor_engine.runtime.supervised_worker.WorkerTimedOut: worker generation 69bb453b56a9415b8e20c7dc95e772c7 terminated after deadline">tmp_path = PosixPath('/tmp/pytest-of-sunhaiwei/pytest-3038/test_direct_timeout_reports_la1')
+phase = 'write', code = 'WRITE_TIMEOUT', commit_state = 'UNKNOWN'
+
+    @pytest.mark.parametrize("phase,code,commit_state", [
+        ("compute", "COMPUTE_TIMEOUT", "NOT_STARTED"),
+        ("write", "WRITE_TIMEOUT", "UNKNOWN"),
+    ])
+    def test_direct_timeout_reports_last_worker_phase(tmp_path, phase, code, commit_state):
+        marker = tmp_path / phase
+&gt;       receipt = execute_run_many_durable(
+            None, [Factor("timed")],
+            policy=resolve_default_policy({
+                "compute_unknown_seconds": 1,
+                "job_unknown_seconds": 3,
+                "job_min_seconds": 3,
+                "job_max_seconds": 3,
+                "cooperative_cancel_grace_seconds": .01,
+                "worker_exit_observation_seconds": .5,
+            }),
+            artifact_root=tmp_path / "artifacts",
+            run_kwargs={"broker": Broker()},
+            engine_factory=build_phase_hang_engine,
+            engine_factory_config={"marker": str(marker), "modes": str(tmp_path / "modes")},
+        )
+
+factor_engine/tests/runtime/test_v7_direct_artifact_pipeline.py:489: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+factor_engine/runtime/bounded_pipeline.py:2063: in execute_run_many_durable
+    winner, worker_result = _await_any_direct_slot(
+factor_engine/runtime/bounded_pipeline.py:627: in _await_any_direct_slot
+    return slot, slot.handle.result()
+                 ^^^^^^^^^^^^^^^^^^^^
+factor_engine/runtime/supervised_worker.py:228: in result
+    raise self._error
+factor_engine/runtime/supervised_worker.py:201: in invoke
+    self._result = worker._execute_async_entry(
+factor_engine/runtime/supervised_worker.py:472: in _execute_async_entry
+    return self._execute(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = &lt;factor_engine.runtime.supervised_worker.SupervisedReusableWorker object at 0x775169ba9550&gt;
+function = [&lt;test_v7_direct_artifact_pipeline.Factor object at 0x775169babd40&gt;]
+args = ({}, 2097152, {'root': PosixPath('/tmp/pytest-of-sunhaiwei/pytest-3038/test_direct_timeout_reports_la1/artifacts'), 'r...sh=False), 'assignments': {'timed': (0, 'bb30958754eb456389bb38fbe8fe7861')}, ...}, '1befa160a7d1492eac675b1e554543f1')
+kwargs = {}, timeout_seconds = 1.0, lease = None
+cancel_event = &lt;threading.Event at 0x775169bab560: unset&gt;
+expected_progress_ordinals = frozenset({0})
+
+    def _execute(self, function, args, kwargs, timeout_seconds, lease, cancel_event,
+                 expected_progress_ordinals):
+        try:
+            self.start()
+        except BaseException:
+            # Admission was transferred by execute(), including startup. A
+            # spawn/pickling failure must not leak it; a partially started or
+            # untracked process must still be observed dead before release.
+            if self.quarantined:
+                raise
+            if self._process is not None and self._process.pid is not None:
+                self._retire()
+            if lease is not None:
+                lease.release()
+            raise
+        assert self._process is not None
+        request_id = uuid.uuid4().hex
+        completed = threading.Event()
+        response = {}
+        progress_phases: dict[int, str] = {}
+        progress_times: dict[int, float] = {}
+        request_dispatched_at = 0.0
+        # A reusable worker must never attribute an earlier request's phase to
+        # a later request that times out before emitting its first frame.
+        self.last_progress = None
+    
+        def exchange():
+            nonlocal request_dispatched_at
+            try:
+                if self._function is None:
+                    payload = pickle.dumps((function, args, kwargs))
+                else:
+                    payload = pickle.dumps(((function,) + args, kwargs))
+                request_dispatched_at = time.monotonic()
+                self._connection.send((request_id, payload))
+                del payload
+                while True:
+                    rid, generation, ok, payload = self._connection.recv()
+                    if ok == "progress":
+                        received_at = time.monotonic()
+                        if (rid != request_id or generation != self.generation
+                                or type(payload) is not dict
+                                or set(payload) != {"phase", "ordinal", "monotonic"}
+                                or payload.get("phase") not in {"COMPUTE", "WRITE", "VERIFY_DONE"}
+                                or type(payload.get("ordinal")) is not int
+                                or payload.get("ordinal") &lt; 0
+                                or type(payload.get("monotonic")) not in (int, float)
+                                or not math.isfinite(payload.get("monotonic"))
+                                or payload.get("monotonic") &lt; request_dispatched_at
+                                or payload.get("monotonic") &gt; received_at):
+                            raise RuntimeError("invalid worker progress frame")
+                        ordinal = payload["ordinal"]
+                        phase = payload["phase"]
+                        if expected_progress_ordinals is None or ordinal not in expected_progress_ordinals:
+                            raise RuntimeError("worker progress ordinal is not assigned to this request")
+                        expected_phase = {
+                            None: "COMPUTE", "COMPUTE": "WRITE", "WRITE": "VERIFY_DONE",
+                        }.get(progress_phases.get(ordinal))
+                        if phase != expected_phase:
+                            raise RuntimeError("invalid worker progress phase transition")
+                        previous_time = progress_times.get(ordinal)
+                        if previous_time is not None and payload["monotonic"] &lt; previous_time:
+                            raise RuntimeError("worker progress timestamp moved backwards")
+                        progress_phases[ordinal] = phase
+                        progress_times[ordinal] = payload["monotonic"]
+                        self.last_progress = dict(payload)
+                        continue
+                    response["result"] = (rid, generation, ok, pickle.loads(payload))
+                    break
+            except BaseException as exc:
+                response["error"] = exc
+            finally:
+                completed.set()
+    
+        # poll() only guarantees a header, not a complete message. Supervise
+        # the full serialization/send/receive/decode operation instead.
+        self._transport = threading.Thread(target=exchange, daemon=True,
+                                           name="factor-v2-worker-ipc")
+        self._transport.start()
+        deadline = time.monotonic() + timeout_seconds
+        while not completed.is_set() and not cancel_event.is_set():
+            completed.wait(min(0.05, max(0.0, deadline - time.monotonic())))
+            if time.monotonic() &gt;= deadline:
+                break
+        if completed.is_set():
+            self._transport.join()
+            if "error" in response:
+                self._retire()
+                if lease is not None:
+                    lease.release()
+                error = response["error"]
+                raise WorkerTransportFailed(
+                    f"worker transport failed after proven retirement: {type(error).__name__}: {error}"
+                ) from error
+            rid, generation, ok, value = response["result"]
+            if rid != request_id or generation != self.generation:
+                self._retire()
+                if lease is not None:
+                    lease.release()
+                raise WorkerStaleResponse("stale worker response rejected; worker retirement proven")
+            if lease is not None:
+                lease.release()
+            if ok:
+                return WorkerResult(value, generation)
+            if not isinstance(value, BaseException):
+                raise RuntimeError("invalid worker exception response")
+            raise value
+        # Cooperative phase: invalidate write authority before termination.
+        cancelled = cancel_event.is_set()
+        old_generation = self.generation
+        self.generation = uuid.uuid4().hex
+        completed.wait(self.cancel_grace_seconds)
+        # Even a late cooperative reply belongs to the expired generation.
+        # Retire it rather than reusing a process with a stale generation.
+        self._retire()
+        response.clear()
+        if lease is not None:
+            lease.release()
+        if cancelled:
+            stage = str((self.last_progress or {}).get("phase") or "UNKNOWN")
+            raise WorkerCancelled(
+                f"worker generation {old_generation} cancelled after proven retirement",
+                stage=stage,
+                phases=progress_phases,
+            )
+        stage = str((self.last_progress or {}).get("phase") or "UNKNOWN")
+&gt;       raise WorkerTimedOut(
+            f"worker generation {old_generation} terminated after deadline",
+            stage=stage,
+            phases=progress_phases,
+        )
+E       factor_engine.runtime.supervised_worker.WorkerTimedOut: worker generation 69bb453b56a9415b8e20c7dc95e772c7 terminated after deadline
+
+factor_engine/runtime/supervised_worker.py:638: WorkerTimedOut</failure></testcase><testcase classname="factor_engine.tests.runtime.test_v7_direct_artifact_pipeline" name="test_zero_cpu_authority_terminalizes_without_starting_engine_or_attempt" time="0.837" /><testcase classname="factor_engine.tests.runtime.test_v7_direct_artifact_pipeline" name="test_cancellation_retires_both_overlap_slots_and_preserves_per_factor_commit_state" time="2.256" /><testcase classname="factor_engine.tests.runtime.test_v7_direct_artifact_pipeline" name="test_verified_current_is_persisted_before_prefetch_quarantine" time="2.253" /><testcase classname="factor_engine.tests.runtime.test_v7_direct_artifact_pipeline" name="test_two_slots_refill_c_after_a_finishes_without_waiting_for_b" time="4.113" /><testcase classname="factor_engine.tests.runtime.test_v7_direct_artifact_pipeline" name="test_two_slots_refill_c_after_b_finishes_without_waiting_for_a" time="3.916" /><testcase classname="factor_engine.tests.runtime.test_v7_direct_artifact_pipeline" name="test_cancellation_interrupts_refill_compile_and_active_compute_slot" time="2.880" /><testcase classname="factor_engine.tests.runtime.test_v9_m11c_runtime_evidence" name="test_real_run_many_compute_snapshot_is_nonempty_and_pageable" time="0.924" /><testcase classname="factor_engine.tests.runtime.test_v9_m11c_runtime_evidence" name="test_result_validator_preserves_legacy_unpack_and_distinguishes_missing" time="0.001" /><testcase classname="factor_engine.tests.runtime.test_v9_m11c_runtime_evidence" name="test_extended_envelope_rejects_missing_or_invalid_evidence_identity[None]" time="0.000" /><testcase classname="factor_engine.tests.runtime.test_v9_m11c_runtime_evidence" name="test_extended_envelope_rejects_missing_or_invalid_evidence_identity[]" time="0.000" /><testcase classname="factor_engine.tests.runtime.test_v9_m11c_runtime_evidence" name="test_extended_envelope_rejects_missing_or_invalid_evidence_identity[AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA]" time="0.000" /><testcase classname="factor_engine.tests.runtime.test_v9_m11c_runtime_evidence" name="test_extended_envelope_rejects_missing_or_invalid_evidence_identity[aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa]" time="0.000" /><testcase classname="factor_engine.tests.runtime.test_v9_m11c_runtime_evidence" name="test_snapshot_factor_identity_cannot_move_to_another_wave" time="0.001" /><testcase classname="factor_engine.tests.runtime.test_v9_m11c_runtime_evidence" name="test_persistent_evidence_is_bounded_paged_and_idempotent" time="0.014" /><testcase classname="factor_engine.tests.runtime.test_v9_m11c_runtime_evidence" name="test_direct_success_persists_observed_wave_before_terminal" time="0.016" /><testcase classname="factor_engine.tests.runtime.test_v9_m11c_runtime_evidence" name="test_direct_evidence_write_failure_cannot_leave_success_terminal" time="0.015" /><testcase classname="factor_engine.tests.runtime.test_v9_m11c_runtime_evidence" name="test_resume_rejects_missing_or_corrupt_new_evidence[drop_table]" time="0.793" /><testcase classname="factor_engine.tests.runtime.test_v9_m11c_runtime_evidence" name="test_resume_rejects_missing_or_corrupt_new_evidence[delete_row]" time="0.786" /><testcase classname="factor_engine.tests.runtime.test_v9_m11c_runtime_evidence" name="test_resume_rejects_missing_or_corrupt_new_evidence[payload]" time="0.817" /><testcase classname="factor_engine.tests.runtime.test_v9_m11c_runtime_evidence" name="test_resume_rejects_missing_or_corrupt_new_evidence[assignments]" time="0.766" /><testcase classname="factor_engine.tests.runtime.test_v9_m11c_runtime_evidence" name="test_resume_rejects_missing_or_corrupt_new_evidence[orphan]" time="0.792" /><testcase classname="factor_engine.tests.runtime.test_v9_m11c_runtime_evidence" name="test_legacy_unavailable_survives_two_resumes" time="1.654" /><testcase classname="factor_engine.tests.runtime.test_v9_m11c_runtime_evidence" name="test_new_marker_and_tables_remain_authoritative_before_receipt_exists" time="0.768" /><testcase classname="factor_engine.tests.runtime.test_v9_m11c_runtime_evidence" name="test_evidence_page_has_a_total_wire_budget_without_skipping_seq" time="0.044" /><testcase classname="factor_engine.tests.runtime.test_v9_m11c_runtime_evidence" name="test_resume_rejects_malformed_evidence_receipt_reference[store]" time="0.750" /><testcase classname="factor_engine.tests.runtime.test_v9_m11c_runtime_evidence" name="test_resume_rejects_malformed_evidence_receipt_reference[bool_count]" time="0.783" /><testcase classname="factor_engine.tests.runtime.test_v9_m11c_runtime_evidence" name="test_resume_rejects_malformed_evidence_receipt_reference[bool_cursor]" time="0.777" /><testcase classname="factor_engine.tests.runtime.test_v9_m11c_runtime_evidence" name="test_resume_rejects_malformed_evidence_receipt_reference[extra]" time="0.776" /><testcase classname="factor_engine.tests.runtime.test_v9_m11c_runtime_evidence" name="test_unavailable_evidence_has_no_counts_and_assignment_is_authoritative" time="0.014" /><testcase classname="factor_engine.tests.runtime.test_v9_m11c_runtime_evidence" name="test_large_wave_assignment_links_do_not_reject_legal_long_names" time="0.019" /><testcase classname="factor_engine.tests.runtime.test_v9_m11c_runtime_evidence" name="test_evidence_digest_covers_assignments" time="0.016" /><testcase classname="factor_engine.tests.runtime.test_v9_m11c_runtime_evidence" name="test_compute_reserves_snapshot_transport_before_result_admission" time="0.001" /><testcase classname="factor_engine.tests.runtime.test_v9_pending_resume_safe_subset" name="test_never_dispatched_accepted_resumes_after_strict_worker_exit_proof" time="1.923" /><testcase classname="factor_engine.tests.runtime.test_v9_pending_resume_safe_subset" name="test_spawn_direct_mixed_resume_filters_main_prefetch_and_refill" time="7.074" /><testcase classname="factor_engine.tests.runtime.test_v9_pending_resume_safe_subset" name="test_pending_resume_rejects_incomplete_or_corrupt_exit_proof[starting]" time="0.814" /><testcase classname="factor_engine.tests.runtime.test_v9_pending_resume_safe_subset" name="test_pending_resume_rejects_incomplete_or_corrupt_exit_proof[bound]" time="0.784" /><testcase classname="factor_engine.tests.runtime.test_v9_pending_resume_safe_subset" name="test_pending_resume_rejects_incomplete_or_corrupt_exit_proof[pid]" time="0.807" /><testcase classname="factor_engine.tests.runtime.test_v9_pending_resume_safe_subset" name="test_pending_resume_rejects_incomplete_or_corrupt_exit_proof[namespace]" time="0.764" /><testcase classname="factor_engine.tests.runtime.test_v9_pending_resume_safe_subset" name="test_pending_original_deadline_expiry_rejects_before_writable_state" time="0.813" /><testcase classname="factor_engine.tests.runtime.test_v9_pending_resume_safe_subset" name="test_dispatched_pending_is_not_authorized_to_resume[RUNNING-NOT_STARTED-None]" time="0.797" /><testcase classname="factor_engine.tests.runtime.test_v9_pending_resume_safe_subset" name="test_dispatched_pending_is_not_authorized_to_resume[RUNNING-INTENT-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa]" time="0.783" /><testcase classname="factor_engine.tests.runtime.test_v9_pending_resume_safe_subset" name="test_dispatched_pending_is_not_authorized_to_resume[RUNNING-UNKNOWN-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa]" time="0.807" /><testcase classname="factor_engine.tests.runtime.test_v9_pending_resume_safe_subset" name="test_accepted_with_dispatch_evidence_is_rejected" time="0.805" /><testcase classname="factor_engine.tests.runtime.test_v9_pending_resume_safe_subset" name="test_pending_executor_requires_full_validated_authority[ownership_store]" time="0.814" /><testcase classname="factor_engine.tests.runtime.test_v9_pending_resume_safe_subset" name="test_pending_executor_requires_full_validated_authority[ownership_coverage]" time="0.771" /><testcase classname="factor_engine.tests.runtime.test_v9_pending_resume_safe_subset" name="test_pending_executor_requires_full_validated_authority[fit_failure_evidence_available]" time="0.786" /></testsuite></testsuites>

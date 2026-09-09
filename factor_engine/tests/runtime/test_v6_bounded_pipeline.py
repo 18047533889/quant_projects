@@ -353,6 +353,7 @@ def test_spawn_compute_exit_aborts_later_wave_without_reusing_proxy_binding(tmp_
     assert db.execute(
         "select ordinal from fit_failure_evidence_assignments"
     ).fetchall() == [(0,)]
+    db.close()
 
 
 def _build_spawn_engine(config):

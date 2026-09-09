@@ -1230,6 +1230,7 @@ def execute_run_many_durable(
     ownership_context = None
     resuming = resume_run_id is not None
     resume_pending_count = None
+    resume_execute_new = False
     if resuming:
         if manifest_path is not None or state_path is not None:
             raise ValueError("resume_run_id owns canonical manifest/state paths")
@@ -1261,6 +1262,52 @@ def execute_run_many_durable(
                 ownership_context = RunOwnershipContext(
                     run_id, resume_context.identity_sha256,
                 )
+            if resume_pending_count:
+                if (ownership_context is None
+                        or not resume_context.fit_failure_evidence_available):
+                    raise ResumeIdentityError(
+                        "pending resume requires full SQLite ownership and indexed evidence"
+                    )
+                from factor_engine.runtime.run_deadline import restore_run_deadline
+                restored = restore_run_deadline(
+                    resume_context.job_deadline_record,
+                    expected_run_id=run_id, expected_policy_digest=policy.digest,
+                )
+                if restored.expired:
+                    raise ResumeIdentityError("restored job deadline exhausted")
+                job_deadline = restored.deadline_monotonic
+                from factor_engine.runtime.worker_ownership_sqlite import (
+                    validate_all_workers_exited_sqlite,
+                )
+                retirement = validate_all_workers_exited_sqlite(
+                    run_dir, context=ownership_context,
+                )
+                if not retirement.all_exited:
+                    raise ResumeIdentityError(
+                        "pending resume requires complete persisted worker-exit proof"
+                    )
+                from factor_engine.runtime.resume_action_catalog import (
+                    iter_resume_action_catalog,
+                )
+                allowed = {
+                    "EXECUTE_NEW", "PRESERVE_TERMINAL",
+                    "REVALIDATE_VERIFIED_ARTIFACT",
+                }
+                execute_count = 0
+                for action in iter_resume_action_catalog(
+                        resume_context, policy=policy,
+                        restored_job_deadline=job_deadline):
+                    if action.action not in allowed:
+                        raise ResumeIdentityError(
+                            "pending same-run execution contains dispatched or "
+                            "reconcilable work without authorization"
+                        )
+                    execute_count += action.action == "EXECUTE_NEW"
+                if execute_count != resume_pending_count:
+                    raise ResumeIdentityError(
+                        "pending resume is not exactly never-dispatched work"
+                    )
+                resume_execute_new = True
             manifest_path, state_path = resume_context.manifest_path, resume_context.state_path
             manifest = FiniteFactorManifest(manifest_path)
             state = PersistentRunState(state_path, max_attempts=max_attempts)
@@ -1425,6 +1472,17 @@ def execute_run_many_durable(
             "ownership_context": ownership_context,
             "ownership_role": role,
         }
+
+    def resume_admission_allowed(ordinal):
+        if not resume_execute_new:
+            return True
+        page = state.outcomes_page(start=ordinal, limit=1)
+        return bool(
+            page and page[0].ordinal == ordinal
+            and page[0].state == "ACCEPTED"
+            and page[0].attempts == 0
+            and page[0].commit_state == "NOT_STARTED"
+        )
     if resuming:
         from factor_engine.runtime.auto_memory_budget import MemoryLeaseKind
         from factor_engine.runtime.resume_validation import (
@@ -1440,11 +1498,6 @@ def execute_run_many_durable(
                 cancel_grace_seconds=float(policy.cooperative_cancel_grace_seconds),
                 exit_observation_seconds=float(policy.worker_exit_observation_seconds),
             )
-            if resume_pending_count:
-                raise ResumeIdentityError(
-                    "pending same-run execution requires persisted worker-exit proof; "
-                    "terminal artifact resume only is currently enabled"
-                )
             for artifact_record in iter_resume_artifacts_to_revalidate(
                     resume_context, deadline=job_deadline):
                 available = int(broker.current_sink_budget())
@@ -1678,6 +1731,8 @@ def execute_run_many_durable(
             else:
                 admitted = []
                 for ordinal, factor, manifest_error, manifest_name in wave:
+                    if not resume_admission_allowed(ordinal):
+                        continue
                     factor, scope_error = _apply_execution_scope(factor, execution_scope)
                     rejection = manifest_error or scope_error
                     if rejection is not None:
@@ -1782,7 +1837,8 @@ def execute_run_many_durable(
                     if using_prefetched:
                         artifact_assignments[_factor.name] = prefetched_direct["assignments"][_factor.name]
                     else:
-                        state.consume_attempt(ordinal, "execution")
+                        if state.consume_attempt(ordinal, "execution") is None:
+                            raise RuntimeError("admitted execution lost its attempt authority")
                     if direct_artifacts and not using_prefetched:
                         generation = uuid.uuid4().hex
                         state.record_commit_intent(ordinal, generation)
@@ -1826,6 +1882,8 @@ def execute_run_many_durable(
                             )
                             next_admitted = []
                             for next_ordinal, next_factor, next_error, _next_name in next_wave:
+                                if not resume_admission_allowed(next_ordinal):
+                                    continue
                                 next_factor, next_scope_error = _apply_execution_scope(
                                     next_factor, execution_scope
                                 )
@@ -1904,7 +1962,11 @@ def execute_run_many_durable(
                                 if all(value is None for value in next_compile.values()):
                                     next_assignments = {}
                                     for next_ordinal, next_factor in next_admitted:
-                                        state.consume_attempt(next_ordinal, "execution")
+                                        if state.consume_attempt(
+                                                next_ordinal, "execution") is None:
+                                            raise RuntimeError(
+                                                "prefetched execution lost its attempt authority"
+                                            )
                                         next_generation = uuid.uuid4().hex
                                         state.record_commit_intent(next_ordinal, next_generation)
                                         next_assignments[next_factor.name] = (
@@ -2064,6 +2126,8 @@ def execute_run_many_durable(
                                 )
                                 for (refill_ordinal, refill_factor, refill_error,
                                      refill_name) in refill_wave:
+                                    if not resume_admission_allowed(refill_ordinal):
+                                        continue
                                     refill_factor, refill_scope_error = _apply_execution_scope(
                                         refill_factor, execution_scope
                                     )
@@ -2120,7 +2184,11 @@ def execute_run_many_durable(
                                 continue
                             refill_assignments = {}
                             for refill_ordinal, refill_factor in refill_admitted:
-                                state.consume_attempt(refill_ordinal, "execution")
+                                if state.consume_attempt(
+                                        refill_ordinal, "execution") is None:
+                                    raise RuntimeError(
+                                        "refill execution lost its attempt authority"
+                                    )
                                 refill_generation = uuid.uuid4().hex
                                 state.record_commit_intent(
                                     refill_ordinal, refill_generation
@@ -2232,6 +2300,25 @@ def execute_run_many_durable(
                         WorkerTimedOut, WorkerTransportFailed,
                     )
                     failed_slot = getattr(exc, "failing_slot", None)
+                    recoverable_retired_current_slot = bool(
+                        isinstance(exc, (WorkerTimedOut, WorkerTransportFailed))
+                        and failed_slot is not None
+                        and direct_artifacts
+                        and len(active_slots) == 1
+                        and active_slots[0] is failed_slot
+                        and failed_slot is completed_slot
+                        and failed_slot.worker is compute_worker
+                        and failed_slot.proxy is compute_proxy
+                        and failed_slot.handle is current_handle
+                        and failed_slot.wave is direct_context.wave
+                        and failed_slot.admitted is direct_context.admitted
+                        and failed_slot.assignments is direct_context.assignments
+                        and failed_slot.cursor == direct_context.cursor == cursor
+                        and failed_slot.evidence_id == wave_evidence_id
+                        and prefetched_direct is None
+                        and pending_next is None
+                        and not direct_context.has_later_wave
+                    )
                     evidence_already_persisted = bool(
                         failed_slot is not None
                         and failed_slot.phase == "EVIDENCE_PERSISTED"
@@ -2251,7 +2338,7 @@ def execute_run_many_durable(
                              for ordinal, factor in unavailable_admitted),
                             None, availability="UNAVAILABLE",
                         )
-                    if failed_slot is not None:
+                    if failed_slot is not None and not recoverable_retired_current_slot:
                         for failed_ordinal, failed_factor in failed_slot.admitted:
                             page = state.outcomes_page(start=failed_ordinal, limit=1)
                             current_state = (

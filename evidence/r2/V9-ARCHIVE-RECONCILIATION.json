@@ -1,0 +1,2522 @@
+[
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_preprocess/pyproject.toml",
+    "sha256": "8e11249002587c0840def4f8d122bd57e4f50c76f045256e19ed1082b6fd5bdb",
+    "blob": "a144b62f2bf7a88a117de2311f3d6d6651107a21",
+    "live_sha256": "987ad6b12071b49d33482a9fb52b0539e789632b1b09b7ff4036653298ac0703",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_preprocess/factor_preprocess/representation/policy.py",
+    "sha256": "5f3dbb87c5b8d4c2bad21fa03b7e38885d978bd4bd6fd53a1db25b53d7c7cb0b",
+    "blob": "d3b1d9c3b7ceef13db730fdb0de7293d3903b941",
+    "live_sha256": "fdb0967671f949a93a8a7e59853530b35d2b5917213c53c256dba6dbc23de386",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_preprocess/factor_preprocess/representation/__init__.py",
+    "sha256": "002a78ff01444192c4e7f889c5796b4676e054561da40965d35f3306ff9a3c25",
+    "blob": "e745d77d04da1ccd0201a1bef427bfd30319949d",
+    "live_sha256": "5b62691fd8b68400db3bcc025ec528ed68240d3dd127d5e036fe3e08fb58942d",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_preprocess/factor_preprocess/regime/adaptive_weights.py",
+    "sha256": "e7e94abc572236e2c08e1c616681e639c66caf19717e70e15f287bcda4a6edb9",
+    "blob": "944f45eb722c366fbdd876f30af7d78f75ef42fb",
+    "live_sha256": "d9afad769e0ecd98650c72e1d57d86c8258e713ec01252791847c3c6c5883519",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_preprocess/factor_preprocess/regime/switching.py",
+    "sha256": "c66b90278b50c33be8733f416f5c470638ef23b9a08c8c24053fee1d0239c76f",
+    "blob": "b29ebd98f5cd0fdb82aba992bbd8bb7d3f0916f3",
+    "live_sha256": "a6114ab07de853206d2d705d79946a162efb5d8cb04a8c7352e87ca5e5c8c43a",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_preprocess/factor_preprocess/regime/causal_detector.py",
+    "sha256": "1a19b51a299e66105c45d82468676b90b34e8f4a4296b5832a2953873798c58a",
+    "blob": "4fc8e0ba772c6f34f4f86cae4ff0791a6360ccdc",
+    "live_sha256": "09bf81ebe35ea4c0c1e63b3b0bbcd94682d468a33c845a8ebdecb0820329091e",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_preprocess/factor_preprocess/grammar/search_grammar.py",
+    "sha256": "b0546446e03d24103c09de0359cc03f299e914a675001659527978ab0e798c0e",
+    "blob": "f92eadd2c20d727dfe8837433ce92c0ec32b693d",
+    "live_sha256": "0b94c7426eae3690f40bbf86019d1c658433e53b23f08e2a2545dff3c72528be",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_preprocess/factor_preprocess/adapters/data_access.py",
+    "sha256": "0dbebec5ff5aa6a88a0787ae6b26c8e90b1636c646af8aed3dabd64c888fe9ca",
+    "blob": "a621b5c2e887d7251afd791f0039fcbca26d60d0",
+    "live_sha256": "9d8db39b4ca234cbe957f412ddba3d52b78d6be46befa8ef617f7279863ae0c6",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_preprocess/factor_preprocess/adapters/fe_operator.py",
+    "sha256": "b39c9625cbdf10a21636ba1da9e3c227eda30d398a4090de9cfa2a3ec25cad94",
+    "blob": "3f498a84e3b517a5c638534f95be541a23c27c87",
+    "live_sha256": "bcd298abfe0d6e277f5ef47f68916d7ea576ea049c7a1e76a98ad9418ced3d35",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_preprocess/factor_preprocess/adapters/_data_access_impl.py",
+    "sha256": "1e7d29c82185889567f6025bcba0dea5e92a241294f74acee0b0e9527d1855d2",
+    "blob": "4b5e882991677b89ad68aada1e77ee5da54dea04",
+    "live_sha256": "81d88b87b3a14b93afae6a975ee2d852d28f81b115d099d248387b681270e1ea",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_preprocess/factor_preprocess/adapters/__init__.py",
+    "sha256": "4b251eab8701c8d950b0558273c7ebf42e2c66c35bacbf4c5bb5043e4ac74ef4",
+    "blob": "302cf6b8d456b705bc195f3cc636d9748921197c",
+    "live_sha256": "ba37f7ae44f9dc1984ca159fb788ed0159503ea7e324a4325ff31f5f97db6d6a",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_preprocess/factor_preprocess/neutralization/diagnostics.py",
+    "sha256": "3b86534ef3bf67d173d10fa198b0e754ddeae9dcd9f8620af428f294df6a7779",
+    "blob": "b7f404cf7351ad47003ef033f108b03c225afc3c",
+    "live_sha256": "03bd20c0d96540ec980b867bbf9312f4163d0ad3295bb89546f3c55450495487",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_preprocess/factor_preprocess/neutralization/regularized.py",
+    "sha256": "3e41bd9fc468d2490cb029753b6e2830b3acfabeabcdf17bb96014faf81757ad",
+    "blob": "02bfa4e16f6a72efe6947e0adcc9dacb035872b0",
+    "live_sha256": "addbde6651b22f7fa5c29342a6d33728221323fd21b3c988930e4f84028b9998",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_preprocess/factor_preprocess/registry/policies.py",
+    "sha256": "800a4621481e384a3c33e7bd52988fdfb6a7a7111d7dc2c7a94f76bdae7f711e",
+    "blob": "470f4ff8c811525b4a52d8d22eca401fa1e25f0e",
+    "live_sha256": "6f0c776875e25205ce2e8f072dfdb70ae15caacdb6f9dc516a6151cace7fd202",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_preprocess/factor_preprocess/registry/transforms.py",
+    "sha256": "5717f91a77927f4f69e9b9c64901113e13e5ee23c074c2399bd409f724e66e38",
+    "blob": "fad61d026a4dfac306e23b3a4c09cb324a643cc0",
+    "live_sha256": "199e47337197f41143d4d0e7be5f847e6f2cb40a2debb22ef01496dc74e11fdb",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_preprocess/factor_preprocess/__init__.py",
+    "sha256": "80cfded8848491cecc5f2e2619975ca5149d7fc42b40a425e4c1c301c7713fe4",
+    "blob": "82327b3307bc8daf7889d6d8092081818ff0b3c5",
+    "live_sha256": "f5a80d33d15bec2ea64c588986c0351f5270612e9cc6c7e8061a03825c224197",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_preprocess/factor_preprocess/contracts/treatment_recipe.py",
+    "sha256": "5d2aa9c43832ba78a540c3631ee5bd1515465485ebdb56e3123ecde3a0339171",
+    "blob": "09dcc1942452078d98be9edbd01a6f7be11ffc16",
+    "live_sha256": "344aefaa753b8b93fb950d9816bf74b2a52bcdea8283e72ff73d7ccc3a776504",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_preprocess/factor_preprocess/contracts/feature_bundle.py",
+    "sha256": "8c3816c283ea58176f281fde074436db63bb7735f6fe44c30726981abd6c5ffd",
+    "blob": "81e39d6ff3a7c02e2eac56a2119aa5c9374b24b1",
+    "live_sha256": "5cdd944768a4b306d402c5e7db49c2b9468d27c62c056fbf7aa54113aa9fc35d",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_preprocess/factor_preprocess/contracts/treatment_lineage.py",
+    "sha256": "35d453932eb4a7f4a3cdd8e17ccc234e10802fc1be2500dd6cc2aa248325c684",
+    "blob": "2ab4ccd4a43415e0573ae161f64d37308be64e77",
+    "live_sha256": "ff2959d7c94a85d074be84fc0597261dcca21903f3459d65fc905f3895fda713",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_preprocess/factor_preprocess/contracts/__init__.py",
+    "sha256": "3fd2771a149c50a8df6d0341dc05c246f7bf39778fc853a720bc915447078756",
+    "blob": "6b0464b2ce90095a89cf53771142f3be937e01d3",
+    "live_sha256": "f52df967671f0845fc2bda361f01cb2cfdb242d7d8f2453a717014b2722b22ac",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_preprocess/tests/representation/test_representation_policies.py",
+    "sha256": "5a1833ddedb9f282389fd5cdf6c92063f0467338e506e0857c0dd965deb484c2",
+    "blob": "a77c44b7772dc13fcadc1c7840b48c27f07714ef",
+    "live_sha256": "c8d90a52188dbdcb78766abaec46c03852f4267e4872950fa9cf68d87c30405a",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_preprocess/tests/regime/test_regime_production.py",
+    "sha256": "6bf35894ca7566c09c29afca6284ab1c95cc43f6270f5ca6514e9369905fce0f",
+    "blob": "c71d0216ccdb8d26abac838ec941c495c023fe93",
+    "live_sha256": "ba79d35603a610489705a9781c2ff3d7d7dd920277d9ecc75c23d9947c07529f",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_preprocess/tests/test_fe_operator_parity.py",
+    "sha256": "24733a200b450a19fadf41db0b3ea32189730dc9799fa97daa0c8327e2adf717",
+    "blob": "fbfe952ef41365c8bee1ddff2e59987ceef90e34",
+    "live_sha256": "47efa01cd41941fc239f9e43add1a97e7d20de0adb3bc066ca292b0b7c7855ba",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_preprocess/tests/transforms/test_hp_prefix_invariance.py",
+    "sha256": "4cdc0a4c6d38c3d72e72126a833aaed66fc41eeb6c23caab62b0936fed491726",
+    "blob": "66af5ec1376781892523016d92f8f8ff7e41f349",
+    "live_sha256": "556fd226d35fb97631b74dd740b3d33014bf1d7146ebfb3d4e577e4fc50b5f56",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_preprocess/tests/adapters/test_data_access_adapter.py",
+    "sha256": "51b0853bf515c3ec6d34713c9de710a697d4ac71d89f2c6c3ddeee3951e2ebd6",
+    "blob": "f0880e00c3082a494912147add45f0d9d1c48df5",
+    "live_sha256": "fb2c68140fef5be8fa18db9a501197d96b05089da9b359a9649dad945869c101",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_preprocess/tests/contracts/test_identity_pit_contract.py",
+    "sha256": "d33b0f0ae6af5e938a336ae3516b7d39594a5c28538386b14bbb4e48b5af2be4",
+    "blob": "b9bb2c31981e03f10e9da5e647a31651b5a11283",
+    "live_sha256": "2961737873c1436320bc454d0351692604e9e43179ce41238539732f25a1064d",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_preprocess/tests/contracts/test_treatment_lineage.py",
+    "sha256": "4384c50e8149ac58950aaf2219d9d8b4d635876235c6f1fee48438c3fad79369",
+    "blob": "e6fb8141656533384137da4fdd099648d5fada3c",
+    "live_sha256": "759eebed2695c02d0d23769b2581dd5e9b5cb49411f153f5970743eb561fe7fb",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "vectorbt_qs/mvp/engine/batch.py",
+    "sha256": "31dbc5bbb2f150d8c171ac2b3342adad6978bafc23a7ae4f30fefb1ed7d5510e",
+    "blob": "1f7a7a506f2e67be95d736b16d1339214f23751c",
+    "live_sha256": "a348af49584dc13e9282fbdd33b16714fac1d9555c4602d70db4a2e3d23577ea",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "vectorbt_qs/mvp/engine/execution.py",
+    "sha256": "7e2c05f4b0ca30eeb08fc3aa8932cbe009cb146a6bbb04304e1489bfba563a70",
+    "blob": "1a65c302cbe64625f48afe31ed9f78518b7b2a21",
+    "live_sha256": "77432b5c20ed7491486aaf01ac7dfc046ed40dabf22ea358ba9f7fa837c31f54",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "vectorbt_qs/mvp/engine/__init__.py",
+    "sha256": "391544da7f910c270712597057a2cb4bdd4abee29f397e522801574c7621c87b",
+    "blob": "6e853f8209ddb5f0a82515b460ba7f980f8118ae",
+    "live_sha256": "486dd7cc4562bf6aecd7bbf7793dea6ebd4a88c038dc7767ef69254d7c10d6b2",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "vectorbt_qs/contracts/__init__.py",
+    "sha256": "ab014b09b96c4155595328ddd283a52f4b251c8abb00a41af2ffa0f9148b8bfd",
+    "blob": "c32ad86398f10ec3c80402595d2ac1f842164c89",
+    "live_sha256": "5dabf0f45ff1e7352a43c255f6b031dd8787b4a804e9aa66c1e87a6d3df3b436",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_assets/profiling/taxonomy.py",
+    "sha256": "453c67bf69a2a996c37317f5057692659a7098bcf2ec52a647d028e9744fe7c2",
+    "blob": "69169af1e872515862c93852598041f82b6908d7",
+    "live_sha256": "94763c54640651cf1929a1d3a0a8e569eb3795b878e6ef713c1827f230d8d6ad",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_assets/profiling/metric_grading.py",
+    "sha256": "fcc0ea71d5ce39df67d57d5032b178e16b173edc84bf860fe6e0d34b2f732cd8",
+    "blob": "5de605e958eaa6b23ae23780f349d47e7f065eb6",
+    "live_sha256": "45d214fcd322195c7727b06d4aae813ca9faeec2e833e092b6e82a6521b670cd",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_assets/profiling/policies.py",
+    "sha256": "b6f2ee6cb77696a07280d707e9842edc3c65030ffaee784532ff8259d330e931",
+    "blob": "60710f54e3a514109245da48837745c2a81064f0",
+    "live_sha256": "b035d0ace968c755d22390c1343d344cac9e21b389f33642b23933ce586b1906",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_assets/profiling/health_card.py",
+    "sha256": "06cd2289eae3ce81580959913363bd826fc698caee2c44c437122ad9c7dc0c62",
+    "blob": "4fcccf006e115847bef0a1d6cd19d2bf26cea2a7",
+    "live_sha256": "fd9d8926e2d74fc444d68b2110b33753e5e4424efbe87e4f5c9ab6a0d8de575b",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_assets/profiling/dimensions.py",
+    "sha256": "125cfcaa7299cecc5f6a1674106eb9faf55c145d116ec5c6e909e2bcaabaf127",
+    "blob": "d2c847a7d179113de31408a543a0275f22438a52",
+    "live_sha256": "41d429fad2e0a8dee028bea5b9f549bea8dc200ead9bbf424625797e7fbac595",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_assets/adapters/data_access.py",
+    "sha256": "4f26af7f0dd840865a4adc976fae01569bba75ea2a0ae26ea0c0f34247843b8c",
+    "blob": "6d069c230b129d23977baa3d85c310f1b3eaacae",
+    "live_sha256": "31fb26a05415d0c73427efe8ac20191d971ebaea4c84b1eec996c96f1490091f",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_assets/adapters/residual_novelty.py",
+    "sha256": "556e368e5839c50864ce3757f58ee83e52a0255a0cdfe656e23329702b3fd4b8",
+    "blob": "7f991899caab5245a4abc9eb426e9c85e7b36bf1",
+    "live_sha256": "082138e1260f2f9abf2138b1a2ec3c36c6efccc1e37fb4426f6cd8ae9fc75532",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_assets/adapters/quant_evaluator.py",
+    "sha256": "e5842989c98dc3189097e242ec041954c81b2a92e87967739e6a6b7c02d6f4c5",
+    "blob": "6b51b1b7d5ca8dae613021f216490972510e9f8f",
+    "live_sha256": "d8e60274e78b4f5ef97dee8af2db7f966b1ce012aa71ccfc3d5878789f025eb0",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_assets/adapters/__init__.py",
+    "sha256": "050770a940e9ee1713433dfc4280c47c609816dcae7e11c017ebd38f6581c0ea",
+    "blob": "0c70c1d38e0e67e0eb1ba568a29ee7b58c98def6",
+    "live_sha256": "03a1c72e1abc2543e7ec11fc93a4fad0461ff25d62f1eb5708027202a71a7842",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_assets/adapters/factor_engine.py",
+    "sha256": "9d46970d51fa30ac22da56d086d38a609f535752939221193ea58ccf4a5490b5",
+    "blob": "2e18edc723ef5de0fd423e6bd5416873539e6b11",
+    "live_sha256": "e44f03bdbabd0fa0222c0f0016824a7a5ce707fbe7385ed4477f93a9dbe4a1fb",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_assets/selection/__init__.py",
+    "sha256": "484331f82e30244f42916d9c1f42688e18c560958c87221b6ffa1fdb0ef7e966",
+    "blob": "daa0f7980ce9814f7de925a9bd3e9af4cf56c056",
+    "live_sha256": "b87a61e8e909ab515f49b0269f2d26ed5fbdd02b92fe03bdd6b8b54741b167ab",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_assets/registry/factory.py",
+    "sha256": "b4e3ae4c01694e6bbb616cd66242d9b424cc3657d0d739c73b1ee99224f4a44b",
+    "blob": "0b12a3b1d026322ba6976136e151897caa0a80a6",
+    "live_sha256": "9492a6175435a8a2579e1c9eba61764d53268d5c81c7b280ea1538ad37c82050",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_assets/registry/sqlite_repository.py",
+    "sha256": "6bae2eea2f39b415e5a2da7dc87d9ff21e2b8f8e818d93b7bda8b2d782b1904a",
+    "blob": "78f6d0d040f34a6351c599d96fcff37826023b8c",
+    "live_sha256": "fd3ecfdb7bb75bf8c2db0208d9d13bd88cefc3b94a6015d69d58400cb013a4b9",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_assets/registry/serialization.py",
+    "sha256": "ac2ec89f7ddb9f088e69e8b6b7a5cdc0db17329734143e9dcded9eefea6db175",
+    "blob": "64c13300422dad046224b042c26569ceb177abd9",
+    "live_sha256": "1ebdfd3be2ccd83afd9421c9ed7d1fae129cf0b5f0345e89dfc10b99db32aea5",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_assets/registry/lifecycle.py",
+    "sha256": "52159e7308cfa32de72ec6ff26c1afd689b6d8f8f9f201485176974881f1b0f5",
+    "blob": "4d4b227fde526a9438f7212facc2ac51700f7277",
+    "live_sha256": "3885c93329770be44fa6a648c34315d84ac3fa8f9fe033e101fda7bf7906aaec",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_assets/registry/__init__.py",
+    "sha256": "4ac9f882e41223aaaea9d655277efdc5b50b27e65d8563b04149197f25ec65ef",
+    "blob": "227f750e7d0fe641990e3f9fd730a0f8ed6f1839",
+    "live_sha256": "de6cd31fc1df66d55c6a99f8d32a614abbec6f387453123b3fd891acfc4880ec",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_assets/aggregation/composite.py",
+    "sha256": "0bebf89de52e555e2a35a80fb7fdbdb21656be98486038cd4ef2f11f2cba01a8",
+    "blob": "33d875d1a57da29dbf7633276596e4cbccd1986b",
+    "live_sha256": "e26d8f976335dde9dcd961dc902fc05b256894c3f9d50aaa96447b7334798994",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_assets/aggregation/representatives.py",
+    "sha256": "be8ed52f1076e725cb0faa31d157e7fcb8fd58762b3b52b9fdfa36e8a3d794b6",
+    "blob": "d20157633157f59e401eee710644248aca65fd65",
+    "live_sha256": "ae9c5b3dff3d53cd17dec984bdd24f8a19dc87e39ca8b54039acea0646151d6c",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_assets/aggregation/specs.py",
+    "sha256": "01b8108cca8f7dd07fde869e7e99abca0642864acf9fb97a26b363ed9636166b",
+    "blob": "9fa26f91014a0982be5c9f53cf7685fe1ec496c2",
+    "live_sha256": "f1de3e6cde618a4660457866b8288dc2f89048b53b22cebad1b83c2f62f943f1",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_assets/aggregation/__init__.py",
+    "sha256": "23360d9d85f5db775baa53279f1bd0806949802b01c52ec3dc9511474b72280d",
+    "blob": "48cef53882f0406d2dc530aaed4649489dbedae8",
+    "live_sha256": "b6d43881a15e59a0bf53285ad8d1b629d22f96cf510b8400d25e91d0b58ee4ed",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_assets/similarity/exact.py",
+    "sha256": "0bf4d71b4ba9cd043dae98a53aa449763c97a696d1bbc227d6043c0bf3a258d5",
+    "blob": "59119b69c5078cf03a263f9570a76680f4884356",
+    "live_sha256": "fd986636a74e27d3d0612507e3d8177c78fbbfbe0d6b05173cfaafca2e5eba56",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_assets/optimizer/pareto.py",
+    "sha256": "7d7aed91ae55853589196a1b66aed1223d0984bccadab7b5d7165423952f0cfd",
+    "blob": "c6140cfbc6719d1bcc3fbc6cabcab84c1f40d5f4",
+    "live_sha256": "0c37202acbf8764f55d53e40cd29ae69c2de25b11daa43d02c99c89e474a6425",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_assets/clustering/families.py",
+    "sha256": "25c72cfb2524576d02d20e3ad44fef18178f95601b08bcd4d995e022911580b7",
+    "blob": "c07f2967873105e3b9d768f1874d659636ed3dd1",
+    "live_sha256": "909a048428217321eeb0fa2a16c4cf182fcb4e182467eed534dc675cf39f86fe",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_assets/clustering/incremental.py",
+    "sha256": "301f22e20a91c4926d667df2e4bd14ab23b695b2607f85bca919f21af1cf649d",
+    "blob": "900213826be65af7307fe514a723b4f92f554638",
+    "live_sha256": "145e0b453474bf30ac6e98fb4dce4d3d2fa89ef339d9cdbf025cce2f6319fd0e",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_assets/clustering/__init__.py",
+    "sha256": "33d42a786d65045d6870f06cc142822291473853b02c856a8f2505e700b64e2e",
+    "blob": "09d1132f85387f76710e0174c52629362c4f8add",
+    "live_sha256": "4ca83d80c8663e3c0608aead61b1446010e9e300f0aed1548d65eadf43628bf8",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_assets/library/promotion_gate.py",
+    "sha256": "db9d0930a249793d464b286bfc3c36a7c60ea37dd9d180f557628e4a333b9fc2",
+    "blob": "cde26503439475ca9622e43e241f0791056ca00d",
+    "live_sha256": "82ac97f937c12e1ceb6e075ce53b0f52b5662f55adb9e18b6a8fa1dd7d1d70c4",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_assets/assembly/engine.py",
+    "sha256": "ddd58bb69af3dab46bdcea0f1865a764c5760d41474ab8d4f412c284f80e262b",
+    "blob": "2260dd83e9b49a6f9430c348fb7be6cba052d289",
+    "live_sha256": "974d5b394a64ad026ceb94c08b822fcbfa541b25c7ffe22ac5946a47042a6b4b",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_assets/__init__.py",
+    "sha256": "a9814b4a307ef8eb18766313e29109a22fd82f43a90cdcd1132418d98a83043d",
+    "blob": "74b339a15e002ea5ba4e0bb6085975d2ffb7aca6",
+    "live_sha256": "d648fe10eabf442cff6963acea52797f5d79bc3b139e9daf467dcaac4377eaf2",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_assets/tests/test_dlib_fa_004_011_cluster_governance.py",
+    "sha256": "7c1d6d3b2c72f970c8b1f6a791ccf7718289cbe7f2f106ae4074c08763baf391",
+    "blob": "db78ec99a8ad3803c59e10ef8ae81d45048c1e64",
+    "live_sha256": "5e45da4676d7910cd55fc05ded04a73030bffbba6ba1e19bf721c77e77686caf",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_assets/tests/test_adapter_data_access.py",
+    "sha256": "903a55a77db11f333a519091a8cae5f360fed00fd8c5f33ef71a44e13ae4434f",
+    "blob": "1f4f8e3df1cc7bdbbfbec7bbc0fcb4679c837d2d",
+    "live_sha256": "a6261285590c00c1965eca7f32ff186c9755d60a23f6ff0fd6c1900fc60cd4a0",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_assets/tests/profiling/test_dimensions.py",
+    "sha256": "8c1ded72fc1edc7060f1fa047c382699bc04cd672e167470fe8b5d3c8ed509dc",
+    "blob": "d8759cfb04a731bf73a29e077fd3262e0ba585ed",
+    "live_sha256": "97dc22295f73a4618e5c861f79fb23470f6afb6c6f1b9a01ef0256f9c429904a",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_assets/tests/profiling/test_health_card.py",
+    "sha256": "bcad7b7a1cdc934ffd8f76bf8c91ed94c0c3ee8f162346fd4aad15c224f10f02",
+    "blob": "8d6ca09a0aa81f27084ba82400ed281a95e7acb1",
+    "live_sha256": "d07e6e67857179e1789ef613e1461c8883775650add1491aa1f4dd5edf9fdeea",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_assets/tests/profiling/test_metric_grading.py",
+    "sha256": "dae6170164c1705a3f3aa0433bae56234320c30ba4cd62f6b17d966e55469c95",
+    "blob": "a1cb70dec994123cbc36a3120414fc8e89d30bc0",
+    "live_sha256": "b7213ad52eb4a842d0d6ce7c57c43941fdc325cad44d104fdf29736eab41a713",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_assets/tests/profiling/test_policies.py",
+    "sha256": "f7590b58652a255cfa6e319c063fff5914225c456de79d16a2512835f678136e",
+    "blob": "f72bdc193472f9e094469d653e0b4820fe18750b",
+    "live_sha256": "3de18e6dae15b2f8565cbc1917c2477aecff4a855cdbabecb5924914946e4d2b",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_assets/tests/profiling/test_taxonomy.py",
+    "sha256": "97ec7a166793bc7349a22c1cc7a539814dddb1d3b4bd59b6e3239feebd86aaf4",
+    "blob": "57ff013c2df686248dc0ac1b077b05b2cb0f8698",
+    "live_sha256": "f1643667fd337d2812c71c115d12374648ec7fbcf79f5b15ce410b7e78f51492",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_assets/tests/test_library_promotion_gate.py",
+    "sha256": "baa7dd43b8fddc07f488bc0bcddcc1a53491057c27756429bc5a8def6a71983e",
+    "blob": "fed3eb53cf48937814adb25dc0354ebb9bf821c0",
+    "live_sha256": "b8f4b267c6b4471e87e1f44dd4b297d6ee7031bdb7d2a5b18367d5f5fc9e1759",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_assets/tests/adapters/test_residual_novelty.py",
+    "sha256": "f6cd8331a5a21784d3359b4bd7817c232ef89d4709d0d038b030f2e9351e98c1",
+    "blob": "390879e96cfb8951f76d0c0473782e9898dee1a3",
+    "live_sha256": "4912d715cae6fd8c8969690d701e4edb3b2dff29383b2ae4023a4683f743ed56",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_assets/tests/test_adapter_quant_evaluator.py",
+    "sha256": "daf1d3e049342c0e27d56281262a9c81aacbd8c96601e12f746579aafb11d950",
+    "blob": "0bacda6c3e0c7ded0d4df0646b822a81ecda87c1",
+    "live_sha256": "76ed6eca0ed95db72c2d432b50f083851043151b222f6e3978a5f7bb2cc9144a",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_assets/tests/test_sqlite_repository.py",
+    "sha256": "7e3f210561c972af6a6e301b751ed810b1a463e0c953900cddff0d80a975e460",
+    "blob": "f731e60e52e1d6b1631c21bf4d7071ade2547d32",
+    "live_sha256": "69a6f50c7714898ce53368d9f2f70f9630cf0b3593442267369c99ad9414a3e3",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_assets/tests/aggregation/test_representatives.py",
+    "sha256": "9302775a1c3cb72dd771123118d75a2bfad294d13784c6dc228dd146fc7ecb4b",
+    "blob": "b8f6ad1ba833e4b910a0e6b701075e869f307b8c",
+    "live_sha256": "b2c3de2027bf57d1a10d8e1e2d4f44fe0a7f1756f14729877c8cbd6860dfe653",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_assets/tests/aggregation/test_specs.py",
+    "sha256": "5a0fc3047a5e1c9bc50f855a40bb8cc71d6bb9bd55a906c9afbcb286b71d0e9f",
+    "blob": "53c43db5d1fd0dd790c996499bbb61a59b48e187",
+    "live_sha256": "d60c5572d380c763ba279e7edd48bfb3d36fe34d3efffaf83a1aa045be77e71a",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_assets/tests/test_adapter_factor_engine.py",
+    "sha256": "72ed6d84e50be4b45411bd22c63944363cc60b7c978d5e5919b4af4f8572f332",
+    "blob": "1fbdee42d22854e25b3a6cb45d2df02069dc5fa1",
+    "live_sha256": "dcfad0b5823605fafc5fd1b4d4daf2cd60654d1309f206f779401ac8c3869314",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_assets/tests/test_dlib_fa_012_016_library_evidence.py",
+    "sha256": "114ec2b80ea48e19dafd2351356951ec45f3fb53140b8576eb0f6c572663bf9b",
+    "blob": "495e09ce32637600dedfb3254b222ce1e3479b25",
+    "live_sha256": "74d8507c307a7f3259bfe65c7b3de6c774b8dcbe68c68420eac3be9a956663f1",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_assets/tests/test_incremental_cluster_assign.py",
+    "sha256": "04d0a38fcae6de5684fef6108ad4184b576d566ce964e421b1b1da35f602265e",
+    "blob": "c26dd77e2a970217c29154ead1d9d56e0c2aaeff",
+    "live_sha256": "096a74e864fb704724227d16f6bf900186f9b8ff903558f4ee4c4d74ea68dff5",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_assets/tests/optimizer/test_pareto_negative.py",
+    "sha256": "a4c4685ace94b084cd5332199ccef2d3ded8c1b5679e802a6a88380851f2a9de",
+    "blob": "4d62fc78c111834dd46fc63333506d56badfe44f",
+    "live_sha256": "85742f052ae77fdf9748a33d769cfc6374672bb186b76955c5b0a527035d3080",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_assets/tests/test_dlib_fa_018_composite.py",
+    "sha256": "1550004b87631d5f3ecf0e53df760ab4ad9ecc783382fefcc913070c8b5c5a71",
+    "blob": "a07fd6e6ec7d6d9e281ef70cc8edb4867df00c90",
+    "live_sha256": "5eb91de6a2086861d3daab9e304555594a0b711265968046a0d8c71f0cff47fd",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_assets/tests/assembly/test_fa_105_assembly_hash_and_score.py",
+    "sha256": "1530da82a468dba99d09bf03dc6aabbbc26ea0e690a8e98edb06cc15797fd577",
+    "blob": "5661c212415accb434e6b9bc0e982a63cb361d53",
+    "live_sha256": "8b17db4c45761268d3a5bf70bd34d1987690d923122934395fb7d8899476665f",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_assets/tests/assembly/test_production_and_similarity_artifact.py",
+    "sha256": "8da3a6e6d6cf64df0637faf261bdd05a6f078ee6403b8bf4e00bae2557d2e0b9",
+    "blob": "552b4de038244cacc6bd80980dd3484c45fc4783",
+    "live_sha256": "7f49ae29762be61c428f32b4d92936d59ec14d2182bf62148faf3433152d574e",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_assets/tests/assembly/test_fa_treatment_optimization_ref.py",
+    "sha256": "74c4e126ce8e9ec517a6d3cbbf7bec17a6fed3f3637ce9a4c5ae0ad646676a22",
+    "blob": "2bb5e919b5e522c54ecfefe69529734bf8a2ad10",
+    "live_sha256": "840904c789d64fab5f4bf743df5ffa0110735460a2d7e456529cf614b8f9916a",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_assets/tests/assembly/test_treatment_membership.py",
+    "sha256": "2d5b6cdbdd8981adc95c2b09d0b944a238fcf47699db717be7bf482d1588babf",
+    "blob": "16a6710270ef472fb5eaa149a97c50fe0f1781bd",
+    "live_sha256": "31f85dbfd6ecd43faa5d08b354aa2f4e5021c16e2808ce73a87b1f03e31b7d7e",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_assets/tests/assembly/test_engine.py",
+    "sha256": "4c21a61a340c068a9542fe88ce50ee6865773a63574b3b07dcec96d11095c222",
+    "blob": "880e8eed4d408063099370f8ab05d512738e3ec0",
+    "live_sha256": "66ea6002389278169322e4a6270a1814a5acd61f18ac4e5d9225b87b36eeea9c",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_assets/tests/test_clustering_certification.py",
+    "sha256": "3582a33b293398ccb48332bc91aa625d707cfd5cc2e3d027af4b705451f582fc",
+    "blob": "18650262c2e9024fc9402d38a1014cd0e2984343",
+    "live_sha256": "96b3abf55c3c2c2f26c59b3bb73ac936d7ee1d364f98cda8fd3343d99bd6a6d8",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_assets/tests/test_lifecycle_orchestration.py",
+    "sha256": "5d57717ff270ef067af7045edd3c126cf4cebf45ee77add44b3b362b8da84a74",
+    "blob": "28203b1803e447eed281c04808930e5c06eff62b",
+    "live_sha256": "0a01d689a2d03664a6b1da8f290da0761943821f3ddaaa478bf432cf22bb99b0",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_assets/contracts/admission.py",
+    "sha256": "17052fa7787816ff47d21021c4531abfe984406a266cd5fae8fef4d7d2b864c9",
+    "blob": "e559a108d205f189276274b1c47516fa91efc9ff",
+    "live_sha256": "89d5f147f5ecbd50372d2b860ed48cfaf6a5b44d26b169db2837c9489563e9ce",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_assets/contracts/cluster_governance.py",
+    "sha256": "91f546c078d2b11e6ad0179282e79c0bdb3845c7ec346cbd53c39a8863a80c9a",
+    "blob": "2080332813309879c1a0ba7ebb5b38c5f0330cf5",
+    "live_sha256": "30b961b94faa7532a3ffbf41ddd4389b0ef3208650f5d5fda54787337d56ad6a",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_assets/contracts/factor_set.py",
+    "sha256": "401acdce0b2f930ca3f0fa045339aeb5caedefaf9c087d8964bc758c49eddb58",
+    "blob": "27420d2c03a8d323e8abd53c8b43f5ed7ae3f992",
+    "live_sha256": "f8e4561ee9cfe0a235633f9de69cc10097e4408812ae66eca9e4caae465e98e4",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_assets/contracts/fingerprint.py",
+    "sha256": "92d2b343dcc4c7a4d569aecae16863b9147fb6eeed1791f736ba19da85ecde59",
+    "blob": "8e1c825a32bb15b71b3522a31c7983969038161b",
+    "live_sha256": "3510218720c5c17bb5db0011a5308cb85c6d21c2ca1af638c13029a4a51cb302",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_assets/contracts/lifecycle.py",
+    "sha256": "399ead0b682bd68788dcff021490fb57592daafc1d3ea1c4df87ec60d3c8324b",
+    "blob": "cd0ac91e1fecfe2bdedcc770cca272955bc47f2a",
+    "live_sha256": "ca197dc01bd23f7007d822c6199e46c11af0f01d8b1826a838f82053d0f260b3",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_assets/contracts/evidence_ref.py",
+    "sha256": "137cd4d478cd42d03c928d624488a629dce5274afc97388e79f44af7cdb8467c",
+    "blob": "a4660fa8f820a42f2c4a810de3aa2e3871f439a5",
+    "live_sha256": "3206e916f2d95a7eb31f2ae893553e63c9eb69d9a879d653b662944b9e31317b",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_assets/contracts/assembly_evidence.py",
+    "sha256": "879df3f18553ed2acb2065f67dbe10565a90993dc575bf9341f43b9afbc1e425",
+    "blob": "7eb4036e0547049ed378e4514b389bd07c17c743",
+    "live_sha256": "5bc559202d97ba19736efa629a492a4d3a664be08f1ff60ddc25071771262a60",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_assets/contracts/__init__.py",
+    "sha256": "4c1d7f570224e8b570b552319f6499fdda97e1cbfcce81faea339a0ac84306d2",
+    "blob": "025c805f18d9e7bbfac0b05107e6a91dc8a936eb",
+    "live_sha256": "20bb5493bd41f3198266239a6aeb37563b63dc00876e8f72c17d09e38657e5d9",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "data_access/r30/data_change.py",
+    "sha256": "29ba4dc50a95cc3a65e544b7c4cf6e8900bd0493c03becbc9d438f3b20e60979",
+    "blob": "3be84818a70958b0146752fb9d23ed53f736a5eb",
+    "live_sha256": "4da934104a8efee115b70ec34b88da9a67df3d046cb0ca73e645c046176640b1",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "data_access/core/__init__.py",
+    "sha256": "1c05d93c30f44a99d3671a17e080460dbda19db3e2cc92b8f394368dc232d482",
+    "blob": "22e5d97a0a0e7cd4543fea463a947fb9aa9d1805",
+    "live_sha256": "eb7b7a230d03ddfaf817b55a3479a84d5cb6cd798c4be4c9728931447d31dfa5",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "modeling/selection.py",
+    "sha256": "3244fa8c9529a894d9c0766dc8585fb9b27f8a4a3459fb5684b69818fee9611d",
+    "blob": "3859e2fb5860dc264b9dfa818b85e106fb6a6f99",
+    "live_sha256": "4d76fe82e3f78c3bd5b43acf8a282ca6a9417853073384eda53d2f7c6582d2ad",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "modeling/trainer.py",
+    "sha256": "5dc3fe1f854314550c478d2418a45910d4552cc889b8c10daf7e729dbff64e63",
+    "blob": "9c5b62969085cd680457db3098f33248a718c70f",
+    "live_sha256": "45f5a4b8e94e04ca4265b2c1494e81552044e8c3cbfdf402920b4aa24338fa35",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "modeling/monitoring.py",
+    "sha256": "661ca8d3aa93cd72a22bdbb2502634d486b2cdc4fc7e70bf241339ff5d75d314",
+    "blob": "35be02e1e92864494dce575dddb3c87e9fa6a576",
+    "live_sha256": "274902d7884bd30da6bc652ee0d201d97b00c446f98e69b2499ae8d229d7b9da",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "modeling/diagnostics.py",
+    "sha256": "4bf4c97a0cb7379ef66915a4d94bdc106b5f07a38d5a091f9cfa9f9185c67b1e",
+    "blob": "5dcfec1e053ee8f504f1e93891ed298a328304cc",
+    "live_sha256": "f3b15b617d0e6874e21c5f03370c5bdcaa05b65bb0baef7c5579732cb3dcff07",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "modeling/walk_forward.py",
+    "sha256": "93ec84964d19a17b98bedca5bc338705ed433895bc2be79bb37fa1d25134c9e2",
+    "blob": "669bc99c39ad63d928442905942aa53bfea32101",
+    "live_sha256": "0f3969409774b09fdf5a7742f6d4e7ffa04f5303c0a5375c5c2e008f8198c68f",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "modeling/benchmark.py",
+    "sha256": "09e6cfc8f3c16640052d7bc26a9e7635c8418b0a8a62e94c7d4d7fa163fae28d",
+    "blob": "58f371e2a158140a26442325b75fcb6a40e68d78",
+    "live_sha256": "c3c59b277eb62b1b3a9be7974ed9e72ad40de59bf9548f9c9a2b45246b7eef65",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "modeling/predictor.py",
+    "sha256": "d7876b3008a9832abc86939a9777a71f0ee97375edee9e072a19ff390e7521e0",
+    "blob": "e2b9b1124fbc9c23c06d2d417bf80aa92e19a578",
+    "live_sha256": "5d44ab8df651ca3f2e123c36f6e0f5c1f0adddfebb20551e4144a578da2ca182",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "modeling/artifact.py",
+    "sha256": "71f59fb618d355143e34a3688a705a693fb596c245fc7991b88a5d0ff0b48612",
+    "blob": "40ec9951d28aab9e4439a997581cb6491c6b9ec8",
+    "live_sha256": "1bbeb4f3bd5b872647a1b5741426ef39e5f23cc371528a84cc6760338311c9dd",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "modeling/dataset.py",
+    "sha256": "5ede2c18c759a2975445c98344f5b7190d25b45bdeb07b8562b8361497a22c69",
+    "blob": "8a689eb04e9f273049be01547a77f7677e2e60b5",
+    "live_sha256": "944e6531af6b273fab0ad8a3c983dcf66b94742d60e578c0e17c017a58bd1d0c",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "modeling/evaluation.py",
+    "sha256": "b237471151f769d82d7fafc683dd096721a09cefa1b86f6d18d5551e6c3b8b80",
+    "blob": "ea490b7b9988fa3c8b2e155d88746a84cdf6a00d",
+    "live_sha256": "2869ae218304443f224801dc85d78230012e0d842fcd9eb10d8cab095bf190db",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "modeling/trainer_governance.py",
+    "sha256": "9fa4ac6c584aa86fb47a54352ee220224ddeb24d52d22998013dca3efb4c0c0d",
+    "blob": "648cc6655666176a0f60831fe810add606ea2222",
+    "live_sha256": "41ccf4155581adb860cde0723a113e7ebd67584976f9ee02e8ef6b28866bebf7",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_engine/backend/cleaned_bridge.py",
+    "sha256": "e4146eee57840e42f120ec82047353922e7a15ba91c270aad2711e51d81be405",
+    "blob": "ea2455e034a1db1e8e8b245f14b2eb85d78e3887",
+    "live_sha256": "69244aab24397b0f024543ee3c55942901ddcc2e04e3568bbbb9f2baacb35042",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_engine/backend/parameter_aliases.py",
+    "sha256": "0524d7ea929a5c8dc5227858aa190a3cd0fdbd0198a9f1be2677bf8411d18b12",
+    "blob": "f34640996130d081af3a9c6eb5321af76db8fadf",
+    "live_sha256": "44fc5f53be9a38733fa6aa8cf3089d96926eafd6744ca19f31176af41588eb2c",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_engine/backend/operator_cost.py",
+    "sha256": "47efcab77b15058ade27617722011665cd4dbb6bdbef02f75266f403aad505cb",
+    "blob": "e49a50f82bbb8df2719d6cd96e3d9e45dc8e0b95",
+    "live_sha256": "9f71deb99510b66bb40abea2b415d22b82ece70e6027daba82e61c8592dadd8e",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_engine/backend/context.py",
+    "sha256": "9530d02a207b5289d3209892b58da692590cf169722daeaf61deb5d108df2987",
+    "blob": "ce21ebb970d07e8957b6b89fa4c4e62ada66fa9d",
+    "live_sha256": "1cfd5f48847e79b424b66bad2281732972236ed27548c3ede4ddabe67d4a1045",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_engine/backend/operator_semantic_version.py",
+    "sha256": "ccdc594216e9f90c12bd9bb6eb70f99f7137687899b4ddccbae3bc3660f0bbc9",
+    "blob": "8229c2fd0463ea399873d2dc55baa6222e9377de",
+    "live_sha256": "2afd486489d1dbcb5613cfbe712ec86db32341a0f858d74bcac9d9d971d1e1c9",
+    "status": "REVIEW_REQUIRED"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_engine/runtime/batch_service.py",
+    "sha256": "9610be6be674e690a994e3d60e4db7177b3d6b4f7355bb198c1a689ea2c4d95a",
+    "blob": "af4151f5190014c4222f4dbfbf548108ff17d0f1",
+    "live_sha256": "7bae6f96973ef11ef0c89ce2844caf95074a658ae0d523403cfc5d8d721d0c82",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_engine/runtime/resume_validation.py",
+    "sha256": "4cff1ff43d73c6020a0df627d399c7ed445901c38fbf403abc1c1e219db46459",
+    "blob": "ffb310626e5550276c8d80cb63518f523ba3235e",
+    "live_sha256": "f004d77d4d2ca51c14e41aa5318811cb0c40c90bfe4f33dda24a31c8427eafa6",
+    "status": "REVIEW_REQUIRED"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_engine/runtime/engine.py",
+    "sha256": "f7b9f4113e166f5db9a34cf21afd6208a499e42e59b007780a26b89f6018095b",
+    "blob": "83abd79854a12196582806c2ef3ee097342724e1",
+    "live_sha256": "6d2a070757f1a494ec0e4e7bb1af3e322abaf94cda0d19a66310e35026b67d61",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_engine/runtime/execution_contract.py",
+    "sha256": "e8738cb29eedfd6c44e16f144f3bda7b2fa949bd3b8088af2bbaaa0cf39dda73",
+    "blob": "d3718f6869cc14d00c3e8a64f94eca5f9a6f5291",
+    "live_sha256": "30d46c843a07aed822b164073231fc89f1a9341098d838d8918a84c7021421b7",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_engine/runtime/adaptive_batch_scheduler.py",
+    "sha256": "8b2151e8f32838866e93bc11eda45baf2cee27ef7e7118db6e5d866eee020cd7",
+    "blob": "4c0b2c5be5a47847e713c54c50351b252ac3e64a",
+    "live_sha256": "647ba605923a6fe7d28939bc8fa6b00f10c126c114de4b1ba9e7becb308b92d7",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_engine/runtime/persistent_run_state.py",
+    "sha256": "51ae47bfd2c99759d1e3670f2762b6f57780024f5436625f3b696b6d5e585380",
+    "blob": "b035426bf98f1438adc20afd02cc2815a9c63310",
+    "live_sha256": "3397822c28c0d214114f6642f62fd2cf512a955a50caab8ac98fb96f82d5de79",
+    "status": "REVIEW_REQUIRED"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_engine/runtime/bounded_pipeline.py",
+    "sha256": "975b2de2cdd0a27b4ffc0f78b8ed16d5b3f61ad3caf789e26e868a0fc6b48783",
+    "blob": "54e49f1d5bae594565c234ea4f45a72cf2f8dc9d",
+    "live_sha256": "a6c4abb105a82f23c9140e3fdf73e9889ddf18942531b5a75bf8896836241859",
+    "status": "REVIEW_REQUIRED"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_engine/cleaned_operators/filter_smooth.py",
+    "sha256": "4606f056ea7e0f2ed39e81392ec63efea7ff2179c63b3b15d0d71be623b3e36d",
+    "blob": "3c18645433208a3f704687194bdf69ec06efa221",
+    "live_sha256": "5ee367a03e726001c3bdb1bd1e866aec97e8a1cbd912782c47fcce5923b878db",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_engine/cleaned_operators/event_response.py",
+    "sha256": "5489aba154c99e3f641780052f12c0a5942baba70e64501e5fda10da94d73de9",
+    "blob": "11b0023025401448111ffba1cd01e74d77031f13",
+    "live_sha256": "00335d6866a89ea47bfc90257e596247dd63718c9b15a8090a752936138ba4d5",
+    "status": "REVIEW_REQUIRED"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_engine/cleaned_operators/ts_model/_rolling_core.py",
+    "sha256": "9c3ab6a3ecaf2989c9449bfeb5690571f98711429ece6b8b2322bb2bb0c429ad",
+    "blob": "642e28a4db2280c520c9b81c037083334746505e",
+    "live_sha256": "3341881a4f013f67ea08f2e4783cd46bb05c8542b6dd6e07c9cb4935072bcbd5",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_engine/cleaned_operators/ts_model/wavelet_spectral.py",
+    "sha256": "0b4db5e9505796987b3f3f4980eb214d76bfd4dd859d53ec2817c4ccdfa710d7",
+    "blob": "31c17c62af4d6ff190d8ad13bbc88c55d643e4f9",
+    "live_sha256": "e37667e81efb32ba7555bfffb4944ba63b2b028f779b9d8a6ba967bb4cb95366",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_engine/cleaned_operators/ts_model/dynamic_regression.py",
+    "sha256": "03c5c9f1dc3c37258b90056fbdb08a152624521894fb79dbc5d83cf791d73973",
+    "blob": "5258725a8ea19561ef1526262d9e6ccacfcda65a",
+    "live_sha256": "6d94d101f5e1ede4935d09ad9d92d7d298c7f22e099b3b4b7610da608099e129",
+    "status": "REVIEW_REQUIRED"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_engine/cleaned_operators/filter_hysteresis.py",
+    "sha256": "cd26f9ffbed607da426a4aa0958c7b7f25dd652805ac6a578236b17a294c7123",
+    "blob": "8439561dfbd685663fa767856ba672a0ef1807c6",
+    "live_sha256": "5919accf5933482607efd311a6b9ef6a693d49abf4699b008fdc28162f47f279",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_engine/cleaned_operators/registry.py",
+    "sha256": "f12a45fa619595a317c15bab6f4412b74517a1702101570b5676edaeaa2b96bc",
+    "blob": "f611b673e2f87cd8ab2576b30cd69c2faa328841",
+    "live_sha256": "2dad4938a702dff291d553c14bb43724b3d5250c90b3d512f553c2fa8e4159e2",
+    "status": "REVIEW_REQUIRED"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_engine/cleaned_operators/advanced_expectile.py",
+    "sha256": "db58e37feb74d0cfdbd0516d2fb85d1890636f3b44173263a6549ca91d4b6cee",
+    "blob": "06a5409c329490451a8b86a5725f99738b20f9a1",
+    "live_sha256": "a3af37f76d2a011b1291e90058855ecb4215daa15f48b5f813177e078ca7c50d",
+    "status": "REVIEW_REQUIRED"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_engine/cleaned_operators/extreme_tail.py",
+    "sha256": "2bf40c8f72f2f44bf00f4d2aa5f0b027d406c4ce83c797e076e3a0e948499e1f",
+    "blob": "cb1fc0c01e948a18394349615d733b4d7aad9068",
+    "live_sha256": "d65bf9c49af68f8a09fc45e9d25f6dcf0e3b6a8aa2e3b1358c36878e45e9a07e",
+    "status": "REVIEW_REQUIRED"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_engine/cleaned_operators/local_lyapunov.py",
+    "sha256": "6ddc727e3c385523bdcb864fc4393141f1c9e47d2c3f9416c85eb32ed1464983",
+    "blob": "925b289b371d4e5dc8a0f4043c1678a645cc962e",
+    "live_sha256": "119bbcb15def56c2b6b67031d7d5cc37a324c95e6e84b0ff5e40fa8e2f170474",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_engine/cleaned_operators/cross_section/peer_ops.py",
+    "sha256": "b559e68d142d82daf121eb805764666cb2c910bf7a9c4755c15f9adf35f489c1",
+    "blob": "907e83e00e866adcf931ba7e0acfd29bb7299999",
+    "live_sha256": "f453dec21c36f3726f309f32d330087540f5183a605fd8b5d3f448bf292450ce",
+    "status": "REVIEW_REQUIRED"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_engine/cleaned_operators/cross_section/polars_peer.py",
+    "sha256": "145c557516b1cffbb61028393aabb2c405103eb247a94744cd02ab4f7f12cb45",
+    "blob": "c086f653519c5e7fd7fc6f9968d346162b65423e",
+    "live_sha256": "0cd9613addfa09f0f0ce981ceb767b84e5475a01f8d87f14f70b6869966337df",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_engine/cleaned_operators/group_ext.py",
+    "sha256": "f75211388bd261732e35da0eb56c1ad6b8b3de1cf569dc77a5f98e3e9d5fe535",
+    "blob": "4aa72c48f82ca71c7dcb12863a8e479caeb6535d",
+    "live_sha256": "1a30522149c31ed8e746fb3cd1ca1201d162de7ea2968af72298ada0b0191fe7",
+    "status": "REVIEW_REQUIRED"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_engine/cleaned_operators/polars_native/ts_advanced_batch1.py",
+    "sha256": "55f83709dd4c2ae9eef42843ef9941f090ccab8fea9b58f1fda04653734e4890",
+    "blob": "029b4672a71158fdcfa90cf7d730ffcb5b8e76f4",
+    "live_sha256": "021a25da5872d064a719618fd06bfcac0466f44960fd7979ffad9dcd8db60808",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_engine/cleaned_operators/polars_native/ts_advanced_batch4.py",
+    "sha256": "cef17fa4697607fd9931d8104c6bf0000f3130e8bb50a5a5bf0c442251d989a8",
+    "blob": "0bf21b933589fe02f1c71b8a560559fab186ddf4",
+    "live_sha256": "0a2eb5b5d243827fa39a5b047163918477a266b1f237ba61b649804c315cdfa2",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_engine/cleaned_operators/polars_native/ts_advanced_batch5.py",
+    "sha256": "e12e376f09ccf0eca49f21cec2aedafcd1142fdc06026d148c804800a5ec1553",
+    "blob": "135dac219d02c2b9e51d1931cc4cfe442927bc82",
+    "live_sha256": "2d36ecd4316aa5fd78c6bae9de278e5ff90bdf3444f5b5528e0d0752510a237c",
+    "status": "REVIEW_REQUIRED"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_engine/cleaned_operators/regression_models.py",
+    "sha256": "2b5a507c07310123e885712a14185947d57d71f9840e079da5cd8c7c93e5ae59",
+    "blob": "d847909b82cf8303ef6ec1f240286624ede98192",
+    "live_sha256": "e3463642b754e1b684dbca2612313934b0fc9a87ee500c1141dd9950aa8018c4",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_engine/cleaned_operators/candle_state_space.py",
+    "sha256": "369442d112d6d0375b0a8c39345abf503a5ba98aa42f94593b8630defdd048e1",
+    "blob": "8a96f6499d14c07906e6d6b4c463e06ab75c2511",
+    "live_sha256": "980dd0b3441634155d86fa6c1e648b40f7e686aafa84a8a65e1b7da5a25001ad",
+    "status": "REVIEW_REQUIRED"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_engine/cleaned_operators/research_spectral.py",
+    "sha256": "88d61f02f4d5ef856f464c1611b170349c81b4c7e157d87e39a7c1c722f644d8",
+    "blob": "2da61cd70f83401a003aa9f31416bdcbac110083",
+    "live_sha256": "0af43f7f0fb45f2c01b2a990e25b01e0f4b069e6bbadca951d1745aa4e2156b3",
+    "status": "REVIEW_REQUIRED"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_engine/cleaned_operators/dynamic_knn.py",
+    "sha256": "fb2bda54985333c7d4d5d1b2c6b6aeda23b26a68b85ecd0cdffa2a598208c90b",
+    "blob": "bf4e9bd768e4cac3875375fd4424459bb14a5902",
+    "live_sha256": "5c947ff1c39363d8a2d85d9bd5dc830b129620bc933912b2ea759d46c4625285",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_engine/cleaned_operators/nonlinear_dependence.py",
+    "sha256": "334fc8bf345658663d8dc4af108fc5a0fd0ea80ea5ff8b1b69bfcb0ff2b8a97d",
+    "blob": "46da67bdee2ec8169e6f7231cea40a98e34aeaeb",
+    "live_sha256": "c94cafdc36d2974edde973460a0c09023013fd9694d06f313759c6cee0f15794",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_engine/tests/backend/test_polars_ts_rolling_pairwise.py",
+    "sha256": "220b25e62e2cea29a14e5cc6eb9f001d8b86abd9a6d8fc31673b7ab76903bbba",
+    "blob": "690eb43f852b374e9c299e5496c2200d896e61f9",
+    "live_sha256": "3ea85db83941f801596df46c092d60c896b277d044ee99c5c4111ae13fb4ab3b",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_engine/tests/operators/test_same_clock_lag.py",
+    "sha256": "83c9154242e65a7887f549b9c293ff64bbf7ef004b3e622c219168dd8ecd72a7",
+    "blob": "bf9973d02cc05a7a932bf5c3629f5a4dfd209d69",
+    "live_sha256": "754c86a61ca884b5cc720d848eb60fbea77c10c3b2d0d363ea1c73b5a3b7f18a",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_engine/tests/operators/test_r11_round3_spectral_mem.py",
+    "sha256": "72eebf30c8343719137610e3999ba0cea7c64e43a578bfb34809f11ff779e7b2",
+    "blob": "d390990f723dc087af3bc41b92f85e82f4a2ccbf",
+    "live_sha256": "100691e722dc8302da35413edc94240a2e3961716b75266ab707c451e1c9a1a2",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_engine/tests/operators/test_v9_hsic_solve_domain.py",
+    "sha256": "6669d08be9a4038ea690b304ce7892d6c763eb30844024621f75bfd620e40b0d",
+    "blob": "a17477dd778a80424f07ee9c7d8d1b0af7bf928c",
+    "live_sha256": "c8230e3a7687ea4b554fb3e8f4696e10f0c017570341bb8eacea5950840f5f3c",
+    "status": "REVIEW_REQUIRED"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_engine/tests/operators/test_v9_expectile_location.py",
+    "sha256": "c86f0cbefa5fc98d23567357f23dcbbb8816922c5a409a65ce1c4950eaf8ac7e",
+    "blob": "62627da4a2c047e9b58ef93f0c5e6a67a04b00d0",
+    "live_sha256": "c47d9b8b14f939586f6bdde3fe49454553266bbdbe44c4c29ca325938e445af8",
+    "status": "REVIEW_REQUIRED"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_engine/tests/operators/test_r19_param_single_authority.py",
+    "sha256": "c6db87c792304c0380dd0455be6c39dbdda0614e94dbdde50b57112bd30de669",
+    "blob": "4dec6093a8ec83eac85a82b8d0a5904b4a382b2d",
+    "live_sha256": "c386659ee1a90bf4361c3b8e714220b9079c6c3fc724e30814266aa50ba2fa9e",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_engine/tests/operators/test_round14_evt_moments_support_2026_08.py",
+    "sha256": "e918742e2f85f52820f93c26a98c03dfdbe70a0ae29ffad456c5963999d57b74",
+    "blob": "27016aa59abc1239d9fa9a3d1bd90f7431472898",
+    "live_sha256": "609233933e511ade6fe4bf3e2d058875b41daab4ec14e1b0792c055bf8ce0989",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_engine/tests/operators/test_v9_m32_hill_domain.py",
+    "sha256": "948efc9ce06e3f6a51f47cb08f09944b1b795f10ced8703e4b2f4b5e80820ca1",
+    "blob": "dad14a81622613e1337517864afe9e0acee6cf97",
+    "live_sha256": "cadeb2fcf3471b5aa63980970fb869798252f02989cd755d23e92146d6311c98",
+    "status": "REVIEW_REQUIRED"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_engine/tests/operators/test_filter_layer.py",
+    "sha256": "800d112a20eb4fa2c8b269e70a180fd501fac1a51f42947d8f5147bd105d4de6",
+    "blob": "7eab4002415f64e3e834436b3e5bf36a990b7ea2",
+    "live_sha256": "5dd8cc58e4dc254b04f29982ea5bd831f855f60e4f58607bad0995406ed74997",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_engine/tests/operators/test_event_response.py",
+    "sha256": "acdb9be13a6f18addfafcdd1310f7ac79e915ff074e45c1b34440bef86fa1a54",
+    "blob": "e1d8c67dfaca7ea89c1403730992472ad03e2a8f",
+    "live_sha256": "1cc3d8133d6b1468a5b5d8a60f7eea01b7f4f975c8e22609bc74356204fd84eb",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_engine/tests/operators/test_nonlinear_dependence.py",
+    "sha256": "51bea69c351f615e78b123b9956104148078c9b3823f6aaf91726df26a426480",
+    "blob": "1b30f12df59527de3d089369e274baa620acc36b",
+    "live_sha256": "43de6012b7781b5b2a3f67d766d6da2a800044651015d02efe8a12323242d79d",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_engine/tests/operators/test_advanced_information.py",
+    "sha256": "b0773e2b80e5b7eb7ff8b8e51c283cbf89395a602d9371b4fba23f4c7eb93fba",
+    "blob": "7c5d15947ea1d67e0b33e8444527fbc69c4e6d75",
+    "live_sha256": "5c698d877beeef666bfd4b164bed997cc73837ba63d35a88f70fb93ca2a5f330",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_engine/tests/runtime/test_v9_contract_identity.py",
+    "sha256": "3a7e15f1c16a48417406f97ff2a4546bbefd05b0ffefc26ed57164486f6ec7e3",
+    "blob": "e9035f8b9db8c173deb64a1224bcad70acc763e8",
+    "live_sha256": "cc7a21a6b3e80f7891932ba076082f94f34fecc5104613bf017f7e7d57eef63b",
+    "status": "REVIEW_REQUIRED"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_engine/tests/runtime/test_v6_bounded_pipeline.py",
+    "sha256": "8f824224e5b76e77137d6b862215f5c79bd0b5223055570b97167cb439767314",
+    "blob": "fcbed4535e462cdbf3bb0d7d1d1fa699be976868",
+    "live_sha256": "6656bc9508235a06c2cdd89f1f00e68e6fe65681bda2ff6c9dc5acf3d770dcc9",
+    "status": "REVIEW_REQUIRED"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_engine/tests/runtime/test_v8_slot_failure_ownership.py",
+    "sha256": "314c4ed3d5c285dd40a350ac5aa84d979e1142fe61f6b717b7a72c91adfa29a9",
+    "blob": "0b4b3562e1d68dc418221963ffe3f8e7f3890cb8",
+    "live_sha256": "d89bf47ffd6ceecb5252504dc1c3efe74f5eef821d6bc11b34357891b04314b9",
+    "status": "REVIEW_REQUIRED"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_engine/tests/r35/test_model_audit_state_families.py",
+    "sha256": "b885d0186068f22c94f47d45de17197566a8dd757d4466f47cba35818c8d1252",
+    "blob": "2a4b7a545cc394ee136cc0d726241f283f1e2061",
+    "live_sha256": "809722385bc5f0792757335ba0316fb73c1de5830a2fe86dd12d846aa22327fc",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "quant_evaluator/api/batch_bundle.py",
+    "sha256": "a750b6caa9fec8e1ddfd2bf06b80e5f4886cbe60bdb7d82dc092713037945bcf",
+    "blob": "fd975bc8728d670c20849bd04f1b2cd3b7aecfbb",
+    "live_sha256": "8bf79a9abfb88748f94ec96824a2074844dd71ea70f6f4333ea549340e09e2ce",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "quant_evaluator/api/requests.py",
+    "sha256": "3bb2d1733fddfd30e326fa981222a3904b62d2378d02a9b470565701aced397e",
+    "blob": "4ee6a2ebbaa8fd436d1e47d87bb3e41e972757c6",
+    "live_sha256": "b25cb2bb616c0abb9ed1558e8b6d6bbf77165d36002cc16b17737d1832e79826",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "quant_evaluator/api/__init__.py",
+    "sha256": "b0816b508aa3afb70db52717af9a52edd263fa57e09c79e1d2794cbe20afc851",
+    "blob": "8f8dc76b91ae1194d83bbbf36ffdde6b509987db",
+    "live_sha256": "5cfd6ebf1b26714b13ca02a69c04fde0fa2e469ec630c5c322227ad09f18338d",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "quant_evaluator/scripts/generate_capability_matrix.py",
+    "sha256": "17baa578ea08adaaec0ee117cf4e5e3bc588c3965a979b1eb4915777c10f7749",
+    "blob": "d9f2701c0468991b94027ae37a7e34a38f1237c6",
+    "live_sha256": "8b2baa01ee5e58b63700579a1f66df212d380f42254ac6f9a5f926144c9437c9",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "quant_evaluator/metrics/risk/drawdown_analysis.py",
+    "sha256": "19c583d89bad9c425003dbe754c42aada94302a5c3e08527eab68f9460c4a038",
+    "blob": "61bca556814cbf5b0e1fdf61ce869900afa8bfaa",
+    "live_sha256": "82705da8cc38fe8f8c9af44802d5070e8351f4c21b5d4a6da637eac598754370",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "quant_evaluator/metrics/risk/var_cvar.py",
+    "sha256": "09865659729ae7fc456581e09db3c4386b938c49a1f327ee9ae93a954b908057",
+    "blob": "7e0dbc501457f2bec956014098e8630dc82ecfc0",
+    "live_sha256": "794b1348abf769f69c0c96a14c55686e544fa1b3aa03da3593c36f0206b2ed9d",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "quant_evaluator/metrics/risk/tail_risk.py",
+    "sha256": "bcfa5311369ae4258bf183964ecce48c649b936fd629ec6578bfd785e4babaeb",
+    "blob": "2112f0d2f7585ebeda3b443c3fb606ca04c3ff12",
+    "live_sha256": "7b191ea2f9ebcfb4f254585d457ff705d9db37deadc77640c9fde8983694dc4c",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "quant_evaluator/metrics/risk/stress_testing.py",
+    "sha256": "c54548f87d0e459a93859be6895dc8335273402c0e180f51758cad085123a3ba",
+    "blob": "da6e8fe8c76bd260124f9139fa4f12aafb702f44",
+    "live_sha256": "700a70ddf28df88a328b57ba985676639ffd3f3f74d046085e52c4589a902b23",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "quant_evaluator/metrics/robustness.py",
+    "sha256": "3800aa0c0f24bcb877dce2a036c9235511a962012848d93acb828cdaead55254",
+    "blob": "903d075f52d3786ec70ca0e24b90cbbc546f83ec",
+    "live_sha256": "04744c041c09bf6be935f47c3d88a271411e6f3f38ab5305ad3156114aecbffc",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "quant_evaluator/metrics/interactions/substitution.py",
+    "sha256": "b4a90cbf67447d92260e1737fe62de8a53b6ed565039c8bae23489e0d09e3d0f",
+    "blob": "6a9d0fad50f3eae9e1be28f9132f3513957036c2",
+    "live_sha256": "63120eb1fb326e9184303ef01c880fbbef71c5497e4a164b2869245d0da39094",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "quant_evaluator/metrics/interactions/pairwise.py",
+    "sha256": "72813dbc4d89dbe20765e5594104b93bccc58538f08b411fb4c14e0afe434285",
+    "blob": "93025038b6a1936fcd440a443658aaccefb920d5",
+    "live_sha256": "221265bbba1999d82cc63c1c64abb215f2e64aa66c2a22cf31e0d8c15ffcf2ab",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "quant_evaluator/metrics/interactions/complementarity.py",
+    "sha256": "3516b1476dba747081406b59f8f415e4b21802ce1c6882f4fbf61abec8c5e1d3",
+    "blob": "5a27256ec942d4418dc772062b1e3f2179a775b5",
+    "live_sha256": "77d4db54aa387dcc3d492ee8ee26171afac4ede8d26eacb41b764dd56d913941",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "quant_evaluator/metrics/interactions/conditional.py",
+    "sha256": "12a112614830700bc076a6680548ab0ce7c6122bcadbd05c2c5b8d8d94d15b40",
+    "blob": "1bf7d6d1abac8ddfd2d1a2b572d790e63ca6c138",
+    "live_sha256": "23b2c614855c3e4e2b96d10af1d6c73e68d0977599244cf8f9fe9af8d96e7487",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "quant_evaluator/metrics/interactions/__init__.py",
+    "sha256": "01f59793c32637b0a9e7c0225b0dcd64222faff176fc71b7db866b50000aa50c",
+    "blob": "4bea475fcbe3ebda9c653d92ee6bb7d731d98a29",
+    "live_sha256": "4937bbc5d4cb5fa516d3d2263efcafba7a944c50f5c224c574e647c1024ff061",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "quant_evaluator/metrics/multiple_testing.py",
+    "sha256": "b14b42c8669a70c3a0bc817f575f2337ad534e3a4a4672d03d0a421a9e1b0ede",
+    "blob": "1263fb80346262953ebb44640b338e69197b7707",
+    "live_sha256": "3abc3d7c4bccfd8161da35e5fb06851072da9835fb390b1cb4f25c491e1ded82",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "quant_evaluator/metrics/generalization_evidence.py",
+    "sha256": "351f2586927d1803b8874ab0284927111962f742fa2371c4d2e4ad0780b63210",
+    "blob": "8288b1a816875c5b217954a87ed086b8fbe1712e",
+    "live_sha256": "3fa5b80383d9821a0663cbb83c42c192672039769d0322f48ec9526d7ffb1b67",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "quant_evaluator/metrics/registry_adapters.py",
+    "sha256": "95dfdce69e237949be8fb9ffe297d51ccaed71cdb1740d33cf4bbca00e1737b4",
+    "blob": "2e45d7a0ab52431dd3bd9787108f33d4d30af2b5",
+    "live_sha256": "51208dbbcdb2a48f44effc653e1d681c5986800fdd729a5707a3074590f89f04",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "quant_evaluator/metrics/shape_evidence.py",
+    "sha256": "b783ff4b6da6be8d78bb192d88c88612164f4f20fddaa78f85ed4d8ad79ef78d",
+    "blob": "323f142f70eef17f63ee2d9b01b7da645ffdf07d",
+    "live_sha256": "ee29f13fb0320b381d4855af479b1407eddf7e51a39a554919723220d3825c12",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "quant_evaluator/metrics/exposure.py",
+    "sha256": "ffa8b3f1a8d69fb7118b9a90dd026367257497209c0b41a5c23d16aeeddc8a9a",
+    "blob": "5d4262880999615a20316d9bae4cddbd78ec051f",
+    "live_sha256": "4f5ee88cf28cf8078f1257065121b36205232b5dec102bfb3f59c5b50a7427e6",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "quant_evaluator/metrics/portfolio_stats.py",
+    "sha256": "69f4126ef93548cd1fd21114a85053c13d8cd6d76af0d7eb8d3cf3628b350a99",
+    "blob": "9964ff75407332fab34843f217d19cee05a173e6",
+    "live_sha256": "1079415e143824111b42362fd2bff145a41c3057eee07ba9c7f13f3c779df833",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "quant_evaluator/metrics/probe_portfolio/_core.py",
+    "sha256": "3d85fb63b7e38302d6a62068541fb483ecc1ce9c2d8a2dfe649e052d505128ec",
+    "blob": "34eef799a41db8b6bc997fe930d2a4062457e798",
+    "live_sha256": "0050d6534af36b2ce74831779e8e6280cd2f4ab04ec7413e8d7c9dba481407f6",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "quant_evaluator/metrics/probe_portfolio/costs.py",
+    "sha256": "8f760462e9b2b9e6a4518c2042e4a3aa182c244c2e12c6962b47aa34f6001d75",
+    "blob": "5b881bd5ab3492a502ecce1f13569f87633f3dc8",
+    "live_sha256": "17408d16a9ac3f3b5f4917534f9811e1c15285be4f2fd49e71907ac4ea391f5f",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "quant_evaluator/metrics/probe_portfolio/__init__.py",
+    "sha256": "88a3a6be7acebe25b2c63272f318f5caa6efe88bad36bcbcc250fe9a382f7c12",
+    "blob": "5f61a4fe5db5345686dbe074b1f329e8f303529f",
+    "live_sha256": "20883ae1e0c77502cd152657df6631fd6cee77e9228140ba224bae22bef92d66",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "quant_evaluator/metrics/probe_portfolio/sharpe.py",
+    "sha256": "8b1766c38d32c05712c3de7b88870d0dc82f8bd5d63f7743c58183a9e41f4cb0",
+    "blob": "faf754b046ee9faf1aa0719d25c4f14401dc2ae6",
+    "live_sha256": "8da1e97fb34ea0e7d74c37035d1f82f00814f07868e3adecc12a9313bfad5dae",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "quant_evaluator/metrics/exposure_evidence.py",
+    "sha256": "0b11ffd121c7628fb09502724119036569d491eec0f097527efc05f59dbac1a1",
+    "blob": "535b4a67da1242238cb601093245f546dc754a02",
+    "live_sha256": "456afdae6777282129827a67680f190b4499c206b58ecd6c2490a3f3d72cdc14",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "quant_evaluator/metrics/ic_summary.py",
+    "sha256": "f0e41d7ade0583879d150eef14602ed0dd67bed47c4d71c021677f965adceeab",
+    "blob": "4dfb994e5a1796ad6df9bab04ccbfe120d4376ad",
+    "live_sha256": "8585a8c144e35aca598e51e78dc544089ea346699ffac093bf0b032b03ae0ed3",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "quant_evaluator/metrics/quantile.py",
+    "sha256": "17e639218aa8dd1bdc783e356649b75420cc96e3e4fe0b47d12e0311d6cc1381",
+    "blob": "8f4280a824540f7110a4f865de962a4d01ce9798",
+    "live_sha256": "1f337aa0d2e3d70d4ca5b612eebbded8c0f9a58fe615d2ef0cdfa2fb60a20eef",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "quant_evaluator/metrics/temporal.py",
+    "sha256": "133d7d2017b590585c7f891d5754ae9fbffd7186cfaceeca8ad1b4ffd1f71ab6",
+    "blob": "0460df2fbcddc156836c5fc17082bb542bb9eafc",
+    "live_sha256": "59737b295e15247e1c9b88b621d28e4a1e2513b8a5a69f7260be15940b130ca9",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "quant_evaluator/metrics/quantile_numba.py",
+    "sha256": "d35b0f0d3d4d489fdf697242552ad00330d213a2706a8ba4f2eb09e8fb8b57f7",
+    "blob": "182c1856b8c4dacee81ba240cbff966cde83a940",
+    "live_sha256": "a1b57fa0ff46a1f7aea7642fc1e11887d1d94ba31c761b2c057af6c80c0ba6d3",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "quant_evaluator/metrics/underwater.py",
+    "sha256": "d30c4e9c456fefa51cc950e5f4f2b05687f520d258692316e906e87243753d62",
+    "blob": "530674270c4ee065bbb3d2f23fd7413a1928b926",
+    "live_sha256": "acaab47e6e5c31c2a4646df4eaf1b20cc9f0c09588e2ce46a51c16383b4704d3",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "quant_evaluator/metrics/ic.py",
+    "sha256": "1546631b401dda40e7f3abacbec34b957dddb9e623d677625cc98e2dbc78abba",
+    "blob": "a7ef5a595be0f2217c47695b46975a3996133bcb",
+    "live_sha256": "0b21a8e368073a0cd3d6cb6f4c168613ef7e6d97c2e809a72fcde9af7620814c",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "quant_evaluator/metrics/__init__.py",
+    "sha256": "83e6b20e7190adc1328ed4e2d86770d1d167ee6dc5c82c449cfc52486cf0b0a6",
+    "blob": "f474b653232aa9d102b24b73713998ce8e87b04b",
+    "live_sha256": "ae6f217e2302c3e404619c9d785728aa9ec9a9e828a36f7b0ef0959714afe063",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "quant_evaluator/metrics/stats/structural_breaks.py",
+    "sha256": "c6605572c224e1ccf1ade6ddb507c80695bc06a63d100b62d99fe1d19286344e",
+    "blob": "4141f3ebb6f6f60be3611ac7a0910411aa82e639",
+    "live_sha256": "3517fc4fd66277472b959dc344b147d516d386ea063010681d840cd8eb720db3",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "quant_evaluator/metrics/stats/regime_detection.py",
+    "sha256": "f24f158100f46e35306dc14571013f69f6188011eae169287289a2f6bdd2fc45",
+    "blob": "272871f75167a84b22ca62ffc9ce15e97e2acf49",
+    "live_sha256": "6851890c8fb4e9feb38394c97fec5fb7b86f3b14ff1e08ff8e065a4571251b4c",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "quant_evaluator/metrics/stats/cointegration.py",
+    "sha256": "c986d3eab0789bb49c37a0b230c26a9a5d61375fa2e946221a765de3619507f2",
+    "blob": "ed2c5122ec4db7e993c77a6b85fb2c1f5943ec54",
+    "live_sha256": "1ab65f68d7a8091962a167d0b83fa584c64787a84fb7bb0a6f96d4df3a2946c7",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "quant_evaluator/metrics/dimensions.py",
+    "sha256": "94156db406b3a33a29c3cf61d207dca0aee576aa17b26c137ab19da5942d851f",
+    "blob": "eaa45de0350825897d1c40f1165da9d49a62c656",
+    "live_sha256": "3a31e24a440e97cf537b5eec3ba96bc5d464548e04f1a2a8e41a9eece6c30451",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "quant_evaluator/metrics/probe_portfolio_legacy.py",
+    "sha256": "34d7d7b265e4f50822b086bd73210a650ca14c5e7f48eb5060d051a212866a2d",
+    "blob": "e3d240b10f503e8cfb79a90eb0781437fb3a8515",
+    "live_sha256": "30d03d2beb630fc82de5163313a8acf06496e2e87936eea7a47a2d31bb476fd8",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "quant_evaluator/metrics/coverage_compiler.py",
+    "sha256": "b2103bb0d3229c282d130d013726cdd3e6de5243ce5d2c911fb88f96bfc90696",
+    "blob": "3d84f106a006ea7668b4b2923db98ec5c991f97d",
+    "live_sha256": "96476973b4bc4ad128f9690b77a6953d60120d7e4b609391ec784a0323dbfcc3",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "quant_evaluator/runtime/gpu_executor.py",
+    "sha256": "1549462fbe87f6ed58a4eb75637b74b297a9497ec5e0ab7cd88ff99dbeea9294",
+    "blob": "77ed3f1f34474ae827ad55a4c9cf304792a2aaa4",
+    "live_sha256": "2f5ec2cf1a62c69f7cd95c6bac5f3943474a2524f945bc69565a391580c9008e",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "quant_evaluator/runtime/streaming_evaluator.py",
+    "sha256": "336e4079880c5cf00265aeb3caeb5ea891d201bba254e2806a993302e7f4cf3b",
+    "blob": "a204ae042542955d6a14caaa3f4def34fa38fa00",
+    "live_sha256": "efe9ca771d9374beed9b3a308d550be9dd027baa03a0a22d3945d033b186de96",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "quant_evaluator/runtime/evaluator.py",
+    "sha256": "1fc523d6b767db77c5f2ee094394b20f12d806675933471f8a3484025a42dd3d",
+    "blob": "20ec7fdf90bc014833d449270a7dd83101b4d140",
+    "live_sha256": "bdb040ac384c61698b016ce4ceb51d7b35be274af12f96e5aad903b8d76e7ef7",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "quant_evaluator/runtime/cache_v2.py",
+    "sha256": "2c1cee412c176d0c0270b24f7398d68708edcf10dcb18934838e3b363843af4c",
+    "blob": "33397beeaa6016fcfbb2bd2c6e27dbf40d75f061",
+    "live_sha256": "6c99080e4834dd901c07f2d986ab4dcd23ca8e854b37205a4a5ef2b4371aea6e",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "quant_evaluator/runtime/device_session.py",
+    "sha256": "cef08e4bbae307c583c8c5d110aefe09c032fdf4f92e3d8666da89388670abeb",
+    "blob": "fdb449806d6d67dc433df540646e5a174bb1e94b",
+    "live_sha256": "12321ecca749c783c2557c6aa11d60d9a3c42d086aa67d3589a46382e1da7ce3",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "quant_evaluator/registry/metrics.py",
+    "sha256": "39fc88c7241afa43722c0d9adfa91ff0e37bd470481aca7cfe4d836536b28665",
+    "blob": "b9dff991164c75b666be0d980fafbbd17a9963f1",
+    "live_sha256": "e5f380b6e208cbec831e932c729892bf8db17e151035079438e99ca77c47c4dc",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "quant_evaluator/kernels/gpu/robustness.py",
+    "sha256": "1c7cb8d2f4ed9a2a2435e1fadd0c783e75af183bbe00e9939db0d7f4b0f37289",
+    "blob": "3507c7e53f0090912bde7a5a6ae1c2b19a7228d1",
+    "live_sha256": "243a1b3eac83c1ad25f9ecbc5b752e16c7284c374a7540d17458d030255e7b07",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "quant_evaluator/kernels/gpu/quantile_shape.py",
+    "sha256": "18e3b979c7d9cb919aefb790f95b233286d44a7c8826d90252576f97babc4571",
+    "blob": "18986825b9883ee8d3774854e25f0982e4fca27f",
+    "live_sha256": "c0b69a996965e32d018e26b782aa3aba22b7b263564e660a8269c205bdae5b9c",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "quant_evaluator/kernels/gpu/portfolio.py",
+    "sha256": "00799dcc60585040c5a06bfe06532b583e947afa4d1a3e6097696f43e10c3d72",
+    "blob": "e7efb01d3aa626fcb8a4b3ae2e29f4d7c68d3f7e",
+    "live_sha256": "faa622ce297f755f17bf4a817bf0d81432e43c738e73e608189e1d62a2085e11",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "quant_evaluator/kernels/gpu/correlation.py",
+    "sha256": "7f148092d1e158ed96f86277ee5075981ddc9941de629689b932d18b9e24f207",
+    "blob": "171f0524068c6d1e281ebc3c60c72c45c745981c",
+    "live_sha256": "c2585b5e4c07669c319c983ce4b1641e0baf4ffd5396aac407f227387358a200",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "quant_evaluator/kernels/gpu/tradability.py",
+    "sha256": "e8a3f2305a802c9f2daf9bb83584b00a9d7a282ef8dc16e5c6368d910e6f5f22",
+    "blob": "b0a2bebadef3febc6dd769ff9b50b06dc9da18f2",
+    "live_sha256": "e2b4f0b5603f6fb3516b96c3e35a5c3ff5530dda00fabaca8d78724c5ea0aa27",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "quant_evaluator/kernels/gpu/exposure.py",
+    "sha256": "a133d27f90b6c94873937bfc17a20a2a25f81629c2753a1c76aff610832eb5ef",
+    "blob": "3d50d10700dfce60a6e2280958e79b2ba9fda006",
+    "live_sha256": "db4dc13008fe7ee3b71baa89663626d19a7a0fb2e1573cd380f6cc44b0ee7c34",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "quant_evaluator/kernels/gpu/rank.py",
+    "sha256": "600579350af49b71654b17c7b01e62d73b3e2a30069502614c7c35aaa3332243",
+    "blob": "70bd76175e62a94d9b4e4bc06894f526bffee4e4",
+    "live_sha256": "6ee1b272ce2aa00033736962f3f72669f9c50c305dc691abfa83775e84bae975",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "quant_evaluator/kernels/gpu/drawdown.py",
+    "sha256": "9b2216df4309ab3bb300c95422f68bbfdfb635faa8c521753d00921700248549",
+    "blob": "ea5a2e8c8b7c10df78e263773930f6bb5949abb5",
+    "live_sha256": "03daf9807db250b14e272d05639aff5144d3de5aa86424e957202f86f45ab17f",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "quant_evaluator/kernels/gpu/exposure_evidence.py",
+    "sha256": "7dfa906b288bc35edc6188f90e43134a8b8e59afd8d4f78721dbb3248b07065b",
+    "blob": "0097595a4cecc552c46162549fef510328d385db",
+    "live_sha256": "1cf9b3c537f317961a65f0c3e63a75efc1cfc5d54f40d6fcc7d66c52cd489a6c",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "quant_evaluator/kernels/gpu/quantile.py",
+    "sha256": "5cd2f1c0ab552b911b3014ecbdde80590f4dc3197ca93eb168ab19dfb552a80f",
+    "blob": "02867b782a319db4bcbc92228f7b3103293db8fc",
+    "live_sha256": "8da69a0a0956a4e7a8bec1fc455cccd8480e36c5104c6ba4d9ea4250e666e031",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "quant_evaluator/kernels/gpu/temporal.py",
+    "sha256": "5df9948d30676106c55d1e8f8211777c47cd01df4859f247d03013f44a511a42",
+    "blob": "bc35987e90a036cc899d07e760281ad616936e8e",
+    "live_sha256": "44ff8ce03fad1255bbcbbc1e05cb34b9dddffb3811a27a75c3931d5b3fda2814",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "quant_evaluator/kernels/gpu/interactions.py",
+    "sha256": "e27f98f75c7cbdfdf18e8fef01b3f1d8b5b04887ec6b0ccc4e22cc0607c32dd5",
+    "blob": "5fc467b27f6f86743d03b183c052db83d1d75562",
+    "live_sha256": "2aeb3c7e4bc7556dbec3cbd5f9890936aef2d0a765d00a4e000425f7e492be39",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "quant_evaluator/kernels/gpu/turnover.py",
+    "sha256": "84482eb83d214885283dd050c637a4a48698e556eb646557888466d2c5a6aff2",
+    "blob": "ac7ee0d1d785ca7c26ee9049eca2b4d6557cba05",
+    "live_sha256": "26d89bf43b084e15960c164fdb4f11a6db1a16fcff8de6146f6da98f6d56452b",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "quant_evaluator/conftest.py",
+    "sha256": "4dfc25cbcf90fd1df7ac912e423c77529d9cc9bc1ee68a8feff01fb64503d417",
+    "blob": "fe805a9606e334d830877df5a5a499445bfe5044",
+    "live_sha256": "080264db986d1d5b3cf1d8c4800596c78054281b00fac14996ab3f078a9e2a0a",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "quant_evaluator/__init__.py",
+    "sha256": "d221c249b296a8e5064811881302336fd935b2da9d7d3fa38b57e701f9a22de4",
+    "blob": "63f4d2a6a02f48b9814b2899f26548ff364513cf",
+    "live_sha256": "e064b55ef42381385032435fc157d737c411501d8c2cebaa0be39d6f4750a910",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "quant_evaluator/tests/test_public_gpu_tiling.py",
+    "sha256": "62729e1064d949fd5f2ffe93b8fd9d6ad3a40233cb2472753bd3eab135de8bd6",
+    "blob": "e498305344424f7cdfc4bfff36c0b76fcf2a43fa",
+    "live_sha256": "73568fbc9ffe265777468e3698a42e02ace5efdfecc893fbfa8c7f6403fb41e9",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "quant_evaluator/tests/test_dimension_mapping.py",
+    "sha256": "e11dc811840a38c744337dacba3130d336b2ae5ae58d2a3d8705412e8d06e02f",
+    "blob": "3c5388b44263c91940bb14433986dd6e57d56bd3",
+    "live_sha256": "a71aaca1c5b1185230528bf40a9724aac0ffb062450b0d075fdf38590138dcc0",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "quant_evaluator/tests/metrics/test_ic_significance.py",
+    "sha256": "f4c3b43f1aa4a960a186c8458d68384f60cca970cbc9c575dd3bc6205183c05a",
+    "blob": "860a4c95314cde1e084bbc0655fcddd32f0926ce",
+    "live_sha256": "857850005d6e118515da8b34fffc1474c12ad9616643a0c72959bfc84f5f49bd",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "quant_evaluator/tests/metrics/test_probe_cohort_metrics.py",
+    "sha256": "dd3157d4eaaedc5fca2bc2054fa27d9e453f4673b1c1324712c4771a25924468",
+    "blob": "bb36d5026bf2697937ac31f100653546767312e1",
+    "live_sha256": "2661936da1e26ca09a4401f346c0c4ae333cc2ab296bcfc32e5b99239ff054ae",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "quant_evaluator/tests/metrics/test_coverage_compiler.py",
+    "sha256": "95acfc17c8e202a65701d384ca95024aaa9960054844bcce4e5e163d19f7ec4d",
+    "blob": "6148dcd2dfa83210c44f9950fe3088da67762abf",
+    "live_sha256": "30ec04cd15b407b8293d2418c56a6e8787ab2695c076a7cc6bd74f6c744638e7",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "quant_evaluator/tests/test_consistency.py",
+    "sha256": "73d29d6b35b9c25f56c681a3f70fd3efdbef407d8e634d0c11041f76914f944d",
+    "blob": "6ab585042f55e949e085b043bd91805a8fd411b2",
+    "live_sha256": "74352d56d589109fc333440bd6833b72c287339f07d8e06e986173d0ad36ed10",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "quant_evaluator/tests/test_shape_evidence.py",
+    "sha256": "441c692a273c57400a26412313c3551b73df5c648d22ab276ba612d89a57fa47",
+    "blob": "9dac4ae31fa56de993c7b0f246433580d77baedf",
+    "live_sha256": "ad17ddb32b5f2356b754b3732ef4ae47c3497f18e44ce147ed70f3ea07690343",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "quant_evaluator/tests/test_generalization_evidence.py",
+    "sha256": "2a25a70e9f159f63f80943287ce2f15bab7ee0fcecaf32fe48e99c50776cedc9",
+    "blob": "7f70aee9dd683f6fc14753dbca5fad0d55ad8aa4",
+    "live_sha256": "75a83277362a3d539f40ac68e7c3eb6dc48003d190a52949c3db2ab7df602f3c",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "quant_evaluator/tests/test_exposure_evidence.py",
+    "sha256": "cc7348db93c2a877d64314cc295254aef6d33f0f88ca23f2c6f2007b6b9372ba",
+    "blob": "2baa0a8d50a5f318574e3b7911ebba909dc53de7",
+    "live_sha256": "5f7e6bc7a0b5a24ca2bbafab094d73964ef015972eddace3b59ce675fcb15b15",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "quant_evaluator/tests/test_gpu_probe_parity.py",
+    "sha256": "ea12186da94003d9a1ccba8c9292fd3e9e7504520afb742f717150e510c14fa0",
+    "blob": "fecf32266cf29ff15db2dd0564bb50d138d4f646",
+    "live_sha256": "e2f37bd8e2ff11e382df24a2e647017ae67a296537fe2a571e9da1a072cfcc35",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "quant_evaluator/tests/test_numerical_oracle.py",
+    "sha256": "7b02aebccb767f52a6633668071e98e7e7aff411d43395c745453cf82a79ea47",
+    "blob": "f2f2db3fe64f9722eec790a3f643d9cb59055a50",
+    "live_sha256": "fad83a5937abaed89e8983a0917d90e24273bd2f3841053865f415626bcbaf05",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "quant_evaluator/contracts/axis_refs.py",
+    "sha256": "b31f095e70b7906901db2dd3da9596c3219ba1e2cdc6c7616561085a807eb950",
+    "blob": "d6297999b1261776bb9774613ab5f59e572cb6d4",
+    "live_sha256": "94aa3796d23540c6bc4a16e4948824352ee85a6efde042c3debb676deb8000c0",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "quant_evaluator/contracts/adaptive_bins_policy.py",
+    "sha256": "5530e4bba878e0f86b0e3516f5ddef8ff536100ee8b0629fbf78ba86ec8a2aa7",
+    "blob": "23e2ed18d989832e7c5af24dd7184acde9926530",
+    "live_sha256": "c1f76f918867e24f27b28d0c4244958187953b0ec7ddb550467687c7c50910b1",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "quant_evaluator/contracts/factor_batch.py",
+    "sha256": "90c2849ce9e9b158d5f05f86a5fb6ffc168c8b9beeb1a2f4abe0623d493a1bd1",
+    "blob": "07508e63cefda509efbef51db2d0b8f8aac3b5bd",
+    "live_sha256": "415af372ec8e70e65c8a4bcae3125f0890227ecc0bd373977082d58b1dbbdd3f",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "quant_evaluator/contracts/artifact_types.py",
+    "sha256": "c534d7ed03ca962576f5dfedae022c192e14723eb8f7b07d6247dcb796307dd4",
+    "blob": "bbd0ba4ec03780c6921716b5266526153c66a6b2",
+    "live_sha256": "d006261272d03091d23e8a49f68d2fb7c6826fff11cae381c8b26b9dfeb6f889",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "quant_evaluator/contracts/label_bundle.py",
+    "sha256": "5deb5d4673395a0525da2f48506b3fc559ba5e4bc313637712ab32c6e11dc7db",
+    "blob": "0e1b2d96ff1d806bf3ad30f7d678d12d07369353",
+    "live_sha256": "fa36aab34ec54a7b3f209788f0ac0c9e8ee9d7026ab215cdb7b3a6a92bca823e",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "quant_evaluator/contracts/_hashutil.py",
+    "sha256": "c807099f48ee4a0a042012de6d13b76295006580356584e3ea1f1560d0f05573",
+    "blob": "e58e9bdf318066c871174d7cee9b02c16590a228",
+    "live_sha256": "71d008920a8befb3836ec0c53461b61c9e35e16beb56d6e83c8d9e859b40d1e1",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "quant_evaluator/contracts/metric_artifacts.py",
+    "sha256": "803de49f22cdec9b30f396cc39f18bbc7fa93913dbea5bd562b160f4d1e0985d",
+    "blob": "c961ee056515b4a58ab7f4761d804bc902279cd6",
+    "live_sha256": "2d5c9ae70072f8da914b451fc99d5eadeb6b323982305844bba26e6d1e0e7d09",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "quant_evaluator/contracts/backend_policy.py",
+    "sha256": "7ea8261f91bf4c9e2c17929d27ee48c5e5b6ff668c2c58b823a54275341c210e",
+    "blob": "e7c92f7b69cf9f3d26bc6cec8102670d2d8b4446",
+    "live_sha256": "20d847c36ae0626bac2c098b49a77d9df0d4f7393f62eeb31ac07c3de80dca6f",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "quant_evaluator/contracts/evaluation_refs.py",
+    "sha256": "3dd1c17e95e5b0d00e75d644139c67f38caff299925acd648f91089a8122f295",
+    "blob": "ed1423382df12ee28d85d98002bc1ea66bc17633",
+    "live_sha256": "94ae852d962a51a01d069ff054f82e8bd77a8bc62bdd65c92d6a75feaf603d56",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "quant_evaluator/contracts/_ndarray_codec.py",
+    "sha256": "80f47a3fc43c301f58c029bd5cd15e33e7a6d47338e0bf98005e6a37f1c0e06c",
+    "blob": "4d1feba4927ae23fbdbb479cc56e015dfbab618e",
+    "live_sha256": "cbb403bb24c7a5fdc3e1ad9733d3ed0df973b2927dba07e1e2a2c7e64d5580a2",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_optimizer/factor_optimizer/data_capabilities.py",
+    "sha256": "9e0c26e05924446b1241ea363f406bdd06e8118ffac83d1efd529bbea2b27a45",
+    "blob": "328b8863127de7ffd122e51853b2c0d675076f8c",
+    "live_sha256": "aca1502b1f57b9c4d4427434c64e18296df60cfd24933ee17b9cf55aa257d2f5",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_optimizer/factor_optimizer/adapters/quant_evaluator.py",
+    "sha256": "f271811600809426a5606935755c4a87e6088b4aa1dca373d5c3d9c773b69195",
+    "blob": "1c0b0df02cc2bad474c0df6fc28fe28593d35a32",
+    "live_sha256": "8729c99585db29ae16b0dc31526f7c730c6ad61b16099acac559f3c3aca0ec5a",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_optimizer/factor_optimizer/ports/factor_intelligence.py",
+    "sha256": "91de3d0d13dec10db66deb870cd0e4411f532e6f619ce49e0d0aec6a1da0f071",
+    "blob": "cfedf6e769c6f8c38443a610a34e1ad0cd789c38",
+    "live_sha256": "d1f8cb9761da774d354cb3b5d6d91f79b54cb5f7c3519d0911ad98e7c79e2821",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_optimizer/factor_optimizer/search/runner.py",
+    "sha256": "239d3f0d7d56265cadcc2df75e052bbf857e3d23f84ac5f096e6b04100267e96",
+    "blob": "76251fa3b519c2b1db7c4f9eed27d56c93f09f1d",
+    "live_sha256": "e2d443aa91160ae5a1a2913020943e954a3aee14948aaea0f2e3b59c0ad507ed",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_optimizer/factor_optimizer/search/uncertainty_winner.py",
+    "sha256": "8003bf298972b869da7400fd163ec7b55f2e609ebebfe2d5667b000cbc69a62b",
+    "blob": "a761cfdc4ae9a3a78a87606316a6f17f2bb02243",
+    "live_sha256": "3b78c7c867a84cb81d30c134abe2cfe5833ff9ddf99141c862c6fd03a7c7d77b",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_optimizer/factor_optimizer/search/plateau.py",
+    "sha256": "da4397c144d9413c449b123d314351ce9271546a10c92f502199e02967e1029f",
+    "blob": "263c6dcd53e8a88e8813d116711a77355c91d106",
+    "live_sha256": "7c096dfd215cc4d2f22d2953a3adf3ff73ac2914345724aac36e542cda3e117d",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_optimizer/factor_optimizer/search/winner_selector.py",
+    "sha256": "5db665d033a34f02d432e4b1803375435e53e36021a03905512183a158181541",
+    "blob": "d983d74379c88ee368eb929edc017b056a420a44",
+    "live_sha256": "12a8815f3953e80b9bacf96c1fe2855e655637fe9e2306ed8eb5149c793efc01",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_optimizer/factor_optimizer/search/tiered_evaluation.py",
+    "sha256": "04be1cdde00989bfb29e063c26d85a3891317f34e94e15caa8beace4d09dca1f",
+    "blob": "86cd9ef660665608e55105490830e99e84231907",
+    "live_sha256": "1f2738c929372b7aa9a025f5ae04ebc71e1e977ca13160ab54411697979637fc",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_optimizer/factor_optimizer/search/treatment_decision.py",
+    "sha256": "775cc852542e3791268c586d45b1cdd6797307c4723e908914d0df351d3787d5",
+    "blob": "baa98f31874fab70a99911f96b1d1e56e320df62",
+    "live_sha256": "7073d47030e31fb8b66848c748960ed24da7dcc8452fb0082750a3aa98a0a29e",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_optimizer/factor_optimizer/contracts/splits.py",
+    "sha256": "09a50c7c92958a6aae5e4c48c341a4cf13de7713551449b208fd6eb31c7c0017",
+    "blob": "079e85618a9ef2007b83eced0e2efaeb6f24bced",
+    "live_sha256": "e77f13e4dd3289058b445c68ded01e2a8a02ab29e522f1ce2723e09a9c564018",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_optimizer/factor_optimizer/contracts/search_budget.py",
+    "sha256": "8a262c69870e09a6bbd4b0e8fa59e2619d7b99b730a26fcce1728e015fe0388f",
+    "blob": "715dfecf36d8310e20cf0004207db3929cbed5a1",
+    "live_sha256": "80c82daddf51eb217815c2c1b4d5784c23417dbf0943b14ec05746f9852f1be9",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_optimizer/factor_optimizer/contracts/trial_ledger.py",
+    "sha256": "5e66626e45d63dfc24dfc75a9f2b2ea3ad3ba2c07662152e646a7fae9c241b17",
+    "blob": "b47520f51e52e95fd128a8188ba81e931f9e0b90",
+    "live_sha256": "a62289e7cffe6591b033fa7fda52ef7f29431ec9088a6c3206989dc73a0fc51a",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_optimizer/factor_optimizer/contracts/evaluation_artifact.py",
+    "sha256": "7b8ea96825e438f5bc7fcc0a8f8f6551adfb2e2c0e8a511b75dc877b108fde31",
+    "blob": "d07f12d177e9c6a565a0c4e869ef3247754d1d87",
+    "live_sha256": "6573c2904d7d06d6ebd9838936b3c86d8e4ca3ab123d32571f14bd41e1db64b3",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_optimizer/factor_optimizer/contracts/__init__.py",
+    "sha256": "d7308f088433d0af9cf5b05c183f197b8fafea3c61acdd862299e954c90b86a1",
+    "blob": "6dffb86d7947861099967ca9c12998c160f15946",
+    "live_sha256": "14ef3afa8541d37f91e067c43fa07adbcbffc6f263647ff5d4653e08713274c4",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_optimizer/tests/test_treatment_decision_generalized.py",
+    "sha256": "2e859f0a518b16397acafb3f6073e04f4f87e7e4123922fe088d269ffc88c33b",
+    "blob": "b8d833eaddfe19e0d5114939a8ba105de553acae",
+    "live_sha256": "5bd0df7256d562a39b13fb9211ebad91e2d5b97b67462529c6eacc4e72fb6a21",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_optimizer/tests/search/test_test_authority_boundary.py",
+    "sha256": "024da1adb08c45f29661c3de9bcf85cab9d97849834f8491b14992b66658accd",
+    "blob": "9265b0aee8be01e5f73024bea5db72ee603e1cdb",
+    "live_sha256": "8d3ccafd9dfe71c8561df49137ffda3640055d77997d9fcf625879075b8a9fd2",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_optimizer/tests/search/test_strategy_checkpoint_resume.py",
+    "sha256": "4f0c799e64672414350b37afdfe3d9f69378cc80a1be649c8348ac7a03ab8660",
+    "blob": "c9ee1fd47098873cbb3396f8b73cd4f5cfa749f3",
+    "live_sha256": "b6dc151c3fbb95ab9160a9cd15fdcf16c44261f1b3e054b679062eba06802dec",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_optimizer/tests/search/test_dlib_uncertainty_winner.py",
+    "sha256": "35de9b700e98ef1306cf38d8f11d2c6bf579208b829d5afbb18febc924371823",
+    "blob": "bf832b4aaa64691c1f6bd0405f88536a69b284cf",
+    "live_sha256": "9953da69734a6ad7bfe60bc0c1327d603623417db4b7362ef35a550beee4a04d",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_optimizer/tests/search/test_correctness_boundaries.py",
+    "sha256": "34d28fec95dadc503a3a162525d5842cddce89caddd04fff818bb997d9612ccb",
+    "blob": "563a3e48f77fab9a6bf3d9b138fbfadf5cd8922f",
+    "live_sha256": "4d111cbaec19c6764e59a3a6ace3ee6431d3a753f789a811669328f63576d504",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_optimizer/tests/search/test_tiered_evaluation.py",
+    "sha256": "17f4b29666dafad8c3511280561bc1820d58dd92487a1e1745f76a5cb6c29ba7",
+    "blob": "1e172918777046656f5b101cbac91b0955ad4b2f",
+    "live_sha256": "f42e0705daa301f5069f84c7c0f401d46998bfa7cdc6393ad5283c0925100cd5",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_optimizer/tests/search/test_adversarial_isolation.py",
+    "sha256": "9c15e6ebb5e519647e840dc01964d9ee77475bea593cced2d3894c627b6b57d9",
+    "blob": "71716eb917a1170200ddae5a503ff4af36e11d2a",
+    "live_sha256": "a73fdead279e798411d35e333e4f3bc9f3a7202d9bfc1dd58fabaf8861f9ceee",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_optimizer/tests/search/test_runner.py",
+    "sha256": "ddb2f82b11f8aa30ca5537517b0888314f30c02b39937508ad0aca88139694c4",
+    "blob": "a1fde673a66bb241d9c1f9a226607c7634923d0f",
+    "live_sha256": "878c4787214a0b20f5f3d3ae00075d34ecbf829c531dd50b33e0f3313b596757",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_optimizer/tests/search/test_sealed_test_hardening.py",
+    "sha256": "905ce2a7ad1ba88f6cb80ae12cc618bfe5584acc4bc6cb85af56a73d25c72b10",
+    "blob": "77263fa96d811a2516a217c84c496b5c04980b45",
+    "live_sha256": "9e9d2bc337587a2def69d02868dacbf1d59df1fcf271452adc888c2dad7c9855",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "factor_optimizer/tests/search/test_label_bundle_intervals.py",
+    "sha256": "b1db137e293547fb40316ed736959897d6cfea072a8ffec679ae8f65b4e05262",
+    "blob": "9c75fe091803e8dbc6ea229dec680e6c2ffdb65c",
+    "live_sha256": "3c3e4321f3a8891c869f11cdfc761e04cdc996183bede7e18074689c0776efa5",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "quant_platform/pyproject.toml",
+    "sha256": "968e1eac7733aca901652e7daf340a79ede206aeb5c6b0247d501db1694173e2",
+    "blob": "dc3d217645621ec8906cf0253645c5466fafbd9e",
+    "live_sha256": "73c9fab3f70b7487c9c04b19617e98649cf2b580388ff3959b5b86204d9bb881",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "quant_platform/app/candidate/ingest.py",
+    "sha256": "8578af5083e6ef4eeeb1965d50ea46603ddc295929ad9fd74dda1caf779e5e0f",
+    "blob": "fb6b11b2466caadacb26eecdc77bad181aa2d5a9",
+    "live_sha256": "8eafc20728a60b8d24f247208a0b1f7de3b25b4b3ef9ecf6c52c9e2bbad09c5e",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "quant_platform/app/adapters/data_access_storage.py",
+    "sha256": "58aac42e3b66d89140c784d98233a16ad6d792ee32851c439beadfbbd13a6eac",
+    "blob": "3085d3ce3460ca2a921b3efd5d2391e099a5185b",
+    "live_sha256": "cde8bea3235f76928254abd8aa5b9fc1f54bf04c332e9ea61eab1336c165583a",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "quant_platform/app/db/schema.py",
+    "sha256": "4c31fc531e2dad4ed6eb6ba525325864e4d696e74e15332e1bf5341f575c344d",
+    "blob": "5ddbf5b3b62a49cf0d90a83521b13fb8d77f1a8e",
+    "live_sha256": "f90fb8edf801961c985b1b6118473eaa0dce9a329e12b2c407744525af839851",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "quant_platform/app/db/postgres_backend.py",
+    "sha256": "51329d49f850f94b8c64198d44bdc0dcd8409079bbd9dc8b55aab2433f13e29c",
+    "blob": "a0b7e171915a99cf7f927fccfd3f300d4f15a453",
+    "live_sha256": "5db1c9178b33aa57c908e0ec8a6a3f71f90698fe72335d4a9bd576b4daed416c",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "quant_platform/app/db/durable_store.py",
+    "sha256": "b2fc129d4332c88950dbfa2411f889944897235a811778bdbdb47aaa607f1d2e",
+    "blob": "3f83534be24ceca16b1488592112816e53104054",
+    "live_sha256": "bcf04bedeb540e3ab72d2162cd3e87eb34610b8270c4cdb3e577bd6bd1435eda",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "quant_platform/app/db/migrations.py",
+    "sha256": "80ce33bacacd61f71b69bb5cbd559ffce571f07718a4949e3b1ad3e6ddbfdd59",
+    "blob": "1a07c0c6330d0cef2763d84dd33574647a303083",
+    "live_sha256": "fa97d984e0f6d072da24b51024024308b39442f75069e6082dd3f480ce3ef24c",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "quant_platform/app/db/sqlite_backend.py",
+    "sha256": "b0b36288786544a85ae548d7d48c66461b64fc68cdb4c46c40b374965002a413",
+    "blob": "eefef2de6121cf29dc9c438f6b79398e064069d3",
+    "live_sha256": "1b9429227d987b89f6af2c91e0b6078d0f808c26e2de54764ff23b2342f7e9e1",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "quant_platform/app/outbox.py",
+    "sha256": "48cb1c2b7797dd796b9a6bed7ecc1fdc9ff76e10f9b96eab69319c22610fe8db",
+    "blob": "979e8aba76379f4954230a9f5fa5532f70a71e9f",
+    "live_sha256": "308d46be84489b68066300bf8e1a7deb3411ee1778ddeafac09d2051937139be",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "quant_platform/app/worker/jobs.py",
+    "sha256": "982d9a3211c4a33188cad0d743ac8b3893c7778e763dbfe11c7a41996204bc5d",
+    "blob": "7b1227cdd23c5c097089764e6d4869ab83d00c87",
+    "live_sha256": "88b30fd73c0c1bb0fa17566f448561ba17929e86678a84851472a6bb5636a8a6",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "quant_platform/app/orchestrator.py",
+    "sha256": "c56aa33b48e81edc765d1750519c9fa6bf036f59fc752f3d00a9747296fde0f0",
+    "blob": "b9cec62bd3f8ceea791ae39babb6868bf954f6be",
+    "live_sha256": "db97f69fe8915f4c88c0f986eea951f35ae5cde27393371dd900b58a5c1bb911",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "quant_platform/app/composition.py",
+    "sha256": "242d2e98309c2e82fcea1a67965b7852f5e51ac777bdac5afe906f96323ed3aa",
+    "blob": "9a9cd1d2fc32f1e314738794501acc844a5c4042",
+    "live_sha256": "7e98c8828e5e787f457d50724d4a753ce94482d861e53b2672b469925419eae0",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "quant_platform/app/contracts/candidate.py",
+    "sha256": "977bce36224afb823d4388913b18edad9e72cfcab4122d197fb9502d0960b188",
+    "blob": "ede8be2dd73b3aac72bce8b8779c7321292d67b8",
+    "live_sha256": "2816a709d23a9a1a317264d501530bba66ba057ea0fc02574405e6d6edb402ab",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "quant_platform/app/contracts/__init__.py",
+    "sha256": "678a564402e6b8083d9e89b2b3de7aea48551a1448b945daefcdbcd601bb89d4",
+    "blob": "7eaeb973f17e639e877d3def50826cc314ea4e06",
+    "live_sha256": "3995852a12b339bf1549f6dbc55ea011e723e53c917947fd903cabfd2ddcc0de",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "quant_platform/app/contracts/storage.py",
+    "sha256": "885d04d67a2e6214eeb669d2d271e17fa4ca29507135dd6ca1337872e29626c8",
+    "blob": "5b61269c599c851e7a3e758edb8ac163359af54f",
+    "live_sha256": "e4b976efb3b78cf253406870397227ee6ffe9b3652fd369a9626a989b2ddbf32",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "quant_platform/tests/test_outbox_claim.py",
+    "sha256": "573beff0ac3d677b68fb6bd8c7d3f8d93c1567919738b3d647731094e3ef0e29",
+    "blob": "39827f523789a26391339cf5d9d2314942b79a78",
+    "live_sha256": "b6607b3e273d922f819b7468fb72a95f3799222ff927f029a1086443222824a8",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "quant_platform/tests/test_postgres_dialect.py",
+    "sha256": "fe419c5fab9e4fc7523e48a0a5ee41977f13a95d31126220e31f852bbbf1fac6",
+    "blob": "7e8302fc63f757961bf5399b12d2c0b4b64b2b69",
+    "live_sha256": "3ba86905e999948f6e76f77aeb1c876511b41e0a0427b7eaf57b8b60500962bd",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "quant_platform/tests/test_postgres_live.py",
+    "sha256": "1043075f1eb2196ad55f97280b99165b583aa957a6eb4c2165ce66e6df55413c",
+    "blob": "a90502beb7c3657381e5eb1dc6402b943da58e08",
+    "live_sha256": "3e59e8381e557e68eecee7f78b10c0ce5cb5c88474bf5ef3c29c2572092b64c7",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "quant_platform/tests/test_composition.py",
+    "sha256": "fd0f835c1b5487018194dae10623de332c0ea97d33dd5ac9039cf70fc0cf5b1f",
+    "blob": "1002da4f56d80b7ad1e6aa557c8bc1c839080097",
+    "live_sha256": "ef60be69a7c71f3e3c36b7a5507c218fac0f93a60d632f3987e903231de79f01",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "quant_platform/tests/test_durable_store.py",
+    "sha256": "0757c5b7421a607387da60d254890bdc84b4a7d15a1f261b36f8f8e196563871",
+    "blob": "0bbbed03ce6b6cc71e7328c99ee2605c5db36062",
+    "live_sha256": "d02811f4be0cfb18b9c36555e9345f59f4046041e1b5883a09f6cf52f5f20247",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "quant_platform/tests/test_orchestrator_pipeline.py",
+    "sha256": "5764ba184780c3e68b700a2306a83a43db4ec75574dfbdef28ab186b5664a6c6",
+    "blob": "68c61fb59884f783874396844efbb7e869f9288e",
+    "live_sha256": "df2b4256b80af48f5a69bb2b81a0f88663077ad70c88ee7ff39ed4eb92fefd9c",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "tests/backend/test_polars_ts_rolling_pairwise.py",
+    "sha256": "220b25e62e2cea29a14e5cc6eb9f001d8b86abd9a6d8fc31673b7ab76903bbba",
+    "blob": "690eb43f852b374e9c299e5496c2200d896e61f9",
+    "live_sha256": "3ea85db83941f801596df46c092d60c896b277d044ee99c5c4111ae13fb4ab3b",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "tests/operators/test_same_clock_lag.py",
+    "sha256": "83c9154242e65a7887f549b9c293ff64bbf7ef004b3e622c219168dd8ecd72a7",
+    "blob": "bf9973d02cc05a7a932bf5c3629f5a4dfd209d69",
+    "live_sha256": "754c86a61ca884b5cc720d848eb60fbea77c10c3b2d0d363ea1c73b5a3b7f18a",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "tests/operators/test_filter_layer.py",
+    "sha256": "800d112a20eb4fa2c8b269e70a180fd501fac1a51f42947d8f5147bd105d4de6",
+    "blob": "7eab4002415f64e3e834436b3e5bf36a990b7ea2",
+    "live_sha256": "49a2b5075f5ef68f3f1953de6122a10075e3ed96447d92fbb9ef4e9b47e01bc1",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "tests/modeling/test_trainer_governance.py",
+    "sha256": "39c7c943970ead3ca63af2d2d2b752ec2274e79f7f796c1c4a1000b0d4cf4827",
+    "blob": "e1335e23d286d9294629e154a1ba10323f70e4c7",
+    "live_sha256": "cac861acc819ad7d1d0f2349d89f4f294a7a80d7ac0ff5f9166b67297239652e",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "tests/modeling/test_r41_monitoring_ledger_contracts.py",
+    "sha256": "ef98e758e3e9715c25256b6c5e30d5802f4ff4ccdd3aa12ef5949022de2c462f",
+    "blob": "9a7fbf9cc65e3cd1eacb17fe01a190d825b474e9",
+    "live_sha256": "47cae6a5b63eb6af8af16e190e8a967a114e1e562a6d95ce4ac7d3606c5b1495",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "tests/modeling/test_training_orchestration.py",
+    "sha256": "39faf62c7915531facecdcd0be6ebdd260729ce992bc3cf2d653fed16fd081b0",
+    "blob": "29cbe9d23a7b5f05b076c84940b4ed32ae6126c3",
+    "live_sha256": "1c2a7d7320599aa11fa6495e4f154f25e2e708046cd9325fedcb24084273ad5a",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-m37-differing-source-before-cleanup.tar.gz",
+    "path": "tests/modeling/test_negative_controls_new_m311_318.py",
+    "sha256": "561fcf3796d81633656c4e2d067b9e113917f2bc718b45cf8883e22be3a300cd",
+    "blob": "383285a630b86288197727031defffcb75d45bfc",
+    "live_sha256": "8634ccd68bf9ad8a1661a269b8c3d68733b053a3090594cf557f3f9c898b6fcb",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-small-drafts-before-cleanup.tar.gz",
+    "path": "test_pending_positive.py",
+    "sha256": "c6cb8872cb2f4ee627f0643f4b95bde2365e9f94a00948e592c0e1debd974f98",
+    "blob": "5982faddb95398a5439e1c9507e2dee60c425eaa",
+    "live_sha256": null,
+    "status": "REVIEW_REQUIRED"
+  },
+  {
+    "archive": "v9-small-drafts-before-cleanup.tar.gz",
+    "path": "factor_engine/backend/cleaned_bridge.py",
+    "sha256": "b7c36cd71a79adc5c3a1049330d2b2b1029988528a68b99009c1f1a88f64c452",
+    "blob": "e0cfe8d227c0e18d1bbbfd736e6504ec5aba45d7",
+    "live_sha256": "69244aab24397b0f024543ee3c55942901ddcc2e04e3568bbbb9f2baacb35042",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-small-drafts-before-cleanup.tar.gz",
+    "path": "factor_engine/backend/operator_cost.py",
+    "sha256": "47efcab77b15058ade27617722011665cd4dbb6bdbef02f75266f403aad505cb",
+    "blob": "e49a50f82bbb8df2719d6cd96e3d9e45dc8e0b95",
+    "live_sha256": "9f71deb99510b66bb40abea2b415d22b82ece70e6027daba82e61c8592dadd8e",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-small-drafts-before-cleanup.tar.gz",
+    "path": "factor_engine/.pytest_cache/README.md",
+    "sha256": "73fd6fccdd802c419a6b2d983d6c3173b7da97558ac4b589edec2dfe443db9ad",
+    "blob": "b89018ced91c0a8af7f3f23ce8901870da89f3a0",
+    "live_sha256": null,
+    "status": "REVIEW_REQUIRED"
+  },
+  {
+    "archive": "v9-small-drafts-before-cleanup.tar.gz",
+    "path": "factor_engine/runtime/resume_validation.py",
+    "sha256": "f004d77d4d2ca51c14e41aa5318811cb0c40c90bfe4f33dda24a31c8427eafa6",
+    "blob": "a655b3f0951634523e1c763312c481c4c1351278",
+    "live_sha256": "f004d77d4d2ca51c14e41aa5318811cb0c40c90bfe4f33dda24a31c8427eafa6",
+    "status": "IDENTICAL_MAIN"
+  },
+  {
+    "archive": "v9-small-drafts-before-cleanup.tar.gz",
+    "path": "factor_engine/runtime/bounded_pipeline.py",
+    "sha256": "a6c4abb105a82f23c9140e3fdf73e9889ddf18942531b5a75bf8896836241859",
+    "blob": "99eeb74fd80ead77f03fed3c78d1e406d765c706",
+    "live_sha256": "a6c4abb105a82f23c9140e3fdf73e9889ddf18942531b5a75bf8896836241859",
+    "status": "IDENTICAL_MAIN"
+  },
+  {
+    "archive": "v9-small-drafts-before-cleanup.tar.gz",
+    "path": "factor_engine/cleaned_operators/filter_smooth.py",
+    "sha256": "4606f056ea7e0f2ed39e81392ec63efea7ff2179c63b3b15d0d71be623b3e36d",
+    "blob": "3c18645433208a3f704687194bdf69ec06efa221",
+    "live_sha256": "5ee367a03e726001c3bdb1bd1e866aec97e8a1cbd912782c47fcce5923b878db",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-small-drafts-before-cleanup.tar.gz",
+    "path": "factor_engine/cleaned_operators/filter_hysteresis.py",
+    "sha256": "cd26f9ffbed607da426a4aa0958c7b7f25dd652805ac6a578236b17a294c7123",
+    "blob": "8439561dfbd685663fa767856ba672a0ef1807c6",
+    "live_sha256": "5919accf5933482607efd311a6b9ef6a693d49abf4699b008fdc28162f47f279",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-small-drafts-before-cleanup.tar.gz",
+    "path": "factor_engine/tests/backend/test_polars_ts_rolling_pairwise.py",
+    "sha256": "220b25e62e2cea29a14e5cc6eb9f001d8b86abd9a6d8fc31673b7ab76903bbba",
+    "blob": "690eb43f852b374e9c299e5496c2200d896e61f9",
+    "live_sha256": "3ea85db83941f801596df46c092d60c896b277d044ee99c5c4111ae13fb4ab3b",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-small-drafts-before-cleanup.tar.gz",
+    "path": "factor_engine/tests/operators/test_same_clock_lag.py",
+    "sha256": "83c9154242e65a7887f549b9c293ff64bbf7ef004b3e622c219168dd8ecd72a7",
+    "blob": "bf9973d02cc05a7a932bf5c3629f5a4dfd209d69",
+    "live_sha256": "754c86a61ca884b5cc720d848eb60fbea77c10c3b2d0d363ea1c73b5a3b7f18a",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-small-drafts-before-cleanup.tar.gz",
+    "path": "factor_engine/tests/operators/test_filter_layer.py",
+    "sha256": "800d112a20eb4fa2c8b269e70a180fd501fac1a51f42947d8f5147bd105d4de6",
+    "blob": "7eab4002415f64e3e834436b3e5bf36a990b7ea2",
+    "live_sha256": "5dd8cc58e4dc254b04f29982ea5bd831f855f60e4f58607bad0995406ed74997",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-small-drafts-before-cleanup.tar.gz",
+    "path": "factor_engine/tests/runtime/test_v9_pending_resume_safe_subset.py",
+    "sha256": "f0a7e33c1c2b699ba6119839e456ae69c1a55a6d0023a8bc83753c3331f38edb",
+    "blob": "3e77c98c9a1c98c3e7aed1eb380c8bc08f537d69",
+    "live_sha256": "a8d761f0cece594570c52a87f9a769ec79d811f178de22faa4441ddbd1da22db",
+    "status": "REVIEW_REQUIRED"
+  },
+  {
+    "archive": "v9-small-drafts-before-cleanup.tar.gz",
+    "path": "factor_engine/runtime/__init__.py",
+    "sha256": "a8415eab7cae7f7950295b1e00b98bf1a3ccf1fa424b9e01ff9a6bcb4d0cde19",
+    "blob": "b36383a61027f0875a3cb103edc8f2a4528a3289",
+    "live_sha256": "6e5f3ab9d2a7448d2155201dec0cc1b227f28a72f977be5508b3219797962851",
+    "status": "REVIEW_REQUIRED"
+  },
+  {
+    "archive": "v9-small-drafts-before-cleanup.tar.gz",
+    "path": "factor_engine/__init__.py",
+    "sha256": "a8415eab7cae7f7950295b1e00b98bf1a3ccf1fa424b9e01ff9a6bcb4d0cde19",
+    "blob": "b36383a61027f0875a3cb103edc8f2a4528a3289",
+    "live_sha256": "eb9cea7e482973e7df3b6ac6ee5861d4c215db8ec3714be31323567e6a7e5a86",
+    "status": "REVIEW_REQUIRED"
+  },
+  {
+    "archive": "v9-small-drafts-before-cleanup.tar.gz",
+    "path": "factor_engine/tests/runtime/test_fit_failure_evidence.py",
+    "sha256": "65d070843f66e7b20037777c38b1304662903a6ee3b7b9e1983fdba33c9a2d4d",
+    "blob": "2be10633e92f260b1b3449134733e93ea68104ea",
+    "live_sha256": "3bc3899e0915246762fec715512c1cf2e30d199ea27bc8d8525248bb88b58dfe",
+    "status": "REVIEW_REQUIRED"
+  },
+  {
+    "archive": "v9-small-drafts-before-cleanup.tar.gz",
+    "path": "factor_engine/tests/runtime/test_v6_bounded_pipeline.py",
+    "sha256": "3d933989ec45e4c28e3b637b20cb004ab9551b2f2f54ebc1a17a92b2fdf79ae5",
+    "blob": "d53d7153d28f0f767047b9b77f7a43f8e2928cac",
+    "live_sha256": "6656bc9508235a06c2cdd89f1f00e68e6fe65681bda2ff6c9dc5acf3d770dcc9",
+    "status": "REVIEW_REQUIRED"
+  },
+  {
+    "archive": "v9-small-drafts-before-cleanup.tar.gz",
+    "path": "factor_engine/tests/runtime/test_v8_slot_failure_ownership.py",
+    "sha256": "314c4ed3d5c285dd40a350ac5aa84d979e1142fe61f6b717b7a72c91adfa29a9",
+    "blob": "0b4b3562e1d68dc418221963ffe3f8e7f3890cb8",
+    "live_sha256": "d89bf47ffd6ceecb5252504dc1c3efe74f5eef821d6bc11b34357891b04314b9",
+    "status": "REVIEW_REQUIRED"
+  },
+  {
+    "archive": "v9-small-drafts-before-cleanup.tar.gz",
+    "path": "factor_engine/tests/runtime/__init__.py",
+    "sha256": "a8415eab7cae7f7950295b1e00b98bf1a3ccf1fa424b9e01ff9a6bcb4d0cde19",
+    "blob": "b36383a61027f0875a3cb103edc8f2a4528a3289",
+    "live_sha256": null,
+    "status": "REVIEW_REQUIRED"
+  },
+  {
+    "archive": "v9-small-drafts-before-cleanup.tar.gz",
+    "path": "factor_engine/tests/__init__.py",
+    "sha256": "a8415eab7cae7f7950295b1e00b98bf1a3ccf1fa424b9e01ff9a6bcb4d0cde19",
+    "blob": "b36383a61027f0875a3cb103edc8f2a4528a3289",
+    "live_sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
+    "status": "REVIEW_REQUIRED"
+  },
+  {
+    "archive": "v9-small-drafts-before-cleanup.tar.gz",
+    "path": "V9-M36-RESOURCE-ADMISSION-v5.patch",
+    "sha256": "79c9f81c3bd9ae22948a617997020408b93d80efceaf808d7450e4940d466f35",
+    "blob": "27963ec1502f9e4a4b62d1de75e937abf7db3cd7",
+    "live_sha256": null,
+    "status": "REVIEW_REQUIRED"
+  },
+  {
+    "archive": "v9-small-drafts-before-cleanup.tar.gz",
+    "path": "V9-M36-RESOURCE-ADMISSION.patch",
+    "sha256": "35651d109143cc6d51a104d08d3d9df0a2f89fedb1970cef446d7949401341d3",
+    "blob": "d58876a27afbcc6e65d0df9c2e53db4ae9bca3b9",
+    "live_sha256": null,
+    "status": "REVIEW_REQUIRED"
+  },
+  {
+    "archive": "v9-small-drafts-before-cleanup.tar.gz",
+    "path": "V9-M36-RESOURCE-ADMISSION-v2.patch",
+    "sha256": "a2dd09974ae6285f902d165d1988c528f85bae3d8b1245234784d4f5a9211aa1",
+    "blob": "a2e9511e9fb439359623af5b08be43317d8fa405",
+    "live_sha256": null,
+    "status": "REVIEW_REQUIRED"
+  },
+  {
+    "archive": "v9-small-drafts-before-cleanup.tar.gz",
+    "path": "V9-M36-RESOURCE-ADMISSION-v3.patch",
+    "sha256": "ed45d381799a38133e6f7d2cbf31234fdc357892e71c131c30e6388541ffb8f1",
+    "blob": "f238768bc859a80add09f596dccbe5b7d51e0e8c",
+    "live_sha256": null,
+    "status": "REVIEW_REQUIRED"
+  },
+  {
+    "archive": "v9-small-drafts-before-cleanup.tar.gz",
+    "path": "factor_engine/backend/cleaned_bridge.py",
+    "sha256": "b7c36cd71a79adc5c3a1049330d2b2b1029988528a68b99009c1f1a88f64c452",
+    "blob": "e0cfe8d227c0e18d1bbbfd736e6504ec5aba45d7",
+    "live_sha256": "69244aab24397b0f024543ee3c55942901ddcc2e04e3568bbbb9f2baacb35042",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-small-drafts-before-cleanup.tar.gz",
+    "path": "factor_engine/cleaned_operators/filter_smooth.py",
+    "sha256": "4606f056ea7e0f2ed39e81392ec63efea7ff2179c63b3b15d0d71be623b3e36d",
+    "blob": "3c18645433208a3f704687194bdf69ec06efa221",
+    "live_sha256": "5ee367a03e726001c3bdb1bd1e866aec97e8a1cbd912782c47fcce5923b878db",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-small-drafts-before-cleanup.tar.gz",
+    "path": "factor_engine/cleaned_operators/filter_hysteresis.py",
+    "sha256": "cd26f9ffbed607da426a4aa0958c7b7f25dd652805ac6a578236b17a294c7123",
+    "blob": "8439561dfbd685663fa767856ba672a0ef1807c6",
+    "live_sha256": "5919accf5933482607efd311a6b9ef6a693d49abf4699b008fdc28162f47f279",
+    "status": "HISTORICAL_BLOB_IN_MAIN"
+  },
+  {
+    "archive": "v9-small-drafts-before-cleanup.tar.gz",
+    "path": "V9-M36-RESOURCE-ADMISSION-v4.patch",
+    "sha256": "15f2c142147ac50c6b65300918062b66ecde4b4e734921544053fc5dbcf3f952",
+    "blob": "db559301632a1b5344c8ff3b00c249f489ba7f28",
+    "live_sha256": null,
+    "status": "REVIEW_REQUIRED"
+  },
+  {
+    "archive": "v9-small-drafts-before-cleanup.tar.gz",
+    "path": "tests/backend/.pytest_cache/README.md",
+    "sha256": "73fd6fccdd802c419a6b2d983d6c3173b7da97558ac4b589edec2dfe443db9ad",
+    "blob": "b89018ced91c0a8af7f3f23ce8901870da89f3a0",
+    "live_sha256": null,
+    "status": "REVIEW_REQUIRED"
+  },
+  {
+    "archive": "v9-small-drafts-before-cleanup.tar.gz",
+    "path": "tests/backend/test_m36_resource_admission.py",
+    "sha256": "5b9fae3431bb26d50ef9e026e404ecbd737c9e27f141e6f0d83d4fa7d7ae01b3",
+    "blob": "10e47a26576b83fe8321ea211ef31b43f1b7d53b",
+    "live_sha256": null,
+    "status": "REVIEW_REQUIRED"
+  }
+]

@@ -1,0 +1,55 @@
+schema: v9-main-recovery-integration-1
+date: '2026-09-09'
+workspace: /home/sunhaiwei/quant_projects
+audited_base_commit: ba895a8c83d35e832240161bbbb427aa41bd4c4c
+execution_location: actual_main_worktree_only
+new_branches_or_worktrees: false
+scope:
+  - Reconcile old V3 checkout via platform 470-file audit and FE-specific independent diff review.
+  - Reconcile 315 retained draft entries without replacing newer main implementations with old versions.
+  - Integrate never-dispatched ACCEPTED pending-resume subset through all three admission paths.
+  - Preserve strict full ownership and exit proof, original deadline, evidence integrity and coordinator lock.
+  - Restore lone-current-slot lost-ACK and timeout compatibility without cross-slot reconciliation.
+  - Integrate benchmark test isolation and restore lost test DB close.
+source_sha256:
+  factor_engine/runtime/bounded_pipeline.py: 36b779ec2ac9a4e89e378a6960ce79f0bc3d44670a9f4f69d2e3140b5f0a4466
+  factor_engine/runtime/resume_validation.py: f004d77d4d2ca51c14e41aa5318811cb0c40c90bfe4f33dda24a31c8427eafa6
+  factor_engine/tests/backend/test_operator_cost_baseline.py: cf84b863d9b36d4332717d2f46313dc48cdd21aa08008634b2e89cd18b481283
+  factor_engine/tests/runtime/test_v6_bounded_pipeline.py: aa8ba1335c50bfa641e7767e4c651016a123dce32e2b3a5d6766e90b95bf894d
+  factor_engine/tests/runtime/test_v9_pending_resume_safe_subset.py: c14c642ecf7ea0f3a1757ffe72b0114fed60caff4dd63404cb85fef6cc2fda77
+tests:
+  pending_formatted_final: {passed: 14, failed: 0, warnings: 41, seconds: 19.77, xml: evidence/r2/v9-pending-resume-formatted-final.xml}
+  pending_subset_final_agent: {passed: 14, failed: 0, seconds: 19.12, scope: Real spawn/direct resumed-instance roles and bounded refill handshake plus negative gates}
+  original_three_recovery_regressions_agent: {passed: 3, failed: 0, seconds: 7.26, tests_modified: false}
+  slot_refill_and_recovery_agent: {passed: 12, failed: 0, seconds: 27.78}
+  benchmark_target_agent: {passed: 3, failed: 0, seconds: 29.59}
+  preservation_initial: {passed: 77, failed: 3, seconds: 230.96, xml: evidence/r2/v9-recovery-integration-preservation.xml}
+  preservation_final: {passed: 80, failed: 0, warnings: 116, seconds: 237.13, xml: evidence/r2/v9-recovery-integration-preservation-final.xml}
+  all_v9_and_snapshot_and_benchmark: {passed: 750, failed: 0, warnings: 101, seconds: 255.19, xml: evidence/r2/v9-main-reconciled-final.xml}
+  py_compile_changed_files: PASS
+  git_diff_check: PASS_SOURCE_AND_DOCS_RAW_JUNIT_TRACEBACK_WHITESPACE_EXCLUDED
+  final_test_formatting: Trailing whitespace removed from pending test after full runs; Python AST equality verified against tested 41f3d67c source.
+  counts_are_overlapping_not_additive: true
+independent_review:
+  reviewer: v9_wavelet_GPT_5.6_sol
+  result: APPROVE
+  checks:
+    - Resume role assertions exclude pre-existing worker instances; refill handshake has a 15-second bound.
+    - Main/next/refill eligibility checks precede admission; failed consume_attempt cannot execute.
+    - Single-slot recovery requires exact active/current identity and still calls strict retirement and client reclaim.
+    - Multi-slot, prefetched, later-wave, stale, quarantine and protocol failures remain fail-closed.
+branches:
+  local_remaining: [main]
+  deleted_local_and_remote:
+    backup/r48-root-ownership-closure: 0d22dc674d0e3e6d1437c2c67e801ace7bc4cc37
+    backup/r49-repository-domain-reorganization: 58be5764cb095a1eec7b3b43fbc07d39644d78d7
+    backup/r50-production-truth-closure: 80c17e571466cd658e5c9ab5df26cb07ada46555
+  safety: All three tips verified ancestors of main; remote deletion atomic with expected-tip leases.
+  other_old_remote_branches: 34 preserved; not created by this task and no migration evidence supplied.
+  old_v3_checkout: Detached evidence source retained by platform audit; not an execution target.
+limits:
+  - Scoped integration completion is not closure of all 51 audit tasks or certification of all 1756 canonicals.
+  - Pending recovery only accepts never-dispatched ACCEPTED items; RUNNING/retry/INTENT/UNKNOWN remain rejected.
+  - Fit evidence remains bounded instrumented wave samples, not complete per-model/per-window receipts.
+  - No approved real-data 100k/GPU throughput, deployment, production publication, or new COS transfer was performed.
+  - A broader cost-named agent sweep found 6 existing non-v9 plan-hash API test incompatibilities; outside this integration test set, not claimed passing.

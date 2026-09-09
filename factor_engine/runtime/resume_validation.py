@@ -57,6 +57,7 @@ class ValidatedResumeContext:
     artifact_revalidation_required: bool = True
     old_worker_exit_proof_required: bool = True
     fit_failure_evidence_available: bool = False
+    job_deadline_record: dict | None = None
 
 
 def _read_json(path: Path, *, maximum_bytes=1048576):
@@ -320,6 +321,13 @@ def validate_resume_context(artifact_root, run_id, *, policy, run_identity, dead
             ).fetchone()[0]
             if linked_total != declared_total:
                 raise ResumeIdentityError("fit failure evidence assignment count differs")
+            if state.execute(
+                    "SELECT 1 FROM fit_failure_evidence_assignments AS assignment "
+                    "JOIN outcomes AS outcome ON outcome.ordinal=assignment.ordinal "
+                    "WHERE outcome.state='ACCEPTED' LIMIT 1").fetchone() is not None:
+                raise ResumeIdentityError(
+                    "accepted outcome has persisted dispatch evidence"
+                )
         evidence_row_count = 0
         evidence_last_seq = 0
         evidence_observed = 0
@@ -474,6 +482,7 @@ def validate_resume_context(artifact_root, run_id, *, policy, run_identity, dead
         ownership_store=identity.get("ownership_store"),
         ownership_coverage=identity.get("ownership_coverage"),
         fit_failure_evidence_available=evidence_table,
+        job_deadline_record=identity.get("job_deadline"),
     )
 
 
