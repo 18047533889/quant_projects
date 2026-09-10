@@ -23,7 +23,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field
 from typing import Any, Sequence
 
-from data_access.core.exceptions import ResourceAdmissionError
+from data_access.core.exceptions import HostLeaseAdmissionDenied, ResourceAdmissionError
 
 logger = logging.getLogger("data_access.resource_governor")
 
@@ -373,6 +373,10 @@ class GlobalResourceGovernor:
                     reservation.estimated_memory,
                     reservation.estimated_scan_bytes,
                 )
+            except HostLeaseAdmissionDenied as exc:
+                raise ResourceAdmissionError(
+                    f"host-backed admission denied by authoritative host lease: {exc}"
+                ) from exc
             except Exception as exc:
                 # R32-P0-008：host 配置但失败 → strict/production fail-closed。
                 # research/interactive 允许 fallback 本地 governor（仍受本地

@@ -151,24 +151,26 @@ def test_permutation_equivariance_all_tie_sensitive_operators() -> None:
     assert set(res) == {"quantile_bucket", "topk", "group_rank", "winsorize", "neutralize", "cs_regression"}
 
 
-def test_prefix_invariance_hard_gate_all_causal_ts_operators() -> None:
-    """#258: 所有 causal TS canonical 的 prefix-invariance universal gate。"""
-    ok, det = check_prefix_invariance_all_causal_ts()
+def test_reference_causal_examples_are_not_production_certification() -> None:
+    """H22: preserve useful reference self-checks without production claims."""
+    from factor_engine.cleaned_operators.math_certificate import reference_self_check_causal_examples
+    ok, det = reference_self_check_causal_examples()
     assert ok is True, det
-    assert det["gate"] == PREFIX_INVARIANCE_FAILURE
+    assert det["gate"] == "REFERENCE_SELF_CHECK"
 
 
-def test_chunk_boundary_invariance_all_streamable_operators() -> None:
-    """#259: 可流式/分块算子（EWM/cumsum）的 chunk-boundary invariance。"""
-    ok, det = check_chunk_boundary_invariance_all_streamable()
+def test_reference_stream_examples_are_not_production_certification() -> None:
+    """H22: demonstration streams do not certify actual registry winners."""
+    from factor_engine.cleaned_operators.math_certificate import reference_self_check_stream_examples
+    ok, det = reference_self_check_stream_examples()
     assert ok is True, det
-    assert det["gate"] == CHUNK_BOUNDARY_INVARIANCE
+    assert det["gate"] == "REFERENCE_SELF_CHECK"
 
 
 def test_full_production_determinism_across_processes_and_restarts() -> None:
     """#260: 两个独立进程对同一 spec 产生相同 checksum/hash；worker count 不影响。"""
     probe_code = (
-        "from cleaned_operators.math_certificate import cross_process_determinism_probe;"
+        "from factor_engine.cleaned_operators.math_certificate import cross_process_determinism_probe;"
         "import json,sys;"
         "print(json.dumps(cross_process_determinism_probe(worker_count=int(sys.argv[1]), seed=42)))"
     )

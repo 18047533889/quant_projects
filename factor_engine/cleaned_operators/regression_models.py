@@ -492,13 +492,14 @@ class TsArCoefficient(SeriesOperator):
                 # P1: strict full-history floor when warmup_policy="full".
                 if warmup_policy == "full" and row < w - 1:
                     continue
-                # AR maturity fix: need W+lag rows [t-W-lag+1, t] so after
-                # forming lag pairs we have exactly W pairs for the AR fit.
-                start = max(0, row - w - lg + 1)
+                # ``window`` counts source observations, matching the public
+                # trailing-window contract and the other AR implementation.
+                # Lag construction therefore yields ``window-lag`` pairs.
+                start = max(0, row - w + 1)
                 if row - start < lg:
                     # insufficient history to form even one lag pair
                     continue
-                # IN-SAMPLE (audit M-040): the segment is ``[row-w-lag+1, row]`` —
+                # IN-SAMPLE (audit M-040): the segment is ``[row-w+1, row]`` —
                 # it INCLUDES the current row, so the fitted AR(lag) covariance
                 # is a trailing descriptive estimate, NOT a strict-prior fit.
                 # ``ts_ar_prior_coeff`` (ar_meanrev) is the strictly t-1 variant.

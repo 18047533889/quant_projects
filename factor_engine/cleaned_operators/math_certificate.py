@@ -1241,7 +1241,6 @@ METAMORPHIC_PROPERTY_DECLARATIONS: dict[str, tuple[str, ...]] = {
     "topk": ("rank.column_permutation_equivariance",),
     "winsorize": ("rank.column_permutation_equivariance",),
     "cs_regression": ("rank.column_permutation_equivariance",),
-    "neutralize": ("rank.column_permutation_equivariance",),
     # rank 家族：strict monotonic transform invariance + column permutation
     # equivariance（rank 不随单调变换/列置换改变）。
     "rank": ("rank.strict_monotonic_invariance", "rank.column_permutation_equivariance"),
@@ -1253,7 +1252,7 @@ METAMORPHIC_PROPERTY_DECLARATIONS: dict[str, tuple[str, ...]] = {
     # zscore 家族：translation + positive-scale invariance。
     "zscore": ("translation_invariance", "positive_scale_invariance"),
     "c_zscore": ("translation_invariance", "positive_scale_invariance"),
-    "cs_std": ("translation_invariance", "positive_scale_invariance"),
+    "cs_std": ("translation_invariance", "absolute_scale_equivariance"),
     "ts_zscore": ("translation_invariance", "positive_scale_invariance"),
     # correlation：translation + positive-scale invariance + symmetry。
     "Corr": ("translation_invariance", "positive_scale_invariance", "symmetry"),
@@ -1267,16 +1266,16 @@ METAMORPHIC_PROPERTY_DECLARATIONS: dict[str, tuple[str, ...]] = {
     "Beta": ("beta.y_scale_covariance", "beta.x_scale_inverse_covariance"),
     "ts_beta": ("beta.y_scale_covariance", "beta.x_scale_inverse_covariance"),
     # neutralize：group residual mean≈0 + size residual covariance≈0。
-    "neutralize": ("neutralize.group_residual_mean_0",
+    "neutralize": ("rank.column_permutation_equivariance", "neutralize.group_residual_mean_0",
                    "neutralize.size_residual_cov_0"),
     "group_neutralize": ("neutralize.group_residual_mean_0",),
     "cs_demean": ("translation_invariance",),
     "normalize": ("positive_scale_invariance",),
-    "ts_mean": ("translation_invariance",),
-    "ts_std": ("translation_invariance", "positive_scale_invariance"),
-    "ts_var": ("translation_invariance", "scale_covariance"),
-    "ts_sum": ("translation_invariance", "scale_covariance"),
-    "ts_pct": ("scale_covariance",),
+    "ts_mean": ("translation_equivariance", "linear_scale_equivariance"),
+    "ts_std": ("translation_invariance", "absolute_scale_equivariance"),
+    "ts_var": ("translation_invariance", "square_scale_equivariance"),
+    "ts_sum": ("support_translation_equivariance", "linear_scale_equivariance"),
+    "ts_pct": ("positive_scale_invariance",),
 }
 
 
@@ -1285,57 +1284,128 @@ METAMORPHIC_PROPERTY_DECLARATIONS: dict[str, tuple[str, ...]] = {
 # ---------------------------------------------------------------------------
 
 
-def prefix_invariance_check(
-    fn: Callable[[np.ndarray], np.ndarray],
-    x: np.ndarray,
-    *,
-    T: int | None = None,
-    K: int = 10,
-    rtol: float = 1e-8,
-    atol: float = 1e-10,
-) -> MetamorphicResult:
-    """R19-103 prefix invariance：``fn(prefix T+K)[:T]`` == ``fn(prefix T)``。
-
-    任何 full-sample statistic 泄漏进 direct factor（如 ``rank_corr(d=0)`` 对
-    全面板 rank）都会在这里被抓出：未来 T+1.. 的变化会改变前 T 的输出。
-
-    参数:
-        fn: 一维时序函数（``ndarray -> ndarray``）。
-        x: 一维时序数组。
-        T: 前缀长度（默认 ``max(10, len(x)//2)``）。
-        K: 追加长度。
-        rtol/atol: ``np.allclose`` 容差。
-
-    返回:
-        MetamorphicResult（property_name="prefix_invariance"）。
-    """
-    x = np.asarray(x, dtype=float)
-    if T is None:
-        T = max(10, int(len(x) * 0.6))
-    T = min(int(T), len(x))
-    K = min(int(K), len(x) - T)
-    if T <= 0 or K <= 0:
-        return MetamorphicResult("prefix_invariance", False,
-                                 f"invalid T={T}, K={K}")
-    try:
-        y_short = np.asarray(fn(x[:T]), dtype=float)
-        y_long = np.asarray(fn(x[: T + K]), dtype=float)
-    except Exception as exc:  # noqa: BLE001
-        return MetamorphicResult("prefix_invariance", False,
-                                 f"fn raised {type(exc).__name__}: {exc}")
-    if y_short.shape != (T,) and y_short.shape != (T, 1):
-        # 兼容 2D 输出：取第一列
-        if y_short.ndim == 2 and y_short.shape[0] == T:
-            y_short = y_short[:, 0]
+def _validation_metadata(value: Any) -> Any:
+    """Exact, bounded metadata identity; unsupported objects fail closed."""
+    remaining = [65536, 4096]
+    def visit(obj, depth=0):
+        remaining[1] -= 1
+        if depth > 16 or remaining[1] < 0:
+            raise ValueError("validation metadata nesting/count exceeds budget")
+        if obj is None or type(obj) in (bool, int, float, complex, str, bytes):
+            if isinstance(obj, (str, bytes)) and len(obj) > remaining[0]:
+                raise ValueError("validation metadata exceeds byte budget")
+            if type(obj) is int and obj.bit_length() > remaining[0] * 3:
+                raise ValueError("validation metadata integer exceeds byte budget")
+            payload = obj if isinstance(obj, bytes) else repr(obj).encode("utf-8")
+            remaining[0] -= len(payload)
+            result = (type(obj).__name__, payload)
+        elif isinstance(obj, np.generic) and obj.dtype.kind in "biufc":
+            result = (obj.dtype.str, obj.tobytes())
+            remaining[0] -= obj.nbytes
+        elif isinstance(obj, np.ndarray) and obj.dtype.kind in "biufc":
+            if obj.nbytes > remaining[0]:
+                raise ValueError("validation metadata exceeds byte budget")
+            remaining[0] -= obj.nbytes
+            result = ("array", obj.dtype.str, obj.shape, obj.tobytes())
+        elif type(obj) in (list, tuple):
+            if len(obj) > remaining[1]:
+                raise ValueError("validation metadata exceeds item budget")
+            result = (type(obj).__name__, tuple(visit(v, depth + 1) for v in obj))
+        elif type(obj) is dict:
+            if len(obj) > remaining[1] or any(type(k) is not str for k in obj):
+                raise ValueError("validation metadata requires bounded string keys")
+            result = ("dict", tuple((visit(k, depth + 1), visit(obj[k], depth + 1))
+                                    for k in sorted(obj)))
         else:
-            return MetamorphicResult("prefix_invariance", False,
-                                     f"unexpected shape {y_short.shape}")
-    if y_long.ndim == 2 and y_long.shape[0] >= T:
-        y_long = y_long[:T, 0]
-    ok = _allclose_nan(y_short, np.asarray(y_long[:T], dtype=float),
-                       rtol=rtol, atol=atol)
+            raise TypeError("unsupported validation metadata")
+        if remaining[0] < 0:
+            raise ValueError("validation metadata exceeds byte budget")
+        return result
+    return visit(value)
+
+
+def _validation_copy(value: Any) -> Any:
+    """Bounded numeric-only snapshots; object containers require an explicit adapter."""
+    import pandas as pd
+    if isinstance(value, (pd.DataFrame, pd.Series)):
+        dtypes = value.dtypes if isinstance(value, pd.DataFrame) else [value.dtype]
+        if any(not pd.api.types.is_numeric_dtype(dt) for dt in dtypes):
+            raise TypeError("validation requires numeric, non-object data")
+        size = value.memory_usage(deep=True)
+        if int(size.sum() if hasattr(size, "sum") else size) > 16 * 1024 * 1024:
+            raise ValueError("validation fixture exceeds 16 MiB budget")
+        _validation_metadata(value.attrs)
+        return value.copy(deep=True)
+    arr = np.asarray(value)
+    if arr.dtype.kind not in "biufc" or arr.nbytes > 16 * 1024 * 1024:
+        raise ValueError("unsupported dtype or fixture exceeds 16 MiB budget")
+    return arr.copy()
+
+
+def _validation_equal(a: Any, b: Any, *, rtol: float, atol: float) -> bool:
+    import pandas as pd
+    if type(a) is not type(b):
+        return False
+    if isinstance(a, (pd.DataFrame, pd.Series)):
+        try:
+            if _validation_metadata(a.attrs) != _validation_metadata(b.attrs):
+                return False
+        except (TypeError, ValueError, RecursionError):
+            return False
+        if not a.index.identical(b.index):
+            return False
+        if isinstance(a, pd.DataFrame):
+            if not a.columns.identical(b.columns) or not a.dtypes.equals(b.dtypes):
+                return False
+        elif a.dtype != b.dtype or a.name != b.name:
+            return False
+        dtypes = a.dtypes if isinstance(a, pd.DataFrame) else [a.dtype]
+        dtype = complex if any(pd.api.types.is_complex_dtype(dt) for dt in dtypes) else float
+        av, bv = a.to_numpy(dtype=dtype, na_value=np.nan), b.to_numpy(dtype=dtype, na_value=np.nan)
+    else:
+        av, bv = np.asarray(a), np.asarray(b)
+        if av.dtype != bv.dtype:
+            return False
+    return _allclose_nan(av, bv, rtol=rtol, atol=atol)
+
+
+def _validation_slice(value: Any, start: int, stop: int) -> Any:
+    return value.iloc[start:stop] if hasattr(value, "iloc") else value[start:stop]
+
+
+def _validation_useful(value: Any) -> bool:
+    arr = value.to_numpy(dtype=float, na_value=np.nan) if hasattr(value, "to_numpy") else np.asarray(value)
+    return bool(arr.size and np.isfinite(arr).any())
+
+
+def prefix_invariance_check(
+    fn: Callable[[np.ndarray], np.ndarray], x: np.ndarray, *,
+    T: int | None = None, K: int = 10,
+    rtol: float = 1e-8, atol: float = 1e-10,
+) -> MetamorphicResult:
+    """Compare complete time-aligned outputs, including every column and metadata."""
+    try:
+        x = _validation_copy(x)
+        T = min(int(T if T is not None else max(10, len(x) * 0.6)), len(x))
+        K = min(int(K), len(x) - T)
+        if T <= 0 or K <= 0:
+            raise ValueError(f"invalid T={T}, K={K}")
+        short_input = _validation_copy(_validation_slice(x, 0, T))
+        long_input = _validation_copy(_validation_slice(x, 0, T + K))
+        y_short = _validation_copy(fn(short_input))
+        y_long = _validation_copy(fn(long_input))
+        if len(y_short) != T or len(y_long) != T + K:
+            raise ValueError("unexpected output time dimension")
+        ok = (
+            _validation_equal(short_input, _validation_slice(x, 0, T), rtol=0, atol=0)
+            and _validation_equal(long_input, _validation_slice(x, 0, T + K), rtol=0, atol=0)
+            and _validation_useful(y_short)
+            and _validation_equal(y_short, _validation_slice(y_long, 0, T), rtol=rtol, atol=atol)
+        )
+    except Exception as exc:
+        return MetamorphicResult("prefix_invariance", False, f"{type(exc).__name__}: {exc}")
     return MetamorphicResult("prefix_invariance", ok,
-                             "first T outputs unchanged" if ok else "future leakage")
+                             "all prefix outputs unchanged" if ok else "leakage, mutation, metadata mismatch or no useful coverage")
 
 
 # ---------------------------------------------------------------------------
@@ -1353,77 +1423,93 @@ HOSTILE_BOUNDARY_KINDS = (
 
 
 def chunk_invariance_check(
-    fn: Callable[[np.ndarray], np.ndarray],
-    x: np.ndarray,
-    *,
-    window: int,
-    boundaries: Sequence[int] | None = None,
-    min_overlap: int | None = None,
-    rtol: float = 1e-8,
-    atol: float = 1e-10,
+    fn: Callable[[np.ndarray], np.ndarray], x: np.ndarray, *,
+    window: int, boundaries: Sequence[int] | None = None,
+    min_overlap: int | None = None, rtol: float = 1e-8, atol: float = 1e-10,
 ) -> MetamorphicResult:
-    """R19-105 chunk invariance：hostile chunk 切分后与整体结果一致。
-
-    对 trailing rolling op（窗口 ``window``），输出 t 只依赖 ``x[t-window+1:t]``。
-    按给定 boundaries 分块，每块左侧用 ``window-1`` 的 overlap 补齐历史，丢弃
-    每块（除首块）前 ``window-1`` 的输出（它们缺历史），再把有效输出拼接成
-    chunked 结果，与 full run 比较。
-
-    参数:
-        fn: 一维 rolling 函数（``ndarray -> ndarray``，NaN 为缺失）。
-        x: 一维时序数组。
-        window: 滚动窗口长度。
-        boundaries: 分块边界（index 列表）。默认构造 hostile 边界。
-        min_overlap: 补齐历史长度，默认 ``window - 1``。
-        rtol/atol: 容差。
-
-    返回:
-        MetamorphicResult（property_name="chunk_invariance"）。
-    """
-    x = np.asarray(x, dtype=float)
-    n = x.shape[0]
-    if window <= 1:
-        return MetamorphicResult("chunk_invariance", False, "window must be > 1")
-    overlap = window - 1 if min_overlap is None else int(min_overlap)
-    if boundaries is None:
-        boundaries = _hostile_chunk_boundaries(x, window)
-    boundaries = sorted(set(int(b) for b in boundaries if 0 < int(b) < n))
-    # full run
+    """Check all columns and axes at real chunk boundaries, without broadcasting."""
     try:
-        full = np.asarray(fn(x), dtype=float)
-    except Exception as exc:  # noqa: BLE001
-        return MetamorphicResult("chunk_invariance", False,
-                                 f"full fn raised {type(exc).__name__}: {exc}")
-    if full.ndim == 2:
-        full = full[:, 0]
-    # chunked run
-    starts = [0] + boundaries
-    ends = boundaries + [n]
-    chunked = np.full(n, np.nan, dtype=float)
-    for si, (s, e) in enumerate(zip(starts, ends)):
-        lo = max(0, s - overlap)
-        seg = x[lo:e]
-        try:
-            seg_out = np.asarray(fn(seg), dtype=float)
-        except Exception as exc:  # noqa: BLE001
-            return MetamorphicResult("chunk_invariance", False,
-                                     f"chunk fn raised {type(exc).__name__}: {exc}")
-        if seg_out.ndim == 2:
-            seg_out = seg_out[:, 0]
-        # 有效输出范围：与整体 x 对齐的 [s, e)
-        offset = s - lo  # seg_out[:offset] 对应历史补齐段（丢弃）
-        keep_from = offset if si > 0 else 0
-        seg_len = e - s
-        chunked[s:e] = seg_out[keep_from : keep_from + seg_len]
-    ok = _allclose_nan(full, chunked, rtol=rtol, atol=atol)
-    return MetamorphicResult("chunk_invariance", ok,
-                             f"boundaries={list(boundaries)}" if ok
-                             else f"mismatch at boundaries={list(boundaries)}")
+        x = _validation_copy(x)
+        n = len(x)
+        overlap = window - 1 if min_overlap is None else int(min_overlap)
+        if window <= 1 or overlap < 0:
+            raise ValueError("invalid window or overlap")
+        if boundaries is None:
+            boundaries = _hostile_chunk_boundaries(np.asarray(x), window)
+        boundaries = sorted(set(int(b) for b in boundaries if 0 < int(b) < n))
+        if not boundaries:
+            raise ValueError("no chunk boundary coverage")
+        full_input = _validation_copy(x)
+        full = _validation_copy(fn(full_input))
+        if len(full) != n or not _validation_useful(full):
+            raise ValueError("invalid shape or no useful coverage")
+        ok = _validation_equal(full_input, x, rtol=0, atol=0)
+        for s, e in zip([0] + boundaries, boundaries + [n]):
+            lo = max(0, s - overlap)
+            seg = _validation_copy(_validation_slice(x, lo, e))
+            seg_out = _validation_copy(fn(seg))
+            if len(seg_out) != e - lo:
+                raise ValueError("unexpected chunk output time dimension")
+            ok = ok and _validation_equal(seg, _validation_slice(x, lo, e), rtol=0, atol=0)
+            ok = ok and _validation_equal(
+                _validation_slice(full, s, e), _validation_slice(seg_out, s - lo, e - lo),
+                rtol=rtol, atol=atol)
+    except Exception as exc:
+        return MetamorphicResult("chunk_invariance", False, f"{type(exc).__name__}: {exc}")
+    return MetamorphicResult("chunk_invariance", ok, f"all columns; boundaries={boundaries}")
 
+
+
+def check_moment_transformations(
+    canonical: str, fn: Callable, x: np.ndarray, *,
+    support_fn: Callable | None = None, shift: float = 3.0,
+    scale: float = -2.5, rtol: float = 1e-8, atol: float = 1e-10,
+) -> tuple[MetamorphicResult, ...]:
+    """Executable moment laws on a fixed finite mask and identical support.
+
+    Sum translation requires an explicit support oracle matching the declared
+    window/min_periods. Unknown operators and unavailable support fail closed.
+    """
+    laws = {
+        "ts_mean": ("translation_equivariance", "linear_scale_equivariance", 1),
+        "ts_sum": ("support_translation_equivariance", "linear_scale_equivariance", 1),
+        "ts_std": ("translation_invariance", "absolute_scale_equivariance", 1),
+        "cs_std": ("translation_invariance", "absolute_scale_equivariance", 1),
+        "ts_var": ("translation_invariance", "square_scale_equivariance", 2),
+    }
+    if canonical not in laws or not np.isfinite([shift, scale]).all() or scale == 0:
+        return (MetamorphicResult("moment_domain", False, "unsupported canonical/transform"),)
+    translation, scaling, power = laws[canonical]
+    try:
+        x = _validation_copy(x)
+        base = _validation_copy(fn(_validation_copy(x)))
+        shifted = _validation_copy(fn(x + shift))
+        scaled = _validation_copy(fn(x * scale))
+        expected = _validation_copy(base)
+        if canonical == "ts_mean":
+            expected = expected + shift
+        elif canonical == "ts_sum":
+            if support_fn is None:
+                raise ValueError("sum requires matching support oracle")
+            counts = _validation_copy(support_fn(_validation_copy(x)))
+            if np.shape(counts) != np.shape(base):
+                raise ValueError("support shape mismatch")
+            expected = expected + shift * counts
+        multiplier = abs(scale) if canonical in {"ts_std", "cs_std"} else scale ** power
+        useful = _validation_useful(base)
+        return (
+            MetamorphicResult(translation, useful and _validation_equal(expected, shifted, rtol=rtol, atol=atol)),
+            MetamorphicResult(scaling, useful and _validation_equal(base * multiplier, scaled, rtol=rtol, atol=atol)),
+        )
+    except Exception as exc:
+        return (MetamorphicResult("moment_domain", False, str(exc)),)
 
 def _hostile_chunk_boundaries(x: np.ndarray, window: int) -> list[int]:
     """构造 hostile chunk 边界：把 NaN / Inf / 局部极大 / 值跳变 / 首尾等敏感点
     放进边界集合。"""
+    if x.ndim > 1:
+        # Candidate boundaries may inspect one series; comparisons never do.
+        x = x.reshape(len(x), -1)[:, 0]
     n = x.shape[0]
     b: set[int] = set()
     # NaN at boundary
@@ -1918,29 +2004,34 @@ def reference_smoke_pass(
 def differential_against_reference(
     optimized_fn: Callable[..., np.ndarray],
     reference_fn: Callable[..., np.ndarray],
-    fixtures: Sequence[np.ndarray],
-    *,
-    rtol: float = 1e-8,
-    atol: float = 1e-10,
+    fixtures: Sequence[np.ndarray], *,
+    rtol: float = 1e-8, atol: float = 1e-10,
 ) -> tuple[bool, dict[str, bool]]:
-    """R19-116 optimized 必须 differential test reference。
+    """Independent bounded inputs and immediately detached oracle snapshots.
 
-    返回 ``(all_ok, {fixture_index: ok})``。
+    Numeric views are supported by snapshotting; input mutation is forbidden.
+    Object/nested fixtures need an explicit adapter. Empty/all-missing coverage
+    cannot certify useful computation.
     """
     results: dict[str, bool] = {}
-    all_ok = True
+    useful = False
     for i, fx in enumerate(fixtures):
         try:
-            ref = np.asarray(reference_fn(fx), dtype=float)
-            opt = np.asarray(optimized_fn(fx), dtype=float)
-        except Exception:  # noqa: BLE001
-            results[f"fixture_{i}"] = False
-            all_ok = False
-            continue
-        ok = _allclose_nan(ref, opt, rtol=rtol, atol=atol)
+            baseline = _validation_copy(fx)
+            ref_input = _validation_copy(baseline)
+            opt_input = _validation_copy(baseline)
+            ref = _validation_copy(reference_fn(ref_input))
+            opt = _validation_copy(optimized_fn(opt_input))
+            ok = (
+                _validation_equal(ref_input, baseline, rtol=0, atol=0)
+                and _validation_equal(opt_input, baseline, rtol=0, atol=0)
+                and _validation_equal(ref, opt, rtol=rtol, atol=atol)
+            )
+            useful = useful or (ok and _validation_useful(ref))
+        except Exception:
+            ok = False
         results[f"fixture_{i}"] = bool(ok)
-        all_ok = all_ok and ok
-    return all_ok, results
+    return bool(results) and useful and all(results.values()), results
 
 
 # ---------------------------------------------------------------------------
@@ -2071,7 +2162,7 @@ def cross_process_determinism_probe(
     }
 
 
-def check_chunk_boundary_invariance_all_streamable(
+def reference_self_check_stream_examples(
     *,
     n_bars: int = 120,
     seed: int = 9,
@@ -2079,11 +2170,10 @@ def check_chunk_boundary_invariance_all_streamable(
     rtol: float = 1e-6,
     atol: float = 1e-8,
 ) -> tuple[bool, dict[str, Any]]:
-    """R40 #259：可流式/分块算子的 chunk-boundary invariance universal gate。
+    """REFERENCE_SELF_CHECK: local EWM/cumsum demonstrations only.
 
-    覆盖 EWM mean（span=12）、streaming cumsum、streaming valid-count（writer
-    block DQ 代理）。随机 chunk 边界，逐 chunk 续流与全量流比较。可被
-    ``scripts/audit_r40_hard_gates.py`` 复用。
+    These examples do not invoke registered operators or production writers.
+    Use check_chunk_boundary_invariance_all_streamable for actual execution.
     """
     rng = np.random.default_rng(seed)
     x = rng.standard_normal(n_bars)
@@ -2109,13 +2199,14 @@ def check_chunk_boundary_invariance_all_streamable(
                 details.append(f"boundaries={boundaries} mismatch")
         per_canonical[name] = {"ok": ok, "detail": details}
         all_ok = all_ok and ok
-    return all_ok, {"per_canonical": per_canonical, "gate": CHUNK_BOUNDARY_INVARIANCE}
+    return all_ok, {"per_canonical": per_canonical, "gate": "REFERENCE_SELF_CHECK", "scope": "demo_streams_not_production"}
 
 #: R40 #258：被纳入 universal prefix-invariance hard gate 的 causal TS canonicals。
 CAUSAL_TS_CANONICALS: tuple[str, ...] = (
     "ts_mean", "ts_std", "ts_sum", "ts_rank", "ts_delta", "ts_pct",
     "ts_max", "ts_min", "ts_zscore", "ts_argmax", "ts_argmin",
-    "ts_regression_slope", "ts_rank_corr",
+    # H22: the registered canonical is rank_corr; ts_rank_corr was a demo label.
+    "ts_regression_slope", "rank_corr",
 )
 
 
@@ -2163,12 +2254,12 @@ def _causal_ts_kernel(canonical: str, d: int = 10):
         ).to_numpy()
     if canonical == "ts_regression_slope":
         return lambda a: _r40_ts_regression_slope(np.arange(len(a), dtype=float), np.asarray(a, float), d)
-    if canonical == "ts_rank_corr":
+    if canonical in {"rank_corr", "ts_rank_corr"}:
         return lambda a: _r40_ts_rank_corr(np.asarray(a, float), np.arange(len(a), dtype=float), d)
     raise KeyError(canonical)
 
 
-def check_prefix_invariance_all_causal_ts(
+def reference_self_check_causal_examples(
     *,
     n_bars: int = 140,
     seed: int = 3,
@@ -2177,12 +2268,10 @@ def check_prefix_invariance_all_causal_ts(
     rtol: float = 1e-6,
     atol: float = 1e-8,
 ) -> tuple[bool, dict[str, Any]]:
-    """R40 #258：所有 causal TS canonical 的 universal prefix-invariance hard
-    gate。
+    """REFERENCE_SELF_CHECK: local causal-reference kernels only.
 
-    随机 cut point ``T_cut``：``fn(prefix T+K)[:T] == fn(prefix T)``。production
-    下任何未来数据改变历史输出即为 ``PREFIX_INVARIANCE_FAILURE``。可被
-    ``scripts/audit_r40_hard_gates.py`` 复用。
+    This intentionally remains independent of registry winner resolution.
+    Use check_prefix_invariance_all_causal_ts for actual execution evidence.
     """
     rng = np.random.default_rng(seed)
     x = rng.standard_normal(n_bars)
@@ -2199,8 +2288,172 @@ def check_prefix_invariance_all_causal_ts(
         res = prefix_invariance_check(fn, x, T=T_cut, K=K_append, rtol=rtol, atol=atol)
         per_canonical[canonical] = {"ok": bool(res.passed), "detail": res.detail}
         all_ok = all_ok and bool(res.passed)
-    return all_ok, {"per_canonical": per_canonical, "gate": PREFIX_INVARIANCE_FAILURE}
+    return all_ok, {"per_canonical": per_canonical, "gate": "REFERENCE_SELF_CHECK", "scope": "local_causal_references_not_production"}
 
+
+
+def _resolved_validation_operator(canonical: str, backend: str):
+    from factor_engine.cleaned_operators import load_all
+    from factor_engine.cleaned_operators.registry import OperatorRegistry, _impl_source_hash
+    load_all()
+    resolved = OperatorRegistry.resolve_canonical(canonical)
+    op = OperatorRegistry.get(canonical, backend=backend, mode="production")
+    if op is None:
+        raise LookupError(f"no production registry winner for {canonical}/{backend}")
+    from factor_engine.backend.operator_capability import _declared_physical_spec
+    physical = _declared_physical_spec(op, backend)
+    kind = str(getattr(physical.execution_kind, "value", physical.execution_kind)) if physical else "UNDECLARED"
+    return op, {
+        "advertised": canonical, "runtime_resolved": resolved, "backend": backend,
+        "execution_kind": kind, "delegated": "delegate" in kind.lower(),
+        "module": type(op).__module__, "class": type(op).__qualname__,
+        "implementation_hash": _impl_source_hash(op),
+        "test_executed": False, "fallback": False,
+    }
+
+
+def check_prefix_invariance_all_causal_ts(
+    *, n_bars: int = 140, seed: int = 3, T_cut: int = 90,
+    K_append: int = 30, rtol: float = 1e-6, atol: float = 1e-8,
+    backend: str = "pandas_numpy", canonicals: Sequence[str] | None = None,
+) -> tuple[bool, dict[str, Any]]:
+    """Resolve and invoke actual production winners; unavailable coverage fails."""
+    import pandas as pd
+    chosen = tuple(CAUSAL_TS_CANONICALS if canonicals is None else canonicals)
+    rng = np.random.default_rng(seed)
+    panel = pd.DataFrame(rng.standard_normal((n_bars, 2)), columns=["a", "b"])
+    panel.iloc[::11] = np.nan
+    records = {}
+    for canonical in chosen:
+        evidence = {"advertised": canonical, "backend": backend, "test_executed": False}
+        try:
+            op, evidence = _resolved_validation_operator(canonical, backend)
+            if backend != "pandas_numpy":
+                raise NotImplementedError("backend needs an explicit real execution fixture adapter")
+            names = getattr(op.metadata, "param_names", ())
+            params = {}
+            for name in ("window", "d", "n"):
+                if name in names:
+                    params[name] = 10
+                    break
+            specs = getattr(op.metadata, "param_specs", {}) or {}
+            from factor_engine.cleaned_operators.base import MISSING
+            declared_defaults = {name: spec.default for name, spec in specs.items()
+                                 if getattr(spec, "default", MISSING) is not MISSING}
+            evidence["parameters"] = {**declared_defaults, **params}
+            evidence["input_fixture"] = {"shape": [n_bars, 2], "seed": seed, "gaps_every": 11}
+            def fn(a):
+                evidence["test_executed"] = True
+                if canonical in {"ts_regression_slope", "rank_corr"}:
+                    x = pd.DataFrame(np.repeat(np.asarray(a.index, dtype=float)[:, None], 2, axis=1),
+                                     index=a.index, columns=a.columns)
+                    return op.calculate(a, x, **params)
+                return op.calculate(a, **params)
+            result = prefix_invariance_check(fn, panel, T=T_cut, K=K_append, rtol=rtol, atol=atol)
+            evidence.update(ok=result.passed, detail=result.detail,
+                            status="PASS_LIMITED" if result.passed else "FAILED")
+        except Exception as exc:
+            evidence.update(ok=False, status="BLOCKED", detail=f"{type(exc).__name__}: {exc}")
+        records[canonical] = evidence
+    return bool(records) and all(v["ok"] for v in records.values()), {
+        "per_canonical": records, "gate": PREFIX_INVARIANCE_FAILURE,
+        "scope": "actual_registry_prefix_only", "zero_coverage": not bool(records),
+        "retired_demo_labels": {"ts_rank_corr": "rank_corr"},
+    }
+
+
+def check_chunk_boundary_invariance_all_streamable(
+    *, n_bars: int = 120, seed: int = 9, n_random_chunkings: int = 3,
+    rtol: float = 1e-6, atol: float = 1e-8,
+) -> tuple[bool, dict[str, Any]]:
+    """Real segmented execution, checked against the registered full-run winner.
+
+    Local demonstration streams are kept in reference_self_check_stream_examples
+    and cannot satisfy this production gate.
+    """
+    import pandas as pd
+    from factor_engine.stateful_runtime import execute_stateful_segment
+    from factor_engine.cleaned_operators.production_hardening import SEGMENTED_EXECUTION_CANONICALS
+    rng = np.random.default_rng(seed)
+    x = 100 + rng.standard_normal(n_bars).cumsum()
+    y = 100 + rng.standard_normal(n_bars).cumsum()
+    x[17::17] = np.nan
+    if n_bars > 37:
+        x[37] = np.inf
+    timestamps = pd.date_range("2024-01-01", periods=n_bars, tz="UTC")
+    records = {}
+    for canonical in sorted(SEGMENTED_EXECUTION_CANONICALS):
+        evidence = {"advertised": canonical, "test_executed": False}
+        try:
+            if n_bars < 4 or n_random_chunkings < 1:
+                raise ValueError("no useful chunk coverage")
+            backend = "polars" if canonical in {"ts_ewm_cov", "ts_ewm_corr"} else "pandas_numpy"
+            op, evidence = _resolved_validation_operator(canonical, backend)
+            if canonical in {"ATR_WILDER", "ADX"}:
+                inputs = {"high": x + .5, "low": x - .5, "close": x}
+                args = [inputs[k] for k in ("high", "low", "close")]
+            elif canonical in {"ts_ewm_cov", "ts_ewm_corr"}:
+                inputs = {"x": x, "y": y}
+                args = [x, y]
+            else:
+                inputs, args = {"x": x}, [x]
+            params = {}
+            names = getattr(op.metadata, "param_names", ())
+            if "span" in names:
+                params["span"] = 20
+            elif "window" in names:
+                params["window"] = 14 if canonical in {"ADX", "ATR_WILDER", "RSI_WILDER"} else 20
+            frames = [pd.DataFrame(a, index=timestamps, columns=["TEST"]) for a in args]
+            from factor_engine.cleaned_operators.base import MISSING
+            specs = getattr(op.metadata, "param_specs", {}) or {}
+            defaults = {name: spec.default for name, spec in specs.items()
+                        if getattr(spec, "default", MISSING) is not MISSING}
+            evidence["parameters"] = {**defaults, **params}
+            from factor_engine.stateful_contract import StatefulCheckpointRegistry
+            state_spec = StatefulCheckpointRegistry.get(canonical)
+            if state_spec is not None:
+                evidence["minimum_history"] = state_spec.minimum_history_for(
+                    evidence["parameters"]
+                )
+            evidence["test_executed"] = True
+            if backend == "polars":
+                import polars as pl
+                actual = op.calculate(*[pl.from_pandas(frame.reset_index(drop=True)) for frame in frames], **params)
+                if not isinstance(actual, pl.DataFrame) or actual.columns != ["TEST"]:
+                    raise ValueError("Polars output axis mismatch")
+                reference = _validation_copy(actual.to_pandas())
+                evidence["conversion"] = "bounded pandas fixture -> Polars -> pandas validation snapshot"
+            else:
+                reference = _validation_copy(op.calculate(*frames, **params))
+            from factor_engine.stateful_runtime import _implementation_hash
+            evidence["stateful_implementation_hash"] = _implementation_hash(canonical)
+            if reference.shape != (n_bars, 1):
+                raise ValueError("full registry result needs a one-column panel")
+            expected = reference.to_numpy()[:, 0]
+            ok = _validation_useful(expected)
+            def run(s, e, checkpoint=None):
+                return execute_stateful_segment(
+                    canonical, {k: v[s:e] for k, v in inputs.items()},
+                    timestamps=timestamps[s:e], instrument="TEST",
+                    input_identity={"audit": "H22", "canonical": canonical, "seed": seed},
+                    params=params, checkpoint=checkpoint, starts_at_dataset_origin=s == 0)
+            full = _validation_copy(run(0, n_bars).values)
+            ok = ok and _validation_equal(expected, np.asarray(full), rtol=rtol, atol=atol)
+            for _ in range(n_random_chunkings):
+                cut = int(rng.integers(2, n_bars - 1))
+                first = run(0, cut)
+                second = run(cut, n_bars, first.checkpoint)
+                combined = np.concatenate([first.values, second.values])
+                ok = ok and _validation_equal(np.asarray(full), combined, rtol=rtol, atol=atol)
+            evidence.update(ok=bool(ok), status="PASS_LIMITED" if ok else "FAILED",
+                            n_chunkings=n_random_chunkings, detail="registered full run vs real segmented state replay")
+        except Exception as exc:
+            evidence.update(ok=False, status="BLOCKED", detail=f"{type(exc).__name__}: {exc}")
+        records[canonical] = evidence
+    return bool(records) and all(v["ok"] for v in records.values()), {
+        "per_canonical": records, "gate": CHUNK_BOUNDARY_INVARIANCE,
+        "scope": "actual_registry_and_stateful_runtime", "zero_coverage": not bool(records),
+    }
 
 def check_chunk_invariance_all_segmented_canonicals(
     *,

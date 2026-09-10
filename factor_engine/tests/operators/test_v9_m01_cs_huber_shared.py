@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import numpy as np
 import pandas as pd
+import pytest
 
 from factor_engine.cleaned_operators.group_ext import (
     CsHuberResid,
@@ -92,14 +93,32 @@ def test_missing_rank_failure_and_iteration_cap_fail_closed():
     assert status["reason"] == "non_converged" and status["iterations"] == 1
 
 
-def test_exact_inlier_majority_has_no_positive_adaptive_mad_scale():
+def test_exact_inlier_majority_is_reported_as_exact_consensus():
     x = np.arange(1.0, 31.0)
     y = 3.0 + 2.0 * x
     y[-1] += 500.0
+    beta = _huber_irls_fit(x, y, True)
+    assert beta == pytest.approx((3.0, 2.0), abs=1e-12)
+    status = last_fit_status()
+    assert status["converged"] and status["reason"] == "exact_consensus"
+
+
+def test_rank_deficient_exact_majority_remains_scale_degenerate():
+    x = np.r_[np.zeros(21), np.arange(1.0, 10.0)]
+    y = np.r_[np.zeros(21), 100.0 * np.arange(1.0, 10.0) + np.linspace(0.0, 3.0, 9)]
     assert _huber_irls_fit(x, y, True) is None
     status = last_fit_status()
-    assert status["reason"] == "scale_degenerate"
-    assert status["mad"] <= 64.0 * np.finfo(float).eps * status["residual_extent"]
+    assert not status["converged"] and status["reason"] == "scale_degenerate"
+
+
+def test_high_leverage_minority_is_not_certified_as_exact_consensus():
+    inlier_x = np.arange(21.0)
+    x = np.r_[inlier_x, np.full(10, 100.0)]
+    y = np.r_[3.0 + 2.0 * inlier_x, np.full(10, -1e6)]
+    _huber_irls_fit(x, y, True)
+    # The high-leverage minority violates the bounded-subgradient certificate;
+    # it must never be relabelled as a zero-scale exact-consensus solution.
+    assert last_fit_status()["reason"] != "exact_consensus"
 
 
 def test_real_registry_winner_uses_stable_kernel():
@@ -115,13 +134,20 @@ def test_real_registry_winner_uses_stable_kernel():
     np.testing.assert_allclose(shifted, base, rtol=0, atol=3e-7)
 
 
-def test_default_pandas_batch_bridge_preserves_translation():
+@pytest.mark.parametrize("isolated_budget", [False, True], ids=["default-broker", "bounded-fixture"])
+def test_default_pandas_batch_bridge_preserves_translation(monkeypatch, isolated_budget):
     from factor_engine.api.cleaned_ops import make_cleaned_call_factory
     from factor_engine.api.columns import col
     from factor_engine.api.factor import Factor
     from factor_engine.backend.factory import build_backend
     from factor_engine.runtime.engine import FactorEngine
+    from factor_engine.runtime.adaptive_batch_scheduler import AdaptiveBatchScheduler
     from factor_engine.tests.helpers import InMemorySeriesSource
+
+    if isolated_budget:
+        # Keep a deterministic mathematical/translation lane alongside the
+        # unmodified default-broker integration lane.
+        monkeypatch.setattr(AdaptiveBatchScheduler, "_dynamic_wave_budget", lambda _self: 64 * 1024 * 1024)
 
     x, y = _seed8()
     index = pd.MultiIndex.from_product(
@@ -140,4 +166,9 @@ def test_default_pandas_batch_bridge_preserves_translation():
     ]
     engine = FactorEngine(backend=build_backend(), data_source=source, run_mode="research")
     result = engine.run_many(factors)["results"]
+    expected = _cs_robust_resid(_panel(y), _panel(x), _huber_irls_fit, True).stack()
+    assert result["base"].index.equals(expected.index)
+    assert np.isfinite(result["base"].to_numpy()).all()
+    assert np.isfinite(result["shifted"].to_numpy()).all()
+    np.testing.assert_allclose(result["base"], expected, rtol=0, atol=3e-7)
     np.testing.assert_allclose(result["shifted"], result["base"], rtol=0, atol=3e-7)

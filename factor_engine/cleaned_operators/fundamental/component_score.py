@@ -102,36 +102,47 @@ class FinComponentScore(SeriesOperator):
     metadata = _metadata("fin_component_score", [*_COMPONENT_PARAMS, "component_directions", "score_weights", "missing_policy"])
 
     def _calculate_series(self, *args: Any, **kwargs: Any) -> pd.DataFrame:
-        # The panel inputs are the positional component slots; the scalar params
-        # arrive as kwargs (or trailing positional).  Separate them strictly:
-        # every DataFrame/None positional is a component panel, the two scalar
-        # params are never panels.
-        panels: list[pd.DataFrame | None] = []
-        for value in args:
-            if value is None:
-                panels.append(None)
-            elif isinstance(value, pd.DataFrame):
-                panels.append(value)
-            elif isinstance(value, (str, list, tuple)) or value is None:
-                # scalar param bound positionally — stop treating as panel
-                break
-            else:
-                panels.append(value)
+        # Consume the SAME declared slot order as BindCall.  Keyword components
+        # are first-class inputs, gaps are explicit ``None``, and trailing
+        # positional scalar arguments are read only at their declared indices.
+        names = [*_COMPONENT_PARAMS, "component_directions", "score_weights", "missing_policy"]
+        if len(args) > len(names):
+            raise ValueError(f"fin_component_score accepts at most {len(names)} arguments")
+        bound: dict[str, Any] = dict(kwargs)
+        for index, value in enumerate(args):
+            name = names[index]
+            if name in bound:
+                raise ValueError(f"duplicate parameter {name!r}")
+            bound[name] = value
+        unknown = sorted(set(bound) - set(names))
+        if unknown:
+            raise ValueError(f"unknown fin_component_score parameters: {unknown}")
 
-        directions = kwargs.get("component_directions")
-        missing_policy = kwargs.get("missing_policy", "score_available")
+        slot_panels: list[tuple[str, pd.DataFrame]] = []
+        for name in _COMPONENT_PARAMS:
+            value = bound.get(name)
+            if value is None:
+                continue
+            if not isinstance(value, pd.DataFrame):
+                raise TypeError(f"{name} must be a pandas DataFrame or None")
+            slot_panels.append((name, value))
+
+        directions = bound.get("component_directions")
+        missing_policy = bound.get("missing_policy", "score_available")
         if missing_policy not in ("score_available", "require_full"):
             raise ValueError(
                 f"missing_policy must be 'score_available' or 'require_full', got {missing_policy!r}"
             )
-        weights = kwargs.get("score_weights")
-        provided = [p for p in panels if p is not None]
-        if not provided:
+        weights = bound.get("score_weights")
+        if not slot_panels:
             raise ValueError("fin_component_score requires at least one component panel")
         # Strict alignment: every provided component panel must share the exact
         # date x instrument grid (R25-082 — a mismatched ComponentStack input is
         # a caller bug, never a silent reindex).
-        aligned = align_panel_inputs(*provided, names=[f"component_{i}" for i in range(1, len(provided) + 1)])
+        aligned = align_panel_inputs(
+            *(panel for _, panel in slot_panels),
+            names=[name for name, _ in slot_panels],
+        )
         base = aligned[0]
         n_components = len(aligned)
         if isinstance(directions, str):
@@ -145,9 +156,14 @@ class FinComponentScore(SeriesOperator):
         if weights is None:
             weight_list = [1.0] * n_components
         else:
-            weight_list = [float(w) for w in weights]
+            try:
+                weight_list = [float(w) for w in weights]
+            except (TypeError, ValueError) as exc:
+                raise ValueError("score_weights must be a finite numeric sequence") from exc
             if len(weight_list) != n_components:
                 raise ValueError("score_weights length must equal number of component panels")
+            if not np.all(np.isfinite(np.asarray(weight_list, dtype=float))):
+                raise ValueError("score_weights must contain only finite values")
 
         arrays = [f.astype(float).to_numpy(dtype=float) for f in aligned]
         stacked = np.stack(arrays, axis=2)  # (rows, cols, components)

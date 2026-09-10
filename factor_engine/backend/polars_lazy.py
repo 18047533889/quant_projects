@@ -4,7 +4,10 @@ from __future__ import annotations
 
 from collections import OrderedDict
 from dataclasses import dataclass, field
+from threading import RLock
+import time
 from typing import Any
+import weakref
 
 
 def _collect_arrow_table(lf: Any, *, select_cols: list[str]) -> Any:
@@ -119,19 +122,29 @@ class LazyColumnBundle:
     timestamp_unit: str | None
     snapshot_id: str | None = None
     _materialized: dict[str, Any] = field(default_factory=dict)
-    _materialized_budget: int = 0
+    _materialized_budget: int | None = None
+    _cache_broker: Any | None = field(default=None, repr=False, compare=False)
+    _cache_leases: dict[str, int] = field(default_factory=dict, init=False, repr=False)
+    _live_cache_leases: dict[int, Any] = field(default_factory=dict, init=False, repr=False)
+    _cache_context: tuple | None = field(default=None, init=False, repr=False)
+    _materialize_lock: Any = field(default_factory=RLock, init=False, repr=False, compare=False)
 
     @property
     def materialized_budget(self) -> int:
-        """bundle 内已物化 Series 的字节预算（默认进程预算 × 8%）。"""
-        if self._materialized_budget > 0:
-            return self._materialized_budget
+        """Shared-broker residency cap; unknown/zero authority disables caching."""
+        explicit = None if self._materialized_budget is None else max(
+            0, int(self._materialized_budget)
+        )
+        if explicit == 0:
+            return 0
         try:
-            from factor_engine.runtime.resource_governor import ExecutionResourcePlan
-
-            return int(ExecutionResourcePlan.auto().process_budget_bytes * 0.08)
+            if self._cache_broker is None:
+                from factor_engine.storage.sources.data_access_source import _data_cache_authority
+                self._cache_broker = _data_cache_authority()
+            shared = max(0, int(self._cache_broker.current_read_budget()))
+            return shared if explicit is None else min(explicit, shared)
         except Exception:
-            return 512 * 1024 * 1024
+            return 0
 
     def _cache_bytes(self) -> int:
         from factor_engine.runtime.resource_governor import estimate_object_bytes
@@ -145,8 +158,23 @@ class LazyColumnBundle:
         if not isinstance(self._materialized, OrderedDict):
             self._materialized = OrderedDict(self._materialized)
         while self._materialized and self._cache_bytes() > target:
-            _, value = self._materialized.popitem(last=False)
-            _ = estimate_object_bytes(value)  # 逐出即释放
+            name, value = self._materialized.popitem(last=False)
+            self._cache_leases.pop(name, None)
+            # Removing residency does not release its lease while a caller still
+            # owns the physical buffers; owner finalizers perform that release.
+            _ = estimate_object_bytes(value)
+
+    def release_cached(self, physical_columns: list[str]) -> None:
+        """Transfer residency away from the bundle without touching request refs."""
+        with self._materialize_lock:
+            for name in physical_columns:
+                self._materialized.pop(name, None)
+                self._cache_leases.pop(name, None)
+
+    def close(self) -> None:
+        """Drop residency; physical-owner finalizers release outstanding leases."""
+        with self._materialize_lock:
+            self.release_cached(list(self._materialized))
 
     def missing_physical(self, physical: list[str]) -> list[str]:
         """返回 bundle 中缺失的物理列名列表。"""
@@ -154,63 +182,106 @@ class LazyColumnBundle:
         return [c for c in physical if c not in have]
 
     def materialize_columns(
-        self,
-        physical_columns: list[str],
-        *,
+        self, physical_columns: list[str], *,
         output_names: dict[str, str] | None = None,
     ) -> dict[str, Any]:
-        """从 bundle 物化列（已 collect 的列走有界缓存）。
-
-        Phase 5 R8：``_materialized`` 从无界 dict 改为受 ``materialized_budget``
-        约束的有界 LRU——DataAccessSource 把列逐出后，这里不会留下第二份常驻
-        Series 让内存实际不释放。
-        """
-        from factor_engine.runtime.resource_governor import estimate_object_bytes
-
+        """Cache physical columns; own request references survive LRU eviction."""
         from data_access.read.adapters import arrow_table_to_multiindex_columns
 
         names = list(dict.fromkeys(physical_columns))
-        fetched: dict[str, Any] = {}
-        pending = [c for c in names if c not in self._materialized]
-        if pending:
-            select_cols = list(
-                dict.fromkeys(
-                    [self.time_column, self.instrument_column, *pending]
-                )
-            )
-            table = _collect_arrow_table(self.lf, select_cols=select_cols)
-            reverse = {src: tgt for src, tgt in (output_names or self.output_names).items()}
-            fetched = arrow_table_to_multiindex_columns(
-                table,
-                timestamp_column=self.time_column,
-                instrument_column=self.instrument_column,
-                value_columns=pending,
-                output_names=reverse or None,
-                normalize_timestamp=self.normalize_timestamp,
-                timestamp_unit=self.timestamp_unit,
-            )
+        missing = self.missing_physical(names)
+        if missing:
+            raise KeyError(f"columns outside bundle: {missing}")
+        effective_out = dict(self.output_names if output_names is None else output_names)
+        logical_names = [effective_out.get(src, src) for src in names]
+        if len(set(logical_names)) != len(logical_names):
+            raise ValueError("conflicting physical-to-logical column mapping")
+        context = (id(self.lf), self.snapshot_id, self.time_column,
+                   self.instrument_column, self.normalize_timestamp, self.timestamp_unit)
+        with self._materialize_lock:
+            if self._cache_context != context:
+                self.release_cached(list(self._materialized))
+                self._cache_context = context
             if not isinstance(self._materialized, OrderedDict):
                 self._materialized = OrderedDict(self._materialized)
-            effective_out = output_names or self.output_names
-            budget = self.materialized_budget
-            # 已 fetch 的列先入缓存（best-effort），超预算时只逐出最旧的；
-            # 返回结果直接基于 fetched 构造，逐出不破坏本次返回。
-            for src in pending:
-                logical = effective_out.get(src, src) if effective_out else src
-                self._materialized[logical] = fetched[logical]
-            if self._cache_bytes() > budget:
-                self._evict_to(budget)
-
-        effective_out = output_names or self.output_names
-        out: dict[str, Any] = {}
-        for src in names:
-            logical = effective_out.get(src, src) if effective_out else src
-            value = self._materialized.get(logical)
-            if value is None and logical in fetched:
-                value = fetched[logical]
-            if value is not None:
-                out[logical] = value
-        return out
+            # Strong request-owned references MUST precede inserting new entries.
+            request = {}
+            for src in names:
+                if src in self._materialized:
+                    request[src] = self._materialized[src]
+                    self._materialized.move_to_end(src)
+            pending = [src for src in names if src not in request]
+            if pending:
+                select_cols = list(dict.fromkeys(
+                    [self.time_column, self.instrument_column, *pending]))
+                table = _collect_arrow_table(self.lf, select_cols=select_cols)
+                fetched = arrow_table_to_multiindex_columns(
+                    table, timestamp_column=self.time_column,
+                    instrument_column=self.instrument_column,
+                    value_columns=pending, output_names=None,
+                    normalize_timestamp=self.normalize_timestamp,
+                    timestamp_unit=self.timestamp_unit,
+                )
+                if set(fetched) != set(pending):
+                    raise RuntimeError("materialized physical columns do not match request")
+                request.update(fetched)
+                budget = self.materialized_budget
+                if budget > 0 and self._cache_broker is not None:
+                    from factor_engine.runtime.auto_memory_budget import MemoryLeaseKind
+                    from factor_engine.runtime.resource_governor import estimate_object_bytes
+                    for src in pending:
+                        value = fetched[src]
+                        nbytes = estimate_object_bytes(value)
+                        if nbytes <= 0 or nbytes > budget:
+                            continue
+                        from factor_engine.storage.sources.data_access_source import DataAccessSource
+                        owners = DataAccessSource._physical_cache_owners(value)
+                        if not owners:
+                            continue
+                        lease = self._cache_broker.acquire_memory(
+                            MemoryLeaseKind.SOURCE_READ, nbytes,
+                            lease_id=(f"lazy-column-bundle:{id(self)}:{src}:"
+                                      f"{time.monotonic_ns()}"),
+                        )
+                        if lease is None:
+                            continue
+                        self._materialized[src] = value
+                        token = id(lease)
+                        state = {"remaining": len(owners), "lease": lease,
+                                 "lock": RLock(), "finalizers": ()}
+                        self._live_cache_leases[token] = state
+                        bundle_ref = weakref.ref(self)
+                        def release_owner(tok=token, owner_state=state, ref=bundle_ref):
+                            with owner_state["lock"]:
+                                owner_state["remaining"] -= 1
+                                if owner_state["remaining"] != 0:
+                                    return
+                                owner_state["lease"].release()
+                            bundle = ref()
+                            if bundle is not None:
+                                with bundle._materialize_lock:
+                                    bundle._live_cache_leases.pop(tok, None)
+                        registered = []
+                        try:
+                            for owner in owners:
+                                registered.append(weakref.finalize(owner, release_owner))
+                            state["finalizers"] = tuple(registered)
+                        except Exception:
+                            for finalizer in registered:
+                                finalizer.detach()
+                            self._materialized.pop(src, None)
+                            self._live_cache_leases.pop(token, None)
+                            lease.release()
+                            continue
+                        self._cache_leases[src] = token
+            # Budget may shrink between waves even when every column is a hit.
+            # Request references already own all results before cache eviction.
+            self._evict_to(self.materialized_budget)
+            if set(request) != set(names):
+                raise RuntimeError("incomplete materialization")
+            # Rename only at the public boundary, never in the cache namespace.
+            return {logical: request[src].rename(logical, copy=False)
+                    for src, logical in zip(names, logical_names)}
 
 
 def build_lazy_column_bundle(
@@ -228,6 +299,7 @@ def build_lazy_column_bundle(
     params: dict[str, Any] | None,
     mode: str = "auto",
     filters: Any = None,
+    materialized_budget: int | None = None,
 ) -> LazyColumnBundle:
     """构建 LazyFrame bundle（不 collect）。
 
@@ -258,6 +330,7 @@ def build_lazy_column_bundle(
         normalize_timestamp=normalize_timestamp,
         timestamp_unit=timestamp_unit,
         snapshot_id=_snapshot_id_from_scan(scan_obj),
+        _materialized_budget=materialized_budget,
     )
 
 

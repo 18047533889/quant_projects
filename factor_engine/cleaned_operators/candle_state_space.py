@@ -429,7 +429,8 @@ def _z_normalize(sub: np.ndarray) -> np.ndarray:
 
 def _matrix_profile_series(
     x2d: np.ndarray, window: int, subsequence_length: int, history: int,
-) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    *, return_counts: bool = False,
+) -> tuple[np.ndarray, ...]:
     """Shared matrix-profile kernel -> (novelty, motif_age, frequency, dispersion).
 
     For every row ``t`` the current trailing subsequence is ``x[t-L+1..t]`` and
@@ -452,6 +453,8 @@ def _matrix_profile_series(
     age = np.full((rows, cols), np.nan, dtype=float)
     frequency = np.full((rows, cols), np.nan, dtype=float)
     dispersion = np.full((rows, cols), np.nan, dtype=float)
+    matches = np.full((rows, cols), np.nan, dtype=float)
+    eligible = np.zeros((rows, cols), dtype=np.int64)
     w = int(window)
     L = int(subsequence_length)
     h = int(history)
@@ -504,6 +507,7 @@ def _matrix_profile_series(
                     best_s = s
             if not dists:
                 continue
+            eligible[r, c] = len(dists)
             novelty[r, c] = best_d
             # R11 round-3 #63: the age of the motif is the START-to-START age.
             # The current subsequence starts at ``r - L + 1`` (its end is ``r``),
@@ -513,10 +517,11 @@ def _matrix_profile_series(
             age[r, c] = (r - L + 1 - best_s) / float(h)
             if len(dists) >= 3:
                 thr = float(np.median(dists)) * 0.5
-                frequency[r, c] = (
-                    float(sum(d <= thr for d in dists)) / float(len(dists))
-                )
+                matches[r, c] = float(sum(d <= thr for d in dists))
+                frequency[r, c] = matches[r, c] / float(len(dists))
                 dispersion[r, c] = float(np.std(dists))
+    if return_counts:
+        return novelty, age, frequency, dispersion, matches, eligible
     return novelty, age, frequency, dispersion
 
 

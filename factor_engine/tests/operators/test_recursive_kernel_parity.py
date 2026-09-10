@@ -95,7 +95,8 @@ def test_atr_wilder_matches_pandas(noisy_close):
 def test_adx_matches_pandas(noisy_close):
     high = noisy_close + 1.2
     low = noisy_close - 1.2
-    ref = _compute_dmi_adx(pd.Series(high), pd.Series(low), pd.Series(noisy_close), 14).to_numpy()
+    from factor_engine.cleaned_operators.overhaul.technical import pd_adx
+    ref = pd_adx(_frames(high), _frames(low), _frames(noisy_close), 14)["c"].to_numpy()
     values, _ = adx_segment(high, low, noisy_close, {}, 14)
     np.testing.assert_allclose(values, ref, equal_nan=True, rtol=1e-12, atol=1e-12)
 

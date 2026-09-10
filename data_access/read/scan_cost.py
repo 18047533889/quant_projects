@@ -27,6 +27,8 @@ from __future__ import annotations
 import enum
 import json
 import logging
+import math
+import numbers
 import statistics
 import time
 from dataclasses import dataclass, field
@@ -481,109 +483,173 @@ def scan_shape_key(
 # 与上面的轻量 EMA（_calibration, dataset 级）正交：EMA 给出稳定乘子，
 # 这里给出逐形状的分位数/MAD 诊断。生产读取只依赖保守估计（COST_*），
 # 分位数仅用于路由/监控，因此样本缺失时 fail-closed 返回 None。
+_MAX_CALIBRATION_KEYS = 128
+_MAX_CALIBRATION_SAMPLES = 256
+_MAX_CALIBRATION_FILE_BYTES = 4 * 1024 * 1024
 _shape_calibration_samples: dict[tuple[str, ...], list[float]] = {}
 _shape_calibration_lock = threading.Lock()
 
 
+def _valid_shape_key(value) -> tuple[str, ...]:
+    if not isinstance(value, (tuple, list)) or not 1 <= len(value) <= 8:
+        raise ValueError("invalid calibration shape key")
+    if any(not isinstance(v, str) or not v or len(v.encode("utf-8")) > 1024 for v in value):
+        raise ValueError("invalid calibration key component")
+    return tuple(value)
+
+
+def _put_recent(mapping, key, value):
+    mapping.pop(key, None)
+    mapping[key] = value
+    while len(mapping) > _MAX_CALIBRATION_KEYS:
+        mapping.pop(next(iter(mapping)))
+
+
+def _positive_finite(value) -> bool:
+    if not isinstance(value, numbers.Real) or isinstance(value, bool):
+        return False
+    try:
+        converted = float(value)
+    except (TypeError, ValueError, OverflowError):
+        return False
+    return math.isfinite(converted) and converted > 0
+
+
 def record_scan_actual(
-    dataset: str,
-    *,
-    estimated_score: float,
-    actual_elapsed_ms: float,
+    dataset: str, *, estimated_score: float, actual_elapsed_ms: float,
     shape_key: tuple[str, ...] | None = None,
 ) -> None:
-    """#27 + R42：记录一次实际读数。
-
-    兼容既有签名（不传 shape_key 时只更新轻量 EMA）。传入 shape_key 时
-    同时把 elapsed 加入对应形状样本桶（R42 形状分位数校准）。
-    """
-    if estimated_score <= 0 or actual_elapsed_ms <= 0:
+    """Bounded rolling samples and dataset EMA; invalid measurements are ignored."""
+    if not _positive_finite(estimated_score) or not _positive_finite(actual_elapsed_ms):
+        return
+    estimated_score = float(estimated_score)
+    actual_elapsed_ms = float(actual_elapsed_ms)
+    if not isinstance(dataset, str) or not dataset or len(dataset.encode("utf-8")) > 1024:
+        return
+    try:
+        key = _valid_shape_key(shape_key) if shape_key is not None else None
+    except ValueError:
         return
     ratio = actual_elapsed_ms / max(1.0, estimated_score / 1e6)
     correction = max(0.1, min(10.0, ratio))
     with _calibration_lock:
         cur = _calibration.get(dataset, 1.0)
-        _calibration[dataset] = cur + _EMA_ALPHA * (correction - cur)
-    if shape_key is not None:
-        key = tuple(shape_key)
+        _put_recent(_calibration, dataset, cur + _EMA_ALPHA * (correction - cur))
+    if key is not None:
         with _shape_calibration_lock:
-            _shape_calibration_samples.setdefault(key, []).append(actual_elapsed_ms)
+            samples = _shape_calibration_samples.pop(key, [])
+            samples.append(float(actual_elapsed_ms))
+            _put_recent(_shape_calibration_samples, key, samples[-_MAX_CALIBRATION_SAMPLES:])
 
 
-def calibration_quantiles(
-    shape_key: tuple[str, ...] | None,
-) -> CalibrationStats | None:
-    """按形状 key 返回分位数摘要；无样本 → None（fail-closed）。"""
-    if shape_key is None:
+def calibration_quantiles(shape_key: tuple[str, ...] | None) -> CalibrationStats | None:
+    """Statistics for the bounded recent window, not an all-time quantile sketch."""
+    try:
+        key = _valid_shape_key(shape_key)
+    except ValueError:
         return None
-    key = tuple(shape_key)
     with _shape_calibration_lock:
         samples = list(_shape_calibration_samples.get(key, ()))
+        if samples:
+            _put_recent(_shape_calibration_samples, key, _shape_calibration_samples[key])
     if not samples:
         return None
-    samples = sorted(samples)
+    samples.sort()
     n = len(samples)
-    p50 = samples[n // 2] if n else 0.0
-    p95 = samples[min(n - 1, int(round(n * 0.95)))] if n else 0.0
-    mean = sum(samples) / n
-    mad = statistics.median(sorted(abs(x - mean) for x in samples))
-    return CalibrationStats(
-        sample_count=n, p50=p50, p95=p95, mad=mad, mean=mean,
-    )
+    # Stable midpoint avoids overflow for large but finite elapsed values.
+    p50 = (samples[n // 2] if n % 2 else
+           samples[n // 2 - 1] + (samples[n // 2] - samples[n // 2 - 1]) / 2)
+    p95 = samples[math.ceil(n * 0.95) - 1]
+    mean = statistics.mean(samples)
+    mad = statistics.median(abs(x - p50) for x in samples)
+    return CalibrationStats(sample_count=n, p50=p50, p95=p95, mad=mad, mean=mean)
 
 
 def save_calibration(
-    path: Path,
-    *,
-    host_class: str,
-    storage_class: str,
-    build_id: str,
+    path: Path, *, host_class: str, storage_class: str, build_id: str,
 ) -> None:
-    """把形状校准样本落盘，绑定 host/storage/build（R42 生成绑定）。"""
-    payload = {
-        "schema": "r42-scan-cost-shape-calibration-v1",
-        "host_class": host_class,
-        "storage_class": storage_class,
-        "build_id": build_id,
-        "samples": {
-            "::".join(str(part) for part in k): v for k, v in _shape_calibration_samples.items()
-        },
-    }
-    path.write_text(
-        json.dumps(payload, ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
+    """Atomically persist bounded detached samples and legacy EMA, with exact keys."""
+    import os
+    import tempfile
+    with _calibration_lock, _shape_calibration_lock:
+        payload = {
+            "schema": "scan-cost-calibration-v2",
+            "host_class": host_class, "storage_class": storage_class, "build_id": build_id,
+            "ema": dict(_calibration),
+            "samples": [{"key": list(k), "values": list(v)}
+                        for k, v in _shape_calibration_samples.items()],
+        }
+    data = json.dumps(payload, ensure_ascii=False, allow_nan=False)
+    if len(data.encode("utf-8")) > _MAX_CALIBRATION_FILE_BYTES:
+        raise ValueError("calibration payload exceeds bounded file budget")
+    path = Path(path)
+    tmp = None
+    try:
+        with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=path.parent,
+                                         prefix=".scan-calibration-", delete=False) as fh:
+            tmp = fh.name
+            fh.write(data)
+            fh.flush()
+            os.fsync(fh.fileno())
+        os.replace(tmp, path)
+        tmp = None
+    finally:
+        if tmp is not None:
+            os.unlink(tmp)
 
 
 def load_calibration(
-    path: Path,
-    *,
-    host_class: str,
-    storage_class: str,
-    build_id: str,
+    path: Path, *, host_class: str, storage_class: str, build_id: str,
 ) -> bool:
-    """加载与当前 (host, storage, build) 匹配的形状校准；不匹配 → 丢弃（返回 False）。
-
-    只有三把钥匙全对才载入样本（否则会用别的主机/存储/构建的读数污染）。
-    返回是否加载成功。
-    """
-    if not Path(path).exists():
-        return False
+    """Validate a bounded file completely before replacing any live calibration."""
     try:
-        payload = json.loads(Path(path).read_text(encoding="utf-8"))
-    except (OSError, ValueError):
+        with Path(path).open("rb") as fh:
+            raw = fh.read(_MAX_CALIBRATION_FILE_BYTES + 1)
+        if len(raw) > _MAX_CALIBRATION_FILE_BYTES:
+            return False
+        payload = json.loads(raw)
+        if not isinstance(payload, dict) or any(
+            payload.get(k) != v for k, v in
+            (("host_class", host_class), ("storage_class", storage_class), ("build_id", build_id))
+        ):
+            return False
+        schema = payload.get("schema")
+        if schema == "scan-cost-calibration-v2":
+            records = payload.get("samples")
+        elif schema == "r42-scan-cost-shape-calibration-v1":
+            old = payload.get("samples")
+            if not isinstance(old, dict):
+                return False
+            records = [{"key": k.split("::"), "values": v} for k, v in old.items()]
+        else:
+            return False
+        if not isinstance(records, list) or len(records) > _MAX_CALIBRATION_KEYS:
+            return False
+        staged = {}
+        for record in records:
+            key = _valid_shape_key(record["key"])
+            vals = record["values"]
+            if key in staged or not isinstance(vals, list) or not 1 <= len(vals) <= _MAX_CALIBRATION_SAMPLES:
+                return False
+            if not all(_positive_finite(v) for v in vals):
+                return False
+            staged[key] = [float(v) for v in vals]
+        ema = payload.get("ema", {})
+        if not isinstance(ema, dict) or len(ema) > _MAX_CALIBRATION_KEYS:
+            return False
+        if any(not isinstance(k, str) or not k or len(k.encode("utf-8")) > 1024
+               or not _positive_finite(v) or not 0.1 <= v <= 10 for k, v in ema.items()):
+            return False
+    except (OSError, ValueError, TypeError, KeyError, AttributeError, OverflowError):
         return False
-    if (
-        payload.get("host_class") != host_class
-        or payload.get("storage_class") != storage_class
-        or payload.get("build_id") != build_id
-    ):
-        return False
-    samples = payload.get("samples", {})
-    with _shape_calibration_lock:
-        for key, vals in samples.items():
-            _shape_calibration_samples[tuple(key.split("::"))] = list(vals)
+    with _calibration_lock, _shape_calibration_lock:
+        _shape_calibration_samples.clear()
+        _shape_calibration_samples.update(staged)
+        if schema == "scan-cost-calibration-v2":
+            _calibration.clear()
+            _calibration.update(ema)
     return True
+
 
 def suggest_read_strategy(
     cost: ScanCost,

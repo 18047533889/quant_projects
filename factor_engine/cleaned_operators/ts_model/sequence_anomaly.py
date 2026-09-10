@@ -40,12 +40,32 @@ _MP_RELATIONAL_SPECS: list[RelationalParamSpec] = [
         "history_window (m={m}, history_window={history_window})",
     ),
     RelationalParamSpec(
-        "history_window >= m + m // 4",
+        "history_window >= m + 3",
         "ts_matrix_profile_discord_score / ts_motif_recurrence_count require "
-        "history_window >= m + m//4 (exclusion-zone feasibility; history_window="
+        "history_window >= m+3 (query geometry floor; history_window="
         "{history_window}, m={m})",
     ),
+    RelationalParamSpec(
+        "history_window >= m + m // 4 + 1",
+        "matrix-profile novelty requires at least one eligible historical "
+        "candidate after the exclusion zone",
+    ),
 ]
+
+
+def _validate_mp_geometry(m: int, history_window: int, stat: str) -> tuple[int, int]:
+    m = strict_int(m, "m", lower=3)
+    hist = strict_int(history_window, "history_window", lower=1)
+    candidates = hist - m - (m // 4)
+    required = 3 if stat == "recurrence" else 1
+    minimum = max(m + 3, m + (m // 4) + required)
+    if hist < minimum:
+        raise ValueError(
+            "INFEASIBLE_PARAMETER_DOMAIN: "
+            f"{stat} with m={m} requires history_window>={minimum} "
+            f"({required} eligible historical candidate(s)); got {hist}"
+        )
+    return m, hist
 
 
 def _register(name: str, description: str, params: list[str], unit: str, fn, cost: int = 9):
@@ -57,11 +77,18 @@ def _register(name: str, description: str, params: list[str], unit: str, fn, cos
         source="ts_model.sequence_anomaly",
         backend="pandas_numpy",
         status="experimental",
+        semantic_version="2.0" if name == "ts_motif_recurrence_count" else "1.0",
     )
     class _AnomalyOp(SeriesOperator):
         metadata = metadata(name, description, params, unit=unit, cost=cost,
                             param_specs=_MP_PARAM_SPECS)
         metadata.relational_specs = list(_MP_RELATIONAL_SPECS)
+        if name == "ts_motif_recurrence_count":
+            metadata.relational_specs.append(RelationalParamSpec(
+                "history_window >= m + m // 4 + 3",
+                "ts_motif_recurrence_count requires at least three eligible "
+                "historical candidates after the exclusion zone",
+            ))
 
         # Expose the real kernel through the bridge default so the shared
         # binder can recover its canonical scalar defaults before evaluating
@@ -124,8 +151,7 @@ def _mp_stats(vals: np.ndarray, m: int, stat: str, history_window: int = 252) ->
     v = np.asarray(vals, dtype=float)
     if v.ndim == 1:
         v = v[:, None]
-    m = strict_int(m, "m", lower=3)
-    hist = strict_int(history_window, "history_window", lower=1)
+    m, hist = _validate_mp_geometry(m, history_window, stat)
     n = v.shape[0]
     lo = max(0, n - hist)
     vw = v[lo:]
@@ -133,8 +159,8 @@ def _mp_stats(vals: np.ndarray, m: int, stat: str, history_window: int = 252) ->
     if nw < m + 3:
         return np.nan
     # Explicit band (no hard-coded 200): window == history == trailing band.
-    novelty, _age, frequency, dispersion = _matrix_profile_series(
-        vw, window=nw, subsequence_length=m, history=nw
+    novelty, _age, frequency, dispersion, matches, eligible = _matrix_profile_series(
+        vw, window=nw, subsequence_length=m, history=nw, return_counts=True,
     )
     last = nw - 1
     if stat in {"discord", "motif"}:
@@ -146,7 +172,7 @@ def _mp_stats(vals: np.ndarray, m: int, stat: str, history_window: int = 252) ->
         # compatibility alias (its metadata documents the relationship).
         return float(novelty[last, 0])
     if stat == "recurrence":
-        return float(frequency[last, 0]) if np.isfinite(frequency[last, 0]) else np.nan
+        return float(matches[last, 0]) if eligible[last, 0] >= 3 and np.isfinite(matches[last, 0]) else np.nan
     return float(dispersion[last, 0]) if np.isfinite(dispersion[last, 0]) else np.nan
 
 

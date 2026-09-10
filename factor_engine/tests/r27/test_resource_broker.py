@@ -2,7 +2,7 @@
 """R27-022..044/236..238/241..243: ResourceBroker live headroom + token admission。"""
 from __future__ import annotations
 
-from types import SimpleNamespace
+from dataclasses import replace
 
 import pytest
 
@@ -16,7 +16,7 @@ from factor_engine.runtime.resource_governor import ExecutionResourcePlan, live_
 from factor_engine.runtime.task_resource_contract import TaskResourceContract, panel_bytes
 
 
-_STABLE_BUDGET_TESTS = {
+_COHERENT_CAPACITY_TESTS = {
     "test_memory_token_admission_caps_concurrency",
     "test_cpu_token_admission",
     "test_pressure_stage_external_awareness",
@@ -32,23 +32,28 @@ _STABLE_BUDGET_TESTS = {
 
 
 @pytest.fixture(autouse=True)
-def _stable_budget_for_accounting_tests(monkeypatch, request):
-    """Keep accounting tests independent of live shared-host pressure."""
-    if request.node.name not in _STABLE_BUDGET_TESTS:
+def _coherent_capacity_for_accounting_tests(monkeypatch, request):
+    """Keep positive-capacity fixtures independent of live shared-host use."""
+    if request.node.name not in _COHERENT_CAPACITY_TESTS:
         return
+    refresh = ResourceBroker._refresh
 
-    def stable_snapshot(broker, *, force=False):
-        del force
-        return SimpleNamespace(
-            live_headroom=broker.hard_memory_limit,
-            hard_memory_limit=broker.hard_memory_limit,
+    def coherent_snapshot(broker, *, force=False):
+        snapshot = refresh(broker, force=force)
+        hard = broker.hard_memory_limit
+        return replace(
+            snapshot,
+            hard_memory_limit=hard,
+            cgroup_memory_current=0,
+            host_mem_available=hard,
+            process_rss=0,
+            worker_rss=0,
+            process_family_rss=0,
+            process_family_pss=0,
+            host_mem_available_known=True,
         )
 
-    monkeypatch.setattr(ResourceBroker, "_refresh", stable_snapshot)
-    monkeypatch.setattr(ResourceBroker, "pressure_stage", lambda self: STAGE_NORMAL)
-    monkeypatch.setattr(
-        ResourceBroker, "execution_budget", lambda self: int(self.hard_memory_limit * 0.8)
-    )
+    monkeypatch.setattr(ResourceBroker, "_refresh", coherent_snapshot)
 
 
 def _task(peak: int, *, cpu: int = 1, io: int = 0, spill: int = 0,

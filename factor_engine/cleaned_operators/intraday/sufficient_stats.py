@@ -41,7 +41,11 @@ Design / contract
 """
 from __future__ import annotations
 
-from functools import lru_cache
+import hashlib
+import weakref
+import threading
+from collections import OrderedDict
+from collections.abc import Iterator, Mapping
 from typing import Any
 
 import numpy as np
@@ -72,19 +76,18 @@ def _grid3(
     days = pd.DatetimeIndex(idx).normalize()
     codes, uniques = pd.factorize(days, sort=True)
     D = int(len(uniques))
-    B = int(len(idx))
     C = int(frames[0].shape[1])
     filled = [f.reindex(idx).to_numpy(dtype=float) for f in frames]
-    grids = []
-    for f_arr in filled:
-        g = np.empty((D, B, C), dtype=np.float64)
-        for d in range(D):
-            m = codes == d
-            g[d] = np.where(m[:, None], f_arr, np.nan)
-        grids.append(g)
-    active = np.zeros((D,), dtype=np.int64)
+    lengths = np.bincount(codes, minlength=D) if D else np.zeros(0, dtype=np.int64)
+    slots = int(lengths.max()) if lengths.size else 0
+    grids = [np.full((D, slots, C), np.nan, dtype=np.float64) for _ in filled]
+    active = np.zeros(D, dtype=np.int64)
     for d in range(D):
-        active[d] = int(np.sum(np.isfinite(filled[0][codes == d])))
+        rows = codes == d
+        nrows = int(lengths[d])
+        for grid, values in zip(grids, filled):
+            grid[d, :nrows, :] = values[rows]
+        active[d] = int(np.sum(np.isfinite(filled[0][rows])))
     uniq_days = pd.DatetimeIndex(uniques)
     return grids[0], grids[1] if len(grids) > 1 else None, (
         grids[2] if len(grids) > 2 else None
@@ -98,24 +101,18 @@ def as_panel(x: Any) -> pd.DataFrame:
 
 
 def _frame_hash(frame: pd.DataFrame) -> int:
-    """Fast content hash over a frame's underlying float blocks."""
-    h = 0x9E3779B97F4A7C15  # golden-ratio odd constant (no 64-bit wrap needed)
-    for col in frame.columns:
-        arr = frame[col]
-        try:
-            v = np.asarray(arr, dtype=np.float64)
-        except (TypeError, ValueError):
-            v = np.asarray(arr, dtype=object)
-        if v.ndim == 0:
-            continue
-        flat = v.reshape(-1)
-        if flat.size:
-            h ^= hash(col)
-            sample = flat[:: max(1, flat.size // 64)]
-            with np.errstate(invalid="ignore"):
-                h = (h + int(np.nansum(sample))) & 0xFFFFFFFFFFFFFFFF
-            h = (h * 31 + (flat.size & 0xFFFFFFFF)) & 0xFFFFFFFFFFFFFFFF
-    return h & 0xFFFFFFFFFFFFFFFF
+    """Deterministic identity over every value, mask, dtype and axis label."""
+    digest = hashlib.blake2b(digest_size=16, person=b"intraday-stats")
+    digest.update(repr(frame.shape).encode())
+    for axis in (frame.index, frame.columns):
+        digest.update(type(axis).__qualname__.encode())
+        digest.update(str(axis.dtype).encode())
+        digest.update(pd.util.hash_pandas_object(axis, index=True).to_numpy(dtype="uint64").tobytes())
+        digest.update(repr(tuple(axis.names)).encode())
+    for name, series in frame.items():
+        digest.update(repr((type(name).__qualname__, name, str(series.dtype))).encode())
+        digest.update(pd.util.hash_pandas_object(series, index=False).to_numpy(dtype="uint64").tobytes())
+    return int.from_bytes(digest.digest(), "big")
 
 
 def _session_slot_map(times: np.ndarray) -> np.ndarray:
@@ -132,30 +129,143 @@ def _session_slot_map(times: np.ndarray) -> np.ndarray:
     return seconds // 60
 
 
-@lru_cache(maxsize=8)
-def _bundle_cached(*, key: tuple, **_) -> tuple:
-    # placeholder — real body below (kept signature-compatible for hot reload)
-    raise NotImplementedError
+class _FrozenBundle(Mapping):
+    """Weak-referenceable immutable owner for read-only bundle buffers."""
+
+    __slots__ = ("_data", "__weakref__")
+
+    def __init__(self, data: dict) -> None:
+        self._data = data
+
+    def __getitem__(self, key):
+        return self._data[key]
+
+    def __iter__(self) -> Iterator:
+        return iter(self._data)
+
+    def __len__(self) -> int:
+        return len(self._data)
+
+
+class _LeaseGroup:
+    """Release one broker lease after every charged physical owner dies."""
+
+    def __init__(self, lease: Any, owners: int) -> None:
+        self._lease = lease
+        self._remaining = owners
+        self._lock = threading.Lock()
+
+    def release_owner(self) -> None:
+        with self._lock:
+            self._remaining -= 1
+            if self._remaining == 0:
+                self._lease.release()
 
 
 class _BundleStore:
-    """Thread-light in-process bundle cache keyed by (id, hash, cols, shape)."""
+    """Byte-bounded LRU; entries are immutable views owned by this cache."""
 
-    _MAX = 8
+    _MAX_BYTES = 64 * 1024 * 1024
 
     def __init__(self) -> None:
-        self._data: dict[tuple, dict] = {}
+        self._data: OrderedDict[tuple, _FrozenBundle] = OrderedDict()
+        self._sizes: dict[tuple, int] = {}
+        self._leases: dict[tuple, Any] = {}
+        self._bytes = 0
+        self._lock = threading.RLock()
+
+    def _reconcile_external_clears(self) -> None:
+        for stale in set(self._leases).difference(self._data):
+            self._leases.pop(stale)
+            self._sizes.pop(stale, None)
+        self._bytes = sum(self._sizes.get(key, 0) for key in self._data)
 
     def get(self, key: tuple) -> dict | None:
-        return self._data.get(key)
+        with self._lock:
+            self._reconcile_external_clears()
+            found = self._data.get(key)
+            if found is None:
+                return None
+            self._data.move_to_end(key)
+            return found
 
-    def put(self, key: tuple, bundle: dict) -> None:
-        self._data[key] = bundle
-        if len(self._data) > self._MAX:
-            # evict the oldest inserted (dict preserves insertion order).
-            for k in list(self._data):
-                del self._data[k]
-                break
+    def put(self, key: tuple, bundle: dict) -> _FrozenBundle:
+        total = 0
+        for value in bundle.values():
+            if isinstance(value, np.ndarray):
+                total += int(value.nbytes)
+            elif isinstance(value, pd.Index):
+                total += int(value.memory_usage(deep=True))
+        with self._lock:
+            self._reconcile_external_clears()
+            lease = None
+            if total <= self._MAX_BYTES:
+                try:
+                    from factor_engine.runtime.auto_memory_budget import MemoryLeaseKind
+                    from factor_engine.runtime.resource_broker import peek_v2_resource_broker
+
+                    broker = peek_v2_resource_broker()
+                    lease = None if broker is None else broker.acquire_memory(
+                        MemoryLeaseKind.CSE_CACHE, total,
+                        lease_id=f"intraday-sufficient-statistics:{hash(key)}",
+                    )
+                except (ImportError, RuntimeError):
+                    lease = None
+            if lease is None:
+                # No cache residency was admitted. Return read-only views of
+                # the already-computed workspace without allocating a second
+                # complete byte copy; the caller's compute lease owns it.
+                transient = {}
+                for name, value in bundle.items():
+                    if isinstance(value, np.ndarray):
+                        value = value.view()
+                        value.setflags(write=False)
+                    transient[name] = value
+                return _FrozenBundle(transient)
+
+            # Cache residency was admitted: detach arrays into immutable byte
+            # owners. Finalizers bind the lease to each physical root buffer
+            # (and retained Index), so extracting an array/view/np.asarray
+            # keeps the lease alive even after bundle eviction.
+            owned: dict = {}
+            physical_owners = []
+            try:
+                for name, value in bundle.items():
+                    if isinstance(value, np.ndarray):
+                        contiguous = np.ascontiguousarray(value)
+                        root = np.frombuffer(contiguous.tobytes(), dtype=contiguous.dtype)
+                        physical_owners.append(root)
+                        value = root.reshape(contiguous.shape)
+                    elif isinstance(value, pd.Index):
+                        value = value.copy(deep=True)
+                        root = value.to_numpy(copy=False)
+                        while isinstance(root.base, np.ndarray):
+                            root = root.base
+                        physical_owners.append(root)
+                    owned[name] = value
+            except Exception:
+                lease.release()
+                raise
+            if not physical_owners:
+                lease.release()
+                return _FrozenBundle(owned)
+            protected = _FrozenBundle(owned)
+            group = _LeaseGroup(lease, len(physical_owners))
+            for owner in physical_owners:
+                weakref.finalize(owner, group.release_owner)
+            old = self._data.pop(key, None)
+            if old is not None:
+                self._bytes -= self._sizes.pop(key)
+                self._leases.pop(key)
+            while self._data and self._bytes + total > self._MAX_BYTES:
+                evicted_key, _ = self._data.popitem(last=False)
+                self._bytes -= self._sizes.pop(evicted_key)
+                self._leases.pop(evicted_key)
+            self._data[key] = protected
+            self._sizes[key] = total
+            self._leases[key] = lease
+            self._bytes += total
+            return protected
 
 
 _STORE = _BundleStore()
@@ -163,11 +273,8 @@ _STORE = _BundleStore()
 
 def _make_key(frame: pd.DataFrame) -> tuple:
     return (
-        id(frame),
         _frame_hash(frame),
-        tuple(str(c) for c in frame.columns),
-        frame.shape,
-        str(frame.index.dtype),
+        "intraday-sufficient-statistics/v2",
     )
 
 
@@ -180,6 +287,19 @@ def _derive_stats(g: np.ndarray, fin: np.ndarray, cnt: np.ndarray) -> dict:
     the ``min_finite`` gate downstream.
     """
     n, B, C = g.shape
+    if B == 0:
+        dc = (n, C)
+        nan = np.full(dc, np.nan)
+        return {
+            "g": g, "fin": fin, "cnt": cnt, "order": np.empty(g.shape, dtype=np.int64),
+            "packed": g.copy(), "max_cnt": 0, "mask": np.empty(g.shape, dtype=bool),
+            "pf": g.copy(), "sum": np.zeros(dc), "sumsq": np.zeros(dc),
+            "cube": np.zeros(dc), "quart": np.zeros(dc), "var": nan.copy(),
+            "mean": nan.copy(), "max": nan.copy(), "min": nan.copy(),
+            "first": nan.copy(), "last": nan.copy(),
+            "argmax_pos": np.full(dc, -1, dtype=np.int64),
+            "argmin_pos": np.full(dc, -1, dtype=np.int64),
+        }
     z = np.where(fin, g, 0.0)
     z2 = z * z
     z3 = z2 * z
@@ -289,7 +409,9 @@ def _statistics_for_grid(g: np.ndarray) -> dict:
     return st
 
 
-def compute_sufficient_statistics(frame: pd.DataFrame) -> dict:
+def compute_sufficient_statistics(
+    frame: pd.DataFrame, *, grid: tuple | None = None, required: str | None = None,
+) -> dict:
     """Memoized sufficient-statistics bundle for one source frame.
 
     Returns the ``_derive_stats`` dict plus the return moments (r2/r3/r4)
@@ -303,18 +425,26 @@ def compute_sufficient_statistics(frame: pd.DataFrame) -> dict:
     """
     key = _make_key(frame)
     cached = _STORE.get(key)
-    if cached is not None:
+    needed = {"sum", "mean"} if required in {"sum", "mean"} else {"r2", "packed", "quart"}
+    if cached is not None and needed.issubset(cached):
         return cached
-    g, _, _, _, uniq, active, filled = _grid3(frame)
-    bundle = _statistics_for_grid(g)
+    g, _, _, _, uniq, active, filled = grid if grid is not None else _grid3(frame)
+    if required in {"sum", "mean"}:
+        fin = np.isfinite(g)
+        cnt = np.sum(fin, axis=1).astype(np.int64)
+        total = np.where(fin, g, 0.0).sum(axis=1)
+        mean = total / np.maximum(cnt, 1)
+        mean = np.where(cnt > 0, mean, np.nan)
+        bundle = {"g": g, "fin": fin, "cnt": cnt, "sum": total, "mean": mean}
+    else:
+        bundle = _statistics_for_grid(g)
     bundle["uniq_days"] = uniq
     bundle["columns"] = tuple(str(c) for c in frame.columns)
     bundle["active"] = active
-    _STORE.put(key, bundle)
-    return bundle
+    return _STORE.put(key, bundle)
 
 
-def two_panel_statistics(a: pd.DataFrame, b: pd.DataFrame) -> dict:
+def two_panel_statistics(a: pd.DataFrame, b: pd.DataFrame, *, grid: tuple | None = None) -> dict:
     """Memoized sufficient statistics for a (close, volume) / (a, b) pair.
 
     Derives the cross-panel moments an amount/volume-weighted operator needs:
@@ -327,7 +457,7 @@ def two_panel_statistics(a: pd.DataFrame, b: pd.DataFrame) -> dict:
     cached = _STORE.get(key)
     if cached is not None:
         return cached
-    ga, gb, _, _, uniq, active, filled = _grid3(a, b)
+    ga, gb, _, _, uniq, active, filled = grid if grid is not None else _grid3(a, b)
     g = ga
     # daily_agg_two drops NaN-CLOSE rows first (``dropna(subset=["a"])``), so
     # the scalar kernel sees the close-compressed series.  ``close_cnt`` is
@@ -341,38 +471,19 @@ def two_panel_statistics(a: pd.DataFrame, b: pd.DataFrame) -> dict:
     z = np.where(fin, g, 0.0)
     zb = np.where(fin, gb, 0.0)
 
-    # Packed close-compressed series (order-preserving): the scalar log-return
-    # pairing runs over CONSECUTIVE FINITE closes, so a missing minute must
-    # not split a return pair.
-    order = np.argsort(~close_fin, axis=1, kind="stable")
-    p_close = np.take_along_axis(g, order, axis=1)
-    p_vol = np.take_along_axis(gb, order, axis=1)
-    p_close[~np.isfinite(p_close)] = 0.0
-    max_cnt = int(close_cnt.max()) if close_cnt.size and close_cnt.max() > 0 else 1
-    ar = np.arange(max_cnt)[None, :, None]
-    pmask = ar < close_cnt[:, None, :]  # (D, max_cnt, C)
-    pc = np.where(pmask, p_close[:, :max_cnt, :], 0.0)
-    pv = np.where(pmask, p_vol[:, :max_cnt, :], 0.0)
-    # compressed log returns r[j] = log(pc[j]/pc[j-1]) over prefix pairs
-    # (r[:, 0] stays NaN, mirroring ``_core.log_returns``).
-    rp = np.full((g.shape[0], max_cnt, g.shape[2]), np.nan)
-    with np.errstate(divide="ignore", invalid="ignore"):
-        rp[:, 1:, :] = np.log(
-            np.where(pmask[:, 1:, :], pc[:, 1:, :], np.nan)
-            / np.where(pmask[:, :-1, :], pc[:, :-1, :], np.nan)
-        )
+    rp = _logret_grid(g)
+    pair_mask = np.isfinite(rp) & np.isfinite(gb) & (gb > 0)
 
     st = {
         "g": g, "gb": gb, "fin": fin, "cnt": cnt, "close_cnt": close_cnt,
-        "pmask": pmask, "pc": pc, "pv": pv, "rp": rp, "max_cnt": max_cnt,
+        "pair_mask": pair_mask, "rp": rp,
         "sum": z.sum(axis=1), "sumsq": (z * z).sum(axis=1),
         "vsum": zb.sum(axis=1), "vsq": (zb * zb).sum(axis=1),
         "pvsum": (z * zb).sum(axis=1),
         "asum": z.sum(axis=1), "pasum": (z * zb).sum(axis=1),
         "uniq_days": uniq, "columns": tuple(str(c) for c in a.columns),
     }
-    _STORE.put(key, st)
-    return st
+    return _STORE.put(key, st)
 
 
 def three_panel_statistics(a: pd.DataFrame, b: pd.DataFrame, c: pd.DataFrame) -> dict:
@@ -396,5 +507,4 @@ def three_panel_statistics(a: pd.DataFrame, b: pd.DataFrame, c: pd.DataFrame) ->
         "asum": zb.sum(axis=1), "pasum": (za * zb).sum(axis=1),
         "uniq_days": uniq, "columns": tuple(str(c) for c in a.columns),
     }
-    _STORE.put(key, st)
-    return st
+    return _STORE.put(key, st)

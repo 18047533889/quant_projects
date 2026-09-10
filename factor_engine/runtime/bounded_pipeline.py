@@ -708,6 +708,18 @@ def _worker_thread_environment(proxy):
     )}
 
 
+def _create_parent_broker_ipc(broker, *, rpc_timeout_seconds):
+    """Capture the concrete parent-thread job scope for every child proxy."""
+    from factor_engine.runtime.host_resource_coordinator import get_active_job_lease
+    from factor_engine.runtime.resource_broker_ipc import ParentBrokerIPC
+
+    return ParentBrokerIPC(
+        broker,
+        rpc_timeout_seconds=rpc_timeout_seconds,
+        job_lease=get_active_job_lease(),
+    )
+
+
 def _acquire_protected_egress_until(
     broker, queue_bytes, writer_bytes, *, lease_id, deadline, poll_seconds,
     cancellation_token=None,
@@ -1191,6 +1203,16 @@ def execute_run_many_durable(
     from factor_engine.runtime.default_execution_policy import DefaultExecutionPolicy
     if not isinstance(policy, DefaultExecutionPolicy):
         raise TypeError("policy must be a validated DefaultExecutionPolicy")
+    from factor_engine.runtime.host_resource_coordinator import get_active_job_lease
+    if get_active_job_lease() is not None and engine_factory is None:
+        # Fork would copy the broker and its locks/accounting into the child.
+        # A scoped service job must instead build workers from an explicit
+        # factory so every child uses its parent-mediated broker IPC proxy.
+        from factor_engine.runtime.default_engine import DeploymentConfigurationError
+        raise DeploymentConfigurationError(
+            missing_fields=("engine_factory",),
+            detail="active JobLease requires an explicit spawn engine factory",
+        )
     run_identity = _validated_run_identity(run_identity)
     job_started_monotonic_ns = time.monotonic_ns()
     job_started_realtime_ns = time.time_ns()
@@ -1601,8 +1623,9 @@ def execute_run_many_durable(
     execution_cpu_budget = None
     broker_ipc = compute_proxy = spare_compute_proxy = compile_proxy = direct_reconcile_proxy = None
     if engine_factory is not None:
-        from factor_engine.runtime.resource_broker_ipc import ParentBrokerIPC
-        broker_ipc = ParentBrokerIPC(broker, rpc_timeout_seconds=policy.connect_seconds)
+        broker_ipc = _create_parent_broker_ipc(
+            broker, rpc_timeout_seconds=policy.connect_seconds
+        )
         execution_cpu_budget = int(broker.cpu_budget())
         partitions = broker_ipc.create_partitioned_proxies(2) if direct_artifacts else []
         if partitions:

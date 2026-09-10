@@ -178,13 +178,15 @@ def test_physical_lowerer_contract_is_admitted_by_existing_broker(monkeypatch):
         min_host_reserve_gb=0.0, min_host_reserve_fraction=0.0,
     )
     monkeypatch.setattr(broker, "pressure_stage", lambda: "NORMAL")
+    # Exercise the authoritative execution pool, not an incomplete legacy
+    # live-headroom snapshot. No model-sized buffers are allocated here.
     monkeypatch.setattr(
-        broker, "_refresh", lambda: SimpleNamespace(live_headroom=hard - 1)
+        broker, "execution_budget", lambda: hard - 1
     )
     assert broker.try_reserve(contract, task_id="m36-too-small") is None
     monkeypatch.setattr(
-        broker, "_refresh",
-        lambda: SimpleNamespace(live_headroom=2 * contract.admissible_peak_bytes),
+        broker, "execution_budget",
+        lambda: 2 * contract.admissible_peak_bytes,
     )
     lease = broker.try_reserve(contract, task_id="m36-root")
     assert lease is not None

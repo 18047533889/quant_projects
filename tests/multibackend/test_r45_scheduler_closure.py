@@ -69,7 +69,7 @@ def test_broker_admission_acquires_and_releases() -> None:
         scheduler.shutdown()
 
 
-def test_broker_denial_is_work_conserving() -> None:
+def test_broker_denial_is_work_conserving(monkeypatch) -> None:
     """When broker denies, region stays ready and runs in a later round."""
     # Memory limit such that one 8GB region (peak = 8GB * 1.3 = 10.4GB) fits
     # but two (20.8GB) do not -> second is denied until first releases.
@@ -79,6 +79,12 @@ def test_broker_denial_is_work_conserving() -> None:
         min_host_reserve_gb=0.0,
         min_host_reserve_fraction=0.0,
     )
+    # Synthetic admission lane: 12 GiB admits one 10.4 GiB peak plus
+    # protected egress, but never two. No real 8 GiB buffers are allocated.
+    # Live cgroup usage must not be combined with a fictitious 16 GiB host.
+    monkeypatch.setattr(broker, "execution_budget", lambda: 12 * 1024**3)
+    monkeypatch.setattr(broker, "pressure_stage", lambda: "NORMAL")
+
     scheduler = ParallelRegionScheduler(
         max_parallel_regions=4, resource_broker=broker
     )

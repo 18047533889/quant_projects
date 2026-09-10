@@ -1,6 +1,26 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
+import pytest
+import pandas as pd
+
+@pytest.fixture(autouse=True)
+def _bounded_cache_authority(monkeypatch):
+    # Cache tests require a known positive shared authority; unknown stays zero.
+    from factor_engine.storage.sources import data_access_source as source_module
+    # This unit fixture tests cache retention, not live host budget discovery.
+    # Its tiny explicit authority cannot allocate or publish production data.
+    class Broker:
+        def current_read_budget(self):
+            return 8 * 1024**2
+        def acquire_memory(self, *args, **kwargs):
+            class Lease:
+                def release(self):
+                    pass
+            return Lease()
+    monkeypatch.setattr(source_module, "_data_cache_authority", lambda: Broker())
+
+
 
 from factor_engine.storage.sources import data_access_source as module
 from factor_engine.storage.sources.data_access_source import DataAccessSource
@@ -79,9 +99,9 @@ def test_snapshot_change_uses_cheap_manifest_token(monkeypatch):
 def test_cache_is_lru_bounded(monkeypatch):
     monkeypatch.setenv("FACTOR_ENGINE_DATA_CACHE_MAX_COLUMNS", "2")
     source = DataAccessSource(dataset="demo", params={})
-    source._put_cache(source._column_cache, "a", 1)
-    source._put_cache(source._column_cache, "b", 2)
-    source._put_cache(source._column_cache, "c", 3)
+    source._put_cache(source._column_cache, "a", pd.Series([1.0]))
+    source._put_cache(source._column_cache, "b", pd.Series([2.0]))
+    source._put_cache(source._column_cache, "c", pd.Series([3.0]))
     assert list(source._column_cache) == ["b", "c"]
 
 

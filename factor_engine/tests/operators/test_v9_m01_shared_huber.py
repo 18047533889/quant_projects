@@ -85,7 +85,7 @@ def test_rank_shape_and_parameter_failures_are_explicit():
     assert huber_fit(np.ones((5, 2)), np.arange(5.0)) is None
     assert last_fit_status()["reason"] == "singular"
     assert huber_fit(np.ones((2, 3)), np.ones(2)) is None
-    assert last_fit_status()["reason"] == "invalid_params"
+    assert last_fit_status()["reason"] == "insufficient_sample"
     assert huber_fit(np.ones((3, 1)), np.ones((3, 1))) is None
     assert last_fit_status()["reason"] == "invalid_params"
     assert huber_fit(np.ones((3, 1)), np.ones(3), delta=0) is None

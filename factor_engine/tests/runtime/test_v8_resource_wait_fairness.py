@@ -121,7 +121,11 @@ def test_real_lease_release_wakes_waiter_without_lost_wakeup(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     broker = _broker(monkeypatch)
-    blocker = broker.acquire_memory(MemoryLeaseKind.CSE_CACHE, 100, lease_id="blocker")
+    # First realize the protected sink reserve, then use the remaining pool.
+    # Ordinary compute/cache admission may not consume the unrealized reserve.
+    seed_egress = broker.acquire_protected_egress(5, 5, lease_id="seed-egress")
+    assert seed_egress is not None
+    blocker = broker.acquire_memory(MemoryLeaseKind.CSE_CACHE, 90, lease_id="blocker")
     assert blocker is not None
     failed_acquire = threading.Event()
     result: list[bool] = []
@@ -139,6 +143,7 @@ def test_real_lease_release_wakes_waiter_without_lost_wakeup(
     thread.join(1.0)
 
     assert result == [True]
+    _release_pair(seed_egress)
     assert broker._memory_leases == {}
 
 

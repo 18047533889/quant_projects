@@ -521,6 +521,31 @@ SQL_IMPLEMENTED_CANONICALS = SQL_IMPLEMENTED_CANONICALS | frozenset({
     "ts_crossing_acceleration",
 })
 
+# Explicit SQL deferrals discovered by the 2026-09-10 registry-honesty audit.
+# These remain available through their existing non-SQL backends; none is
+# production-safe.  Do not advertise them as SQL-implemented until an exact
+# emitter plus independent parity evidence exists.
+SQL_EXPLICIT_UNSUPPORTED_REASONS: dict[str, str] = {
+    "ElderRay": "no SQL emitter branch",
+    "atr_pct": "no SQL emitter branch",
+    "atr_acceleration": "no SQL emitter branch",
+    "atr_zscore": "no SQL emitter branch",
+    "atr_percentile": "no SQL emitter branch",
+    "atr_short_long_ratio": "no SQL emitter branch",
+    "candle_body_strength": "no SQL emitter branch",
+    "candle_wick_balance": "no SQL emitter branch",
+    "candle_range_pct": "no SQL emitter branch",
+    "candle_pattern_count": "no SQL emitter branch",
+    "ofi_abs_imbalance_trend": "finite-slice compaction cannot be expressed exactly by the current ROWS-frame emitter",
+    "ofi_imbalance_persistence": "finite-slice compaction cannot be expressed exactly by the current ROWS-frame emitter",
+    "ofi_reversal_rate": "finite-slice compaction cannot be expressed exactly by the current ROWS-frame emitter",
+    "aq1_accrual_stability": "finite-slice compaction cannot be expressed exactly by the current ROWS-frame emitter",
+    "aq1_accrual_ratio_dispersion": "finite-slice compaction cannot be expressed exactly by the current ROWS-frame emitter",
+}
+SQL_IMPLEMENTED_CANONICALS = SQL_IMPLEMENTED_CANONICALS - frozenset(
+    SQL_EXPLICIT_UNSUPPORTED_REASONS
+)
+
 # 2026-08-08 Gemini-recommended primitives: SQL pushdown subset with emitter
 # branches in backend/sql_pushdown/emitter.py (exact-parity DuckDB window
 # aggregates / correlated top-k selection).
@@ -904,6 +929,13 @@ from factor_engine.cleaned_operators.operator_surface import DAILY_CANONICALS as
 
 _STATIC_SQL_CANDIDATES: frozenset[str] = (
     frozenset({"column", "literal", "protected_div"}) | frozenset(_DAILY_CANONICALS)
+)
+
+# Some unsupported names are added by historical family blocks below the
+# reason table, so apply the honesty correction after all implemented-family
+# unions have been assembled.
+SQL_IMPLEMENTED_CANONICALS = SQL_IMPLEMENTED_CANONICALS - frozenset(
+    SQL_EXPLICIT_UNSUPPORTED_REASONS
 )
 
 SQL_PRODUCTION_SAFE_CANONICALS: frozenset[str] = frozenset(

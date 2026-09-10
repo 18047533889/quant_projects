@@ -5,6 +5,8 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
+from factor_engine.cleaned_operators.base import ParamRole, ParamSpec
+
 from factor_engine.cleaned_operators.overhaul.base import (
     EPS,
     Spec,
@@ -220,5 +222,14 @@ def register() -> None:
         "AROON": Spec("technical_signal", ["close", "window"], "Aroon Up-Down，并列极值取最近一次", pd_aroon, pl_aroon),
         "AROON_up": Spec("technical_signal", ["close", "window"], "Aroon Up，并列极值取最近一次", pd_aroon_up, pl_aroon_up),
         "AROON_down": Spec("technical_signal", ["close", "window"], "Aroon Down，并列极值取最近一次", pd_aroon_down, pl_aroon_down),
-        "ADX": Spec("technical_signal", ["high", "low", "close", "window"], "Wilder ADX，方向运动独立判断", pd_adx, pl_adx),
+        "ADX": Spec(
+            "technical_signal", ["high", "low", "close", "window"],
+            "Wilder ADX，方向运动独立判断", pd_adx, pl_adx,
+            param_specs={
+                "window": ParamSpec(
+                    dtype=int, min=1, default=14,
+                    param_role=ParamRole.HORIZON, searchable=True,
+                )
+            },
+        ),
     })

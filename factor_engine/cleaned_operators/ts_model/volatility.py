@@ -67,12 +67,32 @@ _VOL_PARAM_SPECS: dict[str, ParamSpec] = {
 }
 _GARCH_MIN_WINDOW = 13   # fit_seg = window - 1 must be >= _GARCH_MIN_FIT_OBS
 _GARCH_MIN_FIT_OBS = 12  # _fit_garch/_fit_gjr both refuse below this
-_HAR_MIN_WINDOW = 30     # _har_rv needs n >= 30 for the OLS design
+_HAR_FEATURE_SPAN = 22
+_HAR_MIN_TRAIN_OBS = 25
+_HAR_MIN_COVERAGE = 0.6
+
+
+def _derive_har_min_window(*, error: bool) -> int:
+    window = _HAR_FEATURE_SPAN + 1
+    while True:
+        capacity = window - _HAR_FEATURE_SPAN - (1 if error else 0)
+        required = max(_HAR_MIN_TRAIN_OBS, int(np.ceil(_HAR_MIN_COVERAGE * window)))
+        if capacity >= required:
+            return window
+        window += 1
+
+
+_HAR_FORECAST_MIN_WINDOW = _derive_har_min_window(error=False)
+_HAR_ERROR_MIN_WINDOW = _derive_har_min_window(error=True)
+_HAR_MIN_WINDOW = 30  # legacy diagnostic constant; not the public call floor
 _GARCH_PARAM_SPECS: dict[str, ParamSpec] = {
     "window": ParamSpec(dtype=int, min=_GARCH_MIN_WINDOW, param_role=ParamRole.HORIZON, searchable=True),
 }
-_HAR_PARAM_SPECS: dict[str, ParamSpec] = {
-    "window": ParamSpec(dtype=int, min=_HAR_MIN_WINDOW, param_role=ParamRole.HORIZON, searchable=True),
+_HAR_FORECAST_PARAM_SPECS: dict[str, ParamSpec] = {
+    "window": ParamSpec(dtype=int, min=_HAR_FORECAST_MIN_WINDOW, param_role=ParamRole.HORIZON, searchable=True),
+}
+_HAR_ERROR_PARAM_SPECS: dict[str, ParamSpec] = {
+    "window": ParamSpec(dtype=int, min=_HAR_ERROR_MIN_WINDOW, param_role=ParamRole.HORIZON, searchable=True),
 }
 # P1: window semantics contract — a max lookback, not a strict full window.
 _WINDOW_SEMANTICS = "max_lookback"
@@ -103,7 +123,6 @@ _GARCH_MISSING_POLICY = "fail_closed_on_gap"
 # design must have.  This is a SEPARATE policy minimum from the rolling
 # ``window`` (the feature span) — it is not derived from ``window`` and is
 # versioned independently.  It is intentionally NOT a user-facing parameter.
-_HAR_MIN_TRAIN_OBS = 25
 
 # P1 (HAR sample-coverage governance): a HAR model must retain a minimum
 # FRACTION of its rolling ``window`` in effective training rows, not just meet
@@ -112,7 +131,6 @@ _HAR_MIN_TRAIN_OBS = 25
 # double gate is ``N_effective >= _HAR_MIN_TRAIN_OBS AND
 # N_effective >= _HAR_MIN_COVERAGE * window``.  Versioned; a change to this
 # constant is a semantic change to every ts_har_* output.
-_HAR_MIN_COVERAGE = 0.6
 
 # Model-audit M-083: shared MLE fit cache.  ``_fit_garch`` / ``_fit_gjr``
 # (variance-targeting Nelder-Mead) dominate the cost of every GARCH / GJR
@@ -571,15 +589,15 @@ def _har_rv(rv: np.ndarray, window: int, stat: str) -> float:
     longer keep estimating on 25/120 = 1/5 of the history.
     """
     w = int(window)
-    if w < _HAR_MIN_WINDOW:
+    minimum = _HAR_FORECAST_MIN_WINDOW if stat in ("forecast", "var_forecast") else _HAR_ERROR_MIN_WINDOW
+    if w < minimum:
         raise ValueError(
-            f"HAR window={w} is below the minimum {_HAR_MIN_WINDOW}: the OLS "
-            f"design cannot form below this (all-NaN by construction, "
-            f"parameter-domain gate)."
+            "INFEASIBLE_PARAMETER_DOMAIN: "
+            f"HAR {stat} window={w} is below the derived minimum {minimum}"
         )
     seg = rv[-w:]
     n = len(seg)
-    if n < _HAR_MIN_WINDOW:
+    if n < minimum:
         return np.nan
     daily = seg
     weekly = pd.Series(seg).rolling(5).mean().to_numpy()
@@ -653,10 +671,10 @@ def _har_from_return(rets: np.ndarray, window: int, stat: str) -> float:
 # the kernel predicts the next-period realized VARIANCE; the sqrt output is a
 # volatility forecast and is named ``ts_har_rv_next_vol_forecast``, while the
 # raw-RV forecast is the distinct ``ts_har_rv_next_var_forecast`` canonical.
-_register("ts_har_rv_next_vol_forecast", "HAR-RV 下一期已实现波动率预测（对下一期 RV 预测取平方根，输入已实现方差）。window=max lookback（非严格满窗），最小 window=30；有效行需同时满足 N>=25 与 N/window>=0.6 双约束。", ["rv", "window"], "volatility",
+_register("ts_har_rv_next_vol_forecast", f"HAR-RV 下一期已实现波动率预测（对下一期 RV 预测取平方根，输入已实现方差）。window=max lookback（非严格满窗），最小 window={_HAR_FORECAST_MIN_WINDOW}；有效行需同时满足 N>=25 与 N/window>=0.6 双约束。", ["rv", "window"], "volatility",
            lambda x, window=120: _apply(x, lambda v: _har_rv(v, int(window), "forecast")),
            input_units={"rv": "realized_variance"}, output_unit="volatility",
-           param_specs=_HAR_PARAM_SPECS)
+           param_specs=_HAR_FORECAST_PARAM_SPECS)
 OperatorRegistry.register_compat_alias(
     "ts_har_rv_next_forecast",
     "ts_har_rv_next_vol_forecast",
@@ -664,22 +682,22 @@ OperatorRegistry.register_compat_alias(
     deprecated_since="2026-08",
     removal_version="1.0",
 )
-_register("ts_har_rv_next_var_forecast", "HAR-RV 下一期已实现方差预测（不取平方根，输入已实现方差）。window=max lookback（非严格满窗），最小 window=30；有效行双约束。", ["rv", "window"], "variance",
+_register("ts_har_rv_next_var_forecast", f"HAR-RV 下一期已实现方差预测（不取平方根，输入已实现方差）。window=max lookback（非严格满窗），最小 window={_HAR_FORECAST_MIN_WINDOW}；有效行双约束。", ["rv", "window"], "variance",
            lambda x, window=120: _apply(x, lambda v: _har_rv(v, int(window), "var_forecast")),
            input_units={"rv": "realized_variance"}, output_unit="variance",
-           param_specs=_HAR_PARAM_SPECS)
-_register("ts_har_rv_forecast_error_z", "RV 相对 HAR 预测的标准化偏差（输入已实现方差）。window=max lookback（非严格满窗），最小 window=30；有效行双约束。", ["rv", "window"], "level",
+           param_specs=_HAR_FORECAST_PARAM_SPECS)
+_register("ts_har_rv_forecast_error_z", f"RV 相对 HAR 预测的标准化偏差（输入已实现方差）。window=max lookback（非严格满窗），最小 window={_HAR_ERROR_MIN_WINDOW}；有效行双约束。", ["rv", "window"], "level",
            lambda x, window=120: _apply(x, lambda v: _har_rv(v, int(window), "innovation_z")),
-           param_specs=_HAR_PARAM_SPECS)
+           param_specs=_HAR_ERROR_PARAM_SPECS)
 # The from-return variants square the daily return panel internally.
-_register("ts_har_from_return_next_vol", "HAR 基于日收益的下一期波动预测（内部平方为 RV）。window=max lookback（非严格满窗），最小 window=30；有效行双约束。", ["ret", "window"], "volatility",
+_register("ts_har_from_return_next_vol", f"HAR 基于日收益的下一期波动预测（内部平方为 RV）。window=max lookback（非严格满窗），最小 window={_HAR_FORECAST_MIN_WINDOW}；有效行双约束。", ["ret", "window"], "volatility",
            lambda x, window=120: _apply(x, lambda v: _har_from_return(v, int(window), "forecast")),
            input_units=_RETURN_INPUT, output_unit="volatility", reject_price_level=True,
-           param_specs=_HAR_PARAM_SPECS)
-_register("ts_har_from_return_forecast_error_z", "日收益平方 RV 相对 HAR 预测的标准化偏差。window=max lookback（非严格满窗），最小 window=30；有效行双约束。", ["ret", "window"], "level",
+           param_specs=_HAR_FORECAST_PARAM_SPECS)
+_register("ts_har_from_return_forecast_error_z", f"日收益平方 RV 相对 HAR 预测的标准化偏差。window=max lookback（非严格满窗），最小 window={_HAR_ERROR_MIN_WINDOW}；有效行双约束。", ["ret", "window"], "level",
            lambda x, window=120: _apply(x, lambda v: _har_from_return(v, int(window), "innovation_z")),
            input_units=_RETURN_INPUT, output_unit="level", reject_price_level=True,
-           param_specs=_HAR_PARAM_SPECS)
+           param_specs=_HAR_ERROR_PARAM_SPECS)
 # Model-audit M-088: ``ts_har_rv_forecast`` and ``ts_har_rv_innovation_z`` are
 # genuine registry compat aliases (NOT separate canonicals) — each is byte-for-
 # byte the same kernel/stat as its target canonical (``_har_rv`` ``forecast`` /

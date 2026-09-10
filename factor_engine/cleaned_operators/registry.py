@@ -51,6 +51,82 @@ from factor_engine.cleaned_operators.base import MISSING  # noqa: E402
 _BOOTSTRAP_TOKEN = object()
 
 
+class _FrozenList(tuple):
+    pass
+
+
+class _FrozenTuple(tuple):
+    pass
+
+
+class _FrozenSet(frozenset):
+    pass
+
+
+class _FrozenFrozenSet(frozenset):
+    pass
+
+
+@dataclasses.dataclass(frozen=True)
+class _FrozenArray:
+    dtype: str
+    shape: tuple[int, ...]
+    payload: bytes
+
+    def __getitem__(self, key: Any) -> Any:
+        return np.frombuffer(self.payload, dtype=np.dtype(self.dtype)).reshape(self.shape)[key]
+
+    def to_numpy(self) -> np.ndarray:
+        return np.frombuffer(self.payload, dtype=np.dtype(self.dtype)).reshape(self.shape).copy()
+
+
+@dataclasses.dataclass(frozen=True)
+class _FrozenDataclass:
+    original_type: type
+    fields: Mapping
+
+    def __getattr__(self, name: str) -> Any:
+        try:
+            return self.fields[name]
+        except KeyError as exc:
+            raise AttributeError(name) from exc
+
+
+def _immutable_catalog_value(value: Any) -> Any:
+    """Create a detached, recursively immutable logical catalog value."""
+    if isinstance(value, (
+        _FrozenList, _FrozenTuple, _FrozenSet, _FrozenFrozenSet,
+        _FrozenArray, _FrozenDataclass,
+    )):
+        return value
+    if isinstance(value, Mapping):
+        return MappingProxyType({
+            _immutable_catalog_value(k): _immutable_catalog_value(v)
+            for k, v in value.items()
+        })
+    if isinstance(value, list):
+        return _FrozenList(_immutable_catalog_value(v) for v in value)
+    if isinstance(value, tuple):
+        return _FrozenTuple(_immutable_catalog_value(v) for v in value)
+    if isinstance(value, set):
+        return _FrozenSet(_immutable_catalog_value(v) for v in value)
+    if isinstance(value, frozenset):
+        return _FrozenFrozenSet(_immutable_catalog_value(v) for v in value)
+    if dataclasses.is_dataclass(value) and not isinstance(value, type):
+        return _FrozenDataclass(
+            type(value), MappingProxyType({
+                field.name: _immutable_catalog_value(getattr(value, field.name))
+                for field in dataclasses.fields(value)
+            })
+        )
+    if isinstance(value, np.ndarray):
+        if value.dtype.hasobject:
+            raise TypeError("object-dtype catalog arrays cannot form an immutable byte snapshot")
+        out = np.ascontiguousarray(value)
+        return _FrozenArray(out.dtype.str, tuple(out.shape), bytes(out.tobytes()))
+    return copy.deepcopy(value)
+
+
 def _deepfreeze_catalog(catalog: Mapping) -> MappingProxyType:
     """Recursively freeze a catalog dict into immutable MappingProxyType leaves.
 
@@ -59,19 +135,11 @@ def _deepfreeze_catalog(catalog: Mapping) -> MappingProxyType:
     dicts; this helper deep-freezes every nested mapping (the per-canonical
     entry, ``backend_meta``, ``backend_signatures``, and any other dict leaf)
     so a post-freeze writer holding a reference from ``_catalog.get(canon)``
-    can no longer mutate live registry state.  Values are shared with the
-    original (freeze never duplicates data); the frozen snapshot's own
-    deepcopy passes plain dicts straight through, so the snapshot stays
-    consistent and cheap.
+    can no longer mutate live registry state. Every value is detached; typed
+    immutable wrappers preserve sequence/set/dataclass reconstruction and array
+    payloads are bytes-backed so callers cannot re-enable writeability.
     """
-    out: dict[Any, Any] = {}
-    for key, value in catalog.items():
-        if isinstance(value, dict):
-            value = _deepfreeze_catalog(value)
-        elif isinstance(value, MappingProxyType):
-            value = _deepfreeze_catalog(dict(value))
-        out[key] = value
-    return MappingProxyType(out)
+    return _immutable_catalog_value(catalog)
 
 
 def _defrost_catalog(catalog: Mapping) -> dict:
@@ -81,14 +149,26 @@ def _defrost_catalog(catalog: Mapping) -> dict:
     Called from :meth:`OperatorRegistry.thaw_for_bootstrap`.  Deep-copies every
     leaf so the frozen snapshot stays detached and immutable.
     """
-    out: dict[Any, Any] = {}
-    for key, value in catalog.items():
-        if isinstance(value, MappingProxyType):
-            value = _defrost_catalog(value)
-        elif isinstance(value, dict):
-            value = _defrost_catalog(value)
-        out[key] = value
-    return out
+    def thaw(value: Any) -> Any:
+        if isinstance(value, _FrozenDataclass):
+            return value.original_type(**{
+                name: thaw(item) for name, item in value.fields.items()
+            })
+        if isinstance(value, _FrozenArray):
+            return value.to_numpy()
+        if isinstance(value, Mapping):
+            return {copy.deepcopy(k): thaw(v) for k, v in value.items()}
+        if isinstance(value, _FrozenList):
+            return [thaw(v) for v in value]
+        if isinstance(value, _FrozenTuple):
+            return tuple(thaw(v) for v in value)
+        if isinstance(value, _FrozenSet):
+            return {thaw(v) for v in value}
+        if isinstance(value, _FrozenFrozenSet):
+            return frozenset(thaw(v) for v in value)
+        return copy.deepcopy(value)
+
+    return {copy.deepcopy(key): thaw(value) for key, value in catalog.items()}
 
 
 class RegistryInitializationError(RuntimeError):
@@ -141,34 +221,63 @@ def _code_payload(code: Any, *, include_names: bool) -> str:
     import dis
     import hashlib
 
-    name_codes = frozenset(dis.hasname)
-    n_names = len(code.co_names)
-    n_consts = len(code.co_consts)
-    ops: list[tuple[str, Any]] = []
-    for instr in dis.get_instructions(code):
+    instructions = tuple(dis.get_instructions(code))
+    offsets = {item.offset: pos for pos, item in enumerate(instructions)}
+    ops: list[tuple[str, Any, Any]] = []
+    for instr in instructions:
         if instr.opname == "CACHE":  # adaptive-interpreter noise, not semantic
             continue
-        opname = instr.opname
-        arg = instr.arg
-        # R44-P0: wordcode (Python >= 3.11) quirks on this CPython build:
-        #  * ``LOAD_GLOBAL``/``LOAD_ATTR`` ``instr.arg`` is the raw encoded
-        #    operand (``(name_idx << 1) | flag`` for LOAD_GLOBAL), which may
-        #    exceed ``len(co_names)`` — never index past the tuple, fall back
-        #    to the raw arg.
-        #  * ``RETURN_CONST`` (3.12+) is a const-carrying opcode that is NOT
-        #    ``LOAD_CONST``; the digest must resolve the actual value from
-        #    ``co_consts[arg]`` or every ``return <literal>`` collapses to the
-        #    same opcode+arg pair (constant-swap collisions).
-        if opname in ("LOAD_CONST", "RETURN_CONST") and arg is not None:
-            resolved = _freeze_const(
-                code.co_consts[arg] if 0 <= arg < n_consts else None
-            )
-        elif arg is not None and instr.opcode in name_codes:
-            resolved = code.co_names[arg] if 0 <= arg < n_names else arg
+        # ``argval`` is CPython's resolved semantic operand.  Raw ``arg`` is
+        # retained only as an explicit interpreter-build detail (call flags,
+        # inline-cache encoding); it is never used as a substitute for a name.
+        if instr.arg is None:
+            resolved = None
+        elif instr.opcode in dis.hasconst:
+            resolved = _freeze_const(instr.argval)
+        elif instr.opcode in dis.hasname or instr.opcode in dis.hasfree:
+            if not isinstance(instr.argval, str):
+                raise TypeError(f"unresolved name/freevar operand for {instr.opname}")
+            resolved = instr.argval if include_names else "<name>"
+        elif instr.opcode in dis.hasjrel or instr.opcode in dis.hasjabs:
+            # Offsets vary between interpreter builds; use the target's
+            # instruction ordinal for logical control-flow identity.
+            resolved = ("target", offsets.get(instr.argval, instr.argval))
         else:
-            resolved = arg
-        ops.append((opname, resolved))
-    return hashlib.sha256(repr(tuple(ops)).encode("utf-8")).hexdigest()[:16]
+            resolved = instr.argval
+        flags = instr.argrepr if ("NULL +" in instr.argrepr or instr.opcode in dis.hasfree) else ""
+        ops.append((instr.opname, resolved, flags))
+    exception_entries = tuple(
+        (offsets.get(e.start, e.start), offsets.get(e.end, e.end),
+         offsets.get(e.target, e.target), e.depth, e.lasti)
+        for e in getattr(dis.Bytecode(code), "exception_entries", ())
+    )
+    payload = (
+        "python-bytecode-v2", sys.implementation.name, tuple(sys.version_info[:2]),
+        code.co_flags, tuple(ops), exception_entries,
+        hashlib.sha256(getattr(code, "co_exceptiontable", b"")).hexdigest(),
+    )
+    return hashlib.sha256(repr(payload).encode("utf-8")).hexdigest()[:16]
+
+
+def _pandas_dtype_identity(dtype: Any) -> str:
+    """Lossless dtype identity, including categorical dictionary semantics."""
+    if isinstance(dtype, pd.CategoricalDtype):
+        return (
+            "category(categories=" + _freeze_value(tuple(dtype.categories))
+            + f",ordered={dtype.ordered})"
+        )
+    return str(dtype)
+
+
+def _referenced_helper_payload(fn: Any, code: Any) -> str:
+    """Bind Python helper functions actually referenced by a callable."""
+    namespace = getattr(fn, "__globals__", {})
+    parts: list[str] = []
+    for name in sorted(set(getattr(code, "co_names", ()))):
+        helper = namespace.get(name)
+        if callable(helper) and getattr(helper, "__code__", None) is not None:
+            parts.append(f"{name}={_freeze_value(helper)}")
+    return "|helpers={" + ",".join(parts) + "}"
 
 
 def _freeze_value(value: Any) -> str:
@@ -194,8 +303,54 @@ def _freeze_value(value: Any) -> str:
     * anything else -> a clear error (R9-P1-042): hashing by type name alone
       would conflate ``SameClass(config=A)`` and ``SameClass(config=B)``.
     """
+    # A callable/capture identity is intentionally bounded.  Context is kept
+    # per thread so recursive calls through this function share cycle/depth and
+    # byte accounting without exposing mutable global identity state.
+    import threading
+    state = getattr(_freeze_value, "_state", None)
+    if state is None:
+        state = threading.local()
+        _freeze_value._state = state
+    root = not hasattr(state, "active")
+    if root:
+        state.active, state.depth, state.bytes = set(), 0, 0
+    identity_container = isinstance(value, (Mapping, list, tuple, set, frozenset, np.ndarray)) or callable(value)
+    marker = id(value)
+    if state.depth >= 64:
+        raise ValueError("semantic identity exceeds maximum depth 64")
+    if identity_container and marker in state.active:
+        if callable(value):
+            module = getattr(value, "__module__", type(value).__module__)
+            qualname = getattr(value, "__qualname__", type(value).__qualname__)
+            return f"recursive_callable({module}.{qualname})"
+        raise ValueError("cyclic semantic identity is not certifiable")
+    if identity_container:
+        state.active.add(marker)
+    state.depth += 1
+    try:
+        result = _freeze_value_unbounded(value)
+        state.bytes += len(result.encode("utf-8"))
+        if state.bytes > 1_048_576:
+            raise ValueError("semantic identity exceeds 1 MiB budget")
+        return result
+    finally:
+        state.depth -= 1
+        if identity_container:
+            state.active.discard(marker)
+        if root:
+            for attr in ("active", "depth", "bytes"):
+                try:
+                    delattr(state, attr)
+                except AttributeError:
+                    pass
+
+
+def _freeze_value_unbounded(value: Any) -> str:
+    """Implementation for :func:`_freeze_value`; recursion stays bounded."""
     import hashlib
 
+    if value is pd.NA:
+        return "pd.NA"
     if isinstance(value, Enum):
         # IntEnum members are ints too — catch them BEFORE the primitives branch
         # so ``Color.RED`` never collapses into plain ``1``.
@@ -276,8 +431,8 @@ def _freeze_value(value: Any) -> str:
         # different column order MUST hash apart.
         import hashlib as _h
 
-        cols = ",".join(str(c) for c in value.columns)
-        dtypes = ",".join(str(d) for d in value.dtypes)
+        cols = _freeze_value(tuple(value.columns))
+        dtypes = ",".join(_pandas_dtype_identity(d) for d in value.dtypes)
         idx = value.index
         if isinstance(idx, pd.DatetimeIndex):
             _vals: list[str] = []
@@ -313,25 +468,18 @@ def _freeze_value(value: Any) -> str:
             mask_hex = _h.sha256(np.ascontiguousarray(mask).tobytes()).hexdigest()[:16]
         except Exception:
             mask_hex = ""
-        try:
-            arr = value.to_numpy(dtype=float)
-        except (TypeError, ValueError):
-            # non-numeric / object columns: hash the canonical recursive freeze
-            # (R10 #14) — never a repr-based digest of object cells.
-            payload = _h.sha256(
-                _freeze_value(value.to_numpy(dtype=object).tolist()).encode("utf-8")
-            ).hexdigest()[:16]
-        else:
+        column_payloads = []
+        for pos in range(value.shape[1]):
+            series = value.iloc[:, pos]
             try:
-                arr = np.ascontiguousarray(arr, dtype=float)
-                if mask.size and bool(mask.any()):
-                    arr = arr.copy()
-                    arr[mask] = 0.0  # NaN -> fixed byte pattern; mask records it
-                payload = _h.sha256(arr.tobytes()).hexdigest()[:16]
+                data = np.asarray(series.array)
+                if data.dtype.kind == "O":
+                    raise TypeError("object/extension payload requires scalar encoding")
+                encoded = _h.sha256(np.ascontiguousarray(data).tobytes()).hexdigest()
             except (TypeError, ValueError):
-                payload = _h.sha256(
-                    _freeze_value(arr.tolist()).encode("utf-8")
-                ).hexdigest()[:16]
+                encoded = _h.sha256(_freeze_value(series.tolist()).encode()).hexdigest()
+            column_payloads.append(f"{pos}:{series.dtype}:{encoded}")
+        payload = _h.sha256("|".join(column_payloads).encode("utf-8")).hexdigest()[:16]
         return (
             f"DataFrame(cols={cols}|dtypes={dtypes}|idx=({idx_vals})|"
             f"idxname={idx_name}|tz={tz}|mask={mask_hex}|payload={payload})"
@@ -341,7 +489,7 @@ def _freeze_value(value: Any) -> str:
         # NaN mask + payload, mirroring the DataFrame contract (R9-P1-043).
         import hashlib as _h
 
-        _dt = str(value.dtype)
+        _dt = _pandas_dtype_identity(value.dtype)
         _name = _freeze_value(value.name)
         _idx = value.index
         if isinstance(_idx, pd.DatetimeIndex):
@@ -360,25 +508,27 @@ def _freeze_value(value: Any) -> str:
                 ",".join(_freeze_value(v) for v in _idx).encode("utf-8")
             ).hexdigest()[:16]
             _tz = ""
+        _idx_name = (
+            "|".join(_freeze_value(n) for n in _idx.names)
+            if isinstance(_idx, pd.MultiIndex)
+            else _freeze_value(_idx.name)
+        )
         try:
             _mask = pd.isna(value).to_numpy()
             _mask_hex = _h.sha256(np.ascontiguousarray(_mask).tobytes()).hexdigest()[:16]
         except Exception:
             _mask_hex = ""
         try:
-            _arr = np.ascontiguousarray(value.to_numpy(dtype=float), dtype=float)
-            if _mask.size and bool(_mask.any()):
-                _arr = _arr.copy()
-                _arr[_mask] = 0.0
-            _payload = _h.sha256(_arr.tobytes()).hexdigest()[:16]
+            _arr = np.asarray(value.array)
+            if _arr.dtype.kind == "O":
+                raise TypeError("object/extension payload requires scalar encoding")
+            _payload = _h.sha256(np.ascontiguousarray(_arr).tobytes()).hexdigest()[:16]
         except (TypeError, ValueError):
-            # R10 #14: object-dtype payload -> canonical recursive freeze, never
-            # a repr-based digest (object cell reprs embed addresses).
             _payload = _h.sha256(
-                _freeze_value(value.to_numpy(dtype=object).tolist()).encode("utf-8")
+                _freeze_value(value.tolist()).encode("utf-8")
             ).hexdigest()[:16]
         return (
-            f"Series(dtype={_dt}|name={_name}|idx=({_idx_hex})|tz={_tz}|"
+            f"Series(dtype={_dt}|name={_name}|idx=({_idx_hex})|idxname={_idx_name}|tz={_tz}|"
             f"mask={_mask_hex}|payload={_payload})"
         )
     if value is pd.NaT:
@@ -425,14 +575,21 @@ def _freeze_value(value: Any) -> str:
         fn_code = getattr(value, "__code__", None)
         if fn_code is not None:
             parts = [_code_payload(fn_code, include_names=True)]
+            parts.append("defaults=" + _freeze_value(getattr(value, "__defaults__", None)))
+            parts.append("kwdefaults=" + _freeze_value(getattr(value, "__kwdefaults__", None)))
             closure = getattr(value, "__closure__", None) or ()
             cells = []
-            for cell in closure:
+            freevars = tuple(fn_code.co_freevars)
+            for pos, cell in enumerate(closure):
+                name = freevars[pos] if pos < len(freevars) else f"<cell{pos}>"
                 try:
-                    cells.append(_freeze_value(cell.cell_contents))
+                    cell_value = cell.cell_contents
                 except ValueError:  # uninitialised cell
-                    cells.append("<empty>")
-            parts.append("cells=" + ",".join(sorted(cells)))
+                    cells.append(f"{name}=<empty>")
+                else:
+                    cells.append(f"{name}={_freeze_value(cell_value)}")
+            parts.append("cells=" + ",".join(cells))
+            parts.append(_referenced_helper_payload(value, fn_code))
             return "fn(" + "|".join(parts) + ")"
         # Callable without Python bytecode (numpy ufunc, C builtin): hash by its
         # stable module.qualname identity — deterministic, never id()/repr.
@@ -479,6 +636,13 @@ def _impl_source_hash(operator: Any) -> str:
     import hashlib
 
     cls = operator.__class__
+
+    wrapped = getattr(operator, "_fn", None)
+    if callable(wrapped):
+        payload = _fn_payload(wrapped, cls)
+        if payload is None:
+            raise TypeError("wrapped kernel has no certifiable implementation identity")
+        return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]
 
     def _is_class_defined(attr: str) -> bool:
         # R7-226: "class-defined" means the SUBCLASS overrides it — the abstract
@@ -732,7 +896,11 @@ def _fn_payload(fn: Any, cls: type) -> str | None:
         code = getattr(fn, "__code__", None)
         closure = getattr(fn, "__closure__", None)
         if code is not None and closure:
-            parts = [_code_payload(code, include_names=False)]
+            parts = [
+                _code_payload(code, include_names=True),
+                "defaults=" + _freeze_value(getattr(fn, "__defaults__", None)),
+                "kwdefaults=" + _freeze_value(getattr(fn, "__kwdefaults__", None)),
+            ]
             # R30 §13 (P0-009): a closure cell's position is semantically bound
             # to its ``co_freevars`` name — the SAME value set in a different
             # variable binding is a different kernel.  Hash cells in original
@@ -743,13 +911,19 @@ def _fn_payload(fn: Any, cls: type) -> str | None:
             for i, cell in enumerate(closure):
                 name = freevars[i] if i < len(freevars) else f"<cell{i}>"
                 try:
-                    cells.append(f"{name}={_freeze_value(cell.cell_contents)}")
+                    cell_value = cell.cell_contents
                 except ValueError:  # uninitialised cell
                     cells.append(f"{name}=<empty>")
+                else:
+                    cells.append(f"{name}={_freeze_value(cell_value)}")
             parts.append("cells={" + ",".join(cells) + "}")
-            return "|".join(parts)
+            return "|".join(parts) + _referenced_helper_payload(fn, code)
         if code is not None:
-            return _code_payload(code, include_names=True)
+            return "|".join([
+                _code_payload(code, include_names=True),
+                "defaults=" + _freeze_value(getattr(fn, "__defaults__", None)),
+                "kwdefaults=" + _freeze_value(getattr(fn, "__kwdefaults__", None)),
+            ]) + _referenced_helper_payload(fn, code)
         return _inspect.getsource(fn)
     except (OSError, TypeError):  # pragma: no cover - interactive/no-source
         return None
@@ -1450,7 +1624,7 @@ class OperatorRegistry:
                     for _c, _impls in cls._operators.items()
                 }),
                 "aliases": MappingProxyType(dict(cls._aliases)),
-                "catalog": MappingProxyType(_deepfreeze_catalog(cls._catalog)),
+                "catalog": _deepfreeze_catalog(cls._catalog),
             }
             # R40 #208 + P0-14: the LIVE dicts become fully immutable —
             # including every nested catalog entry (previously only the outer
@@ -1468,7 +1642,7 @@ class OperatorRegistry:
                 for _c, _impls in cls._operators.items()
             })
             cls._aliases = MappingProxyType(dict(cls._aliases))
-            cls._catalog = MappingProxyType(_deepfreeze_catalog(cls._catalog))
+            cls._catalog = _deepfreeze_catalog(cls._catalog)
             cls._lifecycle = cls.Lifecycle.FROZEN
             cls._mutation_token = None
             cls._version += 1
@@ -2495,9 +2669,9 @@ class OperatorRegistry:
         if cls._lifecycle is not cls.Lifecycle.FROZEN:
             raise RuntimeError("registry snapshot is available only after freeze")
         operators, aliases, catalog = cls._read_state()
-        return MappingProxyType({
+        return _immutable_catalog_value({
             "version": cls._version,
-            "operators": MappingProxyType(copy.deepcopy(_defrost_catalog(dict(operators)))),
-            "aliases": MappingProxyType(copy.deepcopy(dict(aliases))),
-            "catalog": MappingProxyType(copy.deepcopy(_defrost_catalog(catalog))),
+            "operators": operators,
+            "aliases": aliases,
+            "catalog": catalog,
         })

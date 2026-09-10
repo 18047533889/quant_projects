@@ -192,6 +192,8 @@ def test_execute_root_with_path_uses_overlay_no_full_copy(monkeypatch):
 
     @dataclass
     class _Ctx:
+        task_id: str | None = None
+        factor_id: str | None = None
         runtime_stats: dict = field(default_factory=dict)
         shared_result_cache: dict | None = None
         shared_long_lazy_cache: dict | None = None

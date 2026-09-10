@@ -9,6 +9,11 @@ import subprocess
 import hashlib
 
 
+# Declarative, read-only history-to-current topology mapping. This is data for
+# blob reconciliation only; it is not an import or runtime package alias.
+LEGACY_READ_ONLY_PATH_PREFIXES = {"dataaccess/": "data_access/"}  # PATH_GATE_HISTORICAL_MAPPING
+
+
 def git(*args):
     return subprocess.check_output(["git", *args])
 
@@ -16,8 +21,10 @@ def git(*args):
 def current_path_candidates(path):
     """Explicit migration candidates, not a claim of semantic equivalence."""
     stripped = path.removeprefix("AutoFactorEvaluation-RECONSTRUCT/")
-    if stripped.startswith("dataaccess/"):
-        stripped = "data_access/" + stripped[len("dataaccess/"):]
+    for historical, current in LEGACY_READ_ONLY_PATH_PREFIXES.items():
+        if stripped.startswith(historical):
+            stripped = current + stripped[len(historical):]
+            break
     return tuple(dict.fromkeys((path, stripped)))
 
 

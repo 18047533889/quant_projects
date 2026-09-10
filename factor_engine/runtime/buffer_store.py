@@ -18,10 +18,21 @@ from __future__ import annotations
 import enum
 import threading
 import time
+import weakref
 from dataclasses import dataclass, field
 from typing import Any, Iterable
 
 from factor_engine.runtime.spill_store import SpillStore, SpillRef
+
+
+_CONSERVATIVE_LEASE_LOCK = threading.Lock()
+_CONSERVATIVE_LEASES: list[Any] = []
+
+
+def _retain_lease_conservatively(lease: Any) -> None:
+    """Fail closed when Python cannot prove the physical owner's death."""
+    with _CONSERVATIVE_LEASE_LOCK:
+        _CONSERVATIVE_LEASES.append(lease)
 
 
 def _estimate_bytes(value: Any) -> int:
@@ -93,6 +104,97 @@ class _Entry:
     future_consumers: int = 1
     # R42-016：reuse distance（下次使用距离，Belady-like eviction）。
     next_use_distance: int = 0  # 0=unknown, >0=已知消费序列距离
+
+
+@dataclass(frozen=True)
+class BufferLeaseTarget:
+    """Stable resident-entry snapshot spanning broker transfer and attachment."""
+
+    key: str
+    bytes: int
+    _entry: _Entry = field(repr=False, compare=False)
+    _store_token: Any = field(repr=False, compare=False)
+    _owners: tuple[Any, ...] = field(repr=False, compare=False)
+
+    @property
+    def physical_ownership_supported(self) -> bool:
+        return bool(self._owners)
+
+
+def _physical_memory_owners(value: Any) -> tuple[Any, ...]:
+    """Return every weakref-able Python owner of known NumPy/pandas storage.
+
+    An empty result is deliberately fail-closed: native/extension storage whose
+    physical lifetime cannot be proven must never be released on logical eviction.
+    """
+    try:
+        import numpy as np
+
+        arrays: list[Any] = []
+        wrappers: list[Any] = []
+        if isinstance(value, np.ndarray):
+            arrays.append(value)
+        elif type(value).__module__.split(".", 1)[0] == "pandas":
+            wrappers.append(value)
+            manager = getattr(value, "_mgr", None)
+            blocks = tuple(getattr(manager, "blocks", ()))
+            if not blocks:
+                return ()
+            for block in blocks:
+                block_value = getattr(block, "values", None)
+                if not isinstance(block_value, np.ndarray):
+                    return ()
+                arrays.append(block_value)
+            axes = []
+            for name in ("index", "columns"):
+                axis = getattr(value, name, None)
+                if axis is not None:
+                    axes.append(axis)
+            while axes:
+                axis = axes.pop()
+                wrappers.append(axis)
+                for code in getattr(axis, "codes", ()):
+                    if not isinstance(code, np.ndarray):
+                        return ()
+                    arrays.append(code)
+                for level in getattr(axis, "levels", ()):
+                    axes.append(level)
+                converter = getattr(axis, "to_numpy", None)
+                if callable(converter):
+                    axis_values = converter(copy=False)
+                    if not isinstance(axis_values, np.ndarray):
+                        return ()
+                    arrays.append(axis_values)
+        else:
+            return ()
+
+        owners: list[Any] = []
+        seen: set[int] = set()
+        for owner in wrappers:
+            weakref.ref(owner)
+            seen.add(id(owner))
+            owners.append(owner)
+        for array in arrays:
+            owner = array
+            chain: list[Any] = []
+            while isinstance(owner, np.ndarray):
+                chain.append(owner)
+                base = getattr(owner, "base", None)
+                if base is None:
+                    break
+                if not isinstance(base, np.ndarray):
+                    # Python cannot prove the lifetime of foreign/native roots.
+                    return ()
+                owner = base
+            for candidate in chain:
+                if id(candidate) in seen:
+                    continue
+                weakref.ref(candidate)
+                seen.add(id(candidate))
+                owners.append(candidate)
+        return tuple(owners)
+    except Exception:
+        return ()
 
 
 class SpillDecisionEngine:
@@ -183,6 +285,8 @@ class GovernedBufferStore:
     ) -> None:
         self._backing: dict[str, Any] = backing if backing is not None else {}
         self._entries: dict[str, _Entry] = {}
+        self._entry_leases: dict[str, tuple[weakref.finalize, ...]] = {}
+        self._lease_target_token = object()
         self._budget = budget_bytes if budget_bytes is not None and budget_bytes > 0 else None
         self._pinned: set[str] = set()
         self._lock = threading.RLock()
@@ -206,6 +310,89 @@ class GovernedBufferStore:
 
     def _total_accounted(self) -> int:
         return sum(e.bytes for e in self._entries.values())
+
+    def entry_bytes(self, key: str) -> int | None:
+        with self._lock:
+            entry = self._entries.get(key)
+            return None if entry is None else max(0, int(entry.bytes))
+
+    def capture_lease_target(self, key: str) -> BufferLeaseTarget | None:
+        """Capture the exact resident generation before broker transfer."""
+        with self._lock:
+            entry = self._entries.get(key)
+            if entry is None:
+                return None
+            owners = _physical_memory_owners(entry.value)
+            return BufferLeaseTarget(
+                key=key, bytes=max(0, int(entry.bytes)), _entry=entry,
+                _store_token=self._lease_target_token, _owners=owners,
+            )
+
+    def attach_memory_lease(
+        self, key: str, lease: Any, *, target: BufferLeaseTarget | None = None,
+    ) -> bool:
+        """Bind a pure-memory lease to proven physical owners of one generation."""
+        with self._lock:
+            entry = self._entries.get(key)
+            if target is None and entry is not None:
+                owners = _physical_memory_owners(entry.value)
+                target = BufferLeaseTarget(
+                    key=key, bytes=max(0, int(entry.bytes)), _entry=entry,
+                    _store_token=self._lease_target_token, _owners=owners,
+                )
+            valid = (
+                isinstance(target, BufferLeaseTarget)
+                and target.key == key
+                and target._store_token is self._lease_target_token
+            )
+            owners = target._owners if valid else ()
+            if valid and not owners:
+                # A caller bypassed the pre-transfer support check. There is
+                # no safe finalizer, so retain admission for process lifetime.
+                _retain_lease_conservatively(lease)
+                return False
+            if not valid:
+                accepted = False
+            else:
+                state = {
+                    "remaining": len(owners), "lease": lease,
+                    "lock": threading.Lock(), "conservative": False,
+                }
+
+                def release_owner(owner_state=state):
+                    with owner_state["lock"]:
+                        owner_state["remaining"] -= 1
+                        if (owner_state["remaining"] == 0
+                                and not owner_state["conservative"]):
+                            held = owner_state.pop("lease")
+                            held.release()
+
+                registered = []
+                try:
+                    for owner in owners:
+                        registered.append(weakref.finalize(owner, release_owner))
+                except BaseException:
+                    # Some callbacks may already be globally registered. Fence
+                    # all of them from releasing and retain admission for the
+                    # process lifetime rather than claim unproven reclamation.
+                    with state["lock"]:
+                        state["conservative"] = True
+                    _retain_lease_conservatively(lease)
+                    return False
+                finalizers = tuple(registered)
+                # Detaching an older binding must not release it: its callbacks
+                # remain registered until that generation's owners physically die.
+                if entry is target._entry:
+                    self._entry_leases.pop(key, None)
+                    self._entry_leases[key] = finalizers
+                accepted = True
+        if not accepted:
+            lease.release()
+        return accepted
+
+    def _detach_entry_lease_locked(self, key: str) -> None:
+        """Drop logical tracking; global weakref finalizers retain the lease."""
+        self._entry_leases.pop(key, None)
 
     def put(
         self,
@@ -260,6 +447,8 @@ class GovernedBufferStore:
                         return BufferPutResult(
                             STATUS_REFUSED, key, reason=f"over_budget:{size}>remaining"
                         )
+            if old is not None:
+                self._detach_entry_lease_locked(key)
             self._backing[key] = value
             self._entries[key] = _Entry(
                 value=value,
@@ -388,6 +577,7 @@ class GovernedBufferStore:
                     pass
             self._backing.pop(key, None)
             self._entries.pop(key, None)
+            self._detach_entry_lease_locked(key)
             self._pinned.discard(key)
             if existed:
                 self._releases += 1
@@ -443,6 +633,7 @@ class GovernedBufferStore:
                 # 无 spill store → drop + recompute（显式 RECOMPUTE，不装 spill）。
                 self._backing.pop(key, None)
                 self._entries.pop(key, None)
+                self._detach_entry_lease_locked(key)
                 self._pinned.discard(key)
                 self._spill_refs.pop(key, None)
                 return BufferPutResult(STATUS_RECOMPUTE, key, reason="no_spill_store_recompute")
@@ -454,6 +645,7 @@ class GovernedBufferStore:
                 entry.state = BufferEntryState.SPILLED
                 self._backing.pop(key, None)
                 self._entries.pop(key, None)
+                self._detach_entry_lease_locked(key)
                 self._pinned.discard(key)
                 self._spill_refs[key] = ref
                 self._spilled += 1
@@ -513,6 +705,7 @@ class GovernedBufferStore:
                     self._spilled += 1
                     self._backing.pop(key, None)
                     self._entries.pop(key, None)
+                    self._detach_entry_lease_locked(key)
                     freed += entry.bytes
                     continue
             # drop（recompute 便宜 / spill 不可用）：清掉旧 spill ref 防止复活。
@@ -525,8 +718,16 @@ class GovernedBufferStore:
             entry.state = BufferEntryState.RECOMPUTABLE
             self._backing.pop(key, None)
             self._entries.pop(key, None)
+            self._detach_entry_lease_locked(key)
             freed += entry.bytes
         return freed
+
+    def clear(self) -> None:
+        """Drop every entry and release every attached memory lease once."""
+        with self._lock:
+            keys = set(self._entries) | set(self._entry_leases)
+        for key in keys:
+            self.release(key)
 
     # -- reconciliation（R38 P1-037：大 keyset 抽样 + 外推） --
 

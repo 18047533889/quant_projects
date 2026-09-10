@@ -333,6 +333,12 @@ def _release_lease(lease: Any) -> None:
         lease.release()
 
 
+def _run_in_job_context(job_lease: Any, fn: Callable[..., Any], *args: Any) -> Any:
+    """Run executor work with the explicitly captured job bound for DA children."""
+    with job_lease.bind_context():
+        return fn(*args)
+
+
 def _default_contract_for(task_type: str, plan_cost: dict[str, Any]) -> Any:
     from factor_engine.runtime.task_resource_contract import TaskResourceContract
 
@@ -368,6 +374,7 @@ class AdaptiveBatchScheduler:
         wave_memory_budget: int | None = None,
         max_concurrency: int | None = None,
         execution_policy: str | None = None,
+        job_lease: Any | None = None,
     ) -> None:
         if execution_policy not in {None, "thread", "process"}:
             raise ValueError("execution_policy must be thread, process, or None")
@@ -397,6 +404,11 @@ class AdaptiveBatchScheduler:
             raise_on_missing=True,
             run_mode=os.environ.get("FACTOR_ENGINE_RUN_MODE", "").strip().lower() or None,
         )
+        # Capture the concrete JobLease on the originating worker thread.
+        # Executor threads must never depend on ContextVar propagation.
+        self.job_lease = job_lease
+        job_lease_id = str(getattr(job_lease, "lease_id", "standalone") or "standalone")
+        self._lease_scope = f"{job_lease_id}:scheduler:{id(self)}"
         self.executor = executor or HybridExecutor(
             broker=self.broker,
             max_thread_workers=max_concurrency,
@@ -494,22 +506,107 @@ class AdaptiveBatchScheduler:
     def _dynamic_wave_budget(self) -> int:
         """R36 P0-010：从 broker ResourceDecision 取动态 read-wave 预算。
 
-        P3/P4：不再回退固定 4GiB——broker 无法给出真实预算时从 live headroom
-        派生（``current_read_budget``）；两者都不可用时才用绝对上限 4GiB 作 cap。
+        UNKNOWN/KNOWN_ZERO must remain zero; fabricating a positive fallback
+        would bypass the broker's unified execution-memory authority.
         """
         try:
-            decision = self.broker.resource_decision()
+            decision = self.broker.resource_decision(
+                job_memory_lease_bytes=self._job_memory_cap()
+            )
             self._last_decision = decision
-            return max(1, int(decision.read_wave_bytes))
+            return max(0, int(decision.read_wave_bytes))
         except Exception:
             pass
         try:
             live = self.broker.current_read_budget()
-            if live > 0:
-                return max(1, live)
+            live = max(0, int(live))
+            cap = self._job_memory_cap()
+            return live if cap is None else min(live, cap)
         except Exception:
             pass
-        return 4 * 1024**3
+        return 0
+
+    def _job_memory_cap(self) -> int | None:
+        job_lease = getattr(self, "job_lease", None)
+        if job_lease is None:
+            return None
+        if bool(getattr(job_lease, "released", False)):
+            return 0
+        return max(0, int(getattr(job_lease, "memory_bytes", 0) or 0))
+
+    def _reserve_task(self, contract: Any, *, task_id: str) -> Any | None:
+        from factor_engine.runtime.job_scoped_lease import reserve_job_scoped_task
+
+        return reserve_job_scoped_task(
+            self.broker, self.job_lease, contract,
+            task_id=f"{self._lease_scope}:task:{task_id}",
+        )
+
+    def _acquire_wave(self, kind: Any, nbytes: int, *, lease_id: str) -> Any | None:
+        from factor_engine.runtime.job_scoped_lease import acquire_job_scoped_memory
+
+        return acquire_job_scoped_memory(
+            self.broker, self.job_lease, kind, nbytes,
+            lease_id=f"{self._lease_scope}:wave:{lease_id}",
+        )
+
+    def _transfer_cse_memory_ownership(
+        self, ctx: Any, task_id: str, lease: Any
+    ) -> bool | None:
+        """Atomically turn a completed CSE task reservation into entry memory."""
+        if lease is None or not task_id.startswith("cse:"):
+            return None
+        store = getattr(ctx, "shared_buffers", None)
+        if store is None:
+            return None
+        sid = task_id.split(":", 1)[1]
+        capture = getattr(store, "capture_lease_target", None)
+        target = capture(sid) if callable(capture) else None
+        if target is None:
+            # A successfully spilled/recomputed/lazy or genuinely zero-byte CSE
+            # has no resident allocation whose ownership needs transferring.
+            return None
+        if not bool(getattr(target, "physical_ownership_supported", False)):
+            # Resident data with unknown native ownership cannot be allowed to
+            # outlive its reservation unaccounted. It has not been published
+            # to consumers yet, so discard it and fail the task closed.
+            store.release(sid)
+            return False
+        nbytes = max(0, int(target.bytes))
+        if nbytes <= 0:
+            return None
+        transfer = getattr(lease, "transfer_memory_ownership", None)
+        if not callable(transfer):
+            return False
+        from factor_engine.runtime.auto_memory_budget import MemoryLeaseKind
+
+        memory_lease = transfer(
+            MemoryLeaseKind.CSE_CACHE,
+            nbytes,
+            lease_id=f"{self._lease_scope}:cse:{sid}",
+        )
+        if memory_lease is None:
+            return False
+        return bool(store.attach_memory_lease(sid, memory_lease, target=target))
+
+    def _submit(self, backend: str, fn: Callable[..., Any], *args: Any, **kwargs: Any) -> Future:
+        job_lease = getattr(self, "job_lease", None)
+        if job_lease is None:
+            return self.executor.submit(backend, fn, *args, **kwargs)
+        # JobLease owns coordinator locks and is intentionally not pickleable.
+        # Service scheduling already relies on shared in-process ctx/cache, so
+        # keep the scoped wrapper on a thread and bind the job explicitly there.
+        if self._execution_policy == "process" or bool(
+            getattr(self.executor, "prefer_process", False)
+        ):
+            raise RuntimeError(
+                "job-scoped scheduler cannot execute in a process pool without "
+                "a parent JobLease IPC bridge"
+            )
+        kwargs["prefer"] = "thread"
+        return self.executor.submit(
+            backend, _run_in_job_context, job_lease, fn, *args, **kwargs
+        )
 
     # -- plan --
 
@@ -591,6 +688,7 @@ class AdaptiveBatchScheduler:
         # R36 P0-010：read wave 预算不再固定 4GB——plan 时从 broker decision 取
         # 动态值（§35：min(calibrated_optimum, SafeEnvelope×wave_fraction, job lease)）。
         wave_budget = self._dynamic_wave_budget()
+        self._last_wave_budget = wave_budget
         read_waves = build_waves_from_dag(
             physical,
             wave_memory_budget=wave_budget,
@@ -815,7 +913,7 @@ class AdaptiveBatchScheduler:
             import time
 
             self._task_started_at[task.task_id] = time.monotonic() * 1000.0
-            future = self.executor.submit(
+            future = self._submit(
                 task.preferred_backend,
                 fn, task, backend, ctx, execute_root, materialize_shared,
                 prefer=self._execution_policy,
@@ -825,7 +923,7 @@ class AdaptiveBatchScheduler:
         if stage in {"PRESSURE_3", "PRESSURE_4", "CRITICAL"}:
             self._explain(f"task={task.task_id}: blocked by pressure_stage={stage}")
             return None, None
-        lease = self.broker.try_reserve(contract, task_id=task.task_id)
+        lease = self._reserve_task(contract, task_id=task.task_id)
         if lease is None:
             self._explain(
                 f"task={task.task_id}: admission rejected "
@@ -845,7 +943,7 @@ class AdaptiveBatchScheduler:
 
         self._task_started_at[task.task_id] = time.monotonic() * 1000.0
         try:
-            future = self.executor.submit(
+            future = self._submit(
                 task.preferred_backend,
                 fn, task, backend, ctx, execute_root, materialize_shared,
                 prefer=self._execution_policy,
@@ -1024,9 +1122,9 @@ class AdaptiveBatchScheduler:
             from factor_engine.runtime.auto_memory_budget import MemoryLeaseKind
             from factor_engine.runtime.resource_errors import ResourceBudgetExceeded
             wave_bytes = int(getattr(wave, "estimated_memory_bytes", 0) or 0)
-            wave_lease = self.broker.acquire_memory(
+            wave_lease = self._acquire_wave(
                 MemoryLeaseKind.READ_WAVE, wave_bytes,
-                lease_id=f"read-wave:{id(self)}:{wid}",
+                lease_id=str(wid),
             )
             if wave_lease is None:
                 capacity_fn = getattr(self.broker, "execution_budget", None)
@@ -1158,7 +1256,7 @@ class AdaptiveBatchScheduler:
         decision = getattr(self, "_last_decision", None)
         if decision is None:
             return
-        budget = max(1, int(decision.read_wave_bytes))
+        budget = max(0, int(decision.read_wave_bytes))
         last = getattr(self, "_last_wave_budget", budget)
         if budget >= last * 0.6:
             self._last_wave_budget = budget
@@ -1407,7 +1505,7 @@ class AdaptiveBatchScheduler:
             # 压力升高 AIMD fast down、压力解除稳定后 slow up、动态 budgets
             # （wave/block/sink）全部在此刷新（§301 伪代码 scheduler.set_targets）。
             decision = self.broker.resource_decision(
-                job_memory_lease_bytes=None,
+                job_memory_lease_bytes=self._job_memory_cap(),
                 sink_backpressure=float(sink.backpressure_ratio) if sink is not None else 0.0,
             )
             self._last_decision = decision
@@ -1457,7 +1555,7 @@ class AdaptiveBatchScheduler:
                 for t in roots:
                     contract = dag.tasks[t].resource_contract
                     if contract is not None:
-                        lease = self.broker.try_reserve(contract, task_id=t)
+                        lease = self._reserve_task(contract, task_id=t)
                         if lease is None:
                             ok = False
                             break
@@ -1467,7 +1565,7 @@ class AdaptiveBatchScheduler:
                         lease.release()
                     continue
                 try:
-                    future = self.executor.submit(
+                    future = self._submit(
                         group.backend,
                         _dispatch_fusion, group, dag.tasks, backend, ctx, execute_root,
                         prefer=self._execution_policy,
@@ -1532,7 +1630,7 @@ class AdaptiveBatchScheduler:
                         mb_contract = self._micro_batch_contract(mb, dag)
                         lease = None
                         if mb_contract is not None:
-                            lease = self.broker.try_reserve(
+                            lease = self._reserve_task(
                                 mb_contract, task_id=mb_key
                             )
                             if lease is None:
@@ -1569,7 +1667,7 @@ class AdaptiveBatchScheduler:
                         for tid in mb.roots:
                             self._task_started_at[tid] = time.monotonic() * 1000.0
                         try:
-                            future = self.executor.submit(
+                            future = self._submit(
                                 mb.backend, dispatch_micro_batch, mb.roots, dag.tasks,
                                 execute_root, prefer=self._execution_policy,
                             )
@@ -1793,6 +1891,23 @@ class AdaptiveBatchScheduler:
                         f"(class={kind})"
                     )
                     raise
+                task = dag.tasks.get(key)
+                if task is not None and task.task_type == TASK_CSE_SHARED:
+                    transferred = self._transfer_cse_memory_ownership(ctx, key, lease)
+                    if transferred is False:
+                        sid = key.split(":", 1)[1]
+                        store = getattr(ctx, "shared_buffers", None)
+                        if store is not None:
+                            store.release(sid)
+                        _release_lease(lease)
+                        lease = None
+                        from factor_engine.runtime.resource_errors import ResourceBudgetExceeded
+
+                        raise ResourceBudgetExceeded(
+                            f"CSE memory ownership transfer failed for {key}"
+                        )
+                    if transferred:
+                        lease = None
                 _release_lease(lease)
                 # fusion group 完成：逐 root 处理结果（honest per-root fallback
                 # 结果也已进入 dict）。
@@ -1960,8 +2075,8 @@ class AdaptiveBatchScheduler:
     ) -> dict[str, Any]:
         """R33 §22/§39：small-batch AUTO bypass——serial fused。
 
-        极少量简单因子时，scheduler 开销 > compute savings：不建 future、不占
-        resource lease、不走 priority queue。仍先执行 read waves（真实 scan 一次）
+        极少量简单因子时，scheduler 开销 > compute savings：不建 future、不走
+        priority queue，但每个真实任务仍必须取得 broker/job lease。仍先执行 read waves（真实 scan 一次）
         再串行物化 shared + 执行 roots（拓扑序）。结果与 ``run`` 完全一致。
         """
         from factor_engine.runtime.batch_service import _execute_root_with_path, _materialize_shared_subplan
@@ -2013,14 +2128,44 @@ class AdaptiveBatchScheduler:
                     continue
                 if task.task_type == TASK_CSE_SHARED:
                     sid = task.task_id.split(":", 1)[1]
-                    materialize_shared(sid, task.node_ref)
+                    lease = self._reserve_task(task.resource_contract, task_id=tid)
+                    if lease is None:
+                        from factor_engine.runtime.resource_errors import ResourceBudgetExceeded
+
+                        raise ResourceBudgetExceeded(
+                            f"serial CSE admission denied for {tid}"
+                        )
+                    try:
+                        materialize_shared(sid, task.node_ref)
+                        transferred = self._transfer_cse_memory_ownership(ctx, tid, lease)
+                        if transferred is False:
+                            store = getattr(ctx, "shared_buffers", None)
+                            if store is not None:
+                                store.release(sid)
+                            raise ResourceBudgetExceeded(
+                                f"CSE memory ownership transfer failed for {tid}"
+                            )
+                        if transferred:
+                            lease = None
+                    finally:
+                        _release_lease(lease)
                     committed.add(tid)
                     remaining.discard(tid)
                     self._record_timing(tid, task)
                     progressed = True
                     continue
                 if task.task_type == TASK_ROOT:
-                    result = execute_root(task)
+                    lease = self._reserve_task(task.resource_contract, task_id=tid)
+                    if lease is None:
+                        from factor_engine.runtime.resource_errors import ResourceBudgetExceeded
+
+                        raise ResourceBudgetExceeded(
+                            f"serial root admission denied for {tid}"
+                        )
+                    try:
+                        result = execute_root(task)
+                    finally:
+                        _release_lease(lease)
                     committed.add(tid)
                     remaining.discard(tid)
                     self._record_timing(tid, task)
@@ -2691,16 +2836,19 @@ class AdaptiveBatchScheduler:
         """
         if queue_bytes is None:
             try:
-                decision = self.broker.resource_decision()
+                decision = self.broker.resource_decision(
+                    job_memory_lease_bytes=self._job_memory_cap()
+                )
                 self._last_decision = decision
-                queue_bytes = max(1, int(decision.result_queue_bytes))
+                queue_bytes = max(0, int(decision.result_queue_bytes))
             except Exception:
-                # P3/P4: 从 broker live headroom 派生 sink 预算（不再固定 4GiB）；
-                # 都不行才回退绝对上限。
                 try:
-                    queue_bytes = self.broker.current_sink_budget() or (4 * 1024**3)
+                    queue_bytes = max(0, int(self.broker.current_sink_budget()))
+                    cap = self._job_memory_cap()
+                    if cap is not None:
+                        queue_bytes = min(queue_bytes, cap)
                 except Exception:
-                    queue_bytes = 4 * 1024**3
+                    queue_bytes = 0
         sink = StreamingResultSink(
             writer=writer,
             queue_bytes=queue_bytes,

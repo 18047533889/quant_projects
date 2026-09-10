@@ -63,6 +63,26 @@ class StatefulOperatorSpec:
     checkpoint_required_for_segmented: bool = True
     segmented_execution_supported: bool = True
     checkpoint_field_specs: tuple[CheckpointFieldSpec, ...] = ()
+    minimum_history_parameter: str | None = None
+    minimum_history_multiplier: int = 1
+
+    def minimum_history_for(self, params: Mapping[str, Any] | None = None) -> int:
+        """Resolve parameter-aware maturity without changing legacy callers."""
+        if self.minimum_history_parameter is None:
+            return int(self.minimum_history)
+        raw = (params or {}).get(self.minimum_history_parameter)
+        if raw is None:
+            return int(self.minimum_history)
+        if isinstance(raw, bool) or not isinstance(raw, (int, float)):
+            raise StatefulContractError(
+                f"{self.minimum_history_parameter} must be a positive integer"
+            )
+        numeric = float(raw)
+        if not math.isfinite(numeric) or numeric < 1 or numeric != int(numeric):
+            raise StatefulContractError(
+                f"{self.minimum_history_parameter} must be a positive integer"
+            )
+        return int(numeric) * int(self.minimum_history_multiplier)
 
 
 @dataclass(frozen=True)
@@ -613,9 +633,11 @@ for _spec in (
     StatefulOperatorSpec(
         canonical="ADX",
         state_schema_version="adx_state.v2",
-        semantic_version="3.0",
+        semantic_version="4.0",
         minimum_history=28,
-        # R5-10: every stage (TR/+DM/-DM/DX) is a ``min_periods=1`` pandas EWM —
+        minimum_history_parameter="window",
+        minimum_history_multiplier=2,
+        # H22: actual winner requires window valid observations at every EWM stage;
         # there is no SMA seeding anywhere.
         checkpoint_fields=("tr", "plus_dm", "minus_dm", "dx", "last_high", "last_low", "last_close", "last_timestamp"),
         missing_policy="pandas_adjust_false_ignore_na_false",

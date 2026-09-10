@@ -264,6 +264,15 @@ class ResourceAdmissionError(DataAccessError):
     """
 
 
+class HostLeaseAdmissionDenied(DataAccessError):
+    """The configured host authority explicitly denied a resource lease.
+
+    Unlike an incidental host-integration failure, this is an authoritative
+    admission decision and must never fall back to the process-local governor,
+    including in research mode.
+    """
+
+
 class CacheSecurityError(DataAccessError):
     """R25 §28 / §78：缓存安全违例（principal scope 不匹配 / 权限过宽）。
 

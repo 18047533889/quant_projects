@@ -313,7 +313,10 @@ def gate_n9_numerics() -> GateResult:
         failed.append("chunk-boundary")
     return GateResult(
         not failed,
-        f"perm={ok_perm} prefix={ok_pref} chunk={ok_chunk} fail={failed or 'none'}",
+        f"perm={ok_perm} prefix={ok_pref} chunk={ok_chunk} fail={failed or 'none'}; "
+        f"prefix_canonicals={len(d_pref.get('per_canonical', {}))} "
+        f"chunk_canonicals={len(d_chunk.get('per_canonical', {}))}; "
+        "scope=declared fixtures only, not all operators/parameters/backends",
     )
 
 

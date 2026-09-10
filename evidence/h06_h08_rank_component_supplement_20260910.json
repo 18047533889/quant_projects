@@ -1,0 +1,21 @@
+{
+  "record": "H06-H08 rank and component binding supplement",
+  "date": "2026-09-10",
+  "workspace": "/home/sunhaiwei/quant_projects",
+  "changes": {
+    "H06": "Rank on the original Polars list axis and count non-null values separately; no pandas fallback.",
+    "H07": "Bind positional and named component slots plus trailing scalar parameters through one declared immutable request mapping; reject conflicts, unknowns, invalid panel types and excess arguments.",
+    "H08": "Reject non-sequence, wrong-length and non-finite weights before scoring; finite negative and zero weights remain allowed by the existing contract."
+  },
+  "verification": {
+    "dedicated": "17 passed",
+    "combined_bounded_regression": "69 passed",
+    "rank_cases": "none/first/middle/last/all missing, NaN, infinities, ties, singleton and permutation",
+    "component_cases": "named/positional/gapped/eight-slot forms, directions, weight domain/length and require_full"
+  },
+  "limitations": [
+    "FinComponentScore remains experimental; no production admission was changed.",
+    "No SQL component-score backend was added.",
+    "Tests use the installed Polars team environment, not a newly installed minimum-version environment."
+  ]
+}

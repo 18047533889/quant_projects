@@ -2,6 +2,10 @@
 """R27-022..044/236..238/241..243: ResourceBroker live headroom + token admission。"""
 from __future__ import annotations
 
+from dataclasses import replace
+
+import pytest
+
 from factor_engine.runtime.resource_broker import (
     STAGE_CRITICAL,
     STAGE_NORMAL,
@@ -10,6 +14,44 @@ from factor_engine.runtime.resource_broker import (
 )
 from factor_engine.runtime.resource_governor import ExecutionResourcePlan, live_memory_headroom_bytes
 from factor_engine.runtime.task_resource_contract import TaskResourceContract, panel_bytes
+
+
+_COHERENT_CAPACITY_TESTS = {
+    "test_memory_token_admission_caps_concurrency",
+    "test_cpu_token_admission",
+    "test_pressure_stage_external_awareness",
+    "test_duplicate_task_id_rejected",
+    "test_reserve_backward_compat_duplicate_idempotent",
+    "test_idempotent_release_via_lease",
+    "test_idempotent_release_via_api",
+    "test_token_accounting_exact_reserve_release_cycles",
+    "test_concurrent_reserve_release_same_id",
+}
+
+
+@pytest.fixture(autouse=True)
+def _coherent_capacity_for_accounting_tests(monkeypatch, request):
+    """Keep positive-capacity fixtures independent of live shared-host use."""
+    if request.node.name not in _COHERENT_CAPACITY_TESTS:
+        return
+    refresh = ResourceBroker._refresh
+
+    def coherent_snapshot(broker, *, force=False):
+        snapshot = refresh(broker, force=force)
+        hard = broker.hard_memory_limit
+        return replace(
+            snapshot,
+            hard_memory_limit=hard,
+            cgroup_memory_current=0,
+            host_mem_available=hard,
+            process_rss=0,
+            worker_rss=0,
+            process_family_rss=0,
+            process_family_pss=0,
+            host_mem_available_known=True,
+        )
+
+    monkeypatch.setattr(ResourceBroker, "_refresh", coherent_snapshot)
 
 
 def _task(peak: int, *, cpu: int = 1, io: int = 0, spill: int = 0,
@@ -327,4 +369,3 @@ def test_concurrent_reserve_release_same_id():
     # Token 精确归零。
     assert broker._cpu.in_use == 0
     assert broker._io.in_use == 0
-

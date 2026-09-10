@@ -1355,9 +1355,11 @@ class RankPctPolars(SeriesOperator):
         # finite cells — divergent from pandas (NEW-255 references cs_rank_01's
         # finite mask; cs_pct_rank follows the pandas authority instead).
         # Fix: drop NaN first, then rank, then divide by the NaN-free count.
-        clean = values.list.drop_nulls()
-        ranks = clean.list.eval(pl.element().rank(method="average"))
-        count = clean.list.len()
+        # Rank on the original list so null positions remain on the instrument
+        # axis.  Ranking a compressed ``drop_nulls`` list and then indexing it
+        # with the original column ordinal shifts every value after a null.
+        ranks = values.list.eval(pl.element().rank(method="average"))
+        count = values.list.drop_nulls().list.len()
         return x.with_columns([
             pl.when(values.list.get(i).is_null()).then(None)
             .otherwise(ranks.list.get(i) / count)

@@ -216,7 +216,8 @@ class ResourceBrokerProxy:
 class ParentBrokerIPC:
     """Own real leases in the parent and serve spawn-safe child proxies."""
 
-    def __init__(self, broker: Any, *, rpc_timeout_seconds: float = 5.0) -> None:
+    def __init__(self, broker: Any, *, rpc_timeout_seconds: float = 5.0,
+                 job_lease: Any | None = None) -> None:
         self.broker = broker
         self.rpc_timeout_seconds = max(0.05, float(rpc_timeout_seconds))
         self._lock = threading.RLock()
@@ -231,6 +232,9 @@ class ParentBrokerIPC:
         self._threads: list[threading.Thread] = []
         self._closing_clients: set[str] = set()
         self._closed = False
+        if job_lease is not None and getattr(job_lease, "broker", None) is not broker:
+            raise ValueError("IPC JobLease broker does not match parent broker")
+        self._job_lease = job_lease
 
     def create_proxy(self, *, cpu_quota: int | None = None,
                      io_quota: int | None = None) -> ResourceBrokerProxy:
@@ -278,7 +282,11 @@ class ParentBrokerIPC:
             except (EOFError, OSError):
                 return  # disconnect is not exit proof; leases remain charged
             try:
-                value = self._dispatch(client_id, operation, payload)
+                if self._job_lease is None:
+                    value = self._dispatch(client_id, operation, payload)
+                else:
+                    with self._job_lease.bind_context():
+                        value = self._dispatch(client_id, operation, payload)
                 connection.send((request_id, True, value))
             except Exception as exc:
                 try:

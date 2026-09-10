@@ -24,6 +24,7 @@ from __future__ import annotations
 import contextvars
 import threading
 import uuid
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -46,6 +47,11 @@ TERMINAL_RING_SIZE = 64
 _ACTIVE_JOB_LEASE: contextvars.ContextVar = contextvars.ContextVar(
     "fe_active_job_lease", default=None
 )
+
+
+def get_active_job_lease() -> Any | None:
+    """Read the current job binding without creating/switching a coordinator."""
+    return _ACTIVE_JOB_LEASE.get()
 
 
 @dataclass
@@ -103,8 +109,14 @@ class JobLease:
         return self._lease.memory_bytes
 
     @property
+    def broker(self) -> ResourceBroker:
+        return self._coordinator.broker
+
+    @property
     def released(self) -> bool:
-        return self._lease.released
+        return self._lease.released or self._coordinator.job_lease_closing(
+            self._lease.lease_id
+        )
 
     def request_child(
         self,
@@ -127,9 +139,29 @@ class JobLease:
             parent_lease_id=self._lease.lease_id,
         )
 
+    @property
+    def remaining_memory_bytes(self) -> int:
+        """Current uncommitted memory in this job's child-lease tree."""
+        return self._coordinator.remaining_child_memory(self._lease.lease_id)
+
+    def release_child(self, lease: HostResourceLease) -> bool:
+        """Release one child lease without releasing the whole job tree."""
+        if lease.parent_lease_id != self._lease.lease_id:
+            return False
+        return self._coordinator.release_lease(lease.lease_id)
+
+    @contextmanager
+    def bind_context(self):
+        """Bind this concrete job while code runs in an executor thread."""
+        token = _ACTIVE_JOB_LEASE.set(self)
+        try:
+            yield self
+        finally:
+            _ACTIVE_JOB_LEASE.reset(token)
+
     def release(self) -> None:
-        """释放整棵 job lease 树（幂等）。"""
-        self._coordinator.release_lease(self._lease.lease_id)
+        """Close admission and release the root after live children drain."""
+        self._coordinator.close_job_lease(self._lease.lease_id)
 
     def to_dict(self) -> dict[str, Any]:
         return self._lease.to_dict()
@@ -153,6 +185,7 @@ class HostResourceCoordinator:
         self._rejected: list[str] = []
         # P1-021：released lease 移到 terminal ring（避免无限增长）。
         self._terminal: list[HostResourceLease] = []
+        self._closing_job_roots: set[str] = set()
         # 显式 job 内存 lease 上限（旧 API 兼容：全局 scalar；R38 推荐 JobLease）。
         self._job_lease_bytes: int | None = None
 
@@ -231,6 +264,10 @@ class HostResourceCoordinator:
         :class:`_HostLeaseRef`（带 ``release()``，DA governor release 时一并释放）。
         """
         job = _ACTIVE_JOB_LEASE.get()
+        requested = max(0, int(memory_bytes)) + max(0, int(scan_bytes))
+        if requested <= 0:
+            requested = 1
+        lease_id = f"da-query-workspace:{getattr(job, 'lease_id', 'standalone')}:{uuid.uuid4().hex}"
         if job is None:
             # Spawned durable workers do not own a local JobLease tree. Charge
             # their DA query workspace directly to the installed parent broker
@@ -239,30 +276,30 @@ class HostResourceCoordinator:
             # query/decode workspace and resident output may coexist.
             from factor_engine.runtime.auto_memory_budget import MemoryLeaseKind
 
-            requested = max(0, int(memory_bytes)) + max(0, int(scan_bytes))
-            if requested <= 0:
-                requested = 1
             lease = self._broker.acquire_memory(
                 MemoryLeaseKind.SOURCE_READ,
                 requested,
-                lease_id="da-query-workspace",
+                lease_id=lease_id,
             )
             if lease is None:
-                raise MemoryError(
+                from data_access.core.exceptions import HostLeaseAdmissionDenied
+                raise HostLeaseAdmissionDenied(
                     f"parent broker denied DA query workspace bytes={requested}"
                 )
             return lease
-        try:
-            lease = job.request_child(
-                owner="da-scan",
-                kind=KIND_DA_SCAN,
-                memory_bytes=max(0, int(memory_bytes)),
-            )
-        except Exception:
-            return None
+        from factor_engine.runtime.auto_memory_budget import MemoryLeaseKind
+        from factor_engine.runtime.job_scoped_lease import acquire_job_scoped_memory
+
+        lease = acquire_job_scoped_memory(
+            self._broker, job, MemoryLeaseKind.SOURCE_READ, requested,
+            lease_id=lease_id,
+        )
         if lease is None:
-            return None
-        return _HostLeaseRef(self, lease)
+            from data_access.core.exceptions import HostLeaseAdmissionDenied
+            raise HostLeaseAdmissionDenied(
+                f"job lease denied DA query workspace bytes={requested}"
+            )
+        return lease
 
     def apply_da_envelope(self) -> dict[str, Any]:
         """R36 兼容别名：内部调用 :meth:`sync_da_limits`。"""
@@ -318,7 +355,8 @@ class HostResourceCoordinator:
             env = self.envelope()
             if parent_lease_id is not None:
                 parent = self._leases.get(parent_lease_id)
-                if parent is None or parent.released:
+                if (parent is None or parent.released
+                        or parent_lease_id in self._closing_job_roots):
                     self._rejected.append(f"parent_released:{owner}:{parent_lease_id}")
                     return None
                 ok, why = self._parent_has_room(
@@ -352,6 +390,43 @@ class HostResourceCoordinator:
                 parent = self._leases[parent_lease_id]
                 parent.child_lease_ids.append(lease.lease_id)
             return lease
+
+    def remaining_child_memory(self, parent_lease_id: str) -> int:
+        """Return remaining memory under one live root lease, atomically."""
+        with self._lock:
+            parent = self._leases.get(parent_lease_id)
+            if (parent is None or parent.released or parent.parent_lease_id is not None
+                    or parent_lease_id in self._closing_job_roots):
+                return 0
+            child_mem = sum(
+                child.memory_bytes
+                for child_id in parent.child_lease_ids
+                if (child := self._leases.get(child_id)) is not None
+                and not child.released
+            )
+            return max(0, parent.memory_bytes - child_mem)
+
+    def close_job_lease(self, lease_id: str) -> bool:
+        """Reject new children now; release the root after existing children drain."""
+        with self._lock:
+            root = self._leases.get(lease_id)
+            if root is None:
+                return any(item.lease_id == lease_id for item in self._terminal)
+            if root.parent_lease_id is not None:
+                return False
+            self._closing_job_roots.add(lease_id)
+            if not any(
+                (child := self._leases.get(child_id)) is not None
+                and not child.released
+                for child_id in root.child_lease_ids
+            ):
+                self._closing_job_roots.discard(lease_id)
+                return self.release_lease(lease_id)
+            return True
+
+    def job_lease_closing(self, lease_id: str) -> bool:
+        with self._lock:
+            return lease_id in self._closing_job_roots
 
     def _parent_has_room(
         self,
@@ -426,12 +501,24 @@ class HostResourceCoordinator:
             if lease is None:
                 # 已在 terminal ring（幂等）：仍返回 True（无害）。
                 return any(l.lease_id == lease_id for l in self._terminal)
+            parent_id = lease.parent_lease_id
             self._release_subtree(lease)
             # 顶层 root 从主 dict 移到 terminal ring（P1-021）。
             self._leases.pop(lease_id, None)
             self._terminal.append(lease)
             if len(self._terminal) > TERMINAL_RING_SIZE:
                 self._terminal = self._terminal[-TERMINAL_RING_SIZE:]
+            if parent_id is not None:
+                parent = self._leases.get(parent_id)
+                if parent is not None:
+                    parent.child_lease_ids = [
+                        child_id for child_id in parent.child_lease_ids
+                        if child_id != lease_id
+                    ]
+                if parent_id in self._closing_job_roots and parent is not None \
+                        and not parent.child_lease_ids:
+                    self._closing_job_roots.discard(parent_id)
+                    self.release_lease(parent_id)
             return True
 
     def _release_subtree(self, lease: HostResourceLease) -> None:

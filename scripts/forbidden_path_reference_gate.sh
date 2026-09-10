@@ -64,6 +64,14 @@ FILES="$( {
 } | grep -v "$SELF" | grep -v '/tests/' )"
 
 bad=0
+# Merge rejects/backups are not live source. Historical examples belong in an
+# explicitly reviewed evidence/archive area, never beside runtime modules.
+while IFS= read -r residual; do
+  [ -z "$residual" ] && continue
+  echo "PATH_GATE MERGE RESIDUAL: $residual"
+  bad=1
+done < <(find data_access factor_engine scripts -type f \( -name '*.orig' -o -name '*.rej' \) 2>/dev/null)
+
 while IFS= read -r f; do
   [ -z "$f" ] && continue
   skip=0
@@ -76,6 +84,13 @@ while IFS= read -r f; do
   file -b "$f" 2>/dev/null | grep -q 'text' || continue
   while IFS=: read -r _ln line; do
     matched=1
+    # One exact declaration in the read-only historical blob reconciler is
+    # data, not a live import/path. Keep the exception file-, role-, and
+    # spelling-specific so runtime imports/configuration remain forbidden.
+    if [[ "$f" == "scripts/audit_legacy_branch_content.py" \
+       && "$line" == 'LEGACY_READ_ONLY_PATH_PREFIXES = {"dataaccess/": "data_access/"}  # PATH_GATE_HISTORICAL_MAPPING' ]]; then
+      matched=0
+    fi
     for a in "${ALLOW_PATTERNS[@]}"; do
       if [[ "$line" == *"$a"* ]]; then
         matched=0

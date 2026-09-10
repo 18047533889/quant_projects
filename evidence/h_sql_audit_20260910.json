@@ -1,0 +1,79 @@
+{
+  "scope": ["H09", "H14", "H15", "H16", "H17", "H24", "H34", "H35"],
+  "commit_at_start": "c5e880db91f672d101676f92f7901361ea48522d",
+  "environment": {
+    "host": "server-c",
+    "worktree": "/home/sunhaiwei/quant_projects",
+    "duckdb": "real .venv DuckDB, in-memory bounded fixtures"
+  },
+  "tests": [
+    {
+      "command": ".venv/bin/python -m pytest -q tests/backend_sql/test_h_sql_audit_regressions.py",
+      "result": "76 passed",
+      "elapsed_seconds": 1.72
+    },
+    {
+      "command": ".venv/bin/python -m pytest -q tests/r40/test_r40_emitter.py tests/backend_sql/test_duckdb_bound_params_null_min_periods.py tests/backend/test_sql_pushdown_integration.py",
+      "result": "9 passed, 15 skipped",
+      "skip_reason": "legacy alias integration matrix skipped by existing suite"
+    }
+  ],
+  "followup_tests": [
+    {
+      "command": ".venv/bin/python -m pytest -q tests/backend_sql/test_h_sql_audit_regressions.py tests/backend_sql/test_duckdb_skew_kurt_parity.py tests/backend_sql/test_sql_registry_emitter_consistency.py",
+      "result": "711 passed, 1 skipped",
+      "elapsed_seconds": 38.04
+    },
+    {
+      "command": ".venv/bin/python -m pytest -q tests/backend_sql --maxfail=1",
+      "result": "741 passed, 23 skipped",
+      "elapsed_seconds": 38.99,
+      "skip_reason": "existing real-dataset/data-access requirements and superseded legacy alias matrix"
+    }
+  ],
+  "bounded_measurements": {
+    "joint_dag_fixture_roots": 8,
+    "joint_dag_query_utf8_bytes_upper_assertion": 8000,
+    "shared_ts_mean_compile_calls": 1,
+    "real_duckdb_explain": "completed",
+    "claim_boundary": "compiler/query structure fixture only; not production throughput"
+  },
+  "semantic_checks": {
+    "ddof": [0, 1, 2],
+    "fiscal": ["missing_period", "late_arrival", "first_revision", "latest_revision", "all_8_derivatives"],
+    "rank": ["future_append", "ties", "missing", "instrument_isolation"],
+    "min_periods_candidates": 7,
+    "cache": ["oversize_ascii", "oversize_utf8", "replacement_accounting"],
+    "template_context": ["plan", "semantic_attrs", "source", "axis", "filter", "dialect", "generation"]
+  },
+  "production_gate": {
+    "h34_h35_production_safe": false,
+    "production_safe_set_modified": false,
+    "implemented_and_parity_claims_corrected_for_15": true
+  },
+  "registry_honesty": {
+    "initial_inventory": "546 passed, 92 failed, 1 skipped",
+    "fixture_repairs": 77,
+    "explicit_sql_deferrals": {
+      "count": 15,
+      "no_emitter_branch": [
+        "ElderRay", "atr_pct", "atr_acceleration", "atr_zscore",
+        "atr_percentile", "atr_short_long_ratio", "candle_body_strength",
+        "candle_wick_balance", "candle_range_pct", "candle_pattern_count"
+      ],
+      "exact_semantics_fallback": [
+        "ofi_abs_imbalance_trend", "ofi_imbalance_persistence",
+        "ofi_reversal_rate", "aq1_accrual_stability",
+        "aq1_accrual_ratio_dispersion"
+      ],
+      "production_safe_affected": false,
+      "fallback": "existing non-SQL backend"
+    }
+  },
+  "not_claimed": [
+    "production factor certification or publication",
+    "full DataAccess-to-artifact end-to-end certification",
+    "ClickHouse numerical parity for DuckDB-only fiscal and trailing-rank paths",
+    "production throughput or memory improvement"
+  ]
+}

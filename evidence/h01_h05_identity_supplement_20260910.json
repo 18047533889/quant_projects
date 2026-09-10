@@ -1,0 +1,31 @@
+{
+  "record": "H01-H05 identity supplement",
+  "date": "2026-09-10",
+  "workspace": "/home/sunhaiwei/quant_projects",
+  "base_head_observed_before_work": "c5e880db91f672d101676f92f7901361ea48522d",
+  "identity_schema_changes": {
+    "code": "resolved bytecode argval plus explicit call flag and normalized jump target",
+    "callable": "code, defaults, kwdefaults, named closure bindings; cycle/depth/byte bounds",
+    "frame": "dtype-preserving per-column bytes, structured labels, axis/mask metadata",
+    "catalog": "detached recursive immutable snapshot including sequences, sets and arrays",
+    "execution_variant": "execution-variant-v2: physical spec/id when declared, actual code digest, delegate/native kind and fusion identity"
+  },
+  "verification": [
+    {
+      "command_scope": "factor_engine/tests/operators/test_h01_h05_identity_20260910.py",
+      "result": "14 passed after supplemental boundary review"
+    },
+    {
+      "command_scope": "test_r10_registry_identity.py, test_r7_panel_identity.py, test_r9_panel_identity_2026_08.py, test_v9_cpu_bridge_identity.py",
+      "result": "49 passed"
+    }
+  ],
+  "certificate_effect": "Identity schema changed. Existing certificates and cache keys are not relabeled PASS; affected evidence requires explicit stale marking/recomputation by its owning workflow.",
+  "production_gate_effect": "No production admission gate was relaxed. Missing or incomplete PhysicalImplementationSpec remains ineligible; heuristic Polars classification is identity diagnostics only.",
+  "limitations": [
+    "No production factor was published or executed.",
+    "No historical certificate or persistent cache was rewritten.",
+    "SQL emitter, accelerator ABI, and fused-region end-to-end execution were not available in this bounded test set.",
+    "Python bytecode identity is explicitly build-scoped to interpreter name and major/minor version; cross-version certificate reuse is intentionally invalidated."
+  ]
+}

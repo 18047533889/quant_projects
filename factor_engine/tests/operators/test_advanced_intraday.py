@@ -43,6 +43,9 @@ def test_intraday_wasserstein_pair_distance_basic() -> None:
 
     # Create sample data
     x = pd.DataFrame(np.random.randn(20, 10), index=idx, columns=cols)
+    y = pd.DataFrame(np.random.randn(20, 10), index=idx, columns=cols)
+    y = pd.DataFrame(np.random.randn(20, 10), index=idx, columns=cols)
+    y = pd.DataFrame(np.random.randn(20, 10), index=idx, columns=cols)
 
     op = _op("intraday_wasserstein_pair_distance")
     # Get param names from metadata
@@ -50,7 +53,7 @@ def test_intraday_wasserstein_pair_distance_basic() -> None:
 
     # Call with default parameters
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, y)
 
         # Basic shape check
         assert result.shape == x.shape, f"{result.shape} != {x.shape}"
@@ -71,11 +74,12 @@ def test_intraday_wasserstein_pair_distance_handles_nans() -> None:
     # Data with NaNs
     data = [[1.0, np.nan, 3.0]] * 10
     x = pd.DataFrame(data, index=idx, columns=cols)
+    y = x.copy()
 
     op = _op("intraday_wasserstein_pair_distance")
 
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, y)
 
         # Should not raise, should return DataFrame
         assert isinstance(result, pd.DataFrame)
@@ -92,11 +96,12 @@ def test_intraday_wasserstein_pair_distance_handles_inf() -> None:
     # Data with infinities
     data = [[1.0, np.inf], [2.0, -np.inf], [3.0, 4.0]] * 3 + [[5.0, 6.0]]
     x = pd.DataFrame(data, index=idx, columns=cols)
+    y = x.replace([np.inf, -np.inf], np.nan)
 
     op = _op("intraday_wasserstein_pair_distance")
 
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, y)
 
         # Should handle inf gracefully (typically return NaN)
         assert isinstance(result, pd.DataFrame)
@@ -111,7 +116,7 @@ def test_intraday_wasserstein_pair_distance_empty_input() -> None:
     op = _op("intraday_wasserstein_pair_distance")
 
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, x)
 
         # Should return empty DataFrame
         assert isinstance(result, pd.DataFrame)
@@ -125,16 +130,23 @@ def test_intraday_wasserstein_pair_distance_single_column() -> None:
     """Single column test."""
     idx = pd.date_range("2024-01-01", periods=20)
     x = pd.DataFrame({"A": range(20)}, index=idx)
+    y = pd.DataFrame({"A": range(20, 40)}, index=idx)
 
     op = _op("intraday_wasserstein_pair_distance")
 
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, y)
 
         assert isinstance(result, pd.DataFrame)
         assert result.shape[1] == 1
     except Exception as e:
         pytest.fail(f"{op} failed on single column: {e}")
+
+
+def test_intraday_wasserstein_pair_distance_requires_both_inputs() -> None:
+    x = pd.DataFrame({"A": range(20)}, index=pd.date_range("2024-01-01", periods=20))
+    with pytest.raises(TypeError, match="missing 1 required positional argument: 'y'"):
+        _op("intraday_wasserstein_pair_distance").calculate(x)
 
 
 # ---------------------------------------------------------------------------
@@ -148,6 +160,7 @@ def test_baseline_scaled_wasserstein_distance_basic() -> None:
 
     # Create sample data
     x = pd.DataFrame(np.random.randn(20, 10), index=idx, columns=cols)
+    y = pd.DataFrame(np.random.randn(20, 10), index=idx, columns=cols)
 
     op = _op("baseline_scaled_wasserstein_distance")
     # Get param names from metadata
@@ -155,7 +168,7 @@ def test_baseline_scaled_wasserstein_distance_basic() -> None:
 
     # Call with default parameters
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, y)
 
         # Basic shape check
         assert result.shape == x.shape, f"{result.shape} != {x.shape}"
@@ -176,11 +189,12 @@ def test_baseline_scaled_wasserstein_distance_handles_nans() -> None:
     # Data with NaNs
     data = [[1.0, np.nan, 3.0]] * 10
     x = pd.DataFrame(data, index=idx, columns=cols)
+    y = x.copy()
 
     op = _op("baseline_scaled_wasserstein_distance")
 
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, y)
 
         # Should not raise, should return DataFrame
         assert isinstance(result, pd.DataFrame)
@@ -197,11 +211,12 @@ def test_baseline_scaled_wasserstein_distance_handles_inf() -> None:
     # Data with infinities
     data = [[1.0, np.inf], [2.0, -np.inf], [3.0, 4.0]] * 3 + [[5.0, 6.0]]
     x = pd.DataFrame(data, index=idx, columns=cols)
+    y = x.replace([np.inf, -np.inf], np.nan)
 
     op = _op("baseline_scaled_wasserstein_distance")
 
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, y)
 
         # Should handle inf gracefully (typically return NaN)
         assert isinstance(result, pd.DataFrame)
@@ -216,7 +231,7 @@ def test_baseline_scaled_wasserstein_distance_empty_input() -> None:
     op = _op("baseline_scaled_wasserstein_distance")
 
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, x)
 
         # Should return empty DataFrame
         assert isinstance(result, pd.DataFrame)
@@ -230,11 +245,12 @@ def test_baseline_scaled_wasserstein_distance_single_column() -> None:
     """Single column test."""
     idx = pd.date_range("2024-01-01", periods=20)
     x = pd.DataFrame({"A": range(20)}, index=idx)
+    y = pd.DataFrame({"A": range(20, 40)}, index=idx)
 
     op = _op("baseline_scaled_wasserstein_distance")
 
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, y)
 
         assert isinstance(result, pd.DataFrame)
         assert result.shape[1] == 1
@@ -253,6 +269,8 @@ def test_intraday_barrier_approach_acceleration_basic() -> None:
 
     # Create sample data
     x = pd.DataFrame(np.random.randn(20, 10), index=idx, columns=cols)
+    high_limit = pd.DataFrame(10.0, index=idx, columns=cols)
+    low_limit = pd.DataFrame(-10.0, index=idx, columns=cols)
 
     op = _op("intraday_barrier_approach_acceleration")
     # Get param names from metadata
@@ -260,7 +278,7 @@ def test_intraday_barrier_approach_acceleration_basic() -> None:
 
     # Call with default parameters
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, high_limit, low_limit)
 
         # Basic shape check
         assert result.shape == x.shape, f"{result.shape} != {x.shape}"
@@ -281,11 +299,13 @@ def test_intraday_barrier_approach_acceleration_handles_nans() -> None:
     # Data with NaNs
     data = [[1.0, np.nan, 3.0]] * 10
     x = pd.DataFrame(data, index=idx, columns=cols)
+    high_limit = pd.DataFrame(10.0, index=idx, columns=cols)
+    low_limit = pd.DataFrame(-10.0, index=idx, columns=cols)
 
     op = _op("intraday_barrier_approach_acceleration")
 
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, high_limit, low_limit)
 
         # Should not raise, should return DataFrame
         assert isinstance(result, pd.DataFrame)
@@ -302,11 +322,13 @@ def test_intraday_barrier_approach_acceleration_handles_inf() -> None:
     # Data with infinities
     data = [[1.0, np.inf], [2.0, -np.inf], [3.0, 4.0]] * 3 + [[5.0, 6.0]]
     x = pd.DataFrame(data, index=idx, columns=cols)
+    high_limit = pd.DataFrame(10.0, index=idx, columns=cols)
+    low_limit = pd.DataFrame(-10.0, index=idx, columns=cols)
 
     op = _op("intraday_barrier_approach_acceleration")
 
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, high_limit, low_limit)
 
         # Should handle inf gracefully (typically return NaN)
         assert isinstance(result, pd.DataFrame)
@@ -321,7 +343,7 @@ def test_intraday_barrier_approach_acceleration_empty_input() -> None:
     op = _op("intraday_barrier_approach_acceleration")
 
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, x, x)
 
         # Should return empty DataFrame
         assert isinstance(result, pd.DataFrame)
@@ -335,11 +357,13 @@ def test_intraday_barrier_approach_acceleration_single_column() -> None:
     """Single column test."""
     idx = pd.date_range("2024-01-01", periods=20)
     x = pd.DataFrame({"A": range(20)}, index=idx)
+    high_limit = pd.DataFrame({"A": [30.0] * 20}, index=idx)
+    low_limit = pd.DataFrame({"A": [-10.0] * 20}, index=idx)
 
     op = _op("intraday_barrier_approach_acceleration")
 
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, high_limit, low_limit)
 
         assert isinstance(result, pd.DataFrame)
         assert result.shape[1] == 1

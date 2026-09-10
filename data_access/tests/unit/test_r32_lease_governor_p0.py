@@ -11,7 +11,11 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from data_access.core.exceptions import DeadlineExceeded, ResourceAdmissionError
+from data_access.core.exceptions import (
+    DeadlineExceeded,
+    HostLeaseAdmissionDenied,
+    ResourceAdmissionError,
+)
 from data_access.r30.execution_lease import ExecutionLease
 from data_access.r30.resolution_lease import ResolutionLease
 from data_access.runtime.resource_governor import GlobalResourceGovernor, ResourceReservation
@@ -358,6 +362,30 @@ def test_r32_gov_002_broken_host_coordinator_fails_no_fallback():
         with pytest.raises(ResourceAdmissionError):
             gov.admit(r)
 
+        assert gov.active_count() == 0
+    finally:
+        reset_runtime_mode_identity(token)
+
+
+@pytest.mark.parametrize("mode", ["interactive_research", "production"])
+def test_host_lease_explicit_denial_never_falls_back(mode):
+    """An authoritative host denial is fail-closed in every runtime mode."""
+    from data_access.runtime.mode_identity import (
+        reset_runtime_mode_identity,
+        set_runtime_mode_identity,
+    )
+
+    token = set_runtime_mode_identity(mode, source="test")
+    try:
+        gov = GlobalResourceGovernor(max_total_reserved_memory=10000)
+
+        def denied(*_):
+            raise HostLeaseAdmissionDenied("job child budget exhausted")
+
+        gov.set_host_lease_request(denied)
+        with pytest.raises(ResourceAdmissionError, match="authoritative host lease") as exc_info:
+            gov.admit(ResourceReservation(f"denied-{mode}", "principal", estimated_memory=100))
+        assert isinstance(exc_info.value.__cause__, HostLeaseAdmissionDenied)
         assert gov.active_count() == 0
     finally:
         reset_runtime_mode_identity(token)

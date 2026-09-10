@@ -106,15 +106,32 @@ def test_plan_ref_reuses_lazy_cache_no_pandas_roundtrip(source, monkeypatch):
 def test_run_many_shared_lazy_only_defers_collect(source, monkeypatch):
     """CSE 共享子树应 compile-only，不在 shared 阶段 collect。"""
     import polars as pl
+    from contextvars import ContextVar
+    from factor_engine.runtime import batch_service
+    from factor_engine.runtime.buffer_ref import SourceWaveExecutor
 
-    collect_count = {"n": 0}
+    phase = ContextVar("collect_phase", default="root")
+    collect_count = {"source": 0, "shared": 0, "root": 0}
     orig_collect = pl.LazyFrame.collect
 
+    def in_phase(name, fn):
+        def wrapped(*args, **kwargs):
+            token = phase.set(name)
+            try:
+                return fn(*args, **kwargs)
+            finally:
+                phase.reset(token)
+        return wrapped
+
     def counting_collect(self, *args, **kwargs):
-        collect_count["n"] += 1
+        collect_count[phase.get()] += 1
         return orig_collect(self, *args, **kwargs)
 
     monkeypatch.setattr(pl.LazyFrame, "collect", counting_collect)
+    monkeypatch.setattr(SourceWaveExecutor, "execute_wave",
+                        in_phase("source", SourceWaveExecutor.execute_wave))
+    monkeypatch.setattr(batch_service, "_materialize_shared_subplan",
+                        in_phase("shared", batch_service._materialize_shared_subplan))
 
     sub = ts_mean(col("close"), 2)
     f1 = Factor(name="a", expr=sub)
@@ -123,8 +140,9 @@ def test_run_many_shared_lazy_only_defers_collect(source, monkeypatch):
     out = eng.run_many([f1, f2])
     assert len(out["dag"].shared_nodes) >= 1
     assert not out.get("production_pandas_fallbacks")
-    # shared compile-only + 两个 root 各 collect 一次
-    assert collect_count["n"] == 2
+    # One bounded source-wave materialization is distinct from CSE collect.
+    # Shared compilation stays lazy; each of the two roots collects once.
+    assert collect_count == {"source": 1, "shared": 0, "root": 2}
 
 
 def test_run_many_shared_lazy_only_skips_series_cache(source):

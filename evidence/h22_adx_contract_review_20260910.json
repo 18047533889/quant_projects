@@ -1,0 +1,21 @@
+{
+  "record": "H22 ADX parameter-aware stateful contract review",
+  "date": "2026-09-10",
+  "workspace": "/home/sunhaiwei/quant_projects",
+  "changes": {
+    "registry": "The actual Pandas ADX winner declares window as a searchable positive integer horizon with default 14.",
+    "stateful_contract": "ADX minimum history is resolved as 2 * window; the default remains 28 and the semantic version is 4.0.",
+    "validation_gate": "The real segmented-execution gate binds window=14 explicitly and records both the executed parameters and parameter-aware minimum history."
+  },
+  "verification": {
+    "dedicated": "14 passed, 2 warnings",
+    "bounded_regression": "88 passed, 3 warnings",
+    "windows": "window 5/14/20 require 10/28/40 rows and retain first-finite indices 9/27/39",
+    "checkpoint": "ADX semantic-version 3.0 checkpoint is rejected against contract version 4.0"
+  },
+  "limitations": [
+    "No production factor was published and no deployment was performed.",
+    "Warnings concern pre-existing test-only unknown Polars physical specifications.",
+    "The static minimum_history field remains 28 for backward-compatible callers; parameter-aware callers use minimum_history_for(params)."
+  ]
+}

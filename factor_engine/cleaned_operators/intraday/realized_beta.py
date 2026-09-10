@@ -58,7 +58,11 @@ def _aligned_market(
     raw = close.to_numpy(dtype=float)
     with np_errstate():
         logr = np.full_like(raw, np.nan, dtype=float)
-        logr[1:, :] = np.log(raw[1:, :] / raw[:-1, :])
+        adjacent = (
+            np.isfinite(raw[1:, :]) & np.isfinite(raw[:-1, :])
+            & (raw[1:, :] > 0.0) & (raw[:-1, :] > 0.0)
+        )
+        logr[1:, :] = np.where(adjacent, np.log(raw[1:, :] / raw[:-1, :]), np.nan)
         # P0: hard-break at calendar-day boundaries only; the am/pm lunch-break
         # policy stays governed by the session contract (no invented break).
         days = close.index.normalize().to_numpy()
@@ -69,7 +73,7 @@ def _aligned_market(
     rets = pd.DataFrame(logr, index=close.index, columns=close.columns)
     w_bc = broadcast_daily_panel(close, weights)
     w_bc = w_bc.where(np.isfinite(w_bc) & (w_bc > 0.0))  # P1-104: invalid cap -> excluded
-    w_ret = w_bc.where(rets.notna())
+    w_ret = w_bc.where(np.isfinite(rets))
     with np_errstate():
         num = (rets * w_bc).sum(axis=1)
         den = w_ret.sum(axis=1)
@@ -89,8 +93,11 @@ def _market_return_ex_self(rets: pd.DataFrame, w_bc: pd.DataFrame, w_ret: pd.Dat
     instrument's own contribution prevents large-capitalisation names from
     mechanically inflating their own market beta / commonality.
     """
-    num = (rets * w_bc).sum(axis=1) - rets[inst] * w_bc[inst]
-    den = w_ret.sum(axis=1) - w_ret[inst]
+    valid = np.isfinite(rets) & np.isfinite(w_bc) & (w_bc > 0.0)
+    contributions = (rets * w_bc).where(valid, 0.0)
+    effective_weights = w_bc.where(valid, 0.0)
+    num = contributions.sum(axis=1) - contributions[inst]
+    den = effective_weights.sum(axis=1) - effective_weights[inst]
     with np_errstate():
         m = pd.Series(
             np.where(np.isfinite(den) & (np.abs(den) > _EPS), num / den, np.nan),
@@ -111,6 +118,7 @@ def _beta_daily(close: pd.DataFrame, weights: pd.DataFrame, fn: Callable[[np.nda
     # return shares the minute index of ``rets``), then keep the dropna (it
     # only removes rows where the PRIMARY column is NaN).
     require_same_session_grid(rets, mkt)
+    all_days = pd.DatetimeIndex(close.index.normalize().unique()).sort_values()
     out: dict[str, pd.Series] = {}
     for inst in close.columns:
         m = _market_return_ex_self(rets, w_bc, w_ret, inst) if ex_self else mkt
@@ -127,7 +135,7 @@ def _beta_daily(close: pd.DataFrame, weights: pd.DataFrame, fn: Callable[[np.nda
                 per_day[day] = float(fn(rr, mm))
             except (DataDegeneracy, ZeroDivisionError, OverflowError):
                 per_day[day] = np.nan
-        out[inst] = pd.Series(per_day, dtype=float)
+        out[inst] = pd.Series(per_day, dtype=float).reindex(all_days)
     if not out:
         return pd.DataFrame(dtype=float)
     return pd.DataFrame(out).sort_index()
@@ -236,15 +244,20 @@ def _idio_kurtosis(r: np.ndarray, m: np.ndarray) -> float:
 
 
 def _market_r2(r: np.ndarray, m: np.ndarray) -> float:
-    fit = _market_model(r, m)
+    valid = np.isfinite(r) & np.isfinite(m)
+    paired_r = r[valid]
+    fit = _market_model(paired_r, m[valid])
     if fit is None:
         return np.nan
     e = fit[2]
     ss_res = float(np.sum(e * e))
-    ss_tot = float(np.sum((r - np.mean(r)) ** 2))
-    if ss_tot <= _EPS:
+    ss_tot = float(np.sum((paired_r - np.mean(paired_r)) ** 2))
+    if not np.isfinite(ss_res) or not np.isfinite(ss_tot) or ss_tot <= _EPS:
         return np.nan
-    return float(max(0.0, 1.0 - ss_res / ss_tot))
+    value = 1.0 - ss_res / ss_tot
+    if not np.isfinite(value):
+        return np.nan
+    return float(np.clip(value, 0.0, 1.0))
 
 
 def _op(name: str, description: str, unit: str):

@@ -1,0 +1,68 @@
+{
+  "record": "H10/H25/H26 dependency and merge hygiene supplement",
+  "date": "2026-09-10",
+  "workspace": "/home/sunhaiwei/quant_projects",
+  "H10": {
+    "decision": "Raise declared minima to APIs used directly by source.",
+    "pandas_minimum": "2.1",
+    "polars_minimum": "1.21",
+    "synchronized_declarations": ["pyproject.toml", "factor_engine/pyproject.toml", "data_access/pyproject.toml"],
+    "team_lock_observed": {"pandas": "2.3.3", "polars": "1.42.1"},
+    "limitation": "No alternate minimum-version environment was installed or executed."
+  },
+  "H25": {
+    "adjudication": [
+      {
+        "path": "data_access/read/scan_handle.py.orig",
+        "sha256": "6958a32c35d61e5c7bba1462f08ab8ff70dfa42bf1695465501eb3a7adce5546",
+        "decision": "redundant",
+        "evidence": "Byte-identical to data_access/read/scan_handle.py (sha256 6958a32c35d61e5c7bba1462f08ab8ff70dfa42bf1695465501eb3a7adce5546)."
+      },
+      {
+        "path": "factor_engine/backend/polars_lazy.py.orig",
+        "sha256": "e4a432b779dc72475c83542e0a60e397b218b58431994ba32b8c7564b3065cd4",
+        "decision": "superseded and withdrawn experiment",
+        "hunks": [
+          "lines 10-72: attempted lazy approved-content checking; current policy instead keeps approved reads on the strict eager ReadHandle path until lazy has equivalent identity, so this D02 experiment is not restored",
+          "LazyColumnBundle identity fields/build arguments: removed with the withdrawn lazy-approved experiment, not evidence that eager approval checks were removed",
+          "materialize_columns/cache hunks: replaced by H36 physical-key cache namespace, lock, request-owned references, exact key-set checks and boundary-only rename"
+        ],
+        "evidence": "Current implementation contains newer H36 cache completeness/locking behavior; copying the backup would regress it."
+      },
+      {
+        "path": "factor_engine/backend/polars_lazy.py.rej",
+        "sha256": "72a663a88f04f19ea5589ac6d884df1e8081ef15b98830b9cdd9803182de6c12",
+        "decision": "actively rejected",
+        "hunks": ["single rejected hunk lines 7-69 removes the abandoned lazy-approved helper/signature and cannot be replayed as a protection fix"],
+        "evidence": "This reject belongs to the withdrawn D02 lazy experiment. Current approved-source protection is the strict eager path in DataAccessSource; the reject is not a pending fix and must not be replayed."
+      },
+      {
+        "path": "factor_engine/storage/sources/data_access_source.py.orig",
+        "sha256": "1836f1b4803635cd3cd6a679fab59f72cc08b20ffb304b50f2623d704388d41e",
+        "decision": "superseded",
+        "hunks": [
+          "load_columns entry: current source fences cache normalization identity before reuse",
+          "use_lazy_read: current source documents and enforces approved digest -> strict eager route",
+          "lazy call arguments: obsolete comments/experimental arguments removed",
+          "_prefetch_lazy_bundle: current source captures request_approved_digest and checks it before and after materialization",
+          "materialization ordering: current source records the observed bundle snapshot after materialization and validates before cache publication"
+        ],
+        "evidence": "No backup-only behavior is needed; copying it would remove newer normalization and request snapshot fencing."
+      }
+    ],
+    "formal_source_change": "None; polars_lazy.py formal source was reviewed read-only and not edited by this work package."
+  },
+  "H26": {
+    "decision": "Keep the historical mapping as a declarative read-only mapping and allow only its exact declaration in the path gate.",
+    "negative_control": "A normal runtime Python file containing an old-package import remains rejected.",
+    "positive_control": "dataaccess/read/scan_handle.py maps to data_access/read/scan_handle.py in the history reconciler."
+  },
+  "verification": {
+    "identity_and_component_plus_scan_regression": "69 passed",
+    "persistent_path_gate_controls": "3 passed",
+    "path_gate_positive": "PASS",
+    "old_runtime_import_negative": "rejected",
+    "merge_residual_negative": "rejected",
+    "metadata_parse": "H10_METADATA_OK"
+  }
+}

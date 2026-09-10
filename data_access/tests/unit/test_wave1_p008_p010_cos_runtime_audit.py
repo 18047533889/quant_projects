@@ -118,7 +118,7 @@ def test_p0_08_no_implicit_gc_trigger_in_publisher():
 # ---- P0-09: writer lease / 崩溃资源（DISPROVEN → 测试固定） -------------
 
 
-def test_p0_09_memory_lease_released_on_writer_failure(tmp_path):
+def test_p0_09_memory_lease_released_on_writer_failure(tmp_path, monkeypatch):
     import numpy as np
     from data_access.read.object_store import LocalObjectStore
     from factor_engine.runtime.resource_broker import ResourceBroker
@@ -132,6 +132,12 @@ def test_p0_09_memory_lease_released_on_writer_failure(tmp_path):
         min_host_reserve_gb=0.0,
     )
     store = LocalObjectStore(tmp_path / "obj")
+    # This fixture validates real lease accounting on uploader failure, not
+    # host/cgroup discovery. A 64 MiB configured cap on a busy host correctly
+    # yields zero live headroom; give this tiny unit fixture explicit budget.
+    monkeypatch.setattr(broker, "execution_budget", lambda: 64 * 1024 * 1024)
+    from factor_engine.runtime import remote_factor_block_writer as writer_module
+    monkeypatch.setattr(writer_module, "_ACQUIRE_TIMEOUT_S", 0.1)
 
     class _FailingPublisher:
         """add_object 抛错的 publisher —— 模拟上传中途失败。"""

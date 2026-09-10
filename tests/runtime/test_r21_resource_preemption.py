@@ -32,7 +32,8 @@ def test_memory_budget_is_never_4x_hard_limit() -> None:
     detected = effective_memory_limit_bytes()
     mgr = ConcurrentTokenManager(memory_budget_bytes=None)  # default probe path
     assert mgr.memory_budget_bytes == detected
-    assert mgr.memory_budget_bytes <= 32 * 1024**3 + 1  # no x4 blowup on host RAM
+    # Equality above detects amplification on every host, including >32 GiB.
+    # Do not mistake an old test machine's RAM for a universal hard limit.
     assert mgr.memory_budget_bytes > 0
     # cpu budget also derived from real detection, not hardcoded 8.
     assert mgr.cpu_budget == effective_cpu_slots()
@@ -123,7 +124,10 @@ def test_startup_resource_budget_detects_cpu_and_ram() -> None:
     assert budget.hard_cpu_cores >= 1
     assert budget.hard_memory_limit_bytes >= 1
     assert budget.hard_memory_limit_bytes == effective_memory_limit_bytes()
-    assert budget.hard_cpu_cores == effective_cpu_slots()
+    # A valid user CPU cap may be lower than the probed hardware ceiling.
+    assert effective_cpu_slots() <= budget.hard_cpu_cores
+    assert effective_cpu_slots(explicit=budget.hard_cpu_cores) == budget.hard_cpu_cores
+
 
     # cpuset detection, when available, is reflected in the hard CPU count.
     if budget.cpuset_cores is not None:

@@ -2882,6 +2882,8 @@ class DataAccessSource(DataSource):
             # #收官轮 P0：read_mode / semantic_filters 贯穿到 DataAccess scan。
             mode=self.read_mode,
             filters=self.semantic_filters or None,
+            # Source owns the sole resident cache/lease for these payloads.
+            materialized_budget=0,
         )
         if old_bundle is not None and old_bundle is not self._lazy_bundle:
             if hasattr(old_bundle, "close") and callable(old_bundle.close):

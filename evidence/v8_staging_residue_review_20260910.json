@@ -1,0 +1,30 @@
+{
+  "record": "V8 ignored staging residue absorption review",
+  "date": "2026-09-10",
+  "workspace": "/home/sunhaiwei/quant_projects",
+  "decision": "All staged source and tests are absorbed or superseded by formal runtime files; remove the three ignored staging directories without widening CLEAN-004 exclusions.",
+  "source_sha256": {
+    ".v8_finite_stage/finite_manifest_staged.py": "fbc83d2f8a5bd8ccc4a9e76366677944b245d862f68b695d73b0c41bbdfa1eed",
+    ".v8_finite_stage/test_finite_manifest_ingest_cleanup.py": "a3ab76c621ae28e2e5fecb33a5d44649486a76d4f43f3acd2e2acf8384b75ffd",
+    ".v8_finite_stage/test_finite_manifest_ingest_cleanup_prod.py": "419db28d8631585f1c7e7351bf95822e55ac59ed6dceaba6b734c09cc93a8f42",
+    ".v8_finite_stage/test_v8_ownership_store_selection.py": "463989ba38e9925c4a66bb4b1b9e71b012e6c977b68d42cd07d89f538eaef08c",
+    ".v8_finite_stage/test_v8_worker_initialization_gate.py": "244d62faf844336978faeb213aa8387fba2ea4d0fd1b9a719d289e6e177f3399",
+    ".v8_finite_stage/test_v8_worker_initialization_gate_edges.py": "3f5d34e4875451c4c99fd7676831e952bcc8c5a29e7442c6bf1190af543590a2",
+    ".v8_finite_stage/worker_ownership_routing.py": "857c5e7ac6727a3dc6c2fbca36485edb0c5468bc8a366c96e42d42846d4c80bf",
+    ".v8_ingest_ownership/finite_manifest.py": "9e56e9e82a662fd263cacfa4a2f7499ec33d733589e03502bb9e757fa559b31d",
+    ".v8_ingest_ownership/test_finite_manifest_ownership.py": "5deac971d2d28594a213c1aa279a996a1193fd95ce13f5457890f33c10cfd1f0",
+    ".v8_inspection_stage/factor_engine/runtime/worker_ownership.py": "2449f0ed24399ce98e73dc333f4235cf1dabd14784c8f84b200172ab365ffa73",
+    ".v8_inspection_stage/factor_engine/tests/runtime/test_v8_worker_ownership_inspection.py": "227bc229f70a829059ed04a0bd55911ece5b4d578dd898f3d8f13643f4246e0b"
+  },
+  "absorption": {
+    "finite_manifest": "Both staged generations expose the same manifest classes/ingestion child surface; formal factor_engine/runtime/finite_manifest.py contains the later bounded-pickle, timeout hierarchy, ownership and cleanup hardening.",
+    "worker_ownership": "Formal worker_ownership.py contains the staged APIs plus later store selection/routing and mutation-boundary conflict recheck.",
+    "exact_test_copies": "Ownership-store selection, both worker initialization suites, and worker ownership inspection are byte-identical to formal tests.",
+    "evolved_tests": "Finite ingest cleanup and manifest ingestion ownership formal suites retain every staged test function and add later edge coverage."
+  },
+  "formal_sha256_at_review": {
+    "factor_engine/runtime/finite_manifest.py": "4d8abb768d9d6bf6724f31dcc13c45a8f7acce2159fb2abbbff1e6ad1e3c7622",
+    "factor_engine/runtime/worker_ownership.py": "fe1ee1bb282c11669bc89b46616be4efbac21b7450689f87e47622b924460a7b"
+  },
+  "cleanup": "Removed only .v8_finite_stage, .v8_ingest_ownership and .v8_inspection_stage after recording hashes; no tracked or formal runtime file was removed."
+}

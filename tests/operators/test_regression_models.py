@@ -197,13 +197,8 @@ def test_predictive_regression_excludes_current_observation() -> None:
     )
 
 
-def test_ar_coefficient_uses_exactly_w_pairs() -> None:
-    """POISON TEST: AR(lag) must use exactly W pairs (W+lag observations).
-
-    For window=W, lag=L, the segment must be [t-W-L+1, t], yielding W pairs after
-    lagging. Perturbing t-W-L (outside) should NOT change output; perturbing
-    t-W-L+1 (inside, the first lagged obs) MUST change output.
-    """
+def test_ar_coefficient_uses_exactly_w_source_rows() -> None:
+    """AR window=W uses [t-W+1,t], yielding exactly W-lag pairs."""
     rng = np.random.default_rng(44)
     n = 100
     w = 20
@@ -214,39 +209,33 @@ def test_ar_coefficient_uses_exactly_w_pairs() -> None:
     op = OperatorRegistry.get("ts_ar_coefficient")
     base_out = op.calculate(x_base, window=w, lag=lag, min_periods=5)
 
-    # For last row at index n-1=99, window=20, lag=2: need segment [78, 99] = 22 rows → 20 pairs
-    # Poison row at (n-1)-w-lag = 99-20-2 = 77 (outside the window)
     last_row = n - 1
     x_poison_outside = x_base.copy()
-    x_poison_outside.iloc[last_row - w - lag, :] = 1e10
+    x_poison_outside.iloc[last_row - w, :] = 1e10
     out_outside = op.calculate(x_poison_outside, window=w, lag=lag, min_periods=5)
 
     np.testing.assert_allclose(
         base_out.iloc[-1].to_numpy(),
         out_outside.iloc[-1].to_numpy(),
         rtol=1e-9,
-        err_msg="AR coefficient changed when row at t-W-lag was poisoned (window too wide)",
+        err_msg="AR coefficient changed when the row at t-W was poisoned",
     )
 
-    # Poison row at (n-1)-w-lag+1 = 78 (first row of the window [78, 99])
     x_poison_inside = x_base.copy()
-    x_poison_inside.iloc[last_row - w - lag + 1, :] = 1e10
+    x_poison_inside.iloc[last_row - w + 1, :] = 1e10
     out_inside = op.calculate(x_poison_inside, window=w, lag=lag, min_periods=5)
 
     diff = np.abs(base_out.iloc[-1].to_numpy() - out_inside.iloc[-1].to_numpy())
     assert np.all(diff > 1e-6), (
-        f"AR coefficient did NOT change when row at t-W-lag+1 was poisoned (window too narrow): diff={diff}"
+        f"AR coefficient did not change when the first source row t-W+1 was poisoned: diff={diff}"
     )
 
-    # Poison row 78 (t-W-lag+1 = 78, first row of the window [78, 99])
-    x_poison_inside = x_base.copy()
-    x_poison_inside.iloc[n - w - lag + 1, :] = 1e10
-    out_inside = op.calculate(x_poison_inside, window=w, lag=lag, min_periods=5)
-
-    diff = np.abs(base_out.iloc[-1].to_numpy() - out_inside.iloc[-1].to_numpy())
-    assert np.all(diff > 1e-6), (
-        f"AR coefficient did NOT change when row at t-W-lag+1 was poisoned (window too narrow): diff={diff}"
-    )
+    segment = x_base.iloc[-w:].to_numpy()
+    for col in range(segment.shape[1]):
+        current, lagged = segment[lag:, col], segment[:-lag, col]
+        design = np.column_stack([np.ones(w - lag), lagged])
+        reference = np.linalg.lstsq(design, current, rcond=None)[0][1]
+        assert base_out.iloc[-1, col] == pytest.approx(reference, abs=1e-12)
 
 
 def test_predictive_regression_manual_window_parity() -> None:

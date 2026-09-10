@@ -1,4 +1,5 @@
 """Small synthetic regression tests: no market data or large allocations."""
+from dataclasses import replace
 import gc
 import weakref
 from types import SimpleNamespace
@@ -11,6 +12,18 @@ from factor_engine.runtime.batch_service import (
     execute_run_many_parallel,
 )
 from factor_engine.runtime.adaptive_batch_scheduler import AdaptiveBatchScheduler
+
+
+def _bind_coherent_snapshot(broker):
+    hard = broker.hard_memory_limit
+    snapshot = replace(
+        broker.snapshot(), hard_memory_limit=hard,
+        cgroup_memory_current=0, host_mem_available=hard,
+        process_rss=0, worker_rss=0, process_family_rss=0,
+        process_family_pss=0, host_mem_available_known=True,
+    )
+    broker._refresh = lambda force=False: snapshot
+    return broker
 
 
 @pytest.mark.parametrize("entry", [execute_run_many, execute_run_many_parallel])
@@ -77,13 +90,36 @@ def serial_scheduler():
     scheduler._task_timing = {}
     scheduler._explanations = []
     scheduler._wave_summary = {}
-    scheduler.broker = SimpleNamespace(summary=lambda: {})
+    from factor_engine.runtime.resource_broker import ResourceBroker, ResourceSnapshot
+    from factor_engine.runtime.task_resource_contract import TaskResourceContract
+
+    scheduler.broker = ResourceBroker(
+        hard_memory_limit=1024**3, cpu_slots=1,
+        min_host_reserve_gb=0, min_host_reserve_fraction=0,
+    )
+    snapshot = ResourceSnapshot(
+        timestamp_ms=0, hard_cpu_slots=1, system_cpu_util=0, our_cpu_util=0,
+        external_cpu_util=0, loadavg=0, hard_memory_limit=1024**3,
+        cgroup_memory_current=0, host_mem_available=1024**3,
+        process_rss=0, worker_rss=0, process_family_rss=0,
+        process_family_pss=0, spill_free_bytes=1024**3,
+        spill_total_bytes=2 * 1024**3, disk_busy=0,
+        host_mem_available_known=True,
+    )
+    scheduler.broker._refresh = lambda **kwargs: snapshot
+    scheduler.job_lease = None
+    scheduler._lease_scope = "serial-test"
     scheduler.executor = SimpleNamespace(summary=lambda: {})
     scheduler._execute_read_waves = lambda *a, **k: None
     scheduler._record_timing = lambda *a: None
     scheduler._record_task_calibration = lambda *a: None
     scheduler._release_consumed = lambda *a: None
-    task = SimpleNamespace(task_type="ROOT", factor_name="factor")
+    task = SimpleNamespace(
+        task_type="ROOT", factor_name="factor", inputs=(),
+        resource_contract=TaskResourceContract(
+            peak_memory_bytes=1024, uncertainty=1.0, cpu_tokens=1,
+        ),
+    )
     dag = SimpleNamespace(tasks={"root": task}, topological_order=lambda: ["root"])
     return scheduler, dag
 
@@ -141,8 +177,10 @@ def test_parallel_sink_does_not_retain_results(monkeypatch, micro_batch):
         ))
     dag.roots = tuple(dag.tasks)
     scheduler = AdaptiveBatchScheduler(
-        broker=ResourceBroker(hard_memory_limit=8 * 1024**3, cpu_slots=2,
-                              min_host_reserve_gb=1, min_host_reserve_fraction=0.05),
+        broker=_bind_coherent_snapshot(ResourceBroker(
+            hard_memory_limit=8 * 1024**3, cpu_slots=2,
+            min_host_reserve_gb=1, min_host_reserve_fraction=0.05,
+        )),
         max_concurrency=2,
     )
     written = {}
@@ -201,6 +239,7 @@ def test_microbatch_future_failure_has_bounded_retries(monkeypatch, error_type, 
 
     monkeypatch.setattr(module, "dispatch_micro_batch", failing_dispatch)
     scheduler = _make_scheduler(cpu_slots=2)
+    _bind_coherent_snapshot(scheduler.broker)
     try:
         with pytest.raises(error_type, match="batch transport failure"):
             scheduler.run(_bare_dag(20), backend=None, ctx=_Ctx(),
@@ -253,6 +292,7 @@ def test_microbatch_sink_failure_releases_lease(monkeypatch):
 
     monkeypatch.setenv("FACTOR_ENGINE_HYBRID_FORCE", "thread")
     scheduler = _make_scheduler(cpu_slots=4)
+    _bind_coherent_snapshot(scheduler.broker)
 
     def fail(name, result):
         raise OSError("writer failed")

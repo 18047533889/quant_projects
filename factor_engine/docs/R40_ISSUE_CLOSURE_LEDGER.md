@@ -227,8 +227,8 @@
 | #255 | FIXED — EdgeContract 增 signed_zero/subnormal/overflow_policy + edge_contract_numeric_identity |
 | #256 | **PARTIAL** — NumericDeterminismLevel + record_blas_config（threadpoolctl）；production evidence 打标需改 evidence 生成链（其他簇） |
 | #257 | FIXED — check_permutation_equivariance_all_tie_sensitive_operators（6 tie-sensitive canonical） |
-| #258 | FIXED — check_prefix_invariance_all_causal_ts（13 causal TS canonical 全过） |
-| #259 | FIXED — check_chunk_boundary_invariance_all_streamable（EWM/cumsum-valid 续流） |
+| #258 | H22 撤销旧全过声明：此前仅 REFERENCE_SELF_CHECK；现由实际 registry winner 逐项执行，未覆盖项阻断，见 evidence/r2/H22-real-gates.log |
+| #259 | H22 撤销旧生产声明：此前 EWM/cumsum 为演示内核；现比较真实 registry 与 stateful runtime，不可用项保留 BLOCKED，见 evidence/r2/H22-real-gates.log |
 | #260 | FIXED — cross_process_determinism_probe（subprocess 双进程 + restart 语义） |
 | #198 | FIXED — compare_sql 补 isinf；compare_pandas 对齐 `_both_finite`（跨 backend 一致） |
 | #199 | **PARTIAL** — ProtectedDivisionSemantics 真值表 + numpy/pandas/polars 对齐；SQL Inf numerator 缺口用 pytest.xfail 诚实标记 |

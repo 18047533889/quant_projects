@@ -186,21 +186,73 @@ class ExecutionVariantIdentity:
 
     @classmethod
     def of(cls, operator: Any, backend: str, canonical: str) -> "ExecutionVariantIdentity":
-        impl_id = f"{type(operator).__module__}.{type(operator).__qualname__}"
-        if str(backend).lower() == "polars":
-            kernel_variant = "native_polars"
+        from factor_engine.backend.operator_capability import _declared_physical_spec
+        from factor_engine.cleaned_operators.registry import _freeze_value, _impl_source_hash
+
+        backend_name = str(backend)
+        spec = _declared_physical_spec(operator, backend_name)
+        physical_id = spec.physical_implementation_id if spec is not None else None
+        impl_id = (
+            str(physical_id) if physical_id is not None
+            else f"{type(operator).__module__}.{type(operator).__qualname__}"
+        )
+        if spec is not None:
+            kernel_variant = str(getattr(spec.execution_kind, "value", spec.execution_kind))
+            declared_identity = {
+                "implementation_source_hash": spec.implementation_source_hash,
+                "implementation_closure_hash": spec.implementation_closure_hash,
+                "kernel_identity": spec.kernel_identity,
+                "emitter_identity": spec.emitter_identity,
+                "kernel_signature": spec.kernel_signature,
+                "accelerator": str(getattr(spec.accelerator, "value", spec.accelerator)),
+            }
+        elif backend_name.lower() == "polars":
+            # This is diagnostic classification only; production eligibility
+            # remains governed by the explicit-spec gates.  Crucially, a
+            # pandas delegate is never labelled native merely because its
+            # registry slot is named ``polars``.
+            from factor_engine.backend.polars_backend_kind import polars_backend_kind
+
+            source = ""
+            try:
+                from factor_engine.cleaned_operators.registry import OperatorRegistry
+
+                entry = OperatorRegistry._catalog.get(canonical, {}) or {}
+                source = str(((entry.get("backend_meta") or {}).get(backend_name) or {}).get("source", ""))
+            except Exception:
+                pass
+            kernel_variant = polars_backend_kind(
+                operator, source=source, production_mode=False
+            ).value
+            declared_identity = {"missing_physical_spec": True, "source": source}
         elif "numba" in str(type(operator).__module__).lower():
             kernel_variant = "numba"
+            declared_identity = {"missing_physical_spec": True}
         else:
-            kernel_variant = "reference"
-        code_hash = hashlib.sha256(
-            f"{impl_id}|{canonical}|{kernel_variant}".encode("utf-8")
-        ).hexdigest()[:16]
+            kernel_variant = "pandas_reference"
+            declared_identity = {"missing_physical_spec": True}
+        fused = bool(
+            getattr(operator, "fused", False)
+            or getattr(operator, "_fused", False)
+            or getattr(operator, "fusion_region_identity", None)
+        )
+        payload = {
+            "schema": "execution-variant-v2",
+            "canonical": canonical,
+            "backend": backend_name,
+            "implementation": impl_id,
+            "kernel_variant": kernel_variant,
+            "fused": fused,
+            "fusion_region": getattr(operator, "fusion_region_identity", None),
+            "resolved_code": _impl_source_hash(operator),
+            "declared": declared_identity,
+        }
+        code_hash = hashlib.sha256(_freeze_value(payload).encode("utf-8")).hexdigest()[:16]
         return cls(
-            backend=str(backend),
+            backend=backend_name,
             implementation_id=impl_id,
             kernel_variant=kernel_variant,
-            fused=False,
+            fused=fused,
             code_hash=code_hash,
         )
 

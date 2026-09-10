@@ -1464,7 +1464,11 @@ def _minimum_warmup_rows(
     history must be treated as UNKNOWN (conservative full history).
     """
     spec = _checkpoint_spec(canonical, strict=production)
-    min_rows = int(getattr(spec, "minimum_history", 0) or 0) if spec is not None else 0
+    min_rows = (
+        spec.minimum_history_for(params or {})
+        if spec is not None and hasattr(spec, "minimum_history_for")
+        else int(getattr(spec, "minimum_history", 0) or 0) if spec is not None else 0
+    )
     declared = _own_history_extension(canonical, params or {})
     if declared is _UNKNOWN:
         return max(2, min_rows), True

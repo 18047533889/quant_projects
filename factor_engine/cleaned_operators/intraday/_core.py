@@ -328,10 +328,8 @@ def daily_agg_two(
 ) -> pd.DataFrame:
     """Apply fn(a_vals, b_vals) per (instrument, day).
 
-    The two frames must share the same session grid (P0-08) — otherwise the
-    ``pd.concat(...).dropna(subset=["a"])`` below would silently compress a
-    mismatched axis.  The ``dropna`` is kept; it only removes rows where the
-    PRIMARY column (``a``) is NaN, and slot compression is now guarded.
+    The two frames must share the same session grid (P0-08). Rows remain on
+    that physical clock so a missing primary value breaks adjacent returns.
 
     PERF-2 dispatch (100k GO §6.2): ``fn`` is the KERNEL ITSELF (e.g.
     ``tg._price_delay_kernel``), which carries the ``__vec__`` attribute; the
@@ -363,7 +361,7 @@ def daily_agg_two(
     out: dict[str, pd.Series] = {}
     for inst in frame_a.columns:
         a, b = frame_a[inst], frame_b[inst]
-        joined = pd.concat([a, b], axis=1, keys=["a", "b"]).dropna(subset=["a"])
+        joined = pd.concat([a, b], axis=1, keys=["a", "b"])
         joined["day"] = joined.index.normalize()
         per_day: dict[pd.Timestamp, float] = {}
         for day, group in joined.groupby("day"):
@@ -545,19 +543,18 @@ def _grid3(
     days = pd.DatetimeIndex(idx).normalize()
     codes, uniques = pd.factorize(days, sort=True)
     D = int(len(uniques))
-    B = int(len(idx))
     C = int(frames[0].shape[1])
     filled = [f.reindex(idx).to_numpy(dtype=float) for f in frames]
-    grids = []
-    for f_arr in filled:
-        g = np.empty((D, B, C), dtype=np.float64)
-        for d in range(D):
-            m = codes == d
-            g[d] = np.where(m[:, None], f_arr, np.nan)
-        grids.append(g)
-    active = np.zeros((D,), dtype=np.int64)
+    lengths = np.bincount(codes, minlength=D) if D else np.zeros(0, dtype=np.int64)
+    slots = int(lengths.max()) if lengths.size else 0
+    grids = [np.full((D, slots, C), np.nan, dtype=np.float64) for _ in filled]
+    active = np.zeros(D, dtype=np.int64)
     for d in range(D):
-        active[d] = int(np.sum(np.isfinite(filled[0][codes == d])))
+        rows = codes == d
+        nrows = int(lengths[d])
+        for grid, values in zip(grids, filled):
+            grid[d, :nrows, :] = values[rows]
+        active[d] = int(np.sum(np.isfinite(filled[0][rows])))
     uniq_days = pd.DatetimeIndex(uniques)
     return grids[0], grids[1] if len(grids) > 1 else None, (
         grids[2] if len(grids) > 2 else None
@@ -1495,15 +1492,15 @@ def _vec_bipower_and_jump(
 # all-NaN days; the fail-closed bind count covers them.
 # ---------------------------------------------------------------------------
 
-def _ss_bundle(frame: pd.DataFrame) -> dict:
+def _ss_bundle(frame: pd.DataFrame, grid: tuple | None = None, required: str | None = None) -> dict:
     """Memoized sufficient-statistics bundle for one frame (lazy import)."""
     from factor_engine.cleaned_operators.intraday import sufficient_stats as _ss
-    return _ss.compute_sufficient_statistics(frame)
+    return _ss.compute_sufficient_statistics(frame, grid=grid, required=required)
 
 
-def _ss_pair(a: pd.DataFrame, b: pd.DataFrame) -> dict:
+def _ss_pair(a: pd.DataFrame, b: pd.DataFrame, grid: tuple | None = None) -> dict:
     from factor_engine.cleaned_operators.intraday import sufficient_stats as _ss
-    return _ss.two_panel_statistics(a, b)
+    return _ss.two_panel_statistics(a, b, grid=grid)
 
 
 def _ss_triple(a: pd.DataFrame, b: pd.DataFrame, c: pd.DataFrame) -> dict:
@@ -1571,68 +1568,68 @@ def _vec_one_from_bundle(bundle: dict, kind: str, *, min_finite: int):
 
 
 def _vec_ts_sum(a, *, min_finite: int = 2, _grid: tuple | None = None) -> pd.DataFrame:
-    b = _ss_bundle(a)
+    b = _ss_bundle(a, _grid, "sum")
     return _vec_result_df(_vec_one_from_bundle(b, "sum", min_finite=min_finite), b["uniq_days"], a.columns)
 
 
 def _vec_ts_mean(a, *, min_finite: int = 2, _grid: tuple | None = None) -> pd.DataFrame:
-    b = _ss_bundle(a)
+    b = _ss_bundle(a, _grid, "mean")
     return _vec_result_df(_vec_one_from_bundle(b, "mean", min_finite=min_finite), b["uniq_days"], a.columns)
 
 
 def _vec_ts_variance(a, *, min_finite: int = 2, _grid: tuple | None = None) -> pd.DataFrame:
-    b = _ss_bundle(a)
+    b = _ss_bundle(a, _grid)
     return _vec_result_df(_vec_one_from_bundle(b, "variance", min_finite=min_finite), b["uniq_days"], a.columns)
 
 
 def _vec_ts_std(a, *, min_finite: int = 2, _grid: tuple | None = None) -> pd.DataFrame:
-    b = _ss_bundle(a)
+    b = _ss_bundle(a, _grid)
     return _vec_result_df(_vec_one_from_bundle(b, "std", min_finite=min_finite), b["uniq_days"], a.columns)
 
 
 def _vec_ts_min(a, *, min_finite: int = 2, _grid: tuple | None = None) -> pd.DataFrame:
-    b = _ss_bundle(a)
+    b = _ss_bundle(a, _grid)
     return _vec_result_df(_vec_one_from_bundle(b, "min", min_finite=min_finite), b["uniq_days"], a.columns)
 
 
 def _vec_ts_max(a, *, min_finite: int = 2, _grid: tuple | None = None) -> pd.DataFrame:
-    b = _ss_bundle(a)
+    b = _ss_bundle(a, _grid)
     return _vec_result_df(_vec_one_from_bundle(b, "max", min_finite=min_finite), b["uniq_days"], a.columns)
 
 
 def _vec_ts_last(a, *, min_finite: int = 2, _grid: tuple | None = None) -> pd.DataFrame:
-    b = _ss_bundle(a)
+    b = _ss_bundle(a, _grid)
     return _vec_result_df(_vec_one_from_bundle(b, "last", min_finite=min_finite), b["uniq_days"], a.columns)
 
 
 def _vec_ts_first(a, *, min_finite: int = 2, _grid: tuple | None = None) -> pd.DataFrame:
-    b = _ss_bundle(a)
+    b = _ss_bundle(a, _grid)
     return _vec_result_df(_vec_one_from_bundle(b, "first", min_finite=min_finite), b["uniq_days"], a.columns)
 
 
 def _vec_ts_last_value(a, *, min_finite: int = 2, _grid: tuple | None = None) -> pd.DataFrame:
-    b = _ss_bundle(a)
+    b = _ss_bundle(a, _grid)
     return _vec_result_df(_vec_one_from_bundle(b, "last", min_finite=min_finite), b["uniq_days"], a.columns)
 
 
 def _vec_ts_argmax(a, *, min_finite: int = 2, _grid: tuple | None = None) -> pd.DataFrame:
-    b = _ss_bundle(a)
+    b = _ss_bundle(a, _grid)
     return _vec_result_df(_vec_one_from_bundle(b, "argmax", min_finite=min_finite), b["uniq_days"], a.columns)
 
 
 def _vec_ts_argmin(a, *, min_finite: int = 2, _grid: tuple | None = None) -> pd.DataFrame:
-    b = _ss_bundle(a)
+    b = _ss_bundle(a, _grid)
     return _vec_result_df(_vec_one_from_bundle(b, "argmin", min_finite=min_finite), b["uniq_days"], a.columns)
 
 
 def _vec_ts_realized_variance(a, *, min_finite: int = 2, _grid: tuple | None = None) -> pd.DataFrame:
-    b = _ss_bundle(a)
+    b = _ss_bundle(a, _grid)
     return _vec_result_df(_vec_one_from_bundle(b, "realized_variance", min_finite=min_finite), b["uniq_days"], a.columns)
 
 
 def _vec_ts_vwap(a, b, *, min_finite: int = 2, _grid: tuple | None = None) -> pd.DataFrame:
     """Vector intra_ts_vwap: Σ(p·v)/Σv over the joint finite (close, vol>0)."""
-    sb = _ss_pair(a, b)
+    sb = _ss_pair(a, b, _grid)
     with np.errstate(divide="ignore", invalid="ignore"):
         vwap = np.where(sb["vsum"] > _EPS, sb["pvsum"] / np.maximum(sb["vsum"], _EPS), np.nan)
     out = np.full(vwap.shape, np.nan)
@@ -1651,12 +1648,11 @@ def _vec_ts_volume_weighted_return(a, b, *, min_finite: int = 2, _grid: tuple | 
     pv, rp) reproduces that compressed series exactly; one O(n) pass per
     (day, inst) over the shared packed prefix.
     """
-    sb = _ss_pair(a, b)
-    rp = sb["rp"]  # (D, max_cnt, C) compressed log returns (r[:,0]=NaN)
-    pv = sb["pv"]
-    pmask = sb["pmask"]
-    vmask = pmask & np.isfinite(pv) & (pv > 0) & np.isfinite(rp)
-    num = np.where(vmask, np.where(vmask, rp, 0.0) * pv, 0.0).sum(axis=1)
+    sb = _ss_pair(a, b, _grid)
+    rp = sb["rp"]
+    pv = sb["gb"]
+    vmask = sb["pair_mask"]
+    num = np.where(vmask, rp * pv, 0.0).sum(axis=1)
     den = np.where(vmask, pv, 0.0).sum(axis=1)
     with np.errstate(divide="ignore", invalid="ignore"):
         val = np.where(den > _EPS, num / np.maximum(den, _EPS), np.nan)
@@ -1671,11 +1667,10 @@ def _vec_ts_volume_weighted_return(a, b, *, min_finite: int = 2, _grid: tuple | 
 
 def _vec_ts_realized_covariance(a, b, *, min_finite: int = 2, _grid: tuple | None = None) -> pd.DataFrame:
     """Vector intra_ts_realized_covariance: Σ(r²·v)/Σv over the packed prefix."""
-    sb = _ss_pair(a, b)
+    sb = _ss_pair(a, b, _grid)
     rp = sb["rp"]
-    pv = sb["pv"]
-    pmask = sb["pmask"]
-    vmask = pmask & np.isfinite(pv) & (pv > 0) & np.isfinite(rp)
+    pv = sb["gb"]
+    vmask = sb["pair_mask"]
     with np.errstate(divide="ignore", invalid="ignore"):
         rv = np.where(vmask, rp, 0.0)
         num = (rv * rv * np.where(vmask, pv, 0.0)).sum(axis=1)
@@ -1690,7 +1685,7 @@ def _vec_ts_realized_covariance(a, b, *, min_finite: int = 2, _grid: tuple | Non
 
 def _vec_ts_amount_weighted_mean(a, b, *, min_finite: int = 2, _grid: tuple | None = None) -> pd.DataFrame:
     """Vector intra_ts_amount_weighted_mean: Σ(c·a)/Σa, amount>0 bars."""
-    sb = _ss_pair(a, b)  # b treated as the amount panel (joint mask amount>0)
+    sb = _ss_pair(a, b, _grid)  # b treated as the amount panel (joint mask amount>0)
     with np.errstate(divide="ignore", invalid="ignore"):
         val = np.where(sb["vsum"] > _EPS, sb["pvsum"] / np.maximum(sb["vsum"], _EPS), np.nan)
     out = np.full(val.shape, np.nan)

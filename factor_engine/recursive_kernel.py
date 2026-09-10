@@ -207,79 +207,50 @@ def atr_wilder_segment(
 
 
 def adx_segment(
-    high: np.ndarray,
-    low: np.ndarray,
-    close: np.ndarray,
-    state: dict[str, Any],
-    window: int,
+    high: np.ndarray, low: np.ndarray, close: np.ndarray,
+    state: dict[str, Any], window: int,
 ) -> tuple[np.ndarray, dict[str, Any]]:
-    """``ADX``: pandas ``_compute_dmi_adx`` — every stage (TR / +DM / -DM / DX)
-    is a ``ewm(alpha=1/w, adjust=False, min_periods=1)`` recursion, so there is
-    NO SMA seed anywhere (the previous segment kernel seeded TR/DM/DX with simple
-    means, diverging from the full-history reference)."""
+    """Actual ADX winner: every EWM stage requires window valid observations.
+
+    Physical high/low/close shifts are independent; a missing close must not
+    erase a valid high/low movement. Zero directional support is undefined.
+    """
     alpha = 1.0 / window
-    last_h = state.get("last_high")
-    last_l = state.get("last_low")
-    last_c = state.get("last_close")
-    last_h = float(last_h) if last_h is not None and not np.isnan(last_h) else None
-    last_l = float(last_l) if last_l is not None and not np.isnan(last_l) else None
-    last_c = float(last_c) if last_c is not None and not np.isnan(last_c) else None
+    last_h = state.get("last_high", np.nan)
+    last_l = state.get("last_low", np.nan)
+    last_c = state.get("last_close", np.nan)
+    last_h = np.nan if last_h is None else float(last_h)
+    last_l = np.nan if last_l is None else float(last_l)
+    last_c = np.nan if last_c is None else float(last_c)
     tr_state = EwmState.from_dict(state.get("tr", {}))
     plus_state = EwmState.from_dict(state.get("plus_dm", {}))
     minus_state = EwmState.from_dict(state.get("minus_dm", {}))
     dx_state = EwmState.from_dict(state.get("dx", {}))
     out = np.full(close.shape, np.nan, dtype=float)
     for i, (h, l, c) in enumerate(zip(high, low, close)):
-        if np.isnan(h) or np.isnan(l) or np.isnan(c):
-            # Missing bar.  TR uses ``np.maximum`` -> NaN (propagates through the
-            # ewm as a missing observation).  +DM/-DM are ``high-high.shift(1)``
-            # = NaN, but pandas maps them to 0.0 via
-            # ``.where((>0)&(>0), 0.0)`` (NaN comparisons are False), so the DM
-            # smoothing *does* receive a 0.0 update.  The shifts for the next
-            # valid bar become NaN (R5-09).
-            tr = None
-            plus_raw = minus_raw = 0.0
-            last_h = last_l = last_c = np.nan
-        else:
-            h, l, c = float(h), float(l), float(c)
-            tr = _true_range(h, l, last_c)
-            # Replicate pandas ``plus_dm = (high-high.shift(1)).where((>0)&(>0),
-            # 0.0)`` / ``minus_dm``.  ``Inf`` arithmetic is real; a NaN shift
-            # (missing previous bar) makes both comparisons False -> 0.0.
-            if last_h is None or last_l is None:
-                up = down = float("nan")
-            else:
-                up = h - last_h
-                down = last_l - l
-            if np.isnan(up) or np.isnan(down):
-                plus_raw = minus_raw = 0.0
-            else:
-                plus_raw = up if (up > down and up > 0.0) else 0.0
-                minus_raw = down if (down > up and down > 0.0) else 0.0
-            last_h, last_l, last_c = h, l, c
+        h, l, c = float(h), float(l), float(c)
+        with np.errstate(invalid="ignore", over="ignore"):
+            tr = float(np.maximum.reduce([h - l, abs(h - last_c), abs(l - last_c)]))
+            up, down = h - last_h, last_l - l
+        plus_raw = up if up > down and up > 0 else 0.0
+        minus_raw = down if down > up and down > 0 else 0.0
+        last_h, last_l, last_c = h, l, c
         atr = _ewm_step(tr_state, tr, alpha)
         plus_sm = _ewm_step(plus_state, plus_raw, alpha)
         minus_sm = _ewm_step(minus_state, minus_raw, alpha)
-        # pandas: plus_di = 100*(plus_sm/atr.replace(0,NaN)); dx uses
-        # (plus_di+minus_di).replace(0,NaN).  min_periods=1 -> output starts at
-        # the first observation (which carries NaN only while TR itself is NaN).
-        if atr is None or atr == 0.0 or plus_sm is None or minus_sm is None:
-            dx: float | None = None
-        else:
-            plus_di = 100.0 * plus_sm / atr
-            minus_di = 100.0 * minus_sm / atr
+        mature = min(tr_state.valid_count, plus_state.valid_count, minus_state.valid_count) >= window
+        dx = None
+        if mature and atr is not None and atr != 0 and plus_sm is not None and minus_sm is not None:
+            plus_di, minus_di = 100.0 * plus_sm / atr, 100.0 * minus_sm / atr
             denom = plus_di + minus_di
-            dx = 0.0 if denom == 0.0 else 100.0 * abs(plus_di - minus_di) / denom
+            if denom != 0:
+                dx = 100.0 * abs(plus_di - minus_di) / denom
         adx = _ewm_step(dx_state, dx, alpha)
-        if adx is not None:
+        if adx is not None and dx_state.valid_count >= window:
             out[i] = adx
-    state["last_high"] = np.nan if last_h is None else last_h
-    state["last_low"] = np.nan if last_l is None else last_l
-    state["last_close"] = np.nan if last_c is None else last_c
-    state["tr"] = tr_state.to_dict()
-    state["plus_dm"] = plus_state.to_dict()
-    state["minus_dm"] = minus_state.to_dict()
-    state["dx"] = dx_state.to_dict()
+    state.update(last_high=last_h, last_low=last_l, last_close=last_c,
+                 tr=tr_state.to_dict(), plus_dm=plus_state.to_dict(),
+                 minus_dm=minus_state.to_dict(), dx=dx_state.to_dict())
     return out, state
 
 

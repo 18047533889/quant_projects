@@ -398,7 +398,8 @@ class ReadWavePlanner:
         cost_model: WaveCostModel | None = None,
         universe_rows_estimator: Callable[[str], int] | None = None,
     ) -> None:
-        self.wave_memory_budget = max(1, wave_memory_budget)
+        # A real zero budget is an admission boundary, not a one-byte budget.
+        self.wave_memory_budget = max(0, int(wave_memory_budget))
         self.rows_estimate = max(1, rows_estimate)
         self.per_column_bytes = _default_per_column_bytes(self.rows_estimate)
         self.axis_bytes = max(0, int(axis_bytes))

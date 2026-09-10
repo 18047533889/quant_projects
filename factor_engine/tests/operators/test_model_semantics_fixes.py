@@ -88,6 +88,8 @@ def test_huber_robust_to_outliers_with_sqrt_weight() -> None:
     yy.iloc[40, 0] = -40.0
     out = OperatorRegistry.get("ts_huber_regression_coeff").calculate(yy, xx, window=n, coefficient_index=1, min_periods=10)
     assert out["A"].iloc[-1] == pytest.approx(2.0, abs=0.05)
+    from factor_engine.cleaned_operators.ts_model._rolling_core import last_fit_status
+    assert last_fit_status()["reason"] == "exact_consensus"
 
 
 def test_ridge_penalises_first_feature_without_intercept() -> None:
@@ -214,6 +216,13 @@ def test_garch_shock_uses_h_t() -> None:
         h_cur = w + a * seg[i - 1] ** 2 + b * h_cur
     shock = _garch_path(ret, 120, "shock", False, 0.0)
     assert shock == pytest.approx(seg[-1] / np.sqrt(max(h_cur, 1e-12)), rel=1e-6)
+
+    # The current observation may change the numerator, but not the h_t state
+    # reconstructed solely from the strict-prior segment.
+    changed = ret.copy()
+    changed[-1] *= 3.0
+    changed_shock = _garch_path(changed, 120, "shock", False, 0.0)
+    assert changed_shock / shock == pytest.approx(3.0, rel=1e-6)
 
 
 # ---------------------------------------------------------------------------

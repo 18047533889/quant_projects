@@ -595,7 +595,7 @@ def huber_fit(
         _set_fit_status(False, "invalid_params")
         return None
     if (x.ndim != 2 or target.ndim != 1 or x.shape[0] != target.shape[0]
-            or x.shape[0] < x.shape[1] or x.shape[1] == 0
+            or x.shape[1] == 0
             or not np.all(np.isfinite(x)) or not np.all(np.isfinite(target))
             or isinstance(delta, (bool, np.bool_)) or not np.isfinite(cutoff) or cutoff <= 0.0
             or isinstance(iterations, (bool, np.bool_)) or not isinstance(iterations, (int, np.integer)) or max_iter <= 0
@@ -604,6 +604,9 @@ def huber_fit(
         return None
 
     n, p = x.shape
+    if n < p:
+        _set_fit_status(False, "insufficient_sample", n=int(n), p=int(p))
+        return None
     constant = np.all(x == x[0], axis=0)
     constant_nonzero = constant & (np.abs(x[0]) > 0.0)
     intercept_cols = np.flatnonzero(constant_nonzero)
@@ -681,6 +684,53 @@ def huber_fit(
         + float(np.linalg.norm(z, ord=np.inf) * np.linalg.norm(gamma, ord=np.inf))
     )
     exact_floor = 64.0 * eps * backward_scale
+    exact_consensus: np.ndarray | None = None
+
+    def _exact_majority_fit(residual: np.ndarray) -> tuple[np.ndarray, np.ndarray] | None:
+        """Return a verified zero-residual majority fit, never a relaxed IRLS fit."""
+        centered = residual - float(np.median(residual))
+        residual_floor = 128.0 * eps * max(backward_scale, 1.0)
+        mask = np.abs(centered) <= residual_floor
+        if int(mask.sum()) <= n // 2 or int(mask.sum()) < p + 1:
+            return None
+        consensus_design = z[mask]
+        if np.linalg.matrix_rank(consensus_design) < p:
+            return None
+        try:
+            candidate, *_ = np.linalg.lstsq(consensus_design, yn[mask], rcond=None)
+        except (np.linalg.LinAlgError, ValueError):
+            return None
+        if not np.all(np.isfinite(candidate)):
+            return None
+        candidate_residual = yn - z @ candidate
+        candidate_centered = candidate_residual - float(np.median(candidate_residual))
+        stable_mask = np.abs(candidate_centered) <= residual_floor
+        if (int(stable_mask.sum()) <= n // 2 or int(stable_mask.sum()) < p + 1
+                or not np.all(stable_mask[mask])):
+            return None
+        consensus_error = float(np.max(np.abs(candidate_residual[stable_mask])))
+        if not np.isfinite(consensus_error) or consensus_error > residual_floor:
+            return None
+        # Zero-scale Huber/LAD limit certificate.  Exact residuals admit a
+        # subgradient in [-1, 1]; non-consensus residuals contribute their
+        # signs.  Accept only when a bounded consensus subgradient closes the
+        # full transformed-design stationarity equation.
+        outlier_mask = ~stable_mask
+        rhs = -(z[outlier_mask].T @ np.sign(candidate_residual[outlier_mask]))
+        try:
+            consensus_subgradient, *_ = np.linalg.lstsq(z[stable_mask].T, rhs, rcond=None)
+        except (np.linalg.LinAlgError, ValueError):
+            return None
+        stationarity_error = z[stable_mask].T @ consensus_subgradient - rhs
+        stationarity_floor = 512.0 * eps * max(
+            1.0, float(np.linalg.norm(rhs, ord=np.inf)))
+        if (not np.all(np.isfinite(consensus_subgradient))
+                or float(np.max(np.abs(consensus_subgradient))) > 1.0 + 512.0 * eps
+                or not np.all(np.isfinite(stationarity_error))
+                or float(np.max(np.abs(stationarity_error))) > stationarity_floor):
+            return None
+        return candidate, stable_mask
+
     if float(np.max(np.abs(initial_resid))) <= exact_floor:
         reason, final_scale, final_score, used = "exact_fit", 0.0, 0.0, 0
     else:
@@ -695,11 +745,16 @@ def huber_fit(
             residual_extent = float(np.max(np.abs(centered_resid)))
             if (np.isfinite(mad) and residual_extent > exact_floor
                     and mad <= 64.0 * eps * residual_extent):
-                _set_fit_status(
-                    False, "scale_degenerate", iterations=used,
-                    mad=mad, residual_extent=residual_extent,
-                )
-                return None
+                consensus = _exact_majority_fit(resid)
+                if consensus is None:
+                    _set_fit_status(
+                        False, "scale_degenerate", iterations=used,
+                        mad=mad, residual_extent=residual_extent,
+                    )
+                    return None
+                gamma, exact_consensus = consensus
+                reason, final_scale, final_score = "exact_consensus", 0.0, 0.0
+                break
             scale = 1.4826 * mad
             if not np.isfinite(scale) or scale == 0.0:
                 scale = _stable_std(resid)
@@ -735,11 +790,16 @@ def huber_fit(
             final_extent = float(np.max(np.abs(centered_final)))
             if (np.isfinite(final_mad) and final_extent > exact_floor
                     and final_mad <= 64.0 * eps * final_extent):
-                _set_fit_status(
-                    False, "scale_degenerate", iterations=used,
-                    mad=final_mad, residual_extent=final_extent,
-                )
-                return None
+                consensus = _exact_majority_fit(final_resid)
+                if consensus is None:
+                    _set_fit_status(
+                        False, "scale_degenerate", iterations=used,
+                        mad=final_mad, residual_extent=final_extent,
+                    )
+                    return None
+                gamma, exact_consensus = consensus
+                reason, final_scale, final_score = "exact_consensus", 0.0, 0.0
+                break
             final_scale = 1.4826 * final_mad
             if not np.isfinite(final_scale) or final_scale == 0.0:
                 final_scale = _stable_std(final_resid)
@@ -811,6 +871,20 @@ def huber_fit(
             normalized_backward_error=returned_backward_error,
         )
         return None
+    if reason == "exact_consensus":
+        if exact_consensus is None:
+            _set_fit_status(False, "internal_status_mismatch", iterations=used)
+            return None
+        original_scale = max(
+            1.0, float(np.max(np.abs(target))),
+            float(np.linalg.norm(x, ord=np.inf) * np.linalg.norm(beta, ord=np.inf)),
+        )
+        consensus_floor = 256.0 * eps * original_scale
+        if (np.linalg.matrix_rank(x[exact_consensus]) < p
+                or not np.all(np.isfinite((x @ beta)[exact_consensus]))
+                or float(np.max(np.abs(original_resid[exact_consensus]))) > consensus_floor):
+            _set_fit_status(False, "numerical_failure", iterations=used)
+            return None
     if reported_scale == 0.0:
         reported_score = 0.0
     elif not np.isfinite(reported_scale):

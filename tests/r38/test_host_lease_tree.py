@@ -5,11 +5,13 @@
     - parent + child **不 double count** host memory（§R38_HOST_LEASE_NO_PARENT_CHILD_DOUBLE_COUNT）；
     - CPU / IO / spill 真实约束（§R38_HOST_LEASE_CPU_LIMIT_ENFORCED / IO / SPILL）；
     - JobLease 每 job 独立（§R38_MULTI_JOB_LEASE_ISOLATION）；
-    - release 递归释放整棵子树 + 幂等（§R38_HOST_LEASE_RECURSIVE_RELEASE）；
+    - JobLease close 拒绝新 child，已有 child drain 后释放 root；
     - released lease 进 terminal ring，不无限增长（P1-021）；
     - ``summary()`` 纯读，不触发 DA governor 副作用（P0-022）。
 """
 from __future__ import annotations
+
+from dataclasses import replace
 
 from factor_engine.runtime.host_resource_coordinator import (
     KIND_COMPUTE,
@@ -31,6 +33,18 @@ def _coordinator(hard_memory=8 * 1024**3, cpu_slots=4) -> HostResourceCoordinato
         spill_min_free_gb=0.0,
         spill_min_free_fraction=0.0,
     )
+    snapshot = replace(
+        broker.snapshot(),
+        hard_memory_limit=hard_memory,
+        cgroup_memory_current=0,
+        host_mem_available=hard_memory,
+        process_rss=0,
+        worker_rss=0,
+        process_family_rss=0,
+        process_family_pss=0,
+        host_mem_available_known=True,
+    )
+    broker._refresh = lambda force=False: snapshot
     return HostResourceCoordinator(broker=broker)
 
 
@@ -93,7 +107,7 @@ def test_job_lease_isolation_multi_job():
     assert job_a.released
 
 
-def test_recursive_release_idempotent():
+def test_job_close_drains_existing_children_and_is_idempotent():
     c = _coordinator()
     job = c.request_job_lease(owner="jobR", memory_bytes=4 * 1024**3, cpu_tokens=4)
     child1 = job.request_child(owner="jobR:c1", memory_bytes=2 * 1024**3, cpu_tokens=2)
@@ -103,13 +117,18 @@ def test_recursive_release_idempotent():
         cpu_tokens=1, parent_lease_id=child1.lease_id,
     )
     assert gchild is not None
-    assert c.release_lease(job.lease_id) is True
+    job.release()
     assert job.released
-    # 整棵子树全部 released。
-    for lid in (child1.lease_id, child2.lease_id, gchild.lease_id):
-        assert c._leases.get(lid) is None or c._leases[lid].released
-    # 幂等：重复 release 无害。
-    assert c.release_lease(job.lease_id) is True
+    assert c.job_lease_closing(job.lease_id)
+    assert job.request_child(owner="jobR:new", memory_bytes=1) is None
+    assert c._root_reserved("memory") == 4 * 1024**3
+    assert c.release_lease(child1.lease_id)
+    assert c._root_reserved("memory") == 4 * 1024**3
+    assert c.release_lease(child2.lease_id)
+    assert c._root_reserved("memory") == 0
+    assert not c.job_lease_closing(job.lease_id)
+    # 幂等：重复 close 无害。
+    job.release()
 
 
 def test_terminal_ring_bounds_growth():

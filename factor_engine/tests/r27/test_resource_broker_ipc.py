@@ -34,11 +34,12 @@ def test_spawn_children_compete_for_one_parent_budget():
     broker = _broker()
     ipc = ParentBrokerIPC(broker)
     budget = broker.execution_budget()
-    assert budget > 4
+    ordinary_budget = budget - broker.current_sink_budget()
+    assert ordinary_budget > 2
     ctx = mp.get_context("spawn")
     output = ctx.Queue()
     release = ctx.Event()
-    p1 = ctx.Process(target=_acquire_in_child, args=(ipc.create_proxy(), budget - 1, output, release))
+    p1 = ctx.Process(target=_acquire_in_child, args=(ipc.create_proxy(), ordinary_budget, output, release))
     p2 = ctx.Process(target=_acquire_in_child, args=(ipc.create_proxy(), 2, output, release))
     p1.start(); assert output.get(timeout=5) is True
     p2.start(); assert output.get(timeout=5) is False

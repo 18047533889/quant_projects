@@ -24,6 +24,67 @@ def _minimal_plan_raw(op: str) -> PlanNode:
     close, volume, industry = column("close"), column("volume"), column("industry")
     high, low = column("high"), column("low")
     open_ = column("open")
+    # SQL registry honesty probes must exercise the operator's real arity.
+    fin_arity = {
+        "fin_accrual_ratio": 3, "fin_cash_earnings_gap": 3,
+        "fin_impairment_intensity": 3, "fin_lease_intensity": 3,
+        "fin_rd_total_intensity": 3, "fin_contract_asset_liability_gap": 3,
+        "fin_lease_asset_liability_gap": 3, "fin_deferred_tax_gap": 3,
+        "fin_comprehensive_income_gap": 3, "fin_roe_cash_gap": 3,
+        "fin_debt_service_coverage_proxy": 3,
+        "fin_actual_expectation_divergence": 3, "fin_surprise": 3,
+        "fin_net_borrowing_cashflow": 4, "fin_financing_gap": 5,
+        "fin_core_earnings_ratio": 6, "fin_noncore_income_ratio": 7,
+    }
+    fin_binary = {
+        "a_share_cap_ratio", "free_float_ratio", "free_float_turnover",
+        "real_turnover_rate", "true_turnover_rate", "market_cap_free_cap_gap",
+        "holder_pledge_ratio", "holder_freeze_ratio", "holder_locked_share_ratio",
+        "holder_float_concentration_gap", "val1_relative_valuation_gap",
+        "valuation_pe_ttm_lyr_gap", "valuation_pcf_definition_gap",
+        "valuation_pe_gap_signed_log", "valuation_pcf_gap_signed_log",
+        "valuation_pe_gap_positive", "valuation_pcf_gap_positive",
+        "fin_common_size", "fin_cash_conversion", "fin_acquisition_cash_intensity",
+        "fin_borrowing_intensity", "fin_capex_intensity", "fin_goodwill_intensity",
+        "fin_debt_repayment_intensity", "fin_contract_asset_intensity",
+        "fin_contract_liability_intensity", "fin_oci_to_equity",
+        "fin_interest_coverage_proxy", "fin_discontinued_operation_ratio",
+        "fin_minority_profit_share", "fin_fair_value_income_dependence",
+        "fin_investment_income_dependence", "fin_other_earnings_dependence",
+        "fin_rd_capitalization_ratio", "fin_expectation_dispersion",
+        "fin_cash_burn_runway", "circulating_cap_ratio_change",
+    }
+    fixture_cols = [close, volume, high, low, open_, industry, column("aux")]
+    if op in fin_binary:
+        return PlanNode(op=op, inputs=fixture_cols[:2], attrs={})
+    if op in fin_arity:
+        return PlanNode(op=op, inputs=fixture_cols[:fin_arity[op]], attrs={})
+    if op == "avg2":
+        return PlanNode(op=op, inputs=[close, volume], attrs={})
+    if op == "fillna":
+        return PlanNode(op=op, inputs=[close, literal(0.0)], attrs={"value": 0.0})
+    if op in {"cs_shrink_to_group_mean", "cs_universe_coverage"}:
+        return PlanNode(op=op, inputs=[close, industry], attrs={})
+    if op == "group_weighted_zscore":
+        return PlanNode(op=op, inputs=[close, industry, volume], attrs={})
+    if op in {"ts_overnight_intraday_cov", "ts_overnight_intraday_spread",
+              "ts_overnight_intraday_sign_agreement", "ts_opening_mispricing_score"}:
+        return PlanNode(op=op, inputs=[close, open_, column("preclose")], attrs={"window": 20})
+    if op in {"aq1_cash_conversion_strength", "aq1_working_capital_accrual",
+              "m1_volume_adjusted_momentum"}:
+        return PlanNode(op=op, inputs=[close, volume], attrs={"window": 20, "min_periods": 2})
+    if op in {"ashare_limit_up_touch", "ashare_limit_down_touch",
+              "ashare_open_at_upper_limit"}:
+        return PlanNode(op=op, inputs=[high, column("limit"), literal(0.005)], attrs={"tick_tolerance": 0.005})
+    if op in {"ashare_limit_failed", "ashare_limit_open_failed"}:
+        return PlanNode(op=op, inputs=[high, close, column("limit"), literal(0.005)], attrs={"tick_tolerance": 0.005})
+    if op == "ashare_limit_touch_count":
+        return PlanNode(op=op, inputs=[high, low, column("high_limit"), column("low_limit")], attrs={"window": 20, "side": "up"})
+    if op == "ashare_failed_limit_count":
+        return PlanNode(op=op, inputs=[high, low, close, column("high_limit"), column("low_limit")], attrs={"window": 20, "side": "up"})
+    if op in {"ashare_limit_asymmetry", "ashare_limit_up_volume_ratio",
+              "ashare_limit_down_volume_ratio", "ashare_limit_up_streak"}:
+        return PlanNode(op=op, inputs=[close, volume], attrs={"window": 20})
     # 4-input OHLC candle ops
     if op in {
         "candle_body_ratio",

@@ -4,6 +4,8 @@ shard legality + native fusion + as_completed。
 """
 from __future__ import annotations
 
+from dataclasses import replace
+
 from factor_engine.planner.physical_factor_dag import (
     TASK_CSE_SHARED,
     TASK_ROOT,
@@ -16,6 +18,21 @@ from factor_engine.runtime.resource_broker import ResourceBroker
 from factor_engine.runtime.task_resource_contract import TaskResourceContract
 
 from factor_engine.planner.native_fusion import adaptive_fusion_block_size, can_fuse_roots
+
+
+def _coherent_broker(*, hard_memory=8 * 1024**3, cpu_slots=4):
+    broker = ResourceBroker(
+        hard_memory_limit=hard_memory, cpu_slots=cpu_slots,
+        min_host_reserve_gb=1, min_host_reserve_fraction=0.05,
+    )
+    snapshot = replace(
+        broker.snapshot(), hard_memory_limit=hard_memory,
+        cgroup_memory_current=0, host_mem_available=hard_memory,
+        process_rss=0, worker_rss=0, process_family_rss=0,
+        process_family_pss=0, host_mem_available_known=True,
+    )
+    broker._refresh = lambda force=False: snapshot
+    return broker
 
 
 def _dag_with_shared() -> PhysicalFactorDAG:
@@ -64,8 +81,7 @@ def test_scheduler_shared_parallel_and_as_completed(monkeypatch):
     monkeypatch.setenv("FACTOR_ENGINE_HYBRID_FORCE", "thread")
     dag = _dag_with_shared()
     scheduler = AdaptiveBatchScheduler(
-        broker=ResourceBroker(hard_memory_limit=8 * 1024**3, cpu_slots=4,
-                              min_host_reserve_gb=1, min_host_reserve_fraction=0.05)
+        broker=_coherent_broker(),
     )
     executed: dict[str, str] = {}
 

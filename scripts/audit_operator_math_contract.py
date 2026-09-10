@@ -31,6 +31,8 @@ import numpy as np
 import pandas as pd
 
 REPO = Path(__file__).resolve().parent.parent
+if (REPO / "factor_engine" / "cleaned_operators").is_dir():
+    REPO = REPO / "factor_engine"
 sys.path.insert(0, str(REPO))
 
 
@@ -325,6 +327,25 @@ def _run_dynamic(op: Any, canonical: str, reg) -> dict[str, Any]:
             out["chunk_invariance"] = False
             out["math_defect"].append(f"chunk_err:{type(exc).__name__}")
 
+    # H12: apply executable moment laws with the same default support policy.
+    if canonical in {"ts_mean", "ts_sum", "ts_std", "ts_var"}:
+        try:
+            fn2d = _op_fn_2d(op)
+            support_fn = None
+            if canonical == "ts_sum":
+                import inspect
+                sig = inspect.signature(op._calculate_series)
+                window = sig.parameters["window"].default
+                if not isinstance(window, int) or window < 1:
+                    raise ValueError("unknown sum support policy")
+                support_fn = lambda arr: pd.DataFrame(arr).rolling(window, min_periods=1).count().to_numpy()
+            checks = MC.check_moment_transformations(canonical, fn2d, base, support_fn=support_fn)
+            out["metamorphic_properties"] = tuple(r.property_name for r in checks)
+            out["metamorphic_passed"] = bool(checks) and all(r.passed for r in checks)
+        except Exception as exc:
+            out["metamorphic_passed"] = False
+            out["math_defect"].append(f"moment_domain:{type(exc).__name__}")
+
     # ---- column permutation / metamorphic（row-wise 家族）----
     if axis == "row_wise":
         try:
@@ -336,18 +357,19 @@ def _run_dynamic(op: Any, canonical: str, reg) -> dict[str, Any]:
                 np.allclose(r0, r1, rtol=1e-8, atol=1e-10, equal_nan=True))
             if not out["column_permutation"]:
                 out["math_defect"].append("column_permutation_fail")
-            # 通用 metamorphic：translation / positive-scale（适用于 zscore/rank/corr 等）
-            props = []
-            g = 3.0 * base + 1.0
-            try:
-                ok = bool(np.allclose(fn2d(g), fn2d(base), rtol=1e-8, atol=1e-10,
-                                      equal_nan=True))
-                props.append("strict_monotonic_invariance")
-                out["metamorphic_passed"] = ok if out["metamorphic_passed"] is None \
-                    else (out["metamorphic_passed"] and ok)
-            except Exception:  # noqa: BLE001
-                pass
-            out["metamorphic_properties"] = tuple(props)
+            # Only declared laws apply: monotonic invariance is not universal.
+            declared = MC.METAMORPHIC_PROPERTY_DECLARATIONS.get(canonical, ())
+            checks = []
+            if "rank.strict_monotonic_invariance" in declared:
+                checks.append(MC.check_rank_monotonic_invariance(fn2d, base))
+            if "translation_invariance" in declared:
+                checks.append(MC.check_translation_invariance(fn2d, base))
+            if "positive_scale_invariance" in declared:
+                checks.append(MC.check_positive_scale_invariance(fn2d, base))
+            if canonical == "cs_std":
+                checks.extend(MC.check_moment_transformations(canonical, fn2d, base))
+            out["metamorphic_properties"] = tuple(r.property_name for r in checks)
+            out["metamorphic_passed"] = all(r.passed for r in checks) if checks else None
         except Exception as exc:  # noqa: BLE001
             out["column_permutation"] = False
             out["math_defect"].append(f"perm_err:{type(exc).__name__}")

@@ -26,7 +26,7 @@ import time
 from collections import deque
 from contextlib import contextmanager
 from dataclasses import dataclass, field
-from typing import Any, Iterator
+from typing import Any, Callable, Iterator
 
 from factor_engine.runtime.task_resource_contract import DEFAULT_UNCERTAINTY, TaskResourceContract
 
@@ -585,12 +585,14 @@ class ReservationLease:
     幂等：重复调用无害（R31_TASK_FAILURE_RESOURCE_LEAK_ZERO 的基础）。
     """
 
-    def __init__(self, broker: "ResourceBroker", task: TaskResourceContract, task_id: str) -> None:
+    def __init__(self, broker: "ResourceBroker", task: TaskResourceContract, task_id: str,
+                 on_release: Callable[[], None] | None = None) -> None:
         self._broker = broker
         self._task = task
         self._task_id = task_id
         self._released = False
         self._lock = threading.RLock()
+        self._on_release = on_release
 
     @property
     def task(self) -> TaskResourceContract:
@@ -611,7 +613,43 @@ class ReservationLease:
             if self._released:
                 return
             self._released = True
-            self._broker._release_locked(self._task, task_id=self._task_id)
+            try:
+                self._broker._release_locked(self._task, task_id=self._task_id)
+            finally:
+                if self._on_release is not None:
+                    callback, self._on_release = self._on_release, None
+                    callback()
+
+    def transfer_memory_ownership(
+        self, kind: MemoryLeaseKind, nbytes: int, *, lease_id: str,
+        on_release: Callable[[], None] | None = None,
+    ) -> "MemoryLease | None":
+        """Atomically replace this running peak with a physical memory lease."""
+        with self._lock:
+            if self._released:
+                return None
+            callbacks = [cb for cb in (self._on_release, on_release) if cb is not None]
+
+            def release_callbacks() -> None:
+                first_error = None
+                for callback in callbacks:
+                    try:
+                        callback()
+                    except BaseException as exc:
+                        if first_error is None:
+                            first_error = exc
+                if first_error is not None:
+                    raise first_error
+
+            lease = self._broker._transfer_reservation_memory_locked(
+                self._task, self._task_id, kind, nbytes, lease_id,
+                release_callbacks if callbacks else None,
+            )
+            if lease is None:
+                return None
+            self._released = True
+            self._on_release = None
+            return lease
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -638,6 +676,7 @@ class MemoryLease:
         kind: MemoryLeaseKind,
         nbytes: int,
         lease_id: str,
+        on_release: Callable[[], None] | None = None,
     ) -> None:
         self._broker = broker
         self._kind = kind
@@ -645,6 +684,7 @@ class MemoryLease:
         self._lease_id = lease_id
         self._released = False
         self._lock = threading.RLock()
+        self._on_release = on_release
 
     @property
     def kind(self) -> MemoryLeaseKind:
@@ -669,7 +709,12 @@ class MemoryLease:
             if self._released:
                 return
             self._released = True
-            self._broker._release_memory_locked(self)
+            try:
+                self._broker._release_memory_locked(self)
+            finally:
+                if self._on_release is not None:
+                    callback, self._on_release = self._on_release, None
+                    callback()
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -1062,8 +1107,48 @@ class ResourceBroker:
         """P3/P4：ExecutionBudget = SafeLiveBudget × safety_factor。"""
         return max(0, self.auto_memory_budget().execution_budget)
 
+    def _active_job_memory_cap(self) -> int | None:
+        """Return the bound job ceiling without changing host authority."""
+        from factor_engine.runtime.host_resource_coordinator import get_active_job_lease
+
+        job = get_active_job_lease()
+        if job is None:
+            return None
+        if getattr(job, "broker", None) is not self or bool(getattr(job, "released", False)):
+            return 0
+        return max(0, int(getattr(job, "memory_bytes", 0) or 0))
+
+    def _memory_target_budget(self) -> int:
+        budget = self.execution_budget()
+        cap = self._active_job_memory_cap()
+        return budget if cap is None else min(budget, cap)
+
     def _lease_sum_bytes(self) -> int:
         return sum(l.nbytes for l in self._memory_leases.values())
+
+    def _running_peak_sum_bytes(self) -> int:
+        return sum(t.admissible_peak_bytes for t in self._running.values())
+
+    def _egress_reserve_remaining_locked(
+        self, exec_budget: int, *, candidate_kind: MemoryLeaseKind | None = None,
+        candidate_bytes: int = 0,
+    ) -> int:
+        """Keep the shared sink pools available without double-counting leases."""
+        target = sum(
+            self._pool_limit(kind, exec_budget)
+            for kind in (MemoryLeaseKind.RESULT_QUEUE, MemoryLeaseKind.WRITER_BATCH)
+        )
+        active = sum(
+            lease.nbytes for lease in self._memory_leases.values()
+            if lease.kind in {MemoryLeaseKind.RESULT_QUEUE, MemoryLeaseKind.WRITER_BATCH}
+        )
+        if candidate_kind in {MemoryLeaseKind.RESULT_QUEUE, MemoryLeaseKind.WRITER_BATCH}:
+            active += max(0, int(candidate_bytes))
+        return max(0, min(exec_budget, target) - active)
+
+    def _committed_memory_bytes_locked(self) -> int:
+        """Logical task peaks and physical leases are distinct commitments."""
+        return self._running_peak_sum_bytes() + self._lease_sum_bytes()
 
     def _pool_limit(self, kind: MemoryLeaseKind, exec_budget: int) -> int:
         """该 kind 的软池初始额度（exec_budget × fraction）。"""
@@ -1083,6 +1168,37 @@ class ResourceBroker:
         - 全局硬上限始终强制，绝不超 ``ExecutionBudget``；
         - 超限返回 ``None``（fail-closed，调用方应降级/等待）。
         """
+        from factor_engine.runtime.host_resource_coordinator import get_active_job_lease
+        from factor_engine.runtime.job_scoped_lease import (
+            broker_job_hook_suppressed, suppress_broker_job_hook,
+        )
+
+        job = None if broker_job_hook_suppressed() else get_active_job_lease()
+        if job is None:
+            return self._acquire_memory_host_only(kind, nbytes, lease_id=lease_id)
+        if getattr(job, "broker", None) is not self or bool(getattr(job, "released", False)):
+            return None
+        child = job.request_child(
+            owner=str(lease_id or "broker-memory"), kind="memory",
+            memory_bytes=max(0, int(nbytes)),
+        )
+        if child is None:
+            return None
+        try:
+            with suppress_broker_job_hook():
+                lease = self._acquire_memory_host_only(kind, nbytes, lease_id=lease_id)
+        except BaseException:
+            job.release_child(child)
+            raise
+        if lease is None:
+            job.release_child(child)
+            return None
+        lease._on_release = lambda: job.release_child(child)
+        return lease
+
+    def _acquire_memory_host_only(
+        self, kind: MemoryLeaseKind, nbytes: int, *, lease_id: str = "",
+    ) -> MemoryLease | None:
         nb = int(nbytes)
         if nb <= 0:
             return None
@@ -1090,8 +1206,10 @@ class ResourceBroker:
             exec_budget = self.execution_budget()
             if exec_budget <= 0:
                 return None
-            # 全局硬上限：SUM(all active leases) + candidate <= ExecutionBudget。
-            if self._lease_sum_bytes() + nb > exec_budget:
+            reserve = self._egress_reserve_remaining_locked(
+                exec_budget, candidate_kind=kind, candidate_bytes=nb,
+            )
+            if self._committed_memory_bytes_locked() + nb + reserve > exec_budget:
                 return None
             self._lease_counter += 1
             lid = str(lease_id or f"memlease_{self._lease_counter}")
@@ -1198,7 +1316,7 @@ class ResourceBroker:
 
     def current_read_budget(self) -> int:
         """P3/P4: read 类预算（SOURCE_READ + READ_WAVE 软池额度）。"""
-        exec_budget = self.execution_budget()
+        exec_budget = self._memory_target_budget()
         return sum(
             self._pool_limit(k, exec_budget)
             for k in (MemoryLeaseKind.SOURCE_READ, MemoryLeaseKind.READ_WAVE)
@@ -1206,7 +1324,7 @@ class ResourceBroker:
 
     def current_sink_budget(self) -> int:
         """P3/P4: sink/writer 类预算（RESULT_QUEUE + WRITER_BATCH）。"""
-        exec_budget = self.execution_budget()
+        exec_budget = self._memory_target_budget()
         return sum(
             self._pool_limit(k, exec_budget)
             for k in (MemoryLeaseKind.RESULT_QUEUE, MemoryLeaseKind.WRITER_BATCH)
@@ -1215,7 +1333,7 @@ class ResourceBroker:
     def automatic_result_queue_budget(self) -> int:
         """Initial bounded result queue from the one active broker pool."""
         return min(
-            int(self.execution_budget() * DEFAULT_RESULT_QUEUE_FRACTION),
+            int(self._memory_target_budget() * DEFAULT_RESULT_QUEUE_FRACTION),
             DEFAULT_RESULT_QUEUE_CAP_BYTES,
         )
 
@@ -1227,6 +1345,41 @@ class ResourceBroker:
         lease_id: str,
     ) -> tuple[MemoryLease, MemoryLease] | None:
         """Atomically reserve result delivery before compute admission."""
+        from factor_engine.runtime.host_resource_coordinator import get_active_job_lease
+        from factor_engine.runtime.job_scoped_lease import (
+            SharedChildRelease, broker_job_hook_suppressed, suppress_broker_job_hook,
+        )
+
+        job = None if broker_job_hook_suppressed() else get_active_job_lease()
+        if job is not None:
+            if getattr(job, "broker", None) is not self or bool(getattr(job, "released", False)):
+                return None
+            total = max(0, int(result_queue_bytes)) + max(0, int(writer_workspace_bytes))
+            child = job.request_child(owner=str(lease_id), kind="writer", memory_bytes=total)
+            if child is None:
+                return None
+            try:
+                with suppress_broker_job_hook():
+                    leases = self._acquire_protected_egress_host_only(
+                        result_queue_bytes, writer_workspace_bytes, lease_id=lease_id,
+                    )
+            except BaseException:
+                job.release_child(child)
+                raise
+            if leases is None:
+                job.release_child(child)
+                return None
+            release_child = SharedChildRelease(job, child, len(leases))
+            for lease in leases:
+                lease._on_release = release_child
+            return leases
+        return self._acquire_protected_egress_host_only(
+            result_queue_bytes, writer_workspace_bytes, lease_id=lease_id,
+        )
+
+    def _acquire_protected_egress_host_only(
+        self, result_queue_bytes: int, writer_workspace_bytes: int, *, lease_id: str,
+    ) -> tuple[MemoryLease, MemoryLease] | None:
         queue_bytes = int(result_queue_bytes)
         writer_bytes = int(writer_workspace_bytes)
         if queue_bytes <= 0 or writer_bytes <= 0 or not lease_id:
@@ -1253,7 +1406,9 @@ class ResourceBroker:
                     return None
                 if waiter.lease_id != lease_id:
                     return None
-            if self._lease_sum_bytes() + queue_bytes + writer_bytes > self.execution_budget():
+            exec_budget = self.execution_budget()
+            if (self._committed_memory_bytes_locked() + queue_bytes + writer_bytes
+                    > exec_budget):
                 if waiter is not None:
                     waiter.observed_revision = self._resource_revision
                 return None
@@ -1323,20 +1478,15 @@ class ResourceBroker:
         reserve/release 时 CPU/IO token 泄漏。现在判定与获取分离：
         ``can_admit`` 纯判定，``try_reserve`` 原子 check+acquire 并返回 lease。
         """
-        snap = self._refresh()
-        stage = self.pressure_stage()
-        if stage in {STAGE_PRESSURE_3, STAGE_PRESSURE_4, STAGE_CRITICAL}:
-            return False
-        peak = task.admissible_peak_bytes
-        if peak > 0:
-            in_use = sum(
-                t.admissible_peak_bytes for t in self._running.values()
-            )
-            # R27-039: sum(running) + candidate*uncertainty <= admissible_memory
-            admissible = max(0, snap.live_headroom - self._reserve_bytes())
-            if in_use + peak > admissible:
-                return False
         with self._lock:
+            stage = self.pressure_stage()
+            if stage in {STAGE_PRESSURE_3, STAGE_PRESSURE_4, STAGE_CRITICAL}:
+                return False
+            peak = max(0, int(task.admissible_peak_bytes))
+            exec_budget = self.execution_budget()
+            reserve = self._egress_reserve_remaining_locked(exec_budget)
+            if self._committed_memory_bytes_locked() + peak + reserve > exec_budget:
+                return False
             # CPU token（R27-043/044）—— 纯判定
             if task.cpu_tokens > 0 and not self._cpu.can_acquire(task.cpu_tokens):
                 return False
@@ -1356,6 +1506,37 @@ class ResourceBroker:
         在同一把锁内判定并获取：``can_admit`` True 后 ``try_acquire`` 必然成功，
         不存在「check 通过但 token 被抢走」的窗口。
         """
+        from factor_engine.runtime.host_resource_coordinator import get_active_job_lease
+        from factor_engine.runtime.job_scoped_lease import (
+            broker_job_hook_suppressed, suppress_broker_job_hook,
+        )
+
+        job = None if broker_job_hook_suppressed() else get_active_job_lease()
+        if job is None:
+            return self._try_reserve_host_only(task, task_id=task_id)
+        if getattr(job, "broker", None) is not self or bool(getattr(job, "released", False)):
+            return None
+        child = job.request_child(
+            owner=str(task_id or "broker-task"), kind="compute",
+            memory_bytes=max(0, int(task.admissible_peak_bytes)),
+        )
+        if child is None:
+            return None
+        try:
+            with suppress_broker_job_hook():
+                lease = self._try_reserve_host_only(task, task_id=task_id)
+        except BaseException:
+            job.release_child(child)
+            raise
+        if lease is None:
+            job.release_child(child)
+            return None
+        lease._on_release = lambda: job.release_child(child)
+        return lease
+
+    def _try_reserve_host_only(
+        self, task: TaskResourceContract, *, task_id: str = "",
+    ) -> ReservationLease | None:
         tid = str(task_id or id(task))
         with self._lock:
             # A lease id is the accounting key. Re-admitting it would charge
@@ -1390,6 +1571,31 @@ class ResourceBroker:
             self._cpu.release(reserved.cpu_tokens)
             self._io.release(reserved.io_tokens)
             self._notify_resource_change_locked()
+
+    def _transfer_reservation_memory_locked(
+        self, task: TaskResourceContract, task_id: str, kind: MemoryLeaseKind,
+        nbytes: int, lease_id: str, on_release: Callable[[], None] | None,
+    ) -> MemoryLease | None:
+        """Move running memory to the physical ledger without an uncharged gap."""
+        nb = int(nbytes)
+        lid = str(lease_id)
+        if nb <= 0 or nb > int(task.admissible_peak_bytes) or not lid:
+            return None
+        with self._lock:
+            if self._running.get(task_id) is not task or lid in self._memory_leases:
+                return None
+            lease = MemoryLease(self, kind, nb, lid, on_release=on_release)
+            try:
+                self._memory_leases[lid] = lease
+            except BaseException:
+                if self._memory_leases.get(lid) is lease:
+                    self._memory_leases.pop(lid, None)
+                raise
+            self._running.pop(task_id)
+            self._cpu.release(task.cpu_tokens)
+            self._io.release(task.io_tokens)
+            self._notify_resource_change_locked()
+            return lease
 
     def reserve(self, task: TaskResourceContract, *, task_id: str = "") -> bool:
         """向后兼容：返回 bool。内部经 ``try_reserve`` 拿到 lease 并持有，
@@ -1503,7 +1709,14 @@ class ResourceBroker:
         )
 
     def _envelope_from_snapshot(self, snap: ResourceSnapshot) -> Any:
-        """从单个采样构造 Safe Envelope（§303/17）。"""
+        """Build the controller envelope from the broker's one execution pool.
+
+        ``compute_safe_envelope`` still supplies the non-memory resource fields,
+        but its legacy reserve formula must not become a second memory authority.
+        AutoMemoryBudget already reconciles the live domains, reserve, verified
+        residency, safety factor and recovery hysteresis.  Controller targets are
+        subdivisions of that active execution budget; they are not another pool.
+        """
         from factor_engine.runtime.resource_monitor import compute_safe_envelope
 
         env = compute_safe_envelope(
@@ -1514,8 +1727,11 @@ class ResourceBroker:
         )
         from dataclasses import replace
 
+        auto_budget = self.auto_memory_budget()
         return replace(
             env,
+            safe_memory_bytes=max(0, int(self.execution_budget())),
+            emergency_reserve_bytes=max(0, int(auto_budget.emergency_reserve)),
             hard_cpu_tokens=self.hard_cpu_slots,
             target_cpu_tokens=max(1, self._cpu.soft_budget),
             io_capacity_score=1.0,
@@ -1566,18 +1782,44 @@ class ResourceBroker:
             if autopilot is not None and autopilot.started and autopilot.last_decision() is not None:
                 snap = autopilot.last_decision()
                 if not snap.is_stale:
-                    return snap.decision
+                    return self._clamp_decision_memory(
+                        snap.decision, job_memory_lease_bytes,
+                    )
                 # 太旧 → **直接** conservative（旧 last_decision 同样过期，不能当 fresh）。
-                return self._conservative_decision()
+                return self._clamp_decision_memory(
+                    self._conservative_decision(), job_memory_lease_bytes,
+                )
         except Exception:
             pass
         snap = self._refresh(force=True)
-        return self._resource_controller().tick(
+        decision = self._resource_controller().tick(
             self._signals_from_snapshot(snap),
             self._envelope_from_snapshot(snap),
             job_memory_lease_bytes=job_memory_lease_bytes,
             sink_backpressure=sink_backpressure,
         )
+        return self._clamp_decision_memory(decision, job_memory_lease_bytes)
+
+    def _clamp_decision_memory(self, decision: Any, cap: int | None) -> Any:
+        """Shrink stale/fresh memory targets to the immediate job ceiling."""
+        if cap is None:
+            cap = self._active_job_memory_cap()
+        if cap is None:
+            return decision
+        limit = max(0, min(self.execution_budget(), int(cap)))
+        fields = (
+            "read_wave_bytes", "factor_block_bytes",
+            "result_queue_bytes", "cache_budget_bytes",
+        )
+        values = [max(0, int(getattr(decision, name, 0))) for name in fields]
+        total = sum(values)
+        if total <= limit:
+            return decision
+        updates = {
+            name: (0 if total == 0 else value * limit // total)
+            for name, value in zip(fields, values)
+        }
+        return replace(decision, **updates)
 
     def _record_live_signals(
         self,
@@ -1598,19 +1840,24 @@ class ResourceBroker:
     def _conservative_decision(self) -> Any:
         """decision 过期时的保守回退（§P0-012：不自行创建第二套 decision）。"""
         from factor_engine.runtime.resource_autopilot import ResourceDecision
+        from factor_engine.runtime.memory_budget_allocator import MemoryBudgetAllocator
 
-        env = self.resource_envelope()
+        exec_budget = self.execution_budget()
+        alloc = MemoryBudgetAllocator().allocate(
+            exec_budget, pressure_stage=STAGE_PRESSURE_3,
+            spill_free_bytes=self._usable_spill(), spill_reserve_bytes=0,
+        )
         return ResourceDecision(
             target_concurrency=1,
             target_cpu_tokens=max(1, self.hard_cpu_slots // 4),
-            read_wave_bytes=256 * 1024**2,
-            factor_block_bytes=64 * 1024**2,
-            result_queue_bytes=128 * 1024**2,
+            read_wave_bytes=alloc.read_wave_bytes,
+            factor_block_bytes=alloc.factor_block_bytes,
+            result_queue_bytes=alloc.result_queue_bytes,
             io_concurrency=1,
             remote_concurrency=1,
-            cache_budget_bytes=128 * 1024**2,
-            spill_budget_bytes=0,
-            pressure_state="NORMAL",
+            cache_budget_bytes=alloc.cache_bytes,
+            spill_budget_bytes=alloc.spill_bytes,
+            pressure_state=STAGE_PRESSURE_3,
             memory_constrained=True,
             reasons=("stale_decision_conservative_fallback",),
         )

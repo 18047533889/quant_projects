@@ -1,0 +1,40 @@
+{
+  "record": "H36 LazyColumnBundle shared-resource follow-up",
+  "date": "2026-09-10",
+  "workspace": "/home/sunhaiwei/quant_projects",
+  "implementation": {
+    "admission": "LazyColumnBundle discovers the installed v2 data-cache authority and uses current_read_budget as its shared residency ceiling. An explicit positive cap is clamped to the current shared ceiling; explicit zero, unknown authority, known-zero authority, and authority failures disable residency.",
+    "leases": "An independently used bundle requests one SOURCE_READ broker lease per admitted physical Series. Lease IDs include a monotonic generation so a re-fetch can coexist with an older payload still owned by a caller.",
+    "owner_lifetime": "The bundle reuses DataAccessSource._physical_cache_owners and installs weakref finalizers for the Series wrapper and distinct ndarray/index roots. Eviction, context invalidation, release_cached, and close remove residency references but do not release a lease while any physical owner remains alive.",
+    "source_single_owner": "DataAccessSource constructs its LazyColumnBundle with materialized_budget=0. The bundle performs the governed collect but does not retain or charge the physical payload; DataAccessSource._put_cache is the sole resident-cache admission and lease owner. Repeated source requests therefore use the Source cache without another collect when admission succeeds, while a zero/denied budget intentionally permits re-read rather than ungoverned residency.",
+    "alias_and_request_integrity": "The internal cache remains keyed by physical column name, logical aliases are applied only at the public return boundary, and request-owned strong references are captured before any eviction."
+  },
+  "failure_cleanup": {
+    "owner_discovery": "If physical owners cannot be established, the payload is returned to the request but is not cached and no lease is requested.",
+    "lease_denial": "If broker admission returns no lease, the payload remains request-only and no resident mapping is created.",
+    "finalizer_registration": "If finalizer registration fails after lease acquisition, every already-created finalizer is detached, the tentative resident mapping and live-lease state are removed, and the acquired lease is released exactly once."
+  },
+  "verification": [
+    {
+      "command": ".venv/bin/pytest -q tests/operators/test_h_validation_lazy_regressions.py",
+      "result": "22 passed, 2 warnings"
+    },
+    {
+      "command": ".venv/bin/pytest -q factor_engine/tests/storage/test_data_access_lazy_bundle.py factor_engine/tests/storage/test_data_access_source_concurrent.py -k \"lazy or cache or prefetch\"",
+      "result": "7 passed, 3 deselected, 2 warnings"
+    },
+    {
+      "command": ".venv/bin/pytest -q tests/storage/test_data_access_lazy_bundle.py",
+      "result": "1 passed, 2 warnings"
+    },
+    {
+      "command": "git diff --check",
+      "result": "passed"
+    }
+  ],
+  "production_validation_boundary": [
+    "The tests use bounded synthetic Polars/Pandas fixtures and fake shared brokers; no live production broker, COS dataset, or production factor publication was exercised.",
+    "The two same-named lazy-bundle mirror test modules must run in separate pytest processes because collecting both together triggers pytest's import-file-mismatch behavior.",
+    "No commit, push, deployment, dependency installation, or production data mutation was performed."
+  ]
+}

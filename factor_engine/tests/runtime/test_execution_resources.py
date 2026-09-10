@@ -16,9 +16,11 @@ from factor_engine.runtime.execution_resources import (
 def _reset(monkeypatch):
     reset_resource_cache()
     monkeypatch.setenv("FACTOR_ENGINE_CPU_BUDGET", "16")
+    monkeypatch.setenv("FACTOR_ENGINE_MAX_MEMORY_BYTES", str(16 * 1024**3))
     # R27-021/167：显式给出足够小的 per-worker 峰值，让内存不再是 CPU 约束的
     # 主要限制（否则 host RAM 会通过 memory bound 把 8 核 cap 成 7，测试不确定）。
-    monkeypatch.setenv("FACTOR_ENGINE_PER_WORKER_PEAK_BYTES", str(1024**3))
+    # This lane tests CPU allocation, independent of imported runtime profiles.
+    monkeypatch.setenv("FACTOR_ENGINE_PER_WORKER_PEAK_BYTES", str(128 * 1024**2))
     yield
     reset_resource_cache()
 

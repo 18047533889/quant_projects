@@ -191,7 +191,23 @@ def test_two_panel_parity(fn, mf) -> None:
 # (b') scan-count / source-read proof: the vec path consumes the shared bundle
 # ---------------------------------------------------------------------------
 
-def test_vec_path_builds_shared_bundle_and_derives_in_process() -> None:
+@pytest.fixture
+def leased_ss_cache(monkeypatch):
+    """Install the same central-broker admission seam production caching uses."""
+    from factor_engine.runtime import resource_broker
+
+    class Lease:
+        def release(self):
+            pass
+
+    class Broker:
+        def acquire_memory(self, *_args, **_kwargs):
+            return Lease()
+
+    monkeypatch.setattr(resource_broker, "peek_v2_resource_broker", lambda: Broker())
+    return ss._STORE
+
+def test_vec_path_builds_shared_bundle_and_derives_in_process(leased_ss_cache) -> None:
     """The vec kernel must read the sufficient-stats bundle, not re-scan bars.
 
     Proof: (1) before running the vec kernel, the bundle store has no entry for
@@ -209,35 +225,41 @@ def test_vec_path_builds_shared_bundle_and_derives_in_process() -> None:
     key = ss._make_key(a)
     assert key in ss._STORE._data, "vec path did not materialize the bundle"
     bundle = ss._STORE._data[key]
-    # bundle carries the full grid + sums + packed prefix
-    assert set(bundle) >= {"g", "fin", "cnt", "sum", "sumsq", "max", "min",
-                           "first", "last", "argmax_pos", "argmin_pos", "r2", "r3", "r4"}
+    # A sum request retains only the statistics it consumes; expensive powers,
+    # packed prefixes and return moments are not materialized speculatively.
+    assert set(bundle) == {"g", "fin", "cnt", "sum", "mean", "uniq_days", "columns", "active"}
+    assert bundle["g"].shape[:1] == (2,)
+    assert bundle["columns"] == tuple(a.columns)
     # the vec kernel's output IS derived from the bundle sums
     assert np.allclose(res_sum.to_numpy(), bundle["sum"], rtol=0, atol=0) or np.allclose(
         res_sum.to_numpy(), bundle["sum"], rtol=1e-12)
 
     # second operator on the same frame -> identical bundle object (cache reuse)
-    bundle2 = ss.compute_sufficient_statistics(a)
+    bundle2 = ss.compute_sufficient_statistics(a, required="sum")
     assert bundle2 is bundle
 
 
-def test_cache_reuse_across_two_operators_same_frame() -> None:
+def test_cache_reuse_across_two_operators_same_frame(leased_ss_cache) -> None:
     a = _close_panel(days=2, seed=6)
     ss._STORE._data.clear()
     _vec(sso._ts_mean, a, min_finite=2)
     key = ss._make_key(a)
     bundle = ss._STORE._data[key]
-    # compute the bundle directly -> same object (no second grid materialization)
-    assert ss.compute_sufficient_statistics(a) is bundle
-    # two different one-panel ops on the same frame hit the same bundle
+    # Another mean request reuses the same on-demand bundle.
+    assert ss.compute_sufficient_statistics(a, required="mean") is bundle
+    # A max request upgrades the entry to the full family bundle rather than
+    # forcing mean to pay for unused extrema/powers up front.
     _vec(sso._ts_max, a, min_finite=2)
-    assert ss._STORE._data[key] is bundle
+    upgraded = ss._STORE._data[key]
+    assert upgraded is not bundle
+    assert {"max", "quart", "packed", "r4"}.issubset(upgraded)
+    assert upgraded["uniq_days"].equals(pd.DatetimeIndex(a.index.normalize().unique()))
     # exactly one bundle entry for this frame id
     matches = [k for k in ss._STORE._data if k == key]
     assert len(matches) == 1
 
 
-def test_pair_bundle_reused_for_two_panel_ops() -> None:
+def test_pair_bundle_reused_for_two_panel_ops(leased_ss_cache) -> None:
     a = _close_panel(days=2, seed=7)
     b = _volume_panel(a, seed=8)
     ss._STORE._data.clear()

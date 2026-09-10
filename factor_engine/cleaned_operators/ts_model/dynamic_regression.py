@@ -19,6 +19,7 @@ All fits degrade to NaN rather than fabricate values.
 """
 from __future__ import annotations
 
+from collections import deque
 from typing import Any, Callable
 
 import numpy as np
@@ -73,6 +74,7 @@ _MULTI_PARAM_SPECS: dict[str, ParamSpec] = {
 _MULTI_WINDOW_SEMANTICS = "max_lookback"
 _MULTI_WARMUP_POLICY = "expanding"
 _MULTI_FULL_WARMUP = "full"
+_PREDICTION_SCALE_EPS = 1e-12
 # Model-audit 2026-08-13: raised from "n_coeffs + 1" to "5 * n_coeffs" to prevent
 # fitting a 4-feature model on 6 observations (overfitting risk). User can override
 # via explicit min_periods if needed.
@@ -192,6 +194,12 @@ def _multi_regression(
         raise ValueError("stability_k>0 requires stat='coeff'")
     fit = _build_fit(fit_fn, extra, add_intercept)
     out = np.full((rows, cols), np.nan, dtype=float)
+    prediction_status_counts = {
+        "PREDICTION_INPUT_NONFINITE": 0,
+        "PREDICTION_NUMERIC_INVALID": 0,
+        "PREDICTION_ZERO_SCALE": 0,
+        "PREDICTION_INSUFFICIENT_SCALE_SUPPORT": 0,
+    }
     w = int(window)
     # Model-audit 2026-08-13: ratio-based floor prevents overfitting (e.g., 4-feature
     # fit on 6 obs). User min_periods still honored if set higher.
@@ -215,13 +223,25 @@ def _multi_regression(
             maturity_cutoff=y.index[fit_end],
         )
 
+    def record_prediction(reason: str, *, col: int, start: int, fit_end: int, row: int) -> None:
+        prediction_status_counts[reason] += 1
+        record(
+            FitResult(None, FitStatus(False, reason, (("phase", "prediction"),))),
+            col=col, start=start, fit_end=fit_end, row=row,
+        )
+
     for col in range(cols):
         ycol = yv[:, col]
         xcols = [x[:, col] for x in xs]
+        # One exact fit per training cutoff.  Stability consumes these same
+        # cutoff-bound fits; it never refits j=0 or earlier cutoffs.
+        coefficient_fits = deque(maxlen=k) if stat == "coeff" and k > 0 else None
         for row in range(rows):
             fit_end = row - lag
             if fit_end < 0:
                 continue
+            if coefficient_fits is not None:
+                coefficient_fits.append((fit_end, None))
             # P1: strict full-history floor when warmup_policy="full".
             if warmup_policy == "full" and fit_end < w - 1:
                 continue
@@ -247,60 +267,58 @@ def _multi_regression(
             b = result.value
             if b is None:
                 continue
+            if stat == "coeff" and k > 0:
+                value = float(b[coeff_index])
+                coefficient_fits[-1] = (fit_end, value if np.isfinite(value) else None)
             with np.errstate(over="ignore", invalid="ignore"):
                 pred = design @ b
                 e = vy - pred
             if stat == "coeff":
                 if k > 0:
-                    coeffs = []
-                    for j in range(k):
-                        fe = row - lag - j
-                        if fe < 0:
-                            break
-                        s2 = max(0, fe - w + 1)
-                        sy = ycol[s2 : fe + 1]
-                        sx = [x[s2 : fe + 1] for x in xcols]
-                        v2 = np.isfinite(sy)
-                        for x in sx:
-                            v2 &= np.isfinite(x)
-                        if v2.sum() < mp:
-                            record(FitResult(None, FitStatus(False, "insufficient_sample")),
-                                   col=col, start=s2, fit_end=fe, row=row)
-                            break
-                        vy2 = sy[v2]
-                        vx2 = [x[v2] for x in sx]
-                        if any(np.std(vx2) <= 0.0 for vx2 in vx2):
-                            record(FitResult(None, FitStatus(False, "singular")),
-                                   col=col, start=s2, fit_end=fe, row=row)
-                            break
-                        d2 = build_design(vx2, add_intercept)
-                        result2 = fit_result(fit, d2, vy2)
-                        record(result2, col=col, start=s2, fit_end=fe, row=row)
-                        b2 = result2.value
-                        if b2 is None:
-                            break
-                        coeffs.append(float(b2[coeff_index]))
-                    if len(coeffs) >= 2:
+                    recent = list(reversed(coefficient_fits))
+                    coeffs = [value for cutoff, value in recent]
+                    exact = [cutoff for cutoff, _ in recent] == [fit_end - j for j in range(k)]
+                    if exact and len(coeffs) == k and all(v is not None for v in coeffs):
                         out[row, col] = float(np.std(coeffs))
                 else:
                     out[row, col] = float(b[coeff_index])
             elif stat == "resid":
-                if np.isfinite(ycol[row]):
-                    cur_xs = [x[row] for x in xcols]
+                cur_xs = [x[row] for x in xcols]
+                if np.isfinite(ycol[row]) and np.all(np.isfinite(cur_xs)):
                     terms = ([1.0] if add_intercept else []) + cur_xs
-                    out[row, col] = float(ycol[row] - float(np.dot(terms, b)))
+                    pred_now = float(np.dot(terms, b))
+                    resid = float(ycol[row] - pred_now)
+                    if np.isfinite(pred_now) and np.isfinite(resid):
+                        out[row, col] = resid
+                    else:
+                        record_prediction("PREDICTION_NUMERIC_INVALID", col=col, start=start, fit_end=fit_end, row=row)
+                else:
+                    record_prediction("PREDICTION_INPUT_NONFINITE", col=col, start=start, fit_end=fit_end, row=row)
             elif stat == "resid_z":
-                if np.isfinite(ycol[row]):
+                cur_xs = [x[row] for x in xcols]
+                if np.isfinite(ycol[row]) and np.all(np.isfinite(cur_xs)):
                     ddof = max(design.shape[1], 1)
                     if len(e) > ddof:
                         sd = float(np.sqrt(np.sum(e * e) / max(len(e) - ddof, 1)))
                     else:
                         sd = np.nan
-                    if sd is not None and np.isfinite(sd) and sd > 0.0:
-                        cur_xs = [x[row] for x in xcols]
+                    if len(e) <= ddof:
+                        record_prediction("PREDICTION_INSUFFICIENT_SCALE_SUPPORT", col=col, start=start, fit_end=fit_end, row=row)
+                    elif not np.isfinite(sd):
+                        record_prediction("PREDICTION_NUMERIC_INVALID", col=col, start=start, fit_end=fit_end, row=row)
+                    elif sd > _PREDICTION_SCALE_EPS:
                         terms = ([1.0] if add_intercept else []) + cur_xs
-                        resid = float(ycol[row] - float(np.dot(terms, b)))
-                        out[row, col] = resid / sd
+                        pred_now = float(np.dot(terms, b))
+                        resid = float(ycol[row] - pred_now)
+                        z = resid / sd
+                        if np.isfinite(pred_now) and np.isfinite(resid) and np.isfinite(z):
+                            out[row, col] = z
+                        else:
+                            record_prediction("PREDICTION_NUMERIC_INVALID", col=col, start=start, fit_end=fit_end, row=row)
+                    else:
+                        record_prediction("PREDICTION_ZERO_SCALE", col=col, start=start, fit_end=fit_end, row=row)
+                else:
+                    record_prediction("PREDICTION_INPUT_NONFINITE", col=col, start=start, fit_end=fit_end, row=row)
             elif stat in ("r2", "r2_adj"):
                 ss_res = float(np.sum(e * e))
                 # P1 (R² definition governance, versioned): ``_R2_DEFINITION ==
@@ -332,7 +350,9 @@ def _multi_regression(
                         out[row, col] = float(1.0 - (1.0 - r2) * (n - 1.0) / max(denom, 1.0))
                     else:
                         out[row, col] = r2
-    return frame_like(y, out)
+    result_frame = frame_like(y, out)
+    result_frame.attrs["prediction_status_counts"] = {reason: count for reason, count in prediction_status_counts.items() if count}
+    return result_frame
 
 
 # P1-89: honest input_units / output_unit for the multi-variable regression
@@ -370,7 +390,7 @@ def _register_multi(name: str, description: str, fit_fn: Callable[..., Any], ext
         source="ts_model.dynamic_regression",
         backend="pandas_numpy",
         status="experimental",
-        semantic_version="3.0" if name.startswith("ts_ridge_regression_") else "2.0",
+        semantic_version=("3.0" if name == "ts_multi_regression_coeff_stability" or name.startswith("ts_ridge_regression_") else "2.0"),
     )
     class _MultiOp(SeriesOperator):
         metadata = metadata(
@@ -479,7 +499,7 @@ _register_multi(
 )
 _register_multi(
     "ts_multi_regression_coeff_stability",
-    "多变量回归系数在最近 K 个滚动窗口的标准差（因果 model-state alpha：衡量截至 t-1 的连续历史拟合中系数的稳定性，非诊断）。",
+    "多变量回归系数在最近固定 K=5 个连续成功滚动拟合中的标准差（不足5次不输出；截至 t-1 的因果 model-state alpha）。",
     ols_fit, None, "coeff", "level", fit_lag=1, stability_k=5, cost=7,
 )
 _register_multi(

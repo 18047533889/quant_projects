@@ -12,6 +12,7 @@ from enum import Enum
 import hashlib
 import json
 import math
+import numbers
 import re
 import threading
 from collections import OrderedDict
@@ -23,6 +24,9 @@ from factor_engine.cleaned_operators.registry import OperatorRegistry
 from factor_engine.planner.logical_plan import PlanNode
 
 FE_ROOT = Path(__file__).resolve().parents[2]
+# Bump whenever template-emitted SQL semantics change.
+_SQL_TEMPLATE_GENERATION = "2026-09-10-h09-h16-h34-h35"
+
 
 
 class CompileStatus(str, Enum):
@@ -200,7 +204,12 @@ def _plan_shape_key(plan: PlanNode, dialect: SqlDialect) -> str:
                     attrs[k] = v
                 except (TypeError, ValueError):
                     attrs[k] = repr(v)
-        return {"op": n.op, "a": attrs, "in": [rec(c) for c in n.inputs]}
+        semantic = {
+            k: v for k, v in sorted((n.semantic_attrs or {}).items())
+        }
+        return {
+            "op": n.op, "a": attrs, "semantic": semantic, "in": [rec(c) for c in n.inputs]
+        }
 
     payload = _json.dumps(
         rec(plan), sort_keys=True, separators=(",", ":"),
@@ -245,16 +254,27 @@ class SqlTemplate:
         binding 一致 → 直接复用缓存编译结果（零重编译）；binding 不一致 →
         诚实重编译（结构参数变化时 SQL 形状可能不同，绝不硬凑复用）。
         """
-        from factor_engine.backend.sql_pushdown.emitter import compile_plan_to_sql
-
-        if _literal_binding_key(plan) == self.binding_key:
+        required = {"time_column", "instrument_column"}
+        if required.issubset(kw):
+            requested_shape = _template_cache_key(
+                plan,
+                kw.get("dialect", SqlDialect.DUCKDB),
+                dataset=kw.get("dataset"),
+                table=kw.get("table"),
+                time_column=kw["time_column"],
+                instrument_column=kw["instrument_column"],
+                filt=kw.get("filt"),
+            )
+        else:
+            requested_shape = ""
+        if requested_shape == self.shape_key and _literal_binding_key(plan) == self.binding_key:
             return self.compiled
         return compile_plan_to_sql(
             plan,
             dataset=kw.get("dataset"),
             table=kw.get("table"),
-            time_column=kw["time_column"],
-            instrument_column=kw["instrument_column"],
+            time_column=kw.get("time_column", "date"),
+            instrument_column=kw.get("instrument_column", "instrument"),
             filt=kw.get("filt"),
             dialect=kw.get("dialect", SqlDialect.DUCKDB),
         )
@@ -272,6 +292,16 @@ class _SqlTemplateCache:
         self._max_bytes = max(1, int(max_bytes))
         self._data: "OrderedDict[str, SqlTemplate]" = OrderedDict()
         self._lock = threading.Lock()
+        self._bytes = 0
+
+    @staticmethod
+    def _entry_bytes(shape_key: str, binding_key: str, compiled: "CompiledSql") -> int:
+        """Exact managed UTF-8 payload charge (not a claim about Python RSS)."""
+        fields = [shape_key, binding_key, compiled.query, *(compiled.read_datasets or ())]
+        fields.extend(sorted(compiled.referenced_columns))
+        fields.append(compiled.table or "")
+        return sum(len(str(value).encode("utf-8")) for value in fields)
+
 
     def get(self, shape_key: str, binding_key: str) -> "CompiledSql | None":
         with self._lock:
@@ -283,16 +313,18 @@ class _SqlTemplateCache:
 
     def put(self, shape_key: str, binding_key: str, compiled: "CompiledSql") -> None:
         with self._lock:
+            charge = self._entry_bytes(shape_key, binding_key, compiled)
+            old = self._data.pop(shape_key, None)
+            if old is not None:
+                self._bytes -= self._entry_bytes(shape_key, old.binding_key, old.compiled)
+            if charge > self._max_bytes:
+                return
             self._data[shape_key] = SqlTemplate(shape_key, binding_key, compiled)
+            self._bytes += charge
             self._data.move_to_end(shape_key)
-            size = sum(
-                len(str(k)) + len(str(v.compiled.query)) + len(v.binding_key)
-                for k, v in self._data.items()
-            )
-            while (len(self._data) > self._max_entries or size > self._max_bytes) \
-                    and len(self._data) > 1:
+            while len(self._data) > self._max_entries or self._bytes > self._max_bytes:
                 k, v = self._data.popitem(last=False)
-                size -= len(str(k)) + len(str(v.compiled.query)) + len(v.binding_key)
+                self._bytes -= self._entry_bytes(k, v.binding_key, v.compiled)
 
     def info(self) -> dict[str, Any]:
         with self._lock:
@@ -300,12 +332,14 @@ class _SqlTemplateCache:
                 "entries": len(self._data),
                 "max_entries": self._max_entries,
                 "max_bytes": self._max_bytes,
+                "managed_bytes": self._bytes,
                 "shapes": list(self._data.keys()),
             }
 
     def clear(self) -> None:
         with self._lock:
             self._data.clear()
+            self._bytes = 0
 
 
 #: 进程级模板缓存（#65/#217）。
@@ -1401,6 +1435,53 @@ def _rolling_std_min_periods_sql(
     return (
         f"CASE WHEN {cnt} < {mp} THEN NULL ELSE {stdv} * {scale_expr} END"
     )
+
+
+def _nonnegative_int_attr(
+    node: PlanNode, *keys: str, input_index: int | None = None, default: int = 0
+) -> int:
+    """Strict integer parser for domains such as ddof that include zero."""
+    from factor_engine.backend.plan_params import PlanParamError
+
+    value: Any = default
+    label = keys[0] if keys else "integer"
+    for key in keys:
+        if key in node.attrs and node.attrs[key] is not None:
+            value = node.attrs[key]
+            label = key
+            break
+    else:
+        if input_index is not None:
+            value = _raw_literal(node, input_index, default)
+    if isinstance(value, bool) or not isinstance(value, numbers.Integral):
+        raise PlanParamError(f"{label} must be a non-negative integer")
+    if int(value) < 0:
+        raise PlanParamError(f"{label} must be a non-negative integer")
+    return int(value)
+
+def _positive_int_attr(
+    node: PlanNode, *keys: str, input_index: int | None = None, default: int = 1
+) -> int:
+    from factor_engine.backend.plan_params import PlanParamError
+
+    value = _nonnegative_int_attr(node, *keys, input_index=input_index, default=default)
+    if value == 0:
+        raise PlanParamError(f"{keys[0] if keys else 'integer'} must be a positive integer")
+    return value
+
+
+
+def _variance_ddof_expr(value: str, over: str, ddof: int, *, sqrt: bool = False) -> str:
+    """Native stable variance adjusted from N-1 to the requested N-ddof."""
+    count = f"COUNT({value}) OVER ({over})"
+    if ddof == 0:
+        expr = f"VAR_POP({value}) OVER ({over})"
+    else:
+        sample = f"VAR_SAMP({value}) OVER ({over})"
+        expr = f"({sample}) * ({count} - 1.0) / ({count} - {ddof}.0)"
+    if sqrt:
+        expr = f"SQRT({expr})"
+    return f"CASE WHEN {count} <= {ddof} THEN NULL ELSE {expr} END"
 
 
 def _int_attr(node: PlanNode, *keys: str, input_index: int | None = None, default: int = 0) -> int:
@@ -2918,6 +2999,46 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
             has_ts_partition=True,
         )
 
+    def fiscal_ordinal_sql(value: str) -> str:
+        text = f"UPPER(TRIM(CAST({value} AS VARCHAR)))"
+        numeric = f"TRY_CAST({value} AS DOUBLE)"
+        type_name = f"TYPEOF({value})"
+        numeric_type = f"REGEXP_FULL_MATCH({type_name}, 'U?(TINYINT|SMALLINT|INTEGER|BIGINT|HUGEINT)|FLOAT|DOUBLE|DECIMAL.*')"
+        date = f"COALESCE(TRY_STRPTIME({text}, '%Y%m%d'), TRY_CAST({text} AS TIMESTAMP))"
+        return (
+            "CASE "
+            f"WHEN ({numeric_type}) AND {numeric} = FLOOR({numeric}) AND {numeric} BETWEEN 10000 AND 99999 "
+            f"AND MOD(CAST({numeric} AS BIGINT), 10) BETWEEN 1 AND 4 THEN "
+            f"FLOOR({numeric} / 10) * 4 + MOD(CAST({numeric} AS BIGINT), 10) - 1 "
+            f"WHEN REGEXP_FULL_MATCH({text}, '^[0-9]{{4}}[^0-9]*Q?[1-4]$') THEN "
+            f"CAST(SUBSTR({text}, 1, 4) AS BIGINT) * 4 + CAST(RIGHT({text}, 1) AS BIGINT) - 1 "
+            f"WHEN (NOT ({numeric_type}) OR ({numeric} BETWEEN 10000000 AND 99999999 "
+            f"AND {numeric} = FLOOR({numeric}))) AND {date} IS NOT NULL "
+            f"THEN YEAR({date}) * 4 + QUARTER({date}) - 1 "
+            "ELSE NULL END"
+        )
+
+    def revision_policy(n: PlanNode) -> str:
+        from factor_engine.backend.plan_params import PlanParamError
+
+        positional_index = {
+            "period_lag": 3,
+            "period_change": 5,
+            "period_average": 4,
+            "period_cagr": 6,
+            "quarter_from_cumulative": 3,
+            "ttm_from_quarterly": 4,
+            "ttm_from_cumulative": 3,
+            "yoy_by_period": 5,
+        }.get(n.op)
+        raw = n.attrs.get("revision_policy", _raw_literal(n, positional_index, "latest_available") if positional_index is not None else "latest_available")
+        policy = str(raw).lower()
+        if policy not in {"first_available", "latest_available"}:
+            raise PlanParamError(
+                "revision_policy must be 'first_available' or 'latest_available'"
+            )
+        return policy
+
     if op == "period_lag":
         if dialect != SqlDialect.DUCKDB or len(node.inputs) < 2:
             return None
@@ -2925,21 +3046,20 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         period = _compile_layer(node.inputs[1], dialect=dialect)
         if value is None or period is None:
             return None
-        periods = int(node.attrs.get("periods", _raw_literal(node, 2, 1)))
+        periods = _nonnegative_int_attr(node, "periods", input_index=2, default=1)
+        policy = revision_policy(node)
         joined = (
             f"SELECT x.ts, x.inst, x._v AS xv, p._v AS pid "
             f"FROM ({value.sql}) x LEFT JOIN ({period.sql}) p USING (ts, inst)"
         )
+        observed = f"SELECT j.*, {fiscal_ordinal_sql('pid')} AS ordinal FROM ({joined}) j"
+        aggregate = "arg_min" if policy == "first_available" else "arg_max"
         return _Layer(
-            f"SELECT r.ts, r.inst, CASE WHEN r.pid IS NULL THEN NULL ELSE ("
-            f"SELECT arg_max(h.xv, h.ts) FROM ({joined}) h "
-            f"WHERE h.inst = r.inst AND h.ts <= r.ts AND h.pid = ("
-            f"SELECT target.pid FROM ("
-            f"SELECT q.pid, MIN(q.ts) AS first_seen FROM ({joined}) q "
-            f"WHERE q.inst = r.inst AND q.ts <= r.ts AND q.pid IS NOT NULL "
-            f"GROUP BY q.pid ORDER BY first_seen DESC LIMIT 1 OFFSET {periods}"
-            f") target"
-            f")) END AS _v FROM ({joined}) r",
+            f"SELECT r.ts, r.inst, CASE WHEN r.ordinal IS NULL THEN NULL ELSE ("
+            f"SELECT {aggregate}(h.xv, h.ts) FROM ({observed}) h "
+            f"WHERE h.inst = r.inst AND h.ts <= r.ts "
+            f"AND h.ordinal = r.ordinal - {periods} AND {_duckdb_valid('h.xv')}"
+            f") END AS _v FROM ({observed}) r",
             has_inst_window=True,
         )
 
@@ -2947,9 +3067,12 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         if dialect != SqlDialect.DUCKDB or len(node.inputs) < 2:
             return None
         current = _compile_layer(node.inputs[0], dialect=dialect)
-        periods = int(node.attrs.get("periods", _raw_literal(node, 2, 1 if op != "yoy_by_period" else 4)))
+        periods = _positive_int_attr(node, "periods", input_index=2, default=1 if op != "yoy_by_period" else 4)
+        rev = revision_policy(node)
         previous = _compile_layer(
-            PlanNode(op="period_lag", inputs=[node.inputs[0], node.inputs[1]], attrs={"periods": periods}),
+            PlanNode(op="period_lag", inputs=[node.inputs[0], node.inputs[1]], attrs={
+                "periods": periods, "revision_policy": rev,
+            }),
             dialect=dialect,
         )
         if current is None or previous is None:
@@ -2988,12 +3111,15 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         if dialect != SqlDialect.DUCKDB or len(node.inputs) < 2:
             return None
         default_periods = 2 if op == "period_average" else 4
-        count = int(node.attrs.get("periods", _raw_literal(node, 2, default_periods)))
+        count = _positive_int_attr(node, "periods", input_index=2, default=default_periods)
         if count < 1:
             return None
+        rev = revision_policy(node)
         layers = [_compile_layer(node.inputs[0], dialect=dialect)]
         layers.extend(
-            _compile_layer(PlanNode(op="period_lag", inputs=[node.inputs[0], node.inputs[1]], attrs={"periods": lag}), dialect=dialect)
+            _compile_layer(PlanNode(op="period_lag", inputs=[node.inputs[0], node.inputs[1]], attrs={
+                "periods": lag, "revision_policy": rev,
+            }), dialect=dialect)
             for lag in range(1, count)
         )
         if any(layer is None for layer in layers):
@@ -3012,8 +3138,13 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
             return None
         current = _compile_layer(node.inputs[0], dialect=dialect)
         quarter = _compile_layer(node.inputs[2], dialect=dialect)
-        previous = _compile_layer(PlanNode(op="period_lag", inputs=[node.inputs[0], node.inputs[1]], attrs={"periods": 1}), dialect=dialect)
-        previous_q = _compile_layer(PlanNode(op="period_lag", inputs=[node.inputs[2], node.inputs[1]], attrs={"periods": 1}), dialect=dialect)
+        rev = revision_policy(node)
+        previous = _compile_layer(PlanNode(op="period_lag", inputs=[node.inputs[0], node.inputs[1]], attrs={
+            "periods": 1, "revision_policy": rev,
+        }), dialect=dialect)
+        previous_q = _compile_layer(PlanNode(op="period_lag", inputs=[node.inputs[2], node.inputs[1]], attrs={
+            "periods": 1, "revision_policy": rev,
+        }), dialect=dialect)
         if any(layer is None for layer in (current, quarter, previous, previous_q)):
             return None
         joined = (
@@ -3028,9 +3159,14 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
     if op == "ttm_from_cumulative":
         if dialect != SqlDialect.DUCKDB or len(node.inputs) < 3:
             return None
-        quarterly = PlanNode(op="quarter_from_cumulative", inputs=list(node.inputs[:3]), attrs={})
+        rev = revision_policy(node)
+        quarterly = PlanNode(op="quarter_from_cumulative", inputs=list(node.inputs[:3]), attrs={
+            "revision_policy": rev,
+        })
         return _compile_layer(
-            PlanNode(op="ttm_from_quarterly", inputs=[quarterly, node.inputs[1]], attrs={"periods": 4}),
+            PlanNode(op="ttm_from_quarterly", inputs=[quarterly, node.inputs[1]], attrs={
+                "periods": 4, "revision_policy": rev,
+            }),
             dialect=dialect,
         )
 
@@ -3271,9 +3407,11 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         if inner is None:
             return None
         spec = _window_spec(node)
+        finite = "isFinite(_v)" if dialect == SqlDialect.CLICKHOUSE else "isfinite(_v)"
+        clean = f"SELECT ts, inst, CASE WHEN _v IS NOT NULL AND {finite} THEN _v END AS _v FROM ({inner.sql}) t"
         over = f"PARTITION BY inst ORDER BY ts ROWS BETWEEN {spec.size - 1} PRECEDING AND CURRENT ROW"
         return _Layer(
-            f"SELECT ts, inst, FIRST_VALUE(_v) OVER ({over}) AS _v FROM ({inner.sql}) t",
+            f"SELECT ts, inst, CASE WHEN COUNT(_v) OVER ({over}) < {spec.min_periods} THEN NULL ELSE FIRST_VALUE(_v) OVER ({over}) END AS _v FROM ({clean}) t",
             has_inst_window=True,
         )
 
@@ -3282,9 +3420,11 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         if inner is None:
             return None
         spec = _window_spec(node)
+        finite = "isFinite(_v)" if dialect == SqlDialect.CLICKHOUSE else "isfinite(_v)"
+        clean = f"SELECT ts, inst, CASE WHEN _v IS NOT NULL AND {finite} THEN _v END AS _v FROM ({inner.sql}) t"
         over = f"PARTITION BY inst ORDER BY ts ROWS BETWEEN {spec.size - 1} PRECEDING AND CURRENT ROW"
         return _Layer(
-            f"SELECT ts, inst, LAST_VALUE(_v) OVER ({over}) AS _v FROM ({inner.sql}) t",
+            f"SELECT ts, inst, CASE WHEN COUNT(_v) OVER ({over}) < {spec.min_periods} THEN NULL ELSE LAST_VALUE(_v) OVER ({over}) END AS _v FROM ({clean}) t",
             has_inst_window=True,
         )
 
@@ -3310,24 +3450,37 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         )
 
     if op == "ts_dense_rank":
+        if dialect != SqlDialect.DUCKDB:
+            return None
         inner = _compile_layer(node.inputs[0], dialect=dialect)
         if inner is None:
             return None
         spec = _window_spec(node)
-        over = f"PARTITION BY inst ORDER BY _v ROWS BETWEEN {spec.size - 1} PRECEDING AND CURRENT ROW"
+        over = f"PARTITION BY inst ORDER BY ts ROWS BETWEEN {spec.size - 1} PRECEDING AND CURRENT ROW"
+        clean = f"SELECT ts, inst, CASE WHEN {_duckdb_valid('_v')} THEN _v END AS _v FROM ({inner.sql}) t"
+        staged = f"SELECT ts, inst, _v, list(_v) FILTER (WHERE _v IS NOT NULL) OVER ({over}) AS _hist FROM ({clean}) t"
         return _Layer(
-            f"SELECT ts, inst, DENSE_RANK() OVER ({over}) AS _v FROM ({inner.sql}) t",
+            f"SELECT ts, inst, CASE WHEN _v IS NULL OR list_count(_hist) < {spec.min_periods} "
+            f"THEN NULL ELSE 1 + list_unique(list_filter(_hist, x -> x < _v)) END AS _v "
+            f"FROM ({staged}) t",
             has_inst_window=True,
         )
 
     if op == "ts_percent_rank":
+        if dialect != SqlDialect.DUCKDB:
+            return None
         inner = _compile_layer(node.inputs[0], dialect=dialect)
         if inner is None:
             return None
         spec = _window_spec(node)
-        over = f"PARTITION BY inst ORDER BY _v ROWS BETWEEN {spec.size - 1} PRECEDING AND CURRENT ROW"
+        over = f"PARTITION BY inst ORDER BY ts ROWS BETWEEN {spec.size - 1} PRECEDING AND CURRENT ROW"
+        clean = f"SELECT ts, inst, CASE WHEN {_duckdb_valid('_v')} THEN _v END AS _v FROM ({inner.sql}) t"
+        staged = f"SELECT ts, inst, _v, list(_v) FILTER (WHERE _v IS NOT NULL) OVER ({over}) AS _hist FROM ({clean}) t"
         return _Layer(
-            f"SELECT ts, inst, PERCENT_RANK() OVER ({over}) AS _v FROM ({inner.sql}) t",
+            f"SELECT ts, inst, CASE WHEN _v IS NULL OR list_count(_hist) < {spec.min_periods} THEN NULL "
+            f"WHEN list_count(_hist) = 1 THEN 0.0 ELSE "
+            f"CAST(list_count(list_filter(_hist, x -> x < _v)) AS DOUBLE) / "
+            f"(list_count(_hist) - 1) END AS _v FROM ({staged}) t",
             has_inst_window=True,
         )
 
@@ -3496,10 +3649,12 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         inner = _compile_layer(node.inputs[0], dialect=dialect)
         if inner is None:
             return None
-        ddof = _int_attr(node, "ddof", default=1)
-        var_fn = "VAR_POP" if ddof == 0 else "VAR_SAMP"
+        ddof = _nonnegative_int_attr(node, "ddof", default=1)
+        finite = "isFinite(_v)" if dialect == SqlDialect.CLICKHOUSE else "isfinite(_v)"
+        clean = f"SELECT ts, inst, CASE WHEN _v IS NOT NULL AND {finite} THEN _v END AS _v FROM ({inner.sql}) t"
+        over = "PARTITION BY inst ORDER BY ts ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW"
         return _Layer(
-            f"SELECT ts, inst, {var_fn}(_v) OVER (PARTITION BY inst ORDER BY ts ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS _v FROM ({inner.sql}) t",
+            f"SELECT ts, inst, {_variance_ddof_expr('_v', over, ddof)} AS _v FROM ({clean}) t",
             has_inst_window=True,
         )
 
@@ -3550,9 +3705,11 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         if inner is None:
             return None
         spec = _window_spec(node)
+        finite = "isFinite(_v)" if dialect == SqlDialect.CLICKHOUSE else "isfinite(_v)"
+        clean = f"SELECT ts, inst, CASE WHEN _v IS NOT NULL AND {finite} THEN _v END AS _v FROM ({inner.sql}) t"
         over = f"PARTITION BY inst ORDER BY ts ROWS BETWEEN {spec.size - 1} PRECEDING AND CURRENT ROW"
         return _Layer(
-            f"SELECT ts, inst, (MAX(_v) OVER ({over}) - MIN(_v) OVER ({over})) AS _v FROM ({inner.sql}) t",
+            f"SELECT ts, inst, CASE WHEN COUNT(_v) OVER ({over}) < {spec.min_periods} THEN NULL ELSE MAX(_v) OVER ({over}) - MIN(_v) OVER ({over}) END AS _v FROM ({clean}) t",
             has_inst_window=True,
         )
 
@@ -3561,9 +3718,11 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         if inner is None:
             return None
         spec = _window_spec(node)
+        finite = "isFinite(_v)" if dialect == SqlDialect.CLICKHOUSE else "isfinite(_v)"
+        clean = f"SELECT ts, inst, CASE WHEN _v IS NOT NULL AND {finite} THEN _v END AS _v FROM ({inner.sql}) t"
         over = f"PARTITION BY inst ORDER BY ts ROWS BETWEEN {spec.size - 1} PRECEDING AND CURRENT ROW"
         return _Layer(
-            f"SELECT ts, inst, (MAX(_v) OVER ({over}) + MIN(_v) OVER ({over})) / 2.0 AS _v FROM ({inner.sql}) t",
+            f"SELECT ts, inst, CASE WHEN COUNT(_v) OVER ({over}) < {spec.min_periods} THEN NULL ELSE (MAX(_v) OVER ({over}) + MIN(_v) OVER ({over})) / 2.0 END AS _v FROM ({clean}) t",
             has_inst_window=True,
         )
 
@@ -3573,9 +3732,11 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         if inner is None:
             return None
         spec = _window_spec(node)
+        finite = "isFinite(_v)" if dialect == SqlDialect.CLICKHOUSE else "isfinite(_v)"
+        clean = f"SELECT ts, inst, CASE WHEN _v IS NOT NULL AND {finite} THEN _v END AS _v FROM ({inner.sql}) t"
         over = f"PARTITION BY inst ORDER BY ts ROWS BETWEEN {spec.size - 1} PRECEDING AND CURRENT ROW"
         return _Layer(
-            f"SELECT ts, inst, SUM(ABS(_v)) OVER ({over}) AS _v FROM ({inner.sql}) t",
+            f"SELECT ts, inst, CASE WHEN COUNT(_v) OVER ({over}) < {spec.min_periods} THEN NULL ELSE SUM(ABS(_v)) OVER ({over}) END AS _v FROM ({clean}) t",
             has_inst_window=True,
         )
 
@@ -3584,9 +3745,11 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         if inner is None:
             return None
         spec = _window_spec(node)
+        finite = "isFinite(_v)" if dialect == SqlDialect.CLICKHOUSE else "isfinite(_v)"
+        clean = f"SELECT ts, inst, CASE WHEN _v IS NOT NULL AND {finite} THEN _v END AS _v FROM ({inner.sql}) t"
         over = f"PARTITION BY inst ORDER BY ts ROWS BETWEEN {spec.size - 1} PRECEDING AND CURRENT ROW"
         return _Layer(
-            f"SELECT ts, inst, AVG(ABS(_v)) OVER ({over}) AS _v FROM ({inner.sql}) t",
+            f"SELECT ts, inst, CASE WHEN COUNT(_v) OVER ({over}) < {spec.min_periods} THEN NULL ELSE AVG(ABS(_v)) OVER ({over}) END AS _v FROM ({clean}) t",
             has_inst_window=True,
         )
 
@@ -3595,9 +3758,11 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         if inner is None:
             return None
         spec = _window_spec(node)
+        finite = "isFinite(_v)" if dialect == SqlDialect.CLICKHOUSE else "isfinite(_v)"
+        clean = f"SELECT ts, inst, CASE WHEN _v IS NOT NULL AND {finite} THEN _v END AS _v FROM ({inner.sql}) t"
         over = f"PARTITION BY inst ORDER BY ts ROWS BETWEEN {spec.size - 1} PRECEDING AND CURRENT ROW"
         return _Layer(
-            f"SELECT ts, inst, MAX(ABS(_v)) OVER ({over}) AS _v FROM ({inner.sql}) t",
+            f"SELECT ts, inst, CASE WHEN COUNT(_v) OVER ({over}) < {spec.min_periods} THEN NULL ELSE MAX(ABS(_v)) OVER ({over}) END AS _v FROM ({clean}) t",
             has_inst_window=True,
         )
 
@@ -3728,10 +3893,12 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         inner = _compile_layer(node.inputs[0], dialect=dialect)
         if inner is None:
             return None
-        ddof = _int_attr(node, "ddof", default=1)
-        var_fn = "VAR_POP" if ddof == 0 else "VAR_SAMP"
+        ddof = _nonnegative_int_attr(node, "ddof", default=1)
+        finite = "isFinite(_v)" if dialect == SqlDialect.CLICKHOUSE else "isfinite(_v)"
+        clean = f"SELECT ts, inst, CASE WHEN _v IS NOT NULL AND {finite} THEN _v END AS _v FROM ({inner.sql}) t"
+        over = "PARTITION BY ts"
         return _Layer(
-            f"SELECT ts, inst, {var_fn}(_v) OVER (PARTITION BY ts) AS _v FROM ({inner.sql}) t",
+            f"SELECT ts, inst, {_variance_ddof_expr('_v', over, ddof)} AS _v FROM ({clean}) t",
             has_inst_window=inner.has_inst_window,
             has_ts_partition=True,
         )
@@ -3740,10 +3907,12 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         inner = _compile_layer(node.inputs[0], dialect=dialect)
         if inner is None:
             return None
-        ddof = _int_attr(node, "ddof", default=1)
-        std_fn = "STDDEV_POP" if ddof == 0 else "STDDEV_SAMP"
+        ddof = _nonnegative_int_attr(node, "ddof", default=1)
+        finite = "isFinite(_v)" if dialect == SqlDialect.CLICKHOUSE else "isfinite(_v)"
+        clean = f"SELECT ts, inst, CASE WHEN _v IS NOT NULL AND {finite} THEN _v END AS _v FROM ({inner.sql}) t"
+        over = "PARTITION BY ts"
         return _Layer(
-            f"SELECT ts, inst, {std_fn}(_v) OVER (PARTITION BY ts) AS _v FROM ({inner.sql}) t",
+            f"SELECT ts, inst, {_variance_ddof_expr('_v', over, ddof, sqrt=True)} AS _v FROM ({clean}) t",
             has_inst_window=inner.has_inst_window,
             has_ts_partition=True,
         )
@@ -9526,8 +9695,92 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         return None
 
     if op == "ALMA":
-        # Arnaud Legoux Moving Average - needs Gaussian weights, complex
-        return None
+        if dialect != SqlDialect.DUCKDB:
+            return None
+        inner = _compile_layer(node.inputs[0], dialect=dialect)
+        if inner is None:
+            return None
+        w = _window_int(node, default=9)
+        if w < 2:
+            return None
+        from factor_engine.backend.plan_params import PlanParamError, parse_finite_float
+
+        raw_offset = node.attrs.get("offset", _raw_literal(node, 2, 0.85))
+        raw_sigma = node.attrs.get("sigma", _raw_literal(node, 3, 6.0))
+        offset = parse_finite_float(raw_offset, label="offset", ge=0.0, le=1.0)
+        sigma = parse_finite_float(raw_sigma, label="sigma", ge=1e-6)
+        if not 0.0 <= offset <= 1.0 or sigma < 1e-6:
+            raise PlanParamError("ALMA requires offset in [0,1] and sigma >= 1e-6")
+        center = offset * (w - 1)
+        scale = w / sigma
+        weights = [
+            math.exp(-((i - center) ** 2) / (2.0 * scale * scale))
+            for i in range(w)
+        ]
+        total = sum(weights)
+        weights = [weight / total for weight in weights]
+        terms: list[str] = []
+        valid: list[str] = []
+        for lag in range(w):
+            value = "_v" if lag == 0 else f"LAG(_v, {lag}) OVER (PARTITION BY inst ORDER BY ts)"
+            weight = weights[w - 1 - lag]
+            terms.append(f"{weight!r} * ({value})")
+            valid.append(_duckdb_valid(value))
+        expression = " + ".join(terms)
+        validity = " AND ".join(valid)
+        return _Layer(
+            f"SELECT ts, inst, CASE WHEN {validity} THEN {expression} END AS _v "
+            f"FROM ({inner.sql}) t",
+            has_inst_window=True,
+        )
+
+    if op == "CoppockCurve":
+        if dialect != SqlDialect.DUCKDB:
+            return None
+        inner = _compile_layer(node.inputs[0], dialect=dialect)
+        if inner is None:
+            return None
+        roc1 = _positive_int_attr(node, "roc1", input_index=1, default=14)
+        roc2 = _positive_int_attr(node, "roc2", input_index=2, default=11)
+        wma_window = _positive_int_attr(
+            node, "wma_window", input_index=3, default=10
+        )
+        mode = str(node.attrs.get("roc_mode", _raw_literal(node, 4, "pct"))).lower()
+        if mode not in {"pct", "log"}:
+            return None
+        over = "PARTITION BY inst ORDER BY ts"
+        lag1 = f"LAG(_v, {roc1}) OVER ({over})"
+        lag2 = f"LAG(_v, {roc2}) OVER ({over})"
+        if mode == "pct":
+            valid1 = f"({_duckdb_valid('_v')} AND {_duckdb_valid(lag1)} AND {lag1} <> 0)"
+            valid2 = f"({_duckdb_valid('_v')} AND {_duckdb_valid(lag2)} AND {lag2} <> 0)"
+            value1 = f"_v / NULLIF({lag1}, 0) - 1.0"
+            value2 = f"_v / NULLIF({lag2}, 0) - 1.0"
+        else:
+            valid1 = f"({_duckdb_valid('_v')} AND {_duckdb_valid(lag1)} AND _v > 0 AND {lag1} > 0)"
+            valid2 = f"({_duckdb_valid('_v')} AND {_duckdb_valid(lag2)} AND _v > 0 AND {lag2} > 0)"
+            value1 = f"LN(_v / {lag1})"
+            value2 = f"LN(_v / {lag2})"
+        roc_sql = (
+            f"SELECT ts, inst, CASE WHEN {valid1} AND {valid2} "
+            f"THEN ({value1}) + ({value2}) END AS _v FROM ({inner.sql}) t"
+        )
+        terms: list[str] = []
+        valid: list[str] = []
+        weight_total = wma_window * (wma_window + 1) / 2.0
+        for lag in range(wma_window):
+            value = (
+                "_v" if lag == 0
+                else f"LAG(_v, {lag}) OVER (PARTITION BY inst ORDER BY ts)"
+            )
+            weight = (wma_window - lag) / weight_total
+            terms.append(f"{weight!r} * ({value})")
+            valid.append(_duckdb_valid(value))
+        return _Layer(
+            f"SELECT ts, inst, CASE WHEN {' AND '.join(valid)} THEN "
+            f"{' + '.join(terms)} END AS _v FROM ({roc_sql}) t",
+            has_inst_window=True,
+        )
 
     if op == "WMA":
         inner = _compile_layer(node.inputs[0], dialect=dialect)
@@ -10277,7 +10530,7 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         # finite count).  The algebraic identities give the finite-window
         # central moments from the finite-only windowed sums.
         w = int(spec.size)
-        eff_min = w
+        eff_min = max(int(spec.min_periods), 4)
         over = f"PARTITION BY inst ORDER BY ts ROWS BETWEEN {w - 1} PRECEDING AND CURRENT ROW"
         cnt = f"COUNT(_v) OVER ({over})"
         m = f"AVG(_v) OVER ({over})"
@@ -10301,7 +10554,7 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         )
         return _Layer(
             f"SELECT ts, inst, "
-            f"CASE WHEN _v IS NULL OR _n < {eff_min} THEN NULL "
+            f"CASE WHEN _n < {eff_min} THEN NULL "
             f"WHEN _m2 <= 0 THEN NULL ELSE {kurt} END AS _v "
             f"FROM ({win2}) w",
             has_inst_window=True,
@@ -13206,16 +13459,21 @@ def _template_cache_key(
     与源引用。二者任一变化 → 不同缓存条目。
     """
     shape = _plan_shape_key(plan, dialect)
-    filt_sig = "none"
-    if filt is not None:
-        filt_sig = "|".join([
-            str(getattr(filt, "instrument_filter_kind", "")),
-            str(filt.time_column), str(filt.instrument_column),
-            str(filt.start), str(filt.end),
-            ",".join(str(x) for x in (filt.instruments or ())),
-        ])
-    ctx = f"{dataset}|{table}|{time_column}|{instrument_column}|{filt_sig}"
-    ctx_hash = hashlib.sha256(ctx.encode("utf-8")).hexdigest()[:16]
+    filt_sig = None if filt is None else {
+        "kind": str(getattr(filt, "instrument_filter_kind", "")),
+        "time_column": filt.time_column,
+        "instrument_column": filt.instrument_column,
+        "start": filt.start,
+        "end": filt.end,
+        "instruments": list(filt.instruments or ()),
+    }
+    context = {
+        "generation": _SQL_TEMPLATE_GENERATION, "dataset": dataset, "table": table,
+        "time_column": time_column, "instrument_column": instrument_column,
+        "filter": filt_sig, "dialect": getattr(dialect, "value", str(dialect)),
+    }
+    encoded = json.dumps(context, sort_keys=True, separators=(",", ":"), default=str)
+    ctx_hash = hashlib.sha256(encoded.encode("utf-8")).hexdigest()[:16]
     return f"{shape}:{ctx_hash}"
 
 
@@ -13388,6 +13646,8 @@ def compile_plans_batch_to_sql(
     """
     if not plans:
         return None
+    # Batch cardinality must never select a weaker production identity gate.
+    assert_emitter_identity_known()
     if len(plans) == 1:
         sid, plan = next(iter(plans.items()))
         single = compile_plan_to_sql(
@@ -13412,15 +13672,24 @@ def compile_plans_batch_to_sql(
 
     cols: set[str] = set()
     layers: list[tuple[str, str, _Layer]] = []
-    for sid, plan in plans.items():
+    combined_counts: dict[str, int] = {}
+    for plan in plans.values():
         if not plan_is_sql_capable(plan):
             return None
-        layer = _compile_layer(plan, dialect=dialect)
-        if layer is None:
-            return None
-        _collect_columns(plan, cols)
-        alias = f"v_{len(layers)}"
-        layers.append((sid, alias, layer))
+        for key, count in _structural_use_counts(plan).items():
+            combined_counts[key] = combined_counts.get(key, 0) + count
+    memo = _SqlCompileMemo(combined_counts) if any(c > 1 for c in combined_counts.values()) else None
+    token = _sql_memo_ctx.set(memo)
+    try:
+        for sid, plan in plans.items():
+            layer = _compile_layer(plan, dialect=dialect)
+            if layer is None:
+                return None
+            _collect_columns(plan, cols)
+            alias = f"v_{len(layers)}"
+            layers.append((sid, alias, layer))
+    finally:
+        _sql_memo_ctx.reset(token)
 
     if not cols:
         return None
@@ -13468,7 +13737,11 @@ def compile_plans_batch_to_sql(
         if sub_name != first:
             join_from += f" INNER JOIN {sub_name} USING (ts, inst)"
 
-    with_body = ", ".join([base] + sub_ctes)
+    shared_ctes = [] if memo is None else [
+        f"{name} AS (SELECT ts, inst, _v FROM ({sql}) t)"
+        for name, sql in memo.bodies
+    ]
+    with_body = ", ".join([base] + shared_ctes + sub_ctes)
     query = (
         f"WITH {with_body} "
         f"SELECT {', '.join(select_cols)} FROM {join_from} "

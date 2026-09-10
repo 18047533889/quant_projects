@@ -1152,9 +1152,17 @@ def _execute_run_many_scheduler(
         str(getattr(engine_to_use.backend, "runtime_backend_label", "") or "") or None
     )
     ctx.runtime_stats = record_resource_telemetry(ctx.runtime_stats)
+    from factor_engine.runtime.host_resource_coordinator import get_active_job_lease
+
+    job_lease = get_active_job_lease()
+    engine_broker = getattr(engine_to_use, "resource_broker", None)
+    if job_lease is not None and engine_broker is not None \
+            and job_lease.broker is not engine_broker:
+        raise RuntimeError("active JobLease broker does not match FactorEngine broker")
     scheduler = AdaptiveBatchScheduler(
         broker=getattr(engine_to_use, "resource_broker", None),
         max_concurrency=max_concurrency if max_concurrency is not None else perf.max_workers,
+        job_lease=job_lease,
     )
     # Install the parent-owned DA envelope before physical preflight performs
     # any prepare_read reservation.
