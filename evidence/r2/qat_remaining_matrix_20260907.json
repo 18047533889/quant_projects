@@ -1,0 +1,177 @@
+{
+  "E2E": {
+    "E2E-A": {
+      "gap": "Real DSL/catalog/snapshot -> FE -> OOS IC and Q10 -> typed FA grades -> production health PIT rejection exists. Rejected path explicitly stops before promotion; no fake health-ref promotion rejection. Recipe, parent trial, successful admission/library publish and feature version remain absent.",
+      "status": "PARTIAL",
+      "tests": [
+        "factor_optimizer/tests/search/test_qe_adapter_v3.py",
+        "factor_assets/tests/test_library_promotion_gate.py",
+        "jobs/tests/test_e2e_a_fe_qe_fa_spine.py"
+      ]
+    },
+    "E2E-B": {
+      "gap": "Real FE parent/child DSL and public QE IC/Q10/shape/curvature evidence feed bounded TRAIN-only center fitting; OOS poison cannot change frozen center. No direct-kernel bypass or scenario-label decision branch. Still lacks durable campaign/trial linkage, FA health/admission and library/feature publication under a complete trace.",
+      "status": "PARTIAL",
+      "tests": [
+        "factor_optimizer/tests/search/test_supervised_parameter_v3.py",
+        "quant_evaluator/tests/test_shape_evidence.py",
+        "jobs/tests/test_e2e_b_shape_rescue.py"
+      ]
+    },
+    "E2E-C": {
+      "gap": "Real FE -> public Q10/adaptive Q20 -> liquidity/size exposure -> six bounded TRAIN-only DSL candidates -> frozen OOS reevaluation is executable. Small/tied/absent risk evidence fails closed. Durable trial, FA health/admission, library and feature publication trace remain incomplete.",
+      "status": "PARTIAL",
+      "tests": [
+        "factor_optimizer/tests/search/test_supervised_parameter_v3.py",
+        "quant_evaluator/tests/test_daily_quantile_artifact_v3.py"
+      ]
+    },
+    "E2E-D": {
+      "gap": "Real FE raw + FP OLS industry/size candidates -> public QE final exposures/IC -> existing noninferiority/WinnerSet selection implemented in controlled synthetic cases. Actual recipe/value/evaluation identities are carried; missing trial/health/library/feature refs remain None. OOS/FA admission/library publication/feature version remain incomplete.",
+      "status": "PARTIAL",
+      "tests": [
+        "quant_evaluator/tests/test_exposure_evidence.py",
+        "factor_optimizer/tests/search/test_winner_set_v3.py",
+        "jobs/tests/test_e2e_d_risk_shift.py"
+      ]
+    },
+    "E2E-E": {
+      "gap": "Real DataChangeSet -> bounded FP fill/mask/age -> schema-checked model features implemented with full revised oracle in tests. Canonical DSL/catalog, monitor/admission and complete trace remain incomplete; research schema does not fabricate recipe/cluster refs.",
+      "status": "PARTIAL",
+      "tests": [
+        "data_access/tests/unit/test_r30_change_lineage_2026_08.py",
+        "factor_preprocess/tests/test_v3_preprocess_contracts.py",
+        "tests/modeling/test_e2e_e_revision_preprocess_modeling.py"
+      ]
+    },
+    "E2E-F": {
+      "gap": "Bounded durable campaign + actual FE/QE pure-noise threshold rejection -> real DurableGenerationCoordinator stage/publish/root/lineage snapshot -> exact-version physical GC now tested, retaining formula/trial/evidence and protected roots. Full ProposalGenerator/SearchRunner verdict trace remains absent. Current lineage edges conservatively protect every generation of the referenced artifact, not precise per-generation edges.",
+      "status": "PARTIAL",
+      "tests": [
+        "factor_optimizer/tests/search/test_durable_campaign_store_v3.py",
+        "quant_platform/tests/test_generation_coordinator.py",
+        "jobs/tests/test_e2e_f_noise_failure_gc.py"
+      ]
+    },
+    "E2E-G": {
+      "gap": "Version->deployed/replacement model compatibility is implemented with exact refs and resolver-backed binding; still needs DSL/catalog/snapshot and real FE/QE-produced multi-representative evidence plus complete health/admission trace (current component pairwise data are contract fixtures)",
+      "status": "PARTIAL",
+      "tests": [
+        "factor_assets/tests/test_incremental_cluster_assign.py",
+        "factor_assets/tests/test_library_promotion_gate.py",
+        "jobs/tests/test_e2e_g_cluster_model_compatibility.py",
+        "quant_platform/tests/test_modeling_manifest_bridge.py"
+      ]
+    },
+    "E2E-H": {
+      "gap": "Real FE checkpoint -> frozen FP and apply-only fitted state -> exact-intent durable publication/recovery implemented. Mature monitoring reads physically verified bounded generation history, rejects conflicting overlap and missing bytes, gates on actual valid daily QE IC count, binds aggregate values/axes/generations/policy identity, and respects label maturity before QE. Other drift dimensions remain explicitly externally supplied; full catalog/admission/feature trace is incomplete.",
+      "status": "PARTIAL",
+      "tests": [
+        "factor_optimizer/tests/search/test_execution_plan_checkpoint_v3.py",
+        "factor_preprocess/tests/test_v3_preprocess_contracts.py",
+        "tests/modeling/test_r41_monitoring_ledger_contracts.py",
+        "tests/modeling/test_e2e_h_fixed_update.py"
+      ]
+    }
+  },
+  "GOLD-40": {
+    "covered": [
+      "metric, resolved recipe hash and exact implementation-ref dependency invalidation (8 focused planner tests)",
+      "public FP max_lag mapping and frozen recipe identity",
+      "checkpoint offline replay identity",
+      "real-GPU execution status recorded separately"
+    ],
+      "gap": "OPS08 actual selective risk evaluation-to-health and recipe-to-FP-value-to-QE-to-health shadow replay now exists with persisted audit-only envelopes, immutable originals, exact dry-run reconciliation and scoped publication isolation. Cluster/feature/model recomputation and same-lineage approved production rollback remain incomplete.",
+    "status": "PARTIAL",
+    "tests": [
+      "factor_assets/tests/contracts/test_evidence_invalidation_v3.py",
+      "factor_preprocess/tests/test_v3_preprocess_contracts.py",
+      "factor_optimizer/tests/search/test_execution_plan_checkpoint_v3.py",
+      "quant_evaluator/tests/test_v3_gpu_semantics.py"
+    ]
+  },
+  "generated_at": "2026-09-06T18:11:16.216149+00:00",
+  "gpu_device_probe": {
+    "certification": "REAL_DEVICE",
+    "exit_code": 0,
+    "output": "NVIDIA L20, 580.126.20, 46068 MiB"
+  },
+  "groups": {
+    "QAT-01": {
+      "command": [
+        "/home/sunhaiwei/quant_projects/.venv/bin/python",
+        "-m",
+        "pytest",
+        "-q",
+        "quant_evaluator/tests/test_metamorphic.py",
+        "quant_evaluator/tests/test_consistency.py"
+      ],
+      "exit_code": 0,
+      "output": "..........s.......s............                                          [100%]\n=============================== warnings summary ===============================\ntests/test_consistency.py::test_serial_equals_parallel\ntests/test_consistency.py::test_serial_equals_parallel\ntests/test_consistency.py::test_serial_equals_parallel_multi_batch\ntests/test_consistency.py::test_serial_equals_parallel_multi_batch\n  /usr/lib/python3.12/multiprocessing/popen_fork.py:66: DeprecationWarning: This process (pid=699397) is multi-threaded, use of fork() may lead to deadlocks in the child.\n    self.pid = os.fork()\n\n-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html\n=========================== short test summary info ============================\nSKIPPED [1] quant_evaluator/tests/test_metamorphic.py:470: no zscore/standardize kernel exists yet in build/lib; documented-contract test (nothing to check)\nSKIPPED [1] quant_evaluator/tests/test_metamorphic.py:686: no dropna/row-drop kernel exists in build/lib; documented-contract test (nothing to check)\n29 passed, 2 skipped, 4 warnings in 0.85s\n",
+      "status": "PASS"
+    },
+    "QAT-02": {
+      "command": [
+        "/home/sunhaiwei/quant_projects/.venv/bin/python",
+        "-m",
+        "pytest",
+        "-q",
+        "quant_evaluator/tests/test_v3_drawdown_contracts.py",
+        "quant_evaluator/tests/test_portfolio_stats_registry.py",
+        "quant_evaluator/tests/test_daily_quantile_artifact_v3.py",
+        "quant_evaluator/tests/test_v3_statistical_evidence.py"
+      ],
+      "exit_code": 0,
+      "output": "..............................................................           [100%]\n62 passed in 0.75s\n",
+      "status": "PASS"
+    },
+    "QAT-03": {
+      "command": [
+        "/home/sunhaiwei/quant_projects/.venv/bin/python",
+        "-m",
+        "pytest",
+        "-q",
+        "quant_evaluator/tests/test_v3_gpu_semantics.py",
+        "quant_evaluator/tests/test_gpu_parity.py",
+        "quant_evaluator/tests/test_turnover_validity.py"
+      ],
+      "exit_code": 0,
+      "output": "...............                                                          [100%]\n15 passed in 1.04s\n",
+      "status": "PASS"
+    },
+    "QAT-05": {
+      "command": [
+        "/home/sunhaiwei/quant_projects/.venv/bin/python",
+        "-m",
+        "pytest",
+        "-q",
+        "quant_evaluator/tests/test_v3_input_contracts.py",
+        "quant_evaluator/tests/test_qe_serialization.py",
+        "factor_assets/tests/contracts/test_evidence_invalidation_v3.py",
+        "factor_assets/tests/contracts/test_fingerprint_spec_v3.py"
+      ],
+      "exit_code": 0,
+      "output": ".................................................                        [100%]\n49 passed in 0.13s\n",
+      "status": "PASS"
+    },
+    "QAT-06": {
+      "command": [
+        "/home/sunhaiwei/quant_projects/.venv/bin/python",
+        "-m",
+        "pytest",
+        "-q",
+        "data_access/tests/unit/test_r30_change_lineage_2026_08.py",
+        "data_access/tests/unit/test_r32_change_impact_p0.py",
+        "quant_platform/tests/test_generation_coordinator.py",
+        "quant_evaluator/tests/test_consistency.py"
+      ],
+      "exit_code": 0,
+      "output": ".................................................                        [100%]\n=============================== warnings summary ===============================\nquant_evaluator/tests/test_consistency.py::test_serial_equals_parallel\nquant_evaluator/tests/test_consistency.py::test_serial_equals_parallel\nquant_evaluator/tests/test_consistency.py::test_serial_equals_parallel_multi_batch\nquant_evaluator/tests/test_consistency.py::test_serial_equals_parallel_multi_batch\n  /usr/lib/python3.12/multiprocessing/popen_fork.py:66: DeprecationWarning: This process (pid=702206) is multi-threaded, use of fork() may lead to deadlocks in the child.\n    self.pid = os.fork()\n\n-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html\n49 passed, 4 warnings in 1.84s\n",
+      "status": "PASS"
+    }
+  },
+  "repo": "/home/sunhaiwei/quant_projects_v3_remediation",
+  "schema_version": 1,
+  "status": "PASS_WITH_EXPLICIT_PARTIAL_E2E",
+  "suite": "QAT-01-02-03-05-06-and-delivery-map"
+}

@@ -1,0 +1,29 @@
+agent: v3_optimizer
+updated_at: 2026-09-07T00:20:00Z
+head: 2db45f4e446309003381a51a5e03071d31859502
+completed_actions:
+  - Read V3 sections 1-9, FO-01..05, SRH-01..10, related V/STA/GOLD tasks, and section 15.
+  - Reproduced FO-01 against the real quant_evaluator public CPU facade.
+  - Preserved typed per-factor QE evidence and forwarded split/backend/GPU policy.
+  - Bound checkpoints to an execution-plan hash and made checkpoint replacement atomic.
+  - Preserved research-only production guard.
+  - Added transactional SQLite campaign reservations with restart-safe STARTED accounting.
+  - Bound sealed holdout access to dataset/split/purpose and immutable candidate/profile hashes across aliases and sessions.
+  - Permitted retries only after an explicit infrastructure-failure transition; completed retries return the same evidence ref.
+  - Added a SearchRunner durable budget factory and a durable TestAuthorityBroker path.
+  - Added automatic durable SearchRunner configuration, so persistence is not limited to injected tests.
+  - Added hard-gated complementary multi-winner selection with epsilon/simple representative/family cap/incremental evidence.
+  - Added restart-safe failure knowledge keyed by effective recipe, evaluation intent, and context.
+  - Forwarded QE tier, cost budget, metric parameters, and request metadata through its existing EvaluationRequest authority.
+  - Added TRAIN-only finite-grid U-center/tail-cutoff selection, frozen evidence-bound parameter state, and SQLite persistence; validation/test cannot refit.
+  - Added real SearchRunner stage execution traces preserved across checkpoints.
+  - Reverified the real 3-factor CUDA adapter after QE unified typed outputs.
+  - Added durable cross-alias/session hypothesis-family accounting, complete-FDR-family guard, split-purpose OOS guard, retention edge contracts, and horizon-family diagnostics.
+  - Added merge-ready JSON entries for the 177-item parent ledger.
+verification:
+  focused: 46 passed
+  full_package: 807 passed
+next_dependencies:
+  - Coordinator QE normalized EvaluationRequest completion.
+  - FA admission and public multi-winner integration.
+  - CUDA hardware verification.

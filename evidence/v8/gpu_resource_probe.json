@@ -1,0 +1,67 @@
+{
+  "device": "b'NVIDIA L20'",
+  "cupy": "14.2.0",
+  "numpy": "2.2.6",
+  "source_hashes": {
+    "quant_evaluator/kernels/gpu/quantile.py": "8da69a0a0956a4e7a8bec1fc455cccd8480e36c5104c6ba4d9ea4250e666e031",
+    "quant_evaluator/kernels/gpu/rank.py": "6ee1b272ce2aa00033736962f3f72669f9c50c305dc691abfa83775e84bae975"
+  },
+  "source_unchanged": true,
+  "runs": [
+    {
+      "shape_TFN": [
+        32,
+        8,
+        5000
+      ],
+      "Q": 10,
+      "method": "max",
+      "precision": "factor-float32/return-float64",
+      "workspace_budget_bytes": 8388608,
+      "resident_input_bytes": 6400000,
+      "output_bytes": 40960,
+      "observed_peak_active_bytes": 9189376,
+      "observed_peak_reserved_bytes": 9235968,
+      "seconds": 0.60051098105032,
+      "independent_numpy_rows_verified": 3,
+      "assertions": "PASS"
+    },
+    {
+      "shape_TFN": [
+        32,
+        8,
+        5000
+      ],
+      "Q": 20,
+      "method": "max",
+      "precision": "factor-float32/return-float64",
+      "workspace_budget_bytes": 8388608,
+      "resident_input_bytes": 6400000,
+      "output_bytes": 81920,
+      "observed_peak_active_bytes": 9230336,
+      "observed_peak_reserved_bytes": 9276928,
+      "seconds": 0.12745601905044168,
+      "independent_numpy_rows_verified": 3,
+      "assertions": "PASS"
+    },
+    {
+      "shape_TFN": [
+        32,
+        8,
+        5000
+      ],
+      "Q": 40,
+      "method": "max",
+      "precision": "factor-float32/return-float64",
+      "workspace_budget_bytes": 8388608,
+      "resident_input_bytes": 6400000,
+      "output_bytes": 163840,
+      "observed_peak_active_bytes": 9312256,
+      "observed_peak_reserved_bytes": 9358848,
+      "seconds": 0.2161354029085487,
+      "independent_numpy_rows_verified": 3,
+      "assertions": "PASS"
+    }
+  ],
+  "scope": "Isolated allocator-observed active/reserved peaks. Excludes CUDA context/other processes. Cold per-run pool; kernels may be JIT-cached. Not 100k-factor certification; no async/multi-GPU claim."
+}

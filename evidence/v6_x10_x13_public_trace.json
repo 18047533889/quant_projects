@@ -1,0 +1,58 @@
+{
+  "assembly_hash": "fbf59b9178a08aef45fcd8beea770499547d5eb6ee7316c3742ce23f5ea1582c",
+  "assertions": {
+    "rejected_B_never_penalized_C": true,
+    "rejection_is_structured": true,
+    "required_counterexample_selects_A_C": true
+  },
+  "created_at": "2026-09-07T17:50:40.601309+00:00",
+  "infeasible_pair_calls": [],
+  "policy_ref": "mmr-v6@2.0.0",
+  "provider_calls": [
+    [
+      "A",
+      "C"
+    ],
+    [
+      "A",
+      "D"
+    ]
+  ],
+  "public_entrypoint": "factor_assets.assembly.FactorSetAssembler.assemble",
+  "rejections": {
+    "B": "FAMILY_LIMIT",
+    "D": "SELECTION_LIMIT_REACHED"
+  },
+  "schema": "v6.x10-x13.public-assembler-trace.v1",
+  "selected_factor_ids": [
+    "A",
+    "C"
+  ],
+  "selection_algorithm_version": "constrained_mmr.v2",
+  "steps": [
+    {
+      "constraint_headroom": {
+        "capacity_slots": 3,
+        "set_slots": 1,
+        "turnover_remaining": null
+      },
+      "factor_id": "A",
+      "max_redundancy": 0.0,
+      "objective": 0.5,
+      "quality": 1.0,
+      "rank": 0
+    },
+    {
+      "constraint_headroom": {
+        "capacity_slots": 2,
+        "set_slots": 0,
+        "turnover_remaining": null
+      },
+      "factor_id": "C",
+      "max_redundancy": 0.0,
+      "objective": 0.4,
+      "quality": 0.8,
+      "rank": 1
+    }
+  ]
+}

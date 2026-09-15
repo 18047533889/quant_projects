@@ -1,0 +1,713 @@
+{
+  "schema_version": "v3-qe-local-evidence/1",
+  "base_head": "2db45f4e446309003381a51a5e03071d31859502",
+  "issues": [
+    {
+      "issue_id": "QE-01",
+      "status": "FIXED_LOCAL",
+      "root_cause": "Per-factor independent portfolio input, no labels or scalar averaging; CPU/CUDA prebuilt and holdings paths.",
+      "actual_entrypoints": [
+        "quant_evaluator/runtime/evaluator.py::evaluate"
+      ],
+      "targeted_tests": [
+        "quant_evaluator/tests/test_v3_public_artifacts.py",
+        "quant_evaluator/tests/test_v3_risk_variants.py",
+        "quant_evaluator/tests/test_v3_cohort_intervals.py"
+      ],
+      "history_evidence": [
+        "Version changes retained as new registry versions; OPS08 dry-run migration planner exists but historical full replay is not certified."
+      ],
+      "remaining": "Requires per-issue GOLD/E2E/migration closure before VERIFIED."
+    },
+    {
+      "issue_id": "QE-02",
+      "status": "FIXED_LOCAL",
+      "root_cause": "Scalar, series, QF and daily TQF remain typed through public output and lossless JSON bundle transport.",
+      "actual_entrypoints": [
+        "quant_evaluator/runtime/evaluator.py::evaluate"
+      ],
+      "targeted_tests": [
+        "quant_evaluator/tests/test_v3_public_artifacts.py"
+      ],
+      "history_evidence": [
+        "Version changes retained as new registry versions; OPS08 dry-run migration planner exists but historical full replay is not certified."
+      ],
+      "remaining": "Requires per-issue GOLD/E2E/migration closure before VERIFIED."
+    },
+    {
+      "issue_id": "QE-03",
+      "status": "PARTIAL",
+      "root_cause": "Fake availability removed; real daily/profile/IC/portfolio builders, validated CPU and actual CUDA exposure panel execution, and shared daily-IC HAC p-value builders execute through public evaluate and resource budgets.",
+      "actual_entrypoints": [
+        "quant_evaluator/runtime/evaluator.py::evaluate"
+      ],
+      "targeted_tests": [
+        "quant_evaluator/tests/test_v3_public_artifacts.py",
+        "quant_evaluator/tests/test_public_gpu_exposure_v3.py"
+      ],
+      "history_evidence": [
+        "Version changes retained as new registry versions; OPS08 dry-run migration planner exists but historical full replay is not certified."
+      ],
+      "remaining": "Nine exposure metrics execute on actual L20 with no fallback; neutralized/residual RankIC CUDA and general residual artifact DAG remain unsupported. Historical complete selective replay and complete E2E closure are not certified."
+    },
+    {
+      "issue_id": "QE-04",
+      "status": "FIXED_LOCAL",
+      "root_cause": "Common axes and parameter-name validation before device allocation; factor+label validity included.",
+      "actual_entrypoints": [
+        "quant_evaluator/runtime/evaluator.py::evaluate"
+      ],
+      "targeted_tests": [
+        "quant_evaluator/tests/test_v3_input_contracts.py",
+        "quant_evaluator/tests/test_v3_gpu_semantics.py"
+      ],
+      "history_evidence": [
+        "Version changes retained as new registry versions; OPS08 dry-run migration planner exists but historical full replay is not certified."
+      ],
+      "remaining": "Requires per-issue GOLD/E2E/migration closure before VERIFIED."
+    },
+    {
+      "issue_id": "QE-05",
+      "status": "FIXED_LOCAL",
+      "root_cause": "One EvaluationBundle public return contract; CPU/CUDA typed artifacts/counts and aliases preserved.",
+      "actual_entrypoints": [
+        "quant_evaluator/runtime/evaluator.py::evaluate"
+      ],
+      "targeted_tests": [
+        "quant_evaluator/tests/test_v3_public_artifacts.py"
+      ],
+      "history_evidence": [
+        "Version changes retained as new registry versions; OPS08 dry-run migration planner exists but historical full replay is not certified."
+      ],
+      "remaining": "Requires per-issue GOLD/E2E/migration closure before VERIFIED."
+    },
+    {
+      "issue_id": "QE-06",
+      "status": "FIXED_LOCAL",
+      "root_cause": "Registry IC default thresholds, effective overrides, Q count, constant ICIR NaN.",
+      "actual_entrypoints": [
+        "quant_evaluator/runtime/evaluator.py::evaluate"
+      ],
+      "targeted_tests": [
+        "quant_evaluator/tests/test_v3_gpu_semantics.py",
+        "quant_evaluator/tests/test_v3_public_artifacts.py"
+      ],
+      "history_evidence": [
+        "Version changes retained as new registry versions; OPS08 dry-run migration planner exists but historical full replay is not certified."
+      ],
+      "remaining": "Requires per-issue GOLD/E2E/migration closure before VERIFIED."
+    },
+    {
+      "issue_id": "QE-07",
+      "status": "FIXED_LOCAL",
+      "root_cause": "Separate weight turnover and quantile membership turnover CPU/CUDA implementations.",
+      "actual_entrypoints": [
+        "quant_evaluator/runtime/evaluator.py::evaluate"
+      ],
+      "targeted_tests": [
+        "quant_evaluator/tests/test_v3_gpu_semantics.py"
+      ],
+      "history_evidence": [
+        "Version changes retained as new registry versions; OPS08 dry-run migration planner exists but historical full replay is not certified."
+      ],
+      "remaining": "Requires per-issue GOLD/E2E/migration closure before VERIFIED."
+    },
+    {
+      "issue_id": "QE-08",
+      "status": "FIXED_LOCAL",
+      "root_cause": "Formal GPU monotonicity uses dedicated time-mean profile kernel and finite adjacent-pair denominator. Separate daily_quantile_monotonicity_series/rate expose typed daily fractions and valid-day count; CPU/L20 controls distinguish longrun1.0 from daily0.625, no silent fallback.",
+      "actual_entrypoints": [
+        "quant_evaluator/runtime/evaluator.py::evaluate"
+      ],
+      "targeted_tests": [
+        "quant_evaluator/tests/test_v3_gpu_semantics.py"
+      ],
+      "history_evidence": [
+        "Version changes retained as new registry versions; OPS08 dry-run migration planner exists but historical full replay is not certified."
+      ],
+      "remaining": "Requires per-issue GOLD/E2E/migration closure before VERIFIED."
+    },
+    {
+      "issue_id": "QE-09",
+      "status": "FIXED_LOCAL",
+      "root_cause": "Removed stale GPU probe_ls path that passed labels as daily returns; independent price intervals staged.",
+      "actual_entrypoints": [
+        "quant_evaluator/runtime/evaluator.py::evaluate"
+      ],
+      "targeted_tests": [
+        "quant_evaluator/tests/test_v3_cohort_intervals.py"
+      ],
+      "history_evidence": [
+        "Version changes retained as new registry versions; OPS08 dry-run migration planner exists but historical full replay is not certified."
+      ],
+      "remaining": "Requires per-issue GOLD/E2E/migration closure before VERIFIED."
+    },
+    {
+      "issue_id": "QE-10",
+      "status": "FIXED_LOCAL",
+      "root_cause": "GPU tile reuses portfolio PnL for risk metrics; prebuilt portfolio columns aligned across tiles.",
+      "actual_entrypoints": [
+        "quant_evaluator/runtime/evaluator.py::evaluate"
+      ],
+      "targeted_tests": [
+        "quant_evaluator/tests/test_v3_risk_variants.py",
+        "quant_evaluator/tests/test_v3_cohort_intervals.py"
+      ],
+      "history_evidence": [
+        "Version changes retained as new registry versions; OPS08 dry-run migration planner exists but historical full replay is not certified."
+      ],
+      "remaining": "Requires per-issue GOLD/E2E/migration closure before VERIFIED."
+    },
+    {
+      "issue_id": "QE-11",
+      "status": "FIXED_LOCAL",
+      "root_cause": "Initial NAV 1 participates in first-period drawdown.",
+      "actual_entrypoints": [
+        "quant_evaluator/runtime/evaluator.py::evaluate"
+      ],
+      "targeted_tests": [
+        "quant_evaluator/tests/test_v3_drawdown_contracts.py"
+      ],
+      "history_evidence": [
+        "Version changes retained as new registry versions; OPS08 dry-run migration planner exists but historical full replay is not certified."
+      ],
+      "remaining": "Requires per-issue GOLD/E2E/migration closure before VERIFIED."
+    },
+    {
+      "issue_id": "QE-12",
+      "status": "FIXED_LOCAL",
+      "root_cause": "Zero NAV is absorbing bankruptcy, 100% loss; returns below -1 rejected.",
+      "actual_entrypoints": [
+        "quant_evaluator/runtime/evaluator.py::evaluate"
+      ],
+      "targeted_tests": [
+        "quant_evaluator/tests/test_v3_drawdown_contracts.py"
+      ],
+      "history_evidence": [
+        "Version changes retained as new registry versions; OPS08 dry-run migration planner exists but historical full replay is not certified."
+      ],
+      "remaining": "Requires per-issue GOLD/E2E/migration closure before VERIFIED."
+    },
+    {
+      "issue_id": "QE-13",
+      "status": "FIXED_LOCAL",
+      "root_cause": "Empty Sharpe and drawdown output shapes fixed.",
+      "actual_entrypoints": [
+        "quant_evaluator/runtime/evaluator.py::evaluate"
+      ],
+      "targeted_tests": [
+        "quant_evaluator/tests/test_v3_drawdown_contracts.py"
+      ],
+      "history_evidence": [
+        "Version changes retained as new registry versions; OPS08 dry-run migration planner exists but historical full replay is not certified."
+      ],
+      "remaining": "Requires per-issue GOLD/E2E/migration closure before VERIFIED."
+    },
+    {
+      "issue_id": "QE-14",
+      "status": "FIXED_LOCAL",
+      "root_cause": "Underwater event clock does not delete missing dates.",
+      "actual_entrypoints": [
+        "quant_evaluator/runtime/evaluator.py::evaluate"
+      ],
+      "targeted_tests": [
+        "quant_evaluator/tests/test_v3_drawdown_contracts.py"
+      ],
+      "history_evidence": [
+        "Version changes retained as new registry versions; OPS08 dry-run migration planner exists but historical full replay is not certified."
+      ],
+      "remaining": "Requires per-issue GOLD/E2E/migration closure before VERIFIED."
+    },
+    {
+      "issue_id": "QE-15",
+      "status": "FIXED_LOCAL",
+      "root_cause": "One-pass drawdown events preserve censored/unknown recovery status.",
+      "actual_entrypoints": [
+        "quant_evaluator/runtime/evaluator.py::evaluate"
+      ],
+      "targeted_tests": [
+        "quant_evaluator/tests/test_v3_drawdown_contracts.py"
+      ],
+      "history_evidence": [
+        "Version changes retained as new registry versions; OPS08 dry-run migration planner exists but historical full replay is not certified."
+      ],
+      "remaining": "Requires per-issue GOLD/E2E/migration closure before VERIFIED."
+    },
+    {
+      "issue_id": "QE-16",
+      "status": "FIXED_LOCAL",
+      "root_cause": "Adjusted Fisher-Pearson skew with explicit bias variant.",
+      "actual_entrypoints": [
+        "quant_evaluator/runtime/evaluator.py::evaluate"
+      ],
+      "targeted_tests": [
+        "quant_evaluator/tests/test_v3_drawdown_contracts.py"
+      ],
+      "history_evidence": [
+        "Version changes retained as new registry versions; OPS08 dry-run migration planner exists but historical full replay is not certified."
+      ],
+      "remaining": "Requires per-issue GOLD/E2E/migration closure before VERIFIED."
+    },
+    {
+      "issue_id": "QE-17",
+      "status": "FIXED_LOCAL",
+      "root_cause": "Explicit Sortino MAR/denominator/annualization and Calmar arithmetic/CAGR; GPU missing nonzero-target fix; registry v2.",
+      "actual_entrypoints": [
+        "quant_evaluator/runtime/evaluator.py::evaluate"
+      ],
+      "targeted_tests": [
+        "quant_evaluator/tests/test_v3_risk_variants.py"
+      ],
+      "history_evidence": [
+        "Version changes retained as new registry versions; OPS08 dry-run migration planner exists but historical full replay is not certified."
+      ],
+      "remaining": "Requires per-issue GOLD/E2E/migration closure before VERIFIED."
+    },
+    {
+      "issue_id": "QE-18",
+      "status": "FIXED_LOCAL",
+      "root_cause": "Public DA calendar periods and bounded rolling21/63/252 reductions now execute on strict CUDA, including direct HoldingReturnPanel via canonical cohort trajectory and factor tiling. CPU calendar planning is explicit; CUDA reduction has no silent fallback.",
+      "actual_entrypoints": [
+        "quant_evaluator/runtime/evaluator.py::evaluate"
+      ],
+      "targeted_tests": [
+        "quant_evaluator/tests/test_calendar_returns.py",
+        "quant_evaluator/tests/test_v3_calendar_public.py"
+      ],
+      "history_evidence": [
+        "Version changes retained as new registry versions; OPS08 dry-run migration planner exists but historical full replay is not certified."
+      ],
+      "regression_results": ["Full QE797 passed2skipped; /tmp/v3_optimizer_qe_final_manifested_20260907.log; source manifests identical before/after"],
+      "remaining": "Historical GOLD/E2E evidence pending."
+    },
+    {
+      "issue_id": "QE-19",
+      "status": "FIXED_LOCAL",
+      "root_cause": "2D shared boolean validity broadcasts across 3D factors.",
+      "actual_entrypoints": [
+        "quant_evaluator/runtime/evaluator.py::evaluate"
+      ],
+      "targeted_tests": [
+        "quant_evaluator/tests/test_v3_cohort_intervals.py"
+      ],
+      "history_evidence": [
+        "Version changes retained as new registry versions; OPS08 dry-run migration planner exists but historical full replay is not certified."
+      ],
+      "remaining": "Requires per-issue GOLD/E2E/migration closure before VERIFIED."
+    },
+    {
+      "issue_id": "QE-20",
+      "status": "FIXED_LOCAL",
+      "root_cause": "Canonical disjoint tie buckets; degenerate selection not fabricated.",
+      "actual_entrypoints": [
+        "quant_evaluator/runtime/evaluator.py::evaluate"
+      ],
+      "targeted_tests": [
+        "quant_evaluator/tests/test_v3_cohort_intervals.py"
+      ],
+      "history_evidence": [
+        "Version changes retained as new registry versions; OPS08 dry-run migration planner exists but historical full replay is not certified."
+      ],
+      "remaining": "Requires per-issue GOLD/E2E/migration closure before VERIFIED."
+    },
+    {
+      "issue_id": "QE-21",
+      "status": "FIXED_LOCAL",
+      "root_cause": "Future label missingness cannot change originally selected buckets.",
+      "actual_entrypoints": [
+        "quant_evaluator/runtime/evaluator.py::evaluate"
+      ],
+      "targeted_tests": [
+        "quant_evaluator/tests/test_v3_cohort_intervals.py"
+      ],
+      "history_evidence": [
+        "Version changes retained as new registry versions; OPS08 dry-run migration planner exists but historical full replay is not certified."
+      ],
+      "remaining": "Requires per-issue GOLD/E2E/migration closure before VERIFIED."
+    },
+    {
+      "issue_id": "QE-22",
+      "status": "FIXED_LOCAL",
+      "root_cause": "Negative/nonfinite turnover costs rejected.",
+      "actual_entrypoints": [
+        "quant_evaluator/runtime/evaluator.py::evaluate"
+      ],
+      "targeted_tests": [
+        "quant_evaluator/tests/test_v3_drawdown_contracts.py"
+      ],
+      "history_evidence": [
+        "Version changes retained as new registry versions; OPS08 dry-run migration planner exists but historical full replay is not certified."
+      ],
+      "remaining": "Requires per-issue GOLD/E2E/migration closure before VERIFIED."
+    },
+    {
+      "issue_id": "QE-23",
+      "status": "FIXED_LOCAL",
+      "root_cause": "Entry=s+1, first owned interval ends s+2, exit=s+1+H on CPU/CUDA.",
+      "actual_entrypoints": [
+        "quant_evaluator/runtime/evaluator.py::evaluate"
+      ],
+      "targeted_tests": [
+        "quant_evaluator/tests/test_v3_cohort_intervals.py"
+      ],
+      "history_evidence": [
+        "Version changes retained as new registry versions; OPS08 dry-run migration planner exists but historical full replay is not certified."
+      ],
+      "remaining": "Requires per-issue GOLD/E2E/migration closure before VERIFIED."
+    },
+    {
+      "issue_id": "QE-24",
+      "status": "FIXED_LOCAL",
+      "root_cause": "Both entry and exit costs; tail not force-liquidated.",
+      "actual_entrypoints": [
+        "quant_evaluator/runtime/evaluator.py::evaluate"
+      ],
+      "targeted_tests": [
+        "quant_evaluator/tests/test_v3_cohort_intervals.py"
+      ],
+      "history_evidence": [
+        "Version changes retained as new registry versions; OPS08 dry-run migration planner exists but historical full replay is not certified."
+      ],
+      "remaining": "Requires per-issue GOLD/E2E/migration closure before VERIFIED."
+    },
+    {
+      "issue_id": "QE-25",
+      "status": "PARTIAL",
+      "root_cause": "Research purpose and execution_certified=false carried into scalar artifacts; typed side-specific trade permissions applied CPU/CUDA, prohibited exit fails closed.",
+      "actual_entrypoints": [
+        "quant_evaluator/runtime/evaluator.py::evaluate"
+      ],
+      "targeted_tests": [
+        "quant_evaluator/tests/test_v3_trade_eligibility.py"
+      ],
+      "history_evidence": [
+        "Version changes retained as new registry versions; OPS08 dry-run migration planner exists but historical full replay is not certified."
+      ],
+      "remaining": "Research purpose and execution_certified=false carried into scalar artifacts; typed side-specific trade permissions applied CPU/CUDA, prohibited exit fails closed."
+    },
+    {
+      "issue_id": "QE-26",
+      "status": "PARTIAL",
+      "root_cause": "Held unknown quote remains NaN; coherent risk valuation/NAV missingness across every legacy risk path still incomplete. Latest CPU/CUDA max drawdown and Calmar defaults now unknown, explicit zero_fill/fail; known bankruptcy remains100%. Opposing cohorts cannot hide unknown held quote on CUDA.",
+      "actual_entrypoints": [
+        "quant_evaluator/runtime/evaluator.py::evaluate"
+      ],
+      "targeted_tests": [
+        "quant_evaluator/tests/test_v3_cohort_intervals.py",
+        "quant_evaluator/tests/test_v3_drawdown_contracts.py"
+      ],
+      "history_evidence": [
+        "Version changes retained as new registry versions; OPS08 dry-run migration planner exists but historical full replay is not certified."
+      ],
+      "remaining": "Held unknown quote remains NaN; coherent risk valuation/NAV missingness across every legacy risk path still incomplete."
+    },
+    {
+      "issue_id": "QE-27",
+      "status": "PARTIAL",
+      "root_cause": "Actual registry versions/config hash, public sample counts + sample units, typed bundle JSON roundtrip. Some legacy scalar fallback count semantics remain.",
+      "actual_entrypoints": [
+        "quant_evaluator/runtime/evaluator.py::evaluate"
+      ],
+      "targeted_tests": [
+        "quant_evaluator/tests/test_v3_public_artifacts.py",
+        "quant_evaluator/tests/test_v3_calendar_public.py"
+      ],
+      "history_evidence": [
+        "Version changes retained as new registry versions; OPS08 dry-run migration planner exists but historical full replay is not certified."
+      ],
+      "remaining": "Actual registry versions/config hash, public sample counts + sample units, typed bundle JSON roundtrip. Some legacy scalar fallback count semantics remain."
+    },
+    {
+      "issue_id": "QE-28",
+      "status": "PARTIAL",
+      "root_cause": "Request-local shared IC builders/counts and portfolio reuse; tier/node budget admission enforced. Full resource-aware builder DAG not complete.",
+      "actual_entrypoints": [
+        "quant_evaluator/runtime/evaluator.py::evaluate"
+      ],
+      "targeted_tests": [
+        "quant_evaluator/tests/test_v3_public_artifacts.py"
+      ],
+      "history_evidence": [
+        "Version changes retained as new registry versions; OPS08 dry-run migration planner exists but historical full replay is not certified."
+      ],
+      "remaining": "Request-local shared IC builders/counts and portfolio reuse; tier/node budget admission enforced. Full resource-aware builder DAG not complete."
+    },
+    {
+      "issue_id": "QE-29",
+      "status": "PARTIAL",
+      "root_cause": "Coordinate/validity checks before staging, frozen numeric factor ownership. Complete production refs/axis ownership still require auditing.",
+      "actual_entrypoints": [
+        "quant_evaluator/runtime/evaluator.py::evaluate"
+      ],
+      "targeted_tests": [
+        "quant_evaluator/tests/test_v3_input_contracts.py",
+        "quant_evaluator/tests/test_v3_immutable_inputs.py"
+      ],
+      "history_evidence": [
+        "Version changes retained as new registry versions; OPS08 dry-run migration planner exists but historical full replay is not certified."
+      ],
+      "remaining": "Coordinate/validity checks before staging, frozen numeric factor ownership. Complete production refs/axis ownership still require auditing."
+    },
+    {
+      "issue_id": "QE-30",
+      "status": "FIXED_LOCAL",
+      "root_cause": "Observation<=availability<=decision<=execution<=label_start<label_end.",
+      "actual_entrypoints": [
+        "quant_evaluator/runtime/evaluator.py::evaluate"
+      ],
+      "targeted_tests": [
+        "quant_evaluator/tests/test_v3_input_contracts.py"
+      ],
+      "history_evidence": [
+        "Version changes retained as new registry versions; OPS08 dry-run migration planner exists but historical full replay is not certified."
+      ],
+      "remaining": "Requires per-issue GOLD/E2E/migration closure before VERIFIED."
+    },
+    {
+      "issue_id": "QE-31",
+      "status": "FIXED_LOCAL",
+      "root_cause": "Labels bind full clocks/basis/content/axes; numeric buffers are truly immutable. Object axes detach public reads and reject mutable scalar objects; generic object metadata arrays fail closed. FrozenMapping storage cannot be replaced. Codec preserves typed mapping keys and escapes tag-shaped user data; hashes distinguish literal maps from typed values and reject lossy structured dtypes.",
+      "actual_entrypoints": [
+        "quant_evaluator/runtime/evaluator.py::evaluate"
+      ],
+      "targeted_tests": [
+        "quant_evaluator/tests/test_v3_input_contracts.py",
+        "quant_evaluator/tests/test_v3_immutable_inputs.py",
+        "quant_evaluator/tests/test_v3_metadata_ownership.py",
+        "quant_evaluator/tests/test_v3_object_axis_transport.py"
+      ],
+      "history_evidence": [
+        "Version changes retained as new registry versions; OPS08 dry-run migration planner exists but historical full replay is not certified."
+      ],
+      "remaining": "Requires per-issue GOLD/E2E/migration closure before VERIFIED."
+    },
+    {
+      "issue_id": "DTA-05",
+      "status": "PARTIAL",
+      "root_cause": "Typed side-specific can_buy/sell/borrow/cover panel has clocks/axes/universe ref, applied in CPU/CUDA probe entry and exit checks.",
+      "actual_entrypoints": [
+        "quant_evaluator/runtime/evaluator.py::evaluate"
+      ],
+      "targeted_tests": [
+        "quant_evaluator/tests/test_v3_trade_eligibility.py"
+      ],
+      "history_evidence": [
+        "Version changes retained as new registry versions; OPS08 dry-run migration planner exists but historical full replay is not certified."
+      ],
+      "remaining": "Typed side-specific can_buy/sell/borrow/cover panel has clocks/axes/universe ref, applied in CPU/CUDA probe entry and exit checks."
+    },
+    {
+      "issue_id": "QE-33",
+      "root_cause": "Correlation-unit stability uses inverse Fisher transform and leave-one-window-out reference; public facade builds real disjoint windows instead of single profile.",
+      "status": "FIXED_LOCAL",
+      "actual_entrypoints": [
+        "quant_evaluator/runtime/evaluator.py::evaluate"
+      ],
+      "targeted_tests": [
+        "quant_evaluator/tests/test_v3_shape_contracts.py",
+        "quant_evaluator/tests/test_shape_evidence.py"
+      ],
+      "history_evidence": [
+        "Registry shape versions bumped2.0.0; historical FA health thresholds/replay need validation."
+      ],
+      "remaining": "GOLD/public downstream/history migration closure pending."
+    },
+    {
+      "issue_id": "QE-34",
+      "root_cause": "Mirrored contrast separates curvature/asymmetry; moving-block rank-agreement bootstrap has explicit descriptive event, tie-aware ranks and factor-permutation-independent draws; descriptive registry ID added.",
+      "status": "FIXED_LOCAL",
+      "actual_entrypoints": [
+        "quant_evaluator/runtime/evaluator.py::evaluate"
+      ],
+      "targeted_tests": [
+        "quant_evaluator/tests/test_v3_shape_contracts.py",
+        "quant_evaluator/tests/test_shape_evidence.py"
+      ],
+      "history_evidence": [
+        "Registry shape versions bumped2.0.0; historical FA health thresholds/replay need validation."
+      ],
+      "remaining": "GOLD/public downstream/history migration closure pending."
+    },
+    {
+      "issue_id": "QE-35",
+      "root_cause": "Tie-aware per-factor/date actual bucket feasibility chooses fixed Q; selected Q now binds public daily/full builders. Mixed-Q CPU batches group by Q and preserve singleton typed factor_artifacts without padding; JSON custom policy and bundle transport validated.",
+      "status": "FIXED_LOCAL",
+      "actual_entrypoints": [
+        "quant_evaluator/runtime/evaluator.py::evaluate"
+      ],
+      "targeted_tests": [
+        "quant_evaluator/tests/test_v3_shape_contracts.py",
+        "quant_evaluator/tests/test_shape_evidence.py"
+      ],
+      "history_evidence": [
+        "Adaptive count registry3.0.0 and policy2.0.0; historical FA health thresholds/replay need validation."
+      ],
+      "regression_results": ["797 QE tests passed,2skipped; /tmp/v3_optimizer_qe_final_manifested_20260907.log; source manifests identical before/after"],
+      "remaining": "CPU planning plus strict CUDA grouped adaptive builders validated on L20; GOLD/public downstream/history migration closure pending."
+    }
+  ],
+  "entries": [
+    {
+      "issue_id": "STA-01",
+      "status": "FIXED_LOCAL",
+      "actual_entrypoints": ["quant_evaluator.runtime.evaluator.evaluate"],
+      "targeted_tests": ["quant_evaluator/tests/test_v3_pairwise_rank_public.py", "quant_evaluator/tests/test_numerical_oracle.py"],
+      "history_evidence": ["Existing pairwise reranking behavior now verified against independent per-factor scipy rank oracle on actual CPU/L20 public paths, masked poison and joint asset/factor permutations. No new numerical change in this verification."],
+      "remaining": "Full historical/cross-domain certification remains separate from this focused public numerical proof."
+    },
+    {
+      "issue_id": "STA-02",
+      "status": "PARTIAL",
+      "actual_entrypoints": ["quant_evaluator.metrics.statistical_evidence.build_hac_evidence", "quant_evaluator.runtime.evaluator.evaluate"],
+      "targeted_tests": ["quant_evaluator/tests/test_v3_statistical_evidence.py", "quant_evaluator/tests/test_v3_public_artifacts.py"],
+      "history_evidence": ["Typed and legacy CPU/GPU HAC reject internal calendar gaps, trim only empty endpoints, validate policy and preserve existing contiguous covariance convention. hac_tstat/hac_pvalue and four derived multiple corrections now use public semantic version2.0.0 so old evidence can be invalidated."],
+      "remaining": "A general irregular-time estimator is not implemented: gapped samples explicitly insufficient. Actual selective historical replay across all downstream domains is not yet certified."
+    },
+    {
+      "issue_id": "STA-03",
+      "status": "PARTIAL",
+      "actual_entrypoints": ["quant_evaluator.metrics.statistical_evidence.build_paired_block_bootstrap_difference"],
+      "targeted_tests": ["quant_evaluator/tests/test_v3_statistical_evidence.py", "quant_evaluator/tests/test_v3_shape_contracts.py"],
+      "history_evidence": ["Identical candidate differences produce exact zero intervals. Legacy direct CPU/GPU bootstrap now shares one original-calendar draw matrix across candidates, invariant to factor permutation/singleton batching; incomplete columns are NaN. Independent manual block oracle and realL20 regression passed; public block_bootstrap_ci version2.0.0."],
+      "remaining": "Irregular/gapped resampling remains unsupported and fails closed. Complete shape/FO historical replay and all campaign-level use remain to be verified."
+    },
+    {
+      "issue_id": "QAT-07",
+      "status": "FIXED_LOCAL",
+      "actual_entrypoints": ["jobs/qa/run_qat07_import_matrix.py"],
+      "root_cause": "Import success alone did not prove implementation equality, and printed lag-guard failure was ignored. Runner now validates actual forward-fill output/effective parameters and compares1748installedPythonfiles across8wheels byte-for-byte with checkout sources; imported roots are checked explicitly.",
+      "targeted_tests": ["jobs/tests/test_qat07_implementation_comparison.py", "jobs/qa/run_qat07_import_matrix.py"],
+      "regression_results": ["3runner negative tests passed; latest fullclean8wheel matrixPASS,1748sourcefiles compared after generation-reference/statistical guard changes; evidence/r2/v3_qat07_r4_source_parity_20260907.json"],
+      "history_evidence": ["Isolated temporary installation only; original venv unchanged. Same-source byte evidence and actual sample public FP operation parity recorded, not all operator capability certification."],
+      "remaining": "Historical GOLD/E2E rollout not certified; source comparison covers installed Python files, not all possible package resource files or every public operator's behavior."
+    },
+    {
+      "issue_id": "QA-02",
+      "status": "FIXED_LOCAL",
+      "actual_entrypoints": ["quant_evaluator.scripts.generate_capability_matrix.generate_capability_matrix", "quant_evaluator.scripts.generate_capability_matrix.CapabilityRunEvidence.from_public_cpu", "quant_evaluator.scripts.generate_capability_matrix.CapabilityRunEvidence.from_public_gpu"],
+      "targeted_tests": ["quant_evaluator/tests/test_generate_capability_matrix.py", "quant_evaluator/tests/test_gpu_metric_expansion.py"],
+      "root_cause": "Old generator claimed universal CPU support, conflated CUDA declaration/parity enum with execution and production readiness, and used wrong version field. New matrix separates declared/kernel/public CPU/GPU/adapter/profile/admission/update/publication. Callable-only is DECLARED; unknown GPU facade routes remain NOT_RUN rather than inferred unsupported from auxiliary registries.",
+      "regression_results": ["11 focused passed including actual strict CUDA public evaluate, empty auxiliary registry, CUDA-to-CPU relabel rejection, provenance mutation revalidation, wrong versions, invalid artifacts, fake receipts and calendar facade route absence"],
+      "history_evidence": ["Checked-in CSV regenerated for159metrics with zero supplied runtime evidence. Public GPU is NOT_RUN159, missing auxiliary declarations are NOT_DECLARED. Downstream adapter/profile/admission/update/publication all remain NOT_RUN. Old all-green declaration counts are not executable or production certifications."],
+      "remaining": "Evidence receipt certifies only the specific versioned data run, not independent full parity or downstream production readiness. A complete per-capability run/admission/update/publication evidence matrix remains to execute."
+    },
+    {
+      "issue_id": "QA-01",
+      "status": "FIXED_LOCAL",
+      "actual_entrypoints": ["factor_preprocess.registry.transforms.get_default_registry", "jobs.qa.run_qat07_import_matrix.collect_parity_evidence", "jobs.qa.run_qat07_import_matrix.reconcile_collected_tests"],
+      "targeted_tests": ["factor_preprocess/tests/test_fe_operator_parity.py", "factor_preprocess/tests/test_v3_preprocess_contracts.py", "jobs/tests/test_qat07_implementation_comparison.py"],
+      "root_cause": "Real FP registry/recipe to FE parameter bridge tests now supplemented by AST-to-actual-pytest-collection reconciliation. Missing/overwritten/unexpected test definitions or collection errors/skips fail certification; parametrized cases reconcile to base definitions.",
+      "regression_results": ["Actual FE parity module: 12 definitions, 16 collected parameterized cases, no missing or overwritten tests; collector guard 5 tests passed. Full FO+FP 1118 passed, one unrelated offline HP xfail."],
+      "history_evidence": ["Previous import-only or manual max_periods parity claims do not certify recipe execution. Old evidence retained; new required collection receipt binds source SHA256 and exact nodeids."],
+      "remaining": "This collector receipt covers the named FE parity module; full177/GOLD/E2E certification remains separate. QAT07 wheel rerun after final package freeze pending."
+    },
+    {
+      "issue_id": "QE-32",
+      "status": "FIXED_LOCAL",
+      "actual_entrypoints": ["quant_evaluator.api.horizons.evaluate_horizons"],
+      "root_cause": "Public predictive horizon curves evaluate actual H-specific LabelBundles with per-horizon/common maturity masks and typed daily IC artifacts; serial IC autocorrelation remains a distinct statistic. Labels/sample refs/sign changes and nearzero behavior are explicit.",
+      "targeted_tests": ["quant_evaluator/tests/test_horizons.py", "quant_evaluator/tests/test_v3_statistical_evidence.py"],
+      "regression_results": ["Included in stable fullQE797passed2skipped and later802passed2skipped; actual CPU/CUDA horizon path covered"],
+      "history_evidence": ["Old serial-ACF evidence cannot be relabeled as predictive horizon decay; new horizon bundle binds label content refs and sample policy. No historical in-place rewrite performed."],
+      "remaining": "Historical GOLD/E2E migration and downstream FA/FO scenario closure pending."
+    },
+    {
+      "issue_id": "PL-08",
+      "status": "FIXED_LOCAL",
+      "actual_entrypoints": ["quant_platform.app.db.PostgresDb", "quant_platform.app.outbox.Outbox", "quant_platform.app.outbox.Inbox", "quant_platform.app.storage.generation_coordinator.DurableGenerationCoordinator"],
+      "root_cause": "Live PostgreSQL exposed epoch/calendar column mismatch, integer boolean SQL, missing sequences/RETURNING facade and row adapter, concurrent inbox duplicate execution, durable PROCESSING crash gap and composition migration misclassification. Inbox claim/handler/ack are now atomic with failure savepoints; Outbox expired claims recover with stale-token fencing and actual backoff. External delivery remains at-least-once. Plain SQLite DSNs and public PostgreSQL composition corrected.",
+      "targeted_tests": ["quant_platform/tests/test_postgres_live.py", "quant_platform/tests/test_postgres_dialect.py", "quant_platform/tests/test_migrations.py", "quant_platform/tests/test_generation_coordinator.py"],
+      "regression_results": ["459 passed0skipped; evidence/r2/v3_platform_459_20260907.log", "Independent2connection first-delivery, abrupt subprocess death before/after handler write, SQL-error savepoint recovery, death after external delivery before sender acknowledgement, stale claim fencing, real public composition validated", "Generation IDs bind artifact identity and content; legacy identities are reused without relabeling; byte hash/size and retry metadata validated before staging; completed replay and out-of-order pending deliveries cannot roll back newer active generations, on SQLite and real PostgreSQL"],
+      "history_evidence": ["postgres_event_clock_migration requires explicit legacy timezone, preserves fractional Unixsecond clocks and IDs, transactional/idempotent fixture migration passed. No production migration executed."],
+      "remaining": "Full production historical migration/rollback not certified. New inbox claim, DB handler effects and DONE are one transaction with failure savepoints; abrupt process death recovery verified on livePG. Legacy durable PROCESSING rows require controlled operator recovery; external side effects require idempotency/outbox. Outbox lease recovery fences stale acknowledgements but external delivery remains at-least-once."
+    },
+    {
+      "issue_id": "SIM-05",
+      "status": "FIXED_LOCAL",
+      "actual_entrypoints": ["factor_assets.clustering.LeidenClustering.cluster", "factor_assets.clustering.LeidenClustering.cluster_artifact"],
+      "root_cause": "Leiden connectivity is no longer treated as cluster quality. Explicit versioned policy binds observed medoid minimum affinity, signed-cycle conflicts, and high-affinity connected components. Missing medoid edges are INSUFFICIENT, not measured zero. Actual production finalization requires PASS for every cluster; no universal default calibration.",
+      "targeted_tests": ["factor_assets/tests/test_v3_cluster_quality.py", "factor_assets/tests/test_clustering_certification.py", "factor_assets/tests/test_clustering_leiden.py"],
+      "regression_results": ["65 focused clustering tests passed with actual igraph1.0.0", "7 extended quality tests passed including edge-order invariance and JSON identity", "fullFA1315 passed43skipped with isolated igraph; timeout60 no stalls"],
+      "history_evidence": ["Old cluster artifacts without quality retain legacy content hash; new quality changes identity. Existing production callers must supply a calibrated quality policy and reevaluate old clusters. No production graph/pointer mutated."],
+      "remaining": "Historical graph/cluster/model migration and production calibration remain unverified; sparse missing pairs may require new QE evidence before production eligibility."
+    },
+    {
+      "issue_id": "FA-06",
+      "status": "FIXED_LOCAL",
+      "actual_entrypoints": ["factor_assets.adapters.production_taxonomy.classify_definition_taxonomy"],
+      "root_cause": "Real FE field usage resolves through DA catalog canonical IDs with explicit alpha/control/eligibility/weight roles; mechanisms use alpha only in taxonomy2.0.0. FA identity adapter now delegates actual FE DSL parser instead of treating bare field names as string literals; full expressions and their parsed trees share identity without collapsing canonical field vs raw column semantics.",
+      "targeted_tests": ["factor_assets/tests/adapters/test_production_taxonomy_v3.py", "factor_assets/tests/profiling/test_taxonomy.py", "factor_assets/tests/adapters/test_factor_identity_dsl_v3.py", "factor_assets/tests/test_adapter_factor_engine.py"],
+      "regression_results": ["49 taxonomy focused passed; fullFA1326passed43skipped after real DSL identity adapter; /tmp/quant_v3_fa_dsl_identity_full.log"],
+      "history_evidence": ["Taxonomy2.0.0 new; old1.0.0 replay retained. Former string-literal IDs cannot be relabeled as fields: reevaluate under actual canonical field identity and retain old literal artifacts immutable. No production migration executed."],
+      "remaining": "Full historical reclassification and GOLD/E2E migration chain not certified."
+    },
+    {
+      "issue_id": "MOD-07",
+      "status": "FIXED_LOCAL",
+      "actual_entrypoints": ["jobs.evaluate_model_predictions.evaluate_model_predictions", "modeling.evaluation.evaluate_predictions"],
+      "root_cause": "Prediction ID and row-bound QE evidence are separate from independent portfolio QE evidence; legacy forward-label spread and membership proxy explicitly research diagnostics, not execution or OOS certification. Outer jobs layer binds QE port while modeling and platform remain independently packaged.",
+      "targeted_tests": ["tests/modeling/test_v3_mod07_evidence.py", "tests/modeling/test_r41_evaluation_oos_ic.py", "tests/modeling/test_packaging_independence.py"],
+      "regression_results": ["406 modeling tests passed including later E2E-E component; 12 MOD07 focused tests include real PCR train->prediction->QE, value-bound identity and schema/time mismatch rejection"],
+      "history_evidence": ["Report version v3-separated-evidence-2; legacy aliases retain diagnostic status, no factor inherits model performance."],
+      "remaining": "Public jobs train_evaluate_model_predictions/evaluate_trained_model_predictions now execute real PCR model artifact with independently checked OOS schema and value-bound prediction ID; full scenario GOLD/E2E trace remains pending. Legacy array-only paths remain research/descriptive. Execution-domain portfolio certification is not asserted."
+    }
+  ],
+  "frozen_r5_verification": {
+    "qe": "851 passed, 2 optional absent-kernel skips, 4 warnings; evidence/r2/v3_r5_qe_capability_final.log",
+    "optimizer_preprocess": "1150 passed, 1 expected HP xfail,12warnings; evidence/r2/v3_r5_frozen_fofp.log",
+    "modeling_jobs": "453 passed,59warnings; evidence/r2/v3_r5_frozen_modeljobs.log",
+    "qat07": "PASS8wheels1750installedPythonfiles match source;actual FP execution and actual test collection parity PASS; evidence/r2/v3_qat07_r5_source_parity_20260907.json",
+    "scope": "Supporting current-source evidence only; does not certify full177/GOLD40/E2E8 or production deployment."
+  },
+  "additional_findings": [
+    {
+      "finding_id": "V3-EXTRA-MODELING-FINITE-FIT",
+      "related_requirements": ["V-08", "MOD-04"],
+      "status": "FIXED_LOCAL",
+      "public_path": "modeling.trainer.fit_preprocessing",
+      "root_cause": "Training imputer/winsor/scaler used nanmean/nanquantile while retaining infinities. One infinity corrupted otherwise valid finite training statistics and could silently replace a finite mean with zero.",
+      "fix": "Normalize all nonfinite training features to NaN before sequential fitting; preserve caller arrays. Frozen steps include fit_semantics_version=finite-only-v2 in their existing state hash. Existing serialized states are not rewritten.",
+      "tests": ["tests/modeling/test_v3_preprocessing_finite_fit.py", "tests/modeling/test_v3_mod_01_05_08.py"],
+      "evidence": ["5 independent regressions failed before fix; 13 focused tests passed after", "evidence/r2/v3_r5_finite_fit_before.log", "evidence/r2/v3_r5_finite_fit_after.log"],
+      "migration": "New fitted states are separately identified. Refit affected training-only states and reevaluate downstream models in shadow before any approved production switch. No production model or fitted state overwritten."
+    }
+  ],
+  "checkpoints": [
+    {
+      "run": "QE W8",
+      "result": "724 passed, 2 skipped",
+      "log": "/tmp/quant_v3_qe_w8.log"
+    },
+    {
+      "run": "calendar public plus GPU prebuilt portfolio",
+      "result": "8 passed",
+      "log": "/tmp/quant_v3_calendar_public.log"
+    },
+    {
+      "run": "shared IC builders",
+      "result": "10 passed",
+      "log": "/tmp/quant_v3_ic_reuse.log"
+    },
+    {
+      "run": "QE W9",
+      "result": "RUNNING",
+      "log": "/tmp/quant_v3_qe_w9.log"
+    },
+    {
+      "run": "QE W10",
+      "result": "738 passed, 2 skipped",
+      "log": "/tmp/quant_v3_qe_w10.log"
+    },
+    {
+      "run": "shape direct public ownership/bin invariance",
+      "result": "12 passed",
+      "log": "focused console + /tmp/quant_v3_shape_bins.log"
+    }
+  ],
+  "not_certified": [
+    "Full 177 closure",
+    "GOLD40/E2E8 full chain",
+    "Real trading execution/capacity",
+    "Complete history migrations"
+  ]
+}

@@ -1,0 +1,26 @@
+{
+  "scope": "factor_assets V8 assigned tickets",
+  "baseline_manifest_sha256": "6562886acf1bff40cfc58cb2cc138c130f9d18e42750aceca2700bcbcd39a7ca",
+  "tests": {"focused": "composite/aggregation contracts 39 passed, 0 failures", "full_factor_assets": "1481 passed, 46 warnings, 0 failures"},
+  "per_criterion_map": "evidence/v8/fa/fa_acceptance_map.json",
+  "tickets": {
+    "A04": {"status": "PARTIAL", "evidence": ["test_v8_selection_decision.py"], "remaining": "production-calibrated continuous floors for all purposes are unsealed"},
+    "A05": {"status": "PARTIAL", "evidence": ["profiling/dimensions.py", "test_v8_selection_decision.py"], "remaining": "all six blocks require://purpose-specific calibrated primary metrics"},
+    "A06": {"status": "VERIFIED", "evidence": ["test_v8_qe_joint_evidence.py exact QE metric/plan/replicate/factor axes and mutation rejection"]},
+    "A07": {"status": "VERIFIED", "evidence": ["test_identical_candidate_cannot_replace_legal_baseline_by_id_tiebreak"]},
+    "A08": {"status": "VERIFIED", "evidence": ["typed paired relationships, original-RAW guards, and CHEAPER/RISK_CLEANER/SIMPLER same-qualified-evidence authorization tests"]},
+    "A09": {"status": "VERIFIED", "evidence": ["nonfinite/bool guards, policy axes/weights/hash validation"]},
+    "A11": {"status": "VERIFIED", "evidence": ["profiling/dimensions.py context/policy binding", "full regression"]},
+    "A15": {"status": "PARTIAL", "evidence": ["DecisionArtifact exact policy/context/candidate hashes", "qualification resolver"], "remaining": "FO/FP full-chain acceptance owned by their consumers"},
+    "A47": {"status": "VERIFIED", "evidence": ["test_dlib_fa_018_composite.py"]},
+    "A48": {"status": "VERIFIED", "evidence": ["custom weights and normalized regime/HHI regression"]},
+    "A49": {"status": "VERIFIED", "evidence": ["aggregation/test_specs.py", "spec and weight content hashes"]},
+    "A50": {"status": "VERIFIED", "evidence": ["aggregation/test_representatives.py ICEvidenceReceipt cases"]},
+    "A51": {"status": "VERIFIED", "evidence": ["DIVERSITY role and SUBFAMILY_BALANCED round-robin tests"]},
+    "A64": {"status": "VERIFIED", "evidence": ["test_lifecycle_orchestration.py trusted resolver and bypass rejection"]},
+    "A65": {"status": "VERIFIED", "evidence": ["test_sqlite_repository.py lost-response replay"]},
+    "A66": {"status": "VERIFIED", "evidence": ["test_v8_lifecycle_authorization_outbox.py atomic stage/rollback"]},
+    "A71": {"status": "VERIFIED", "evidence": ["typed HEALTH_TRANSITION serialization and replay tests"]}
+  },
+  "claims_excluded": ["real-market calibration", "production deployment", "migration execution"]
+}

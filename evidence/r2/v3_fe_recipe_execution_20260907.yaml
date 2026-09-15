@@ -1,0 +1,21 @@
+issue_id: FP-05
+git_sha: 2db45f4e446309003381a51a5e03071d31859502
+timestamp: 2026-09-07T00:00:00+08:00
+owned_modified_files:
+  - factor_engine/backend/cleaned_bridge.py
+  - factor_engine/tests/backend/test_operator_recipe_execution_v3.py
+  - factor_preprocess/factor_preprocess/adapters/fe_operator.py
+  - factor_preprocess/factor_preprocess/registry/transforms.py
+public_path: TransformRegistry.get_recipe_execution -> FeRecipeExecutor -> execute_operator_recipe -> PandasBackend.execute(PlanNode)
+tests:
+  - command: PYTHONPATH=$PWD/factor_preprocess:$PWD/factor_optimizer:$PWD /home/sunhaiwei/quant_projects/.venv/bin/python -m pytest factor_engine/tests/backend/test_operator_recipe_execution_v3.py factor_preprocess/tests/test_v3_preprocess_contracts.py -q
+    status: PASS
+oracles:
+  input_load_count: 1
+  operator_count: 2
+  unknown_operator: fails_before_execution
+limitations:
+  - CPU pandas_numpy PlanNode path verified; GPU/Q residency NOT_RUN
+  - only all-FE stateless recipes batch; fitted and FP-native steps fail closed
+  - no full dataset benchmark run
+capability: CPU_CERTIFIED_LOCAL

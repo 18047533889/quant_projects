@@ -1,0 +1,3 @@
+X02 old ratio 1.4142135623730951 old_substitute True
+X03 old apparent 1.0 common 0.0
+X04 all-f before 64 after 0

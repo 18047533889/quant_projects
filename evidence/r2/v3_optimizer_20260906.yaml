@@ -1,0 +1,138 @@
+work_package: factor_optimizer_v3
+owner: v3_optimizer
+workspace: /home/sunhaiwei/quant_projects_v3_remediation
+branch: codex/v3-remediation-20260906
+start_head: 2db45f4e446309003381a51a5e03071d31859502
+current_head: 2db45f4e446309003381a51a5e03071d31859502
+runtime: /home/sunhaiwei/quant_projects/.venv/bin/python
+import_evidence:
+  factor_optimizer: /home/sunhaiwei/quant_projects_v3_remediation/factor_optimizer/factor_optimizer/__init__.py
+  quant_evaluator: /home/sunhaiwei/quant_projects_v3_remediation/quant_evaluator/__init__.py
+changes:
+  - factor_optimizer/factor_optimizer/adapters/quant_evaluator.py
+  - factor_optimizer/factor_optimizer/search/runner.py
+  - factor_optimizer/factor_optimizer/search/winner_selector.py
+  - factor_optimizer/factor_optimizer/search/supervised_parameter.py
+  - factor_optimizer/factor_optimizer/contracts/campaign_store.py
+  - factor_optimizer/factor_optimizer/contracts/statistical_governance.py
+  - factor_optimizer/factor_optimizer/contracts/search_budget.py
+  - factor_optimizer/factor_optimizer/contracts/__init__.py
+  - factor_optimizer/factor_optimizer/data_capabilities.py
+  - factor_optimizer/tests/__init__.py
+  - factor_optimizer/tests/search/test_durable_campaign_store_v3.py
+  - factor_optimizer/tests/search/test_winner_set_v3.py
+  - factor_optimizer/tests/search/test_supervised_parameter_v3.py
+  - factor_optimizer/tests/search/test_stage_trace_v3.py
+  - factor_optimizer/tests/search/test_statistical_governance_v3.py
+  - factor_optimizer/tests/search/test_qe_adapter_v3.py
+  - factor_optimizer/tests/search/test_execution_plan_checkpoint_v3.py
+  - factor_optimizer/tests/search/test_v05_cheap_prefilter.py
+issues:
+  FO-01:
+    status: INTEGRATION_VERIFIED
+    actual_entrypoints: [factor_optimizer.adapters.quant_evaluator.create_qe_adapter, quant_evaluator.evaluate]
+    expected_contract: Multi-factor results remain keyed by factor_id and retain validity, observation count, metric version, and warnings.
+    regression_results: ["test_qe_adapter_v3.py: 3 passed"]
+    migration_or_no_migration_reason: Existing erroneous batch trials require reevaluation; factor values need not be rebuilt.
+    remaining_blockers: []
+  FO-02:
+    status: FIXED_LOCAL
+    actual_entrypoints: [factor_optimizer.adapters.quant_evaluator.create_qe_adapter, quant_evaluator.evaluate]
+    expected_contract: Adapter forwards split_ref, backend, and gpu_policy and preserves QE request/config/split/version/ref metadata.
+    regression_results: ["real CPU public adapter path covers tier, cost_budget, metric_parameters and content-identity changes"]
+    migration_or_no_migration_reason: Existing partial evidence snapshots require reevaluation.
+    remaining_blockers: []
+  FO-03:
+    status: ALREADY_FIXED_VERIFIED
+    actual_entrypoints: [factor_optimizer.capabilities.require_production_capability, factor_optimizer.adapters.quant_evaluator.create_qe_adapter]
+    expected_contract: Production remains fail-closed until all capability evidence exists.
+    regression_results: ["existing production capability tests included in 779 passing suite tests"]
+    migration_or_no_migration_reason: No capability version change; research_only flag deliberately preserved.
+    remaining_blockers: [production_legality_chain_missing, full QE/FA evidence escalation integration pending]
+  FO-04:
+    status: INTEGRATION_VERIFIED
+    actual_entrypoints: [factor_optimizer.search.multifidelity.StageProfileRegistry, factor_optimizer.search.runner.SearchRunner]
+    expected_contract: One executable stage plan with actual profile/sample/resource trace.
+    regression_results: ["real SearchRunner records stage, fidelity, profile version, sample split, evidence ref, objective and actual cost; checkpoint roundtrip verified"]
+    migration_or_no_migration_reason: New checkpoints add stage_execution_trace; old checkpoints load with an empty trace.
+    remaining_blockers: []
+  FO-05:
+    status: INTEGRATION_VERIFIED
+    actual_entrypoints: [factor_optimizer.search.runner.SearchSession.checkpoint, factor_optimizer.search.runner.SearchSession.resume]
+    expected_contract: Checkpoints atomically replace files, bind immutable execution-plan identity, and preserve strategy/RNG/ledger/budget state.
+    regression_results: ["checkpoint focused suite: 25 passed", "package suite: 779 passed, 6 unrelated failures"]
+    migration_or_no_migration_reason: Old checkpoints without execution_plan_hash remain loadable and acquire a hash; new checkpoints fail closed on hash mismatch.
+    remaining_blockers: []
+  SRH-01: {status: TO_VERIFY, remaining_blockers: [FE/FP effective-parameter trace owned by other packages]}
+  SRH-02: {status: TO_VERIFY, remaining_blockers: [Cross-package diagnostic priority and FA admission path not proven]}
+  SRH-03: {status: INTEGRATION_VERIFIED, regression_results: [Pareto rejects NaN/Inf; WinnerSetPolicy predeclares epsilon, hard eligibility and deterministic complexity tie-break], remaining_blockers: []}
+  SRH-04: {status: FIXED_LOCAL, regression_results: [Public select_complementary_winners supports empty set, family cap, incremental-value gate and duplicate-correlation exclusion], remaining_blockers: [FA/modeling real OOS incremental evidence producer integration pending]}
+  SRH-05: {status: TO_VERIFY, remaining_blockers: [Common confirmation sample trace depends on QE profile integration]}
+  SRH-06: {status: INTEGRATION_VERIFIED, regression_results: [SQLite concurrent final-budget race permits exactly one worker; restart retains usage and started reservation; SearchRunner durable factory exercised], remaining_blockers: []}
+  SRH-07: {status: INTEGRATION_VERIFIED, regression_results: [Candidate-set scope survives restart/session alias; only INFRA_FAILED retries; completed request returns immutable evidence ref; public TestAuthorityBroker path exercised], remaining_blockers: []}
+  SRH-08: {status: INTEGRATION_VERIFIED, regression_results: [Strategy checkpoint/resume focused suite passes], remaining_blockers: [Asynchronous completion-order policy not applicable while concurrency is deliberately rejected]}
+  SRH-09: {status: ALREADY_FIXED_VERIFIED, regression_results: [Existing plateau/budget tests pass], remaining_blockers: [Paired uncertainty comparison requires QE evidence]}
+  SRH-10: {status: INTEGRATION_VERIFIED, regression_results: [SQLite repair failure knowledge is keyed by effective spec, evaluation intent and context; restart and new-window retry behavior tested], remaining_blockers: []}
+  V-09: {status: INTEGRATION_VERIFIED, remaining_blockers: []}
+  V-05:
+    status: PARTIAL
+    actual_entrypoints:
+      - factor_optimizer.search.runner.SearchRunner._run_session
+      - factor_optimizer.search.tiered_evaluation.TieredEvaluationScheduler.advance
+      - factor_optimizer.contracts.evaluation_artifact.TrialEvaluationArtifact.status
+    public_paths:
+      - EvaluationProtocol returns a typed TrialEvaluationArtifact with COMPLETE, PRUNED, or FAILED status bound to an evidence_ref
+      - SearchRunner preserves low primary RankIC when the declared evaluator status is COMPLETE and advances only through the predeclared TieredEvaluationPolicy
+      - SearchRunner stops a typed PRUNED candidate at the cheap tier, excludes it from incumbent selection, and retains it in the evaluated-hypothesis multiplicity denominator
+    targeted_tests:
+      - factor_optimizer/tests/search/test_v05_cheap_prefilter.py::test_low_raw_rank_ic_does_not_override_declared_survivor_branch
+      - factor_optimizer/tests/search/test_v05_cheap_prefilter.py::test_declared_no_signal_prune_is_terminal_and_budget_bounded
+      - "factor_optimizer/tests/search: 665 passed, 9 warnings"
+    history_evidence:
+      - Existing serialized TrialEvaluationArtifact status values remain compatible; no schema field was added or rewritten.
+      - Existing checkpoints remain loadable; old runs that were over-promoted by the prior hard-coded passed=True decision are immutable historical evidence and require a new search session for corrected routing.
+      - PRUNED trials remain counted as valid evaluated hypotheses rather than disappearing from multiplicity accounting.
+    remaining_blockers:
+      - QE/FA must construct and persist the actual Q10 nonlinear-shape evidence that justifies COMPLETE versus PRUNED.
+      - Sparse-event applicability and coverage must be measured against a predeclared universe denominator by the evidence producer.
+      - Model-complementarity survival requires measured OOS incremental evidence from the modeling/FA producer; FO does not invent a default complementarity score.
+      - No cross-layer executable test yet proves all three evidence producers feed this public SearchRunner path.
+  V-10: {status: TO_VERIFY, remaining_blockers: [Common-sample QE execution trace pending]}
+  V-11: {status: INTEGRATION_VERIFIED, regression_results: [Durable SQLite authority blocks alias/new-session holdout reset and reuses completed immutable result], remaining_blockers: []}
+  V-12: {status: BLOCKED, remaining_blockers: [DA/QE label interval and PIT contracts outside owned package]}
+  V-16: {status: FIXED_LOCAL, remaining_blockers: [FA/modeling real OOS incremental-value producer integration pending]}
+  V-22: {status: ALREADY_FIXED_VERIFIED, regression_results: [Existing proposal validator and deterministic fallback tests pass], remaining_blockers: []}
+  STA-04: {status: INTEGRATION_VERIFIED, regression_results: [Durable proposal/executed/unique-effective/pvalue/horizon counts survive aliases and restart; incomplete FDR family rejected], remaining_blockers: []}
+  STA-05: {status: FIXED_LOCAL, regression_results: [Durable effective trial and complete p-value family summary available], remaining_blockers: [QE DSR return-statistic binding pending]}
+  STA-06: {status: INTEGRATION_VERIFIED, regression_results: [Diagnostic/non-forward and winner-only split evidence rejected for production OOS], remaining_blockers: []}
+  STA-07: {status: INTEGRATION_VERIFIED, regression_results: [Near-zero retention and sign reversal never emit ordinary ratio], remaining_blockers: [QE paired uncertainty producer pending]}
+  STA-09: {status: FIXED_LOCAL, regression_results: [Split-purpose guard blocks ex-post diagnostic use as production OOS], remaining_blockers: [QE/FA online-causal regime typed artifact pending]}
+  STA-10: {status: INTEGRATION_VERIFIED, regression_results: [Sign-changing horizon curve produces no half-life and every horizon counts in durable hypothesis family], remaining_blockers: [QE eligible decay fit evidence pending]}
+  GOLD-34: {status: INTEGRATION_VERIFIED, regression_results: ["checkpoint focused suite: 25 passed", "durable campaign store: 6 passed"], remaining_blockers: []}
+  GOLD-35: {status: INTEGRATION_VERIFIED, regression_results: [NaN Pareto fail-closed plus complementary finite winner set, empty result and stable simple representative tests], remaining_blockers: []}
+  RCP-07:
+    status: FIXED_LOCAL
+    regression_results: [TRAIN-only finite U-center grid selection, frozen training evidence/split/objective identity, SQLite restart roundtrip, VALIDATION/TEST refit rejection]
+    remaining_blockers: [QE T-by-Q-by-F training artifact and FE application adapter integration pending]
+  RCP-08:
+    status: FIXED_LOCAL
+    regression_results: [Finite tail cutoff grid, complete-grid evidence requirement, frozen state cannot be replaced by later split]
+    remaining_blockers: [QE per-date bucket count/tie/tradability/risk artifact and FE saturation/hinge application integration pending]
+test_commands:
+  - command: "PYTHONPATH=$PWD/factor_optimizer:$PWD/factor_preprocess:$PWD /home/sunhaiwei/quant_projects/.venv/bin/python -m pytest -q factor_optimizer/tests/search/test_qe_adapter_v3.py"
+    result: "3 passed"
+  - command: "PYTHONPATH=$PWD/factor_optimizer:$PWD/factor_preprocess:$PWD /home/sunhaiwei/quant_projects/.venv/bin/python -m pytest -q factor_optimizer/tests/search/test_execution_plan_checkpoint_v3.py factor_optimizer/tests/search/test_strategy_checkpoint_resume.py factor_optimizer/tests/search/test_budget_resume.py"
+    result: "25 passed"
+  - command: "PYTHONPATH=$PWD/factor_optimizer:$PWD/factor_preprocess:$PWD /home/sunhaiwei/quant_projects/.venv/bin/python -m pytest -q factor_optimizer/tests"
+    result: "807 passed"
+  - command: "PYTHONPATH=$PWD/factor_optimizer:$PWD/factor_preprocess:$PWD /home/sunhaiwei/quant_projects/.venv/bin/python -m pytest -q factor_optimizer/tests/search/test_durable_campaign_store_v3.py"
+    result: "8 passed, including concurrent SQLite reservation, restart, broker one-shot access, infra retry, automatic SearchRunner config, and repair knowledge"
+  - command: "PYTHONPATH=$PWD/factor_optimizer:$PWD /home/sunhaiwei/quant_projects/.venv/bin/python -m pytest -q factor_optimizer/tests/search"
+    result: "665 passed, 9 warnings; includes V-05 typed cheap-screen routing and bounded prune regression"
+  - command: "nvidia-smi --query-gpu=name,memory.total --format=csv,noheader; pytest quant_evaluator/tests/test_qe_smoke_isolated.py::test_gpu_facade_evaluate"
+    result: "NVIDIA L20 46068 MiB; QE GPU smoke 1 passed; FO real 3-factor CUDA adapter returns typed grouped evidence with positive observation counts and registry versions"
+capability:
+  declared: RESEARCH_ONLY
+  supported: false
+  rationale: Real CPU FO-to-QE adapter, checkpoint integrity, durable campaign/test authority, and persistent reservations are proven. Production legality and full QE/FA admission escalation remain incomplete. NVIDIA L20 is available but GPU certification has not yet been run through this FO package path.
+rollback_plan: Revert the two FO source changes and discard the two additive test files; no production assets or schemas were mutated.

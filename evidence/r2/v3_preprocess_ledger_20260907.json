@@ -1,0 +1,623 @@
+{
+  "owner": "v3_preprocess",
+  "base_head": "2db45f4e446309003381a51a5e03071d31859502",
+  "branch": "codex/v3-remediation-20260906",
+  "capability": "CPU_CERTIFIED_LOCAL",
+  "issues": {
+    "FP-01": {
+      "status": "FIXED_LOCAL",
+      "evidence": [
+        "test_integer_asset_identity_survives_long_to_wide"
+      ]
+    },
+    "FP-02": {
+      "status": "FIXED_LOCAL",
+      "evidence": [
+        "test_conflicting_duplicate_primary_key_fails_in_any_order"
+      ]
+    },
+    "FP-03": {
+      "status": "FIXED_LOCAL",
+      "evidence": [
+        "test_public_execution_binds_forward_fill_max_lag_to_effective_fe_parameter"
+      ]
+    },
+    "FP-04": {
+      "status": "FIXED_LOCAL",
+      "evidence": [
+        "factor_preprocess/tests/test_fe_operator_parity.py"
+      ]
+    },
+    "FP-05": {
+      "status": "FIXED_LOCAL",
+      "evidence": [
+        "factor_engine/tests/backend/test_operator_recipe_execution_v3.py",
+        "test_public_recipe_execution_uses_single_panel_boundary"
+      ],
+      "limitations": [
+        "GPU/Q residency NOT_RUN",
+        "mixed FP-native/fitted recipes remain owner-routed"
+      ]
+    },
+    "FP-06": {
+      "status": "FIXED_LOCAL",
+      "evidence": [
+        "test_ols_neutralize_fe_backed_matches_fp_kernel"
+      ]
+    },
+    "FP-07": {
+      "status": "FIXED_LOCAL",
+      "evidence": [
+        "factor_preprocess/tests/contracts/test_lineage_dedup.py"
+      ]
+    },
+    "FP-08": {
+      "status": "FIXED_LOCAL",
+      "evidence": [
+        "test_output_properties_track_root_not_historical_occurrence"
+      ]
+    },
+    "FP-09": {
+      "status": "FIXED_LOCAL",
+      "evidence": [
+        "test_raw_tag_cannot_certify_nonempty_illegal_recipe"
+      ]
+    },
+    "FP-10": {
+      "status": "FIXED_LOCAL",
+      "evidence": [
+        "test_new_registry_entry_defaults_research_and_runtime_domain_is_enforced"
+      ]
+    },
+    "FP-11": {
+      "status": "FIXED_LOCAL",
+      "evidence": [
+        "test_semantic_identity_and_policy_steps_are_immutable"
+      ]
+    },
+    "FP-12": {
+      "status": "FIXED_LOCAL",
+      "evidence": [
+        "test_dynamic_function_fingerprint_is_content_based_and_mutable_closure_rejected"
+      ]
+    },
+    "RCP-01": {
+      "status": "FIXED_LOCAL",
+      "evidence": [
+        "test_auxiliary_channels_preserve_primary_signal_and_original_mask"
+      ]
+    },
+    "RCP-02": {
+      "status": "FIXED_LOCAL",
+      "evidence": [
+        "test_lineage_dedupe_only_removes_adjacent_exact_duplicate"
+      ]
+    },
+    "RCP-03": {
+      "status": "ALREADY_FIXED_VERIFIED",
+      "evidence": [
+        "factor_preprocess/tests/contracts/test_fit_apply_guards.py"
+      ]
+    },
+    "RCP-04": {
+      "status": "ALREADY_FIXED_VERIFIED",
+      "evidence": [
+        "factor_preprocess/tests/test_fe_operator_parity.py"
+      ]
+    },
+    "RCP-05": {
+      "status": "FIXED_LOCAL",
+      "evidence": [
+        "test_affine_scaling_preserves_neutrality_only_with_same_mask_and_weights"
+      ],
+      "limitations": [
+        "QE measured residual exposure required for integration certification"
+      ]
+    },
+    "RCP-06": {
+      "status": "ALREADY_FIXED_VERIFIED",
+      "evidence": [
+        "factor_preprocess/tests/contracts/test_leakage_properties.py"
+      ]
+    },
+    "RCP-07": {
+      "status": "TRANSFERRED",
+      "limitations": [
+        "FO/QE supervised fold-local selection owner"
+      ]
+    },
+    "RCP-08": {
+      "status": "TRANSFERRED",
+      "limitations": [
+        "FO/QE tail candidate policy owner"
+      ]
+    },
+    "RCP-09": {
+      "status": "ALREADY_FIXED_VERIFIED",
+      "evidence": [
+        "factor_preprocess/tests/representation/test_representation_policies.py"
+      ]
+    },
+    "RCP-10": {
+      "status": "FIXED_LOCAL",
+      "evidence": [
+        "test_recipe_canonical_roundtrip_and_compile_fail_closed",
+        "test_fitted_recipe_requires_bound_state_ref_at_compile"
+      ]
+    },
+    "V-07": {
+      "status": "PARTIAL_FIXED_EWMA_FULL_REPLAY",
+      "public_paths": [
+        "factor_preprocess.adapters.apply_frozen_ewma_full_replay",
+        "factor_preprocess.adapters.FrozenEwmaReplaySpec",
+        "factor_preprocess.transforms.ewma",
+        "factor_preprocess.registry.transforms.create_default_registry",
+        "factor_preprocess.registry.policies.get_default_policy_registry",
+        "factor_engine.recursive_kernel.ema_segment",
+        "factor_engine.stateful_contract.StatefulCheckpointRegistry",
+        "factor_engine.runtime.stateful_checkpoint_store.StatefulCheckpointStore"
+      ],
+      "targeted_tests": [
+        "EWMA replay plus prefix suites: 31 passed, 1 xfailed",
+        "factor_preprocess/tests/test_ewma_full_replay_adapter.py: 23 passed",
+        "full factor_preprocess suite: 336 passed, 1 xfailed, 3 warnings"
+      ],
+      "evidence": [
+        "test_public_full_daily_random_chunk_and_restart_oracle",
+        "test_future_poison_and_new_asset_do_not_change_history",
+        "test_resume_rejects_changed_frozen_identity",
+        "test_non_append_revision_integrity_and_budget_fail_closed",
+        "test_offline_one_sided_smoothers_are_prefix_invariant",
+        "test_hp_filters_are_offline_only_not_production_causal",
+        "test_causal_smoothers_are_production",
+        "test_spec_is_strict",
+        "test_explicit_utc_and_kernel_implementation_identity_are_frozen",
+        "test_competing_subprocess_writers_cannot_lose_history"
+      ],
+      "notes": [
+        "FE audit found a real ts_ema ema_state.v2 checkpoint runtime, but its unshifted span semantics differ from FP ewma strict shift(1), halflife and min_periods; no silent alias was introduced",
+        "the bounded FP adapter reuses the existing FP batch ewma numeric authority and persists integrity-hashed frozen history for exact FULL_REPLAY_ONLY append/restart",
+        "source, feature, security, time, state-key and parameter identities are frozen; non-append revisions, corrupt checkpoints and history-budget overflow fail closed",
+        "future-prefix invariance is exercised for ewma, trailing SMA/median, robust EWMA, KAMA, one-sided IIR and local-level Kalman",
+        "causal_safe remains a factual batch-causality property and the existing production_full EWMA step is preserved",
+        "a nonblocking per-checkpoint process lock covers exists/load, append validation, numerical replay and durable persist; a competing stale writer cannot overwrite a newer append",
+        "unique owned temporary files are removed on failure and the kernel source hash is part of the frozen checkpoint identity",
+        "input dates must be explicitly UTC-aware; naive or non-UTC timestamps are rejected rather than converted"
+      ],
+      "history_scope": [
+        "no existing transform admission or preset was downgraded",
+        "historical batch APIs and outputs are unchanged",
+        "the new adapter is additive and explicitly reports FULL_REPLAY_ONLY plus actual history_rows_replayed"
+      ],
+      "limitations": [
+        "PARTIAL: exact restart replay is bounded full-history recomputation, not efficient O(1) sufficient-state incremental execution",
+        "the configured finite max_history_rows budget rejects overflow without truncation",
+        "daily/chunk/checkpoint replay remains unimplemented for trailing SMA/median, robust EWMA, KAMA, one-sided IIR and local-level Kalman",
+        "stale/event-repeat/calendar-specific update policy is not yet represented",
+        "HP remains an expected non-prefix-invariant xfail and legitimately OFFLINE_ONLY"
+      ]
+    },
+    "DTA-01": {
+      "status": "FIXED_LOCAL",
+      "evidence": [
+        "test_provider_panel_has_true_time_asset_axes_without_symbol_coercion"
+      ],
+      "limitations": [
+        "provider Symbol must already be canonical permanent identity; catalog resolution is DA upstream"
+      ]
+    },
+    "DTA-02": {
+      "status": "FIXED_LOCAL",
+      "evidence": [
+        "data_access/tests/test_cos_pit_edges.py",
+        "test_bundle_rejects_shape_axis_and_fabricated_time"
+      ],
+      "limitations": [
+        "adapter exposure provider now requires real UpdateTime; financial PIT remains DA temporal_join authority"
+      ]
+    },
+    "DTA-03": {
+      "status": "ALREADY_FIXED_VERIFIED",
+      "evidence": [
+        "data_access/tests/security/test_r32_p0_121_128.py"
+      ],
+      "limitations": [
+        "QE portfolio corporate-action reconciliation not in this package"
+      ]
+    },
+    "DTA-04": {
+      "status": "BLOCKED",
+      "limitations": [
+        "historical investable-universe evaluation is FA/QE public path"
+      ]
+    },
+    "DTA-05": {
+      "status": "BLOCKED",
+      "limitations": [
+        "side-specific tradability is execution-domain/QE, not exposure adapter"
+      ]
+    },
+    "DTA-06": {
+      "status": "ALREADY_FIXED_VERIFIED",
+      "evidence": [
+        "data_access/tests/unit/test_r30_concepts_2026_08.py"
+      ]
+    },
+    "DTA-07": {
+      "status": "ALREADY_FIXED_VERIFIED",
+      "evidence": [
+        "data_access/tests/unit/test_r24_pit_crossmarket_2026_08.py"
+      ]
+    },
+    "DTA-08": {
+      "status": "FIXED_PUBLIC_DA_FP_MODELING_CHAIN",
+      "evidence": [
+        "data_access.core.missingness.MissingReasonPlane",
+        "FeatureBundle.get_missing_reason_plane",
+        "PanelDataset.as_matrix",
+        "test_explicit_missing_reasons_survive_da_fp_modeling_and_drive_semantic_coverage",
+        "test_reason_plane_never_infers_two_nan_causes_and_rejects_fabricated_fill"
+      ],
+      "notes": [
+        "explicit producer reasons remain separate from filled values, original-missing flags and age; modeling coverage reports observed/usable/filled independently; label_not_yet_mature is excluded semantically rather than treated as numeric failure"
+      ]
+    },
+    "DTA-09": {
+      "status": "FIXED_LOCAL",
+      "evidence": [
+        "test_provider_panel_rejects_conflicting_join_duplicates",
+        "data_access/tests/test_cos_pit_edges.py"
+      ]
+    },
+    "DTA-10": {
+      "status": "FIXED_PUBLIC_CROSS_LIBRARY_VERIFIED",
+      "evidence": [
+        "DataChangeSet.snapshot_before",
+        "DataChangeSet.data_watermark_after",
+        "plan_minimal_recompute",
+        "compute_state_node_identity",
+        "test_late_revision_has_explicit_watermarks_bounded_window_and_full_recompute_parity",
+        "test_snapshot_revision_changes_checkpoint_identity_and_ema_policy_is_not_polluted_resume"
+      ],
+      "notes": [
+        "late revisions carry distinct event/knowledge times, before/after snapshots and data watermarks; finite rolling propagation is calendar-bounded and parity-tested; changed snapshot identity prevents reuse of polluted state"
+      ]
+    },
+    "DTA-11": {
+      "status": "TRANSFERRED",
+      "limitations": [
+        "QE/FO maturity and common-sample authority"
+      ]
+    },
+    "DTA-12": {
+      "status": "FIXED_LOCAL",
+      "evidence": [
+        "test_validate_bundle_requires_provenance",
+        "test_bundle_snapshot_preserves_instrument_identity_dtype"
+      ]
+    },
+    "E2E-H": {
+      "status": "PARTIAL_FIXED_UPDATE_COMPOSITION",
+      "evidence": [
+        "jobs.e2e_h_fixed_update.run_fixed_daily_update",
+        "jobs.e2e_h_fixed_update.recover_fixed_daily_update",
+        "jobs.monitor_fixed_daily_update.monitor_fixed_daily_update",
+        "jobs.monitor_fixed_daily_update.FixedMonitorPolicy",
+        "factor_preprocess.adapters.fitted_recipe.apply_frozen_fitted_recipe",
+        "test_fixed_daily_checkpoint_restart_matches_full_and_failed_publish_keeps_active",
+        "test_stage_process_death_recovers_saved_segment_without_reexecution",
+        "test_frozen_fitted_state_is_required_and_matches_full_oracle_despite_environment_defaults",
+        "test_fixed_update_publishes_only_its_exact_outbox_intent",
+        "test_only_mature_labels_reach_qe_and_future_label_changes_do_not_affect_monitor",
+        "test_many_mature_rows_but_too_few_valid_daily_ics_is_insufficient",
+        "test_overlapping_complete_segments_with_conflicting_values_are_rejected",
+        "focused H update/recovery: 10 passed, 2 warnings",
+        "focused H maturity monitoring: 6 passed, 2 warnings",
+        "fitted-state adapter negatives: 19 passed"
+      ],
+      "notes": [
+        "the executable DSL, frozen recipe and production content-derived fitted state are validated before execution; missing state never refits and environment defaults cannot override learned parameters",
+        "checkpoint commit is deferred behind an fsync-backed exact-segment recovery journal; real process death before stage commit recovers without FE/FP re-execution",
+        "normal update and recovery drain only their exact outbox generation intent, leaving unrelated production events untouched",
+        "monitoring reads a bounded list of real COMPLETE generations, resolves and verifies physical bytes/hash/size, and rejects missing objects or conflicting overlapping coordinates",
+        "the evaluated-window identity binds merged values, axes, ordered generation refs, factor/recipe/state identities and the frozen monitor policy separately from the latest active ref",
+        "only label rows with label_end_time <= asof are passed to the public QE rank-IC/coverage evaluation; future-label mutations do not affect current metrics or monitor actions",
+        "mature row count is not certification: fewer than the frozen minimum finite daily QE IC observations returns INSUFFICIENT and cannot drive drift or campaign actions",
+        "monitor output is explicitly PARTIAL_EXTERNAL_DIMENSIONS because non-QE dimensions are externally supplied evidence, not measurements made by this adapter",
+        "no Optimizer or Agent surface is imported or called"
+      ],
+      "limitations": [
+        "PARTIAL only: canonical field-catalog identity is not present",
+        "non-QE drift dimensions remain external evidence rather than measurements produced by this composition",
+        "the full request/parent-trial/evaluation/health/verdict/library/feature-version trace is not present",
+        "synthetic Parquet, labels, fitted-state provenance inputs and in-process SQLite/object evidence are not production certification",
+        "one checkpoint root is intentionally single-writer across factor/artifact jobs; parallel scheduling requires isolated checkpoint roots"
+      ]
+    },
+    "E2E-E": {
+      "status": "FIXED_SYNTHETIC_PROVIDER_COMPOSITION",
+      "evidence": [
+        "jobs.e2e_e_revision_preprocess_modeling.replay_announcement_revision",
+        "test_announcement_revision_replays_bounded_fp_channels_and_changes_model_manifest",
+        "test_revision_provider_must_return_every_declared_coordinate",
+        "focused E2E-E plus DTA-08/DTA-10: 6 passed",
+        "full tests/modeling: 406 passed, 3 warnings"
+      ],
+      "notes": [
+        "the real DA DataChangeSet and plan_minimal_recompute authority maps an announcement revision to a trading-session replay range",
+        "a read-only synthetic PIT provider supplies snapshot data only; real factor_preprocess forward_fill, missing_indicator and days_since_update produce the revised value, original-missing, filled, usable and independent age channels",
+        "provider output is normalized once to canonical coordinates; exact declared session/instrument coverage is mandatory and shuffled input cannot misalign patched values or evidence channels",
+        "replay fetches explicit max-lag warmup before the affected range and inspects the revised raw PIT tail to locate the next original observation; a DA range that does not cover every changed age output is rejected",
+        "a long-gap regression proves age remains finite and revision-sensitive after bounded fill expires, while a truthful wider dependency range matches complete revised full recomputation across the retained window",
+        "the pre-revision FeatureBundle remains retained and immutable; only the affected output range is patched",
+        "the modeling FeatureSchema remains explicitly incomplete/research because no real cluster-version authority exists in E2E-E scope; a separate content identity binds the real bundle, snapshot, watermark, schema and preprocessing configuration"
+      ],
+      "limitations": [
+        "synthetic provider data is integration evidence, not production-data certification",
+        "no complete production modeling manifest is claimed; E2E-G must supply actual cluster/version and canonical recipe/state references",
+        "full E2E-E certification remains pending required production DSL/catalog/snapshot and complete execution trace authorities"
+      ]
+    },
+    "SIM-01": {
+      "status": "FIXED_LOCAL_INTEGRATION_PENDING",
+      "evidence": [
+        "factor_assets.adapters.fingerprint.build_similarity_fingerprint",
+        "factor_assets.adapters.fingerprint.assign_preprocessed_fingerprint",
+        "factor_assets/tests/adapters/test_fingerprint_producer.py",
+        "factor_assets/tests/test_incremental_cluster_assign.py::test_approximate_ann_rejects_incomplete_fingerprint_before_recall",
+        "30 focused producer and incremental tests passed",
+        "root full factor_assets integration: 1315 passed, 43 skipped; persistent seen-index standalone: 15 passed"
+      ],
+      "notes": [
+        "SimilarityFingerprintArtifact identity and production completeness bind actual value bytes, authoritative usable mask, axes, snapshot/universe, profile, preprocessing, direction, aggregation and embedding model version",
+        "an earlier concurrent full-suite attempt stalled near 91 percent, but root's later complete integration run passed; status intentionally remains integration-pending rather than VERIFIED"
+      ],
+      "limitations": [
+        "legacy fingerprints require regeneration before approximate ANN because they lack value_ref/profile_ref"
+      ]
+    },
+    "SIM-08": {
+      "status": "FIXED_LOCAL",
+      "evidence": [
+        "factor_assets.clustering.incremental.IncrementalPolicy.cluster_support_k",
+        "factor_assets.clustering.incremental._aggregate_cluster_support",
+        "test_single_bridge_neighbor_cannot_certify_cluster_support",
+        "test_medoid_and_top_k_support_produce_conservative_cluster_affinity",
+        "test_supported_cluster_ambiguity_is_independent_of_mapping_order",
+        "test_redirect_uses_supported_final_cluster_evidence",
+        "25 focused incremental tests passed",
+        "root full factor_assets integration: 1315 passed, 43 skipped"
+      ],
+      "notes": [
+        "formal assignment defaults to top-k 3, minimum two certified supporting neighbors, and required representative/medoid support",
+        "cluster affinity is the conservative minimum of medoid affinity and top-k mean; aggregate CI remains unknown while each support member's interval and refs stay explicit",
+        "member-level signed/window uncertainty gate is unchanged and remains independently tested"
+      ],
+      "limitations": []
+    },
+    "V-18": {
+      "status": "FIXED_LOCAL_INTEGRATION_PENDING",
+      "evidence": [
+        "quant_platform.app.orchestrator.PipelineConfig.require_complete_execution_trace",
+        "EventEnvelope.trace_id and payload.execution_trace",
+        "build_modeling_feature_manifest lineage",
+        "test_complete_execution_trace_uses_real_public_pipeline_refs",
+        "test_complete_execution_trace_fails_closed_on_missing_or_mismatched_refs",
+        "28 focused orchestrator and manifest tests passed",
+        "full quant_platform: 411 passed, 10 skipped, 1 unrelated identity-boundary failure"
+      ],
+      "notes": [
+        "production-configured public pipeline traces request and parent trial through definition, recipe, fitted state, materialized value, QE evaluation and metric policy, FA health policy and verdict, library, and feature manifest identity",
+        "existing EventEnvelope and feature manifest authorities are extended; no duplicate trace DTO or registry"
+      ],
+      "limitations": [
+        "legacy research pipeline remains readable with require_complete_execution_trace disabled; it cannot claim a complete production trace",
+        "full platform failure is outside V-18: app/adapters/model_prediction_evaluation.py imports a domain package and violates test_platform_imports_no_domain_package"
+      ]
+    },
+    "MOD-01": {
+      "status": "FIXED_LOCAL",
+      "evidence": [
+        "test_heldout_mutation_does_not_change_selection_preprocessing_state",
+        "test_final_refit_preprocessing_matches_declared_train_plus_validation_cohort"
+      ],
+      "notes": [
+        "feature manifest preserved through purge/refit; final preprocessing is fitted on the exact declared final-fit cohort"
+      ]
+    },
+    "MOD-02": {
+      "status": "FIXED_LOCAL_MODELING_SURFACE",
+      "evidence": [
+        "modeling/trainer_governance.py::FeatureExperimentSpec",
+        "modeling/diagnostics.py::feature_ablation",
+        "test_feature_diagnostics_distinguish_frozen_perturbation_and_retraining",
+        "test_retrained_ablation_stops_at_durable_campaign_budget"
+      ],
+      "notes": [
+        "retrained ablation uses FO DurableBudgetTracker/SQLiteCampaignStore and binds baseline feature set, folds, seed, resource profile, model recipe, horizon and evidence refs"
+      ]
+    },
+    "MOD-03": {
+      "status": "FIXED_LOCAL_MODELING_SURFACE",
+      "evidence": [
+        "modeling/selection.py::ConsumerNonInferiorityContract",
+        "test_selection_applies_consumer_objective_noninferiority_and_risk_gate"
+      ],
+      "notes": [
+        "paired delta CI uses absolute epsilon, effect size and minimum risk improvement; strict profiles enforce risk budget"
+      ]
+    },
+    "MOD-04": {
+      "status": "FIXED_LOCAL_MODELING_SURFACE",
+      "evidence": [
+        "modeling/trainer.py::PreprocessingSpec",
+        "test_generic_preprocessing_default_cannot_certify_complete_production_manifest"
+      ],
+      "notes": [
+        "complete production manifests require explicit matching consumer profile, policy version, missing policy, scale policy, categorical policy and mask refs; generic defaults remain legacy/research only"
+      ]
+    },
+    "MOD-05": {
+      "status": "FIXED_LOCAL",
+      "evidence": [
+        "test_full_feature_manifest_hash_detects_semantic_change_and_order",
+        "test_same_columns_with_changed_state_ref_are_rejected_between_fold_cohorts",
+        "full-manifest artifact serialization roundtrip in test_v3_mod_01_05_08.py"
+      ],
+      "notes": [
+        "legacy column-only schemas remain explicitly namespaced legacy-columns and cannot impersonate a complete manifest"
+      ]
+    },
+    "MOD-06": {
+      "status": "TRANSFERRED",
+      "evidence": [
+        "factor_assets/clustering/incremental.py::build_incremental_cluster_version"
+      ],
+      "limitations": [
+        "production FeatureSetVersion pointer and compatibility gate caller is factor_assets/assembly/engine.py/platform release path"
+      ]
+    },
+    "MOD-07": {
+      "status": "FIXED_PUBLIC_MODELING_QE_INTEGRATION",
+      "evidence": [
+        "modeling.evaluation.ModelPredictionArtifact",
+        "jobs.evaluate_model_predictions.evaluate_model_predictions",
+        "jobs.evaluate_model_predictions.train_evaluate_model_predictions",
+        "jobs.evaluate_model_predictions.evaluate_trained_model_predictions",
+        "EvaluationReport.training_importance_evidence",
+        "EvaluationReport.oos_ablation_evidence_refs",
+        "tests/modeling/test_v3_mod07_evidence.py",
+        "test_real_training_output_flows_through_typed_prediction_and_qe_evidence",
+        "12 focused tests passed",
+        "full tests/modeling: 404 passed, 3 warnings"
+      ],
+      "notes": [
+        "a real PCR training result now flows through an immutable typed prediction artifact into QE evidence using the trained ModelArtifact artifact_id, its feature_schema_hash, and the OOS LabelBundle content_hash",
+        "the adapter independently derives the actual OOS dataset feature-manifest identity and rejects reordered same-width features or changed manifest state before scoring",
+        "prediction identity uses the stable modeling identity authority and binds model, OOS schema, label evidence, canonical PredictionContext, asset coordinates, actual OOS feature values, and actual prediction values; changing one OOS input under the same trained artifact changes identity",
+        "the public composition requires a complete deterministic time-major OOS panel, exact label axes, and a final-fit window strictly before every OOS prediction time",
+        "immutable prediction id, bytes-backed read-only values, strictly increasing unique time axis, unique asset axis, model artifact, feature manifest and OOS evidence bind the outer-job QE call",
+        "caller cannot re-enable ndarray WRITEABLE; blank identity refs and label/row axis mismatches fail closed",
+        "training importance and retrained OOS ablation references remain separate; portfolio Sharpe is model-level evidence and is never distributed to factors"
+      ],
+      "limitations": [
+        "legacy array-only evaluate_predictions remains explicitly research/descriptive and cannot claim bound OOS identity",
+        "fixture-backed integration evidence is not a production certification"
+      ]
+    },
+    "MOD-08": {
+      "status": "FIXED_LOCAL_MODELING_SURFACE",
+      "evidence": [
+        "test_drift_cannot_trigger_unbounded_retrain",
+        "test_predictive_drift_requires_mature_metric",
+        "test_rollback_binding_cannot_mix_model_and_feature_versions"
+      ],
+      "limitations": [
+        "platform shadow publish/rollback persistence remains platform owner"
+      ]
+    },
+    "OPS-01": {
+      "status": "READ_ONLY_TRANSFERRED",
+      "limitations": [
+        "shared persistence owner: quant_platform/app outbox/work-intent transactions and FA/DA registries"
+      ]
+    },
+    "OPS-02": {
+      "status": "READ_ONLY_TRANSFERRED",
+      "limitations": [
+        "shared runtime owner: QE/FE/platform resource planner, reservation and backpressure"
+      ]
+    },
+    "OPS-03": {
+      "status": "READ_ONLY_TRANSFERRED",
+      "limitations": [
+        "shared runtime owner: QE/FE effective-backend and partial-result contracts"
+      ]
+    },
+    "OPS-04": {
+      "status": "FIXED_LOCAL_MODELING_SURFACE",
+      "evidence": [
+        "modeling/benchmark.py::BenchmarkSpec",
+        "modeling/benchmark.py::measure_synchronized_phase",
+        "test_gpu_benchmark_times_through_sync_and_requires_complete_receipt"
+      ],
+      "limitations": [
+        "QE/FE benchmark runners must populate the validated receipt from real device executions"
+      ]
+    },
+    "OPS-05": {
+      "status": "FIXED_REAL_DURABLE_REGISTRY",
+      "evidence": [
+        "DurableGenerationCoordinator.snapshot_for_gc",
+        "DurableGenerationCoordinator.protect_gc_root",
+        "test_real_registry_snapshot_and_epoch_root_race_blocks_gc",
+        "test_concurrent_root_and_sweep_have_one_safe_winner"
+      ],
+      "notes": [
+        "the existing platform metadata database is the single authority for production, release, active-read, retryable-job, research-evidence and rollback roots; only inactive COMPLETE exact generations are candidates"
+      ]
+    },
+    "OPS-06": {
+      "status": "FIXED_REAL_DURABLE_REGISTRY",
+      "evidence": [
+        "DurableGenerationCoordinator.claim_gc_tombstone",
+        "DurableGenerationCoordinator.publish",
+        "test_real_registry_tombstone_rejects_publish_and_new_root",
+        "test_concurrent_publish_and_sweep_never_leave_dangling_reference_or_bytes"
+      ],
+      "notes": [
+        "root changes, publication and exact-version tombstone claims serialize on the durable reference epoch; tombstones reject later roots and publication, and publication cannot recreate bytes after a physical-deletion receipt"
+      ]
+    },
+    "OPS-07": {
+      "status": "FIXED_REAL_DURABLE_REGISTRY",
+      "evidence": [
+        "DurableGenerationCoordinator.record_deletion_receipt",
+        "RootAwareGarbageCollector.sweep",
+        "test_gc_crash_after_tombstone_replays_to_one_durable_receipt",
+        "test_provider_retention_is_pending_not_physical_success"
+      ],
+      "notes": [
+        "tombstoned deletion outcomes persist in the platform registry and crash replay completes exact-version deletion; plan-scoped protected skips remain retryable after roots are released"
+      ]
+    },
+    "OPS-08": {
+      "status": "READ_ONLY_TRANSFERRED",
+      "limitations": [
+        "FA/QE/FE/platform dependency invalidation and production-pointer migration authority"
+      ]
+    },
+    "OPS-09": {
+      "status": "FIXED_LOCAL_MODELING_SURFACE",
+      "evidence": [
+        "modeling/artifact.py::ReplayContract",
+        "ModelArtifact.from_dict_for_replay",
+        "ModelArtifact.load_for_replay",
+        "strict replay tests in test_v3_mod_01_05_08.py"
+      ],
+      "limitations": [
+        "FE/DA replay runner must supply matching frozen dependency refs and must not resolve live defaults"
+      ]
+    },
+    "OPS-10": {
+      "status": "FIXED_LOCAL_MODELING_CONTRACT",
+      "evidence": [
+        "modeling/monitoring.py::LifecycleReason",
+        "LifecycleEvent",
+        "test_lifecycle_reason_preserves_cause_and_drives_retry_gc_policy"
+      ],
+      "limitations": [
+        "platform persistent event store/UI/GC must consume this typed mapping rather than a generic FAILED state"
+      ]
+    }
+  },
+  "validation": {
+    "factor_preprocess": "336 passed, 1 xfailed, 3 warnings",
+    "fe_recipe_focused": "17 passed",
+    "data_access_authority": "123 passed across PIT/cross-market/change-impact scoped suites",
+    "modeling": "full integration pending root after final H additions; MOD-07 focused 12 passed; E2E-E focused 6 passed; E2E-H update/recovery 10 passed, 2 warnings; E2E-H monitoring 6 passed, 2 warnings; fitted-state adapter negatives 19 passed",
+    "factor_optimizer_campaign_store": "8 passed",
+    "quant_platform": "402 passed, 10 skipped, 1 warning; focused storage GC/adapter 12 passed",
+    "git_diff_check": "PASS"
+  }
+}

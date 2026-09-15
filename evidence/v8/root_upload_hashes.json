@@ -1,0 +1,165 @@
+{
+  "scope": "Root-owned exact local/remote comparison before final freeze",
+  "files": [
+    {
+      "path": "quant_evaluator/metrics/robustness.py",
+      "sha256": "04744c041c09bf6be935f47c3d88a271411e6f3f38ab5305ad3156114aecbffc"
+    },
+    {
+      "path": "quant_evaluator/metrics/multiple_testing.py",
+      "sha256": "3abc3d7c4bccfd8161da35e5fb06851072da9835fb390b1cb4f25c491e1ded82"
+    },
+    {
+      "path": "quant_evaluator/metrics/portfolio_stats.py",
+      "sha256": "bfaf79e27b562d021aec2adf1f5ab9ed69977a13d2253742d79a950295d02319"
+    },
+    {
+      "path": "quant_evaluator/metrics/risk/var_cvar.py",
+      "sha256": "794b1348abf769f69c0c96a14c55686e544fa1b3aa03da3593c36f0206b2ed9d"
+    },
+    {
+      "path": "quant_evaluator/contracts/factor_batch.py",
+      "sha256": "415af372ec8e70e65c8a4bcae3125f0890227ecc0bd373977082d58b1dbbdd3f"
+    },
+    {
+      "path": "quant_evaluator/metrics/registry_adapters.py",
+      "sha256": "51208dbbcdb2a48f44effc653e1d681c5986800fdd729a5707a3074590f89f04"
+    },
+    {
+      "path": "quant_evaluator/metrics/temporal.py",
+      "sha256": "59737b295e15247e1c9b88b621d28e4a1e2513b8a5a69f7260be15940b130ca9"
+    },
+    {
+      "path": "quant_evaluator/metrics/quantile.py",
+      "sha256": "1f337aa0d2e3d70d4ca5b612eebbded8c0f9a58fe615d2ef0cdfa2fb60a20eef"
+    },
+    {
+      "path": "quant_evaluator/metrics/quantile_numba.py",
+      "sha256": "a1b57fa0ff46a1f7aea7642fc1e11887d1d94ba31c761b2c057af6c80c0ba6d3"
+    },
+    {
+      "path": "quant_evaluator/kernels/gpu/rank.py",
+      "sha256": "6ee1b272ce2aa00033736962f3f72669f9c50c305dc691abfa83775e84bae975"
+    },
+    {
+      "path": "quant_evaluator/kernels/gpu/quantile.py",
+      "sha256": "8da69a0a0956a4e7a8bec1fc455cccd8480e36c5104c6ba4d9ea4250e666e031"
+    },
+    {
+      "path": "quant_evaluator/runtime/device_session.py",
+      "sha256": "12321ecca749c783c2557c6aa11d60d9a3c42d086aa67d3589a46382e1da7ce3"
+    },
+    {
+      "path": "quant_evaluator/runtime/gpu_executor.py",
+      "sha256": "2f5ec2cf1a62c69f7cd95c6bac5f3943474a2524f945bc69565a391580c9008e"
+    },
+    {
+      "path": "quant_evaluator/runtime/cache_v2.py",
+      "sha256": "6c99080e4834dd901c07f2d986ab4dcd23ca8e854b37205a4a5ef2b4371aea6e"
+    },
+    {
+      "path": "quant_evaluator/metrics/coverage_compiler.py",
+      "sha256": "96476973b4bc4ad128f9690b77a6953d60120d7e4b609391ec784a0323dbfcc3"
+    },
+    {
+      "path": "quant_evaluator/metrics/dimensions.py",
+      "sha256": "3a31e24a440e97cf537b5eec3ba96bc5d464548e04f1a2a8e41a9eece6c30451"
+    },
+    {
+      "path": "quant_evaluator/metrics/stats/structural_breaks.py",
+      "sha256": "3517fc4fd66277472b959dc344b147d516d386ea063010681d840cd8eb720db3"
+    },
+    {
+      "path": "quant_evaluator/metrics/stats/cointegration.py",
+      "sha256": "1ab65f68d7a8091962a167d0b83fa584c64787a84fb7bb0a6f96d4df3a2946c7"
+    },
+    {
+      "path": "quant_evaluator/contracts/resampling.py",
+      "sha256": "29e2c2ce4b78dbee0b91a098f920c5a92827ac962187406b142544836db61a25"
+    },
+    {
+      "path": "quant_evaluator/kernels/gpu/robustness.py",
+      "sha256": "243a1b3eac83c1ad25f9ecbc5b752e16c7284c374a7540d17458d030255e7b07"
+    },
+    {
+      "path": "quant_evaluator/kernels/gpu/temporal.py",
+      "sha256": "44ff8ce03fad1255bbcbbc1e05cb34b9dddffb3811a27a75c3931d5b3fda2814"
+    },
+    {
+      "path": "quant_evaluator/kernels/gpu/tradability.py",
+      "sha256": "e2b4f0b5603f6fb3516b96c3e35a5c3ff5530dda00fabaca8d78724c5ea0aa27"
+    },
+    {
+      "path": "quant_evaluator/kernels/gpu/turnover.py",
+      "sha256": "26d89bf43b084e15960c164fdb4f11a6db1a16fcff8de6146f6da98f6d56452b"
+    },
+    {
+      "path": "quant_evaluator/tests/test_numerical_oracle.py",
+      "sha256": "fad83a5937abaed89e8983a0917d90e24273bd2f3841053865f415626bcbaf05"
+    },
+    {
+      "path": "quant_evaluator/tests/metrics/test_coverage_compiler.py",
+      "sha256": "30ec04cd15b407b8293d2418c56a6e8787ab2695c076a7cc6bd74f6c744638e7"
+    },
+    {
+      "path": "quant_evaluator/tests/test_dimension_mapping.py",
+      "sha256": "a71aaca1c5b1185230528bf40a9724aac0ffb062450b0d075fdf38590138dcc0"
+    },
+    {
+      "path": "quant_evaluator/registry/metrics.py",
+      "sha256": "e5f380b6e208cbec831e932c729892bf8db17e151035079438e99ca77c47c4dc"
+    },
+    {
+      "path": "quant_evaluator/contracts/hypothesis_family.py",
+      "sha256": "6731f55766411254250fe013f03c7b3b6433fc104dcc0b00305fed66f17a329e"
+    },
+    {
+      "path": "quant_evaluator/tests/test_v8_numeric_goldens.py",
+      "sha256": "a72964f69495d122021f9fd4454f629708eae6f474120d12fa99b8ff7b6e6a01"
+    },
+    {
+      "path": "quant_evaluator/tests/test_v8_risk_domain.py",
+      "sha256": "3b5f53c3a3e35c785f8e3336680a8efd75e30f8cc328577c0ff5751ba5b3ae04"
+    },
+    {
+      "path": "quant_evaluator/contracts/qualification.py",
+      "sha256": "086cce228bcd3916dd75953525187500f784323fc9ae677ddf9463362eff0309"
+    },
+    {
+      "path": "quant_evaluator/runtime/evaluator.py",
+      "sha256": "bdb040ac384c61698b016ce4ceb51d7b35be274af12f96e5aad903b8d76e7ef7"
+    },
+    {
+      "path": "quant_evaluator/tests/test_v3_legacy_statistical_calendar.py",
+      "sha256": "eb12c9bd289308381f7cbaa94290b4344f014f68babbe154597478d67f0b69c2"
+    },
+    {
+      "path": "quant_evaluator/contracts/backend_policy.py",
+      "sha256": "20d847c36ae0626bac2c098b49a77d9df0d4f7393f62eeb31ac07c3de80dca6f"
+    },
+    {
+      "path": "quant_evaluator/metrics/risk/stress_testing.py",
+      "sha256": "700a70ddf28df88a328b57ba985676639ffd3f3f74d046085e52c4589a902b23"
+    },
+    {
+      "path": "quant_evaluator/metrics/risk/tail_risk.py",
+      "sha256": "7b191ea2f9ebcfb4f254585d457ff705d9db37deadc77640c9fde8983694dc4c"
+    },
+    {
+      "path": "quant_evaluator/metrics/risk/drawdown_analysis.py",
+      "sha256": "82705da8cc38fe8f8c9af44802d5070e8351f4c21b5d4a6da637eac598754370"
+    },
+    {
+      "path": "factor_assets/tests/test_v8_formula_oracle.py",
+      "sha256": "6624e72bf9405e8d38514412cd02a237bda8638daf95180ac46a41fbaf1612fd"
+    },
+    {
+      "path": "jobs/ops08_replay_fixture.py",
+      "sha256": "236aff0ed9bf3717d47c98510e850cee71bc32049f034d20bac33eee5082169a"
+    },
+    {
+      "path": "quant_evaluator/tests/metrics/test_v8_probe_stress_contracts.py",
+      "sha256": "5c02c544d2409fff74bebcd705d9538c90434654f9c768da90c538a3643b932c"
+    }
+  ]
+}

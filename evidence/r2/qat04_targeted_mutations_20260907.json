@@ -1,0 +1,36 @@
+{
+  "mutations": [
+    {
+      "baseline_exit_code": 0,
+      "baseline_output": "",
+      "killed": true,
+      "mutant_exit_code": 1,
+      "mutant_output": "Traceback (most recent call last):\n  File \"<string>\", line 7, in <module>\n  File \"/tmp/qat04-empty_integrity_gate_all_true-q1myle9a/factor_assets/profiling/health_card.py\", line 411, in build_health_card\n    return FactorHealthCardArtifact(\n           ^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"<string>\", line 12, in __init__\n  File \"/tmp/qat04-empty_integrity_gate_all_true-q1myle9a/factor_assets/profiling/health_card.py\", line 236, in __post_init__\n    raise ValueError(\"admission summary contradicts integrity gate evidence\")\nValueError: admission summary contradicts integrity gate evidence\n",
+      "mutation_id": "empty_integrity_gate_all_true",
+      "source_file": "factor_assets/profiling/health_card.py"
+    },
+    {
+      "baseline_exit_code": 0,
+      "baseline_output": "/tmp/qat04-fp_max_lag_alias_deleted-tq1159mt/factor_engine/backend/polars_backend_kind.py:243: UserWarning: Production mode: Operator unknown (backend=polars) lacks explicit PhysicalImplementationSpec; classification=UNSUPPORTED. Add _physical_spec attribute or physical_spec() method for production eligibility.\n  return polars_backend_kind(op, source=source, production_mode=production_mode)\n",
+      "killed": true,
+      "mutant_exit_code": 1,
+      "mutant_output": "/tmp/qat04-fp_max_lag_alias_deleted-tq1159mt/factor_engine/backend/polars_backend_kind.py:243: UserWarning: Production mode: Operator unknown (backend=polars) lacks explicit PhysicalImplementationSpec; classification=UNSUPPORTED. Add _physical_spec attribute or physical_spec() method for production eligibility.\n  return polars_backend_kind(op, source=source, production_mode=production_mode)\nTraceback (most recent call last):\n  File \"<string>\", line 6, in <module>\n  File \"/tmp/qat04-fp_max_lag_alias_deleted-tq1159mt/factor_preprocess/factor_preprocess/registry/transforms.py\", line 411, in __call__\n    return self.executor(*args, **kwargs)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/tmp/qat04-fp_max_lag_alias_deleted-tq1159mt/factor_preprocess/factor_preprocess/adapters/fe_operator.py\", line 213, in __call__\n    out = self._op.calculate(panel, **scalar_kw)\n          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/tmp/qat04-fp_max_lag_alias_deleted-tq1159mt/factor_engine/cleaned_operators/overhaul/base.py\", line 154, in calculate\n    processed_args, processed_kwargs = self._prepare_call(tuple(args), dict(kwargs))\n                                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/tmp/qat04-fp_max_lag_alias_deleted-tq1159mt/factor_engine/cleaned_operators/base.py\", line 2144, in _prepare_call\n    return validate_operator_call(self, args, kwargs)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/tmp/qat04-fp_max_lag_alias_deleted-tq1159mt/factor_engine/cleaned_operators/base.py\", line 2068, in validate_operator_call\n    call = bind_operator_call(operator, args, kwargs)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/tmp/qat04-fp_max_lag_alias_deleted-tq1159mt/factor_engine/cleaned_operators/base.py\", line 2018, in bind_operator_call\n    processed_args, processed_kwargs = _normalise_call(\n                                       ^^^^^^^^^^^^^^^^\n  File \"/tmp/qat04-fp_max_lag_alias_deleted-tq1159mt/factor_engine/cleaned_operators/base.py\", line 1564, in _normalise_call\n    raise OperatorParameterError(\nfactor_engine.backend.operator_errors.OperatorParameterError: ffill_limit: undeclared keyword parameter 'max_lag'; parameters are ['x', 'max_periods'].  A hidden keyword that changes results without being visible in the catalog is rejected (R5-06 / round-7 P0); declare it in param_names / param_aliases or tag the operator variadic.\n",
+      "mutation_id": "fp_max_lag_alias_deleted",
+      "source_file": "factor_preprocess/factor_preprocess/adapters/fe_operator.py"
+    },
+    {
+      "baseline_exit_code": 0,
+      "baseline_output": "",
+      "killed": true,
+      "mutant_exit_code": 1,
+      "mutant_output": "Traceback (most recent call last):\n  File \"<string>\", line 16, in <module>\n  File \"/home/sunhaiwei/quant_projects/.venv/lib/python3.12/site-packages/numpy/testing/_private/utils.py\", line 1715, in assert_allclose\n    assert_array_compare(compare, actual, desired, err_msg=str(err_msg),\n  File \"/home/sunhaiwei/quant_projects/.venv/lib/python3.12/site-packages/numpy/testing/_private/utils.py\", line 921, in assert_array_compare\n    raise AssertionError(msg)\nAssertionError: \nNot equal to tolerance rtol=0, atol=1e-12\n\nMismatched elements: 1 / 1 (100%)\nMax absolute difference among violations: 0.01050125\nMax relative difference among violations: 0.35842601\n ACTUAL: array(0.018797)\n DESIRED: array(0.029298)\n",
+      "mutation_id": "gpu_factor_validity_staging_deleted",
+      "source_file": "quant_evaluator/runtime/gpu_executor.py"
+    }
+  ],
+  "python": "3.12.3 (main, Jan 22 2026, 20:57:42) [GCC 13.3.0]",
+  "repo": "/home/sunhaiwei/quant_projects_v3_remediation",
+  "schema_version": 1,
+  "status": "PASS",
+  "suite": "QAT-04-targeted-mutations"
+}

@@ -1,0 +1,107 @@
+{
+  "source_manifest_sha256": "5a805d267f3cadeaa79a4049c355f9e0bcaba87df8ab24e0f0457bd57b5479f9",
+  "source_files_before": 4139,
+  "source_files_after": 4139,
+  "source_changed": false,
+  "suites": {
+    "qe": {
+      "command": [
+        "/home/sunhaiwei/quant_projects/.venv/bin/python",
+        "-m",
+        "pytest",
+        "quant_evaluator/tests",
+        "-q",
+        "--junitxml=/home/sunhaiwei/quant_projects_v3_remediation/evidence/v8/final_regression/qe.xml"
+      ],
+      "returncode": 0,
+      "log": "final_regression/qe.log"
+    },
+    "fa_main": {
+      "command": [
+        "/home/sunhaiwei/quant_projects/.venv/bin/python",
+        "-m",
+        "pytest",
+        "factor_assets/tests",
+        "-k",
+        "not test_concurrent_writers_same_hash_are_idempotent",
+        "-q",
+        "--junitxml=/home/sunhaiwei/quant_projects_v3_remediation/evidence/v8/final_regression/fa_main.xml"
+      ],
+      "returncode": 0,
+      "log": "final_regression/fa_main.log"
+    },
+    "fa_concurrency": {
+      "command": [
+        "/home/sunhaiwei/quant_projects/.venv/bin/python",
+        "-m",
+        "pytest",
+        "factor_assets/tests/test_persistent_seen_index.py::TestPersistentSeenIndex::test_concurrent_writers_same_hash_are_idempotent",
+        "-q",
+        "--junitxml=/home/sunhaiwei/quant_projects_v3_remediation/evidence/v8/final_regression/fa_concurrency.xml"
+      ],
+      "returncode": 0,
+      "log": "final_regression/fa_concurrency.log"
+    },
+    "fo": {
+      "command": [
+        "/home/sunhaiwei/quant_projects/.venv/bin/python",
+        "-m",
+        "pytest",
+        "factor_optimizer/tests",
+        "-q",
+        "--junitxml=/home/sunhaiwei/quant_projects_v3_remediation/evidence/v8/final_regression/fo.xml"
+      ],
+      "returncode": 0,
+      "log": "final_regression/fo.log"
+    },
+    "fp": {
+      "command": [
+        "/home/sunhaiwei/quant_projects/.venv/bin/python",
+        "-m",
+        "pytest",
+        "factor_preprocess/tests",
+        "-q",
+        "--junitxml=/home/sunhaiwei/quant_projects_v3_remediation/evidence/v8/final_regression/fp.xml"
+      ],
+      "returncode": 0,
+      "log": "final_regression/fp.log"
+    },
+    "platform": {
+      "command": [
+        "/home/sunhaiwei/quant_projects/.venv/bin/python",
+        "-m",
+        "pytest",
+        "quant_platform/tests",
+        "-q",
+        "--junitxml=/home/sunhaiwei/quant_projects_v3_remediation/evidence/v8/final_regression/platform.xml"
+      ],
+      "returncode": 0,
+      "log": "final_regression/platform.log"
+    },
+    "modeljobs": {
+      "command": [
+        "/home/sunhaiwei/quant_projects/.venv/bin/python",
+        "-m",
+        "pytest",
+        "tests/modeling",
+        "jobs/tests",
+        "-q",
+        "--junitxml=/home/sunhaiwei/quant_projects_v3_remediation/evidence/v8/final_regression/modeljobs.xml"
+      ],
+      "returncode": 0,
+      "log": "final_regression/modeljobs.log"
+    },
+    "vectorbt": {
+      "command": [
+        "/home/sunhaiwei/quant_projects/.venv/bin/python",
+        "-m",
+        "pytest",
+        "vectorbt_qs/tests",
+        "-q",
+        "--junitxml=/home/sunhaiwei/quant_projects_v3_remediation/evidence/v8/final_regression/vectorbt.xml"
+      ],
+      "returncode": 0,
+      "log": "final_regression/vectorbt.log"
+    }
+  }
+}

@@ -1,0 +1,30 @@
+# FA V8 verification
+
+- Baseline manifest: `evidence/v8/baseline_source/source_manifest.json`, SHA256 `6562886acf1bff40cfc58cb2cc138c130f9d18e42750aceca2700bcbcd39a7ca`.
+- Focused selection/formula/QE integration regression: 38 passed, 0 failures.
+- Full `factor_assets/tests`: 1481 passed, 46 warnings, 0 failures, 0 skipped, 40.76 seconds.
+- Per-criterion evidence and honest PARTIAL/UNSUPPORTED boundaries: `evidence/v8/fa/fa_acceptance_map.json`.
+- Runtime: `/home/sunhaiwei/quant_projects/.venv/bin/python` with `OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 POLARS_MAX_THREADS=2 PYTHONPATH=factor_optimizer:factor_preprocess:.`.
+
+## Source hashes
+
+```
+9e5b00839aadc672acef5dc8e76b6e25bf134fdfa7b842376a1d77d4178b65b7  factor_assets/selection/decision.py
+b87a61e8e909ab515f49b0269f2d26ed5fbdd02b92fe03bdd6b8b54741b167ab  factor_assets/selection/__init__.py
+e26d8f976335dde9dcd961dc902fc05b256894c3f9d50aaa96447b7334798994  factor_assets/aggregation/composite.py
+f1de3e6cde618a4660457866b8288dc2f89048b53b22cebad1b83c2f62f943f1  factor_assets/aggregation/specs.py
+ae9c5b3dff3d53cd17dec984bdd24f8a19dc87e39ca8b54039acea0646151d6c  factor_assets/aggregation/representatives.py
+ca197dc01bd23f7007d822c6199e46c11af0f01d8b1826a838f82053d0f260b3  factor_assets/contracts/lifecycle.py
+3885c93329770be44fa6a648c34315d84ac3fa8f9fe033e101fda7bf7906aaec  factor_assets/registry/lifecycle.py
+fd3ecfdb7bb75bf8c2db0208d9d13bd88cefc3b94a6015d69d58400cb013a4b9  factor_assets/registry/sqlite_repository.py
+1ebdfd3be2ccd83afd9421c9ed7d1fae129cf0b5f0345e89dfc10b99db32aea5  factor_assets/registry/serialization.py
+583c994efa3f15853ce9233f67dff920b36d3cbac8cf38bd6a9dfdf11aa1a110  factor_assets/adapters/platform_outbox.py
+de53d25b507bb448326f56ab903e17c492348a8c2b63e55c57822d64b2d8c79a  factor_assets/adapters/qe_joint_evidence.py
+9492a6175435a8a2579e1c9eba61764d53268d5c81c7b280ea1538ad37c82050  factor_assets/registry/factory.py
+41d429fad2e0a8dee028bea5b9f549bea8dc200ead9bbf424625797e7fbac595  factor_assets/profiling/dimensions.py
+f8fd5c82fe0d2152c44085b65fad685e7da6e46e903b205ab13cec2e98840b55  factor_assets/tests/test_v8_selection_decision.py
+f9c68147b67762a88a6b317e77118e06bc7a0b53d1dfb01e51e93ce692be1352  factor_assets/tests/test_v8_lifecycle_authorization_outbox.py
+5955173c664b7314968a405541c7f3518e01c1b6564975da33546694cc4a9eda  factor_assets/tests/test_v8_qe_joint_evidence.py
+```
+
+No production calibration or real-market validation is claimed. Policy anchors remain versioned inputs and production decisions fail closed without qualified joint evidence and trusted resolvers.

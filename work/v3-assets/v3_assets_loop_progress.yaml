@@ -1,0 +1,17 @@
+owner: v3_assets
+updated_at: 2026-09-06T00:00:00+08:00
+base_head: 2db45f4e446309003381a51a5e03071d31859502
+completed: [FA-01, FA-02, FA-03, FA-04, FA-05, FA-07, FA-08, FA-11]
+already_fixed_with_current_tests: [SIM-01, SIM-09]
+partial: [SIM-08]
+next_independent_candidates: [FA-02, FA-04, FA-09, FA-10, SIM-04, SIM-05, SIM-06, SIM-10]
+external_dependencies:
+  QE: [FA-05, SIM-02, SIM-03, SIM-07]
+  DA_FE: [FA-06]
+  FO: [FA-11 authority consolidation]
+  Platform: [FA-01 and FA-07 public admission caller convergence]
+tests: focused V3 integration 145 passed; prior full FA 1271 passed, 43 skipped
+latest_contracts:
+  metric_grade_provenance: [factor_definition_id, factor_value_ref, factor_axis_ref, evaluation_ref, config_hash, metric_version, created_from_refs]
+  certified_promotion: explicit health/evaluation/definition/value/config refs plus required metric versions
+  metric_version_invalidation: pure dry-run plan, targeted by metric id and required version

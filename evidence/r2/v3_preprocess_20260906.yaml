@@ -1,0 +1,91 @@
+package: factor_preprocess
+base_head: 2db45f4e446309003381a51a5e03071d31859502
+branch: codex/v3-remediation-20260906
+import_source: /home/sunhaiwei/quant_projects_v3_remediation/factor_preprocess/factor_preprocess/__init__.py
+runtime: /home/sunhaiwei/quant_projects/.venv/bin/python
+public_entrypoints:
+  - factor_preprocess.registry.transforms.TransformRegistry.get_execution
+  - factor_preprocess.grammar.search_grammar.certify_production_presets
+evidence:
+  FP-01:
+    status: FIXED_LOCAL
+    root_cause: long-to-wide stringified the target axis but pivot retained integer identity
+    tests: [test_integer_asset_identity_survives_long_to_wide, test_public_execution_binds_forward_fill_max_lag_to_effective_fe_parameter]
+    migration: previously all-NaN materializations need re-evaluation; DA catalog migration remains external
+  FP-02:
+    status: FIXED_LOCAL
+    root_cause: pivot_table silently selected first duplicate
+    tests: [test_conflicting_duplicate_primary_key_fails_in_any_order]
+    migration: affected values must be recomputed after upstream join correction
+  FP-03:
+    status: FIXED_LOCAL
+    root_cause: handwritten scalar allow-list dropped max_lag and other effective parameters
+    tests: [test_public_execution_binds_forward_fill_max_lag_to_effective_fe_parameter]
+    migration: FE max_lag mapping changes value identity; central recipe identity integration remains external
+  FP-04:
+    status: FIXED_LOCAL
+    root_cause: broad Exception fallback hid installed FE failures
+    tests: [factor_preprocess/tests/test_fe_operator_parity.py]
+    migration: native get_function remains compatibility/research API; downstream caller migration is outside package ownership
+  FP-05:
+    status: FIXED_LOCAL
+    tests: [factor_engine/tests/backend/test_operator_recipe_execution_v3.py, test_public_recipe_execution_uses_single_panel_boundary]
+    migration: all-FE stateless recipes use one PlanNode session; mixed/fitted recipes fail closed and remain on their owner path
+  FP-06:
+    status: FIXED_LOCAL
+    root_cause: all non-key exposure columns were implicitly treated as regressors
+    tests: [test_ols_neutralize_fe_backed_matches_fp_kernel]
+    migration: callers must supply exposure_cols; DA ExposureBundle adoption remains external
+  FP-07:
+    status: FIXED_LOCAL
+    root_cause: lineage dedupe ignored parameters, intervening operations, and exact node identity
+    tests: [test_lineage_dedupe_only_removes_adjacent_exact_duplicate, factor_preprocess/tests/contracts/test_lineage_dedup.py]
+    migration: old collapsed recipes require new identities and recomputation
+  FP-08:
+    status: FIXED_LOCAL
+    root_cause: historical occurrence flags did not describe properties at the actual lineage root
+    tests: [test_output_properties_track_root_not_historical_occurrence, test_affine_scaling_preserves_neutrality_only_with_same_mask_and_weights]
+    migration: QE measurement remains required before strict-neutral production certification
+  FP-09:
+    status: FIXED_LOCAL
+    root_cause: recipe tag bypassed comparison with actual stage sequence
+    tests: [test_raw_tag_cannot_certify_nonempty_illegal_recipe, factor_preprocess/tests/test_preset_semantic_order.py]
+    migration: tag-only historical certifications must be re-certified
+  FP-10:
+    status: FIXED_LOCAL
+    tests: [test_new_registry_entry_defaults_research_and_runtime_domain_is_enforced]
+    migration: reviewed legacy built-ins preserve admission; new external registrations default RESEARCH_ONLY
+  FP-11:
+    status: FIXED_LOCAL
+    root_cause: semantic ID and policy dataclasses allowed attribute reassignment
+    tests: [test_semantic_identity_and_policy_steps_are_immutable, factor_preprocess/tests/registry/test_registry_identity.py]
+    migration: no data migration; mutable configs must be recompiled
+  FP-12:
+    status: FIXED_LOCAL
+    root_cause: fallback hashed generator repr instead of function code and closure
+    tests: [test_dynamic_function_fingerprint_is_content_based_and_mutable_closure_rejected]
+    migration: old repr-derived implementation hashes require re-signing
+  RCP-01:
+    status: FIXED_LOCAL
+    tests: [test_auxiliary_channels_preserve_primary_signal_and_original_mask, test_auxiliary_channel_shapes_and_mask_dtype_fail_closed]
+    migration: existing bundles remain readable; new constructor guarantees primary/missing/freshness channel separation
+  RCP-02: {status: FIXED_LOCAL, tests: [test_lineage_dedupe_only_removes_adjacent_exact_duplicate]}
+  RCP-03: {status: ALREADY_FIXED_VERIFIED, tests: [factor_preprocess/tests/contracts/test_fit_apply_guards.py]}
+  RCP-04: {status: ALREADY_FIXED_VERIFIED, tests: [factor_preprocess/tests/test_fe_operator_parity.py, factor_preprocess/tests/contracts/test_tiling_channels_axes.py]}
+  RCP-05:
+    status: FIXED_LOCAL
+    tests: [test_output_properties_track_root_not_historical_occurrence, test_affine_scaling_preserves_neutrality_only_with_same_mask_and_weights]
+    remaining_blockers: [QE must measure actual residual exposure before cross-package production certification]
+  RCP-06: {status: ALREADY_FIXED_VERIFIED, tests: [factor_preprocess/tests/contracts/test_leakage_properties.py, factor_preprocess/tests/transforms/test_hp_prefix_invariance.py]}
+  RCP-07: {status: BLOCKED, blockers: [supervised fold-local center selection owned jointly by FO and QE]}
+  RCP-08: {status: BLOCKED, blockers: [candidate cutoff policy and common-validation evidence owned by FO and QE]}
+  RCP-09: {status: ALREADY_FIXED_VERIFIED, tests: [factor_preprocess/tests/contracts/test_identity_pit_contract.py, factor_preprocess/tests/representation/test_representation_policies.py]}
+  RCP-10:
+    status: FIXED_LOCAL
+    tests: [test_recipe_canonical_roundtrip_and_compile_fail_closed, test_fitted_recipe_requires_bound_state_ref_at_compile]
+    migration: canonical dict roundtrip validates content hash; unknown implementation and missing state refs fail before execution
+validation:
+  command: PYTHONPATH=$PWD/factor_preprocess:$PWD/factor_optimizer:$PWD /home/sunhaiwei/quant_projects/.venv/bin/python -m pytest factor_preprocess/tests -q
+  capability: CPU_CERTIFIED_LOCAL
+  gpu: not_tested
+rollback: revert only the listed factor_preprocess files and re-sign/recompute affected recipes; no production assets changed

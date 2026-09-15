@@ -1,0 +1,16 @@
+{
+  "tests": {
+    "passed": 4992,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 24
+  },
+  "acceptance_counts": {
+    "BLOCKED_DATA": 2,
+    "PARTIAL": 3,
+    "UNSUPPORTED": 2,
+    "VERIFIED": 167
+  },
+  "source_manifest_sha256": "5a805d267f3cadeaa79a4049c355f9e0bcaba87df8ab24e0f0457bd57b5479f9",
+  "report_sha256": "093c784c0a633dba7020f6b602d01ac70d3d0e66285166945bde9af01790421f"
+}

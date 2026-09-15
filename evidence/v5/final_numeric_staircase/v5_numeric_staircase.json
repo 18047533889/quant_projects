@@ -1,0 +1,126 @@
+{
+  "configuration": {
+    "N": 20,
+    "T": 4,
+    "batch_max": 256,
+    "instances": [
+      {
+        "cost_profile": "gross",
+        "horizon": 1,
+        "leg": "unspecified",
+        "metric_id": "rank_ic",
+        "metric_version": "3.0.0",
+        "output_mode": "FULL_DIAGNOSTIC",
+        "parameters": {
+          "min_assets": 10,
+          "min_periods": 1
+        },
+        "portfolio_profile": "default",
+        "price_convention": "vwap_to_vwap",
+        "quantile_builder_parameters": {},
+        "scenario_id": "scale",
+        "usage_profile": "research"
+      },
+      {
+        "cost_profile": "gross",
+        "horizon": 1,
+        "leg": "unspecified",
+        "metric_id": "coverage",
+        "metric_version": "0.1.0",
+        "output_mode": "FULL_DIAGNOSTIC",
+        "parameters": {
+          "min_assets": 10
+        },
+        "portfolio_profile": "default",
+        "price_convention": "vwap_to_vwap",
+        "quantile_builder_parameters": {},
+        "scenario_id": "scale",
+        "usage_profile": "research"
+      }
+    ],
+    "path": "public EvaluationRequest/evaluate via QEJobHandler atomic sink",
+    "production_throughput_claim": false,
+    "totals": [
+      1000,
+      10000,
+      100000
+    ]
+  },
+  "hardware": {
+    "hostname": "qs-compute-gpu-hk-01",
+    "logical_cpus": 32,
+    "memory": {
+      "MemTotal": "96796196 kB",
+      "SwapTotal": "2035708 kB"
+    },
+    "numpy": "2.2.6",
+    "platform": "Linux-6.8.0-124-generic-x86_64-with-glibc2.39",
+    "processor": "AMD EPYC 9K84 96-Core Processor",
+    "python": "3.12.3",
+    "thread_env": {
+      "OMP_NUM_THREADS": "1",
+      "OPENBLAS_NUM_THREADS": "1",
+      "POLARS_MAX_THREADS": "2"
+    }
+  },
+  "run_utc": "2026-09-07T16:52:52Z",
+  "tiers": [
+    {
+      "batch_limit": 256,
+      "elapsed_seconds": 1.762388648930937,
+      "factor_instance_attempted": 2000,
+      "factor_instance_completed": 2000,
+      "factor_instance_failed": 0,
+      "factor_instances_per_second": 1134.8234688263556,
+      "factors_per_second": 567.4117344131778,
+      "factors_requested": 1000,
+      "failed_shards": 0,
+      "failure_rate": 0.0,
+      "metric_instances": 2,
+      "output_bytes": 1064135,
+      "output_files": 8,
+      "rss_peak_delta_mib": 3.5,
+      "rss_peak_mib": 163.453125,
+      "rss_start_mib": 159.953125,
+      "shards": 4
+    },
+    {
+      "batch_limit": 256,
+      "elapsed_seconds": 21.09433835395612,
+      "factor_instance_attempted": 20000,
+      "factor_instance_completed": 20000,
+      "factor_instance_failed": 0,
+      "factor_instances_per_second": 948.1217028193311,
+      "factors_per_second": 474.06085140966553,
+      "factors_requested": 10000,
+      "failed_shards": 0,
+      "failure_rate": 0.0,
+      "metric_instances": 2,
+      "output_bytes": 10800710,
+      "output_files": 80,
+      "rss_peak_delta_mib": 0.75,
+      "rss_peak_mib": 164.203125,
+      "rss_start_mib": 163.453125,
+      "shards": 40
+    },
+    {
+      "batch_limit": 256,
+      "elapsed_seconds": 180.43005640304182,
+      "factor_instance_attempted": 200000,
+      "factor_instance_completed": 200000,
+      "factor_instance_failed": 0,
+      "factor_instances_per_second": 1108.4627693805246,
+      "factors_per_second": 554.2313846902623,
+      "factors_requested": 100000,
+      "failed_shards": 0,
+      "failure_rate": 0.0,
+      "metric_instances": 2,
+      "output_bytes": 109537881,
+      "output_files": 782,
+      "rss_peak_delta_mib": 1.75,
+      "rss_peak_mib": 170.453125,
+      "rss_start_mib": 168.703125,
+      "shards": 391
+    }
+  ]
+}
