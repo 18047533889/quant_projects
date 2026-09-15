@@ -12,7 +12,9 @@ from typing import Iterable
 import numpy as np
 import pandas as pd
 
-from factor_engine.cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
+from factor_engine.cleaned_operators.base import (
+    OperatorMetadata, ParamRole, ParamSpec, SeriesOperator, register_operator,
+)
 from factor_engine.cleaned_operators.price_volume.technical_structure_repairs import _events, _bounded_line
 
 _EPS=1e-12
@@ -33,8 +35,35 @@ def _pf(v,name,minimum=None):
 
 
 def _register(name,params,fn,desc,*,category="price_structure",tags=()):
+    panels={"open","high","low","close","volume","ret","x"}
+    scalar_params=tuple(param for param in params if param not in panels)
+    int_params={
+        param for param in scalar_params
+        if param.endswith("_window") or param in {"window","n","points","min_spacing","max_spacing"}
+    }
+    specs={
+        param: ParamSpec(
+            dtype=int if param in int_params else float,
+            min=(3 if param == "points" and name in {"ts_resistance_fit_r2", "ts_support_fit_r2"} else 2) if param == "points" else (1 if param in int_params else 0.0),
+            param_role=(
+                ParamRole.HORIZON if param == "window" or param.endswith("_window")
+                else ParamRole.ESTIMATOR_RESOLUTION if param in {"n","points"}
+                else ParamRole.STATE_THRESHOLD
+            ),
+        )
+        for param in scalar_params
+    }
+    if {"left_window","right_window","history_window"} <= set(scalar_params):
+        specs["left_window"] = ParamSpec(
+            dtype=int, min=1,
+            history_formula="left_window + right_window + history_window",
+        )
+        specs["right_window"] = ParamSpec(dtype=int,min=1)
+    panel_params=tuple(param for param in params if param in panels)
     meta=OperatorMetadata(name=name,category=category,description=desc,param_names=list(params),return_type="series",
-        tags=["pit_safe","causal","bounded_history","production_extension",*tags])
+        tags=["pit_safe","causal","bounded_history","production_extension",*tags],
+        param_specs=specs,panel_params=panel_params,panel_arity=len(panel_params),
+        scalar_params=scalar_params,total_positional_arity=len(params))
     def _calculate_series(self,*args,**kwargs): return fn(*args,**kwargs)
     cls=type(f"StructureV2_{name}",(SeriesOperator,),{"metadata":meta,"_calculate_series":_calculate_series,"__module__":__name__})
     register_operator(name=name,category=category,business_category="technical_structure",canonical=name,

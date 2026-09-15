@@ -62,12 +62,14 @@ def _metadata(
     unit: str,
     cost: int,
     param_specs: dict[str, ParamSpec] | None = None,
+    panel_params: tuple[str, ...] = (),
 ) -> OperatorMetadata:
     return OperatorMetadata(
         name=name,
         category="fundamental_period",
         description=description,
         param_names=params,
+        panel_params=panel_params,
         return_type="series",
         tags=[
             "fundamental_period", "daily", "pit_safe", "causal", "typed_v2",
@@ -174,7 +176,11 @@ class ReportFilingDelaySurprise(SeriesOperator):
         ["delay", "filing_event", "window", "min_periods"],
         unit="zscore",
         cost=2,
-        param_specs={"window": _REPORT_WINDOW_SPEC},
+        param_specs={
+            "window": _REPORT_WINDOW_SPEC,
+            "min_periods": ParamSpec(dtype=int, min=2, default=3),
+        },
+        panel_params=("delay", "filing_event"),
     )
 
     def _calculate_series(
@@ -301,7 +307,14 @@ class ReportRevisionMagnitude(SeriesOperator):
         ["x", "prev_x", "current_period_id", "prev_period_id", "revision_event", "window", "min_periods"],
         unit="ratio",
         cost=2,
-        param_specs={"window": _REPORT_WINDOW_SPEC},
+        param_specs={
+            "window": _REPORT_WINDOW_SPEC,
+            "min_periods": ParamSpec(dtype=int, min=2, default=3),
+        },
+        panel_params=(
+            "x", "prev_x", "current_period_id", "prev_period_id",
+            "revision_event",
+        ),
     )
 
     def _calculate_series(

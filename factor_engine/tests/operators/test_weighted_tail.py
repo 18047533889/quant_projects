@@ -20,6 +20,12 @@ from factor_engine.cleaned_operators.registry import OperatorRegistry
 ensure_cleaned_loaded()
 
 
+def _fixture_calculate(op,x):
+    # Actual sorter / weight inputs are mandatory; this is fixture data only.
+    second=x.shift(1) if op.metadata.name=="ts_stratified_mean_spread" else pd.DataFrame(1.,index=x.index,columns=x.columns)
+    return op.calculate(x,second)
+
+
 def _op(name: str, backend: str = "pandas_numpy"):
     op = OperatorRegistry.get(name, backend)
     assert op is not None, f"{name}/{backend}"
@@ -39,7 +45,7 @@ def test_ts_stratified_mean_spread_basic() -> None:
 
     op = _op("ts_stratified_mean_spread")
     try:
-        result = op.calculate(x)
+        result = _fixture_calculate(op,x)
         assert isinstance(result, pd.DataFrame)
         assert result.shape == x.shape
     except Exception as e:
@@ -53,7 +59,7 @@ def test_ts_stratified_mean_spread_handles_nans() -> None:
 
     op = _op("ts_stratified_mean_spread")
     try:
-        result = op.calculate(x)
+        result = _fixture_calculate(op,x)
         assert isinstance(result, pd.DataFrame)
     except Exception as e:
         pytest.fail(f"NaN test failed: {e}")
@@ -67,8 +73,8 @@ def test_ts_stratified_mean_spread_deterministic() -> None:
 
     op = _op("ts_stratified_mean_spread")
     try:
-        result1 = op.calculate(x)
-        result2 = op.calculate(x)
+        result1 = _fixture_calculate(op,x)
+        result2 = _fixture_calculate(op,x)
         pd.testing.assert_frame_equal(result1, result2, check_exact=False, rtol=1e-10)
     except Exception:
         pass  # Some operators may not be deterministic
@@ -86,7 +92,7 @@ def test_ts_weighted_semivariance_basic() -> None:
 
     op = _op("ts_weighted_semivariance")
     try:
-        result = op.calculate(x)
+        result = _fixture_calculate(op,x)
         assert isinstance(result, pd.DataFrame)
         assert result.shape == x.shape
     except Exception as e:
@@ -100,7 +106,7 @@ def test_ts_weighted_semivariance_handles_nans() -> None:
 
     op = _op("ts_weighted_semivariance")
     try:
-        result = op.calculate(x)
+        result = _fixture_calculate(op,x)
         assert isinstance(result, pd.DataFrame)
     except Exception as e:
         pytest.fail(f"NaN test failed: {e}")
@@ -114,8 +120,8 @@ def test_ts_weighted_semivariance_deterministic() -> None:
 
     op = _op("ts_weighted_semivariance")
     try:
-        result1 = op.calculate(x)
-        result2 = op.calculate(x)
+        result1 = _fixture_calculate(op,x)
+        result2 = _fixture_calculate(op,x)
         pd.testing.assert_frame_equal(result1, result2, check_exact=False, rtol=1e-10)
     except Exception:
         pass  # Some operators may not be deterministic
@@ -133,7 +139,7 @@ def test_ts_weighted_downside_deviation_basic() -> None:
 
     op = _op("ts_weighted_downside_deviation")
     try:
-        result = op.calculate(x)
+        result = _fixture_calculate(op,x)
         assert isinstance(result, pd.DataFrame)
         assert result.shape == x.shape
     except Exception as e:
@@ -147,7 +153,7 @@ def test_ts_weighted_downside_deviation_handles_nans() -> None:
 
     op = _op("ts_weighted_downside_deviation")
     try:
-        result = op.calculate(x)
+        result = _fixture_calculate(op,x)
         assert isinstance(result, pd.DataFrame)
     except Exception as e:
         pytest.fail(f"NaN test failed: {e}")
@@ -161,8 +167,8 @@ def test_ts_weighted_downside_deviation_deterministic() -> None:
 
     op = _op("ts_weighted_downside_deviation")
     try:
-        result1 = op.calculate(x)
-        result2 = op.calculate(x)
+        result1 = _fixture_calculate(op,x)
+        result2 = _fixture_calculate(op,x)
         pd.testing.assert_frame_equal(result1, result2, check_exact=False, rtol=1e-10)
     except Exception:
         pass  # Some operators may not be deterministic
@@ -180,7 +186,7 @@ def test_ts_weighted_expected_shortfall_basic() -> None:
 
     op = _op("ts_weighted_expected_shortfall")
     try:
-        result = op.calculate(x)
+        result = _fixture_calculate(op,x)
         assert isinstance(result, pd.DataFrame)
         assert result.shape == x.shape
     except Exception as e:
@@ -194,7 +200,7 @@ def test_ts_weighted_expected_shortfall_handles_nans() -> None:
 
     op = _op("ts_weighted_expected_shortfall")
     try:
-        result = op.calculate(x)
+        result = _fixture_calculate(op,x)
         assert isinstance(result, pd.DataFrame)
     except Exception as e:
         pytest.fail(f"NaN test failed: {e}")
@@ -208,8 +214,8 @@ def test_ts_weighted_expected_shortfall_deterministic() -> None:
 
     op = _op("ts_weighted_expected_shortfall")
     try:
-        result1 = op.calculate(x)
-        result2 = op.calculate(x)
+        result1 = _fixture_calculate(op,x)
+        result2 = _fixture_calculate(op,x)
         pd.testing.assert_frame_equal(result1, result2, check_exact=False, rtol=1e-10)
     except Exception:
         pass  # Some operators may not be deterministic
@@ -227,7 +233,7 @@ def test_ts_weighted_drawdown_area_basic() -> None:
 
     op = _op("ts_weighted_drawdown_area")
     try:
-        result = op.calculate(x)
+        result = _fixture_calculate(op,x)
         assert isinstance(result, pd.DataFrame)
         assert result.shape == x.shape
     except Exception as e:
@@ -241,7 +247,7 @@ def test_ts_weighted_drawdown_area_handles_nans() -> None:
 
     op = _op("ts_weighted_drawdown_area")
     try:
-        result = op.calculate(x)
+        result = _fixture_calculate(op,x)
         assert isinstance(result, pd.DataFrame)
     except Exception as e:
         pytest.fail(f"NaN test failed: {e}")
@@ -255,8 +261,8 @@ def test_ts_weighted_drawdown_area_deterministic() -> None:
 
     op = _op("ts_weighted_drawdown_area")
     try:
-        result1 = op.calculate(x)
-        result2 = op.calculate(x)
+        result1 = _fixture_calculate(op,x)
+        result2 = _fixture_calculate(op,x)
         pd.testing.assert_frame_equal(result1, result2, check_exact=False, rtol=1e-10)
     except Exception:
         pass  # Some operators may not be deterministic

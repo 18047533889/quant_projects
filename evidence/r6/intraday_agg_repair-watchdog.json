@@ -1,0 +1,1 @@
+{"command": [".venv/bin/python", "-m", "pytest", "factor_engine/tests/operators/test_r6_intraday_agg_repair.py", "-q", "--tb=short", "--show-capture=no"], "returncode": 0, "sampled_peak_family_rss_bytes": 492965888, "sampling_seconds": 0.1, "seconds": 49.61707599996589, "test_guard_reason": null, "hard_memory_cap": false}

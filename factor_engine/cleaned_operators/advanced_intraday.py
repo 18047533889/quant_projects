@@ -318,7 +318,10 @@ class IntradayBarrierApproachAcceleration(SeriesOperator):
             target_param="close",
         ),
     )
-    metadata.param_specs = {"session_tz": ParamSpec(dtype=str, searchable=False)}  # R11 #64
+    metadata.param_specs = {
+        "lookback": ParamSpec(dtype=int, min=3, default=10, param_role=ParamRole.HORIZON),
+        "session_tz": ParamSpec(dtype=str, default=None, searchable=False, param_role=ParamRole.POLICY),
+    }
 
     def _calculate_series(
         self,
@@ -632,7 +635,10 @@ class IntradaySubsampledRvDispersion(SeriesOperator):
         unit="ratio",
         cost=4,
     )
-    metadata.param_specs = {"session_tz": ParamSpec(dtype=str, searchable=False)}  # R11 #64
+    metadata.param_specs = {
+        "sampling": ParamSpec(dtype=int, min=2, default=5, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+        "session_tz": ParamSpec(dtype=str, default=None, searchable=False, param_role=ParamRole.POLICY),
+    }
 
     def _calculate_series(self, returns: pd.DataFrame, sampling: int = 5, session_tz: str | None = None, **_: Any) -> pd.DataFrame:
         sm = int(sampling)
@@ -692,7 +698,10 @@ class IntradayVolatilitySignatureSlope(SeriesOperator):
         unit="slope",
         cost=4,
     )
-    metadata.param_specs = {"session_tz": ParamSpec(dtype=str, searchable=False)}  # R11 #64
+    metadata.param_specs = {
+        "max_interval": ParamSpec(dtype=int, min=4, default=32, param_role=ParamRole.HORIZON),
+        "session_tz": ParamSpec(dtype=str, default=None, searchable=False, param_role=ParamRole.POLICY),
+    }
 
     def _calculate_series(self, returns: pd.DataFrame, max_interval: int = 32, session_tz: str | None = None, **_: Any) -> pd.DataFrame:
         mi = int(max_interval)
@@ -733,7 +742,11 @@ class IntradayRealizedPowerVariation(SeriesOperator):
         unit="power",
         cost=3,
     )
-    metadata.param_specs = {"session_tz": ParamSpec(dtype=str, searchable=False)}  # R11 #64
+    metadata.param_specs = {
+        "order": ParamSpec(dtype=float, min=0.0, default=4.0, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+        "sampling": ParamSpec(dtype=int, min=1, default=1, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+        "session_tz": ParamSpec(dtype=str, default=None, searchable=False, param_role=ParamRole.POLICY),
+    }
 
     def _calculate_series(self, returns: pd.DataFrame, order: float = 4.0, sampling: int = 1, session_tz: str | None = None, **_: Any) -> pd.DataFrame:
         od = float(order)
@@ -867,7 +880,12 @@ class IntradayProfileSurpriseEnergy(SeriesOperator):
         unit="energy",
         cost=6,
     )
-    metadata.param_specs = {"session_tz": ParamSpec(dtype=str, searchable=False)}  # R11 #64
+    metadata.param_specs = {
+        "history_days": ParamSpec(dtype=int, min=3, default=20, param_role=ParamRole.HORIZON),
+        "n_slots": ParamSpec(dtype=int, min=4, default=32, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+        "cap": ParamSpec(dtype=float, min=0.0, default=25.0, param_role=ParamRole.STATE_THRESHOLD),
+        "session_tz": ParamSpec(dtype=str, default=None, searchable=False, param_role=ParamRole.POLICY),
+    }
 
     def _calculate_series(self, x: pd.DataFrame, history_days: int = 20, n_slots: int = 32, cap: float = 25.0, session_tz: str | None = None, **_: Any) -> pd.DataFrame:
         hd = int(history_days)
@@ -905,7 +923,12 @@ class IntradayProfilePhaseShift(SeriesOperator):
         unit="phase",
         cost=6,
     )
-    metadata.param_specs = {"session_tz": ParamSpec(dtype=str, searchable=False)}  # R11 #64
+    metadata.param_specs = {
+        "history_days": ParamSpec(dtype=int, min=3, default=20, param_role=ParamRole.HORIZON),
+        "max_shift": ParamSpec(dtype=int, min=1, default=4, param_role=ParamRole.HORIZON),
+        "n_slots": ParamSpec(dtype=int, min=4, default=32, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+        "session_tz": ParamSpec(dtype=str, default=None, searchable=False, param_role=ParamRole.POLICY),
+    }
 
     def _calculate_series(self, x: pd.DataFrame, history_days: int = 20, max_shift: int = 4, n_slots: int = 32, session_tz: str | None = None, **_: Any) -> pd.DataFrame:
         hd = int(history_days)

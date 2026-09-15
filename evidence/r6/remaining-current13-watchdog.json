@@ -1,0 +1,1 @@
+{"command": [".venv/bin/python", "evidence/r6/remaining_inventory.py"], "returncode": 0, "sampled_peak_family_rss_bytes": 441278464, "sampling_seconds": 0.1, "seconds": 57.46580011583865, "test_guard_reason": null, "hard_memory_cap": false}

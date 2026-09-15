@@ -29,7 +29,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Mapping, Protocol, runtime_checkable
 
-from .identities import require_non_empty, sha256_hex
+from .identities import deep_freeze, require_non_empty, sha256_hex
 
 __all__ = [
     "DECISION_APPROVED",
@@ -92,6 +92,7 @@ class AdmissionRequest:
     def __post_init__(self) -> None:
         require_non_empty(self.candidate_ref, "candidate_ref")
         sha256_hex(self.content_hash, "content_hash")
+        object.__setattr__(self, "context", deep_freeze(self.context))
 
 
 @dataclass(frozen=True)
@@ -122,7 +123,7 @@ class AdmissionVerdict:
         object.__setattr__(
             self, "reason_codes", tuple(str(c) for c in (self.reason_codes or ()))
         )
-        object.__setattr__(self, "detail", dict(self.detail or {}))
+        object.__setattr__(self, "detail", deep_freeze(self.detail or {}))
         if self.content_hash:
             # carried from the authority; format-checked only
             sha256_hex(self.content_hash, "content_hash")

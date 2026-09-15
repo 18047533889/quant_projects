@@ -36,7 +36,7 @@ def test_event_interval_memory_basic() -> None:
     cols = [f"S{i}" for i in range(10)]
 
     # Create sample data
-    x = pd.DataFrame(np.random.randn(20, 10), index=idx, columns=cols)
+    x = pd.DataFrame(np.random.binomial(1, 0.25, (20, 10)), index=idx, columns=cols)
 
     op = _op("event_interval_memory")
     # Get param names from metadata
@@ -63,7 +63,7 @@ def test_event_interval_memory_handles_nans() -> None:
     cols = ["A", "B", "C"]
 
     # Data with NaNs
-    data = [[1.0, np.nan, 3.0]] * 10
+    data = [[1.0, np.nan, 0.0]] * 10
     x = pd.DataFrame(data, index=idx, columns=cols)
 
     op = _op("event_interval_memory")
@@ -84,7 +84,7 @@ def test_event_interval_memory_handles_inf() -> None:
     cols = ["A", "B"]
 
     # Data with infinities
-    data = [[1.0, np.inf], [2.0, -np.inf], [3.0, 4.0]] * 3 + [[5.0, 6.0]]
+    data = [[1.0, np.inf], [0.0, -np.inf], [1.0, 0.0]] * 3 + [[0.0, 1.0]]
     x = pd.DataFrame(data, index=idx, columns=cols)
 
     op = _op("event_interval_memory")
@@ -118,7 +118,7 @@ def test_event_interval_memory_empty_input() -> None:
 def test_event_interval_memory_single_column() -> None:
     """Single column test."""
     idx = pd.date_range("2024-01-01", periods=20)
-    x = pd.DataFrame({"A": range(20)}, index=idx)
+    x = pd.DataFrame({"A": np.arange(20) % 2}, index=idx)
 
     op = _op("event_interval_memory")
 
@@ -141,7 +141,7 @@ def test_event_local_variation_basic() -> None:
     cols = [f"S{i}" for i in range(10)]
 
     # Create sample data
-    x = pd.DataFrame(np.random.randn(20, 10), index=idx, columns=cols)
+    x = pd.DataFrame(np.random.binomial(1, 0.25, (20, 10)), index=idx, columns=cols)
 
     op = _op("event_local_variation")
     # Get param names from metadata
@@ -168,7 +168,7 @@ def test_event_local_variation_handles_nans() -> None:
     cols = ["A", "B", "C"]
 
     # Data with NaNs
-    data = [[1.0, np.nan, 3.0]] * 10
+    data = [[1.0, np.nan, 0.0]] * 10
     x = pd.DataFrame(data, index=idx, columns=cols)
 
     op = _op("event_local_variation")
@@ -189,7 +189,7 @@ def test_event_local_variation_handles_inf() -> None:
     cols = ["A", "B"]
 
     # Data with infinities
-    data = [[1.0, np.inf], [2.0, -np.inf], [3.0, 4.0]] * 3 + [[5.0, 6.0]]
+    data = [[1.0, np.inf], [0.0, -np.inf], [1.0, 0.0]] * 3 + [[0.0, 1.0]]
     x = pd.DataFrame(data, index=idx, columns=cols)
 
     op = _op("event_local_variation")
@@ -223,7 +223,7 @@ def test_event_local_variation_empty_input() -> None:
 def test_event_local_variation_single_column() -> None:
     """Single column test."""
     idx = pd.date_range("2024-01-01", periods=20)
-    x = pd.DataFrame({"A": range(20)}, index=idx)
+    x = pd.DataFrame({"A": np.arange(20) % 2}, index=idx)
 
     op = _op("event_local_variation")
 
@@ -246,7 +246,7 @@ def test_event_fano_factor_basic() -> None:
     cols = [f"S{i}" for i in range(10)]
 
     # Create sample data
-    x = pd.DataFrame(np.random.randn(20, 10), index=idx, columns=cols)
+    x = pd.DataFrame(np.random.binomial(1, 0.25, (20, 10)), index=idx, columns=cols)
 
     op = _op("event_fano_factor")
     # Get param names from metadata
@@ -273,7 +273,7 @@ def test_event_fano_factor_handles_nans() -> None:
     cols = ["A", "B", "C"]
 
     # Data with NaNs
-    data = [[1.0, np.nan, 3.0]] * 10
+    data = [[1.0, np.nan, 0.0]] * 10
     x = pd.DataFrame(data, index=idx, columns=cols)
 
     op = _op("event_fano_factor")
@@ -294,7 +294,7 @@ def test_event_fano_factor_handles_inf() -> None:
     cols = ["A", "B"]
 
     # Data with infinities
-    data = [[1.0, np.inf], [2.0, -np.inf], [3.0, 4.0]] * 3 + [[5.0, 6.0]]
+    data = [[1.0, np.inf], [0.0, -np.inf], [1.0, 0.0]] * 3 + [[0.0, 1.0]]
     x = pd.DataFrame(data, index=idx, columns=cols)
 
     op = _op("event_fano_factor")
@@ -328,7 +328,7 @@ def test_event_fano_factor_empty_input() -> None:
 def test_event_fano_factor_single_column() -> None:
     """Single column test."""
     idx = pd.date_range("2024-01-01", periods=20)
-    x = pd.DataFrame({"A": range(20)}, index=idx)
+    x = pd.DataFrame({"A": np.arange(20) % 2}, index=idx)
 
     op = _op("event_fano_factor")
 
@@ -351,7 +351,7 @@ def test_event_fano_excess_basic() -> None:
     cols = [f"S{i}" for i in range(10)]
 
     # Create sample data
-    x = pd.DataFrame(np.random.randn(20, 10), index=idx, columns=cols)
+    x = pd.DataFrame(np.random.binomial(1, 0.25, (20, 10)), index=idx, columns=cols)
 
     op = _op("event_fano_excess")
     # Get param names from metadata
@@ -378,7 +378,7 @@ def test_event_fano_excess_handles_nans() -> None:
     cols = ["A", "B", "C"]
 
     # Data with NaNs
-    data = [[1.0, np.nan, 3.0]] * 10
+    data = [[1.0, np.nan, 0.0]] * 10
     x = pd.DataFrame(data, index=idx, columns=cols)
 
     op = _op("event_fano_excess")
@@ -399,7 +399,7 @@ def test_event_fano_excess_handles_inf() -> None:
     cols = ["A", "B"]
 
     # Data with infinities
-    data = [[1.0, np.inf], [2.0, -np.inf], [3.0, 4.0]] * 3 + [[5.0, 6.0]]
+    data = [[1.0, np.inf], [0.0, -np.inf], [1.0, 0.0]] * 3 + [[0.0, 1.0]]
     x = pd.DataFrame(data, index=idx, columns=cols)
 
     op = _op("event_fano_excess")
@@ -433,7 +433,7 @@ def test_event_fano_excess_empty_input() -> None:
 def test_event_fano_excess_single_column() -> None:
     """Single column test."""
     idx = pd.date_range("2024-01-01", periods=20)
-    x = pd.DataFrame({"A": range(20)}, index=idx)
+    x = pd.DataFrame({"A": np.arange(20) % 2}, index=idx)
 
     op = _op("event_fano_excess")
 
@@ -465,3 +465,14 @@ def test_event_interval_metadata() -> None:
         assert meta is not None, f"{op_name} missing metadata"
         assert hasattr(meta, "tags"), f"{op_name} missing tags"
         assert meta.name == op_name, f"{op_name} name mismatch"
+
+
+@pytest.mark.parametrize("op_name", [
+    "event_interval_memory", "event_local_variation",
+    "event_fano_factor", "event_fano_excess",
+])
+def test_event_interval_rejects_non_eventbool_finite_marks(op_name: str) -> None:
+    """Finite marks outside {0, 1} are domain errors, even before warmup."""
+    event = pd.DataFrame({"A": [2.0, 0.0, 1.0]})
+    with pytest.raises(ValueError, match="EventBool"):
+        _op(op_name).calculate(event)

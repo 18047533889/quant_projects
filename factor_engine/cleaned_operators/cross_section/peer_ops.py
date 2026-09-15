@@ -14,10 +14,29 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from factor_engine.cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
+from factor_engine.cleaned_operators.base import MISSING, OperatorMetadata, ParamRole, ParamSpec, SeriesOperator, register_operator
 
 _EPS = 1e-12
 _CANONICALS: list[str] = []
+
+_PEER_SCALARS = {
+    "group_peer_beta_deviation": {}, "group_peer_deviation_index": {},
+    "group_peer_information_diffusion": {"window": (int, 2, MISSING), "lag": (int, 0, MISSING)},
+    "group_leader_laggard_exposure": {"window": (int, 2, MISSING), "lag": (int, 0, MISSING)},
+    "group_return_dispersion_exposure": {"window": (int, 2, MISSING)},
+    "group_multi_level_rank_consistency": {},
+    "ts_market_liquidity_beta": {"window": (int, 2, 60)},
+    "ts_industry_liquidity_beta": {"window": (int, 2, 60)},
+}
+
+def _peer_specs(name: str) -> dict[str, ParamSpec]:
+    out = {}
+    for key, (dtype, minimum, default) in _PEER_SCALARS[name].items():
+        kw = {"dtype": dtype, "min": minimum, "param_role": ParamRole.HORIZON}
+        if default is not MISSING:
+            kw["default"] = default
+        out[key] = ParamSpec(**kw)
+    return out
 
 
 def _meta(name: str, description: str, params: list[str], *, unit: str = "ratio") -> OperatorMetadata:
@@ -32,6 +51,9 @@ def _meta(name: str, description: str, params: list[str], *, unit: str = "ratio"
             f"signature:{','.join(params)}->series", "domain:peer",
             f"unit:{unit}", "cost:2",
         ],
+        panel_params=tuple(p for p in params if p not in _PEER_SCALARS[name]),
+        scalar_params=tuple(_PEER_SCALARS[name]),
+        param_specs=_peer_specs(name),
     )
 
 
@@ -43,7 +65,16 @@ def _mk(name: str, description: str, params: list[str], fn, *, unit: str = "rati
     metadata = _meta(name, description, params, unit=unit)
 
     def _calculate_series(self, *args, **kwargs):
-        return fn(*args, **kwargs)
+        if not kwargs:
+            return fn(*args)
+        values = dict(zip(params, args))
+        values.update(kwargs)
+        ordered = []
+        for param in params:
+            if param not in values:
+                break
+            ordered.append(values[param])
+        return fn(*ordered)
 
     cls = type(
         f"PeerOps_{name}",
@@ -436,6 +467,10 @@ _mk(
     lambda r, l, window=60: _liquidity_beta(r, l, window),
     unit="level",
 )
+
+# The former native registration implemented a different economic quantity.
+from factor_engine.cleaned_operators.rolling_pack import register_polars_bridge
+register_polars_bridge("group_peer_information_diffusion")
 _mk(
     "ts_industry_liquidity_beta",
     "个股收益对行业流动性变化的滚动 Beta。",

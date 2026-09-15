@@ -5,6 +5,7 @@ Rolling statistics (skew, quantiles, tail measures), drawdown metrics,
 distance to highs/lows, channel position, and swing analysis.
 """
 from __future__ import annotations
+from factor_engine.cleaned_operators.common import direction_risk_polars as _risk_kernels
 
 import math
 
@@ -62,48 +63,17 @@ class TSZScoreNative(SeriesOperator):
     )
 
     def _calculate_series(
-        self,
-        x: pl.DataFrame,
-        window: int = 20,
-        min_periods: int = 1,
-        null_policy: str = "ignore",
-        nan_policy: str = "propagate",
-        includes_current_bar: bool = True,
-        ddof: int = 1,
-        zero_std_policy: str = "zero",
-        **kwargs,
+        self, x: pl.DataFrame, window: int = 20, min_periods: int = 1,
+        null_policy: str = "ignore", nan_policy: str = "propagate",
+        includes_current_bar: bool = True, ddof: int = 1,
+        zero_std_policy: str = "zero", **kwargs,
     ) -> pl.DataFrame:
-        from factor_engine.cleaned_operators.common.ts_zscore_spec import TSZScoreSpec
-
-        spec = TSZScoreSpec.resolve(
-            window=window, min_periods=min_periods, null_policy=null_policy,
+        from factor_engine.cleaned_operators.common.ts_zscore_spec import polars_zscore
+        return polars_zscore(
+            x, window=window, min_periods=min_periods, null_policy=null_policy,
             nan_policy=nan_policy, includes_current_bar=includes_current_bar,
             ddof=ddof, zero_std_policy=zero_std_policy,
         )
-        exprs = []
-        propagate = (
-            spec.window.nan_policy == "propagate"
-            or spec.window.null_policy.value == "propagate"
-        )
-        for c in _numeric_cols(x):
-            current = pl.col(c).cast(pl.Float64).fill_nan(None)
-            current = pl.when(current.is_finite()).then(current).otherwise(None)
-            stats = current if spec.includes_current_bar else current.shift(1)
-            mean = stats.rolling_mean(spec.window.size, min_samples=spec.window.min_periods)
-            std = stats.rolling_std(
-                spec.window.size, min_samples=spec.window.min_periods,
-                ddof=spec.window.ddof,
-            )
-            value = pl.when(current.is_null() | std.is_null()).then(None)
-            if propagate:
-                bad = stats.is_null().cast(pl.Int64).rolling_sum(
-                    spec.window.size, min_samples=1
-                ) > 0
-                value = value.when(bad).then(None)
-            zero_value = 0.0 if spec.zero_std_policy == "zero" else None
-            value = value.when(std == 0).then(zero_value).otherwise((current - mean) / std)
-            exprs.append(value.alias(c))
-        return x.with_columns(exprs)
 
 
 @register_operator(
@@ -164,47 +134,15 @@ class TSSkewNative(SeriesOperator):
     source=_SRC,
     backend="polars")
 class TSTrimmedMeanNative(SeriesOperator):
-    """Rolling trimmed mean (exclude top/bottom quantiles)."""
-
-    metadata = OperatorMetadata(
-        name="ts_trimmed_mean",
-        category="time_series",
-        description="滚动截尾均值",
-        param_names=["x", "window", "trim_pct"],
-        return_type="series",
-        tags=["time_series", "statistics", "polars", "native"],
-        param_specs={
-            "window": ParamSpec(dtype=int, min=5, default=20, searchable=True, param_role=ParamRole.HORIZON),
-            "trim_pct": ParamSpec(dtype=float, min=0.0, max=0.5, default=0.1, searchable=False, param_role=ParamRole.ESTIMATOR_RESOLUTION),
-        },
-    )
-
-    def _calculate_series(
-        self, x: pl.DataFrame, window: int = 20, trim_pct: float = 0.1, **kwargs
-    ) -> pl.DataFrame:
-        from factor_engine.cleaned_operators.parameter_validation import strict_integer
-
-        w = strict_integer(window, "window", minimum=5)
-        trim = float(trim_pct)
-        if not np.isfinite(trim) or not 0.0 <= trim < 0.5:
-            raise ValueError("trim_pct must satisfy 0 <= trim_pct < 0.5")
-
-        def trimmed_mean_fn(values: pl.Series) -> float:
-            valid = np.asarray(values.to_numpy(), dtype=float)
-            valid = valid[np.isfinite(valid)]
-            if valid.size < w:
-                return math.nan
-            ordered = np.sort(valid)
-            cut = int(np.floor(trim * ordered.size))
-            if cut * 2 >= ordered.size:
-                return math.nan
-            return float(np.mean(ordered[cut : ordered.size - cut]))
-
-        exprs = [
-            pl.col(c).rolling_map(trimmed_mean_fn, window_size=w, min_samples=1).alias(c)
-            for c in _numeric_cols(x)
-        ]
-        return x.with_columns(exprs)
+    """Canonical robust statistics, shared stable per-column NumPy kernels."""
+    from factor_engine.cleaned_operators.common import robust_stats_native as _native
+    metadata = _native.metadata("ts_trimmed_mean")
+    _physical_spec = _native.physical_spec("ts_trimmed_mean")
+    @property
+    def _contract_callable(self):
+        return self._native.reference(self.metadata.name)._calculate_series
+    def _calculate_series(self,*args,**kwargs):
+        return self._native.calculate(self.metadata.name,*args,**kwargs)
 
 
 @register_operator(
@@ -312,37 +250,15 @@ class TSQnScaleNative(SeriesOperator):
     source=_SRC,
     backend="polars")
 class TSQuantileRangeNative(SeriesOperator):
-    """Rolling quantile range: Q_upper - Q_lower."""
-
-    metadata = OperatorMetadata(
-        name="ts_quantile_range",
-        category="time_series",
-        description="滚动分位数范围",
-        param_names=["x", "window", "lower", "upper"],
-        return_type="series",
-        tags=["time_series", "statistics", "polars", "native"],
-        param_specs={
-            "window": ParamSpec(dtype=int, min=2, default=20, searchable=True, param_role=ParamRole.HORIZON),
-        },
-    )
-
-    def _calculate_series(
-        self, x: pl.DataFrame, window: int = 20, lower: float = 0.25, upper: float = 0.75, **kwargs
-    ) -> pl.DataFrame:
-        from factor_engine.cleaned_operators.parameter_validation import strict_integer
-
-        w = strict_integer(window, "window", minimum=2)
-        lo_q = float(lower)
-        hi_q = float(upper)
-        cols = _numeric_cols(x)
-        exprs = []
-        for c in cols:
-            val = x[c]
-            q_lo = val.rolling_quantile(quantile=lo_q, window_size=w, interpolation="linear")
-            q_hi = val.rolling_quantile(quantile=hi_q, window_size=w, interpolation="linear")
-            exprs.append((q_hi - q_lo).alias(c))
-        result = x.with_columns(exprs)
-        return result
+    """Canonical robust statistics, shared stable per-column NumPy kernels."""
+    from factor_engine.cleaned_operators.common import robust_stats_native as _native
+    metadata = _native.metadata("ts_quantile_range")
+    _physical_spec = _native.physical_spec("ts_quantile_range")
+    @property
+    def _contract_callable(self):
+        return self._native.reference(self.metadata.name)._calculate_series
+    def _calculate_series(self,*args,**kwargs):
+        return self._native.calculate(self.metadata.name,*args,**kwargs)
 
 
 @register_operator(
@@ -443,37 +359,17 @@ class TSQuantileSkewNative(SeriesOperator):
     source=_SRC,
     backend="polars")
 class TSDownsideDeviationNative(SeriesOperator):
-    """Rolling downside deviation: sqrt(mean((min(x - target, 0))^2))."""
-
+    """Authored finite-support ts_downside_deviation; see shared numerical kernel."""
     metadata = OperatorMetadata(
-        name="ts_downside_deviation",
-        category="time_series",
-        description="滚动下行标准差",
-        param_names=["x", "window", "target"],
-        return_type="series",
-        tags=["time_series", "risk", "polars", "native"],
-        param_specs={
-            "window": ParamSpec(dtype=int, min=2, default=20, searchable=True, param_role=ParamRole.HORIZON),
-            "target": ParamSpec(dtype=float, default=0.0, searchable=False, param_role=ParamRole.THRESHOLD),
-        },
+        name="ts_downside_deviation",category="time_series",
+        description="Canonical ts_downside_deviation with validated input and window semantics.",
+        **_risk_kernels.contract("ts_downside_deviation"),
     )
+    _contract_callable = staticmethod(_risk_kernels.ts_downside_deviation)
+    _physical_spec = _risk_kernels.physical_spec("ts_downside_deviation")
 
-    def _calculate_series(
-        self, x: pl.DataFrame, window: int = 20, target: float = 0.0, **kwargs
-    ) -> pl.DataFrame:
-        from factor_engine.cleaned_operators.parameter_validation import strict_integer
-
-        w = strict_integer(window, "window", minimum=2)
-        tgt = float(target)
-        cols = _numeric_cols(x)
-        exprs = []
-        for c in cols:
-            val = x[c]
-            downside = pl.when(val < tgt).then((val - tgt) ** 2).otherwise(0.0)
-            dd = downside.rolling_mean(window_size=w).sqrt()
-            exprs.append(dd.alias(c))
-        result = x.with_columns(exprs)
-        return result
+    def _calculate_series(self, *args, **kwargs):
+        return _risk_kernels.ts_downside_deviation(*args, **kwargs)
 
 
 @register_operator(
@@ -484,44 +380,17 @@ class TSDownsideDeviationNative(SeriesOperator):
     source=_SRC,
     backend="polars")
 class TSUpsideDeviationNative(SeriesOperator):
-    """Rolling upside deviation: sqrt(mean((max(x - target, 0))^2))."""
-
+    """Authored finite-support ts_upside_deviation; see shared numerical kernel."""
     metadata = OperatorMetadata(
-        name="ts_upside_deviation",
-        category="time_series",
-        description="滚动上行标准差",
-        param_names=["x", "window", "target"],
-        return_type="series",
-        tags=["time_series", "risk", "polars", "native"],
-        param_specs={
-            "window": ParamSpec(dtype=int, min=2, default=20, searchable=True, param_role=ParamRole.HORIZON),
-            "target": ParamSpec(dtype=float, default=0.0, searchable=False, param_role=ParamRole.THRESHOLD),
-        },
+        name="ts_upside_deviation",category="time_series",
+        description="Canonical ts_upside_deviation with validated input and window semantics.",
+        **_risk_kernels.contract("ts_upside_deviation"),
     )
+    _contract_callable = staticmethod(_risk_kernels.ts_upside_deviation)
+    _physical_spec = _risk_kernels.physical_spec("ts_upside_deviation")
 
-    def _calculate_series(
-        self, x: pl.DataFrame, window: int = 20, target: float = 0.0, **kwargs
-    ) -> pl.DataFrame:
-        from factor_engine.cleaned_operators.parameter_validation import strict_integer
-
-        w = strict_integer(window, "window", minimum=2)
-        tgt = float(target)
-        cols = _numeric_cols(x)
-        exprs = []
-        for c in cols:
-            val = x[c]
-            upside = pl.when(val > tgt).then((val - tgt) ** 2).otherwise(0.0)
-            ud = upside.rolling_mean(window_size=w).sqrt()
-            exprs.append(ud.alias(c))
-        result = x.with_columns(exprs)
-        return result
-
-
-
-
-# ---------------------------------------------------------------------------
-# Expected shortfall and partial moments
-# ---------------------------------------------------------------------------
+    def _calculate_series(self, *args, **kwargs):
+        return _risk_kernels.ts_upside_deviation(*args, **kwargs)
 
 @register_operator(
     name="ts_expected_shortfall",
@@ -766,32 +635,26 @@ class TSTailMeanNative(SeriesOperator):
         name="ts_tail_mean",
         category="time_series",
         description="滚动尾部均值",
-        param_names=["x", "window", "quantile"],
+        param_names=["x", "window", "q", "side", "min_periods"],
         return_type="series",
         tags=["time_series", "tail", "polars", "native"],
         param_specs={
-            "window": ParamSpec(dtype=int, min=5, default=60, searchable=True, param_role=ParamRole.HORIZON),
-            "quantile": ParamSpec(dtype=float, min=0.0, max=1.0, default=0.95, searchable=False, param_role=ParamRole.THRESHOLD),
+            "window": ParamSpec(dtype=int, min=1, default=20, searchable=True, param_role=ParamRole.HORIZON),
+            "q": ParamSpec(dtype=float, min=0.0, max=0.5, default=0.1, searchable=False, param_role=ParamRole.THRESHOLD),
+            "side": ParamSpec(dtype=str, choices=("lower", "upper"), default="lower", searchable=False, param_role=ParamRole.POLICY),
+            "min_periods": ParamSpec(dtype=int, min=1, default=2, searchable=False, param_role=ParamRole.SUPPORT_POLICY),
         },
     )
 
     def _calculate_series(
-        self, x: pl.DataFrame, window: int = 60, quantile: float = 0.95, **kwargs
+        self, x: pl.DataFrame, window: int = 20, q: float = 0.1,
+        side: str = "lower", min_periods: int = 2, **kwargs
     ) -> pl.DataFrame:
-        from factor_engine.cleaned_operators.parameter_validation import strict_integer
+        from factor_engine.cleaned_operators.overhaul.daily import pl_tail_mean
 
-        w = strict_integer(window, "window", minimum=5)
-        q = float(quantile)
-        cols = _numeric_cols(x)
-        exprs = []
-        for c in cols:
-            val = x[c]
-            threshold = val.rolling_quantile(quantile=q, window_size=w, interpolation="linear")
-            tail = pl.when(val >= threshold).then(val).otherwise(None)
-            tail_mean = tail.rolling_mean(window_size=w)
-            exprs.append(tail_mean.alias(c))
-        result = x.with_columns(exprs)
-        return result
+        return pl_tail_mean(
+            x, window=window, q=q, side=side, min_periods=min_periods
+        )
 
 
 @register_operator(
@@ -929,33 +792,17 @@ class TSMaxDrawdownNative(SeriesOperator):
     source=_SRC,
     backend="polars")
 class TSCurrentDrawdownDurationNative(SeriesOperator):
-    """Days since last peak."""
-
+    """Authored finite-support ts_current_drawdown_duration; see shared numerical kernel."""
     metadata = OperatorMetadata(
-        name="ts_current_drawdown_duration",
-        category="time_series",
-        description="当前回撤持续天数",
-        param_names=["x"],
-        return_type="series",
-        tags=["time_series", "drawdown", "polars", "native"],
+        name="ts_current_drawdown_duration",category="time_series",
+        description="Canonical ts_current_drawdown_duration with validated input and window semantics.",
+        **_risk_kernels.contract("ts_current_drawdown_duration"),
     )
+    _contract_callable = staticmethod(_risk_kernels.ts_current_drawdown_duration)
+    _physical_spec = _risk_kernels.physical_spec("ts_current_drawdown_duration")
 
-    def _calculate_series(
-        self, x: pl.DataFrame, **kwargs
-    ) -> pl.DataFrame:
-        cols = _numeric_cols(x)
-        exprs = []
-        for c in cols:
-            val = x[c]
-            # Check if current value is new peak
-            cummax = val.cum_max()
-            is_peak = (val == cummax)
-            # Count days since last peak
-            block = is_peak.cum_sum()
-            duration = pl.int_range(0, pl.len()).over(block) - pl.int_range(0, pl.len()).shift(1).fill_null(0).over(block)
-            exprs.append(duration.alias(c))
-        result = x.with_columns(exprs)
-        return result
+    def _calculate_series(self, *args, **kwargs):
+        return _risk_kernels.ts_current_drawdown_duration(*args, **kwargs)
 
 
 @register_operator(
@@ -1003,36 +850,17 @@ class TSCurrentDrawdownAreaNative(SeriesOperator):
     source=_SRC,
     backend="polars")
 class TSTimeUnderWaterNative(SeriesOperator):
-    """Rolling fraction of time in drawdown."""
-
+    """Authored finite-support ts_time_under_water; see shared numerical kernel."""
     metadata = OperatorMetadata(
-        name="ts_time_under_water",
-        category="time_series",
-        description="滚动水下时间比例",
-        param_names=["x", "window"],
-        return_type="series",
-        tags=["time_series", "drawdown", "polars", "native"],
-        param_specs={
-            "window": ParamSpec(dtype=int, min=2, default=60, searchable=True, param_role=ParamRole.HORIZON),
-        },
+        name="ts_time_under_water",category="time_series",
+        description="Canonical ts_time_under_water with validated input and window semantics.",
+        **_risk_kernels.contract("ts_time_under_water"),
     )
+    _contract_callable = staticmethod(_risk_kernels.ts_time_under_water)
+    _physical_spec = _risk_kernels.physical_spec("ts_time_under_water")
 
-    def _calculate_series(
-        self, x: pl.DataFrame, window: int = 60, **kwargs
-    ) -> pl.DataFrame:
-        from factor_engine.cleaned_operators.parameter_validation import strict_integer
-
-        w = strict_integer(window, "window", minimum=2)
-        cols = _numeric_cols(x)
-        exprs = []
-        for c in cols:
-            val = x[c]
-            peak = val.rolling_max(window_size=w)
-            under_water = (val < peak).cast(pl.Float64)
-            time_uw = under_water.rolling_mean(window_size=w)
-            exprs.append(time_uw.alias(c))
-        result = x.with_columns(exprs)
-        return result
+    def _calculate_series(self, *args, **kwargs):
+        return _risk_kernels.ts_time_under_water(*args, **kwargs)
 
 
 @register_operator(

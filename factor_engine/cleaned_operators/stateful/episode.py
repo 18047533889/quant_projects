@@ -29,7 +29,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from factor_engine.cleaned_operators.base import SeriesOperator, register_operator
+from factor_engine.cleaned_operators.base import ParamRole, ParamSpec, SeriesOperator, register_operator
 from factor_engine.cleaned_operators.rolling_pack import frame_like
 from factor_engine.cleaned_operators.stateful._common import assert_condition_bool, metadata
 
@@ -332,7 +332,7 @@ class DirectionalChangeState(SeriesOperator):
 
     def _calculate_series(self, price: pd.DataFrame, threshold: float = 0.03, **_: Any) -> pd.DataFrame:
         th = float(threshold)
-        if th <= 0.0:
+        if not np.isfinite(th) or th <= 0.0:
             raise ValueError("threshold must be > 0")
         pv = price.to_numpy(dtype=float)
         rows, cols = pv.shape
@@ -370,7 +370,7 @@ class DirectionalChangeExtent(SeriesOperator):
 
     def _calculate_series(self, price: pd.DataFrame, threshold: float = 0.03, **_: Any) -> pd.DataFrame:
         th = float(threshold)
-        if th <= 0.0:
+        if not np.isfinite(th) or th <= 0.0:
             raise ValueError("threshold must be > 0")
         pv = price.to_numpy(dtype=float)
         rows, cols = pv.shape
@@ -494,6 +494,19 @@ class StateSinceTrendTstat(SeriesOperator):
                 se_b = np.sqrt(mse / (Ss2 - Ss * Ss / n))
                 out[row, col] = b / (se_b + _EPS)
         return frame_like(x, out)
+
+
+_MIN_EPISODE = ParamSpec(dtype=int, min=1, default=2, param_role=ParamRole.ESTIMATOR_RESOLUTION)
+for _cls in (StateSinceSum, StateSinceMean, StateSinceCount, StateSinceLast):
+    _cls.metadata.param_specs = {"min_episode": _MIN_EPISODE}
+
+_THRESHOLD = ParamSpec(dtype=float, min=0.0, default=0.03, param_role=ParamRole.STATE_THRESHOLD)
+DirectionalChangeState.metadata.param_specs = {"threshold": _THRESHOLD}
+DirectionalChangeExtent.metadata.param_specs = {"threshold": _THRESHOLD}
+StateSinceTrendTstat.metadata.param_specs = {
+    "min_obs": ParamSpec(dtype=int, min=3, default=5, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+    "max_age": ParamSpec(dtype=int, min=1, default=None, searchable=False, param_role=ParamRole.POLICY),
+}
 
 
 def _register_surface() -> None:

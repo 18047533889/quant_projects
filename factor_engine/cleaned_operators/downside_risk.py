@@ -17,6 +17,8 @@ import pandas as pd
 
 from factor_engine.cleaned_operators.base import (
     OperatorMetadata,
+    ParamRole,
+    ParamSpec,
     RelationalParamSpec,
     SeriesOperator,
     register_operator,
@@ -54,6 +56,14 @@ def _metadata(
         category="time_series_risk",
         description=description,
         param_names=params,
+        panel_params=tuple(p for p in params if p in {"x","y","stock_return","benchmark_return"}),
+        scalar_params=tuple(p for p in params if p not in {"x","y","stock_return","benchmark_return"}),
+        param_specs={
+            "window": ParamSpec(dtype=int,min=2,default=20,param_role=ParamRole.HORIZON),
+            **({"target": ParamSpec(dtype=float,default=0.,param_role=ParamRole.STATE_THRESHOLD)} if "target" in params else {}),
+            **({"max_lag": ParamSpec(dtype=int,min=1 if name=="ts_price_delay" else 0,default=5,param_role=ParamRole.HORIZON)} if "max_lag" in params else {}),
+            **({"min_periods": ParamSpec(dtype=int,min=3 if name=="ts_price_delay" else 2,default=3 if name=="ts_price_delay" else 2,param_role=ParamRole.ESTIMATOR_RESOLUTION)} if "min_periods" in params else {}),
+        },
         return_type="series",
         tags=[
             "time_series_risk", "daily", "pit_safe", "causal", "typed_v2",
@@ -68,6 +78,16 @@ def _metadata(
 
 def _frame_like(template: pd.DataFrame, values: np.ndarray) -> pd.DataFrame:
     return pd.DataFrame(values, index=template.index, columns=template.columns, dtype=float)
+
+
+def _stable_deviation_rms(values):
+    """Scale before squaring so finite deviations do not overflow spuriously."""
+    peak = float(np.max(np.abs(values)))
+    if not np.isfinite(peak):
+        return np.nan
+    if peak == 0.:
+        return 0.
+    return float(np.sqrt(np.mean((values/peak)**2))*peak)
 
 
 def _rolling_apply_2d(values: np.ndarray, window: int, fn: Any, min_periods: int = 1) -> np.ndarray:
@@ -122,7 +142,8 @@ class TsDownsideDeviation(SeriesOperator):
         mp = _check_int(min_periods, "min_periods", 2)
         if mp > w:
             raise ValueError("min_periods must be <= window")
-        tgt = float(target)
+        from factor_engine.cleaned_operators.parameter_validation import strict_finite_scalar
+        tgt = strict_finite_scalar(target,"target")
         if not np.isfinite(tgt):
             raise ValueError("target must be finite")
 
@@ -131,7 +152,7 @@ class TsDownsideDeviation(SeriesOperator):
             if valid.size < mp:
                 return np.nan
             below = np.minimum(valid - tgt, 0.0)
-            return float(np.sqrt(np.mean(below * below)))
+            return _stable_deviation_rms(below)
 
         return _frame_like(x, _rolling_apply_2d(x.to_numpy(dtype=float), w, _fn, mp))
 
@@ -177,7 +198,8 @@ class TsUpsideDeviation(SeriesOperator):
         mp = _check_int(min_periods, "min_periods", 2)
         if mp > w:
             raise ValueError("min_periods must be <= window")
-        tgt = float(target)
+        from factor_engine.cleaned_operators.parameter_validation import strict_finite_scalar
+        tgt = strict_finite_scalar(target,"target")
         if not np.isfinite(tgt):
             raise ValueError("target must be finite")
 
@@ -186,7 +208,7 @@ class TsUpsideDeviation(SeriesOperator):
             if valid.size < mp:
                 return np.nan
             above = np.maximum(valid - tgt, 0.0)
-            return float(np.sqrt(np.mean(above * above)))
+            return _stable_deviation_rms(above)
 
         return _frame_like(x, _rolling_apply_2d(x.to_numpy(dtype=float), w, _fn, mp))
 

@@ -26,6 +26,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
+from factor_engine.cleaned_operators.base import ParamRole, ParamSpec, RelationalParamSpec
 from factor_engine.cleaned_operators.gemini_v2_common import (
     frame_like,
     register_dual,
@@ -51,19 +52,27 @@ def _spectrum_asymmetry(v: np.ndarray) -> float:
     # extra ad-hoc floor is imposed (an aggressive min/median guard would also
     # reject healthy series, since the smallest of ~hundreds of increments is
     # almost always << its median).
-    hp = np.asarray([_hurst_generalized(v, q_) for q_ in _QS], dtype=float)
-    hn = np.asarray([_hurst_generalized(v, -q_) for q_ in _QS], dtype=float)
+    magnitude = float(np.max(np.abs(v)))
+    if not np.isfinite(magnitude) or magnitude == 0.0:
+        return np.nan
+    stable = np.asarray(v, dtype=float) / magnitude
+    hp = np.asarray([_hurst_generalized(stable, q_) for q_ in _QS], dtype=float)
+    hn = np.asarray([_hurst_generalized(stable, -q_) for q_ in _QS], dtype=float)
     if not (np.all(np.isfinite(hp)) and np.all(np.isfinite(hn))):
         return np.nan
     return float(np.mean(hn - hp))
 
 
-def _ts_multifractal_asymmetry(x: pd.DataFrame, window: int = 120, min_periods: int = 30) -> pd.DataFrame:
-    if int(window) < 20:
-        raise ValueError("ts_multifractal_asymmetry requires window >= 20")
+def _ts_multifractal_asymmetry(x: pd.DataFrame, window: int = 120, min_periods: int = 40) -> pd.DataFrame:
+    if int(window) < 40:
+        raise ValueError("ts_multifractal_asymmetry requires window >= 40")
     rows, cols = x.shape
     w = int(window)
-    mp = max(20, int(min_periods))
+    mp = int(min_periods)
+    if mp < 40:
+        raise ValueError("ts_multifractal_asymmetry requires min_periods >= 40")
+    if mp > w:
+        raise ValueError("ts_multifractal_asymmetry requires min_periods <= window")
     arr = x.to_numpy(dtype=float)
     out = np.full((rows, cols), np.nan, dtype=float)
     for c in range(cols):
@@ -92,15 +101,22 @@ def _register() -> None:
         ["x", "window", "min_periods"],
         category="multifractal",
         domain="scaling",
-        unit="level",
+        unit="dimensionless",
         cost=6,
         source="multifractal_asym",
         tags_extra=[],
-        output_unit="level",
+        input_units={"x": "level"},
+        output_unit="dimensionless",
         # R4-95: the trailing ``window`` is a real horizon (R4-94); at most
         # ``window`` rows are consumed, gapped rows reduce the finite
         # contiguous run below the ``min_periods`` floor.
         window_semantics="max_rows",
+        param_specs={
+            "window": ParamSpec(dtype=int, min=40, default=120, history_semantics="max_rows", param_role=ParamRole.HORIZON),
+            "min_periods": ParamSpec(dtype=int, min=40, default=40, param_role=ParamRole.SUPPORT_POLICY),
+        },
+        relational_specs=[RelationalParamSpec("min_periods <= window", "min_periods must be <= window")],
+        panel_params=("x",),
     )
     # R6-218 (A-share coverage audit): negative q-moments of the generalised
     # Hurst exponent are undefined at any exact-zero increment (A-share 停牌 /

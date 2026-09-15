@@ -1,0 +1,56 @@
+....FFF...........                                                       [100%]
+=================================== FAILURES ===================================
+_______ test_x09_ill_conditioned_coefficients_do_not_erase_real_residual _______
+
+    def test_x09_ill_conditioned_coefficients_do_not_erase_real_residual():
+        from quant_evaluator.metrics.exposure import rank_aware_projection
+        n=40
+        basis=np.linalg.qr(np.column_stack((np.ones(n),np.linspace(-1,1,n),
+            np.linspace(-1,1,n)**2,np.linspace(-1,1,n)**3)))[0]
+        z,u,y=basis[:,1],basis[:,2],basis[:,3]
+        _,residual,diagnostics=rank_aware_projection(np.column_stack((z,z+1e-12*u)),y)
+        assert diagnostics["condition"]>1e10
+>       assert np.linalg.norm(residual)>.99
+E       AssertionError: assert np.float64(0.0) > 0.99
+E        +  where np.float64(0.0) = <function norm at 0x7db11e7252f0>(array([0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.,\n       0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.,\n       0., 0., 0., 0., 0., 0.]))
+E        +    where <function norm at 0x7db11e7252f0> = <module 'numpy.linalg' from '/home/sunhaiwei/quant_projects/.venv/lib/python3.12/site-packages/numpy/linalg/__init__.py'>.norm
+E        +      where <module 'numpy.linalg' from '/home/sunhaiwei/quant_projects/.venv/lib/python3.12/site-packages/numpy/linalg/__init__.py'> = np.linalg
+
+quant_evaluator/tests/test_v6_factor_exposure.py:56: AssertionError
+__________ test_weighted_public_series_provenance_and_roundtrip[cpu] ___________
+
+backend = 'cpu'
+
+    @pytest.mark.parametrize("backend",["cpu","cuda_strict"])
+    def test_weighted_public_series_provenance_and_roundtrip(backend):
+        from quant_evaluator.contracts._ndarray_codec import decode_value
+        risk,alpha=orthogonal_fixture()
+        batch,labels,panel=_known_math_contract(risk,risk[:,:,0]+alpha,("size",))
+        weights=np.tile(np.linspace(.1,2,risk.shape[1]),(risk.shape[0],1))
+        panel=replace(panel,regression_weights=weights,weight_ref="weights:gold")
+>       panel=ExposurePanel.from_dict(panel.to_dict())
+              ^^^^^^^^^^^^^^^^^^^^^^^
+E       AttributeError: type object 'ExposurePanel' has no attribute 'from_dict'. Did you mean: 'to_dict'?
+
+quant_evaluator/tests/test_v6_factor_exposure.py:67: AttributeError
+______ test_weighted_public_series_provenance_and_roundtrip[cuda_strict] _______
+
+backend = 'cuda_strict'
+
+    @pytest.mark.parametrize("backend",["cpu","cuda_strict"])
+    def test_weighted_public_series_provenance_and_roundtrip(backend):
+        from quant_evaluator.contracts._ndarray_codec import decode_value
+        risk,alpha=orthogonal_fixture()
+        batch,labels,panel=_known_math_contract(risk,risk[:,:,0]+alpha,("size",))
+        weights=np.tile(np.linspace(.1,2,risk.shape[1]),(risk.shape[0],1))
+        panel=replace(panel,regression_weights=weights,weight_ref="weights:gold")
+>       panel=ExposurePanel.from_dict(panel.to_dict())
+              ^^^^^^^^^^^^^^^^^^^^^^^
+E       AttributeError: type object 'ExposurePanel' has no attribute 'from_dict'. Did you mean: 'to_dict'?
+
+quant_evaluator/tests/test_v6_factor_exposure.py:67: AttributeError
+=========================== short test summary info ============================
+FAILED quant_evaluator/tests/test_v6_factor_exposure.py::test_x09_ill_conditioned_coefficients_do_not_erase_real_residual
+FAILED quant_evaluator/tests/test_v6_factor_exposure.py::test_weighted_public_series_provenance_and_roundtrip[cpu]
+FAILED quant_evaluator/tests/test_v6_factor_exposure.py::test_weighted_public_series_provenance_and_roundtrip[cuda_strict]
+3 failed, 15 passed in 1.23s

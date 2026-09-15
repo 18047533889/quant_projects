@@ -527,7 +527,14 @@ def _mark_experimental(canonical: str, catalog: dict[str, Any]) -> None:
     catalog["pit_safe"] = False
     catalog["production_certified"] = False
     existing_policy = dict(_EXPLICIT_POLICIES.get(canonical) or {})
-    existing_policy["pit_safe"] = False
+    # Lifecycle/production evidence must not erase a declared mathematical
+    # time contract needed for candidate research. Known semantic isolation
+    # remains fail-closed; absence of a declaration is never promoted here.
+    from factor_engine.cleaned_operators.semantic_certification import is_isolated_from_default_mining
+    if is_isolated_from_default_mining(canonical):
+        existing_policy["pit_safe"] = False
+    else:
+        existing_policy.setdefault("pit_safe", False)
     existing_policy["scope"] = existing_policy.get("scope", _infer_scope(canonical, catalog))
     _EXPLICIT_POLICIES[canonical] = existing_policy
 

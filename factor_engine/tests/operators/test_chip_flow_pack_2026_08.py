@@ -167,6 +167,11 @@ def test_pack_deterministic_and_axes(canonical):
     panels = _daily_panels()
     args, kw = _call_for(canonical, panels)
     op = OperatorRegistry.get(canonical, "pandas_numpy")
+    if canonical == "micro_bvc_vpin" and op is None:
+        # P2/research-only is intentionally absent from a production-frozen
+        # registry; test its real reference owner without weakening that gate.
+        from factor_engine.cleaned_operators.microstructure.flow_impact import MicroBvcVpin
+        op = MicroBvcVpin()
     first = op.calculate(*args, **kw)
     second = op.calculate(*args, **kw)
     if canonical.startswith("intraday_") or canonical == "micro_bvc_vpin":

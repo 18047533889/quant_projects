@@ -11,6 +11,8 @@ Polars Native CS (Cross-Section) Operators - Advanced Batch (Phase 3)
 """
 from __future__ import annotations
 
+import hashlib
+from pathlib import Path
 import numpy as np
 import pandas as pd
 
@@ -24,6 +26,7 @@ from factor_engine.cleaned_operators.base_polars import (
     register_operator as _register_operator,
     OperatorMetadata,
 )
+from factor_engine.backend.contracts import ExecutionKind, PhysicalImplementationSpec
 
 
 def register_operator(**kwargs):
@@ -117,42 +120,13 @@ class CSActualLOFScore(SeriesOperator):
     business_category="outlier_detection",
 )
 class CSIsolationForestScore(SeriesOperator):
-    """截面 Isolation Forest 异常分数
+    """Canonical cross-sectional estimator with explicit Pandas conversion."""
+    from factor_engine.cleaned_operators.common import cs_estimator_delegate as _delegate
+    metadata = _delegate.metadata("cs_isolation_forest_score")
+    _physical_spec = _delegate.physical_spec("cs_isolation_forest_score")
 
-    使用 isolation forest 算法检测异常值
-    """
-    metadata = OperatorMetadata(
-        name="cs_isolation_forest_score",
-        category="cross_sectional",
-        description="Isolation Forest anomaly score (cross-sectional)",
-        examples=["cs_isolation_forest_score(feature)"],
-        param_names=["x"],
-        return_type="series",
-        tags=["cross_sectional", "outlier", "isolation_forest", "polars_native"],
-    )
-
-    def _calculate_series(self, feature, **kwargs):
-        if pl is None:
-            raise ImportError("Polars is required for polars_native operators")
-
-        # TODO: Implement genuine Isolation Forest
-        # Requires: tree-based isolation path length calculation
-        # For now, return placeholder
-        original_index = feature.index
-        feature_name = feature.name or "value"
-
-        lf = _to_polars_safe(feature)
-
-        # Placeholder: normalized absolute deviation
-        median_expr = pl.col(feature_name).median()
-        mad_expr = (pl.col(feature_name) - median_expr).abs().median()
-
-        lf = lf.with_columns([
-            ((pl.col(feature_name) - median_expr).abs() / mad_expr)
-            .alias(feature_name)
-        ])
-
-        return _from_polars_safe(lf, feature_name, original_index)
+    def _calculate_series(self, *args, **kwargs):
+        return self._delegate.calculate("cs_isolation_forest_score", *args, **kwargs)
 
 
 @register_operator(
@@ -437,37 +411,31 @@ class CSKNNLocalGradientNorm(SeriesOperator):
     business_category="knn",
 )
 class CSKNNLocalMoran(SeriesOperator):
-    """截面 KNN 局部 Moran's I 统计量"""
+    """Exact full-panel delegate to the standard Local Moran I reference."""
+    from factor_engine.cleaned_operators.cross_section_ext import CsKnnLocalMoran as _reference
+    _meta = _reference.metadata
     metadata = OperatorMetadata(
-        name="cs_knn_local_moran",
-        category="cross_sectional",
-        description="KNN local Moran's I statistic",
-        examples=["cs_knn_local_moran(feature, 20)"],
-        param_names=["x", "k"],
-        return_type="series",
-        tags=["cross_sectional", "knn", "moran", "spatial", "polars_native"],
+        name=_meta.name, category=_meta.category, description=_meta.description,
+        param_names=list(_meta.param_names), panel_params=_meta.panel_params,
+        scalar_params=_meta.scalar_params, param_specs=dict(_meta.param_specs),
+        tags=[*_meta.tags, "polars", "pandas_delegate"], output_unit=_meta.output_unit,
+    )
+    _physical_spec = PhysicalImplementationSpec(
+        canonical="cs_knn_local_moran", backend="polars",
+        execution_kind=ExecutionKind.POLARS_PANDAS_DELEGATE,
+        materializes_full_panel=True, supports_nulls=True, supports_nan=True,
+        supports_inf=True,
+        implementation_source_hash=hashlib.sha256(
+            Path(__file__).read_bytes()
+            + Path(__import__("factor_engine.cleaned_operators.cross_section_ext", fromlist=["x"]).__file__).read_bytes()
+        ).hexdigest(),
+        kernel_identity="cross_section_ext.CsKnnLocalMoran",
+        notes="Exact CPU full-panel pandas delegate; not native Polars acceleration.",
     )
 
-    def _calculate_series(self, feature, k=20, **kwargs):
-        if pl is None:
-            raise ImportError("Polars is required for polars_native operators")
-
-        # TODO: Implement genuine local Moran's I
-        # For now, return zscore as placeholder
-        original_index = feature.index
-        feature_name = feature.name or "value"
-
-        lf = _to_polars_safe(feature)
-
-        mean_expr = pl.col(feature_name).mean()
-        std_expr = pl.col(feature_name).std()
-
-        lf = lf.with_columns([
-            ((pl.col(feature_name) - mean_expr) / std_expr)
-            .alias(feature_name)
-        ])
-
-        return _from_polars_safe(lf, feature_name, original_index)
+    def _calculate_series(self, *args, **kwargs):
+        from factor_engine.cleaned_operators.rolling_pack import _call_pandas_delegate
+        return _call_pandas_delegate("cs_knn_local_moran", args, kwargs)
 
 
 @register_operator(
@@ -1305,37 +1273,13 @@ class CSRankCopulaMI(SeriesOperator):
     business_category="shrinkage",
 )
 class CSEmpiricalBayesShrinkage(SeriesOperator):
-    """截面经验贝叶斯收缩"""
-    metadata = OperatorMetadata(
-        name="cs_empirical_bayes_shrinkage",
-        category="cross_sectional",
-        description="Empirical Bayes shrinkage estimator",
-        examples=["cs_empirical_bayes_shrinkage(feature)"],
-        param_names=["x"],
-        return_type="series",
-        tags=["cross_sectional", "shrinkage", "bayes", "polars_native"],
-    )
+    """Canonical cross-sectional estimator with explicit Pandas conversion."""
+    from factor_engine.cleaned_operators.common import cs_estimator_delegate as _delegate
+    metadata = _delegate.metadata("cs_empirical_bayes_shrinkage")
+    _physical_spec = _delegate.physical_spec("cs_empirical_bayes_shrinkage")
 
-    def _calculate_series(self, feature, **kwargs):
-        if pl is None:
-            raise ImportError("Polars is required for polars_native operators")
-
-        # TODO: Implement genuine empirical Bayes shrinkage
-        # For now, shrink toward mean with fixed factor
-        original_index = feature.index
-        feature_name = feature.name or "value"
-
-        lf = _to_polars_safe(feature)
-
-        mean_expr = pl.col(feature_name).mean()
-        shrinkage_factor = 0.5
-
-        lf = lf.with_columns([
-            (shrinkage_factor * pl.col(feature_name) + (1 - shrinkage_factor) * mean_expr)
-            .alias(feature_name)
-        ])
-
-        return _from_polars_safe(lf, feature_name, original_index)
+    def _calculate_series(self, *args, **kwargs):
+        return self._delegate.calculate("cs_empirical_bayes_shrinkage", *args, **kwargs)
 
 
 @register_operator(
@@ -1345,37 +1289,13 @@ class CSEmpiricalBayesShrinkage(SeriesOperator):
     business_category="shrinkage",
 )
 class CSShrinkToGroupMean(SeriesOperator):
-    """截面收缩到组均值"""
-    metadata = OperatorMetadata(
-        name="cs_shrink_to_group_mean",
-        category="cross_sectional",
-        description="Shrink toward group mean",
-        examples=["cs_shrink_to_group_mean(feature, group, 0.5)"],
-        param_names=["x", "group", "shrinkage"],
-        return_type="series",
-        tags=["cross_sectional", "shrinkage", "group", "polars_native"],
-    )
+    """Canonical cross-sectional estimator with explicit Pandas conversion."""
+    from factor_engine.cleaned_operators.common import cs_estimator_delegate as _delegate
+    metadata = _delegate.metadata("cs_shrink_to_group_mean")
+    _physical_spec = _delegate.physical_spec("cs_shrink_to_group_mean")
 
-    def _calculate_series(self, feature, group=None, shrinkage=0.5, **kwargs):
-        if pl is None:
-            raise ImportError("Polars is required for polars_native operators")
-
-        # TODO: Implement genuine group-based shrinkage
-        # For now, shrink toward overall mean
-        original_index = feature.index
-        feature_name = feature.name or "value"
-        shrinkage = float(shrinkage) if shrinkage is not None else 0.5
-
-        lf = _to_polars_safe(feature)
-
-        mean_expr = pl.col(feature_name).mean()
-
-        lf = lf.with_columns([
-            ((1 - shrinkage) * pl.col(feature_name) + shrinkage * mean_expr)
-            .alias(feature_name)
-        ])
-
-        return _from_polars_safe(lf, feature_name, original_index)
+    def _calculate_series(self, *args, **kwargs):
+        return self._delegate.calculate("cs_shrink_to_group_mean", *args, **kwargs)
 
 
 # =============================================================================
@@ -1389,34 +1309,13 @@ class CSShrinkToGroupMean(SeriesOperator):
     business_category="factor",
 )
 class CSFactorBucketReturn(SeriesOperator):
-    """截面因子分桶收益率"""
-    metadata = OperatorMetadata(
-        name="cs_factor_bucket_return",
-        category="cross_sectional",
-        description="Factor bucket return (cross-sectional)",
-        examples=["cs_factor_bucket_return(factor, returns, 5)"],
-        param_names=["factor", "returns", "n_buckets"],
-        return_type="series",
-        tags=["cross_sectional", "factor", "bucket", "polars_native"],
-    )
+    """Canonical cross-sectional estimator with explicit Pandas conversion."""
+    from factor_engine.cleaned_operators.common import cs_estimator_delegate as _delegate
+    metadata = _delegate.metadata("cs_factor_bucket_return")
+    _physical_spec = _delegate.physical_spec("cs_factor_bucket_return")
 
-    def _calculate_series(self, factor, returns, n_buckets=5, **kwargs):
-        if pl is None:
-            raise ImportError("Polars is required for polars_native operators")
-
-        # TODO: Implement genuine bucket return calculation
-        # For now, return demean of returns
-        original_index = returns.index
-        feature_name = returns.name or "value"
-
-        lf = _to_polars_safe(returns)
-
-        lf = lf.with_columns([
-            (pl.col(feature_name) - pl.col(feature_name).mean())
-            .alias(feature_name)
-        ])
-
-        return _from_polars_safe(lf, feature_name, original_index)
+    def _calculate_series(self, *args, **kwargs):
+        return self._delegate.calculate("cs_factor_bucket_return", *args, **kwargs)
 
 
 @register_operator(

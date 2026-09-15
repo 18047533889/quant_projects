@@ -22,6 +22,7 @@ Honest-naming review (R11 round-2):
 from __future__ import annotations
 
 from typing import Any
+from factor_engine.cleaned_operators.parameter_validation import strict_integer, strict_finite_scalar
 
 import numpy as np
 import pandas as pd
@@ -67,6 +68,37 @@ _REGRESSION_PARAM_SPECS: dict[str, ParamSpec] = {
 _AR_WINDOW_SEMANTICS = "max_lookback"
 
 
+_REMAINING_MODEL_NAMES = {
+    "ts_quantile_regression_slope", "ts_variance_ratio_proxy", "ts_lo_mackinlay_vr",
+    "ts_lo_mackinlay_z", "ts_cumulative_deviation_score", "ts_level_shift_score", "ts_vol_shift_score",
+}
+
+def _remaining_specs(name):
+    variance=name in {"ts_variance_ratio_proxy","ts_lo_mackinlay_vr","ts_lo_mackinlay_z"}
+    floor=7 if name=="ts_variance_ratio_proxy" else 6 if variance else 4 if name in {"ts_level_shift_score","ts_vol_shift_score"} else 3
+    specs={
+        "window":ParamSpec(dtype=int,min=20 if name=="ts_level_shift_score" else floor,default=60 if variance else 20,param_role=ParamRole.HORIZON),
+        "min_periods":ParamSpec(dtype=int,min=1,default=10 if variance else 5,param_role=ParamRole.SUPPORT_POLICY,searchable=False),
+    }
+    if variance:
+        specs["q"]=ParamSpec(dtype=int,min=2,default=5,param_role=ParamRole.HORIZON)
+    elif name=="ts_quantile_regression_slope":
+        specs["q"]=ParamSpec(dtype=float,min=np.nextafter(0.,1.),max=np.nextafter(1.,0.),default=.5,param_role=ParamRole.ECONOMIC)
+    return specs
+
+def _remaining_window(window,min_periods,floor,*,levels_extra=0):
+    w=strict_integer(window,"window",minimum=floor+levels_extra)
+    mp=max(floor,strict_integer(min_periods,"min_periods",minimum=1))
+    if mp+levels_extra>w:
+        raise ValueError("min_periods and estimator support must fit within window")
+    return w,mp
+
+def _scale_finite(values):
+    finite=values[np.isfinite(values)]
+    scale=np.max(np.abs(finite)) if finite.size else 0.
+    return values/scale if scale>0 else values
+
+
 def _metadata(
     name: str,
     description: str,
@@ -92,8 +124,10 @@ def _metadata(
         category="time_series_regression",
         description=description,
         param_names=params,
+        panel_params=tuple(p for p in params if p in {"x","y"}) if name in _REMAINING_MODEL_NAMES else (),
+        scalar_params=tuple(p for p in params if p not in {"x","y"}) if name in _REMAINING_MODEL_NAMES else (),
         return_type="series",
-        param_specs={k: v for k, v in (param_specs or {}).items() if k in params},
+        param_specs={k: v for k, v in (_remaining_specs(name) if name in _REMAINING_MODEL_NAMES else (param_specs or {})).items() if k in params},
         tags=tags,
         output_unit=output_unit,
         input_units=dict(input_units or {}),
@@ -415,9 +449,8 @@ class TsQuantileRegressionSlope(SeriesOperator):
 
     def _calculate_series(self, y: pd.DataFrame, x: pd.DataFrame, window: int = 20, q: float = 0.5, min_periods: int = 5, **_: Any) -> pd.DataFrame:
         y, x = _aligned(y, x)
-        w = int(window)
-        mp = max(3, int(min_periods))
-        quantile = float(q)
+        w, mp = _remaining_window(window,min_periods,3,levels_extra=0)
+        quantile = strict_finite_scalar(q,"q")
         if not (0.0 < quantile < 1.0):
             raise ValueError("q must be in (0,1)")
         yv = y.to_numpy(dtype=float)
@@ -614,25 +647,24 @@ class TsVarianceRatioProxy(SeriesOperator):
     )
 
     def _calculate_series(self, x: pd.DataFrame, window: int = 60, q: int = 5, min_periods: int = 10, **_: Any) -> pd.DataFrame:
-        w = int(window)
+        w, mp = _remaining_window(window,min_periods,6,levels_extra=1)
         if w < 1:
             raise ValueError("window must be >= 1")
-        periods = int(q)
+        periods = strict_integer(q,"q",minimum=2)
         # Feasibility validation (review P1-123): the q-period return needs at
         # least 2 overlapping q-period windows inside the trailing window, and a
         # degenerate q<2 used to be silently clamped.
         if periods < 2:
             raise ValueError("q must be >= 2")
-        if periods >= w:
-            raise ValueError("q must be < window")
-        mp = max(6, int(min_periods))
+        if periods > w-2:
+            raise ValueError("q must be <= window - 2")
         xv = x.to_numpy(dtype=float)
         rows, cols = xv.shape
         out = np.full((rows, cols), np.nan, dtype=float)
         for col in range(cols):
             for row in range(rows):
                 start = max(0, row - w + 1)
-                segment = xv[start : row + 1, col]
+                segment = _scale_finite(xv[start : row + 1, col])
                 # Trailing contiguous run: a gap must not re-pair values that
                 # were not temporally adjacent (review P1-123).
                 vals = _trailing_contiguous(segment)
@@ -686,22 +718,21 @@ class TsLoMackinlayVr(SeriesOperator):
     )
 
     def _calculate_series(self, x: pd.DataFrame, window: int = 60, q: int = 5, min_periods: int = 10, **_: Any) -> pd.DataFrame:
-        w = int(window)
+        w, mp = _remaining_window(window,min_periods,6,levels_extra=0)
         if w < 1:
             raise ValueError("window must be >= 1")
-        periods = int(q)
+        periods = strict_integer(q,"q",minimum=2)
         if periods < 2:
             raise ValueError("q must be >= 2")
-        if periods >= w:
-            raise ValueError("q must be < window")
-        mp = max(6, int(min_periods))
+        if periods > w-2:
+            raise ValueError("q must be <= window - 2")
         xv = x.to_numpy(dtype=float)
         rows, cols = xv.shape
         out = np.full((rows, cols), np.nan, dtype=float)
         for col in range(cols):
             for row in range(rows):
                 start = max(0, row - w + 1)
-                segment = xv[start : row + 1, col]
+                segment = _scale_finite(xv[start : row + 1, col])
                 vals = _trailing_contiguous(segment)
                 if vals.size < mp:
                     continue
@@ -742,22 +773,21 @@ class TsLoMackinlayZ(SeriesOperator):
     )
 
     def _calculate_series(self, x: pd.DataFrame, window: int = 60, q: int = 5, min_periods: int = 10, **_: Any) -> pd.DataFrame:
-        w = int(window)
+        w, mp = _remaining_window(window,min_periods,6,levels_extra=0)
         if w < 1:
             raise ValueError("window must be >= 1")
-        periods = int(q)
+        periods = strict_integer(q,"q",minimum=2)
         if periods < 2:
             raise ValueError("q must be >= 2")
-        if periods >= w:
-            raise ValueError("q must be < window")
-        mp = max(6, int(min_periods))
+        if periods > w-2:
+            raise ValueError("q must be <= window - 2")
         xv = x.to_numpy(dtype=float)
         rows, cols = xv.shape
         out = np.full((rows, cols), np.nan, dtype=float)
         for col in range(cols):
             for row in range(rows):
                 start = max(0, row - w + 1)
-                segment = xv[start : row + 1, col]
+                segment = _scale_finite(xv[start : row + 1, col])
                 vals = _trailing_contiguous(segment)
                 if vals.size < mp:
                     continue
@@ -796,17 +826,16 @@ class TsCumulativeDeviationScore(SeriesOperator):
     )
 
     def _calculate_series(self, x: pd.DataFrame, window: int = 20, min_periods: int = 5, **_: Any) -> pd.DataFrame:
-        w = int(window)
+        w, mp = _remaining_window(window,min_periods,3,levels_extra=0)
         if w < 1:
             raise ValueError("window must be >= 1")
-        mp = max(3, int(min_periods))
         xv = x.to_numpy(dtype=float)
         rows, cols = xv.shape
         out = np.full((rows, cols), np.nan, dtype=float)
         for col in range(cols):
             for row in range(rows):
                 start = max(0, row - w + 1)
-                segment = xv[start : row + 1, col]
+                segment = _scale_finite(xv[start : row + 1, col])
                 # Trailing contiguous run: no drop-finite/reconnect (P1-123).
                 vals = _trailing_contiguous(segment)
                 if vals.size < mp:
@@ -848,15 +877,15 @@ class TsLevelShiftScore(SeriesOperator):
     )
 
     def _calculate_series(self, x: pd.DataFrame, window: int = 20, min_periods: int = 5, **_: Any) -> pd.DataFrame:
-        w = int(window)
-        mp = max(4, int(min_periods))
+        window = strict_integer(window,"window",minimum=20)
+        w, mp = _remaining_window(window,min_periods,4,levels_extra=0)
         xv = x.to_numpy(dtype=float)
         rows, cols = xv.shape
         out = np.full((rows, cols), np.nan, dtype=float)
         for col in range(cols):
             for row in range(rows):
                 start = max(0, row - w + 1)
-                segment = xv[start : row + 1, col]
+                segment = _scale_finite(xv[start : row + 1, col])
                 # Trailing contiguous run: a NaN must not re-pair rows on either
                 # side of a gap (review R11 #12).
                 vals = _trailing_contiguous(segment)
@@ -899,15 +928,14 @@ class TsVolShiftScore(SeriesOperator):
     )
 
     def _calculate_series(self, x: pd.DataFrame, window: int = 20, min_periods: int = 5, **_: Any) -> pd.DataFrame:
-        w = int(window)
-        mp = max(4, int(min_periods))
+        w, mp = _remaining_window(window,min_periods,4,levels_extra=0)
         xv = x.to_numpy(dtype=float)
         rows, cols = xv.shape
         out = np.full((rows, cols), np.nan, dtype=float)
         for col in range(cols):
             for row in range(rows):
                 start = max(0, row - w + 1)
-                segment = xv[start : row + 1, col]
+                segment = _scale_finite(xv[start : row + 1, col])
                 # Trailing contiguous run: a NaN must not re-pair rows on either
                 # side of a gap (review R11 #12).
                 vals = _trailing_contiguous(segment)

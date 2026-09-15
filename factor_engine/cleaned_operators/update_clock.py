@@ -29,6 +29,7 @@ import pandas as pd
 
 from factor_engine.cleaned_operators.base import (
     OperatorMetadata,
+    ParamRole,
     ParamSpec,
     SeriesOperator,
     register_operator,
@@ -98,12 +99,14 @@ def _metadata(
     cost: int,
     extra_tags: tuple[str, ...] = (),
     param_specs: dict[str, ParamSpec] | None = None,
+    panel_params: tuple[str, ...] = (),
 ) -> OperatorMetadata:
     return OperatorMetadata(
         name=name,
         category="update_clock",
         description=description,
         param_names=params,
+        panel_params=panel_params,
         return_type="series",
         tags=[
             "update_clock", "daily", "pit_safe", "causal", "typed_v2",
@@ -130,6 +133,8 @@ _UPDATE_MISSING_POLICY_SPEC = ParamSpec(
     dtype=str,
     choices=("BREAK", "SKIP"),
     default=UpdateMissingEventPolicy.BREAK,
+    searchable=False,
+    param_role=ParamRole.MISSING_POLICY,
 )
 
 
@@ -206,7 +211,11 @@ def _update_kernel(canonical: str, min_updates: int, fn) -> SeriesOperator:
                     ["x", "update_event", "n_updates", "missing_policy"],
                     unit=_UNITS[canonical],
                     cost=4,
-                    param_specs={"missing_policy": _UPDATE_MISSING_POLICY_SPEC},
+                    param_specs={
+                        "n_updates": ParamSpec(dtype=int, min=min_updates, default=5, param_role=ParamRole.HORIZON),
+                        "missing_policy": _UPDATE_MISSING_POLICY_SPEC,
+                    },
+                    panel_params=("x", "update_event"),
                 ),
                 "_calculate_series": _calculate_series,
                 "__module__": __name__,

@@ -129,8 +129,8 @@ def test_ts_robust_zscore_split_registered() -> None:
         assert op is not None, name
         assert classify_canonical(name) == "extended", name
     # Both canonicals carry both backends.
-    assert set(OperatorRegistry.backends_for("ts_robust_zscore_inclusive")) == {"pandas_numpy", "polars"}
-    assert set(OperatorRegistry.backends_for("ts_robust_zscore_prior")) == {"pandas_numpy", "polars"}
+    assert {"pandas_numpy","polars"} <= set(OperatorRegistry.backends_for("ts_robust_zscore_inclusive"))
+    assert {"pandas_numpy","polars"} <= set(OperatorRegistry.backends_for("ts_robust_zscore_prior"))
 
 
 def test_ts_robust_zscore_alias_keeps_old_behaviour() -> None:

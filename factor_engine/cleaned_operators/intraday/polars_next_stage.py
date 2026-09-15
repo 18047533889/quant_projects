@@ -13,9 +13,12 @@ from typing import Any
 import polars as pl
 
 from factor_engine.cleaned_operators.base_polars import OperatorMetadata, SeriesOperator, register_operator
+from factor_engine.cleaned_operators.base import ParamRole, ParamSpec
 
 _TIME_COLS = frozenset({"date", "timestamp", "time", "QuoteTime", "TradeDate"})
 _EPS = 1e-12
+_SESSION_TZ = "Asia/Shanghai"
+_TZ_SPEC = ParamSpec(dtype=str, default=None, searchable=False, param_role=ParamRole.POLICY)
 
 
 def _time_col(df: pl.DataFrame) -> str:
@@ -23,6 +26,15 @@ def _time_col(df: pl.DataFrame) -> str:
         if c in _TIME_COLS:
             return c
     return "date"
+
+
+def _session_tz_panel(df: pl.DataFrame, session_tz: str | None) -> pl.DataFrame:
+    tc = _time_col(df)
+    if getattr(df.schema[tc], "time_zone", None):
+        return df.with_columns(
+            pl.col(tc).dt.convert_time_zone(session_tz or _SESSION_TZ).dt.replace_time_zone(None).alias(tc)
+        )
+    return df
 
 
 def _melt(df: pl.DataFrame, value_name: str) -> pl.DataFrame:
@@ -45,7 +57,7 @@ def _pivot(df: pl.DataFrame, value: str) -> pl.DataFrame:
     return piv.fill_null(float("nan"))
 
 
-def _mk(canonical: str, description: str, params: list[str], fn):
+def _mk(canonical: str, description: str, params: list[str], fn, panel_params=None, scalar_params=None, param_specs=None):
     metadata = OperatorMetadata(
         name=canonical,
         category="intraday_microstructure",
@@ -53,6 +65,10 @@ def _mk(canonical: str, description: str, params: list[str], fn):
         param_names=params,
         return_type="series",
         tags=["polars", "intraday", "minute", "native", "typed_v2"],
+        panel_params=tuple(panel_params or ()),
+        panel_arity=len(panel_params) if panel_params else None,
+        scalar_params=tuple(scalar_params or ()),
+        param_specs=dict(param_specs or {}),
     )
 
     def _calculate_series(self, *args, **kwargs):
@@ -203,7 +219,7 @@ def _interval_ret(close: pl.DataFrame, start: int, end: int) -> pl.DataFrame:
     long = _melt(close, "close")
     long = long.with_columns(
         pl.col("ts").dt.date().alias("date"),
-        (pl.col("ts").dt.hour() * 60 + pl.col("ts").dt.minute()).alias("mod"),
+        (pl.col("ts").dt.hour().cast(pl.Int64) * 60 + pl.col("ts").dt.minute().cast(pl.Int64)).alias("mod"),
     )
     mask = (pl.col("mod") >= int(start)) & (pl.col("mod") <= int(end))
     seg = long.filter(mask).group_by(["date", "instrument"]).agg(
@@ -214,15 +230,15 @@ def _interval_ret(close: pl.DataFrame, start: int, end: int) -> pl.DataFrame:
     return _pivot(out, "v")
 
 
-_mk("intra_interval_return", "指定分钟区间收益（Polars）。", ["close", "start_minute", "end_minute"],
-   lambda close, start_minute=570, end_minute=900: _interval_ret(close, int(start_minute), int(end_minute)))
+_mk("intra_interval_return", "指定分钟区间收益（Polars）。", ["close", "start_minute", "end_minute", "session_tz"],
+   lambda close, start_minute=570, end_minute=900, session_tz=None: _interval_ret(_session_tz_panel(close, session_tz), int(start_minute), int(end_minute)), panel_params=("close",), scalar_params=("start_minute", "end_minute", "session_tz"), param_specs={"start_minute": ParamSpec(dtype=int, min=0, max=1440, default=570, param_role=ParamRole.STATE_THRESHOLD), "end_minute": ParamSpec(dtype=int, min=0, max=1440, default=900, param_role=ParamRole.STATE_THRESHOLD), "session_tz": _TZ_SPEC})
 
 
 def _interval_share(value: pl.DataFrame, start: int, end: int) -> pl.DataFrame:
     long = _melt(value, "value")
     long = long.with_columns(
         pl.col("ts").dt.date().alias("date"),
-        (pl.col("ts").dt.hour() * 60 + pl.col("ts").dt.minute()).alias("mod"),
+        (pl.col("ts").dt.hour().cast(pl.Int64) * 60 + pl.col("ts").dt.minute().cast(pl.Int64)).alias("mod"),
     )
     total = long.group_by(["date", "instrument"]).agg(pl.col("value").sum().alias("total"))
     mask = (pl.col("mod") >= int(start)) & (pl.col("mod") <= int(end))
@@ -232,10 +248,10 @@ def _interval_share(value: pl.DataFrame, start: int, end: int) -> pl.DataFrame:
     return _pivot(out, "v")
 
 
-_mk("intra_interval_volume_share", "区间成交量占比（Polars）。", ["volume", "start_minute", "end_minute"],
-   lambda volume, start_minute=570, end_minute=900: _interval_share(volume, int(start_minute), int(end_minute)))
-_mk("intra_interval_amount_share", "区间成交额占比（Polars）。", ["amount", "start_minute", "end_minute"],
-   lambda amount, start_minute=570, end_minute=900: _interval_share(amount, int(start_minute), int(end_minute)))
+_mk("intra_interval_volume_share", "区间成交量占比（Polars）。", ["volume", "start_minute", "end_minute", "session_tz"],
+   lambda volume, start_minute=570, end_minute=900, session_tz=None: _interval_share(_session_tz_panel(volume, session_tz), int(start_minute), int(end_minute)), panel_params=("volume",), scalar_params=("start_minute", "end_minute", "session_tz"), param_specs={"start_minute": ParamSpec(dtype=int, min=0, max=1440, default=570, param_role=ParamRole.STATE_THRESHOLD), "end_minute": ParamSpec(dtype=int, min=0, max=1440, default=900, param_role=ParamRole.STATE_THRESHOLD), "session_tz": _TZ_SPEC})
+_mk("intra_interval_amount_share", "区间成交额占比（Polars）。", ["amount", "start_minute", "end_minute", "session_tz"],
+   lambda amount, start_minute=570, end_minute=900, session_tz=None: _interval_share(_session_tz_panel(amount, session_tz), int(start_minute), int(end_minute)), panel_params=("amount",), scalar_params=("start_minute", "end_minute", "session_tz"), param_specs={"start_minute": ParamSpec(dtype=int, min=0, max=1440, default=570, param_role=ParamRole.STATE_THRESHOLD), "end_minute": ParamSpec(dtype=int, min=0, max=1440, default=900, param_role=ParamRole.STATE_THRESHOLD), "session_tz": _TZ_SPEC})
 
 
 # ---------------------------------------------------------------------------

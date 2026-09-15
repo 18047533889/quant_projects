@@ -46,11 +46,13 @@ from __future__ import annotations
 
 import copy
 import enum
-from dataclasses import dataclass, field
-from datetime import datetime
+import math
+from dataclasses import dataclass, field, replace
+from datetime import date, datetime
 from typing import Any, Mapping
 
-from ._contenthash import content_hash
+from ._contenthash import content_hash, content_hash_v2
+from .identities import deep_freeze
 from .rbac import SecurityClassification
 from .timing import TimingContract
 
@@ -95,11 +97,20 @@ class RetrainPolicy:
     max_changed_count: int = 2
 
     def __post_init__(self) -> None:
+        for name in ("retrain_on_added", "retrain_on_removed"):
+            if type(getattr(self, name)) is not bool:
+                raise TypeError(f"RetrainPolicy.{name} must be a bool")
+        if type(self.max_changed_ratio) not in (int, float):
+            raise TypeError("RetrainPolicy.max_changed_ratio must be a real number")
+        if isinstance(self.max_changed_ratio, float) and not math.isfinite(self.max_changed_ratio):
+            raise ValueError("RetrainPolicy.max_changed_ratio must be finite")
         if self.max_changed_ratio <= 0.0 or self.max_changed_ratio > 1.0:
             raise ValueError(
                 "RetrainPolicy.max_changed_ratio must be > 0.0 and <= 1.0, got "
                 f"{self.max_changed_ratio!r}"
             )
+        if type(self.max_changed_count) is not int:
+            raise TypeError("RetrainPolicy.max_changed_count must be an integer")
         if self.max_changed_count < 0:
             raise ValueError(
                 "RetrainPolicy.max_changed_count must be >= 0, got "
@@ -164,6 +175,14 @@ class FeatureSetDiffCategory(enum.Enum):
         """Default retrain decision (spec §18)."""
         code = self.retrain_reason_code
         return bool(code and code in _RETRAIN_TRIGGER_CODES)
+
+
+# These invalidations cannot be waived by membership thresholds or hidden by
+# the legacy single-category projection. Schema keeps its explicit policy.
+_MANDATORY_RETRAIN_CODES = frozenset({
+    "CHANGED_VERSION", "CHANGED_TREATMENT", "CHANGED_ORIENTATION",
+    "CHANGED_LABEL", "CHANGED_DATA_REVISION",
+})
 
 
 # Semantic-field -> granular reason code / change-kind map for per-member diffs.
@@ -231,13 +250,39 @@ class FeatureMemberRef:
     metadata: Mapping[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
+        if type(self.position) is not int:
+            raise TypeError("position must be an integer")
         if self.position < 0:
             raise ValueError("position must be >= 0")
+        for name in ("feature_name", "factor_definition_ref"):
+            if not isinstance(getattr(self, name), str):
+                raise TypeError(f"{name} must be a string")
+        for name in (
+            "raw_value_ref", "treatment_selection_ref", "treated_feature_ref",
+            "orientation", "dtype", "channel", "timing_ref",
+            "source_artifact_id", "availability_semantics",
+        ):
+            value = getattr(self, name)
+            if value is not None and not isinstance(value, str):
+                raise TypeError(f"{name} must be a string or None")
         if not self.feature_name:
             raise ValueError("feature_name is required")
         if not self.factor_definition_ref:
             raise ValueError("factor_definition_ref is required")
-        object.__setattr__(self, "metadata", copy.deepcopy(dict(self.metadata or {})))
+        classification = self.security_classification
+        if isinstance(classification, str):
+            try:
+                classification = SecurityClassification(classification)
+            except ValueError as exc:
+                raise ValueError("unknown security_classification") from exc
+            object.__setattr__(self, "security_classification", classification)
+        elif classification is not None and not isinstance(classification, SecurityClassification):
+            raise TypeError("security_classification must be a SecurityClassification, its value, or None")
+        if self.metadata is not None and not isinstance(self.metadata, Mapping):
+            raise TypeError("metadata must be a mapping or None")
+        metadata = {} if self.metadata is None else dict(self.metadata)
+        _validate_metadata_value(metadata)
+        object.__setattr__(self, "metadata", deep_freeze(metadata))
 
     # -- FactorValueRef-shaped provenance projection ------------------------ #
     @property
@@ -266,7 +311,7 @@ class FeatureMemberRef:
             "factor_value_id": self.factor_value_id,
             "factor_ids": list(self.factor_ids),
             "source_ref": self.source_ref,
-            "metadata": dict(self.metadata),
+            "metadata": _metadata_transport(self.metadata),
         }
         optional = {
             "position": self.position,
@@ -288,6 +333,34 @@ class FeatureMemberRef:
 # --------------------------------------------------------------------------- #
 
 
+def _validate_metadata_value(value: Any, depth: int = 0) -> None:
+    """Reject opaque mutable objects the recursive container freezer cannot seal."""
+    if depth > 64:
+        raise ValueError("feature metadata nesting exceeds 64 levels")
+    if isinstance(value, Mapping):
+        for key, item in value.items():
+            if not isinstance(key, str):
+                raise TypeError("feature metadata keys must be strings")
+            _validate_metadata_value(item, depth + 1)
+    elif isinstance(value, (tuple, list)):
+        for item in value:
+            _validate_metadata_value(item, depth + 1)
+    elif isinstance(value, enum.Enum):
+        if not isinstance(value.value, (str, int, float, bool, date, type(None))):
+            raise TypeError("feature metadata enum value must be an immutable scalar")
+    elif value is not None and not isinstance(value, (str, int, float, bool, date)):
+        raise TypeError("feature metadata requires immutable scalars or JSON-like containers")
+
+
+def _metadata_transport(value: Any) -> Any:
+    """Detached ordinary containers for transport, never the frozen internals."""
+    if isinstance(value, Mapping):
+        return {key: _metadata_transport(item) for key, item in value.items()}
+    if isinstance(value, (tuple, list)):
+        return [_metadata_transport(item) for item in value]
+    return copy.deepcopy(value)
+
+
 @dataclass(frozen=True)
 class FeatureSetVersion:
     """Versioned feature set with typed, ordered members (§5.5)."""
@@ -304,32 +377,40 @@ class FeatureSetVersion:
     created_at: datetime | None = None
 
     def __post_init__(self) -> None:
+        for name in ("feature_set_id", "version"):
+            if not isinstance(getattr(self, name), str):
+                raise TypeError(f"{name} must be a string")
+        for name in ("consumer_profile", "label_definition_ref", "data_revision_ref"):
+            value = getattr(self, name)
+            if value is not None and not isinstance(value, str):
+                raise TypeError(f"{name} must be a string or None")
         if not self.feature_set_id:
             raise ValueError("feature_set_id is required")
         if not self.version:
             raise ValueError("version is required")
-        if not self.schema_hash:
-            object.__setattr__(
-                self,
-                "schema_hash",
-                content_hash(
-                    self.feature_set_id,
-                    self.version,
-                    self.ordered_members,
-                ),
-            )
-        if not self.semantic_hash:
-            object.__setattr__(
-                self,
-                "semantic_hash",
-                content_hash(
-                    self.feature_set_id,
-                    self.version,
-                    self.ordered_members,
-                    self.source_library_versions,
-                    self.consumer_profile,
-                ),
-            )
+        if not isinstance(self.ordered_members, (tuple, list)) or any(
+            not isinstance(member, FeatureMemberRef) for member in self.ordered_members
+        ):
+            raise ValueError("ordered_members must contain FeatureMemberRef objects")
+        if not isinstance(self.source_library_versions, (tuple, list)) or any(
+            not isinstance(ref, str) or not ref for ref in self.source_library_versions
+        ):
+            raise ValueError("source_library_versions must contain nonempty strings")
+        object.__setattr__(self, "ordered_members", tuple(self.ordered_members))
+        object.__setattr__(self, "source_library_versions", tuple(self.source_library_versions))
+        # Preserve the historical v1 formula in this bounded integrity repair.
+        # Supplying a digest is not authority to bypass recomputation. Codec
+        # migration remains separate so existing valid generations retain IDs.
+        schema = content_hash(self.feature_set_id, self.version, self.ordered_members)
+        semantic = content_hash(self.feature_set_id, self.version, self.ordered_members,
+                                self.source_library_versions, self.consumer_profile)
+        for name, computed in (("schema_hash", schema), ("semantic_hash", semantic)):
+            supplied = getattr(self, name)
+            if not isinstance(supplied, str):
+                raise ValueError(f"{name} must be a string digest or empty string")
+            if supplied and supplied != computed:
+                raise ValueError(f"{name} does not match FeatureSetVersion content")
+            object.__setattr__(self, name, computed)
 
 
 @dataclass(frozen=True)
@@ -348,10 +429,14 @@ class FeatureSetArtifact:
     ordered_feature_manifest: tuple[str, ...] = ()
     created_at: datetime | None = None
     content_hash: str = ""
+    # None means unversioned construction: a supplied historical hash is v1;
+    # newly minted artifacts use v2. Serialized new artifacts carry this field.
+    hash_codec: str | None = None
 
     def recomputed_hash(self) -> str:
         """The authoritative hash over all semantic fields incl. ordering."""
-        return content_hash(
+        hasher = content_hash_v2 if self.hash_codec == "semantic-v2" else content_hash
+        return hasher(
             self.feature_set_id,
             self.feature_set_version,
             self.source_library_versions,
@@ -363,6 +448,19 @@ class FeatureSetArtifact:
             raise ValueError("feature_set_id is required")
         if not self.feature_set_version:
             raise ValueError("feature_set_version is required")
+        codec = self.hash_codec
+        if codec is None:
+            codec = "semantic-v1" if self.content_hash else "semantic-v2"
+        if codec not in {"semantic-v1", "semantic-v2"}:
+            raise ValueError("unknown FeatureSetArtifact hash codec")
+        object.__setattr__(self, "hash_codec", codec)
+        for name in ("source_library_versions", "ordered_feature_manifest"):
+            values = getattr(self, name)
+            if not isinstance(values, (list, tuple)) or any(
+                not isinstance(value, str) or not value for value in values
+            ):
+                raise ValueError(f"{name} must be a sequence of nonempty strings")
+            object.__setattr__(self, name, tuple(values))
         computed = self.recomputed_hash()
         if not self.content_hash:
             object.__setattr__(self, "content_hash", computed)
@@ -398,16 +496,29 @@ class FeatureMemberChange:
     after: Any = None
 
 
+def _index_members(
+    members: tuple[FeatureMemberRef, ...],
+) -> dict[tuple[str, str], FeatureMemberRef]:
+    indexed: dict[tuple[str, str], FeatureMemberRef] = {}
+    for member in members:
+        key = (member.feature_name, member.factor_definition_ref)
+        if key in indexed:
+            raise ValueError(f"duplicate feature member identity: {key!r}")
+        indexed[key] = member
+    return indexed
+
+
 def _member_changes(
     old: tuple[FeatureMemberRef, ...],
     new: tuple[FeatureMemberRef, ...],
 ) -> tuple[FeatureMemberChange, ...]:
-    """Per-member semantic diff for same-position same-identity member pairs."""
+    """Compare retained identities in new order, independent of position."""
     changes: list[FeatureMemberChange] = []
-    for a, b in zip(old, new):
-        if a.feature_name != b.feature_name or a.factor_definition_ref != b.factor_definition_ref:
-            # identity differs — that is a membership change, not a member
-            # semantic change; the caller decides the category.
+    old_by_id = _index_members(old)
+    for key, b in _index_members(new).items():
+        a = old_by_id.get(key)
+        if a is None:
+            # New identities belong to the membership ledger.
             continue
         for attr, (kind, code) in _SEMANTIC_FIELD_KINDS.items():
             if getattr(a, attr) != getattr(b, attr):
@@ -421,8 +532,10 @@ def _member_changes(
                         after=getattr(b, attr),
                     )
                 )
-        src_before = a.raw_value_ref or a.source_artifact_id
-        src_after = b.raw_value_ref or b.source_artifact_id
+        # Both components define provenance. Neither a truthy fallback nor
+        # the display-only source_ref projection is an injective identity.
+        src_before = (a.raw_value_ref, a.source_artifact_id)
+        src_after = (b.raw_value_ref, b.source_artifact_id)
         if src_before != src_after:
             changes.append(
                 FeatureMemberChange(
@@ -442,8 +555,8 @@ def _membership_ledger(
     new: tuple[FeatureMemberRef, ...],
 ) -> tuple[tuple[FeatureMemberRef, ...], tuple[FeatureMemberRef, ...]]:
     """Position-independent added/removed members (by feature identity)."""
-    old_by_id = {(m.feature_name, m.factor_definition_ref): m for m in old}
-    new_by_id = {(m.feature_name, m.factor_definition_ref): m for m in new}
+    old_by_id = _index_members(old)
+    new_by_id = _index_members(new)
     added = tuple(m for key, m in new_by_id.items() if key not in old_by_id)
     removed = tuple(m for key, m in old_by_id.items() if key not in new_by_id)
     return added, removed
@@ -557,7 +670,9 @@ class FeatureSetDiff:
 
     @property
     def retrain_required(self) -> bool:
-        return self.category.retrain_required
+        return self.category.retrain_required or bool(
+            self.retrain_reason_codes & _MANDATORY_RETRAIN_CODES
+        )
 
     @property
     def summary(self) -> FeatureSetDiffSummary:
@@ -671,7 +786,7 @@ def compute_feature_set_content_hash(ordered_features: tuple[FeatureMemberRef, .
     return content_hash(ordered_features)
 
 
-def classify_feature_set_diff(
+def _classify_feature_set_diff(
     old: FeatureSetVersion,
     new: FeatureSetVersion,
 ) -> FeatureSetDiff:
@@ -743,11 +858,13 @@ def classify_feature_set_diff(
         return FeatureSetDiff._assemble(
             FeatureSetDiffCategory.LABEL_CHANGE,
             reason="label definition changed",
+            changed_members=changes,
         )
     if old.data_revision_ref != new.data_revision_ref:
         return FeatureSetDiff._assemble(
             FeatureSetDiffCategory.DATA_REVISION,
             reason="data revision changed",
+            changed_members=changes,
         )
 
     # Remaining differences are metadata / evidence only. Evidence is carried by
@@ -778,6 +895,24 @@ def classify_feature_set_diff(
 # --------------------------------------------------------------------------- #
 # Retrain decision with injectable policy
 # --------------------------------------------------------------------------- #
+
+
+def classify_feature_set_diff(
+    old: FeatureSetVersion,
+    new: FeatureSetVersion,
+) -> FeatureSetDiff:
+    """Preserve the legacy category without masking global invalidations.
+
+    Label and data-revision changes are independent of membership/schema
+    changes. Capture both before any policy uses the first-match category.
+    """
+    diff = _classify_feature_set_diff(old, new)
+    codes = set(diff.retrain_reason_codes)
+    if old.label_definition_ref != new.label_definition_ref:
+        codes.add("CHANGED_LABEL")
+    if old.data_revision_ref != new.data_revision_ref:
+        codes.add("CHANGED_DATA_REVISION")
+    return replace(diff, retrain_reason_codes=frozenset(codes))
 
 
 def _over_threshold(diff: FeatureSetDiff, policy: RetrainPolicy) -> bool:
@@ -867,7 +1002,11 @@ def retrain_required_for_diff(
     # ---- policy decision ---------------------------------------------------- #
     category = diff.category
 
-    if category is FeatureSetDiffCategory.FEATURE_TRANSFORM_CHANGE or (
+    if diff.retrain_reason_codes & _MANDATORY_RETRAIN_CODES:
+        # Mandatory invalidations cannot be waived by an add/schema policy or
+        # hidden behind the legacy single-category projection.
+        retrain = True
+    elif category is FeatureSetDiffCategory.FEATURE_TRANSFORM_CHANGE or (
         category is FeatureSetDiffCategory.FEATURE_ORIENTATION_CHANGE
     ):
         retrain = True

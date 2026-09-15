@@ -229,7 +229,7 @@ def test_ts_best_lag_corr_raw_basic() -> None:
 
     op = _op("ts_best_lag_corr_raw")
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, x.shift(1).fillna(0.0))
         assert isinstance(result, pd.DataFrame)
         assert result.shape == x.shape
     except Exception as e:
@@ -243,7 +243,7 @@ def test_ts_best_lag_corr_raw_handles_nans() -> None:
 
     op = _op("ts_best_lag_corr_raw")
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, x.shift(1).fillna(0.0))
         assert isinstance(result, pd.DataFrame)
     except Exception as e:
         pytest.fail(f"NaN test failed: {e}")
@@ -257,11 +257,11 @@ def test_ts_best_lag_corr_raw_deterministic() -> None:
 
     op = _op("ts_best_lag_corr_raw")
     try:
-        result1 = op.calculate(x)
-        result2 = op.calculate(x)
+        result1 = op.calculate(x, x.shift(1).fillna(0.0))
+        result2 = op.calculate(x, x.shift(1).fillna(0.0))
         pd.testing.assert_frame_equal(result1, result2, check_exact=False, rtol=1e-10)
-    except Exception:
-        pass  # Some operators may not be deterministic
+    except Exception as e:
+        pytest.fail(f"Determinism test failed: {e}")
 
 
 # ---------------------------------------------------------------------------
@@ -276,7 +276,7 @@ def test_ts_best_lag_corr_excess_basic() -> None:
 
     op = _op("ts_best_lag_corr_excess")
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, x.shift(1).fillna(0.0))
         assert isinstance(result, pd.DataFrame)
         assert result.shape == x.shape
     except Exception as e:
@@ -290,7 +290,7 @@ def test_ts_best_lag_corr_excess_handles_nans() -> None:
 
     op = _op("ts_best_lag_corr_excess")
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, x.shift(1).fillna(0.0))
         assert isinstance(result, pd.DataFrame)
     except Exception as e:
         pytest.fail(f"NaN test failed: {e}")
@@ -304,11 +304,11 @@ def test_ts_best_lag_corr_excess_deterministic() -> None:
 
     op = _op("ts_best_lag_corr_excess")
     try:
-        result1 = op.calculate(x)
-        result2 = op.calculate(x)
+        result1 = op.calculate(x, x.shift(1).fillna(0.0))
+        result2 = op.calculate(x, x.shift(1).fillna(0.0))
         pd.testing.assert_frame_equal(result1, result2, check_exact=False, rtol=1e-10)
-    except Exception:
-        pass  # Some operators may not be deterministic
+    except Exception as e:
+        pytest.fail(f"Determinism test failed: {e}")
 
 
 # ---------------------------------------------------------------------------
@@ -323,7 +323,7 @@ def test_ts_price_delay_basic() -> None:
 
     op = _op("ts_price_delay")
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, x.shift(1).fillna(0.0))
         assert isinstance(result, pd.DataFrame)
         assert result.shape == x.shape
     except Exception as e:
@@ -337,7 +337,7 @@ def test_ts_price_delay_handles_nans() -> None:
 
     op = _op("ts_price_delay")
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, x.shift(1).fillna(0.0))
         assert isinstance(result, pd.DataFrame)
     except Exception as e:
         pytest.fail(f"NaN test failed: {e}")
@@ -351,11 +351,11 @@ def test_ts_price_delay_deterministic() -> None:
 
     op = _op("ts_price_delay")
     try:
-        result1 = op.calculate(x)
-        result2 = op.calculate(x)
+        result1 = op.calculate(x, x.shift(1).fillna(0.0))
+        result2 = op.calculate(x, x.shift(1).fillna(0.0))
         pd.testing.assert_frame_equal(result1, result2, check_exact=False, rtol=1e-10)
-    except Exception:
-        pass  # Some operators may not be deterministic
+    except Exception as e:
+        pytest.fail(f"Determinism test failed: {e}")
 
 
 

@@ -288,7 +288,8 @@ def state_transition_surprise(state, window):
         var = pairs * p * (1.0 - p)
         if not np.isfinite(var) or var <= _EPS:
             return np.nan
-        transitions = float(np.count_nonzero(np.diff(chunk) != 0.0))
+        # State labels are identities, not quantities to subtract (which can overflow).
+        transitions = float(np.count_nonzero(chunk[1:] != chunk[:-1]))
         expect = pairs * p
         return (transitions - expect) / float(np.sqrt(var))
 
@@ -340,8 +341,9 @@ def _register(name, params, fn, desc, *, param_specs=None, relational_specs=None
         category="technical_signal",
         description=desc,
         param_names=list(params),
+        panel_params=(params[0],),scalar_params=tuple(params[1:]),
         return_type="series",
-        tags=["pit_safe", "causal", "production_extension"],
+        tags=["pit_safe", "causal", "production_extension", "validation_scope:atomic_input_panel"],
         param_specs=dict(param_specs or {}),
         relational_specs=list(relational_specs or []),
     )
@@ -352,7 +354,7 @@ def _register(name, params, fn, desc, *, param_specs=None, relational_specs=None
     cls = type(
         f"EventStateV2_{name}",
         (SeriesOperator,),
-        {"metadata": meta, "_calculate_series": _calculate_series, "__module__": __name__},
+        {"metadata": meta, "_calculate_series": _calculate_series, "_contract_callable": staticmethod(fn), "__module__": __name__},
     )
     register_operator(
         name=name,
@@ -363,6 +365,14 @@ def _register(name, params, fn, desc, *, param_specs=None, relational_specs=None
         backend="pandas_numpy",
         status="production",
     )(cls)
+    try:
+        import polars  # optional backend; Pandas registration remains usable without it
+    except ImportError:
+        return
+    from factor_engine.cleaned_operators.common.event_state_v2_polars import make
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
+    OperatorRegistry.register(make(name,meta,fn),canonical=name,backend="polars",
+        source="event_state_v2_numpy",status="implemented",backend_explicit=True)
 
 
 for _name, _params, _fn, _desc in _SPECS:

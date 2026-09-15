@@ -100,12 +100,12 @@ _EVT_RELATIONAL_SPECS = [
 # input.  Each family has ONE feasibility function, used by both the declared
 # contract and the runtime guard.
 _ALLAN_FACTOR_SPEC = {
-    "window": ParamSpec(dtype=int, min=8),
-    "scale": ParamSpec(dtype=int, min=1, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+    "window": ParamSpec(dtype=int, min=8, default=120, history_semantics="max_rows", param_role=ParamRole.HORIZON),
+    "scale": ParamSpec(dtype=int, min=1, default=8, param_role=ParamRole.ESTIMATOR_RESOLUTION),
 }
 _ALLAN_SCALING_SPEC = {
-    "window": ParamSpec(dtype=int, min=12),
-    "max_scale": ParamSpec(dtype=int, min=4, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+    "window": ParamSpec(dtype=int, min=12, default=120, history_semantics="max_rows", param_role=ParamRole.HORIZON),
+    "max_scale": ParamSpec(dtype=int, min=4, default=16, param_role=ParamRole.ESTIMATOR_RESOLUTION),
 }
 _ALLAN_FACTOR_RELATIONAL_SPECS = [
     RelationalParamSpec(
@@ -298,14 +298,14 @@ def _allan_scaling(v: np.ndarray, max_scale: int) -> tuple[float | None, float |
     return slope, float(np.mean(ys))
 
 
-def _ts_event_allan_factor(x: pd.DataFrame, window: int = 120, scale: int = 8) -> pd.DataFrame:
+def _ts_event_allan_factor(event: pd.DataFrame, window: int = 120, scale: int = 8) -> pd.DataFrame:
     if int(window) < 8:
         raise ValueError("event_allan_factor requires window >= 8")
     if int(scale) < 1:
         raise ValueError("event_allan_factor requires scale >= 1")
-    rows, cols = x.shape
+    rows, cols = event.shape
     w = int(window)
-    arr = x.to_numpy(dtype=float)
+    arr = event.to_numpy(dtype=float)
     out = np.full((rows, cols), np.nan, dtype=float)
     for c in range(cols):
         col = arr[:, c]
@@ -321,15 +321,15 @@ def _ts_event_allan_factor(x: pd.DataFrame, window: int = 120, scale: int = 8) -
             val = _allan_factor_single(v, int(scale))
             if np.isfinite(val):
                 out[r, c] = val
-    return frame_like(x, out)
+    return frame_like(event, out)
 
 
-def _ts_event_allan_scaling_slope(x: pd.DataFrame, window: int = 120, max_scale: int = 16) -> pd.DataFrame:
-    if int(window) < 16:
-        raise ValueError("event_allan_scaling_slope requires window >= 16")
-    rows, cols = x.shape
+def _ts_event_allan_scaling_slope(event: pd.DataFrame, window: int = 120, max_scale: int = 16) -> pd.DataFrame:
+    if int(window) < 12:
+        raise ValueError("event_allan_scaling_slope requires window >= 12")
+    rows, cols = event.shape
     w = int(window)
-    arr = x.to_numpy(dtype=float)
+    arr = event.to_numpy(dtype=float)
     out = np.full((rows, cols), np.nan, dtype=float)
     for c in range(cols):
         col = arr[:, c]
@@ -344,15 +344,15 @@ def _ts_event_allan_scaling_slope(x: pd.DataFrame, window: int = 120, max_scale:
             slope, _ = _allan_scaling(v, int(max_scale))
             if slope is not None and np.isfinite(slope):
                 out[r, c] = slope
-    return frame_like(x, out)
+    return frame_like(event, out)
 
 
-def _ts_event_allan_log_mean(x: pd.DataFrame, window: int = 120, max_scale: int = 16) -> pd.DataFrame:
-    if int(window) < 16:
-        raise ValueError("event_allan_log_mean requires window >= 16")
-    rows, cols = x.shape
+def _ts_event_allan_log_mean(event: pd.DataFrame, window: int = 120, max_scale: int = 16) -> pd.DataFrame:
+    if int(window) < 12:
+        raise ValueError("event_allan_log_mean requires window >= 12")
+    rows, cols = event.shape
     w = int(window)
-    arr = x.to_numpy(dtype=float)
+    arr = event.to_numpy(dtype=float)
     out = np.full((rows, cols), np.nan, dtype=float)
     for c in range(cols):
         col = arr[:, c]
@@ -367,7 +367,7 @@ def _ts_event_allan_log_mean(x: pd.DataFrame, window: int = 120, max_scale: int 
             _, log_mean = _allan_scaling(v, int(max_scale))
             if log_mean is not None and np.isfinite(log_mean):
                 out[r, c] = log_mean
-    return frame_like(x, out)
+    return frame_like(event, out)
 
 
 _SPECS: dict[str, dict[str, Any]] = {
@@ -400,10 +400,10 @@ _SPECS: dict[str, dict[str, Any]] = {
         "params": ["event", "window", "scale"],
         "category": "event_counting",
         "domain": "event",
-        "unit": "level",
+        "unit": "dimensionless",
         "cost": 3,
         "tags_extra": ["state"],
-        "output_unit": "level",
+        "output_unit": "dimensionless",
         "param_specs": _ALLAN_FACTOR_SPEC,
         "relational_specs": _ALLAN_FACTOR_RELATIONAL_SPECS,
     },
@@ -412,10 +412,10 @@ _SPECS: dict[str, dict[str, Any]] = {
         "params": ["event", "window", "max_scale"],
         "category": "event_counting",
         "domain": "event",
-        "unit": "level",
+        "unit": "dimensionless",
         "cost": 4,
         "tags_extra": ["state"],
-        "output_unit": "level",
+        "output_unit": "dimensionless",
         "param_specs": _ALLAN_SCALING_SPEC,
     },
     "event_allan_log_mean": {
@@ -423,10 +423,10 @@ _SPECS: dict[str, dict[str, Any]] = {
         "params": ["event", "window", "max_scale"],
         "category": "event_counting",
         "domain": "event",
-        "unit": "level",
+        "unit": "dimensionless",
         "cost": 3,
         "tags_extra": ["state"],
-        "output_unit": "level",
+        "output_unit": "dimensionless",
         "param_specs": _ALLAN_SCALING_SPEC,
     },
 }
@@ -447,6 +447,7 @@ def _register() -> None:
             output_unit=spec.get("output_unit"),
             param_specs=spec.get("param_specs"),
             relational_specs=spec.get("relational_specs"),
+            panel_params=("event",) if canonical.startswith("event_allan_") else ("x",),
         )
     union_extended(*_SPECS.keys())
 

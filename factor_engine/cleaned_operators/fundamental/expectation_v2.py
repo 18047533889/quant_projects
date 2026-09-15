@@ -2,12 +2,19 @@
 """Generic PIT-aware actual/expectation and estimate-revision operators."""
 from __future__ import annotations
 
+import inspect
 from typing import Iterable
 
 import numpy as np
 import pandas as pd
 
-from factor_engine.cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
+from factor_engine.cleaned_operators.base import (
+    OperatorMetadata,
+    ParamRole,
+    ParamSpec,
+    SeriesOperator,
+    register_operator,
+)
 from factor_engine.cleaned_operators.fundamental.transforms_v2 import (
     _pos_int,
     _value_streak_span,
@@ -289,11 +296,31 @@ def _register(
     description: str,
     extra_tags: Iterable[str] = (),
 ) -> None:
+    params = list(params)
+    signature = inspect.signature(function)
+    scalar_specs: dict[str, ParamSpec] = {}
+    for parameter_name in ("window_days", "periods", "max_days", "max_periods"):
+        if parameter_name in params:
+            default = signature.parameters[parameter_name].default
+            minimum = {
+                ("fin_surprise_zscore", "window_days"): 2,
+                ("fin_surprise_event_zscore", "periods"): 3,
+                ("fin_surprise_event_percentile", "periods"): 2,
+            }.get((name, parameter_name), 1)
+            scalar_specs[parameter_name] = ParamSpec(
+                dtype=int,
+                min=minimum,
+                default=default,
+                param_role=ParamRole.HORIZON,
+            )
+    panel_params = tuple(param for param in params if param not in scalar_specs)
     metadata = OperatorMetadata(
         name=name,
         category="fundamental_period",
         description=description,
-        param_names=list(params),
+        param_names=params,
+        panel_params=panel_params,
+        param_specs=scalar_specs,
         return_type="series",
         tags=[
             "fundamental",

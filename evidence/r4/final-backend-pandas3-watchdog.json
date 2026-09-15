@@ -1,0 +1,1 @@
+{"command": ["/usr/bin/python3", "-m", "pytest", "tests/backend_parity", "-q", "--tb=short", "--show-capture=no", "--junitxml=evidence/r4/final-backend-pandas3.xml"], "returncode": 1, "sampled_peak_family_rss_bytes": 663126016, "sampling_seconds": 0.1, "seconds": 342.2541245641187, "test_guard_reason": null, "hard_memory_cap": false}

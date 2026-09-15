@@ -1,0 +1,1 @@
+{"command": [".venv/bin/python", "-m", "pytest", "factor_engine/tests/backend_parity/test_ts_wave3_parity.py", "-k", "sql_triple", "-q", "--tb=short", "--show-capture=no"], "returncode": 1, "sampled_peak_family_rss_bytes": 523415552, "sampling_seconds": 0.1, "seconds": 53.893529559951276, "test_guard_reason": null, "hard_memory_cap": false}

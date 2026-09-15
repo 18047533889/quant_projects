@@ -1,0 +1,1 @@
+{"command": [".venv/bin/python", "-m", "pytest", "factor_engine/tests/runtime/test_r4_manifest_rejection_edges.py", "-k", "invalid_unicode or float_range", "-q", "--tb=short", "--show-capture=no"], "returncode": 1, "sampled_peak_family_rss_bytes": 787746816, "sampling_seconds": 0.1, "seconds": 50.53535283799283, "test_guard_reason": null, "hard_memory_cap": false}

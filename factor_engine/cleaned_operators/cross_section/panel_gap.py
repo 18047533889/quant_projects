@@ -22,7 +22,9 @@ import pandas as pd
 
 from factor_engine.cleaned_operators.base import (
     OperatorMetadata,
+    ParamRole,
     ParamSpec,
+    RelationalParamSpec,
     SeriesOperator,
     register_operator,
 )
@@ -31,12 +33,12 @@ _EPS = 1e-12
 _CANONICALS: list[str] = []
 
 _INT_SPECS: dict[str, ParamSpec] = {
-    "window": ParamSpec(dtype=int, min=2),
-    "min_periods": ParamSpec(dtype=int, min=2),
-    "min_history": ParamSpec(dtype=int, min=2),
-    "refresh_freq": ParamSpec(dtype=int, min=1),
-    "clusters": ParamSpec(dtype=int, min=2),
-    "lag": ParamSpec(dtype=int, min=1),
+    "window": ParamSpec(dtype=int, min=2, param_role=ParamRole.HORIZON),
+    "min_periods": ParamSpec(dtype=int, min=2, searchable=False, param_role=ParamRole.SUPPORT_POLICY),
+    "min_history": ParamSpec(dtype=int, min=2, searchable=False, param_role=ParamRole.SUPPORT_POLICY),
+    "refresh_freq": ParamSpec(dtype=int, min=1, searchable=False, param_role=ParamRole.POLICY),
+    "clusters": ParamSpec(dtype=int, min=2, searchable=False, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+    "lag": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
 }
 
 
@@ -250,6 +252,22 @@ class PanelFactorPocketStrength(SeriesOperator):
         ["ret", "factor", "window", "min_periods", "threshold"],
         unit="ratio",
     )
+    metadata.param_specs = {
+        **metadata.param_specs,
+        "threshold": ParamSpec(
+            dtype=float,
+            min=np.nextafter(0.0, 1.0),
+            max=np.nextafter(1.0, 0.0),
+            default=0.5,
+            searchable=False,
+            param_role=ParamRole.POLICY,
+        ),
+    }
+    metadata.panel_params = ("ret", "factor")
+    metadata.scalar_params = ("window", "min_periods", "threshold")
+    metadata.relational_specs = [
+        RelationalParamSpec("min_periods <= window", "min_periods must be <= window")
+    ]
 
     def _calculate_series(
         self,

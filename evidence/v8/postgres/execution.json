@@ -1,0 +1,8 @@
+{
+  "returncode": 0,
+  "temporary_cluster": "/tmp/quant-v8-pg-g18_e06f",
+  "server_stopped": true,
+  "tcp_listener": false,
+  "driver": "psycopg2-binary 2.9.10 isolated target",
+  "production_database_accessed": false
+}

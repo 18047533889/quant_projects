@@ -49,14 +49,14 @@ def _run(op, *frames, **kw):
     ("ts_endpoint_deviation", dict(window=5), ([1, 2, 3, 4, 5],), [np.nan, np.nan, 0.0, 0.0, 0.0], 0),
     ("ts_mass_concentration", dict(window=4), ([1, 1, 1, 1],), [np.nan, 0.0, 0.0, 0.0], 1e-6),
     # ---- distribution ----
-    ("ts_location_shift", dict(recent_window=3, old_window=3, min_periods=2), ([1] * 8,), [np.nan] * 5 + [0.0, 0.0, 0.0], 1e-6),
-    ("ts_scale_shift", dict(recent_window=3, old_window=3, min_periods=2), ([1] * 8,), [np.nan] * 5 + [0.0, 0.0, 0.0], 1e-6),
+    ("ts_location_shift", dict(recent_window=3, old_window=3, min_periods=2), ([1] * 8,), [np.nan] * 8, 1e-6),
+    ("ts_scale_shift", dict(recent_window=3, old_window=3, min_periods=2), ([1] * 8,), [np.nan] * 8, 1e-6),
     ("ts_ks_shift", dict(recent_window=3, old_window=3, min_periods=2), ([1] * 8,), [np.nan] * 5 + [0.0, 0.0, 0.0], 1e-6),
     ("ts_tail_imbalance", dict(window=8, k=1.0, min_periods=4), ([1, 2, 3, 4, 5, 6, 7, 8],), [np.nan, np.nan, np.nan, 0.0, 0.0, 0.0, 0.0, 0.0], 1e-6),
     # ---- volatility structure ----
     ("ts_semivariance_balance", dict(window=4, min_periods=2), ([0.01, 0.02, 0.03, 0.01],), [np.nan, 1.0, 1.0, 1.0], 1e-6),
     ("ts_realized_quarticity", dict(window=5, min_periods=3), ([0.01] * 5,), [np.nan, np.nan, 1 / 3, 1 / 3, 1 / 3], 1e-6),
-    ("ts_vol_term_structure", dict(short_window=3, long_window=5), ([0.01] * 8,), [np.nan, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], 1e-6),
+    ("ts_vol_term_structure", dict(short_window=3, long_window=5), ([0.01] * 8,), [np.nan] * 8, 1e-6),
     ("ts_sign_persistence", dict(window=6, min_periods=3), ([1, -1, 2, -2, 3, -3],), [np.nan, np.nan, np.nan, -1.0, -1.0, -1.0], 1e-6),
     ("ts_vol_clustering", dict(window=3, min_periods=3), ([0.01, 0.02, 0.03],), [np.nan, np.nan, np.nan], 1e-6),
     ("ts_jump_bipower_proxy", dict(window=5, min_periods=3), ([0.01] * 5,), [np.nan, np.nan, 0.0, 0.0, 0.0], 1e-6),

@@ -30,7 +30,13 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from factor_engine.cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
+from factor_engine.cleaned_operators.base import (
+    OperatorMetadata,
+    ParamRole,
+    ParamSpec,
+    SeriesOperator,
+    register_operator,
+)
 
 try:
     import polars as pl
@@ -54,6 +60,20 @@ def _metadata() -> OperatorMetadata:
             "domain:intraday_clock", "unit:passthrough", "cost:4",
             "min_periods:1",
         ],
+        panel_params=("x",),
+        scalar_params=("lag", "clock_unit"),
+        param_specs={
+            "lag": ParamSpec(
+                dtype=int, min=0, default=1, param_role=ParamRole.HORIZON
+            ),
+            "clock_unit": ParamSpec(
+                dtype=str,
+                choices=("minute_of_day", "slot"),
+                searchable=False,
+                default="minute_of_day",
+                param_role=ParamRole.POLICY,
+            ),
+        },
     )
 
 

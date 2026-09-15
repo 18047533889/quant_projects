@@ -5,13 +5,37 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from factor_engine.cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
+from factor_engine.cleaned_operators.base import (
+    OperatorMetadata,
+    ParamRole,
+    ParamSpec,
+    SeriesOperator,
+    register_operator,
+)
+from factor_engine.market.price_basis import validate_limit_ops_price_basis
+from factor_engine.market.price_grid import price_grid_for_market
+
+
+_TICK_TOLERANCE_SPEC = ParamSpec(
+    dtype=float,
+    min=0.0,
+    default=0.005,
+    searchable=False,
+    param_role=ParamRole.NUMERICAL,
+)
 
 
 def _safe_div(num, den) -> pd.DataFrame:
     denominator = den.replace(0, np.nan) if hasattr(den, "replace") else den
     out = num / denominator
     return out.replace([np.inf, -np.inf], np.nan)
+
+
+def _tick_tolerance(value, market=None) -> float:
+    tolerance = float(value)
+    if not np.isfinite(tolerance) or tolerance < 0:
+        raise ValueError("tick_tolerance must be finite and non-negative")
+    return price_grid_for_market(market or "ashare").validate_tick_tolerance(tolerance)
 
 
 def _metadata(name: str, description: str, params: list[str], *, domain: str, unit: str) -> OperatorMetadata:
@@ -72,26 +96,42 @@ class BookToPrice(_RatioOp):
 @register_operator(name="float_share_ratio", category="ashare", business_category="capital_structure", canonical="float_share_ratio", source="ashare.ops", status="experimental")
 class FloatShareRatio(_RatioOp):
     metadata = _metadata("float_share_ratio", "流通股本占总股本比例。", ["float_shares", "total_shares"], domain="capital", unit="ratio")
+    metadata.panel_params = ("float_shares", "total_shares")
+    metadata.panel_arity = 2
+    metadata.scalar_params = ()
+    metadata.param_specs = {}
 
 
 @register_operator(name="free_float_share_ratio", category="ashare", business_category="capital_structure", canonical="free_float_share_ratio", source="ashare.ops", status="experimental")
 class FreeFloatShareRatio(_RatioOp):
     metadata = _metadata("free_float_share_ratio", "自由流通股本占总股本比例。", ["free_float_shares", "total_shares"], domain="capital", unit="ratio")
+    metadata.panel_params = ("free_float_shares", "total_shares")
+    metadata.panel_arity = 2
+    metadata.scalar_params = ()
+    metadata.param_specs = {}
 
 
 @register_operator(name="true_turnover_rate", category="ashare", business_category="liquidity", canonical="true_turnover_rate", source="ashare.ops", status="experimental")
 class TrueTurnoverRate(_RatioOp):
     metadata = _metadata("true_turnover_rate", "真实换手率：成交量 / 自由流通股本。", ["volume", "free_float_shares"], domain="liquidity", unit="ratio")
+    metadata.panel_params = ("volume", "free_float_shares")
+    metadata.panel_arity = 2
+    metadata.scalar_params = ()
+    metadata.param_specs = {}
 
 
 @register_operator(name="limit_up_close", category="ashare", business_category="trading_state", canonical="limit_up_close", source="ashare.ops", status="experimental")
 class LimitUpClose(SeriesOperator):
     metadata = _metadata("limit_up_close", "收盘价在 tick 容差内达到实际涨停价。", ["close", "upper_limit", "tick_tolerance"], domain="trading_state", unit="boolean")
+    metadata.panel_params = ("close", "upper_limit")
+    metadata.panel_arity = 2
+    metadata.scalar_params = ("tick_tolerance",)
+    metadata.param_specs = {"tick_tolerance": _TICK_TOLERANCE_SPEC}
 
-    def _calculate_series(self, close, upper_limit, tick_tolerance=0.005, **kwargs):
-        tolerance = float(tick_tolerance)
-        if tolerance < 0:
-            raise ValueError("tick_tolerance must be non-negative")
+    def _calculate_series(self, close, upper_limit, tick_tolerance=0.005, price_basis=None, market=None, **kwargs):
+        if price_basis is not None:
+            validate_limit_ops_price_basis(price_basis)
+        tolerance = _tick_tolerance(tick_tolerance, market)
         valid = close.notna() & upper_limit.notna()
         return (close >= upper_limit - tolerance).astype(float).where(valid)
 
@@ -99,16 +139,24 @@ class LimitUpClose(SeriesOperator):
 @register_operator(name="limit_up_state", category="ashare", business_category="trading_state", canonical="limit_up_close", source="ashare.ops", status="deprecated")
 class LimitUpState(LimitUpClose):
     metadata = _metadata("limit_up_state", "Deprecated alias of limit_up_close.", ["close", "upper_limit", "tick_tolerance"], domain="trading_state", unit="boolean")
+    metadata.panel_params = ("close", "upper_limit")
+    metadata.panel_arity = 2
+    metadata.scalar_params = ("tick_tolerance",)
+    metadata.param_specs = {"tick_tolerance": _TICK_TOLERANCE_SPEC}
 
 
 @register_operator(name="limit_down_close", category="ashare", business_category="trading_state", canonical="limit_down_close", source="ashare.ops", status="experimental")
 class LimitDownClose(SeriesOperator):
     metadata = _metadata("limit_down_close", "收盘价在 tick 容差内达到实际跌停价。", ["close", "lower_limit", "tick_tolerance"], domain="trading_state", unit="boolean")
+    metadata.panel_params = ("close", "lower_limit")
+    metadata.panel_arity = 2
+    metadata.scalar_params = ("tick_tolerance",)
+    metadata.param_specs = {"tick_tolerance": _TICK_TOLERANCE_SPEC}
 
-    def _calculate_series(self, close, lower_limit, tick_tolerance=0.005, **kwargs):
-        tolerance = float(tick_tolerance)
-        if tolerance < 0:
-            raise ValueError("tick_tolerance must be non-negative")
+    def _calculate_series(self, close, lower_limit, tick_tolerance=0.005, price_basis=None, market=None, **kwargs):
+        if price_basis is not None:
+            validate_limit_ops_price_basis(price_basis)
+        tolerance = _tick_tolerance(tick_tolerance, market)
         valid = close.notna() & lower_limit.notna()
         return (close <= lower_limit + tolerance).astype(float).where(valid)
 
@@ -116,6 +164,10 @@ class LimitDownClose(SeriesOperator):
 @register_operator(name="limit_down_state", category="ashare", business_category="trading_state", canonical="limit_down_close", source="ashare.ops", status="deprecated")
 class LimitDownState(LimitDownClose):
     metadata = _metadata("limit_down_state", "Deprecated alias of limit_down_close.", ["close", "lower_limit", "tick_tolerance"], domain="trading_state", unit="boolean")
+    metadata.panel_params = ("close", "lower_limit")
+    metadata.panel_arity = 2
+    metadata.scalar_params = ("tick_tolerance",)
+    metadata.param_specs = {"tick_tolerance": _TICK_TOLERANCE_SPEC}
 
 
 @register_operator(name="tradable_state", category="ashare", business_category="trading_state", canonical="tradable_state", source="ashare.ops", status="experimental")
@@ -139,3 +191,7 @@ class BenchmarkExcessReturn(SeriesOperator):
 @register_operator(name="benchmark_relative_price", category="ashare", business_category="benchmark_relative", canonical="benchmark_relative_price", source="ashare.ops", status="experimental")
 class BenchmarkRelativePrice(_RatioOp):
     metadata = _metadata("benchmark_relative_price", "个股价格相对基准点位。", ["price", "benchmark_price"], domain="benchmark", unit="ratio")
+    metadata.panel_params = ("price", "benchmark_price")
+    metadata.panel_arity = 2
+    metadata.scalar_params = ()
+    metadata.param_specs = {}

@@ -26,14 +26,14 @@ def _loaded():
 def test_ts_sharpe_insufficient_window(_loaded):
     op = OperatorRegistry.get("ts_sharpe")
     ret = pd.DataFrame({"A": [0.01, -0.02, 0.015]})
-    out = op.calculate(ret, window=60, min_periods=10)
+    out = op.calculate(ret, window=60)
     assert out.isna().all().all()
 
 
 def test_ts_sharpe_zero_std_is_null_for_constant_returns(_loaded):
     op = OperatorRegistry.get("ts_sharpe")
     ret = pd.DataFrame({"A": [0.01] * 30})
-    out = op.calculate(ret, window=20, min_periods=5)
+    out = op.calculate(ret, window=20)
     assert pd.isna(out.iloc[-1, 0])
 
 

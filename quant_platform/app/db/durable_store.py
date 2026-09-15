@@ -135,6 +135,26 @@ class _CandidateReservations:
                 "(SELECT content_hash FROM consumed_manifests) THEN 'COMPLETE' ELSE 'RETRYABLE' END, "
                 "lease_until=0 WHERE owner_token=? AND status='RESERVED'", (owner_token,))
 
+    def completed_discoveries(self):
+        """Original discovery bytes for terminal intents, including semantic refs."""
+        with self._reservation_transaction() as conn:
+            rows = conn.execute(
+                "SELECT discovery_json FROM candidate_reservations WHERE status='COMPLETE'"
+            ).fetchall()
+            return tuple(row['discovery_json'] for row in rows)
+
+    def reservation_attempt(self, content_hash, owner_token):
+        """Monotonic attempt identity survives process-local runner counters."""
+        self.assert_reservations((content_hash,), owner_token)
+        with self._reservation_transaction() as conn:
+            row = conn.execute(
+                "SELECT attempt FROM candidate_reservations WHERE content_hash=? AND owner_token=?",
+                (content_hash, owner_token),
+            ).fetchone()
+            if row is None:
+                raise RuntimeError("candidate reservation lost before scheduling")
+            return row['attempt']
+
     def consume_reserved(self, candidate_id, content_hash, semantic, consumed_at, owner_token):
         """Atomically fence the attempt, record terminal use, and complete it."""
         now = time.time()

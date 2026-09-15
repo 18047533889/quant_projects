@@ -1,0 +1,1 @@
+{"command": [".venv/bin/python", "-m", "pytest", "-q", "--tb=short", "--show-capture=no", "factor_engine/tests/runtime/test_r6_fundamental_contracts.py"], "returncode": 0, "sampled_peak_family_rss_bytes": 312336384, "sampling_seconds": 0.1, "seconds": 6.026634969981387, "test_guard_reason": null, "hard_memory_cap": false}

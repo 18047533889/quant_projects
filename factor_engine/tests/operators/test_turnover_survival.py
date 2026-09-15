@@ -33,6 +33,33 @@ def _op(name: str, backend: str = "pandas_numpy"):
     return op
 
 
+def _turnover_like(price: pd.DataFrame) -> pd.DataFrame:
+    """Legal, non-vacuous daily turnover panel aligned with ``price``."""
+    rows, cols = price.shape
+    values = 0.20 + 0.05 * np.abs(
+        np.sin(np.arange(rows, dtype=float)[:, None] / 3.0 + np.arange(cols)[None, :])
+    )
+    return pd.DataFrame(values, index=price.index, columns=price.columns)
+
+
+def test_turnover_reference_price_matches_independent_survival_weights() -> None:
+    idx = pd.date_range("2024-01-01", periods=8)
+    price = pd.DataFrame({"A": np.arange(10.0, 18.0)}, index=idx)
+    turnover = pd.DataFrame({"A": [0.7] * 8}, index=idx)
+    result = _op("ts_turnover_reference_price").calculate(price, turnover, 5)
+    turns = turnover["A"].iloc[:5].to_numpy()
+    survival_after = np.array([np.exp(-turns[i + 1 :].sum()) for i in range(5)])
+    raw = (-np.expm1(-turns)) * survival_after
+    expected = float(np.dot(raw / raw.sum(), price["A"].iloc[:5]))
+    assert result.loc[idx[5], "A"] == pytest.approx(expected)
+
+
+def test_turnover_operator_rejects_missing_turnover_panel() -> None:
+    price = pd.DataFrame({"A": np.arange(10.0, 18.0)})
+    with pytest.raises((TypeError, ValueError)):
+        _op("ts_turnover_reference_price").calculate(price)
+
+
 
 # ---------------------------------------------------------------------------
 # 1. ts_turnover_reference_price
@@ -52,7 +79,7 @@ def test_ts_turnover_reference_price_basic() -> None:
 
     # Call with default parameters
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, _turnover_like(x))
 
         # Basic shape check
         assert result.shape == x.shape, f"{result.shape} != {x.shape}"
@@ -77,7 +104,7 @@ def test_ts_turnover_reference_price_handles_nans() -> None:
     op = _op("ts_turnover_reference_price")
 
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, _turnover_like(x))
 
         # Should not raise, should return DataFrame
         assert isinstance(result, pd.DataFrame)
@@ -98,7 +125,7 @@ def test_ts_turnover_reference_price_handles_inf() -> None:
     op = _op("ts_turnover_reference_price")
 
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, _turnover_like(x))
 
         # Should handle inf gracefully (typically return NaN)
         assert isinstance(result, pd.DataFrame)
@@ -113,7 +140,7 @@ def test_ts_turnover_reference_price_empty_input() -> None:
     op = _op("ts_turnover_reference_price")
 
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, _turnover_like(x))
 
         # Should return empty DataFrame
         assert isinstance(result, pd.DataFrame)
@@ -131,7 +158,7 @@ def test_ts_turnover_reference_price_single_column() -> None:
     op = _op("ts_turnover_reference_price")
 
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, _turnover_like(x))
 
         assert isinstance(result, pd.DataFrame)
         assert result.shape[1] == 1
@@ -157,7 +184,7 @@ def test_ts_turnover_cost_dispersion_basic() -> None:
 
     # Call with default parameters
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, _turnover_like(x))
 
         # Basic shape check
         assert result.shape == x.shape, f"{result.shape} != {x.shape}"
@@ -182,7 +209,7 @@ def test_ts_turnover_cost_dispersion_handles_nans() -> None:
     op = _op("ts_turnover_cost_dispersion")
 
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, _turnover_like(x))
 
         # Should not raise, should return DataFrame
         assert isinstance(result, pd.DataFrame)
@@ -203,7 +230,7 @@ def test_ts_turnover_cost_dispersion_handles_inf() -> None:
     op = _op("ts_turnover_cost_dispersion")
 
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, _turnover_like(x))
 
         # Should handle inf gracefully (typically return NaN)
         assert isinstance(result, pd.DataFrame)
@@ -218,7 +245,7 @@ def test_ts_turnover_cost_dispersion_empty_input() -> None:
     op = _op("ts_turnover_cost_dispersion")
 
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, _turnover_like(x))
 
         # Should return empty DataFrame
         assert isinstance(result, pd.DataFrame)
@@ -236,7 +263,7 @@ def test_ts_turnover_cost_dispersion_single_column() -> None:
     op = _op("ts_turnover_cost_dispersion")
 
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, _turnover_like(x))
 
         assert isinstance(result, pd.DataFrame)
         assert result.shape[1] == 1
@@ -262,7 +289,7 @@ def test_ts_turnover_profit_share_basic() -> None:
 
     # Call with default parameters
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, _turnover_like(x))
 
         # Basic shape check
         assert result.shape == x.shape, f"{result.shape} != {x.shape}"
@@ -287,7 +314,7 @@ def test_ts_turnover_profit_share_handles_nans() -> None:
     op = _op("ts_turnover_profit_share")
 
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, _turnover_like(x))
 
         # Should not raise, should return DataFrame
         assert isinstance(result, pd.DataFrame)
@@ -308,7 +335,7 @@ def test_ts_turnover_profit_share_handles_inf() -> None:
     op = _op("ts_turnover_profit_share")
 
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, _turnover_like(x))
 
         # Should handle inf gracefully (typically return NaN)
         assert isinstance(result, pd.DataFrame)
@@ -323,7 +350,7 @@ def test_ts_turnover_profit_share_empty_input() -> None:
     op = _op("ts_turnover_profit_share")
 
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, _turnover_like(x))
 
         # Should return empty DataFrame
         assert isinstance(result, pd.DataFrame)
@@ -341,7 +368,7 @@ def test_ts_turnover_profit_share_single_column() -> None:
     op = _op("ts_turnover_profit_share")
 
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, _turnover_like(x))
 
         assert isinstance(result, pd.DataFrame)
         assert result.shape[1] == 1
@@ -367,7 +394,7 @@ def test_ts_turnover_holding_age_basic() -> None:
 
     # Call with default parameters
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, _turnover_like(x))
 
         # Basic shape check
         assert result.shape == x.shape, f"{result.shape} != {x.shape}"
@@ -392,7 +419,7 @@ def test_ts_turnover_holding_age_handles_nans() -> None:
     op = _op("ts_turnover_holding_age")
 
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, _turnover_like(x))
 
         # Should not raise, should return DataFrame
         assert isinstance(result, pd.DataFrame)
@@ -413,7 +440,7 @@ def test_ts_turnover_holding_age_handles_inf() -> None:
     op = _op("ts_turnover_holding_age")
 
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, _turnover_like(x))
 
         # Should handle inf gracefully (typically return NaN)
         assert isinstance(result, pd.DataFrame)
@@ -428,7 +455,7 @@ def test_ts_turnover_holding_age_empty_input() -> None:
     op = _op("ts_turnover_holding_age")
 
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, _turnover_like(x))
 
         # Should return empty DataFrame
         assert isinstance(result, pd.DataFrame)
@@ -446,7 +473,7 @@ def test_ts_turnover_holding_age_single_column() -> None:
     op = _op("ts_turnover_holding_age")
 
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, _turnover_like(x))
 
         assert isinstance(result, pd.DataFrame)
         assert result.shape[1] == 1
@@ -472,7 +499,7 @@ def test_ts_turnover_near_cost_mass_basic() -> None:
 
     # Call with default parameters
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, _turnover_like(x))
 
         # Basic shape check
         assert result.shape == x.shape, f"{result.shape} != {x.shape}"
@@ -497,7 +524,7 @@ def test_ts_turnover_near_cost_mass_handles_nans() -> None:
     op = _op("ts_turnover_near_cost_mass")
 
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, _turnover_like(x))
 
         # Should not raise, should return DataFrame
         assert isinstance(result, pd.DataFrame)
@@ -518,7 +545,7 @@ def test_ts_turnover_near_cost_mass_handles_inf() -> None:
     op = _op("ts_turnover_near_cost_mass")
 
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, _turnover_like(x))
 
         # Should handle inf gracefully (typically return NaN)
         assert isinstance(result, pd.DataFrame)
@@ -533,7 +560,7 @@ def test_ts_turnover_near_cost_mass_empty_input() -> None:
     op = _op("ts_turnover_near_cost_mass")
 
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, _turnover_like(x))
 
         # Should return empty DataFrame
         assert isinstance(result, pd.DataFrame)
@@ -551,7 +578,7 @@ def test_ts_turnover_near_cost_mass_single_column() -> None:
     op = _op("ts_turnover_near_cost_mass")
 
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, _turnover_like(x))
 
         assert isinstance(result, pd.DataFrame)
         assert result.shape[1] == 1
@@ -577,7 +604,7 @@ def test_ts_turnover_cost_quantile_distance_basic() -> None:
 
     # Call with default parameters
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, _turnover_like(x))
 
         # Basic shape check
         assert result.shape == x.shape, f"{result.shape} != {x.shape}"
@@ -602,7 +629,7 @@ def test_ts_turnover_cost_quantile_distance_handles_nans() -> None:
     op = _op("ts_turnover_cost_quantile_distance")
 
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, _turnover_like(x))
 
         # Should not raise, should return DataFrame
         assert isinstance(result, pd.DataFrame)
@@ -623,7 +650,7 @@ def test_ts_turnover_cost_quantile_distance_handles_inf() -> None:
     op = _op("ts_turnover_cost_quantile_distance")
 
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, _turnover_like(x))
 
         # Should handle inf gracefully (typically return NaN)
         assert isinstance(result, pd.DataFrame)
@@ -638,7 +665,7 @@ def test_ts_turnover_cost_quantile_distance_empty_input() -> None:
     op = _op("ts_turnover_cost_quantile_distance")
 
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, _turnover_like(x))
 
         # Should return empty DataFrame
         assert isinstance(result, pd.DataFrame)
@@ -656,7 +683,7 @@ def test_ts_turnover_cost_quantile_distance_single_column() -> None:
     op = _op("ts_turnover_cost_quantile_distance")
 
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, _turnover_like(x))
 
         assert isinstance(result, pd.DataFrame)
         assert result.shape[1] == 1
@@ -682,7 +709,7 @@ def test_ts_turnover_cost_entropy_basic() -> None:
 
     # Call with default parameters
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, _turnover_like(x))
 
         # Basic shape check
         assert result.shape == x.shape, f"{result.shape} != {x.shape}"
@@ -707,7 +734,7 @@ def test_ts_turnover_cost_entropy_handles_nans() -> None:
     op = _op("ts_turnover_cost_entropy")
 
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, _turnover_like(x))
 
         # Should not raise, should return DataFrame
         assert isinstance(result, pd.DataFrame)
@@ -728,7 +755,7 @@ def test_ts_turnover_cost_entropy_handles_inf() -> None:
     op = _op("ts_turnover_cost_entropy")
 
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, _turnover_like(x))
 
         # Should handle inf gracefully (typically return NaN)
         assert isinstance(result, pd.DataFrame)
@@ -743,7 +770,7 @@ def test_ts_turnover_cost_entropy_empty_input() -> None:
     op = _op("ts_turnover_cost_entropy")
 
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, _turnover_like(x))
 
         # Should return empty DataFrame
         assert isinstance(result, pd.DataFrame)
@@ -761,7 +788,7 @@ def test_ts_turnover_cost_entropy_single_column() -> None:
     op = _op("ts_turnover_cost_entropy")
 
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, _turnover_like(x))
 
         assert isinstance(result, pd.DataFrame)
         assert result.shape[1] == 1
@@ -787,7 +814,7 @@ def test_ts_turnover_cost_mode_distance_basic() -> None:
 
     # Call with default parameters
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, _turnover_like(x))
 
         # Basic shape check
         assert result.shape == x.shape, f"{result.shape} != {x.shape}"
@@ -812,7 +839,7 @@ def test_ts_turnover_cost_mode_distance_handles_nans() -> None:
     op = _op("ts_turnover_cost_mode_distance")
 
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, _turnover_like(x))
 
         # Should not raise, should return DataFrame
         assert isinstance(result, pd.DataFrame)
@@ -833,7 +860,7 @@ def test_ts_turnover_cost_mode_distance_handles_inf() -> None:
     op = _op("ts_turnover_cost_mode_distance")
 
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, _turnover_like(x))
 
         # Should handle inf gracefully (typically return NaN)
         assert isinstance(result, pd.DataFrame)
@@ -848,7 +875,7 @@ def test_ts_turnover_cost_mode_distance_empty_input() -> None:
     op = _op("ts_turnover_cost_mode_distance")
 
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, _turnover_like(x))
 
         # Should return empty DataFrame
         assert isinstance(result, pd.DataFrame)
@@ -866,7 +893,7 @@ def test_ts_turnover_cost_mode_distance_single_column() -> None:
     op = _op("ts_turnover_cost_mode_distance")
 
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, _turnover_like(x))
 
         assert isinstance(result, pd.DataFrame)
         assert result.shape[1] == 1
@@ -892,7 +919,7 @@ def test_ts_turnover_cost_skew_basic() -> None:
 
     # Call with default parameters
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, _turnover_like(x))
 
         # Basic shape check
         assert result.shape == x.shape, f"{result.shape} != {x.shape}"
@@ -917,7 +944,7 @@ def test_ts_turnover_cost_skew_handles_nans() -> None:
     op = _op("ts_turnover_cost_skew")
 
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, _turnover_like(x))
 
         # Should not raise, should return DataFrame
         assert isinstance(result, pd.DataFrame)
@@ -938,7 +965,7 @@ def test_ts_turnover_cost_skew_handles_inf() -> None:
     op = _op("ts_turnover_cost_skew")
 
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, _turnover_like(x))
 
         # Should handle inf gracefully (typically return NaN)
         assert isinstance(result, pd.DataFrame)
@@ -953,7 +980,7 @@ def test_ts_turnover_cost_skew_empty_input() -> None:
     op = _op("ts_turnover_cost_skew")
 
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, _turnover_like(x))
 
         # Should return empty DataFrame
         assert isinstance(result, pd.DataFrame)
@@ -971,7 +998,7 @@ def test_ts_turnover_cost_skew_single_column() -> None:
     op = _op("ts_turnover_cost_skew")
 
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, _turnover_like(x))
 
         assert isinstance(result, pd.DataFrame)
         assert result.shape[1] == 1
@@ -997,7 +1024,7 @@ def test_ts_turnover_age_dispersion_basic() -> None:
 
     # Call with default parameters
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, _turnover_like(x))
 
         # Basic shape check
         assert result.shape == x.shape, f"{result.shape} != {x.shape}"
@@ -1022,7 +1049,7 @@ def test_ts_turnover_age_dispersion_handles_nans() -> None:
     op = _op("ts_turnover_age_dispersion")
 
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, _turnover_like(x))
 
         # Should not raise, should return DataFrame
         assert isinstance(result, pd.DataFrame)
@@ -1043,7 +1070,7 @@ def test_ts_turnover_age_dispersion_handles_inf() -> None:
     op = _op("ts_turnover_age_dispersion")
 
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, _turnover_like(x))
 
         # Should handle inf gracefully (typically return NaN)
         assert isinstance(result, pd.DataFrame)
@@ -1058,7 +1085,7 @@ def test_ts_turnover_age_dispersion_empty_input() -> None:
     op = _op("ts_turnover_age_dispersion")
 
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, _turnover_like(x))
 
         # Should return empty DataFrame
         assert isinstance(result, pd.DataFrame)
@@ -1076,7 +1103,7 @@ def test_ts_turnover_age_dispersion_single_column() -> None:
     op = _op("ts_turnover_age_dispersion")
 
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, _turnover_like(x))
 
         assert isinstance(result, pd.DataFrame)
         assert result.shape[1] == 1
@@ -1102,7 +1129,7 @@ def test_ts_turnover_old_mass_basic() -> None:
 
     # Call with default parameters
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, _turnover_like(x))
 
         # Basic shape check
         assert result.shape == x.shape, f"{result.shape} != {x.shape}"
@@ -1127,7 +1154,7 @@ def test_ts_turnover_old_mass_handles_nans() -> None:
     op = _op("ts_turnover_old_mass")
 
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, _turnover_like(x))
 
         # Should not raise, should return DataFrame
         assert isinstance(result, pd.DataFrame)
@@ -1148,7 +1175,7 @@ def test_ts_turnover_old_mass_handles_inf() -> None:
     op = _op("ts_turnover_old_mass")
 
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, _turnover_like(x))
 
         # Should handle inf gracefully (typically return NaN)
         assert isinstance(result, pd.DataFrame)
@@ -1163,7 +1190,7 @@ def test_ts_turnover_old_mass_empty_input() -> None:
     op = _op("ts_turnover_old_mass")
 
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, _turnover_like(x))
 
         # Should return empty DataFrame
         assert isinstance(result, pd.DataFrame)
@@ -1181,7 +1208,7 @@ def test_ts_turnover_old_mass_single_column() -> None:
     op = _op("ts_turnover_old_mass")
 
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, _turnover_like(x))
 
         assert isinstance(result, pd.DataFrame)
         assert result.shape[1] == 1
@@ -1207,7 +1234,7 @@ def test_ts_turnover_cost_entropy_vol_scaled_basic() -> None:
 
     # Call with default parameters
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, _turnover_like(x))
 
         # Basic shape check
         assert result.shape == x.shape, f"{result.shape} != {x.shape}"
@@ -1232,7 +1259,7 @@ def test_ts_turnover_cost_entropy_vol_scaled_handles_nans() -> None:
     op = _op("ts_turnover_cost_entropy_vol_scaled")
 
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, _turnover_like(x))
 
         # Should not raise, should return DataFrame
         assert isinstance(result, pd.DataFrame)
@@ -1253,7 +1280,7 @@ def test_ts_turnover_cost_entropy_vol_scaled_handles_inf() -> None:
     op = _op("ts_turnover_cost_entropy_vol_scaled")
 
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, _turnover_like(x))
 
         # Should handle inf gracefully (typically return NaN)
         assert isinstance(result, pd.DataFrame)
@@ -1268,7 +1295,7 @@ def test_ts_turnover_cost_entropy_vol_scaled_empty_input() -> None:
     op = _op("ts_turnover_cost_entropy_vol_scaled")
 
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, _turnover_like(x))
 
         # Should return empty DataFrame
         assert isinstance(result, pd.DataFrame)
@@ -1286,7 +1313,7 @@ def test_ts_turnover_cost_entropy_vol_scaled_single_column() -> None:
     op = _op("ts_turnover_cost_entropy_vol_scaled")
 
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, _turnover_like(x))
 
         assert isinstance(result, pd.DataFrame)
         assert result.shape[1] == 1

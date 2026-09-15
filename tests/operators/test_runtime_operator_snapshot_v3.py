@@ -3,9 +3,13 @@ from __future__ import annotations
 import json
 from concurrent.futures import ThreadPoolExecutor
 
+import numpy as np
+import pandas as pd
+import pytest
+
 from factor_engine.runtime.operator_snapshot import (
     _evidence_for, _native_accelerated, _parameter_contract, _research_callable,
-    load_evidence_records,
+    build_runtime_operator_snapshot, load_evidence_records,
     query_runtime_operator_snapshot,
 )
 import factor_engine.runtime.operator_snapshot as snapshot_module
@@ -18,6 +22,23 @@ class _Op:
         panel_params=("x",),
         param_specs={"window": ParamSpec(dtype=int, min=1, default=5, param_role=ParamRole.HORIZON)},
     )
+
+
+class _FunctionBackedOp:
+    metadata = OperatorMetadata(
+        name="function_backed", category="test",
+        param_names=["high", "low", "window", "enabled"],
+    )
+
+    @staticmethod
+    def _kernel(high: "pd.DataFrame", low: "pd.DataFrame", window: int = 14,
+                enabled: bool = True):
+        return high
+
+    _fn = _kernel
+
+    def calculate(self, *args, **kwargs):
+        return self._fn(*args, **kwargs)
 
 
 def _identity():
@@ -33,6 +54,30 @@ def test_parameter_schema_is_typed_and_unknown_is_fail_closed():
     assert schema["properties"]["mystery"]["x-factor-engine-verification"] == "unknown"
     assert schema["x-factor-engine-contract-status"] == "unknown"
     assert len(digest) == 64
+    assert verified is False
+
+
+def test_function_backed_signature_is_authoritative_without_name_guesses():
+    from factor_engine.cleaned_operators.operator_spec import _infer_panel_params
+
+    op = _FunctionBackedOp()
+    panels = _infer_panel_params(op, op.metadata, {})
+    assert panels == ("high", "low")
+    schema, _, verified = _parameter_contract(
+        op, panels
+    )
+    assert schema["properties"]["high"] == {
+        "x-factor-engine-role": "panel", "type": "array"
+    }
+    assert schema["properties"]["low"] == {
+        "x-factor-engine-role": "panel", "type": "array"
+    }
+    assert schema["properties"]["window"] == {
+        "x-factor-engine-verification": "unknown"
+    }
+    assert schema["properties"]["enabled"] == {
+        "x-factor-engine-verification": "unknown"
+    }
     assert verified is False
 
 
@@ -57,6 +102,45 @@ def test_pandas_and_delegate_slots_never_count_as_native():
 
 def test_registered_noop_without_typed_contract_is_not_research_callable():
     assert _research_callable([{"research_supported": True, "contract_status": "unknown"}]) is False
+
+
+def test_snapshot_uses_authoritative_inferred_panel_topology():
+    snapshot = build_runtime_operator_snapshot(profile="runtime")
+    rows = {row["canonical"]: row for row in snapshot["operators"]}
+
+    for canonical, expected_panels in {
+        "ts_mean": {"x"},
+        "ts_corr": {"x", "y"},
+    }.items():
+        row = rows[canonical]
+        assert row["research_callable"] is True
+        assert row["execution_state"] == "EXECUTABLE_UNVERIFIED"
+        assert row["production_callable"] is False
+        binding = next(b for b in row["backends"] if b["backend"] == "pandas_numpy")
+        properties = binding["parameter_schema"]["properties"]
+        assert {
+            name for name, contract in properties.items()
+            if contract.get("x-factor-engine-role") == "panel"
+        } == expected_panels
+        assert binding["evidence"]["status"] == "NOT_RUN"
+
+
+def test_snapshot_exposes_declared_bool_scalar_contract_and_runtime_gate():
+    snapshot = build_runtime_operator_snapshot(profile="runtime")
+    row = next(r for r in snapshot["operators"] if r["canonical"] == "cs_huber_resid")
+    binding = next(b for b in row["backends"] if b["backend"] == "pandas_numpy")
+    assert binding["parameter_schema"]["properties"]["add_intercept"] == {
+        "x-factor-engine-role": "policy",
+        "x-searchable": False,
+        "type": "boolean",
+        "default": True,
+    }
+    assert binding["contract_status"] == "declared"
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
+    op = OperatorRegistry.get("cs_huber_resid", "pandas_numpy", mode="any")
+    x = pd.DataFrame(np.arange(12.0).reshape(3, 4))
+    with pytest.raises((TypeError, ValueError)):
+        op.calculate(x, x, add_intercept=1)
 
 
 def test_binding_digest_change_invalidates_old_pass():

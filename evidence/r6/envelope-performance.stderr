@@ -1,0 +1,24 @@
+Traceback (most recent call last):
+  File "/home/sunhaiwei/quant_projects/evidence/r6/envelope_benchmark.py", line 16, in <module>
+    load_all()
+  File "/home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/__init__.py", line 918, in load_all
+    REGISTRY_BOOTSTRAP.ensure_ready(include_research=include_research)
+  File "/home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/__init__.py", line 652, in ensure_ready
+    self._run_initialization(self._include_research)
+  File "/home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/__init__.py", line 614, in _run_initialization
+    _load_all_impl(include_research=include_research)
+  File "/home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/__init__.py", line 957, in _load_all_impl
+    _load_module_if_available(spec.module)
+  File "/home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/__init__.py", line 526, in _load_module_if_available
+    __import__(mod, fromlist=["*"])
+  File "/home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/ts_model/volatility.py", line 470, in <module>
+    _register("ts_garch_next_vol_forecast", "GARCH(1,1) 下一期条件波动率（观测最后收益之后）。window=max lookback（非严格满窗），最小 window=13。", ["x", "window"], "volatility",
+  File "/home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/ts_model/volatility.py", line 194, in _register
+    class _VolOp(SeriesOperator):
+  File "/home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/ts_model/volatility.py", line 198, in _VolOp
+    metadata.panel_params = tuple(
+                            ^^^^^^
+  File "/home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/ts_model/volatility.py", line 199, in <genexpr>
+    param for param in params if param not in metadata.param_specs
+                                              ^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'function' object has no attribute 'param_specs'

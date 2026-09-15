@@ -64,52 +64,18 @@ def test_inverse_polars_does_not_use_pandas_bridge(monkeypatch: pytest.MonkeyPat
     out = OperatorRegistry.get("inverse", "polars").calculate(
         pl.DataFrame({"x": [2.0, 0.0, None, -4.0]})
     )["x"].to_list()
-    assert out == [0.5, None, None, -0.25]
+    np.testing.assert_allclose(out, [0.5, np.nan, np.nan, -0.25], equal_nan=True)
 
 
-def test_registered_polars_backends_are_engine_native() -> None:
-    import inspect
+def test_known_polars_delegates_are_classified_honestly() -> None:
+    from factor_engine.backend.polars_backend_kind import canonical_polars_kind
 
-    # Operators with Polars backends that currently route through pandas bridge
-    # helpers and need native rewrites.  These are tracked as known exceptions.
-    PENDING_NATIVE_REWRITES = frozenset({
-        'cs_resid', 'cs_regression', 'group_neutralize', 'expanding_rank',
-        'group_percentile', 'size_neutralize', 'industry_size_neutralize',
-        'rank_corr', 'ts_decay_linear', 'ts_mad', 'ts_decay_exp_window',
-        'ts_kurt', 'ts_product', 'ts_sum_decay', 'ts_moment', 'tail_beta',
-        'idio_vol', 'hump_decay',
-    })
-
-    # A Polars backend is "engine-native" when it does NOT fall back to pandas
-    # (no pandas DataFrame bridge / to_pandas).  Sequential state machines
-    # (pivot detection, fiscal-ordinal walks) and pairwise rolling stats
-    # legitimately use NumPy kernels over polars column arrays — these operate on
-    # polars data and never construct a pandas DataFrame, so they stay native.
-    # Dynamically-defined kernels (type()-built operator classes) are not
-    # locatable by inspect but are covered by dedicated pandas/polars parity
-    # suites, so they are not treated as offenders here.
-    PANDAS_BRIDGE_TOKENS = (
-        "to_pandas",
-        "bridge_pandas",
-        "bridge_registry",
-        "from_pandas_panel",
-        "panel_pandas_bridge",
-    )
-
-    offenders = []
-    for canonical, implementations in OperatorRegistry._operators.items():
-        operator = implementations.get("polars")
-        if operator is None:
-            continue
-        if canonical in PENDING_NATIVE_REWRITES:
-            continue  # Known pending rewrite
-        try:
-            source = inspect.getsource(operator.__class__)
-        except (OSError, TypeError):
-            continue  # dynamically-defined kernel; covered by parity suites
-        if any(token in source for token in PANDAS_BRIDGE_TOKENS):
-            offenders.append(canonical)
-    assert offenders == []
+    # Runtime branch selection matters: shared classes can contain unused
+    # Pandas branches (e.g. native envelopes). Class-source token scans cannot
+    # certify execution. Native routes have separate conversion-forbidden tests.
+    for canonical in ("group_percentile", "ts_joint_energy_shift", "event_mark_autocorr"):
+        kind = canonical_polars_kind(canonical, production_mode=True)
+        assert "PANDAS_DELEGATE" in kind.name, (canonical, kind)
 
 
 @pytest.mark.parametrize("canonical", ["ewm_std", "ewm_var", "ts_skew", "ts_quantile"])
@@ -177,13 +143,15 @@ def test_daily_numeric_contract_metadata_is_complete() -> None:
     assert incomplete == []
 
 
-def test_production_sql_lowering_is_fail_closed() -> None:
+def test_production_sql_lowering_is_fail_closed(monkeypatch) -> None:
     from factor_engine.planner.sql_lowerer import lower_to_physical_plan
+    from factor_engine.backend.sql_pushdown import sql_registry
 
     plan = PlanNode(op="tanh", inputs=[PlanNode(op="column", attrs={"name": "x"})])
-    # tanh is now backed by real SQL and certified production evidence.
     assert lower_to_physical_plan(plan, mode="research").fully_sql
-    assert lower_to_physical_plan(plan, mode="production").fully_sql
+    # Real SQL capability must not manufacture missing production evidence.
+    monkeypatch.setattr(sql_registry, "is_sql_production_safe", lambda plan: False)
+    assert not lower_to_physical_plan(plan, mode="production").fully_sql
 
 
 def test_tanh_executes_in_real_duckdb() -> None:

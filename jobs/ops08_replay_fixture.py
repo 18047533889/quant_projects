@@ -125,7 +125,7 @@ class RealParameterBridgeReplayAuthority:
                 recipe_id="fill-recipe-v2", source_factor_definition_ref=self.definition_ref,
                 source_factor_value_ref=self.source_value_ref,
                 ordered_steps=(RecipeStep(
-                    step_id="fill", semantic_transform_id="forward_fill",
+                    step_id="fill", semantic_transform_id="FILL:forward",
                     implementation_ref="forward_fill", stage="missingness",
                     parameters={"max_lag": self.max_lag},
                 ),),
@@ -139,7 +139,9 @@ class RealParameterBridgeReplayAuthority:
             recipe_doc = json.loads(available_shadow_refs["recipe:old"].domain_payload)
             if recipe_doc["effective_max_periods"] != self.max_lag:
                 raise ValueError("recipe parameter bridge payload mismatch")
-            executor = create_default_registry().get_recipe_execution(self._recipe)
+            # This authority creates hermetic AUDIT_REPLAY shadow artifacts,
+            # never production-approved values. Keep the opt-in explicit.
+            executor = create_default_registry().get_recipe_execution(self._recipe, allow_research=True)
             treated = executor(self.raw, value_col="value", time_col="date", asset_col="asset_id")
             times = list(self.template.time_axis.values); assets = list(self.template.asset_axis.values)
             frame = self.raw.assign(value=treated).pivot(index="date", columns="asset_id", values="value")

@@ -61,8 +61,16 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from factor_engine.cleaned_operators.base import OperatorMetadata, ParamSpec, SeriesOperator, register_operator
+from factor_engine.cleaned_operators.base import (
+    OperatorMetadata,
+    ParamRole,
+    ParamSpec,
+    RelationalParamSpec,
+    SeriesOperator,
+    register_operator,
+)
 from factor_engine.cleaned_operators.rolling_pack import frame_like, register_polars_bridge
+from factor_engine.runtime.session_calendar import SessionCalendar
 
 _EPS = 1e-12
 _WARNED_NO_CALENDAR = False
@@ -83,8 +91,12 @@ def _metadata(name: str, description: str, params: list[str], *, unit: str, cost
         ],
         # R6-196: EOD-realised availability contract — output at session close,
         # never usable in the same session (history-based session operators).
+        input_grain="minute",
+        output_grain="daily",
         available_at="session_close",
         same_session_usable=False,
+        input_units={"x": "level"},
+        output_unit="dimensionless",
     )
 
 
@@ -504,11 +516,28 @@ class IntradaySessionShapeNovelty(SeriesOperator):
         unit="ratio",
         cost=7,
     )
+    metadata.panel_params = ("x", "session_id")
+    metadata.panel_arity = 2
+    metadata.scalar_params = ("history_days", "min_history_sessions", "calendar")
     metadata.param_specs = {
         # R11 #71: history_days counts SESSIONS, not trading bars.
-        "history_days": ParamSpec(dtype=int, min=1, history_semantics="session_count"),
-        "min_history_sessions": ParamSpec(dtype=int, min=1, searchable=False),
+        "history_days": ParamSpec(
+            dtype=int, min=1, default=20, history_semantics="session_count",
+            param_role=ParamRole.HORIZON,
+        ),
+        "min_history_sessions": ParamSpec(
+            dtype=int, min=1, default=5, searchable=False, param_role=ParamRole.POLICY,
+        ),
+        "calendar": ParamSpec(
+            dtype=SessionCalendar, default=None, searchable=False, param_role=ParamRole.POLICY,
+        ),
     }
+    metadata.relational_specs = [
+        RelationalParamSpec(
+            "min_history_sessions <= history_days",
+            "min_history_sessions must not exceed history_days",
+        ),
+    ]
 
     def _calculate_series(
         self,
@@ -565,11 +594,36 @@ class IntradayProfilePcaResidual(SeriesOperator):
         unit="ratio",
         cost=8,
     )
+    metadata.panel_params = ("x", "session_id")
+    metadata.panel_arity = 2
+    metadata.scalar_params = (
+        "history_days", "n_components", "min_history_sessions", "calendar",
+    )
     metadata.param_specs = {
-        "history_days": ParamSpec(dtype=int, min=1, history_semantics="session_count"),  # R11 #71
-        "n_components": ParamSpec(dtype=int, min=1),
-        "min_history_sessions": ParamSpec(dtype=int, min=1, searchable=False),
+        "history_days": ParamSpec(
+            dtype=int, min=1, default=20, history_semantics="session_count",
+            param_role=ParamRole.HORIZON,
+        ),  # R11 #71
+        "n_components": ParamSpec(
+            dtype=int, min=1, default=3, param_role=ParamRole.ESTIMATOR_RESOLUTION,
+        ),
+        "min_history_sessions": ParamSpec(
+            dtype=int, min=1, default=5, searchable=False, param_role=ParamRole.POLICY,
+        ),
+        "calendar": ParamSpec(
+            dtype=SessionCalendar, default=None, searchable=False, param_role=ParamRole.POLICY,
+        ),
     }
+    metadata.relational_specs = [
+        RelationalParamSpec(
+            "min_history_sessions <= history_days",
+            "min_history_sessions must not exceed history_days",
+        ),
+        RelationalParamSpec(
+            "n_components + 1 <= history_days",
+            "history_days must admit at least n_components + 1 historical sessions",
+        ),
+    ]
 
     def _calculate_series(
         self,

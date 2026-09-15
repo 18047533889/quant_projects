@@ -14,7 +14,7 @@ import json
 import os
 from pathlib import Path
 
-from .default_execution_policy import DefaultExecutionPolicy, resolve_default_policy
+from .default_execution_policy import DefaultExecutionPolicy, ExecutionPurpose, resolve_default_policy
 
 
 class DeploymentConfigurationError(ValueError):
@@ -24,6 +24,50 @@ class DeploymentConfigurationError(ValueError):
         self.missing_fields = tuple(sorted(missing_fields))
         super().__init__("v2 deployment configuration: " +
                          (", ".join(self.missing_fields) or detail))
+
+
+def iter_parsed_factor_definitions(entries, *, surface="all"):
+    """Yield Factors or typed manifest rejections without fabricating Exprs."""
+    from factor_engine.api.dsl_parser import (
+        DSLParseError,
+        DSLUnknownOperatorError,
+        parse_factor,
+    )
+    from factor_engine.runtime.finite_manifest import RejectedFactorDefinition
+
+    for entry in entries:
+        if (type(entry) is not dict or set(entry) != {"name", "formula"}
+                or not isinstance(entry["name"], str)
+                or not isinstance(entry["formula"], str)):
+            raise TypeError("factor definitions require exact name and formula strings")
+        name = entry["name"]
+        formula = entry["formula"]
+        # Hash in bounded chunks, including malformed Unicode losslessly.
+        # surrogatepass is ONLY the rejection identity encoding: the parser
+        # still rejects surrogates before constructing any executable Expr.
+        definition_bytes = 0
+        digest = hashlib.sha256()
+        for start in range(0, len(formula), 4096):
+            chunk = formula[start:start + 4096].encode("utf-8", errors="surrogatepass")
+            definition_bytes += len(chunk)
+            digest.update(chunk)
+        definition_digest = digest.hexdigest()
+        try:
+            yield parse_factor(formula, name=name, surface=surface)
+        except DSLUnknownOperatorError:
+            yield RejectedFactorDefinition(
+                name=name,
+                definition_bytes=definition_bytes,
+                definition_digest=definition_digest,
+                error_code="OPERATOR_UNKNOWN",
+            )
+        except DSLParseError:
+            yield RejectedFactorDefinition(
+                name=name,
+                definition_bytes=definition_bytes,
+                definition_digest=definition_digest,
+                error_code="INVALID_DSL",
+            )
 
 
 @dataclass(frozen=True)
@@ -48,7 +92,7 @@ class ApprovedDeploymentProfile:
         if missing:
             raise DeploymentConfigurationError(missing)
         unknown = set(value) - required - {
-            "execution", "expected_snapshot_token", "expected_source_snapshot_tokens",
+            "purpose", "execution", "expected_snapshot_token", "expected_source_snapshot_tokens",
             "expected_source_content_digests",
         }
         if unknown:
@@ -112,6 +156,10 @@ class ApprovedDeploymentProfile:
         if source["dataset"] not in content_digests:
             raise DeploymentConfigurationError(
                 detail="approved content digest set must include the anchor dataset")
+        try:
+            ExecutionPurpose(purpose=value.get("purpose", "research_compute"))
+        except (ValueError, TypeError) as exc:
+            raise DeploymentConfigurationError(detail=str(exc)) from None
         resolve_default_policy(profile=value.get("execution"))
         try:
             payload = json.dumps(dict(value), sort_keys=True, separators=(",", ":"), allow_nan=False)
@@ -125,6 +173,10 @@ class ApprovedDeploymentProfile:
     @property
     def digest(self):
         return hashlib.sha256(self.canonical_json.encode()).hexdigest()
+
+    @property
+    def execution_purpose(self):
+        return ExecutionPurpose(purpose=self.to_dict().get("purpose", "research_compute"))
 
 
 def load_deployment_profile(path=None):
@@ -172,11 +224,25 @@ class DurableFactorEngine:
         self._engine = engine
         self.deployment = deployment
         self.policy = policy
+        self.execution_purpose = deployment.execution_purpose
+        expected_scope = _execution_scope_from_business(deployment.to_dict())
+        if getattr(engine, "execution_purpose", None) != self.execution_purpose:
+            raise DeploymentConfigurationError(detail="core purpose differs from approved deployment")
+        if getattr(engine, "execution_scope", None) != expected_scope:
+            raise DeploymentConfigurationError(detail="core execution scope differs from approved deployment")
         if engine.run_mode != "production":
             raise DeploymentConfigurationError(detail="v2 cannot run through research mode")
         engine.default_execution_policy = policy
 
     def run_many(self, factors, *, resume_run_id=None, cancellation_token=None):
+        expected_scope = _execution_scope_from_business(self.deployment.to_dict())
+        if (self.execution_purpose != self.deployment.execution_purpose
+                or getattr(self._engine, "execution_purpose", None) != self.execution_purpose
+                or getattr(self._engine, "execution_scope", None) != expected_scope
+                or self._engine.run_mode != "production"):
+            raise DeploymentConfigurationError(
+                detail="execution purpose, scope, or input governance changed"
+            )
         from .bounded_pipeline import execute_run_many_durable
         from .resource_broker import heavy_run_guard
         business = self.deployment.to_dict()
@@ -192,6 +258,8 @@ class DurableFactorEngine:
                 raise DeploymentConfigurationError(detail="approved source snapshot token does not match")
         with heavy_run_guard(timeout_seconds=self.policy.resource_wait_seconds):
             run_identity = {
+                "execution_purpose": self.execution_purpose.to_dict(),
+                "execution_purpose_digest": self.execution_purpose.digest,
                 "deployment_digest": self.deployment.digest,
                 "profile_id": business["profile_id"],
                 "approval_id": business["approval_id"],
@@ -208,16 +276,26 @@ class DurableFactorEngine:
                     "content_digests": business["expected_source_content_digests"],
                 },
             }
+            # The durable facade has one validated policy authority. Legacy
+            # tuning environment variables must not silently disable DAG/CSE,
+            # fusion or pin the scheduler to one worker inside spawned cores.
+            from factor_engine.runtime.perf_config import PerfConfig
+            automatic_perf = PerfConfig(
+                max_workers=None, enable_cse=True, panel_native=True,
+                native_fusion=True, scheduler="adaptive", operator_backend="auto",
+            )
             receipt = execute_run_many_durable(
                 self._engine, factors, policy=self.policy, artifact_root=root,
                 engine_factory=build_execution_core_from_worker_config,
                 engine_factory_config=ExecutionCoreWorkerConfig(self.deployment, self.policy),
                 execution_scope={k: business[k] for k in
                                  ("market", "calendar_id", "frequency", "universe_id")},
-                run_kwargs={"auto_warmup": True, "trim_warmup": True,
+                run_kwargs={"perf": automatic_perf, "enable_cse": True,
+                            "auto_warmup": True, "trim_warmup": True,
                             "market": business["market"], "input_dq_check": True,
                             "input_dq_strict": True, "pit_enforce": True},
                 run_identity=run_identity,
+                automatic_dag=True,
                 resume_run_id=resume_run_id,
                 cancellation_token=cancellation_token,
             )
@@ -250,6 +328,18 @@ class ExecutionCoreWorkerConfig:
     policy: DefaultExecutionPolicy
 
 
+def _execution_scope_from_business(business):
+    """Build the complete immutable scope solely from an approved profile."""
+    from factor_engine.api.factor import FactorExecutionScopeHint
+
+    return FactorExecutionScopeHint(
+        market=business["market"],
+        calendar_id=business["calendar_id"],
+        frequency=business["frequency"],
+        universe_id=business["universe_id"],
+    )
+
+
 def build_execution_core_from_worker_config(config):
     """Construct inside a spawned worker after its parent broker proxy is installed.
 
@@ -260,7 +350,10 @@ def build_execution_core_from_worker_config(config):
         raise TypeError("validated ExecutionCoreWorkerConfig is required")
     if not isinstance(config.deployment, ApprovedDeploymentProfile) or not isinstance(config.policy, DefaultExecutionPolicy):
         raise TypeError("worker deployment and policy must be validated")
-    business = config.deployment.to_dict()
+    # Revalidate after process deserialization; the frozen wrapper alone is
+    # not proof that its JSON payload was ever validated.
+    deployment = ApprovedDeploymentProfile.from_mapping(config.deployment.to_dict())
+    business = deployment.to_dict()
     policy = config.policy
     from factor_engine.backend.factory import build_backend
     from factor_engine.storage.factory import build_data_source, DataSourceBuildContext
@@ -283,7 +376,11 @@ def build_execution_core_from_worker_config(config):
             source.bind_approved_content_digest(content_digests[source.dataset])
         _validate_hfq_source_contract(source)
         backend = build_backend("pandas" if policy.backend == "pandas_numpy" else policy.backend)
-        core = FactorEngine(backend, source, run_mode="production")
+        execution_scope = _execution_scope_from_business(business)
+        core = FactorEngine(
+            backend, source, run_mode="production", execution_scope=execution_scope
+        )
+        core.execution_purpose = deployment.execution_purpose
         # A failed source/backend construction must not claim the process-wide
         # policy singleton and block a later, valid deployment profile.
         broker = get_v2_resource_broker(policy)

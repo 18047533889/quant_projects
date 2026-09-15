@@ -106,6 +106,15 @@ def build_research_mining_allowlist() -> dict[str, Callable[..., Any]]:
     return build_cleaned_dsl_allowlist(set(), surface="all")
 
 
+def build_recommended_authoring_allowlist(
+    *, dialect: str = "native", dialect_version: str | None = None
+) -> dict[str, Callable[..., Any]]:
+    """Default Agent/research authoring catalog from the complete runtime surface."""
+    return build_dsl_allowlist(
+        surface="all", dialect=dialect, dialect_version=dialect_version
+    )
+
+
 def build_production_mining_allowlist() -> dict[str, Callable[..., Any]]:
     """Production mining surface: only six-gate certified operators.
 

@@ -2,8 +2,8 @@
 """R30 §9/§24: production operators carry explicit panel/scalar kinds and
 explicit ParamRole on every searchable scalar.
 
-* ``ts_threshold_cycle_period(x, lower, upper, window)`` infers panel=(x,),
-  not (x, lower, upper) — required scalars are never misclassified as panels;
+* explicit kernel annotations distinguish scalar threshold bounds from panel
+  envelope bounds without guessing from the names ``lower`` / ``upper``;
 * no production scalar resolves to the silent ECONOMIC fallback
   (``missing_role_defaults_to_searchable`` is 0 across daily/extended).
 """
@@ -23,12 +23,12 @@ def test_required_scalar_thresholds_not_misclassified_as_panels():
     assert "lower" not in panels and "upper" not in panels
 
 
-def test_envelope_scalars_not_panels():
+def test_envelope_bounds_are_panels_per_kernel_signature():
     for c in ("ts_envelope_boundary_dwell", "ts_envelope_pressure"):
         op = OperatorRegistry.get(c)
         meta = getattr(op, "metadata", None)
         panels = _infer_panel_params(op, meta, OperatorRegistry._catalog.get(c, {}))
-        assert "lower" not in panels and "upper" not in panels
+        assert tuple(panels) == ("x", "upper", "lower")
 
 
 def test_no_production_scalar_resolves_to_silent_economic():

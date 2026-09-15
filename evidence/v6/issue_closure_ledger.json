@@ -1,0 +1,141 @@
+{
+  "schema": "v6-closure-ledger.v1",
+  "reference_head": "2bac7209c00e302728b810513c91f5475ec6954f",
+  "checkout_head": "2db45f4e446309003381a51a5e03071d31859502",
+  "checkout_root": "/home/sunhaiwei/quant_projects_v3_remediation",
+  "production_changes": false,
+  "issues": [
+    {
+      "id": "X01",
+      "status": "PUBLIC_PATH_VERIFIED",
+      "tests": [
+        "quant_evaluator/tests/test_v6_factor_exposure.py",
+        "factor_assets/tests/test_qe_typed_metric_grading.py"
+      ],
+      "verification_scope": "Actual library/public research API and scoped consumers; synthetic evidence, not production certification."
+    },
+    {
+      "id": "X02",
+      "status": "PUBLIC_PATH_VERIFIED",
+      "tests": [
+        "quant_evaluator/tests/test_v6_interactions.py"
+      ],
+      "verification_scope": "Actual library/public research API and scoped consumers; synthetic evidence, not production certification."
+    },
+    {
+      "id": "X03",
+      "status": "PUBLIC_PATH_VERIFIED",
+      "tests": [
+        "quant_evaluator/tests/test_v6_interactions.py"
+      ],
+      "verification_scope": "Actual library/public research API and scoped consumers; synthetic evidence, not production certification."
+    },
+    {
+      "id": "X04",
+      "status": "PUBLIC_PATH_VERIFIED",
+      "tests": [
+        "quant_evaluator/tests/test_v6_interactions.py"
+      ],
+      "verification_scope": "Actual library/public research API and scoped consumers; synthetic evidence, not production certification."
+    },
+    {
+      "id": "X05",
+      "status": "PUBLIC_PATH_VERIFIED",
+      "tests": [
+        "quant_evaluator/tests/test_generalization_evidence.py",
+        "quant_evaluator/tests/test_v6_generalization_audit.py"
+      ],
+      "verification_scope": "Actual library/public research API and scoped consumers; synthetic evidence, not production certification."
+    },
+    {
+      "id": "X06",
+      "status": "PUBLIC_PATH_VERIFIED",
+      "tests": [
+        "quant_evaluator/tests/test_generalization_evidence.py",
+        "quant_evaluator/tests/test_v6_generalization_audit.py"
+      ],
+      "verification_scope": "Actual library/public research API and scoped consumers; synthetic evidence, not production certification."
+    },
+    {
+      "id": "X07",
+      "status": "PUBLIC_PATH_VERIFIED",
+      "tests": [
+        "quant_evaluator/tests/test_generalization_evidence.py",
+        "quant_evaluator/tests/test_v6_generalization_audit.py"
+      ],
+      "verification_scope": "Actual library/public research API and scoped consumers; synthetic evidence, not production certification."
+    },
+    {
+      "id": "X08",
+      "status": "PUBLIC_PATH_VERIFIED",
+      "tests": [
+        "quant_evaluator/tests/test_v6_interactions.py",
+        "factor_assets/tests/adapters/test_residual_novelty.py"
+      ],
+      "verification_scope": "Actual library/public research API and scoped consumers; synthetic evidence, not production certification."
+    },
+    {
+      "id": "X09",
+      "status": "PUBLIC_PATH_VERIFIED",
+      "tests": [
+        "quant_evaluator/tests/test_v6_interactions.py",
+        "quant_evaluator/tests/test_v6_factor_exposure.py"
+      ],
+      "verification_scope": "Actual library/public research API and scoped consumers; synthetic evidence, not production certification."
+    },
+    {
+      "id": "X10",
+      "status": "PUBLIC_PATH_VERIFIED",
+      "tests": [
+        "factor_assets/tests/assembly/test_v6_constrained_mmr.py"
+      ],
+      "verification_scope": "Actual library/public research API and scoped consumers; synthetic evidence, not production certification."
+    },
+    {
+      "id": "X11",
+      "status": "PUBLIC_PATH_VERIFIED",
+      "tests": [
+        "factor_assets/tests/assembly/test_v6_constrained_mmr.py"
+      ],
+      "verification_scope": "Actual library/public research API and scoped consumers; synthetic evidence, not production certification."
+    },
+    {
+      "id": "X12",
+      "status": "PUBLIC_PATH_VERIFIED",
+      "tests": [
+        "factor_assets/tests/assembly/test_v6_constrained_mmr.py"
+      ],
+      "verification_scope": "Actual library/public research API and scoped consumers; synthetic evidence, not production certification."
+    },
+    {
+      "id": "X13",
+      "status": "PUBLIC_PATH_VERIFIED",
+      "tests": [
+        "factor_assets/tests/assembly/test_v6_constrained_mmr.py"
+      ],
+      "verification_scope": "Actual library/public research API and scoped consumers; synthetic evidence, not production certification."
+    },
+    {
+      "id": "X14",
+      "status": "PUBLIC_PATH_VERIFIED",
+      "tests": [
+        "factor_optimizer/tests/search/test_tiered_evaluation.py",
+        "factor_optimizer/tests/search/test_v05_cheap_prefilter.py"
+      ],
+      "verification_scope": "Actual library/public research API and scoped consumers; synthetic evidence, not production certification."
+    },
+    {
+      "id": "X15",
+      "status": "PUBLIC_PATH_VERIFIED",
+      "tests": [
+        "factor_preprocess/tests/representation/test_representation_policies.py"
+      ],
+      "verification_scope": "Public registration and new real-filesystem exclusive writer; no pre-existing production writer found."
+    }
+  ],
+  "remaining_external_conditions": [
+    "Historical empirical threshold calibration requires a designated unsealed development dataset.",
+    "Production historical-consumption audit and migration not executed or certified.",
+    "Raw daily generalization confidence requires temporal dependence treatment; use declared fold/precomputed paired draw evidence, not IID daily SE."
+  ]
+}

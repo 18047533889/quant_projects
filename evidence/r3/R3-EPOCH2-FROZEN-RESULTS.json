@@ -1,0 +1,14 @@
+{
+  "scope": "Historical frozen epoch 2, before subsequent service/CLI/axis corrections",
+  "head": "e94ac507d670fd1c16b1d6a63fc5d6286daa5970",
+  "factor_engine_python_hash_before": "cb154d6498f773383a2dae24782bd5ebb36c08dc29cc58aad4364a4025a0ec3d",
+  "factor_engine_python_hash_after": "cb154d6498f773383a2dae24782bd5ebb36c08dc29cc58aad4364a4025a0ec3d",
+  "source_stability": "MATCH",
+  "project": {"passed": 1024, "skipped": 340, "failed": 0, "seconds": 325.20, "junit": "R07-final-project-parity.xml"},
+  "system_pandas3": {"passed": 846, "skipped": 348, "failed": 170, "seconds": 326.73, "junit": "R07-final-pandas3-parity.xml"},
+  "remaining_failure_classification": {"cross_source_datetime_precision": 169, "short_window_correlation": 1},
+  "approved_data": "NOT_RUN",
+  "gpu_acceptance": "NOT_RUN",
+  "rss_and_100k_performance": "NOT_RUN",
+  "overall": "PARTIAL"
+}

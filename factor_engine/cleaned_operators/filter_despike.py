@@ -11,7 +11,7 @@ from typing import Any, Literal
 import numpy as np
 import pandas as pd
 
-from factor_engine.cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
+from factor_engine.cleaned_operators.base import OperatorMetadata, ParamSpec, ParamRole, RelationalParamSpec, SeriesOperator, register_operator
 from factor_engine.cleaned_operators.rolling_pack import frame_like
 from factor_engine.cleaned_operators.filter_contracts import (
     FilterContract,
@@ -63,11 +63,23 @@ class TSHampelFilterCausal(SeriesOperator):
         category="signal_filter",
         description="严格因果Hampel去毛刺：过去窗口估计中位数+MAD，clip异常幅度",
         param_names=["x", "window", "n_sigma", "replacement", "scale_floor"],
+        panel_params=("x",), scalar_params=("window","n_sigma","replacement","scale_floor"),
+        output_unit="same_as:x",
+        param_specs={
+            "window": ParamSpec(dtype=int,min=2,default=20,param_role=ParamRole.HORIZON,
+                                history_formula="window + 1"),
+            "n_sigma": ParamSpec(dtype=float,min=float(np.nextafter(0.,1.)),default=3.,
+                                param_role=ParamRole.STATE_THRESHOLD),
+            "replacement": ParamSpec(dtype=str,choices=("clip","median"),default="clip",
+                                    param_role=ParamRole.POLICY,searchable=False),
+            "scale_floor": ParamSpec(dtype=float,min=float(np.nextafter(0.,1.)),default=1e-10,
+                                    param_role=ParamRole.NUMERICAL,searchable=False),
+        },
         return_type="series",
         tags=[
             "signal_filter", "causal", "typed_v2", "pit_safe",
             "signature:x,window,n_sigma,replacement,scale_floor->series",
-            "domain:signal_filter", "unit:dimensionless",
+            "domain:signal_filter", "unit:same_as:x",
             "filter_contract:despike",
         ],
     )
@@ -85,93 +97,9 @@ class TSHampelFilterCausal(SeriesOperator):
         turnover_control=False,
     )
 
-    def _calculate_series(
-        self,
-        x: pd.DataFrame,
-        window: int = 20,
-        n_sigma: float = 3.0,
-        replacement: Literal["clip", "median"] = "clip",
-        scale_floor: float = 1e-10,
-        **_: Any,
-    ) -> pd.DataFrame:
-        # 参数校验
-        if window < 2:
-            raise ValueError(f"ts_hampel_filter_causal requires window >= 2, got {window}")
-        if n_sigma <= 0:
-            raise ValueError(f"ts_hampel_filter_causal requires n_sigma > 0, got {n_sigma}")
-        if scale_floor <= 0:
-            raise ValueError(f"ts_hampel_filter_causal requires scale_floor > 0, got {scale_floor}")
-        if replacement not in ("clip", "median"):
-            raise ValueError(f"ts_hampel_filter_causal replacement must be 'clip' or 'median', got {replacement!r}")
-
-        xv = x.to_numpy(dtype=float)
-        rows, cols = xv.shape
-        out = np.full((rows, cols), np.nan, dtype=float)
-
-        # MAD常数（使MAD估计一致于标准差）
-        MAD_SCALE = 1.4826
-
-        for col in range(cols):
-            for row in range(rows):
-                curr = xv[row, col]
-                if not np.isfinite(curr):
-                    out[row, col] = np.nan
-                    continue
-
-                # 预热期：窗口不足，直接输出原值
-                if row < window:
-                    out[row, col] = curr
-                    continue
-
-                # 严格因果：只使用过去窗口 [row-window:row]（不含row）
-                past_window = xv[row - window : row, col]
-                finite_mask = np.isfinite(past_window)
-                finite_vals = past_window[finite_mask]
-
-                # 至少需要2个有限值才能估计MAD
-                if len(finite_vals) < 2:
-                    out[row, col] = curr
-                    continue
-
-                # 估计中位数和MAD
-                m_t = float(np.median(finite_vals))
-                mad_raw = float(np.median(np.abs(finite_vals - m_t)))
-
-                # FL-P0-035: zero_scale_policy when MAD==0
-                # Don't let numerical epsilon decide economic jump significance
-                if mad_raw < 1e-14:
-                    # Zero MAD: past window is perfectly flat
-                    # Policy: use recent range as floor, or bypass filter
-                    recent_range = float(np.ptp(finite_vals))  # peak-to-peak
-                    if recent_range > 1e-12:
-                        # Non-trivial range despite zero MAD (discrete values)
-                        s_t = max(MAD_SCALE * recent_range / 4.0, scale_floor)
-                    else:
-                        # Truly flat: bypass filter (accept current value)
-                        out[row, col] = curr
-                        continue
-                else:
-                    s_t = max(MAD_SCALE * mad_raw, scale_floor)
-
-                # 判断是否为毛刺
-                deviation = abs(curr - m_t)
-                threshold = n_sigma * s_t
-
-                if deviation > threshold:
-                    # 超出阈值：应用替换策略
-                    if replacement == "clip":
-                        # clip：保留方向，压制幅度
-                        delta = curr - m_t
-                        clipped_delta = float(np.clip(delta, -threshold, threshold))
-                        out[row, col] = m_t + clipped_delta
-                    else:
-                        # median：直接替换为中位数
-                        out[row, col] = m_t
-                else:
-                    # 正常范围：保留原值
-                    out[row, col] = curr
-
-        return frame_like(x, out)
+    def _calculate_series(self,x,window=20,n_sigma=3.,replacement="clip",scale_floor=1e-10,**_):
+        w,sigma,policy,floor=_hampel_parameters(window,n_sigma,replacement,scale_floor)
+        return frame_like(x,_hampel(x.to_numpy(dtype=float),w,sigma,policy,floor))
 
 
 @register_operator(
@@ -208,11 +136,12 @@ class TSMedian3Causal(SeriesOperator):
         category="signal_filter",
         description="三点中位数去毛刺：median(x_t, x_{t-1}, x_{t-2})，抑制孤立 spike",
         param_names=["x"],
+        panel_params=("x",), scalar_params=(), output_unit="same_as:x",
         return_type="series",
         tags=[
             "signal_filter", "causal", "typed_v2", "pit_safe",
             "signature:x->series",
-            "domain:signal_filter", "unit:dimensionless",
+            "domain:signal_filter", "unit:same_as:x",
             "filter_contract:despike",
         ],
     )
@@ -230,38 +159,8 @@ class TSMedian3Causal(SeriesOperator):
         turnover_control=False,
     )
 
-    def _calculate_series(
-        self,
-        x: pd.DataFrame,
-        **_: Any,
-    ) -> pd.DataFrame:
-        xv = x.to_numpy(dtype=float)
-        rows, cols = xv.shape
-        out = np.full((rows, cols), np.nan, dtype=float)
-
-        for col in range(cols):
-            for row in range(rows):
-                curr = xv[row, col]
-
-                # 前两行：窗口不足，直接输出
-                if row < 2:
-                    out[row, col] = curr
-                    continue
-
-                # 收集最近三个观测
-                val_0 = xv[row - 2, col]  # t-2
-                val_1 = xv[row - 1, col]  # t-1
-                val_2 = curr              # t
-
-                # 如果任何一个是 NaN，输出 NaN
-                if not (np.isfinite(val_0) and np.isfinite(val_1) and np.isfinite(val_2)):
-                    out[row, col] = np.nan
-                    continue
-
-                # 计算三点中位数
-                out[row, col] = float(np.median([val_0, val_1, val_2]))
-
-        return frame_like(x, out)
+    def _calculate_series(self,x,**_):
+        return frame_like(x,_median3(x.to_numpy(dtype=float)))
 
 
 @register_operator(
@@ -300,11 +199,19 @@ class TSRollingMedianCausal(SeriesOperator):
         category="signal_filter",
         description="短窗口滚动中位数去毛刺：比 mean 更抗 outlier",
         param_names=["x", "window", "min_periods"],
+        panel_params=("x",), scalar_params=("window","min_periods"), output_unit="same_as:x",
+        param_specs={
+            "window": ParamSpec(dtype=int,min=2,default=5,param_role=ParamRole.HORIZON,
+                                history_semantics="max_rows"),
+            "min_periods": ParamSpec(dtype=int,min=1,default=3,param_role=ParamRole.SUPPORT_POLICY,
+                                    searchable=False),
+        },
+        relational_specs=[RelationalParamSpec("min_periods <= window","min_periods must not exceed window")],
         return_type="series",
         tags=[
             "signal_filter", "causal", "typed_v2", "pit_safe",
             "signature:x,window,min_periods->series",
-            "domain:signal_filter", "unit:dimensionless",
+            "domain:signal_filter", "unit:same_as:x",
             "filter_contract:despike",
         ],
     )
@@ -322,52 +229,92 @@ class TSRollingMedianCausal(SeriesOperator):
         turnover_control=False,
     )
 
-    def _calculate_series(
-        self,
-        x: pd.DataFrame,
-        window: int = 5,
-        min_periods: int = 3,
-        **_: Any,
-    ) -> pd.DataFrame:
-        # 参数校验
-        if window < 2:
-            raise ValueError(f"ts_rolling_median_causal requires window >= 2, got {window}")
-        if min_periods < 1:
-            raise ValueError(f"ts_rolling_median_causal requires min_periods >= 1, got {min_periods}")
-        if min_periods > window:
-            raise ValueError(
-                f"ts_rolling_median_causal requires min_periods <= window, got {min_periods} > {window}"
-            )
+    def _calculate_series(self,x,window=5,min_periods=3,**_):
+        w,minimum=_median_parameters(window,min_periods)
+        return frame_like(x,_rolling_median(x.to_numpy(dtype=float),w,minimum))
 
-        xv = x.to_numpy(dtype=float)
-        rows, cols = xv.shape
-        out = np.full((rows, cols), np.nan, dtype=float)
 
-        for col in range(cols):
-            for row in range(rows):
-                # 窗口起点（包含当前点）
-                start = max(0, row - window + 1)
-                window_vals = xv[start : row + 1, col]
+def _hampel_parameters(window,n_sigma,replacement,scale_floor):
+    from factor_engine.cleaned_operators.common.strict_params import strict_int,strict_float,strict_enum
+    positive=float(np.nextafter(0.,1.))
+    return (strict_int(window,"window",minimum=2),
+            strict_float(n_sigma,"n_sigma",minimum=positive),
+            strict_enum(replacement,"replacement",("clip","median")),
+            strict_float(scale_floor,"scale_floor",minimum=positive))
 
-                # 只保留有限值
-                finite_mask = np.isfinite(window_vals)
-                finite_vals = window_vals[finite_mask]
 
-                # 有效观测数不足 min_periods
-                if len(finite_vals) < min_periods:
-                    out[row, col] = np.nan
-                    continue
+def _median_parameters(window,min_periods):
+    from factor_engine.cleaned_operators.common.strict_params import strict_int
+    w=strict_int(window,"window",minimum=2)
+    minimum=strict_int(min_periods,"min_periods",minimum=1,maximum=w)
+    return w,minimum
 
-                # 计算中位数
-                out[row, col] = float(np.median(finite_vals))
 
-        return frame_like(x, out)
+def _finite_median(values):
+    # Wide accumulation avoids overflow of the two central finite float64
+    # values and preserves small representable midpoints.
+    return np.median(np.asarray(values,dtype=np.longdouble))
+
+
+def _hampel(values,window,n_sigma,replacement,scale_floor):
+    out=np.full(values.shape,np.nan)
+    for c in range(values.shape[1]):
+        for t in range(values.shape[0]):
+            current=values[t,c]
+            if not np.isfinite(current):
+                continue
+            out[t,c]=current
+            if t<window:
+                continue
+            past=values[t-window:t,c]
+            past=past[np.isfinite(past)].astype(np.longdouble)
+            if past.size<2:
+                continue
+            center=_finite_median(past)
+            mad=_finite_median(np.abs(past-center))
+            # Exact degeneracy, not a price-unit-dependent absolute epsilon.
+            if mad==0:
+                span=past.max()-past.min()
+                if span==0:
+                    continue  # Existing truly-flat-history bypass policy.
+                robust_scale=np.longdouble("1.4826")*span/4
+            else:
+                robust_scale=np.longdouble("1.4826")*mad
+            threshold=np.longdouble(n_sigma)*max(robust_scale,np.longdouble(scale_floor))
+            delta=np.longdouble(current)-center
+            if abs(delta)>threshold:
+                filtered=center if replacement=="median" else center+np.clip(delta,-threshold,threshold)
+                out[t,c]=float(filtered) if np.isfinite(filtered) else np.nan
+    return out
+
+
+def _median3(values):
+    out=np.full(values.shape,np.nan)
+    for c in range(values.shape[1]):
+        for t in range(values.shape[0]):
+            recent=values[max(0,t-2):t+1,c]
+            if t<2:
+                out[t,c]=values[t,c] if np.isfinite(values[t,c]) else np.nan
+            elif np.isfinite(recent).all():
+                out[t,c]=float(_finite_median(recent))
+    return out
+
+
+def _rolling_median(values,window,min_periods):
+    out=np.full(values.shape,np.nan)
+    for c in range(values.shape[1]):
+        for t in range(values.shape[0]):
+            recent=values[max(0,t-window+1):t+1,c]
+            recent=recent[np.isfinite(recent)]
+            if recent.size>=min_periods:
+                out[t,c]=float(_finite_median(recent))
+    return out
 
 
 def _register_surface() -> None:
     """注册到 extended surface 并添加 Polars 后端支持。"""
     import factor_engine.cleaned_operators.operator_surface as _surface
-    from factor_engine.cleaned_operators.rolling_pack import register_polars_bridge
+    from factor_engine.cleaned_operators.rolling_pack import register_polars_udf
 
     _CANONICALS = {
         "ts_hampel_filter_causal",
@@ -377,9 +324,9 @@ def _register_surface() -> None:
 
     _surface.extend_extended_only(_CANONICALS)
 
-    # Polars 后端：委托 pandas reference
+    # Polars 后端：同一 NumPy 内核，避免 pandas 面板转换
     for _canon in _CANONICALS:
-        register_polars_bridge(_canon)
+        register_polars_udf(_canon)
 
 
 _register_surface()

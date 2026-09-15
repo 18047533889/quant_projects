@@ -24,6 +24,17 @@ def _op(name: str, backend: str = "pandas_numpy"):
     return op
 
 
+def _calculate(op, x):
+    """Exercise the actual panel topology with supported short histories."""
+    name = op.metadata.name
+    y = x.shift(1) * 0.7 + x * x
+    if name == "ts_copula_central_asymmetry":
+        return op.calculate(x, y, window=10)
+    kwargs = dict(recent_window=2, prior_window=4)
+    if name == "ts_energy_break_score":
+        kwargs["window"] = 3
+    return op.calculate(x, y, x.shift(2) - x, **kwargs)
+
 
 # ---------------------------------------------------------------------------
 # 1. ts_joint_energy_shift
@@ -37,7 +48,7 @@ def test_ts_joint_energy_shift_basic() -> None:
 
     op = _op("ts_joint_energy_shift")
     try:
-        result = op.calculate(x)
+        result = _calculate(op, x)
         assert isinstance(result, pd.DataFrame)
         assert result.shape == x.shape
     except Exception as e:
@@ -51,7 +62,7 @@ def test_ts_joint_energy_shift_handles_nans() -> None:
 
     op = _op("ts_joint_energy_shift")
     try:
-        result = op.calculate(x)
+        result = _calculate(op, x)
         assert isinstance(result, pd.DataFrame)
     except Exception as e:
         pytest.fail(f"NaN test failed: {e}")
@@ -64,12 +75,9 @@ def test_ts_joint_energy_shift_deterministic() -> None:
     x = pd.DataFrame(np.random.randn(15, 5), index=idx, columns=list("ABCDE"))
 
     op = _op("ts_joint_energy_shift")
-    try:
-        result1 = op.calculate(x)
-        result2 = op.calculate(x)
-        pd.testing.assert_frame_equal(result1, result2, check_exact=False, rtol=1e-10)
-    except Exception:
-        pass  # Some operators may not be deterministic
+    result1 = _calculate(op, x)
+    result2 = _calculate(op, x)
+    pd.testing.assert_frame_equal(result1, result2, check_exact=False, rtol=1e-10)
 
 
 # ---------------------------------------------------------------------------
@@ -84,7 +92,7 @@ def test_ts_energy_break_score_basic() -> None:
 
     op = _op("ts_energy_break_score")
     try:
-        result = op.calculate(x)
+        result = _calculate(op, x)
         assert isinstance(result, pd.DataFrame)
         assert result.shape == x.shape
     except Exception as e:
@@ -98,7 +106,7 @@ def test_ts_energy_break_score_handles_nans() -> None:
 
     op = _op("ts_energy_break_score")
     try:
-        result = op.calculate(x)
+        result = _calculate(op, x)
         assert isinstance(result, pd.DataFrame)
     except Exception as e:
         pytest.fail(f"NaN test failed: {e}")
@@ -111,12 +119,9 @@ def test_ts_energy_break_score_deterministic() -> None:
     x = pd.DataFrame(np.random.randn(15, 5), index=idx, columns=list("ABCDE"))
 
     op = _op("ts_energy_break_score")
-    try:
-        result1 = op.calculate(x)
-        result2 = op.calculate(x)
-        pd.testing.assert_frame_equal(result1, result2, check_exact=False, rtol=1e-10)
-    except Exception:
-        pass  # Some operators may not be deterministic
+    result1 = _calculate(op, x)
+    result2 = _calculate(op, x)
+    pd.testing.assert_frame_equal(result1, result2, check_exact=False, rtol=1e-10)
 
 
 # ---------------------------------------------------------------------------
@@ -131,7 +136,7 @@ def test_ts_copula_central_asymmetry_basic() -> None:
 
     op = _op("ts_copula_central_asymmetry")
     try:
-        result = op.calculate(x)
+        result = _calculate(op, x)
         assert isinstance(result, pd.DataFrame)
         assert result.shape == x.shape
     except Exception as e:
@@ -145,7 +150,7 @@ def test_ts_copula_central_asymmetry_handles_nans() -> None:
 
     op = _op("ts_copula_central_asymmetry")
     try:
-        result = op.calculate(x)
+        result = _calculate(op, x)
         assert isinstance(result, pd.DataFrame)
     except Exception as e:
         pytest.fail(f"NaN test failed: {e}")
@@ -158,12 +163,9 @@ def test_ts_copula_central_asymmetry_deterministic() -> None:
     x = pd.DataFrame(np.random.randn(15, 5), index=idx, columns=list("ABCDE"))
 
     op = _op("ts_copula_central_asymmetry")
-    try:
-        result1 = op.calculate(x)
-        result2 = op.calculate(x)
-        pd.testing.assert_frame_equal(result1, result2, check_exact=False, rtol=1e-10)
-    except Exception:
-        pass  # Some operators may not be deterministic
+    result1 = _calculate(op, x)
+    result2 = _calculate(op, x)
+    pd.testing.assert_frame_equal(result1, result2, check_exact=False, rtol=1e-10)
 
 
 

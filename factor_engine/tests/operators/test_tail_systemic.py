@@ -128,27 +128,29 @@ def test_relation_diffusion_score_basic() -> None:
     idx = pd.date_range("2024-01-01", periods=20)
     cols = [f"S{i}" for i in range(10)]
     x = pd.DataFrame(np.random.randn(20, 10), index=idx, columns=cols)
+    group = pd.DataFrame(1, index=idx, columns=cols)
 
     op = _op("relation_diffusion_score")
-    try:
-        result = op.calculate(x)
-        assert isinstance(result, pd.DataFrame)
-        assert result.shape == x.shape
-    except Exception as e:
-        pytest.fail(f"{op} basic test failed: {e}")
+    result = op.calculate(x, group, alpha=0.5, steps=2)
+    m = len(cols)
+    transition = (np.ones((m, m)) - np.eye(m)) / (m - 1)
+    expected = np.vstack([
+        0.5 * transition @ row + 0.5 * (transition @ transition) @ row
+        for row in x.to_numpy()
+    ])
+    np.testing.assert_allclose(result.to_numpy(), expected, atol=1e-14, rtol=1e-14)
 
 
 def test_relation_diffusion_score_handles_nans() -> None:
     """NaN handling test."""
     idx = pd.date_range("2024-01-01", periods=10)
     x = pd.DataFrame([[1.0, np.nan, 3.0]] * 10, index=idx, columns=["A", "B", "C"])
+    group = pd.DataFrame(1, index=idx, columns=x.columns)
 
     op = _op("relation_diffusion_score")
-    try:
-        result = op.calculate(x)
-        assert isinstance(result, pd.DataFrame)
-    except Exception as e:
-        pytest.fail(f"NaN test failed: {e}")
+    result = op.calculate(x, group, alpha=0.5, steps=2)
+    np.testing.assert_allclose(result[["A", "C"]].to_numpy(), 2.0)
+    assert result["B"].isna().all()
 
 
 def test_relation_diffusion_score_deterministic() -> None:
@@ -156,14 +158,12 @@ def test_relation_diffusion_score_deterministic() -> None:
     np.random.seed(123)
     idx = pd.date_range("2024-01-01", periods=15)
     x = pd.DataFrame(np.random.randn(15, 5), index=idx, columns=list("ABCDE"))
+    group = pd.DataFrame([[1, 1, 1, 2, 2]] * len(idx), index=idx, columns=x.columns)
 
     op = _op("relation_diffusion_score")
-    try:
-        result1 = op.calculate(x)
-        result2 = op.calculate(x)
-        pd.testing.assert_frame_equal(result1, result2, check_exact=False, rtol=1e-10)
-    except Exception:
-        pass  # Some operators may not be deterministic
+    result1 = op.calculate(x, group)
+    result2 = op.calculate(x, group)
+    pd.testing.assert_frame_equal(result1, result2, check_exact=True)
 
 
 

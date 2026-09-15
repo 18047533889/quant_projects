@@ -11,14 +11,16 @@ import json
 import os
 from pathlib import Path
 import re
+from threading import RLock
 import time
 import uuid
+import weakref
 
 import pandas as pd
 import pyarrow as pa
 import pyarrow.parquet as pq
 
-from factor_engine.runtime.default_execution_policy import DefaultExecutionPolicy
+from factor_engine.runtime.default_execution_policy import DefaultExecutionPolicy, ExecutionPurpose
 from factor_engine.runtime.dq_gates import assert_factor_dq
 from factor_engine.storage.parquet_batch_writer import BatchParquetWriter
 
@@ -29,6 +31,59 @@ class ArtifactResourceRequirementError(MemoryError):
     def __init__(self, required, available):
         self.required_bytes, self.available_bytes = required, available
         super().__init__(f"writer requires {required} bytes; admitted {available} bytes")
+
+
+_LEGACY_PURPOSE = {
+    "schema_version": "factor_engine.execution_purpose.legacy.v1",
+    "purpose": "legacy_unspecified", "input_integrity": "unknown",
+    "assurance": "LEGACY_UNSPECIFIED", "publication_authorized": False,
+}
+
+
+def _purpose_payload(execution_purpose):
+    if execution_purpose is None:
+        return dict(_LEGACY_PURPOSE)
+    if not isinstance(execution_purpose, ExecutionPurpose):
+        raise TypeError("a validated ExecutionPurpose is required")
+    return execution_purpose.to_dict()
+
+
+def _unique_json_object(pairs):
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError("duplicate manifest key")
+        result[key] = value
+    return result
+
+
+def _bind_read_lease(value, lease):
+    """Release a read lease only after every known returned buffer owner dies."""
+    from factor_engine.storage.sources.data_access_source import DataAccessSource
+
+    owners = DataAccessSource._physical_cache_owners(value)
+    if not owners:
+        raise RuntimeError("artifact readback has no trackable physical owners")
+    state = {"remaining": len(owners), "lease": lease, "lock": RLock()}
+
+    def release_owner(owner_state=state):
+        with owner_state["lock"]:
+            owner_state["remaining"] -= 1
+            if owner_state["remaining"] == 0:
+                owner_state["lease"].release()
+
+    registered = []
+    try:
+        for owner in owners:
+            registered.append(weakref.finalize(owner, release_owner))
+    except BaseException:
+        for finalizer in registered:
+            finalizer.detach()
+        raise
+    finalizers = tuple(registered)
+    # The global weakref finalizer registry retains callbacks; keeping the tuple
+    # in state also makes the ownership relation explicit for diagnostics.
+    state["finalizers"] = finalizers
 
 
 def required_writer_workspace_bytes(value) -> int:
@@ -68,7 +123,9 @@ def _file_digest(path, chunk_bytes):
     return digest.hexdigest()
 
 
-def verify_factor_artifact_receipt(receipt, root, run_id, ordinal, name, value, *, policy, budget_bytes):
+def verify_factor_artifact_receipt(receipt, root, run_id, ordinal, name, value, *, policy,
+                                   budget_bytes, execution_purpose=None,
+                                   run_identity_digest=None):
     """Independently verify an external sink; booleans are never commit proof.
 
     Only the isolated v2 manifest format is accepted. The caller retains result
@@ -95,15 +152,7 @@ def verify_factor_artifact_receipt(receipt, root, run_id, ordinal, name, value, 
     if hashlib.sha256(payload).hexdigest() != receipt.get("sha256"):
         raise ValueError("sink manifest hash differs from receipt")
 
-    def unique_object(pairs):
-        result = {}
-        for key, item in pairs:
-            if key in result:
-                raise ValueError("duplicate manifest key")
-            result[key] = item
-        return result
-
-    manifest = json.loads(payload, object_pairs_hook=unique_object)
+    manifest = json.loads(payload, object_pairs_hook=_unique_json_object)
     if not isinstance(manifest, dict):
         raise ValueError("sink manifest must be an object")
     expected_identity = {
@@ -113,6 +162,16 @@ def verify_factor_artifact_receipt(receipt, root, run_id, ordinal, name, value, 
     }
     if any(manifest.get(key) != item for key, item in expected_identity.items()):
         raise ValueError("sink manifest identity differs from requested output")
+    manifest_purpose = manifest.get("execution_purpose")
+    manifest_identity_digest = manifest.get("run_identity_digest")
+    if execution_purpose is None:
+        if (manifest_purpose not in (None, _purpose_payload(None))
+                or manifest_identity_digest not in (None, run_identity_digest)):
+            raise ValueError("legacy sink purpose identity is invalid")
+        manifest_purpose = _purpose_payload(None)
+    elif (manifest_purpose != _purpose_payload(execution_purpose)
+          or manifest_identity_digest != run_identity_digest):
+        raise ValueError("sink purpose identity differs from requested output")
     if manifest.get("committed") is not True or manifest.get("production_published") is not False:
         raise ValueError("sink manifest is not an isolated committed artifact")
     if not manifest.get("generation") or manifest["generation"] != receipt.get("generation"):
@@ -163,7 +222,11 @@ def verify_factor_artifact_receipt(receipt, root, run_id, ordinal, name, value, 
         del restored, expected
     if offset != len(value) or receipt.get("rows") != offset or receipt.get("bytes") != total_bytes:
         raise ValueError("sink receipt does not cover all requested rows/bytes")
-    return {**receipt, "verified": True, "production_published": False}
+    return {**receipt, "verified": True, "production_published": False,
+            "execution_purpose": manifest_purpose,
+            "run_identity_digest": manifest_identity_digest,
+            "assurance": manifest_purpose["assurance"],
+            "publication_authorized": False}
 
 
 def _artifact_directory(root, run_id, ordinal, generation):
@@ -176,7 +239,9 @@ def _artifact_directory(root, run_id, ordinal, generation):
     return Path(root) / run_id / "values" / f"{ordinal:08d}-{generation}"
 
 
-def reconcile_factor_artifact(root, run_id, ordinal, name, value, *, generation, policy, budget_bytes):
+def reconcile_factor_artifact(root, run_id, ordinal, name, value, *, generation, policy,
+                              budget_bytes, execution_purpose=None,
+                              run_identity_digest=None):
     """Read only one persisted intent's manifest after the writer has exited.
 
     The caller must supervise this verification with a finite deadline and hold
@@ -195,7 +260,7 @@ def reconcile_factor_artifact(root, run_id, ordinal, name, value, *, generation,
         payload = stream.read(limit + 1)
     if len(payload) > limit:
         raise ArtifactResourceRequirementError(len(payload) * 4, budget_bytes)
-    manifest = json.loads(payload)
+    manifest = json.loads(payload, object_pairs_hook=_unique_json_object)
     if not isinstance(manifest, dict) or not isinstance(manifest.get("chunks"), list):
         raise ValueError("invalid reconciliation manifest")
     chunks = manifest["chunks"]
@@ -208,7 +273,9 @@ def reconcile_factor_artifact(root, run_id, ordinal, name, value, *, generation,
     # Includes duplicate-key rejection, identity, DQ, hashes, exact axes/values,
     # chunk bounds and full coverage. The synthetic receipt is not the oracle.
     verified = verify_factor_artifact_receipt(
-        receipt, root, run_id, ordinal, name, value, policy=policy, budget_bytes=budget_bytes)
+        receipt, root, run_id, ordinal, name, value, policy=policy,
+        budget_bytes=budget_bytes, execution_purpose=execution_purpose,
+        run_identity_digest=run_identity_digest)
     # A writer may have exited between rename and directory fsync. Re-read
     # equality is not durability proof: flush only these verified existing
     # files and their directory chain, without changing or creating content.
@@ -221,7 +288,8 @@ def reconcile_factor_artifact(root, run_id, ordinal, name, value, *, generation,
 
 
 def write_verified_factor_artifact(root, run_id, ordinal, name, value, *, policy, budget_bytes,
-                                   generation=None):
+                                   generation=None, execution_purpose=None,
+                                   run_identity_digest=None):
     if not isinstance(policy, DefaultExecutionPolicy):
         raise TypeError("a validated DefaultExecutionPolicy is required")
     if type(budget_bytes) is not int or budget_bytes <= 0:
@@ -306,6 +374,8 @@ def write_verified_factor_artifact(root, run_id, ordinal, name, value, *, policy
         "policy_digest": policy.digest, "dtype": str(value.dtype),
         "rows": rows_verified, "chunks": chunks, "dq": dq.to_dict(),
         "committed": True, "verified": True, "production_published": False,
+        "execution_purpose": _purpose_payload(execution_purpose),
+        "run_identity_digest": run_identity_digest,
         "performance": {"write_seconds": write_seconds, "verify_seconds": verify_seconds,
                         "total_seconds": time.monotonic() - started,
                         "workspace_estimate_bytes": required, "workspace_budget_bytes": budget_bytes,
@@ -323,7 +393,147 @@ def write_verified_factor_artifact(root, run_id, ordinal, name, value, *, policy
     # Fsyncing only `values/` does not make a newly created run directory durable.
     for parent in (directory.parent, directory.parent.parent, Path(root)):
         _fsync_directory(parent)
-    return {"path": str(manifest_path), "sha256": hashlib.sha256(payload).hexdigest(),
+    return {"schema_version": manifest["schema_version"],
+            "run_id": run_id, "ordinal": ordinal, "factor_id": name,
+            "policy_digest": policy.digest,
+            "path": str(manifest_path), "sha256": hashlib.sha256(payload).hexdigest(),
             "generation": generation, "committed": True, "verified": True,
             "rows": rows_verified, "bytes": sum(item["bytes"] for item in chunks),
-            "production_published": False, "performance": manifest["performance"]}
+            "production_published": False,
+            "execution_purpose": manifest["execution_purpose"],
+            "run_identity_digest": run_identity_digest,
+            "assurance": manifest["execution_purpose"]["assurance"],
+            "publication_authorized": False, "performance": manifest["performance"]}
+
+
+def read_verified_factor_artifact(receipt, root, *, policy, budget_bytes, broker,
+                                  execution_purpose=None, run_identity_digest=None):
+    """Read a managed research artifact after identity/hash/axis verification."""
+    if not isinstance(policy, DefaultExecutionPolicy):
+        raise TypeError("a validated DefaultExecutionPolicy is required")
+    if type(budget_bytes) is not int or budget_bytes < 1024 * 1024:
+        raise ArtifactResourceRequirementError(1024 * 1024, budget_bytes)
+    if broker is None or not callable(getattr(broker, "acquire_memory", None)):
+        raise TypeError("managed artifact read requires a ResourceBroker authority")
+    if not isinstance(receipt, dict) or receipt.get("committed") is not True:
+        raise ValueError("a committed artifact receipt is required")
+    path = Path(receipt.get("path", "")).resolve()
+    resolved_root = Path(root).resolve()
+    if not path.is_relative_to(resolved_root) or path.name != "manifest.json":
+        raise ValueError("artifact is outside the managed root")
+    from factor_engine.runtime.auto_memory_budget import MemoryLeaseKind
+    limit = min(16 * 1024 * 1024, budget_bytes // 4)
+    metadata_lease = broker.acquire_memory(
+        MemoryLeaseKind.SOURCE_READ, limit,
+        lease_id=f"artifact-manifest-read:{uuid.uuid4().hex}",
+    )
+    if metadata_lease is None:
+        raise ArtifactResourceRequirementError(limit, 0)
+    try:
+        with path.open("rb") as stream:
+            payload = stream.read(limit + 1)
+        if len(payload) > limit:
+            raise ArtifactResourceRequirementError(len(payload) * 4, budget_bytes)
+        if hashlib.sha256(payload).hexdigest() != receipt.get("sha256"):
+            raise ValueError("artifact manifest hash differs from receipt")
+        manifest = json.loads(payload, object_pairs_hook=_unique_json_object)
+    finally:
+        metadata_lease.release()
+    if (manifest.get("schema_version") != "factor_engine.factor_artifact.v2"
+            or manifest.get("policy_digest") != policy.digest):
+        raise ValueError("artifact schema or policy identity is invalid")
+    receipt_identity = {
+        "schema_version": manifest.get("schema_version"),
+        "run_id": manifest.get("run_id"), "ordinal": manifest.get("ordinal"),
+        "factor_id": manifest.get("factor_id"),
+        "generation": manifest.get("generation"),
+        "policy_digest": manifest.get("policy_digest"),
+    }
+    if any(receipt.get(key) != value for key, value in receipt_identity.items()):
+        raise ValueError("artifact receipt run/ordinal identity is invalid")
+    expected_purpose = _purpose_payload(execution_purpose)
+    actual_purpose = manifest.get("execution_purpose")
+    actual_digest = manifest.get("run_identity_digest")
+    legacy_ok = (execution_purpose is None
+                 and actual_purpose in (None, expected_purpose)
+                 and actual_digest in (None, run_identity_digest))
+    if not legacy_ok and (actual_purpose != expected_purpose
+                          or actual_digest != run_identity_digest):
+        raise ValueError("artifact purpose or run identity differs from reader context")
+    if (manifest.get("committed") is not True
+            or manifest.get("production_published") is not False
+            or manifest.get("generation") != receipt.get("generation")):
+        raise ValueError("artifact commit identity is invalid")
+    lease = broker.acquire_memory(
+        MemoryLeaseKind.SOURCE_READ, budget_bytes,
+        lease_id=f"artifact-value-read:{uuid.uuid4().hex}",
+    )
+    if lease is None:
+        raise ArtifactResourceRequirementError(budget_bytes, 0)
+    pieces = []
+    offset = decoded_bytes = total_file_bytes = 0
+    seen = set()
+    try:
+        for chunk in manifest.get("chunks", []):
+            filename, rows = chunk.get("path"), chunk.get("rows")
+            if (not isinstance(filename, str) or Path(filename).name != filename
+                or filename in seen
+                or type(rows) is not int or rows <= 0 or chunk.get("offset") != offset):
+                raise ValueError("artifact chunks are not unique contiguous coverage")
+            seen.add(filename)
+            chunk_path = (path.parent / filename).resolve()
+            if chunk_path.parent != path.parent or not chunk_path.is_file():
+                raise ValueError("artifact chunk escapes managed generation")
+            size = chunk_path.stat().st_size
+            if size != chunk.get("bytes") or size > policy.max_file_bytes:
+                raise ValueError("artifact chunk size is invalid")
+            if _file_digest(chunk_path, min(1024 * 1024, budget_bytes // 16)) != chunk.get("sha256"):
+                raise ValueError("artifact chunk hash differs from manifest")
+            parquet = pq.ParquetFile(chunk_path)
+            if parquet.metadata.num_rows != rows:
+                raise ValueError("artifact chunk row count is invalid")
+            decoded_bytes += sum(
+                parquet.metadata.row_group(group).column(col).total_uncompressed_size
+                for group in range(parquet.metadata.num_row_groups)
+                for col in range(parquet.metadata.num_columns)
+            )
+            if decoded_bytes * 4 > budget_bytes:
+                raise ArtifactResourceRequirementError(decoded_bytes * 4, budget_bytes)
+            piece = parquet.read().to_pandas()["factor_value"]
+            pieces.append(piece)
+            offset += rows
+            total_file_bytes += size
+        value = pd.concat(pieces) if pieces else pd.Series(dtype=manifest.get("dtype"))
+    except BaseException:
+        lease.release()
+        raise
+    if (offset != manifest.get("rows") or str(value.dtype) != manifest.get("dtype")
+            or not isinstance(value.index, pd.MultiIndex) or value.index.nlevels != 2
+            or not value.index.is_unique):
+        lease.release()
+        raise ValueError("artifact readback axis/dtype coverage is invalid")
+    if receipt.get("rows") != offset or receipt.get("bytes") != total_file_bytes:
+        lease.release()
+        raise ValueError("artifact receipt row/byte coverage is invalid")
+    try:
+        assert_factor_dq(value, raise_on_fail=True)
+        _bind_read_lease(value, lease)
+    except BaseException:
+        lease.release()
+        raise
+    artifact_id = (f'{manifest["run_id"]}:{manifest["ordinal"]}:'
+                   f'{manifest["generation"]}')
+    projection = {
+        "schema_version": "factor_engine.factor_value_ref.v1",
+        "artifact_id": artifact_id,
+        "manifest_sha256": receipt["sha256"],
+        "execution_purpose": expected_purpose,
+        "run_identity": {"digest": actual_digest},
+    }
+    return {"value": value, "artifact_id": artifact_id,
+            "factor_id": manifest["factor_id"], "rows": offset,
+            "execution_purpose": expected_purpose,
+            "run_identity_digest": actual_digest,
+            "manifest_projection": projection,
+            "assurance": expected_purpose["assurance"],
+            "publication_authorized": False, "verified": True}

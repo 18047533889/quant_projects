@@ -169,7 +169,7 @@ def test_monotone_rise_first_up_then_no_completed_leg_overshoot_nan():
 def test_threshold_non_positive_rejected(bad):
     op = _get("ts_dc_event_rate")
     x = _col([100.0, 102.0, 101.0])
-    with pytest.raises(ValueError, match="threshold > 0"):
+    with pytest.raises(ValueError, match=r"threshold (?:> 0|must be >=)"):
         op.calculate(x, _ones(3), threshold=bad, window=10)
 
 

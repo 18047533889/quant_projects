@@ -14,6 +14,7 @@ from factor_engine.cleaned_operators.base_polars import (
     register_operator,
     PANEL_SKIP_COLUMNS,
 )
+from factor_engine.cleaned_operators.base import ParamRole, ParamSpec
 
 
 def _result_df(data_cols: dict, template_df: pl.DataFrame) -> pl.DataFrame:
@@ -64,6 +65,20 @@ class AshareOnePriceLimitStreak(SeriesOperator):
             "side": str,
             "tick_tolerance": float,
         },
+        param_specs={
+            "side": ParamSpec(
+                dtype=str, choices=("up", "down"), default="up",
+                searchable=False, param_role=ParamRole.MARKET_POLICY,
+            ),
+            "tick_tolerance": ParamSpec(
+                dtype=float, min=0.0, default=0.005,
+                searchable=False, param_role=ParamRole.NUMERICAL,
+            ),
+        },
+        panel_params=("open", "high", "low", "close", "high_limit", "low_limit", "valid_trade"),
+        panel_arity=7,
+        scalar_params=("side", "tick_tolerance"),
+        total_positional_arity=9,
         tags=["ashare", "limit", "trading_state", "polars_native"],
     )
 
@@ -164,20 +179,21 @@ class CashFlowLifecycleStage(SeriesOperator):
         name="cash_flow_lifecycle_stage",
         category="fundamental",
         description="Company lifecycle stage from cash flow patterns (OCF/ICF/FCF)",
-        param_names=["operating_cf", "investing_cf", "financing_cf"],
+        param_names=["operating", "investing", "financing"],
+        panel_params=("operating", "investing", "financing"),
         param_types={
-            "operating_cf": pl.DataFrame,
-            "investing_cf": pl.DataFrame,
-            "financing_cf": pl.DataFrame,
+            "operating": pl.DataFrame,
+            "investing": pl.DataFrame,
+            "financing": pl.DataFrame,
         },
         tags=["fundamental", "cash_flow", "lifecycle", "polars_native", "pit_safe"],
     )
 
     def _calculate_series(
         self,
-        operating_cf: pl.DataFrame,
-        investing_cf: pl.DataFrame,
-        financing_cf: pl.DataFrame,
+        operating: pl.DataFrame,
+        investing: pl.DataFrame,
+        financing: pl.DataFrame,
         **kwargs
     ) -> pl.DataFrame:
         """
@@ -191,13 +207,13 @@ class CashFlowLifecycleStage(SeriesOperator):
 
         Return numeric codes: 0=unknown, 1=growth, 2=mature, 3=decline, 4=turnaround
         """
-        cols = [c for c in operating_cf.columns if c not in PANEL_SKIP_COLUMNS]
+        cols = [c for c in operating.columns if c not in PANEL_SKIP_COLUMNS]
         result_data = {}
 
         for col in cols:
-            ocf = operating_cf[col].to_numpy()
-            icf = investing_cf[col].to_numpy()
-            fcf = financing_cf[col].to_numpy()
+            ocf = operating[col].to_numpy()
+            icf = investing[col].to_numpy()
+            fcf = financing[col].to_numpy()
 
             # Placeholder: simple sign-based classification
             stage = np.where(
@@ -216,7 +232,7 @@ class CashFlowLifecycleStage(SeriesOperator):
             )
             result_data[col] = stage
 
-        return _result_df(result_data, operating_cf)
+        return _result_df(result_data, operating)
 
 
 @register_operator(
@@ -473,7 +489,8 @@ class IndustryRollingPCALoading(SeriesOperator):
 
 @register_operator(
     name="session_event_recovery_score",
-    category="intraday",
+    category="intraday_microstructure",
+    business_category="intraday_microstructure",
     canonical="session_event_recovery_score",
     source="polars_native_misc_final",
     backend="polars")
@@ -483,68 +500,32 @@ class SessionEventRecoveryScore(SeriesOperator):
     Measures price recovery from intraday low/high following a shock.
     """
 
-    metadata = OperatorMetadata(
-        name="session_event_recovery_score",
-        category="intraday",
-        description="Recovery score after intraday event/shock",
-        param_names=["x", "event", "horizon", "residual_fraction", "refractory", "session_tz", "min_events", "calendar"],
-        param_types={
-            "x": pl.DataFrame,
-            "event": pl.DataFrame,
-            "horizon": int,
-            "residual_fraction": float,
-            "refractory": int,
-            "session_tz": str,
-            "min_events": int,
-            "calendar": str,
-        },
-        tags=["intraday", "session", "recovery", "polars_native"],
-    )
+    from factor_engine.cleaned_operators.common import session_recovery_delegate as _delegate
+    metadata = _delegate.metadata()
+
+    @property
+    def _contract_callable(self):
+        return self._delegate.reference()._calculate_series
 
     def _calculate_series(
         self,
         x: pl.DataFrame,
-        event=None,
-        horizon: int = 5,
-        residual_fraction: float = 0.5,
+        event,
+        horizon: int = 10,
+        residual_fraction: float = 0.25,
         refractory: int = 1,
-        session_tz: str = "Asia/Shanghai",
-        min_events: int = 1,
-        calendar: str = "XSHG",
+        session_tz: str | None = None,
+        min_events: int = 3,
+        calendar=None,
         **kwargs
     ) -> pl.DataFrame:
-        """
-        Best-effort delegation (R4-100 parity): the pandas reference
-        (session_recovery) declares the 8-param contract ``(x, event, horizon,
-        residual_fraction, refractory, session_tz, min_events, calendar)``.  The
-        reference computes the recovery score from the intraday panel; this
-        native exposes the same arity so a positional call never mis-binds.
+        return self._delegate.calculate(
+            x, event, horizon, residual_fraction, refractory, session_tz,
+            min_events, calendar,
+        )
 
-        Logic:
-        - Detect significant intraday move (e.g., close vs. low)
-        - Measure recovery: (close - low) / (high - low)
-        - Normalize and score
-        """
-        panel = x if isinstance(x, pl.DataFrame) else (x.to_frame() if not hasattr(x, "columns") else x)
-        cols = [c for c in panel.columns if c not in PANEL_SKIP_COLUMNS]
-        result_data = {}
-
-        for col in cols:
-            single = getattr(panel[col], "to_numpy", None)
-            c_val = single() if single is not None else panel[col]
-            c_val = np.asarray(c_val, dtype=float)
-            # Simple recovery proxy from the panel series alone.
-            running_max = np.fmax.accumulate(c_val)
-            running_min = np.minimum.accumulate(c_val)
-            range_val = running_max - running_min
-            recovery = np.where(
-                range_val > 1e-10,
-                (c_val - running_min) / range_val,
-                np.nan
-            )
-            result_data[col] = recovery
-
-        return _result_df(result_data, panel)
+    def physical_spec(self):
+        return self._delegate.physical_spec()
 
 
 # ============================================================================

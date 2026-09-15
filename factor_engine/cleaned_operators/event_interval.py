@@ -2,7 +2,7 @@
 """Event-interval statistics operators (2026-08 geometry/math expansion).
 
 An *event panel* is a ``TradeDate x Symbol`` frame with explicit **EventBool**
-semantics (reviews R4-54 / R4-96): ``1`` (or any finite nonzero) marks an
+semantics (reviews R4-54 / R4-96): ``1`` marks an
 event, ``0`` marks a *confirmed* no-event row, and ``NaN`` marks an *unknown*
 row.  For each instrument column the distance between consecutive event rows
 defines the inter-event intervals ``τ_i`` inside the trailing window; when a
@@ -31,13 +31,14 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from factor_engine.cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
+from factor_engine.cleaned_operators.base import OperatorMetadata, ParamRole, ParamSpec, SeriesOperator, register_operator
 from factor_engine.cleaned_operators.rolling_pack import frame_like, register_polars_bridge
 
 _EPS = 1e-12
 
 
-def _metadata(name: str, description: str, params: list[str], *, unit: str, cost: int) -> OperatorMetadata:
+def _metadata(name: str, description: str, params: list[str], *, unit: str, cost: int,
+              param_specs: dict[str, ParamSpec]) -> OperatorMetadata:
     return OperatorMetadata(
         name=name,
         category="event_interval",
@@ -50,6 +51,9 @@ def _metadata(name: str, description: str, params: list[str], *, unit: str, cost
             f"signature:{','.join(params)}->series", "domain:event_process",
             f"unit:{unit}", f"cost:{cost}",
         ],
+        param_specs=param_specs,
+        panel_params=("event",),
+        scalar_params=tuple(p for p in params if p != "event"),
     )
 
 
@@ -232,6 +236,23 @@ def _check_event_params(window: int, block: int | None = None) -> tuple[int, int
     return w, None
 
 
+def _validated_event_array(event: pd.DataFrame) -> np.ndarray:
+    values = event.to_numpy(dtype=float)
+    _event_mask(values.reshape(-1))  # validate every finite mark atomically
+    return values
+
+
+def _max_pre_age(value: Any, window: int) -> int:
+    if value is None:
+        return window
+    if isinstance(value, (bool, np.bool_)) or not isinstance(value, (int, np.integer)):
+        raise ValueError("max_pre_window_age must be an integer or None")
+    out = int(value)
+    if out < 1:
+        raise ValueError("max_pre_window_age must be >= 1")
+    return out
+
+
 @register_operator(
     name="event_interval_memory",
     category="event_interval",
@@ -255,6 +276,7 @@ class EventIntervalMemory(SeriesOperator):
         ["event", "window", "max_pre_window_age"],
         unit="corr",
         cost=3,
+        param_specs={"window": ParamSpec(dtype=int, min=2, default=240, param_role=ParamRole.HORIZON), "max_pre_window_age": ParamSpec(dtype=int, min=1, default=None, searchable=False, param_role=ParamRole.SUPPORT_POLICY)},
     )
 
     def _calculate_series(self, event: pd.DataFrame, window: int = 240, max_pre_window_age: Any = None, **_: Any) -> pd.DataFrame:
@@ -262,10 +284,9 @@ class EventIntervalMemory(SeriesOperator):
         # Round-7 P0: the pre-window event may only reach ``max_pre_window_age``
         # rows before the window (default = window), so the effective history is
         # bounded to ``2 * window`` and full/chunk/incremental parity holds.
-        pre = int(max_pre_window_age) if max_pre_window_age is not None else w
-        if pre < 1:
-            raise ValueError("max_pre_window_age must be >= 1")
-        return frame_like(event, _interval_memory_series(event.to_numpy(dtype=float), w, pre))
+        pre = _max_pre_age(max_pre_window_age, w)
+        values = _validated_event_array(event)
+        return frame_like(event, _interval_memory_series(values, w, pre))
 
 
 @register_operator(
@@ -289,14 +310,14 @@ class EventLocalVariation(SeriesOperator):
         ["event", "window", "max_pre_window_age"],
         unit="ratio",
         cost=3,
+        param_specs={"window": ParamSpec(dtype=int, min=2, default=240, param_role=ParamRole.HORIZON), "max_pre_window_age": ParamSpec(dtype=int, min=1, default=None, searchable=False, param_role=ParamRole.SUPPORT_POLICY)},
     )
 
     def _calculate_series(self, event: pd.DataFrame, window: int = 240, max_pre_window_age: Any = None, **_: Any) -> pd.DataFrame:
         w, _ = _check_event_params(window)
-        pre = int(max_pre_window_age) if max_pre_window_age is not None else w
-        if pre < 1:
-            raise ValueError("max_pre_window_age must be >= 1")
-        return frame_like(event, _local_variation_series(event.to_numpy(dtype=float), w, pre))
+        pre = _max_pre_age(max_pre_window_age, w)
+        values = _validated_event_array(event)
+        return frame_like(event, _local_variation_series(values, w, pre))
 
 
 @register_operator(
@@ -322,11 +343,13 @@ class EventFanoFactor(SeriesOperator):
         ["event", "window", "block"],
         unit="ratio",
         cost=3,
+        param_specs={"window": ParamSpec(dtype=int, min=2, default=240, param_role=ParamRole.HORIZON), "block": ParamSpec(dtype=int, min=1, default=20, searchable=False, param_role=ParamRole.ESTIMATOR_RESOLUTION)},
     )
 
     def _calculate_series(self, event: pd.DataFrame, window: int = 240, block: int = 20, **_: Any) -> pd.DataFrame:
         w, b = _check_event_params(window, block)
-        return frame_like(event, _fano_factor_series(event.to_numpy(dtype=float), w, b))
+        values = _validated_event_array(event)
+        return frame_like(event, _fano_factor_series(values, w, b))
 
 
 @register_operator(
@@ -352,11 +375,13 @@ class EventFanoExcess(SeriesOperator):
         ["event", "window", "block"],
         unit="ratio",
         cost=3,
+        param_specs={"window": ParamSpec(dtype=int, min=2, default=240, param_role=ParamRole.HORIZON), "block": ParamSpec(dtype=int, min=1, default=20, searchable=False, param_role=ParamRole.ESTIMATOR_RESOLUTION)},
     )
 
     def _calculate_series(self, event: pd.DataFrame, window: int = 240, block: int = 20, **_: Any) -> pd.DataFrame:
         w, b = _check_event_params(window, block)
-        fano = _fano_factor_series(event.to_numpy(dtype=float), w, b)
+        values = _validated_event_array(event)
+        fano = _fano_factor_series(values, w, b)
         out = fano - 1.0
         out[~np.isfinite(fano)] = np.nan
         return frame_like(event, out)

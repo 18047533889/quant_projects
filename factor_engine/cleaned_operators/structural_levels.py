@@ -51,6 +51,7 @@ from factor_engine.cleaned_operators.base import (
     OperatorMetadata,
     ParamRole,
     ParamSpec,
+    RelationalParamSpec,
     SeriesOperator,
     register_operator,
 )
@@ -112,36 +113,46 @@ def _metadata(
             f"signature:{','.join(params)}->series", "domain:price_geometry",
             f"unit:{unit}", f"cost:{cost}",
         ],
-        param_specs=param_specs or {},
+        panel_params=("price",), scalar_params=tuple(params[1:]),
+        param_specs={
+            **(param_specs or {}),
+            "window":ParamSpec(dtype=int,min=2,default=120,param_role=ParamRole.HORIZON,history_semantics="max_rows"),
+            "prominence":ParamSpec(dtype=float,min=float(np.nextafter(0.,1.)),default=.02,param_role=ParamRole.ECONOMIC),
+            "confirmation":ParamSpec(dtype=int,min=1,default=3,param_role=ParamRole.MODEL_ORDER),
+            "min_periods":ParamSpec(dtype=int,min=1,default=20,param_role=ParamRole.SUPPORT_POLICY),
+            "min_coverage_fraction":ParamSpec(dtype=float,min=0.,max=1.,default=.5,param_role=ParamRole.SUPPORT_POLICY),
+            **({"bandwidth":ParamSpec(dtype=float,min=float(np.nextafter(0.,1.)),default=.03,param_role=ParamRole.ECONOMIC)} if "bandwidth" in params else {}),
+            **({"direction":ParamSpec(dtype=str,choices=("any","above","below"),default="any",param_role=ParamRole.POLICY)} if "direction" in params else {}),
+            **({"decay":ParamSpec(dtype=float,min=0.,default=.05,param_role=ParamRole.ECONOMIC),
+                "cutoff":ParamSpec(dtype=float,min=float(np.nextafter(0.,1.)),default=.05,param_role=ParamRole.ECONOMIC)} if "decay" in params else {}),
+        },
+        relational_specs=[RelationalParamSpec("min_periods <= window","min_periods must not exceed window"),
+                          RelationalParamSpec("confirmation < window","confirmation must be smaller than window")],
         available_at="close_of_t",
         same_session_usable=False,
     )
 
 
 def _check_int(value: Any, name: str, minimum: int) -> int:
-    if isinstance(value, (bool, np.bool_)):
-        raise ValueError(f"{name} must be an integer, not bool")
-    fv = float(value)
-    if not np.isfinite(fv) or fv != float(int(fv)):
-        raise ValueError(f"{name} must be an integer")
-    iv = int(fv)
-    if iv < minimum:
-        raise ValueError(f"{name} must be >= {minimum}")
-    return iv
+    from factor_engine.cleaned_operators.common.strict_params import strict_int
+    return strict_int(value,name,minimum=minimum)
 
 
 def _check_positive_float(value: Any, name: str) -> float:
-    fv = float(value)
-    if not np.isfinite(fv) or fv <= 0.0:
-        raise ValueError(f"{name} must be a finite positive number")
-    return fv
+    from factor_engine.cleaned_operators.common.strict_params import strict_float
+    return strict_float(value,name,minimum=float(np.nextafter(0.,1.)))
 
 
 def _check_coverage_fraction(value: Any, name: str = "min_coverage_fraction") -> float:
-    fv = float(value)
-    if not np.isfinite(fv) or not (0.0 <= fv <= 1.0):
-        raise ValueError(f"{name} must be in [0, 1]")
-    return fv
+    from factor_engine.cleaned_operators.common.strict_params import strict_float
+    return strict_float(value,name,minimum=0.,maximum=1.)
+
+
+def _log_price_ratio(a: float, b: float) -> float:
+    """Finite positive log ratio, with accurate nearby ratios and no overflow."""
+    # Far apart prices need log differences; nearby ratios avoid cancellation.
+    ratio = a / b
+    return math.log(ratio) if 0.5 <= ratio <= 2.0 else math.log(a)-math.log(b)
 
 
 def _window_covered(
@@ -164,7 +175,7 @@ def _window_covered(
     eff = int(np.isfinite(chunk).sum())
     if eff < int(min_periods):
         return False
-    return eff / chunk.shape[0] >= float(min_coverage_fraction)
+    return eff / window >= float(min_coverage_fraction)
 
 
 def _density_series(
@@ -197,7 +208,7 @@ def _density_series(
             active = _active_pivots_within_age(
                 ledger.active_at(t, window=w), t, conf, max_pivot_age
             )
-            ds = [math.log(pt / ev.value) for ev in active if ev.value > 0.0]
+            ds = [_log_price_ratio(pt, ev.value) for ev in active if ev.value > 0.0]
             if not ds:
                 continue
             d = np.asarray(ds, dtype=float)
@@ -231,7 +242,7 @@ def _nearest_distance_series(
         lr = np.full(rows, np.nan, dtype=float)
         for t in range(1, rows):
             if np.isfinite(x[t - 1]) and np.isfinite(x[t]) and x[t - 1] > 0.0 and x[t] > 0.0:
-                lr[t] = math.log(x[t] / x[t - 1])
+                lr[t] = _log_price_ratio(float(x[t]),float(x[t - 1]))
         scale = np.full(rows, np.nan, dtype=float)
         for t in range(rows):
             i0 = max(0, t - w + 1)
@@ -254,15 +265,15 @@ def _nearest_distance_series(
                 if p <= 0.0:
                     continue
                 if direction == "any":
-                    adi = abs(math.log(pt / p))
+                    adi = abs(_log_price_ratio(pt,p))
                 elif direction == "above":
                     if not (p > pt):
                         continue
-                    adi = abs(math.log(pt / p))
+                    adi = abs(_log_price_ratio(pt,p))
                 else:  # below
                     if not (p < pt):
                         continue
-                    adi = abs(math.log(pt / p))
+                    adi = abs(_log_price_ratio(pt,p))
                 if adi < best:
                     best = adi
             if np.isfinite(best):
@@ -309,7 +320,7 @@ def _strength_series(
                 p = ev.value
                 if p <= 0.0:
                     continue
-                di = math.log(pt / p)
+                di = _log_price_ratio(pt,p)
                 adi = abs(di)
                 if adi > cut:
                     continue
@@ -473,9 +484,8 @@ class TsStructuralLevelStrength(SeriesOperator):
         w = _check_int(window, "window", 2)
         prom = _check_positive_float(prominence, "prominence")
         conf = _check_int(confirmation, "confirmation", 1)
-        dec = float(decay)
-        if not np.isfinite(dec) or dec < 0.0:
-            raise ValueError("decay must be a finite non-negative number")
+        from factor_engine.cleaned_operators.common.strict_params import strict_float
+        dec = strict_float(decay,"decay",minimum=0.)
         cut = _check_positive_float(cutoff, "cutoff")
         mp = _check_int(min_periods, "min_periods", 1)
         mcf = _check_coverage_fraction(min_coverage_fraction)
@@ -497,8 +507,16 @@ def _register_surface() -> None:
     import factor_engine.cleaned_operators.operator_surface as _surface
 
     _surface.extend_extended_only(set(_NEW_CANONICALS))
+    from factor_engine.cleaned_operators.common.structural_delegate import register
     for _canon in _NEW_CANONICALS:
-        register_polars_bridge(_canon)
+        register(_canon)
 
 
 _register_surface()
+
+# The alternating ledger is seeded by prior confirmed events, even when output
+# aggregation uses a finite window. No checkpoint adapter exists yet.
+from factor_engine.runtime.execution_contract import declare_stateful
+for _canonical in _NEW_CANONICALS:
+    declare_stateful(_canonical,state_model="recursive",chunking="required_full_history",
+                     history_kind="full_history")

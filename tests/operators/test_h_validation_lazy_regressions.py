@@ -216,14 +216,51 @@ def test_lazy_cache_lease_survives_external_ndarray_view(monkeypatch):
     out = b.materialize_columns(["A"])
     token = b._cache_leases["A"]
     lease = b._live_cache_leases[token]["lease"]
+    output_tokens = set(b._live_cache_leases) - {token}
+    assert len(output_tokens) == 1
+    output_lease = b._live_cache_leases[output_tokens.pop()]["lease"]
     view = out["A"].to_numpy(copy=False)
     b.release_cached(["A"])
     del out
     gc.collect()
-    assert not lease.released
+    assert lease.released
+    assert not output_lease.released
     del view
     gc.collect()
-    assert lease.released
+    assert output_lease.released
+
+
+@pytest.mark.parametrize("copy_on_write", [False, True])
+def test_lazy_return_mutation_cannot_change_cached_snapshot(monkeypatch, copy_on_write):
+    b, calls = _bundle(monkeypatch)
+    with pd.option_context("mode.copy_on_write", copy_on_write):
+        first = b.materialize_columns(["A"], output_names={"A": "price"})["price"]
+        first.attrs["source"] = "caller"
+        first.index = first.index.set_names(["caller_time", "caller_instrument"])
+        first.iloc[0] = 999.0
+        derived = first.to_numpy(copy=False)
+        if derived.flags.writeable:
+            derived[1] = 888.0
+        else:
+            with pytest.raises(ValueError):
+                derived[1] = 888.0
+        second = b.materialize_columns(["A"], output_names={"A": "again"})["again"]
+    np.testing.assert_array_equal(second.to_numpy(), [1.0, 2.0])
+    assert second.index.names == ["timestamp", "instrument"]
+    assert second.attrs == {}
+    assert len(calls) == 1
+
+
+def test_lazy_mutation_after_lru_eviction_does_not_rebind_old_snapshot(monkeypatch):
+    b, calls = _bundle(monkeypatch)
+    old = b.materialize_columns(["A"])["A"]
+    b._materialized_budget = b._cache_bytes()
+    both = b.materialize_columns(["A", "B"])
+    old.iloc[0] = 77.0
+    both["A"].iloc[1] = 66.0
+    assert len(calls) == 2
+    np.testing.assert_array_equal(both["B"].to_numpy(), [3.0, 4.0])
+
 
 def test_unknown_and_zero_budget_still_refuse_source_cache(monkeypatch):
     from types import SimpleNamespace

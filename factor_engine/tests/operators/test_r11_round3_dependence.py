@@ -252,10 +252,14 @@ def test_hsic_tie_heavy_operator_finite():
     assert np.isfinite(out.iloc[-1, 0])
 
 
-def test_hsic_bandwidth_source_uses_positive_distances():
-    src = inspect.getsource(_rbf_kernel)
-    assert "tri[tri > _EPS]" in src or "> _EPS" in src
-    assert "median(pos)" in src or "median" in src
+def test_hsic_bandwidth_uses_positive_distances_at_any_units():
+    values = np.array([0.,0.,0.,0.,0.,1.,2.])
+    d = np.abs(values[:,None]-values[None,:])
+    distances = d[np.triu_indices(len(values),1)]
+    sigma = np.median(distances[distances>0.])
+    expected = np.exp(-0.5*(d/sigma)**2)
+    for units in (1.,1e-200,1e200):
+        np.testing.assert_allclose(_rbf_kernel(values*units),expected,atol=1e-12)
 
 
 # ---------------------------------------------------------------------------

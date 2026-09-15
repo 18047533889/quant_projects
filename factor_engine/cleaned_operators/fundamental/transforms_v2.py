@@ -10,6 +10,7 @@ already-visible period updates results only from the revision timestamp onward.
 from __future__ import annotations
 
 from collections import OrderedDict
+import inspect
 from typing import Callable, Iterable
 
 import numpy as np
@@ -26,10 +27,47 @@ _VS_PRIOR_HISTORY_PARAM_SPECS: dict[str, ParamSpec] = {
     "periods": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON, searchable=True),
 }
 from factor_engine.cleaned_operators.fiscal_strict import (
+    FLOW_TYPE_SET,
     period_ordinal,
     reject_ytd_growth,
     require_same_flow_grain,
 )
+
+_INTEGER_SCALAR_PARAMS = frozenset({
+    "periods", "periods_per_year", "short_periods", "long_periods",
+    "growth_periods", "compare_periods", "window_periods", "average_periods",
+})
+
+
+def _signature_contract(
+    params: Iterable[str], fn: Callable
+) -> tuple[tuple[str, ...], dict[str, ParamSpec]]:
+    """Derive topology/defaults only from this module's concrete kernels."""
+    names = tuple(params)
+    signature = inspect.signature(fn)
+    scalar_specs: dict[str, ParamSpec] = {}
+    for name in names:
+        parameter = signature.parameters.get(name)
+        if parameter is None:
+            continue
+        default = parameter.default
+        if name in _INTEGER_SCALAR_PARAMS:
+            scalar_specs[name] = ParamSpec(
+                dtype=int,
+                min=1,
+                default=default,
+                param_role=ParamRole.HORIZON,
+            )
+        elif name == "flow_type":
+            scalar_specs[name] = ParamSpec(
+                dtype=str,
+                choices=tuple(sorted(FLOW_TYPE_SET)),
+                searchable=False,
+                default=default,
+                param_role=ParamRole.POLICY,
+            )
+    panels = tuple(name for name in names if name not in scalar_specs)
+    return panels, scalar_specs
 
 _EPS = 1e-12
 
@@ -395,13 +433,30 @@ def _lag_value(order, visible, current, periods: int):
 
 
 def _register(name: str, params: Iterable[str], fn, description: str, *, tags=(), param_specs: dict[str, ParamSpec] | None = None):
+    params = list(params)
+    panel_params, signature_specs = _signature_contract(params, fn)
+    for key, declared in (param_specs or {}).items():
+        if key not in signature_specs:
+            signature_specs[key] = declared
+        elif declared.param_role is not None:
+            current = signature_specs[key]
+            signature_specs[key] = ParamSpec(
+                dtype=current.dtype, min=current.min, max=current.max,
+                choices=current.choices, searchable=declared.searchable,
+                active_when=declared.active_when,
+                history_semantics=declared.history_semantics,
+                history_formula=declared.history_formula,
+                default=current.default, equivalence=declared.equivalence,
+                param_role=declared.param_role,
+            )
     metadata = OperatorMetadata(
         name=name,
         category="fundamental_period",
         description=description,
-        param_names=list(params),
+        param_names=params,
+        panel_params=panel_params,
         return_type="series",
-        param_specs={k: v for k, v in (param_specs or {}).items() if k in params},
+        param_specs={k: v for k, v in signature_specs.items() if k in params},
         tags=["fundamental", "period_aware", "pit_safe", "causal", "production_extension", *tags],
     )
     # Round-11 #51: expose the expected reporting-flow grain on the contract.

@@ -11,7 +11,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from factor_engine.cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
+from factor_engine.cleaned_operators.base import OperatorMetadata, ParamRole, ParamSpec, SeriesOperator, register_operator
 
 
 def _metadata(name: str, description: str, params: list[str], *, domain: str, unit: str, price_params: tuple[str, ...], available_at: str = "session_close", same_session_usable: bool = False) -> OperatorMetadata:
@@ -26,6 +26,8 @@ def _metadata(name: str, description: str, params: list[str], *, domain: str, un
         category="return_decomposition",
         description=description,
         param_names=declared,
+        panel_params=tuple(params), scalar_params=("price_basis",),
+        param_specs={"price_basis": ParamSpec(dtype=str, default=None, searchable=False, param_role=ParamRole.POLICY)},
         return_type="series",
         tags=[
             "return_decomposition", "daily", "pit_safe", "causal", "typed_v2",
@@ -190,7 +192,7 @@ def _safe_ratio(numerator: pd.DataFrame, denominator: pd.DataFrame, *, strict: b
     """
     num = numerator.to_numpy(dtype=float) if hasattr(numerator, "to_numpy") else np.asarray(numerator, dtype=float)
     den = denominator.to_numpy(dtype=float) if hasattr(denominator, "to_numpy") else np.asarray(denominator, dtype=float)
-    with np.errstate(divide="ignore", invalid="ignore"):
+    with np.errstate(divide="ignore", invalid="ignore", over="ignore"):
         out = num / den
     # P0-61: a finite price <= 0 is not a price.  A zero denominator was already
     # NaN; a negative denominator (or a zero/negative numerator) would otherwise

@@ -36,7 +36,7 @@ def test_event_mark_autocorr_basic() -> None:
 
     op = _op("event_mark_autocorr")
     try:
-        result = op.calculate(x)
+        result = op.calculate((x > 0).astype(float).where(x.notna()), x)
         assert isinstance(result, pd.DataFrame)
         assert result.shape == x.shape
     except Exception as e:
@@ -50,7 +50,7 @@ def test_event_mark_autocorr_handles_nans() -> None:
 
     op = _op("event_mark_autocorr")
     try:
-        result = op.calculate(x)
+        result = op.calculate((x > 0).astype(float).where(x.notna()), x)
         assert isinstance(result, pd.DataFrame)
     except Exception as e:
         pytest.fail(f"NaN test failed: {e}")
@@ -63,12 +63,9 @@ def test_event_mark_autocorr_deterministic() -> None:
     x = pd.DataFrame(np.random.randn(15, 5), index=idx, columns=list("ABCDE"))
 
     op = _op("event_mark_autocorr")
-    try:
-        result1 = op.calculate(x)
-        result2 = op.calculate(x)
-        pd.testing.assert_frame_equal(result1, result2, check_exact=False, rtol=1e-10)
-    except Exception:
-        pass  # Some operators may not be deterministic
+    result1 = op.calculate((x > 0).astype(float).where(x.notna()), x)
+    result2 = op.calculate((x > 0).astype(float).where(x.notna()), x)
+    pd.testing.assert_frame_equal(result1, result2, check_exact=False, rtol=1e-10)
 
 
 # ---------------------------------------------------------------------------
@@ -83,7 +80,7 @@ def test_event_interval_mark_coupling_basic() -> None:
 
     op = _op("event_interval_mark_coupling")
     try:
-        result = op.calculate(x)
+        result = op.calculate((x > 0).astype(float).where(x.notna()), x)
         assert isinstance(result, pd.DataFrame)
         assert result.shape == x.shape
     except Exception as e:
@@ -97,7 +94,7 @@ def test_event_interval_mark_coupling_handles_nans() -> None:
 
     op = _op("event_interval_mark_coupling")
     try:
-        result = op.calculate(x)
+        result = op.calculate((x > 0).astype(float).where(x.notna()), x)
         assert isinstance(result, pd.DataFrame)
     except Exception as e:
         pytest.fail(f"NaN test failed: {e}")
@@ -110,12 +107,9 @@ def test_event_interval_mark_coupling_deterministic() -> None:
     x = pd.DataFrame(np.random.randn(15, 5), index=idx, columns=list("ABCDE"))
 
     op = _op("event_interval_mark_coupling")
-    try:
-        result1 = op.calculate(x)
-        result2 = op.calculate(x)
-        pd.testing.assert_frame_equal(result1, result2, check_exact=False, rtol=1e-10)
-    except Exception:
-        pass  # Some operators may not be deterministic
+    result1 = op.calculate((x > 0).astype(float).where(x.notna()), x)
+    result2 = op.calculate((x > 0).astype(float).where(x.notna()), x)
+    pd.testing.assert_frame_equal(result1, result2, check_exact=False, rtol=1e-10)
 
 
 

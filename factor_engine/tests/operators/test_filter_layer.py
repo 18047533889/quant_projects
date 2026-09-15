@@ -453,6 +453,7 @@ def test_hampel_warmup_period(registry):
 
 def test_hampel_parameter_validation(registry):
     """验证参数校验。"""
+    from factor_engine.backend.operator_errors import OperatorParameterError
     dates = pd.date_range("2020-01-01", periods=6, freq="D")
     data = pd.DataFrame({"A": [1.0] * 6}, index=dates)
 
@@ -465,15 +466,15 @@ def test_hampel_parameter_validation(registry):
         op.calculate(data, window=1)
 
     # n_sigma <= 0 应报错
-    with pytest.raises(ValueError, match=r"(?:ts_hampel_filter_causal\.n_sigma \[runtime\]: n_sigma must be >= 1\.0|ts_hampel_filter_causal requires n_sigma > 0, got 0\.0)"):
+    with pytest.raises(OperatorParameterError, match="n_sigma"):
         op.calculate(data, window=5, n_sigma=0.0)
 
     # scale_floor <= 0 应报错
-    with pytest.raises(ValueError, match="scale_floor > 0"):
+    with pytest.raises(OperatorParameterError, match="scale_floor"):
         op.calculate(data, window=5, scale_floor=0.0)
 
     # 无效的 replacement 应报错
-    with pytest.raises(ValueError, match="replacement must be"):
+    with pytest.raises(OperatorParameterError, match="replacement"):
         op.calculate(data, window=5, replacement="invalid")
 
 
@@ -808,7 +809,7 @@ def test_super_smoother_parameter_validation(registry):
     meta = op.metadata
 
     # period < 3 应报错（两极滤波器不稳定）
-    with pytest.raises(ValueError, match="period >= 3"):
+    with pytest.raises(ValueError, match=r"period.*>= 3"):
         op.calculate(data, period=2)
 
 

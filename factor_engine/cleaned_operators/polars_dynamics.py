@@ -13,12 +13,17 @@ pandas_numpy-only: their aggregation is cross-column, not per-column.
 """
 from __future__ import annotations
 
+import copy
+import hashlib
+import inspect
+from pathlib import Path
 from typing import Any
 
 import numpy as np
 import polars as pl
 
 from factor_engine.cleaned_operators.base_polars import OperatorMetadata, SeriesOperator, register_operator
+from factor_engine.backend.contracts import ExecutionKind, PhysicalImplementationSpec
 from factor_engine.cleaned_operators.markov_dynamics import (
     _state_dynamics_series,
     _observed_reachable,
@@ -37,6 +42,7 @@ from factor_engine.cleaned_operators.extreme_tail import (
     _hill_series,
     _mean_excess_slope_series,
     _extremal_index_series,
+    _quantile_beta_series,
 )
 from factor_engine.cleaned_operators.report_timing import _delay_surprise_series
 from factor_engine.cleaned_operators.advanced_information import _te_peak_window
@@ -68,19 +74,114 @@ def _mk(canonical: str, description: str, params: list[str], fn):
         return_type="series",
         tags=["polars", "daily", "native_udf", "typed_v2"],
     )
+    if canonical in {
+        "ts_first_passage_hit_probability",
+        "ts_first_passage_conditional_time",
+        "event_historical_response_mean",
+        "event_historical_response_sign_balance",
+        "ts_state_density",
+    }:
+        from factor_engine.cleaned_operators.first_passage import (
+            TsFirstPassageConditionalTime,
+            TsFirstPassageHitProbability,
+        )
+        from factor_engine.cleaned_operators.event_response import (
+            EventHistoricalResponseMean,
+            EventHistoricalResponseSignBalance,
+        )
+        from factor_engine.cleaned_operators.state_geometry import TsStateDensity
+        references = {
+            cls.metadata.name: cls for cls in
+            (
+                TsFirstPassageHitProbability,
+                TsFirstPassageConditionalTime,
+                EventHistoricalResponseMean,
+                EventHistoricalResponseSignBalance,
+                TsStateDensity,
+            )
+        }
+        metadata = copy.deepcopy(references[canonical].metadata)
+
+    physical_spec = None
+    if canonical in {
+        "event_historical_response_mean",
+        "event_historical_response_sign_balance",
+    }:
+        from factor_engine.cleaned_operators import event_response
+        digest = hashlib.sha256(
+            Path(event_response.__file__).read_bytes() + Path(__file__).read_bytes()
+        ).hexdigest()
+        physical_spec = PhysicalImplementationSpec(
+            canonical=canonical,
+            backend="polars",
+            execution_kind=ExecutionKind.POLARS_NUMPY_KERNEL,
+            supports_lazy=False,
+            supports_streaming=False,
+            materializes_full_panel=True,
+            supports_nulls=True,
+            supports_nan=True,
+            supports_inf=True,
+            implementation_source_hash=digest,
+            kernel_identity="event_response._horizon_response:" + canonical,
+            notes=("Per-instrument shared NumPy CPU kernel over fully materialized "
+                   "Polars columns; no pandas-panel conversion and no GPU claim."),
+        )
+    elif canonical == "ts_state_density":
+        source_payload = "\n".join(
+            inspect.getsource(obj)
+            for obj in (_state_density_series, _single_kernel, _rebuild)
+        )
+        source_hash = hashlib.sha256(source_payload.encode("utf-8")).hexdigest()
+        domain_hash = hashlib.sha256(
+            b"window:int>=2;bandwidth:finite-float>0;min_periods:int>=2;min_periods<=window"
+        ).hexdigest()
+        contract_hash = hashlib.sha256(
+            b"strict-past-reference;epanechnikov;robust-scale;dimensionless;gap-preserving;prefix-causal"
+        ).hexdigest()
+        physical_spec = PhysicalImplementationSpec(
+            canonical=canonical,
+            backend="polars",
+            execution_kind=ExecutionKind.POLARS_NUMPY_KERNEL,
+            supports_lazy=False,
+            supports_streaming=False,
+            materializes_full_panel=True,
+            requires_sorted=True,
+            supports_nulls=True,
+            supports_nan=True,
+            supports_inf=True,
+            implementation_source_hash=source_hash,
+            emitter_identity="polars_dynamics._single_kernel:_rebuild:v1",
+            kernel_identity="state_geometry._state_density_series:v2",
+            kernel_signature="(series,window,bandwidth,min_periods)->float64-series",
+            parameter_domain_hash=domain_hash,
+            semantic_contract_hash=contract_hash,
+            implementation_closure_hash=source_hash,
+            notes=("Per-column shared NumPy Epanechnikov kernel over fully "
+                   "materialized Polars columns; no pandas conversion, lazy "
+                   "execution, streaming, GPU, or Polars-expression claim."),
+        )
 
     def _calculate_series(self, *args, **kwargs):
         return fn(*args, **kwargs)
 
+    def _physical_spec_method(self):
+        return physical_spec
+
     cls = type(
         f"PolarsDynamics_{canonical}",
         (SeriesOperator,),
-        {"metadata": metadata, "_calculate_series": _calculate_series, "__module__": __name__},
+        {
+            "metadata": metadata,
+            "_calculate_series": _calculate_series,
+            "_physical_spec": physical_spec,
+            "physical_spec": _physical_spec_method,
+            "__module__": __name__,
+        },
     )
     register_operator(
         name=canonical,
-        category="state_dynamics",
-        business_category="state_dynamics",
+        category=metadata.category,
+        business_category=metadata.category,
         canonical=canonical,
         source="polars_dynamics",
     )(cls)
@@ -603,8 +704,22 @@ _mk(
     "ts_hill_tail_index",
     "Hill 尾部指数 ξ（Polars）。",
     ["x", "window", "side", "tail_fraction", "min_tail_count"],
-    lambda frame, window=120, side="upper", tail_fraction=0.2, min_tail_count=10: _single_kernel(
-        frame, lambda s: _hill_series(s, window, side, tail_fraction, min_tail_count)
+    lambda x, window=120, side="upper", tail_fraction=0.2, min_tail_count=10: _single_kernel(
+        x, lambda s: _hill_series(s, window, side, tail_fraction, min_tail_count)
+    ),
+)
+_mk(
+    "ts_quantile_regression_beta",
+    "分位数回归斜率 β_q（Polars）。",
+    ["y", "x", "window", "quantile"],
+    lambda y, x, window=120, quantile=0.5: _rebuild(
+        y,
+        {
+            c: _quantile_beta_series(
+                _col(y, c)[:, None], _col(x, c)[:, None], window, quantile
+            )[:, 0]
+            for c in _cols(y)
+        },
     ),
 )
 def _delay_surprise_pair(delay_frame, event_frame, window, min_periods):
@@ -641,12 +756,21 @@ def _fp_stats_pair(x_frame, scale_frame, window, barrier, horizon, min_anchors, 
     return _rebuild(x_frame, out)
 
 
+def _fp_side_index(side, upper, lower):
+    normalized = str(side).lower()
+    if normalized == "upper":
+        return upper
+    if normalized == "lower":
+        return lower
+    raise ValueError(f"unknown side {side!r}; expected upper/lower")
+
+
 _mk(
     "ts_first_passage_hit_probability",
     "历史首达命中概率（Polars）。",
     ["x", "scale", "window", "barrier", "horizon", "min_anchors", "scale_horizon", "side"],
     lambda x, scale, window=120, barrier=1.0, horizon=10, min_anchors=3, scale_horizon=1, side="upper": _fp_stats_pair(
-        x, scale, window, barrier, horizon, min_anchors, 0 if str(side).lower() == "upper" else 1, scale_horizon
+        x, scale, window, barrier, horizon, min_anchors, _fp_side_index(side, 0, 1), scale_horizon
     ),
 )
 _mk(
@@ -654,7 +778,7 @@ _mk(
     "命中条件下的平均首达时间（Polars）。",
     ["x", "scale", "window", "barrier", "horizon", "min_anchors", "scale_horizon", "side"],
     lambda x, scale, window=120, barrier=1.0, horizon=10, min_anchors=3, scale_horizon=1, side="upper": _fp_stats_pair(
-        x, scale, window, barrier, horizon, min_anchors, 2 if str(side).lower() == "upper" else 3, scale_horizon
+        x, scale, window, barrier, horizon, min_anchors, _fp_side_index(side, 2, 3), scale_horizon
     ),
 )
 
@@ -758,23 +882,23 @@ _mk(
     "ts_extremal_index",
     "极值指数 θ = 簇数/超阈次数（Polars）。",
     ["x", "window", "side", "q", "min_exceed", "run_length"],
-    lambda frame, window=120, side="upper", q=0.9, min_exceed=3, run_length=1: _single_kernel(
-        frame, lambda s: _extremal_index_series(s, window, side, q, min_exceed, run_length)
+    lambda x, window=120, side="upper", q=0.9, min_exceed=3, run_length=1: _single_kernel(
+        x, lambda s: _extremal_index_series(s, window, side, q, min_exceed, run_length)
     ),
 )
 _mk(
     "ts_mean_excess_slope",
     "mean-excess 图斜率（Polars）。",
     ["x", "window", "side", "min_tail_count"],
-    lambda frame, window=120, side="upper", min_tail_count=5: _single_kernel(
-        frame, lambda s: _mean_excess_slope_series(s, window, side, min_tail_count)
+    lambda x, window=120, side="upper", min_tail_count=5: _single_kernel(
+        x, lambda s: _mean_excess_slope_series(s, window, side, min_tail_count)
     ),
 )
 _mk(
     "ts_gpd_shape_pwm",
     "GPD 形状参数 ξ（PWM，Polars）。",
     ["x", "window", "side", "tail_fraction", "min_tail_count"],
-    lambda frame, window=120, side="upper", tail_fraction=0.2, min_tail_count=10: _single_kernel(
-        frame, lambda s: _gpd_shape_pwm_series(s, window, side, tail_fraction, min_tail_count)
+    lambda x, window=120, side="upper", tail_fraction=0.2, min_tail_count=10: _single_kernel(
+        x, lambda s: _gpd_shape_pwm_series(s, window, side, tail_fraction, min_tail_count)
     ),
 )

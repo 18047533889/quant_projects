@@ -31,15 +31,22 @@ shape-preserving and NaN fail-closed:
 """
 from __future__ import annotations
 
+import inspect
 from typing import Any, Callable
 
 import numpy as np
 import pandas as pd
 
+from factor_engine.backend.contracts import ExecutionKind, PhysicalImplementationSpec
 from factor_engine.cleaned_operators.base_polars import OperatorMetadata as PolarsMetadata
 from factor_engine.cleaned_operators.base_polars import SeriesOperator as PolarsSeriesOperator
 from factor_engine.cleaned_operators.registry import OperatorRegistry
 from factor_engine.cleaned_operators.rolling_pack import frame_like
+from factor_engine.cleaned_operators.base import ParamRole, ParamSpec
+from factor_engine.cleaned_operators.parameter_validation import (
+    strict_finite_scalar,
+    strict_integer,
+)
 
 _EPS = 1e-12
 
@@ -99,9 +106,7 @@ def _group_topk_mean(
     exclude_self: bool = True,
 ) -> pd.DataFrame:
     target, score, group = _align(target, score, group)
-    kk = int(k)
-    if kk < 1:
-        raise ValueError("group_topk_mean requires k >= 1")
+    kk = strict_integer(k, "k", minimum=1)
     tv = _as_float(target)
     sv = _as_float(score)
     gv = group.to_numpy()
@@ -165,9 +170,19 @@ def _group_topk_mean(
             if n_eq and not np.all(np.isfinite(t[eq_idx])):
                 continue
             frac = (n_take_eq / n_eq) if n_eq > 0 else 0.0
-            mean_val = (
-                float(np.sum(t[above])) + frac * float(np.sum(t[eq_idx]))
-            ) / kk
+            selected_scale = float(np.max(np.abs(np.concatenate((t[above], t[eq_idx])))))
+            if not np.isfinite(selected_scale):
+                continue
+            if selected_scale == 0.0:
+                mean_val = 0.0
+            else:
+                normalized_sum = (
+                    float(np.sum(t[above] / selected_scale))
+                    + frac * float(np.sum(t[eq_idx] / selected_scale))
+                ) / kk
+                mean_val = selected_scale * normalized_sum
+                if not np.isfinite(mean_val):
+                    continue
             out[r, i] = float(mean_val)
     return frame_like(target, out)
 
@@ -183,9 +198,7 @@ def _ts_value_at_argextreme(
     include_current: bool = False,
 ) -> pd.DataFrame:
     value, score = _align(value, score)
-    w = int(window)
-    if w < 2:
-        raise ValueError("ts_value_at_argextreme requires window >= 2")
+    w = strict_integer(window, "window", minimum=2)
     mode_s = str(mode).lower()
     if mode_s not in {"max", "min"}:
         raise ValueError("mode must be 'max' or 'min'")
@@ -244,13 +257,18 @@ def _cs_weighted_percentile_rank(x: pd.DataFrame, weight: pd.DataFrame) -> pd.Da
             continue
         valid = np.isfinite(xr) & np.isfinite(wr)
         valid_idx = np.flatnonzero(valid)
-        total = float(wr[valid].sum())
-        if total <= _EPS:
+        raw_weights = wr[valid]
+        weight_scale = float(np.max(raw_weights)) if raw_weights.size else 0.0
+        if not np.isfinite(weight_scale) or weight_scale <= 0.0:
+            continue
+        scaled_weights = raw_weights / weight_scale
+        total = float(np.sum(scaled_weights))
+        if not np.isfinite(total) or total <= 0.0:
             continue
         # weighted mid-rank for ties
         order = np.argsort(xr[valid], kind="stable")
         xs = xr[valid][order]
-        ws = wr[valid][order]
+        ws = scaled_weights[order]
         n = xs.size
         lower_cum = 0.0
         rank_out = np.full(n, np.nan)
@@ -284,12 +302,8 @@ def _group_distribution_js_divergence(
     exclude_group_from_reference: bool = True,
 ) -> pd.DataFrame:
     x, group = _align(x, group)
-    nb = int(bins)
-    if nb < 2:
-        raise ValueError("group_distribution_js_divergence requires bins >= 2")
-    mg = int(min_group_size)
-    if mg < 1:
-        raise ValueError("min_group_size must be >= 1")
+    nb = strict_integer(bins, "bins", minimum=2)
+    mg = strict_integer(min_group_size, "min_group_size", minimum=1)
     xv = _as_float(x)
     gv = group.to_numpy()
     rows, cols = xv.shape
@@ -402,13 +416,11 @@ def _event_level_survival_share(
     tolerance: float = 0.0,
 ) -> pd.DataFrame:
     event, level, x = _align(event, level, x)
-    w = int(history_window)
-    if w < 2:
-        raise ValueError("event_level_survival_share requires history_window >= 2")
+    w = strict_integer(history_window, "history_window", minimum=2)
     direction_s = str(direction).lower()
     if direction_s not in {"up", "down"}:
         raise ValueError("direction must be 'up' or 'down'")
-    tol = float(tolerance)
+    tol = strict_finite_scalar(tolerance, "tolerance")
     if tol < 0.0:
         raise ValueError("tolerance must be >= 0")
     ev = _as_float(event)
@@ -422,15 +434,15 @@ def _event_level_survival_share(
         # so "survived" means the *whole path since the event* stayed on the
         # favorable side, not merely that today's x happens to be there (a dip
         # below the level and recovery would otherwise count as "survived").
-        cohort: list[tuple[int, float, float]] = []
+        cohort: list[tuple[int, float, float, bool]] = []
         for r in range(rows):
             if r >= 1:
                 prev = r - 1
                 if np.isfinite(ev[prev, c]) and ev[prev, c] != 0.0 and np.isfinite(lv[prev, c]):
                     if direction_s == "up":
-                        cohort.append((prev, float(lv[prev, c]), np.inf))
+                        cohort.append((prev, float(lv[prev, c]), np.inf, False))
                     else:
-                        cohort.append((prev, float(lv[prev, c]), -np.inf))
+                        cohort.append((prev, float(lv[prev, c]), -np.inf, False))
             # drop events older than the window
             while cohort and (r - cohort[0][0]) > w:
                 cohort.pop(0)
@@ -438,15 +450,23 @@ def _event_level_survival_share(
                 continue
             cur = xv[r, c]
             if not np.isfinite(cur):
+                # Once any part of an event's path is unknown, its survival is
+                # censored for the remainder of its cohort life.  A later
+                # recovery must never resurrect it as a known survivor.
+                cohort = [(er, lev, ext, True) for er, lev, ext, _ in cohort]
                 continue
             survived = 0.0
+            observed = 0
             for k in range(len(cohort)):
-                e_row, lev, ext = cohort[k]
+                e_row, lev, ext, censored = cohort[k]
+                if censored:
+                    continue
                 if direction_s == "up":
                     ext = min(ext, cur)
                 else:
                     ext = max(ext, cur)
-                cohort[k] = (e_row, lev, ext)
+                cohort[k] = (e_row, lev, ext, False)
+                observed += 1
                 # Inclusive survival: x_t == level (e.g. a stock that touches the
                 # limit price) is still "alive" in A-share limit semantics; a
                 # small tick tolerance avoids floating-point boundary flips.
@@ -456,7 +476,8 @@ def _event_level_survival_share(
                 else:
                     if ext <= lev + tol:
                         survived += 1.0
-            out[r, c] = float(survived / len(cohort))
+            if observed:
+                out[r, c] = float(survived / observed)
     return frame_like(x, out)
 
 
@@ -506,6 +527,37 @@ _UNITS: dict[str, str] = {
     "event_level_survival_share": "probability",
 }
 
+_PANEL_PARAMS = {
+    "group_topk_mean": ("target", "score", "group"),
+    "ts_value_at_argextreme": ("value", "score"),
+    "cs_weighted_percentile_rank": ("x", "weight"),
+    "group_distribution_js_divergence": ("x", "group"),
+    "event_level_survival_share": ("event", "level", "x"),
+}
+
+_PARAM_SPECS = {
+    "group_topk_mean": {
+        "k": ParamSpec(dtype=int, min=1, default=3, param_role=ParamRole.ESTIMATOR_RESOLUTION, searchable=False),
+        "exclude_self": ParamSpec(dtype=bool, default=True, param_role=ParamRole.POLICY, searchable=False),
+    },
+    "ts_value_at_argextreme": {
+        "window": ParamSpec(dtype=int, min=2, default=20, history_semantics="max_rows", param_role=ParamRole.HORIZON),
+        "mode": ParamSpec(dtype=str, choices=("max", "min"), default="max", param_role=ParamRole.POLICY, searchable=False),
+        "include_current": ParamSpec(dtype=bool, default=False, param_role=ParamRole.POLICY, searchable=False),
+    },
+    "cs_weighted_percentile_rank": {},
+    "group_distribution_js_divergence": {
+        "bins": ParamSpec(dtype=int, min=2, default=10, param_role=ParamRole.ESTIMATOR_RESOLUTION, searchable=False),
+        "min_group_size": ParamSpec(dtype=int, min=1, default=5, param_role=ParamRole.SUPPORT_POLICY, searchable=False),
+        "exclude_group_from_reference": ParamSpec(dtype=bool, default=True, param_role=ParamRole.POLICY, searchable=False),
+    },
+    "event_level_survival_share": {
+        "history_window": ParamSpec(dtype=int, min=2, default=60, history_semantics="exact_rows", param_role=ParamRole.HORIZON),
+        "direction": ParamSpec(dtype=str, choices=("up", "down"), default="up", param_role=ParamRole.POLICY, searchable=False),
+        "tolerance": ParamSpec(dtype=float, min=0.0, default=0.0, param_role=ParamRole.NUMERICAL, searchable=False),
+    },
+}
+
 
 def _register() -> None:
     from factor_engine.cleaned_operators.base import Operator as PandasOperator
@@ -514,6 +566,9 @@ def _register() -> None:
     for canonical, fn in _KERNELS.items():
         params = _PARAMS[canonical]
         category = _CATEGORIES[canonical]
+        panels = _PANEL_PARAMS[canonical]
+        scalars = tuple(param for param in params if param not in panels)
+        specs = _PARAM_SPECS[canonical]
 
         class _PandasOp(PandasOperator):
             metadata = PandasMetadata(
@@ -522,6 +577,10 @@ def _register() -> None:
                 description=canonical,
                 examples=[],
                 param_names=params,
+                panel_params=panels,
+                panel_arity=len(panels),
+                scalar_params=scalars,
+                param_specs=specs,
                 return_type="series",
                 tags=["daily", "panel", "pit_safe", "causal", "deterministic",
                       f"signature:{','.join(params)}->series",
@@ -529,6 +588,7 @@ def _register() -> None:
             )
 
             _HANDLES_CALL_CONTRACT = True  # R5-02: routes through validate_operator_call
+            _contract_callable = staticmethod(fn)
 
             def calculate(self, *args, _fn=fn, **kwargs):
                 # R5-02: this module registered ``calculate`` directly without
@@ -545,13 +605,37 @@ def _register() -> None:
         )
 
         class _PolarsOp(PolarsSeriesOperator):
-            metadata = PolarsMetadata(name=canonical, category="gather_ext", param_names=[])
+            metadata = PolarsMetadata(
+                name=canonical, category="gather_ext", param_names=params,
+                panel_params=panels, panel_arity=len(panels), scalar_params=scalars,
+                param_specs=specs,
+            )
 
-            def _calculate_series(self, *frames, _fn=fn, **params):
-                import polars as pl  # noqa: F401
-                pdfs = [f.select([c for c in f.columns if c not in _SKIP]).to_pandas() for f in frames]
-                out = _fn(*pdfs, **params)
-                base = frames[0]
+            _contract_callable = staticmethod(fn)
+            _physical_spec = PhysicalImplementationSpec(
+                canonical=canonical,
+                backend="polars",
+                execution_kind=ExecutionKind.POLARS_PANDAS_DELEGATE,
+                supports_lazy=False,
+                supports_streaming=False,
+                materializes_full_panel=True,
+                requires_sorted=canonical in {"ts_value_at_argextreme", "event_level_survival_share"},
+                supports_nulls=True,
+                supports_nan=True,
+                supports_inf=False,
+                notes="Eager pandas reference delegate; not native Polars or production eligible.",
+            )
+
+            def _calculate_series(self, *args, _fn=fn, _panels=panels, **kwargs):
+                import polars as pl
+                bound = inspect.signature(_fn).bind(*args, **kwargs)
+                for panel_name in _panels:
+                    frame = bound.arguments[panel_name]
+                    bound.arguments[panel_name] = frame.select(
+                        [c for c in frame.columns if c not in _SKIP]
+                    ).to_pandas()
+                out = _fn(*bound.args, **bound.kwargs)
+                base = args[0] if args else kwargs[_panels[0]]
                 cols = [c for c in base.columns if c not in _SKIP]
                 return base.with_columns(
                     [pl.Series(name=c, values=np.asarray(out[c], dtype=np.float64)) for c in cols]

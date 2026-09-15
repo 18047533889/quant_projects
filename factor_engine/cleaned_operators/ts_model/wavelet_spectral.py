@@ -44,6 +44,18 @@ def _register(
     fixed_window: bool = False,
     window_spec: ParamSpec | None = None,
 ):
+    param_specs = {}
+    if fixed_window:
+        param_specs["window"] = ParamSpec(
+            dtype=int,
+            choices=_FIXED_WINDOW_ANCHORS,
+            default=128,
+            history_semantics="max_rows",
+            param_role=ParamRole.HORIZON,
+        )
+    elif window_spec is not None:
+        param_specs["window"] = window_spec
+
     @register_operator(
         name=name,
         category="time_series_regression",
@@ -60,15 +72,11 @@ def _register(
             params,
             unit=unit,
             cost=cost,
-            param_specs={
-                "window": ParamSpec(
-                    dtype=int,
-                    choices=_FIXED_WINDOW_ANCHORS,
-                    default=128,
-                    param_role=ParamRole.HORIZON,
-                )
-            } if fixed_window else ({"window": window_spec} if window_spec else None),
+            param_specs=param_specs,
         )
+        metadata.panel_params = ("x",)
+        metadata.panel_arity = 1
+        metadata.scalar_params = tuple(param for param in params if param != "x")
 
         def _calculate_series(self, *args, **kwargs):
             return fn(*args, **kwargs)
@@ -159,12 +167,23 @@ def _haar_energy(vals: np.ndarray, window: int) -> list[tuple[int, float]]:
 
 
 def _wavelet_stats(vals: np.ndarray, window: int, stat: str) -> float:
-    levels = _haar_energy(vals, window)
+    anchor = _fixed_window_anchor(window)
+    seg = vals[-anchor:]
+    finite = _trailing_contiguous_finite(seg)
+    if finite.size < anchor:
+        return np.nan
+    scale = float(np.max(np.abs(finite[-anchor:])))
+    if not np.isfinite(scale) or scale == 0.0:
+        return np.nan
+    # Haar statistics are homogeneous in energy. Scaling the complete physical
+    # window before pairwise sums/squares avoids overflow and absolute-unit
+    # degeneracy without changing the dyadic bands.
+    levels = _haar_energy(finite[-anchor:] / scale, anchor)
     if len(levels) < 2:
         return np.nan
     energies = [energy for _scale, energy in levels]
     total = float(sum(energies))
-    if total <= 1e-12:
+    if not np.isfinite(total) or total <= 0.0:
         return np.nan
     if stat == "low":
         return float(energies[0] / total)
@@ -224,7 +243,14 @@ def _spectral_low_ratio(vals: np.ndarray, window: int) -> float:
     # empty block via ``_trailing_contiguous_finite``, audit #55.)
     if finite.size < w:
         return np.nan
-    demean = finite - np.mean(finite)
+    finite = finite[-w:]
+    scale = float(np.max(np.abs(finite)))
+    if not np.isfinite(scale) or scale == 0.0:
+        return np.nan
+    # The ratio is dimensionless. Normalize before demeaning and FFT so squared
+    # magnitudes cannot overflow and tiny nonconstant signals remain valid.
+    normalized = finite / scale
+    demean = normalized - np.mean(normalized)
     spec = np.abs(np.fft.rfft(demean)) ** 2
     weights = np.full(spec.size, 2.0, dtype=float)
     weights[0] = 1.0
@@ -232,7 +258,7 @@ def _spectral_low_ratio(vals: np.ndarray, window: int) -> float:
         weights[-1] = 1.0
     energy = weights * spec
     total = float(np.sum(energy))
-    if total <= 1e-12:
+    if not np.isfinite(total) or total <= 0.0:
         return np.nan
     half = max(1, len(spec) // 2)
     return float(np.sum(energy[:half]) / total)
@@ -240,4 +266,4 @@ def _spectral_low_ratio(vals: np.ndarray, window: int) -> float:
 
 _register("ts_spectral_low_frequency_ratio", "傅里叶低频能量占比。", ["x", "window"], "ratio",
            lambda x, window=128: _apply(x, lambda v: _spectral_low_ratio(v, window)),
-           window_spec=ParamSpec(dtype=int, min=1, default=128, param_role=ParamRole.HORIZON))
+           window_spec=ParamSpec(dtype=int, min=2, default=128, history_semantics="max_rows", param_role=ParamRole.HORIZON))

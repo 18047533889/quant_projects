@@ -1,0 +1,3972 @@
+{
+  "task_sha256": "03f6c13af4be7adfcd6c5372bc1a2c22577d1939c8be757c3fa9c610da320837",
+  "tickets": {
+    "A01": {
+      "title": "分层评估晋级没有更新局部阶段名，而且成功计算被当作质量通过",
+      "status": "VERIFIED",
+      "evidence": [
+        "factor_optimizer/tests/search/test_tiered_evaluation.py",
+        "factor_optimizer/tests/search/test_v05_cheap_prefilter.py",
+        "factor_optimizer/tests/search/test_v05_cheap_prefilter.py::test_complete_high_score_without_decision_provider_cannot_promote"
+      ],
+      "acceptance_ids": [
+        "T15",
+        "T16"
+      ],
+      "owner_reported_status": "PENDING_RECONCILIATION",
+      "historical_disposition": "Preserve original artifacts; changed numeric definitions require affected-lineage recomputation, policy-only changes reuse valid raw metrics. No production mutation performed.",
+      "rollback": "Use frozen source/diff as a coherent version; do not mix old policy receipts with new implementations."
+    },
+    "A02": {
+      "title": "已有 TrialEvaluationArtifact 被原样接收，未按本次请求验明身份与状态",
+      "status": "VERIFIED",
+      "evidence": [
+        "factor_optimizer/tests/search/test_evaluation_artifact.py",
+        "factor_optimizer/tests/search/test_v05_cheap_prefilter.py"
+      ],
+      "acceptance_ids": [
+        "T13",
+        "T14"
+      ],
+      "owner_reported_status": "PENDING_RECONCILIATION",
+      "historical_disposition": "Preserve original artifacts; changed numeric definitions require affected-lineage recomputation, policy-only changes reuse valid raw metrics. No production mutation performed.",
+      "rollback": "Use frozen source/diff as a coherent version; do not mix old policy receipts with new implementations."
+    },
+    "A03": {
+      "title": "复杂评分存在于模块，但 SearchRunner 没有把它设成必经选择入口",
+      "status": "VERIFIED",
+      "evidence": [
+        "factor_optimizer/tests/search/test_v8_qe_fa_fo_integration.py",
+        "factor_optimizer/tests/search/test_v8_qe_fa_fo_integration.py::test_actual_qe_joint_bootstrap_yields_identical_fa_fo_fp_decision_identity",
+        "factor_optimizer/tests/test_treatment_decision_generalized.py::test_legacy_decide_requires_explicit_screening_mode",
+        "factor_optimizer/tests/test_treatment_decision_generalized.py::test_local_health_decision_requires_explicit_screening_mode_and_marks_result"
+      ],
+      "acceptance_ids": [
+        "T17",
+        "T30",
+        "T111"
+      ],
+      "owner_reported_status": "PENDING_RECONCILIATION",
+      "historical_disposition": "Preserve original artifacts; changed numeric definitions require affected-lineage recomputation, policy-only changes reuse valid raw metrics. No production mutation performed.",
+      "rollback": "Use frozen source/diff as a coherent version; do not mix old policy receipts with new implementations."
+    },
+    "A04": {
+      "title": "健康维度下限只检查“有等级”，并用布尔覆盖与零指标代替真实值",
+      "status": "VERIFIED",
+      "evidence": [
+        "factor_assets/tests/test_v8_selection_decision.py::test_t02_required_dimension_ids_are_unique_and_empty_means_no_dimension_gate",
+        "factor_assets/tests/test_v8_selection_decision.py::test_hard_gates_precede_scoring_and_do_not_borrow_grade_or_coverage",
+        "factor_assets/tests/test_v8_selection_decision.py::test_nonfinite_and_bool_metric_inputs_fail_closed_at_boundary"
+      ],
+      "remaining": "production-calibrated continuous floors for all purposes are unsealed",
+      "owner_evidence": "fa/acceptance_ledger.json",
+      "acceptance_ids": [
+        "T02",
+        "T03",
+        "T04",
+        "T05"
+      ],
+      "owner_reported_status": "PARTIAL",
+      "historical_disposition": "Preserve original artifacts; changed numeric definitions require affected-lineage recomputation, policy-only changes reuse valid raw metrics. No production mutation performed.",
+      "rollback": "Use frozen source/diff as a coherent version; do not mix old policy receipts with new implementations."
+    },
+    "A05": {
+      "title": "六轴健康投影丢掉形状/状态信息，缺失轴借总体等级，容量方向也不一致",
+      "status": "VERIFIED",
+      "evidence": [
+        "factor_assets/tests/test_v8_selection_decision.py::test_hard_gates_precede_scoring_and_do_not_borrow_grade_or_coverage",
+        "factor_assets/tests/test_v8_selection_decision.py::test_t10_policy_used_shape_or_state_raw_perturbation_changes_utility_and_gate[shape_score]",
+        "factor_assets/tests/test_v8_selection_decision.py::test_t10_policy_used_shape_or_state_raw_perturbation_changes_utility_and_gate[state_purity]"
+      ],
+      "remaining": "all six blocks require://purpose-specific calibrated primary metrics",
+      "owner_evidence": "fa/acceptance_ledger.json",
+      "acceptance_ids": [
+        "T09",
+        "T10"
+      ],
+      "owner_reported_status": "PARTIAL",
+      "historical_disposition": "Preserve original artifacts; changed numeric definitions require affected-lineage recomputation, policy-only changes reuse valid raw metrics. No production mutation performed.",
+      "rollback": "Use frozen source/diff as a coherent version; do not mix old policy receipts with new implementations."
+    },
+    "A06": {
+      "title": "部分或无关 bootstrap 证据可以被补成“完整”的常数维度",
+      "status": "VERIFIED",
+      "evidence": [
+        "factor_assets/tests/test_v8_formula_oracle.py::test_v8_joint_formula_pairing_is_per_replicate_not_difference_of_quantiles",
+        "factor_assets/tests/test_v8_qe_joint_evidence.py::test_adapter_rejects_identity_axis_and_finiteness_mutations[replicates]",
+        "factor_assets/tests/test_v8_qe_joint_evidence.py::test_adapter_preserves_named_metric_plan_replicate_and_factor_axes",
+        "factor_assets/tests/test_v8_qe_joint_evidence.py::test_adapter_rejects_identity_axis_and_finiteness_mutations[plan]"
+      ],
+      "owner_evidence": "fa/acceptance_ledger.json",
+      "acceptance_ids": [
+        "T21",
+        "T22"
+      ],
+      "owner_reported_status": "VERIFIED",
+      "historical_disposition": "Preserve original artifacts; changed numeric definitions require affected-lineage recomputation, policy-only changes reuse valid raw metrics. No production mutation performed.",
+      "rollback": "Use frozen source/diff as a coherent version; do not mix old policy receipts with new implementations."
+    },
+    "A07": {
+      "title": "先按点估计 Pareto 删除候选，可能删除最终效用真正更好的版本",
+      "status": "VERIFIED",
+      "evidence": [
+        "factor_optimizer/tests/search/test_v8_qe_fa_fo_integration.py::test_higher_point_but_inconclusive_variant_does_not_replace_raw",
+        "factor_optimizer/tests/search/test_v8_remaining_acceptance_gaps.py::test_point_dominance_cannot_delete_conservative_utility_winner",
+        "factor_optimizer/tests/search/test_v05_cheap_prefilter.py",
+        "factor_optimizer/tests/search/test_v8_qe_fa_fo_integration.py",
+        "factor_optimizer/tests/test_treatment_decision_generalized.py::test_local_health_decision_requires_explicit_screening_mode_and_marks_result"
+      ],
+      "owner_evidence": "fa/acceptance_ledger.json",
+      "acceptance_ids": [
+        "T20",
+        "T115"
+      ],
+      "owner_reported_status": "VERIFIED",
+      "historical_disposition": "Preserve original artifacts; changed numeric definitions require affected-lineage recomputation, policy-only changes reuse valid raw metrics. No production mutation performed.",
+      "rollback": "Use frozen source/diff as a coherent version; do not mix old policy receipts with new implementations."
+    },
+    "A08": {
+      "title": "RAW差值被记录但未执行改善检验，所有非RAW赢家都称为IMPROVED",
+      "status": "VERIFIED",
+      "evidence": [
+        "factor_assets/tests/test_v8_selection_decision.py::test_paired_relationships_are_typed_and_missing_evidence_is_inconclusive",
+        "factor_assets/tests/test_v8_selection_decision.py::test_t24_noninferior_candidate_records_proven_replacement_role[CHEAPER]",
+        "factor_assets/tests/test_v8_selection_decision.py::test_t24_noninferior_candidate_records_proven_replacement_role[RISK_CLEANER]",
+        "factor_assets/tests/test_v8_selection_decision.py::test_t24_noninferior_candidate_records_proven_replacement_role[SIMPLER]",
+        "factor_assets/tests/test_v8_selection_decision.py::test_t24_naked_scalar_or_subthreshold_raw_cannot_spoof_replacement_role"
+      ],
+      "owner_evidence": "fa/acceptance_ledger.json",
+      "acceptance_ids": [
+        "T23",
+        "T24"
+      ],
+      "owner_reported_status": "VERIFIED",
+      "historical_disposition": "Preserve original artifacts; changed numeric definitions require affected-lineage recomputation, policy-only changes reuse valid raw metrics. No production mutation performed.",
+      "rollback": "Use frozen source/diff as a coherent version; do not mix old policy receipts with new implementations."
+    },
+    "A09": {
+      "title": "效用政策与连续映射的输入守卫不完整",
+      "status": "VERIFIED",
+      "evidence": [
+        "factor_assets/tests/test_v8_formula_oracle.py::test_t06_display_only_zero_weight_cannot_zero_geometric_utility",
+        "factor_assets/tests/test_v8_formula_oracle.py::test_v8_joint_formula_monotonicity_and_measured_zero",
+        "factor_assets/tests/test_v8_selection_decision.py::test_nonfinite_and_bool_metric_inputs_fail_closed_at_boundary",
+        "factor_assets/tests/test_v8_qe_joint_evidence.py::test_adapter_rejects_identity_axis_and_finiteness_mutations[nonfinite]",
+        "factor_assets/tests/test_v8_selection_decision.py::test_policy_binding_and_order_invariant_semantic_identity"
+      ],
+      "owner_evidence": "fa/acceptance_ledger.json",
+      "acceptance_ids": [
+        "T06",
+        "T07",
+        "T08",
+        "T11"
+      ],
+      "owner_reported_status": "VERIFIED",
+      "historical_disposition": "Preserve original artifacts; changed numeric definitions require affected-lineage recomputation, policy-only changes reuse valid raw metrics. No production mutation performed.",
+      "rollback": "Use frozen source/diff as a coherent version; do not mix old policy receipts with new implementations."
+    },
+    "A10": {
+      "title": "停止规则没有跟随目标方向，前沿数量也被误当成研究进展",
+      "status": "VERIFIED",
+      "evidence": [
+        "factor_optimizer/tests/search/test_plateau.py",
+        "factor_optimizer/tests/search/test_v8_remaining_acceptance_gaps.py::test_stronger_point_replacing_two_old_points_is_hypervolume_progress",
+        "factor_optimizer/tests/search/test_v8_remaining_acceptance_gaps.py::test_runner_does_not_stop_when_stronger_point_replaces_two_frontier_points"
+      ],
+      "acceptance_ids": [
+        "T18",
+        "T19"
+      ],
+      "owner_reported_status": "PENDING_RECONCILIATION",
+      "historical_disposition": "Preserve original artifacts; changed numeric definitions require affected-lineage recomputation, policy-only changes reuse valid raw metrics. No production mutation performed.",
+      "rollback": "Use frozen source/diff as a coherent version; do not mix old policy receipts with new implementations."
+    },
+    "A11": {
+      "title": "FA维度装配没有核对指标评级的来源评价与政策",
+      "status": "VERIFIED",
+      "evidence": [
+        "factor_assets/tests/profiling/test_dimensions.py",
+        "factor_assets/tests/aggregation/test_specs.py::test_t113_alias_reordering_and_snapshot_vintage_cannot_hide_sample_overlap",
+        "factor_assets/tests/aggregation/test_specs.py::test_t113_disjoint_matured_typed_coordinates_are_accepted_and_bound"
+      ],
+      "owner_evidence": "fa/acceptance_ledger.json",
+      "acceptance_ids": [
+        "T25",
+        "T113"
+      ],
+      "owner_reported_status": "VERIFIED",
+      "historical_disposition": "Preserve original artifacts; changed numeric definitions require affected-lineage recomputation, policy-only changes reuse valid raw metrics. No production mutation performed.",
+      "rollback": "Use frozen source/diff as a coherent version; do not mix old policy receipts with new implementations."
+    },
+    "A12": {
+      "title": "QE多断点函数在无可行分割时可能崩溃，BIC回滚还可能删错断点",
+      "status": "VERIFIED",
+      "evidence": [
+        "quant_evaluator/tests/test_v8_numeric_goldens.py::test_a12_no_feasible_additional_break"
+      ],
+      "acceptance_ids": [],
+      "historical_disposition": "Preserve original artifacts; changed numeric definitions require affected-lineage recomputation, policy-only changes reuse valid raw metrics. No production mutation performed.",
+      "rollback": "Use frozen source/diff as a coherent version; do not mix old policy receipts with new implementations.",
+      "scope": "Scoped public numeric counterexample regression; not all structural-break inference certified."
+    },
+    "A13": {
+      "title": "QE Chow检验按列数算自由度，重复控制变量会改变显著性",
+      "status": "VERIFIED",
+      "evidence": [
+        "quant_evaluator/tests/test_v8_numeric_goldens.py::test_a13_rank_deficient_chow_rejected"
+      ],
+      "acceptance_ids": [],
+      "historical_disposition": "Preserve original artifacts; changed numeric definitions require affected-lineage recomputation, policy-only changes reuse valid raw metrics. No production mutation performed.",
+      "rollback": "Use frozen source/diff as a coherent version; do not mix old policy receipts with new implementations.",
+      "scope": "Scoped public numeric counterexample regression; not all structural-break inference certified."
+    },
+    "A14": {
+      "title": "CUSUM与Sup-Wald中的近似/默认值不能冒充已校准统计证据",
+      "status": "VERIFIED",
+      "evidence": [
+        "quant_evaluator/tests/test_v8_numeric_goldens.py::test_a14_ols_cusum_reference_and_unsupported_recursive_scope"
+      ],
+      "acceptance_ids": [
+        "T56"
+      ],
+      "owner_reported_status": "PENDING_RECONCILIATION",
+      "historical_disposition": "Preserve original artifacts; changed numeric definitions require affected-lineage recomputation, policy-only changes reuse valid raw metrics. No production mutation performed.",
+      "rollback": "Use frozen source/diff as a coherent version; do not mix old policy receipts with new implementations."
+    },
+    "A15": {
+      "title": "FactorFitnessSpec写了政策引用，但结果没有证明这些政策真正执行",
+      "status": "PARTIAL",
+      "evidence": [
+        "factor_assets/tests/test_v8_selection_decision.py::test_policy_binding_and_order_invariant_semantic_identity",
+        "factor_optimizer/tests/search/test_v8_qe_fa_fo_integration.py::test_actual_qe_joint_bootstrap_yields_identical_fa_fo_fp_decision_identity",
+        "factor_optimizer/tests/test_treatment_decision_generalized.py::test_legacy_decide_requires_explicit_screening_mode",
+        "factor_optimizer/tests/test_treatment_decision_generalized.py::test_local_health_decision_requires_explicit_screening_mode_and_marks_result",
+        "factor_optimizer/tests/search/test_v05_cheap_prefilter.py",
+        "factor_optimizer/tests/search/test_v8_qe_fa_fo_integration.py"
+      ],
+      "remaining": "FO/FP full-chain acceptance owned by their consumers",
+      "owner_evidence": "fa/acceptance_ledger.json",
+      "acceptance_ids": [
+        "T12",
+        "T30",
+        "T111",
+        "T115",
+        "T120"
+      ],
+      "owner_reported_status": "PARTIAL",
+      "historical_disposition": "Preserve original artifacts; changed numeric definitions require affected-lineage recomputation, policy-only changes reuse valid raw metrics. No production mutation performed.",
+      "rollback": "Use frozen source/diff as a coherent version; do not mix old policy receipts with new implementations."
+    },
+    "A16": {
+      "title": "HAC使用逐滞后变化的分母，可能失去Bartlett估计的非负性",
+      "status": "VERIFIED",
+      "evidence": [
+        "quant_evaluator/tests/test_v8_numeric_goldens.py::test_t31_hac_bartlett_normalization",
+        "quant_evaluator/tests/test_v8_numeric_goldens.py::test_t32_hac_matches_positive_semidefinite_quadratic_form"
+      ],
+      "acceptance_ids": [
+        "T31",
+        "T32"
+      ],
+      "owner_reported_status": "PENDING_RECONCILIATION",
+      "historical_disposition": "Preserve original artifacts; changed numeric definitions require affected-lineage recomputation, policy-only changes reuse valid raw metrics. No production mutation performed.",
+      "rollback": "Use frozen source/diff as a coherent version; do not mix old policy receipts with new implementations."
+    },
+    "A17": {
+      "title": "HAC与区块重采样先压缩NaN，原始时间依赖被改写",
+      "status": "VERIFIED",
+      "evidence": [
+        "quant_evaluator/tests/test_v8_clock_sink_acceptance.py::test_t33_missing_positions_never_acquire_compressed_hac_or_bootstrap_clock"
+      ],
+      "acceptance_ids": [
+        "T33"
+      ],
+      "owner_reported_status": "PENDING_RECONCILIATION",
+      "historical_disposition": "Preserve original artifacts; changed numeric definitions require affected-lineage recomputation, policy-only changes reuse valid raw metrics. No production mutation performed.",
+      "rollback": "Use frozen source/diff as a coherent version; do not mix old policy receipts with new implementations."
+    },
+    "A18": {
+      "title": "Bootstrap生成器不满足变体配对与因子分片不变性",
+      "status": "VERIFIED",
+      "evidence": [
+        "quant_evaluator/tests/test_v8_numeric_goldens.py::test_t34_t35_joint_plan_identity_and_permutation",
+        "quant_evaluator/tests/test_v8_clock_sink_acceptance.py::test_t36_singleton_repeats_short_span_and_oversized_blocks_cannot_be_evidence"
+      ],
+      "acceptance_ids": [
+        "T34",
+        "T35",
+        "T36"
+      ],
+      "owner_reported_status": "PENDING_RECONCILIATION",
+      "historical_disposition": "Preserve original artifacts; changed numeric definitions require affected-lineage recomputation, policy-only changes reuse valid raw metrics. No production mutation performed.",
+      "rollback": "Use frozen source/diff as a coherent version; do not mix old policy receipts with new implementations."
+    },
+    "A19": {
+      "title": "排名稳定性和换手适配器丢弃FactorBatch.validity",
+      "status": "VERIFIED",
+      "evidence": [
+        "quant_evaluator/tests/test_v8_numeric_goldens.py::test_t37_invalid_values_cannot_change_rank_stability"
+      ],
+      "acceptance_ids": [
+        "T37"
+      ],
+      "owner_reported_status": "PENDING_RECONCILIATION",
+      "historical_disposition": "Preserve original artifacts; changed numeric definitions require affected-lineage recomputation, policy-only changes reuse valid raw metrics. No production mutation performed.",
+      "rollback": "Use frozen source/diff as a coherent version; do not mix old policy receipts with new implementations."
+    },
+    "A20": {
+      "title": "ACF遇到一个无样本lag便停止，漏掉后续有效滞后",
+      "status": "VERIFIED",
+      "evidence": [
+        "quant_evaluator/tests/test_v8_numeric_goldens.py::test_t38_nonmonotone_lag_pair_counts",
+        "quant_evaluator/tests/test_v8_numeric_goldens.py::test_t38_lag_counts_are_explicit"
+      ],
+      "acceptance_ids": [
+        "T38"
+      ],
+      "owner_reported_status": "PENDING_RECONCILIATION",
+      "historical_disposition": "Preserve original artifacts; changed numeric definitions require affected-lineage recomputation, policy-only changes reuse valid raw metrics. No production mutation performed.",
+      "rollback": "Use frozen source/diff as a coherent version; do not mix old policy receipts with new implementations."
+    },
+    "A21": {
+      "title": "零截距AR系数把正IC均值混入持久性，不能称预测衰减半衰期",
+      "status": "VERIFIED",
+      "evidence": [
+        "quant_evaluator/tests/test_v8_numeric_goldens.py::test_t39_centered_persistence_translation"
+      ],
+      "acceptance_ids": [
+        "T39"
+      ],
+      "owner_reported_status": "PENDING_RECONCILIATION",
+      "historical_disposition": "Preserve original artifacts; changed numeric definitions require affected-lineage recomputation, policy-only changes reuse valid raw metrics. No production mutation performed.",
+      "rollback": "Use frozen source/diff as a coherent version; do not mix old policy receipts with new implementations."
+    },
+    "A22": {
+      "title": "极端分层换手的分母与股票消失处理会低估真实更替",
+      "status": "VERIFIED",
+      "evidence": [
+        "quant_evaluator/tests/test_v8_numeric_goldens.py::test_t40_t41_membership_units_and_unknown_exit"
+      ],
+      "acceptance_ids": [
+        "T40",
+        "T41"
+      ],
+      "owner_reported_status": "PENDING_RECONCILIATION",
+      "historical_disposition": "Preserve original artifacts; changed numeric definitions require affected-lineage recomputation, policy-only changes reuse valid raw metrics. No production mutation performed.",
+      "rollback": "Use frozen source/diff as a coherent version; do not mix old policy receipts with new implementations."
+    },
+    "A23": {
+      "title": "纯多头active序列被当成普通资金收益复利并重复扣无风险",
+      "status": "VERIFIED",
+      "evidence": [
+        "quant_evaluator/tests/metrics/test_v8_probe_stress_contracts.py::test_active_basis_and_ir_do_not_subtract_cash_twice"
+      ],
+      "acceptance_ids": [
+        "T42",
+        "T43"
+      ],
+      "owner_reported_status": "PENDING_RECONCILIATION",
+      "historical_disposition": "Preserve original artifacts; changed numeric definitions require affected-lineage recomputation, policy-only changes reuse valid raw metrics. No production mutation performed.",
+      "rollback": "Use frozen source/diff as a coherent version; do not mix old policy receipts with new implementations."
+    },
+    "A24": {
+      "title": "DrawdownPersistence把数据不足计为最佳值，参数与输出合同也不完整",
+      "status": "VERIFIED",
+      "evidence": [
+        "quant_evaluator/tests/test_v8_numeric_goldens.py::test_t44_t46_short_risk_schema",
+        "quant_evaluator/tests/test_v8_numeric_goldens.py::test_t45_t46_holding_identity_and_three_way_schema"
+      ],
+      "acceptance_ids": [
+        "T44",
+        "T45",
+        "T46"
+      ],
+      "owner_reported_status": "PENDING_RECONCILIATION",
+      "historical_disposition": "Preserve original artifacts; changed numeric definitions require affected-lineage recomputation, policy-only changes reuse valid raw metrics. No production mutation performed.",
+      "rollback": "Use frozen source/diff as a coherent version; do not mix old policy receipts with new implementations."
+    },
+    "A25": {
+      "title": "FactorBatch基础身份与有效性合同不足，重复ID可静默丢掉因子",
+      "status": "VERIFIED",
+      "evidence": [
+        "quant_evaluator/tests/test_v8_numeric_goldens.py::test_t47_t50_factor_validity_storage_identity"
+      ],
+      "acceptance_ids": [
+        "T47",
+        "T48",
+        "T49",
+        "T50"
+      ],
+      "owner_reported_status": "PENDING_RECONCILIATION",
+      "historical_disposition": "Preserve original artifacts; changed numeric definitions require affected-lineage recomputation, policy-only changes reuse valid raw metrics. No production mutation performed.",
+      "rollback": "Use frozen source/diff as a coherent version; do not mix old policy receipts with new implementations."
+    },
+    "A26": {
+      "title": "固定成本拖累演示函数不能用于默认净评分或压力门槛",
+      "status": "VERIFIED",
+      "evidence": [
+        "quant_evaluator/tests/metrics/test_v8_probe_stress_contracts.py::test_cost_evidence_zero_trade_and_carry_are_distinct",
+        "quant_evaluator/tests/metrics/test_probe_cohort_metrics.py::test_cost_scenarios_interface"
+      ],
+      "acceptance_ids": [
+        "T51",
+        "T52"
+      ],
+      "owner_reported_status": "PENDING_RECONCILIATION",
+      "historical_disposition": "Preserve original artifacts; changed numeric definitions require affected-lineage recomputation, policy-only changes reuse valid raw metrics. No production mutation performed.",
+      "rollback": "Use frozen source/diff as a coherent version; do not mix old policy receipts with new implementations."
+    },
+    "A27": {
+      "title": "公开legacy组合导出仍有另一套mask与多空收益尺度",
+      "status": "VERIFIED",
+      "evidence": [
+        "quant_evaluator/tests/test_v8_numeric_goldens.py::test_t53_canonical_compatibility_export_matches_legacy_definition",
+        "quant_evaluator/tests/metrics/test_v8_probe_stress_contracts.py::test_legacy_mask_contract_accepts_2d_for_3d_and_rejects_nonboolean"
+      ],
+      "acceptance_ids": [
+        "T53",
+        "T54"
+      ],
+      "owner_reported_status": "PENDING_RECONCILIATION",
+      "historical_disposition": "Preserve original artifacts; changed numeric definitions require affected-lineage recomputation, policy-only changes reuse valid raw metrics. No production mutation performed.",
+      "rollback": "Use frozen source/diff as a coherent version; do not mix old policy receipts with new implementations."
+    },
+    "A28": {
+      "title": "协整检验的临界值维度与确定项不匹配，粗分档不能作为正式p值",
+      "status": "VERIFIED",
+      "evidence": [
+        "quant_evaluator/tests/test_v8_numeric_goldens.py::test_t55_johansen_reference",
+        "quant_evaluator/tests/test_v8_numeric_goldens.py::test_a14_ols_cusum_reference_and_unsupported_recursive_scope"
+      ],
+      "acceptance_ids": [
+        "T55",
+        "T56"
+      ],
+      "owner_reported_status": "PENDING_RECONCILIATION",
+      "historical_disposition": "Preserve original artifacts; changed numeric definitions require affected-lineage recomputation, policy-only changes reuse valid raw metrics. No production mutation performed.",
+      "rollback": "Use frozen source/diff as a coherent version; do not mix old policy receipts with new implementations."
+    },
+    "A29": {
+      "title": "正则化中性化merge丢失原行身份，列名碰撞还可能把因子自己当暴露",
+      "status": "VERIFIED",
+      "evidence": [
+        "factor_preprocess/tests/test_v8_fp_acceptance.py::test_regularized_alignment_affine_and_contract",
+        "factor_preprocess/tests/test_v8_regularized_diagnostics.py::test_t58_collision_and_duplicate_exposure_keys_reject"
+      ],
+      "acceptance_ids": [
+        "T57",
+        "T58"
+      ],
+      "owner_reported_status": "PENDING_RECONCILIATION",
+      "historical_disposition": "Preserve original artifacts; changed numeric definitions require affected-lineage recomputation, policy-only changes reuse valid raw metrics. No production mutation performed.",
+      "rollback": "Use frozen source/diff as a coherent version; do not mix old policy receipts with new implementations."
+    },
+    "A30": {
+      "title": "关闭标准化时，带截距Ridge/Lasso/ElasticNet的拟合不正确",
+      "status": "VERIFIED",
+      "evidence": [
+        "factor_preprocess/tests/test_v8_regularized_diagnostics.py::test_t59_regularizers_match_declared_objective"
+      ],
+      "acceptance_ids": [
+        "T59"
+      ],
+      "owner_reported_status": "PENDING_RECONCILIATION",
+      "historical_disposition": "Preserve original artifacts; changed numeric definitions require affected-lineage recomputation, policy-only changes reuse valid raw metrics. No production mutation performed.",
+      "rollback": "Use frozen source/diff as a coherent version; do not mix old policy receipts with new implementations."
+    },
+    "A31": {
+      "title": "正则化超参单位、求解收敛与失败状态没有形成可比较合同",
+      "status": "VERIFIED",
+      "evidence": [
+        "factor_preprocess/tests/test_v8_regularized_diagnostics.py::test_t60_invalid_full_parameter_domain",
+        "factor_preprocess/tests/test_v8_regularized_diagnostics.py::test_t61_budget_and_stationarity_evidence_are_distinct"
+      ],
+      "acceptance_ids": [
+        "T60",
+        "T61"
+      ],
+      "owner_reported_status": "PENDING_RECONCILIATION",
+      "historical_disposition": "Preserve original artifacts; changed numeric definitions require affected-lineage recomputation, policy-only changes reuse valid raw metrics. No production mutation performed.",
+      "rollback": "Use frozen source/diff as a coherent version; do not mix old policy receipts with new implementations."
+    },
+    "A32": {
+      "title": "中性化诊断把数值正交与统计置信混用，并遗漏实际拟合设计",
+      "status": "VERIFIED",
+      "evidence": [
+        "factor_preprocess/tests/test_v8_regularized_diagnostics.py::test_t62_t63_rank_dof_and_same_sample_scope"
+      ],
+      "acceptance_ids": [
+        "T62",
+        "T63"
+      ],
+      "owner_reported_status": "PENDING_RECONCILIATION",
+      "historical_disposition": "Preserve original artifacts; changed numeric definitions require affected-lineage recomputation, policy-only changes reuse valid raw metrics. No production mutation performed.",
+      "rollback": "Use frozen source/diff as a coherent version; do not mix old policy receipts with new implementations."
+    },
+    "A33": {
+      "title": "静态覆盖扫描的READY并非测试通过，更不是指标数学认证",
+      "status": "PARTIAL",
+      "evidence": [
+        "quant_evaluator/tests/test_v8_numeric_goldens.py::test_t64_t67_qualification_domain_is_not_portable",
+        "quant_evaluator/tests/metrics/test_coverage_compiler.py",
+        "factor_assets/tests/test_dlib_fa_018_composite.py::test_accounting_diagnostics_are_weight_only_not_backtest",
+        "quant_evaluator/tests/test_v8_numeric_goldens.py::test_t116_method_version_changes_identity_and_rejects_stale_serialized_instance",
+        "quant_evaluator/tests/test_v8_numeric_goldens.py::test_t73_t74_t75_real_cuda_parameter_domain"
+      ],
+      "acceptance_ids": [
+        "T64",
+        "T65",
+        "T67",
+        "T114",
+        "T116",
+        "T118"
+      ],
+      "owner_reported_status": "PENDING_RECONCILIATION",
+      "historical_disposition": "Preserve original artifacts; changed numeric definitions require affected-lineage recomputation, policy-only changes reuse valid raw metrics. No production mutation performed.",
+      "rollback": "Use frozen source/diff as a coherent version; do not mix old policy receipts with new implementations."
+    },
+    "A34": {
+      "title": "分层函数混淆一维截面与时间轴，单因子维度被提前挤掉导致optimized入口崩溃",
+      "status": "VERIFIED",
+      "evidence": [
+        "quant_evaluator/tests/test_v8_numeric_goldens.py::test_t71_t72_quantile_axes"
+      ],
+      "acceptance_ids": [
+        "T71",
+        "T72"
+      ],
+      "owner_reported_status": "PENDING_RECONCILIATION",
+      "historical_disposition": "Preserve original artifacts; changed numeric definitions require affected-lineage recomputation, policy-only changes reuse valid raw metrics. No production mutation performed.",
+      "rollback": "Use frozen source/diff as a coherent version; do not mix old policy receipts with new implementations."
+    },
+    "A35": {
+      "title": "GPU排序/分层接受了未执行的轴和tie参数，Inf处理也与finite-only合同不一致",
+      "status": "VERIFIED",
+      "evidence": [
+        "quant_evaluator/tests/test_v8_numeric_goldens.py::test_t73_t74_t75_real_cuda_parameter_domain",
+        "quant_evaluator/tests/test_v8_numeric_goldens.py::test_t64_t67_qualification_domain_is_not_portable"
+      ],
+      "acceptance_ids": [
+        "T73",
+        "T74",
+        "T118"
+      ],
+      "owner_reported_status": "PENDING_RECONCILIATION",
+      "historical_disposition": "Preserve original artifacts; changed numeric definitions require affected-lineage recomputation, policy-only changes reuse valid raw metrics. No production mutation performed.",
+      "rollback": "Use frozen source/diff as a coherent version; do not mix old policy receipts with new implementations."
+    },
+    "A36": {
+      "title": "GPU分层临时张量按证券数×分层数扩张，排序分片不能保证整个调用显存有界",
+      "status": "PARTIAL",
+      "evidence": [
+        "quant_evaluator/tests/test_v8_numeric_goldens.py::test_quantile_returns_bounded_workspace_matches_full",
+        "evidence/v8/gpu_resource_probe.json",
+        "quant_evaluator/tests/test_v8_clock_sink_acceptance.py::test_t76_oom_retile_preserves_numbers_and_never_recounts_committed_tile"
+      ],
+      "acceptance_ids": [
+        "T75",
+        "T76",
+        "T119"
+      ],
+      "owner_reported_status": "PENDING_RECONCILIATION",
+      "historical_disposition": "Preserve original artifacts; changed numeric definitions require affected-lineage recomputation, policy-only changes reuse valid raw metrics. No production mutation performed.",
+      "rollback": "Use frozen source/diff as a coherent version; do not mix old policy receipts with new implementations."
+    },
+    "A37": {
+      "title": "历史CVaR用阈值条件均值代替固定尾部概率质量，ties会摊薄极端损失",
+      "status": "VERIFIED",
+      "evidence": [
+        "quant_evaluator/tests/test_v8_numeric_goldens.py::test_t77_fixed_tail_mass",
+        "quant_evaluator/tests/test_v8_numeric_goldens.py::test_t78_fractional_tail_mass"
+      ],
+      "acceptance_ids": [
+        "T77",
+        "T78"
+      ],
+      "owner_reported_status": "PENDING_RECONCILIATION",
+      "historical_disposition": "Preserve original artifacts; changed numeric definitions require affected-lineage recomputation, policy-only changes reuse valid raw metrics. No production mutation performed.",
+      "rollback": "Use frozen source/diff as a coherent version; do not mix old policy receipts with new implementations."
+    },
+    "A38": {
+      "title": "UpsidePotentialRatio公式声明无条件部分矩，实现却用了条件均值",
+      "status": "VERIFIED",
+      "evidence": [
+        "quant_evaluator/tests/test_v8_numeric_goldens.py::test_t79_unconditional_partial_moments",
+        "quant_evaluator/tests/test_v8_risk_domain.py::test_t80_upr_mar_translation_and_undefined_denominator"
+      ],
+      "acceptance_ids": [
+        "T79",
+        "T80"
+      ],
+      "owner_reported_status": "PENDING_RECONCILIATION",
+      "historical_disposition": "Preserve original artifacts; changed numeric definitions require affected-lineage recomputation, policy-only changes reuse valid raw metrics. No production mutation performed.",
+      "rollback": "Use frozen source/diff as a coherent version; do not mix old policy receipts with new implementations."
+    },
+    "A39": {
+      "title": "尾部风险的实际估计方法和期限被隐式更换，输出无法支撑统一评分",
+      "status": "PARTIAL",
+      "evidence": [
+        "quant_evaluator/tests/test_v8_numeric_goldens.py::test_t81_no_implicit_mixed_var_es_model",
+        "quant_evaluator/tests/test_v8_risk_domain.py::test_t82_es_ratio_has_no_mechanical_annualization_or_absolute_epsilon",
+        "quant_evaluator/tests/test_v8_numeric_goldens.py::test_t116_method_version_changes_identity_and_rejects_stale_serialized_instance",
+        "quant_evaluator/tests/test_v8_numeric_goldens.py::test_t64_t67_qualification_domain_is_not_portable"
+      ],
+      "acceptance_ids": [
+        "T81",
+        "T82",
+        "T116"
+      ],
+      "owner_reported_status": "PENDING_RECONCILIATION",
+      "historical_disposition": "Preserve original artifacts; changed numeric definitions require affected-lineage recomputation, policy-only changes reuse valid raw metrics. No production mutation performed.",
+      "rollback": "Use frozen source/diff as a coherent version; do not mix old policy receipts with new implementations."
+    },
+    "A40": {
+      "title": "压力测试相关性调整原地串行改列，输出依赖无经济意义的因子排列",
+      "status": "VERIFIED",
+      "evidence": [
+        "quant_evaluator/tests/metrics/test_v8_probe_stress_contracts.py::test_named_correlation_mapping_is_permutation_equivariant_and_evidenced",
+        "quant_evaluator/tests/test_v8_risk_domain.py::test_t84_psd_domain_and_rank_deficient_target_are_explicit"
+      ],
+      "acceptance_ids": [
+        "T83",
+        "T84"
+      ],
+      "owner_reported_status": "PENDING_RECONCILIATION",
+      "historical_disposition": "Preserve original artifacts; changed numeric definitions require affected-lineage recomputation, policy-only changes reuse valid raw metrics. No production mutation performed.",
+      "rollback": "Use frozen source/diff as a coherent version; do not mix old policy receipts with new implementations."
+    },
+    "A41": {
+      "title": "历史情景复制/波动缩放并不能证明各因子的真实压力响应",
+      "status": "PARTIAL",
+      "evidence": [
+        "quant_evaluator/tests/test_v8_risk_domain.py::test_t85_research_trajectory_is_typed_but_not_executable_certification",
+        "quant_evaluator/tests/test_v8_risk_domain.py::test_t86_event_identity_is_content_bound_order_invariant_not_value_dedup",
+        "factor_assets/tests/test_dlib_fa_018_composite.py"
+      ],
+      "acceptance_ids": [
+        "T85",
+        "T86",
+        "T117"
+      ],
+      "owner_reported_status": "PENDING_RECONCILIATION",
+      "historical_disposition": "Preserve original artifacts; changed numeric definitions require affected-lineage recomputation, policy-only changes reuse valid raw metrics. No production mutation performed.",
+      "rollback": "Use frozen source/diff as a coherent version; do not mix old policy receipts with new implementations."
+    },
+    "A42": {
+      "title": "Šidák直接相减使极小调整p值和检验阈值被舍入为零",
+      "status": "VERIFIED",
+      "evidence": [
+        "quant_evaluator/tests/test_v8_numeric_goldens.py::test_t87_sidak_tiny_values"
+      ],
+      "acceptance_ids": [
+        "T87",
+        "T88"
+      ],
+      "owner_reported_status": "PENDING_RECONCILIATION",
+      "historical_disposition": "Preserve original artifacts; changed numeric definitions require affected-lineage recomputation, policy-only changes reuse valid raw metrics. No production mutation performed.",
+      "rollback": "Use frozen source/diff as a coherent version; do not mix old policy receipts with new implementations."
+    },
+    "A43": {
+      "title": "校正函数的finite-only数组被误当完整研究假设族，失败/分片会改变准入门槛",
+      "status": "PARTIAL",
+      "evidence": [
+        "quant_evaluator/tests/test_v8_numeric_goldens.py::test_t89_t90_complete_family_never_shrinks_failed_members",
+        "factor_optimizer/tests/search/test_v8_remaining_acceptance_gaps.py::test_same_gpu_repeated_batches_match_one_batch_full_family_correction",
+        "factor_optimizer/tests/search/test_v8_remaining_acceptance_gaps.py::test_t112_cross_worker_retry_preserves_validation_without_duplicate_hypothesis"
+      ],
+      "acceptance_ids": [
+        "T89",
+        "T90",
+        "T112",
+        "T120"
+      ],
+      "owner_reported_status": "PENDING_RECONCILIATION",
+      "historical_disposition": "Preserve original artifacts; changed numeric definitions require affected-lineage recomputation, policy-only changes reuse valid raw metrics. No production mutation performed.",
+      "rollback": "Use frozen source/diff as a coherent version; do not mix old policy receipts with new implementations."
+    },
+    "A44": {
+      "title": "搜索事件条数被计作提议次数，终态分类与多重尝试制品对不上",
+      "status": "VERIFIED",
+      "evidence": [
+        "factor_optimizer/tests/search/test_trial_ledger.py",
+        "factor_optimizer/tests/search/test_budget_resume.py",
+        "factor_optimizer/tests/search/test_v8_remaining_acceptance_gaps.py::test_t112_cross_worker_retry_preserves_validation_without_duplicate_hypothesis"
+      ],
+      "acceptance_ids": [
+        "T91",
+        "T92",
+        "T112"
+      ],
+      "owner_reported_status": "PENDING_RECONCILIATION",
+      "historical_disposition": "Preserve original artifacts; changed numeric definitions require affected-lineage recomputation, policy-only changes reuse valid raw metrics. No production mutation performed.",
+      "rollback": "Use frozen source/diff as a coherent version; do not mix old policy receipts with new implementations."
+    },
+    "A45": {
+      "title": "TrialLedger关闭状态不能完整序列化，finish也没有把已完成账本真正封存",
+      "status": "VERIFIED",
+      "evidence": [
+        "factor_optimizer/tests/search/test_trial_ledger.py",
+        "factor_optimizer/tests/search/test_budget_resume.py",
+        "factor_optimizer/tests/search/test_v8_remaining_acceptance_gaps.py::test_finish_fault_before_seal_is_not_half_committed",
+        "factor_optimizer/tests/search/test_v8_remaining_acceptance_gaps.py::test_finish_fault_after_seal_recovers_without_half_finished_state"
+      ],
+      "acceptance_ids": [
+        "T93",
+        "T94"
+      ],
+      "owner_reported_status": "PENDING_RECONCILIATION",
+      "historical_disposition": "Preserve original artifacts; changed numeric definitions require affected-lineage recomputation, policy-only changes reuse valid raw metrics. No production mutation performed.",
+      "rollback": "Use frozen source/diff as a coherent version; do not mix old policy receipts with new implementations."
+    },
+    "A46": {
+      "title": "研究事件哈希使用无转义分隔字符串，不同记录可以得到相同的序列化内容",
+      "status": "VERIFIED",
+      "evidence": [
+        "factor_optimizer/tests/search/test_trial_ledger.py"
+      ],
+      "acceptance_ids": [
+        "T96"
+      ],
+      "owner_reported_status": "PENDING_RECONCILIATION",
+      "historical_disposition": "Preserve original artifacts; changed numeric definitions require affected-lineage recomputation, policy-only changes reuse valid raw metrics. No production mutation performed.",
+      "rollback": "Use frozen source/diff as a coherent version; do not mix old policy receipts with new implementations."
+    },
+    "A47": {
+      "title": "FA组合方向把已实现亏损取绝对值，非负幅度不能叫多空收益",
+      "status": "VERIFIED",
+      "evidence": [
+        "factor_assets/tests/test_dlib_fa_018_composite.py::test_composite_short_flips_sign",
+        "factor_assets/tests/test_dlib_fa_018_composite.py::test_t98_orientation_and_return_measure_identity_fail_closed",
+        "factor_assets/tests/test_dlib_fa_018_composite.py::test_t98_typed_holding_return_horizon_must_match_evaluator",
+        "factor_assets/tests/test_dlib_fa_018_composite.py::test_t98_authoritative_path_rejects_naked_finite_series",
+        "factor_assets/tests/test_dlib_fa_018_composite.py::test_accounting_diagnostics_are_weight_only_not_backtest"
+      ],
+      "owner_evidence": "fa/acceptance_ledger.json",
+      "acceptance_ids": [
+        "T97",
+        "T98",
+        "T114"
+      ],
+      "owner_reported_status": "VERIFIED",
+      "historical_disposition": "Preserve original artifacts; changed numeric definitions require affected-lineage recomputation, policy-only changes reuse valid raw metrics. No production mutation performed.",
+      "rollback": "Use frozen source/diff as a coherent version; do not mix old policy receipts with new implementations."
+    },
+    "A48": {
+      "title": "合成因子忽略权重方案，状态权重与集中度也缺少共同归一化合同",
+      "status": "PARTIAL",
+      "evidence": [
+        "factor_assets/tests/aggregation/test_specs.py::test_aggregation_spec_custom_weights",
+        "factor_assets/tests/test_dlib_fa_018_composite.py::test_accounting_diagnostics_are_weight_only_not_backtest",
+        "factor_assets/tests/test_dlib_fa_018_composite.py::test_composite_regime_weights",
+        "quant_evaluator/tests/test_v8_risk_domain.py::test_t86_event_identity_is_content_bound_order_invariant_not_value_dedup",
+        "factor_assets/tests/test_dlib_fa_018_composite.py"
+      ],
+      "owner_evidence": "fa/acceptance_ledger.json",
+      "acceptance_ids": [
+        "T99",
+        "T100",
+        "T117"
+      ],
+      "owner_reported_status": "VERIFIED",
+      "historical_disposition": "Preserve original artifacts; changed numeric definitions require affected-lineage recomputation, policy-only changes reuse valid raw metrics. No production mutation performed.",
+      "rollback": "Use frozen source/diff as a coherent version; do not mix old policy receipts with new implementations."
+    },
+    "A49": {
+      "title": "聚合拟合的OOS校验只比较split名字，不验证真实样本和拟合时钟",
+      "status": "VERIFIED",
+      "evidence": [
+        "factor_assets/tests/aggregation/test_specs.py::test_aggregation_fit_oos_evaluation_rejects_same_split",
+        "factor_assets/tests/aggregation/test_specs.py::test_t102_same_spec_id_changed_weights_changes_bound_content_hash",
+        "factor_assets/tests/aggregation/test_specs.py::test_t102_unmatured_fit_or_evaluation_labels_fail_closed",
+        "factor_assets/tests/aggregation/test_specs.py::test_t102_authoritative_oos_rejects_missing_resolved_sample_vintage_coordinates",
+        "factor_assets/tests/aggregation/test_specs.py::test_t113_alias_reordering_and_snapshot_vintage_cannot_hide_sample_overlap",
+        "factor_assets/tests/aggregation/test_specs.py::test_t113_disjoint_matured_typed_coordinates_are_accepted_and_bound"
+      ],
+      "owner_evidence": "fa/acceptance_ledger.json",
+      "acceptance_ids": [
+        "T101",
+        "T102",
+        "T113"
+      ],
+      "owner_reported_status": "VERIFIED",
+      "historical_disposition": "Preserve original artifacts; changed numeric definitions require affected-lineage recomputation, policy-only changes reuse valid raw metrics. No production mutation performed.",
+      "rollback": "Use frozen source/diff as a coherent version; do not mix old policy receipts with new implementations."
+    },
+    "A50": {
+      "title": "代表因子MAX_IC仍消费裸数，未填承诺的证据引用并可能接受Inf",
+      "status": "VERIFIED",
+      "evidence": [
+        "factor_assets/tests/aggregation/test_representatives.py::test_selector_max_ic",
+        "factor_assets/tests/aggregation/test_representatives.py::test_selector_max_ic_missing_data",
+        "factor_assets/tests/aggregation/test_representatives.py::test_representative_selection_with_ic_values"
+      ],
+      "owner_evidence": "fa/acceptance_ledger.json",
+      "acceptance_ids": [
+        "T103",
+        "T104"
+      ],
+      "owner_reported_status": "VERIFIED",
+      "historical_disposition": "Preserve original artifacts; changed numeric definitions require affected-lineage recomputation, policy-only changes reuse valid raw metrics. No production mutation performed.",
+      "rollback": "Use frozen source/diff as a coherent version; do not mix old policy receipts with new implementations."
+    },
+    "A51": {
+      "title": "最小组内相关选的是离群成员，等间隔取ID也不等于子族均衡代表",
+      "status": "VERIFIED",
+      "evidence": [
+        "factor_assets/tests/aggregation/test_representatives.py::test_selector_min_correlation",
+        "factor_assets/tests/aggregation/test_representatives.py"
+      ],
+      "owner_evidence": "fa/acceptance_ledger.json",
+      "acceptance_ids": [
+        "T105",
+        "T106"
+      ],
+      "owner_reported_status": "VERIFIED",
+      "historical_disposition": "Preserve original artifacts; changed numeric definitions require affected-lineage recomputation, policy-only changes reuse valid raw metrics. No production mutation performed.",
+      "rollback": "Use frozen source/diff as a coherent version; do not mix old policy receipts with new implementations."
+    },
+    "A52": {
+      "title": "最大回撤峰值定位使用另一套默认容差，可能把正在水下的谷点标为峰值",
+      "status": "VERIFIED",
+      "evidence": [
+        "quant_evaluator/tests/test_v8_numeric_goldens.py::test_t107_peak_not_underwater_trough",
+        "quant_evaluator/tests/test_v3_drawdown_contracts.py",
+        "quant_evaluator/tests/test_v8_risk_domain.py::test_t108_tiny_loss_peak_duration_and_underwater_statistics_share_events"
+      ],
+      "acceptance_ids": [
+        "T107",
+        "T108"
+      ],
+      "owner_reported_status": "PENDING_RECONCILIATION",
+      "historical_disposition": "Preserve original artifacts; changed numeric definitions require affected-lineage recomputation, policy-only changes reuse valid raw metrics. No production mutation performed.",
+      "rollback": "Use frozen source/diff as a coherent version; do not mix old policy receipts with new implementations."
+    },
+    "A53": {
+      "title": "尾部依赖函数计算条件超越概率，却被文档解释为相关性或一般尾部依赖",
+      "status": "VERIFIED",
+      "evidence": [
+        "quant_evaluator/tests/metrics/test_v8_probe_stress_contracts.py::test_tail_direction_ties_and_weak_margin_status",
+        "quant_evaluator/tests/test_v8_risk_domain.py::test_t110_tail_counts_and_small_samples_do_not_claim_confidence"
+      ],
+      "acceptance_ids": [
+        "T109",
+        "T110"
+      ],
+      "owner_reported_status": "PENDING_RECONCILIATION",
+      "historical_disposition": "Preserve original artifacts; changed numeric definitions require affected-lineage recomputation, policy-only changes reuse valid raw metrics. No production mutation performed.",
+      "rollback": "Use frozen source/diff as a coherent version; do not mix old policy receipts with new implementations."
+    },
+    "A54": {
+      "title": "HMM清洗后仍读取原始发射序列，且多列输入被ravel成时间序列",
+      "status": "PARTIAL",
+      "evidence": [
+        "quant_evaluator/tests/test_v8_hmm_scope.py::test_shape_missing_axis_and_refit_reset",
+        "quant_evaluator/tests/test_v8_hmm_scope.py::test_t122_empty_and_one_sample_reject_at_sequence_boundary",
+        "quant_evaluator/metrics/stats/regime_detection.py::GaussianHMM.fit"
+      ],
+      "acceptance_ids": [
+        "T121",
+        "T122",
+        "T123"
+      ],
+      "owner_reported_status": "PENDING_RECONCILIATION",
+      "historical_disposition": "Preserve original artifacts; changed numeric definitions require affected-lineage recomputation, policy-only changes reuse valid raw metrics. No production mutation performed.",
+      "rollback": "Use frozen source/diff as a coherent version; do not mix old policy receipts with new implementations."
+    },
+    "A55": {
+      "title": "HMM把似然大幅下降当收敛，二次fit可能沿用上次收敛状态",
+      "status": "VERIFIED",
+      "evidence": [
+        "quant_evaluator/tests/metrics/test_v8_hmm_contract_reopen.py::test_likelihood_decrease_is_failure_not_convergence",
+        "quant_evaluator/tests/test_v8_hmm_scope.py::test_shape_missing_axis_and_refit_reset",
+        "quant_evaluator/tests/metrics/test_v8_hmm_contract_reopen.py::test_failed_refit_invalidates_old_model_and_gap_requires_clock_policy",
+        "quant_evaluator/tests/test_v8_hmm_scope.py::test_t126_invalid_n_iter_rejected",
+        "quant_evaluator/tests/test_v8_hmm_scope.py::test_t126_invalid_tol_rejected",
+        "quant_evaluator/tests/test_v8_hmm_scope.py::test_t126_empty_transition_row_invalidates_fit"
+      ],
+      "acceptance_ids": [
+        "T124",
+        "T125",
+        "T126"
+      ],
+      "owner_reported_status": "PENDING_RECONCILIATION",
+      "historical_disposition": "Preserve original artifacts; changed numeric definitions require affected-lineage recomputation, policy-only changes reuse valid raw metrics. No production mutation performed.",
+      "rollback": "Use frozen source/diff as a coherent version; do not mix old policy receipts with new implementations."
+    },
+    "A56": {
+      "title": "事后HMM平滑/Viterbi状态与当时可知状态未在接口上隔离",
+      "status": "VERIFIED",
+      "evidence": [
+        "quant_evaluator/tests/test_v8_hmm_scope.py::test_filtered_prefix_invariance_and_smoothed_label",
+        "quant_evaluator/tests/test_v8_hmm_scope.py::test_t127_smoothed_prefix_changes_with_future_tail_but_filtered_does_not",
+        "factor_preprocess/tests/test_v8_fp_acceptance.py::test_actual_fp_consumer_rejects_smoothed_regime_evidence",
+        "quant_evaluator/tests/metrics/test_v8_hmm_contract_reopen.py::test_viterbi_compatibility_and_typed_scopes",
+        "quant_evaluator/tests/test_v8_hmm_scope.py::test_t129_state_parameter_and_weight_permutation_is_output_invariant"
+      ],
+      "acceptance_ids": [
+        "T127",
+        "T128",
+        "T129"
+      ],
+      "owner_reported_status": "PENDING_RECONCILIATION",
+      "historical_disposition": "Preserve original artifacts; changed numeric definitions require affected-lineage recomputation, policy-only changes reuse valid raw metrics. No production mutation performed.",
+      "rollback": "Use frozen source/diff as a coherent version; do not mix old policy receipts with new implementations."
+    },
+    "A57": {
+      "title": "逆波动状态权重把全缺失/常数因子推到接近满仓权重",
+      "status": "VERIFIED",
+      "evidence": [
+        "factor_preprocess/tests/test_v8_fp_acceptance.py::test_t130_t131_effective_counts_reasons_and_volatility_boundary",
+        "factor_preprocess/tests/regime/test_v8_regime_acceptance.py::test_t132_supervised_fallback_is_explicit_research_evidence"
+      ],
+      "acceptance_ids": [
+        "T130",
+        "T131",
+        "T132"
+      ],
+      "owner_reported_status": "PENDING_RECONCILIATION",
+      "historical_disposition": "Preserve original artifacts; changed numeric definitions require affected-lineage recomputation, policy-only changes reuse valid raw metrics. No production mutation performed.",
+      "rollback": "Use frozen source/diff as a coherent version; do not mix old policy receipts with new implementations."
+    },
+    "A58": {
+      "title": "状态标签从按索引拟合变成按位置应用，分数标签还被int静默合并",
+      "status": "VERIFIED",
+      "evidence": [
+        "factor_preprocess/tests/test_v8_fp_acceptance.py::test_weights_float_identity_and_label_validation",
+        "factor_preprocess/tests/test_v8_fp_acceptance.py::test_t134_fractional_and_infinite_labels_reject",
+        "factor_preprocess/tests/test_v8_fp_acceptance.py::test_t135_duplicate_sample_keys_reject"
+      ],
+      "acceptance_ids": [
+        "T133",
+        "T134",
+        "T135"
+      ],
+      "owner_reported_status": "PENDING_RECONCILIATION",
+      "historical_disposition": "Preserve original artifacts; changed numeric definitions require affected-lineage recomputation, policy-only changes reuse valid raw metrics. No production mutation performed.",
+      "rollback": "Use frozen source/diff as a coherent version; do not mix old policy receipts with new implementations."
+    },
+    "A59": {
+      "title": "状态加权沿用整数dtype，小数被截断、未知行变成有限整数",
+      "status": "VERIFIED",
+      "evidence": [
+        "factor_preprocess/tests/test_v8_fp_acceptance.py::test_t136_exact_half_weight_golden_and_t138_dtype_invariance",
+        "factor_preprocess/tests/regime/test_regime_production.py::test_unknown_regime_fail_nan",
+        "factor_preprocess/factor_preprocess/regime/adaptive_weights.py::regime_adaptive_weights"
+      ],
+      "acceptance_ids": [
+        "T136",
+        "T137",
+        "T138"
+      ],
+      "owner_reported_status": "PENDING_RECONCILIATION",
+      "historical_disposition": "Preserve original artifacts; changed numeric definitions require affected-lineage recomputation, policy-only changes reuse valid raw metrics. No production mutation performed.",
+      "rollback": "Use frozen source/diff as a coherent version; do not mix old policy receipts with new implementations."
+    },
+    "A60": {
+      "title": "状态权重序列化丢失全局fallback，输出payload还可能共享可变数组",
+      "status": "VERIFIED",
+      "evidence": [
+        "factor_preprocess/tests/regime/test_v8_regime_acceptance.py::test_t139_141_serialization_replay_isolated_and_old_payload_rejected",
+        "factor_preprocess/tests/regime/test_v8_regime_acceptance.py::test_t132_supervised_fallback_is_explicit_research_evidence"
+      ],
+      "acceptance_ids": [
+        "T139",
+        "T140",
+        "T141"
+      ],
+      "owner_reported_status": "PENDING_RECONCILIATION",
+      "historical_disposition": "Preserve original artifacts; changed numeric definitions require affected-lineage recomputation, policy-only changes reuse valid raw metrics. No production mutation performed.",
+      "rollback": "Use frozen source/diff as a coherent version; do not mix old policy receipts with new implementations."
+    },
+    "A61": {
+      "title": "状态切换rank分支把未知状态当合法，还改变已知股票的排名",
+      "status": "VERIFIED",
+      "evidence": [
+        "factor_preprocess/tests/test_v8_fp_acceptance.py::test_t142_extreme_unknown_value_cannot_change_known_rank",
+        "factor_preprocess/tests/regime/test_v8_regime_acceptance.py::test_t143_144_unknown_policy_and_minimum_cross_section"
+      ],
+      "acceptance_ids": [
+        "T142",
+        "T143",
+        "T144"
+      ],
+      "owner_reported_status": "PENDING_RECONCILIATION",
+      "historical_disposition": "Preserve original artifacts; changed numeric definitions require affected-lineage recomputation, policy-only changes reuse valid raw metrics. No production mutation performed.",
+      "rollback": "Use frozen source/diff as a coherent version; do not mix old policy receipts with new implementations."
+    },
+    "A62": {
+      "title": "因果状态detect缺少增量历史和拟合坐标，min_periods也未真正处理缺口",
+      "status": "VERIFIED",
+      "evidence": [
+        "factor_preprocess/tests/regime/test_v8_regime_acceptance.py::test_t145_147_chunk_bar_checkpoint_and_prior_fit_rejection",
+        "factor_preprocess/tests/regime/test_v8_regime_acceptance.py::test_t146_150_missing_strength_transition_and_degenerate_boundaries",
+        "factor_preprocess/tests/regime/test_v8_regime_acceptance.py::test_t147_rejected_late_revision_preserves_decisions_and_restart_snapshot"
+      ],
+      "acceptance_ids": [
+        "T145",
+        "T146",
+        "T147"
+      ],
+      "owner_reported_status": "PENDING_RECONCILIATION",
+      "historical_disposition": "Preserve original artifacts; changed numeric definitions require affected-lineage recomputation, policy-only changes reuse valid raw metrics. No production mutation performed.",
+      "rollback": "Use frozen source/diff as a coherent version; do not mix old policy receipts with new implementations."
+    },
+    "A63": {
+      "title": "状态强度在负/零阈值处失真，warm-up和缺失也被标成状态切换",
+      "status": "VERIFIED",
+      "evidence": [
+        "factor_preprocess/tests/regime/test_v8_regime_acceptance.py::test_t146_150_missing_strength_transition_and_degenerate_boundaries"
+      ],
+      "acceptance_ids": [
+        "T148",
+        "T149",
+        "T150"
+      ],
+      "owner_reported_status": "PENDING_RECONCILIATION",
+      "historical_disposition": "Preserve original artifacts; changed numeric definitions require affected-lineage recomputation, policy-only changes reuse valid raw metrics. No production mutation performed.",
+      "rollback": "Use frozen source/diff as a coherent version; do not mix old policy receipts with new implementations."
+    },
+    "A64": {
+      "title": "FA生命周期只核对证据类型名，未在提交边界验证实际批准与认证",
+      "status": "VERIFIED",
+      "evidence": [
+        "factor_assets/tests/test_lifecycle_orchestration.py",
+        "factor_assets/tests/test_v8_lifecycle_authorization_outbox.py::test_t152_wrong_factor_recipe_decision_expiry_or_policy_authorization_rejects[mutation0-factor mismatch]",
+        "factor_assets/tests/test_v8_lifecycle_authorization_outbox.py::test_t152_wrong_factor_recipe_decision_expiry_or_policy_authorization_rejects[mutation1-recipe mismatch]",
+        "factor_assets/tests/test_v8_lifecycle_authorization_outbox.py::test_t152_wrong_factor_recipe_decision_expiry_or_policy_authorization_rejects[mutation2-not APPROVED]",
+        "factor_assets/tests/test_v8_lifecycle_authorization_outbox.py::test_t152_wrong_factor_recipe_decision_expiry_or_policy_authorization_rejects[mutation3-expired]",
+        "factor_assets/tests/test_v8_lifecycle_authorization_outbox.py::test_t152_wrong_factor_recipe_decision_expiry_or_policy_authorization_rejects[mutation4-policy version mismatch]",
+        "factor_assets/tests/test_v8_platform_lifecycle_recovery.py::test_lost_callback_retry_redelivery_and_retirement_exclusion"
+      ],
+      "owner_evidence": "fa/acceptance_ledger.json",
+      "acceptance_ids": [
+        "T151",
+        "T152",
+        "T153"
+      ],
+      "owner_reported_status": "VERIFIED",
+      "historical_disposition": "Preserve original artifacts; changed numeric definitions require affected-lineage recomputation, policy-only changes reuse valid raw metrics. No production mutation performed.",
+      "rollback": "Use frozen source/diff as a coherent version; do not mix old policy receipts with new implementations."
+    },
+    "A65": {
+      "title": "FA先检查当前revision再查幂等记录，成功请求的重试会误报冲突",
+      "status": "VERIFIED",
+      "evidence": [
+        "factor_assets/tests/test_lifecycle_orchestration.py::test_replay_after_superseding_transition_returns_original_receipt",
+        "factor_assets/tests/test_v8_platform_lifecycle_recovery.py::test_lost_callback_retry_redelivery_and_retirement_exclusion",
+        "factor_assets/tests/test_lifecycle_orchestration.py::test_decision_replay_rejects_changed_transition_metadata[changed0]"
+      ],
+      "owner_evidence": "fa/acceptance_ledger.json",
+      "acceptance_ids": [
+        "T154",
+        "T155",
+        "T156"
+      ],
+      "owner_reported_status": "VERIFIED",
+      "historical_disposition": "Preserve original artifacts; changed numeric definitions require affected-lineage recomputation, policy-only changes reuse valid raw metrics. No production mutation performed.",
+      "rollback": "Use frozen source/diff as a coherent version; do not mix old policy receipts with new implementations."
+    },
+    "A66": {
+      "title": "FA提交后的监听回调没有持久交付语义，退役/更新通知可能丢失",
+      "status": "VERIFIED",
+      "evidence": [
+        "factor_assets/tests/test_v8_lifecycle_authorization_outbox.py::test_platform_outbox_is_staged_atomically_with_transition",
+        "factor_assets/tests/test_v8_platform_lifecycle_recovery.py::test_lost_callback_retry_redelivery_and_retirement_exclusion"
+      ],
+      "owner_evidence": "fa/acceptance_ledger.json",
+      "acceptance_ids": [
+        "T157",
+        "T158",
+        "T159"
+      ],
+      "owner_reported_status": "VERIFIED",
+      "historical_disposition": "Preserve original artifacts; changed numeric definitions require affected-lineage recomputation, policy-only changes reuse valid raw metrics. No production mutation performed.",
+      "rollback": "Use frozen source/diff as a coherent version; do not mix old policy receipts with new implementations."
+    },
+    "A67": {
+      "title": "L1缓存只限制压缩后载荷，压缩统计无界增长且写入前峰值未受控",
+      "status": "VERIFIED",
+      "evidence": [
+        "evidence/v8/cache_resource_instrumented_candidate2.json",
+        "quant_evaluator/tests/test_v8_numeric_goldens.py::test_t161_cache_read_checks_budget_before_decompression",
+        "quant_evaluator/tests/test_v8_numeric_goldens.py::test_cache_dict_budget_and_custom_array_reducer_are_rejected_before_pickle",
+        "quant_evaluator/tests/test_v8_numeric_goldens.py::test_t162_cache_replacement_does_not_evict_other_key"
+      ],
+      "acceptance_ids": [
+        "T160",
+        "T161",
+        "T162"
+      ],
+      "owner_reported_status": "PENDING_RECONCILIATION",
+      "historical_disposition": "Preserve original artifacts; changed numeric definitions require affected-lineage recomputation, policy-only changes reuse valid raw metrics. No production mutation performed.",
+      "rollback": "Use frozen source/diff as a coherent version; do not mix old policy receipts with new implementations."
+    },
+    "A68": {
+      "title": "GPU政策回执记录的是请求值，未证明精度/多卡/异步能力实际执行",
+      "status": "PARTIAL",
+      "evidence": [
+        "quant_evaluator/tests/test_v8_numeric_goldens.py::test_t163_t165_actual_device_storage_and_transfer_capability"
+      ],
+      "acceptance_ids": [
+        "T163",
+        "T164",
+        "T165"
+      ],
+      "owner_reported_status": "PENDING_RECONCILIATION",
+      "historical_disposition": "Preserve original artifacts; changed numeric definitions require affected-lineage recomputation, policy-only changes reuse valid raw metrics. No production mutation performed.",
+      "rollback": "Use frozen source/diff as a coherent version; do not mix old policy receipts with new implementations."
+    },
+    "A69": {
+      "title": "失败评价和超额计算会全额退款，预算低估已经消耗的算力",
+      "status": "VERIFIED",
+      "evidence": [
+        "factor_optimizer/tests/search/test_runner.py::test_search_runner_started_failure_charges_reserved_envelope",
+        "factor_optimizer/tests/search/test_v8_remaining_acceptance_gaps.py::test_t166_failure_after_ninety_percent_progress_conservatively_charges_reservation",
+        "factor_optimizer/tests/test_search_budget.py",
+        "factor_optimizer/tests/search/test_durable_campaign_store_v3.py"
+      ],
+      "acceptance_ids": [
+        "T166",
+        "T167",
+        "T168"
+      ],
+      "owner_reported_status": "PENDING_RECONCILIATION",
+      "historical_disposition": "Preserve original artifacts; changed numeric definitions require affected-lineage recomputation, policy-only changes reuse valid raw metrics. No production mutation performed.",
+      "rollback": "Use frozen source/diff as a coherent version; do not mix old policy receipts with new implementations."
+    },
+    "A70": {
+      "title": "预算预约只有汇总金额，没有attempt归属；重复释放和恢复可破坏不变量",
+      "status": "VERIFIED",
+      "evidence": [
+        "factor_optimizer/tests/test_search_budget.py",
+        "factor_optimizer/tests/search/test_durable_campaign_store_v3.py",
+        "factor_optimizer/tests/search/test_v8_remaining_acceptance_gaps.py::test_missing_worker_restore_stays_reserved_and_cannot_enlarge_budget",
+        "factor_optimizer/tests/search/test_v8_remaining_acceptance_gaps.py::test_persisted_orphan_reservation_checkpoint_never_restores_as_free_budget",
+        "factor_optimizer/tests/search/test_v8_remaining_acceptance_gaps.py::test_concurrent_commit_cancel_same_started_reservation_settles_once"
+      ],
+      "acceptance_ids": [
+        "T169",
+        "T170",
+        "T171"
+      ],
+      "owner_reported_status": "PENDING_RECONCILIATION",
+      "historical_disposition": "Preserve original artifacts; changed numeric definitions require affected-lineage recomputation, policy-only changes reuse valid raw metrics. No production mutation performed.",
+      "rollback": "Use frozen source/diff as a coherent version; do not mix old policy receipts with new implementations."
+    },
+    "A71": {
+      "title": "健康状态变化只写在人类notes里，事件回放不能可靠重建正交健康状态",
+      "status": "VERIFIED",
+      "evidence": [
+        "factor_assets/tests/test_v8_lifecycle_authorization_outbox.py::test_t172_typed_health_event_log_alone_reconstructs_persisted_snapshot",
+        "factor_assets/tests/test_v8_lifecycle_authorization_outbox.py::test_t173_notes_translation_cannot_change_machine_health_replay",
+        "factor_assets/tests/test_v8_platform_lifecycle_recovery.py::test_lost_callback_retry_redelivery_and_retirement_exclusion"
+      ],
+      "owner_evidence": "fa/acceptance_ledger.json",
+      "acceptance_ids": [
+        "T172",
+        "T173",
+        "T174"
+      ],
+      "owner_reported_status": "VERIFIED",
+      "historical_disposition": "Preserve original artifacts; changed numeric definitions require affected-lineage recomputation, policy-only changes reuse valid raw metrics. No production mutation performed.",
+      "rollback": "Use frozen source/diff as a coherent version; do not mix old policy receipts with new implementations."
+    }
+  },
+  "acceptances": {
+    "T01": {
+      "input": "未认证指标产生有限高分",
+      "required": "可显示研究结果，但不能完成所需正式决策",
+      "ticket_refs": [],
+      "status": "VERIFIED",
+      "tests": [
+        "factor_assets/tests/test_v8_selection_decision.py::test_missing_evidence_and_qualification_are_unselectable"
+      ],
+      "evidence": "FA formal selection rejects unqualified numerical evidence",
+      "selectors": [
+        "factor_assets/tests/test_v8_selection_decision.py::test_missing_evidence_and_qualification_are_unselectable"
+      ],
+      "domain": "FA formal selection rejects unqualified numerical evidence",
+      "owner_evidence": "fa/fa_acceptance_map.json"
+    },
+    "T02": {
+      "input": "必需门为空、缺一个、重复ID",
+      "required": "拒绝，而不是`all([])`通过",
+      "ticket_refs": [
+        "A04"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "factor_assets/tests/test_v8_selection_decision.py::test_t02_required_dimension_ids_are_unique_and_empty_means_no_dimension_gate"
+      ],
+      "evidence": "duplicate required-dimension IDs reject; an explicit empty set means no dimension gate while metric gates remain active",
+      "selectors": [
+        "factor_assets/tests/test_v8_selection_decision.py::test_t02_required_dimension_ids_are_unique_and_empty_means_no_dimension_gate"
+      ],
+      "domain": "duplicate required-dimension IDs reject; an explicit empty set means no dimension gate while metric gates remain active",
+      "owner_evidence": "fa/fa_acceptance_map.json"
+    },
+    "T03": {
+      "input": "某必需维度低于门槛、其他全S+",
+      "required": "拒绝，不靠总分补偿",
+      "ticket_refs": [
+        "A04"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "factor_assets/tests/test_v8_selection_decision.py::test_hard_gates_precede_scoring_and_do_not_borrow_grade_or_coverage"
+      ],
+      "evidence": "dimension floors precede continuous scoring",
+      "selectors": [
+        "factor_assets/tests/test_v8_selection_decision.py::test_hard_gates_precede_scoring_and_do_not_borrow_grade_or_coverage"
+      ],
+      "domain": "dimension floors precede continuous scoring",
+      "owner_evidence": "fa/fa_acceptance_map.json"
+    },
+    "T04": {
+      "input": "D存在但要求B",
+      "required": "必须未通过真实下限",
+      "ticket_refs": [
+        "A04"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "factor_assets/tests/test_v8_selection_decision.py::test_hard_gates_precede_scoring_and_do_not_borrow_grade_or_coverage"
+      ],
+      "evidence": "D does not satisfy B floor",
+      "selectors": [
+        "factor_assets/tests/test_v8_selection_decision.py::test_hard_gates_precede_scoring_and_do_not_borrow_grade_or_coverage"
+      ],
+      "domain": "D does not satisfy B floor",
+      "owner_evidence": "fa/fa_acceptance_map.json"
+    },
+    "T05": {
+      "input": "coverage=bool或缺失",
+      "required": "不可当100%实际覆盖",
+      "ticket_refs": [
+        "A04"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "factor_assets/tests/test_v8_selection_decision.py::test_nonfinite_and_bool_metric_inputs_fail_closed_at_boundary"
+      ],
+      "evidence": "numeric boundary rejects bool/nonfinite; coverage is range checked",
+      "selectors": [
+        "factor_assets/tests/test_v8_selection_decision.py::test_nonfinite_and_bool_metric_inputs_fail_closed_at_boundary"
+      ],
+      "domain": "numeric boundary rejects bool/nonfinite; coverage is range checked",
+      "owner_evidence": "fa/fa_acceptance_map.json"
+    },
+    "T06": {
+      "input": "增加仅展示指标/重复alias",
+      "required": "原评分和权重不改变",
+      "ticket_refs": [
+        "A09"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "factor_assets/tests/test_v8_formula_oracle.py::test_t06_display_only_zero_weight_cannot_zero_geometric_utility"
+      ],
+      "evidence": "zero-weight display metric cannot alter geometric utility",
+      "selectors": [
+        "factor_assets/tests/test_v8_formula_oracle.py::test_t06_display_only_zero_weight_cannot_zero_geometric_utility"
+      ],
+      "domain": "zero-weight display metric cannot alter geometric utility",
+      "owner_evidence": "fa/fa_acceptance_map.json"
+    },
+    "T07": {
+      "input": "一项有效效益改善、其余固定",
+      "required": "在同政策可行域内效用不下降",
+      "ticket_refs": [
+        "A09"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "factor_assets/tests/test_v8_formula_oracle.py::test_v8_joint_formula_monotonicity_and_measured_zero"
+      ],
+      "evidence": "continuous utility monotonicity in the feasible domain",
+      "selectors": [
+        "factor_assets/tests/test_v8_formula_oracle.py::test_v8_joint_formula_monotonicity_and_measured_zero"
+      ],
+      "domain": "continuous utility monotonicity in the feasible domain",
+      "owner_evidence": "fa/fa_acceptance_map.json"
+    },
+    "T08": {
+      "input": "一个非法Inf指标",
+      "required": "映射前拒绝，不能饱和到1",
+      "ticket_refs": [
+        "A09"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "factor_assets/tests/test_v8_selection_decision.py::test_nonfinite_and_bool_metric_inputs_fail_closed_at_boundary",
+        "factor_assets/tests/test_v8_qe_joint_evidence.py::test_adapter_rejects_identity_axis_and_finiteness_mutations[nonfinite]"
+      ],
+      "evidence": "nonfinite values rejected before desirability mapping",
+      "selectors": [
+        "factor_assets/tests/test_v8_selection_decision.py::test_nonfinite_and_bool_metric_inputs_fail_closed_at_boundary",
+        "factor_assets/tests/test_v8_qe_joint_evidence.py::test_adapter_rejects_identity_axis_and_finiteness_mutations[nonfinite]"
+      ],
+      "domain": "nonfinite values rejected before desirability mapping",
+      "owner_evidence": "fa/fa_acceptance_map.json"
+    },
+    "T09": {
+      "input": "缺少形状或纯度证据",
+      "required": "不借总体等级补分",
+      "ticket_refs": [
+        "A05"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "factor_assets/tests/test_v8_selection_decision.py::test_hard_gates_precede_scoring_and_do_not_borrow_grade_or_coverage"
+      ],
+      "evidence": "required dimensions cannot borrow an overall grade",
+      "selectors": [
+        "factor_assets/tests/test_v8_selection_decision.py::test_hard_gates_precede_scoring_and_do_not_borrow_grade_or_coverage"
+      ],
+      "domain": "required dimensions cannot borrow an overall grade",
+      "owner_evidence": "fa/fa_acceptance_map.json"
+    },
+    "T10": {
+      "input": "形状/状态证据改变且画像使用它",
+      "required": "相关连续块或门槛真正改变",
+      "ticket_refs": [
+        "A05"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "factor_assets/tests/test_v8_selection_decision.py::test_t10_policy_used_shape_or_state_raw_perturbation_changes_utility_and_gate[shape_score]",
+        "factor_assets/tests/test_v8_selection_decision.py::test_t10_policy_used_shape_or_state_raw_perturbation_changes_utility_and_gate[state_purity]"
+      ],
+      "evidence": "qualified raw shape/state evidence perturbations alter the policy-used continuous block and hard gate",
+      "selectors": [
+        "factor_assets/tests/test_v8_selection_decision.py::test_t10_policy_used_shape_or_state_raw_perturbation_changes_utility_and_gate[shape_score]",
+        "factor_assets/tests/test_v8_selection_decision.py::test_t10_policy_used_shape_or_state_raw_perturbation_changes_utility_and_gate[state_purity]"
+      ],
+      "domain": "qualified raw shape/state evidence perturbations alter the policy-used continuous block and hard gate",
+      "owner_evidence": "fa/fa_acceptance_map.json"
+    },
+    "T11": {
+      "input": "权重/锚点不同、ID相同",
+      "required": "内容hash不同，禁止重用旧decision",
+      "ticket_refs": [
+        "A09"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "factor_assets/tests/test_v8_selection_decision.py::test_policy_binding_and_order_invariant_semantic_identity"
+      ],
+      "evidence": "policy content hash binds weights, anchors, unit and direction",
+      "selectors": [
+        "factor_assets/tests/test_v8_selection_decision.py::test_policy_binding_and_order_invariant_semantic_identity"
+      ],
+      "domain": "policy content hash binds weights, anchors, unit and direction",
+      "owner_evidence": "fa/fa_acceptance_map.json"
+    },
+    "T12": {
+      "input": "不存在的policy引用",
+      "required": "执行前失败，不能只写入日志",
+      "ticket_refs": [
+        "A15"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "factor_assets/tests/test_v8_selection_decision.py::test_policy_binding_and_order_invariant_semantic_identity"
+      ],
+      "evidence": "unknown/mutated policy binding fails before decision",
+      "selectors": [
+        "factor_assets/tests/test_v8_selection_decision.py::test_policy_binding_and_order_invariant_semantic_identity"
+      ],
+      "domain": "unknown/mutated policy binding fails before decision",
+      "owner_evidence": "fa/fa_acceptance_map.json"
+    },
+    "T13": {
+      "input": "外来trial、split、fidelity、objective的typed artifact",
+      "required": "请求边界拒绝",
+      "ticket_refs": [
+        "A02"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "factor_optimizer/tests/search/test_evaluation_artifact.py"
+      ],
+      "evidence": "Existing typed artifacts are verified and rebound to trial, split, fidelity, objective and evidence before use.",
+      "owner_evidence": "fo/acceptance_traceability.json"
+    },
+    "T14": {
+      "input": "FAILED/PRUNED artifact却携带高score",
+      "required": "不更新best、不升级为EVALUATED",
+      "ticket_refs": [
+        "A02"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "factor_optimizer/tests/search/test_evaluation_artifact.py",
+        "factor_optimizer/tests/search/test_v05_cheap_prefilter.py"
+      ],
+      "evidence": "FAILED/PRUNED and quality-pruned COMPLETE artifacts cannot update the incumbent.",
+      "owner_evidence": "fo/acceptance_traceability.json"
+    },
+    "T15": {
+      "input": "Tier1→Tier2→Tier3→Tier4",
+      "required": "实際访问序列正确，重复投递不推进两次",
+      "ticket_refs": [
+        "A01"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "factor_optimizer/tests/search/test_tiered_evaluation.py",
+        "factor_optimizer/tests/search/test_v05_cheap_prefilter.py"
+      ],
+      "evidence": "Issued jobs bind tier, recipe and attempt; replay is idempotent and the real runner visits the declared tiers.",
+      "owner_evidence": "fo/acceptance_traceability.json"
+    },
+    "T16": {
+      "input": "各层计算成功但质量未过",
+      "required": "应剪枝，不因技术成功晋级",
+      "ticket_refs": [
+        "A01"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "factor_optimizer/tests/search/test_v05_cheap_prefilter.py::test_complete_high_score_without_decision_provider_cannot_promote"
+      ],
+      "evidence": "Technical COMPLETE without an authoritative quality decision is pruned at the cheap tier.",
+      "owner_evidence": "fo/acceptance_traceability.json"
+    },
+    "T17": {
+      "input": "低保真分高、全量分低",
+      "required": "两者不能直接争最终冠军",
+      "ticket_refs": [
+        "A03"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "factor_optimizer/tests/search/test_v8_qe_fa_fo_integration.py"
+      ],
+      "evidence": "FA final-fidelity gates and FO receipt binding prevent lower-fidelity evidence from becoming the final winner.",
+      "owner_evidence": "fo/acceptance_traceability.json"
+    },
+    "T18": {
+      "input": "最小化损失持续改善",
+      "required": "不因为max-only停止",
+      "ticket_refs": [
+        "A10"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "factor_optimizer/tests/search/test_plateau.py"
+      ],
+      "evidence": "Plateau orientation is derived from the objective direction, including minimize.",
+      "owner_evidence": "fo/acceptance_traceability.json"
+    },
+    "T19": {
+      "input": "一个强点替换两个旧前沿点",
+      "required": "不因前沿人数下降认定停滞",
+      "ticket_refs": [
+        "A10"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "factor_optimizer/tests/search/test_plateau.py",
+        "factor_optimizer/tests/search/test_v8_remaining_acceptance_gaps.py::test_stronger_point_replacing_two_old_points_is_hypervolume_progress",
+        "factor_optimizer/tests/search/test_v8_remaining_acceptance_gaps.py::test_runner_does_not_stop_when_stronger_point_replaces_two_frontier_points"
+      ],
+      "evidence": "Fixed-reference hypervolume replaces frontier-count semantics; exact two-old-points-to-one-strong-point geometry and the runner progress trace are exercised.",
+      "owner_evidence": "fo/acceptance_traceability.json"
+    },
+    "T20": {
+      "input": "点Pareto略差但最终成本/不确定性明显更好",
+      "required": "不能在可证明不支配前误删",
+      "ticket_refs": [
+        "A07"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "factor_optimizer/tests/search/test_v8_qe_fa_fo_integration.py::test_higher_point_but_inconclusive_variant_does_not_replace_raw",
+        "factor_optimizer/tests/search/test_v8_remaining_acceptance_gaps.py::test_point_dominance_cannot_delete_conservative_utility_winner"
+      ],
+      "evidence": "Final uncertainty controls replacement and an adversarial point-dominant volatile candidate cannot eliminate the conservative legal winner.",
+      "owner_evidence": "fo/acceptance_traceability.json"
+    },
+    "T21": {
+      "input": "候选分数相同但bootstrap身份不一致",
+      "required": "不得计算成对差值",
+      "ticket_refs": [
+        "A06"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "factor_assets/tests/test_v8_formula_oracle.py::test_v8_joint_formula_pairing_is_per_replicate_not_difference_of_quantiles",
+        "factor_assets/tests/test_v8_qe_joint_evidence.py::test_adapter_rejects_identity_axis_and_finiteness_mutations[replicates]"
+      ],
+      "evidence": "same-plan ordered replicate pairing",
+      "selectors": [
+        "factor_assets/tests/test_v8_formula_oracle.py::test_v8_joint_formula_pairing_is_per_replicate_not_difference_of_quantiles",
+        "factor_assets/tests/test_v8_qe_joint_evidence.py::test_adapter_rejects_identity_axis_and_finiteness_mutations[replicates]"
+      ],
+      "domain": "same-plan ordered replicate pairing",
+      "owner_evidence": "fa/fa_acceptance_map.json"
+    },
+    "T22": {
+      "input": "只有无关bootstrap key或某维单点",
+      "required": "不能自称完整置信证据",
+      "ticket_refs": [
+        "A06"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "factor_assets/tests/test_v8_qe_joint_evidence.py::test_adapter_preserves_named_metric_plan_replicate_and_factor_axes",
+        "factor_assets/tests/test_v8_qe_joint_evidence.py::test_adapter_rejects_identity_axis_and_finiteness_mutations[plan]"
+      ],
+      "evidence": "complete joint QE grid and exact axes required",
+      "selectors": [
+        "factor_assets/tests/test_v8_qe_joint_evidence.py::test_adapter_preserves_named_metric_plan_replicate_and_factor_axes",
+        "factor_assets/tests/test_v8_qe_joint_evidence.py::test_adapter_rejects_identity_axis_and_finiteness_mutations[plan]"
+      ],
+      "domain": "complete joint QE grid and exact axes required",
+      "owner_evidence": "fa/fa_acceptance_map.json"
+    },
+    "T23": {
+      "input": "RAW与变体证据不足以区分",
+      "required": "INCONCLUSIVE，不谎称IMPROVED",
+      "ticket_refs": [
+        "A08"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "factor_assets/tests/test_v8_selection_decision.py::test_paired_relationships_are_typed_and_missing_evidence_is_inconclusive"
+      ],
+      "evidence": "insufficient paired evidence remains INCONCLUSIVE",
+      "selectors": [
+        "factor_assets/tests/test_v8_selection_decision.py::test_paired_relationships_are_typed_and_missing_evidence_is_inconclusive"
+      ],
+      "domain": "insufficient paired evidence remains INCONCLUSIVE",
+      "owner_evidence": "fa/fa_acceptance_map.json"
+    },
+    "T24": {
+      "input": "非劣但低成本/低风险版本",
+      "required": "明确对应关系，不能假称预测提升",
+      "ticket_refs": [
+        "A08"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "factor_assets/tests/test_v8_selection_decision.py::test_t24_noninferior_candidate_records_proven_replacement_role[CHEAPER]",
+        "factor_assets/tests/test_v8_selection_decision.py::test_t24_noninferior_candidate_records_proven_replacement_role[RISK_CLEANER]",
+        "factor_assets/tests/test_v8_selection_decision.py::test_t24_noninferior_candidate_records_proven_replacement_role[SIMPLER]",
+        "factor_assets/tests/test_v8_selection_decision.py::test_t24_naked_scalar_or_subthreshold_raw_cannot_spoof_replacement_role"
+      ],
+      "evidence": "same-qualified-RAW role improvement authorizes NI/equivalent replacement and DecisionArtifact records the exact role; naked/subthreshold claims cannot authorize",
+      "selectors": [
+        "factor_assets/tests/test_v8_selection_decision.py::test_t24_noninferior_candidate_records_proven_replacement_role[CHEAPER]",
+        "factor_assets/tests/test_v8_selection_decision.py::test_t24_noninferior_candidate_records_proven_replacement_role[RISK_CLEANER]",
+        "factor_assets/tests/test_v8_selection_decision.py::test_t24_noninferior_candidate_records_proven_replacement_role[SIMPLER]",
+        "factor_assets/tests/test_v8_selection_decision.py::test_t24_naked_scalar_or_subthreshold_raw_cannot_spoof_replacement_role"
+      ],
+      "domain": "same-qualified-RAW role improvement authorizes NI/equivalent replacement and DecisionArtifact records the exact role; naked/subthreshold claims cannot authorize",
+      "owner_evidence": "fa/fa_acceptance_map.json"
+    },
+    "T25": {
+      "input": "外来factor/evaluation/policy的metric grade",
+      "required": "FA装配拒绝或显式合法转换并留证",
+      "ticket_refs": [
+        "A11"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "factor_assets/tests/profiling/test_dimensions.py"
+      ],
+      "evidence": "foreign factor, evaluation, policy and context coordinates rejected",
+      "selectors": [
+        "factor_assets/tests/profiling/test_dimensions.py"
+      ],
+      "domain": "foreign factor, evaluation, policy and context coordinates rejected",
+      "owner_evidence": "fa/fa_acceptance_map.json"
+    },
+    "T26": {
+      "input": "不同批次/分片/证券顺序",
+      "required": "对齐后同因子指标、证据与决策一致",
+      "ticket_refs": [],
+      "status": "VERIFIED",
+      "tests": [
+        "factor_optimizer/tests/search/test_v8_cross_layer_invariants.py"
+      ],
+      "evidence": "Production QE permutation/single-column/F-shard outputs canonically aligned under one plan produce identical FA/FO decision identity.",
+      "owner_evidence": "root-scoped-review"
+    },
+    "T27": {
+      "input": "未来数据扰动",
+      "required": "历史当时可知输出不改变；拟合只用合法训练部分",
+      "ticket_refs": [],
+      "status": "VERIFIED",
+      "tests": [
+        "factor_optimizer/tests/search/test_v8_cross_layer_invariants.py"
+      ],
+      "evidence": "Future-tail perturbation through the frozen fitted FP recipe leaves historical QE evidence and FA/FO decision identity unchanged in the executed synthetic domain.",
+      "owner_evidence": "root-scoped-review"
+    },
+    "T28": {
+      "input": "父因子、拆分支、重组候选",
+      "required": "分别有完整评价且试验族不重置",
+      "ticket_refs": [],
+      "status": "VERIFIED",
+      "tests": [
+        "factor_optimizer/tests/search/test_v8_remaining_acceptance_gaps.py::test_t28_parent_split_branches_and_recombined_candidate_share_one_complete_family"
+      ],
+      "evidence": "The actual runner fully evaluates parent, both split branches, and recombined candidate; the durable store retains all four under one campaign and binds one complete family to the sealed runner ledger.",
+      "owner_evidence": "fo/acceptance_traceability.json"
+    },
+    "T29": {
+      "input": "全部变体都不合格",
+      "required": "返回无合格者，不硬选一个",
+      "ticket_refs": [],
+      "status": "VERIFIED",
+      "tests": [
+        "factor_assets/tests/test_v8_selection_decision.py::test_missing_evidence_and_qualification_are_unselectable"
+      ],
+      "evidence": "all-ineligible set returns WAIT/no winner",
+      "selectors": [
+        "factor_assets/tests/test_v8_selection_decision.py::test_missing_evidence_and_qualification_are_unselectable"
+      ],
+      "domain": "all-ineligible set returns WAIT/no winner",
+      "owner_evidence": "fa/fa_acceptance_map.json"
+    },
+    "T30": {
+      "input": "FO调用与FP调用同context/policy/evidence",
+      "required": "连续分数、门槛、决策hash一致",
+      "ticket_refs": [
+        "A03",
+        "A15"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "factor_optimizer/tests/search/test_v8_qe_fa_fo_integration.py::test_actual_qe_joint_bootstrap_yields_identical_fa_fo_fp_decision_identity"
+      ],
+      "evidence": "FO and FP replay the exact same canonical FA provider/request and receive identical decision_id and content_hash.",
+      "owner_evidence": "fo/acceptance_traceability.json"
+    },
+    "T31": {
+      "input": "完整交替±1序列，HAC lag1",
+      "required": "与固定normalization的Bartlett独立参考一致",
+      "ticket_refs": [
+        "A16"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "quant_evaluator/tests/test_v8_numeric_goldens.py::test_t31_hac_bartlett_normalization"
+      ],
+      "evidence": "Independent fixed-n Bartlett normalization witness.",
+      "owner_evidence": "root-scoped-review"
+    },
+    "T32": {
+      "input": "HAC负特征值见证",
+      "required": "不把结构性负值clip为高显著性；标准实现匹配正定合同",
+      "ticket_refs": [
+        "A16"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "quant_evaluator/tests/test_v8_numeric_goldens.py::test_t32_hac_matches_positive_semidefinite_quadratic_form"
+      ],
+      "evidence": "Independent PSD quadratic-form n/lag grid, including smallest-eigenvector witness.",
+      "owner_evidence": "root-scoped-review"
+    },
+    "T33": {
+      "input": "缺失位置改变",
+      "required": "HAC/Bootstrap保留真实时间假设，不能无说明压缩",
+      "ticket_refs": [
+        "A17"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "quant_evaluator/tests/test_v8_clock_sink_acceptance.py::test_t33_missing_positions_never_acquire_compressed_hac_or_bootstrap_clock"
+      ],
+      "evidence": "Missing-position witness checks original-clock behavior and explicit rejection, not a certification of every irregular-calendar estimator.",
+      "owner_evidence": "root-scoped-review"
+    },
+    "T34": {
+      "input": "两个完全相同候选",
+      "required": "同plan的逐重复配对差严格0",
+      "ticket_refs": [
+        "A18"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "quant_evaluator/tests/test_v8_numeric_goldens.py::test_t34_t35_joint_plan_identity_and_permutation"
+      ],
+      "evidence": "Common plan, identical candidates and column/shard identities.",
+      "owner_evidence": "root-scoped-review"
+    },
+    "T35": {
+      "input": "候选列置换/单列评价/F分片",
+      "required": "原候选的抽样身份和统计结果不随顺序改变",
+      "ticket_refs": [
+        "A18"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "quant_evaluator/tests/test_v8_numeric_goldens.py::test_t34_t35_joint_plan_identity_and_permutation"
+      ],
+      "evidence": "Common plan, identical candidates and column/shard identities.",
+      "owner_evidence": "root-scoped-review"
+    },
+    "T36": {
+      "input": "Bootstrap重复数/块长不足",
+      "required": "明确不足或拒绝；不把单点重复变成统计证据",
+      "ticket_refs": [
+        "A18"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "quant_evaluator/tests/test_v8_clock_sink_acceptance.py::test_t36_singleton_repeats_short_span_and_oversized_blocks_cannot_be_evidence"
+      ],
+      "evidence": "Singleton paired-bootstrap repetitions now reject; short time span and oversized blocks cannot become statistical evidence.",
+      "owner_evidence": "root-scoped-review"
+    },
+    "T37": {
+      "input": "只污染invalid有限数值",
+      "required": "稳定性/换手等合法证据不变",
+      "ticket_refs": [
+        "A19"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "quant_evaluator/tests/test_v8_numeric_goldens.py::test_t37_invalid_values_cannot_change_rank_stability"
+      ],
+      "evidence": "Invalid finite-buffer contamination leaves rank stability unchanged; existing validity suites cover turnover.",
+      "owner_evidence": "root-scoped-review"
+    },
+    "T38": {
+      "input": "lag1无有效对但lag2足够",
+      "required": "lag2正常计算，有独立样本计数",
+      "ticket_refs": [
+        "A20"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "quant_evaluator/tests/test_v8_numeric_goldens.py::test_t38_nonmonotone_lag_pair_counts",
+        "quant_evaluator/tests/test_v8_numeric_goldens.py::test_t38_lag_counts_are_explicit"
+      ],
+      "evidence": "Later valid lag survives earlier missing lag; pair counts are explicit.",
+      "owner_evidence": "root-scoped-review"
+    },
+    "T39": {
+      "input": "IC加常数",
+      "required": "中心化持久性不变；零均值模型与预测期限衰减分开",
+      "ticket_refs": [
+        "A21"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "quant_evaluator/tests/test_v8_numeric_goldens.py::test_t39_centered_persistence_translation"
+      ],
+      "evidence": "Centered AR persistence translation invariant; zero-mean model remains distinct.",
+      "owner_evidence": "root-scoped-review"
+    },
+    "T40": {
+      "input": "top10完全替换",
+      "required": "全池变化率与所选集合退出率按不同分母正确输出",
+      "ticket_refs": [
+        "A22"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "quant_evaluator/tests/test_v8_numeric_goldens.py::test_t40_t41_membership_units_and_unknown_exit"
+      ],
+      "evidence": "Own-day denominators and unknown exit coverage, not future intersection.",
+      "owner_evidence": "root-scoped-review"
+    },
+    "T41": {
+      "input": "昨日top今日缺失/停牌",
+      "required": "不能通过未来交集把昨日持仓变化删除",
+      "ticket_refs": [
+        "A22"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "quant_evaluator/tests/test_v8_numeric_goldens.py::test_t40_t41_membership_units_and_unknown_exit"
+      ],
+      "evidence": "Own-day denominators and unknown exit coverage, not future intersection.",
+      "owner_evidence": "root-scoped-review"
+    },
+    "T42": {
+      "input": "普通收益与active差值",
+      "required": "Sharpe/IR/相对净值按不同return basis适配",
+      "ticket_refs": [
+        "A23"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "quant_evaluator/tests/metrics/test_v8_probe_stress_contracts.py::test_active_basis_and_ir_do_not_subtract_cash_twice"
+      ],
+      "evidence": [
+        "quant_evaluator/tests/metrics/test_v8_probe_stress_contracts.py::test_active_basis_and_ir_do_not_subtract_cash_twice"
+      ],
+      "id": "T42",
+      "ticket": "A23",
+      "gap": null,
+      "owner_evidence": "fp_regime/acceptance_traceability.json"
+    },
+    "T43": {
+      "input": "组合收益等于基准",
+      "required": "相对净值恒1；IR不再次减Rf",
+      "ticket_refs": [
+        "A23"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "quant_evaluator/tests/metrics/test_v8_probe_stress_contracts.py::test_active_basis_and_ir_do_not_subtract_cash_twice"
+      ],
+      "evidence": [
+        "quant_evaluator/tests/metrics/test_v8_probe_stress_contracts.py::test_active_basis_and_ir_do_not_subtract_cash_twice"
+      ],
+      "id": "T43",
+      "ticket": "A23",
+      "gap": null,
+      "owner_evidence": "fp_regime/acceptance_traceability.json"
+    },
+    "T44": {
+      "input": "少于10个收益的持续回撤",
+      "required": "持续性未就绪，不是最佳0",
+      "ticket_refs": [
+        "A24"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "quant_evaluator/tests/test_v8_numeric_goldens.py::test_t44_t46_short_risk_schema"
+      ],
+      "evidence": [
+        "quant_evaluator/tests/test_v8_numeric_goldens.py::test_t44_t46_short_risk_schema"
+      ],
+      "id": "T44",
+      "ticket": "A24",
+      "gap": null,
+      "owner_evidence": "fp_regime/acceptance_traceability.json"
+    },
+    "T45": {
+      "input": "holding或风险时长预算变化",
+      "required": "只改变预声明标准，实际时间与参数身份保留",
+      "ticket_refs": [
+        "A24"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "quant_evaluator/tests/test_v8_numeric_goldens.py::test_t45_t46_holding_identity_and_three_way_schema"
+      ],
+      "evidence": [
+        "quant_evaluator/tests/test_v8_numeric_goldens.py::test_t45_t46_holding_identity_and_three_way_schema"
+      ],
+      "id": "T45",
+      "ticket": "A24",
+      "gap": null,
+      "owner_evidence": "fp_regime/acceptance_traceability.json"
+    },
+    "T46": {
+      "input": "空/短/足样本全家桶",
+      "required": "结果schema固定，未计算字段有明确状态",
+      "ticket_refs": [
+        "A24"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "quant_evaluator/tests/test_v8_numeric_goldens.py::test_t44_t46_short_risk_schema",
+        "quant_evaluator/tests/test_v8_numeric_goldens.py::test_t45_t46_holding_identity_and_three_way_schema"
+      ],
+      "evidence": [
+        "quant_evaluator/tests/test_v8_numeric_goldens.py::test_t44_t46_short_risk_schema",
+        "quant_evaluator/tests/test_v8_numeric_goldens.py::test_t45_t46_holding_identity_and_three_way_schema"
+      ],
+      "id": "T46",
+      "ticket": "A24",
+      "gap": null,
+      "owner_evidence": "fp_regime/acceptance_traceability.json"
+    },
+    "T47": {
+      "input": "重复factor IDs",
+      "required": "在分组覆盖前拒绝",
+      "ticket_refs": [
+        "A25"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "quant_evaluator/tests/test_v8_numeric_goldens.py::test_t47_t50_factor_validity_storage_identity"
+      ],
+      "evidence": "Typed FactorBatch and AxisRef source identity/owned immutable buffers; not a claim for all bare-array functions.",
+      "id": "T47",
+      "ticket": "A25 dependency of A27",
+      "gap": "FactorBatch duplicate factor identity is outside the six audited probe/stress sources and was not reverified here",
+      "owner_evidence": "root-scoped-review"
+    },
+    "T48": {
+      "input": "重复证券/时间坐标",
+      "required": "按样本键/日历合同拒绝或显式聚合，不能隐藏",
+      "ticket_refs": [
+        "A25"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "quant_evaluator/tests/test_v8_numeric_goldens.py::test_t47_t50_factor_validity_storage_identity"
+      ],
+      "evidence": "Typed FactorBatch and AxisRef source identity/owned immutable buffers; not a claim for all bare-array functions.",
+      "id": "T48",
+      "ticket": "A25 dependency of A27",
+      "gap": "sample/asset calendar uniqueness is outside these portfolio compatibility functions",
+      "owner_evidence": "root-scoped-review"
+    },
+    "T49": {
+      "input": "非布尔mask/True且Inf",
+      "required": "无法构造有效金融证据",
+      "ticket_refs": [
+        "A25"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "quant_evaluator/tests/test_v8_numeric_goldens.py::test_t47_t50_factor_validity_storage_identity"
+      ],
+      "evidence": "Typed FactorBatch and AxisRef source identity/owned immutable buffers; not a claim for all bare-array functions.",
+      "id": "T49",
+      "ticket": "A25/A27",
+      "gap": "non-boolean mask is rejected; mask=True plus Inf is handled by finite filtering but lacks a direct negative assertion",
+      "owner_evidence": "root-scoped-review"
+    },
+    "T50": {
+      "input": "外部原地修改输入buffer",
+      "required": "只读所有权或一致性校验生效，无陈旧hash新结果",
+      "ticket_refs": [
+        "A25"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "quant_evaluator/tests/test_v8_numeric_goldens.py::test_t47_t50_factor_validity_storage_identity"
+      ],
+      "evidence": "Typed FactorBatch and AxisRef source identity/owned immutable buffers; not a claim for all bare-array functions.",
+      "id": "T50",
+      "ticket": "A25 dependency of A27",
+      "gap": "legacy ndarray entrypoints do not provide immutable buffer lease/content-hash detection",
+      "owner_evidence": "root-scoped-review"
+    },
+    "T51": {
+      "input": "无交易但有现金/持仓carry",
+      "required": "交易成本为0，融资/借券按真实余额单独计",
+      "ticket_refs": [
+        "A26"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "quant_evaluator/tests/metrics/test_v8_probe_stress_contracts.py::test_cost_evidence_zero_trade_and_carry_are_distinct"
+      ],
+      "evidence": [
+        "quant_evaluator/tests/metrics/test_v8_probe_stress_contracts.py::test_cost_evidence_zero_trade_and_carry_are_distinct"
+      ],
+      "id": "T51",
+      "ticket": "A26",
+      "gap": null,
+      "owner_evidence": "fp_regime/acceptance_traceability.json"
+    },
+    "T52": {
+      "input": "粗略成本函数",
+      "required": "不具备正式净评分的证据资格",
+      "ticket_refs": [
+        "A26"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "quant_evaluator/tests/metrics/test_v8_probe_stress_contracts.py::test_cost_evidence_zero_trade_and_carry_are_distinct",
+        "quant_evaluator/tests/metrics/test_probe_cohort_metrics.py::test_cost_scenarios_interface"
+      ],
+      "evidence": [
+        "quant_evaluator/tests/metrics/test_v8_probe_stress_contracts.py::test_cost_evidence_zero_trade_and_carry_are_distinct",
+        "quant_evaluator/tests/metrics/test_probe_cohort_metrics.py::test_cost_scenarios_interface"
+      ],
+      "id": "T52",
+      "ticket": "A26",
+      "gap": null,
+      "owner_evidence": "fp_regime/acceptance_traceability.json"
+    },
+    "T53": {
+      "input": "legacy与canonical组合路径",
+      "required": "同定义同值，不同gross/return basis则不同身份",
+      "ticket_refs": [
+        "A27"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "quant_evaluator/tests/test_v8_numeric_goldens.py::test_t53_canonical_compatibility_export_matches_legacy_definition"
+      ],
+      "evidence": [
+        "quant_evaluator/tests/test_v8_numeric_goldens.py::test_t53_canonical_compatibility_export_matches_legacy_definition"
+      ],
+      "id": "T53",
+      "ticket": "A27",
+      "gap": null,
+      "owner_evidence": "fp_regime/acceptance_traceability.json"
+    },
+    "T54": {
+      "input": "三维因子配二维legacy mask",
+      "required": "正确适配或明确拒绝，不能悄悄fallback",
+      "ticket_refs": [
+        "A27"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "quant_evaluator/tests/metrics/test_v8_probe_stress_contracts.py::test_legacy_mask_contract_accepts_2d_for_3d_and_rejects_nonboolean"
+      ],
+      "evidence": [
+        "quant_evaluator/tests/metrics/test_v8_probe_stress_contracts.py::test_legacy_mask_contract_accepts_2d_for_3d_and_rejects_nonboolean"
+      ],
+      "id": "T54",
+      "ticket": "A27",
+      "gap": null,
+      "owner_evidence": "fp_regime/acceptance_traceability.json"
+    },
+    "T55": {
+      "input": "Johansen K/det_order/lag网格",
+      "required": "检验量、临界值和rank逐项与匹配参考一致",
+      "ticket_refs": [
+        "A28"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "quant_evaluator/tests/test_v8_numeric_goldens.py::test_t55_johansen_reference"
+      ],
+      "evidence": "Reference grid K1/2/3/6/12 x det(-1,0,1) x VAR-lag(1,2,4) x alpha(.01,.05,.10); statistics/eigenvalues and critical-table-derived rank checked. K1 deterministic domain explicitly rejected, not certified.",
+      "owner_evidence": "root-scoped-review"
+    },
+    "T56": {
+      "input": "协整/断点粗p分档",
+      "required": "不能进入FDR或正式显著性门",
+      "ticket_refs": [
+        "A14",
+        "A28"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "quant_evaluator/tests/test_v8_numeric_goldens.py::test_a14_ols_cusum_reference_and_unsupported_recursive_scope"
+      ],
+      "evidence": "Unsupported recursive CUSUM rejected and uncalibrated Sup-Wald p is unavailable.",
+      "owner_evidence": "root-scoped-review"
+    },
+    "T57": {
+      "input": "FP非RangeIndex/行置换",
+      "required": "输出按证券时间键正确回填，不全NaN/错位",
+      "ticket_refs": [
+        "A29"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "factor_preprocess/tests/test_v8_fp_acceptance.py::test_regularized_alignment_affine_and_contract"
+      ],
+      "evidence": [
+        "factor_preprocess/tests/test_v8_fp_acceptance.py::test_regularized_alignment_affine_and_contract"
+      ],
+      "id": "T57",
+      "ticket": "A29",
+      "gap": null,
+      "owner_evidence": "fp_regime/acceptance_traceability.json"
+    },
+    "T58": {
+      "input": "暴露重复键/列名value碰撞",
+      "required": "不扩增样本，不将因子自己误作风险变量",
+      "ticket_refs": [
+        "A29"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "factor_preprocess/tests/test_v8_regularized_diagnostics.py::test_t58_collision_and_duplicate_exposure_keys_reject"
+      ],
+      "evidence": [
+        "factor_preprocess/tests/test_v8_regularized_diagnostics.py::test_t58_collision_and_duplicate_exposure_keys_reject"
+      ],
+      "id": "T58",
+      "ticket": "A29",
+      "gap": null,
+      "owner_evidence": "fp_regime/acceptance_traceability.json"
+    },
+    "T59": {
+      "input": "normalize=False,intercept=True",
+      "required": "正则系数/截距与对应目标函数参考一致",
+      "ticket_refs": [
+        "A30"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "factor_preprocess/tests/test_v8_regularized_diagnostics.py::test_t59_regularizers_match_declared_objective"
+      ],
+      "evidence": [
+        "factor_preprocess/tests/test_v8_regularized_diagnostics.py::test_t59_regularizers_match_declared_objective"
+      ],
+      "id": "T59",
+      "ticket": "A30",
+      "gap": null,
+      "owner_evidence": "fp_regime/acceptance_traceability.json"
+    },
+    "T60": {
+      "input": "alpha、tol、max_iter非法",
+      "required": "提前明确拒绝，不生成看似成功的变体",
+      "ticket_refs": [
+        "A31"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "factor_preprocess/tests/test_v8_regularized_diagnostics.py::test_t60_invalid_full_parameter_domain"
+      ],
+      "evidence": [
+        "factor_preprocess/tests/test_v8_regularized_diagnostics.py::test_t60_invalid_full_parameter_domain"
+      ],
+      "id": "T60",
+      "ticket": "A31",
+      "gap": null,
+      "owner_evidence": "fp_regime/acceptance_traceability.json"
+    },
+    "T61": {
+      "input": "达到迭代上限",
+      "required": "报convergence与近似资格，不能等同精确结果",
+      "ticket_refs": [
+        "A31"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "factor_preprocess/tests/test_v8_regularized_diagnostics.py::test_t61_budget_and_stationarity_evidence_are_distinct"
+      ],
+      "evidence": [
+        "factor_preprocess/tests/test_v8_regularized_diagnostics.py::test_t61_budget_and_stationarity_evidence_are_distinct"
+      ],
+      "id": "T61",
+      "ticket": "A31",
+      "gap": null,
+      "owner_evidence": "fp_regime/acceptance_traceability.json"
+    },
+    "T62": {
+      "input": "欠定但条件数小的design",
+      "required": "有效列秩/自由度检查阻断虚假稳定结论",
+      "ticket_refs": [
+        "A32"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "factor_preprocess/tests/test_v8_regularized_diagnostics.py::test_t62_t63_rank_dof_and_same_sample_scope"
+      ],
+      "evidence": [
+        "factor_preprocess/tests/test_v8_regularized_diagnostics.py::test_t62_t63_rank_dof_and_same_sample_scope"
+      ],
+      "id": "T62",
+      "ticket": "A32",
+      "gap": null,
+      "owner_evidence": "fp_regime/acceptance_traceability.json"
+    },
+    "T63": {
+      "input": "同样本OLS正交",
+      "required": "是数值保证，不是独立alpha置信证明",
+      "ticket_refs": [
+        "A32"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "factor_preprocess/tests/test_v8_regularized_diagnostics.py::test_t62_t63_rank_dof_and_same_sample_scope"
+      ],
+      "evidence": [
+        "factor_preprocess/tests/test_v8_regularized_diagnostics.py::test_t62_t63_rank_dof_and_same_sample_scope"
+      ],
+      "id": "T63",
+      "ticket": "A32",
+      "gap": null,
+      "owner_evidence": "fp_regime/acceptance_traceability.json"
+    },
+    "T64": {
+      "input": "测试文件存在但skip/未运行/无断言",
+      "required": "只有盘点资格，无生产认证",
+      "ticket_refs": [
+        "A33"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "quant_evaluator/tests/test_v8_numeric_goldens.py::test_t64_t67_qualification_domain_is_not_portable"
+      ],
+      "evidence": "Execution-domain mismatch/SKIP cannot qualify; inventory not numerical certification.",
+      "owner_evidence": "root-scoped-review"
+    },
+    "T65": {
+      "input": "required metric未注册",
+      "required": "编译失败或等待，不静默过滤缩小指标集",
+      "ticket_refs": [
+        "A33"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "quant_evaluator/tests/metrics/test_coverage_compiler.py"
+      ],
+      "evidence": "Required metric resolution fails closed; no silently filtered request.",
+      "owner_evidence": "root-scoped-review"
+    },
+    "T66": {
+      "input": "新增仅展示指标/别名/副本",
+      "required": "不增加效用权重或改变原赢家",
+      "ticket_refs": [],
+      "status": "VERIFIED",
+      "tests": [
+        "factor_assets/tests/test_v8_formula_oracle.py::test_t06_display_only_zero_weight_cannot_zero_geometric_utility"
+      ],
+      "evidence": "display-only metric cannot change weights or winner",
+      "selectors": [
+        "factor_assets/tests/test_v8_formula_oracle.py::test_t06_display_only_zero_weight_cannot_zero_geometric_utility"
+      ],
+      "domain": "display-only metric cannot change weights or winner",
+      "owner_evidence": "fa/fa_acceptance_map.json"
+    },
+    "T67": {
+      "input": "float32/float64造成ties差异",
+      "required": "指标偏差超数值预算时不继承另一精度PASS",
+      "ticket_refs": [
+        "A33"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "quant_evaluator/tests/test_v8_numeric_goldens.py::test_t64_t67_qualification_domain_is_not_portable"
+      ],
+      "evidence": "Execution-domain mismatch/SKIP cannot qualify; inventory not numerical certification.",
+      "owner_evidence": "root-scoped-review"
+    },
+    "T68": {
+      "input": "每步非劣但多步累积损失过大",
+      "required": "同时检查相对原RAW与当前部署基线的累计差值",
+      "ticket_refs": [],
+      "status": "VERIFIED",
+      "tests": [
+        "factor_assets/tests/test_v8_selection_decision.py::test_t68_original_unit_cumulative_raw_guard_rejects_laundered_steps"
+      ],
+      "evidence": "candidate checked against current baseline and original RAW in original metric units",
+      "selectors": [
+        "factor_assets/tests/test_v8_selection_decision.py::test_t68_original_unit_cumulative_raw_guard_rejects_laundered_steps"
+      ],
+      "domain": "candidate checked against current baseline and original RAW in original metric units",
+      "owner_evidence": "fa/fa_acceptance_map.json"
+    },
+    "T69": {
+      "input": "有效成本情景复制且权重等分",
+      "required": "同语义总权重下效用不变；不同情景不得误合并",
+      "ticket_refs": [],
+      "status": "VERIFIED",
+      "tests": [
+        "factor_assets/tests/test_v8_selection_decision.py::test_t69_equivalent_scenario_duplication_with_conserved_weight_is_invariant"
+      ],
+      "evidence": "duplicating an equivalent named scenario while conserving total weight leaves utility invariant",
+      "selectors": [
+        "factor_assets/tests/test_v8_selection_decision.py::test_t69_equivalent_scenario_duplication_with_conserved_weight_is_invariant"
+      ],
+      "domain": "duplicating an equivalent named scenario while conserving total weight leaves utility invariant",
+      "owner_evidence": "fa/fa_acceptance_map.json"
+    },
+    "T70": {
+      "input": "简单净效用基线对照/空因子负对照",
+      "required": "不以更多高等级替代真实样本外有效性与误报校准",
+      "ticket_refs": [],
+      "status": "BLOCKED_DATA",
+      "tests": [],
+      "evidence": "Awaiting user-designated unsealed development data, dates and universe for economic calibration and negative-control shadow comparison.",
+      "selectors": [],
+      "domain": "FA selection mechanics only",
+      "remaining": "economic null-factor and false-positive calibration require real OOS QE/FO experiments",
+      "owner_evidence": "fa/fa_acceptance_map.json"
+    },
+    "T71": {
+      "input": "一维单时点截面Q=5",
+      "required": "按声明形成五层，不能被误读成N个单证券时点",
+      "ticket_refs": [
+        "A34"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "quant_evaluator/tests/test_v8_numeric_goldens.py::test_t71_t72_quantile_axes"
+      ],
+      "evidence": "One-dimensional cross-section and F=1 standard/fast/Numba MIN/MAX goldens.",
+      "owner_evidence": "root-scoped-review"
+    },
+    "T72": {
+      "input": "F=1的optimized与standard/Numba入口",
+      "required": "内部F轴保留、输出按API恢复；同列数值相同",
+      "ticket_refs": [
+        "A34"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "quant_evaluator/tests/test_v8_numeric_goldens.py::test_t71_t72_quantile_axes"
+      ],
+      "evidence": "One-dimensional cross-section and F=1 standard/fast/Numba MIN/MAX goldens.",
+      "owner_evidence": "root-scoped-review"
+    },
+    "T73": {
+      "input": "GPU MIN/MAX和非法method",
+      "required": "参数真正执行；不支持时明确拒绝",
+      "ticket_refs": [
+        "A35"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "quant_evaluator/tests/test_v8_numeric_goldens.py::test_t73_t74_t75_real_cuda_parameter_domain"
+      ],
+      "evidence": "Real L20 nondefault MIN/MAX, finite mask and nondefault rank axis.",
+      "owner_evidence": "root-scoped-review"
+    },
+    "T74": {
+      "input": "GPU ±Inf、NaN、全部ties、非默认axis",
+      "required": "finite-only、轴和排序合同与金标一致",
+      "ticket_refs": [
+        "A35"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "quant_evaluator/tests/test_v8_numeric_goldens.py::test_t73_t74_t75_real_cuda_parameter_domain"
+      ],
+      "evidence": "Real L20 nondefault MIN/MAX, finite mask and nondefault rank axis.",
+      "owner_evidence": "root-scoped-review"
+    },
+    "T75": {
+      "input": "T/F/Q增长及小device预算",
+      "required": "分层临时内存有界，不能R×N×Q无计划全物化",
+      "ticket_refs": [
+        "A36"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "quant_evaluator/tests/test_v8_numeric_goldens.py::test_quantile_returns_bounded_workspace_matches_full",
+        "evidence/v8/gpu_resource_probe.json"
+      ],
+      "evidence": "Q10/20/40 tiled scratch; measured allocator peaks for stated T/F/N only.",
+      "owner_evidence": "root-scoped-review"
+    },
+    "T76": {
+      "input": "输出sink/OOM重分片",
+      "required": "结果幂等、数值不随分片变化、已提交结果不重计",
+      "ticket_refs": [
+        "A36"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "quant_evaluator/tests/test_v8_clock_sink_acceptance.py::test_t76_oom_retile_preserves_numbers_and_never_recounts_committed_tile"
+      ],
+      "evidence": "Real CUDA OOM injected on second production tile; first committed tile is not repeated, sink persists output and numbers equal no-OOM run.",
+      "owner_evidence": "root-scoped-review"
+    },
+    "T77": {
+      "input": "100期中1个-10%与99个零",
+      "required": "历史ES95=2%，并报告有效尾部质量",
+      "ticket_refs": [
+        "A37"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "quant_evaluator/tests/test_v8_numeric_goldens.py::test_t77_fixed_tail_mass"
+      ],
+      "evidence": "ES95=.02 for one -.10 and 99 zeros.",
+      "owner_evidence": "root-scoped-review"
+    },
+    "T78": {
+      "input": "非整数尾部质量与ties",
+      "required": "分数边界权重正确，复制同经验分布不改变ES",
+      "ticket_refs": [
+        "A37"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "quant_evaluator/tests/test_v8_numeric_goldens.py::test_t78_fractional_tail_mass"
+      ],
+      "evidence": "Fractional boundary mass and replicated empirical distribution.",
+      "owner_evidence": "root-scoped-review"
+    },
+    "T79": {
+      "input": "UPR的90/10与10/90频率交换",
+      "required": "无条件部分矩分别约2.84605与.105409",
+      "ticket_refs": [
+        "A38"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "quant_evaluator/tests/test_v8_numeric_goldens.py::test_t79_unconditional_partial_moments"
+      ],
+      "evidence": "Independent 90/10 and 10/90 unconditional UPR goldens.",
+      "owner_evidence": "root-scoped-review"
+    },
+    "T80": {
+      "input": "MAR平移、全正/全负/常数样本",
+      "required": "公式、单位与无定义状态明确，不epsilon造好分",
+      "ticket_refs": [
+        "A38"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "quant_evaluator/tests/test_v8_risk_domain.py::test_t80_upr_mar_translation_and_undefined_denominator"
+      ],
+      "evidence": "MAR translation and all-positive/all-negative/zero denominator behavior.",
+      "owner_evidence": "root-scoped-review"
+    },
+    "T81": {
+      "input": "CF请求与实际ES方法",
+      "required": "实际方法/降级原因逐值绑定，不假装统一模型",
+      "ticket_refs": [
+        "A39"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "quant_evaluator/tests/test_v8_numeric_goldens.py::test_t81_no_implicit_mixed_var_es_model"
+      ],
+      "evidence": "Unsupported CF joint VaR/ES explicitly rejected; no hidden estimator fallback.",
+      "owner_evidence": "root-scoped-review"
+    },
+    "T82": {
+      "input": "h期完全相关/重叠收益",
+      "required": "不以sqrt(h)机械推出ES比率或H期尾部损失",
+      "ticket_refs": [
+        "A39"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "quant_evaluator/tests/test_v8_risk_domain.py::test_t82_es_ratio_has_no_mechanical_annualization_or_absolute_epsilon"
+      ],
+      "evidence": "Same-period ES ratio has no sqrt annualization or absolute epsilon cutoff.",
+      "owner_evidence": "root-scoped-review"
+    },
+    "T83": {
+      "input": "压力输入列置换并还原",
+      "required": "具名资产压力响应一致",
+      "ticket_refs": [
+        "A40"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "quant_evaluator/tests/metrics/test_v8_probe_stress_contracts.py::test_named_correlation_mapping_is_permutation_equivariant_and_evidenced"
+      ],
+      "evidence": [
+        "quant_evaluator/tests/metrics/test_v8_probe_stress_contracts.py::test_named_correlation_mapping_is_permutation_equivariant_and_evidenced"
+      ],
+      "id": "T83",
+      "ticket": "A40",
+      "gap": null,
+      "owner_evidence": "fp_regime/acceptance_traceability.json"
+    },
+    "T84": {
+      "input": "压力目标非PSD、降秩或缺样本",
+      "required": "拒绝/限定近似有证据；原身份不伪报目标达成",
+      "ticket_refs": [
+        "A40"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "quant_evaluator/tests/test_v8_risk_domain.py::test_t84_psd_domain_and_rank_deficient_target_are_explicit"
+      ],
+      "evidence": "Non-PSD/singular/missing rejected; rank-deficient PSD target achieved and marked diagnostic.",
+      "id": "T84",
+      "ticket": "A40",
+      "gap": "non-PSD, singular and incomplete inputs fail closed in source; direct negative tests and bounded-approximation receipts are absent",
+      "owner_evidence": "root-scoped-review"
+    },
+    "T85": {
+      "input": "历史direct与真实position replay",
+      "required": "诊断生成与策略压力表现拥有不同证据类型",
+      "ticket_refs": [
+        "A41"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "quant_evaluator/tests/test_v8_risk_domain.py::test_t85_research_trajectory_is_typed_but_not_executable_certification"
+      ],
+      "evidence": "Naked POSITION_REPLAY string rejected; real trajectory bridge keeps research non-executable.",
+      "id": "T85",
+      "ticket": "A41",
+      "gap": null,
+      "owner_evidence": "root-scoped-review"
+    },
+    "T86": {
+      "input": "候选集合变动/重叠事件",
+      "required": "共同正式场景及事件有效权重不随无关候选改变",
+      "ticket_refs": [
+        "A41"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "quant_evaluator/tests/test_v8_risk_domain.py::test_t86_event_identity_is_content_bound_order_invariant_not_value_dedup"
+      ],
+      "evidence": "Canonical named event aliases only; content-bound JSON identity, candidate independence and conflict rejection.",
+      "id": "T86",
+      "ticket": "A41",
+      "gap": null,
+      "owner_evidence": "root-scoped-review"
+    },
+    "T87": {
+      "input": "Šidák p=1e-20,m=100000",
+      "required": "调整p约1e-15，不为浮点0",
+      "ticket_refs": [
+        "A42"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "quant_evaluator/tests/test_v8_numeric_goldens.py::test_t87_sidak_tiny_values"
+      ],
+      "evidence": "Stable small-p Sidak with log1p/expm1 and preserved endpoints.",
+      "owner_evidence": "root-scoped-review"
+    },
+    "T88": {
+      "input": "Šidák极小alpha/端点/普通值",
+      "required": "调整p判拒与原始阈值一致；正确普通区间不回归",
+      "ticket_refs": [
+        "A42"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "quant_evaluator/tests/test_v8_numeric_goldens.py::test_t87_sidak_tiny_values"
+      ],
+      "evidence": "Stable small-p Sidak with log1p/expm1 and preserved endpoints.",
+      "owner_evidence": "root-scoped-review"
+    },
+    "T89": {
+      "input": "确认族分成不同GPU batches",
+      "required": "全族校正与一次汇总一致",
+      "ticket_refs": [
+        "A43"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "quant_evaluator/tests/test_v8_numeric_goldens.py::test_t89_t90_complete_family_never_shrinks_failed_members",
+        "factor_optimizer/tests/search/test_v8_remaining_acceptance_gaps.py::test_same_gpu_repeated_batches_match_one_batch_full_family_correction"
+      ],
+      "evidence": "On the same execution device, one batch and repeated differently sized batches aggregate by preregistered hypothesis identity and produce the identical complete-family artifact and correction result under one fixed ledger head/count.",
+      "owner_evidence": "fo/acceptance_traceability.json"
+    },
+    "T90": {
+      "input": "族内候选失败、pending、低保真剪枝",
+      "required": "不能让其余候选悄悄获得更宽松确认门",
+      "ticket_refs": [
+        "A43"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "quant_evaluator/tests/test_v8_numeric_goldens.py::test_t89_t90_complete_family_never_shrinks_failed_members"
+      ],
+      "evidence": "Full family slots retained for failed/pending, no fabricated measured p.",
+      "owner_evidence": "root-scoped-review"
+    },
+    "T91": {
+      "input": "一个trial多状态事件",
+      "required": "事件数、提议数、假设数分别为正确单位",
+      "ticket_refs": [
+        "A44"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "factor_optimizer/tests/search/test_trial_ledger.py"
+      ],
+      "evidence": "Multiplicity reduces lifecycle events to terminal proposal outcomes; SELECTED/PROPOSED do not inflate proposals.",
+      "owner_evidence": "fo/acceptance_traceability.json"
+    },
+    "T92": {
+      "input": "PRUNED/INVALID/SELECTED/重试混合",
+      "required": "所有终态可核对，完成计数不崩溃或重复",
+      "ticket_refs": [
+        "A44"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "factor_optimizer/tests/search/test_trial_ledger.py",
+        "factor_optimizer/tests/search/test_budget_resume.py"
+      ],
+      "evidence": "PRUNED, INVALID, SELECTED and resumed ledger histories finish with reconcilable counts.",
+      "owner_evidence": "fo/acceptance_traceability.json"
+    },
+    "T93": {
+      "input": "close与seal两种账本往返",
+      "required": "关闭权限不因反序列化重新开放",
+      "ticket_refs": [
+        "A45"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "factor_optimizer/tests/search/test_trial_ledger.py",
+        "factor_optimizer/tests/search/test_budget_resume.py"
+      ],
+      "evidence": "CLOSED and SEALED state survives serialization; authorized extension retains prior epoch seals.",
+      "owner_evidence": "fo/acceptance_traceability.json"
+    },
+    "T94": {
+      "input": "完成过程故障/账本缺尾",
+      "required": "按外部head和事务状态恢复，不假装完整",
+      "ticket_refs": [
+        "A45"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "factor_optimizer/tests/search/test_trial_ledger.py",
+        "factor_optimizer/tests/search/test_v8_remaining_acceptance_gaps.py::test_finish_fault_before_seal_is_not_half_committed",
+        "factor_optimizer/tests/search/test_v8_remaining_acceptance_gaps.py::test_finish_fault_after_seal_recovers_without_half_finished_state"
+      ],
+      "evidence": "Head/count/next-sequence truncation checks and crash injection immediately before and after sealing verify deterministic finish recovery.",
+      "owner_evidence": "fo/acceptance_traceability.json"
+    },
+    "T95": {
+      "input": "trial=a",
+      "required": "b,reason=c与trial=a,reason=b",
+      "ticket_refs": [],
+      "status": "VERIFIED",
+      "tests": [
+        "factor_optimizer/tests/search/test_trial_ledger.py"
+      ],
+      "evidence": "V2 canonical named-field JSON distinguishes delimiter-collision records.",
+      "owner_evidence": "fo/acceptance_traceability.json"
+    },
+    "T96": {
+      "input": "null/None字符串/日期规范与旧hash读取",
+      "required": "类型被保留，兼容读取不伪造新旧同证据",
+      "ticket_refs": [
+        "A46"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "factor_optimizer/tests/search/test_trial_ledger.py"
+      ],
+      "evidence": "JSON retains null/string types; hash encoding is versioned and V1 ledgers remain readable without claiming V2 identity.",
+      "owner_evidence": "fo/acceptance_traceability.json"
+    },
+    "T97": {
+      "input": "已实现负收益与LONG_SHORT",
+      "required": "不取abs变正并作为经济收益；诊断幅度隔离",
+      "ticket_refs": [
+        "A47"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "factor_assets/tests/test_dlib_fa_018_composite.py::test_composite_short_flips_sign"
+      ],
+      "evidence": "signed long/short loss is preserved",
+      "selectors": [
+        "factor_assets/tests/test_dlib_fa_018_composite.py::test_composite_short_flips_sign"
+      ],
+      "domain": "signed long/short loss is preserved",
+      "owner_evidence": "fa/fa_acceptance_map.json"
+    },
+    "T98": {
+      "input": "未知orientation/平均收益与持有期收益",
+      "required": "非法方向拒绝、两个不同量不复用同身份",
+      "ticket_refs": [
+        "A47"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "factor_assets/tests/test_dlib_fa_018_composite.py::test_t98_orientation_and_return_measure_identity_fail_closed",
+        "factor_assets/tests/test_dlib_fa_018_composite.py::test_t98_typed_holding_return_horizon_must_match_evaluator",
+        "factor_assets/tests/test_dlib_fa_018_composite.py::test_t98_authoritative_path_rejects_naked_finite_series"
+      ],
+      "evidence": "authoritative FA composition requires typed holding-return evidence and rejects string orientation, cross-sectional mean semantics, horizon mismatch, or naked finite series",
+      "selectors": [
+        "factor_assets/tests/test_dlib_fa_018_composite.py::test_t98_orientation_and_return_measure_identity_fail_closed",
+        "factor_assets/tests/test_dlib_fa_018_composite.py::test_t98_typed_holding_return_horizon_must_match_evaluator",
+        "factor_assets/tests/test_dlib_fa_018_composite.py::test_t98_authoritative_path_rejects_naked_finite_series"
+      ],
+      "domain": "authoritative FA composition requires typed holding-return evidence and rejects string orientation, cross-sectional mean semantics, horizon mismatch, or naked finite series",
+      "owner_evidence": "fa/fa_acceptance_map.json"
+    },
+    "T99": {
+      "input": "CUSTOM .9/.1对+.1/-.1",
+      "required": "合成按权重得.08，或明确不支持，不能静默等权",
+      "ticket_refs": [
+        "A48"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "factor_assets/tests/aggregation/test_specs.py::test_aggregation_spec_custom_weights",
+        "factor_assets/tests/test_dlib_fa_018_composite.py::test_accounting_diagnostics_are_weight_only_not_backtest"
+      ],
+      "evidence": "CUSTOM weights are honored and unsupported fitted schemes fail closed",
+      "selectors": [
+        "factor_assets/tests/aggregation/test_specs.py::test_aggregation_spec_custom_weights",
+        "factor_assets/tests/test_dlib_fa_018_composite.py::test_accounting_diagnostics_are_weight_only_not_backtest"
+      ],
+      "domain": "CUSTOM weights are honored and unsupported fitted schemes fail closed",
+      "owner_evidence": "fa/fa_acceptance_map.json"
+    },
+    "T100": {
+      "input": "等价regime拆分/缩放/权重bounds",
+      "required": "归一化/敞口语义正确，HHI不依赖无意义尺度",
+      "ticket_refs": [
+        "A48"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "factor_assets/tests/test_dlib_fa_018_composite.py::test_composite_regime_weights"
+      ],
+      "evidence": "regime weights normalize and concentration uses normalized exposure",
+      "selectors": [
+        "factor_assets/tests/test_dlib_fa_018_composite.py::test_composite_regime_weights"
+      ],
+      "domain": "regime weights normalize and concentration uses normalized exposure",
+      "owner_evidence": "fa/fa_acceptance_map.json"
+    },
+    "T101": {
+      "input": "不同split引用同一训练坐标",
+      "required": "OOS校验拒绝",
+      "ticket_refs": [
+        "A49"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "factor_assets/tests/aggregation/test_specs.py::test_aggregation_fit_oos_evaluation_rejects_same_split"
+      ],
+      "evidence": "same resolved training/evaluation coordinate rejected",
+      "selectors": [
+        "factor_assets/tests/aggregation/test_specs.py::test_aggregation_fit_oos_evaluation_rejects_same_split"
+      ],
+      "domain": "same resolved training/evaluation coordinate rejected",
+      "owner_evidence": "fa/fa_acceptance_map.json"
+    },
+    "T102": {
+      "input": "合法前推/晚到标签/同spec_id新权重",
+      "required": "实际拟合时间与spec内容hash绑定",
+      "ticket_refs": [
+        "A49"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "factor_assets/tests/aggregation/test_specs.py::test_t102_same_spec_id_changed_weights_changes_bound_content_hash",
+        "factor_assets/tests/aggregation/test_specs.py::test_t102_unmatured_fit_or_evaluation_labels_fail_closed",
+        "factor_assets/tests/aggregation/test_specs.py::test_t102_authoritative_oos_rejects_missing_resolved_sample_vintage_coordinates"
+      ],
+      "evidence": "same spec ID with new weights has a new weight hash; authoritative OOS validation binds sample/vintage/maturation coordinates and rejects missing or unmatured labels",
+      "selectors": [
+        "factor_assets/tests/aggregation/test_specs.py::test_t102_same_spec_id_changed_weights_changes_bound_content_hash",
+        "factor_assets/tests/aggregation/test_specs.py::test_t102_unmatured_fit_or_evaluation_labels_fail_closed",
+        "factor_assets/tests/aggregation/test_specs.py::test_t102_authoritative_oos_rejects_missing_resolved_sample_vintage_coordinates"
+      ],
+      "domain": "same spec ID with new weights has a new weight hash; authoritative OOS validation binds sample/vintage/maturation coordinates and rejects missing or unmatured labels",
+      "owner_evidence": "fa/fa_acceptance_map.json"
+    },
+    "T103": {
+      "input": "MAX_IC输入Inf/NaN/错期限/未成熟",
+      "required": "拒绝或隔离，不选成冠军",
+      "ticket_refs": [
+        "A50"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "factor_assets/tests/aggregation/test_representatives.py::test_selector_max_ic",
+        "factor_assets/tests/aggregation/test_representatives.py::test_selector_max_ic_missing_data"
+      ],
+      "evidence": "MAX_IC consumes qualified finite contextual receipts, not bare floats",
+      "selectors": [
+        "factor_assets/tests/aggregation/test_representatives.py::test_selector_max_ic",
+        "factor_assets/tests/aggregation/test_representatives.py::test_selector_max_ic_missing_data"
+      ],
+      "domain": "MAX_IC consumes qualified finite contextual receipts, not bare floats",
+      "owner_evidence": "fa/fa_acceptance_map.json"
+    },
+    "T104": {
+      "input": "代表输出证据与方向",
+      "required": "一成员一证据，可回溯window/snapshot/split/factor version",
+      "ticket_refs": [
+        "A50"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "factor_assets/tests/aggregation/test_representatives.py::test_representative_selection_with_ic_values"
+      ],
+      "evidence": "selected member IC evidence retains window/snapshot/split/label/context provenance",
+      "selectors": [
+        "factor_assets/tests/aggregation/test_representatives.py::test_representative_selection_with_ic_values"
+      ],
+      "domain": "selected member IC evidence retains window/snapshot/split/label/context provenance",
+      "owner_evidence": "fa/fa_acceptance_map.json"
+    },
+    "T105": {
+      "input": "中心代表与低相关离群成员",
+      "required": "角色不同，medoid不被diversity逻辑代替",
+      "ticket_refs": [
+        "A51"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "factor_assets/tests/aggregation/test_representatives.py::test_selector_min_correlation"
+      ],
+      "evidence": "diversity selection is distinct from central representative selection",
+      "selectors": [
+        "factor_assets/tests/aggregation/test_representatives.py::test_selector_min_correlation"
+      ],
+      "domain": "diversity selection is distinct from central representative selection",
+      "owner_evidence": "fa/fa_acceptance_map.json"
+    },
+    "T106": {
+      "input": "子族A/B任意ID排列",
+      "required": "按真实子族配额选择，不按等间隔位置",
+      "ticket_refs": [
+        "A51"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "factor_assets/tests/aggregation/test_representatives.py"
+      ],
+      "evidence": "subfamily-balanced selection uses actual subfamily membership, independent of ID order",
+      "selectors": [
+        "factor_assets/tests/aggregation/test_representatives.py"
+      ],
+      "domain": "subfamily-balanced selection uses actual subfamily membership, independent of ID order",
+      "owner_evidence": "fa/fa_acceptance_map.json"
+    },
+    "T107": {
+      "input": "微小回撤且默认isclose接近高点",
+      "required": "非零水下谷点不同时是该次回撤峰值",
+      "ticket_refs": [
+        "A52"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "quant_evaluator/tests/test_v8_numeric_goldens.py::test_t107_peak_not_underwater_trough"
+      ],
+      "evidence": "Exact highwater peak does not include slightly underwater trough.",
+      "owner_evidence": "root-scoped-review"
+    },
+    "T108": {
+      "input": "等高峰/初始亏损/破产/容差策略",
+      "required": "幅度、峰谷、恢复和水下时长同一事件合同",
+      "ticket_refs": [
+        "A52"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "quant_evaluator/tests/test_v3_drawdown_contracts.py",
+        "quant_evaluator/tests/test_v8_risk_domain.py::test_t108_tiny_loss_peak_duration_and_underwater_statistics_share_events"
+      ],
+      "evidence": "Shared exact highwater event for tiny drawdown/peak/duration/underwater fraction; initial capital, recovery and default checked.",
+      "owner_evidence": "root-scoped-review"
+    },
+    "T109": {
+      "input": "尾部边缘有ties且交换XY",
+      "required": "记录方向条件概率和边缘质量，不误写对称rho",
+      "ticket_refs": [
+        "A53"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "quant_evaluator/tests/metrics/test_v8_probe_stress_contracts.py::test_tail_direction_ties_and_weak_margin_status"
+      ],
+      "evidence": [
+        "quant_evaluator/tests/metrics/test_v8_probe_stress_contracts.py::test_tail_direction_ties_and_weak_margin_status"
+      ],
+      "id": "T109",
+      "ticket": "A53",
+      "gap": null,
+      "owner_evidence": "fp_regime/acceptance_traceability.json"
+    },
+    "T110": {
+      "input": "尾部边缘常数/尾样本不足",
+      "required": "不获得高置信或渐近尾部依赖认证",
+      "ticket_refs": [
+        "A53"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "quant_evaluator/tests/test_v8_risk_domain.py::test_t110_tail_counts_and_small_samples_do_not_claim_confidence"
+      ],
+      "evidence": "Descriptive finite-q counts with insufficient/degenerate status.",
+      "id": "T110",
+      "ticket": "A53",
+      "gap": "constant margin is asserted; explicit insufficient-tail-count case is source-handled but untested",
+      "owner_evidence": "root-scoped-review"
+    },
+    "T111": {
+      "input": "同一合法请求由FO与FP发起",
+      "required": "同DecisionProvider、相同连续结果及比较关系",
+      "ticket_refs": [
+        "A03",
+        "A15"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "factor_optimizer/tests/search/test_v8_qe_fa_fo_integration.py::test_actual_qe_joint_bootstrap_yields_identical_fa_fo_fp_decision_identity",
+        "factor_optimizer/tests/test_treatment_decision_generalized.py::test_legacy_decide_requires_explicit_screening_mode",
+        "factor_optimizer/tests/test_treatment_decision_generalized.py::test_local_health_decision_requires_explicit_screening_mode_and_marks_result"
+      ],
+      "evidence": "Actual QE common-plan bootstrap feeds one FA provider/request; direct FA, FO final path and FP adapter return identical decision/content hashes. Legacy local scoring cannot be invoked as default authority and explicit screening results are marked non-authoritative.",
+      "owner_evidence": "fo/acceptance_traceability.json"
+    },
+    "T112": {
+      "input": "同一hypothesis的恢复/重试/跨worker迁移",
+      "required": "操作数增加但独立假设不重复，原验证信息不消失",
+      "ticket_refs": [
+        "A43",
+        "A44"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "factor_optimizer/tests/search/test_v8_remaining_acceptance_gaps.py::test_t112_cross_worker_retry_preserves_validation_without_duplicate_hypothesis"
+      ],
+      "evidence": "Two durable worker attempt identities increase operation count while collapsing to one effective hypothesis; the first validation p-value survives restart and the complete retry family binds to a sealed ledger.",
+      "owner_evidence": "fo/acceptance_traceability.json"
+    },
+    "T113": {
+      "input": "split别名、样本排序、snapshot vintage变化",
+      "required": "按真实比较域判OOS与可比性，不按字符串猜测",
+      "ticket_refs": [
+        "A49",
+        "A11"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "factor_assets/tests/aggregation/test_specs.py::test_t113_alias_reordering_and_snapshot_vintage_cannot_hide_sample_overlap",
+        "factor_assets/tests/aggregation/test_specs.py::test_t113_disjoint_matured_typed_coordinates_are_accepted_and_bound"
+      ],
+      "evidence": "resolved split aliases and explicit sample IDs detect overlap independent of ordering or snapshot-vintage renaming; disjoint matured coordinates are accepted and serialized",
+      "selectors": [
+        "factor_assets/tests/aggregation/test_specs.py::test_t113_alias_reordering_and_snapshot_vintage_cannot_hide_sample_overlap",
+        "factor_assets/tests/aggregation/test_specs.py::test_t113_disjoint_matured_typed_coordinates_are_accepted_and_bound"
+      ],
+      "domain": "resolved split aliases and explicit sample IDs detect overlap independent of ordering or snapshot-vintage renaming; disjoint matured coordinates are accepted and serialized",
+      "owner_evidence": "fa/fa_acceptance_map.json"
+    },
+    "T114": {
+      "input": "诊断幅度与正式PnL字段混传",
+      "required": "类型/资格门阻断，不因数值有限而允许评分",
+      "ticket_refs": [
+        "A47",
+        "A33"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "factor_assets/tests/test_dlib_fa_018_composite.py::test_accounting_diagnostics_are_weight_only_not_backtest"
+      ],
+      "evidence": "weight diagnostics cannot be admitted as economic backtest evidence",
+      "selectors": [
+        "factor_assets/tests/test_dlib_fa_018_composite.py::test_accounting_diagnostics_are_weight_only_not_backtest"
+      ],
+      "domain": "weight diagnostics cannot be admitted as economic backtest evidence",
+      "owner_evidence": "fa/fa_acceptance_map.json"
+    },
+    "T115": {
+      "input": "确定性上下界剪枝",
+      "required": "仅作screening bound，缺测维度不能伪装完整fitness",
+      "ticket_refs": [
+        "A07",
+        "A15"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "factor_optimizer/tests/search/test_v05_cheap_prefilter.py",
+        "factor_optimizer/tests/search/test_v8_qe_fa_fo_integration.py",
+        "factor_optimizer/tests/test_treatment_decision_generalized.py::test_local_health_decision_requires_explicit_screening_mode_and_marks_result"
+      ],
+      "evidence": "Screening-only COMPLETE scores cannot become selectable fitness, missing qualification yields no utility, and local treatment ranking is explicitly labeled screening diagnostic rather than formal authority.",
+      "owner_evidence": "fo/acceptance_traceability.json"
+    },
+    "T116": {
+      "input": "新指标方法上线且保留旧展示名",
+      "required": "instance hash/资格/消费者自动失效范围准确",
+      "ticket_refs": [
+        "A39",
+        "A33"
+      ],
+      "status": "PARTIAL",
+      "tests": [
+        "quant_evaluator/tests/test_v8_numeric_goldens.py::test_t116_method_version_changes_identity_and_rejects_stale_serialized_instance",
+        "quant_evaluator/tests/test_v8_numeric_goldens.py::test_t64_t67_qualification_domain_is_not_portable"
+      ],
+      "evidence": "Simulated same-name method upgrade changes instance identity, rejects stale serialized instances/receipts and leaves unrelated instance unchanged; no full downstream dependency-invalidation migration executed.",
+      "owner_evidence": "root-scoped-review"
+    },
+    "T117": {
+      "input": "策略压力共同场景与模型集合增量",
+      "required": "最终组合重算，不把成员风险分数直接相加",
+      "ticket_refs": [
+        "A41",
+        "A48"
+      ],
+      "status": "PARTIAL",
+      "tests": [
+        "quant_evaluator/tests/test_v8_risk_domain.py::test_t86_event_identity_is_content_bound_order_invariant_not_value_dedup",
+        "factor_assets/tests/test_dlib_fa_018_composite.py"
+      ],
+      "evidence": "Common diagnostic scenarios and non-backtest composition boundaries tested; full final-portfolio stress replay requires authorized execution scenario data.",
+      "owner_evidence": "root-scoped-review"
+    },
+    "T118": {
+      "input": "测试只验证默认tie/零Rf/无缺失",
+      "required": "资格域不能自动扩大到未验参数；必须含非默认金标",
+      "ticket_refs": [
+        "A35",
+        "A33"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "quant_evaluator/tests/test_v8_numeric_goldens.py::test_t73_t74_t75_real_cuda_parameter_domain",
+        "quant_evaluator/tests/test_v8_numeric_goldens.py::test_t64_t67_qualification_domain_is_not_portable"
+      ],
+      "evidence": "Real nondefault CUDA goldens and mismatch rejection for each of six identity fields including parameter domain; no qualification expansion to untested combinations.",
+      "owner_evidence": "root-scoped-review"
+    },
+    "T119": {
+      "input": "十万规模性能声明",
+      "required": "写明T/N/F/Q/方法/场景/后端及真实峰值，不能用载荷算例充实测",
+      "ticket_refs": [
+        "A36"
+      ],
+      "status": "PARTIAL",
+      "tests": [
+        "evidence/v8/gpu_resource_probe.json"
+      ],
+      "evidence": "Measured T32/F8/N5000 Q10/20/40 only. No 100000-factor throughput/peak certification claimed.",
+      "owner_evidence": "root-scoped-review"
+    },
+    "T120": {
+      "input": "评分负对照与简单策略基线",
+      "required": "修复后比较误准入与经济效用，不以更多S级为成功",
+      "ticket_refs": [
+        "A43",
+        "A15"
+      ],
+      "status": "BLOCKED_DATA",
+      "tests": [],
+      "evidence": "Awaiting user-designated unsealed development data, dates and universe for economic calibration and negative-control shadow comparison."
+    },
+    "T121": {
+      "input": "序列中间含NaN/Inf",
+      "required": "forward、backward、xi使用同一时点集合/缺失转移策略；输出原轴可解释",
+      "ticket_refs": [
+        "A54"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "quant_evaluator/tests/test_v8_hmm_scope.py::test_shape_missing_axis_and_refit_reset"
+      ],
+      "evidence": [
+        "quant_evaluator/tests/test_v8_hmm_scope.py::test_shape_missing_axis_and_refit_reset"
+      ],
+      "id": "T121",
+      "ticket": "A54",
+      "gap": "chosen contract is explicit rejection of gapped observations, not compressed-axis inference",
+      "owner_evidence": "fp_regime/acceptance_traceability.json"
+    },
+    "T122": {
+      "input": "输入(T,2)与全空/仅1个有效值",
+      "required": "在边界拒绝，不允许ravel成更多观察来凑样本",
+      "ticket_refs": [
+        "A54"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "quant_evaluator/tests/test_v8_hmm_scope.py::test_shape_missing_axis_and_refit_reset",
+        "quant_evaluator/tests/test_v8_hmm_scope.py::test_t122_empty_and_one_sample_reject_at_sequence_boundary"
+      ],
+      "evidence": [
+        "quant_evaluator/tests/test_v8_hmm_scope.py::test_shape_missing_axis_and_refit_reset",
+        "quant_evaluator/tests/test_v8_hmm_scope.py::test_t122_empty_and_one_sample_reject_at_sequence_boundary"
+      ],
+      "id": "T122",
+      "ticket": "A54",
+      "gap": null,
+      "owner_evidence": "fp_regime/acceptance_traceability.json"
+    },
+    "T123": {
+      "input": "清洗/断段后拟合与显式规范参考",
+      "required": "参数、后验和有效样本信息一致，不能只比较最后一个log-likelihood",
+      "ticket_refs": [
+        "A54"
+      ],
+      "status": "UNSUPPORTED",
+      "tests": [
+        "quant_evaluator/metrics/stats/regime_detection.py::GaussianHMM.fit"
+      ],
+      "evidence": [
+        "quant_evaluator/metrics/stats/regime_detection.py::GaussianHMM.fit"
+      ],
+      "id": "T123",
+      "ticket": "A54",
+      "gap": "cleaned/gap-segment fitting is intentionally unsupported; missing event-clock observations are rejected",
+      "owner_evidence": "fp_regime/acceptance_traceability.json"
+    },
+    "T124": {
+      "input": "人为注入明显似然下降",
+      "required": "不能CONVERGED，应产生可定位的数值失败",
+      "ticket_refs": [
+        "A55"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "quant_evaluator/tests/metrics/test_v8_hmm_contract_reopen.py::test_likelihood_decrease_is_failure_not_convergence"
+      ],
+      "evidence": [
+        "quant_evaluator/tests/metrics/test_v8_hmm_contract_reopen.py::test_likelihood_decrease_is_failure_not_convergence"
+      ],
+      "id": "T124",
+      "ticket": "A55",
+      "gap": null,
+      "owner_evidence": "fp_regime/acceptance_traceability.json"
+    },
+    "T125": {
+      "input": "同一对象连续fit两次、第二次限制1次迭代",
+      "required": "第二次状态和迭代数不继承第一次",
+      "ticket_refs": [
+        "A55"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "quant_evaluator/tests/test_v8_hmm_scope.py::test_shape_missing_axis_and_refit_reset",
+        "quant_evaluator/tests/metrics/test_v8_hmm_contract_reopen.py::test_failed_refit_invalidates_old_model_and_gap_requires_clock_policy"
+      ],
+      "evidence": [
+        "quant_evaluator/tests/test_v8_hmm_scope.py::test_shape_missing_axis_and_refit_reset",
+        "quant_evaluator/tests/metrics/test_v8_hmm_contract_reopen.py::test_failed_refit_invalidates_old_model_and_gap_requires_clock_policy"
+      ],
+      "id": "T125",
+      "ticket": "A55",
+      "gap": null,
+      "owner_evidence": "fp_regime/acceptance_traceability.json"
+    },
+    "T126": {
+      "input": "n_iter=0或非法tol/空转移行",
+      "required": "拒绝或明确无拟合结果，不输出可用模型",
+      "ticket_refs": [
+        "A55"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "quant_evaluator/tests/test_v8_hmm_scope.py::test_t126_invalid_n_iter_rejected",
+        "quant_evaluator/tests/test_v8_hmm_scope.py::test_t126_invalid_tol_rejected",
+        "quant_evaluator/tests/test_v8_hmm_scope.py::test_t126_empty_transition_row_invalidates_fit"
+      ],
+      "evidence": [
+        "quant_evaluator/tests/test_v8_hmm_scope.py::test_t126_invalid_n_iter_rejected",
+        "quant_evaluator/tests/test_v8_hmm_scope.py::test_t126_invalid_tol_rejected",
+        "quant_evaluator/tests/test_v8_hmm_scope.py::test_t126_empty_transition_row_invalidates_fit"
+      ],
+      "id": "T126",
+      "ticket": "A55",
+      "gap": null,
+      "owner_evidence": "fp_regime/acceptance_traceability.json"
+    },
+    "T127": {
+      "input": "仅修改未来尾段",
+      "required": "当时可知状态不变；事后平滑结果允许改变且必须被准确标注",
+      "ticket_refs": [
+        "A56"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "quant_evaluator/tests/test_v8_hmm_scope.py::test_filtered_prefix_invariance_and_smoothed_label",
+        "quant_evaluator/tests/test_v8_hmm_scope.py::test_t127_smoothed_prefix_changes_with_future_tail_but_filtered_does_not"
+      ],
+      "evidence": [
+        "quant_evaluator/tests/test_v8_hmm_scope.py::test_filtered_prefix_invariance_and_smoothed_label",
+        "quant_evaluator/tests/test_v8_hmm_scope.py::test_t127_smoothed_prefix_changes_with_future_tail_but_filtered_does_not"
+      ],
+      "id": "T127",
+      "ticket": "A56",
+      "gap": null,
+      "owner_evidence": "fp_regime/acceptance_traceability.json"
+    },
+    "T128": {
+      "input": "把SMOOTHED_POSTHOC送入生产预处理",
+      "required": "在消费边界拒绝，研究报告仍可展示",
+      "ticket_refs": [
+        "A56"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "factor_preprocess/tests/test_v8_fp_acceptance.py::test_actual_fp_consumer_rejects_smoothed_regime_evidence",
+        "quant_evaluator/tests/metrics/test_v8_hmm_contract_reopen.py::test_viterbi_compatibility_and_typed_scopes"
+      ],
+      "evidence": [
+        "factor_preprocess/tests/test_v8_fp_acceptance.py::test_actual_fp_consumer_rejects_smoothed_regime_evidence",
+        "quant_evaluator/tests/metrics/test_v8_hmm_contract_reopen.py::test_viterbi_compatibility_and_typed_scopes"
+      ],
+      "id": "T128",
+      "ticket": "A56",
+      "gap": null,
+      "owner_evidence": "fp_regime/acceptance_traceability.json"
+    },
+    "T129": {
+      "input": "状态编号置换后同时置换模型参数和权重",
+      "required": "真实输出不变；不能把编号大小当经济含义",
+      "ticket_refs": [
+        "A56"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "quant_evaluator/tests/test_v8_hmm_scope.py::test_t129_state_parameter_and_weight_permutation_is_output_invariant"
+      ],
+      "evidence": [
+        "quant_evaluator/tests/test_v8_hmm_scope.py::test_t129_state_parameter_and_weight_permutation_is_output_invariant"
+      ],
+      "id": "T129",
+      "ticket": "A56",
+      "gap": null,
+      "owner_evidence": "fp_regime/acceptance_traceability.json"
+    },
+    "T130": {
+      "input": "全缺失/单有效值列与正常列共同拟合",
+      "required": "无效列不获得高权重，原因及有效计数明确",
+      "ticket_refs": [
+        "A57"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "factor_preprocess/tests/test_v8_fp_acceptance.py::test_t130_t131_effective_counts_reasons_and_volatility_boundary"
+      ],
+      "evidence": [
+        "factor_preprocess/tests/test_v8_fp_acceptance.py::test_t130_t131_effective_counts_reasons_and_volatility_boundary"
+      ],
+      "id": "T130",
+      "ticket": "A57",
+      "gap": null,
+      "owner_evidence": "fp_regime/acceptance_traceability.json"
+    },
+    "T131": {
+      "input": "常数与极低但可测波动列",
+      "required": "分别识别，不把常数当成极佳风险信号",
+      "ticket_refs": [
+        "A57"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "factor_preprocess/tests/test_v8_fp_acceptance.py::test_t130_t131_effective_counts_reasons_and_volatility_boundary"
+      ],
+      "evidence": [
+        "factor_preprocess/tests/test_v8_fp_acceptance.py::test_t130_t131_effective_counts_reasons_and_volatility_boundary"
+      ],
+      "id": "T131",
+      "ticket": "A57",
+      "gap": null,
+      "owner_evidence": "fp_regime/acceptance_traceability.json"
+    },
+    "T132": {
+      "input": "所有监督相关均不可估计",
+      "required": "失败或显式非监督fallback；不能产生虚构的已学习权重证据",
+      "ticket_refs": [
+        "A57"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "factor_preprocess/tests/regime/test_v8_regime_acceptance.py::test_t132_supervised_fallback_is_explicit_research_evidence"
+      ],
+      "evidence": [
+        "factor_preprocess/tests/regime/test_v8_regime_acceptance.py::test_t132_supervised_fallback_is_explicit_research_evidence"
+      ],
+      "id": "T132",
+      "ticket": "A57",
+      "gap": null,
+      "owner_evidence": "fp_regime/acceptance_traceability.json"
+    },
+    "T133": {
+      "input": "标签Series乱序但样本身份相同",
+      "required": "结果与规范输入完全一致，或明确拒绝非规范顺序",
+      "ticket_refs": [
+        "A58"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "factor_preprocess/tests/test_v8_fp_acceptance.py::test_weights_float_identity_and_label_validation"
+      ],
+      "evidence": [
+        "factor_preprocess/tests/test_v8_fp_acceptance.py::test_weights_float_identity_and_label_validation"
+      ],
+      "id": "T133",
+      "ticket": "A58",
+      "gap": null,
+      "owner_evidence": "fp_regime/acceptance_traceability.json"
+    },
+    "T134": {
+      "input": "状态0.1、0.9、True、Inf",
+      "required": "拒绝，不得转换成同一合法状态",
+      "ticket_refs": [
+        "A58"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "factor_preprocess/tests/test_v8_fp_acceptance.py::test_weights_float_identity_and_label_validation",
+        "factor_preprocess/tests/test_v8_fp_acceptance.py::test_t134_fractional_and_infinite_labels_reject"
+      ],
+      "evidence": [
+        "factor_preprocess/tests/test_v8_fp_acceptance.py::test_weights_float_identity_and_label_validation",
+        "factor_preprocess/tests/test_v8_fp_acceptance.py::test_t134_fractional_and_infinite_labels_reject"
+      ],
+      "id": "T134",
+      "ticket": "A58",
+      "gap": null,
+      "owner_evidence": "fp_regime/acceptance_traceability.json"
+    },
+    "T135": {
+      "input": "重复因子名/缺失标签键/重复样本键",
+      "required": "在写入或拟合前报合同错误",
+      "ticket_refs": [
+        "A58"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "factor_preprocess/tests/test_v8_fp_acceptance.py::test_t135_duplicate_sample_keys_reject"
+      ],
+      "evidence": [
+        "factor_preprocess/tests/test_v8_fp_acceptance.py::test_t135_duplicate_sample_keys_reject"
+      ],
+      "id": "T135",
+      "ticket": "A58",
+      "gap": null,
+      "owner_evidence": "fp_regime/acceptance_traceability.json"
+    },
+    "T136": {
+      "input": "整数[1,3]按半权重应用",
+      "required": "输出浮点[0.5,1.5]",
+      "ticket_refs": [
+        "A59"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "factor_preprocess/tests/test_v8_fp_acceptance.py::test_t136_exact_half_weight_golden_and_t138_dtype_invariance"
+      ],
+      "evidence": [
+        "factor_preprocess/tests/test_v8_fp_acceptance.py::test_t136_exact_half_weight_golden_and_t138_dtype_invariance"
+      ],
+      "id": "T136",
+      "ticket": "A59",
+      "gap": null,
+      "owner_evidence": "fp_regime/acceptance_traceability.json"
+    },
+    "T137": {
+      "input": "整数输入遇未知状态/缺失标签",
+      "required": "输出明确无效，不能是有限极端整数",
+      "ticket_refs": [
+        "A59"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "factor_preprocess/tests/regime/test_regime_production.py::test_unknown_regime_fail_nan",
+        "factor_preprocess/factor_preprocess/regime/adaptive_weights.py::regime_adaptive_weights"
+      ],
+      "evidence": [
+        "factor_preprocess/tests/regime/test_regime_production.py::test_unknown_regime_fail_nan",
+        "factor_preprocess/factor_preprocess/regime/adaptive_weights.py::regime_adaptive_weights"
+      ],
+      "id": "T137",
+      "ticket": "A59",
+      "gap": null,
+      "owner_evidence": "fp_regime/acceptance_traceability.json"
+    },
+    "T138": {
+      "input": "相同数值分别以int32/int64/float64传入",
+      "required": "在声明允许范围内结果数值一致",
+      "ticket_refs": [
+        "A59"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "factor_preprocess/tests/test_v8_fp_acceptance.py::test_t136_exact_half_weight_golden_and_t138_dtype_invariance"
+      ],
+      "evidence": [
+        "factor_preprocess/tests/test_v8_fp_acceptance.py::test_t136_exact_half_weight_golden_and_t138_dtype_invariance"
+      ],
+      "id": "T138",
+      "ticket": "A59",
+      "gap": null,
+      "owner_evidence": "fp_regime/acceptance_traceability.json"
+    },
+    "T139": {
+      "input": "FALLBACK_GLOBAL前后序列化重放",
+      "required": "相同合法输入、未知状态的输出一致",
+      "ticket_refs": [
+        "A60"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "factor_preprocess/tests/regime/test_v8_regime_acceptance.py::test_t139_141_serialization_replay_isolated_and_old_payload_rejected"
+      ],
+      "evidence": [
+        "factor_preprocess/tests/regime/test_v8_regime_acceptance.py::test_t139_141_serialization_replay_isolated_and_old_payload_rejected"
+      ],
+      "id": "T139",
+      "ticket": "A60",
+      "gap": null,
+      "owner_evidence": "fp_regime/acceptance_traceability.json"
+    },
+    "T140": {
+      "input": "修改序列化payload或原state数组",
+      "required": "另一个已冻结对象保持不变，或检测内容哈希失败",
+      "ticket_refs": [
+        "A60"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "factor_preprocess/tests/regime/test_v8_regime_acceptance.py::test_t139_141_serialization_replay_isolated_and_old_payload_rejected"
+      ],
+      "evidence": [
+        "factor_preprocess/tests/regime/test_v8_regime_acceptance.py::test_t139_141_serialization_replay_isolated_and_old_payload_rejected"
+      ],
+      "id": "T140",
+      "ticket": "A60",
+      "gap": null,
+      "owner_evidence": "fp_regime/acceptance_traceability.json"
+    },
+    "T141": {
+      "input": "旧payload缺关键字段/研究监督状态恢复",
+      "required": "显式迁移或拒绝，不升级为生产已批准状态",
+      "ticket_refs": [
+        "A60"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "factor_preprocess/tests/regime/test_v8_regime_acceptance.py::test_t139_141_serialization_replay_isolated_and_old_payload_rejected",
+        "factor_preprocess/tests/regime/test_v8_regime_acceptance.py::test_t132_supervised_fallback_is_explicit_research_evidence"
+      ],
+      "evidence": [
+        "factor_preprocess/tests/regime/test_v8_regime_acceptance.py::test_t139_141_serialization_replay_isolated_and_old_payload_rejected",
+        "factor_preprocess/tests/regime/test_v8_regime_acceptance.py::test_t132_supervised_fallback_is_explicit_research_evidence"
+      ],
+      "id": "T141",
+      "ticket": "A60",
+      "gap": null,
+      "owner_evidence": "fp_regime/acceptance_traceability.json"
+    },
+    "T142": {
+      "input": "未知状态极端值混入已知截面",
+      "required": "不得改变合法股票在既定mask内的排名",
+      "ticket_refs": [
+        "A61"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "factor_preprocess/tests/test_v8_fp_acceptance.py::test_t142_extreme_unknown_value_cannot_change_known_rank"
+      ],
+      "evidence": [
+        "factor_preprocess/tests/test_v8_fp_acceptance.py::test_t142_extreme_unknown_value_cannot_change_known_rank"
+      ],
+      "id": "T142",
+      "ticket": "A61",
+      "gap": null,
+      "owner_evidence": "fp_regime/acceptance_traceability.json"
+    },
+    "T143": {
+      "input": "相同unknown policy下对比rank/zscore/none",
+      "required": "未知状态的可用性一致，差异必须来自预声明政策",
+      "ticket_refs": [
+        "A61"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "factor_preprocess/tests/regime/test_v8_regime_acceptance.py::test_t143_144_unknown_policy_and_minimum_cross_section"
+      ],
+      "evidence": [
+        "factor_preprocess/tests/regime/test_v8_regime_acceptance.py::test_t143_144_unknown_policy_and_minimum_cross_section"
+      ],
+      "id": "T143",
+      "ticket": "A61",
+      "gap": null,
+      "owner_evidence": "fp_regime/acceptance_traceability.json"
+    },
+    "T144": {
+      "input": "全部未知或只有一个合法股票",
+      "required": "明确无效/最小样本状态，不伪造完整截面评价",
+      "ticket_refs": [
+        "A61"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "factor_preprocess/tests/regime/test_v8_regime_acceptance.py::test_t143_144_unknown_policy_and_minimum_cross_section"
+      ],
+      "evidence": [
+        "factor_preprocess/tests/regime/test_v8_regime_acceptance.py::test_t143_144_unknown_policy_and_minimum_cross_section"
+      ],
+      "id": "T144",
+      "ticket": "A61",
+      "gap": null,
+      "owner_evidence": "fp_regime/acceptance_traceability.json"
+    },
+    "T145": {
+      "input": "同一序列一次性、多个不等长块、逐Bar",
+      "required": "在共同carry-in和相同时钟下逐点一致，不重复warm-up",
+      "ticket_refs": [
+        "A62"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "factor_preprocess/tests/regime/test_v8_regime_acceptance.py::test_t145_147_chunk_bar_checkpoint_and_prior_fit_rejection"
+      ],
+      "evidence": [
+        "factor_preprocess/tests/regime/test_v8_regime_acceptance.py::test_t145_147_chunk_bar_checkpoint_and_prior_fit_rejection"
+      ],
+      "id": "T145",
+      "ticket": "A62",
+      "gap": null,
+      "owner_evidence": "fp_regime/acceptance_traceability.json"
+    },
+    "T146": {
+      "input": "含缺失窗口且满足min_periods",
+      "required": "按声明的相关估计策略返回正确值或明确不足，不假称完整",
+      "ticket_refs": [
+        "A62"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "factor_preprocess/tests/regime/test_v8_regime_acceptance.py::test_t146_150_missing_strength_transition_and_degenerate_boundaries"
+      ],
+      "evidence": [
+        "factor_preprocess/tests/regime/test_v8_regime_acceptance.py::test_t146_150_missing_strength_transition_and_degenerate_boundaries"
+      ],
+      "id": "T146",
+      "ticket": "A62",
+      "gap": null,
+      "owner_evidence": "fp_regime/acceptance_traceability.json"
+    },
+    "T147": {
+      "input": "推断区间早于fit_end/断点恢复/迟到修订",
+      "required": "正确拒绝或版本化重放，保持过去决策快照",
+      "ticket_refs": [
+        "A62"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "factor_preprocess/tests/regime/test_v8_regime_acceptance.py::test_t145_147_chunk_bar_checkpoint_and_prior_fit_rejection",
+        "factor_preprocess/tests/regime/test_v8_regime_acceptance.py::test_t147_rejected_late_revision_preserves_decisions_and_restart_snapshot"
+      ],
+      "evidence": [
+        "factor_preprocess/tests/regime/test_v8_regime_acceptance.py::test_t145_147_chunk_bar_checkpoint_and_prior_fit_rejection",
+        "factor_preprocess/tests/regime/test_v8_regime_acceptance.py::test_t147_rejected_late_revision_preserves_decisions_and_restart_snapshot"
+      ],
+      "id": "T147",
+      "ticket": "A62",
+      "gap": null,
+      "owner_evidence": "fp_regime/acceptance_traceability.json"
+    },
+    "T148": {
+      "input": "负、零、近零与正相关边界",
+      "required": "强度随预期距离单调、有限、有明确定义范围",
+      "ticket_refs": [
+        "A63"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "factor_preprocess/tests/regime/test_v8_regime_acceptance.py::test_t146_150_missing_strength_transition_and_degenerate_boundaries"
+      ],
+      "evidence": [
+        "factor_preprocess/tests/regime/test_v8_regime_acceptance.py::test_t146_150_missing_strength_transition_and_degenerate_boundaries"
+      ],
+      "id": "T148",
+      "ticket": "A63",
+      "gap": null,
+      "owner_evidence": "fp_regime/acceptance_traceability.json"
+    },
+    "T149": {
+      "input": "warm-up与中间缺失",
+      "required": "不被当作已证实的状态切换",
+      "ticket_refs": [
+        "A63"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "factor_preprocess/tests/regime/test_v8_regime_acceptance.py::test_t146_150_missing_strength_transition_and_degenerate_boundaries"
+      ],
+      "evidence": [
+        "factor_preprocess/tests/regime/test_v8_regime_acceptance.py::test_t146_150_missing_strength_transition_and_degenerate_boundaries"
+      ],
+      "id": "T149",
+      "ticket": "A63",
+      "gap": null,
+      "owner_evidence": "fp_regime/acceptance_traceability.json"
+    },
+    "T150": {
+      "input": "重复边界/常数相关/首次有效状态",
+      "required": "返回明确退化/首次有效标志，不伪装稳定概率",
+      "ticket_refs": [
+        "A63"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "factor_preprocess/tests/regime/test_v8_regime_acceptance.py::test_t146_150_missing_strength_transition_and_degenerate_boundaries"
+      ],
+      "evidence": [
+        "factor_preprocess/tests/regime/test_v8_regime_acceptance.py::test_t146_150_missing_strength_transition_and_degenerate_boundaries"
+      ],
+      "id": "T150",
+      "ticket": "A63",
+      "gap": null,
+      "owner_evidence": "fp_regime/acceptance_traceability.json"
+    },
+    "T151": {
+      "input": "仅传certification/gate_results字符串",
+      "required": "生产升阶拒绝；形状工具仍可返回形状通过但不得发布",
+      "ticket_refs": [
+        "A64"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "factor_assets/tests/test_lifecycle_orchestration.py"
+      ],
+      "evidence": "production elevation requires trusted resolved authorization, not strings",
+      "selectors": [
+        "factor_assets/tests/test_lifecycle_orchestration.py"
+      ],
+      "domain": "production elevation requires trusted resolved authorization, not strings",
+      "owner_evidence": "fa/fa_acceptance_map.json"
+    },
+    "T152": {
+      "input": "错因子/旧配方/REJECTED/过期认证",
+      "required": "提交拒绝并保存明确原因",
+      "ticket_refs": [
+        "A64"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "factor_assets/tests/test_v8_lifecycle_authorization_outbox.py::test_t152_wrong_factor_recipe_decision_expiry_or_policy_authorization_rejects[mutation0-factor mismatch]",
+        "factor_assets/tests/test_v8_lifecycle_authorization_outbox.py::test_t152_wrong_factor_recipe_decision_expiry_or_policy_authorization_rejects[mutation1-recipe mismatch]",
+        "factor_assets/tests/test_v8_lifecycle_authorization_outbox.py::test_t152_wrong_factor_recipe_decision_expiry_or_policy_authorization_rejects[mutation2-not APPROVED]",
+        "factor_assets/tests/test_v8_lifecycle_authorization_outbox.py::test_t152_wrong_factor_recipe_decision_expiry_or_policy_authorization_rejects[mutation3-expired]",
+        "factor_assets/tests/test_v8_lifecycle_authorization_outbox.py::test_t152_wrong_factor_recipe_decision_expiry_or_policy_authorization_rejects[mutation4-policy version mismatch]"
+      ],
+      "evidence": "wrong factor, stale recipe, rejected decision, expiry, and policy-version mismatch each fail without state/event mutation",
+      "selectors": [
+        "factor_assets/tests/test_v8_lifecycle_authorization_outbox.py::test_t152_wrong_factor_recipe_decision_expiry_or_policy_authorization_rejects[mutation0-factor mismatch]",
+        "factor_assets/tests/test_v8_lifecycle_authorization_outbox.py::test_t152_wrong_factor_recipe_decision_expiry_or_policy_authorization_rejects[mutation1-recipe mismatch]",
+        "factor_assets/tests/test_v8_lifecycle_authorization_outbox.py::test_t152_wrong_factor_recipe_decision_expiry_or_policy_authorization_rejects[mutation2-not APPROVED]",
+        "factor_assets/tests/test_v8_lifecycle_authorization_outbox.py::test_t152_wrong_factor_recipe_decision_expiry_or_policy_authorization_rejects[mutation3-expired]",
+        "factor_assets/tests/test_v8_lifecycle_authorization_outbox.py::test_t152_wrong_factor_recipe_decision_expiry_or_policy_authorization_rejects[mutation4-policy version mismatch]"
+      ],
+      "domain": "wrong factor, stale recipe, rejected decision, expiry, and policy-version mismatch each fail without state/event mutation",
+      "owner_evidence": "fa/fa_acceptance_map.json"
+    },
+    "T153": {
+      "input": "唯一发布调用链具备可信授权",
+      "required": "根入口通过授权可成功，直接低层调用不能冒充该授权",
+      "ticket_refs": [
+        "A64"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "factor_assets/tests/test_v8_platform_lifecycle_recovery.py::test_lost_callback_retry_redelivery_and_retirement_exclusion"
+      ],
+      "evidence": "production factory wires the trusted resolver through the root entrypoint",
+      "selectors": [
+        "factor_assets/tests/test_v8_platform_lifecycle_recovery.py::test_lost_callback_retry_redelivery_and_retirement_exclusion"
+      ],
+      "domain": "production factory wires the trusted resolver through the root entrypoint",
+      "owner_evidence": "fa/fa_acceptance_map.json"
+    },
+    "T154": {
+      "input": "提交成功后模拟响应丢失再同命令重试",
+      "required": "返回同一提交回执，不增加事件也不误报revision冲突",
+      "ticket_refs": [
+        "A65"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "factor_assets/tests/test_lifecycle_orchestration.py::test_replay_after_superseding_transition_returns_original_receipt",
+        "factor_assets/tests/test_v8_platform_lifecycle_recovery.py::test_lost_callback_retry_redelivery_and_retirement_exclusion"
+      ],
+      "evidence": "lost-response retry returns original receipt without revision conflict",
+      "selectors": [
+        "factor_assets/tests/test_lifecycle_orchestration.py::test_replay_after_superseding_transition_returns_original_receipt",
+        "factor_assets/tests/test_v8_platform_lifecycle_recovery.py::test_lost_callback_retry_redelivery_and_retirement_exclusion"
+      ],
+      "domain": "lost-response retry returns original receipt without revision conflict",
+      "owner_evidence": "fa/fa_acceptance_map.json"
+    },
+    "T155": {
+      "input": "复用decision_id但改目标/证据/政策",
+      "required": "明确内容冲突，不接受为幂等重试",
+      "ticket_refs": [
+        "A65"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "factor_assets/tests/test_lifecycle_orchestration.py::test_decision_replay_rejects_changed_transition_metadata[changed0]"
+      ],
+      "evidence": "same decision ID with changed command content conflicts",
+      "selectors": [
+        "factor_assets/tests/test_lifecycle_orchestration.py::test_decision_replay_rejects_changed_transition_metadata[changed0]"
+      ],
+      "domain": "same decision ID with changed command content conflicts",
+      "owner_evidence": "fa/fa_acceptance_map.json"
+    },
+    "T156": {
+      "input": "首次提交后又发生health变更再重查旧命令",
+      "required": "仍能返回原回执并独立展示最新状态",
+      "ticket_refs": [
+        "A65"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "factor_assets/tests/test_lifecycle_orchestration.py::test_replay_after_superseding_transition_returns_original_receipt"
+      ],
+      "evidence": "old receipt replay remains stable after later transitions",
+      "selectors": [
+        "factor_assets/tests/test_lifecycle_orchestration.py::test_replay_after_superseding_transition_returns_original_receipt"
+      ],
+      "domain": "old receipt replay remains stable after later transitions",
+      "owner_evidence": "fa/fa_acceptance_map.json"
+    },
+    "T157": {
+      "input": "提交后、回调前杀进程",
+      "required": "重启可重投同一事件，下游最终一致且事件只提交一次",
+      "ticket_refs": [
+        "A66"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "factor_assets/tests/test_v8_lifecycle_authorization_outbox.py::test_platform_outbox_is_staged_atomically_with_transition",
+        "factor_assets/tests/test_v8_platform_lifecycle_recovery.py::test_lost_callback_retry_redelivery_and_retirement_exclusion"
+      ],
+      "evidence": "transactional platform outbox survives callback/process boundary",
+      "selectors": [
+        "factor_assets/tests/test_v8_lifecycle_authorization_outbox.py::test_platform_outbox_is_staged_atomically_with_transition",
+        "factor_assets/tests/test_v8_platform_lifecycle_recovery.py::test_lost_callback_retry_redelivery_and_retirement_exclusion"
+      ],
+      "domain": "transactional platform outbox survives callback/process boundary",
+      "owner_evidence": "fa/fa_acceptance_map.json"
+    },
+    "T158": {
+      "input": "回调失败/超时/重复ack",
+      "required": "有持久状态和有限重试，重复消息不重复改特征",
+      "ticket_refs": [
+        "A66"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "factor_assets/tests/test_v8_platform_lifecycle_recovery.py::test_lost_callback_retry_redelivery_and_retirement_exclusion"
+      ],
+      "evidence": "failed acknowledgement retries; inbox deduplicates side effects",
+      "selectors": [
+        "factor_assets/tests/test_v8_platform_lifecycle_recovery.py::test_lost_callback_retry_redelivery_and_retirement_exclusion"
+      ],
+      "domain": "failed acknowledgement retries; inbox deduplicates side effects",
+      "owner_evidence": "fa/fa_acceptance_map.json"
+    },
+    "T159": {
+      "input": "已有平台outbox负责该链",
+      "required": "证明真实集成，而不是新增一套未接入outbox",
+      "ticket_refs": [
+        "A66"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "factor_assets/tests/test_v8_lifecycle_authorization_outbox.py::test_platform_outbox_is_staged_atomically_with_transition"
+      ],
+      "evidence": "FA stages into quant_platform outbox table in the same SQLite transaction",
+      "selectors": [
+        "factor_assets/tests/test_v8_lifecycle_authorization_outbox.py::test_platform_outbox_is_staged_atomically_with_transition"
+      ],
+      "domain": "FA stages into quant_platform outbox table in the same SQLite transaction",
+      "owner_evidence": "fa/fa_acceptance_map.json"
+    },
+    "T160": {
+      "input": "同一个键反复put/clear百万级模拟",
+      "required": "元数据常量有界，驻留和峰值预算均可核查",
+      "ticket_refs": [
+        "A67"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "evidence/v8/cache_resource_instrumented_candidate2.json"
+      ],
+      "evidence": "One million actual put/clear cycles, bounded history, measured RSS scope.",
+      "owner_evidence": "root-scoped-review"
+    },
+    "T161": {
+      "input": "高压缩比大面板与不可压缩面板",
+      "required": "写入/读取前有预算行为，不在压缩完成后才发现超限",
+      "ticket_refs": [
+        "A67"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "quant_evaluator/tests/test_v8_numeric_goldens.py::test_t161_cache_read_checks_budget_before_decompression",
+        "quant_evaluator/tests/test_v8_numeric_goldens.py::test_cache_dict_budget_and_custom_array_reducer_are_rejected_before_pickle",
+        "evidence/v8/cache_resource_instrumented_candidate2.json"
+      ],
+      "evidence": "Admission before pickle/decompression for compressible/incompressible/dict/custom reducer payloads.",
+      "owner_evidence": "root-scoped-review"
+    },
+    "T162": {
+      "input": "替换同key接近预算上限",
+      "required": "不因重复核算旧值而淘汰无关有效条目",
+      "ticket_refs": [
+        "A67"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "quant_evaluator/tests/test_v8_numeric_goldens.py::test_t162_cache_replacement_does_not_evict_other_key"
+      ],
+      "evidence": "Old same-key bytes deducted before unrelated eviction.",
+      "owner_evidence": "root-scoped-review"
+    },
+    "T163": {
+      "input": "相同输入请求GPU_FP64与GPU_MIXED",
+      "required": "实际dtype/执行算子和能力回执可核对，不以字符串作证明",
+      "ticket_refs": [
+        "A68"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "quant_evaluator/tests/test_v8_numeric_goldens.py::test_t163_t165_actual_device_storage_and_transfer_capability"
+      ],
+      "evidence": "Actual staged FP64/MIXED dtype; unsupported required async/multidevice rejected; effective synchronous transfer recorded.",
+      "owner_evidence": "root-scoped-review"
+    },
+    "T164": {
+      "input": "多设备、pinned、double_buffer开关",
+      "required": "实际执行或显式不支持/降级；不能静默忽略",
+      "ticket_refs": [
+        "A68"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "quant_evaluator/tests/test_v8_numeric_goldens.py::test_t163_t165_actual_device_storage_and_transfer_capability"
+      ],
+      "evidence": "Actual staged FP64/MIXED dtype; unsupported required async/multidevice rejected; effective synchronous transfer recorded.",
+      "owner_evidence": "root-scoped-review"
+    },
+    "T165": {
+      "input": "异步上传+快速回收+跨任务重用buffer",
+      "required": "事件完成前数据不被覆盖；与同步参考一致",
+      "ticket_refs": [
+        "A68"
+      ],
+      "status": "UNSUPPORTED",
+      "tests": [
+        "quant_evaluator/tests/test_v8_numeric_goldens.py::test_t163_t165_actual_device_storage_and_transfer_capability"
+      ],
+      "evidence": "Async lifetime not implemented or advertised. Mandatory async fails closed; synchronous isolation tested.",
+      "owner_evidence": "root-scoped-review"
+    },
+    "T166": {
+      "input": "任务完成90%后抛错",
+      "required": "记录已消耗开销，剩余预算相应减少",
+      "ticket_refs": [
+        "A69"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "factor_optimizer/tests/search/test_runner.py::test_search_runner_started_failure_charges_reserved_envelope",
+        "factor_optimizer/tests/search/test_v8_remaining_acceptance_gaps.py::test_t166_failure_after_ninety_percent_progress_conservatively_charges_reservation"
+      ],
+      "evidence": "A callback fails after 9 of 10 synthetic work units; the durable runner charges the full reserved envelope, consumes one evaluation, and exposes no replacement budget. This is deliberately a conservative upper-bound charge, not a claim of measured worker utilization.",
+      "owner_evidence": "fo/acceptance_traceability.json"
+    },
+    "T167": {
+      "input": "actual_cost大于reservation",
+      "required": "记录overrun并停派，不全额退款为0",
+      "ticket_refs": [
+        "A69"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "factor_optimizer/tests/test_search_budget.py",
+        "factor_optimizer/tests/search/test_durable_campaign_store_v3.py"
+      ],
+      "evidence": "Actual overrun is recorded rather than refunded, and the exhausted budget prevents later dispatch.",
+      "owner_evidence": "fo/acceptance_traceability.json"
+    },
+    "T168": {
+      "input": "未启动取消与启动后失败",
+      "required": "前者可全额释放，后者不能；重试身份与统计假设分开",
+      "ticket_refs": [
+        "A69"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "factor_optimizer/tests/search/test_runner.py::test_search_runner_started_failure_charges_reserved_envelope",
+        "factor_optimizer/tests/test_search_budget.py"
+      ],
+      "evidence": "Unstarted cancellation releases; started failure commits cost under an attempt identity.",
+      "owner_evidence": "fo/acceptance_traceability.json"
+    },
+    "T169": {
+      "input": "两个不同金额预约、重复释放其中一个",
+      "required": "另一个预约不受影响，重复操作幂等或明确冲突",
+      "ticket_refs": [
+        "A70"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "factor_optimizer/tests/test_search_budget.py",
+        "factor_optimizer/tests/search/test_durable_campaign_store_v3.py"
+      ],
+      "evidence": "Settlement/release resolves an exact attempt; duplicate or mismatched operations cannot consume another reservation.",
+      "owner_evidence": "fo/acceptance_traceability.json"
+    },
+    "T170": {
+      "input": "负计数/负费用/孤立inflight预约的检查点",
+      "required": "拒绝或显式reconcile，不恢复为更大可用额度",
+      "ticket_refs": [
+        "A70"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "factor_optimizer/tests/test_search_budget.py",
+        "factor_optimizer/tests/search/test_v8_remaining_acceptance_gaps.py::test_missing_worker_restore_stays_reserved_and_cannot_enlarge_budget",
+        "factor_optimizer/tests/search/test_v8_remaining_acceptance_gaps.py::test_persisted_orphan_reservation_checkpoint_never_restores_as_free_budget"
+      ],
+      "evidence": "A missing-worker reservation remains charged after durable restart and checkpoint restore, replacement dispatch cannot enlarge the budget, and a checkpoint that drops the orphan attempt identity while retaining aggregate reservations is rejected.",
+      "owner_evidence": "fo/acceptance_traceability.json"
+    },
+    "T171": {
+      "input": "并发commit/cancel同一reservation",
+      "required": "恰好一次结算，资源账本与attempt对齐",
+      "ticket_refs": [
+        "A70"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "factor_optimizer/tests/search/test_durable_campaign_store_v3.py",
+        "factor_optimizer/tests/search/test_v8_remaining_acceptance_gaps.py::test_concurrent_commit_cancel_same_started_reservation_settles_once"
+      ],
+      "evidence": "SQLite transactions and in-memory locks serialize state changes, and a dedicated concurrent settle-versus-cancel race proves one exact attempt cannot be consumed twice.",
+      "owner_evidence": "fo/acceptance_traceability.json"
+    },
+    "T172": {
+      "input": "只凭事件日志重建健康状态",
+      "required": "与持久asset快照一致，不解析notes",
+      "ticket_refs": [
+        "A71"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "factor_assets/tests/test_v8_lifecycle_authorization_outbox.py::test_t172_typed_health_event_log_alone_reconstructs_persisted_snapshot"
+      ],
+      "evidence": "folding only typed health event fields reconstructs the reopened durable asset health snapshot",
+      "selectors": [
+        "factor_assets/tests/test_v8_lifecycle_authorization_outbox.py::test_t172_typed_health_event_log_alone_reconstructs_persisted_snapshot"
+      ],
+      "domain": "folding only typed health event fields reconstructs the reopened durable asset health snapshot",
+      "owner_evidence": "fa/fa_acceptance_map.json"
+    },
+    "T173": {
+      "input": "翻译/修改notes展示文案",
+      "required": "机器健康状态和消费者动作不变",
+      "ticket_refs": [
+        "A71"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "factor_assets/tests/test_v8_lifecycle_authorization_outbox.py::test_t173_notes_translation_cannot_change_machine_health_replay"
+      ],
+      "evidence": "replacing notes with unrelated translated display text leaves typed health replay unchanged",
+      "selectors": [
+        "factor_assets/tests/test_v8_lifecycle_authorization_outbox.py::test_t173_notes_translation_cannot_change_machine_health_replay"
+      ],
+      "domain": "replacing notes with unrelated translated display text leaves typed health replay unchanged",
+      "owner_evidence": "fa/fa_acceptance_map.json"
+    },
+    "T174": {
+      "input": "健康退役与正常生命周期升阶交错",
+      "required": "revision顺序可回放，退役成员被新装配正确排除",
+      "ticket_refs": [
+        "A71"
+      ],
+      "status": "VERIFIED",
+      "tests": [
+        "factor_assets/tests/test_v8_platform_lifecycle_recovery.py::test_lost_callback_retry_redelivery_and_retirement_exclusion"
+      ],
+      "evidence": "health retirement preserves lifecycle revision history and excludes asset from new production assembly",
+      "selectors": [
+        "factor_assets/tests/test_v8_platform_lifecycle_recovery.py::test_lost_callback_retry_redelivery_and_retirement_exclusion"
+      ],
+      "domain": "health retirement preserves lifecycle revision history and excludes asset from new production assembly",
+      "owner_evidence": "fa/fa_acceptance_map.json"
+    }
+  },
+  "counts": {
+    "BLOCKED_DATA": 2,
+    "PARTIAL": 3,
+    "UNSUPPORTED": 2,
+    "VERIFIED": 167
+  },
+  "caution": "Scoped tests are not universal market qualification. PENDING/PARTIAL/UNSUPPORTED are not passes. Final regression execution is recorded separately."
+}

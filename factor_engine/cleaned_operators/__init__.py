@@ -843,13 +843,13 @@ def _normalize_polars_ts_legacy_surface(
         # canonical ``window`` name on BOTH backends.  ``d`` stays exposed as the
         # parser-level alias (legacy factor DSL), never as a declared parameter.
         "ts_mean": ("x", "window", "min_periods"),
-        "ts_std": ("x", "window", "min_periods"),
-        "ts_sum": ("x", "window", "min_periods"),
-        "ts_max": ("x", "window", "min_periods"),
-        "ts_min": ("x", "window", "min_periods"),
-        "ts_median": ("x", "window", "min_periods"),
+        # ts_std now declares its real callable contract in polars_ts_basic.
+        # ts_sum now declares its real callable contract in polars_ts_basic.
+        # ts_max now declares its real callable contract in polars_ts_basic.
+        # ts_min now declares its real callable contract in polars_ts_basic.
+        # ts_median now declares its real callable contract in polars_ts_basic.
         "ts_kurt": ("x", "window", "min_periods"),
-        "ts_delta": ("x", "window"),
+        # ts_delta declares the canonical n parameter; do not relabel it window.
         "ts_argmax": ("x", "window"),
         "ts_argmin": ("x", "window"),
         "ts_valid_count": ("x", "window"),

@@ -1,0 +1,18 @@
+{
+  "schema_version": "factor_engine.runtime_operator_snapshot.v4",
+  "generated_at": "2026-09-12T08:32:42.823177+00:00",
+  "catalog_digest": "a1355f36b85f9a41f48cdddc8c3c41a7ff4f0e1f258247260165d7e7ee6589f6",
+  "live_runtime_digest": "4061a3521b338044eadb948473e61540b9ca9b42a89ef0402dcd02a292c260de",
+  "counts": {
+    "canonical": 1756,
+    "aliases": 287,
+    "public_recipes": 248,
+    "runtime_bindings": 4057,
+    "implementation_available": 1756,
+    "research_callable": 429,
+    "executable_unverified": 429,
+    "known_failed_bindings": 0,
+    "production_callable": 0
+  },
+  "scope": "Discovery and declared contracts, not numerical or production certification."
+}

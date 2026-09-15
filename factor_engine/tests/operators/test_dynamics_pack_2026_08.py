@@ -285,9 +285,17 @@ def test_session_recovery_fast_vs_never():
     # min_events=1 is passed explicitly (kernel path) — this test exercises the
     # fast-vs-never recovery SEMANTICS; the R26-048 default floor (>=3) is
     # covered by test_recovery_min_events_*.
-    op = OperatorRegistry.get("session_event_recovery_score", "pandas_numpy")
-    out = op._calculate_series(price, ev, horizon=30, residual_fraction=0.25, min_events=1)
-    vals = out.to_numpy()[:, 0]
+    from factor_engine.cleaned_operators.session_recovery import _recovery_day
+
+    # This is a focused one-event numerical check, not the public operator
+    # support contract (whose reviewed floor remains min_events >= 3).
+    vals = []
+    for day in dates:
+        mask = price.index.normalize() == day
+        vals.append(_recovery_day(
+            price.loc[mask, "S0"].to_numpy(), ev.loc[mask, "S0"].to_numpy(),
+            horizon=30, residual_fraction=0.25, min_events=1,
+        ))
     assert vals[0] == pytest.approx(1.0)      # fragile
     assert vals[1] < 0.5                      # resilient
     assert np.isnan(vals[2])                  # no events

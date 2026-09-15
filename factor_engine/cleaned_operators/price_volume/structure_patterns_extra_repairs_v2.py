@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import numpy as np
 import pandas as pd
+from factor_engine.cleaned_operators.price_volume.structure_extra_contracts import extra_contract
 
 from factor_engine.cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
 from factor_engine.cleaned_operators.price_volume.structure_patterns_extra_v2 import _pf, _pi, _similar
@@ -12,6 +13,8 @@ from factor_engine.cleaned_operators.price_volume.structure_patterns_v2 import _
 
 def _between(frame: pd.DataFrame, lower: float, upper: float) -> pd.DataFrame:
     """Elementwise inclusive between for DataFrame; Series.between is unavailable."""
+    if lower > upper:
+        raise ValueError("min_spacing must be <= max_spacing")
     return frame.ge(lower) & frame.le(upper)
 
 
@@ -110,6 +113,9 @@ def _register(name, function):
         ],
     )
 
+    for field, value in extra_contract(name, metadata.param_names).items():
+        setattr(metadata, field, value)
+
     def calculate(self, *args, **kwargs):
         return function(*args, **kwargs)
 
@@ -119,6 +125,7 @@ def _register(name, function):
         {
             "metadata": metadata,
             "_calculate_series": calculate,
+            "_contract_callable": staticmethod(function),
             "__module__": __name__,
         },
     )

@@ -1,0 +1,25 @@
+WARNING: logical-contract divergence for backend of canonical 'ts_std': field 'param_specs' declares {'window': ParamSpec(dtype=<class 'int'>, min=2, max=None, choices=None, searchable=True, active_when=None, history_semantics=None, history_formula=None, default=20, equivalence=None, param_role=<ParamRole.HORIZON: 'horizon'>), 'ddof': ParamSpec(dtype=<class 'int'>, min=0, max=1, choices=None, searchable=False, active_when=None, history_semantics=None, history_formula=None, default=1, equivalence=None, param_role=<ParamRole.NUMERICAL: 'numerical'>)} but the canonical contract holds {'window': ParamSpec(dtype=<class 'int'>, min=2, max=None, choices=None, searchable=True, active_when=None, history_semantics=None, history_formula=None, default=20, equivalence=None, param_role=<ParamRole.HORIZON: 'horizon'>)} (P0-23 — continuing despite divergence for compatibility)
+WARNING: logical-contract divergence for backend of canonical 'ts_std': field 'scalar_params' declares ('window', 'ddof') but the canonical contract holds ('window',) (P0-23 — continuing despite divergence for compatibility)
+	Command being timed: ".venv/bin/python -m pytest -q factor_engine/tests/test_r6_technical_contracts.py factor_engine/tests/test_r6_state_turnover_contracts.py"
+	User time (seconds): 60.07
+	System time (seconds): 2.91
+	Percent of CPU this job got: 109%
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 0:57.71
+	Average shared text size (kbytes): 0
+	Average unshared data size (kbytes): 0
+	Average stack size (kbytes): 0
+	Average total size (kbytes): 0
+	Maximum resident set size (kbytes): 437168
+	Average resident set size (kbytes): 0
+	Major (requiring I/O) page faults: 2
+	Minor (reclaiming a frame) page faults: 998361
+	Voluntary context switches: 2714
+	Involuntary context switches: 2047
+	Swaps: 0
+	File system inputs: 512
+	File system outputs: 13168
+	Socket messages sent: 0
+	Socket messages received: 0
+	Signals delivered: 0
+	Page size (bytes): 4096
+	Exit status: 0

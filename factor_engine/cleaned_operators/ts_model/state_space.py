@@ -59,6 +59,8 @@ Model-audit remediation (2026-08-11, M-070..M-074) + checkpoint/q-r/warmup audit
 """
 from __future__ import annotations
 
+import dataclasses
+import inspect
 from typing import Any
 
 import numpy as np
@@ -324,6 +326,29 @@ def _numba_kernel(kernel_name: str):
 def _register(name: str, description: str, params: list[str], unit: str, fn,
               *, input_units: dict[str, str] | None = None,
               extra_tags: tuple[str, ...] = ()):
+    _fn_params = inspect.signature(fn).parameters
+    _param_specs = {}
+    for _param in params:
+        if _param not in _KALMAN_PARAM_SPECS:
+            continue
+        _spec = _KALMAN_PARAM_SPECS[_param]
+        _default = _fn_params[_param].default
+        if _default is not inspect.Parameter.empty:
+            _spec = dataclasses.replace(_spec, default=_default)
+        _param_specs[_param] = _spec
+    _op_metadata = metadata(
+        name, description, params, unit=unit, cost=8,
+        input_units=input_units,
+        param_specs=_param_specs,
+    )
+    _op_metadata.panel_params = tuple(
+        param for param in params if param not in _op_metadata.param_specs
+    )
+    _op_metadata.panel_arity = len(_op_metadata.panel_params)
+    _op_metadata.scalar_params = tuple(
+        param for param in params if param in _op_metadata.param_specs
+    )
+
     @register_operator(
         name=name,
         category="time_series_regression",
@@ -334,11 +359,7 @@ def _register(name: str, description: str, params: list[str], unit: str, fn,
         status="experimental",
     )
     class _StateOp(SeriesOperator):
-        metadata = metadata(
-            name, description, params, unit=unit, cost=8,
-            input_units=input_units,
-            param_specs={k: v for k, v in _KALMAN_PARAM_SPECS.items() if k in params},
-        )
+        metadata = _op_metadata
 
         def _calculate_series(self, *args, **kwargs):
             return fn(*args, **kwargs)

@@ -788,6 +788,13 @@ _AUTOCORR_PARAM_SPECS = {
     "lag": ParamSpec(dtype=int, min=1, history_semantics="exact_rows"),
 }
 _EXTRA: dict[str, dict] = {
+    "ChaikinOscillator": {
+        "param_specs": {
+            "fast_window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
+            "slow_window": ParamSpec(dtype=int, min=2, param_role=ParamRole.HORIZON),
+            "adl_window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
+        },
+    },
     "volume_autocorr": {"param_specs": dict(_AUTOCORR_PARAM_SPECS), "relational_specs": list(_AUTOCORR_REL)},
     "turnover_autocorr": {"param_specs": dict(_AUTOCORR_PARAM_SPECS), "relational_specs": list(_AUTOCORR_REL)},
     "volume_volatility": {"input_units": {"volume": "non_negative_volume"}},
@@ -806,7 +813,10 @@ _EXTRA: dict[str, dict] = {
         "output_unit": "volume_per_price_range",
     },
     "zero_return_ratio": {
-        "param_specs": {"epsilon": ParamSpec(dtype=float, min=0.0, searchable=False, param_role=ParamRole.NUMERICAL)},
+        "param_specs": {
+            "window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
+            "epsilon": ParamSpec(dtype=float, min=0.0, searchable=False, param_role=ParamRole.NUMERICAL),
+        },
     },
 }
 
@@ -825,8 +835,19 @@ def _register(name: str, params: tuple[str, ...], function: Callable, descriptio
         # a pure unit-conversion constant — it multiplies the whole output
         # uniformly and leaves cross-sectional ordering invariant, so it must
         # not be an alpha-search dimension.
-        metadata.param_specs = {"volume_scale": ParamSpec(dtype=float, searchable=False)}
+        metadata.param_specs = {
+            "window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
+            "volume_scale": ParamSpec(dtype=float, min=0.0, searchable=False),
+        }
         metadata.tags = [*(metadata.tags or ()), "unit_conversion_only"]
+    inferred_specs = {
+        param: ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON)
+        for param in params
+        if param == "window" or param.endswith("_window")
+    }
+    if inferred_specs:
+        inferred_specs.update(dict(getattr(metadata, "param_specs", None) or {}))
+        metadata.param_specs = inferred_specs
     if extra:
         if extra.get("param_specs"):
             _specs = dict(getattr(metadata, "param_specs", None) or {})

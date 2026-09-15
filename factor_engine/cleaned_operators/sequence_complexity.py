@@ -193,6 +193,7 @@ class TsPermutationEntropy(SeriesOperator):
         cost=5,
         param_specs=dict(
             _ORDINAL_KNOB_SPECS,
+            window=ParamSpec(dtype=int, min=2, default=60, history_semantics="max_rows", param_role=ParamRole.HORIZON),
             normalize=ParamSpec(
                 dtype=bool, choices=(True, False),
                 param_role=ParamRole.POLICY, searchable=False,
@@ -251,6 +252,7 @@ class TsWeightedPermutationEntropy(SeriesOperator):
         cost=5,
         param_specs=dict(
             _ORDINAL_KNOB_SPECS,
+            window=ParamSpec(dtype=int, min=2, default=60, history_semantics="max_rows", param_role=ParamRole.HORIZON),
             weight=ParamSpec(
                 dtype=str, choices=("variance", "range"),
                 param_role=ParamRole.POLICY, searchable=False,
@@ -278,6 +280,10 @@ class TsWeightedPermutationEntropy(SeriesOperator):
             codes: list[tuple[int, ...]] = []
             n_total = 0
             n_tied = 0
+            finite = chunk[np.isfinite(chunk)]
+            scale = float(np.max(np.abs(finite))) if finite.size else 0.0
+            if not np.isfinite(scale) or scale == 0.0:
+                return np.nan
             for i in range(n - embed_len + 1):
                 idx = [i + d * dl for d in range(ord_)]
                 vals = chunk[idx]
@@ -289,7 +295,8 @@ class TsWeightedPermutationEntropy(SeriesOperator):
                     n_tied += 1
                     continue  # review round-3 #44: ordinal tie -> drop embedding
                 codes.append(pattern)
-                weights.append(_embedding_variance(vals) if weight_kind == "variance" else _embedding_range(vals))
+                stable_vals = vals / scale
+                weights.append(_embedding_variance(stable_vals) if weight_kind == "variance" else _embedding_range(stable_vals))
             tie_frac = (n_tied / n_total) if n_total > 0 else 1.0
             if len(codes) < 2:
                 return np.nan
@@ -330,6 +337,7 @@ class TsPermutationTransitionEntropy(SeriesOperator):
         cost=5,
         param_specs=dict(
             _ORDINAL_KNOB_SPECS,
+            window=ParamSpec(dtype=int, min=2, default=60, history_semantics="max_rows", param_role=ParamRole.HORIZON),
             normalize=ParamSpec(
                 dtype=bool, choices=(True, False),
                 param_role=ParamRole.POLICY, searchable=False,
@@ -492,7 +500,7 @@ def _dfa_hurst(run: np.ndarray, min_scale: int, max_scale: int, n_scales: int) -
             trend = np.polyval(coeff, xs)
             residual_sq.append(np.mean((seg - trend) ** 2))
         f = float(np.sqrt(np.mean(residual_sq)))
-        if f <= 1e-12:
+        if not np.isfinite(f) or f <= 0.0:
             continue
         log_s.append(math.log(float(s)))
         log_f.append(math.log(f))
@@ -517,6 +525,12 @@ class TsHurstDfa(SeriesOperator):
         ["x", "window", "min_scale", "max_scale", "n_scales"],
         unit="level",
         cost=7,
+        param_specs={
+            "window": ParamSpec(dtype=int, min=2, max=512, default=120, history_semantics="max_rows", param_role=ParamRole.HORIZON),
+            "min_scale": ParamSpec(dtype=int, min=2, default=4, searchable=False, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+            "max_scale": ParamSpec(dtype=int, min=2, default=None, searchable=False, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+            "n_scales": ParamSpec(dtype=int, min=3, default=6, searchable=False, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+        },
     )
     # metadata.param_specs intentionally omitted - use canonical contract from pandas backend
 
@@ -525,9 +539,11 @@ class TsHurstDfa(SeriesOperator):
         w = strict_int(window, "window", lower=2, upper=512)
         min_s = strict_int(min_scale, "min_scale", lower=2)
         max_s = w // 4 if max_scale is None else strict_int(max_scale, "max_scale", lower=2)
-        if max_s < min_s:
-            max_s = min_s + 1
-        ns = max(3, strict_int(n_scales, "n_scales", lower=3))
+        if max_s <= min_s:
+            raise ValueError("max_scale must be greater than min_scale")
+        if max_s > w // 2:
+            raise ValueError("max_scale must be <= window // 2")
+        ns = strict_int(n_scales, "n_scales", lower=3)
 
         def _fn(chunk: np.ndarray) -> float:
             run = _trailing_finite_suffix(chunk)
@@ -551,7 +567,7 @@ def _higuchi_fd(run: np.ndarray, k_max: int) -> float:
             diff_sum = 0.0
             for i in range(1, len(idx)):
                 diff_sum += abs(run[idx[i]] - run[idx[i - 1]])
-            norm = (n - 1) / (len(idx) * k)
+            norm = (n - 1) / ((len(idx) - 1) * k)
             lengths.append(diff_sum * norm / k)
         if not lengths:
             continue
@@ -581,6 +597,10 @@ class TsHiguchiFractalDimension(SeriesOperator):
         ["x", "window", "k_max"],
         unit="level",
         cost=7,
+        param_specs={
+            "window": ParamSpec(dtype=int, min=2, max=512, default=120, history_semantics="max_rows", param_role=ParamRole.HORIZON),
+            "k_max": ParamSpec(dtype=int, min=1, max=32, default=8, searchable=False, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+        },
     )
     # metadata.param_specs intentionally omitted - use canonical contract from pandas backend
 
@@ -702,6 +722,12 @@ class TsAutocorrDecayHalfLife(SeriesOperator):
         ["x", "window", "max_lag", "use_abs", "min_periods"],
         unit="count",
         cost=2,
+        param_specs={
+            "window": ParamSpec(dtype=int, min=2, default=60, history_semantics="max_rows", param_role=ParamRole.HORIZON),
+            "max_lag": ParamSpec(dtype=int, min=1, max=30, default=10, searchable=False, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+            "use_abs": ParamSpec(dtype=bool, default=False, searchable=False, param_role=ParamRole.POLICY),
+            "min_periods": ParamSpec(dtype=int, min=2, default=2, searchable=False, param_role=ParamRole.SUPPORT_POLICY),
+        },
     )
     # metadata.param_specs intentionally omitted - use canonical contract from pandas backend
 

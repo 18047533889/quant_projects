@@ -1,0 +1,1 @@
+{"command": [".venv/bin/python", "-"], "returncode": 1, "sampled_peak_family_rss_bytes": 737476608, "sampling_seconds": 0.1, "seconds": 55.94288613810204, "test_guard_reason": null, "hard_memory_cap": false}

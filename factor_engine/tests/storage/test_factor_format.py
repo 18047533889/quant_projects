@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import pandas as pd
+import numpy as np
 import pytest
 
 from factor_engine.storage.factor_format import (
@@ -31,6 +32,70 @@ def test_series_long_roundtrip():
     long_df = series_to_long_table(original)
     restored = long_table_to_series(long_df)
     pd.testing.assert_series_equal(restored, original, check_names=False)
+
+
+@pytest.mark.parametrize("asset_dtype", [object, "string"])
+def test_long_table_to_series_preserves_asset_axis_dtype(asset_dtype):
+    frame = pd.DataFrame(
+        {
+            "datetime": pd.to_datetime(
+                [
+                    "2024-01-02",
+                    "2024-01-02",
+                    "2024-01-03",
+                    "2024-01-03",
+                    "2024-01-04",
+                    "2024-01-04",
+                ]
+            ),
+            "asset": pd.Series(["A", "B", "A", "B", "A", "B"], dtype=asset_dtype),
+            "value": [1.0, 2.0, 3.0, 4.0, 5.0, 6.0],
+        }
+    )
+
+    restored = long_table_to_series(frame)
+
+    asset_level = restored.index.get_level_values("asset")
+    assert asset_level.dtype == frame["asset"].dtype
+    # Exercise the regular-timestamp branch that rebuilds the MultiIndex to
+    # retain frequency; it must not change the asset dtype either.
+    assert restored.index.levels[0].freq is not None
+    assert restored.index.levels[1].dtype == frame["asset"].dtype
+
+
+@pytest.mark.parametrize("unit", ["s", "us", "ns"])
+def test_long_table_to_series_preserves_timestamp_unit(unit):
+    frame = pd.DataFrame(
+        {
+            "datetime": pd.Series(
+                np.array(["2024-01-02", "2024-01-03", "2024-01-04"], dtype=f"datetime64[{unit}]")
+            ),
+            "asset": ["A", "A", "A"],
+            "value": [1.0, 2.0, 3.0],
+        }
+    )
+
+    restored = long_table_to_series(frame)
+
+    assert restored.index.levels[0].dtype == np.dtype(f"datetime64[{unit}]")
+    assert list(restored.index.get_level_values(0)) == list(pd.to_datetime(frame["datetime"]))
+
+
+def test_long_table_to_series_does_not_reduce_timestamp_precision():
+    frame = pd.DataFrame(
+        {
+            "datetime": pd.Series(
+                np.array(["2024-01-02T00:00:00.000000001"], dtype="datetime64[ns]")
+            ),
+            "asset": ["A"],
+            "value": [1.0],
+        }
+    )
+
+    restored = long_table_to_series(frame)
+
+    assert restored.index.levels[0].dtype == np.dtype("datetime64[ns]")
+    assert restored.index[0][0].nanosecond == 1
 
 
 def test_pivot_long_to_wide_and_back():

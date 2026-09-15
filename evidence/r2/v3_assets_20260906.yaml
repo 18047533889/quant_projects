@@ -1,0 +1,175 @@
+work_package: v3_factor_assets
+base_head: 2db45f4e446309003381a51a5e03071d31859502
+branch: codex/v3-remediation-20260906
+runtime: /home/sunhaiwei/quant_projects/.venv/bin/python
+pythonpath: /home/sunhaiwei/quant_projects_v3_remediation:/home/sunhaiwei/quant_projects_v3_remediation/factor_optimizer:/home/sunhaiwei/quant_projects_v3_remediation/factor_preprocess
+scope: factor_assets/**
+results:
+  - issue_id: FA-01
+    origin: V2_D
+    status: FIXED_LOCAL
+    current_source_ranges: [factor_assets/profiling/health_card.py]
+    actual_entrypoints: [factor_assets.profiling.health_card.build_health_card]
+    root_cause: legacy boolean gate maps manufactured placeholder evidence refs and empty sequences satisfied all()
+    expected_contract: exact required gate coverage, no duplicates, explicit pass and non-empty caller-supplied evidence identity
+    regression_results: [factor_assets/tests/profiling/test_health_card.py]
+    public_path_trace: build_health_card -> FactorHealthCardArtifact.admission_relevant
+    independent_golden_ref: GOLD-32
+    affected_artifacts: [historical health cards admitted from bare gate booleans]
+    migration_or_no_migration_reason: re-certify historical cards; factor values need not be recomputed when valid evidence remains resolvable
+    rollback_plan: restore prior builder while disabling admission consumers
+    required_capability: [CPU]
+    remaining_blockers: [cross-package AdmissionAuthority integration is parent-owned]
+  - issue_id: FA-08
+    origin: V2_D
+    status: FIXED_LOCAL
+    current_source_ranges: [factor_assets/clustering/incremental.py]
+    actual_entrypoints: [factor_assets.clustering.incremental.incremental_assign]
+    root_cause: small-cluster policy redirected to largest cluster without rebinding affinity evidence
+    expected_contract: final cluster and affinity must come from the same qualifying candidate; otherwise pending
+    regression_results: [factor_assets/tests/test_incremental_cluster_assign.py]
+    public_path_trace: incremental_assign -> IncrementalClusterAssignment
+    independent_golden_ref: GOLD-36
+    affected_artifacts: [incremental assignments, cluster overlays and features derived from redirected assignments]
+    migration_or_no_migration_reason: rebuild affected overlays and dependent feature versions; immutable old versions remain readable
+    rollback_plan: restore previous selector only with admission disabled for redirected assignments
+    required_capability: [CPU]
+    remaining_blockers: []
+  - issue_id: FA-11
+    origin: V2_D
+    status: FIXED_LOCAL
+    current_source_ranges: [factor_assets/optimizer/pareto.py]
+    actual_entrypoints: [factor_assets.optimizer.pareto.ParetoOptimizer.compute_frontier]
+    root_cause: missing objectives became negative infinity and NaN comparisons prevented domination
+    expected_contract: only complete finite required-objective vectors are Pareto eligible
+    regression_results: [factor_assets/tests/optimizer/test_pareto_negative.py]
+    public_path_trace: compute_frontier -> ParetoFrontier
+    independent_golden_ref: GOLD-35
+    affected_artifacts: [frontiers containing incomplete or non-finite candidates]
+    migration_or_no_migration_reason: recompute affected frontiers under the same objective version
+    rollback_plan: restore implementation while rejecting invalid candidates at every caller
+    required_capability: [CPU]
+    remaining_blockers: [FO authority consolidation is parent-owned]
+  - issue_id: FA-07
+    origin: V2_D
+    status: FIXED_LOCAL
+    current_source_ranges: [factor_assets/library/promotion_gate.py]
+    actual_entrypoints: [factor_assets.library.promotion_gate.PromotionGate.evaluate]
+    expected_contract: strict bool parsing and REJECT precedence over REVIEW
+    regression_results: [factor_assets/tests/test_library_promotion_gate.py]
+    independent_golden_ref: GOLD-33
+    affected_artifacts: [legacy approvals still require re-certification under the broader identity contract]
+    migration_or_no_migration_reason: no new code in this package iteration; historical approval migration remains necessary
+    remaining_blockers: [parent is converging platform callers onto certified_release mode]
+  - issue_id: FA-03
+    origin: V2_D
+    status: FIXED_LOCAL
+    current_source_ranges: [factor_assets/profiling/policies.py]
+    actual_entrypoints: [factor_assets.profiling.policies.get_health_policy]
+    expected_contract: nested policy mappings are immutable private snapshots
+    regression_results: [factor_assets/tests/profiling/test_policies.py]
+    independent_golden_ref: GOLD-31
+    affected_artifacts: [health policies previously mutable through public rule mappings]
+    migration_or_no_migration_reason: mapping content is snapshotted and exposed read-only; metric values need no recomputation
+    remaining_blockers: [content-addressed registry collision enforcement not independently closed here]
+  - issue_id: SIM-01
+    origin: V3_E
+    status: ALREADY_FIXED_VERIFIED
+    current_source_ranges: [factor_assets/contracts/similarity.py]
+    actual_entrypoints: [factor_assets.contracts.similarity.SimilarityArtifact]
+    expected_contract: correlation metric, window, universe, snapshot and view alter similarity identity
+    regression_results: [factor_assets/tests/contracts/test_similarity_and_admission.py, factor_assets/tests/similarity/test_exact.py]
+    independent_golden_ref: GOLD-36
+    affected_artifacts: []
+    migration_or_no_migration_reason: existing identity already distinguishes declared metric and provenance
+    remaining_blockers: [QE formal pairwise producer coverage is outside this package]
+  - issue_id: SIM-09
+    origin: V3_E
+    status: ALREADY_FIXED_VERIFIED
+    current_source_ranges: [factor_assets/clustering/lineage.py, factor_assets/contracts/cluster_governance.py]
+    actual_entrypoints: [factor_assets.clustering.incremental.build_incremental_cluster_version, factor_assets.clustering.incremental.build_incremental_lineage_edges]
+    expected_contract: immutable cluster versions and traceable parent-child lineage
+    regression_results: [factor_assets/tests/test_clustering_lineage.py, factor_assets/tests/test_incremental_cluster_assign.py]
+    independent_golden_ref: GOLD-37
+    affected_artifacts: []
+    migration_or_no_migration_reason: copy-on-write versions preserve old readers
+    remaining_blockers: [model-serving compatibility gate is outside this package]
+  - issue_id: FA-02
+    origin: V2_D
+    status: FIXED_LOCAL
+    current_source_ranges: [factor_assets/profiling/health_card.py]
+    actual_entrypoints: [factor_assets.profiling.health_card.FactorHealthCardArtifact]
+    expected_contract: all dimension children bind the same factor, evaluation and policy; admission summary cannot contradict integrity gates
+    regression_results: [factor_assets/tests/profiling/test_health_card.py]
+    independent_golden_ref: GOLD-32
+    affected_artifacts: [manually constructed or deserialized mixed-context health cards]
+    migration_or_no_migration_reason: rebuild health cards from resolved evidence; factor values remain reusable
+    remaining_blockers: [parent must populate the new explicit provenance fields at cross-package adapters]
+  - issue_id: FA-04
+    origin: V2_S
+    status: FIXED_LOCAL
+    current_source_ranges: [factor_assets/profiling/policies.py, factor_assets/profiling/dimensions.py]
+    expected_contract: required missing evidence yields partial sufficiency with no score; optional non-applicable evidence is excluded rather than scored zero
+    regression_results: [factor_assets/tests/profiling/test_dimensions.py]
+    remaining_blockers: []
+  - issue_id: FA-05
+    origin: V2_S
+    status: FIXED_LOCAL
+    current_source_ranges: [factor_assets/profiling/dimensions.py]
+    expected_contract: frozen shape family activates only its applicable metrics; U quality is not penalized by monotonicity
+    regression_results: [factor_assets/tests/profiling/test_dimensions.py]
+    remaining_blockers: [QE adapter must pass the training-frozen family]
+  - issue_id: FA-06
+    origin: V2_G
+    status: BLOCKED
+    remaining_blockers: [requires DA canonical field taxonomy and FE role-bearing static-analysis contract]
+  - issue_id: FA-09
+    origin: V2_S
+    status: FIXED_LOCAL
+    regression_results: [quant_evaluator/tests/test_pairwise_artifact_v3.py, factor_assets/tests/test_fa09_qe_pairwise.py, factor_assets/tests/test_incremental_cluster_assign.py]
+    remaining_blockers: []
+  - issue_id: FA-10
+    origin: V2_G
+    status: TO_VERIFY
+    remaining_blockers: [ANN index build remains inside factor-by-cluster selection loop; persistent global index redesign exceeds safe bounded patch]
+  - issue_id: SIM-02
+    origin: V3_E
+    status: FIXED_LOCAL
+    regression_results: [quant_evaluator/tests/test_pairwise_artifact_v3.py, factor_assets/tests/test_fa09_qe_pairwise.py, factor_assets/tests/test_incremental_cluster_assign.py]
+    remaining_blockers: []
+  - issue_id: SIM-03
+    origin: V3_E
+    status: BLOCKED
+    remaining_blockers: [requires QE multi-window/tail/mask evidence and FO cost evidence]
+  - issue_id: SIM-04
+    origin: V3_E
+    status: TO_VERIFY
+    remaining_blockers: [cross-package covariance consumer audit not completed]
+  - issue_id: SIM-05
+    origin: V3_E
+    status: TO_VERIFY
+    remaining_blockers: [economic homogeneity quality fields not closed]
+  - issue_id: SIM-06
+    origin: V3_E
+    status: TO_VERIFY
+    remaining_blockers: [manifest-to-pairwise evidence resolution audit not closed]
+  - issue_id: SIM-07
+    origin: V3_E
+    status: BLOCKED
+    remaining_blockers: [no exact-recall audit dataset or certified ANN runtime in this run]
+  - issue_id: SIM-08
+    origin: V3_E
+    status: PARTIAL_FIXED_LOCAL
+    remaining_blockers: [final-target affinity corrected; medoid and top-k support contract remains]
+  - issue_id: SIM-10
+    origin: V3_E
+    status: TO_VERIFY
+    remaining_blockers: [cross-package FE/FP/modeling aggregation state contract not closed]
+test_commands:
+  - command: focused V3 health, grading, promotion, invalidation and optimizer consumer tests
+    result: 145 passed
+  - command: PYTHONPATH=<worktree>:<worktree>/factor_optimizer:<worktree>/factor_preprocess /home/sunhaiwei/quant_projects/.venv/bin/python -m pytest -q factor_assets/tests/profiling/test_health_card.py factor_assets/tests/optimizer/test_pareto_negative.py factor_assets/tests/test_incremental_cluster_assign.py
+    result: 42 passed
+  - command: PYTHONPATH=<worktree>:<worktree>/factor_optimizer:<worktree>/factor_preprocess /home/sunhaiwei/quant_projects/.venv/bin/python -m pytest -q factor_assets/tests
+    result: 1271 passed, 43 skipped
+capability_statement: CPU-tested factor_assets behavior only; skipped optional ANN tests and absent QE/modeling integration prevent GPU or release certification.

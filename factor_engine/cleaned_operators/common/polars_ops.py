@@ -338,6 +338,9 @@ class TSPctPolars(SeriesOperator):
     """Polars d 期变化率算子。"""
 
     metadata = OperatorMetadata(
+        panel_params=("x",),
+        scalar_params=("d",),
+        param_specs={"d": ParamSpec(dtype=int, min=1, default=1, param_role=ParamRole.HORIZON)},
         name="ts_pct", category="time_series", description="d 期变化率",
         examples=["ts_pct(close, 1)"], param_names=["x", "d"], return_type="series", tags=["time_series", "polars"],
     )
@@ -387,6 +390,8 @@ class TSArgmaxPolars(SeriesOperator):
         param_specs={
             "window": ParamSpec(dtype=int, min=1, default=20, searchable=True,
                                 param_role=ParamRole.HORIZON),
+            "min_periods": ParamSpec(dtype=int, min=1, default=1, searchable=False,
+                                     param_role=ParamRole.SUPPORT_POLICY),
         },
     )
 
@@ -415,6 +420,8 @@ class TSArgminPolars(SeriesOperator):
         param_specs={
             "window": ParamSpec(dtype=int, min=1, default=20, searchable=True,
                                 param_role=ParamRole.HORIZON),
+            "min_periods": ParamSpec(dtype=int, min=1, default=1, searchable=False,
+                                     param_role=ParamRole.SUPPORT_POLICY),
         },
     )
 
@@ -460,9 +467,12 @@ class TSQuantilePolars(SeriesOperator):
         quantile = strict_probability(kwargs.get("p", q), "q")
         cols = _numeric_cols(x)
         # pandas rolling().quantile() 跳过 NaN；polars rolling_quantile 会把 NaN
-        # 当作最大参与排序。先 fill_nan(None) 对齐 pandas 缺失语义。
+        # 当作最大参与排序。先转 Float64 再清理缺失：Polars 会让整数列的
+        # rolling_quantile 保持整数 dtype，从而把 linear 插值截断成阶梯值。
         return x.with_columns([
-            pl.when(pl.col(c).is_nan() | pl.col(c).is_infinite()).then(None).otherwise(pl.col(c))
+            pl.when(pl.col(c).cast(pl.Float64).is_nan() | pl.col(c).cast(pl.Float64).is_infinite())
+            .then(None)
+            .otherwise(pl.col(c).cast(pl.Float64))
             .rolling_quantile(
                 quantile=quantile,
                 interpolation="linear",
@@ -575,10 +585,12 @@ class TSTopKSumPolars(SeriesOperator):
                            param_role=ParamRole.HORIZON),
             "k": ParamSpec(dtype=int, min=1, default=None, searchable=True,
                            param_role=ParamRole.ECONOMIC),
+            "min_periods": ParamSpec(dtype=int, min=1, default=1, searchable=False,
+                                     param_role=ParamRole.SUPPORT_POLICY),
         },
     )
 
-    def _calculate_series(self, x: pl.DataFrame, d: int = 20, k: int | None = None, min_periods: int | None = None, **kwargs) -> pl.DataFrame:
+    def _calculate_series(self, x: pl.DataFrame, d: int = 20, k: int | None = None, min_periods: int = 1, **kwargs) -> pl.DataFrame:
         from factor_engine.backend.operator_errors import OperatorParameterError
         from factor_engine.cleaned_operators._rolling_fast import rolling_top_n_sum_window
         from factor_engine.cleaned_operators.common.strict_params import strict_int
@@ -590,10 +602,7 @@ class TSTopKSumPolars(SeriesOperator):
             raise OperatorParameterError("k must be <= window")
         cols = _numeric_cols(x)
         pdf = x.select(cols).to_pandas()
-        mp = w if min_periods is None else int(min_periods)
-        out = rolling_top_n_sum_window(pdf, w, top_k)
-        # min_periods gate: values with fewer than mp finite rows stay NaN.
-        out = out.mask(pdf.notna().sum(axis=1) < mp) if mp < w else out
+        out = rolling_top_n_sum_window(pdf, w, top_k, min_periods=min_periods)
         return x.with_columns([pl.Series(name=c, values=out[c].to_numpy()) for c in cols])
 
 

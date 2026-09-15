@@ -135,7 +135,7 @@ def test_duplicate_timestamp_rejected(_loaded):
     ("ts_hvg_degree_entropy", {"window": 5.9}),
     ("ts_glr_mean_shift_score", {"min_segment": 5.9}),
     ("ts_recurrence_determinism", {"dim": 1.9}),
-    ("ts_dmd_dominant_growth_rate", {"rank": 3.9, "dim": 3.7}),
+    ("ts_dmd_return_dominant_growth_rate", {"rank": 3.9, "dim": 3.7}),
     ("ts_pickands_tail_index", {"k": 3.9}),
     ("ts_bds_statistic", {"embedding_dim": 2.9}),
     ("event_allan_factor", {"scale": 1.9}),
@@ -147,6 +147,16 @@ def test_parameter_fraction_rejected(_loaded, canonical, kwargs):
     with pytest.raises(Exception) as excinfo:
         op.calculate(arg, **kwargs)
     assert isinstance(excinfo.value, (ValueError, TypeError)), type(excinfo.value)
+
+
+def test_untyped_dmd_growth_rate_is_internal_and_typed_replacement_is_live(_loaded):
+    from factor_engine.mining.direct_use import DirectUseStatus, resolve_direct_use_status
+
+    assert resolve_direct_use_status("ts_dmd_dominant_growth_rate") is DirectUseStatus.MOVE_INTERNAL
+    assert OperatorRegistry.get("ts_dmd_dominant_growth_rate", "pandas_numpy") is None
+    replacement = OperatorRegistry.get("ts_dmd_return_dominant_growth_rate", "pandas_numpy")
+    assert replacement is not None
+    assert replacement.metadata.input_units == {"x": "return"}
 
 
 @pytest.mark.parametrize("canonical,kwargs", [

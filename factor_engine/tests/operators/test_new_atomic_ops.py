@@ -19,9 +19,9 @@ P0_CANONICALS = frozenset(
     ts_min_if ts_max_if ts_quantile_if ts_corr_if ts_beta_if ts_regression_resid_if
     ts_transition_count ts_time_since_change ts_event_spacing_mean ts_event_spacing_cv
     ts_downside_deviation ts_upside_deviation ts_current_drawdown_duration
-    ts_time_under_water ts_best_lag_corr ts_price_delay
+    ts_time_under_water ts_best_lag_corr_raw ts_price_delay
     group_ex_self_mean group_ex_self_weighted_mean hierarchical_group_neutralize
-    cs_robust_resid overnight_return open_close_return open_to_vwap_return
+    cs_trimmed_ols_resid overnight_return open_close_return open_to_vwap_return
     vwap_to_close_return ashare_limit_distance ashare_limit_up_touch
     ashare_limit_down_touch ashare_limit_one_price ashare_limit_failed
     ashare_open_at_upper_limit ashare_limit_open_failed
@@ -80,12 +80,12 @@ def test_p0_operators_preserve_shape_and_are_deterministic() -> None:
         "ts_upside_deviation": [panel],
         "ts_current_drawdown_duration": [panel],
         "ts_time_under_water": [panel],
-        "ts_best_lag_corr": [panel, panel * 0.5],
+        "ts_best_lag_corr_raw": [panel, panel * 0.5],
         "ts_price_delay": [panel, panel * 0.5],
         "group_ex_self_mean": [panel, _group()],
         "group_ex_self_weighted_mean": [panel, panel.abs() + 1.0, _group()],
         "hierarchical_group_neutralize": [panel, _group(), _group()],
-        "cs_robust_resid": [panel, panel * 0.5],
+        "cs_trimmed_ols_resid": [panel, panel * 0.5],
         "overnight_return": [panel + 10.0, panel + 9.0, "raw"],
         "open_close_return": [panel + 10.0, panel + 11.0, "raw"],
         "open_to_vwap_return": [panel + 10.0, panel + 10.5, "raw"],

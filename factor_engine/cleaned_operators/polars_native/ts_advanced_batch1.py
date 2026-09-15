@@ -12,10 +12,13 @@ Focus areas:
 - Complex algorithms (DFA, multifractal, wavelet) - skeletons with TODO
 """
 from __future__ import annotations
+import copy
+from factor_engine.cleaned_operators.common import direction_risk_polars as _risk_kernels
 
 import numpy as np
 import pandas as pd
 from typing import Optional
+from factor_engine.cleaned_operators.base_polars import SeriesOperator as _ConditionalTEPolarsSeriesOperator
 
 try:
     import polars as pl
@@ -40,173 +43,62 @@ from factor_engine.cleaned_operators.rolling_pack import _call_pandas_delegate
 
 @register_operator(name="ts_abs_concentration", canonical="ts_abs_concentration", backend="polars")
 class TSAbsConcentrationPolarsNative(SeriesOperator):
-    """Herfindahl-Hirschman Index of absolute values (concentration measure)"""
-
+    """Authored finite-support ts_abs_concentration; see shared numerical kernel."""
     metadata = OperatorMetadata(
-        name="ts_abs_concentration",
-        category="time_series",
-        description="HHI of absolute values: sum of squared proportions",
-        param_names=["feature", "window"],
-        return_type="series",
-        tags=["time_series", "rolling", "concentration", "pit_safe"],
+        name="ts_abs_concentration",category="time_series",
+        description="Canonical ts_abs_concentration with validated input and window semantics.",
+        **_risk_kernels.contract("ts_abs_concentration"),
     )
-    metadata.param_specs = {
-        "window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
-    }
+    _contract_callable = staticmethod(_risk_kernels.ts_abs_concentration)
+    _physical_spec = _risk_kernels.physical_spec("ts_abs_concentration")
 
-    def _calculate_series(self, feature, window, **kwargs):
-        # HHI = sum((x_i / sum(x))^2)
-        # HHI is sum(abs(x)^2) / sum(abs(x))^2 over each trailing window.
-        # This algebraic form is exact and keeps the implementation in native
-        # Polars expressions (the previous expression was malformed and also
-        # attempted to roll already-normalized point values).
-        return (
-            feature.to_frame()
-            .lazy()
-            .with_columns(
-                [
-                    pl.col(feature.name).abs().alias("_abs"),
-                ]
-            )
-            .with_columns(
-                [
-                    pl.col("_abs").rolling_sum(window).alias("_sum"),
-                    (pl.col("_abs") ** 2).rolling_sum(window).alias("_sum_sq"),
-                ]
-            )
-            .with_columns(
-                pl.when(pl.col("_sum") > 0)
-                .then(pl.col("_sum_sq") / (pl.col("_sum") ** 2))
-                .otherwise(None)
-                .alias(feature.name)
-            )
-            .select([feature.name])
-            .collect()
-            .to_series()
-        )
+    def _calculate_series(self, *args, **kwargs):
+        return _risk_kernels.ts_abs_concentration(*args, **kwargs)
 
 
 @register_operator(name="ts_abs_entropy", canonical="ts_abs_entropy", backend="polars")
 class TSAbsEntropyPolarsNative(SeriesOperator):
-    """Shannon entropy of absolute values (binned)"""
-
+    """Authored finite-support ts_abs_entropy; see shared numerical kernel."""
     metadata = OperatorMetadata(
-        name="ts_abs_entropy",
-        category="time_series",
-        description="Shannon entropy of absolute values in bits (binned approximation)",
-        param_names=["feature", "window", "bins"],
-        return_type="series",
-        tags=["time_series", "rolling", "entropy", "pit_safe"],
+        name="ts_abs_entropy",category="time_series",
+        description="Canonical ts_abs_entropy with validated input and window semantics.",
+        **_risk_kernels.contract("ts_abs_entropy"),
     )
-    metadata.param_specs = {
-        "window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
-        "bins": ParamSpec(dtype=int, min=2, default=10, param_role=ParamRole.ESTIMATOR_RESOLUTION),
-    }
+    _contract_callable = staticmethod(_risk_kernels.ts_abs_entropy)
+    _physical_spec = _risk_kernels.physical_spec("ts_abs_entropy")
 
-    def _calculate_series(self, feature, window, bins=10, **kwargs):
-        # Shannon entropy using binned histogram approximation
-        # H = -sum(p_i * log2(p_i))
-        # TODO: Implement proper rolling binned entropy in Polars
-        # For now, use pandas fallback for histogram-based calculation
-        result = pd.Series(index=feature.index, dtype=float)
-
-        for i in range(len(feature)):
-            if i < window - 1:
-                result.iloc[i] = np.nan
-                continue
-
-            window_data = feature.iloc[max(0, i - window + 1):i + 1].abs().dropna()
-            if len(window_data) < 2:
-                result.iloc[i] = np.nan
-                continue
-
-            hist, _ = np.histogram(window_data, bins=bins)
-            probs = hist[hist > 0] / hist.sum()
-            result.iloc[i] = -np.sum(probs * np.log2(probs))
-
-        return result
+    def _calculate_series(self, *args, **kwargs):
+        return _risk_kernels.ts_abs_entropy(*args, **kwargs)
 
 
 @register_operator(name="ts_abs_entropy_nats", canonical="ts_abs_entropy_nats", backend="polars")
 class TSAbsEntropyNatsPolarsNative(SeriesOperator):
-    """Shannon entropy of absolute values in nats (natural log)"""
-
+    """Authored finite-support ts_abs_entropy_nats; see shared numerical kernel."""
     metadata = OperatorMetadata(
-        name="ts_abs_entropy_nats",
-        category="time_series",
-        description="Shannon entropy of absolute values in nats",
-        param_names=["feature", "window", "bins"],
-        return_type="series",
-        tags=["time_series", "rolling", "entropy", "pit_safe"],
+        name="ts_abs_entropy_nats",category="time_series",
+        description="Canonical ts_abs_entropy_nats with validated input and window semantics.",
+        **_risk_kernels.contract("ts_abs_entropy_nats"),
     )
-    metadata.param_specs = {
-        "window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
-        "bins": ParamSpec(dtype=int, min=2, default=10, param_role=ParamRole.ESTIMATOR_RESOLUTION),
-    }
+    _contract_callable = staticmethod(_risk_kernels.ts_abs_entropy_nats)
+    _physical_spec = _risk_kernels.physical_spec("ts_abs_entropy_nats")
 
-    def _calculate_series(self, feature, window, bins=10, **kwargs):
-        # Same as ts_abs_entropy but using natural log
-        result = pd.Series(index=feature.index, dtype=float)
-
-        for i in range(len(feature)):
-            if i < window - 1:
-                result.iloc[i] = np.nan
-                continue
-
-            window_data = feature.iloc[max(0, i - window + 1):i + 1].abs().dropna()
-            if len(window_data) < 2:
-                result.iloc[i] = np.nan
-                continue
-
-            hist, _ = np.histogram(window_data, bins=bins)
-            probs = hist[hist > 0] / hist.sum()
-            result.iloc[i] = -np.sum(probs * np.log(probs))
-
-        return result
+    def _calculate_series(self, *args, **kwargs):
+        return _risk_kernels.ts_abs_entropy_nats(*args, **kwargs)
 
 
 @register_operator(name="ts_abs_entropy_normalized", canonical="ts_abs_entropy_normalized", backend="polars")
 class TSAbsEntropyNormalizedPolarsNative(SeriesOperator):
-    """Shannon entropy of absolute values normalized by max entropy"""
-
+    """Authored finite-support ts_abs_entropy_normalized; see shared numerical kernel."""
     metadata = OperatorMetadata(
-        name="ts_abs_entropy_normalized",
-        category="time_series",
-        description="Shannon entropy normalized by log2(bins) -> [0,1]",
-        param_names=["feature", "window", "bins"],
-        return_type="series",
-        tags=["time_series", "rolling", "entropy", "pit_safe"],
+        name="ts_abs_entropy_normalized",category="time_series",
+        description="Canonical ts_abs_entropy_normalized with validated input and window semantics.",
+        **_risk_kernels.contract("ts_abs_entropy_normalized"),
     )
-    metadata.param_specs = {
-        "window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
-        "bins": ParamSpec(dtype=int, min=2, default=10, param_role=ParamRole.ESTIMATOR_RESOLUTION),
-    }
+    _contract_callable = staticmethod(_risk_kernels.ts_abs_entropy_normalized)
+    _physical_spec = _risk_kernels.physical_spec("ts_abs_entropy_normalized")
 
-    def _calculate_series(self, feature, window, bins=10, **kwargs):
-        result = pd.Series(index=feature.index, dtype=float)
-        max_entropy = np.log2(bins)
-
-        for i in range(len(feature)):
-            if i < window - 1:
-                result.iloc[i] = np.nan
-                continue
-
-            window_data = feature.iloc[max(0, i - window + 1):i + 1].abs().dropna()
-            if len(window_data) < 2:
-                result.iloc[i] = np.nan
-                continue
-
-            hist, _ = np.histogram(window_data, bins=bins)
-            probs = hist[hist > 0] / hist.sum()
-            entropy = -np.sum(probs * np.log2(probs))
-            result.iloc[i] = entropy / max_entropy if max_entropy > 0 else 0.0
-
-        return result
-
-
-# ============================================================================
-# Information Theory Measures
-# ============================================================================
+    def _calculate_series(self, *args, **kwargs):
+        return _risk_kernels.ts_abs_entropy_normalized(*args, **kwargs)
 
 @register_operator(name="ts_active_information_storage", canonical="ts_active_information_storage", backend="polars")
 class TSActiveInformationStoragePolarsNative(SeriesOperator):
@@ -692,46 +584,16 @@ class TSAutocorrDecayHalfLifePolarsNative(SeriesOperator):
 
 @register_operator(name="ts_autocorrelation_time_initial_positive_sequence", canonical="ts_autocorrelation_time_initial_positive_sequence", backend="polars")
 class TSAutocorrelationTimeInitialPositiveSequencePolarsNative(SeriesOperator):
-    """Autocorrelation time: sum of ACF while positive"""
-
-    metadata = OperatorMetadata(
-        name="ts_autocorrelation_time_initial_positive_sequence",
-        category="time_series",
-        description="Sum of autocorrelations until first negative",
-        param_names=["feature", "window", "max_lag"],
-        return_type="series",
-        tags=["time_series", "rolling", "autocorrelation", "pit_safe"],
-    )
-    metadata.param_specs = {
-        "window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
-        "max_lag": ParamSpec(dtype=int, min=1, default=20, param_role=ParamRole.HORIZON),
-    }
-
-    def _calculate_series(self, feature, window, max_lag=20, **kwargs):
-        result = pd.Series(index=feature.index, dtype=float)
-        
-        for i in range(len(feature)):
-            if i < window - 1:
-                result.iloc[i] = np.nan
-                continue
-            
-            window_data = feature.iloc[max(0, i - window + 1):i + 1].dropna()
-            if len(window_data) < max_lag + 1:
-                result.iloc[i] = np.nan
-                continue
-            
-            # Sum ACF while positive
-            acf_sum = 0.0
-            for lag in range(1, min(max_lag + 1, len(window_data))):
-                acf = window_data.autocorr(lag=lag)
-                if pd.notna(acf) and acf > 0:
-                    acf_sum += acf
-                else:
-                    break
-            
-            result.iloc[i] = acf_sum
-        
-        return result
+    """Explicit canonical memory reference delegate; not native acceleration."""
+    from factor_engine.cleaned_operators.common import memory_delegate as _delegate
+    metadata = _delegate.metadata("ts_autocorrelation_time_initial_positive_sequence")
+    @property
+    def _contract_callable(self):
+        return self._delegate.reference(self.metadata.name)._calculate_series
+    def _calculate_series(self,*args,**kwargs):
+        return self._delegate.calculate(self.metadata.name,*args,**kwargs)
+    def physical_spec(self):
+        return self._delegate.physical_spec(self.metadata.name)
 
 
 # ============================================================================
@@ -801,128 +663,45 @@ class TSBdsStatisticPolarsNative(SeriesOperator):
 
 @register_operator(name="ts_best_lag_corr_excess", canonical="ts_best_lag_corr_excess", backend="polars")
 class TSBestLagCorrExcessPolarsNative(SeriesOperator):
-    """Best lagged correlation minus lag-0 correlation"""
-
+    """Authored finite-support ts_best_lag_corr_excess; see shared numerical kernel."""
     metadata = OperatorMetadata(
-        name="ts_best_lag_corr_excess",
-        category="time_series",
-        description="Max lagged correlation minus contemporaneous correlation",
-        param_names=["x", "y", "window", "max_lag"],
-        return_type="series",
-        tags=["time_series", "rolling", "correlation", "pit_safe"],
+        name="ts_best_lag_corr_excess",category="time_series",
+        description="Canonical ts_best_lag_corr_excess with validated input and window semantics.",
+        **_risk_kernels.contract("ts_best_lag_corr_excess"),
     )
-    metadata.param_specs = {
-        "window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
-        "max_lag": ParamSpec(dtype=int, min=1, default=10, param_role=ParamRole.HORIZON),
-    }
+    _contract_callable = staticmethod(_risk_kernels.ts_best_lag_corr_excess)
+    _physical_spec = _risk_kernels.physical_spec("ts_best_lag_corr_excess")
 
-    def _calculate_series(self, x, y, window, max_lag=10, **kwargs):
-        result = pd.Series(index=x.index, dtype=float)
-        
-        for i in range(len(x)):
-            if i < window - 1:
-                result.iloc[i] = np.nan
-                continue
-            
-            x_window = x.iloc[max(0, i - window + 1):i + 1]
-            y_window = y.iloc[max(0, i - window + 1):i + 1]
-            
-            if len(x_window) < max_lag + 2:
-                result.iloc[i] = np.nan
-                continue
-            
-            corr_0 = x_window.corr(y_window)
-            
-            best_corr = corr_0
-            for lag in range(1, min(max_lag + 1, len(x_window))):
-                lagged_corr = x_window.iloc[:-lag].corr(y_window.iloc[lag:])
-                if pd.notna(lagged_corr) and abs(lagged_corr) > abs(best_corr):
-                    best_corr = lagged_corr
-            
-            result.iloc[i] = best_corr - corr_0
-        
-        return result
+    def _calculate_series(self, *args, **kwargs):
+        return _risk_kernels.ts_best_lag_corr_excess(*args, **kwargs)
 
 
 @register_operator(name="ts_best_lag_corr_raw", canonical="ts_best_lag_corr_raw", backend="polars")
 class TSBestLagCorrRawPolarsNative(SeriesOperator):
-    """Maximum absolute lagged correlation"""
-
+    """Authored finite-support ts_best_lag_corr_raw; see shared numerical kernel."""
     metadata = OperatorMetadata(
-        name="ts_best_lag_corr_raw",
-        category="time_series",
-        description="Maximum absolute lagged correlation",
-        param_names=["x", "y", "window", "max_lag"],
-        return_type="series",
-        tags=["time_series", "rolling", "correlation", "pit_safe"],
+        name="ts_best_lag_corr_raw",category="time_series",
+        description="Canonical ts_best_lag_corr_raw with validated input and window semantics.",
+        **_risk_kernels.contract("ts_best_lag_corr_raw"),
     )
-    metadata.param_specs = {
-        "window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
-        "max_lag": ParamSpec(dtype=int, min=1, default=10, param_role=ParamRole.HORIZON),
-    }
+    _contract_callable = staticmethod(_risk_kernels.ts_best_lag_corr_raw)
+    _physical_spec = _risk_kernels.physical_spec("ts_best_lag_corr_raw")
 
-    def _calculate_series(self, x, y, window, max_lag=10, **kwargs):
-        result = pd.Series(index=x.index, dtype=float)
-        
-        for i in range(len(x)):
-            if i < window - 1:
-                result.iloc[i] = np.nan
-                continue
-            
-            x_window = x.iloc[max(0, i - window + 1):i + 1]
-            y_window = y.iloc[max(0, i - window + 1):i + 1]
-            
-            if len(x_window) < max_lag + 2:
-                result.iloc[i] = np.nan
-                continue
-            
-            best_corr = 0.0
-            for lag in range(0, min(max_lag + 1, len(x_window))):
-                if lag == 0:
-                    lagged_corr = x_window.corr(y_window)
-                else:
-                    lagged_corr = x_window.iloc[:-lag].corr(y_window.iloc[lag:])
-                
-                if pd.notna(lagged_corr) and abs(lagged_corr) > abs(best_corr):
-                    best_corr = lagged_corr
-            
-            result.iloc[i] = best_corr
-        
-        return result
-
-
-# ============================================================================
-# Regime and Break Detection
-# ============================================================================
+    def _calculate_series(self, *args, **kwargs):
+        return _risk_kernels.ts_best_lag_corr_raw(*args, **kwargs)
 
 @register_operator(name="ts_beta_break_score", canonical="ts_beta_break_score", backend="polars")
 class TSBetaBreakScorePolarsNative(SeriesOperator):
-    """Beta instability: recent vs historical beta divergence"""
+    """Exact Polars-panel delegate to the stable true-beta reference kernel."""
+    from factor_engine.cleaned_operators.feature_geometry import TsBetaBreakScore as _Reference
+    metadata = copy.deepcopy(_Reference.metadata)
+    metadata.tags = list(metadata.tags or []) + ["polars", "delegate:pandas_numpy"]
 
-    metadata = OperatorMetadata(
-        name="ts_beta_break_score",
-        category="time_series",
-        description="Difference between recent and long-term beta",
-        param_names=["x", "y", "short_window", "long_window"],
-        return_type="series",
-        tags=["time_series", "rolling", "regime", "pit_safe"],
-    )
-    metadata.param_specs = {
-        "short_window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
-        "long_window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
-    }
-
-    def _calculate_series(self, x, y, short_window, long_window, **kwargs):
-        # Beta = cov(x, y) / var(y)
-        short_cov = x.rolling(short_window).cov(y)
-        short_var = y.rolling(short_window).var()
-        short_beta = short_cov / short_var
-        
-        long_cov = x.rolling(long_window).cov(y)
-        long_var = y.rolling(long_window).var()
-        long_beta = long_cov / long_var
-        
-        return short_beta - long_beta
+    def _calculate_series(self, y, x, recent_window=30, prior_window=90, **kwargs):
+        return _call_pandas_delegate(
+            "ts_beta_break_score", (y, x),
+            {"recent_window": recent_window, "prior_window": prior_window, **kwargs},
+        )
 
 
 # ============================================================================
@@ -1071,30 +850,13 @@ class TSBinnedResponseMonotonicityPolarsNative(SeriesOperator):
 
 @register_operator(name="ts_bures_corr_shift", canonical="ts_bures_corr_shift", backend="polars")
 class TSBuresCorrShiftPolarsNative(SeriesOperator):
-    """Bures distance between correlation matrices (regime shift)"""
+    """Causal canonical reference with explicit Pandas conversion."""
+    from factor_engine.cleaned_operators.common import structure_delegate as _delegate
+    metadata = _delegate.metadata("ts_bures_corr_shift")
+    _physical_spec = _delegate.physical_spec("ts_bures_corr_shift")
 
-    metadata = OperatorMetadata(
-        name="ts_bures_corr_shift",
-        category="time_series",
-        description="Bures distance between recent and prior correlation (TODO: multivariate)",
-        param_names=["x", "y", "recent_window", "prior_window", "min_pairs"],
-        return_type="series",
-        tags=["time_series", "rolling", "regime", "pit_safe"],
-    )
-    metadata.param_specs = {
-        "recent_window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
-        "prior_window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
-    }
-
-    def _calculate_series(self, x, y=None, recent_window=20, prior_window=60, min_pairs=None, **kwargs):
-        # R4-100 parity: canonical (x, y, recent_window, prior_window,
-        # min_pairs) — the pandas reference (advanced_structure) contract.
-        if y is None:
-            y = x
-        # TODO: Requires multivariate correlation matrix comparison
-        result = pd.Series(index=x.index, dtype=float)
-        result[:] = np.nan
-        return result
+    def _calculate_series(self, *args, **kwargs):
+        return self._delegate.calculate("ts_bures_corr_shift", *args, **kwargs)
 
 
 # ============================================================================
@@ -1131,59 +893,17 @@ class TSChangePointProbabilityPolarsNative(SeriesOperator):
 
 @register_operator(name="ts_chatterjee_xi", canonical="ts_chatterjee_xi", backend="polars")
 class TSChatterjeeXiPolarsNative(SeriesOperator):
-    """Chatterjee's ξ (xi) correlation coefficient (non-parametric)"""
-
-    metadata = OperatorMetadata(
-        name="ts_chatterjee_xi",
-        category="time_series",
-        description="Chatterjee's xi: rank-based dependence measure",
-        param_names=["x", "y", "window"],
-        return_type="series",
-        tags=["time_series", "rolling", "correlation", "pit_safe"],
-    )
-    metadata.param_specs = {
-        "window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
-    }
-
-    def _calculate_series(self, x, y, window, **kwargs):
-        # Chatterjee's ξ = 1 - (3 * sum(|r[i+1] - r[i]|)) / (n^2 - 1)
-        # where r is rank of y ordered by x
-        result = pd.Series(index=x.index, dtype=float)
-        
-        for i in range(len(x)):
-            if i < window - 1:
-                result.iloc[i] = np.nan
-                continue
-            
-            x_window = x.iloc[max(0, i - window + 1):i + 1].dropna()
-            y_window = y.iloc[max(0, i - window + 1):i + 1].dropna()
-            
-            if len(x_window) < 3 or len(y_window) < 3:
-                result.iloc[i] = np.nan
-                continue
-            
-            # Align indices
-            common_idx = x_window.index.intersection(y_window.index)
-            if len(common_idx) < 3:
-                result.iloc[i] = np.nan
-                continue
-            
-            x_aligned = x_window.loc[common_idx]
-            y_aligned = y_window.loc[common_idx]
-            
-            # Sort by x and get y ranks
-            sorted_indices = x_aligned.argsort()
-            y_sorted = y_aligned.iloc[sorted_indices]
-            y_ranks = y_sorted.rank()
-            
-            # Compute xi
-            n = len(y_ranks)
-            rank_diffs = np.abs(np.diff(y_ranks.values))
-            xi = 1 - (3 * np.sum(rank_diffs)) / (n**2 - 1) if n > 1 else np.nan
-            
-            result.iloc[i] = xi
-        
-        return result
+    """Exact reference dependence; explicit Pandas delegation, not a proxy."""
+    from factor_engine.cleaned_operators.common.dependence_delegate import metadata as _metadata, physical_spec as _spec
+    metadata = _metadata("ts_chatterjee_xi")
+    _physical_spec = _spec("ts_chatterjee_xi")
+    @property
+    def _contract_callable(self):
+        from factor_engine.cleaned_operators.common.dependence_delegate import reference
+        return reference("ts_chatterjee_xi")._calculate_series
+    def _calculate_series(self,*args,**kwargs):
+        from factor_engine.cleaned_operators.common.dependence_delegate import calculate
+        return calculate("ts_chatterjee_xi",*args,**kwargs)
 
 
 # ============================================================================
@@ -1237,49 +957,32 @@ class TSChordExcursionAreaPolarsNative(SeriesOperator):
 
 @register_operator(name="ts_conditional_mutual_information", canonical="ts_conditional_mutual_information", backend="polars")
 class TSConditionalMutualInformationPolarsNative(SeriesOperator):
-    """Conditional mutual information I(X;Y|Z)"""
-
-    metadata = OperatorMetadata(
-        name="ts_conditional_mutual_information",
-        category="time_series",
-        description="CMI: I(X;Y|Z) using binned estimation (TODO: proper implementation)",
-        param_names=["x", "y", "z", "window", "bins"],
-        return_type="series",
-        tags=["time_series", "rolling", "information_theory", "pit_safe"],
-    )
-    metadata.param_specs = {
-        "window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
-        "bins": ParamSpec(dtype=int, min=2, default=10, param_role=ParamRole.ESTIMATOR_RESOLUTION),
-    }
-
-    def _calculate_series(self, x, y, z, window, bins=10, **kwargs):
-        # TODO: Implement proper CMI calculation
-        result = pd.Series(index=x.index, dtype=float)
-        result[:] = np.nan
-        return result
+    """Exact reference dependence; explicit Pandas delegation, not a proxy."""
+    from factor_engine.cleaned_operators.common.dependence_delegate import metadata as _metadata, physical_spec as _spec
+    metadata = _metadata("ts_conditional_mutual_information")
+    _physical_spec = _spec("ts_conditional_mutual_information")
+    @property
+    def _contract_callable(self):
+        from factor_engine.cleaned_operators.common.dependence_delegate import reference
+        return reference("ts_conditional_mutual_information")._calculate_series
+    def _calculate_series(self,*args,**kwargs):
+        from factor_engine.cleaned_operators.common.dependence_delegate import calculate
+        return calculate("ts_conditional_mutual_information",*args,**kwargs)
 
 
 @register_operator(name="ts_conditional_transfer_entropy", canonical="ts_conditional_transfer_entropy", backend="polars")
-class TSConditionalTransferEntropyPolarsNative(SeriesOperator):
-    """Conditional transfer entropy TE(X→Y|Z)"""
-
-    metadata = OperatorMetadata(
-        name="ts_conditional_transfer_entropy",
-        category="time_series",
-        description="Conditional TE: information flow X→Y given Z (TODO)",
-        param_names=["target", "source", "condition", "window", "bins", "lag", "min_transitions", "min_cells_ratio"],
-        return_type="series",
-        tags=["time_series", "rolling", "information_theory", "pit_safe"],
-    )
-    # metadata.param_specs intentionally omitted - use canonical contract from pandas backend
-
-    def _calculate_series(self, target, source=None, condition=None, window=20, bins=10, lag=1, min_transitions=None, min_cells_ratio=0.1, **kwargs):
-        # R4-100 parity: canonical 8-param contract.
-        x = target
-        # TODO: Implement conditional TE
-        result = pd.Series(index=x.index, dtype=float)
-        result[:] = np.nan
-        return result
+class TSConditionalTransferEntropyPolarsNative(_ConditionalTEPolarsSeriesOperator):
+    """Real three-panel CTE reference, not an all-NaN placeholder."""
+    from factor_engine.cleaned_operators.common.dependence_delegate import metadata as _metadata, physical_spec as _spec
+    metadata = _metadata("ts_conditional_transfer_entropy")
+    _physical_spec = _spec("ts_conditional_transfer_entropy")
+    @property
+    def _contract_callable(self):
+        from factor_engine.cleaned_operators.common.dependence_delegate import reference
+        return reference("ts_conditional_transfer_entropy")._calculate_series
+    def _calculate_series(self,*args,**kwargs):
+        from factor_engine.cleaned_operators.common.dependence_delegate import calculate
+        return calculate("ts_conditional_transfer_entropy",*args,**kwargs)
 
 
 # ============================================================================
@@ -1372,46 +1075,22 @@ class TSConfirmedPivotLowPolarsNative(SeriesOperator):
 # ============================================================================
 
 @register_operator(name="ts_consolidation_slope", canonical="ts_consolidation_slope", backend="polars")
+@register_operator(name="ts_consolidation_slope", canonical="ts_consolidation_slope", backend="polars", source="pandas_bridge.structure_parity")
 class TSConsolidationSlopePolarsNative(SeriesOperator):
-    """Slope during consolidation (low volatility) periods"""
-
+    """Exact conversion of the authoritative canonical structure operator."""
     metadata = OperatorMetadata(
-        name="ts_consolidation_slope",
-        category="time_series",
-        description="Linear slope during low-volatility periods",
-        param_names=["feature", "window", "vol_threshold"],
-        return_type="series",
-        tags=["time_series", "rolling", "regime", "pit_safe"],
+        name="ts_consolidation_slope", category="time_series",
+        description="Canonical ts_consolidation_slope conversion bridge.",
+        param_names=['close', 'window'], panel_params=('close',),
+        scalar_params=('window',), input_arity=1,
+        panel_arity=1, total_positional_arity=2,
+        param_specs={'window': ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON)},
+        tags=["time_series", "pandas_bridge", "pit_safe"],
     )
-    metadata.param_specs = {
-        "window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
-        "vol_threshold": ParamSpec(dtype=float, min=0.0, default=0.5, param_role=ParamRole.STATE_THRESHOLD),
-    }
 
-    def _calculate_series(self, feature, window, vol_threshold=0.5, **kwargs):
-        # Compute rolling volatility
-        vol = feature.rolling(window).std()
-        
-        # Compute rolling slope
-        result = pd.Series(index=feature.index, dtype=float)
-        for i in range(len(feature)):
-            if i < window - 1:
-                result.iloc[i] = np.nan
-                continue
-            
-            if vol.iloc[i] < vol_threshold:
-                window_data = feature.iloc[max(0, i - window + 1):i + 1].dropna()
-                if len(window_data) >= 2:
-                    x = np.arange(len(window_data))
-                    y = window_data.values
-                    slope = np.polyfit(x, y, 1)[0]
-                    result.iloc[i] = slope
-                else:
-                    result.iloc[i] = np.nan
-            else:
-                result.iloc[i] = np.nan
-        
-        return result
+    def _calculate_series(self, close: pl.DataFrame, window: int, **kwargs) -> pl.DataFrame:
+        from factor_engine.cleaned_operators.price_volume.polars_structure import ts_consolidation_slope
+        return ts_consolidation_slope(close, window)
 
 
 @register_operator(name="ts_consolidation_volume_decay", canonical="ts_consolidation_volume_decay", backend="polars")
@@ -1458,38 +1137,22 @@ class TSConsolidationVolumeDecayPolarsNative(SeriesOperator):
 
 
 @register_operator(name="ts_consolidation_width", canonical="ts_consolidation_width", backend="polars")
+@register_operator(name="ts_consolidation_width", canonical="ts_consolidation_width", backend="polars", source="pandas_bridge.structure_parity")
 class TSConsolidationWidthPolarsNative(SeriesOperator):
-    """Price range width during consolidation"""
-
+    """Exact conversion of the authoritative canonical structure operator."""
     metadata = OperatorMetadata(
-        name="ts_consolidation_width",
-        category="time_series",
-        description="Max-min range during consolidation periods",
-        param_names=["feature", "window", "vol_threshold"],
-        return_type="series",
-        tags=["time_series", "rolling", "range", "pit_safe"],
+        name="ts_consolidation_width", category="time_series",
+        description="Canonical ts_consolidation_width conversion bridge.",
+        param_names=['high', 'low', 'window'], panel_params=('high', 'low'),
+        scalar_params=('window',), input_arity=2,
+        panel_arity=2, total_positional_arity=3,
+        param_specs={'window': ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON)},
+        tags=["time_series", "pandas_bridge", "pit_safe"],
     )
-    metadata.param_specs = {
-        "window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
-        "vol_threshold": ParamSpec(dtype=float, min=0.0, default=0.5, param_role=ParamRole.STATE_THRESHOLD),
-    }
 
-    def _calculate_series(self, feature, window, vol_threshold=0.5, **kwargs):
-        vol = feature.rolling(window).std()
-        
-        result = pd.Series(index=feature.index, dtype=float)
-        for i in range(len(feature)):
-            if i < window - 1:
-                result.iloc[i] = np.nan
-                continue
-            
-            if vol.iloc[i] < vol_threshold:
-                window_data = feature.iloc[max(0, i - window + 1):i + 1]
-                result.iloc[i] = window_data.max() - window_data.min()
-            else:
-                result.iloc[i] = np.nan
-        
-        return result
+    def _calculate_series(self, high: pl.DataFrame, low: pl.DataFrame, window: int, **kwargs) -> pl.DataFrame:
+        from factor_engine.cleaned_operators.price_volume.polars_structure import ts_consolidation_width
+        return ts_consolidation_width(high, low, window)
 
 
 # ============================================================================
@@ -1498,26 +1161,16 @@ class TSConsolidationWidthPolarsNative(SeriesOperator):
 
 @register_operator(name="ts_copula_central_asymmetry", canonical="ts_copula_central_asymmetry", backend="polars")
 class TSCopulaCentralAsymmetryPolarsNative(SeriesOperator):
-    """Copula asymmetry between upper and lower tail"""
-
-    metadata = OperatorMetadata(
-        name="ts_copula_central_asymmetry",
-        category="time_series",
-        description="Tail asymmetry measure (TODO: needs copula estimation)",
-        param_names=["x", "y", "window", "grid"],
-        return_type="series",
-        tags=["time_series", "rolling", "copula", "pit_safe"],
-    )
-    metadata.param_specs = {
-        "window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
-    }
-
-    def _calculate_series(self, x, y, window, grid: int = 10, **kwargs):
-        # R4-100 parity: canonical (x, y, window, grid).
-        # TODO: Implement proper copula-based tail dependence
-        result = pd.Series(index=x.index, dtype=float)
-        result[:] = np.nan
-        return result
+    """Exact distribution reference, not a scalar proxy or zero placeholder."""
+    from factor_engine.cleaned_operators.common import distribution_delegate as _delegate
+    metadata=_delegate.metadata("ts_copula_central_asymmetry")
+    @property
+    def _contract_callable(self):
+        return self._delegate.reference("ts_copula_central_asymmetry")._calculate_series
+    def _calculate_series(self,*args,**kwargs):
+        return self._delegate.calculate("ts_copula_central_asymmetry",*args,**kwargs)
+    def physical_spec(self):
+        return self._delegate.physical_spec("ts_copula_central_asymmetry")
 
 
 # ============================================================================
@@ -1652,44 +1305,30 @@ class TSCrossSpectralPhasePolarsNative(SeriesOperator):
 
 @register_operator(name="ts_crossing_acceleration", canonical="ts_crossing_acceleration", backend="polars", replace=True, expected_old_source="pandas_bridge", replacement_reason="Consolidating polars native operators into ts_advanced_batch1")
 class TSCrossingAccelerationPolarsNative(SeriesOperator):
-    """Second difference of ``x - y`` on crossing bars, normalized by volatility."""
-
-    metadata = OperatorMetadata(
-        name="ts_crossing_acceleration",
-        category="time_series",
-        description="Crossing-bar second difference of x - y, normalized by trailing volatility",
-        param_names=["x", "y", "window"],
-        return_type="series",
-        tags=["time_series", "rolling", "crossing", "pit_safe"],
-    )
-    # metadata.param_specs intentionally omitted - use canonical contract from pandas backend
-
-    def _calculate_series(self, x, y, window, **kwargs):
-        values = _crossing_acceleration_series(
-            np.asarray(x, dtype=float).reshape(-1, 1),
-            np.asarray(y, dtype=float).reshape(-1, 1),
-            int(window),
-        )[:, 0]
-        return pd.Series(values, index=x.index, name=x.name)
+    """Exact CPU two-panel crossing geometry and canonical window defaults."""
+    from factor_engine.cleaned_operators.common import crossing_native as _crossing
+    metadata=_crossing.metadata("ts_crossing_acceleration")
+    @property
+    def _contract_callable(self):
+        return self._crossing.reference("ts_crossing_acceleration")._calculate_series
+    def _calculate_series(self,*args,**kwargs):
+        return self._crossing.calculate("ts_crossing_acceleration",*args,**kwargs)
+    def physical_spec(self):
+        return self._crossing.physical_spec("ts_crossing_acceleration")
 
 
 @register_operator(name="ts_crossing_speed", canonical="ts_crossing_speed", backend="polars", replace=True, expected_old_source="pandas_bridge", replacement_reason="Consolidating polars native operators into ts_advanced_batch1")
 class TSCrossingSpeedPolarsNative(SeriesOperator):
-    """Average threshold crossing frequency"""
-
-    metadata = OperatorMetadata(
-        name="ts_crossing_speed",
-        category="time_series",
-        description="Number of threshold crossings per period",
-        param_names=["feature", "threshold", "window"],
-        return_type="series",
-        tags=["time_series", "rolling", "crossing", "pit_safe"],
-    )
-    # metadata.param_specs intentionally omitted - use canonical contract from pandas backend
-
-    def _calculate_series(self, feature, threshold, window, **kwargs):
-        crossings = ((feature > threshold) != (feature.shift(1) > threshold)).astype(int)
-        return crossings.rolling(window).sum() / window
+    """Exact CPU two-panel crossing geometry and canonical window defaults."""
+    from factor_engine.cleaned_operators.common import crossing_native as _crossing
+    metadata=_crossing.metadata("ts_crossing_speed")
+    @property
+    def _contract_callable(self):
+        return self._crossing.reference("ts_crossing_speed")._calculate_series
+    def _calculate_series(self,*args,**kwargs):
+        return self._crossing.calculate("ts_crossing_speed",*args,**kwargs)
+    def physical_spec(self):
+        return self._crossing.physical_spec("ts_crossing_speed")
 
 
 # ============================================================================
@@ -1698,82 +1337,34 @@ class TSCrossingSpeedPolarsNative(SeriesOperator):
 
 @register_operator(name="ts_cumulative_deviation_score", canonical="ts_cumulative_deviation_score", backend="polars")
 class TSCumulativeDeviationScorePolarsNative(SeriesOperator):
-    """Cumulative deviation from baseline (normalized)"""
-
-    metadata = OperatorMetadata(
-        name="ts_cumulative_deviation_score",
-        category="time_series",
-        description="Cumulative deviation normalized by volatility",
-        param_names=["x", "window", "min_periods"],
-        return_type="series",
-        tags=["time_series", "rolling", "deviation", "pit_safe",
-              "specialized_numerical_kernel"],
-    )
-    metadata.param_specs = {
-        "window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
-        "min_periods": ParamSpec(dtype=int, min=1, param_role=ParamRole.SUPPORT_POLICY),
-    }
-
-    def _calculate_series(self, x, window=20, min_periods=5, **kwargs):
-        w, mp = int(window), max(3, int(min_periods))
-        exprs = []
-        for column in [c for c, dtype in x.schema.items() if dtype.is_numeric()]:
-            values = x[column].to_numpy().astype(float, copy=False)
-            out = np.full(len(values), np.nan)
-            for row in range(len(values)):
-                segment = values[max(0, row - w + 1):row + 1]
-                if not len(segment) or not np.isfinite(segment[-1]):
-                    continue
-                breaks = np.flatnonzero(~np.isfinite(segment))
-                vals = segment[(breaks[-1] + 1 if breaks.size else 0):]
-                if vals.size < mp:
-                    continue
-                sd = float(np.std(vals))
-                if sd > 0.0:
-                    running = np.cumsum((vals - float(np.mean(vals))) / sd)
-                    out[row] = float(np.max(np.abs(running)))
-            exprs.append(pl.Series(column, out))
-        return x.with_columns(exprs)
+    """ts_cumulative_deviation_score: exact canonical estimator with finite-support policy."""
+    from factor_engine.cleaned_operators.common import regression_model_polars as _model
+    metadata=OperatorMetadata(name="ts_cumulative_deviation_score",category="time_series",**_model.contract("ts_cumulative_deviation_score"))
+    _physical_spec=_model.physical_spec("ts_cumulative_deviation_score")
+    _contract_callable=staticmethod(_model.ts_cumulative_deviation_score)
+    def _calculate_series(self,*args,**kwargs):
+        return self._model.ts_cumulative_deviation_score(*args,**kwargs)
 
 
 @register_operator(name="ts_cusum_pressure", canonical="ts_cusum_pressure", backend="polars")
 class TSCusumPressurePolarsNative(SeriesOperator):
-    """CUSUM pressure: cumulative sum pressure indicator"""
-
-    metadata = OperatorMetadata(
-        name="ts_cusum_pressure",
-        category="time_series",
-        description="Cumulative sum of deviations (change detection)",
-        param_names=["x", "reference_window", "drift", "min_periods"],
-        return_type="series",
-        tags=["time_series", "cusum", "pit_safe"],
+    """Exact labelled-panel delegate to the recursive pandas authority."""
+    from factor_engine.cleaned_operators.stateful.sequential import TsCusumPressure as _Reference
+    metadata = copy.deepcopy(_Reference.metadata)
+    metadata.tags = list(metadata.tags) + ["polars", "delegate:pandas_numpy"]
+    _physical_spec = PhysicalImplementationSpec(
+        canonical="ts_cusum_pressure", backend="polars",
+        execution_kind=ExecutionKind.POLARS_PANDAS_DELEGATE,
+        supports_lazy=False, supports_streaming=False, materializes_full_panel=True,
+        supports_nulls=True, supports_nan=True, supports_inf=True,
     )
-    metadata.param_specs = {
-        "reference_window": ParamSpec(dtype=int, min=1, default=60, param_role=ParamRole.HORIZON),
-        "drift": ParamSpec(dtype=float, default=1.0, param_role=ParamRole.STATE_THRESHOLD),
-    }
 
-    def _calculate_series(self, x, reference_window=60, drift=1.0, min_periods=1, **kwargs):
-        # R4-100 parity: canonical (x, reference_window, drift, min_periods).
-        feature = x
-        target = float(drift)
-        threshold = 1.0
-        ms = max(1, int(min_periods))
-        result = pd.Series(index=feature.index, dtype=float)
-        cusum = 0.0
-        count = 0
-        for i in range(len(feature)):
-            if pd.notna(feature.iloc[i]):
-                count += 1
-                if count < ms:
-                    result.iloc[i] = np.nan
-                    continue
-                cusum = max(0.0, cusum + (feature.iloc[i] - target - threshold))
-                result.iloc[i] = cusum
-            else:
-                cusum = 0.0
-                result.iloc[i] = np.nan
-        return result
+    def _calculate_series(self, x, reference_window=20, drift=0.5, min_periods=None, **kwargs):
+        from factor_engine.cleaned_operators.rolling_pack import _call_pandas_delegate
+        return _call_pandas_delegate("ts_cusum_pressure", (x,), {
+            "reference_window": reference_window, "drift": drift,
+            "min_periods": min_periods, **kwargs,
+        })
 
 
 @register_operator(name="ts_cusum_vol_break_score", canonical="ts_cusum_vol_break_score", backend="polars")
@@ -1818,98 +1409,46 @@ class TSCusumVolBreakScorePolarsNative(SeriesOperator):
 
 @register_operator(name="ts_dc_duration_asymmetry", canonical="ts_dc_duration_asymmetry", backend="polars")
 class TSDcDurationAsymmetryPolarsNative(SeriesOperator):
-    """Directional change: uptrend vs downtrend duration asymmetry"""
+    """Real shared directional-change state machine, NumPy arrays only."""
+    from factor_engine.cleaned_operators.common import directional_change_polars as _kernel
+    metadata = _kernel.metadata("ts_dc_duration_asymmetry")
+    _physical_spec = _kernel.physical_spec("ts_dc_duration_asymmetry")
 
-    metadata = OperatorMetadata(
-        name="ts_dc_duration_asymmetry",
-        category="time_series",
-        description="Duration asymmetry between up and down DC events",
-        param_names=["x", "scale", "threshold", "window", "threshold_mode", "scale_mode"],
-        return_type="series",
-        tags=["time_series", "rolling", "directional_change", "pit_safe"],
-    )
-    metadata.param_specs = {
-        "threshold": ParamSpec(dtype=float, min=0.0, param_role=ParamRole.STATE_THRESHOLD),
-        "window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
-    }
-
-    def _calculate_series(self, feature, threshold, window, **kwargs):
-        # TODO: Implement proper directional change event detection
-        result = pd.Series(index=feature.index, dtype=float)
-        result[:] = np.nan
-        return result
+    def _calculate_series(self,*args,**kwargs):
+        return self._kernel.calculate("ts_dc_duration_asymmetry",*args,**kwargs)
 
 
 @register_operator(name="ts_dc_event_rate", canonical="ts_dc_event_rate", backend="polars")
 class TSDcEventRatePolarsNative(SeriesOperator):
-    """Directional change event frequency"""
+    """Real shared directional-change state machine, NumPy arrays only."""
+    from factor_engine.cleaned_operators.common import directional_change_polars as _kernel
+    metadata = _kernel.metadata("ts_dc_event_rate")
+    _physical_spec = _kernel.physical_spec("ts_dc_event_rate")
 
-    metadata = OperatorMetadata(
-        name="ts_dc_event_rate",
-        category="time_series",
-        description="Number of DC events per period",
-        param_names=["x", "scale", "threshold", "window", "threshold_mode", "scale_mode"],
-        return_type="series",
-        tags=["time_series", "rolling", "directional_change", "pit_safe"],
-    )
-    metadata.param_specs = {
-        "threshold": ParamSpec(dtype=float, min=0.0, param_role=ParamRole.STATE_THRESHOLD),
-        "window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
-    }
-
-    def _calculate_series(self, feature, threshold, window, **kwargs):
-        # TODO: Implement DC event detection
-        result = pd.Series(index=feature.index, dtype=float)
-        result[:] = np.nan
-        return result
+    def _calculate_series(self,*args,**kwargs):
+        return self._kernel.calculate("ts_dc_event_rate",*args,**kwargs)
 
 
 @register_operator(name="ts_dc_overshoot_asymmetry", canonical="ts_dc_overshoot_asymmetry", backend="polars")
 class TSDcOvershootAsymmetryPolarsNative(SeriesOperator):
-    """DC overshoot asymmetry between up and down events"""
+    """Real shared directional-change state machine, NumPy arrays only."""
+    from factor_engine.cleaned_operators.common import directional_change_polars as _kernel
+    metadata = _kernel.metadata("ts_dc_overshoot_asymmetry")
+    _physical_spec = _kernel.physical_spec("ts_dc_overshoot_asymmetry")
 
-    metadata = OperatorMetadata(
-        name="ts_dc_overshoot_asymmetry",
-        category="time_series",
-        description="Overshoot asymmetry in DC events",
-        param_names=["x", "scale", "threshold", "window", "threshold_mode", "scale_mode"],
-        return_type="series",
-        tags=["time_series", "rolling", "directional_change", "pit_safe"],
-    )
-    metadata.param_specs = {
-        "threshold": ParamSpec(dtype=float, min=0.0, param_role=ParamRole.STATE_THRESHOLD),
-        "window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
-    }
-
-    def _calculate_series(self, feature, threshold, window, **kwargs):
-        # TODO: Implement DC overshoot calculation
-        result = pd.Series(index=feature.index, dtype=float)
-        result[:] = np.nan
-        return result
+    def _calculate_series(self,*args,**kwargs):
+        return self._kernel.calculate("ts_dc_overshoot_asymmetry",*args,**kwargs)
 
 
 @register_operator(name="ts_dc_overshoot_ratio", canonical="ts_dc_overshoot_ratio", backend="polars")
 class TSDcOvershootRatioPolarsNative(SeriesOperator):
-    """Average DC overshoot ratio"""
+    """Real shared directional-change state machine, NumPy arrays only."""
+    from factor_engine.cleaned_operators.common import directional_change_polars as _kernel
+    metadata = _kernel.metadata("ts_dc_overshoot_ratio")
+    _physical_spec = _kernel.physical_spec("ts_dc_overshoot_ratio")
 
-    metadata = OperatorMetadata(
-        name="ts_dc_overshoot_ratio",
-        category="time_series",
-        description="Mean overshoot beyond DC threshold",
-        param_names=["x", "scale", "threshold", "window", "threshold_mode", "scale_mode"],
-        return_type="series",
-        tags=["time_series", "rolling", "directional_change", "pit_safe"],
-    )
-    metadata.param_specs = {
-        "threshold": ParamSpec(dtype=float, min=0.0, param_role=ParamRole.STATE_THRESHOLD),
-        "window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
-    }
-
-    def _calculate_series(self, feature, threshold, window, **kwargs):
-        # TODO: Implement DC overshoot ratio
-        result = pd.Series(index=feature.index, dtype=float)
-        result[:] = np.nan
-        return result
+    def _calculate_series(self,*args,**kwargs):
+        return self._kernel.calculate("ts_dc_overshoot_ratio",*args,**kwargs)
 
 
 # ============================================================================
@@ -1996,55 +1535,41 @@ class TSDfaHurstPolarsNative(SeriesOperator):
 
 
 @register_operator(name="ts_distance_to_resistance", canonical="ts_distance_to_resistance", backend="polars")
+@register_operator(name="ts_distance_to_resistance", canonical="ts_distance_to_resistance", backend="polars", source="pandas_bridge.structure_parity")
 class TSDistanceToResistancePolarsNative(SeriesOperator):
-    """Distance to resistance level (local maximum)"""
-
+    """Exact conversion of the authoritative canonical structure operator."""
     metadata = OperatorMetadata(
-        name="ts_distance_to_resistance",
-        category="time_series",
-        description="Percentage distance to recent high (resistance)",
-        param_names=["close", "high", "left_window", "right_window", "history_window", "points"],
-        return_type="series",
-        tags=["time_series", "rolling", "technical", "pit_safe"],
+        name="ts_distance_to_resistance", category="time_series",
+        description="Canonical ts_distance_to_resistance conversion bridge.",
+        param_names=['close', 'high', 'left_window', 'right_window', 'history_window', 'points'], panel_params=('close', 'high'),
+        scalar_params=('left_window', 'right_window', 'history_window', 'points'), input_arity=2,
+        panel_arity=2, total_positional_arity=6,
+        param_specs={'left_window': ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON), 'right_window': ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON), 'history_window': ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON), 'points': ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON)},
+        tags=["time_series", "pandas_bridge", "pit_safe"],
     )
-    metadata.param_specs = {
-        "history_window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
-    }
 
-    def _calculate_series(self, close, high=None, left_window: int = 3,
-                          right_window: int = 3, history_window: int = 20,
-                          points: int = 1, **kwargs):
-        # R4-100 parity: canonical (close, high, left_window, right_window,
-        # history_window, points); ``feature``/``window`` are legacy aliases.
-        feature = close
-        window = history_window
-        rolling_max = feature.rolling(window).max()
-        return (feature - rolling_max) / rolling_max.replace(0, np.nan)
+    def _calculate_series(self, close: pl.DataFrame, high: pl.DataFrame, left_window: int, right_window: int, history_window: int, points: int, **kwargs) -> pl.DataFrame:
+        from factor_engine.cleaned_operators.price_volume.polars_structure import ts_distance_to_resistance
+        return ts_distance_to_resistance(close, high, left_window, right_window, history_window, points)
 
 
 @register_operator(name="ts_distance_to_support", canonical="ts_distance_to_support", backend="polars")
+@register_operator(name="ts_distance_to_support", canonical="ts_distance_to_support", backend="polars", source="pandas_bridge.structure_parity")
 class TSDistanceToSupportPolarsNative(SeriesOperator):
-    """Distance to support level (local minimum)"""
-
+    """Exact conversion of the authoritative canonical structure operator."""
     metadata = OperatorMetadata(
-        name="ts_distance_to_support",
-        category="time_series",
-        description="Percentage distance to recent low (support)",
-        param_names=["close", "low", "left_window", "right_window", "history_window", "points"],
-        return_type="series",
-        tags=["time_series", "rolling", "technical", "pit_safe"],
+        name="ts_distance_to_support", category="time_series",
+        description="Canonical ts_distance_to_support conversion bridge.",
+        param_names=['close', 'low', 'left_window', 'right_window', 'history_window', 'points'], panel_params=('close', 'low'),
+        scalar_params=('left_window', 'right_window', 'history_window', 'points'), input_arity=2,
+        panel_arity=2, total_positional_arity=6,
+        param_specs={'left_window': ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON), 'right_window': ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON), 'history_window': ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON), 'points': ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON)},
+        tags=["time_series", "pandas_bridge", "pit_safe"],
     )
-    metadata.param_specs = {
-        "history_window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
-    }
 
-    def _calculate_series(self, close, low=None, left_window: int = 3,
-                          right_window: int = 3, history_window: int = 20,
-                          points: int = 1, **kwargs):
-        feature = close
-        window = history_window
-        rolling_min = feature.rolling(window).min()
-        return (feature - rolling_min) / rolling_min.replace(0, np.nan)
+    def _calculate_series(self, close: pl.DataFrame, low: pl.DataFrame, left_window: int, right_window: int, history_window: int, points: int, **kwargs) -> pl.DataFrame:
+        from factor_engine.cleaned_operators.price_volume.polars_structure import ts_distance_to_support
+        return ts_distance_to_support(close, low, left_window, right_window, history_window, points)
 
 
 # ============================================================================
@@ -2328,33 +1853,16 @@ class TSEndpointDeviationPolarsNative(SeriesOperator):
 
 @register_operator(name="ts_energy_break_score", canonical="ts_energy_break_score", backend="polars")
 class TSEnergyBreakScorePolarsNative(SeriesOperator):
-    """Energy regime break: change in squared returns"""
-
-    metadata = OperatorMetadata(
-        name="ts_energy_break_score",
-        category="time_series",
-        description="Difference in recent vs historical energy (squared returns)",
-        param_names=["f1", "f2", "f3", "window", "recent_window", "prior_window"],
-        return_type="series",
-        tags=["time_series", "rolling", "energy", "regime", "pit_safe"],
-    )
-    metadata.param_specs = {
-        "recent_window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
-        "prior_window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
-    }
-
-    def _calculate_series(self, f1, f2=None, f3=None, window: int = 20,
-                          recent_window: int = 5, prior_window: int = 20, **kwargs):
-        feature = f1
-        short_window = recent_window
-        long_window = prior_window
-        returns = feature.pct_change()
-        energy = returns ** 2
-        
-        short_energy = energy.rolling(short_window).mean()
-        long_energy = energy.rolling(long_window).mean()
-        
-        return (short_energy - long_energy) / long_energy.replace(0, np.nan)
+    """Exact distribution reference, not a scalar proxy or zero placeholder."""
+    from factor_engine.cleaned_operators.common import distribution_delegate as _delegate
+    metadata=_delegate.metadata("ts_energy_break_score")
+    @property
+    def _contract_callable(self):
+        return self._delegate.reference("ts_energy_break_score")._calculate_series
+    def _calculate_series(self,*args,**kwargs):
+        return self._delegate.calculate("ts_energy_break_score",*args,**kwargs)
+    def physical_spec(self):
+        return self._delegate.physical_spec("ts_energy_break_score")
 
 
 # ============================================================================
@@ -2363,101 +1871,44 @@ class TSEnergyBreakScorePolarsNative(SeriesOperator):
 
 @register_operator(name="ts_envelope_boundary_dwell", canonical="ts_envelope_boundary_dwell", backend="polars")
 class TSEnvelopeBoundaryDwellPolarsNative(SeriesOperator):
-    """Time spent near envelope boundaries"""
-
-    metadata = OperatorMetadata(
-        name="ts_envelope_boundary_dwell",
-        category="time_series",
-        description="Fraction of time near upper/lower Bollinger band",
-        param_names=["x", "upper", "lower", "window", "quantile"],
-        return_type="series",
-        tags=["time_series", "rolling", "envelope", "pit_safe"],
+    """Native Polars implementation preserving supplied envelope band panels."""
+    from factor_engine.cleaned_operators.envelope import _metadata as _envelope_metadata
+    metadata = _envelope_metadata(
+        "ts_envelope_boundary_dwell", "Native equivalent of the authored envelope formula",
+        ["x","upper","lower","window","quantile"], unit="ratio", cost=2,
     )
-    metadata.param_specs = {
-        "window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
-        "quantile": ParamSpec(dtype=float, min=0.0, max=1.0, default=0.1, param_role=ParamRole.STATE_THRESHOLD),
-    }
 
-    def _calculate_series(self, x, upper=None, lower=None, window=20, quantile=0.1, **kwargs):
-        # R4-100 parity: canonical (x, upper, lower, window, quantile).
-        feature = x
-        num_std = 2.0
-        boundary_threshold = quantile
-        mean = feature.rolling(window).mean()
-        std = feature.rolling(window).std()
-        
-        upper = mean + num_std * std
-        lower = mean - num_std * std
-        
-        # Distance to boundaries normalized by band width
-        width = upper - lower
-        dist_to_upper = (upper - feature) / width.replace(0, np.nan)
-        dist_to_lower = (feature - lower) / width.replace(0, np.nan)
-        
-        # Count periods near boundaries
-        near_boundary = ((dist_to_upper < boundary_threshold) | (dist_to_lower < boundary_threshold)).astype(int)
-        return near_boundary.rolling(window).mean()
+    def _calculate_series(self, x, upper, lower, window=20, quantile=0.8, **kwargs):
+        from factor_engine.cleaned_operators.envelope import _polars_envelope
+        return _polars_envelope("dwell", (x, upper, lower), window, quantile)
 
 
 @register_operator(name="ts_envelope_compression", canonical="ts_envelope_compression", backend="polars")
 class TSEnvelopeCompressionPolarsNative(SeriesOperator):
-    """Envelope compression: bandwidth narrowing"""
-
-    metadata = OperatorMetadata(
-        name="ts_envelope_compression",
-        category="time_series",
-        description="Rate of Bollinger band width decrease",
-        param_names=["upper", "lower", "mid", "window"],
-        return_type="series",
-        tags=["time_series", "rolling", "envelope", "pit_safe"],
+    """Native Polars implementation preserving supplied envelope band panels."""
+    from factor_engine.cleaned_operators.envelope import _metadata as _envelope_metadata
+    metadata = _envelope_metadata(
+        "ts_envelope_compression", "Native equivalent of the authored envelope formula",
+        ["upper","lower","mid","window"], unit="ratio", cost=2,
     )
-    metadata.param_specs = {
-        "window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
-    }
 
-    def _calculate_series(self, upper, lower=None, mid=None, window=20, **kwargs):
-        # R4-100 parity: canonical (upper, lower, mid, window).
-        feature = mid if mid is not None else (upper + lower) / 2.0 if lower is not None else upper
-        num_std = 2.0
-        std = feature.rolling(window).std()
-        bandwidth = 2 * num_std * std
-        
-        # Rate of change in bandwidth (negative = compression)
-        return bandwidth.pct_change()
+    def _calculate_series(self, upper, lower, mid, window=20, **kwargs):
+        from factor_engine.cleaned_operators.envelope import _polars_envelope
+        return _polars_envelope("compression", (upper, lower, mid), window)
 
 
 @register_operator(name="ts_envelope_pressure", canonical="ts_envelope_pressure", backend="polars")
 class TSEnvelopePressurePolarsNative(SeriesOperator):
-    """Envelope pressure: position within band * momentum"""
-
-    metadata = OperatorMetadata(
-        name="ts_envelope_pressure",
-        category="time_series",
-        description="Bollinger band position weighted by momentum",
-        param_names=["x", "upper", "lower", "window"],
-        return_type="series",
-        tags=["time_series", "rolling", "envelope", "pit_safe"],
+    """Native Polars implementation preserving supplied envelope band panels."""
+    from factor_engine.cleaned_operators.envelope import _metadata as _envelope_metadata
+    metadata = _envelope_metadata(
+        "ts_envelope_pressure", "Native equivalent of the authored envelope formula",
+        ["x","upper","lower","window"], unit="ratio", cost=2,
     )
-    metadata.param_specs = {
-        "window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
-    }
 
-    def _calculate_series(self, x, upper=None, lower=None, window=20, **kwargs):
-        # R4-100 parity: canonical (x, upper, lower, window); ``num_std`` is
-        # legacy.
-        feature = x
-        num_std = 2.0
-        mean = feature.rolling(window).mean()
-        std = feature.rolling(window).std()
-
-        # Position within bands: -1 (lower) to +1 (upper)
-        position = (feature - mean) / (num_std * std).replace(0, np.nan)
-        
-        # Momentum
-        momentum = feature.pct_change()
-        
-        # Pressure = position * momentum
-        return position * momentum
+    def _calculate_series(self, x, upper, lower, window=20, **kwargs):
+        from factor_engine.cleaned_operators.envelope import _polars_envelope
+        return _polars_envelope("pressure", (x, upper, lower), window)
 
 
 # ============================================================================
@@ -2543,51 +1994,16 @@ class TSEvtThresholdStabilityPolarsNative(SeriesOperator):
 
 @register_operator(name="ts_expectile_beta", canonical="ts_expectile_beta", backend="polars")
 class TSExpectileBetaPolarsNative(SeriesOperator):
-    """Eager CPU expectile-regression bridge; not a native Polars expression."""
-
-    metadata = OperatorMetadata(
-        name="ts_expectile_beta",
-        category="time_series",
-        description="Beta using expectile regression at given tau",
-        param_names=["y", "x", "window", "tau", "n_min"],
-        return_type="series",
-        tags=["time_series", "rolling", "expectile", "regression", "pit_safe", "cpu_udf"],
-    )
-    # metadata.param_specs intentionally omitted - use canonical contract from pandas backend
-
-    from factor_engine.backend.contracts import ExecutionKind, PhysicalImplementationSpec
-    _physical_spec = PhysicalImplementationSpec(
-        canonical="ts_expectile_beta", backend="polars",
-        execution_kind=ExecutionKind.DELEGATE_PYTHON,
-        materializes_full_panel=True, requires_sorted=True,
-        supports_nulls=True, supports_nan=True, supports_inf=True,
-        implementation_source_hash="9c3c915c96358bb939147fcee8de51e129c30503f9ecd57aa21d7563acd02f65",
-        emitter_identity="polars.DataFrame.with_columns:python_pair_rolling_kernel",
-        kernel_identity="advanced_expectile._expectile_slope+rolling_pack.map_pair_rolling",
-        parameter_domain_hash="63e9baa85ffe00b26cf31e1af8275307a79f5dc47d82ae6fb42a9ee483b13aec",
-        semantic_contract_hash="703de65db62a7e1e648b4c37d50604dd127871e72d1bcde4c9e12b46f4b6eb53",
-        notes="Eager shared Python/NumPy asymmetric regression; production evidence not certified.",
-    )
-
-    def _calculate_series(self, y, x, window=60, tau=0.1, n_min=3, **kwargs):
-        from factor_engine.cleaned_operators.advanced_expectile import _expectile_slope
-        from factor_engine.cleaned_operators.rolling_pack import map_pair_rolling
-        from factor_engine.cleaned_operators.common._polars_bridge import align_cols
-        cols = align_cols(y, x)
-        if "stock_code" in y.columns and y["stock_code"].n_unique() > 1:
-            raise ValueError("expectile CPU bridge requires a wide or single-stock panel")
-        w, tt, nmin = int(window), float(tau), int(n_min)
-        if w < 4 or not 0.0 < tt < 1.0 or nmin < 1:
-            raise ValueError("expectile regression requires window>=4, 0<tau<1 and n_min>=1")
-        result = map_pair_rolling(
-            y.select(cols).to_numpy().astype(float),
-            x.select(cols).to_numpy().astype(float),
-            w, lambda a, b: _expectile_slope(a, b, tt, nmin),
-        )
-        return y.with_columns([
-            pl.Series(name, result[:, index], dtype=pl.Float64)
-            for index, name in enumerate(cols)
-        ])
+    """Exact CPU expectile implementation; shared strict canonical defaults."""
+    from factor_engine.cleaned_operators.common import expectile_native as _expectile
+    metadata = _expectile.metadata("ts_expectile_beta")
+    @property
+    def _contract_callable(self):
+        return self._expectile.reference("ts_expectile_beta")._calculate_series
+    def _calculate_series(self,*args,**kwargs):
+        return self._expectile.calculate("ts_expectile_beta",*args,**kwargs)
+    def physical_spec(self):
+        return self._expectile.physical_spec("ts_expectile_beta")
 
 
 @register_operator(name="ts_expectile_beta_spread", canonical="ts_expectile_beta_spread", backend="polars")
@@ -2872,59 +2288,47 @@ class TSExtremalIndexPolarsNative(SeriesOperator):
         return result
 
 
-@register_operator(name="ts_extreme_cluster_ratio", canonical="ts_extreme_cluster_ratio", backend="polars")
+@register_operator(name="ts_extreme_cluster_ratio", canonical="ts_extreme_cluster_ratio", backend="polars", source="factor_dsl_polars_native", replace=True, expected_old_source="pandas_bridge", replacement_reason="Authoritative tail-cluster delegate replaces compatibility bridge")
 class TSExtremeClusterRatioPolarsNative(SeriesOperator):
-    """Ratio of clustered to isolated extreme events"""
+    """Exact Polars-to-Pandas bridge to the authoritative tail-cluster kernel."""
 
     metadata = OperatorMetadata(
         name="ts_extreme_cluster_ratio",
-        category="time_series",
-        description="Clustered extremes / isolated extremes",
-        param_names=["x","window","threshold","q","side","min_periods"],
+        category="time_series_risk",
+        description="Adjacent extreme-event pairs divided by extreme count.",
+        param_names=["x", "window", "threshold", "q", "side", "min_periods"],
         return_type="series",
-        tags=["time_series", "rolling", "extreme", "pit_safe"],
+        tags=["time_series_risk", "rolling", "extreme", "pit_safe", "causal", "pandas_delegate"],
     )
     metadata.param_specs = {
-        "window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
-        "threshold": ParamSpec(dtype=float, min=0.0, max=1.0, default=0.95, param_role=ParamRole.STATE_THRESHOLD),
+        "window": ParamSpec(dtype=int, min=2, default=60, history_semantics="max_rows", param_role=ParamRole.HORIZON),
+        "threshold": ParamSpec(alternatives=(ParamSpec(dtype=str), ParamSpec(dtype=float)), default="quantile", param_role=ParamRole.STATE_THRESHOLD),
+        "q": ParamSpec(dtype=float, min=1e-12, max=1.0 - 1e-12, default=0.9, active_when=("threshold", ("quantile",)), param_role=ParamRole.ESTIMATOR_RESOLUTION),
+        "side": ParamSpec(dtype=str, choices=("absolute", "upper", "lower"), default="absolute", searchable=False, param_role=ParamRole.POLICY),
+        "min_periods": ParamSpec(dtype=int, min=2, default=2, searchable=False, param_role=ParamRole.SUPPORT_POLICY),
     }
+    from factor_engine.cleaned_operators.base import RelationalParamSpec as _RelationalParamSpec
+    metadata.relational_specs = [_RelationalParamSpec("min_periods <= window")]
+    _physical_spec = PhysicalImplementationSpec(
+        canonical="ts_extreme_cluster_ratio", backend="polars",
+        execution_kind=ExecutionKind.POLARS_PANDAS_DELEGATE,
+        materializes_full_panel=True, requires_sorted=True,
+        supports_nulls=True, supports_nan=True, supports_inf=False,
+        implementation_source_hash="bc32b5ce81061dee17dbf5fb783081d14ab224cf88676c773fdd0f131126c6a8",
+        emitter_identity="rolling_pack._call_pandas_delegate:polars_to_pandas_to_polars:v1",
+        kernel_identity="robust_tail:TsExtremeClusterRatio._calculate_series:v2",
+        parameter_domain_hash="8e1ae01d4f720a85f441e2be8b2da8a61029818fbef5cac2604a2cb9e2fcb330",
+        semantic_contract_hash="1281240e0f30b7a91c41d679a8594f3214e9989cc32060c51c99eb83da97afc3",
+        notes="Exact eager pandas-reference delegation; never a native Polars expression.",
+    )
 
     def _calculate_series(self, x, window=60, threshold="quantile", q=0.9, side="absolute", min_periods=2, **kwargs):
-        feature = x
-        # R4-100 parity: canonical (x, window, threshold, q, side, min_periods);
-        # ``cluster_gap`` is legacy.
-        result = pd.Series(index=feature.index, dtype=float)
-        
-        for i in range(len(feature)):
-            if i < window - 1:
-                result.iloc[i] = np.nan
-                continue
-            
-            window_data = feature.iloc[max(0, i - window + 1):i + 1].dropna()
-            if len(window_data) < 10:
-                result.iloc[i] = np.nan
-                continue
-            
-            thresh_value = window_data.quantile(threshold)
-            extremes = (window_data > thresh_value).astype(int)
-            
-            if extremes.sum() == 0:
-                result.iloc[i] = np.nan
-                continue
-            
-            # Find gaps between extremes
-            extreme_indices = np.where(extremes.values)[0]
-            if len(extreme_indices) < 2:
-                result.iloc[i] = 0.0  # All isolated
-                continue
-            
-            gaps = np.diff(extreme_indices)
-            clustered = (gaps <= cluster_gap).sum()
-            isolated = len(extreme_indices) - clustered - 1
-            
-            result.iloc[i] = clustered / isolated if isolated > 0 else np.inf
-        
-        return result
+        return _call_pandas_delegate(
+            "ts_extreme_cluster_ratio", (x,), {
+                "window": window, "threshold": threshold, "q": q,
+                "side": side, "min_periods": min_periods, **kwargs,
+            },
+        )
 
 
 @register_operator(name="ts_extremogram", canonical="ts_extremogram", backend="polars")
@@ -2978,46 +2382,15 @@ class TSExtremogramPolarsNative(SeriesOperator):
 
 @register_operator(name="ts_feature_effective_rank", canonical="ts_feature_effective_rank", backend="polars")
 class TSFeatureEffectiveRankPolarsNative(SeriesOperator):
-    """Effective rank of feature (entropy-based diversity measure)"""
+    """Exact Polars-panel delegate to shared robust feature geometry."""
+    from factor_engine.cleaned_operators.feature_geometry import TsFeatureEffectiveRank as _Reference
+    metadata = copy.deepcopy(_Reference.metadata)
+    metadata.tags = list(metadata.tags or []) + ["polars", "delegate:pandas_numpy"]
 
-    metadata = OperatorMetadata(
-        name="ts_feature_effective_rank",
-        category="time_series",
-        description="Effective rank via entropy of normalized squared values",
-        param_names=["f1","f2","f3","window"],
-        return_type="series",
-        tags=["time_series", "rolling", "diversity", "pit_safe"],
-    )
-    metadata.param_specs = {
-        "window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
-    }
-
-    def _calculate_series(self, f1, f2=None, f3=None, window=20, **kwargs):
-        feature = f1
-        result = pd.Series(index=feature.index, dtype=float)
-        
-        for i in range(len(feature)):
-            if i < window - 1:
-                result.iloc[i] = np.nan
-                continue
-            
-            window_data = feature.iloc[max(0, i - window + 1):i + 1].dropna()
-            if len(window_data) < 2:
-                result.iloc[i] = np.nan
-                continue
-            
-            # Normalize squared values to sum to 1 (like eigenvalue distribution)
-            squared = window_data.values ** 2
-            probs = squared / squared.sum()
-            probs = probs[probs > 0]
-            
-            # Entropy-based effective rank
-            entropy = -np.sum(probs * np.log(probs))
-            eff_rank = np.exp(entropy)
-            
-            result.iloc[i] = eff_rank
-        
-        return result
+    def _calculate_series(self, f1, f2, f3, window=60, **kwargs):
+        return _call_pandas_delegate(
+            "ts_feature_effective_rank", (f1, f2, f3), {"window": window, **kwargs},
+        )
 
 
 # Note: We already have ts_ewm_cov in ts_batch1.py, so skipping duplicate

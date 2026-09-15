@@ -1,0 +1,1 @@
+{"command": [".venv/bin/python", "-m", "pytest", "factor_engine/tests/operators/test_r6_stateful_sequential_contract.py", "-q", "--tb=short", "--show-capture=no"], "returncode": 1, "sampled_peak_family_rss_bytes": 796782592, "sampling_seconds": 0.1, "seconds": 53.275245419936255, "test_guard_reason": null, "hard_memory_cap": false}

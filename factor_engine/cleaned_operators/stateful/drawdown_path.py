@@ -17,7 +17,8 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from factor_engine.cleaned_operators.base import SeriesOperator, register_operator
+from factor_engine.cleaned_operators.base import ParamRole, ParamSpec, SeriesOperator, register_operator
+from factor_engine.cleaned_operators.closure.strict_scalar import strict_int
 from factor_engine.cleaned_operators.rolling_pack import frame_like
 from factor_engine.cleaned_operators.stateful._common import metadata
 
@@ -65,9 +66,17 @@ class TsRecoveryFraction(SeriesOperator):
         unit="ratio",
         category="downside_risk",
     )
+    metadata.panel_params = ("x",)
+    metadata.panel_arity = 1
+    metadata.scalar_params = ("window",)
+    metadata.output_unit = "dimensionless"
+    metadata.param_specs = {
+        "window": ParamSpec(dtype=int, min=2, default=60,
+                            history_semantics="max_rows", param_role=ParamRole.HORIZON),
+    }
 
     def _calculate_series(self, x: pd.DataFrame, window: int = 60, **_: Any) -> pd.DataFrame:
-        w = max(2, int(window))
+        w = strict_int(window, "window", lower=2)
         xv = x.to_numpy(dtype=float)
         rows, cols = xv.shape
         out = np.full((rows, cols), np.nan, dtype=float)
@@ -128,9 +137,17 @@ class TsCurrentDrawdownArea(SeriesOperator):
         unit="ratio",
         category="downside_risk",
     )
+    metadata.panel_params = ("x",)
+    metadata.panel_arity = 1
+    metadata.scalar_params = ("window",)
+    metadata.output_unit = "dimensionless"
+    metadata.param_specs = {
+        "window": ParamSpec(dtype=int, min=2, default=60,
+                            history_semantics="max_rows", param_role=ParamRole.HORIZON),
+    }
 
     def _calculate_series(self, x: pd.DataFrame, window: int = 60, **_: Any) -> pd.DataFrame:
-        w = max(2, int(window))
+        w = strict_int(window, "window", lower=2)
         xv = x.to_numpy(dtype=float)
         rows, cols = xv.shape
         out = np.full((rows, cols), np.nan, dtype=float)
@@ -146,11 +163,11 @@ class TsCurrentDrawdownArea(SeriesOperator):
                     continue
                 vals = seg
                 running_max = np.maximum.accumulate(vals)
-                # Last new-high position = last index where the running max
-                # increased (or the first row).  Only rows from there on are the
-                # current, not-yet-recovered episode.
-                new_high = np.r_[True, running_max[1:] > running_max[:-1]]
-                last_peak = int(np.flatnonzero(new_high)[-1])
+                # A repeated touch of the running peak fully recovers the old
+                # episode and starts a new zero-depth episode.  Use the most
+                # recent peak touch, not only strict innovations.
+                peak_touch = vals == running_max
+                last_peak = int(np.flatnonzero(peak_touch)[-1])
                 dd = 1.0 - vals / running_max
                 out[row, col] = float(np.sum(dd[last_peak:]))
         return frame_like(x, out)

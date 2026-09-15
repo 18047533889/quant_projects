@@ -350,7 +350,10 @@ def backend_context_for(
     if route_backend is None:
         route_backend = "pandas_numpy"
     # 归一 backend 名 → HybridExecutor 分类用名。
-    if route_backend in {"polars_panel", "polars_long", "polars"}:
+    # HybridLong materializes SQL subtrees as long LazyFrames and its final
+    # consumer is PolarsLong. Treating its public label as unknown/pandas
+    # binds pandas-only read waves that the native consumer cannot access.
+    if route_backend in {"polars_panel", "polars_long", "polars", "hybrid_long", "auto_long"}:
         norm = "polars"
     elif route_backend in {"duckdb_sql", "clickhouse_sql", "sql"}:
         norm = "duckdb_sql"
@@ -687,7 +690,7 @@ def lower_root_plan(
         task_id=f"root:{factor_name}",
         op=str(getattr(plan, "op", "") or "root"),
         task_type=TASK_ROOT,
-        inputs=(prev_stage_id,) if len(stages) > 1 else (),
+        inputs=(prev_stage_id,),
         consumers=(),
         execution_scope=execution_scope,
         source_scope=source_scope,
@@ -705,13 +708,15 @@ def lower_root_plan(
         executable=True,
     )
     stages.append(root_task)
-    # 连接 barrier stages → ROOT。
-    if len(stages) > 1:
-        for i in range(1, len(stages) - 1):
-            prev_consumers = stages[i].consumers
+    # The root depends only on the final stage. Earlier stages already feed
+    # the chain; adding extra consumer-only edges releases the root before its
+    # real predecessor and corrupts reverse-topological critical-path scoring.
+    for i, stage in enumerate(stages[:-1]):
+        if stage.task_id == prev_stage_id:
             stages[i] = _with_consumers(
-                stages[i], tuple(sorted((*prev_consumers, root_task.task_id)))
+                stage, tuple(sorted(set(stage.consumers) | {root_task.task_id}))
             )
+            break
     return stages
 
 

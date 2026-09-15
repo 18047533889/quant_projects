@@ -167,6 +167,7 @@ class SchemaEpochGate:
                 known_hash_by_path = hash_by_path
                 known_fields = epoch_fields
         groups: dict[str, dict[str, Any]] = {}
+        manifest_fingerprints: dict[str, str] = {}
         for p in paths:
             path_str = str(p)
             shash = known_hash_by_path.get(path_str)
@@ -183,8 +184,14 @@ class SchemaEpochGate:
                         ) from exc
                     continue
                 fields = schema
-                shash = schema_fingerprint(schema)
-            fp = schema_fingerprint(fields)
+                fp = schema_fingerprint(fields)
+            else:
+                # Hash each supplied manifest field mapping once, not once
+                # per object. Recompute from actual fields rather than trust
+                # the manifest's claimed hash; cache only within this call.
+                if shash not in manifest_fingerprints:
+                    manifest_fingerprints[shash] = schema_fingerprint(fields)
+                fp = manifest_fingerprints[shash]
             g = groups.setdefault(fp, {"fields": dict(fields), "objects": []})
             g["objects"].append(path_str)
         return [

@@ -26,6 +26,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from factor_engine.backend.operator_errors import OperatorParameterError
+
 # Register the owned modules directly (order matters for ts_argmax: gtja_compat
 # replaces the time_series pandas backend with the GTJA-compatible semantic).
 import factor_engine.cleaned_operators.common.group  # noqa: F401
@@ -323,5 +325,5 @@ def test_ts_argmax_no_hidden_window_override() -> None:
     # multiple-values TypeError) — the dual authority is gone.
     op = OperatorRegistry.get("ts_argmax", backend="pandas_numpy")
     x = _panel([1.0, 3.0, 2.0, 3.0], ["A"])
-    with pytest.raises(TypeError):
+    with pytest.raises((TypeError, OperatorParameterError), match="multiple values"):
         op.calculate(x, 3, window=9)

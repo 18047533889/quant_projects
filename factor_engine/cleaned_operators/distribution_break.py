@@ -50,6 +50,9 @@ def _metadata(
         category="distribution_shift",
         description=description,
         param_names=params,
+        panel_params=("x","y") if name=="ts_copula_central_asymmetry" else ("f1","f2","f3"),
+        scalar_params=tuple(params[2:]) if name=="ts_copula_central_asymmetry" else tuple(params[3:]),
+        output_unit="dimensionless",
         return_type="series",
         tags=[
             "distribution_shift", "daily", "pit_safe", "causal", "typed_v2",
@@ -57,11 +60,35 @@ def _metadata(
             f"signature:{','.join(params)}->series", "domain:price_volume",
             f"unit:{unit}", f"cost:{cost}",
         ],
-        param_specs=dict(param_specs) if param_specs else {},
+        param_specs=_specs(name,param_specs),
     )
 
 
+def _specs(name,original):
+    if name=="ts_copula_central_asymmetry":
+        return dict(original or {})
+    fields={
+        "recent_window":ParamSpec(dtype=int,min=2,default=20,param_role=ParamRole.HORIZON,
+                                  history_formula="recent_window + prior_window + 1"),
+        "prior_window":ParamSpec(dtype=int,min=2,default=60,param_role=ParamRole.HORIZON),
+    }
+    if name=="ts_energy_break_score":
+        fields["window"]=ParamSpec(dtype=int,min=3,default=60,param_role=ParamRole.HORIZON,
+                                   history_formula="window + recent_window + prior_window + 1")
+    return fields
+
+
+def _finite_output(value):
+    if not np.isfinite(value) or abs(value)>np.finfo(float).max:
+        return np.nan
+    result=float(value)
+    return np.nan if value!=0 and result==0 else result
+
+
 def _stack_feats(features: list[pd.DataFrame]) -> np.ndarray:
+    first=features[0]
+    if any(not first.index.equals(f.index) or not first.columns.equals(f.columns) for f in features[1:]):
+        raise ValueError("energy-shift panels must have identical axes")
     return np.stack([f.to_numpy(dtype=float) for f in features], axis=2)
 
 
@@ -73,6 +100,7 @@ def _euclidean_pairs(a: np.ndarray, b: np.ndarray) -> np.ndarray:
     energy distance ``2 E|X-Y| - E|X-X'| - E|Y-Y'|``.  A distance is a distance;
     degenerate zero-distance cases are handled at the caller (``max(ed, 0)``).
     """
+    a=np.asarray(a,dtype=np.longdouble);b=np.asarray(b,dtype=np.longdouble)
     diff = a[:, None, :] - b[None, :, :]
     return np.sqrt(np.sum(diff * diff, axis=2))
 
@@ -96,12 +124,12 @@ def _energy_distance(X: np.ndarray, Y: np.ndarray) -> float:
     dxy = _euclidean_pairs(X, Y)
     dxx = _euclidean_pairs(X, X)
     dyy = _euclidean_pairs(Y, Y)
-    first = float(np.sum(dxy)) / (m * n)
+    first = np.sum(dxy) / (m * n)
     # U-stat: exclude the diagonal (self-distances); denominator m*(m-1).
-    second = float(np.sum(dxx) - np.trace(dxx)) / (m * (m - 1))
-    third = float(np.sum(dyy) - np.trace(dyy)) / (n * (n - 1))
+    second = (np.sum(dxx) - np.trace(dxx)) / (m * (m - 1))
+    third = (np.sum(dyy) - np.trace(dyy)) / (n * (n - 1))
     ed = 2.0 * first - second - third
-    return float(max(ed, 0.0))
+    return _finite_output(max(ed, 0.0))
 
 
 def _joint_shift_cell(block: np.ndarray, recent: int, prior: int) -> float:
@@ -120,11 +148,14 @@ def _joint_shift_cell(block: np.ndarray, recent: int, prior: int) -> float:
         return np.nan
     prior_block = block[n - r - p - 1 : n - r - 1]      # [t-r-p, t-r-1]
     recent_block = block[n - r - 1 : n - 1]             # [t-r, t-1]
-    d = prior_block.shape[1]
+    if not np.isfinite(prior_block).all() or not np.isfinite(recent_block).all():
+        return np.nan
+    prior_block=prior_block.astype(np.longdouble)
+    recent_block=recent_block.astype(np.longdouble)
     med = np.median(prior_block, axis=0)
-    mad = 1.4826 * np.median(np.abs(prior_block - med), axis=0)
-    scale = np.where(mad > _EPS, mad, np.std(prior_block, axis=0))
-    if np.any(~np.isfinite(scale)) or np.any(scale <= _EPS):
+    mad = np.longdouble("1.4826") * np.median(np.abs(prior_block - med), axis=0)
+    scale = np.where(mad > 0, mad, np.std(prior_block, axis=0))
+    if np.any(~np.isfinite(scale)) or np.any(scale <= 0):
         return np.nan
     X = (recent_block - med) / scale
     Y = (prior_block - med) / scale
@@ -151,8 +182,9 @@ def _joint_shift_series(feats: np.ndarray, recent: int, prior: int) -> np.ndarra
 
 def _robust_z(series: np.ndarray, window: int, min_periods: int) -> np.ndarray:
     n = series.shape[0]
-    w = max(2, int(window))
-    mp = max(2, int(min_periods))
+    from factor_engine.cleaned_operators.common.strict_params import strict_int
+    w = strict_int(window,"window",minimum=2)
+    mp = strict_int(min_periods,"min_periods",minimum=2,maximum=w)
     out = np.full(n, np.nan)
     for t in range(n):
         lo = max(0, t - w)
@@ -163,12 +195,13 @@ def _robust_z(series: np.ndarray, window: int, min_periods: int) -> np.ndarray:
         cur = series[t]
         if not np.isfinite(cur):
             continue
-        med = float(np.median(finite))
-        mad = 1.4826 * float(np.median(np.abs(finite - med)))
-        scale = mad if mad > _EPS else float(np.std(finite))
-        if scale <= _EPS:
+        finite=finite.astype(np.longdouble)
+        med = np.median(finite)
+        mad = np.longdouble("1.4826") * np.median(np.abs(finite - med))
+        scale = mad if mad > 0 else np.std(finite)
+        if scale <= 0:
             continue
-        out[t] = float((cur - med) / scale)
+        out[t] = _finite_output((np.longdouble(cur) - med) / scale)
     return out
 
 
@@ -220,8 +253,9 @@ class TsJointEnergyShift(SeriesOperator):
         prior_window: int = 60,
         **_: Any,
     ) -> pd.DataFrame:
-        r = max(2, int(recent_window))
-        p = max(2, int(prior_window))
+        from factor_engine.cleaned_operators.common.strict_params import strict_int
+        r = strict_int(recent_window,"recent_window",minimum=2)
+        p = strict_int(prior_window,"prior_window",minimum=2)
         feats = _stack_feats([f1, f2, f3])
         return frame_like(f1, _joint_shift_series(feats, r, p))
 
@@ -270,9 +304,11 @@ class TsEnergyBreakScore(SeriesOperator):
         prior_window: int = 60,
         **_: Any,
     ) -> pd.DataFrame:
-        w = max(2, int(window))
-        r = max(2, int(recent_window))
-        p = max(2, int(prior_window))
+        from factor_engine.cleaned_operators.common.strict_params import strict_int
+        w = strict_int(window,"window",minimum=3)
+        from factor_engine.cleaned_operators.common.strict_params import strict_int
+        r = strict_int(recent_window,"recent_window",minimum=2)
+        p = strict_int(prior_window,"prior_window",minimum=2)
         feats = _stack_feats([f1, f2, f3])
         shifts = _joint_shift_series(feats, r, p)
         rows, cols = shifts.shape
@@ -381,17 +417,22 @@ class TsCopulaCentralAsymmetry(SeriesOperator):
         unit="distance",
         cost=7,
         param_specs={
-            "window": ParamSpec(dtype=int, min=4, param_role=ParamRole.ESTIMATOR_RESOLUTION, searchable=False),
-            "grid": ParamSpec(dtype=int, min=4, param_role=ParamRole.ESTIMATOR_RESOLUTION, searchable=False),
+            "window": ParamSpec(dtype=int, min=10, default=120, history_semantics="max_rows", param_role=ParamRole.ESTIMATOR_RESOLUTION, searchable=False),
+            "grid": ParamSpec(dtype=int, min=4, default=8, param_role=ParamRole.ESTIMATOR_RESOLUTION, searchable=False),
         },
     )
 
     def _calculate_series(
         self, x: pd.DataFrame, y: pd.DataFrame, window: int = 120, grid: int = 8, **_: Any
     ) -> pd.DataFrame:
+        from factor_engine.cleaned_operators.common.strict_params import strict_int
+        w=strict_int(window,"window",minimum=10)
+        g=strict_int(grid,"grid",minimum=4)
+        if not x.index.equals(y.index) or not x.columns.equals(y.columns):
+            raise ValueError("copula panels must have identical axes")
         xv = x.to_numpy(dtype=float)
         yv = y.to_numpy(dtype=float)
-        return frame_like(x, _copula_series(xv, yv, window, grid))
+        return frame_like(x, _copula_series(xv, yv, w, g))
 
 
 def _register_surface() -> None:

@@ -13,7 +13,7 @@ Covers :mod:`quant_platform.app.candidate.ingest`:
   by category (enum-indexable), ``conflicts`` detail tuple, ``total`` count,
   ``batch_fingerprint``;
 * ``batch_fingerprint`` — order-independent, content-sensitive, idempotent,
-  ``merkle-v1:`` prefix (an anti-replay token over CARRIED hashes, not a minted
+  ``merkle-v2:`` prefix (an anti-replay token over CARRIED hashes, not a minted
   identity).
 """
 
@@ -236,7 +236,7 @@ def test_reconcile_mixed_batch_counts():
 
 
 def test_reconcile_empty_registry_all_new():
-    report = reconcile_candidates([_manifest(seed="h1"), _manifest(seed="h2")])
+    report = reconcile_candidates([_manifest(seed="h1"), _manifest(seed="h2", factor_name="distinct")])
     assert report[ReconcileReason.NEW] == 2
     assert report.batch_fingerprint
 
@@ -269,7 +269,7 @@ def test_fingerprint_content_sensitive():
 def test_fingerprint_idempotent():
     batch = [_manifest(seed="a"), _manifest(seed="b")]
     assert batch_fingerprint(batch) == batch_fingerprint(batch)
-    assert batch_fingerprint(batch).startswith("merkle-v1:")
+    assert batch_fingerprint(batch).startswith("merkle-v2:")
 
 
 # --- R55 P0-5: the platform mints NO domain identity ------------------------

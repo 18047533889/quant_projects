@@ -67,32 +67,25 @@ class _FakeOp:
 # §1  ParamSpec dtype strictness (items 1-2)
 # ---------------------------------------------------------------------------
 
-def test_declared_int_rejects_string():
-    """window='20' must raise — the runtime never int()s a string (item 1)."""
-    op = _FakeOp(
-        "fake_int", ["x", "window"],
-        {"window": ParamSpec(dtype=int, min=2)},
-        lambda x, window=60, **_: x,
-    )
-    with pytest.raises(Exception, match="integer"):
-        op.calculate(_mk(), window="20")
-    # integral float is still fine (20.0 == 20)
-    out = op.calculate(_mk(), window=20.0)
-    assert out.shape == (40, 3)
-
-
-def test_declared_float_rejects_string_and_nonfinite():
-    op = _FakeOp(
-        "fake_float", ["x", "alpha"],
-        {"alpha": ParamSpec(dtype=float, min=0.0, max=1.0)},
-        lambda x, alpha=0.1, **_: x,
-    )
-    with pytest.raises(Exception, match="real number"):
-        op.calculate(_mk(), alpha="0.05")
-    with pytest.raises(Exception, match="finite"):
-        op.calculate(_mk(), alpha=float("nan"))
-    out = op.calculate(_mk(), alpha=0.05)
-    assert out.shape == (40, 3)
+def test_declared_numeric_strings_bind_once_and_kernel_stays_strict():
+    """R19: numeric declaration permits binder conversion; raw kernels stay strict."""
+    from factor_engine.cleaned_operators.common.strict_params import strict_int, strict_float
+    x=_mk()
+    integer=_FakeOp("fake_int",["x","window"],{"window":ParamSpec(dtype=int,min=2)},
+                    lambda x,window=60,**_: x*strict_int(window,"window"))
+    pd.testing.assert_frame_equal(integer.calculate(x,window="20"),x*20)
+    pd.testing.assert_frame_equal(integer.calculate(x,window=20.),x*20)
+    with pytest.raises((TypeError,ValueError)):
+        strict_int("20","window")
+    for invalid in ("2.5",True,"not-a-number"):
+        with pytest.raises((TypeError,ValueError)):
+            integer.calculate(x,window=invalid)
+    floating=_FakeOp("fake_float",["x","alpha"],{"alpha":ParamSpec(dtype=float,min=0.,max=1.)},
+                     lambda x,alpha=.1,**_: x*strict_float(alpha,"alpha"))
+    pd.testing.assert_frame_equal(floating.calculate(x,alpha="0.05"),x*.05)
+    for invalid in (np.nan,np.inf,"nan","inf",True,"not-a-number"):
+        with pytest.raises((TypeError,ValueError)):
+            floating.calculate(x,alpha=invalid)
 
 
 def test_float_choices_are_enforced():
@@ -210,11 +203,13 @@ def test_registry_catalog_persists_full_contract():
 # §6  DSL numeric-string coercion (item 1 companion)
 # ---------------------------------------------------------------------------
 
-def test_dsl_numeric_string_coerced_at_parser():
-    from factor_engine.api.dsl_parser import _coerce_numeric_string
-
-    assert _coerce_numeric_string("20") == 20 and isinstance(_coerce_numeric_string("20"), int)
-    assert _coerce_numeric_string("0.05") == 0.05 and isinstance(_coerce_numeric_string("0.05"), float)
-    assert _coerce_numeric_string("-3") == -3
-    assert _coerce_numeric_string("doji") is None
-    assert _coerce_numeric_string("upper") is None
+def test_numeric_string_coercion_requires_numeric_declaration():
+    from factor_engine.cleaned_operators.base import bind_numeric_string_if_declared as bind
+    assert bind("20","window",spec=ParamSpec(dtype=int))==20
+    assert isinstance(bind("20","window",spec=ParamSpec(dtype=int)),int)
+    assert bind("0.05","alpha",spec=ParamSpec(dtype=float))==.05
+    assert bind("-3","lag",spec=ParamSpec(dtype=int))==-3
+    # Identifier/string fields and unknown contracts must preserve literal text.
+    for literal in ("20","0.05","doji","upper"):
+        assert bind(literal,"label",spec=ParamSpec(dtype=str))==literal
+        assert bind(literal,"unknown")==literal

@@ -76,7 +76,7 @@ def _write_registry(path: Path, root: Path) -> None:
   time_column: TradeDate
   instrument_column: Symbol
   schema:
-    TradeDate: date
+    TradeDate: timestamp
     Symbol: string
     Close: double
     Open: double
@@ -100,7 +100,7 @@ def _seed(root: Path, source: InMemorySeriesSource) -> None:
 
         rows.append(
             {
-                "TradeDate": timestamp.date(),
+                "TradeDate": timestamp,
                 "Symbol": instrument,
                 "Close": value("close"),
                 "Open": value("open"),

@@ -329,6 +329,30 @@ class LQTPLogicalDataSource(DataSource):
 
     def scan_polars_long(self, columns: list[str]):
         from factor_engine.api.source_ref import decode_source_ref
+        from factor_engine.storage.sources.wave_prefetched_source import WavePrefetchedSourceAdapter
+        # A logical wrapper may be rebuilt around the execution-context wave
+        # adapter. Encoded SourceRefs in that wave have already undergone PIT
+        # materialization: do not ask for their pandas representation again.
+        if (isinstance(self.inner, WavePrefetchedSourceAdapter)
+                and self.inner.has_native_columns(columns)):
+            return self.inner.scan_polars_long(columns)
         if any(decode_source_ref(name) is not None for name in columns):
-            raise NotImplementedError("SourceRef columns currently execute through the certified Pandas/Arrow path")
+            # Preserve the certified PIT/alignment reader, then bridge its
+            # materialized result to the long backend. Never SQL-push financial
+            # rows or bypass visibility/approval checks in load_columns.
+            import polars as pl
+            from factor_engine.backend.polars_lazy import enforce_source_ordering
+            names = list(dict.fromkeys(columns))
+            values = self.load_columns(names)
+            parts = []
+            for name in names:
+                series = values[name]
+                if (not isinstance(series, pd.Series) or not isinstance(series.index, pd.MultiIndex)
+                        or series.index.nlevels != 2 or not series.index.is_unique):
+                    raise ValueError("logical native bridge requires unique date/instrument Series: " + name)
+                parts.append(series.rename(name).rename_axis(["ts", "inst"]))
+            frame = pd.concat(parts, axis=1).reset_index()
+            frame["ts"] = pd.to_datetime(frame["ts"])
+            return enforce_source_ordering(pl.from_pandas(frame).lazy(),
+                instrument_col="inst", time_col="ts", frequency=getattr(self.inner, "frequency", None))
         return self.inner.scan_polars_long(columns)

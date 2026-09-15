@@ -27,7 +27,7 @@ def test_happy_path_stable_hash() -> None:
     payload = {"canonical": "ts_mean", "source": "test", "n": 5}
     h1 = _safe_payload_hash(payload)
     h2 = _safe_payload_hash(dict(payload))
-    assert isinstance(h1, str) and len(h1) == 16
+    assert isinstance(h1, str) and len(h1) == 64
     assert h1 == h2  # sort_keys + stable separators
 
 
@@ -56,4 +56,4 @@ def test_sql_contract_hash_still_works() -> None:
     contract = _sql_contract("ts_mean")
     assert isinstance(contract, dict)
     h = _safe_payload_hash(contract)
-    assert isinstance(h, str) and len(h) == 16
+    assert isinstance(h, str) and len(h) == 64

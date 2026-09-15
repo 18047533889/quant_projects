@@ -1265,6 +1265,14 @@ def evaluate(
             raise UnsupportedMetricError("EvaluationRequest.slices are not supported by public evaluate")
         request_metadata = dict(request.metadata)
         request_fields = {"tier": request.tier, "cost_budget": request.cost_budget}
+        # Keep FE research provenance in both evaluation identity and output.
+        # Transporting a reference is not a numerical certificate or permission
+        # to publish the upstream values.
+        if request.factor_value_ref is not None:
+            if (request.factor_value_ref.factor_ids and
+                    tuple(request.factor_value_ref.factor_ids) != tuple(factor_batch.factor_ids)):
+                raise InvalidContractError("Factor value reference factor axis differs from batch")
+            request_fields["factor_value_ref"] = request.factor_value_ref.to_dict()
         metric_parameters = request.metric_parameters
         portfolio_returns = request.portfolio_returns
         holding_returns = request.holding_returns
@@ -1437,9 +1445,9 @@ def evaluate(
     if any(spec.required_portfolio_leg is not None for spec in resolved_specs.values()) and portfolio_returns is None:
         raise InvalidContractError("Benchmark/capital metrics require an explicitly tagged execution trajectory leg")
     if portfolio_returns is not None:
-        from quant_evaluator.contracts.artifact_types import ProbePortfolioArtifact
-        if not isinstance(portfolio_returns, ProbePortfolioArtifact):
-            raise InvalidContractError("portfolio_returns must be a ProbePortfolioArtifact, never a LabelBundle")
+        from quant_evaluator.contracts.artifact_types import ExecutablePortfolioArtifact, ProbePortfolioArtifact
+        if not isinstance(portfolio_returns, (ProbePortfolioArtifact, ExecutablePortfolioArtifact)):
+            raise InvalidContractError("portfolio_returns must be a typed portfolio artifact, never a LabelBundle")
         if tuple(portfolio_returns.factor_ids) != tuple(factor_batch.factor_ids):
             raise InvalidContractError("Portfolio factor coordinates do not match")
         if tuple(portfolio_returns.time_index) != tuple(label_bundle.observation_time or label_bundle.decision_time):

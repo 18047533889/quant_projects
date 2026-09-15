@@ -392,6 +392,11 @@ def test_qrp_p5_e2e1_real_chain():
         gate_results=("gate-1",),
         policy_ref="policy:1.0",
         created_at="2026-08-27T00:00:00+00:00",
+        universe_ref=UNIVERSE,
+        snapshot_ref=SNAPSHOT,
+        split_ref=SPLIT,
+        recipe_ref=winner_treatment_ref,
+        data_as_of=selection.created_at,
     )
     spec = FactorSetSpec(
         set_id="e2e-set-1",
@@ -400,6 +405,8 @@ def test_qrp_p5_e2e1_real_chain():
         data_snapshot_ref=SNAPSHOT,
         universe_ref=UNIVERSE,
         split_ref=SPLIT,
+        recipe_ref=winner_treatment_ref,
+        selection_as_of=selection.created_at,
         frequency="daily",
         max_factors=1,
     )
@@ -419,6 +426,20 @@ def test_qrp_p5_e2e1_real_chain():
     assert assembled.split_ref == SPLIT
     assert "profit" in assembled.factor_ids
     assert assembled.assembly_hash
+
+    # Production assembly is context-bound: even fully populated evidence
+    # cannot be replayed under a different recipe identity.
+    from dataclasses import replace
+
+    wrong_recipe_spec = replace(spec, recipe_ref="treatment:wrong-recipe")
+    with pytest.raises(ValueError, match="production evidence context mismatch.*recipe_ref"):
+        FactorSetAssembler().assemble(
+            wrong_recipe_spec,
+            [asset],
+            admission_artifacts={"profit": admission},
+            treatment_selection_artifacts={"profit": selection},
+            production=True,
+        )
 
 
 def test_e2e_recipe_variant_evaluates_distinctly():

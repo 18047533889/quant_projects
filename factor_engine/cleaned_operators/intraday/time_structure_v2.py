@@ -28,7 +28,7 @@ from typing import Any, Callable
 import numpy as np
 import pandas as pd
 
-from factor_engine.cleaned_operators.base import register_operator
+from factor_engine.cleaned_operators.base import ParamRole, ParamSpec, register_operator
 from factor_engine.cleaned_operators.intraday._core import (
     _EPS,
     DataDegeneracy,
@@ -46,6 +46,18 @@ from factor_engine.cleaned_operators.intraday._core import (
 
 _MAX_GAP_MINUTES = 10
 _CANONICALS: list[str] = []
+
+_SESSION_TZ_SPEC = ParamSpec(dtype=str, default=None, searchable=False, param_role=ParamRole.POLICY)
+_WINDOW_SPEC = ParamSpec(dtype=int, min=2, default=20, param_role=ParamRole.HORIZON)
+
+
+def _md(name, description, panels, scalars=None, **kwargs):
+    scalar_specs = dict(scalars or {})
+    scalar_specs["session_tz"] = _SESSION_TZ_SPEC
+    return metadata(
+        name, description, [*panels, *scalar_specs], panel_params=tuple(panels),
+        scalar_params=scalar_specs, **kwargs,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -287,9 +299,9 @@ def _lead_lag_panel(
 class IntraBarRangePersistence(SessionAggregationOperator):
     """当日分钟区间（high-low）形状与历史均值曲线的余弦相似度。"""
 
-    metadata = metadata(
+    metadata = _md(
         "intra_bar_range_persistence", "日内 bar 区间曲线跨日延续（余弦）。",
-        ["high", "low", "window"], unit="cosine",
+        ("high", "low"), {"window": _WINDOW_SPEC}, unit="cosine",
         available_at="session_close", same_session_usable=False,
     )
 
@@ -312,9 +324,9 @@ class IntraBarRangePersistence(SessionAggregationOperator):
 class IntraBarRangeDeviation(SessionAggregationOperator):
     """当日分钟区间水平相对历史均值的整体偏差（同槽位平均差异）。"""
 
-    metadata = metadata(
+    metadata = _md(
         "intra_bar_range_deviation", "日内 bar 区间整体高于/低于历史均值。",
-        ["high", "low", "window"], unit="level",
+        ("high", "low"), {"window": _WINDOW_SPEC}, unit="level",
         available_at="session_close", same_session_usable=False,
     )
 
@@ -341,9 +353,9 @@ class IntraBarRangeDeviation(SessionAggregationOperator):
 class IntraTailVolumeShare(SessionAggregationOperator):
     """最大 |分钟收益| 尾部 bar 的成交量占全天比例。"""
 
-    metadata = metadata(
+    metadata = _md(
         "intra_tail_volume_share", "极端分钟涨跌 bar 成交量占比。",
-        ["close", "volume", "tail_quantile"], unit="ratio",
+        ("close", "volume"), {"tail_quantile": ParamSpec(dtype=float, min=0.0, max=1.0, default=0.75, param_role=ParamRole.STATE_THRESHOLD)}, unit="ratio",
         available_at="session_close", same_session_usable=False,
     )
 
@@ -381,9 +393,9 @@ class IntraTailVolumeShare(SessionAggregationOperator):
 class IntraVolumePriceAlignment(SessionAggregationOperator):
     """分钟收益与分钟成交量的日内相关（上涨放量 vs 下跌放量）。"""
 
-    metadata = metadata(
+    metadata = _md(
         "intra_volume_price_alignment", "价量日内相关：corr(minute_return, volume)。",
-        ["close", "volume"], unit="ratio",
+        ("close", "volume"), unit="ratio",
     )
 
     def _calculate_series(self, close, volume, session_tz=None, **_):
@@ -416,9 +428,9 @@ class IntraVolumePriceAlignment(SessionAggregationOperator):
 class IntraUteHigh(SessionAggregationOperator):
     """U 型时间效应-两翼：开收盘边缘窗口已实现方差占全天比例。"""
 
-    metadata = metadata(
+    metadata = _md(
         "intra_ute_high", "开收盘边缘 RV 占比（U 型上翘强度）。",
-        ["close", "edge_minutes"], unit="ratio",
+        ("close",), {"edge_minutes": ParamSpec(dtype=int, min=1, default=30, param_role=ParamRole.ECONOMIC)}, unit="ratio",
     )
 
     def _calculate_series(self, close, edge_minutes=30, session_tz=None, **_):
@@ -458,9 +470,12 @@ class IntraUteHigh(SessionAggregationOperator):
 class IntraUteLow(SessionAggregationOperator):
     """U 型时间效应-午间低谷：中午窗口已实现方差占全天比例。"""
 
-    metadata = metadata(
+    metadata = _md(
         "intra_ute_low", "午间窗口 RV 占比（U 型低谷强度）。",
-        ["close", "mid_start", "mid_end"], unit="ratio",
+        ("close",), {
+            "mid_start": ParamSpec(dtype=int, min=0, max=1440, default=660, param_role=ParamRole.STATE_THRESHOLD),
+            "mid_end": ParamSpec(dtype=int, min=0, max=1440, default=810, param_role=ParamRole.STATE_THRESHOLD),
+        }, unit="ratio",
     )
 
     def _calculate_series(self, close, mid_start=660, mid_end=810, session_tz=None, **_):
@@ -495,9 +510,9 @@ class IntraUteLow(SessionAggregationOperator):
 class IntraSlotVolumeSurprise(SessionAggregationOperator):
     """同槽位成交量相对历史均值的平均偏离（log 尺度）。"""
 
-    metadata = metadata(
+    metadata = _md(
         "intra_slot_volume_surprise", "分钟槽成交量跨日意外度。",
-        ["volume", "window"], unit="level",
+        ("volume",), {"window": _WINDOW_SPEC}, unit="level",
     )
 
     def _calculate_series(self, volume, window=20, session_tz=None, **_):
@@ -517,9 +532,9 @@ class IntraSlotVolumeSurprise(SessionAggregationOperator):
 class IntraSlotAmountSurprise(SessionAggregationOperator):
     """同槽位成交额相对历史均值的平均偏离（log 尺度）。"""
 
-    metadata = metadata(
+    metadata = _md(
         "intra_slot_amount_surprise", "分钟槽成交额跨日意外度。",
-        ["amount", "window"], unit="level",
+        ("amount",), {"window": _WINDOW_SPEC}, unit="level",
     )
 
     def _calculate_series(self, amount, window=20, session_tz=None, **_):
@@ -539,9 +554,9 @@ class IntraSlotAmountSurprise(SessionAggregationOperator):
 class IntraSlotVolatilitySurprise(SessionAggregationOperator):
     """同槽位 bar 区间（波动代理）相对历史均值的平均偏离。"""
 
-    metadata = metadata(
+    metadata = _md(
         "intra_slot_volatility_surprise", "分钟槽波动意外度（log range）。",
-        ["high", "low", "window"], unit="level",
+        ("high", "low"), {"window": _WINDOW_SPEC}, unit="level",
     )
 
     def _calculate_series(self, high, low, window=20, session_tz=None, **_):
@@ -567,9 +582,12 @@ class IntraSlotVolatilitySurprise(SessionAggregationOperator):
 class IntraMarketLeadLagExSelf(SessionAggregationOperator):
     """日内 ex-self 市场领先滞后：corr(r_t, m_{t-k}) - corr(r_t, m_{t+k})。"""
 
-    metadata = metadata(
+    metadata = _md(
         "intra_market_lead_lag_ex_self", "个股 vs 剔除自身市场组合的日内领先滞后。",
-        ["close", "lag", "min_obs"], unit="level", cost=9,
+        ("close",), {
+            "lag": ParamSpec(dtype=int, min=1, default=3, param_role=ParamRole.HORIZON),
+            "min_obs": ParamSpec(dtype=int, min=1, default=10, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+        }, unit="level", cost=9,
     )
 
     def _calculate_series(self, close, lag=3, min_obs=10, session_tz=None, **_):
@@ -588,9 +606,12 @@ class IntraMarketLeadLagExSelf(SessionAggregationOperator):
 class IntraIndustryLeadLagExSelf(SessionAggregationOperator):
     """日内同行业（剔除自身）领先滞后。industry 为日频标签面板。"""
 
-    metadata = metadata(
+    metadata = _md(
         "intra_industry_lead_lag_ex_self", "个股 vs 同行业（剔除自身）日内领先滞后。",
-        ["close", "industry", "lag", "min_obs"], unit="level", cost=10,
+        ("close", "industry"), {
+            "lag": ParamSpec(dtype=int, min=1, default=3, param_role=ParamRole.HORIZON),
+            "min_obs": ParamSpec(dtype=int, min=1, default=10, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+        }, unit="level", cost=10,
         extra_tags=["allow_panel_broadcast"],
     )
 
@@ -614,9 +635,9 @@ class IntraIndustryLeadLagExSelf(SessionAggregationOperator):
 class IntraSessionReturnAsymmetry(SessionAggregationOperator):
     """上午/下午绝对收益强度不对称：(morning - afternoon)/(morning + afternoon)。"""
 
-    metadata = metadata(
+    metadata = _md(
         "intra_session_return_asymmetry", "日内上/下午绝对收益强度差。",
-        ["close"], unit="ratio",
+        ("close",), unit="ratio",
     )
 
     def _calculate_series(self, close, session_tz=None, **_):
@@ -645,9 +666,9 @@ class IntraSessionReturnAsymmetry(SessionAggregationOperator):
 class IntraCloseParticipation(SessionAggregationOperator):
     """收盘前 tail_minutes 分钟成交量占全天比例（尾盘参与度）。"""
 
-    metadata = metadata(
+    metadata = _md(
         "intra_close_participation", "尾盘窗口成交量占比。",
-        ["volume", "tail_minutes"], unit="ratio",
+        ("volume",), {"tail_minutes": ParamSpec(dtype=int, min=1, default=30, param_role=ParamRole.ECONOMIC)}, unit="ratio",
     )
 
     def _calculate_series(self, volume, tail_minutes=30, session_tz=None, **_):
@@ -683,9 +704,9 @@ class IntraCloseParticipation(SessionAggregationOperator):
 class IntraHighLowAffinity(SessionAggregationOperator):
     """日内高点/低点出现时刻与历史均值时刻的相似度（越固定越接近 1）。"""
 
-    metadata = metadata(
+    metadata = _md(
         "intra_high_low_affinity", "日内高低点出现时刻的跨日可重复性。",
-        ["high", "low", "window"], unit="ratio", cost=7,
+        ("high", "low"), {"window": _WINDOW_SPEC}, unit="ratio", cost=7,
     )
 
     def _calculate_series(self, high, low, window=20, session_tz=None, **_):

@@ -8,6 +8,7 @@ from quant_evaluator.contracts.artifact_types import (
     ICSeriesArtifact,
     QuantileReturnArtifact,
     ProbePortfolioArtifact,
+    ExecutablePortfolioArtifact,
     ExposureArtifact,
 )
 from quant_evaluator.contracts.errors import (
@@ -48,6 +49,7 @@ __all__ = [
     "ICSeriesArtifact",
     "QuantileReturnArtifact",
     "ProbePortfolioArtifact",
+    "ExecutablePortfolioArtifact",
     "ExposureArtifact",
     "QuantEvaluatorError",
     "ContractError",

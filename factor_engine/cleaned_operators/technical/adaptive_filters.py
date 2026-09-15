@@ -21,6 +21,7 @@ import polars as pl
 
 from factor_engine.cleaned_operators.base import (
     OperatorMetadata,
+    ParamRole,
     ParamSpec,
     SeriesOperator,
     register_operator,
@@ -167,7 +168,7 @@ class McGinleyDynamic(SeriesOperator):
         unit="price",
         param_specs={
             "window": ParamSpec(dtype=int, min=2),
-            "power": ParamSpec(dtype=float, min=0.1, max=10.0),
+            "power": ParamSpec(dtype=float, min=0.1, max=10.0, param_role=ParamRole.ESTIMATOR_RESOLUTION),
         },
     )
 
@@ -252,7 +253,7 @@ class VIDYA(SeriesOperator):
         unit="price",
         param_specs={
             "window": ParamSpec(dtype=int, min=2),
-            "smooth": ParamSpec(dtype=int, min=1),
+            "smooth": ParamSpec(dtype=int, min=1, param_role=ParamRole.ESTIMATOR_RESOLUTION),
         },
     )
 
@@ -340,7 +341,7 @@ class OneEuroFilter(SeriesOperator):
         unit="price",
         param_specs={
             "min_cutoff": ParamSpec(dtype=float, min=0.001, max=10.0),
-            "beta": ParamSpec(dtype=float, min=0.0, max=10.0),
+            "beta": ParamSpec(dtype=float, min=0.0, max=10.0, param_role=ParamRole.ESTIMATOR_RESOLUTION),
         },
     )
 
@@ -413,8 +414,8 @@ class NLMSFilter(SeriesOperator):
         unit="price",
         param_specs={
             "order": ParamSpec(dtype=int, min=1, max=100),
-            "mu": ParamSpec(dtype=float, min=0.0, max=2.0),
-            "eps": ParamSpec(dtype=float, min=1e-12, max=1.0),
+            "mu": ParamSpec(dtype=float, min=0.0, max=2.0, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+            "eps": ParamSpec(dtype=float, min=1e-12, max=1.0, param_role=ParamRole.NUMERICAL),
         },
     )
 
@@ -503,8 +504,8 @@ class RLSFilter(SeriesOperator):
         unit="price",
         param_specs={
             "order": ParamSpec(dtype=int, min=1, max=50),
-            "lambda_": ParamSpec(dtype=float, min=0.9, max=1.0),
-            "delta": ParamSpec(dtype=float, min=0.01, max=100.0),
+            "lambda_": ParamSpec(dtype=float, min=0.9, max=1.0, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+            "delta": ParamSpec(dtype=float, min=0.01, max=100.0, param_role=ParamRole.NUMERICAL),
         },
     )
 
@@ -858,6 +859,14 @@ class RLSFilterPolars(PolarsSeriesOp):
 
     def _calculate_series(self, x, order=5, lambda_=0.99, delta=1.0, **_):
         return _rls_polars(x, order, lambda_, delta)
+
+
+# Keep the Polars twins on the exact same scalar contracts and roles.
+McGinleyDynamicPolars.metadata.param_specs = dict(McGinleyDynamic.metadata.param_specs)
+VIDYAPolars.metadata.param_specs = dict(VIDYA.metadata.param_specs)
+OneEuroFilterPolars.metadata.param_specs = dict(OneEuroFilter.metadata.param_specs)
+NLMSFilterPolars.metadata.param_specs = dict(NLMSFilter.metadata.param_specs)
+RLSFilterPolars.metadata.param_specs = dict(RLSFilter.metadata.param_specs)
 
 
 # ---------------------------------------------------------------------------

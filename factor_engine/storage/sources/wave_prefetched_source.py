@@ -73,6 +73,13 @@ class WavePrefetchedSourceAdapter:
             cached.update(self.inner.load_columns(missing))
         return cached
 
+    def has_native_columns(self, columns: Iterable[str]) -> bool:
+        """Whether one certified native wave covers this exact projection."""
+        requested = frozenset(columns)
+        with self._lock:
+            return any(requested.issubset(available)
+                       for available, _frame in self._native_frames.values())
+
     def scan_polars_long(self, columns: list[str]):
         requested = frozenset(columns)
         with self._lock:

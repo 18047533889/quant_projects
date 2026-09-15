@@ -46,7 +46,7 @@ def series_to_long_table(
     keep = [timestamp_col, asset_col, value_col]
     out = frame[keep].copy()
     out[timestamp_col] = pd.to_datetime(out[timestamp_col])
-    out[asset_col] = out[asset_col].astype("string")
+    out[asset_col] = out[asset_col].astype(series.index.levels[1].dtype)
     out[value_col] = out[value_col].astype("float64")
     return out
 
@@ -81,8 +81,11 @@ def long_table_to_series(
         work = work.sort_values([timestamp_col, asset_col])
     indexed = work.set_index([timestamp_col, asset_col])[value_col]
     indexed.index.names = [timestamp_col, asset_col]
-    # 与引擎中间态对齐：instrument 层用 object，避免 string dtype 不兼容
-    lvl_asset = indexed.index.get_level_values(1).astype(object)
+    # Preserve the boundary's axis semantics.  In particular, pandas 3 commonly
+    # supplies StringDtype asset columns while older/object-backed callers still
+    # expect object.  A blanket cast makes otherwise equal backend results differ.
+    asset_dtype = work[asset_col].dtype
+    lvl_asset = indexed.index.get_level_values(1).astype(asset_dtype)
     indexed.index = pd.MultiIndex.from_arrays(
         [indexed.index.get_level_values(0), lvl_asset],
         names=indexed.index.names,
@@ -105,7 +108,9 @@ def long_table_to_series(
                 # it, so align the existing values onto a ``from_product`` index
                 # with the freq-carrying level via ``get_indexer`` (values are
                 # already sorted in (timestamp, instrument) order).
-                inst_level = pd.Index(indexed.index.get_level_values(1).unique())
+                inst_level = pd.Index(
+                    indexed.index.get_level_values(1).unique(), dtype=asset_dtype
+                )
                 base = pd.DatetimeIndex(uniq, freq=inferred)
                 rebuilt = pd.MultiIndex.from_product(
                     [base, inst_level], names=indexed.index.names
@@ -180,7 +185,7 @@ def unpivot_wide_to_long(
         columns={panel.index.name: timestamp_col, asset_name: asset_col}
     )
     frame[timestamp_col] = pd.to_datetime(frame[timestamp_col])
-    frame[asset_col] = frame[asset_col].astype("string")
+    frame[asset_col] = frame[asset_col].astype(panel.columns.dtype)
     # R32-P0-024: 宽表→长表保留原 panel 精度。绝不强制 downcast 成 float32 ——
     # 否则历史 float64 面板在 wide 路径做一次 upsert 就被永久降精度。空 panel
     # 保持 float64 默认。

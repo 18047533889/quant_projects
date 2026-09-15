@@ -8,6 +8,7 @@ Polars column array and wrapped into a ``pl.DataFrame``; no pandas DataFrame is
 constructed on the fast path.
 """
 from __future__ import annotations
+from factor_engine.cleaned_operators.common import direction_risk_polars as _risk_kernels
 
 from collections.abc import Callable
 
@@ -15,6 +16,7 @@ import numpy as np
 import polars as pl
 
 from factor_engine.cleaned_operators.base_polars import OperatorMetadata, SeriesOperator, register_operator
+from factor_engine.cleaned_operators.base import ParamRole, ParamSpec
 from factor_engine.backend.contracts import ExecutionKind, PhysicalImplementationSpec
 
 _SKIP = frozenset({"date", "stock_code"})
@@ -82,83 +84,19 @@ def _quantile_range_fn(chunk, mp, lo, hi):
     return float(np.quantile(valid, hi) - np.quantile(valid, lo))
 
 
-def ts_quantile_range(x, window, q_low=0.25, q_high=0.75, min_periods=None):
-    w = _pi(window, "window")
-    lo = _pf(q_low, "q_low")
-    hi = _pf(q_high, "q_high")
-    if not (0.0 < lo < hi < 1.0):
-        raise ValueError("ts_quantile_range requires 0 < q_low < q_high < 1")
-    mp = _auto_min_periods(w, min_periods)
-    cols = _cols(x)
-    rows = x.height
-    out = np.full((rows, len(cols)), np.nan, dtype=float)
-    for i, c in enumerate(cols):
-        out[:, i] = _rolling_1d(_arr(x, c), w, lambda ch, m: _quantile_range_fn(ch, m, lo, hi), mp)
-    return _make(x, cols, out)
+def ts_quantile_range(x,window=20,q_low=.25,q_high=.75,min_periods=None):
+    from factor_engine.cleaned_operators.common.robust_stats_native import calculate
+    return calculate("ts_quantile_range",x,window,q_low,q_high,min_periods)
 
 
-def ts_robust_zscore(x, window, center="median", scale="mad", clip=None):
-    w = _pi(window, "window")
-    center_name = str(center or "median").lower()
-    scale_name = str(scale or "mad").lower()
-    cols = _cols(x)
-    rows = x.height
-    out = np.full((rows, len(cols)), np.nan, dtype=float)
-    bound = float(clip) if clip is not None else None
-    for i, c in enumerate(cols):
-        arr = _arr(x, c)
-        for t in range(rows):
-            lo = max(0, t - w + 1)
-            chunk = arr[lo : t + 1]
-            valid = chunk[np.isfinite(chunk)]
-            if valid.size == 0:
-                continue
-            center_value = float(np.median(valid)) if center_name == "median" else float(np.mean(valid))
-            if scale_name == "std":
-                spread = float(np.std(valid))
-            else:
-                spread = float(np.median(np.abs(valid - center_value))) * 1.4826
-            if not np.isfinite(spread) or spread <= 0.0:
-                continue
-            value = np.where(spread if np.isfinite(chunk[-1]) else np.nan != 0, (float(chunk[-1]) - center_value) / spread if np.isfinite(chunk[-1]) else np.nan, np.nan)
-            if bound is not None and np.isfinite(value):
-                value = max(-bound, min(bound, value))
-            out[t, i] = value
-    return _make(x, cols, out)
+def ts_robust_zscore(x,window=20,center="median",scale="mad",clip=None):
+    from factor_engine.cleaned_operators.common.robust_stats_native import calculate
+    return calculate("ts_robust_zscore_inclusive",x,window,center,scale,clip)
 
 
-def ts_robust_zscore_prior(x, window, center="median", scale="mad", clip=None, min_periods=None):
-    """R11 round-3 #122 (polars twin): baseline estimated on ``[t-W, t-1]`` only,
-    so an extreme ``x_t`` cannot contaminate its own median/MAD score."""
-    w = _pi(window, "window")
-    center_name = str(center or "median").lower()
-    scale_name = str(scale or "mad").lower()
-    mp = _auto_min_periods(w, min_periods)
-    cols = _cols(x)
-    rows = x.height
-    out = np.full((rows, len(cols)), np.nan, dtype=float)
-    bound = float(clip) if clip is not None else None
-    for i, c in enumerate(cols):
-        arr = _arr(x, c)
-        for t in range(rows):
-            lo = max(0, t - w + 1)
-            prior = arr[lo:t]
-            x_t = arr[t]
-            valid = prior[np.isfinite(prior)]
-            if valid.size < mp:
-                continue
-            center_value = float(np.median(valid)) if center_name == "median" else float(np.mean(valid))
-            if scale_name == "std":
-                spread = float(np.std(valid))
-            else:
-                spread = float(np.median(np.abs(valid - center_value))) * 1.4826
-            if not np.isfinite(spread) or spread <= 0.0:
-                continue
-            value = np.where(spread if np.isfinite(x_t) else np.nan != 0, (float(x_t) - center_value) / spread if np.isfinite(x_t) else np.nan, np.nan)
-            if bound is not None and np.isfinite(value):
-                value = max(-bound, min(bound, value))
-            out[t, i] = value
-    return _make(x, cols, out)
+def ts_robust_zscore_prior(x,window=20,center="median",scale="mad",clip=None,min_periods=None):
+    from factor_engine.cleaned_operators.common.robust_stats_native import calculate
+    return calculate("ts_robust_zscore_prior",x,window,center,scale,clip,min_periods)
 
 
 def _trimmed_mean_fn(chunk, mp, trim):
@@ -174,18 +112,9 @@ def _trimmed_mean_fn(chunk, mp, trim):
     return float(np.mean(ordered[cut : ordered.size - cut]))
 
 
-def ts_trimmed_mean(x, window, trim_ratio=0.1, min_periods=None):
-    w = _pi(window, "window")
-    trim = _pf(trim_ratio, "trim_ratio")
-    if not (0.0 <= trim < 0.5):
-        raise ValueError("ts_trimmed_mean requires 0 <= trim_ratio < 0.5")
-    mp = _auto_min_periods(w, min_periods)
-    cols = _cols(x)
-    rows = x.height
-    out = np.full((rows, len(cols)), np.nan, dtype=float)
-    for i, c in enumerate(cols):
-        out[:, i] = _rolling_1d(_arr(x, c), w, lambda ch, m: _trimmed_mean_fn(ch, m, trim), mp)
-    return _make(x, cols, out)
+def ts_trimmed_mean(x,window=20,trim_ratio=.1,min_periods=None):
+    from factor_engine.cleaned_operators.common.robust_stats_native import calculate
+    return calculate("ts_trimmed_mean",x,window,trim_ratio,min_periods)
 
 
 def _abs_concentration_fn(chunk, mp):
@@ -199,15 +128,8 @@ def _abs_concentration_fn(chunk, mp):
     return float(np.sum(shares * shares))
 
 
-def ts_abs_concentration(x, window, min_periods=1):
-    w = _pi(window, "window")
-    mp = max(1, int(min_periods))
-    cols = _cols(x)
-    rows = x.height
-    out = np.full((rows, len(cols)), np.nan, dtype=float)
-    for i, c in enumerate(cols):
-        out[:, i] = _rolling_1d(_arr(x, c), w, _abs_concentration_fn, mp)
-    return _make(x, cols, out)
+def ts_abs_concentration(x,window=20,min_periods=1):
+    return _risk_kernels.ts_abs_concentration(x,window,min_periods)
 
 
 def _abs_entropy_fn(chunk, mp, normalize):
@@ -224,16 +146,8 @@ def _abs_entropy_fn(chunk, mp, normalize):
     return entropy
 
 
-def ts_abs_entropy(x, window, normalize=True, min_periods=1):
-    w = _pi(window, "window")
-    norm = bool(normalize)
-    mp = max(1, int(min_periods))
-    cols = _cols(x)
-    rows = x.height
-    out = np.full((rows, len(cols)), np.nan, dtype=float)
-    for i, c in enumerate(cols):
-        out[:, i] = _rolling_1d(_arr(x, c), w, lambda ch, m: _abs_entropy_fn(ch, m, norm), mp)
-    return _make(x, cols, out)
+def ts_abs_entropy(x,window=20,normalize=True,min_periods=1):
+    return _risk_kernels.ts_abs_entropy(x,window,normalize,min_periods)
 
 
 def _deviation_fn(chunk, mp, target, upside):
@@ -257,86 +171,20 @@ def _deviation_op(x, window, target, min_periods, upside, name):
     return _make(x, cols, out)
 
 
-def ts_downside_deviation(x, window, target=0.0, min_periods=2):
-    return _deviation_op(x, window, target, min_periods, False, "ts_downside_deviation")
+def ts_downside_deviation(x,window=20,target=0.,min_periods=2):
+    return _risk_kernels.ts_downside_deviation(x,window,target,min_periods)
 
 
-def ts_upside_deviation(x, window, target=0.0, min_periods=2):
-    return _deviation_op(x, window, target, min_periods, True, "ts_upside_deviation")
+def ts_upside_deviation(x,window=20,target=0.,min_periods=2):
+    return _risk_kernels.ts_upside_deviation(x,window,target,min_periods)
 
 
-def ts_current_drawdown_duration(x, window, **kwargs):
-    w = _pi(window, "window")
-    cols = _cols(x)
-    rows = x.height
-    out = np.full((rows, len(cols)), np.nan, dtype=float)
-    for i, c in enumerate(cols):
-        arr = _arr(x, c)
-        for t in range(rows):
-            start = max(0, t - w + 1)
-            chunk = arr[start : t + 1]
-            valid_mask = np.isfinite(chunk)
-            # R5 P1-36(a): the *current* observation is missing — the "current"
-            # drawdown duration is unknowable.  Fail-close to NaN instead of
-            # silently reporting the stale duration from the older peers.
-            if not valid_mask.any() or not valid_mask[-1]:
-                continue
-            # P1-07 / R11 #160: the running peak must NOT carry across a missing
-            # row — a value after a NaN gap is compared only against the post-gap
-            # segment (mirrors the pandas kernel).
-            running_peak = np.full(len(chunk), np.nan)
-            peak = -np.inf
-            for k in range(len(chunk)):
-                if not valid_mask[k]:
-                    peak = -np.inf
-                    continue
-                if chunk[k] > peak:
-                    peak = chunk[k]
-                running_peak[k] = peak
-            streak = 0
-            for back in range(len(chunk) - 1, -1, -1):
-                if not valid_mask[back]:
-                    # NaN is a hard episode boundary: the streak must never
-                    # re-link across the gap (P0).
-                    break
-                if chunk[back] < running_peak[back]:
-                    streak += 1
-                else:
-                    break
-            out[t, i] = float(streak)
-    return _make(x, cols, out)
+def ts_current_drawdown_duration(x,window=20):
+    return _risk_kernels.ts_current_drawdown_duration(x,window)
 
 
-def ts_time_under_water(x, window, **kwargs):
-    w = _pi(window, "window")
-    cols = _cols(x)
-    rows = x.height
-    out = np.full((rows, len(cols)), np.nan, dtype=float)
-    for i, c in enumerate(cols):
-        arr = _arr(x, c)
-        for t in range(rows):
-            start = max(0, t - w + 1)
-            chunk = arr[start : t + 1]
-            valid = chunk[np.isfinite(chunk)]
-            # R5 P1-36(b): a missing *current* observation must fail-close to NaN
-            # rather than emitting the historical under-water ratio.
-            if valid.size == 0 or not np.isfinite(chunk[-1]):
-                continue
-            # R11 #160: the running peak must NOT carry across a missing row —
-            # reset the peak at every gap so the next valid observation starts a
-            # fresh reference (mirrors the pandas kernel).
-            running_peak = np.full(len(chunk), np.nan)
-            peak = -np.inf
-            for k in range(len(chunk)):
-                if not np.isfinite(chunk[k]):
-                    peak = -np.inf
-                    continue
-                if chunk[k] > peak:
-                    peak = chunk[k]
-                running_peak[k] = peak
-            under = np.sum((chunk < running_peak) & np.isfinite(chunk))
-            out[t, i] = float(under) / float(valid.size)
-    return _make(x, cols, out)
+def ts_time_under_water(x,window=20):
+    return _risk_kernels.ts_time_under_water(x,window)
 
 
 def _best_lag_corr_raw(xv, yv, row, window, max_lag):
@@ -364,57 +212,12 @@ def _best_lag_corr_raw(xv, yv, row, window, max_lag):
     return float(best)
 
 
-def ts_best_lag_corr_raw(y, x, window, max_lag=5):
-    w = _pi(window, "window", 2)
-    ml = max(0, int(max_lag))
-    if ml >= w:
-        raise ValueError("max_lag must be < window")
-    cols = _cols(x, y)
-    rows = x.height
-    out = np.full((rows, len(cols)), np.nan, dtype=float)
-    for i, c in enumerate(cols):
-        xv, yv = _arr(x, c), _arr(y, c)
-        for t in range(rows):
-            out[t, i] = _best_lag_corr_raw(xv, yv, t, w, ml)
-    return _make(y, cols, out)
+def ts_best_lag_corr_raw(y,x,window=20,max_lag=5):
+    return _risk_kernels.ts_best_lag_corr_raw(y,x,window,max_lag)
 
 
-def ts_best_lag_corr_excess(y, x, window, max_lag=5):
-    """CPU-kernel bridge with explicit absolute-time/security RNG identity."""
-    w = _pi(window, "window", 2)
-    ml = max(0, int(max_lag))
-    if ml >= w:
-        raise ValueError("max_lag must be < window")
-    if "date" not in y.columns or "date" not in x.columns:
-        raise ValueError("ts_best_lag_corr_excess requires an explicit date coordinate")
-    time_keys = y["date"].to_list()
-    if time_keys != x["date"].to_list():
-        raise ValueError("x and y date coordinates must match exactly")
-    finite_time_keys = [key for key in time_keys if key is not None]
-    if len(set(finite_time_keys)) != len(finite_time_keys):
-        raise ValueError("date coordinate must be unique")
-    from factor_engine.backend.operator_semantic_version import versioned_name
-    from factor_engine.cleaned_operators.downside_risk import (
-        _best_lag_corr_excess,
-        _stable_surrogate_seed,
-    )
-
-    canonical_identity = versioned_name("ts_best_lag_corr_excess")
-    cols = _cols(x, y)
-    rows = x.height
-    out = np.full((rows, len(cols)), np.nan, dtype=float)
-    for i, c in enumerate(cols):
-        xv, yv = _arr(x, c), _arr(y, c)
-        for t in range(rows):
-            if time_keys[t] is None:
-                continue
-            identity_seed = _stable_surrogate_seed(
-                42, time_keys[t], c, canonical_identity
-            )
-            out[t, i] = _best_lag_corr_excess(
-                xv, yv, t, w, ml, identity_seed=identity_seed
-            )
-    return _make(y, cols, out)
+def ts_best_lag_corr_excess(y,x,window=20,max_lag=5):
+    return _risk_kernels.ts_best_lag_corr_excess(y,x,window,max_lag)
 
 
 def _price_delay(xv, row, window, max_lag):
@@ -490,24 +293,8 @@ def _price_delay_model(stock, bench, end, window, max_lag, min_periods):
     return max(0.0, 1.0 - r2_r / r2_f)
 
 
-def ts_price_delay(stock_return, benchmark_return, window, max_lag=5, min_periods=3):
-    w = _pi(window, "window")
-    ml = max(1, int(max_lag))
-    mp = max(3, int(min_periods))
-    cols = _cols(stock_return, benchmark_return)
-    rows = stock_return.height
-    out = np.full((rows, len(cols)), np.nan, dtype=float)
-    for i, c in enumerate(cols):
-        sv = _arr(stock_return, c)
-        bv = _arr(benchmark_return, c)
-        for t in range(rows):
-            out[t, i] = _price_delay_model(sv, bv, t, w, ml, mp)
-    return _make(stock_return, cols, out)
-
-
-# ---------------------------------------------------------------------------
-# conditional time-series (mask-based rolling)
-# ---------------------------------------------------------------------------
+def ts_price_delay(stock_return,benchmark_return,window=20,max_lag=5,min_periods=3):
+    return _risk_kernels.ts_price_delay(stock_return,benchmark_return,window,max_lag,min_periods)
 
 
 def _assert_condition_bool(condition_frame: pl.DataFrame) -> None:
@@ -542,7 +329,9 @@ def _selected_mask(condition_frame: pl.DataFrame, c: str, *value_frames) -> np.n
 def _min_max_if(x, condition, window, min_periods, op):
     _assert_condition_bool(condition)
     w = _pi(window, "window")
-    mp = max(1, int(min_periods))
+    mp = _pi(min_periods, "min_periods")
+    if mp > w:
+        raise ValueError("min_periods must be <= window")
     cols = _cols(x, condition)
     rows = x.height
     out = np.full((rows, len(cols)), np.nan, dtype=float)
@@ -572,7 +361,9 @@ def ts_quantile_if(x, condition, window, q=0.5, min_periods=1):
     quantile = _pf(q, "q")
     if not (0.0 <= quantile <= 1.0):
         raise ValueError("ts_quantile_if requires 0 <= q <= 1")
-    mp = max(1, int(min_periods))
+    mp = _pi(min_periods, "min_periods")
+    if mp > w:
+        raise ValueError("min_periods must be <= window")
     cols = _cols(x, condition)
     rows = x.height
     out = np.full((rows, len(cols)), np.nan, dtype=float)
@@ -591,15 +382,17 @@ def ts_quantile_if(x, condition, window, q=0.5, min_periods=1):
 def _pair_condition(x, y, condition, window, min_periods, kind):
     _assert_condition_bool(condition)
     w = _pi(window, "window")
-    mp = max(2 if kind != "resid" else 3, int(min_periods))
-    if kind == "resid":
-        mp = max(3, int(min_periods))
+    floor = 3 if kind == "resid" else 2
+    mp = _pi(min_periods, "min_periods", floor)
+    limit = w - 1 if kind == "resid" else w
+    if mp > limit:
+        raise ValueError("min_periods exceeds available rolling training window")
     cols = _cols(x, y, condition)
     rows = x.height
     out = np.full((rows, len(cols)), np.nan, dtype=float)
     for i, c in enumerate(cols):
         xv, yv = _arr(x, c), _arr(y, c)
-        mask = _selected_mask(condition, c, x)
+        mask = _selected_mask(condition, c, x, y)
         for t in range(rows):
             start = max(0, t - w + 1)
             xs = xv[start : t + 1][mask[start : t + 1]]
@@ -695,27 +488,9 @@ def ts_poly2_resid(y, x, d):
     return _make(y, cols, out)
 
 
-def lqtp_historical_cvar(x, window, q=0.05):
-    w = _pi(window, "window")
-    qf = _pf(q, "q")
-    if not 0.0 < qf <= 1.0:
-        raise ValueError("historical_cvar q must be in (0,1]")
-    cols = _cols(x)
-    rows = x.height
-    out = np.full((rows, len(cols)), np.nan, dtype=float)
-    for i, c in enumerate(cols):
-        arr = _arr(x, c)
-        for t in range(rows):
-            lo = max(0, t - w + 1)
-            vals = arr[lo : t + 1]
-            vals = vals[np.isfinite(vals)]
-            if vals.size == 0:
-                continue
-            cutoff = float(np.quantile(vals, qf))
-            tail = vals[vals <= cutoff]
-            if tail.size:
-                out[t, i] = float(-np.mean(tail))
-    return _make(x, cols, out)
+def lqtp_historical_cvar(x, window=252, q=.05):
+    from factor_engine.cleaned_operators.lqtp_compat import polars_calculate
+    return polars_calculate("lqtp_historical_cvar",x,window=window,q=q)
 
 
 # ---------------------------------------------------------------------------
@@ -749,16 +524,51 @@ _SPECS: tuple[tuple[str, tuple[str, ...], Callable, str], ...] = (
 
 
 def _register(name: str, params: tuple[str, ...], function: Callable, description: str) -> None:
-    is_cpu_bridge = name == "ts_best_lag_corr_excess"
+    if name == "lqtp_historical_cvar":
+        from factor_engine.cleaned_operators.lqtp_compat import register_polars
+        register_polars(name)
+        return
+    if name in {"ts_quantile_range","ts_trimmed_mean","ts_robust_zscore_inclusive","ts_robust_zscore_prior"}:
+        from factor_engine.cleaned_operators.common.robust_stats_native import make
+        register_operator(name=name,canonical=name,source="polars_robust_stats",
+                          backend="polars",status="production")(make(name))
+        return
+    is_cpu_bridge = name == "ts_best_lag_corr_excess" and name not in _risk_kernels.PARAMS
+    if name in _risk_kernels.PARAMS:
+        function = getattr(_risk_kernels,name)
+    conditional = name in {
+        "ts_min_if", "ts_max_if", "ts_quantile_if",
+        "ts_corr_if", "ts_beta_if", "ts_regression_resid_if",
+    }
+    conditional_specs = {
+        "window": ParamSpec(dtype=int, min=1, default=20, param_role=ParamRole.HORIZON),
+        "min_periods": ParamSpec(
+            dtype=int, min=3 if name == "ts_regression_resid_if" else 2 if name in {"ts_corr_if", "ts_beta_if"} else 1,
+            default=3 if name == "ts_regression_resid_if" else 2 if name in {"ts_corr_if", "ts_beta_if"} else 1,
+            searchable=False, param_role=ParamRole.SUPPORT_POLICY,
+        ),
+    } if conditional else {}
+    if name == "ts_quantile_if":
+        conditional_specs["q"] = ParamSpec(
+            dtype=float, min=0.0, max=1.0, default=0.5,
+            param_role=ParamRole.THRESHOLD,
+        )
     metadata = OperatorMetadata(
         name=name,
         category="robust_statistics",
         description=description,
         param_names=list(params),
         return_type="series",
+        panel_params=tuple(p for p in params if p not in conditional_specs) if conditional else (),
+        scalar_params=tuple(conditional_specs) if conditional else (),
+        param_specs=conditional_specs,
         tags=["pit_safe", "causal", "polars", "bridge", "cpu_kernel"]
         if is_cpu_bridge else ["pit_safe", "causal", "polars", "native"],
     )
+
+    if name in _risk_kernels.PARAMS:
+        for field,value in _risk_kernels.contract(name).items():
+            setattr(metadata,field,value)
 
     def _calculate_series(self, *args, **kwargs):
         return function(*args, **kwargs)
@@ -768,6 +578,9 @@ def _register(name: str, params: tuple[str, ...], function: Callable, descriptio
         "_calculate_series": _calculate_series,
         "__module__": __name__,
     }
+    if name in _risk_kernels.PARAMS:
+        class_attrs["_contract_callable"] = staticmethod(function)
+        class_attrs["_physical_spec"] = _risk_kernels.physical_spec(name)
     if is_cpu_bridge:
         class_attrs["_physical_spec"] = PhysicalImplementationSpec(
             canonical=name,

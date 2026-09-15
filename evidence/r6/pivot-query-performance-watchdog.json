@@ -1,0 +1,1 @@
+{"command": [".venv/bin/python", "evidence/r6/pivot_query_performance.py"], "returncode": 0, "sampled_peak_family_rss_bytes": 275005440, "sampling_seconds": 0.1, "seconds": 2.611860506935045, "test_guard_reason": null, "hard_memory_cap": false}

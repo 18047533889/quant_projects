@@ -9,6 +9,7 @@ from factor_preprocess.contracts.treatment_lineage import (
 )
 from factor_preprocess.registry.policies import PolicyLevel, PolicyPreset
 from factor_preprocess.registry.transforms import TransformCategory, TransformRegistry, _source_of
+from factor_preprocess.errors import GovernanceError, InvalidContractError
 from factor_preprocess.registry.transforms import get_default_registry
 from factor_preprocess.contracts.feature_bundle import AxisRef, FeatureBundle
 from factor_preprocess.contracts.treatment_recipe import TreatmentRecipe, RecipeStep
@@ -20,6 +21,22 @@ def test_integer_asset_identity_survives_long_to_wide():
     result = _long_to_wide(frame, "value", "date", "asset_id")
     assert list(result.columns) == [1, 2]
     assert result.notna().sum().sum() == 2
+
+
+def test_mixed_asset_identity_types_fail_before_pivot_or_string_coercion():
+    frame = pd.DataFrame({"date": [1, 1], "asset_id": [1, "001"], "value": [3.0, 4.0]})
+    with pytest.raises(ValueError, match="mixed asset identity types"):
+        _long_to_wide(frame, "value", "date", "asset_id")
+
+
+def test_native_reference_kernel_requires_explicit_research_opt_in():
+    registry = get_default_registry()
+    with pytest.raises(GovernanceError, match="unsafe native-kernel bypass"):
+        registry.get_function("cs_rank")
+    with pytest.raises(GovernanceError, match="research-only"):
+        registry.get_research_reference_function("cs_rank")
+    reference = registry.get_research_reference_function("cs_rank", allow_research=True)
+    assert reference is registry.get("cs_rank").func
 
 
 def test_conflicting_duplicate_primary_key_fails_in_any_order():
@@ -161,7 +178,10 @@ def test_recipe_canonical_roundtrip_and_compile_fail_closed():
 
 def test_fitted_recipe_requires_bound_state_ref_at_compile():
     registry = TransformRegistry()
-    registry.register("fitop", lambda values: values, TransformCategory.TEMPORAL)
+    registry.register(
+        "fitop", lambda values: values, TransformCategory.TEMPORAL,
+        requires_fit=True, fit_kind="fitted",
+    )
     recipe = TreatmentRecipe(
         recipe_id="fit", source_factor_definition_ref="d", source_factor_value_ref="v",
         ordered_steps=(RecipeStep("s", "FIT", "fitop", "temporal", requires_fit=True, state_ref="state:1"),),
@@ -169,6 +189,44 @@ def test_fitted_recipe_requires_bound_state_ref_at_compile():
     with pytest.raises(Exception, match="missing fitted state"):
         recipe.compile(registry)
     assert len(recipe.compile(registry, fitted_state_refs=("state:1",))) == 1
+
+
+@pytest.mark.parametrize(
+    ("semantic", "stage", "requires_fit", "message"),
+    [
+        ("FORGED:rank", "missingness", False, "semantic identity"),
+        ("FILL:forward", "representation", False, "stage disagrees"),
+        ("FILL:forward", "missingness", True, "fit requirement"),
+    ],
+)
+def test_recipe_compile_rejects_identity_or_fit_kind_forgery(
+    semantic, stage, requires_fit, message,
+):
+    recipe = TreatmentRecipe(
+        recipe_id="forged", source_factor_definition_ref="d",
+        source_factor_value_ref="v",
+        ordered_steps=(RecipeStep(
+            "s", semantic, "forward_fill", stage, requires_fit=requires_fit,
+            state_ref="state:forged" if requires_fit else None,
+            parameters={"max_lag": 2},
+        ),),
+    )
+    with pytest.raises(InvalidContractError, match=message):
+        recipe.compile(get_default_registry(), fitted_state_refs=("state:forged",))
+
+
+def test_recipe_compile_rejects_registered_fitted_operator_claimed_stateless():
+    registry = TransformRegistry()
+    registry.register(
+        "fitop", lambda values: values, TransformCategory.TEMPORAL,
+        requires_fit=True, fit_kind="fitted",
+    )
+    recipe = TreatmentRecipe(
+        recipe_id="lie", source_factor_definition_ref="d", source_factor_value_ref="v",
+        ordered_steps=(RecipeStep("s", "FIT", "fitop", "temporal"),),
+    )
+    with pytest.raises(InvalidContractError, match="fit requirement"):
+        recipe.compile(registry)
 
 
 def test_public_recipe_execution_uses_single_panel_boundary():

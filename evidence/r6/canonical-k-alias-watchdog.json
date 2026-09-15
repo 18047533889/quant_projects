@@ -1,0 +1,1 @@
+{"command": [".venv/bin/python", "-m", "pytest", "factor_engine/tests/runtime/test_r6_named_arity.py", "--noconftest", "-q", "--tb=short"], "returncode": 0, "sampled_peak_family_rss_bytes": 316170240, "sampling_seconds": 0.1, "seconds": 2.5098226389382035, "test_guard_reason": null, "hard_memory_cap": false}

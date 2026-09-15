@@ -100,17 +100,19 @@ def test_run_concentration_nan_breaks_episode():
 # ---------------------------------------------------------------------------
 
 def test_survival_nan_does_not_end_episode():
-    dates = _dates(12)
+    dates = _dates(13)
     state = pd.DataFrame(0.0, index=dates, columns=["A"])
-    state.iloc[0:2] = 1.0      # completed run length 2
-    state.iloc[4:6] = 1.0      # completed run length 2
-    state.iloc[[8, 10, 11]] = 1.0   # a run split by a NaN gap at row 9
-    state.iloc[9] = np.nan
+    # Leading confirmed inactivity makes both length-2 entries observable;
+    # an episode already active at the sample boundary is left-censored.
+    state.iloc[1:3] = 1.0      # completed observed run length 2
+    state.iloc[5:7] = 1.0      # completed observed run length 2
+    state.iloc[[9, 11, 12]] = 1.0   # a run split by a NaN gap at row 10
+    state.iloc[10] = np.nan
     out = _get("ts_state_age_percentile").calculate(
         state, history_window=60, min_completed_runs=2)
-    assert np.isnan(out["A"].iloc[9])       # UNKNOWN -> NaN, not 0
-    assert out["A"].iloc[10] == pytest.approx(0.0)  # re-based age 1 in {2,2}
-    assert out["A"].iloc[11] == pytest.approx(1.0)  # age 2 in {2,2}
+    assert np.isnan(out["A"].iloc[10])       # UNKNOWN -> NaN, not 0
+    assert out["A"].iloc[11] == pytest.approx(0.0)  # re-based age 1 in {2,2}
+    assert out["A"].iloc[12] == pytest.approx(1.0)  # age 2 in {2,2}
 
 
 # ---------------------------------------------------------------------------

@@ -167,8 +167,27 @@ def _manifest_fingerprint(db, *, max_definition_bytes, max_factors, deadline):
                 actual.update(chunk)
             if actual.hexdigest() != expected:
                 raise ResumeIdentityError("manifest definition digest mismatch")
-        elif valid or expected:
+        elif valid:
             raise ResumeIdentityError("missing valid factor definition")
+        elif expected:
+            rejected_codes = {
+                "INVALID_DSL", "OPERATOR_UNKNOWN", "DEFINITION_TOO_LARGE",
+                "DUPLICATE_FACTOR_NAME",
+            }
+            if (error not in rejected_codes
+                    or type(expected) is not str
+                    or len(expected) != 64
+                    or any(char not in "0123456789abcdef" for char in expected)
+                    or (size > max_definition_bytes
+                        and error not in {"DEFINITION_TOO_LARGE", "DUPLICATE_FACTOR_NAME"})):
+                raise ResumeIdentityError("invalid rejected factor definition metadata")
+        elif size != 0:
+            # Capped pickle admission intentionally keeps only max+1 bytes of
+            # size evidence, no payload and therefore no content digest.
+            # A duplicate name can supersede its original rejection code.
+            if (expected != "" or size != max_definition_bytes + 1
+                    or error not in {"DEFINITION_TOO_LARGE", "DUPLICATE_FACTOR_NAME"}):
+                raise ResumeIdentityError("invalid empty factor definition metadata")
         _hash_record(digest, [ordinal, name, size, expected, valid, error])
         seen += 1
     if seen != count:

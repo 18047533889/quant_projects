@@ -1,0 +1,20 @@
+{
+  "iterations": 1000000,
+  "seconds": 15.1509576770477,
+  "ru_maxrss_before_kib": 162724,
+  "ru_maxrss_after_kib": 162980,
+  "scope": "Linux isolated process, payload/workspace budget excludes caller arrays and interpreter",
+  "stats": {
+    "num_entries": 0,
+    "current_size_bytes": 0,
+    "max_size_bytes": 65536,
+    "utilization": 0.0,
+    "total_original_bytes": 0,
+    "total_compressed_bytes": 0,
+    "memory_savings_pct": 100.0,
+    "avg_compression_ratio": 1.4253731343283582,
+    "compression_history_size": 1000,
+    "workspace_budget_bytes": 65536
+  },
+  "large_payloads_rejected_before_pickle": true
+}

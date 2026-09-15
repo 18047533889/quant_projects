@@ -53,7 +53,10 @@ def test_legacy_top_n_aliases_use_explicit_topk_with_compatible_default():
     assert OperatorRegistry._aliases["ts_top_n_avg"] == "ts_topk_mean"
     assert OperatorRegistry._aliases["ts_bottom_n_sum"] == "ts_bottomk_sum"
     values = pd.DataFrame({"A": [1.0, 2.0, 10.0, 4.0]})
-    legacy = OperatorRegistry.get("ts_top_n_avg", backend="pandas_numpy").calculate(values, 3)
+    # The alias inherits real k=5; it must not silently clamp k to window.
+    with pytest.raises(ValueError, match="k"):
+        OperatorRegistry.get("ts_top_n_avg", backend="pandas_numpy").calculate(values, 3)
+    legacy = OperatorRegistry.get("ts_top_n_avg", backend="pandas_numpy").calculate(values, 3, k=3)
     assert legacy.iloc[2, 0] == pytest.approx(13.0 / 3.0)
     assert legacy.iloc[3, 0] == pytest.approx(16.0 / 3.0)
     assert _pd("ts_topk_mean").calculate(values, 3, 2).iloc[-1, 0] == 7.0

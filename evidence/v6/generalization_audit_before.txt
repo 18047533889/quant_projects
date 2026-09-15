@@ -1,0 +1,65 @@
+FFFFF                                                                    [100%]
+=================================== FAILURES ===================================
+___ test_paired_ci_uses_one_joint_support_for_means_variances_and_covariance ___
+
+    def test_paired_ci_uses_one_joint_support_for_means_variances_and_covariance():
+        artifact = build_train_validation_artifact(
+            np.array([2.5]), np.array([2.5]),
+            train_samples=np.array([[1.0], [2.0], [np.nan], [4.0]]),
+            validation_samples=np.array([[1.0], [np.nan], [3.0], [4.0]]),
+            sample_unit="fold", sample_dependence="paired",
+            train_sample_ids=("a", "b", "c", "d"),
+            validation_sample_ids=("a", "b", "c", "d"), **IDENTITY,
+        )
+        # Only a and d are valid paired observations. Marginal n=3 is not the
+        # sample underlying the paired covariance or a paired ratio interval.
+>       assert artifact.n_train_samples == (2,)
+E       assert (3,) == (2,)
+E         
+E         At index 0 diff: 3 != 2
+E         Use -v to get more diff
+
+quant_evaluator/tests/test_v6_generalization_audit.py:27: AssertionError
+___________ test_ci_is_bound_to_the_supplied_summary_point_estimate ____________
+
+    def test_ci_is_bound_to_the_supplied_summary_point_estimate():
+>       with pytest.raises(ValueError, match="summary.*sample|sample.*summary"):
+E       Failed: DID NOT RAISE ValueError
+
+quant_evaluator/tests/test_v6_generalization_audit.py:32: Failed
+______________ test_frozen_artifact_metadata_is_deeply_immutable _______________
+
+    def test_frozen_artifact_metadata_is_deeply_immutable():
+        source = {"nested": {"owner": "original"}}
+        artifact = build_train_validation_artifact(
+            np.array([0.8]), np.array([0.64]), metadata=source, **IDENTITY,
+        )
+        source["nested"]["owner"] = "changed"
+>       assert artifact.metadata["nested"]["owner"] == "original"
+E       AssertionError: assert 'changed' == 'original'
+E         
+E         - original
+E         + changed
+
+quant_evaluator/tests/test_v6_generalization_audit.py:49: AssertionError
+________ test_time_samples_require_declared_temporal_uncertainty_model _________
+
+    def test_time_samples_require_declared_temporal_uncertainty_model():
+>       with pytest.raises(ValueError, match="temporal|HAC|dependence"):
+E       Failed: DID NOT RAISE ValueError
+
+quant_evaluator/tests/test_v6_generalization_audit.py:55: Failed
+__ test_public_artifact_requires_explicit_factor_identity_and_metric_instance __
+
+    def test_public_artifact_requires_explicit_factor_identity_and_metric_instance():
+>       with pytest.raises(ValueError, match="factor.*identit"):
+E       Failed: DID NOT RAISE ValueError
+
+quant_evaluator/tests/test_v6_generalization_audit.py:67: Failed
+=========================== short test summary info ============================
+FAILED quant_evaluator/tests/test_v6_generalization_audit.py::test_paired_ci_uses_one_joint_support_for_means_variances_and_covariance
+FAILED quant_evaluator/tests/test_v6_generalization_audit.py::test_ci_is_bound_to_the_supplied_summary_point_estimate
+FAILED quant_evaluator/tests/test_v6_generalization_audit.py::test_frozen_artifact_metadata_is_deeply_immutable
+FAILED quant_evaluator/tests/test_v6_generalization_audit.py::test_time_samples_require_declared_temporal_uncertainty_model
+FAILED quant_evaluator/tests/test_v6_generalization_audit.py::test_public_artifact_requires_explicit_factor_identity_and_metric_instance
+5 failed in 0.07s

@@ -571,6 +571,14 @@ def _json_contract_value(value: Any) -> Any:
     those pass through unchanged. Any OTHER live object type still raises
     ``CapabilityInfrastructureError`` (fail-closed, no silent coercion).
     """
+    from factor_engine.cleaned_operators.registry import _FrozenDataclass, _defrost_catalog
+    if isinstance(value, _FrozenDataclass):
+        from factor_engine.cleaned_operators.base import ParamSpec, RelationalParamSpec
+        if value.original_type not in (ParamSpec, RelationalParamSpec):
+            raise CapabilityInfrastructureError("unsupported frozen contract dataclass")
+        # Detach this one typed leaf, not the live registry; freezing must not
+        # change capability identity or make an otherwise valid contract unreadable.
+        return _json_contract_value(_defrost_catalog({"contract": value})["contract"])
     if value is None or isinstance(value, (str, int, float, bool)):
         return value
     if isinstance(value, MappingProxyType):

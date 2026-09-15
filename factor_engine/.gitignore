@@ -17,3 +17,11 @@ __pycache__/
 
 dist/
 *.whl
+
+# Generated report bundles belong outside the library.
+/docs/reports/
+/docs/factor_pages/
+/docs/factors/
+/docs/index.html
+/docs/report_*.tar.gz
+/docs/fig_*.png

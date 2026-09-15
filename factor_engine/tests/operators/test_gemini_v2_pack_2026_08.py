@@ -134,8 +134,13 @@ def test_surface_classification(_loaded):
         assert classify_canonical(op) == "daily", op
     for op in _EXTENDED_OPS:
         assert classify_canonical(op) == "extended", op
+    # R22 DirectUse promotes the reviewed spectral factors to extended.
+    # Untyped DMD compatibility names retain their research-only gate.
     for op in _RESEARCH_OPS:
-        assert classify_canonical(op) == "research", op
+        expected = "research" if op.startswith("ts_dmd_") else "extended"
+        assert classify_canonical(op) == expected, op
+        if op.startswith("ts_dmd_"):
+            assert OperatorRegistry.get(op, "pandas_numpy", mode="production") is None
 
 
 # ---------------------------------------------------------------------------
@@ -190,7 +195,7 @@ _TS_SPECS: dict[str, tuple[list[str], dict]] = {
 def _future_randomization_invariant(canonical: str, panel_keys: list[str], kwargs: dict) -> None:
     n, cut = 120, 70
     panels = _make_panels(n=n)
-    op = OperatorRegistry.get(canonical, "pandas_numpy")
+    op = OperatorRegistry.get(canonical, "pandas_numpy", mode="research")
     assert op is not None, canonical
     args_full = [panels[k] for k in panel_keys]
     out_full = op.calculate(*args_full, **kwargs)

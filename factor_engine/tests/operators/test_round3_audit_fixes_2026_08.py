@@ -200,7 +200,9 @@ def test_recovery_excludes_censored_late_events():
     event = np.zeros(n)
     event[2] = 1.0  # early event (full horizon available)
     event[n - 2] = 1.0  # late event at index 10, horizon 5 -> censored
-    val = _recovery_day(x, event, horizon=5, residual_fraction=0.25)
+    # This test isolates right-censoring geometry.  The production default
+    # requires three effective events, so opt into a one-event kernel probe.
+    val = _recovery_day(x, event, horizon=5, residual_fraction=0.25, min_events=1)
     # Only the early event participates; it never recovers -> tau=H+1
     assert val == (5 + 1) / (5 + 1) == 1.0
 

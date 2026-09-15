@@ -36,10 +36,46 @@ def test_protocol_corruption_aborts_without_artifacts(tmp_path, monkeypatch, fau
     assert not list(tmp_path.rglob('*.parquet'))
 
 
-@pytest.mark.parametrize('mapping', [{}, {'a': None, 'extra': None}, {'a': False}, {'a': ''}, []])
+@pytest.mark.parametrize('mapping', [
+    {}, {'a': None, 'extra': None}, {'a': False}, {'a': ''},
+    {'a': {'code': 'bad', 'error_type': 'ValueError', 'message': 'x', 'retryable': False}},
+    {'a': {'code': 'UNKNOWN_FIELD', 'error_type': 'ValueError', 'message': 'x'}},
+    [],
+])
 def test_compile_protocol_rejects_missing_extra_and_untyped(mapping):
     with pytest.raises(pipeline.WorkerProtocolError):
         pipeline._validate_compile_results(mapping, {'a'})
+
+
+def test_compile_wave_preserves_typed_reason_codes_per_factor():
+    from factor_engine.runtime.exceptions import KnownBadImplementation
+
+    class TypedEngine:
+        def compile(self, factor):
+            if factor.name == 'known_bad':
+                raise KnownBadImplementation('exact binding counterexample')
+            if factor.name == 'missing':
+                exc = ValueError('logical dataset unavailable')
+                exc.reason_code = 'DATA_SOURCE_MISSING'
+                raise exc
+
+    factors = [FakeFactor('ok'), FakeFactor('known_bad'), FakeFactor('missing')]
+    result = pipeline._compile_wave(TypedEngine(), factors)
+    assert result['ok'] is None
+    assert result['known_bad'] == {
+        'code': 'KNOWN_BAD_IMPLEMENTATION',
+        'error_type': 'KnownBadImplementation',
+        'message': 'exact binding counterexample',
+        'retryable': False,
+    }
+    assert result['missing']['code'] == 'DATA_SOURCE_MISSING'
+    pipeline._validate_compile_results(result, {factor.name for factor in factors})
+
+
+def test_compile_reason_code_cannot_inject_worker_protocol_fields():
+    exc = ValueError('bad code')
+    exc.reason_code = 'unknown-field;retry=true'
+    assert pipeline._compile_failure_envelope(exc)['code'] == 'INVALID_FACTOR_COMPILE'
 
 
 @pytest.mark.parametrize('envelope', [

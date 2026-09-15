@@ -12,20 +12,40 @@ from typing import Any
 
 import numpy as np
 
-from factor_engine.cleaned_operators.base import register_operator
+from factor_engine.cleaned_operators.base import ParamRole, ParamSpec, register_operator
 from factor_engine.cleaned_operators.intraday._core import (
     _EPS,
     _REALIZED_MIN_RETURNS,
     SessionAggregationOperator,
     daily_agg,
     log_returns,
-    metadata,
+    metadata as _core_metadata,
     np_errstate,
     register_surface,
     tripower_scale,
 )
 
 _CANONICALS: list[str] = []
+
+_THRESHOLD_CANONICALS = frozenset({
+    "intra_positive_jump_variation", "intra_negative_jump_variation",
+    "intra_signed_jump_ratio", "intra_jump_count", "intra_positive_tail_variation",
+    "intra_negative_tail_variation", "intra_tail_event_count",
+    "intra_signed_tail_variation_ratio", "intra_jump_concentration",
+    "intra_jump_first_time", "intra_jump_last_time", "intra_jump_clustering",
+})
+
+
+def metadata(name, description, params, **kwargs):
+    scalars = {}
+    if name in _THRESHOLD_CANONICALS:
+        scalars["threshold_scale"] = ParamSpec(
+            dtype=float, min=0.0, default=3.0, param_role=ParamRole.STATE_THRESHOLD,
+        )
+    return _core_metadata(
+        name, description, params, panel_params=("close",),
+        scalar_params=scalars, **kwargs,
+    )
 
 # P0-09: minimum number of finite within-session returns required before a
 # realized skewness / kurtosis estimate is emitted.  30 returns == at least 31

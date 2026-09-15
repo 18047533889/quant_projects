@@ -14,7 +14,13 @@ from typing import Any, Callable, Iterable
 import numpy as np
 import pandas as pd
 
-from factor_engine.cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
+from factor_engine.cleaned_operators.base import (
+    OperatorMetadata,
+    ParamRole,
+    ParamSpec,
+    SeriesOperator,
+    register_operator,
+)
 from factor_engine.cleaned_operators.fundamental.transforms_v2 import (
     _lag_value,
     _period_insert,
@@ -46,6 +52,7 @@ _CANONICALS: list[str] = []
 # so ``fundamental/transforms_v2`` can import them without a cycle.
 # ---------------------------------------------------------------------------
 from factor_engine.cleaned_operators.fiscal_strict import (  # noqa: E402
+    FLOW_TYPE_SET,
     FinancialFlowSemantics,
     flow_types as _flow_types,
     reject_ytd_growth as _reject_ytd_growth,
@@ -59,12 +66,16 @@ def _meta(
     extra_tags: Iterable[str] = (),
     unit: str = "ratio",
     input_units: dict[str, str] | None = None,
+    panel_params: tuple[str, ...] = (),
+    param_specs: dict[str, ParamSpec] | None = None,
 ) -> OperatorMetadata:
     metadata = OperatorMetadata(
         name=name,
         category="fundamental_period",
         description=description,
         param_names=params,
+        panel_params=panel_params,
+        param_specs=dict(param_specs or {}),
         return_type="series",
         tags=[
             "fundamental", "period_aware", "pit_safe", "causal", "typed_v2",
@@ -95,7 +106,31 @@ def _mk(
     declared = list(params)
     if "period_id" not in declared:
         declared = declared + ["period_id"]
-    metadata = _meta(name, description, declared, extra_tags=extra_tags, unit=unit, input_units=input_units)
+    param_specs: dict[str, ParamSpec] = {}
+    if "periods" in declared:
+        param_specs["periods"] = ParamSpec(
+            dtype=int,
+            min=2 if name in {"fin_earnings_cash_gap_volatility", "fin_earnings_smoothness"} else 3,
+            default=8,
+            param_role=ParamRole.HORIZON,
+        )
+    if "flow_type" in declared:
+        param_specs["flow_type"] = ParamSpec(
+            dtype=str,
+            choices=tuple(sorted(FLOW_TYPE_SET)),
+            searchable=False,
+            default=None,
+            param_role=ParamRole.POLICY,
+        )
+    panel_params = tuple(param for param in declared if param not in param_specs)
+    metadata = _meta(
+        name, description, declared,
+        extra_tags=extra_tags,
+        unit=unit,
+        input_units=input_units,
+        panel_params=panel_params,
+        param_specs=param_specs,
+    )
 
     def _calculate_series(self, *args, **kwargs):
         return fn(*args, **kwargs)

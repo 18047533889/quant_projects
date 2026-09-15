@@ -185,6 +185,7 @@ def test_feature_set_artifact_verifies_content_hash():
         feature_set_version="1.0",
         ordered_feature_manifest=("F1", "F2"),
         content_hash=fs.content_hash,
+        hash_codec=fs.hash_codec,
     )
     assert fs2.content_hash == fs.content_hash
 

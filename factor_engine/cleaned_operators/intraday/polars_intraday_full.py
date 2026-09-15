@@ -25,12 +25,25 @@ import math
 import polars as pl
 
 from factor_engine.cleaned_operators.base_polars import OperatorMetadata, SeriesOperator, register_operator
+from factor_engine.cleaned_operators.base import ParamRole, ParamSpec
 from factor_engine.cleaned_operators.intraday._core import tripower_scale as _tripower_scale
 
 _TIME_COLS = frozenset({"date", "timestamp", "time", "QuoteTime", "TradeDate"})
 _EPS = 1e-12
 _SESSION_TZ = "Asia/Shanghai"
 _SEGMENT_RANGES = {"morning": (570, 690), "afternoon": (780, 900)}
+_TZ_SPEC = ParamSpec(dtype=str, default=None, searchable=False, param_role=ParamRole.POLICY)
+
+
+def _session_tz_panel(df: pl.DataFrame, session_tz: str | None) -> pl.DataFrame:
+    """Apply the caller's session timezone before kernels derive wall-clock slots."""
+    tc = _time_col(df)
+    if getattr(df.schema[tc], "time_zone", None):
+        zone = session_tz or _SESSION_TZ
+        return df.with_columns(
+            pl.col(tc).dt.convert_time_zone(zone).dt.replace_time_zone(None).alias(tc)
+        )
+    return df
 
 
 def _time_col(df: pl.DataFrame) -> str:
@@ -83,7 +96,7 @@ def _pivot(df: pl.DataFrame, value: str) -> pl.DataFrame:
     return piv.fill_null(float("nan"))
 
 
-def _mk(canonical: str, description: str, params: list[str], fn, extra_tags=None, available_at=None, same_session_usable=None):
+def _mk(canonical: str, description: str, params: list[str], fn, extra_tags=None, available_at=None, same_session_usable=None, panel_params=None, scalar_params=None, param_specs=None):
     tags = ["polars", "intraday", "minute", "native", "typed_v2"]
     if extra_tags:
         tags.extend(extra_tags)
@@ -96,6 +109,10 @@ def _mk(canonical: str, description: str, params: list[str], fn, extra_tags=None
         tags=tags,
         available_at=available_at,
         same_session_usable=same_session_usable,
+        panel_params=tuple(panel_params or ()),
+        panel_arity=len(panel_params) if panel_params else None,
+        scalar_params=tuple(scalar_params or ()),
+        param_specs=dict(param_specs or {}),
     )
 
     def _calculate_series(self, *args, **kwargs):
@@ -911,10 +928,10 @@ def _same_slot_score(close: pl.DataFrame, window: int, reverse: bool) -> pl.Data
     return _pivot(out, "v")
 
 
-_mk("intra_same_slot_momentum", "同日段跨日延续得分（Polars）。", ["close", "window"],
-   lambda close, window=20: _same_slot_score(close, int(window), reverse=False))
-_mk("intra_same_slot_reversal", "同日段反向得分（Polars）。", ["close", "window"],
-   lambda close, window=20: _same_slot_score(close, int(window), reverse=True))
+_mk("intra_same_slot_momentum", "同日段跨日延续得分（Polars）。", ["close", "window", "session_tz"],
+   lambda close, window=20, session_tz=None: _same_slot_score(_session_tz_panel(close, session_tz), int(window), reverse=False), panel_params=("close",), scalar_params=("window", "session_tz"), param_specs={"window": ParamSpec(dtype=int, min=2, default=20, param_role=ParamRole.HORIZON), "session_tz": _TZ_SPEC})
+_mk("intra_same_slot_reversal", "同日段反向得分（Polars）。", ["close", "window", "session_tz"],
+   lambda close, window=20, session_tz=None: _same_slot_score(_session_tz_panel(close, session_tz), int(window), reverse=True), panel_params=("close",), scalar_params=("window", "session_tz"), param_specs={"window": ParamSpec(dtype=int, min=2, default=20, param_role=ParamRole.HORIZON), "session_tz": _TZ_SPEC})
 
 
 def _profile_frame(values: pl.DataFrame) -> pl.DataFrame:
@@ -1007,7 +1024,7 @@ for _name, _desc, _fn in (
     ("intra_amount_profile_jsd", "成交额分布与历史基准 JSD（Polars）。", _profile_jsd),
     ("intra_profile_earth_mover_distance", "分布与历史基准 Wasserstein 距离（Polars）。", _profile_emd),
 ):
-    _mk(_name, _desc, ["x", "window"], lambda x, window=20, _fn=_fn: _fn(x, int(window)), available_at="session_close", same_session_usable=False)
+    _mk(_name, _desc, ["x", "window", "session_tz"], lambda x, window=20, session_tz=None, _fn=_fn: _fn(_session_tz_panel(x, session_tz), int(window)), available_at="session_close", same_session_usable=False, panel_params=("x",), scalar_params=("window", "session_tz"), param_specs={"window": ParamSpec(dtype=int, min=2, default=20, param_role=ParamRole.HORIZON), "session_tz": _TZ_SPEC})
 
 
 # ---------------------------------------------------------------------------
@@ -1351,8 +1368,8 @@ def _interval_rv(close: pl.DataFrame, start: int, end: int) -> pl.DataFrame:
     return _pivot(out, "v")
 
 
-_mk("intra_interval_realized_variance", "区间已实现方差（Polars）。", ["close", "start_minute", "end_minute"],
-   lambda close, start_minute=570, end_minute=900: _interval_rv(close, int(start_minute), int(end_minute)))
+_mk("intra_interval_realized_variance", "区间已实现方差（Polars）。", ["close", "start_minute", "end_minute", "session_tz"],
+   lambda close, start_minute=570, end_minute=900, session_tz=None: _interval_rv(_session_tz_panel(close, session_tz), int(start_minute), int(end_minute)), panel_params=("close",), scalar_params=("start_minute", "end_minute", "session_tz"), param_specs={"start_minute": ParamSpec(dtype=int, min=0, max=1440, default=570, param_role=ParamRole.STATE_THRESHOLD), "end_minute": ParamSpec(dtype=int, min=0, max=1440, default=900, param_role=ParamRole.STATE_THRESHOLD), "session_tz": _TZ_SPEC})
 
 
 def _interval_vwap_dev(close: pl.DataFrame, amount: pl.DataFrame, volume: pl.DataFrame, start: int, end: int) -> pl.DataFrame:
@@ -1377,9 +1394,9 @@ def _interval_vwap_dev(close: pl.DataFrame, amount: pl.DataFrame, volume: pl.Dat
 
 
 _mk("intra_interval_vwap_deviation", "区间 VWAP 偏离（Polars）。",
-   ["close", "amount", "volume", "start_minute", "end_minute"],
-   lambda close, amount, volume, start_minute=570, end_minute=900:
-       _interval_vwap_dev(close, amount, volume, int(start_minute), int(end_minute)))
+   ["close", "amount", "volume", "start_minute", "end_minute", "session_tz"],
+   lambda close, amount, volume, start_minute=570, end_minute=900, session_tz=None:
+       _interval_vwap_dev(_session_tz_panel(close, session_tz), _session_tz_panel(amount, session_tz), _session_tz_panel(volume, session_tz), int(start_minute), int(end_minute)), panel_params=("close", "amount", "volume"), scalar_params=("start_minute", "end_minute", "session_tz"), param_specs={"start_minute": ParamSpec(dtype=int, min=0, max=1440, default=570, param_role=ParamRole.STATE_THRESHOLD), "end_minute": ParamSpec(dtype=int, min=0, max=1440, default=900, param_role=ParamRole.STATE_THRESHOLD), "session_tz": _TZ_SPEC})
 
 
 def _interval_illiq(close: pl.DataFrame, amount: pl.DataFrame, start: int, end: int) -> pl.DataFrame:
@@ -1402,9 +1419,9 @@ def _interval_illiq(close: pl.DataFrame, amount: pl.DataFrame, start: int, end: 
 
 
 _mk("intra_interval_illiquidity", "区间 Amihud 非流动性（Polars）。",
-   ["close", "amount", "start_minute", "end_minute"],
-   lambda close, amount, start_minute=570, end_minute=900:
-       _interval_illiq(close, amount, int(start_minute), int(end_minute)))
+   ["close", "amount", "start_minute", "end_minute", "session_tz"],
+   lambda close, amount, start_minute=570, end_minute=900, session_tz=None:
+       _interval_illiq(_session_tz_panel(close, session_tz), _session_tz_panel(amount, session_tz), int(start_minute), int(end_minute)), panel_params=("close", "amount"), scalar_params=("start_minute", "end_minute", "session_tz"), param_specs={"start_minute": ParamSpec(dtype=int, min=0, max=1440, default=570, param_role=ParamRole.STATE_THRESHOLD), "end_minute": ParamSpec(dtype=int, min=0, max=1440, default=900, param_role=ParamRole.STATE_THRESHOLD), "session_tz": _TZ_SPEC})
 
 
 # ---------------------------------------------------------------------------

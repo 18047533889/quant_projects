@@ -1,0 +1,3005 @@
+WARNING: logical-contract divergence for backend of canonical 'ts_confirmed_pivot_high': field 'param_specs' declares {'left_window': ParamSpec(dtype=<class 'int'>, min=1, max=None, choices=None, searchable=True, active_when=None, history_semantics=None, history_formula=None, default=MISSING, equivalence=None, param_role=<ParamRole.HORIZON: 'horizon'>), 'right_window': ParamSpec(dtype=<class 'int'>, min=1, max=None, choices=None, searchable=True, active_when=None, history_semantics=None, history_formula=None, default=MISSING, equivalence=None, param_role=<ParamRole.HORIZON: 'horizon'>)} but the canonical contract holds {'left_window': ParamSpec(dtype=<class 'int'>, min=1, max=None, choices=None, searchable=True, active_when=None, history_semantics=None, history_formula='left_window + right_window', default=MISSING, equivalence=None, param_role=None), 'right_window': ParamSpec(dtype=<class 'int'>, min=1, max=None, choices=None, searchable=True, active_when=None, history_semantics=None, history_formula=None, default=MISSING, equivalence=None, param_role=None)} (P0-23 — continuing despite divergence for compatibility)
+WARNING: logical-contract divergence for backend of canonical 'ts_confirmed_pivot_low': field 'param_specs' declares {'left_window': ParamSpec(dtype=<class 'int'>, min=1, max=None, choices=None, searchable=True, active_when=None, history_semantics=None, history_formula=None, default=MISSING, equivalence=None, param_role=<ParamRole.HORIZON: 'horizon'>), 'right_window': ParamSpec(dtype=<class 'int'>, min=1, max=None, choices=None, searchable=True, active_when=None, history_semantics=None, history_formula=None, default=MISSING, equivalence=None, param_role=<ParamRole.HORIZON: 'horizon'>)} but the canonical contract holds {'left_window': ParamSpec(dtype=<class 'int'>, min=1, max=None, choices=None, searchable=True, active_when=None, history_semantics=None, history_formula='left_window + right_window', default=MISSING, equivalence=None, param_role=None), 'right_window': ParamSpec(dtype=<class 'int'>, min=1, max=None, choices=None, searchable=True, active_when=None, history_semantics=None, history_formula=None, default=MISSING, equivalence=None, param_role=None)} (P0-23 — continuing despite divergence for compatibility)
+/home/sunhaiwei/quant_projects/factor_engine/backend/polars_backend_kind.py:248: UserWarning: Production mode: Operator unknown (backend=polars) lacks explicit PhysicalImplementationSpec; classification=UNSUPPORTED. Add _physical_spec attribute or physical_spec() method for production eligibility.
+  return polars_backend_kind(op, source=source, production_mode=production_mode)
+/home/sunhaiwei/quant_projects/factor_engine/backend/polars_backend_kind.py:248: UserWarning: Production mode: Operator unknown (backend=polars) lacks explicit PhysicalImplementationSpec; classification=UNSUPPORTED. Add _physical_spec attribute or physical_spec() method for production eligibility.
+  return polars_backend_kind(op, source=source, production_mode=production_mode)
+{
+  "schema_version": "factor_engine.r6.remaining_contracts.v1",
+  "catalog_digest": "7a9eb5e0d64e0df5268d87b65fba2a4ec78d676b5c02f7c146bb420c07aab584",
+  "counts": {
+    "canonical": 1756,
+    "aliases": 287,
+    "public_recipes": 248,
+    "runtime_bindings": 4057,
+    "implementation_available": 1756,
+    "research_callable": 1430,
+    "executable_unverified": 1430,
+    "known_failed_bindings": 0,
+    "production_callable": 0
+  },
+  "scope": "Runtime contracts only; no numerical or production certification.",
+  "groups": [
+    {
+      "source": "/home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/overhaul/daily.py",
+      "count": 9,
+      "operators": [
+        {
+          "canonical": "cs_bucket",
+          "unknown_parameters": [
+            "ascending",
+            "buckets"
+          ]
+        },
+        {
+          "canonical": "cs_bucket_historical",
+          "unknown_parameters": [
+            "min_periods",
+            "quantiles",
+            "window"
+          ]
+        },
+        {
+          "canonical": "ts_argmax",
+          "unknown_parameters": [
+            "min_periods"
+          ]
+        },
+        {
+          "canonical": "ts_argmin",
+          "unknown_parameters": [
+            "min_periods"
+          ]
+        },
+        {
+          "canonical": "ts_count_if",
+          "unknown_parameters": [
+            "min_periods",
+            "window"
+          ]
+        },
+        {
+          "canonical": "ts_mean_if",
+          "unknown_parameters": [
+            "min_periods"
+          ]
+        },
+        {
+          "canonical": "ts_std_if",
+          "unknown_parameters": [
+            "ddof",
+            "min_periods"
+          ]
+        },
+        {
+          "canonical": "ts_sum_if",
+          "unknown_parameters": [
+            "min_periods"
+          ]
+        },
+        {
+          "canonical": "ts_tail_mean",
+          "unknown_parameters": [
+            "min_periods",
+            "q",
+            "side"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "/home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/regression_models.py",
+      "count": 7,
+      "operators": [
+        {
+          "canonical": "ts_cumulative_deviation_score",
+          "unknown_parameters": [
+            "min_periods",
+            "window"
+          ]
+        },
+        {
+          "canonical": "ts_level_shift_score",
+          "unknown_parameters": [
+            "min_periods",
+            "window"
+          ]
+        },
+        {
+          "canonical": "ts_lo_mackinlay_vr",
+          "unknown_parameters": [
+            "min_periods",
+            "q",
+            "window"
+          ]
+        },
+        {
+          "canonical": "ts_lo_mackinlay_z",
+          "unknown_parameters": [
+            "min_periods",
+            "q",
+            "window"
+          ]
+        },
+        {
+          "canonical": "ts_quantile_regression_slope",
+          "unknown_parameters": [
+            "min_periods",
+            "q",
+            "window"
+          ]
+        },
+        {
+          "canonical": "ts_variance_ratio_proxy",
+          "unknown_parameters": [
+            "min_periods",
+            "q",
+            "window"
+          ]
+        },
+        {
+          "canonical": "ts_vol_shift_score",
+          "unknown_parameters": [
+            "min_periods",
+            "window"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "/home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/robust_tail.py",
+      "count": 7,
+      "operators": [
+        {
+          "canonical": "ts_expected_shortfall",
+          "unknown_parameters": [
+            "min_tail_count",
+            "q",
+            "side",
+            "window"
+          ]
+        },
+        {
+          "canonical": "ts_extreme_cluster_ratio",
+          "unknown_parameters": [
+            "min_periods",
+            "q",
+            "side",
+            "threshold",
+            "window"
+          ]
+        },
+        {
+          "canonical": "ts_lower_partial_moment",
+          "unknown_parameters": [
+            "min_periods",
+            "order",
+            "threshold",
+            "window"
+          ]
+        },
+        {
+          "canonical": "ts_quantile_kurtosis",
+          "unknown_parameters": [
+            "inner",
+            "min_periods",
+            "outer",
+            "window"
+          ]
+        },
+        {
+          "canonical": "ts_quantile_skew",
+          "unknown_parameters": [
+            "min_periods",
+            "q_high",
+            "q_low",
+            "q_mid",
+            "window"
+          ]
+        },
+        {
+          "canonical": "ts_tail_ratio",
+          "unknown_parameters": [
+            "min_periods",
+            "q_high",
+            "q_low",
+            "window"
+          ]
+        },
+        {
+          "canonical": "ts_upper_partial_moment",
+          "unknown_parameters": [
+            "min_periods",
+            "order",
+            "threshold",
+            "window"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "/home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/advanced_quantile_dynamics.py",
+      "count": 6,
+      "operators": [
+        {
+          "canonical": "ts_cross_extremogram",
+          "unknown_parameters": [
+            "fixed_threshold",
+            "lag",
+            "source_q",
+            "source_side",
+            "target_q",
+            "target_side",
+            "window"
+          ]
+        },
+        {
+          "canonical": "ts_cross_quantilogram",
+          "unknown_parameters": [
+            "fixed_threshold",
+            "lag",
+            "source_q",
+            "source_side",
+            "target_q",
+            "target_side",
+            "window"
+          ]
+        },
+        {
+          "canonical": "ts_extremal_dependence_decay",
+          "unknown_parameters": [
+            "fixed_threshold",
+            "max_lag",
+            "quantile",
+            "side",
+            "window"
+          ]
+        },
+        {
+          "canonical": "ts_extremogram",
+          "unknown_parameters": [
+            "fixed_threshold",
+            "lag",
+            "quantile",
+            "side",
+            "window"
+          ]
+        },
+        {
+          "canonical": "ts_quantile_crossing_spectral_concentration",
+          "unknown_parameters": [
+            "fixed_threshold",
+            "quantile",
+            "side",
+            "window"
+          ]
+        },
+        {
+          "canonical": "ts_quantilogram",
+          "unknown_parameters": [
+            "fixed_threshold",
+            "lag",
+            "quantile",
+            "side",
+            "window"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "/home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/ashare/limit_ops.py",
+      "count": 6,
+      "operators": [
+        {
+          "canonical": "ashare_limit_down_touch",
+          "unknown_parameters": [
+            "tick_tolerance"
+          ]
+        },
+        {
+          "canonical": "ashare_limit_failed",
+          "unknown_parameters": [
+            "tick_tolerance"
+          ]
+        },
+        {
+          "canonical": "ashare_limit_one_price",
+          "unknown_parameters": [
+            "open",
+            "side",
+            "tick_tolerance"
+          ]
+        },
+        {
+          "canonical": "ashare_limit_open_failed",
+          "unknown_parameters": [
+            "open",
+            "tick_tolerance"
+          ]
+        },
+        {
+          "canonical": "ashare_limit_up_touch",
+          "unknown_parameters": [
+            "tick_tolerance"
+          ]
+        },
+        {
+          "canonical": "ashare_open_at_upper_limit",
+          "unknown_parameters": [
+            "open",
+            "tick_tolerance"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "/home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/ashare/ops.py",
+      "count": 6,
+      "operators": [
+        {
+          "canonical": "benchmark_relative_price",
+          "unknown_parameters": [
+            "benchmark_price",
+            "denominator",
+            "numerator",
+            "price"
+          ]
+        },
+        {
+          "canonical": "float_share_ratio",
+          "unknown_parameters": [
+            "denominator",
+            "float_shares",
+            "numerator",
+            "total_shares"
+          ]
+        },
+        {
+          "canonical": "free_float_share_ratio",
+          "unknown_parameters": [
+            "denominator",
+            "free_float_shares",
+            "numerator",
+            "total_shares"
+          ]
+        },
+        {
+          "canonical": "limit_down_close",
+          "unknown_parameters": [
+            "tick_tolerance"
+          ]
+        },
+        {
+          "canonical": "limit_up_close",
+          "unknown_parameters": [
+            "tick_tolerance"
+          ]
+        },
+        {
+          "canonical": "true_turnover_rate",
+          "unknown_parameters": [
+            "free_float_shares",
+            "volume"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "/home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/conditional_ext.py",
+      "count": 6,
+      "operators": [
+        {
+          "canonical": "ts_beta_if",
+          "unknown_parameters": [
+            "min_periods",
+            "window"
+          ]
+        },
+        {
+          "canonical": "ts_corr_if",
+          "unknown_parameters": [
+            "min_periods",
+            "window"
+          ]
+        },
+        {
+          "canonical": "ts_max_if",
+          "unknown_parameters": [
+            "min_periods",
+            "window"
+          ]
+        },
+        {
+          "canonical": "ts_min_if",
+          "unknown_parameters": [
+            "min_periods",
+            "window"
+          ]
+        },
+        {
+          "canonical": "ts_quantile_if",
+          "unknown_parameters": [
+            "min_periods",
+            "q",
+            "window"
+          ]
+        },
+        {
+          "canonical": "ts_regression_resid_if",
+          "unknown_parameters": [
+            "min_periods",
+            "window"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "/home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/interval_geometry.py",
+      "count": 6,
+      "operators": [
+        {
+          "canonical": "ts_interval_exploration_efficiency",
+          "unknown_parameters": [
+            "window"
+          ]
+        },
+        {
+          "canonical": "ts_interval_nesting_depth",
+          "unknown_parameters": [
+            "mode"
+          ]
+        },
+        {
+          "canonical": "ts_interval_occupancy_entropy",
+          "unknown_parameters": [
+            "bins",
+            "window"
+          ]
+        },
+        {
+          "canonical": "ts_interval_occupancy_mode_distance",
+          "unknown_parameters": [
+            "bins",
+            "window"
+          ]
+        },
+        {
+          "canonical": "ts_interval_overlap_connected_component_ratio",
+          "unknown_parameters": [
+            "window"
+          ]
+        },
+        {
+          "canonical": "ts_interval_union_coverage",
+          "unknown_parameters": [
+            "window"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "/home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/layer_topk_compat.py",
+      "count": 6,
+      "operators": [
+        {
+          "canonical": "ts_bottomk_mean",
+          "unknown_parameters": [
+            "k",
+            "min_periods",
+            "window"
+          ]
+        },
+        {
+          "canonical": "ts_bottomk_std",
+          "unknown_parameters": [
+            "k",
+            "min_periods",
+            "window"
+          ]
+        },
+        {
+          "canonical": "ts_bottomk_sum",
+          "unknown_parameters": [
+            "k",
+            "min_periods",
+            "window"
+          ]
+        },
+        {
+          "canonical": "ts_topk_mean",
+          "unknown_parameters": [
+            "k",
+            "min_periods",
+            "window"
+          ]
+        },
+        {
+          "canonical": "ts_topk_std",
+          "unknown_parameters": [
+            "k",
+            "min_periods",
+            "window"
+          ]
+        },
+        {
+          "canonical": "ts_topk_sum",
+          "unknown_parameters": [
+            "min_periods"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "/home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/price_volume/ops.py",
+      "count": 6,
+      "operators": [
+        {
+          "canonical": "coskewness_to_market",
+          "unknown_parameters": [
+            "window"
+          ]
+        },
+        {
+          "canonical": "idio_skew",
+          "unknown_parameters": [
+            "window"
+          ]
+        },
+        {
+          "canonical": "idio_vol",
+          "unknown_parameters": [
+            "window"
+          ]
+        },
+        {
+          "canonical": "residual_momentum_capm",
+          "unknown_parameters": [
+            "window"
+          ]
+        },
+        {
+          "canonical": "rolling_beta_to_market",
+          "unknown_parameters": [
+            "benchmark_ret",
+            "window"
+          ]
+        },
+        {
+          "canonical": "tail_beta",
+          "unknown_parameters": [
+            "q",
+            "window"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "/home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/relation/distribution.py",
+      "count": 6,
+      "operators": [
+        {
+          "canonical": "group_quantile_spread",
+          "unknown_parameters": [
+            "q_high",
+            "q_low"
+          ]
+        },
+        {
+          "canonical": "group_tail_ratio",
+          "unknown_parameters": [
+            "q_high",
+            "q_low"
+          ]
+        },
+        {
+          "canonical": "relation_distribution_excess_kurtosis",
+          "unknown_parameters": [
+            "relations"
+          ]
+        },
+        {
+          "canonical": "relation_distribution_pearson_kurtosis",
+          "unknown_parameters": [
+            "relations"
+          ]
+        },
+        {
+          "canonical": "relation_distribution_skew",
+          "unknown_parameters": [
+            "relations"
+          ]
+        },
+        {
+          "canonical": "relation_rank_entity_mobility",
+          "unknown_parameters": [
+            "p1",
+            "p10",
+            "p2",
+            "p3",
+            "p4",
+            "p5",
+            "p6",
+            "p7",
+            "p8",
+            "p9",
+            "psid1",
+            "psid10",
+            "psid2",
+            "psid3",
+            "psid4",
+            "psid5",
+            "psid6",
+            "psid7",
+            "psid8",
+            "psid9",
+            "s1",
+            "s10",
+            "s2",
+            "s3",
+            "s4",
+            "s5",
+            "s6",
+            "s7",
+            "s8",
+            "s9",
+            "sid1",
+            "sid10",
+            "sid2",
+            "sid3",
+            "sid4",
+            "sid5",
+            "sid6",
+            "sid7",
+            "sid8",
+            "sid9"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "/home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/safe_ops.py",
+      "count": 6,
+      "operators": [
+        {
+          "canonical": "group_impute_median",
+          "unknown_parameters": [
+            "min_group_size"
+          ]
+        },
+        {
+          "canonical": "ts_argmax_age",
+          "unknown_parameters": [
+            "min_periods"
+          ]
+        },
+        {
+          "canonical": "ts_argmax_index_from_oldest",
+          "unknown_parameters": [
+            "min_periods"
+          ]
+        },
+        {
+          "canonical": "ts_argmin_age",
+          "unknown_parameters": [
+            "min_periods"
+          ]
+        },
+        {
+          "canonical": "ts_argmin_index_from_oldest",
+          "unknown_parameters": [
+            "min_periods"
+          ]
+        },
+        {
+          "canonical": "ts_ffill_limited",
+          "unknown_parameters": [
+            "lineage"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "/home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/ts_model/state_space.py",
+      "count": 6,
+      "operators": [
+        {
+          "canonical": "ts_kalman_beta",
+          "unknown_parameters": [
+            "x",
+            "y"
+          ]
+        },
+        {
+          "canonical": "ts_kalman_beta_change",
+          "unknown_parameters": [
+            "x",
+            "y"
+          ]
+        },
+        {
+          "canonical": "ts_kalman_beta_uncertainty",
+          "unknown_parameters": [
+            "x",
+            "y"
+          ]
+        },
+        {
+          "canonical": "ts_kalman_innovation_z",
+          "unknown_parameters": [
+            "x"
+          ]
+        },
+        {
+          "canonical": "ts_kalman_level",
+          "unknown_parameters": [
+            "x"
+          ]
+        },
+        {
+          "canonical": "ts_kalman_trend",
+          "unknown_parameters": [
+            "x"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "/home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/advanced_structure.py",
+      "count": 5,
+      "operators": [
+        {
+          "canonical": "cs_sliced_wasserstein_copula_shift",
+          "unknown_parameters": [
+            "directions",
+            "window"
+          ]
+        },
+        {
+          "canonical": "group_spd_feature_structure_shift",
+          "unknown_parameters": [
+            "composition_policy",
+            "min_peers",
+            "min_reference_days",
+            "reference_window"
+          ]
+        },
+        {
+          "canonical": "ts_bures_corr_shift",
+          "unknown_parameters": [
+            "min_pairs",
+            "prior_window",
+            "recent_window"
+          ]
+        },
+        {
+          "canonical": "ts_kramers_moyal_diffusion",
+          "unknown_parameters": [
+            "bins",
+            "lag",
+            "min_bin_count",
+            "window"
+          ]
+        },
+        {
+          "canonical": "ts_kramers_moyal_drift",
+          "unknown_parameters": [
+            "bins",
+            "lag",
+            "min_bin_count",
+            "window"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "/home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/common/data_cleaning.py",
+      "count": 5,
+      "operators": [
+        {
+          "canonical": "fillna",
+          "unknown_parameters": [
+            "method"
+          ]
+        },
+        {
+          "canonical": "fillna_const",
+          "unknown_parameters": [
+            "value"
+          ]
+        },
+        {
+          "canonical": "nonfinite_to_num",
+          "unknown_parameters": [
+            "num"
+          ]
+        },
+        {
+          "canonical": "ts_ewm_std",
+          "unknown_parameters": [
+            "span"
+          ]
+        },
+        {
+          "canonical": "ts_ewm_var",
+          "unknown_parameters": [
+            "span"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "/home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/cs_batch1.py",
+      "count": 5,
+      "operators": [
+        {
+          "canonical": "cs_empirical_bayes_shrinkage",
+          "unknown_parameters": [
+            "shrinkage_factor"
+          ]
+        },
+        {
+          "canonical": "cs_factor_bucket_return",
+          "unknown_parameters": [
+            "ascending",
+            "n_buckets"
+          ]
+        },
+        {
+          "canonical": "cs_isolation_forest_score",
+          "unknown_parameters": [
+            "contamination",
+            "n_trees",
+            "random_seed"
+          ]
+        },
+        {
+          "canonical": "cs_shrink_to_group_mean",
+          "unknown_parameters": [
+            "shrinkage_intensity"
+          ]
+        },
+        {
+          "canonical": "panel_peer_graph_aggregate",
+          "unknown_parameters": [
+            "method",
+            "threshold"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "/home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/extreme_tail.py",
+      "count": 5,
+      "operators": [
+        {
+          "canonical": "ts_extremal_index",
+          "unknown_parameters": [
+            "min_exceed",
+            "q",
+            "run_length",
+            "side",
+            "window"
+          ]
+        },
+        {
+          "canonical": "ts_gpd_shape_pwm",
+          "unknown_parameters": [
+            "min_tail_count",
+            "side",
+            "tail_fraction",
+            "window"
+          ]
+        },
+        {
+          "canonical": "ts_hill_tail_index",
+          "unknown_parameters": [
+            "min_tail_count",
+            "side",
+            "tail_fraction",
+            "window"
+          ]
+        },
+        {
+          "canonical": "ts_mean_excess_slope",
+          "unknown_parameters": [
+            "min_tail_count",
+            "side",
+            "window"
+          ]
+        },
+        {
+          "canonical": "ts_quantile_regression_beta",
+          "unknown_parameters": [
+            "quantile",
+            "window"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "/home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/layer_weighted.py",
+      "count": 5,
+      "operators": [
+        {
+          "canonical": "cs_weighted_demean",
+          "unknown_parameters": [
+            "weight"
+          ]
+        },
+        {
+          "canonical": "cs_weighted_mean",
+          "unknown_parameters": [
+            "weight"
+          ]
+        },
+        {
+          "canonical": "cs_weighted_zscore",
+          "unknown_parameters": [
+            "weight"
+          ]
+        },
+        {
+          "canonical": "group_weighted_mean",
+          "unknown_parameters": [
+            "group",
+            "weight"
+          ]
+        },
+        {
+          "canonical": "group_weighted_zscore",
+          "unknown_parameters": [
+            "group",
+            "weight"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "/home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/microstructure/flow_impact.py",
+      "count": 5,
+      "operators": [
+        {
+          "canonical": "intraday_bvc_imbalance",
+          "unknown_parameters": [
+            "locked",
+            "scale_window"
+          ]
+        },
+        {
+          "canonical": "intraday_impact_asymmetry",
+          "unknown_parameters": [
+            "min_periods"
+          ]
+        },
+        {
+          "canonical": "intraday_impact_beta",
+          "unknown_parameters": [
+            "min_periods"
+          ]
+        },
+        {
+          "canonical": "intraday_return_wasserstein_shift",
+          "unknown_parameters": [
+            "lookback_days"
+          ]
+        },
+        {
+          "canonical": "micro_bvc_vpin",
+          "unknown_parameters": [
+            "bucket_count",
+            "scale_window"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "/home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/microstructure/intraday_agg.py",
+      "count": 5,
+      "operators": [
+        {
+          "canonical": "intra_limit_duration",
+          "unknown_parameters": [
+            "high_limit",
+            "low_limit"
+          ]
+        },
+        {
+          "canonical": "intra_limit_first_hit_time",
+          "unknown_parameters": [
+            "high",
+            "high_limit",
+            "low",
+            "low_limit"
+          ]
+        },
+        {
+          "canonical": "intra_limit_reopen_count",
+          "unknown_parameters": [
+            "high_limit",
+            "low_limit"
+          ]
+        },
+        {
+          "canonical": "intra_segment_amount_share",
+          "unknown_parameters": [
+            "amount",
+            "market"
+          ]
+        },
+        {
+          "canonical": "intra_segment_volume_share",
+          "unknown_parameters": [
+            "market",
+            "volume"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "/home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/sequence_complexity.py",
+      "count": 5,
+      "operators": [
+        {
+          "canonical": "ts_autocorr_decay_half_life",
+          "unknown_parameters": [
+            "max_lag",
+            "min_periods",
+            "use_abs",
+            "window"
+          ]
+        },
+        {
+          "canonical": "ts_higuchi_fractal_dimension",
+          "unknown_parameters": [
+            "k_max",
+            "window"
+          ]
+        },
+        {
+          "canonical": "ts_hurst_dfa",
+          "unknown_parameters": [
+            "max_scale",
+            "min_scale",
+            "n_scales",
+            "window"
+          ]
+        },
+        {
+          "canonical": "ts_permutation_transition_entropy",
+          "unknown_parameters": [
+            "window"
+          ]
+        },
+        {
+          "canonical": "ts_weighted_permutation_entropy",
+          "unknown_parameters": [
+            "window"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "/home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/state_event.py",
+      "count": 5,
+      "operators": [
+        {
+          "canonical": "event_decay_asof",
+          "unknown_parameters": [
+            "event_kind",
+            "half_life",
+            "missing_policy"
+          ]
+        },
+        {
+          "canonical": "ts_event_spacing_cv",
+          "unknown_parameters": [
+            "min_events",
+            "window"
+          ]
+        },
+        {
+          "canonical": "ts_event_spacing_mean",
+          "unknown_parameters": [
+            "min_events",
+            "window"
+          ]
+        },
+        {
+          "canonical": "ts_time_since_change",
+          "unknown_parameters": [
+            "initial_semantics",
+            "max_lookback",
+            "missing_policy"
+          ]
+        },
+        {
+          "canonical": "ts_transition_count",
+          "unknown_parameters": [
+            "missing_policy",
+            "window"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "/home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/stateful/rotation.py",
+      "count": 5,
+      "operators": [
+        {
+          "canonical": "cs_rank_churn",
+          "unknown_parameters": [
+            "group",
+            "lag"
+          ]
+        },
+        {
+          "canonical": "cs_rank_combined_churn",
+          "unknown_parameters": [
+            "group",
+            "lag"
+          ]
+        },
+        {
+          "canonical": "cs_rank_composition_churn",
+          "unknown_parameters": [
+            "group",
+            "lag"
+          ]
+        },
+        {
+          "canonical": "cs_tail_breadth",
+          "unknown_parameters": [
+            "group",
+            "quantile",
+            "side"
+          ]
+        },
+        {
+          "canonical": "cs_tail_retention",
+          "unknown_parameters": [
+            "cohort",
+            "group",
+            "lag",
+            "quantile",
+            "side"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "/home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/technical/event_state_v2.py",
+      "count": 5,
+      "operators": [
+        {
+          "canonical": "event_cluster_score",
+          "unknown_parameters": [
+            "event"
+          ]
+        },
+        {
+          "canonical": "event_rate_pct",
+          "unknown_parameters": [
+            "event"
+          ]
+        },
+        {
+          "canonical": "event_recency_z",
+          "unknown_parameters": [
+            "event"
+          ]
+        },
+        {
+          "canonical": "state_dwell_pct",
+          "unknown_parameters": [
+            "state"
+          ]
+        },
+        {
+          "canonical": "state_transition_surprise",
+          "unknown_parameters": [
+            "state"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "/home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/ts_model/wavelet_spectral.py",
+      "count": 5,
+      "operators": [
+        {
+          "canonical": "ts_spectral_low_frequency_ratio",
+          "unknown_parameters": [
+            "x"
+          ]
+        },
+        {
+          "canonical": "ts_wavelet_energy_slope",
+          "unknown_parameters": [
+            "x"
+          ]
+        },
+        {
+          "canonical": "ts_wavelet_entropy",
+          "unknown_parameters": [
+            "x"
+          ]
+        },
+        {
+          "canonical": "ts_wavelet_high_frequency_ratio",
+          "unknown_parameters": [
+            "x"
+          ]
+        },
+        {
+          "canonical": "ts_wavelet_low_frequency_ratio",
+          "unknown_parameters": [
+            "x"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "/home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/weighted_tail.py",
+      "count": 5,
+      "operators": [
+        {
+          "canonical": "ts_stratified_mean_spread",
+          "unknown_parameters": [
+            "min_periods",
+            "quantile",
+            "window"
+          ]
+        },
+        {
+          "canonical": "ts_weighted_downside_deviation",
+          "unknown_parameters": [
+            "min_periods",
+            "target",
+            "window"
+          ]
+        },
+        {
+          "canonical": "ts_weighted_drawdown_area",
+          "unknown_parameters": [
+            "window"
+          ]
+        },
+        {
+          "canonical": "ts_weighted_expected_shortfall",
+          "unknown_parameters": [
+            "min_tail_count",
+            "quantile",
+            "side",
+            "window"
+          ]
+        },
+        {
+          "canonical": "ts_weighted_semivariance",
+          "unknown_parameters": [
+            "min_periods",
+            "target",
+            "window"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "/home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/directional_change.py",
+      "count": 4,
+      "operators": [
+        {
+          "canonical": "ts_dc_duration_asymmetry",
+          "unknown_parameters": [
+            "scale_mode",
+            "threshold",
+            "threshold_mode",
+            "window"
+          ]
+        },
+        {
+          "canonical": "ts_dc_event_rate",
+          "unknown_parameters": [
+            "scale_mode",
+            "threshold",
+            "threshold_mode",
+            "window"
+          ]
+        },
+        {
+          "canonical": "ts_dc_overshoot_asymmetry",
+          "unknown_parameters": [
+            "scale_mode",
+            "threshold",
+            "threshold_mode",
+            "window"
+          ]
+        },
+        {
+          "canonical": "ts_dc_overshoot_ratio",
+          "unknown_parameters": [
+            "scale_mode",
+            "threshold",
+            "threshold_mode",
+            "window"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "/home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/event_interval.py",
+      "count": 4,
+      "operators": [
+        {
+          "canonical": "event_fano_excess",
+          "unknown_parameters": [
+            "block",
+            "window"
+          ]
+        },
+        {
+          "canonical": "event_fano_factor",
+          "unknown_parameters": [
+            "block",
+            "window"
+          ]
+        },
+        {
+          "canonical": "event_interval_memory",
+          "unknown_parameters": [
+            "max_pre_window_age",
+            "window"
+          ]
+        },
+        {
+          "canonical": "event_local_variation",
+          "unknown_parameters": [
+            "max_pre_window_age",
+            "window"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "/home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/feature_geometry.py",
+      "count": 4,
+      "operators": [
+        {
+          "canonical": "ts_beta_break_score",
+          "unknown_parameters": [
+            "prior_window",
+            "recent_window"
+          ]
+        },
+        {
+          "canonical": "ts_feature_effective_rank",
+          "unknown_parameters": [
+            "window"
+          ]
+        },
+        {
+          "canonical": "ts_feature_mode_share",
+          "unknown_parameters": [
+            "window"
+          ]
+        },
+        {
+          "canonical": "ts_feature_subspace_rotation",
+          "unknown_parameters": [
+            "prior_window",
+            "recent_window"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "/home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/gather_ext.py",
+      "count": 4,
+      "operators": [
+        {
+          "canonical": "event_level_survival_share",
+          "unknown_parameters": [
+            "direction",
+            "history_window",
+            "tolerance"
+          ]
+        },
+        {
+          "canonical": "group_distribution_js_divergence",
+          "unknown_parameters": [
+            "bins",
+            "exclude_group_from_reference",
+            "min_group_size"
+          ]
+        },
+        {
+          "canonical": "group_topk_mean",
+          "unknown_parameters": [
+            "exclude_self",
+            "k"
+          ]
+        },
+        {
+          "canonical": "ts_value_at_argextreme",
+          "unknown_parameters": [
+            "include_current",
+            "mode",
+            "window"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "/home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/group_ext.py",
+      "count": 4,
+      "operators": [
+        {
+          "canonical": "cs_huber_resid",
+          "unknown_parameters": [
+            "add_intercept"
+          ]
+        },
+        {
+          "canonical": "cs_lad_resid",
+          "unknown_parameters": [
+            "add_intercept"
+          ]
+        },
+        {
+          "canonical": "cs_trimmed_ols_resid",
+          "unknown_parameters": [
+            "add_intercept",
+            "trim_ratio"
+          ]
+        },
+        {
+          "canonical": "group_multi_resid",
+          "unknown_parameters": [
+            "add_intercept",
+            "min_obs"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "/home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/memory_ext.py",
+      "count": 4,
+      "operators": [
+        {
+          "canonical": "ts_autocorrelation_time",
+          "unknown_parameters": [
+            "max_lag",
+            "window"
+          ]
+        },
+        {
+          "canonical": "ts_autocorrelation_time_initial_positive_sequence",
+          "unknown_parameters": [
+            "max_lag",
+            "window"
+          ]
+        },
+        {
+          "canonical": "ts_fractional_difference",
+          "unknown_parameters": [
+            "cutoff",
+            "fd",
+            "max_discarded_weight_mass"
+          ]
+        },
+        {
+          "canonical": "ts_fractional_difference_discarded_weight_mass",
+          "unknown_parameters": [
+            "cutoff",
+            "fd"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "/home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/nonlinear_dependence.py",
+      "count": 4,
+      "operators": [
+        {
+          "canonical": "ts_lagged_mutual_information",
+          "unknown_parameters": [
+            "bias_correction",
+            "bins",
+            "lag",
+            "min_periods",
+            "window"
+          ]
+        },
+        {
+          "canonical": "ts_lower_tail_coexceedance_probability",
+          "unknown_parameters": [
+            "min_tail_count",
+            "q",
+            "window"
+          ]
+        },
+        {
+          "canonical": "ts_mutual_information",
+          "unknown_parameters": [
+            "estimator"
+          ]
+        },
+        {
+          "canonical": "ts_upper_tail_coexceedance_probability",
+          "unknown_parameters": [
+            "min_tail_count",
+            "q",
+            "window"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "/home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/return_decomp.py",
+      "count": 4,
+      "operators": [
+        {
+          "canonical": "open_close_return",
+          "unknown_parameters": [
+            "price_basis"
+          ]
+        },
+        {
+          "canonical": "open_to_vwap_return",
+          "unknown_parameters": [
+            "price_basis"
+          ]
+        },
+        {
+          "canonical": "overnight_return",
+          "unknown_parameters": [
+            "price_basis"
+          ]
+        },
+        {
+          "canonical": "vwap_to_close_return",
+          "unknown_parameters": [
+            "price_basis"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "/home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/robust_stats.py",
+      "count": 4,
+      "operators": [
+        {
+          "canonical": "ts_quantile_range",
+          "unknown_parameters": [
+            "min_periods",
+            "q_high",
+            "q_low",
+            "window"
+          ]
+        },
+        {
+          "canonical": "ts_robust_zscore_inclusive",
+          "unknown_parameters": [
+            "center",
+            "clip",
+            "scale",
+            "window"
+          ]
+        },
+        {
+          "canonical": "ts_robust_zscore_prior",
+          "unknown_parameters": [
+            "center",
+            "clip",
+            "min_periods",
+            "scale",
+            "window"
+          ]
+        },
+        {
+          "canonical": "ts_trimmed_mean",
+          "unknown_parameters": [
+            "min_periods",
+            "trim_ratio",
+            "window"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "/home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/stateful/rule_language.py",
+      "count": 4,
+      "operators": [
+        {
+          "canonical": "state_deadband",
+          "unknown_parameters": [
+            "band"
+          ]
+        },
+        {
+          "canonical": "state_hold",
+          "unknown_parameters": [
+            "reset_condition"
+          ]
+        },
+        {
+          "canonical": "state_latch",
+          "unknown_parameters": [
+            "initial_state"
+          ]
+        },
+        {
+          "canonical": "state_slew_limit",
+          "unknown_parameters": [
+            "limit"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "/home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/stateful/sequential.py",
+      "count": 4,
+      "operators": [
+        {
+          "canonical": "state_ewm_if",
+          "unknown_parameters": [
+            "half_life"
+          ]
+        },
+        {
+          "canonical": "ts_cusum_pressure",
+          "unknown_parameters": [
+            "drift",
+            "min_periods",
+            "reference_window"
+          ]
+        },
+        {
+          "canonical": "ts_lag_of_peak_corr",
+          "unknown_parameters": [
+            "max_lag",
+            "min_periods",
+            "window"
+          ]
+        },
+        {
+          "canonical": "ts_rank_if",
+          "unknown_parameters": [
+            "min_periods",
+            "window"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "/home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/technical/exself_cs_v1.py",
+      "count": 4,
+      "operators": [
+        {
+          "canonical": "ex_self_mad_z",
+          "unknown_parameters": [
+            "group",
+            "x"
+          ]
+        },
+        {
+          "canonical": "ex_self_mean_gap",
+          "unknown_parameters": [
+            "group",
+            "x"
+          ]
+        },
+        {
+          "canonical": "ex_self_rank_pct",
+          "unknown_parameters": [
+            "group",
+            "x"
+          ]
+        },
+        {
+          "canonical": "ex_self_zscore",
+          "unknown_parameters": [
+            "group",
+            "x"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "/home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/ts_model/ar_meanrev.py",
+      "count": 4,
+      "operators": [
+        {
+          "canonical": "ts_mean_reversion_half_life",
+          "unknown_parameters": [
+            "min_periods",
+            "window"
+          ]
+        },
+        {
+          "canonical": "ts_mean_reversion_ou_approx_half_life",
+          "unknown_parameters": [
+            "min_periods",
+            "window"
+          ]
+        },
+        {
+          "canonical": "ts_mean_reversion_ou_approx_half_life_prior",
+          "unknown_parameters": [
+            "min_periods",
+            "window"
+          ]
+        },
+        {
+          "canonical": "ts_variance_ratio_slope",
+          "unknown_parameters": [
+            "max_q",
+            "min_periods",
+            "window"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "/home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/vector_path.py",
+      "count": 4,
+      "operators": [
+        {
+          "canonical": "ts_vector_path_curvature",
+          "unknown_parameters": [
+            "window"
+          ]
+        },
+        {
+          "canonical": "ts_vector_path_efficiency",
+          "unknown_parameters": [
+            "window"
+          ]
+        },
+        {
+          "canonical": "ts_vector_self_intersection_rate",
+          "unknown_parameters": [
+            "window"
+          ]
+        },
+        {
+          "canonical": "ts_vector_turning_coherence",
+          "unknown_parameters": [
+            "window"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "/home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/binned_response.py",
+      "count": 3,
+      "operators": [
+        {
+          "canonical": "ts_binned_response_curvature",
+          "unknown_parameters": [
+            "window"
+          ]
+        },
+        {
+          "canonical": "ts_binned_response_monotonicity",
+          "unknown_parameters": [
+            "window"
+          ]
+        },
+        {
+          "canonical": "ts_response_slope_asymmetry",
+          "unknown_parameters": [
+            "split_quantile",
+            "window"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "/home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/common/cross_sectional.py",
+      "count": 3,
+      "operators": [
+        {
+          "canonical": "cs_quantile",
+          "unknown_parameters": [
+            "p"
+          ]
+        },
+        {
+          "canonical": "cs_regression",
+          "unknown_parameters": [
+            "mode"
+          ]
+        },
+        {
+          "canonical": "scale",
+          "unknown_parameters": [
+            "to"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "/home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/common/group.py",
+      "count": 3,
+      "operators": [
+        {
+          "canonical": "group_decay_linear",
+          "unknown_parameters": [
+            "fallback_policy"
+          ]
+        },
+        {
+          "canonical": "group_ts_decay_linear",
+          "unknown_parameters": [
+            "fallback_policy",
+            "normalize",
+            "window"
+          ]
+        },
+        {
+          "canonical": "group_winsorize",
+          "unknown_parameters": [
+            "a"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "/home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/dependence_ext.py",
+      "count": 3,
+      "operators": [
+        {
+          "canonical": "ts_chatterjee_xi",
+          "unknown_parameters": [
+            "window"
+          ]
+        },
+        {
+          "canonical": "ts_distance_correlation_partial_proxy",
+          "unknown_parameters": [
+            "window"
+          ]
+        },
+        {
+          "canonical": "ts_hsic",
+          "unknown_parameters": [
+            "window"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "/home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/evt_allan.py",
+      "count": 3,
+      "operators": [
+        {
+          "canonical": "event_allan_factor",
+          "unknown_parameters": [
+            "event"
+          ]
+        },
+        {
+          "canonical": "event_allan_log_mean",
+          "unknown_parameters": [
+            "event"
+          ]
+        },
+        {
+          "canonical": "event_allan_scaling_slope",
+          "unknown_parameters": [
+            "event"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "/home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/fundamental/fiscal_batch1.py",
+      "count": 3,
+      "operators": [
+        {
+          "canonical": "fiscal_acceleration",
+          "unknown_parameters": [
+            "lag",
+            "min_periods",
+            "period_id",
+            "periods",
+            "require_consecutive",
+            "revision_policy",
+            "value"
+          ]
+        },
+        {
+          "canonical": "fiscal_pct_change",
+          "unknown_parameters": [
+            "lag",
+            "min_periods",
+            "period_id",
+            "periods",
+            "require_consecutive",
+            "revision_policy",
+            "value"
+          ]
+        },
+        {
+          "canonical": "fiscal_rolling_std",
+          "unknown_parameters": [
+            "ddof",
+            "min_periods",
+            "period_id",
+            "periods",
+            "require_consecutive",
+            "revision_policy",
+            "value"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "/home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/intraday/slice_profile.py",
+      "count": 3,
+      "operators": [
+        {
+          "canonical": "intra_round_price_clustering_share",
+          "unknown_parameters": [
+            "window"
+          ]
+        },
+        {
+          "canonical": "intra_slice_mask_pair_reduce",
+          "unknown_parameters": [
+            "window"
+          ]
+        },
+        {
+          "canonical": "intra_slice_mask_reduce",
+          "unknown_parameters": [
+            "window"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "/home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/jump_robust.py",
+      "count": 3,
+      "operators": [
+        {
+          "canonical": "intraday_jump_test_stat",
+          "unknown_parameters": [
+            "window"
+          ]
+        },
+        {
+          "canonical": "intraday_medrv",
+          "unknown_parameters": [
+            "window"
+          ]
+        },
+        {
+          "canonical": "intraday_minrv",
+          "unknown_parameters": [
+            "window"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "/home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/layer_cos_fundamental.py",
+      "count": 3,
+      "operators": [
+        {
+          "canonical": "period_stability",
+          "unknown_parameters": [
+            "method",
+            "periods",
+            "require_consecutive"
+          ]
+        },
+        {
+          "canonical": "revision_delta",
+          "unknown_parameters": [
+            "mode"
+          ]
+        },
+        {
+          "canonical": "safe_div_null",
+          "unknown_parameters": [
+            "epsilon"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "/home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/moments_ext.py",
+      "count": 3,
+      "operators": [
+        {
+          "canonical": "ts_hartigan_dip",
+          "unknown_parameters": [
+            "min_coverage_fraction",
+            "min_periods",
+            "window"
+          ]
+        },
+        {
+          "canonical": "ts_l_kurtosis",
+          "unknown_parameters": [
+            "min_coverage_fraction",
+            "min_periods",
+            "window"
+          ]
+        },
+        {
+          "canonical": "ts_l_skewness",
+          "unknown_parameters": [
+            "min_coverage_fraction",
+            "min_periods",
+            "window"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "/home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/multifractal.py",
+      "count": 3,
+      "operators": [
+        {
+          "canonical": "ts_generalized_hurst_spread_q1_q4",
+          "unknown_parameters": [
+            "window"
+          ]
+        },
+        {
+          "canonical": "ts_multifractal_curvature",
+          "unknown_parameters": [
+            "window"
+          ]
+        },
+        {
+          "canonical": "ts_multifractal_spectrum_width",
+          "unknown_parameters": [
+            "window"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "/home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/multiscale_trend.py",
+      "count": 3,
+      "operators": [
+        {
+          "canonical": "ts_multiscale_trend_consensus",
+          "unknown_parameters": [
+            "scales"
+          ]
+        },
+        {
+          "canonical": "ts_multiscale_trend_curvature",
+          "unknown_parameters": [
+            "scales"
+          ]
+        },
+        {
+          "canonical": "ts_multiscale_trend_dispersion",
+          "unknown_parameters": [
+            "scales"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "/home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/overhaul/technical.py",
+      "count": 3,
+      "operators": [
+        {
+          "canonical": "MACD_hist",
+          "unknown_parameters": [
+            "fast",
+            "signal",
+            "slow"
+          ]
+        },
+        {
+          "canonical": "MACD_line",
+          "unknown_parameters": [
+            "fast",
+            "slow"
+          ]
+        },
+        {
+          "canonical": "MACD_signal",
+          "unknown_parameters": [
+            "fast",
+            "signal",
+            "slow"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "/home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/semantic_hardening.py",
+      "count": 3,
+      "operators": [
+        {
+          "canonical": "group_percentile",
+          "unknown_parameters": [
+            "missing_group_policy",
+            "p",
+            "side"
+          ]
+        },
+        {
+          "canonical": "ts_mad",
+          "unknown_parameters": [
+            "min_periods",
+            "scale",
+            "window"
+          ]
+        },
+        {
+          "canonical": "ts_product",
+          "unknown_parameters": [
+            "min_periods",
+            "skipna"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "/home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/shareholder/ops.py",
+      "count": 3,
+      "operators": [
+        {
+          "canonical": "holder_company_ownership_hhi",
+          "unknown_parameters": [
+            "s1",
+            "s10",
+            "s2",
+            "s3",
+            "s4",
+            "s5",
+            "s6",
+            "s7",
+            "s8",
+            "s9"
+          ]
+        },
+        {
+          "canonical": "holder_concentration_change",
+          "unknown_parameters": [
+            "lag"
+          ]
+        },
+        {
+          "canonical": "holder_count_change_rate",
+          "unknown_parameters": [
+            "lag"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "/home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/stateful/survival.py",
+      "count": 3,
+      "operators": [
+        {
+          "canonical": "ts_state_age_percentile",
+          "unknown_parameters": [
+            "gap_policy",
+            "history_window",
+            "inactive_policy",
+            "min_completed_runs"
+          ]
+        },
+        {
+          "canonical": "ts_state_exit_hazard",
+          "unknown_parameters": [
+            "alpha",
+            "gap_policy",
+            "history_window",
+            "inactive_policy",
+            "min_completed_runs"
+          ]
+        },
+        {
+          "canonical": "ts_state_residual_life",
+          "unknown_parameters": [
+            "gap_policy",
+            "history_window",
+            "inactive_policy",
+            "min_completed_runs"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "/home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/structural_levels.py",
+      "count": 3,
+      "operators": [
+        {
+          "canonical": "ts_nearest_structural_level_distance",
+          "unknown_parameters": [
+            "confirmation",
+            "direction",
+            "min_coverage_fraction",
+            "min_periods",
+            "prominence",
+            "window"
+          ]
+        },
+        {
+          "canonical": "ts_structural_level_density",
+          "unknown_parameters": [
+            "bandwidth",
+            "confirmation",
+            "min_coverage_fraction",
+            "min_periods",
+            "prominence",
+            "window"
+          ]
+        },
+        {
+          "canonical": "ts_structural_level_strength",
+          "unknown_parameters": [
+            "confirmation",
+            "decay",
+            "min_coverage_fraction",
+            "min_periods",
+            "prominence",
+            "window"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "/home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/technical/group_state_v1.py",
+      "count": 3,
+      "operators": [
+        {
+          "canonical": "beta_divergence_pct",
+          "unknown_parameters": [
+            "market_ret",
+            "ret"
+          ]
+        },
+        {
+          "canonical": "beta_residual_z",
+          "unknown_parameters": [
+            "market_ret",
+            "ret"
+          ]
+        },
+        {
+          "canonical": "relative_strength_group_pct",
+          "unknown_parameters": [
+            "group",
+            "ret"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "/home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/technical/signal.py",
+      "count": 3,
+      "operators": [
+        {
+          "canonical": "hump_decay",
+          "unknown_parameters": [
+            "hump"
+          ]
+        },
+        {
+          "canonical": "signed_power",
+          "unknown_parameters": [
+            "c"
+          ]
+        },
+        {
+          "canonical": "trade_when",
+          "unknown_parameters": [
+            "fallback"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "/home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/ts_model/path_signature.py",
+      "count": 3,
+      "operators": [
+        {
+          "canonical": "ts_path_leadlag_area",
+          "unknown_parameters": [
+            "lag",
+            "window",
+            "x",
+            "y"
+          ]
+        },
+        {
+          "canonical": "ts_path_signature_area",
+          "unknown_parameters": [
+            "window",
+            "x",
+            "y"
+          ]
+        },
+        {
+          "canonical": "ts_path_signature_depth2_norm",
+          "unknown_parameters": [
+            "window",
+            "x",
+            "y"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "/home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/advanced_expectile.py",
+      "count": 2,
+      "operators": [
+        {
+          "canonical": "ts_expectile",
+          "unknown_parameters": [
+            "tau",
+            "window"
+          ]
+        },
+        {
+          "canonical": "ts_expectile_beta",
+          "unknown_parameters": [
+            "tau",
+            "window"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "/home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/advanced_information.py",
+      "count": 2,
+      "operators": [
+        {
+          "canonical": "report_benford_js_divergence",
+          "unknown_parameters": [
+            "window"
+          ]
+        },
+        {
+          "canonical": "ts_score_rank_weighted_mean",
+          "unknown_parameters": [
+            "decay",
+            "window"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "/home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/candle_state_space.py",
+      "count": 2,
+      "operators": [
+        {
+          "canonical": "ts_vector_state_local_density",
+          "unknown_parameters": [
+            "k",
+            "window"
+          ]
+        },
+        {
+          "canonical": "ts_vector_state_mahalanobis",
+          "unknown_parameters": [
+            "shrinkage",
+            "window"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "/home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/common/elementwise.py",
+      "count": 2,
+      "operators": [
+        {
+          "canonical": "coalesce",
+          "unknown_parameters": [
+            "x",
+            "y"
+          ]
+        },
+        {
+          "canonical": "power",
+          "unknown_parameters": [
+            "y"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "/home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/cross_section_local.py",
+      "count": 2,
+      "operators": [
+        {
+          "canonical": "cs_rank_copula_entropy",
+          "unknown_parameters": [
+            "grid"
+          ]
+        },
+        {
+          "canonical": "cs_rank_copula_mi",
+          "unknown_parameters": [
+            "grid"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "/home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/crossing.py",
+      "count": 2,
+      "operators": [
+        {
+          "canonical": "ts_crossing_acceleration",
+          "unknown_parameters": [
+            "window"
+          ]
+        },
+        {
+          "canonical": "ts_crossing_speed",
+          "unknown_parameters": [
+            "window"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "/home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/distribution_break.py",
+      "count": 2,
+      "operators": [
+        {
+          "canonical": "ts_energy_break_score",
+          "unknown_parameters": [
+            "prior_window",
+            "recent_window",
+            "window"
+          ]
+        },
+        {
+          "canonical": "ts_joint_energy_shift",
+          "unknown_parameters": [
+            "prior_window",
+            "recent_window"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "/home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/event_response.py",
+      "count": 2,
+      "operators": [
+        {
+          "canonical": "event_historical_response_mean",
+          "unknown_parameters": [
+            "require_full_horizon"
+          ]
+        },
+        {
+          "canonical": "event_historical_response_sign_balance",
+          "unknown_parameters": [
+            "require_full_horizon"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "/home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/extrema_divergence.py",
+      "count": 2,
+      "operators": [
+        {
+          "canonical": "ts_extrema_confirmation_rate",
+          "unknown_parameters": [
+            "confirmation",
+            "prominence",
+            "side",
+            "tolerance",
+            "window"
+          ]
+        },
+        {
+          "canonical": "ts_extrema_divergence_strength",
+          "unknown_parameters": [
+            "confirmation",
+            "match_lag",
+            "prominence",
+            "side",
+            "window"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "/home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/filter_despike.py",
+      "count": 2,
+      "operators": [
+        {
+          "canonical": "ts_hampel_filter_causal",
+          "unknown_parameters": [
+            "n_sigma",
+            "replacement",
+            "scale_floor",
+            "window"
+          ]
+        },
+        {
+          "canonical": "ts_rolling_median_causal",
+          "unknown_parameters": [
+            "min_periods",
+            "window"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "/home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/filter_smooth.py",
+      "count": 2,
+      "operators": [
+        {
+          "canonical": "ts_kama",
+          "unknown_parameters": [
+            "er_window",
+            "fast_period",
+            "min_periods",
+            "slow_period"
+          ]
+        },
+        {
+          "canonical": "ts_super_smoother",
+          "unknown_parameters": [
+            "period"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "/home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/first_passage.py",
+      "count": 2,
+      "operators": [
+        {
+          "canonical": "ts_first_passage_conditional_time",
+          "unknown_parameters": [
+            "side"
+          ]
+        },
+        {
+          "canonical": "ts_first_passage_hit_probability",
+          "unknown_parameters": [
+            "side"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "/home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/intraday/limit_eod.py",
+      "count": 2,
+      "operators": [
+        {
+          "canonical": "intra_eod_reversal_decomposition",
+          "unknown_parameters": [
+            "baseline",
+            "output",
+            "window_minutes"
+          ]
+        },
+        {
+          "canonical": "intra_limit_pre_hit_pressure_profile",
+          "unknown_parameters": [
+            "output",
+            "pre_window",
+            "require_hit",
+            "side"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "/home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/intraday_session.py",
+      "count": 2,
+      "operators": [
+        {
+          "canonical": "intraday_profile_pca_residual",
+          "unknown_parameters": [
+            "calendar"
+          ]
+        },
+        {
+          "canonical": "intraday_session_shape_novelty",
+          "unknown_parameters": [
+            "calendar"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "/home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/lqtp_compat.py",
+      "count": 2,
+      "operators": [
+        {
+          "canonical": "lqtp_historical_cvar",
+          "unknown_parameters": [
+            "q",
+            "window"
+          ]
+        },
+        {
+          "canonical": "ts_sma_cn",
+          "unknown_parameters": [
+            "m",
+            "n"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "/home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/marked_event.py",
+      "count": 2,
+      "operators": [
+        {
+          "canonical": "event_interval_mark_coupling",
+          "unknown_parameters": [
+            "mark_missing_policy",
+            "max_boundary_extension",
+            "window"
+          ]
+        },
+        {
+          "canonical": "event_mark_autocorr",
+          "unknown_parameters": [
+            "event_lag",
+            "history_window",
+            "mark_missing_policy"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "/home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/rough_vol.py",
+      "count": 2,
+      "operators": [
+        {
+          "canonical": "ts_vol_pvariation_roughness",
+          "unknown_parameters": [
+            "p",
+            "scales",
+            "window"
+          ]
+        },
+        {
+          "canonical": "ts_vol_scaling_break",
+          "unknown_parameters": [
+            "p",
+            "window"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "/home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/spread_estimators.py",
+      "count": 2,
+      "operators": [
+        {
+          "canonical": "ohlc_corwin_schultz_spread",
+          "unknown_parameters": [
+            "smooth_window"
+          ]
+        },
+        {
+          "canonical": "ts_roll_effective_spread",
+          "unknown_parameters": [
+            "min_periods",
+            "window"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "/home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/stateful/drawdown_path.py",
+      "count": 2,
+      "operators": [
+        {
+          "canonical": "ts_current_drawdown_area",
+          "unknown_parameters": [
+            "window"
+          ]
+        },
+        {
+          "canonical": "ts_recovery_fraction",
+          "unknown_parameters": [
+            "window"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "/home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/stateful/events.py",
+      "count": 2,
+      "operators": [
+        {
+          "canonical": "cross_event",
+          "unknown_parameters": [
+            "direction"
+          ]
+        },
+        {
+          "canonical": "event_refractory",
+          "unknown_parameters": [
+            "cooldown"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "/home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/threshold_cycle.py",
+      "count": 2,
+      "operators": [
+        {
+          "canonical": "ts_threshold_cycle_asymmetry",
+          "unknown_parameters": [
+            "lower",
+            "upper",
+            "window"
+          ]
+        },
+        {
+          "canonical": "ts_threshold_cycle_period",
+          "unknown_parameters": [
+            "lower",
+            "upper",
+            "window"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "/home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/weighted_moment_ext.py",
+      "count": 2,
+      "operators": [
+        {
+          "canonical": "ts_cov_if",
+          "unknown_parameters": [
+            "min_periods",
+            "window"
+          ]
+        },
+        {
+          "canonical": "ts_weighted_standardized_moment",
+          "unknown_parameters": [
+            "window"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "/home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/common/gtja_compat.py",
+      "count": 1,
+      "operators": [
+        {
+          "canonical": "protected_div",
+          "unknown_parameters": [
+            "default",
+            "epsilon"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "/home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/common/stable_high_moments_v2.py",
+      "count": 1,
+      "operators": [
+        {
+          "canonical": "ts_kurt",
+          "unknown_parameters": [
+            "window"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "/home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/composite_fastpath.py",
+      "count": 1,
+      "operators": [
+        {
+          "canonical": "RSI_WILDER",
+          "unknown_parameters": [
+            "window"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "/home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/conditional_dependence.py",
+      "count": 1,
+      "operators": [
+        {
+          "canonical": "ts_conditional_transfer_entropy",
+          "unknown_parameters": [
+            "min_transitions"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "/home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/cross_section/panel_gap.py",
+      "count": 1,
+      "operators": [
+        {
+          "canonical": "panel_factor_pocket_strength",
+          "unknown_parameters": [
+            "threshold"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "/home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/cross_section_ext.py",
+      "count": 1,
+      "operators": [
+        {
+          "canonical": "cs_knn_local_moran",
+          "unknown_parameters": [
+            "k"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "/home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/fiscal_event_ops.py",
+      "count": 1,
+      "operators": [
+        {
+          "canonical": "row_sum_skipna",
+          "unknown_parameters": [
+            "...",
+            "min_count"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "/home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/fundamental/component_score.py",
+      "count": 1,
+      "operators": [
+        {
+          "canonical": "fin_component_score",
+          "unknown_parameters": [
+            "component_directions",
+            "score_weights"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "/home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/intraday/event_response.py",
+      "count": 1,
+      "operators": [
+        {
+          "canonical": "intra_impulse_event_detector",
+          "unknown_parameters": [
+            "event",
+            "merge_gap",
+            "min_bars",
+            "output",
+            "threshold",
+            "volume",
+            "z"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "/home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/intraday_activity_duration.py",
+      "count": 1,
+      "operators": [
+        {
+          "canonical": "intraday_activity_duration_curvature",
+          "unknown_parameters": [
+            "calendar"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "/home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/layer_composite_fixes.py",
+      "count": 1,
+      "operators": [
+        {
+          "canonical": "ts_days_since",
+          "unknown_parameters": [
+            "max_lookback"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "/home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/layer_primitives.py",
+      "count": 1,
+      "operators": [
+        {
+          "canonical": "cs_rank_gaussian",
+          "unknown_parameters": [
+            "method"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "/home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/multifractal_asym.py",
+      "count": 1,
+      "operators": [
+        {
+          "canonical": "ts_multifractal_asymmetry",
+          "unknown_parameters": [
+            "min_periods",
+            "window"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "/home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/relation/ops_ext.py",
+      "count": 1,
+      "operators": [
+        {
+          "canonical": "group_signal_attraction_share",
+          "unknown_parameters": [
+            "damping"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "/home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/session_recovery.py",
+      "count": 1,
+      "operators": [
+        {
+          "canonical": "session_event_recovery_score",
+          "unknown_parameters": [
+            "calendar"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "/home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/spectral_ext.py",
+      "count": 1,
+      "operators": [
+        {
+          "canonical": "ts_dominant_cycle_period",
+          "unknown_parameters": [
+            "min_peak_share"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "/home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/state_geometry.py",
+      "count": 1,
+      "operators": [
+        {
+          "canonical": "ts_state_density",
+          "unknown_parameters": [
+            "bandwidth",
+            "min_periods",
+            "window"
+          ]
+        }
+      ]
+    },
+    {
+      "source": "/home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/tail_systemic.py",
+      "count": 1,
+      "operators": [
+        {
+          "canonical": "relation_diffusion_score",
+          "unknown_parameters": [
+            "alpha",
+            "steps"
+          ]
+        }
+      ]
+    }
+  ]
+}

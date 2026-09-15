@@ -1,0 +1,1 @@
+{"command": ["/bin/sh", "-c", "PYTHONPATH=. .venv/bin/python evidence/r6/envelope_benchmark.py 2> evidence/r6/envelope-performance.stderr"], "returncode": 1, "sampled_peak_family_rss_bytes": 327372800, "sampling_seconds": 0.1, "seconds": 12.952714890940115, "test_guard_reason": null, "hard_memory_cap": false}

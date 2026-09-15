@@ -175,6 +175,10 @@ class RegistryInitializationError(RuntimeError):
     """Registry bootstrap was attempted from an impossible lifecycle state."""
 
 
+class UncertifiableImplementationIdentity(TypeError):
+    """An execution dependency cannot form a complete deterministic identity."""
+
+
 def _freeze_const(value: Any) -> Any:
     """Deterministic representation of a code-object constant (P0-23).
 
@@ -269,15 +273,68 @@ def _pandas_dtype_identity(dtype: Any) -> str:
     return str(dtype)
 
 
+def _module_dependency_payload(module: Any) -> str:
+    """Bounded module identity; never walks a module ``__dict__``."""
+    import inspect
+
+    name = getattr(module, "__name__", type(module).__module__)
+    root_name = str(name).partition(".")[0]
+    version = getattr(module, "__version__", None)
+    if version is None:
+        root = sys.modules.get(root_name)
+        version = getattr(root, "__version__", None)
+    if version is not None:
+        return f"module({name}|version={_freeze_value(version)})"
+    if root_name in getattr(sys, "stdlib_module_names", ()):
+        return f"stdlib_module({name}|python={sys.implementation.name}-{sys.version_info[:2]})"
+    try:
+        source = inspect.getsource(module)
+    except (OSError, TypeError):
+        source = None
+    if source is None or len(source.encode("utf-8")) > 1_048_576:
+        raise UncertifiableImplementationIdentity(
+            f"module {name!r} has neither a declared version nor bounded readable source"
+        )
+    import hashlib
+
+    return f"module({name}|source={hashlib.sha256(source.encode('utf-8')).hexdigest()})"
+
+
 def _referenced_helper_payload(fn: Any, code: Any) -> str:
-    """Bind Python helper functions actually referenced by a callable."""
+    """Bind only globals actually named by bytecode, with bounded policies."""
+    import types
+
     namespace = getattr(fn, "__globals__", {})
+    verified_dependency_roots = frozenset({
+        "numpy", "pandas", "scipy", "polars", "pyarrow", "numba", "bottleneck",
+    })
     parts: list[str] = []
     for name in sorted(set(getattr(code, "co_names", ()))):
-        helper = namespace.get(name)
-        if callable(helper) and getattr(helper, "__code__", None) is not None:
-            parts.append(f"{name}={_freeze_value(helper)}")
-    return "|helpers={" + ",".join(parts) + "}"
+        if name not in namespace:
+            continue
+        dependency = namespace[name]
+        if isinstance(dependency, types.ModuleType):
+            payload = _module_dependency_payload(dependency)
+        elif callable(dependency):
+            dep_module = getattr(dependency, "__module__", type(dependency).__module__)
+            dep_root = str(dep_module).partition(".")[0]
+            is_verified_library_function = (
+                dep_root in verified_dependency_roots
+                and getattr(dependency, "__code__", None) is not None
+            )
+            if is_verified_library_function:
+                owner = sys.modules.get(str(dep_module)) or sys.modules.get(str(dep_module).partition(".")[0])
+                version = getattr(owner, "__version__", None)
+                qualname = getattr(dependency, "__qualname__", getattr(dependency, "__name__", type(dependency).__qualname__))
+                dep_code = getattr(dependency, "__code__", None)
+                code_id = _code_payload(dep_code, include_names=True)
+                payload = f"external_callable({dep_module}.{qualname}|version={_freeze_value(version)}|code={code_id})"
+            else:
+                payload = _freeze_value(dependency)
+        else:
+            payload = _freeze_value(dependency)
+        parts.append(f"{name}={payload}")
+    return "|globals={" + ",".join(parts) + "}"
 
 
 def _freeze_value(value: Any) -> str:
@@ -347,8 +404,17 @@ def _freeze_value(value: Any) -> str:
 
 def _freeze_value_unbounded(value: Any) -> str:
     """Implementation for :func:`_freeze_value`; recursion stays bounded."""
+    import contextvars
     import hashlib
 
+    if isinstance(value, contextvars.ContextVar):
+        return f"ContextVar({value.name})"
+    if value is Ellipsis:
+        return "Ellipsis"
+    if type(value).__module__ == "typing":
+        return f"typing({value!r})"
+    if isinstance(value, np.dtype):
+        return f"numpy.dtype({value.str})"
     if value is pd.NA:
         return "pd.NA"
     if isinstance(value, Enum):
@@ -572,12 +638,16 @@ def _freeze_value_unbounded(value: Any) -> str:
     if code is not None:  # code object -> bytecode + constants
         return _code_payload(value, include_names=True)
     if callable(value):
-        fn_code = getattr(value, "__code__", None)
+        import inspect
+
+        bound_self = getattr(value, "__self__", None) if inspect.ismethod(value) else None
+        function = getattr(value, "__func__", value)
+        fn_code = getattr(function, "__code__", None)
         if fn_code is not None:
             parts = [_code_payload(fn_code, include_names=True)]
-            parts.append("defaults=" + _freeze_value(getattr(value, "__defaults__", None)))
-            parts.append("kwdefaults=" + _freeze_value(getattr(value, "__kwdefaults__", None)))
-            closure = getattr(value, "__closure__", None) or ()
+            parts.append("defaults=" + _freeze_value(getattr(function, "__defaults__", None)))
+            parts.append("kwdefaults=" + _freeze_value(getattr(function, "__kwdefaults__", None)))
+            closure = getattr(function, "__closure__", None) or ()
             cells = []
             freevars = tuple(fn_code.co_freevars)
             for pos, cell in enumerate(closure):
@@ -589,17 +659,35 @@ def _freeze_value_unbounded(value: Any) -> str:
                 else:
                     cells.append(f"{name}={_freeze_value(cell_value)}")
             parts.append("cells=" + ",".join(cells))
-            parts.append(_referenced_helper_payload(value, fn_code))
+            parts.append(_referenced_helper_payload(function, fn_code))
+            if bound_self is not None:
+                parts.append("bound_self=" + _freeze_value(bound_self))
             return "fn(" + "|".join(parts) + ")"
-        # Callable without Python bytecode (numpy ufunc, C builtin): hash by its
-        # stable module.qualname identity — deterministic, never id()/repr.
+        if inspect.isclass(value):
+            try:
+                source = inspect.getsource(value)
+            except (OSError, TypeError):
+                source = ""
+            return (
+                f"class({value.__module__}.{value.__qualname__}|"
+                f"source={hashlib.sha256(source.encode('utf-8')).hexdigest()})"
+            )
+        native_extension_callable = type(value).__module__ == "numpy" or type(value).__module__.startswith("numpy.")
+        if not (inspect.isbuiltin(value) or isinstance(value, np.ufunc) or native_extension_callable):
+            raise TypeError(
+                "Python callable instances must be dataclasses or expose "
+                "semantic_identity(); type-name-only identity is uncertifiable: "
+                f"{type(value).__module__}.{type(value).__qualname__}"
+            )
         _mod = getattr(value, "__module__", None) or type(value).__module__
         _qual = (
             getattr(value, "__qualname__", None)
             or getattr(value, "__name__", None)
             or type(value).__qualname__
         )
-        return f"callable({_mod}.{_qual})"
+        owner = sys.modules.get(str(_mod)) or sys.modules.get(str(_mod).partition(".")[0])
+        version = getattr(owner, "__version__", None)
+        return f"native_callable({_mod}.{_qual}|version={_freeze_value(version)})"
     # R9-P1-042: hashing by type name alone conflates distinct payloads.  Fail
     # loudly (certification failure) instead of producing a collision-prone
     # identity that silently equates ``SameClass(config=A)`` and
@@ -637,13 +725,6 @@ def _impl_source_hash(operator: Any) -> str:
 
     cls = operator.__class__
 
-    wrapped = getattr(operator, "_fn", None)
-    if callable(wrapped):
-        payload = _fn_payload(wrapped, cls)
-        if payload is None:
-            raise TypeError("wrapped kernel has no certifiable implementation identity")
-        return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]
-
     def _is_class_defined(attr: str) -> bool:
         # R7-226: "class-defined" means the SUBCLASS overrides it — the abstract
         # framework bases (Operator/SeriesOperator) define ``_calculate_series``
@@ -670,22 +751,26 @@ def _impl_source_hash(operator: Any) -> str:
                 return True
         return False
 
-    # 1. class-defined kernel method (highest priority).
-    for attr in ("_calculate_series", "_calculate_scalar"):
+    dependency_parts = ["execution-dependency-v3"]
+    for attr in ("_calculate_series", "_calculate_scalar", "calculate"):
         if _is_class_defined(attr):
             fn = getattr(operator, attr, None)
             if callable(fn):
-                payload = _fn_payload(fn, cls)
-                if payload is not None:
-                    return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]
-    # 2. class-defined calculate (direct call-contract implementation).
-    if _is_class_defined("calculate"):
-        fn = getattr(operator, "calculate", None)
-        if callable(fn):
-            payload = _fn_payload(fn, cls)
-            if payload is not None:
-                return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]
-    # 3. wrapped kernel callable via a bridge ``_fn`` default.
+                payload = _fn_payload(fn, cls, include_bound_self=False)
+                if payload is None:
+                    raise UncertifiableImplementationIdentity(
+                        f"{attr} has no certifiable implementation identity"
+                    )
+                dependency_parts.append(f"wrapper:{attr}={payload}")
+    wrapped = getattr(operator, "_fn", None)
+    if callable(wrapped):
+        payload = _fn_payload(wrapped, cls)
+        if payload is None:
+            raise UncertifiableImplementationIdentity(
+                "wrapped kernel has no certifiable implementation identity"
+            )
+        dependency_parts.append("kernel:_fn=" + payload)
+
     try:
         import inspect
 
@@ -698,9 +783,12 @@ def _impl_source_hash(operator: Any) -> str:
             if fn_default is not None and callable(fn_default.default):
                 payload = _fn_payload(fn_default.default, cls)
                 if payload is not None:
-                    return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]
+                    dependency_parts.append("kernel:default_fn=" + payload)
     except (TypeError, ValueError):
         pass
+    if len(dependency_parts) > 1:
+        return hashlib.sha256("|".join(dependency_parts).encode("utf-8")).hexdigest()[:16]
+
     # 4. factory closure payload (register_dual / _mk closures).
     for attr in ("_calculate_series", "_calculate_scalar", "calculate"):
         fn = getattr(operator, attr, None)
@@ -720,6 +808,14 @@ def _impl_source_hash(operator: Any) -> str:
     # 5. framework hash: module.qualname only.
     src = f"{cls.__module__}.{cls.__qualname__}"
     return hashlib.sha256(src.encode("utf-8")).hexdigest()[:16]
+
+
+def _registration_impl_hash(operator: Any) -> str | None:
+    """Registration records uncertifiable candidates without certifying them."""
+    try:
+        return _impl_source_hash(operator)
+    except UncertifiableImplementationIdentity:
+        return None
 
 
 def _contract_hash(operator: Any) -> str:
@@ -773,6 +869,9 @@ def _contract_hash(operator: Any) -> str:
     parts.append("specs={" + ",".join(spec_parts) + "}")
     parts.append("panel=" + ",".join(tuple(getattr(meta, "panel_params", None) or ())))
     parts.append("scalar=" + ",".join(tuple(getattr(meta, "scalar_params", None) or ())))
+    parts.append("mixed=" + ",".join(tuple(getattr(meta, "mixed_params", None) or ())))
+    parts.append("nullable_mixed=" + ",".join(tuple(getattr(meta, "nullable_mixed_params", None) or ())))
+    parts.append("variadic_mixed=" + str(getattr(meta, "variadic_mixed_param", None) or ""))
     parts.append("aliases=" + ",".join(
         f"{k}->{v}" for k, v in sorted((getattr(meta, "param_aliases", None) or {}).items())
     ))
@@ -880,7 +979,7 @@ def _contract_hash(operator: Any) -> str:
     return hashlib.sha256("|".join(parts).encode("utf-8")).hexdigest()[:16]
 
 
-def _fn_payload(fn: Any, cls: type) -> str | None:
+def _fn_payload(fn: Any, cls: type, *, include_bound_self: bool = True) -> str | None:
     """Deterministic payload of one callable: code + closure (R7-227).
 
     The class qualname is deliberately NOT part of the semantic payload: two
@@ -893,13 +992,15 @@ def _fn_payload(fn: Any, cls: type) -> str | None:
     import inspect as _inspect
 
     try:
-        code = getattr(fn, "__code__", None)
-        closure = getattr(fn, "__closure__", None)
+        bound_self = getattr(fn, "__self__", None) if _inspect.ismethod(fn) else None
+        function = getattr(fn, "__func__", fn)
+        code = getattr(function, "__code__", None)
+        closure = getattr(function, "__closure__", None)
         if code is not None and closure:
             parts = [
                 _code_payload(code, include_names=True),
-                "defaults=" + _freeze_value(getattr(fn, "__defaults__", None)),
-                "kwdefaults=" + _freeze_value(getattr(fn, "__kwdefaults__", None)),
+                "defaults=" + _freeze_value(getattr(function, "__defaults__", None)),
+                "kwdefaults=" + _freeze_value(getattr(function, "__kwdefaults__", None)),
             ]
             # R30 §13 (P0-009): a closure cell's position is semantically bound
             # to its ``co_freevars`` name — the SAME value set in a different
@@ -917,14 +1018,21 @@ def _fn_payload(fn: Any, cls: type) -> str | None:
                 else:
                     cells.append(f"{name}={_freeze_value(cell_value)}")
             parts.append("cells={" + ",".join(cells) + "}")
-            return "|".join(parts) + _referenced_helper_payload(fn, code)
+            if include_bound_self and bound_self is not None:
+                parts.append("bound_self=" + _freeze_value(bound_self))
+            return "|".join(parts) + _referenced_helper_payload(function, code)
         if code is not None:
-            return "|".join([
+            parts = [
                 _code_payload(code, include_names=True),
-                "defaults=" + _freeze_value(getattr(fn, "__defaults__", None)),
-                "kwdefaults=" + _freeze_value(getattr(fn, "__kwdefaults__", None)),
-            ]) + _referenced_helper_payload(fn, code)
-        return _inspect.getsource(fn)
+                "defaults=" + _freeze_value(getattr(function, "__defaults__", None)),
+                "kwdefaults=" + _freeze_value(getattr(function, "__kwdefaults__", None)),
+            ]
+            if include_bound_self and bound_self is not None:
+                parts.append("bound_self=" + _freeze_value(bound_self))
+            return "|".join(parts) + _referenced_helper_payload(function, code)
+        return _freeze_value(fn)
+    except UncertifiableImplementationIdentity:
+        raise
     except (OSError, TypeError):  # pragma: no cover - interactive/no-source
         return None
 
@@ -1051,6 +1159,9 @@ _LOGICAL_CONTRACT_FIELDS: tuple[tuple[str, str], ...] = (
     ("total_positional_arity", "scalar"),
     ("scalar_params", "tuple"),
     ("panel_params", "tuple"),
+    ("mixed_params", "tuple"),
+    ("nullable_mixed_params", "tuple"),
+    ("variadic_mixed_param", "scalar"),
     ("input_fields", "list"),
 )
 
@@ -1184,6 +1295,9 @@ _CANONICAL_CONTRACT_FIELDS: tuple[str, ...] = (
     "same_unit_input_groups",
     "panel_params",
     "scalar_params",
+    "mixed_params",
+    "nullable_mixed_params",
+    "variadic_mixed_param",
     "input_units",
     "output_unit",
     "compatible_units",
@@ -1822,7 +1936,7 @@ class OperatorRegistry:
             cls._first_registered[canonical] = {
                 "first_registered_status": str(status or "implemented"),
                 "first_registered_source": str(source or ""),
-                "first_registered_hash": _impl_source_hash(operator),
+                "first_registered_hash": _registration_impl_hash(operator),
             }
         if backend in existing_ops:
             old_source = str((cls._catalog.get(canonical, {}).get("backend_meta") or {}).get(backend, {}).get("source", "") or "")
@@ -1928,8 +2042,8 @@ class OperatorRegistry:
                 "backend": backend,
                 "old_source": old_source,
                 "new_source": source,
-                "old_hash": _impl_source_hash(existing_ops[backend]),
-                "new_hash": _impl_source_hash(operator),
+                "old_hash": _registration_impl_hash(existing_ops[backend]),
+                "new_hash": _registration_impl_hash(operator),
                 # R7-233: contract hash of old/new logical contract (param_names
                 # + param_specs + panel_params + aliases + units + grains), so an
                 # audit can prove WHICH contract was replaced, not just that a
@@ -2090,6 +2204,18 @@ class OperatorRegistry:
             "scalar_params": _first_non_null(
                 prev.get("scalar_params"),
                 tuple(getattr(_metadata, "scalar_params", None) or ()),
+            ),
+            "mixed_params": _first_non_null(
+                prev.get("mixed_params"),
+                tuple(getattr(_metadata, "mixed_params", None) or ()),
+            ),
+            "nullable_mixed_params": _first_non_null(
+                prev.get("nullable_mixed_params"),
+                tuple(getattr(_metadata, "nullable_mixed_params", None) or ()),
+            ),
+            "variadic_mixed_param": _first_non_null(
+                prev.get("variadic_mixed_param"),
+                getattr(_metadata, "variadic_mixed_param", None),
             ),
             "role": _first_non_null(
                 prev.get("role"),

@@ -342,10 +342,8 @@ class PhysicalFactorDAG:
         diamond 结构会指数爆炸）。每次调用线性计算全部 task 的 critical path，
         直接查表返回。
         """
-        try:
-            order = self.topological_order()
-        except RuntimeError:
-            order = list(self.tasks.keys())
+        # Insertion order is not a valid fallback for a cyclic graph.
+        order = self.topological_order()
         memo: dict[str, float] = {}
         for tid in reversed(order):
             t = self.tasks.get(tid)
@@ -370,13 +368,15 @@ class PhysicalFactorDAG:
         import heapq
 
         order: list[str] = []
-        indegree = {tid: len(t.inputs) for tid, t in self.tasks.items()}
+        # Dependencies are edges, not operand multiplicities. CSE may discover
+        # the same edge through more than one expression occurrence.
+        indegree = {tid: len(set(t.inputs)) for tid, t in self.tasks.items()}
         ready = [tid for tid, deg in indegree.items() if deg == 0]
         heapq.heapify(ready)
         while ready:
             tid = heapq.heappop(ready)
             order.append(tid)
-            for succ in sorted(self.tasks[tid].consumers):
+            for succ in sorted(set(self.tasks[tid].consumers)):
                 if succ not in indegree:
                     continue
                 indegree[succ] -= 1

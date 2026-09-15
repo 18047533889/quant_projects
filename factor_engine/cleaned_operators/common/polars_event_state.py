@@ -226,38 +226,24 @@ class StateDeadbandNative(SeriesOperator):
     source=_SRC,
     backend="polars")
 class StateEwmIfNative(SeriesOperator):
-    """EWM that only updates when condition is true."""
-
-    metadata = OperatorMetadata(
-        name="state_ewm_if",
-        category="state",
-        description="条件指数加权移动平均",
-        param_names=["x", "condition", "window"],
-        return_type="series",
-        tags=["state", "polars", "native"],
+    """Exact labelled-panel delegate to the conditional-EWM authority."""
+    import copy as _copy
+    from factor_engine.cleaned_operators.stateful.sequential import StateEwmIf as _Reference
+    metadata = _copy.deepcopy(_Reference.metadata)
+    metadata.tags = list(metadata.tags) + ["polars", "delegate:pandas_numpy"]
+    from factor_engine.backend.contracts import ExecutionKind as _EK, PhysicalImplementationSpec as _PS
+    _physical_spec = _PS(
+        canonical="state_ewm_if", backend="polars",
+        execution_kind=_EK.POLARS_PANDAS_DELEGATE,
+        supports_lazy=False, supports_streaming=False, materializes_full_panel=True,
+        supports_nulls=True, supports_nan=True, supports_inf=True,
     )
 
-    def _calculate_series(self, x: pl.DataFrame, condition: pl.DataFrame | None = None,
-                         window: int = 20, **kwargs) -> pl.DataFrame:
-        from factor_engine.cleaned_operators.parameter_validation import strict_integer
-
-        w = strict_integer(window, "window", minimum=1)
-        cols = _numeric_cols(x)
-        alpha = 2.0 / (w + 1)
-
-        if condition is None:
-            raise ValueError("state_ewm_if requires condition")
-
-        exprs = []
-        for c in cols:
-            cond = (condition[c] != 0) & condition[c].is_not_null() if c in condition.columns else pl.lit(True)
-
-            # When condition is false, use previous value (simplified)
-            val = pl.when(cond).then(pl.col(c)).otherwise(pl.col(c).shift(1))
-            ewm = val.ewm_mean(alpha=alpha, adjust=False, ignore_nulls=True)
-            exprs.append(ewm.alias(c))
-
-        return x.with_columns(exprs)
+    def _calculate_series(self, x, condition, half_life=10.0, **kwargs):
+        from factor_engine.cleaned_operators.rolling_pack import _call_pandas_delegate
+        return _call_pandas_delegate("state_ewm_if", (x, condition), {
+            "half_life": half_life, **kwargs,
+        })
 
 
 # ---------------------------------------------------------------------------

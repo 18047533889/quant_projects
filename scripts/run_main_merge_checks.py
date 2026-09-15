@@ -34,6 +34,7 @@ def source_identity():
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--name", required=True)
+    parser.add_argument("--output-dir", default="evidence/r2/main_merge_20260909")
     parser.add_argument("tests", nargs="+")
     args = parser.parse_args()
     if not args.name.replace("_", "").isalnum():
@@ -42,8 +43,10 @@ def main():
         path = (ROOT / test).resolve()
         if not path.is_relative_to(ROOT) or not path.exists():
             raise ValueError("test path must exist in formal checkout")
-    folder = ROOT / "evidence/r2/main_merge_20260909"
-    folder.mkdir(exist_ok=True)
+    folder = (ROOT / args.output_dir).resolve()
+    if not folder.is_relative_to(ROOT / "evidence"):
+        raise ValueError("output directory must be inside formal checkout evidence")
+    folder.mkdir(parents=True, exist_ok=True)
     before, sources = source_identity()
     log = folder / (args.name + ".log")
     command = [sys.executable, "-m", "pytest", "-q", *args.tests]

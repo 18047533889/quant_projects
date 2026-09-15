@@ -130,6 +130,7 @@ def _audit_derived_field(
     violations,
     checked,
     source_guard,
+    execution_purpose=None,
 ):
     key = f"DerivedField:{field}"
     if key in source_guard:
@@ -145,7 +146,7 @@ def _audit_derived_field(
         factor = parse_factor(
             definition.expression,
             name=f"pit::{field}@{definition.version}",
-            surface="compat",
+            surface="all" if execution_purpose is not None and execution_purpose.admission_mode == "research" else "compat",
             dialect="lqtp",
             dialect_version="2026-07-19",
         )
@@ -154,6 +155,7 @@ def _audit_derived_field(
             forbid_forward_fill=forbid_forward_fill,
             fail_on_missing=fail_on_missing,
             _source_guard=source_guard,
+            execution_purpose=execution_purpose,
         )
         checked.extend(f"{key}->{op}" for op in report.checked_ops)
         violations.extend(f"{key}->{item}" for item in report.violations)
@@ -284,6 +286,7 @@ def _audit_source_ref_by_contract(
     violations: list[str],
     checked: list[str],
     source_guard: set[str],
+    execution_purpose=None,
 ) -> bool:
     """Validate a SourceRef against its ``LogicalTableContract`` (R13 P1-13).
 
@@ -312,6 +315,7 @@ def _audit_source_ref_by_contract(
                 violations=violations,
                 checked=checked,
                 source_guard=source_guard,
+                execution_purpose=execution_purpose,
             )
         else:
             violations.append(f"{label}(unknown_availability_contract)")
@@ -398,6 +402,7 @@ def _audit_source_ref_hardcoded(
     violations: list[str],
     checked: list[str],
     source_guard: set[str],
+    execution_purpose=None,
 ) -> bool:
     """Research fallback classification used only when the contract layer is
     unavailable (import failure) or the table is not registered.  Production /
@@ -495,6 +500,7 @@ def _audit_source_ref_hardcoded(
             violations=violations,
             checked=checked,
             source_guard=source_guard,
+            execution_purpose=execution_purpose,
         )
         return True
 
@@ -517,6 +523,7 @@ def _audit_source_ref(
     violations,
     checked,
     source_guard,
+    execution_purpose=None,
 ) -> bool:
     from factor_engine.api.source_ref import decode_source_ref
 
@@ -549,6 +556,7 @@ def _audit_source_ref(
                 violations=violations,
                 checked=checked,
                 source_guard=source_guard,
+                execution_purpose=execution_purpose,
             )
 
     # Research fallback: contract layer unavailable (import failure) or the
@@ -564,6 +572,7 @@ def _audit_source_ref(
         violations=violations,
         checked=checked,
         source_guard=source_guard,
+        execution_purpose=execution_purpose,
     )
 
 
@@ -573,12 +582,18 @@ def audit_ir(
     forbid_forward_fill: bool = False,
     fail_on_missing: bool = True,
     _source_guard: set[str] | None = None,
+    execution_purpose=None,
 ) -> PitAuditReport:
     from factor_engine.backend.cleaned_bridge import ensure_cleaned_loaded
     from factor_engine.cleaned_operators.operator_policy import infer_operator_policy
     from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     ensure_cleaned_loaded()
+    from factor_engine.runtime.default_execution_policy import ExecutionPurpose
+    if execution_purpose is not None and not isinstance(execution_purpose, ExecutionPurpose):
+        raise TypeError("validated ExecutionPurpose required")
+    certification_required = (execution_purpose is None
+                              or execution_purpose.admission_mode == "production")
     violations: list[str] = []
     checked: list[str] = []
     source_guard = _source_guard if _source_guard is not None else set()
@@ -592,6 +607,7 @@ def audit_ir(
                 violations=violations,
                 checked=checked,
                 source_guard=source_guard,
+                execution_purpose=execution_purpose,
             )
             return
         if node.op in {"literal", "plan_ref"}:
@@ -623,12 +639,15 @@ def audit_ir(
                 # forward-fill and must be blocked by the same gate as ``ffill``.
                 violations.append("fillna(forward_fill)")
 
-        implementation = OperatorRegistry.get(canonical)
+        implementation = OperatorRegistry.get(
+            canonical, mode="production" if certification_required else "any")
         if implementation is None:
             if fail_on_missing:
                 violations.append(f"{canonical}(missing_runtime)")
             return
-        policy = infer_operator_policy(implementation, canonical=canonical)
+        policy = infer_operator_policy(
+            implementation, canonical=canonical,
+            certification_required=certification_required)
         if not policy.pit_safe or policy.lag < 0:
             violations.append(canonical)
         for child in node.inputs:
@@ -644,11 +663,13 @@ def assert_pit_safe(
     enforce: bool = True,
     forbid_forward_fill: bool = False,
     fail_on_missing: bool = True,
+    execution_purpose=None,
 ) -> PitAuditReport:
     report = audit_ir(
         ir,
         forbid_forward_fill=forbid_forward_fill,
         fail_on_missing=fail_on_missing,
+        execution_purpose=execution_purpose,
     )
     if enforce and not report.passed:
         raise PitSafetyError(report.violations)

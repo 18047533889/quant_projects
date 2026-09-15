@@ -1,0 +1,1 @@
+{"command": [".venv/bin/python", "-m", "pytest", "-q", "--noconftest", "factor_engine/tests/operators/test_r6_event_response_contract.py::test_factor_engine_run_and_run_many_research_path"], "returncode": 1, "sampled_peak_family_rss_bytes": 446783488, "sampling_seconds": 0.1, "seconds": 54.33097919006832, "test_guard_reason": null, "hard_memory_cap": false}

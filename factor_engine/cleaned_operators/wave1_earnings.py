@@ -22,7 +22,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from factor_engine.cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
+from factor_engine.cleaned_operators.base import OperatorMetadata, ParamRole, ParamSpec, SeriesOperator, register_operator
 from factor_engine.cleaned_operators.common.daily_panel import _aligned, _check_int
 
 
@@ -30,11 +30,40 @@ def _metadata(
     name: str, description: str, params: list[str], *, domain: str, unit: str,
     cost: int = 1, category: str,
 ) -> OperatorMetadata:
+    defaults = {
+        "es1_earnings_cv": {"window": 8, "min_periods": 4},
+        "es1_revenue_earnings_divergence": {"window": 8, "min_periods": 3},
+        "es1_earnings_smoothness": {"window": 8, "min_periods": 4},
+        "es1_earnings_mean_reversion_speed": {"window": 8, "min_periods": 4},
+        "aq1_working_capital_accrual": {"min_periods": 2},
+        "aq1_accrual_stability": {"window": 8, "min_periods": 4},
+        "aq1_cash_conversion_strength": {"window": 8, "min_periods": 3},
+        "aq1_cash_flow_volatility": {"window": 8, "min_periods": 4},
+        "aq1_accrual_ratio_dispersion": {"window": 8, "min_periods": 4},
+        "ep1_earnings_autocorr": {"window": 8, "min_periods": 4},
+        "ep1_roa_stability": {"window": 8, "min_periods": 4},
+        "ep1_earnings_consistency": {"window": 8, "min_periods": 3},
+        "ep1_earnings_surprise_decay": {"half_life": 6.0, "min_periods": 4},
+    }.get(name, {})
+    minimums = {"window": 3, "min_periods": 2, "half_life": 1.0}
+    if name in {"es1_earnings_mean_reversion_speed", "ep1_earnings_autocorr", "ep1_earnings_surprise_decay"}:
+        minimums["min_periods"] = 3
+    scalar_specs = {
+        param: ParamSpec(
+            dtype=float if param == "half_life" else int,
+            min=minimums[param],
+            default=default,
+            param_role=(ParamRole.HORIZON if param in {"window", "half_life"} else ParamRole.ESTIMATOR_RESOLUTION),
+        )
+        for param, default in defaults.items()
+    }
     return OperatorMetadata(
         name=name,
         category=category,
         description=description,
         param_names=params,
+        panel_params=tuple(param for param in params if param not in scalar_specs),
+        param_specs=scalar_specs,
         return_type="series",
         tags=[
             category, "wave1", "daily", "pit_safe", "causal", "typed_v2",

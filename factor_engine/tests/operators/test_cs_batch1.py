@@ -16,6 +16,7 @@ import pytest
 
 from factor_engine.backend.cleaned_bridge import ensure_cleaned_loaded
 from factor_engine.cleaned_operators.registry import OperatorRegistry
+from factor_engine.cleaned_operators.common.static_adjacency import StaticAdjacency
 
 ensure_cleaned_loaded()
 
@@ -347,15 +348,12 @@ def test_panel_peer_graph_aggregate_mean() -> None:
     cols = list("ABCD")
 
     x = pd.DataFrame([[1.0, 2.0, 3.0, 4.0]], index=idx, columns=cols)
-    # Uniform similarity -> all neighbors equally weighted
-    similarity = pd.DataFrame([[1.0, 1.0, 1.0, 1.0]], index=idx, columns=cols)
+    similarity = pd.DataFrame(np.ones((4, 4)), index=cols, columns=cols)
 
     out = _op("panel_peer_graph_aggregate").calculate(x, similarity, method="mean", threshold=0.0)
 
     result = out.to_numpy()[0]
-    # Mean of all = (1+2+3+4)/4 = 2.5
-    expected_mean = 2.5
-    np.testing.assert_allclose(result, expected_mean, atol=1e-6)
+    np.testing.assert_allclose(result, [3.0, 8/3, 7/3, 2.0], atol=1e-6)
 
 
 def test_panel_peer_graph_aggregate_weighted_mean() -> None:
@@ -364,15 +362,14 @@ def test_panel_peer_graph_aggregate_weighted_mean() -> None:
     cols = list("ABCD")
 
     x = pd.DataFrame([[1.0, 2.0, 3.0, 4.0]], index=idx, columns=cols)
-    # Different similarities
-    similarity = pd.DataFrame([[0.1, 0.2, 0.3, 0.4]], index=idx, columns=cols)
+    similarity = pd.DataFrame([
+        [99, 1, 2, 0], [4, 99, 0, 0], [0, 1, 99, 3], [1, 1, 1, 99],
+    ], index=cols, columns=cols)
 
     out = _op("panel_peer_graph_aggregate").calculate(x, similarity, method="weighted_mean", threshold=0.0)
 
     result = out.to_numpy()[0]
-    # Weighted mean = (1*0.1 + 2*0.2 + 3*0.3 + 4*0.4) / (0.1+0.2+0.3+0.4) = 3.0
-    expected = (1*0.1 + 2*0.2 + 3*0.3 + 4*0.4) / (0.1+0.2+0.3+0.4)
-    np.testing.assert_allclose(result, expected, atol=1e-6)
+    np.testing.assert_allclose(result, [8/3, 1, 3.5, 2], atol=1e-6)
 
 
 def test_panel_peer_graph_aggregate_sum() -> None:
@@ -381,14 +378,12 @@ def test_panel_peer_graph_aggregate_sum() -> None:
     cols = list("ABCD")
 
     x = pd.DataFrame([[1.0, 2.0, 3.0, 4.0]], index=idx, columns=cols)
-    similarity = pd.DataFrame([[1.0, 1.0, 1.0, 1.0]], index=idx, columns=cols)
+    similarity = pd.DataFrame(np.ones((4, 4)), index=cols, columns=cols)
 
     out = _op("panel_peer_graph_aggregate").calculate(x, similarity, method="sum", threshold=0.0)
 
     result = out.to_numpy()[0]
-    # Sum = 1+2+3+4 = 10
-    expected_sum = 10.0
-    np.testing.assert_allclose(result, expected_sum, atol=1e-6)
+    np.testing.assert_allclose(result, [9, 8, 7, 6], atol=1e-6)
 
 
 def test_panel_peer_graph_aggregate_threshold() -> None:
@@ -397,18 +392,17 @@ def test_panel_peer_graph_aggregate_threshold() -> None:
     cols = list("ABCDEF")
 
     x = pd.DataFrame([[1.0, 2.0, 3.0, 4.0, 5.0, 6.0]], index=idx, columns=cols)
-    # Only last 3 stocks have high similarity
-    similarity = pd.DataFrame([[0.1, 0.2, 0.3, 0.8, 0.9, 1.0]], index=idx, columns=cols)
+    similarity = pd.DataFrame([
+        [0, .5, .51, 0, 0, 0], [1, 0, 0, 0, 0, 0],
+        [0, 0, 0, .8, .9, 1], [0, 0, 0, 1, 0, 0],
+        [0, 0, 0, 0, 1, 0], [0, 0, 0, 0, 0, 1],
+    ], index=cols, columns=cols)
 
     out = _op("panel_peer_graph_aggregate").calculate(x, similarity, method="mean", threshold=0.5)
 
     result = out.to_numpy()[0]
-    # Only stocks with similarity > 0.5 are included: [4, 5, 6]
-    # Mean = (4+5+6)/3 = 5.0
-    # First 3 should be NaN (below threshold)
-    assert np.isnan(result[:3]).all()
-    # Last 3 should be mean of themselves
-    np.testing.assert_allclose(result[3:], 5.0, atol=1e-6)
+    np.testing.assert_allclose(result[:3], [3.0, 1.0, 5.0])
+    assert np.isnan(result[3:]).all()  # diagonal never qualifies as a neighbor
 
 
 def test_panel_peer_graph_aggregate_missing_values() -> None:
@@ -417,18 +411,14 @@ def test_panel_peer_graph_aggregate_missing_values() -> None:
     cols = list("ABCDEF")
 
     x_vals = [1.0, 2.0, np.nan, 4.0, 5.0, 6.0]
-    sim_vals = [1.0, 1.0, 1.0, np.nan, 1.0, 1.0]
-
     x = pd.DataFrame([x_vals], index=idx, columns=cols)
-    similarity = pd.DataFrame([sim_vals], index=idx, columns=cols)
+    similarity = pd.DataFrame(np.ones((6, 6)), index=cols, columns=cols)
 
     out = _op("panel_peer_graph_aggregate").calculate(x, similarity, method="mean")
 
     result = out.to_numpy()[0]
-    # Valid neighbors: stocks 0, 1, 4, 5 (x and sim both finite)
-    # Mean = (1+2+5+6)/4 = 3.5
-    assert np.isfinite(result[0])
-    assert np.isfinite(result[1])
+    np.testing.assert_allclose(result[[0, 1, 4, 5]], [4.25, 4, 3.25, 3])
+    assert result[2] == pytest.approx(3.6)  # a missing source value does not erase its neighbors
 
 
 def test_panel_peer_graph_aggregate_invalid_method() -> None:
@@ -437,12 +427,18 @@ def test_panel_peer_graph_aggregate_invalid_method() -> None:
     cols = list("ABCD")
 
     x = pd.DataFrame([[1.0, 2.0, 3.0, 4.0]], index=idx, columns=cols)
-    similarity = pd.DataFrame([[1.0, 1.0, 1.0, 1.0]], index=idx, columns=cols)
+    similarity = pd.DataFrame(np.ones((4, 4)), index=cols, columns=cols)
+    with pytest.raises(Exception, match="allowed choice"):
+        _op("panel_peer_graph_aggregate").calculate(x, similarity, method="invalid")
 
-    out = _op("panel_peer_graph_aggregate").calculate(x, similarity, method="invalid")
 
-    # Invalid method -> all NaN
-    assert out.isna().all().all()
+def test_panel_peer_graph_static_identity_and_validation() -> None:
+    cols = list("ABC")
+    first = StaticAdjacency(tuple(cols), ((0, 1, 0), (0, 0, 1), (1, 0, 0)))
+    second = StaticAdjacency(tuple(cols), ((0, 1, 0), (0, 0, 2), (1, 0, 0)))
+    assert first.stable_hash() != second.stable_hash()
+    with pytest.raises(ValueError, match="same symbols in the same order"):
+        StaticAdjacency.from_frame(pd.DataFrame(np.eye(3), index=cols, columns=list("ACB")))
 
 
 # ---------------------------------------------------------------------------

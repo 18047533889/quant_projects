@@ -17,7 +17,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from factor_engine.cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
+from factor_engine.cleaned_operators.base import OperatorMetadata, ParamRole, ParamSpec, SeriesOperator, register_operator
 from factor_engine.cleaned_operators.common.daily_panel import _aligned, _check_int
 
 
@@ -82,6 +82,8 @@ class Cs1WeekdayLagRatio(SeriesOperator):
                     continue
                 i = row - lw
                 if i < 0:
+                    continue
+                if np.isfinite(xv[max(0, row - lw):row, col]).sum() < mp:
                     continue
                 v = xv[i, col]
                 if np.isfinite(v) and np.abs(v) > 1e-12:
@@ -174,6 +176,8 @@ class Cs1MonthlyLagRatio(SeriesOperator):
                     continue
                 i = row - lm
                 if i < 0:
+                    continue
+                if np.isfinite(xv[max(0, row - lm):row, col]).sum() < mp:
                     continue
                 v = xv[i, col]
                 if np.isfinite(v) and np.abs(v) > 1e-12:
@@ -506,3 +510,25 @@ class Cs1SeasonalResidualSmoothness(SeriesOperator):
                 else:
                     out[row, col] = s / (den + 1e-12)
         return _frame_like(x, out)
+
+
+_H = lambda default, minimum=1: ParamSpec(
+    dtype=int, min=minimum, default=default, param_role=ParamRole.HORIZON,
+)
+_N = lambda default, minimum=1: ParamSpec(
+    dtype=int, min=minimum, default=default, param_role=ParamRole.ESTIMATOR_RESOLUTION,
+)
+
+Cs1WeekdayLagRatio.metadata.param_specs = {"lag_week": _H(5), "min_periods": _N(1)}
+Cs1WeekdayLagZscore.metadata.param_specs = {"lag_week": _H(5, 2), "min_periods": _N(3, 2)}
+Cs1MonthlyLagRatio.metadata.param_specs = {"lag_month": _H(20), "min_periods": _N(1)}
+Cs1SeasonalRelativeRank.metadata.param_specs = {"lag_week": _H(5, 2), "min_periods": _N(3, 2)}
+Cs1WeekdayEffectStrength.metadata.param_specs = {
+    "lag_week": _H(5), "window": _H(40, 3), "min_periods": _N(8, 4),
+}
+Cs1WeekdayAnomaly.metadata.param_specs = {"lag_week": _H(5, 2), "min_periods": _N(2, 2)}
+Cs1WeekCyclePhase.metadata.param_specs = {"lag_week": _H(5, 2), "min_periods": _N(6, 3)}
+Cs1WeeklyHarmonicPower.metadata.param_specs = {"lag_week": _H(5, 2), "min_periods": _N(6, 3)}
+Cs1SeasonalResidualSmoothness.metadata.param_specs = {
+    "lag_week": _H(5), "window": _H(40, 3), "min_periods": _N(8, 4),
+}

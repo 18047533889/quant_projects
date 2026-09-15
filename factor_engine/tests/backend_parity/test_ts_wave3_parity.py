@@ -195,7 +195,12 @@ SQL_CASES = [
     SQL_CASES,
     ids=[name for name, _ in SQL_CASES],
 )
-def test_wave3_ts_sql_triple_parity(panel, duckdb_source, name, expr_builder):
+def test_wave3_ts_sql_triple_parity(panel, duckdb_source, name, expr_builder, monkeypatch):
+    # This test promises actual SQL execution: expose its original exception,
+    # rather than accepting a numerically correct Python fallback.
+    from factor_engine.backend.sql_pushdown import executor
+    monkeypatch.setattr(executor, "_sql_fallback_allowed", lambda exc, ctx: False)
+
     from tests.backend_parity.duckdb_parity_helpers import assert_duckdb_real_sql_execution
 
     pandas_out = _run(panel, expr_builder(_mem), "pandas")["result"]

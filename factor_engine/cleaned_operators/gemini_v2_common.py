@@ -30,11 +30,13 @@ uniformly and cannot be bypassed by a future module.
 """
 from __future__ import annotations
 
+import inspect
 from typing import Any, Callable, Mapping, Sequence
 
 import numpy as np
 import pandas as pd
 
+from factor_engine.backend.contracts import ExecutionKind, PhysicalImplementationSpec
 from factor_engine.cleaned_operators.base_polars import OperatorMetadata as PolarsMetadata
 from factor_engine.cleaned_operators.base_polars import SeriesOperator as PolarsSeriesOperator
 from factor_engine.cleaned_operators.registry import OperatorRegistry
@@ -147,6 +149,7 @@ def register_dual(
     # forwarded to the pandas metadata so the central validator rejects
     # guaranteed-NaN parameter combinations before search spends budget.
     relational_specs: Sequence[Any] | None = None,
+    panel_params: Sequence[str] | None = None,
     # R9-OP-024: machine-readable operator role (``global_state`` etc.).  A
     # forward-compatible field; when set it is carried on the pandas metadata so
     # the search grammar can gate terminal generation mechanically.
@@ -175,8 +178,13 @@ def register_dual(
     units = dict(input_units) if input_units else None
     specs = dict(param_specs) if param_specs else None
     rel_specs = list(relational_specs) if relational_specs else None
+    panels = tuple(panel_params or ())
+    scalars = tuple(p for p in params if p not in panels)
 
     class _PandasOp(PandasSeriesOperator):
+        # Preserve the actual authored signature through the variadic transport.
+        _contract_callable = staticmethod(fn)
+
         metadata = PandasMetadata(
             name=canonical,
             category=category,
@@ -190,6 +198,9 @@ def register_dual(
             window_semantics=window_semantics,
             param_specs=specs,
             relational_specs=rel_specs,
+            panel_params=panels,
+            panel_arity=len(panels),
+            scalar_params=scalars,
             role=role,
         )
 
@@ -202,16 +213,37 @@ def register_dual(
     )
 
     class _PolarsOp(PolarsSeriesOperator):
-        metadata = PolarsMetadata(
-            name=canonical, category=category, param_names=[],
-            tags=["python_bridge", "materializes_full_panel"],
+        _contract_callable = staticmethod(fn)
+        _physical_spec = PhysicalImplementationSpec(
+            canonical=canonical,
+            backend="polars",
+            execution_kind=ExecutionKind.POLARS_PANDAS_DELEGATE,
+            supports_lazy=False,
+            supports_streaming=False,
+            materializes_full_panel=True,
+            supports_nulls=True,
+            supports_nan=True,
+            supports_inf=True,
         )
+        metadata = PolarsMetadata(
+            name=canonical, category=category, param_names=list(params),
+            param_specs=dict(specs or {}),
+            panel_params=panels,
+            panel_arity=len(panels),
+            scalar_params=scalars,
+            tags=[*tag_list, "python_bridge", "materializes_full_panel"],
+        )
+        metadata.relational_specs = rel_specs
 
         def _calculate_series(self, *frames, _fn=fn, **params):
             import polars as pl  # noqa: F401
-            pdfs: list[pd.DataFrame] = []
+            bound = inspect.signature(_fn).bind(*frames, **params)
+            panel_inputs = []
             axes: list[tuple[np.ndarray | None, tuple[str, ...], int]] = []
-            for f in frames:
+            for parameter, f in list(bound.arguments.items()):
+                if not isinstance(f, pl.DataFrame):
+                    continue
+                panel_inputs.append(f)
                 cols = [c for c in f.columns if c not in _SKIP]
                 pdf = f.select(cols).to_pandas()
                 date_vals: np.ndarray | None = None
@@ -235,7 +267,9 @@ def register_dual(
                     except (ValueError, TypeError):
                         raise
                 axes.append((date_vals, tuple(cols), pdf.shape[0]))
-                pdfs.append(pdf)
+                bound.arguments[parameter] = pdf
+            if not axes:
+                raise ValueError(f"{canonical}: requires at least one panel input")
             base_date, base_cols, base_rows = axes[0]
             for j, (date_vals, cols, rows) in enumerate(axes[1:], start=1):
                 if rows != base_rows:
@@ -263,8 +297,8 @@ def register_dual(
                         "the base input (a gap, an extra row, or a different order "
                         "would pair x_t with y_{t+1})"
                     )
-            out = _fn(*pdfs, **params)
-            base = frames[0]
+            out = _fn(*bound.args, **bound.kwargs)
+            base = panel_inputs[0]
             cols = [c for c in base.columns if c not in _SKIP]
             return base.with_columns(
                 [pl.Series(name=c, values=np.asarray(out[c], dtype=np.float64)) for c in cols]

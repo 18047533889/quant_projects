@@ -9,7 +9,7 @@
 
 产物：
 - weekly_backtest_output/robustness_logic_stats.json  (新结构 {operator_table, semantic_table})
-- factor_engine/docs/reports/2026-08-23/robustness_2026/robustness_2026.html (重绘图表)
+- ../quant_project_archives/factor_engine-docs/reports/2026-08-23/robustness_2026/robustness_2026.html (重绘图表)
 - index.html 首页归因区块同步
 - /tmp/reclass36_done.json + /tmp/reclass36_progress.log
 """
@@ -20,7 +20,7 @@ import numpy as np
 ROOT = os.path.abspath(".")
 MB = os.path.join(ROOT, "weekly_backtest_output")
 FORMULA_JSON = "/home/sunhaiwei/factor_delivery_converted/formula_lqtp_all.json"
-REPORT_DIR = os.path.join(ROOT, "factor_engine/docs/reports/2026-08-23")
+REPORT_DIR = os.path.join(ROOT, "../quant_project_archives/factor_engine-docs/reports/2026-08-23")
 OUT_PAGE_DIR = os.path.join(REPORT_DIR, "robustness_2026")
 INDEX = os.path.join(REPORT_DIR, "index.html")
 OUT_JSON = os.path.join(MB, "robustness_2026.json")

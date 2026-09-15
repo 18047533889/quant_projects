@@ -145,6 +145,16 @@ def _conditional_te_window(
     ys = s_t[mask]
     cs = c_t[mask]
     xn = t_next[mask]
+    # Normalize target past/future by ONE common scale before quantiles.
+    # Separate scales would change the meaning of target-state transitions.
+    tx_scale = max(float(np.max(np.abs(xs))),float(np.max(np.abs(xn))))
+    if tx_scale:
+        xs, xn = xs / tx_scale, xn / tx_scale
+    sy_scale, cc_scale = float(np.max(np.abs(ys))),float(np.max(np.abs(cs)))
+    if sy_scale:
+        ys = ys / sy_scale
+    if cc_scale:
+        cs = cs / cc_scale
     if np.unique(xs).size < 2 or np.unique(ys).size < 2 or np.unique(cs).size < 2:
         return np.nan
     n = xs.shape[0]
@@ -245,12 +255,20 @@ class TsConditionalTransferEntropy(SeriesOperator):
         unit="nats",
         cost=7,
     )
+    metadata.panel_params = ("target","source","condition")
+    metadata.scalar_params = ("window","bins","lag","min_transitions","min_cells_ratio")
     metadata.param_specs = {
-        "window": ParamSpec(dtype=int, min=2),
-        "bins": ParamSpec(dtype=int, choices=(2, 3), param_role=ParamRole.ESTIMATOR_RESOLUTION),
-        "lag": ParamSpec(dtype=int, min=1),
-        "min_cells_ratio": ParamSpec(dtype=float, min=0.0, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+        "window": ParamSpec(dtype=int,min=2,default=60,param_role=ParamRole.HORIZON,history_semantics="max_rows"),
+        "bins": ParamSpec(dtype=int,choices=(2,3),default=2,param_role=ParamRole.ESTIMATOR_RESOLUTION),
+        "lag": ParamSpec(dtype=int,min=1,default=1,param_role=ParamRole.MODEL_ORDER),
+        "min_transitions": ParamSpec(dtype=int,min=1,default=None,param_role=ParamRole.SUPPORT_POLICY),
+        "min_cells_ratio": ParamSpec(dtype=float,min=0.,default=1.,param_role=ParamRole.SUPPORT_POLICY),
     }
+    metadata.relational_specs = [
+        RelationalParamSpec("window - lag >= 3 * bins ** 4", "CTE window-lag must cover 3*bins^4 transitions"),
+        RelationalParamSpec("window - lag >= min_cells_ratio * bins ** 4", "CTE window-lag must cover the requested cell-support ratio"),
+        RelationalParamSpec("window - lag >= lag + 2", "CTE window-lag must cover lag+2 aligned transitions"),
+    ]
 
     def _calculate_series(
         self,
@@ -264,10 +282,11 @@ class TsConditionalTransferEntropy(SeriesOperator):
         min_cells_ratio: float = 1.0,
         **_: Any,
     ) -> pd.DataFrame:
-        w = int(window)
-        nb = int(bins)
-        lg = int(lag)
-        ratio = float(min_cells_ratio)
+        from factor_engine.cleaned_operators.common.strict_params import strict_int, strict_float
+        w = strict_int(window,"window",minimum=2)
+        nb = strict_int(bins,"bins",minimum=2)
+        lg = strict_int(lag,"lag",minimum=1)
+        ratio = strict_float(min_cells_ratio,"min_cells_ratio",minimum=0.)
         # R5 P1-43(a): production restricts the search to bins in {2, 3}.  The
         # 4-D joint (t', t, s, c) has ``bins^4`` cells; 4/5 bins need more daily
         # transitions than a panel can supply and only manufacture noise.
@@ -294,9 +313,9 @@ class TsConditionalTransferEntropy(SeriesOperator):
         if min_transitions is None:
             mt = max(30, 2 * nb * nb * nb)
         else:
-            mt = max(lg + 2, int(min_transitions))
+            mt = max(lg + 2, strict_int(min_transitions,"min_transitions",minimum=1))
         required = 3 * (nb ** 4)
-        mt = max(mt, required)
+        mt = max(mt, required, lg + 2)
         mt = max(mt, int(np.ceil(ratio * nb * nb * nb * nb)))
         if w - lg < mt:
             raise ValueError(
@@ -483,8 +502,9 @@ def _register_surface() -> None:
     import factor_engine.cleaned_operators.operator_surface as _surface
 
     _surface.extend_research_only({"ts_conditional_transfer_entropy", "ts_modwt_band_corr"})
-    for _canon in ("ts_conditional_transfer_entropy", "ts_modwt_band_corr"):
-        register_polars_udf(_canon)
+    from factor_engine.cleaned_operators.common.dependence_delegate import register
+    register("ts_conditional_transfer_entropy")
+    register_polars_udf("ts_modwt_band_corr")
 
 
 _register_surface()

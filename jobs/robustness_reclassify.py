@@ -9,8 +9,8 @@
 产物:
   - weekly_backtest_output/robustness_2026.json   (logic_tags 改为主分类字符串 + 新增 logic_summary)
   - weekly_backtest_output/robustness_logic_stats.json / robustness_survivors.json (按新分类重算)
-  - factor_engine/docs/reports/2026-08-23/robustness_2026/robustness_2026.html (算子表/逻辑表/图重画)
-  - factor_engine/docs/reports/2026-08-23/index.html (2026 区块归因文字同步)
+  - ../quant_project_archives/factor_engine-docs/reports/2026-08-23/robustness_2026/robustness_2026.html (算子表/逻辑表/图重画)
+  - ../quant_project_archives/factor_engine-docs/reports/2026-08-23/index.html (2026 区块归因文字同步)
   - /tmp/reclass36_done.json + /tmp/reclass_progress.log
 
 用法: .venv/bin/python jobs/robustness_reclassify.py

@@ -1,0 +1,1 @@
+{"command": [".venv/bin/python", "-m", "pytest", "-q", "tests/backend_parity/test_statistical_operators_triple_parity.py"], "returncode": 0, "sampled_peak_family_rss_bytes": 780201984, "sampling_seconds": 0.1, "seconds": 58.44935276801698, "test_guard_reason": null, "hard_memory_cap": false}

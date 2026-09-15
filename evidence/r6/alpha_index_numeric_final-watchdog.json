@@ -1,0 +1,1 @@
+{"command": [".venv/bin/python", "-m", "pytest", "factor_engine/tests/operators/test_r6_alpha_index_finalized.py", "-q", "--tb=short", "--show-capture=no"], "returncode": 0, "sampled_peak_family_rss_bytes": 481193984, "sampling_seconds": 0.1, "seconds": 49.83468682388775, "test_guard_reason": null, "hard_memory_cap": false}

@@ -21,9 +21,14 @@ ensure_cleaned_loaded()
 
 
 def _op(name: str, backend: str = "pandas_numpy"):
-    op = OperatorRegistry.get(name, backend)
+    mode = "research" if name == "ts_quantile_regression_beta" else "production"
+    op = OperatorRegistry.get(name, backend, mode=mode)
     assert op is not None, f"{name}/{backend}"
     return op
+
+
+def test_quantile_regression_beta_remains_production_gated() -> None:
+    assert OperatorRegistry.get("ts_quantile_regression_beta", "pandas_numpy") is None
 
 
 
@@ -86,7 +91,7 @@ def test_ts_quantile_regression_beta_basic() -> None:
 
     op = _op("ts_quantile_regression_beta")
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, x)
         assert isinstance(result, pd.DataFrame)
         assert result.shape == x.shape
     except Exception as e:
@@ -100,7 +105,7 @@ def test_ts_quantile_regression_beta_handles_nans() -> None:
 
     op = _op("ts_quantile_regression_beta")
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, x)
         assert isinstance(result, pd.DataFrame)
     except Exception as e:
         pytest.fail(f"NaN test failed: {e}")
@@ -114,8 +119,8 @@ def test_ts_quantile_regression_beta_deterministic() -> None:
 
     op = _op("ts_quantile_regression_beta")
     try:
-        result1 = op.calculate(x)
-        result2 = op.calculate(x)
+        result1 = op.calculate(x, x)
+        result2 = op.calculate(x, x)
         pd.testing.assert_frame_equal(result1, result2, check_exact=False, rtol=1e-10)
     except Exception:
         pass  # Some operators may not be deterministic

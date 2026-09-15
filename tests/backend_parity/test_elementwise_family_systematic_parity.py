@@ -86,7 +86,7 @@ def _write_duckdb_registry(path: Path, root: Path) -> None:
   time_column: TradeDate
   instrument_column: Symbol
   schema:
-    TradeDate: date
+    TradeDate: timestamp
     Symbol: string
     X: double
     Y: double
@@ -105,7 +105,7 @@ def _seed_duckdb(root: Path, source: InMemorySeriesSource) -> None:
         y_val = source.data["y"].loc[(timestamp, instrument)]
         rows.append(
             {
-                "TradeDate": timestamp.date(),
+                "TradeDate": timestamp,
                 "Symbol": instrument,
                 # SQL must receive the SAME Inf fixture as in-memory backends.
                 "X": float(x_val) if pd.notna(x_val) else None,

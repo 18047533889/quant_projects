@@ -1,0 +1,1 @@
+{"command": [".venv/bin/python", "-m", "pytest", "--noconftest", "factor_engine/tests/operators/test_r6_dual_call_contract.py", "-q", "--tb=short"], "returncode": 2, "sampled_peak_family_rss_bytes": 306126848, "sampling_seconds": 0.1, "seconds": 2.607986592920497, "test_guard_reason": null, "hard_memory_cap": false}

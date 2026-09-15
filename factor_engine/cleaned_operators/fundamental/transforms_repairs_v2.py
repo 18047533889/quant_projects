@@ -3,7 +3,7 @@
 from __future__ import annotations
 import numpy as np
 import pandas as pd
-from factor_engine.cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
+from factor_engine.cleaned_operators.base import OperatorMetadata, ParamRole, ParamSpec, SeriesOperator, register_operator
 from factor_engine.cleaned_operators.fundamental.transforms_v2 import (
     _pos_int,
     _streak_span,
@@ -13,7 +13,15 @@ from factor_engine.cleaned_operators.fundamental.transforms_v2 import (
 
 
 def _register(name,params,fn,desc,tags=()):
-    meta=OperatorMetadata(name=name,category="fundamental_period",description=desc,param_names=list(params),return_type="series",tags=["fundamental","period_aware","pit_safe","causal","bounded_history","production_repair",*tags])
+    scalar_specs = {}
+    defaults = {"max_periods": 8, "window_days": 252, "coverage_threshold": 0.8, "max_days": 504}
+    for parameter in params:
+        if parameter in ("max_periods", "window_days", "max_days"):
+            scalar_specs[parameter] = ParamSpec(dtype=int, min=1, default=defaults[parameter], param_role=ParamRole.HORIZON)
+        elif parameter == "coverage_threshold":
+            scalar_specs[parameter] = ParamSpec(dtype=float, min=0.0, max=1.0, default=0.8, param_role=ParamRole.STATE_THRESHOLD)
+    panels = tuple(parameter for parameter in params if parameter not in scalar_specs)
+    meta=OperatorMetadata(name=name,category="fundamental_period",description=desc,param_names=list(params),panel_params=panels,param_specs=scalar_specs,return_type="series",tags=["fundamental","period_aware","pit_safe","causal","bounded_history","production_repair",*tags])
     def _calculate_series(self,*args,**kwargs):return fn(*args,**kwargs)
     cls=type(f"FundamentalRepair_{name}",(SeriesOperator,),{"metadata":meta,"_calculate_series":_calculate_series,"__module__":__name__})
     register_operator(name=name,category="fundamental_period",business_category="fundamental",canonical=name,source="fundamental_transforms_repairs_v2",backend="pandas_numpy",status="production")(cls)
@@ -28,7 +36,7 @@ def _streak(x,period_id,max_periods,positive):
     )
 def fin_positive_streak(x,period_id,max_periods=8):return _streak(x,period_id,max_periods,True)
 def fin_negative_streak(x,period_id,max_periods=8):return _streak(x,period_id,max_periods,False)
-def fin_cash_earnings_gap(earnings,cashflow,scale_base):return fin_ratio(earnings-cashflow,scale_base.abs())
+def fin_cash_earnings_gap(earnings,cashflow,scale):return fin_ratio(earnings-cashflow,scale.abs())
 
 
 def _revision_masks(x, period_id):
@@ -260,7 +268,6 @@ _EXTRA=set()
 for _name,_params,_fn,_desc in [
 ("fin_positive_streak",["x","period_id","max_periods"],fin_positive_streak,"Bounded streak of positive report-to-report changes between adjacent fiscal periods; a skipped report ends the streak (review R4-23)."),
 ("fin_negative_streak",["x","period_id","max_periods"],fin_negative_streak,"Bounded streak of negative report-to-report changes between adjacent fiscal periods; a skipped report ends the streak (review R4-23)."),
-("fin_cash_earnings_gap",["earnings","cashflow","scale_base"],fin_cash_earnings_gap,"Scaled earnings-minus-cashflow gap."),
 ]:
     _register(_name,_params,_fn,_desc);_EXTRA.add(_name)
 

@@ -197,6 +197,38 @@ def evaluate_input_columns(
     return InputDQReport(columns=reports)
 
 
+def assert_native_input_dq(frame, columns, *, thresholds=None, raise_on_fail=True):
+    """Check the certified materialized wave, never reopen its physical source.
+
+    Reuse the reference DQ implementation one column at a time. This bounds
+    conversion memory to keys plus one column, rather than a second full panel,
+    and preserves pandas null, infinity, duplicate and coverage semantics.
+    The execution backend itself remains native.
+    """
+    import polars as pl
+    if not isinstance(frame, pl.DataFrame):
+        raise TypeError("native input DQ requires a materialized Polars DataFrame")
+    if not {"ts", "inst"}.issubset(frame.columns):
+        raise ValueError("native input DQ requires ts/inst keys")
+    index = pd.MultiIndex.from_frame(frame.select("ts", "inst").to_pandas())
+    reports = []
+    for name in sorted(set(columns)):
+        if name not in frame.columns:
+            reports.append(InputColumnReport(name, False, 0, 0.0, 0,
+                                            "materialized wave omitted column"))
+            continue
+        series = frame.get_column(name).to_pandas()
+        series.index = index
+        report = evaluate_input_columns(None, [name], thresholds=thresholds,
+                                        prefetched={name: series})
+        reports.extend(report.columns)
+        del series, report
+    report = InputDQReport(columns=reports)
+    if not report.passed and raise_on_fail:
+        raise InputDQError(report)
+    return report
+
+
 def assert_input_dq(
     data_source: Any,
     columns: set[str] | list[str],

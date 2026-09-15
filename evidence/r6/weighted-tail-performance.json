@@ -1,0 +1,64 @@
+WARNING: logical-contract divergence for backend of canonical 'ts_confirmed_pivot_high': field 'param_specs' declares {'left_window': ParamSpec(dtype=<class 'int'>, min=1, max=None, choices=None, searchable=True, active_when=None, history_semantics=None, history_formula=None, default=MISSING, equivalence=None, param_role=<ParamRole.HORIZON: 'horizon'>, items=None, min_items=None, max_items=None, alternatives=None), 'right_window': ParamSpec(dtype=<class 'int'>, min=1, max=None, choices=None, searchable=True, active_when=None, history_semantics=None, history_formula=None, default=MISSING, equivalence=None, param_role=<ParamRole.HORIZON: 'horizon'>, items=None, min_items=None, max_items=None, alternatives=None)} but the canonical contract holds {'left_window': ParamSpec(dtype=<class 'int'>, min=1, max=None, choices=None, searchable=True, active_when=None, history_semantics=None, history_formula='left_window + right_window', default=MISSING, equivalence=None, param_role=None, items=None, min_items=None, max_items=None, alternatives=None), 'right_window': ParamSpec(dtype=<class 'int'>, min=1, max=None, choices=None, searchable=True, active_when=None, history_semantics=None, history_formula=None, default=MISSING, equivalence=None, param_role=None, items=None, min_items=None, max_items=None, alternatives=None)} (P0-23 — continuing despite divergence for compatibility)
+WARNING: logical-contract divergence for backend of canonical 'ts_confirmed_pivot_low': field 'param_specs' declares {'left_window': ParamSpec(dtype=<class 'int'>, min=1, max=None, choices=None, searchable=True, active_when=None, history_semantics=None, history_formula=None, default=MISSING, equivalence=None, param_role=<ParamRole.HORIZON: 'horizon'>, items=None, min_items=None, max_items=None, alternatives=None), 'right_window': ParamSpec(dtype=<class 'int'>, min=1, max=None, choices=None, searchable=True, active_when=None, history_semantics=None, history_formula=None, default=MISSING, equivalence=None, param_role=<ParamRole.HORIZON: 'horizon'>, items=None, min_items=None, max_items=None, alternatives=None)} but the canonical contract holds {'left_window': ParamSpec(dtype=<class 'int'>, min=1, max=None, choices=None, searchable=True, active_when=None, history_semantics=None, history_formula='left_window + right_window', default=MISSING, equivalence=None, param_role=None, items=None, min_items=None, max_items=None, alternatives=None), 'right_window': ParamSpec(dtype=<class 'int'>, min=1, max=None, choices=None, searchable=True, active_when=None, history_semantics=None, history_formula=None, default=MISSING, equivalence=None, param_role=None, items=None, min_items=None, max_items=None, alternatives=None)} (P0-23 — continuing despite divergence for compatibility)
+/home/sunhaiwei/quant_projects/factor_engine/backend/polars_backend_kind.py:248: UserWarning: Production mode: Operator unknown (backend=polars) lacks explicit PhysicalImplementationSpec; classification=UNSUPPORTED. Add _physical_spec attribute or physical_spec() method for production eligibility.
+  return polars_backend_kind(op, source=source, production_mode=production_mode)
+/home/sunhaiwei/quant_projects/factor_engine/backend/polars_backend_kind.py:248: UserWarning: Production mode: Operator unknown (backend=polars) lacks explicit PhysicalImplementationSpec; classification=UNSUPPORTED. Add _physical_spec attribute or physical_spec() method for production eligibility.
+  return polars_backend_kind(op, source=source, production_mode=production_mode)
+{
+  "scope": "Synthetic 160x4 panels, median of 3; no 100k-factor throughput or GPU claim.",
+  "rows": 160,
+  "columns": 4,
+  "output_conversion_timed": false,
+  "operators": [
+    {
+      "operator": "ts_stratified_mean_spread",
+      "pandas_seconds": 0.020702484995126724,
+      "polars_seconds": 0.021727254847064614,
+      "input_conversion_seconds": 0.000779526075348258,
+      "speedup_kernel": 0.9528348215570207,
+      "speedup_including_input_conversion": 0.9198332301049156,
+      "max_abs_difference": 0.0,
+      "final_polars_owner": "factor_engine.cleaned_operators.polars_chip_tail.PolarsChipTail_ts_stratified_mean_spread"
+    },
+    {
+      "operator": "ts_weighted_semivariance",
+      "pandas_seconds": 0.016287459060549736,
+      "polars_seconds": 0.016050035832449794,
+      "input_conversion_seconds": 0.0007816071156412363,
+      "speedup_kernel": 1.0147926914667644,
+      "speedup_including_input_conversion": 0.9676689976599692,
+      "max_abs_difference": 0.0,
+      "final_polars_owner": "factor_engine.cleaned_operators.polars_chip_tail.PolarsChipTail_ts_weighted_semivariance"
+    },
+    {
+      "operator": "ts_weighted_downside_deviation",
+      "pandas_seconds": 0.014767515007406473,
+      "polars_seconds": 0.014714855933561921,
+      "input_conversion_seconds": 0.0007196881342679262,
+      "speedup_kernel": 1.0035786333269119,
+      "speedup_including_input_conversion": 0.9567833648022257,
+      "max_abs_difference": 0.0,
+      "final_polars_owner": "factor_engine.cleaned_operators.polars_chip_tail.PolarsChipTail_ts_weighted_downside_deviation"
+    },
+    {
+      "operator": "ts_weighted_expected_shortfall",
+      "pandas_seconds": 0.030033354181796312,
+      "polars_seconds": 0.028536798898130655,
+      "input_conversion_seconds": 0.0007616870570927858,
+      "speedup_kernel": 1.052442997864196,
+      "speedup_including_input_conversion": 1.0250821229361804,
+      "max_abs_difference": 0.0,
+      "final_polars_owner": "factor_engine.cleaned_operators.polars_chip_tail.PolarsChipTail_ts_weighted_expected_shortfall"
+    },
+    {
+      "operator": "ts_weighted_drawdown_area",
+      "pandas_seconds": 0.02266088593751192,
+      "polars_seconds": 0.022220619022846222,
+      "input_conversion_seconds": 0.0007530979346483946,
+      "speedup_kernel": 1.0198134405802572,
+      "speedup_including_input_conversion": 0.9863830907048482,
+      "max_abs_difference": 0.0,
+      "final_polars_owner": "factor_engine.cleaned_operators.polars_chip_tail.PolarsChipTail_ts_weighted_drawdown_area"
+    }
+  ]
+}

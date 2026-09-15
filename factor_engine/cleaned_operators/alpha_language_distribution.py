@@ -24,7 +24,7 @@ from typing import Any, Callable
 import numpy as np
 import pandas as pd
 
-from factor_engine.cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
+from factor_engine.cleaned_operators.base import OperatorMetadata, ParamRole, ParamSpec, SeriesOperator, register_operator
 from factor_engine.cleaned_operators.rolling_pack import (
     check_window,
     frame_like,
@@ -33,6 +33,27 @@ from factor_engine.cleaned_operators.rolling_pack import (
 )
 
 _EPS = 1e-12
+
+_DISTRIBUTION_DEFAULTS = {
+    "ts_tail_imbalance": {"window": 60, "k": 1.0, "min_periods": 8},
+    "ts_expected_shortfall_asymmetry": {"window": 60, "q": 0.05, "min_tail_count": 3},
+    **{name: {"recent_window": 20, "old_window": 40, "min_periods": mp} for name, mp in {
+        "ts_wasserstein_shift": 5, "ts_ks_shift": 5, "ts_location_shift": 5,
+        "ts_scale_shift": 5, "ts_quantile_transport_slope": 3,
+        "ts_quantile_transport_curvature": 3, "ts_mmd_rbf_shift": 5,
+    }.items()},
+}
+
+def _distribution_specs(name: str) -> dict[str, ParamSpec]:
+    out: dict[str, ParamSpec] = {}
+    for key, default in _DISTRIBUTION_DEFAULTS[name].items():
+        if key in ("window", "recent_window", "old_window", "min_periods", "min_tail_count"):
+            out[key] = ParamSpec(dtype=int, min=1, default=default, param_role=ParamRole.HORIZON)
+        elif key == "k":
+            out[key] = ParamSpec(dtype=float, min=0.0, default=default, param_role=ParamRole.STATE_THRESHOLD)
+        elif key == "q":
+            out[key] = ParamSpec(dtype=float, min=0.0, max=0.5, default=default, param_role=ParamRole.ESTIMATOR_RESOLUTION)
+    return out
 
 
 def _metadata(name: str, description: str, params: list[str], *, unit: str) -> OperatorMetadata:
@@ -47,6 +68,9 @@ def _metadata(name: str, description: str, params: list[str], *, unit: str) -> O
             f"signature:{','.join(params)}->series", "domain:distribution",
             f"unit:{unit}", "cost:1",
         ],
+        panel_params=tuple(p for p in params if p not in _DISTRIBUTION_DEFAULTS[name]),
+        scalar_params=tuple(_DISTRIBUTION_DEFAULTS[name]),
+        param_specs=_distribution_specs(name),
     )
 
 

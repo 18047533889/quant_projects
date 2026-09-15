@@ -47,12 +47,31 @@ from factor_engine.cleaned_operators.rolling_pack import frame_like, register_po
 _DEAD_WINDOW_SPEC = ParamSpec(
     dtype=int,
     min=2,
+    default=60,
     searchable=False,
     param_role=ParamRole.POLICY,
 )
 
 
-def _metadata(name: str, description: str, params: list[str], *, unit: str, cost: int) -> OperatorMetadata:
+def _metadata(
+    name: str,
+    description: str,
+    params: list[str],
+    *,
+    unit: str,
+    cost: int,
+    min_scales: int,
+) -> OperatorMetadata:
+    scale_item = ParamSpec(dtype=int, min=2)
+    scales_spec = ParamSpec(
+        alternatives=(
+            ParamSpec(dtype=tuple, items=scale_item, min_items=min_scales),
+            ParamSpec(dtype=list, items=scale_item, min_items=min_scales),
+        ),
+        default=(5, 10, 20, 40),
+        searchable=False,
+        param_role=ParamRole.ESTIMATOR_RESOLUTION,
+    )
     return OperatorMetadata(
         name=name,
         category="multiscale_trend",
@@ -65,7 +84,12 @@ def _metadata(name: str, description: str, params: list[str], *, unit: str, cost
             f"signature:{','.join(params)}->series", "domain:trend",
             f"unit:{unit}", f"cost:{cost}",
         ],
-        param_specs={"window": _DEAD_WINDOW_SPEC},
+        input_units={"x": "price_level_or_log_price_level"},
+        output_unit="dimensionless",
+        panel_params=("x",),
+        panel_arity=1,
+        scalar_params=("window", "scales"),
+        param_specs={"window": _DEAD_WINDOW_SPEC, "scales": scales_spec},
     )
 
 
@@ -99,6 +123,12 @@ def _scale_trend(chunk: np.ndarray, s: int) -> tuple[float, float]:
     ys = chunk[-int(s):]
     if not np.isfinite(ys).all():
         return np.nan, np.nan
+    amplitude = float(np.max(np.abs(ys)))
+    if not np.isfinite(amplitude) or amplitude == 0.0:
+        return np.nan, np.nan
+    # T_s is invariant to a non-zero multiplicative rescaling.  Normalising
+    # first avoids overflow/underflow for otherwise equivalent tiny/huge data.
+    ys = ys / amplitude
     xs = np.arange(int(s), dtype=float)
     xbar = xs.mean()
     ybar = ys.mean()
@@ -108,6 +138,8 @@ def _scale_trend(chunk: np.ndarray, s: int) -> tuple[float, float]:
     slope = float(np.dot(xs - xbar, ys - ybar) / denom)
     resid = ys - (ybar + slope * (xs - xbar))
     rs = float(np.sqrt(np.mean(resid ** 2)))
+    if rs <= np.finfo(float).eps * 8.0:
+        return np.nan, np.nan
     return slope, rs
 
 
@@ -203,6 +235,7 @@ class TsMultiscaleTrendConsensus(SeriesOperator):
         ["x", "window", "scales"],
         unit="ratio",
         cost=5,
+        min_scales=1,
     )
 
     def _calculate_series(
@@ -240,6 +273,7 @@ class TsMultiscaleTrendDispersion(SeriesOperator):
         ["x", "window", "scales"],
         unit="ratio",
         cost=5,
+        min_scales=2,
     )
 
     def _calculate_series(
@@ -277,6 +311,7 @@ class TsMultiscaleTrendCurvature(SeriesOperator):
         ["x", "window", "scales"],
         unit="ratio",
         cost=6,
+        min_scales=3,
     )
 
     def _calculate_series(

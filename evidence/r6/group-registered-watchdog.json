@@ -1,0 +1,1 @@
+{"command": [".venv/bin/python", "-m", "pytest", "factor_engine/tests/runtime/test_r6_registered_group_membership.py", "-q", "--tb=short"], "returncode": 1, "sampled_peak_family_rss_bytes": 444977152, "sampling_seconds": 0.1, "seconds": 47.421862764051184, "test_guard_reason": null, "hard_memory_cap": false}

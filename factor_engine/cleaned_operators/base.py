@@ -403,6 +403,30 @@ class ParamSpec:
     # search grammar restricts them to small reviewed grids instead of letting
     # the optimizer chase estimator bias.
     param_role: ParamRole | None = None
+    # Explicit structured scalar contracts. Legacy unspecified containers retain
+    # their existing handling; only these opt-in declarations recurse.
+    items: "ParamSpec | None" = None
+    min_items: int | None = None
+    max_items: int | None = None
+    alternatives: "tuple[ParamSpec, ...] | None" = None
+
+    def __post_init__(self):
+        if self.alternatives is not None:
+            if not self.alternatives or not all(isinstance(s,ParamSpec) for s in self.alternatives):
+                raise ValueError("alternatives must contain ParamSpec branches")
+            if self.dtype is not None or self.items is not None or self.min is not None or self.max is not None or self.choices is not None:
+                raise ValueError("union constraints belong on their explicit alternatives")
+        if self.items is not None:
+            if self.dtype not in (list,tuple) or not isinstance(self.items,ParamSpec):
+                raise ValueError("items requires dtype=list/tuple and a ParamSpec item contract")
+        if self.min_items is not None or self.max_items is not None:
+            if self.items is None:
+                raise ValueError("sequence bounds require an item contract")
+            for count in (self.min_items,self.max_items):
+                if count is not None and (type(count) is not int or count<0):
+                    raise ValueError("sequence bounds must be nonnegative integers")
+            if self.min_items is not None and self.max_items is not None and self.min_items>self.max_items:
+                raise ValueError("min_items must be <= max_items")
 
 
 # R6-24 (RelationalParamSpec): cross-parameter feasibility constraints that
@@ -865,6 +889,13 @@ class OperatorMetadata:
     # ``total_positional_arity = len(panel_params) + len(scalar_params)`` when
     # the explicit arity fields are not set.
     scalar_params: tuple[str, ...] = ()
+    # Parameters accepting either a panel expression or a scalar literal.
+    # Kept distinct from panel_params/scalar_params so DSL/schema consumers do
+    # not erase one legal branch (e.g. power(base, exponent), coalesce(...)).
+    mixed_params: tuple[str, ...] = ()
+    nullable_mixed_params: tuple[str, ...] = ()
+    # Optional name for additional positional mixed arguments on a variadic op.
+    variadic_mixed_param: str | None = None
 
 
 def _normalise_integer(
@@ -909,7 +940,7 @@ def _normalise_integer(
     # R7-220: every declared ``ParamSpec`` — int/float/bool/str/choices — routes
     # through the single strict validator below.  Only operators WITHOUT a spec
     # keep the legacy name-whitelist / ``param_types`` heuristics.
-    if spec is not None and spec.dtype is not None:
+    if spec is not None and (spec.dtype is not None or spec.alternatives is not None):
         return _validate_param_spec(value, name, spec, lower, upper)
 
     is_int_declared = declared_type is int
@@ -1083,6 +1114,27 @@ def _validate_param_spec(
     # type gate would reject the very value the contract declares as default.
     if value is None and spec.default is None:
         return value
+    if spec.alternatives is not None:
+        for branch in spec.alternatives:
+            try:
+                return _validate_param_spec(value,name,branch,branch.min,branch.max)
+            except OperatorParameterError:
+                continue
+        raise OperatorParameterError(f"{name} does not match any declared parameter alternative")
+    if spec.items is not None:
+        if isinstance(value,np.ndarray):
+            if value.ndim!=1:
+                raise OperatorParameterError(f"{name} must be a one-dimensional sequence")
+            value=value.tolist()
+        if not isinstance(value,(list,tuple)):
+            raise OperatorParameterError(f"{name} must be a numeric/typed sequence")
+        if spec.min_items is not None and len(value)<spec.min_items:
+            raise OperatorParameterError(f"{name} requires at least {spec.min_items} items")
+        if spec.max_items is not None and len(value)>spec.max_items:
+            raise OperatorParameterError(f"{name} requires at most {spec.max_items} items")
+        child=spec.items
+        values=[_validate_param_spec(v,f"{name}[{i}]",child,child.min,child.max) for i,v in enumerate(value)]
+        return tuple(values) if dtype is tuple else values
     if dtype is bool:
         # Strict: ``type(value) is bool`` — a truthy ``1``/``1.0`` is a contract
         # violation, not a usable boolean.
@@ -1143,6 +1195,18 @@ def _validate_param_spec(
         # representations never coexist in the AST/hash (a false search-space
         # duplicate).  Raw ``1`` and ``1.0`` must hash identically.
         return numeric
+    # Narrow custom-object gate: static graph context is accepted only through
+    # its authoritative immutable type (or its explicitly supported DataFrame
+    # constructor), never through a generic arbitrary-object widening.
+    if getattr(dtype, "__name__", None) == "StaticAdjacency" and getattr(
+        dtype, "__module__", None
+    ) == "factor_engine.cleaned_operators.common.static_adjacency":
+        from factor_engine.cleaned_operators.common.static_adjacency import coerce_static_adjacency
+
+        try:
+            return coerce_static_adjacency(value)
+        except (TypeError, ValueError) as exc:
+            raise OperatorParameterError(f"{name}: {exc}") from exc
     # No recognized dtype: if choices are declared, require exact membership.
     if choices is not None:
         if not _choices_contains(choices, value, name):
@@ -1266,44 +1330,43 @@ def bind_numeric_string_if_declared(
 
 
 def _kernel_param_defaults(operator: Any) -> dict[str, Any]:
-    """Canonical default values from the operator kernel signature.
+    """Read authored callable defaults, then explicit metadata fallbacks.
 
-    Used for ``ParamSpec.active_when`` runtime enforcement: an INACTIVE
-    parameter is only tolerated when it equals its canonical default (the "dead
-    knob set to its no-op value" case).  Fall back to ``ParamSpec.default`` when
-    the kernel signature is not introspectable.
-
-    R6-24: the ``register_dual`` bridge binds the real kernel as the ``_fn``
-    default of ``_calculate_series(*args, _fn=fn, **kwargs)`` — signature
-    introspection of the bridge itself yields only ``_fn``.  Resolve through the
-    ``_fn`` default so relational specs see the kernel's real per-parameter
-    defaults (window/dim/delay/min_line/…), not just the bridge.
+    Generated transport wrappers must not hide defaults from relational checks,
+    omission validation, or semantic identities.
     """
     import inspect
 
-    fn = getattr(operator, "_calculate_series", None) or getattr(operator, "calculate", None)
-    if fn is None:
-        return {}
-    try:
-        sig = inspect.signature(fn)
-    except (TypeError, ValueError):
-        return {}
-    params = {
-        name: param.default
-        for name, param in sig.parameters.items()
-        if param.default is not inspect.Parameter.empty
-    }
-    # Resolve through a ``_fn`` bridge default when present.
-    bridged = params.get("_fn")
-    if bridged is not None and callable(bridged):
+    params: dict[str, Any] = {}
+    for fn in (
+        getattr(operator, "_contract_callable", None),
+        getattr(operator, "_fn", None),
+        getattr(operator, "_calculate_series", None),
+        getattr(operator, "calculate", None),
+    ):
+        if not callable(fn):
+            continue
         try:
-            bsig = inspect.signature(bridged)
+            signature = inspect.signature(fn)
+            bridge = signature.parameters.get("_fn")
+            if bridge is not None and callable(bridge.default):
+                signature = inspect.signature(bridge.default)
         except (TypeError, ValueError):
-            bsig = None
-        if bsig is not None:
-            for name, param in bsig.parameters.items():
-                if param.default is not inspect.Parameter.empty and name not in params:
-                    params[name] = param.default
+            continue
+        named = {
+            name: param for name, param in signature.parameters.items()
+            if name not in {"self", "_fn", "_canon"}
+            and param.kind not in (inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD)
+        }
+        if named:
+            params = {name: p.default for name, p in named.items()
+                      if p.default is not inspect.Parameter.empty}
+            break
+    specs = getattr(getattr(operator, "metadata", None), "param_specs", None) or {}
+    for name, spec in specs.items():
+        default = getattr(spec, "default", MISSING)
+        if name not in params and default is not MISSING:
+            params[name] = default
     return params
 
 
@@ -1477,6 +1540,7 @@ def _normalise_call(
     names = list(getattr(metadata, "param_names", None) or [])
     types = getattr(metadata, "param_types", None) or {}
     specs = getattr(metadata, "param_specs", None) or {}
+    mixed = set(getattr(metadata, "mixed_params", None) or ())
     aliases = set(getattr(metadata, "param_aliases", None) or {})
     tags = {str(t).lower() for t in (getattr(metadata, "tags", None) or [])}
     variadic = "variadic" in tags or "dynamic_inputs" in tags
@@ -1503,25 +1567,57 @@ def _normalise_call(
         # round-7 panel-input count); then panel_params + scalar_params when both
         # are declared; then the legacy ``len(param_names)``.
         declared_arity = getattr(metadata, "total_positional_arity", None)
-        if declared_arity is None:
-            declared_arity = getattr(metadata, "input_arity", None)
-        if declared_arity is None:
-            _pp = getattr(metadata, "panel_params", None) or ()
-            _sp = getattr(metadata, "scalar_params", None) or ()
-            if _pp or _sp:
-                declared_arity = len(_pp) + len(_sp)
-        if declared_arity is not None:
-            if len(args) != int(declared_arity):
+        panels = tuple(getattr(metadata, "panel_params", None) or ())
+        scalars = tuple(getattr(metadata, "scalar_params", None) or ())
+        if names and (panels or scalars):
+            # A named topology describes arguments, not how many MUST be
+            # positional. Bind required inputs by name and allow optional
+            # scalars to use kernel/ParamSpec defaults in every call style.
+            maximum = int(declared_arity) if declared_arity is not None else len(names)
+            if len(args) > maximum:
                 raise OperatorParameterError(
-                    f"{metadata.name}: declares input_arity={declared_arity} but "
-                    f"received {len(args)} positional arguments"
+                    f"{metadata.name}: received {len(args)} positional arguments; "
+                    f"at most {maximum} are declared"
                 )
-        elif names and len(args) > len(names):
-            raise OperatorParameterError(
-                f"{metadata.name}: received {len(args)} positional arguments but "
-                f"declares {len(names)} parameters {names}; extra positional "
-                "arguments are rejected unless the operator declares variadic"
-            )
+            provided = set(names[:len(args)])
+            alias_map = getattr(metadata, "param_aliases", None) or {}
+            for key in kwargs:
+                target = alias_map.get(key, key)
+                if target == key and key not in names and key in _LEGACY_KERNEL_ALIASES:
+                    target = next((n for n in _LEGACY_KERNEL_ALIASES[key] if n in names), key)
+                if target in provided:
+                    raise OperatorParameterError(
+                        f"{metadata.name}: multiple values for parameter {target!r}"
+                    )
+                provided.add(target)
+            mixed_names = tuple(getattr(metadata, "mixed_params", None) or ())
+            missing = [
+                name for name in (*panels, *scalars, *mixed_names)
+                if name not in provided
+                and name not in (defaults or {})
+                and getattr(specs.get(name), "default", MISSING) is MISSING
+            ]
+            if missing:
+                raise OperatorParameterError(
+                    f"{metadata.name}: missing required parameters {missing}"
+                )
+        else:
+            # Preserve exact positional arity for legacy unnamed contracts;
+            # they have no names with which to bind keyword inputs.
+            if declared_arity is None:
+                declared_arity = getattr(metadata, "input_arity", None)
+            if declared_arity is not None:
+                if len(args) != int(declared_arity):
+                    raise OperatorParameterError(
+                        f"{metadata.name}: declares input_arity={declared_arity} but "
+                        f"received {len(args)} positional arguments"
+                    )
+            elif names and len(args) > len(names):
+                raise OperatorParameterError(
+                    f"{metadata.name}: received {len(args)} positional arguments but "
+                    f"declares {len(names)} parameters {names}; extra positional "
+                    "arguments are rejected unless the operator declares variadic"
+                )
     # R19-002: per-value validation routes through the SAME unified
     # scalar-parameter authority the planning-time validator uses
     # (``normalize_and_validate_scalar_param``), so runtime and planning share
@@ -1532,17 +1628,16 @@ def _normalise_call(
     from factor_engine.cleaned_operators.common.strict_params import normalize_and_validate_scalar_param
 
     _canonical = str(getattr(metadata, "name", "") or "")
-    processed_args = [
-        normalize_and_validate_scalar_param(
-            _canonical,
-            names[index] if index < len(names) else "",
-            value,
-            phase="runtime",
-            declared_type=types.get(names[index]) if index < len(names) else None,
-            spec=specs.get(names[index]) if index < len(names) else None,
-        )
-        for index, value in enumerate(args)
-    ]
+    processed_args = []
+    for index, value in enumerate(args):
+        name = names[index] if index < len(names) else ""
+        if (name in mixed or (index >= len(names) and getattr(metadata, "variadic_mixed_param", None))) and _is_panel(value):
+            processed_args.append(value)
+        else:
+            processed_args.append(normalize_and_validate_scalar_param(
+                _canonical, name, value, phase="runtime",
+                declared_type=types.get(name), spec=specs.get(name),
+            ))
     # R7-223: alias -> canonical param-name map.  A keyword given under an alias
     # spelling is validated against the CANONICAL target's ParamSpec/type/bounds
     # — never the alias's own (usually empty) spec — so ``d=5`` on an operator
@@ -1561,7 +1656,7 @@ def _normalise_call(
                     "a canonical param_names entry"
                 )
             alias_target[key] = target
-        elif key in _LEGACY_KERNEL_ALIASES and not variadic:
+        elif key not in names and key in _LEGACY_KERNEL_ALIASES and not variadic:
             targets = _LEGACY_KERNEL_ALIASES[key]
             matched = [t for t in targets if t in names or t in aliases]
             if matched:
@@ -1574,6 +1669,9 @@ def _normalise_call(
         # binder + strict domain) per kwarg, before any alias resolution — the
         # canonical target's spec (via alias_target) is the authority below.
         if key in names:
+            if key in mixed and _is_panel(value):
+                processed_kwargs[key] = value
+                continue
             processed_kwargs[key] = normalize_and_validate_scalar_param(
                 _canonical, key, value, phase="runtime",
                 declared_type=types.get(key), spec=specs.get(key),
@@ -2011,7 +2109,7 @@ def _split_bound(
     for key in kwargs:
         if key in explicit_aliases:
             alias_resolved[key] = explicit_aliases[key]
-        elif key in _LEGACY_KERNEL_ALIASES:
+        elif key not in names and key in _LEGACY_KERNEL_ALIASES:
             matched = [t for t in _LEGACY_KERNEL_ALIASES[key] if t in names or t in explicit_aliases]
             if matched:
                 alias_resolved[key] = matched[0]

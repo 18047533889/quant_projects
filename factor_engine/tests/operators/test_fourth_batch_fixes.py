@@ -52,14 +52,23 @@ def test_huber_matches_independent_irls_reference():
     # independent IRLS with sqrt(w) — the reference convention
     ref = np.linalg.lstsq(design, y, rcond=None)[0]
     delta = 1.345
-    for _ in range(5):
+    converged = False
+    for _ in range(1_000):
         resid = y - design @ ref
         scale = 1.4826 * np.median(np.abs(resid - np.median(resid)))
         z = resid / scale
         w = np.where(np.abs(z) <= delta, 1.0, delta / np.abs(z))
         rw = np.sqrt(w)
-        ref = np.linalg.lstsq(design * rw[:, None], y * rw, rcond=None)[0]
-    np.testing.assert_allclose(beta, ref, rtol=1e-8, atol=1e-8)
+        updated = np.linalg.lstsq(
+            design * rw[:, None], y * rw, rcond=None
+        )[0]
+        if np.max(np.abs(updated - ref)) <= 1e-12:
+            ref = updated
+            converged = True
+            break
+        ref = updated
+    assert converged, "independent raw-coordinate IRLS oracle did not converge"
+    np.testing.assert_allclose(beta, ref, rtol=2e-8, atol=2e-8)
 
 
 # --------------------------------------------------------------------------

@@ -17,7 +17,7 @@ import numpy as np
 import pandas as pd
 from factor_engine.cleaned_operators.base import (
     Operator,
-    OperatorMetadata,
+    OperatorMetadata, ParamRole, ParamSpec,
     SeriesOperator,
     ScalarOperator,
     TwoVarOperator,
@@ -310,6 +310,11 @@ class RollingBetaOp(SeriesOperator):
 class LqtpRollingbetatomarketOp(SeriesOperator):
     """[experimental] 滚动市场 Beta；请优先使用 rolling_beta(ret, benchmark, window)"""
     metadata = OperatorMetadata(
+        panel_params=("ret", "benchmark_ret"),
+        scalar_params=("window",),
+        param_specs={
+            "window": ParamSpec(dtype=int, min=1, default=60, param_role=ParamRole.HORIZON),
+        },
         name="rolling_beta_to_market",
         category="price_volume",
         description="[experimental] 滚动市场 Beta；请优先使用 rolling_beta(ret, benchmark, window)",
@@ -357,6 +362,12 @@ class LqtpDownsidebetaOp(SeriesOperator):
 class LqtpTailbetaOp(SeriesOperator):
     """尾部 Beta：在 benchmark_ret 最低 q 分位子样本上估计"""
     metadata = OperatorMetadata(
+        panel_params=("ret", "benchmark_ret"),
+        scalar_params=("window", "q"),
+        param_specs={
+            "window": ParamSpec(dtype=int, min=1, default=60, param_role=ParamRole.HORIZON),
+            "q": ParamSpec(dtype=float, min=0.0, max=1.0, default=0.05, param_role=ParamRole.THRESHOLD),
+        },
         name="tail_beta",
         category="price_volume",
         description="尾部 Beta：在 benchmark_ret 最低 q 分位子样本上估计",
@@ -383,6 +394,11 @@ class LqtpTailbetaOp(SeriesOperator):
 class LqtpResidualmomentumcapmOp(SeriesOperator):
     """CAPM 残差动量：窗口内回归残差之和"""
     metadata = OperatorMetadata(
+        panel_params=("ret", "benchmark_ret"),
+        scalar_params=("window",),
+        param_specs={
+            "window": ParamSpec(dtype=int, min=1, default=60, param_role=ParamRole.HORIZON),
+        },
         name="residual_momentum_capm",
         category="price_volume",
         description="CAPM 残差动量：窗口内回归残差之和",
@@ -408,6 +424,11 @@ class LqtpResidualmomentumcapmOp(SeriesOperator):
 class LqtpCoskewnesstomarketOp(SeriesOperator):
     """相对市场的协偏度"""
     metadata = OperatorMetadata(
+        panel_params=("ret", "benchmark_ret"),
+        scalar_params=("window",),
+        param_specs={
+            "window": ParamSpec(dtype=int, min=1, default=60, param_role=ParamRole.HORIZON),
+        },
         name="coskewness_to_market",
         category="price_volume",
         description="相对市场的协偏度",
@@ -433,6 +454,11 @@ class LqtpCoskewnesstomarketOp(SeriesOperator):
 class LqtpIdiovolOp(SeriesOperator):
     """特质波动率：CAPM 残差滚动标准差"""
     metadata = OperatorMetadata(
+        panel_params=("ret", "benchmark_ret"),
+        scalar_params=("window",),
+        param_specs={
+            "window": ParamSpec(dtype=int, min=1, default=60, param_role=ParamRole.HORIZON),
+        },
         name="idio_vol",
         category="price_volume",
         description="特质波动率：CAPM 残差滚动标准差",
@@ -458,6 +484,11 @@ class LqtpIdiovolOp(SeriesOperator):
 class LqtpIdioskewOp(SeriesOperator):
     """特质偏度：CAPM 残差滚动偏度"""
     metadata = OperatorMetadata(
+        panel_params=("ret", "benchmark_ret"),
+        scalar_params=("window",),
+        param_specs={
+            "window": ParamSpec(dtype=int, min=1, default=60, param_role=ParamRole.HORIZON),
+        },
         name="idio_skew",
         category="price_volume",
         description="特质偏度：CAPM 残差滚动偏度",

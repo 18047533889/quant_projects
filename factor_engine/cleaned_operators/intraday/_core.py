@@ -23,7 +23,12 @@ from typing import Any, Callable
 import numpy as np
 import pandas as pd
 
-from factor_engine.cleaned_operators.base import OperatorMetadata, SeriesOperator
+from factor_engine.cleaned_operators.base import (
+    OperatorMetadata,
+    ParamRole,
+    ParamSpec,
+    SeriesOperator,
+)
 
 _EPS = 1e-12
 # P0-09: minimum number of finite within-session returns required before a
@@ -203,6 +208,8 @@ def metadata(
     extra_tags: list[str] | None = None,
     available_at: str | None = None,
     same_session_usable: bool | None = None,
+    panel_params: tuple[str, ...] | None = None,
+    scalar_params: dict[str, ParamSpec] | None = None,
 ) -> OperatorMetadata:
     """Standard metadata for intraday -> daily aggregation operators."""
     tags = [
@@ -213,6 +220,16 @@ def metadata(
     ]
     if extra_tags:
         tags.extend(extra_tags)
+    panel_names = tuple(panel_params or ())
+    scalar_specs = dict(scalar_params or {})
+    scalar_names = tuple(scalar_specs)
+    if panel_names or scalar_names:
+        declared = panel_names + scalar_names
+        if len(params) != len(declared) or set(params) != set(declared):
+            raise ValueError(
+                f"metadata parameter topology mismatch for {name}: "
+                f"param_names={tuple(params)!r}, declared={declared!r}"
+            )
     return OperatorMetadata(
         name=name,
         category="intraday_microstructure",
@@ -224,6 +241,10 @@ def metadata(
         output_grain="daily",
         available_at=available_at,
         same_session_usable=same_session_usable,
+        panel_params=panel_names,
+        panel_arity=len(panel_names) if panel_names else None,
+        scalar_params=scalar_names,
+        param_specs=scalar_specs,
     )
 
 
@@ -367,7 +388,13 @@ def daily_agg_two(
         for day, group in joined.groupby("day"):
             vals_a = np.asarray(group["a"], dtype=float)
             vals_b = np.asarray(group["b"], dtype=float)
-            if int(np.sum(np.isfinite(vals_a))) < int(min_finite):
+            if getattr(fn, "_joint_positive_support", False):
+                support = int(np.sum(
+                    np.isfinite(vals_a) & np.isfinite(vals_b) & (vals_b > 0)
+                ))
+            else:
+                support = int(np.sum(np.isfinite(vals_a)))
+            if support < int(min_finite):
                 per_day[day] = np.nan
                 continue
             try:

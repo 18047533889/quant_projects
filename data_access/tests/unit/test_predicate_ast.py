@@ -1,5 +1,7 @@
 """read/predicate_ast.py：Filter AST 单测（DuckDB / Polars / Arrow 三编译器）。"""
 from __future__ import annotations
+import datetime as dt
+
 
 import pytest
 
@@ -74,6 +76,34 @@ def test_compile_arrow():
     arrow_expr = compile_filter_arrow(expr, pc=pc)
     filtered = table.filter(arrow_expr)
     assert filtered.num_rows == 1
+
+
+def test_compile_arrow_between_timestamp_boundaries():
+    """Arrow Between 可执行，并严格保留上下界开闭语义。"""
+    pc = pytest.importorskip("pyarrow.compute")
+    table = pa.table(
+        {
+            "ts": pa.array(
+                [
+                    dt.datetime(2023, 12, 31, 23, 59, 59),
+                    dt.datetime(2024, 1, 1),
+                    dt.datetime(2024, 1, 1, 23, 59, 59, 999999),
+                    dt.datetime(2024, 1, 2),
+                    None,
+                ]
+            )
+        }
+    )
+    expr = Between(
+        "ts",
+        dt.datetime(2024, 1, 1),
+        dt.datetime(2024, 1, 2),
+        True,
+        False,
+    )
+
+    filtered = table.filter(compile_filter_arrow(expr, pc=pc))
+    assert filtered["ts"].to_pylist() == table["ts"].to_pylist()[1:3]
 
 
 def test_not():

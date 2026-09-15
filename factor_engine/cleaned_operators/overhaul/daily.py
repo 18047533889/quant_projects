@@ -6,6 +6,8 @@ from typing import Any
 
 import numpy as np
 import pandas as pd
+from factor_engine.cleaned_operators.base import ParamRole, ParamSpec, strict_bool_param
+from factor_engine.cleaned_operators.parameter_validation import strict_finite_scalar
 
 from factor_engine.cleaned_operators.overhaul.base import (
     Spec,
@@ -274,7 +276,9 @@ def pl_true_streak(condition, **_):
 
 def pd_cs_bucket(x, buckets=10, ascending=True, **_):
     count = positive_int(buckets, "buckets")
-    rank = x.rank(axis=1, method="average", ascending=bool(ascending), na_option="keep")
+    ascending = strict_bool_param(ascending, "ascending")
+    x = x.where(finite_pd(x))
+    rank = x.rank(axis=1, method="average", ascending=ascending, na_option="keep")
     valid_count = x.notna().sum(axis=1).astype(float)
     rank01 = rank.sub(1).div((valid_count - 1).replace(0, np.nan), axis=0)
     single = valid_count.eq(1)
@@ -285,7 +289,10 @@ def pd_cs_bucket(x, buckets=10, ascending=True, **_):
 
 def pl_cs_bucket(x, buckets=10, ascending=True, **_):
     count = positive_int(buckets, "buckets")
+    ascending = strict_bool_param(ascending, "ascending")
     cols = pl_cols(x)
+    if not cols or not x.height:
+        return x
     long = x.select(cols).with_row_index("row").unpivot(
         index="row", on=cols, variable_name="inst", value_name="value"
     ).with_columns(
@@ -305,15 +312,15 @@ def pl_cs_bucket(x, buckets=10, ascending=True, **_):
 
 
 def pd_cs_bucket_fixed(x, breaks, **_):
-    """固定边界分桶：值 <= breaks[0] → 1；> breaks[-1] → len(breaks)+1；其余按所在区间。
+    """固定边界分桶：值 < breaks[0] → 1；>= breaks[-1] → len(breaks)+1；边界归右桶。
 
     与等频 ``cs_bucket``（横截面排名分桶）不同，固定边界是明确数值断点。
     """
     b = np.asarray(list(breaks), dtype=float)
     if b.ndim != 1 or b.size == 0:
         raise ValueError("breaks must be a non-empty 1D sequence")
-    if np.any(np.diff(b) <= 0):
-        raise ValueError("breaks must be strictly increasing")
+    if not np.isfinite(b).all() or np.any(np.diff(b) <= 0):
+        raise ValueError("breaks must be finite and strictly increasing")
     arr = x.to_numpy(dtype=float)
     out = np.full(x.shape, np.nan, dtype=float)
     idx = np.searchsorted(b, arr, side="right") + 1.0
@@ -327,17 +334,16 @@ def pd_cs_bucket_historical(x, window=20, quantiles=(0.2, 0.4, 0.6, 0.8), min_pe
 
     与等频 ``cs_bucket``（横截面）和固定边界 ``cs_bucket_fixed`` 语义不同。
     """
-    w = positive_int(window, "window")
-    q = tuple(float(v) for v in quantiles)
-    if not q or any(not 0 < v < 1 for v in q):
-        raise ValueError("quantiles must be strictly inside (0, 1)")
-    mp = max(1, int(min_periods))
+    w, mp = window_params(window, min_periods)
+    q = tuple(strict_finite_scalar(v, "quantile") for v in quantiles)
+    if not q or any(not 0 < v < 1 for v in q) or any(a >= b for a, b in zip(q, q[1:])):
+        raise ValueError("quantiles must be strictly increasing inside (0, 1)")
     arr = x.to_numpy(dtype=float)
     out = np.full(x.shape, np.nan, dtype=float)
     for col in range(arr.shape[1]):
         for row in range(arr.shape[0]):
-            start = max(0, row - w + 1)
-            seg = arr[start:row, col]  # 历史窗不含当前行
+            start = max(0, row - w)
+            seg = arr[start:row, col]  # Exactly w prior rows, excluding current.
             valid = seg[np.isfinite(seg)]
             if valid.size < mp:
                 continue
@@ -358,7 +364,7 @@ def pd_argext(x, window, pick, min_periods=1):
             valid = np.isfinite(values)
             if valid.sum() < mp:
                 continue
-            target = np.nanmax(values) if pick == "max" else np.nanmin(values)
+            target = np.max(values[valid]) if pick == "max" else np.min(values[valid])
             hit_idx = np.flatnonzero(valid & (values == target))
             if hit_idx.size == 0:
                 continue
@@ -382,7 +388,7 @@ def pl_argext(x, window, pick, min_periods=1):
         valid = np.isfinite(values)
         if valid.sum() < mp:
             return np.nan
-        target = np.nanmax(values) if pick == "max" else np.nanmin(values)
+        target = np.max(values[valid]) if pick == "max" else np.min(values[valid])
         hit = np.flatnonzero(valid & (values == target))[-1]
         return float(values.size - 1 - hit)
     return pl_unary_rolling_map(x, w, 1, fn)
@@ -429,7 +435,7 @@ def pl_topbottom(x, window, k, min_periods, top, stat):
 
 def pd_tail_mean(x, window, q=0.1, side="lower", min_periods=None, **_):
     w, mp = window_params(window, min_periods, default_mp=2)
-    q = float(q)
+    q = strict_finite_scalar(q, "q")
     if not 0 < q <= 0.5:
         raise ValueError("q must satisfy 0 < q <= 0.5")
     if side not in {"lower", "upper"}:
@@ -449,7 +455,7 @@ def pd_tail_mean(x, window, q=0.1, side="lower", min_periods=None, **_):
 
 def pl_tail_mean(x, window, q=0.1, side="lower", min_periods=None, **_):
     w, mp = window_params(window, min_periods, default_mp=2)
-    q = float(q)
+    q = strict_finite_scalar(q, "q")
     if not 0 < q <= 0.5 or side not in {"lower", "upper"}:
         raise ValueError("invalid q or side")
     def fn(values):
@@ -468,12 +474,12 @@ def _top_spec(top, stat):
     # the other topk/bottomk canonicals use ``["x","window","k"]``.  The DSL
     # binder always passes the CANONICAL key (``d`` for ts_topk_sum), so the
     # wrapped kernels must accept that spelling.
-    def _pand(x, window=None, k=None, min_periods=None, *, d=None, n=None, **kw):
+    def _pand(x, window=None, k=5, min_periods=1, *, d=None, n=None, **kw):
         w = window if window is not None else d
         kk = k if k is not None else n
         return pd_topbottom(x, w, kk, min_periods, top, stat)
 
-    def _pola(x, window=None, k=None, min_periods=None, *, d=None, n=None, **kw):
+    def _pola(x, window=None, k=5, min_periods=1, *, d=None, n=None, **kw):
         w = window if window is not None else d
         kk = k if k is not None else n
         return pl_topbottom(x, w, kk, min_periods, top, stat)
@@ -482,20 +488,38 @@ def _top_spec(top, stat):
 
 
 def register() -> None:
+    window = ParamSpec(dtype=int, min=1, default=20, param_role=ParamRole.HORIZON)
+    support1 = ParamSpec(dtype=int, min=1, default=1, searchable=False, param_role=ParamRole.SUPPORT_POLICY)
+    support2 = ParamSpec(dtype=int, min=1, default=2, searchable=False, param_role=ParamRole.SUPPORT_POLICY)
+    ddof = ParamSpec(dtype=int, choices=(0, 1), default=1, searchable=False, param_role=ParamRole.POLICY)
     specs = {
-        "ts_count_if": Spec("time_series_condition", ["condition", "window", "min_periods"], "滚动统计有限条件为真的次数", pd_count_if, pl_count_if),
-        "ts_sum_if": Spec("time_series_condition", ["x", "condition", "window", "min_periods"], "滚动条件求和", pd_sum_if, pl_sum_if),
-        "ts_mean_if": Spec("time_series_condition", ["x", "condition", "window", "min_periods"], "滚动条件均值", pd_mean_if, pl_mean_if),
-        "ts_std_if": Spec("time_series_condition", ["x", "condition", "window", "min_periods", "ddof"], "滚动条件标准差", pd_std_if, pl_std_if),
-        "ts_last_if": Spec("time_series_event", ["x", "condition", "window"], "窗口内最近一次条件成立时的值", pd_last_if, pl_last_if),
+        "ts_count_if": Spec("time_series_condition", ["condition", "window", "min_periods"], "滚动统计有限条件为真的次数", pd_count_if, pl_count_if, {"window": window, "min_periods": support1}, ("condition",), ("window", "min_periods")),
+        "ts_sum_if": Spec("time_series_condition", ["x", "condition", "window", "min_periods"], "滚动条件求和", pd_sum_if, pl_sum_if, {"window": window, "min_periods": support1}, ("x", "condition"), ("window", "min_periods")),
+        "ts_mean_if": Spec("time_series_condition", ["x", "condition", "window", "min_periods"], "滚动条件均值", pd_mean_if, pl_mean_if, {"window": window, "min_periods": support1}, ("x", "condition"), ("window", "min_periods")),
+        "ts_std_if": Spec("time_series_condition", ["x", "condition", "window", "min_periods", "ddof"], "滚动条件标准差", pd_std_if, pl_std_if, {"window": ParamSpec(dtype=int, min=2, default=20, param_role=ParamRole.HORIZON), "min_periods": support2, "ddof": ddof}, ("x", "condition"), ("window", "min_periods", "ddof")),
+        "ts_last_if": Spec("time_series_event", ["x", "condition", "window"], "窗口内最近一次条件成立时的值", pd_last_if, pl_last_if, {"window": window}, ("x", "condition"), ("window",)),
         "ts_days_since": Spec("time_series_event", ["condition", "max_lookback"], "距最近一次条件成立的交易行数", pd_days_since, pl_days_since),
         "ts_true_streak": Spec("time_series_event", ["condition"], "截至当前连续条件成立长度", pd_true_streak, pl_true_streak),
-        "cs_bucket": Spec("cross_sectional", ["x", "buckets", "ascending"], "横截面零到一排名分桶", pd_cs_bucket, pl_cs_bucket),
+        "cs_bucket": Spec("cross_sectional", ["x", "buckets", "ascending"], "横截面零到一排名分桶", pd_cs_bucket, pl_cs_bucket, {"buckets": ParamSpec(dtype=int, min=1, default=10, param_role=ParamRole.ECONOMIC), "ascending": ParamSpec(dtype=bool, default=True, searchable=False, param_role=ParamRole.POLICY)}, ("x",), ("buckets", "ascending")),
         "cs_bucket_fixed": Spec("cross_sectional", ["x", "breaks"], "固定边界分桶", pd_cs_bucket_fixed),
-        "cs_bucket_historical": Spec("cross_sectional", ["x", "window", "quantiles", "min_periods"], "基于历史边界分桶（PIT）", pd_cs_bucket_historical),
-        "ts_argmax": Spec("time_series_order", ["x", "window", "min_periods"], "距最近一次窗口最大值的交易行数", pd_argmax, pl_argmax),
-        "ts_argmin": Spec("time_series_order", ["x", "window", "min_periods"], "距最近一次窗口最小值的交易行数", pd_argmin, pl_argmin),
-        "ts_tail_mean": Spec("time_series_risk", ["x", "window", "q", "side", "min_periods"], "当前窗口统一阈值下的尾部均值", pd_tail_mean, pl_tail_mean),
+        "cs_bucket_historical": Spec(
+            "cross_sectional", ["x", "window", "quantiles", "min_periods"],
+            "基于历史边界分桶（PIT）", pd_cs_bucket_historical,
+            param_specs={
+                "window": ParamSpec(dtype=int, min=1, default=20, param_role=ParamRole.HORIZON),
+                "quantiles": ParamSpec(
+                    alternatives=(
+                        ParamSpec(dtype=tuple, items=ParamSpec(dtype=float, min=0.0, max=1.0), min_items=1),
+                        ParamSpec(dtype=list, items=ParamSpec(dtype=float, min=0.0, max=1.0), min_items=1),
+                    ), default=(0.2, 0.4, 0.6, 0.8), param_role=ParamRole.THRESHOLD,
+                ),
+                "min_periods": ParamSpec(dtype=int, min=1, default=5, searchable=False, param_role=ParamRole.SUPPORT_POLICY),
+            },
+            panel_params=("x",), scalar_params=("window", "quantiles", "min_periods"),
+        ),
+        "ts_argmax": Spec("time_series_order", ["x", "window", "min_periods"], "距最近一次窗口最大值的交易行数", pd_argmax, pl_argmax, {"window": window, "min_periods": support1}, ("x",), ("window", "min_periods")),
+        "ts_argmin": Spec("time_series_order", ["x", "window", "min_periods"], "距最近一次窗口最小值的交易行数", pd_argmin, pl_argmin, {"window": window, "min_periods": support1}, ("x",), ("window", "min_periods")),
+        "ts_tail_mean": Spec("time_series_risk", ["x", "window", "q", "side", "min_periods"], "当前窗口统一阈值下的尾部均值", pd_tail_mean, pl_tail_mean, {"window": ParamSpec(dtype=int, min=1, default=20, param_role=ParamRole.HORIZON), "q": ParamSpec(dtype=float, min=0.0, max=0.5, default=0.1, param_role=ParamRole.THRESHOLD), "side": ParamSpec(dtype=str, choices=("lower", "upper"), default="lower", searchable=False, param_role=ParamRole.POLICY), "min_periods": support2}, ("x",), ("window", "q", "side", "min_periods")),
     }
     for name, top, stat, desc in (
         ("ts_topk_mean", True, "mean", "窗口内最大 K 个值的均值"),
@@ -510,5 +534,17 @@ def register() -> None:
         # ``window``/``n`` explicit aliases); its inherited ParamSpec keys must
         # sit inside the overhaul param_names (R6-157 invariant).
         params = ["x", "d", "k", "min_periods"] if name == "ts_topk_sum" else ["x", "window", "k", "min_periods"]
-        specs[name] = Spec("time_series_order", params, desc, pfn, plfn)
+        specs[name] = Spec(
+            "time_series_order", params, desc, pfn, plfn,
+            {"d": window, "k": ParamSpec(dtype=int, min=1, default=None, param_role=ParamRole.ECONOMIC), "min_periods": support1},
+            ("x",), ("d", "k", "min_periods"),
+        ) if name == "ts_topk_sum" else Spec(
+            "time_series_order", params, desc, pfn, plfn,
+            {
+                "window": ParamSpec(dtype=int, min=2 if stat == "std" else 1, default=20, param_role=ParamRole.HORIZON),
+                "k": ParamSpec(dtype=int, min=2 if stat == "std" else 1, default=5, searchable=False, param_role=ParamRole.SUPPORT_POLICY),
+                "min_periods": support1,
+            },
+            ("x",), ("window", "k", "min_periods"),
+        )
     register_specs(specs)

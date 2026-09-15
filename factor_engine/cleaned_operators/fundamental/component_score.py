@@ -23,7 +23,13 @@ import numpy as np
 import pandas as pd
 
 from factor_engine.cleaned_operators.alignment import align_panel_inputs
-from factor_engine.cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
+from factor_engine.cleaned_operators.base import (
+    OperatorMetadata,
+    ParamRole,
+    ParamSpec,
+    SeriesOperator,
+    register_operator,
+)
 
 MAX_COMPONENTS = 8
 _COMPONENT_PARAMS = [f"component_{i}" for i in range(1, MAX_COMPONENTS + 1)]
@@ -40,6 +46,22 @@ def _metadata(name: str, params: list[str]) -> OperatorMetadata:
             "R30 §18: 条件满足→+1，条件不满足(完整数据)→0，非有限→NaN（三值逻辑）。"
         ),
         param_names=params,
+        panel_params=tuple(_COMPONENT_PARAMS),
+        scalar_params=("component_directions", "score_weights", "missing_policy"),
+        param_specs={
+            "component_directions": ParamSpec(default=None, searchable=False, param_role=ParamRole.POLICY,
+                alternatives=(
+                    ParamSpec(dtype=str, choices=("up", "down", "pos", "neg")),
+                    ParamSpec(dtype=list, items=ParamSpec(dtype=str, choices=("up", "down", "pos", "neg")),
+                        min_items=1, max_items=MAX_COMPONENTS),
+                    ParamSpec(dtype=tuple, items=ParamSpec(dtype=str, choices=("up", "down", "pos", "neg")),
+                        min_items=1, max_items=MAX_COMPONENTS))),
+            "score_weights": ParamSpec(default=None, searchable=False, param_role=ParamRole.POLICY,
+                alternatives=(
+                    ParamSpec(dtype=list, items=ParamSpec(dtype=float), min_items=1, max_items=MAX_COMPONENTS),
+                    ParamSpec(dtype=tuple, items=ParamSpec(dtype=float), min_items=1, max_items=MAX_COMPONENTS))),
+            "missing_policy": ParamSpec(dtype=str, choices=("score_available", "require_full"), default="score_available", searchable=False, param_role=ParamRole.MISSING_POLICY),
+        },
         return_type="series",
         tags=[
             "fundamental", "daily", "pit_safe", "causal", "typed_v2",
@@ -101,19 +123,24 @@ class FinComponentScore(SeriesOperator):
 
     metadata = _metadata("fin_component_score", [*_COMPONENT_PARAMS, "component_directions", "score_weights", "missing_policy"])
 
-    def _calculate_series(self, *args: Any, **kwargs: Any) -> pd.DataFrame:
-        # Consume the SAME declared slot order as BindCall.  Keyword components
-        # are first-class inputs, gaps are explicit ``None``, and trailing
-        # positional scalar arguments are read only at their declared indices.
+    def _calculate_series(
+        self,
+        component_1: pd.DataFrame | None = None,
+        component_2: pd.DataFrame | None = None,
+        component_3: pd.DataFrame | None = None,
+        component_4: pd.DataFrame | None = None,
+        component_5: pd.DataFrame | None = None,
+        component_6: pd.DataFrame | None = None,
+        component_7: pd.DataFrame | None = None,
+        component_8: pd.DataFrame | None = None,
+        component_directions=None, score_weights=None,
+        missing_policy="score_available", **kwargs,
+    ) -> pd.DataFrame:
         names = [*_COMPONENT_PARAMS, "component_directions", "score_weights", "missing_policy"]
-        if len(args) > len(names):
-            raise ValueError(f"fin_component_score accepts at most {len(names)} arguments")
-        bound: dict[str, Any] = dict(kwargs)
-        for index, value in enumerate(args):
-            name = names[index]
-            if name in bound:
-                raise ValueError(f"duplicate parameter {name!r}")
-            bound[name] = value
+        bound = dict(zip(_COMPONENT_PARAMS, (component_1, component_2, component_3,
+            component_4, component_5, component_6, component_7, component_8)))
+        bound.update(component_directions=component_directions,
+            score_weights=score_weights, missing_policy=missing_policy, **kwargs)
         unknown = sorted(set(bound) - set(names))
         if unknown:
             raise ValueError(f"unknown fin_component_score parameters: {unknown}")
@@ -169,7 +196,7 @@ class FinComponentScore(SeriesOperator):
         stacked = np.stack(arrays, axis=2)  # (rows, cols, components)
         contributions = np.stack(
             [
-                _score_component(stacked[:, :, i], direction_list[i]) * weight_list[i]
+                _score_component(stacked[:, :, i], direction_list[i]).astype(np.longdouble) * np.longdouble(weight_list[i])
                 for i in range(n_components)
             ],
             axis=2,
@@ -192,6 +219,7 @@ class FinComponentScore(SeriesOperator):
                 scored = np.nansum(contributions, axis=2)
             any_finite = np.any(np.isfinite(contributions), axis=2)
             scored = np.where(any_finite, scored, np.nan)
+        scored = np.where(np.isfinite(scored) & (np.abs(scored) <= np.finfo(float).max), scored, np.nan)
         out = pd.DataFrame(scored, index=base.index, columns=base.columns, dtype=float)
         # R30 §18: record the effective (finite) component count per cell so
         # downstream consumers can refuse to compare partial and full scores.

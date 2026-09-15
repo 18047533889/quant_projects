@@ -18,6 +18,7 @@ import numpy as np
 import polars as pl
 
 from factor_engine.cleaned_operators.base_polars import OperatorMetadata, SeriesOperator, register_operator
+from factor_engine.cleaned_operators.base import ParamRole, ParamSpec
 from factor_engine.cleaned_operators.fiscal_strict import (
     period_ordinal,
     pl_quarter_from_cumulative,
@@ -760,15 +761,15 @@ def fin_divergence(x, y, period_id, periods=4):
     return _make(x, cols, out)
 
 
-def fin_cash_earnings_gap(earnings, cashflow, scale_base, flow_type=None):
+def fin_cash_earnings_gap(earnings, cashflow, scale, flow_type=None):
     require_same_flow_grain("fin_cash_earnings_gap", flow_type, 2)
-    cols = _cols(earnings, cashflow, scale_base)
+    cols = _cols(earnings, cashflow, scale)
     rows = earnings.height
     out = np.full((rows, len(cols)), np.nan, dtype=float)
     for i, c in enumerate(cols):
         out[:, i] = _sdiv_num_den(
             earnings[c].to_numpy() - cashflow[c].to_numpy(),
-            np.abs(scale_base[c].to_numpy()),
+            np.abs(scale[c].to_numpy()),
         )
     return _make(earnings, cols, out)
 
@@ -1277,7 +1278,7 @@ _SPECS: tuple[tuple[str, tuple[str, ...], Callable, str], ...] = (
     ("fin_common_size", ("x", "base"), lambda x, base: fin_ratio(x, base), "Common-size ratio."),
     ("fin_turnover", ("flow", "balance", "period_id", "average_periods"), fin_turnover, "Flow divided by average balance."),
     ("fin_divergence", ("x", "y", "period_id", "periods"), fin_divergence, "Difference of same-period percent changes."),
-    ("fin_cash_earnings_gap", ("earnings", "cashflow", "scale_base", "flow_type"), fin_cash_earnings_gap, "Scaled earnings-minus-cashflow gap."),
+    ("fin_cash_earnings_gap", ("earnings", "cashflow", "scale", "flow_type"), fin_cash_earnings_gap, "Scaled earnings-minus-cashflow gap."),
     ("fin_accrual_ratio", ("earnings", "cashflow", "assets", "flow_type"), fin_accrual_ratio, "Accrual ratio scaled by absolute assets."),
     ("fin_cash_conversion", ("cashflow", "earnings", "flow_type"), lambda cashflow, earnings, flow_type=None: (require_same_flow_grain("fin_cash_conversion", flow_type, 2) or fin_ratio(cashflow, earnings)), "Cash conversion ratio."),
     ("fin_working_capital_change", ("working_capital", "period_id", "periods"), fin_working_capital_change, "Working-capital period change."),
@@ -1466,11 +1467,38 @@ def _revision_compose(
 
 
 def _register(name: str, params: tuple[str, ...], function: Callable, description: str) -> None:
+    panel_params = ()
+    param_specs = {}
+    if name == "fin_cash_earnings_gap":
+        panel_params = ("earnings", "cashflow", "scale")
+        param_specs = {
+            "flow_type": ParamSpec(
+                dtype=str,
+                choices=("AnnualFlow", "CumulativeYTDFlow", "SinglePeriodFlow", "Stock", "TTMFlow"),
+                searchable=False,
+                default=None,
+                param_role=ParamRole.POLICY,
+            )
+        }
+    elif name in {"fin_ttm_quarterly", "fin_ttm_cumulative"}:
+        panel_params = tuple(param for param in params if param != "periods_per_year")
+        param_specs = {
+            "periods_per_year": ParamSpec(
+                dtype=int,
+                min=1,
+                default=4,
+                param_role=ParamRole.HORIZON,
+            )
+        }
+    elif name == "fin_quarter_from_cumulative":
+        panel_params = tuple(params)
     metadata = OperatorMetadata(
         name=name,
         category="fundamental_period",
         description=description,
         param_names=list(params),
+        panel_params=panel_params,
+        param_specs=param_specs,
         return_type="series",
         tags=["fundamental", "period_aware", "pit_safe", "causal", "polars", "native"],
     )

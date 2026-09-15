@@ -20,7 +20,8 @@ Fail-closed rules (2026-08 round-3): no ``+ eps`` floor on the denominator — a
 crossing bar whose volatility scale is non-finite or ``<= 0`` (sample too small
 / zero spread) emits NaN, never a fabricated number; a row whose *current*
 ``z`` is NaN emits NaN, never a stale 0/trailing value.  A finite non-crossing
-bar emits 0.0 (there was genuinely no crossing event).
+bar with a valid previous observation emits 0.0 (there was genuinely no crossing event).
+A missing adjacent observation emits NaN; the initial seed row remains 0.
 
 All operators are trailing-window per-column, prefix-causal, deterministic,
 NaN-safe and reject invalid parameters.
@@ -32,7 +33,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from factor_engine.cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
+from factor_engine.cleaned_operators.base import OperatorMetadata, ParamSpec, ParamRole, SeriesOperator, register_operator
 from factor_engine.cleaned_operators.rolling_pack import frame_like, register_polars_bridge
 
 
@@ -42,6 +43,10 @@ def _metadata(name: str, description: str, params: list[str], *, unit: str, cost
         category="crossing",
         description=description,
         param_names=params,
+        panel_params=("x","y"), scalar_params=("window",), output_unit="dimensionless",
+        same_unit_input_groups=(("x","y"),),
+        param_specs={"window":ParamSpec(dtype=int,min=2,default=20,param_role=ParamRole.HORIZON,
+            history_formula="max(window, 3)" if name=="ts_crossing_acceleration" else "window")},
         return_type="series",
         tags=[
             "crossing", "daily", "pit_safe", "causal", "typed_v2",
@@ -55,26 +60,27 @@ def _metadata(name: str, description: str, params: list[str], *, unit: str, cost
 def _crossing_parts(x2d: np.ndarray, y2d: np.ndarray, window: int) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Return ``(z, dz, scale_z)`` 2D panels for all columns."""
     rows, cols = x2d.shape
-    z = np.full((rows, cols), np.nan, dtype=float)
-    dz = np.full((rows, cols), np.nan, dtype=float)
-    scale = np.full((rows, cols), np.nan, dtype=float)
-    w = int(window)
+    z = np.full((rows, cols), np.nan, dtype=np.longdouble)
+    dz = np.full((rows, cols), np.nan, dtype=np.longdouble)
+    scale = np.full((rows, cols), np.nan, dtype=np.longdouble)
+    from factor_engine.cleaned_operators.common.strict_params import strict_int
+    w = strict_int(window,"window",minimum=2)
     for c in range(cols):
-        x, y = x2d[:, c], y2d[:, c]
-        zc = np.full(rows, np.nan, dtype=float)
+        x, y = x2d[:, c].astype(np.longdouble), y2d[:, c].astype(np.longdouble)
+        zc = np.full(rows, np.nan, dtype=np.longdouble)
         for t in range(rows):
             if np.isfinite(x[t]) and np.isfinite(y[t]):
                 zc[t] = x[t] - y[t]
         for t in range(1, rows):
             if np.isfinite(zc[t]) and np.isfinite(zc[t - 1]):
                 dz[t, c] = zc[t] - zc[t - 1]
-        sc = np.full(rows, np.nan, dtype=float)
+        sc = np.full(rows, np.nan, dtype=np.longdouble)
         for t in range(rows):
             i0 = max(0, t - w + 1)
             v = zc[i0 : t + 1]
             v = v[np.isfinite(v)]
             if v.size >= 2:
-                sc[t] = float(np.std(v))
+                sc[t] = np.std(v)
         z[:, c] = zc
         scale[:, c] = sc
     return z, dz, scale
@@ -88,6 +94,7 @@ def _crossing_flags(z: np.ndarray) -> np.ndarray:
         for c in range(cols):
             zt, ztm = z[t, c], z[t - 1, c]
             if not (np.isfinite(zt) and np.isfinite(ztm)):
+                flags[t,c]=np.nan  # Missing adjacency is unknown, not a no-crossing event.
                 continue
             if ztm <= 0.0 < zt:
                 flags[t, c] = 1.0
@@ -149,8 +156,8 @@ def _crossing_acceleration_series(x2d: np.ndarray, y2d: np.ndarray, window: int)
                 out[t, c] = np.nan
                 continue
             a = (dz[t, c] - dz[t - 1, c]) / scale[t, c]
-            if np.isfinite(a):
-                out[t, c] = a
+            if np.isfinite(a) and abs(a)<=np.finfo(float).max and (a==0 or float(a)!=0):
+                out[t, c] = float(a)
             else:
                 out[t, c] = np.nan
     return out
@@ -182,9 +189,10 @@ class TsCrossingSpeed(SeriesOperator):
     )
 
     def _calculate_series(self, x: pd.DataFrame, y: pd.DataFrame, window: int = 20, **_: Any) -> pd.DataFrame:
-        w = int(window)
-        if w < 2:
-            raise ValueError("window must be >= 2")
+        from factor_engine.cleaned_operators.common.strict_params import strict_int
+        w = strict_int(window,"window",minimum=2)
+        if not x.index.equals(y.index) or not x.columns.equals(y.columns):
+            raise ValueError("crossing inputs must have identical axes")
         return frame_like(
             x,
             _crossing_speed_series(x.to_numpy(dtype=float), y.to_numpy(dtype=float), w),
@@ -214,9 +222,10 @@ class TsCrossingAcceleration(SeriesOperator):
     )
 
     def _calculate_series(self, x: pd.DataFrame, y: pd.DataFrame, window: int = 20, **_: Any) -> pd.DataFrame:
-        w = int(window)
-        if w < 2:
-            raise ValueError("window must be >= 2")
+        from factor_engine.cleaned_operators.common.strict_params import strict_int
+        w = strict_int(window,"window",minimum=2)
+        if not x.index.equals(y.index) or not x.columns.equals(y.columns):
+            raise ValueError("crossing inputs must have identical axes")
         return frame_like(
             x,
             _crossing_acceleration_series(x.to_numpy(dtype=float), y.to_numpy(dtype=float), w),

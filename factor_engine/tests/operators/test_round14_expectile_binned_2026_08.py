@@ -118,16 +118,19 @@ def test_expectile_non_converged_budget_emits_nan(monkeypatch):
     assert np.isnan(_ae._expectile(v, 0.2))
 
 
-def test_expectile_beta_near_singular_design_is_nan():
-    # x is constant to machine precision -> std(x) < EPS -> fail-closed NaN
-    # instead of a bogus ~1e12 slope.
+def test_expectile_beta_small_unit_design_remains_identifiable():
+    # 1e-12 is thousands of ULPs at 1, not a constant design. At tau=.5 this
+    # two-level regressor has the exact difference-of-group-means OLS slope.
     rng = np.random.default_rng(2)
     y = _col(rng.normal(size=(40, 1)))
     x = _col(np.r_[np.ones(39), 1.0 + 1e-12])
-    out = OperatorRegistry.get("ts_expectile_beta", "pandas_numpy").calculate(
-        y, x, window=40, tau=0.5
-    )
-    assert np.isnan(out.to_numpy(dtype=float)).all()
+    op = OperatorRegistry.get("ts_expectile_beta", "pandas_numpy")
+    out = op.calculate(y, x, window=40, tau=0.5)
+    delta = x.iloc[-1,0] - x.iloc[0,0]
+    expected = (y.iloc[-1,0]-y.iloc[:-1,0].mean()) / delta
+    assert out.iloc[-1,0] == pytest.approx(expected,rel=1e-10)
+    # Truly constant predictor is still unidentifiable and must fail closed.
+    assert op.calculate(y,x*0+1,window=40,tau=.5).isna().all().all()
 
 
 def test_expectile_beta_converges_on_well_posed_design():

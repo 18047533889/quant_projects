@@ -1,0 +1,1 @@
+{"command": [".venv/bin/python", "-m", "pytest", "factor_engine/tests/r40/test_r40_operator_spec_127_130.py", "factor_engine/tests/r40/test_r40_capability_identity.py", "-q", "--tb=short", "--show-capture=no"], "returncode": 0, "sampled_peak_family_rss_bytes": 340770816, "sampling_seconds": 0.1, "seconds": 4.513816491002217, "test_guard_reason": null, "hard_memory_cap": false}

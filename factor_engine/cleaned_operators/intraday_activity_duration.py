@@ -41,8 +41,15 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from factor_engine.cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
+from factor_engine.cleaned_operators.base import (
+    OperatorMetadata,
+    ParamRole,
+    ParamSpec,
+    SeriesOperator,
+    register_operator,
+)
 from factor_engine.cleaned_operators.rolling_pack import frame_like
+from factor_engine.runtime.session_calendar import SessionCalendar
 
 _EPS = 1e-12
 _SESSION_TZ = "Asia/Shanghai"
@@ -55,6 +62,18 @@ def _metadata(name: str, description: str, params: list[str]) -> OperatorMetadat
         category="intraday_microstructure",
         description=description,
         param_names=params,
+        panel_params=("activity",),
+        panel_arity=1,
+        scalar_params=("buckets", "calendar"),
+        param_specs={
+            "buckets": ParamSpec(
+                dtype=int, min=3, default=10,
+                param_role=ParamRole.ESTIMATOR_RESOLUTION,
+            ),
+            "calendar": ParamSpec(
+                dtype=SessionCalendar, default=None, searchable=False, param_role=ParamRole.POLICY,
+            ),
+        },
         return_type="series",
         # R11 P0-13: these operators consume minute bars and emit one scalar per
         # (TradeDate, Symbol) — the grain contract is declared HERE so the
@@ -64,6 +83,8 @@ def _metadata(name: str, description: str, params: list[str]) -> OperatorMetadat
         output_grain="daily",
         available_at="session_close",
         same_session_usable=False,
+        input_units={"activity": "level"},
+        output_unit="dimensionless",
         tags=[
             "intraday", "minute", "daily", "pit_safe", "causal", "deterministic",
             f"signature:{','.join(params)}->series", "domain:intraday",
@@ -152,12 +173,19 @@ def _day_curvature(values: np.ndarray, buckets: int) -> float:
     b = int(buckets)
     if b < 3:
         raise ValueError("intraday_activity_duration_curvature requires buckets >= 3")
-    cum = np.cumsum(v)
+    # Bucket locations are invariant to a positive rescaling.  Normalising
+    # before accumulation prevents overflow for large finite activity and also
+    # avoids rejecting tiny-but-positive sessions via an absolute total gate.
+    vmax = float(np.max(v)) if v.size else 0.0
+    if vmax <= 0.0:
+        return np.nan
+    scaled = v / vmax
+    cum = np.cumsum(scaled)
     # Use the same accumulation for total and bucket crossing. Pairwise sum
     # can exceed cumsum[-1] by an ulp after adjustment, making the final bucket
     # impossible to reach and turning a complete trading session into NaN.
     total = float(cum[-1]) if v.size else 0.0
-    if total <= _EPS or v.size < b:
+    if not np.isfinite(total) or total <= 0.0 or v.size < b:
         return np.nan
     # completion bar index (original session position) for each fraction k/B
     D = np.full(b, np.nan)
@@ -172,7 +200,7 @@ def _day_curvature(values: np.ndarray, buckets: int) -> float:
         return np.nan
     d2 = D[2:] - 2.0 * D[1:-1] + D[:-2]
     mad = float(np.median(np.abs(D - np.median(D))))
-    if mad <= _EPS:
+    if mad == 0.0:
         return np.nan
     return float(np.mean(d2) / mad)
 

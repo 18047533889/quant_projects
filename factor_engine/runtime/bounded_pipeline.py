@@ -91,10 +91,13 @@ class _DirectSlot:
         return getattr(self, name, default)
 
 
-def _complete_direct_slot(slot, envelope, *, run_id, policy, state, error_groups):
+def _complete_direct_slot(slot, envelope, *, run_id, policy, state, error_groups,
+                          execution_purpose, run_identity_digest):
     """Validate and durably terminalize one completed direct slot."""
     receipts, artifact_errors, factor_errors, evidence = _validate_artifact_envelope(
         envelope, slot.assignments, run_id=run_id, policy_digest=policy.digest,
+        execution_purpose=(execution_purpose.to_dict() if execution_purpose else None),
+        run_identity_digest=run_identity_digest,
         expected_evidence_id=slot.evidence_id, include_evidence=True,
     )
     state.record_fit_failure_evidence(
@@ -162,11 +165,69 @@ def _fit_failure_evidence_reference(state, *, legacy_unavailable=False):
 
 
 def _validate_compile_results(results, expected):
+    def valid_failure(value):
+        if type(value) is not dict or set(value) != {
+            "code", "error_type", "message", "retryable",
+        }:
+            return False
+        code = value["code"]
+        error_type = value["error_type"]
+        message = value["message"]
+        return (
+            type(code) is str and 1 <= len(code) <= 64
+            and code[0].isalpha() and code[0].isupper()
+            and all(char.isupper() or char.isdigit() or char == "_" for char in code)
+            and type(error_type) is str and 1 <= len(error_type) <= 128
+            and type(message) is str and len(message) <= 4096
+            and type(value["retryable"]) is bool
+        )
+
     if (type(results) is not dict or set(results) != set(expected)
-            or any(value is not None and (type(value) is not str or not value)
+            or any(value is not None and not valid_failure(value)
                    for value in results.values())):
         raise WorkerProtocolError("compile protocol requires exact factor keys and typed outcomes")
     return results
+
+
+def _compile_failure_envelope(exc: BaseException) -> dict[str, Any]:
+    raw_code = getattr(exc, "reason_code", None)
+    code = raw_code if (
+        type(raw_code) is str and 1 <= len(raw_code) <= 64
+        and raw_code[0].isalpha() and raw_code[0].isupper()
+        and all(char.isupper() or char.isdigit() or char == "_" for char in raw_code)
+    ) else "INVALID_FACTOR_COMPILE"
+    from factor_engine.runtime.exceptions import (
+        ResourceAdmissionError, TransientIOError,
+    )
+    message = str(exc)
+    if len(message) > 4096:
+        message = message[:4093] + "..."
+    return {
+        "code": code,
+        "error_type": type(exc).__name__[:128] or "Error",
+        "message": message,
+        "retryable": isinstance(exc, (ResourceAdmissionError, TransientIOError)),
+    }
+
+
+def _terminalize_compile_failures(admitted, results, *, state, error_groups, policy):
+    validated = []
+    for ordinal, factor in admitted:
+        problem = results[factor.name]
+        if problem is None:
+            validated.append((ordinal, factor))
+            continue
+        code = problem["code"]
+        state.terminal(
+            ordinal, "REJECTED", error_code=code,
+            detail=f"{problem['error_type']}: {problem['message']}",
+            retryable=problem["retryable"],
+        )
+        group = error_groups.setdefault(code, {"count": 0, "examples": []})
+        group["count"] += 1
+        if len(group["examples"]) < policy.max_examples_per_error_group:
+            group["examples"].append({"ordinal": ordinal, "name": factor.name})
+    return validated
 
 
 def _validated_fit_failure_evidence(
@@ -234,6 +295,7 @@ def _validate_result_envelope(
 
 def _validate_artifact_envelope(
     envelope, expected, *, run_id=None, policy_digest=None,
+    execution_purpose=None, run_identity_digest=None,
     expected_evidence_id=None, include_evidence=False,
 ):
     legacy_keys = {"receipts", "artifact_errors", "factor_errors"}
@@ -269,6 +331,9 @@ def _validate_artifact_envelope(
                 "generation": generation,
                 "policy_digest": policy_digest,
             }
+            if execution_purpose is not None:
+                identity.update(execution_purpose=execution_purpose,
+                                run_identity_digest=run_identity_digest)
             if (type(receipt.get("ordinal")) is not int
                     or any(receipt.get(key) != value for key, value in identity.items())):
                 raise WorkerProtocolError(
@@ -289,6 +354,9 @@ def _validate_artifact_envelope(
                     "generation": generation,
                     "policy_digest": policy_digest,
                 }
+                if execution_purpose is not None:
+                    identity.update(execution_purpose=execution_purpose,
+                                    run_identity_digest=run_identity_digest)
                 if (type(error.get("ordinal")) is not int
                         or any(error.get(key) != value for key, value in identity.items())):
                     raise WorkerProtocolError(
@@ -300,13 +368,16 @@ def _validate_artifact_envelope(
 class _DirectVerifiedArtifactSink:
     """Synchronous per-root sink owned by the supervised compute process."""
 
-    def __init__(self, *, root, run_id, policy, assignments, writer_bytes, broker):
+    def __init__(self, *, root, run_id, policy, assignments, writer_bytes, broker,
+                 execution_purpose=None, run_identity_digest=None):
         self.root = Path(root)
         self.run_id = run_id
         self.policy = policy
         self.assignments = dict(assignments)
         self.writer_bytes = int(writer_bytes)
         self.broker = broker
+        self.execution_purpose = execution_purpose
+        self.run_identity_digest = run_identity_digest
         self.receipts = {}
         self.errors = {}
 
@@ -343,6 +414,8 @@ class _DirectVerifiedArtifactSink:
             receipt = write_verified_factor_artifact(
                 self.root, self.run_id, ordinal, name, value,
                 policy=self.policy, budget_bytes=available, generation=generation,
+                execution_purpose=self.execution_purpose,
+                run_identity_digest=self.run_identity_digest,
             )
             if (receipt.get("committed") is not True or receipt.get("verified") is not True
                     or receipt.get("generation") != generation):
@@ -353,6 +426,12 @@ class _DirectVerifiedArtifactSink:
                 "ordinal": ordinal,
                 "factor_id": name,
                 "policy_digest": self.policy.digest,
+                "execution_purpose": self.execution_purpose.to_dict() if self.execution_purpose else {
+                    "schema_version": "factor_engine.execution_purpose.legacy.v1",
+                    "purpose": "legacy_unspecified", "input_integrity": "unknown",
+                    "assurance": "LEGACY_UNSPECIFIED", "publication_authorized": False,
+                },
+                "run_identity_digest": self.run_identity_digest,
             }
             if (("ordinal" in receipt and type(receipt["ordinal"]) is not int)
                     or any(key in receipt and receipt[key] != value
@@ -395,10 +474,18 @@ def _compute_wave_to_artifacts(
     expected = {factor.name for factor in factors}
     if set(assignments) != expected:
         raise WorkerProtocolError("direct artifact assignments require exact factor coverage")
+    engine_purpose = getattr(engine, "execution_purpose", None)
+    if engine_purpose is None:
+        engine_purpose = getattr(getattr(engine, "_engine", None), "execution_purpose", None)
+    planned_purpose = artifact_plan.get("execution_purpose")
+    if engine_purpose != planned_purpose:
+        raise WorkerProtocolError("artifact plan purpose differs from worker engine")
     target = _DirectVerifiedArtifactSink(
         root=artifact_plan["root"], run_id=artifact_plan["run_id"],
         policy=artifact_plan["policy"], assignments=assignments,
         writer_bytes=artifact_plan["writer_bytes"], broker=broker,
+        execution_purpose=artifact_plan.get("execution_purpose"),
+        run_identity_digest=artifact_plan.get("run_identity_digest"),
     )
     from factor_engine.runtime.supervised_worker import emit_worker_progress
     for name, (ordinal, _generation) in assignments.items():
@@ -428,6 +515,24 @@ def _compute_wave_to_artifacts(
                 _execution_owner=execution_owner,
                 _collect_fit_failure_snapshot=True, **run_kwargs
             )
+    # Persist only bounded observed metrics before dropping the batch objects.
+    # A diagnostic write must not turn already verified values into a retry.
+    if (type(evidence_id) is str and len(evidence_id) == 32
+            and all(char in "0123456789abcdef" for char in evidence_id)):
+        try:
+            from factor_engine.runtime.execution_ledger import summarize_execution_ledger
+            ledger = summarize_execution_ledger(
+                output, run_id=artifact_plan["run_id"], evidence_id=evidence_id)
+            _write_control_receipt(
+                Path(artifact_plan["root"]) / artifact_plan["run_id"]
+                / f"execution-{evidence_id}.json", ledger,
+            )
+        except Exception as exc:
+            import logging
+            logging.getLogger(__name__).warning(
+                "bounded execution ledger unavailable (%s); factor delivery is unchanged",
+                type(exc).__name__,
+            )
     fit_failure_snapshot = output.pop("_fit_failure_snapshot", None)
     factor_errors = dict(output.pop("physical_preflight_errors", {}) or {})
     returned = output.pop("results", {})
@@ -456,6 +561,9 @@ def _compute_wave_to_artifacts(
                 "generation": generation,
                 "policy_digest": artifact_plan["policy"].digest,
             }
+            if planned_purpose is not None:
+                identity.update(execution_purpose=planned_purpose.to_dict(),
+                                run_identity_digest=artifact_plan.get("run_identity_digest"))
             if (("ordinal" in record and type(record["ordinal"]) is not int)
                     or any(key in record and record[key] != value
                            for key, value in identity.items())):
@@ -490,6 +598,36 @@ def _validated_run_identity(value):
     if frozen != value:
         raise TypeError("run_identity must preserve exact JSON identity")
     return frozen
+
+
+def _run_identity_digest(value):
+    payload = json.dumps(value, sort_keys=True, separators=(",", ":"),
+                         allow_nan=False).encode()
+    return hashlib.sha256(payload).hexdigest()
+
+
+def _validated_execution_purpose(engine, run_identity):
+    from factor_engine.runtime.default_execution_policy import ExecutionPurpose
+
+    purpose = getattr(engine, "execution_purpose", None)
+    if purpose is None:
+        purpose = getattr(getattr(engine, "_engine", None), "execution_purpose", None)
+    declared = run_identity.get("execution_purpose")
+    if purpose is None and declared is None:
+        return None
+    if not isinstance(purpose, ExecutionPurpose):
+        raise WorkerProtocolError("engine requires a validated execution purpose")
+    if declared != purpose.to_dict():
+        raise WorkerProtocolError("run identity purpose differs from parent engine")
+    return purpose
+
+
+def _purpose_receipt_payload(purpose):
+    if purpose is not None:
+        return purpose.to_dict()
+    return {"schema_version": "factor_engine.execution_purpose.legacy.v1",
+            "purpose": "legacy_unspecified", "input_integrity": "unknown",
+            "assurance": "LEGACY_UNSPECIFIED", "publication_authorized": False}
 
 
 def _stage_timeout(job_deadline, stage_budget, stage):
@@ -697,8 +835,12 @@ def _await_worker_call(handle, token, *active_handles):
             pass
 
 
-def _worker_thread_environment(proxy):
+def _worker_thread_environment(proxy, *, fallback_cpu_budget=None):
     quota = getattr(proxy, "cpu_quota", None)
+    if quota is None and proxy is not None:
+        # An unpartitioned proxy has full broker authority, not permission for
+        # native pools to ignore the parent startup CPU envelope.
+        quota = fallback_cpu_budget
     if type(quota) is not int or quota <= 0:
         return None
     value = str(quota)
@@ -990,14 +1132,14 @@ def _compile_factor(engine: Any, factor: Any) -> bool:
     return True
 
 
-def _compile_wave(engine: Any, factors: list[Any]) -> dict[str, str | None]:
+def _compile_wave(engine: Any, factors: list[Any]) -> dict[str, dict[str, Any] | None]:
     outcomes = {}
     for factor in factors:
         try:
             engine.compile(factor)
             outcomes[factor.name] = None
         except Exception as exc:
-            outcomes[factor.name] = f"{type(exc).__name__}: {exc}"
+            outcomes[factor.name] = _compile_failure_envelope(exc)
     return outcomes
 
 
@@ -1083,7 +1225,8 @@ class _SpawnFactoryArtifactReconciler:
         return self._engine
 
     def __call__(self, factor, run_kwargs, root, run_id, policy,
-                 ordinal, name, budget_bytes, generation):
+                 ordinal, name, budget_bytes, generation,
+                 execution_purpose=None, run_identity_digest=None):
         from factor_engine.runtime.adaptive_batch_scheduler import disable_inner_retries_for_v2
         from factor_engine.runtime.durable_artifact_sink import (
             reconcile_factor_artifact, required_writer_workspace_bytes,
@@ -1115,6 +1258,8 @@ class _SpawnFactoryArtifactReconciler:
             return reconcile_factor_artifact(
                 root, run_id, ordinal, name, value, generation=generation,
                 policy=policy, budget_bytes=available,
+                execution_purpose=execution_purpose,
+                run_identity_digest=run_identity_digest,
             )
         finally:
             if extra_lease is not None:
@@ -1127,30 +1272,39 @@ class _SpawnFactoryArtifactReconciler:
 
 
 def _default_worker_write(root: Path, run_id: str, policy: Any, ordinal: int,
-                          name: str, value: Any, budget_bytes: int, generation: str):
+                          name: str, value: Any, budget_bytes: int, generation: str,
+                          execution_purpose=None, run_identity_digest=None):
     from factor_engine.runtime.durable_artifact_sink import write_verified_factor_artifact
     return write_verified_factor_artifact(
         root, run_id, ordinal, name, value, policy=policy, budget_bytes=budget_bytes,
         generation=generation,
+        execution_purpose=execution_purpose,
+        run_identity_digest=run_identity_digest,
     )
 
 
 def _custom_worker_write_verify(sink: Any, root: Path, run_id: str, policy: Any,
-                                ordinal: int, name: str, value: Any, budget_bytes: int):
+                                ordinal: int, name: str, value: Any, budget_bytes: int,
+                                execution_purpose=None, run_identity_digest=None):
     from factor_engine.runtime.durable_artifact_sink import verify_factor_artifact_receipt
     candidate = sink(ordinal, name, value)
     return verify_factor_artifact_receipt(
         candidate, root, run_id, ordinal, name, value,
         policy=policy, budget_bytes=budget_bytes,
+        execution_purpose=execution_purpose,
+        run_identity_digest=run_identity_digest,
     )
 
 
 def _default_worker_reconcile(root: Path, run_id: str, policy: Any, ordinal: int,
-                              name: str, value: Any, budget_bytes: int, generation: str):
+                              name: str, value: Any, budget_bytes: int, generation: str,
+                              execution_purpose=None, run_identity_digest=None):
     from factor_engine.runtime.durable_artifact_sink import reconcile_factor_artifact
     return reconcile_factor_artifact(
         root, run_id, ordinal, name, value, generation=generation,
         policy=policy, budget_bytes=budget_bytes,
+        execution_purpose=execution_purpose,
+        run_identity_digest=run_identity_digest,
     )
 
 
@@ -1189,6 +1343,7 @@ def execute_run_many_durable(
     run_identity: dict[str, Any] | None = None,
     resume_run_id: str | None = None,
     cancellation_token: Any = None,
+    automatic_dag: bool = False,
 ) -> dict[str, Any]:
     """Execute finite input with ordinal terminals and one persisted retry budget.
 
@@ -1214,6 +1369,8 @@ def execute_run_many_durable(
             detail="active JobLease requires an explicit spawn engine factory",
         )
     run_identity = _validated_run_identity(run_identity)
+    execution_purpose = _validated_execution_purpose(engine, run_identity)
+    run_identity_digest = _run_identity_digest(run_identity)
     job_started_monotonic_ns = time.monotonic_ns()
     job_started_realtime_ns = time.time_ns()
     # Terminal-only revalidation has its own finite observation budget. New
@@ -1385,6 +1542,8 @@ def execute_run_many_durable(
             "schema_version": "factor_engine.run_identity.v1",
             "run_id": run_id,
             "run_identity": run_identity,
+            "execution_purpose": _purpose_receipt_payload(execution_purpose),
+            "run_identity_digest": run_identity_digest,
             "deployment_digest": run_identity.get("deployment_digest"),
             "policy_id": _policy_value(policy, "policy_id", None),
             "policy_digest": getattr(policy, "digest", None),
@@ -1522,6 +1681,19 @@ def execute_run_many_durable(
             )
             for artifact_record in iter_resume_artifacts_to_revalidate(
                     resume_context, deadline=job_deadline):
+                persisted_artifact = artifact_record.get("artifact", {})
+                persisted_purpose = persisted_artifact.get("execution_purpose")
+                persisted_digest = persisted_artifact.get("run_identity_digest")
+                legacy_ok = (execution_purpose is None
+                             and persisted_purpose in (
+                                 None, _purpose_receipt_payload(None))
+                             and persisted_digest in (None, run_identity_digest))
+                if not legacy_ok and (
+                        persisted_purpose != _purpose_receipt_payload(execution_purpose)
+                        or persisted_digest != run_identity_digest):
+                    raise ResumeIdentityError(
+                        "persisted artifact purpose differs from resume context"
+                    )
                 available = int(broker.current_sink_budget())
                 expected_manifest = (
                     resume_context.run_dir / "values"
@@ -1627,7 +1799,9 @@ def execute_run_many_durable(
             broker, rpc_timeout_seconds=policy.connect_seconds
         )
         execution_cpu_budget = int(broker.cpu_budget())
-        partitions = broker_ipc.create_partitioned_proxies(2) if direct_artifacts else []
+        partitions = (broker_ipc.create_partitioned_proxies(2)
+                      if direct_artifacts and not (automatic_dag and len(manifest) <= lookahead)
+                      else [])
         if partitions:
             compute_proxy, spare_compute_proxy = partitions
         else:
@@ -1647,7 +1821,8 @@ def execute_run_many_durable(
         exit_observation_seconds=float(_policy_value(policy, "worker_exit_observation_seconds", 10)),
         context=worker_context,
         function=compute_callable,
-        process_environment=_worker_thread_environment(compute_proxy),
+        process_environment=_worker_thread_environment(
+            compute_proxy, fallback_cpu_budget=execution_cpu_budget),
     )
     compile_worker = SupervisedReusableWorker(
         **ownership_kwargs("compiler"),
@@ -1655,8 +1830,15 @@ def execute_run_many_durable(
         exit_observation_seconds=float(policy.worker_exit_observation_seconds),
         context=worker_context, function=compile_callable,
     )
-    writer_callable = (partial(_custom_worker_write_verify, sink, root, run_id, policy)
-                       if sink is not None else partial(_default_worker_write, root, run_id, policy))
+    writer_callable = (
+        partial(_custom_worker_write_verify, sink, root, run_id, policy,
+                execution_purpose=execution_purpose,
+                run_identity_digest=run_identity_digest)
+        if sink is not None else
+        partial(_default_worker_write, root, run_id, policy,
+                execution_purpose=execution_purpose,
+                run_identity_digest=run_identity_digest)
+    )
     sink_worker = SupervisedReusableWorker(
         **ownership_kwargs("artifact-writer"),
         cancel_grace_seconds=float(_policy_value(policy, "cooperative_cancel_grace_seconds", 5)),
@@ -1667,7 +1849,9 @@ def execute_run_many_durable(
     reconcile_worker = None if sink is not None else SupervisedReusableWorker(
         **ownership_kwargs("artifact-reconciler"),
         context="spawn",
-        function=partial(_default_worker_reconcile, root, run_id, policy),
+        function=partial(_default_worker_reconcile, root, run_id, policy,
+                         execution_purpose=execution_purpose,
+                         run_identity_digest=run_identity_digest),
         cancel_grace_seconds=float(policy.cooperative_cancel_grace_seconds),
         exit_observation_seconds=float(policy.worker_exit_observation_seconds),
     )
@@ -1690,8 +1874,36 @@ def execute_run_many_durable(
     spare_compute_worker = None
     refill_compile_worker = None
     refill_compile_proxy = None
+    dag_metadata_lease = None
+    dag_admission = {"execution_scope": "bounded_waves", "reason": "LEGACY_LOW_LEVEL_ENTRY",
+                     "cross_wave_value_reuse": False}
     try:
         _check_cancellation(cancellation_token)
+        if automatic_dag and resume_pending_count != 0:
+            from factor_engine.runtime.auto_dag_admission import admit_run_dag
+            dag_metadata_lease, dag_admission = admit_run_dag(
+                manifest, broker, run_id=run_id, fallback_items=lookahead,
+                deadline=job_deadline,
+                descriptor_budget_bytes=(int(broker.automatic_result_queue_budget())
+                                         if direct_artifacts else None),
+                check_cancellation=lambda: _check_cancellation(cancellation_token),
+            )
+            if dag_metadata_lease is not None:
+                lookahead = int(dag_admission["factor_limit"])
+                if broker_ipc is not None:
+                    # One global graph has no spare wave: give its inner adaptive
+                    # scheduler the full parent CPU/IO authority, not half a slot.
+                    compute_proxy = broker_ipc.create_proxy()
+                    compute_callable.broker_proxy = compute_proxy
+                    compute_worker = SupervisedReusableWorker(
+                        **ownership_kwargs("compute-primary"), context="spawn",
+                        function=compute_callable,
+                        cancel_grace_seconds=float(policy.cooperative_cancel_grace_seconds),
+                        exit_observation_seconds=float(policy.worker_exit_observation_seconds),
+                        process_environment=_worker_thread_environment(
+                            compute_proxy, fallback_cpu_budget=execution_cpu_budget),
+                    )
+                    spare_compute_proxy = None
         state.register_many(
             (record.ordinal, record.name)
             for record in manifest.records(start=0, limit=len(manifest) or 1)
@@ -1738,6 +1950,8 @@ def execute_run_many_durable(
                 metadata_bytes = max(1, min(int(broker.current_read_budget()), 64 * 1024 * 1024))
             except Exception:
                 metadata_bytes = max(1, policy.max_definition_bytes)
+            if dag_metadata_lease is not None:
+                metadata_bytes = max(1, int(dag_admission["definition_bytes"]))
             prevalidated_wave = bool(
                 prefetched_direct is not None
                 and prefetched_direct["cursor"] == cursor
@@ -1792,24 +2006,15 @@ def execute_run_many_durable(
                               JobDeadlineExceeded)
                     ):
                         raise
-                    compile_results = {factor.name: f"{type(exc).__name__}: {exc}"
+                    failure = _compile_failure_envelope(exc)
+                    compile_results = {factor.name: dict(failure)
                                        for _, factor in admitted}
                 _validate_compile_results(compile_results, {factor.name for _, factor in admitted})
                 _check_cancellation(cancellation_token)
-                validated = []
-                for ordinal, factor in admitted:
-                    compile_error = compile_results[factor.name]
-                    if compile_error is None:
-                        validated.append((ordinal, factor))
-                        continue
-                    code = "INVALID_FACTOR_COMPILE"
-                    state.terminal(ordinal, "REJECTED", error_code=code,
-                                   detail=compile_error, retryable=False)
-                    group = error_groups.setdefault(code, {"count": 0, "examples": []})
-                    group["count"] += 1
-                    if len(group["examples"]) < policy.max_examples_per_error_group:
-                        group["examples"].append({"ordinal": ordinal, "name": factor.name})
-                admitted = validated
+                admitted = _terminalize_compile_failures(
+                    admitted, compile_results, state=state,
+                    error_groups=error_groups, policy=policy,
+                )
             if admitted and egress_leases is None:
                     total_queue_bytes = int(broker.automatic_result_queue_budget())
                     total_writer_bytes = min(total_queue_bytes, int(_policy_value(
@@ -1982,6 +2187,10 @@ def execute_run_many_durable(
                                 _validate_compile_results(
                                     next_compile, {factor.name for _, factor in next_admitted}
                                 )
+                                # A speculative prefetch does not own terminal
+                                # state for this cursor.  On any compile failure
+                                # the ordinary claim/refill path will consume the
+                                # same typed outcomes once and terminalize them.
                                 if all(value is None for value in next_compile.values()):
                                     next_assignments = {}
                                     for next_ordinal, next_factor in next_admitted:
@@ -2034,6 +2243,8 @@ def execute_run_many_durable(
                                     "root": root, "run_id": run_id, "policy": policy,
                                     "assignments": direct_context.assignments,
                                     "writer_bytes": writer_bytes,
+                                    "execution_purpose": execution_purpose,
+                                    "run_identity_digest": run_identity_digest,
                                 },
                                 current_evidence_id,
                                 timeout_seconds=_stage_timeout(
@@ -2054,6 +2265,8 @@ def execute_run_many_durable(
                                             "policy": policy,
                                             "assignments": next_assignments,
                                             "writer_bytes": writer_bytes,
+                                            "execution_purpose": execution_purpose,
+                                            "run_identity_digest": run_identity_digest,
                                         },
                                         pending_next.evidence_id,
                                         timeout_seconds=_stage_timeout(
@@ -2091,6 +2304,8 @@ def execute_run_many_durable(
                                     winner, worker_result.value, run_id=run_id,
                                     policy=policy, state=state,
                                     error_groups=error_groups,
+                                    execution_purpose=execution_purpose,
+                                    run_identity_digest=run_identity_digest,
                                 )
                             except BaseException as slot_failure:
                                 slot_failure.failing_slot = winner
@@ -2194,16 +2409,11 @@ def execute_run_many_durable(
                                 refill_compile_result,
                                 {factor.name for _, factor in refill_admitted},
                             )
-                            if not all(
-                                value is None for value in refill_compile_result.values()
-                            ):
-                                for refill_ordinal, refill_factor in refill_admitted:
-                                    state.terminal(
-                                        refill_ordinal, "REJECTED",
-                                        error_code="COMPILE_REJECTED",
-                                        detail=str(refill_compile_result[refill_factor.name]),
-                                        retryable=False,
-                                    )
+                            refill_admitted = _terminalize_compile_failures(
+                                refill_admitted, refill_compile_result, state=state,
+                                error_groups=error_groups, policy=policy,
+                            )
+                            if not refill_admitted:
                                 continue
                             refill_assignments = {}
                             for refill_ordinal, refill_factor in refill_admitted:
@@ -2460,6 +2670,7 @@ def execute_run_many_durable(
                                 delivered = direct_reconcile_worker.execute(
                                     factor, run_kwargs, root, run_id, policy,
                                     ordinal, factor.name, writer_bytes, intent["generation"],
+                                    execution_purpose, run_identity_digest,
                                     timeout_seconds=_stage_timeout(
                                         job_deadline, policy.reconcile_seconds,
                                         "direct reconcile",
@@ -2707,7 +2918,8 @@ def execute_run_many_durable(
                                 _policy_value(policy, "worker_exit_observation_seconds", 10)
                             ),
                             context="spawn", function=compute_callable,
-                            process_environment=_worker_thread_environment(compute_proxy),
+                            process_environment=_worker_thread_environment(
+                                compute_proxy, fallback_cpu_budget=execution_cpu_budget),
                         )
                         compute_worker.start()
                         broker_ipc.bind_client_process(
@@ -2738,6 +2950,10 @@ def execute_run_many_durable(
             "deployment_digest": run_identity.get("deployment_digest"),
             "policy_id": _policy_value(policy, "policy_id", None),
             "policy_digest": getattr(policy, "digest", None),
+            "execution_purpose": _purpose_receipt_payload(execution_purpose),
+            "run_identity_digest": run_identity_digest,
+            "assurance": _purpose_receipt_payload(execution_purpose)["assurance"],
+            "publication_authorized": False,
             "requested_factors": len(manifest), "requested_total": len(manifest),
             "counts": counts, "outcomes": outcomes,
             "outcomes_truncated": outcomes_truncated,
@@ -2749,6 +2965,12 @@ def execute_run_many_durable(
             "all_outputs_valid": all_outputs_valid,
             "terminal_count": terminal_count,
             "execution_batches": execution_batches,
+            "run_dag": dag_admission,
+            "execution_ledger": ({
+                "directory": str(run_dir), "filename_pattern": "execution-*.json",
+                "scope": "completed_compute_waves", "availability": "BEST_EFFORT",
+                "max_bytes_per_wave": 65536,
+            } if direct_artifacts else None),
             "manifest_path": str(manifest_path), "state_path": str(state_path),
             "identity_path": str(identity_path),
             "result_index": str(state_path),
@@ -2800,10 +3022,15 @@ def execute_run_many_durable(
             aborted_receipt = {
                 "schema_version": "factor_engine.artifact_receipt.v2",
                 "run_id": run_id, "status": "ABORTED", "counts": state.counts(),
+                "run_dag": dag_admission,
                 "run_identity": run_identity,
                 "deployment_digest": run_identity.get("deployment_digest"),
                 "policy_id": _policy_value(policy, "policy_id", None),
                 "policy_digest": getattr(policy, "digest", None),
+                "execution_purpose": _purpose_receipt_payload(execution_purpose),
+                "run_identity_digest": run_identity_digest,
+                "assurance": _purpose_receipt_payload(execution_purpose)["assurance"],
+                "publication_authorized": False,
                 "requested_factors": len(manifest), "requested_total": len(manifest),
                 "input_complete": manifest.input_complete,
                 "manifest_path": str(manifest_path), "state_path": str(state_path),
@@ -2820,6 +3047,8 @@ def execute_run_many_durable(
             receipt_path = run_dir / "receipt.json"
             _write_control_receipt(receipt_path, aborted_receipt)
             exc.receipt_path = str(receipt_path)
+            exc.durable_run_id = run_id
+            exc.run_identity_digest = run_identity_digest
         except BaseException as abort_exc:
             exc.abort_receipt_error = abort_exc
         raise
@@ -2858,6 +3087,11 @@ def execute_run_many_durable(
         # memory or writer state. Attach authorities to the cleanup exception so
         # the facade/supervisor can retain them through PID cleanup.
         if not cleanup_errors and not worker_cleanup_failed:
+            if dag_metadata_lease is not None:
+                try:
+                    dag_metadata_lease.release()
+                except BaseException as exc:
+                    cleanup_errors.append(exc)
             if egress_leases is not None:
                 for lease in egress_leases:
                     try:
@@ -2891,6 +3125,7 @@ def execute_run_many_durable(
             active_primary.run_manifest = manifest
             active_primary.broker_ipc = broker_ipc
             active_primary.egress_leases = egress_leases
+            active_primary.dag_metadata_lease = dag_metadata_lease
         if cleanup_errors:
             if active_primary is not None:
                 active_primary.cleanup_errors = list(
@@ -2898,6 +3133,7 @@ def execute_run_many_durable(
                 ) + cleanup_errors
                 active_primary.broker_ipc = broker_ipc
                 active_primary.egress_leases = egress_leases
+                active_primary.dag_metadata_lease = dag_metadata_lease
                 if worker_cleanup_failed:
                     active_primary.cleanup_pending = True
                     active_primary.broker = broker
@@ -2908,6 +3144,7 @@ def execute_run_many_durable(
                 failure = cleanup_errors[0]
                 failure.broker_ipc = broker_ipc
                 failure.egress_leases = egress_leases
+                failure.dag_metadata_lease = dag_metadata_lease
                 if worker_cleanup_failed:
                     failure.cleanup_pending = True
                     failure.broker = broker

@@ -38,7 +38,7 @@ def test_ts_vector_path_efficiency_basic() -> None:
 
     op = _op("ts_vector_path_efficiency")
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, x.shift(1).fillna(0.0) ** 2 + 0.5, window=5)
         assert isinstance(result, pd.DataFrame)
         assert result.shape == x.shape
     except Exception as e:
@@ -52,7 +52,7 @@ def test_ts_vector_path_efficiency_handles_nans() -> None:
 
     op = _op("ts_vector_path_efficiency")
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, x.shift(1).fillna(0.0) ** 2 + 0.5, window=5)
         assert isinstance(result, pd.DataFrame)
     except Exception as e:
         pytest.fail(f"NaN test failed: {e}")
@@ -65,12 +65,9 @@ def test_ts_vector_path_efficiency_deterministic() -> None:
     x = pd.DataFrame(np.random.randn(15, 5), index=idx, columns=list("ABCDE"))
 
     op = _op("ts_vector_path_efficiency")
-    try:
-        result1 = op.calculate(x)
-        result2 = op.calculate(x)
-        pd.testing.assert_frame_equal(result1, result2, check_exact=False, rtol=1e-10)
-    except Exception:
-        pass  # Some operators may not be deterministic
+    result1 = op.calculate(x, x.shift(1).fillna(0.0) ** 2 + 0.5, window=5)
+    result2 = op.calculate(x, x.shift(1).fillna(0.0) ** 2 + 0.5, window=5)
+    pd.testing.assert_frame_equal(result1, result2, check_exact=False, rtol=1e-10)
 
 
 # ---------------------------------------------------------------------------
@@ -85,7 +82,7 @@ def test_ts_vector_turning_coherence_basic() -> None:
 
     op = _op("ts_vector_turning_coherence")
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, x.shift(1).fillna(0.0) ** 2 + 0.5, window=5)
         assert isinstance(result, pd.DataFrame)
         assert result.shape == x.shape
     except Exception as e:
@@ -99,7 +96,7 @@ def test_ts_vector_turning_coherence_handles_nans() -> None:
 
     op = _op("ts_vector_turning_coherence")
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, x.shift(1).fillna(0.0) ** 2 + 0.5, window=5)
         assert isinstance(result, pd.DataFrame)
     except Exception as e:
         pytest.fail(f"NaN test failed: {e}")
@@ -112,12 +109,9 @@ def test_ts_vector_turning_coherence_deterministic() -> None:
     x = pd.DataFrame(np.random.randn(15, 5), index=idx, columns=list("ABCDE"))
 
     op = _op("ts_vector_turning_coherence")
-    try:
-        result1 = op.calculate(x)
-        result2 = op.calculate(x)
-        pd.testing.assert_frame_equal(result1, result2, check_exact=False, rtol=1e-10)
-    except Exception:
-        pass  # Some operators may not be deterministic
+    result1 = op.calculate(x, x.shift(1).fillna(0.0) ** 2 + 0.5, window=5)
+    result2 = op.calculate(x, x.shift(1).fillna(0.0) ** 2 + 0.5, window=5)
+    pd.testing.assert_frame_equal(result1, result2, check_exact=False, rtol=1e-10)
 
 
 # ---------------------------------------------------------------------------
@@ -132,7 +126,7 @@ def test_ts_vector_path_curvature_basic() -> None:
 
     op = _op("ts_vector_path_curvature")
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, x.shift(1).fillna(0.0) ** 2 + 0.5, window=5)
         assert isinstance(result, pd.DataFrame)
         assert result.shape == x.shape
     except Exception as e:
@@ -146,7 +140,7 @@ def test_ts_vector_path_curvature_handles_nans() -> None:
 
     op = _op("ts_vector_path_curvature")
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, x.shift(1).fillna(0.0) ** 2 + 0.5, window=5)
         assert isinstance(result, pd.DataFrame)
     except Exception as e:
         pytest.fail(f"NaN test failed: {e}")
@@ -159,12 +153,9 @@ def test_ts_vector_path_curvature_deterministic() -> None:
     x = pd.DataFrame(np.random.randn(15, 5), index=idx, columns=list("ABCDE"))
 
     op = _op("ts_vector_path_curvature")
-    try:
-        result1 = op.calculate(x)
-        result2 = op.calculate(x)
-        pd.testing.assert_frame_equal(result1, result2, check_exact=False, rtol=1e-10)
-    except Exception:
-        pass  # Some operators may not be deterministic
+    result1 = op.calculate(x, x.shift(1).fillna(0.0) ** 2 + 0.5, window=5)
+    result2 = op.calculate(x, x.shift(1).fillna(0.0) ** 2 + 0.5, window=5)
+    pd.testing.assert_frame_equal(result1, result2, check_exact=False, rtol=1e-10)
 
 
 # ---------------------------------------------------------------------------
@@ -179,7 +170,7 @@ def test_ts_vector_self_intersection_rate_basic() -> None:
 
     op = _op("ts_vector_self_intersection_rate")
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, x.shift(1).fillna(0.0) ** 2 + 0.5, window=5)
         assert isinstance(result, pd.DataFrame)
         assert result.shape == x.shape
     except Exception as e:
@@ -193,7 +184,7 @@ def test_ts_vector_self_intersection_rate_handles_nans() -> None:
 
     op = _op("ts_vector_self_intersection_rate")
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, x.shift(1).fillna(0.0) ** 2 + 0.5, window=5)
         assert isinstance(result, pd.DataFrame)
     except Exception as e:
         pytest.fail(f"NaN test failed: {e}")
@@ -206,12 +197,9 @@ def test_ts_vector_self_intersection_rate_deterministic() -> None:
     x = pd.DataFrame(np.random.randn(15, 5), index=idx, columns=list("ABCDE"))
 
     op = _op("ts_vector_self_intersection_rate")
-    try:
-        result1 = op.calculate(x)
-        result2 = op.calculate(x)
-        pd.testing.assert_frame_equal(result1, result2, check_exact=False, rtol=1e-10)
-    except Exception:
-        pass  # Some operators may not be deterministic
+    result1 = op.calculate(x, x.shift(1).fillna(0.0) ** 2 + 0.5, window=5)
+    result2 = op.calculate(x, x.shift(1).fillna(0.0) ** 2 + 0.5, window=5)
+    pd.testing.assert_frame_equal(result1, result2, check_exact=False, rtol=1e-10)
 
 
 

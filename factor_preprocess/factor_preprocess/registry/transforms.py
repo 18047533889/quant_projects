@@ -836,9 +836,34 @@ class TransformRegistry:
         return _ValidatedExecutor(self._transforms[name], self._transforms[name].func)
 
     def get_function(self, name: str) -> Optional[Callable]:
-        """Get transform function by name."""
+        """Reject the retired unvalidated native-kernel execution bypass.
+
+        Production and ordinary research callers must use :meth:`get_execution`,
+        which enforces the registered call contract and routes FE-owned math to
+        FactorEngine.  Reference kernels remain inspectable only through the
+        deliberately named, opt-in research API below.
+        """
+        if name not in self._transforms:
+            return None
+        raise GovernanceError(
+            "get_function() is an unsafe native-kernel bypass; use "
+            "get_execution(), or get_research_reference_function(..., "
+            "allow_research=True) for explicit parity research"
+        )
+
+    def get_research_reference_function(
+        self, name: str, *, allow_research: bool = False,
+    ) -> Optional[Callable]:
+        """Return a retained native parity kernel only with explicit consent."""
         metadata = self._transforms.get(name)
-        return metadata.func if metadata else None
+        if metadata is None:
+            return None
+        if not allow_research:
+            raise GovernanceError(
+                "native reference kernels are research-only; pass "
+                "allow_research=True explicitly"
+            )
+        return metadata.func
 
     def get_recipe_execution(
         self, recipe, *, execution_context=None, backend=None,

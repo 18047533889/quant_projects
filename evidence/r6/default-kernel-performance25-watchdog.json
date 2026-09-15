@@ -1,0 +1,1 @@
+{"command": [".venv/bin/python", "evidence/r6/default_kernel_performance.py"], "returncode": 0, "sampled_peak_family_rss_bytes": 446242816, "sampling_seconds": 0.1, "seconds": 52.443008026108146, "test_guard_reason": null, "hard_memory_cap": false}

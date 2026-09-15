@@ -542,6 +542,22 @@ class AdaptiveBatchScheduler:
             task_id=f"{self._lease_scope}:task:{task_id}",
         )
 
+    def _reserve_serial_task(self, contract: Any, *, task_id: str) -> Any | None:
+        """Give indivisible serial work the same guarded CPU floor as parallel work."""
+        lease = self._reserve_task(contract, task_id=task_id)
+        if lease is not None:
+            return lease
+        if int(getattr(contract, "cpu_tokens", 0) or 0) <= self.broker.cpu_budget():
+            return None
+        from factor_engine.runtime.resource_errors import CPUWidthUnavailable
+        decision = self.broker.resource_decision(job_memory_lease_bytes=self._job_memory_cap())
+        try:
+            self._last_decision = self.broker.request_minimum_cpu_width(contract, decision=decision)
+        except CPUWidthUnavailable:
+            return None
+        # Never weaken the real contract or bypass job/memory/IO admission.
+        return self._reserve_task(contract, task_id=task_id)
+
     def _acquire_wave(self, kind: Any, nbytes: int, *, lease_id: str) -> Any | None:
         from factor_engine.runtime.job_scoped_lease import acquire_job_scoped_memory
 
@@ -682,7 +698,7 @@ class AdaptiveBatchScheduler:
                     prev_c = physical.tasks[cid].consumers
                     physical.tasks[cid] = rebase_task(
                         physical.tasks[cid],
-                        consumers=tuple(sorted((*prev_c, rid))),
+                        consumers=tuple(sorted(set((*prev_c, rid)))),
                     )
 
         # R36 P0-010：read wave 预算不再固定 4GB——plan 时从 broker decision 取
@@ -1215,13 +1231,21 @@ class AdaptiveBatchScheduler:
                     thresholds = adjust_input_dq_thresholds_from_stats(
                         input_dq_thresholds, stats, list(wave.columns)
                     )
-                    report = assert_input_dq(
-                        source,
-                        list(wave.columns),
-                        prefetched=(ref.meta or {}).get("loaded_columns"),
-                        raise_on_fail=input_dq_strict,
-                        thresholds=thresholds,
-                    )
+                    native = (ref.meta or {}).get("native_buffer")
+                    if native is not None:
+                        from factor_engine.runtime.input_dq import assert_native_input_dq
+                        report = assert_native_input_dq(
+                            native, list(wave.columns),
+                            raise_on_fail=input_dq_strict, thresholds=thresholds,
+                        )
+                    else:
+                        report = assert_input_dq(
+                            source,
+                            list(wave.columns),
+                            prefetched=(ref.meta or {}).get("loaded_columns"),
+                            raise_on_fail=input_dq_strict,
+                            thresholds=thresholds,
+                        )
                     self._input_dq_reports.append(report)
                 except Exception:
                     if input_dq_strict:
@@ -1400,6 +1424,7 @@ class AdaptiveBatchScheduler:
         # 本次 run 的 ctx（shard 时间窗 / 真实交易日历推导用，P0-009）。
         self._run_ctx = ctx
         from factor_engine.runtime.batch_service import _execute_root_with_path, _materialize_shared_subplan
+        from factor_engine.runtime.resource_errors import ResourceBudgetExceeded
 
         def _default_execute_root(task: PhysicalFactorTask) -> Any:
             # R31-P0-002：lowerer 生成的 ROOT task 的 node_ref 是裸 plan；
@@ -2080,6 +2105,7 @@ class AdaptiveBatchScheduler:
         再串行物化 shared + 执行 roots（拓扑序）。结果与 ``run`` 完全一致。
         """
         from factor_engine.runtime.batch_service import _execute_root_with_path, _materialize_shared_subplan
+        from factor_engine.runtime.resource_errors import ResourceBudgetExceeded
 
         def _default_execute_root(task: PhysicalFactorTask) -> Any:
             node = getattr(task, "node_ref", None)
@@ -2128,12 +2154,17 @@ class AdaptiveBatchScheduler:
                     continue
                 if task.task_type == TASK_CSE_SHARED:
                     sid = task.task_id.split(":", 1)[1]
-                    lease = self._reserve_task(task.resource_contract, task_id=tid)
+                    lease = self._reserve_serial_task(task.resource_contract, task_id=tid)
                     if lease is None:
                         from factor_engine.runtime.resource_errors import ResourceBudgetExceeded
 
                         raise ResourceBudgetExceeded(
-                            f"serial CSE admission denied for {tid}"
+                            f"serial CSE admission denied for {tid}; "
+                            f"cpu_tokens={getattr(task.resource_contract, 'cpu_tokens', None)}, "
+                            f"peak_memory_bytes={getattr(task.resource_contract, 'peak_memory_bytes', None)}, "
+                            f"input_bytes={getattr(task.resource_contract, 'input_bytes', None)}, "
+                            f"output_bytes={getattr(task.resource_contract, 'output_bytes', None)}, "
+                            f"uncertainty={getattr(task.resource_contract, 'uncertainty', None)}"
                         )
                     try:
                         materialize_shared(sid, task.node_ref)
@@ -2155,7 +2186,7 @@ class AdaptiveBatchScheduler:
                     progressed = True
                     continue
                 if task.task_type == TASK_ROOT:
-                    lease = self._reserve_task(task.resource_contract, task_id=tid)
+                    lease = self._reserve_serial_task(task.resource_contract, task_id=tid)
                     if lease is None:
                         from factor_engine.runtime.resource_errors import ResourceBudgetExceeded
 
@@ -2247,10 +2278,9 @@ class AdaptiveBatchScheduler:
         dag_key = id(dag)
         if cache is not None and cache[0] == dag_key:
             return cache[1]
-        try:
-            order = dag.topological_order()
-        except RuntimeError:
-            order = list(dag.tasks)
+        # A malformed/cyclic graph cannot be scored in insertion order.
+        # Preserve the explicit planning failure instead of a later KeyError.
+        order = dag.topological_order()
         scores: dict[str, float] = {}
         for tid in reversed(order):
             task = dag.tasks.get(tid)

@@ -1,5 +1,16 @@
 # `docs` — 文档中心
 
+## 文档收录范围
+
+本目录保留安装使用、API、算子语义、后端与资源约束、数据字典及必要的整改证据。
+运行时读取的 JSON/YAML 清单保留，不按文件大小删除。
+
+2026-09-15：历史评估 HTML、配套数据/图片、网页备份及无关的旧会话/其他库审计材料，
+已原地移动至服务器 `/home/sunhaiwei/quant_project_archives/factor_engine-docs/`，不再随本库分发。
+归档的 `relocation-manifest.json` 记录原路径、大小和文件身份；没有删除报告数据。
+同文件系统移动不增加副本，也不会释放整盘空间。后续新增大型持久报告应通过 DataAccess
+写入已配置且授权的 COS；不要再放进包内 `docs/reports`。
+
 > **零基础读者**：先读 **[`FactorEngine完全指南.md`](FactorEngine完全指南.md)**；HTTP 直接看 [`../service/README.md`](../service/README.md)。  
 > **仓库**：https://github.com/HKUST-QUANT-SOCIETY/factor_engine · 读数 https://github.com/HKUST-QUANT-SOCIETY/data_access
 

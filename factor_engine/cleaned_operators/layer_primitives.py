@@ -3,6 +3,10 @@
 from __future__ import annotations
 
 import re
+import hashlib
+from pathlib import Path
+from factor_engine.cleaned_operators.base import ParamSpec, ParamRole
+from factor_engine.cleaned_operators.common.strict_params import strict_enum
 from statistics import NormalDist
 from typing import Any, Callable
 
@@ -26,9 +30,31 @@ POLARS_SOURCE = "layer_governance_native_polars"
 EPS = 1e-12
 
 
+def _gaussian_contract(name):
+    if name != "cs_rank_gaussian":
+        return {}
+    return dict(panel_params=("x",), scalar_params=("method",), param_specs={
+        "method": ParamSpec(dtype=str, choices=("blom", "van_der_waerden"),
+            default="blom", searchable=False, param_role=ParamRole.ESTIMATOR_RESOLUTION)})
+
+
+def _gaussian_polars(name, category, params, description, fn):
+    op = PolarsFunctionOperator(name, category, params, description, fn, **_gaussian_contract(name))
+    if name == "cs_rank_gaussian":
+        from factor_engine.backend.contracts import ExecutionKind, PhysicalImplementationSpec
+        op._physical_spec = PhysicalImplementationSpec(canonical=name, backend="polars",
+            execution_kind=ExecutionKind.POLARS_NUMPY_KERNEL, materializes_full_panel=True,
+            supports_nulls=True, supports_nan=True, supports_inf=True,
+            implementation_source_hash=hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+            kernel_identity="layer_primitives._rank_gaussian_array",
+            notes="NumPy tied ranks and NormalDist inverse CDF; CPU, no Pandas panel conversion.")
+    return op
+
+
 def _register(name: str, category: str, params: list[str], description: str, pandas_fn, polars_fn=None) -> None:
     OperatorRegistry.register(
-        PandasFunctionOperator(name, category, params, description, pandas_fn),
+        PandasFunctionOperator(name, category, params, description, pandas_fn,
+            **_gaussian_contract(name)),
         canonical=name,
         backend="pandas_numpy",
         source=PANDAS_SOURCE,
@@ -37,7 +63,7 @@ def _register(name: str, category: str, params: list[str], description: str, pan
     )
     if pl is not None and polars_fn is not None:
         OperatorRegistry.register(
-            PolarsFunctionOperator(name, category, params, description, polars_fn),
+            _gaussian_polars(name, category, params, description, polars_fn),
             canonical=name,
             backend="polars",
             source=POLARS_SOURCE,
@@ -290,6 +316,7 @@ def pl_cs_fill_median(x, **_):
 
 
 def _rank_gaussian_array(values: np.ndarray, method: str) -> np.ndarray:
+    method = strict_enum(method, "method", ("blom", "van_der_waerden"))
     out = np.full(values.shape, np.nan, dtype=float)
     normal = NormalDist()
     for row in range(values.shape[0]):
@@ -298,8 +325,9 @@ def _rank_gaussian_array(values: np.ndarray, method: str) -> np.ndarray:
         n = int(valid.sum())
         if n == 0:
             continue
-        series = pd.Series(current[valid])
-        ranks = series.rank(method="average").to_numpy(dtype=float)
+        _, inverse, counts = np.unique(current[valid], return_inverse=True, return_counts=True)
+        average_ranks = np.cumsum(counts) - (counts - 1) / 2
+        ranks = average_ranks[inverse]
         if method == "blom":
             probability = (ranks - 0.375) / (n + 0.25)
         elif method == "van_der_waerden":
@@ -314,13 +342,13 @@ def _rank_gaussian_array(values: np.ndarray, method: str) -> np.ndarray:
 
 
 def pd_cs_rank_gaussian(x, method="blom", **_):
-    return frame_pd(x, _rank_gaussian_array(x.to_numpy(dtype=float), str(method).lower()))
+    return frame_pd(x, _rank_gaussian_array(x.to_numpy(dtype=float), method))
 
 
 def pl_cs_rank_gaussian(x, method="blom", **_):
     cols = pl_cols(x)
     values = x.select(cols).to_numpy()
-    out = _rank_gaussian_array(values.astype(float), str(method).lower())
+    out = _rank_gaussian_array(values.astype(float), method)
     return pl_base_with(x, {col: pl.Series(col, out[:, idx]) for idx, col in enumerate(cols)})
 
 

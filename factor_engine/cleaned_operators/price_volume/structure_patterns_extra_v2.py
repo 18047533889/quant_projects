@@ -3,22 +3,19 @@
 from __future__ import annotations
 import numpy as np
 import pandas as pd
+from factor_engine.cleaned_operators.price_volume.structure_extra_contracts import extra_contract
+from factor_engine.cleaned_operators.parameter_validation import strict_integer, strict_finite_scalar
 from factor_engine.cleaned_operators.base import OperatorMetadata,SeriesOperator,register_operator
 from factor_engine.cleaned_operators.price_volume.structure_patterns_v2 import ts_nth_pivot_high,ts_nth_pivot_low,ts_pivot_high_spacing,ts_pivot_low_spacing,ts_consolidation_width,ts_consolidation_volume_decay,_seq_features,_between
 
 def _pi(v,n,m=1):
-    if isinstance(v,bool):raise ValueError(f"{n} must be integer")
-    v=int(v)
-    if v<m:raise ValueError(f"{n} must be >= {m}")
-    return v
+    return strict_integer(v,n,minimum=m)
 def _pf(v,n,lo=0):
-    v=float(v)
-    if not np.isfinite(v) or v<lo:raise ValueError(f"{n} invalid")
-    return v
+    return strict_finite_scalar(v,n,minimum=lo)
 def _register(name,params,fn,desc):
-    meta=OperatorMetadata(name=name,category="chart_pattern",description=desc,param_names=list(params),return_type="series",tags=["pit_safe","causal","bounded_history","production_extension"])
+    meta=OperatorMetadata(name=name,category="chart_pattern",description=desc,param_names=list(params),return_type="series",tags=["pit_safe","causal","bounded_history","production_extension"],**extra_contract(name,params))
     def calc(self,*a,**k):return fn(*a,**k)
-    cls=type(f"ChartExtra_{name}",(SeriesOperator,),{"metadata":meta,"_calculate_series":calc,"__module__":__name__})
+    cls=type(f"ChartExtra_{name}",(SeriesOperator,),{"metadata":meta,"_calculate_series":calc,"_contract_callable":staticmethod(fn),"__module__":__name__})
     register_operator(name=name,category="chart_pattern",business_category="technical_structure",canonical=name,source="structure_patterns_extra_v2",backend="pandas_numpy",status="production")(cls)
 def _similar(values,tol):
     stack=np.stack([v.to_numpy(float) for v in values])
@@ -35,6 +32,8 @@ def _similar(values,tol):
     score=np.where(complete,np.clip(1-ratio,0,1),np.nan)
     return pd.DataFrame(score,index=values[0].index,columns=values[0].columns)
 def pattern_triple_top(high,low,left_window,right_window,history_window,tolerance,min_depth,min_spacing,max_spacing):
+    if _pi(min_spacing,"min_spacing") > _pi(max_spacing,"max_spacing"):
+        raise ValueError("min_spacing must be <= max_spacing")
     tol=_pf(tolerance,"tolerance",1e-12)
     ok,prices,positions=_seq_features(high,low,left_window,right_window,history_window,5,(True,False,True,False,True))
     hs=[prices[0],prices[2],prices[4]];trough=prices[3]
@@ -42,6 +41,8 @@ def pattern_triple_top(high,low,left_window,right_window,history_window,toleranc
     spacing=positions[4]-positions[2]
     return (_similar(hs,tol)*depth.astype(float)*_between(spacing,_pi(min_spacing,"min_spacing"),_pi(max_spacing,"max_spacing")))*ok.astype(float)
 def pattern_triple_bottom(high,low,left_window,right_window,history_window,tolerance,min_depth,min_spacing,max_spacing):
+    if _pi(min_spacing,"min_spacing") > _pi(max_spacing,"max_spacing"):
+        raise ValueError("min_spacing must be <= max_spacing")
     tol=_pf(tolerance,"tolerance",1e-12)
     ok,prices,positions=_seq_features(high,low,left_window,right_window,history_window,5,(False,True,False,True,False))
     ls=[prices[0],prices[2],prices[4]];peak=prices[3]
@@ -67,8 +68,14 @@ def _quadratic_score(close,window,up=True):
             curvature=coef[0] if up else -coef[0];res[t]=max(0.0,curvature)*max(0.0,r2)
         out[col]=res
     return out
-def pattern_rounding_bottom(close,window,min_fit):return _quadratic_score(close,window,True).where(_quadratic_score(close,window,True)>=_pf(min_fit,"min_fit",0),0.0)
-def pattern_rounding_top(close,window,min_fit):return _quadratic_score(close,window,False).where(_quadratic_score(close,window,False)>=_pf(min_fit,"min_fit",0),0.0)
+def pattern_rounding_bottom(close,window,min_fit):
+    score = _quadratic_score(close,window,True)
+    threshold = _pf(min_fit,"min_fit",0)
+    return score.where(score >= threshold,0.).where(score.notna())
+def pattern_rounding_top(close,window,min_fit):
+    score = _quadratic_score(close,window,False)
+    threshold = _pf(min_fit,"min_fit",0)
+    return score.where(score >= threshold,0.).where(score.notna())
 def pattern_cup(close,window,min_depth,max_edge_diff,min_fit):
     w=_pi(window,"window",5);score=_quadratic_score(close,w,True);left=close.shift(w-1);edge=(close-left).abs()/((close.abs()+left.abs())/2).replace(0,np.nan);center=close.shift(w//2);depth=((left+close)/2/center.replace(0,np.nan)-1);return score*edge.le(_pf(max_edge_diff,"max_edge_diff",0)).astype(float)*depth.ge(_pf(min_depth,"min_depth",0)).astype(float)*score.ge(_pf(min_fit,"min_fit",0)).astype(float)
 def pattern_cup_handle(close,high,low,cup_window,handle_window,min_depth,max_edge_diff,min_fit,max_handle_retracement):

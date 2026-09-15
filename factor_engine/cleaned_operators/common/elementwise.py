@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import numpy as np
 import pandas as pd
+from factor_engine.cleaned_operators.common.elementwise_scalar_contracts import scalar_contract, quantile_bounds
 from factor_engine.cleaned_operators._causal import (
     causal_convolve_column,
     causal_correlate_column,
@@ -381,12 +382,14 @@ class Constant(ScalarOperator):
         description="返回常量值",
         examples=["constant(1.0)"],
         param_names=["c"],
+        **scalar_contract("constant"),
         return_type="scalar",
         tags=["math", "utility", "scalar"]
     )
 
     def _calculate_scalar(self, c: float = 0.0, **kwargs):
-        return c
+        from factor_engine.cleaned_operators.parameter_validation import strict_finite_scalar
+        return strict_finite_scalar(c, "c")
 
 
 
@@ -1168,11 +1171,14 @@ class Lerp(SeriesOperator):
         description="线性插值 a + f*(b-a)",
         examples=["lerp(a, b, 0.5)"],
         param_names=["a", "b", "fraction"],
+        **scalar_contract("lerp"),
         return_type="series",
         tags=["math", "interpolation"]
     )
 
     def _calculate_series(self, a: pd.DataFrame, b: pd.DataFrame, fraction: float = 0.5, **kwargs) -> pd.DataFrame:
+        from factor_engine.cleaned_operators.parameter_validation import strict_finite_scalar
+        fraction = strict_finite_scalar(fraction, "fraction")
         result = a + fraction * (b - a)
         return result.replace([np.inf, -np.inf], np.nan)
 
@@ -1596,6 +1602,10 @@ class Pow(SeriesOperator):
         description="计算x的y次方（实数域策略：负数底数 & 非整数指数 → NaN，整数指数 → 实数）",
         examples=["pow(close, 2)", "pow(volume, 0.5)"],
         param_names=["x", "y"],
+        mixed_params=("x", "y"),
+        param_specs={
+            "y": ParamSpec(dtype=float, default=2.0, param_role=ParamRole.NUMERICAL),
+        },
         return_type="series",
         tags=["math", "power", "exponent"]
     )
@@ -1616,37 +1626,33 @@ class Pow(SeriesOperator):
         # bridge 展成 ``x=19(int)``，元素级 kernel 直接 ``x.astype`` 崩
         # （'int' object has no attribute 'astype'）。标量-标量幂在此合法：
         # 直接按实数域返回标量。
-        if not isinstance(x, pd.DataFrame):
+        panels = [value for value in (x, y) if isinstance(value, pd.DataFrame)]
+        if not panels:
             try:
-                return float(x) ** float(y)
-            except (TypeError, ValueError, ZeroDivisionError):
+                base_scalar, exp_scalar = float(x), float(y)
+                if (base_scalar < 0 and not exp_scalar.is_integer()) or (base_scalar == 0 and exp_scalar < 0):
+                    return float("nan")
+                with np.errstate(invalid="ignore", divide="ignore", over="ignore"):
+                    value = float(np.power(base_scalar, exp_scalar))
+                return value if np.isfinite(value) else float("nan")
+            except (TypeError, ValueError, ZeroDivisionError, OverflowError):
                 return float("nan")
-        base = x.astype(float)
-        if isinstance(y, pd.DataFrame):
-            exp_df = y.astype(float)
-            exp = exp_df
-            is_elementwise = True
-        else:
-            exp = float(y)
-            is_elementwise = False
+        template = panels[0]
+        for panel in panels[1:]:
+            if not template.index.equals(panel.index) or not template.columns.equals(panel.columns):
+                raise ValueError("power panel inputs must have identical axes")
+        base = x.astype(float) if isinstance(x, pd.DataFrame) else pd.DataFrame(float(x), index=template.index, columns=template.columns)
+        exp_df = y.astype(float) if isinstance(y, pd.DataFrame) else pd.DataFrame(float(y), index=template.index, columns=template.columns)
+        exp = exp_df
         with np.errstate(invalid="ignore", divide="ignore", over="ignore"):
             result = np.power(base, exp)
         # real-domain 策略（元素级或标量统一处理）。
-        if is_elementwise:
-            bad_domain = (
-                base.isna() | exp_df.isna()
-                | ((base < 0) & (exp_df != np.floor(exp_df)))
-                | ((base == 0) & (exp_df < 0))
-            )
-            result = result.where(~bad_domain, np.nan)
-        else:
-            is_integer_exp = float(exp).is_integer()
-            if not is_integer_exp:
-                # 负数底数 & 非整数指数：实数域无定义 → NaN。
-                result = result.where(base >= 0, np.nan)
-            if exp < 0:
-                # 0 的负次幂 → NaN（与 polars ``base==0 AND exp<0 -> NULL`` 一致）。
-                result = result.where((base != 0) | (np.isnan(base)), np.nan)
+        bad_domain = (
+            base.isna() | exp_df.isna()
+            | ((base < 0) & (exp_df != np.floor(exp_df)))
+            | ((base == 0) & (exp_df < 0))
+        )
+        result = result.where(~bad_domain, np.nan)
         return result.replace([np.inf, -np.inf], np.nan)
 
 # aliases: POWER
@@ -1769,6 +1775,7 @@ class Round(SeriesOperator):
         description="四舍五入（保留 decimals 位小数）",
         examples=["round(price, 2)"],
         param_names=["x", "decimals"],
+        **scalar_contract("round"),
         return_type="series",
         tags=["math", "rounding"]
     )
@@ -1777,7 +1784,10 @@ class Round(SeriesOperator):
         from factor_engine.cleaned_operators.parameter_validation import strict_integer
 
         value = strict_integer(decimals, "decimals", minimum=-18, maximum=18)
-        return x.round(decimals=value)
+        with np.errstate(over="ignore", invalid="ignore"):
+            result = x.round(decimals=value)
+        # At this magnitude no decimal fraction remains; scaling must not create Inf.
+        return result.mask(np.isfinite(x) & ~np.isfinite(result), x)
 
 # aliases: ROUND
 
@@ -2140,6 +2150,7 @@ class Truncate(SeriesOperator):
         description="向零截断（保留 decimals 位小数）",
         examples=["truncate(price, 2)"],
         param_names=["x", "decimals"],
+        **scalar_contract("truncate"),
         return_type="series",
         tags=["math", "rounding", "truncation"]
     )
@@ -2149,7 +2160,9 @@ class Truncate(SeriesOperator):
 
         value = strict_integer(decimals, "decimals", minimum=-18, maximum=18)
         scale = 10.0 ** value
-        return np.trunc(x * scale) / scale
+        with np.errstate(over="ignore", invalid="ignore"):
+            result = np.trunc(x * scale) / scale
+        return result.mask(np.isfinite(x) & ~np.isfinite(result), x)
 
 
 
@@ -2323,11 +2336,14 @@ class Winsorize(SeriesOperator):
         description="缩尾处理",
         examples=["winsorize(x, 0.05, 0.95)"],
         param_names=["x", "lower", "upper"],
+        **scalar_contract("winsorize"),
         return_type="series",
         tags=["math", "utility", "winsorize"]
     )
 
     def _calculate_series(self, x: pd.DataFrame, lower: float = 0.05, upper: float = 0.95, **kwargs) -> pd.DataFrame:
+        lower, upper = quantile_bounds(lower, upper)
+        x = x.replace([np.inf, -np.inf], np.nan)
         lower_val = x.quantile(lower, axis=1)
         upper_val = x.quantile(upper, axis=1)
         result = x.clip(lower=lower_val, upper=upper_val, axis=0)
@@ -2347,12 +2363,15 @@ class WinsorizeMean(SeriesOperator):
         description="截尾均值",
         examples=["winsorize_mean(x, 0.1)"],
         param_names=["x", "trim_pct"],
+        **scalar_contract("winsorize_mean"),
         return_type="series",
         tags=["math", "utility", "mean", "trimmed"]
     )
 
     def _calculate_series(self, x: pd.DataFrame, trim_pct: float = 0.1, **kwargs) -> pd.DataFrame:
-        trim_pct = max(0.0, min(trim_pct, 0.49))
+        from factor_engine.cleaned_operators.parameter_validation import strict_finite_scalar
+        trim_pct = strict_finite_scalar(trim_pct, "trim_pct", minimum=0, maximum=0.49)
+        x = x.replace([np.inf, -np.inf], np.nan)
         lower = x.quantile(trim_pct, axis=1)
         upper = x.quantile(1 - trim_pct, axis=1)
         clipped = x.clip(lower=lower, upper=upper, axis=0)
@@ -2408,23 +2427,34 @@ class Coalesce(SeriesOperator):
         category="elementwise_math",
         description="返回第一个非 NaN 值",
         param_names=["x", "y"],
+        mixed_params=("x", "y"),
+        nullable_mixed_params=("x", "y"),
+        variadic_mixed_param="values",
         return_type="series",
-        tags=["math", "coalesce"],
+        tags=["math", "coalesce", "variadic", "dynamic_inputs"],
     )
 
     def _calculate_series(self, *args, **kwargs) -> pd.DataFrame:
         if len(args) < 2:
             raise ValueError("coalesce 至少需要两个参数")
-        result = args[0].copy()
-        for other in args[1:]:
-            if isinstance(other, pd.DataFrame):
-                for idx in result.index:
-                    for col in result.columns:
-                        if col in other.columns and pd.isna(result.at[idx, col]):
-                            result.at[idx, col] = other.at[idx, col]
+        panels = [value for value in args if isinstance(value, pd.DataFrame)]
+        if not panels:
+            for value in args:
+                if value is not None and not pd.isna(value):
+                    return float(value)
+            return float("nan")
+        template = panels[0]
+        for panel in panels[1:]:
+            if not template.index.equals(panel.index) or not template.columns.equals(panel.columns):
+                raise ValueError("coalesce panel inputs must have identical axes")
+        result = pd.DataFrame(np.nan, index=template.index, columns=template.columns, dtype=float)
+        for value in args:
+            if isinstance(value, pd.DataFrame):
+                candidate = value.astype(float)
             else:
-                fill = np.nan if other is None else float(other)
-                result = result.fillna(fill)
+                fill = np.nan if value is None else float(value)
+                candidate = pd.DataFrame(fill, index=template.index, columns=template.columns)
+            result = result.combine_first(candidate)
         return result
 
 # canonical=add backend=pandas_numpy selected=add source=basic_runtime

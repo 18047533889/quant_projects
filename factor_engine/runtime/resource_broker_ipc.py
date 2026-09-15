@@ -161,6 +161,9 @@ class ResourceBrokerProxy:
     def current_sink_budget(self) -> int:
         return int(self._rpc("current_sink_budget"))
 
+    def current_cse_budget(self) -> int:
+        return int(self._rpc("current_cse_budget"))
+
     def execution_budget(self) -> int:
         return int(self._rpc("execution_budget"))
 
@@ -399,7 +402,7 @@ class ParentBrokerIPC:
             )
         elif operation in {"hard_cpu_slots", "hard_memory_limit"}:
             return int(getattr(self.broker, operation))
-        elif operation in {"automatic_result_queue_budget", "current_read_budget", "current_sink_budget", "execution_budget", "cpu_budget", "summary", "resource_envelope"}:
+        elif operation in {"automatic_result_queue_budget", "current_read_budget", "current_sink_budget", "current_cse_budget", "execution_budget", "cpu_budget", "summary", "resource_envelope"}:
             return getattr(self.broker, operation)()
         else:
             raise ValueError(f"unsupported broker RPC operation {operation!r}")

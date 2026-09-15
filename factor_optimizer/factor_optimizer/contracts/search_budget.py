@@ -25,6 +25,14 @@ class SearchBudget:
 
     def __post_init__(self):
         """Validate budget limits."""
+        for name in ("max_trials", "max_evaluations", "max_llm_calls"):
+            value = getattr(self, name)
+            if name == "max_llm_calls" and value is None:
+                continue
+            if type(value) is not int:
+                raise TypeError(f"{name} must be an integer")
+        if isinstance(self.max_cost_units, bool):
+            raise TypeError("max_cost_units must be a numeric cost, not a bool")
         if self.max_trials < 1:
             raise ValueError("max_trials must be >= 1")
         if self.max_evaluations < 1:
@@ -75,13 +83,15 @@ class BudgetTracker:
 
     def can_spend(self, cost: float) -> bool:
         """Check if budget allows spending cost units."""
-        if not isfinite(cost) or cost < 0:
+        if isinstance(cost, bool) or not isfinite(cost) or cost < 0:
             return False
         with self._lock:
             return self.cost_used + self.cost_reserved + cost <= self.budget.max_cost_units
 
     def reserve_evaluation(self, cost: float, attempt_id: Optional[str] = None) -> bool:
         """Atomically reserve one evaluation and its maximum expected cost."""
+        if isinstance(cost, bool):
+            raise TypeError("evaluation cost must not be a bool")
         if not isfinite(cost) or cost < 0:
             raise ValueError("evaluation cost reservation must be finite and >= 0")
         with self._lock:
@@ -99,6 +109,8 @@ class BudgetTracker:
 
     def commit_evaluation(self, reserved_cost: float, actual_cost: float, attempt_id: Optional[str] = None) -> None:
         """Commit a reservation and refund any unused reserved cost."""
+        if isinstance(reserved_cost, bool) or isinstance(actual_cost, bool):
+            raise TypeError("evaluation cost must not be a bool")
         if not isfinite(actual_cost) or actual_cost < 0:
             raise ValueError("actual evaluation cost must be finite and >= 0")
         if not isfinite(reserved_cost) or reserved_cost < 0:
@@ -122,6 +134,8 @@ class BudgetTracker:
 
     def release_evaluation(self, reserved_cost: float, attempt_id: Optional[str] = None) -> None:
         """Refund a reservation after an evaluation fails."""
+        if isinstance(reserved_cost, bool):
+            raise TypeError("reserved evaluation cost must not be a bool")
         if not isfinite(reserved_cost) or reserved_cost < 0:
             raise ValueError("reserved evaluation cost must be finite and >= 0")
         with self._lock:

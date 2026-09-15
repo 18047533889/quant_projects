@@ -7,11 +7,12 @@ are plain period-over-period differences over the as-of daily panel.
 from __future__ import annotations
 
 from typing import Any
+import inspect
 
 import numpy as np
 import pandas as pd
 
-from factor_engine.cleaned_operators.base import OperatorMetadata, ParamSpec, SeriesOperator, register_operator
+from factor_engine.cleaned_operators.base import OperatorMetadata, ParamRole, ParamSpec, SeriesOperator, register_operator
 
 _EPS = 1e-12
 _CANONICALS: list[str] = []
@@ -23,6 +24,11 @@ def _meta(name: str, description: str, params: list[str], *, unit: str = "ratio"
         category="valuation",
         description=description,
         param_names=params,
+        # All authored valuation inputs are panels except the explicit unit scale.
+        panel_params=tuple(p for p in params if p != "scale"),
+        scalar_params=("scale",) if name == "valuation_growth_mismatch" else (),
+        panel_arity=len(params) - (name == "valuation_growth_mismatch"),
+        total_positional_arity=len(params),
         return_type="series",
         tags=[
             "valuation", "ashare", "daily", "pit_safe", "causal", "typed_v2",
@@ -41,13 +47,27 @@ def _safe_div(num, den):
 def _mk(name: str, description: str, params: list[str], fn, *, unit: str = "ratio", param_specs: dict | None = None):
     metadata = _meta(name, description, params, unit=unit, param_specs=param_specs)
 
+    kernel_names = tuple(inspect.signature(fn).parameters)
+    if len(kernel_names) != len(params):
+        raise ValueError(f"{name}: authored kernel and public parameter counts differ")
+    kernel_aliases = dict(zip(params, kernel_names))
+
     def _calculate_series(self, *args, **kwargs):
-        return fn(*args, **kwargs)
+        # Public names (e.g. pe_ratio) differ from several kernels' a/b names.
+        # Preserve positional compatibility while making Agent keyword calls real.
+        panels = [v for v in (*args, *kwargs.values()) if isinstance(v, pd.DataFrame)]
+        if panels:
+            first = panels[0]
+            if any(not p.index.equals(first.index) or not p.columns.equals(first.columns)
+                   for p in panels[1:]):
+                raise ValueError(f"{name}: panel axes must match exactly")
+        return fn(*args, **{kernel_aliases[k]: v for k, v in kwargs.items()})
 
     cls = type(
         f"Valuation_{name}",
         (SeriesOperator,),
-        {"metadata": metadata, "_calculate_series": _calculate_series, "__module__": __name__},
+        {"metadata": metadata, "_calculate_series": _calculate_series,
+         "_contract_callable": staticmethod(fn), "__module__": __name__},
     )
     register_operator(
         name=name,
@@ -189,10 +209,14 @@ def _valuation_cashflow_disagreement(pe_ratio, pcf_ratio, pcf_ratio2, ocf_yield,
                 arr[row, :] = np.nan
                 continue
             lo, hi = np.quantile(finite, [0.01, 0.99])
-            clipped = np.clip(arr[row], lo, hi)
+            # Missing/nonfinite stocks cannot become finite winsorized observations.
+            clipped = np.clip(np.where(np.isfinite(arr[row]), arr[row], np.nan), lo, hi)
             sd = np.nanstd(clipped)
             if sd > 0:
                 arr[row] = (clipped - np.nanmean(clipped)) / sd
+            else:
+                # A constant cross-section has no defined standardized signal.
+                arr[row, :] = np.nan
         standardized.append(arr)
     stacked = np.stack(standardized, axis=0)  # (components, rows, cols)
     out = np.full((stacked.shape[1], stacked.shape[2]), np.nan, dtype=float)
@@ -238,7 +262,7 @@ _mk(
     ["earnings_yield", "profit_growth", "scale"],
     _growth_mismatch,
     unit="level",
-    param_specs={"scale": ParamSpec(dtype=float, default=1.0, searchable=False, min=1e-6)},
+    param_specs={"scale": ParamSpec(dtype=float, default=1.0, searchable=False, min=1e-6, param_role=ParamRole.POLICY)},
 )
 
 

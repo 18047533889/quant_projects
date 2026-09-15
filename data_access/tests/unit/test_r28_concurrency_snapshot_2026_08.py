@@ -164,6 +164,26 @@ def test_r28_1_pin_expired_no_deadlock(tmp_path):
     assert new.size_bytes == 20
 
 
+def test_r28_1_expired_logical_cache_entry_can_be_readmitted():
+    """无物理 path 的过期条目移出账本后，同 key 必须能立即重新准入。"""
+    import time
+
+    from data_access.runtime.cache_manager import CacheManager
+
+    cm = CacheManager(ttl=0.01)
+    cm.pin("logical", path="", size_bytes=10)
+    cm.unpin("logical")
+    time.sleep(0.03)
+
+    cm.pin("logical", path="", size_bytes=20)
+
+    entry = cm.get("logical")
+    assert entry is not None
+    assert entry.refcount == 1
+    assert entry.size_bytes == 20
+    assert cm.total_bytes() == 20
+
+
 def test_r28_2_delete_fail_keeps_entry_quota(tmp_path):
     """R28-2：删除失败必须保留 entry、字节仍计入配额（账本反映现实）。"""
     from data_access.runtime.cache_manager import (

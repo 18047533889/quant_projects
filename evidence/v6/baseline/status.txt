@@ -1,0 +1,324 @@
+ M data_access/_build_info.py
+ M data_access/core/__init__.py
+ M data_access/r30/data_change.py
+ M factor_assets/adapters/__init__.py
+ M factor_assets/adapters/data_access.py
+ M factor_assets/adapters/factor_engine.py
+ M factor_assets/adapters/quant_evaluator.py
+ M factor_assets/assembly/engine.py
+ M factor_assets/clustering/__init__.py
+ M factor_assets/clustering/families.py
+ M factor_assets/clustering/incremental.py
+ M factor_assets/contracts/__init__.py
+ M factor_assets/contracts/admission.py
+ M factor_assets/contracts/assembly_evidence.py
+ M factor_assets/contracts/cluster_governance.py
+ M factor_assets/contracts/evidence_ref.py
+ M factor_assets/contracts/factor_set.py
+ M factor_assets/contracts/fingerprint.py
+ M factor_assets/library/promotion_gate.py
+ M factor_assets/optimizer/pareto.py
+ M factor_assets/profiling/dimensions.py
+ M factor_assets/profiling/health_card.py
+ M factor_assets/profiling/metric_grading.py
+ M factor_assets/profiling/policies.py
+ M factor_assets/profiling/taxonomy.py
+ M factor_assets/similarity/exact.py
+ M factor_assets/tests/assembly/test_engine.py
+ M factor_assets/tests/assembly/test_fa_treatment_optimization_ref.py
+ M factor_assets/tests/assembly/test_production_and_similarity_artifact.py
+ M factor_assets/tests/assembly/test_treatment_membership.py
+ M factor_assets/tests/optimizer/test_pareto_negative.py
+ M factor_assets/tests/profiling/test_dimensions.py
+ M factor_assets/tests/profiling/test_health_card.py
+ M factor_assets/tests/profiling/test_metric_grading.py
+ M factor_assets/tests/profiling/test_policies.py
+ M factor_assets/tests/profiling/test_taxonomy.py
+ M factor_assets/tests/test_adapter_data_access.py
+ M factor_assets/tests/test_adapter_factor_engine.py
+ M factor_assets/tests/test_clustering_certification.py
+ M factor_assets/tests/test_dlib_fa_012_016_library_evidence.py
+ M factor_assets/tests/test_incremental_cluster_assign.py
+ M factor_assets/tests/test_library_promotion_gate.py
+ M factor_engine/backend/cleaned_bridge.py
+ M factor_engine/cleaned_operators/filter_hysteresis.py
+ M factor_engine/cleaned_operators/filter_smooth.py
+ M factor_engine/tests/backend/test_polars_ts_rolling_pairwise.py
+ M factor_engine/tests/operators/test_filter_layer.py
+ M factor_engine/tests/operators/test_same_clock_lag.py
+ M factor_optimizer/factor_optimizer/adapters/quant_evaluator.py
+ M factor_optimizer/factor_optimizer/contracts/__init__.py
+ M factor_optimizer/factor_optimizer/contracts/search_budget.py
+ M factor_optimizer/factor_optimizer/data_capabilities.py
+ M factor_optimizer/factor_optimizer/search/runner.py
+ M factor_optimizer/factor_optimizer/search/winner_selector.py
+ M factor_preprocess/factor_preprocess/__init__.py
+ M factor_preprocess/factor_preprocess/adapters/__init__.py
+ M factor_preprocess/factor_preprocess/adapters/_data_access_impl.py
+ M factor_preprocess/factor_preprocess/adapters/data_access.py
+ M factor_preprocess/factor_preprocess/adapters/fe_operator.py
+ M factor_preprocess/factor_preprocess/contracts/__init__.py
+ M factor_preprocess/factor_preprocess/contracts/feature_bundle.py
+ M factor_preprocess/factor_preprocess/contracts/treatment_lineage.py
+ M factor_preprocess/factor_preprocess/contracts/treatment_recipe.py
+ M factor_preprocess/factor_preprocess/grammar/search_grammar.py
+ M factor_preprocess/factor_preprocess/registry/policies.py
+ M factor_preprocess/factor_preprocess/registry/transforms.py
+ M factor_preprocess/factor_preprocess/representation/policy.py
+ M factor_preprocess/pyproject.toml
+ M factor_preprocess/tests/adapters/test_data_access_adapter.py
+ M factor_preprocess/tests/contracts/test_identity_pit_contract.py
+ M factor_preprocess/tests/contracts/test_treatment_lineage.py
+ M factor_preprocess/tests/representation/test_representation_policies.py
+ M factor_preprocess/tests/test_fe_operator_parity.py
+ M factor_preprocess/tests/transforms/test_hp_prefix_invariance.py
+ M modeling/artifact.py
+ M modeling/benchmark.py
+ M modeling/dataset.py
+ M modeling/diagnostics.py
+ M modeling/evaluation.py
+ M modeling/monitoring.py
+ M modeling/predictor.py
+ M modeling/selection.py
+ M modeling/trainer.py
+ M modeling/trainer_governance.py
+ M modeling/walk_forward.py
+ M quant_evaluator/__init__.py
+ M quant_evaluator/api/__init__.py
+ M quant_evaluator/api/batch_bundle.py
+ M quant_evaluator/api/requests.py
+ M quant_evaluator/conftest.py
+ M quant_evaluator/contracts/_hashutil.py
+ M quant_evaluator/contracts/_ndarray_codec.py
+ M quant_evaluator/contracts/adaptive_bins_policy.py
+ M quant_evaluator/contracts/artifact_types.py
+ M quant_evaluator/contracts/axis_refs.py
+ M quant_evaluator/contracts/evaluation_refs.py
+ M quant_evaluator/contracts/factor_batch.py
+ M quant_evaluator/contracts/label_bundle.py
+ M quant_evaluator/contracts/metric_artifacts.py
+ M quant_evaluator/docs/METRIC_CAPABILITY_MATRIX.csv
+ M quant_evaluator/kernels/gpu/correlation.py
+ M quant_evaluator/kernels/gpu/drawdown.py
+ M quant_evaluator/kernels/gpu/portfolio.py
+ M quant_evaluator/kernels/gpu/quantile.py
+ M quant_evaluator/kernels/gpu/quantile_shape.py
+ M quant_evaluator/kernels/gpu/rank.py
+ M quant_evaluator/kernels/gpu/robustness.py
+ M quant_evaluator/kernels/gpu/turnover.py
+ M quant_evaluator/metrics/exposure_evidence.py
+ M quant_evaluator/metrics/ic.py
+ M quant_evaluator/metrics/ic_summary.py
+ M quant_evaluator/metrics/interactions/pairwise.py
+ M quant_evaluator/metrics/portfolio_stats.py
+ M quant_evaluator/metrics/probe_portfolio/_core.py
+ M quant_evaluator/metrics/registry_adapters.py
+ M quant_evaluator/metrics/risk/drawdown_analysis.py
+ M quant_evaluator/metrics/robustness.py
+ M quant_evaluator/metrics/shape_evidence.py
+ M quant_evaluator/metrics/underwater.py
+ M quant_evaluator/registry/metrics.py
+ M quant_evaluator/runtime/device_session.py
+ M quant_evaluator/runtime/evaluator.py
+ M quant_evaluator/runtime/gpu_executor.py
+ M quant_evaluator/runtime/streaming_evaluator.py
+ M quant_evaluator/scripts/generate_capability_matrix.py
+ M quant_evaluator/tests/metrics/test_ic_significance.py
+ M quant_evaluator/tests/metrics/test_probe_cohort_metrics.py
+ M quant_evaluator/tests/test_consistency.py
+ M quant_evaluator/tests/test_gpu_probe_parity.py
+ M quant_evaluator/tests/test_public_gpu_tiling.py
+ M quant_evaluator/tests/test_shape_evidence.py
+ M quant_platform/app/adapters/data_access_storage.py
+ M quant_platform/app/candidate/ingest.py
+ M quant_platform/app/composition.py
+ M quant_platform/app/contracts/__init__.py
+ M quant_platform/app/contracts/candidate.py
+ M quant_platform/app/contracts/storage.py
+ M quant_platform/app/db/migrations.py
+ M quant_platform/app/db/postgres_backend.py
+ M quant_platform/app/db/schema.py
+ M quant_platform/app/db/sqlite_backend.py
+ M quant_platform/app/orchestrator.py
+ M quant_platform/app/outbox.py
+ M quant_platform/app/worker/jobs.py
+ M quant_platform/pyproject.toml
+ M quant_platform/tests/test_composition.py
+ M quant_platform/tests/test_durable_store.py
+ M quant_platform/tests/test_orchestrator_pipeline.py
+ M quant_platform/tests/test_outbox_claim.py
+ M quant_platform/tests/test_postgres_dialect.py
+ M quant_platform/tests/test_postgres_live.py
+ M tests/backend/test_polars_ts_rolling_pairwise.py
+ M tests/modeling/test_negative_controls_new_m311_318.py
+ M tests/modeling/test_r41_monitoring_ledger_contracts.py
+ M tests/modeling/test_trainer_governance.py
+ M tests/modeling/test_training_orchestration.py
+ M tests/operators/test_filter_layer.py
+ M tests/operators/test_same_clock_lag.py
+ M vectorbt_qs/contracts/__init__.py
+ M vectorbt_qs/mvp/engine/execution.py
+?? build_unified_ledger.py
+?? data_access/core/missingness.py
+?? docs/V3_REMEDIATION_SPEC_20260906.md
+?? docs/V5_DELIVERY_20260908.md
+?? docs/V5_DELTA_ACCEPTANCE_20260907.md
+?? docs/V5_DELTA_SPEC_20260907.md
+?? evidence/r2/REMEDIATION_STATUS_20260907_R3.md
+?? evidence/r2/REMEDIATION_STATUS_20260907_R5.md
+?? evidence/r2/qat04_targeted_mutations_20260907.json
+?? evidence/r2/qat07_import_matrix_20260907.json
+?? evidence/r2/qat_remaining_matrix_20260907.json
+?? evidence/r2/v3_177_unified_ledger.json
+?? evidence/r2/v3_assets_177_ledger.json
+?? evidence/r2/v3_assets_20260906.yaml
+?? evidence/r2/v3_fe_recipe_execution_20260907.yaml
+?? evidence/r2/v3_optimizer_20260906.yaml
+?? evidence/r2/v3_optimizer_ledger_merge_20260907.json
+?? evidence/r2/v3_platform_ledger.json
+?? evidence/r2/v3_preprocess_20260906.yaml
+?? evidence/r2/v3_preprocess_ledger_20260907.json
+?? evidence/r2/v3_qat07_latest_20260907.json
+?? evidence/r2/v3_qat07_r3_source_parity_20260907.json
+?? evidence/r2/v3_qat07_r4_source_parity_20260907.json
+?? evidence/r2/v3_qat07_r5_source_parity_20260907.json
+?? evidence/r2/v3_qat07_source_parity_20260907.json
+?? evidence/r2/v3_qe_exposure_hac_source_manifest_20260907.sha256
+?? evidence/r2/v3_qe_ledger_merge_20260907.json
+?? evidence/r2/v3_qe_source_manifest_20260907.sha256
+?? evidence/v5/
+?? evidence/v6/
+?? factor_assets/adapters/fingerprint.py
+?? factor_assets/adapters/production_taxonomy.py
+?? factor_assets/clustering/refresh_service.py
+?? factor_assets/profiling/calibration.py
+?? factor_assets/tests/adapters/test_factor_identity_dsl_v3.py
+?? factor_assets/tests/adapters/test_fingerprint_producer.py
+?? factor_assets/tests/adapters/test_production_taxonomy_v3.py
+?? factor_assets/tests/assembly/test_v5_assembly_delta.py
+?? factor_assets/tests/contracts/test_evidence_invalidation_v3.py
+?? factor_assets/tests/contracts/test_fingerprint_spec_v3.py
+?? factor_assets/tests/profiling/test_v5_development_calibration.py
+?? factor_assets/tests/profiling/test_v5_multidimensional_grading.py
+?? factor_assets/tests/test_fa09_qe_pairwise.py
+?? factor_assets/tests/test_qe_typed_metric_grading.py
+?? factor_assets/tests/test_v3_cluster_quality.py
+?? factor_assets/tests/test_v5_cluster_lifecycle.py
+?? factor_engine/tests/backend/test_operator_recipe_execution_v3.py
+?? factor_optimizer/factor_optimizer/contracts/campaign_store.py
+?? factor_optimizer/factor_optimizer/contracts/statistical_governance.py
+?? factor_optimizer/factor_optimizer/search/diagnosis_routing.py
+?? factor_optimizer/factor_optimizer/search/paired_comparison.py
+?? factor_optimizer/factor_optimizer/search/statistical_consumption.py
+?? factor_optimizer/factor_optimizer/search/supervised_parameter.py
+?? factor_optimizer/tests/__init__.py
+?? factor_optimizer/tests/search/test_durable_campaign_store_v3.py
+?? factor_optimizer/tests/search/test_execution_plan_checkpoint_v3.py
+?? factor_optimizer/tests/search/test_qe_adapter_v3.py
+?? factor_optimizer/tests/search/test_stage_trace_v3.py
+?? factor_optimizer/tests/search/test_statistical_consumption.py
+?? factor_optimizer/tests/search/test_statistical_governance_v3.py
+?? factor_optimizer/tests/search/test_supervised_parameter_v3.py
+?? factor_optimizer/tests/search/test_v05_cheap_prefilter.py
+?? factor_optimizer/tests/search/test_v5_diagnosis_routing.py
+?? factor_optimizer/tests/search/test_v5_paired_comparison.py
+?? factor_optimizer/tests/search/test_winner_set_v3.py
+?? factor_preprocess/factor_preprocess/adapters/ewma_full_replay.py
+?? factor_preprocess/factor_preprocess/adapters/fitted_recipe.py
+?? factor_preprocess/tests/test_ewma_full_replay_adapter.py
+?? factor_preprocess/tests/test_fitted_recipe_adapter.py
+?? factor_preprocess/tests/test_v3_preprocess_contracts.py
+?? jobs/e2e_a_fe_qe_fa_spine.py
+?? jobs/e2e_b_shape_rescue.py
+?? jobs/e2e_c_tail_rescue.py
+?? jobs/e2e_d_risk_shift.py
+?? jobs/e2e_e_revision_preprocess_modeling.py
+?? jobs/e2e_f_noise_failure_gc.py
+?? jobs/e2e_g_cluster_model_compatibility.py
+?? jobs/e2e_h_fixed_update.py
+?? jobs/e2e_i_feature_set_retraining.py
+?? jobs/e2e_v5_acceptance.py
+?? jobs/evaluate_model_predictions.py
+?? jobs/monitor_fixed_daily_update.py
+?? jobs/ops08_replay_fixture.py
+?? jobs/qa/
+?? jobs/tests/
+?? loop/
+?? modeling/feature_set_trials.py
+?? quant_evaluator/adapters/execution_trajectory.py
+?? quant_evaluator/api/horizons.py
+?? quant_evaluator/contracts/metric_instance.py
+?? quant_evaluator/contracts/portfolio_inputs.py
+?? quant_evaluator/contracts/portfolio_schedule.py
+?? quant_evaluator/contracts/statistical_evidence.py
+?? quant_evaluator/jobs/
+?? quant_evaluator/metrics/calendar_returns.py
+?? quant_evaluator/metrics/long_only.py
+?? quant_evaluator/metrics/statistical_evidence.py
+?? quant_evaluator/metrics/turnover_cost.py
+?? quant_evaluator/runtime/impact_plan.py
+?? quant_evaluator/runtime/label_maturation.py
+?? quant_evaluator/runtime/metric_instances.py
+?? quant_evaluator/runtime/online_moments.py
+?? quant_evaluator/tests/test_calendar_returns.py
+?? quant_evaluator/tests/test_daily_quantile_artifact_v3.py
+?? quant_evaluator/tests/test_generate_capability_matrix.py
+?? quant_evaluator/tests/test_horizons.py
+?? quant_evaluator/tests/test_icir_exact_variance.py
+?? quant_evaluator/tests/test_pairwise_artifact_v3.py
+?? quant_evaluator/tests/test_public_gpu_exposure_v3.py
+?? quant_evaluator/tests/test_turnover_cost.py
+?? quant_evaluator/tests/test_turnover_validity.py
+?? quant_evaluator/tests/test_v3_calendar_public.py
+?? quant_evaluator/tests/test_v3_cohort_intervals.py
+?? quant_evaluator/tests/test_v3_drawdown_contracts.py
+?? quant_evaluator/tests/test_v3_gpu_semantics.py
+?? quant_evaluator/tests/test_v3_immutable_inputs.py
+?? quant_evaluator/tests/test_v3_input_contracts.py
+?? quant_evaluator/tests/test_v3_legacy_statistical_calendar.py
+?? quant_evaluator/tests/test_v3_metadata_ownership.py
+?? quant_evaluator/tests/test_v3_object_axis_transport.py
+?? quant_evaluator/tests/test_v3_pairwise_rank_public.py
+?? quant_evaluator/tests/test_v3_public_artifacts.py
+?? quant_evaluator/tests/test_v3_risk_variants.py
+?? quant_evaluator/tests/test_v3_shape_contracts.py
+?? quant_evaluator/tests/test_v3_statistical_evidence.py
+?? quant_evaluator/tests/test_v3_trade_eligibility.py
+?? quant_evaluator/tests/test_v5_discrete_rank_semantics.py
+?? quant_evaluator/tests/test_v5_execution_trajectory_adapter.py
+?? quant_evaluator/tests/test_v5_final_semantics.py
+?? quant_evaluator/tests/test_v5_gpu_capability_matrix.py
+?? quant_evaluator/tests/test_v5_maturity_gc.py
+?? quant_evaluator/tests/test_v5_maturity_streaming.py
+?? quant_evaluator/tests/test_v5_metric_instances.py
+?? quant_evaluator/tests/test_v5_qe_job_safety.py
+?? quant_evaluator/tests/test_v5_scoped_impact.py
+?? quant_platform/app/modeling_manifest_bridge.py
+?? quant_platform/app/ops08_migration.py
+?? quant_platform/app/storage/generation_coordinator.py
+?? quant_platform/app/worker/durable_jobs.py
+?? quant_platform/tests/test_generation_coordinator.py
+?? quant_platform/tests/test_modeling_manifest_bridge.py
+?? quant_platform/tests/test_ops08_migration.py
+?? quant_platform/tests/test_storage_gc.py
+?? quant_platform/tests/test_v5_durable_job_fencing.py
+?? quant_platform/tests/test_v5_durable_qe_jobs.py
+?? scripts/v5_impact_plan.py
+?? scripts/v5_numeric_staircase.py
+?? scripts/v5_source_evidence.py
+?? test_validate_unified_ledger.py
+?? tests/modeling/test_dta08_dta10_public_chain.py
+?? tests/modeling/test_e2e_e_revision_preprocess_modeling.py
+?? tests/modeling/test_e2e_h_fixed_update.py
+?? tests/modeling/test_monitor_fixed_daily_update.py
+?? tests/modeling/test_v3_mod07_evidence.py
+?? tests/modeling/test_v3_mod_01_05_08.py
+?? tests/modeling/test_v3_preprocessing_finite_fit.py
+?? tests/modeling/test_v5_feature_set_trials.py
+?? validate_unified_ledger.py
+?? vectorbt_qs/contracts/costs.py
+?? vectorbt_qs/contracts/trajectories.py
+?? vectorbt_qs/tests/test_v5_cost_schedule.py
+?? vectorbt_qs/tests/test_v5_filled_ledger.py
+?? vectorbt_qs/tests/test_v5_research_trajectories.py
+?? work/

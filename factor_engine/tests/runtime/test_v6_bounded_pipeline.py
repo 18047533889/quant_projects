@@ -92,6 +92,9 @@ class _TrackedLease:
 
 
 class FakeBroker:
+    def current_cse_budget(self):
+        return 64 * 1024 * 1024
+
     def summary(self):
         return {"kind": "fake-bounded-broker"}
 

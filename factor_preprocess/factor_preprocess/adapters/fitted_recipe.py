@@ -68,6 +68,21 @@ def apply_frozen_fitted_recipe(
         raise ValueError("decision and fit cutoff must use the same timezone policy")
     if start <= fit_end:
         raise ValueError("fitted state cutoff must be strictly before decision segment")
+    if not isinstance(panel.index, pd.DatetimeIndex):
+        raise ValueError("fitted recipe panel requires an explicit DatetimeIndex")
+    if panel.index.empty or panel.index.hasnans:
+        raise ValueError("fitted recipe panel time axis must be non-empty and contain no NaT")
+    if panel.index.has_duplicates or not panel.index.is_monotonic_increasing:
+        raise ValueError("fitted recipe panel time axis must be unique and increasing")
+    panel_start = panel.index[0]
+    if (panel_start.tzinfo is None) != (fit_end.tzinfo is None):
+        raise ValueError("panel and fit cutoff must use the same timezone policy")
+    if (panel_start.tzinfo is None) != (start.tzinfo is None):
+        raise ValueError("panel and decision boundary must use the same timezone policy")
+    if panel_start <= fit_end:
+        raise ValueError("panel contains observations at or before the fitted-state cutoff")
+    if panel_start < start:
+        raise ValueError("panel begins before the declared decision segment")
     learned = dict(state.learned_params)
     if set(learned) != {"mean", "scale"}:
         raise ValueError("fitted standardization state requires exact mean/scale parameters")

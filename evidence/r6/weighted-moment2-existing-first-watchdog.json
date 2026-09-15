@@ -1,0 +1,1 @@
+{"command": [".venv/bin/python", "-m", "pytest", "factor_engine/tests/operators/test_gemini_pack_2026_08.py", "factor_engine/tests/operators/test_r11_group_cs_ops.py", "-q", "--tb=short", "--show-capture=no"], "returncode": 0, "sampled_peak_family_rss_bytes": 491372544, "sampling_seconds": 0.1, "seconds": 53.34029779280536, "test_guard_reason": null, "hard_memory_cap": false}

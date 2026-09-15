@@ -31,8 +31,8 @@ from typing import Any, Callable
 import numpy as np
 import pandas as pd
 
-from factor_engine.cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
-from factor_engine.cleaned_operators.rolling_pack import check_window, frame_like, register_polars_bridge
+from factor_engine.cleaned_operators.base import OperatorMetadata, ParamRole, ParamSpec, SeriesOperator, register_operator, strict_int_param
+from factor_engine.cleaned_operators.rolling_pack import frame_like, register_polars_bridge
 
 _EPS = 1e-12
 # Standard MedRV constant (Andersen–Dobrev–Schaumburg 2012): pi/(6-4√3+pi).
@@ -64,6 +64,16 @@ def _metadata(name: str, description: str, params: list[str], *, unit: str, cost
             f"signature:{','.join(params)}->series", "domain:intraday_variation",
             f"unit:{unit}", f"cost:{cost}",
         ],
+        output_unit=unit,
+        panel_params=("returns",),
+        panel_arity=1,
+        scalar_params=("window",),
+        param_specs={
+            "window": ParamSpec(
+                dtype=int, min=_MIN_FINITE, default=240,
+                history_semantics="max_rows", param_role=ParamRole.HORIZON,
+            ),
+        },
     )
 
 
@@ -79,40 +89,63 @@ def _rolling_returns(returns: np.ndarray, window: int, fn: Callable[[np.ndarray]
     """
     rows, cols = returns.shape
     out = np.full((rows, cols), np.nan, dtype=float)
-    w = int(window)
+    w = strict_int_param(window, "window", lower=_MIN_FINITE)
     for c in range(cols):
         col = returns[:, c]
         for r in range(rows):
             i0 = max(0, r - w + 1)
             v = col[i0 : r + 1]
-            finite = np.isfinite(v)
+            if np.isinf(v).any():
+                continue
+            finite = ~np.isnan(v)
             n_fin = int(finite.sum())
             if n_fin < _MIN_FINITE:
                 continue
             first = int(np.flatnonzero(finite)[0])
             if np.any(~finite[first:]):
                 continue  # interior missing minute -> window invalid
-            out[r, c] = fn(v[first:])
+            value = fn(v[first:])
+            if np.isfinite(value):
+                out[r, c] = value
     return out
+
+
+def _variance_from_normalized(value: float, magnitude: float) -> float:
+    """Restore a degree-two statistic without emitting overflow/underflow zeros."""
+    restored = np.longdouble(value) * np.longdouble(magnitude) ** 2
+    tiny = np.longdouble(np.nextafter(0.0, 1.0))
+    if not np.isfinite(restored) or restored > np.finfo(float).max:
+        return np.nan
+    if restored > 0.0 and restored < tiny:
+        return np.nan
+    return float(restored)
 
 
 def _medrv(v: np.ndarray) -> float:
     n = int(v.size)
-    if n < 3:
+    if n < 3 or not np.all(np.isfinite(v)):
         return np.nan
-    a = np.abs(v)
+    magnitude = float(np.max(np.abs(v)))
+    if magnitude == 0.0:
+        return np.nan
+    a = np.abs(v / magnitude)
     med = np.empty(n - 2, dtype=float)
     for i in range(2, n):
         med[i - 2] = float(np.median(a[i - 2 : i + 1]))
-    return float(_MEDRV_CONST * (n / (n - 2)) * float(np.sum(med * med)))
+    normalized = float(_MEDRV_CONST * (n / (n - 2)) * float(np.sum(med * med)))
+    return _variance_from_normalized(normalized, magnitude)
 
 
 def _minrv(v: np.ndarray) -> float:
     n = int(v.size)
-    if n < 2:
+    if n < 2 or not np.all(np.isfinite(v)):
         return np.nan
-    a = np.abs(v)
-    return float(_MINRV_CONST * (n / (n - 1)) * float(np.sum(np.minimum(a[1:], a[:-1]) ** 2)))
+    magnitude = float(np.max(np.abs(v)))
+    if magnitude == 0.0:
+        return np.nan
+    a = np.abs(v / magnitude)
+    normalized = float(_MINRV_CONST * (n / (n - 1)) * float(np.sum(np.minimum(a[1:], a[:-1]) ** 2)))
+    return _variance_from_normalized(normalized, magnitude)
 
 
 def _jump_z(v: np.ndarray) -> float:
@@ -159,7 +192,7 @@ class IntradayMedRV(SeriesOperator):
     def _calculate_series(
         self, returns: pd.DataFrame, window: int = 240, **_: Any
     ) -> pd.DataFrame:
-        w = check_window(window)
+        w = strict_int_param(window, "window", lower=_MIN_FINITE)
         return frame_like(returns, _rolling_returns(returns.to_numpy(dtype=float), w, _medrv))
 
 
@@ -188,7 +221,7 @@ class IntradayMinRV(SeriesOperator):
     def _calculate_series(
         self, returns: pd.DataFrame, window: int = 240, **_: Any
     ) -> pd.DataFrame:
-        w = check_window(window)
+        w = strict_int_param(window, "window", lower=_MIN_FINITE)
         return frame_like(returns, _rolling_returns(returns.to_numpy(dtype=float), w, _minrv))
 
 
@@ -221,7 +254,7 @@ class IntradayJumpTestStat(SeriesOperator):
     def _calculate_series(
         self, returns: pd.DataFrame, window: int = 240, **_: Any
     ) -> pd.DataFrame:
-        w = check_window(window)
+        w = strict_int_param(window, "window", lower=_MIN_FINITE)
         return frame_like(returns, _rolling_returns(returns.to_numpy(dtype=float), w, _jump_z))
 
 

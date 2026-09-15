@@ -1,0 +1,34 @@
+/home/sunhaiwei/quant_projects/factor_engine/backend/polars_backend_kind.py:248: UserWarning: Production mode: Operator unknown (backend=polars) lacks explicit PhysicalImplementationSpec; classification=UNSUPPORTED. Add _physical_spec attribute or physical_spec() method for production eligibility.
+  return polars_backend_kind(op, source=source, production_mode=production_mode)
+/home/sunhaiwei/quant_projects/factor_engine/backend/polars_backend_kind.py:248: UserWarning: Production mode: Operator unknown (backend=polars) lacks explicit PhysicalImplementationSpec; classification=UNSUPPORTED. Add _physical_spec attribute or physical_spec() method for production eligibility.
+  return polars_backend_kind(op, source=source, production_mode=production_mode)
+当前 DuckDB 1.5 已把 PRAGMA enable_object_cache 标为 legacy/no-op；建议改用 external file cache / HTTP metadata cache / connection reuse。
+ValidationError ValidationError("sql() 拒绝执行：'list_count' 是 table function（['macro']）——文件/网络/外部源入口默认禁用。读外部文件请先在 datasets.yaml 登记数据集。")
+Traceback (most recent call last):
+  File "<stdin>", line 13, in <module>
+  File "/home/sunhaiwei/quant_projects/factor_engine/runtime/engine.py", line 3451, in run
+    result = engine_to_use.backend.execute(plan, ctx)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/sunhaiwei/quant_projects/factor_engine/backend/sql_backend.py", line 103, in execute
+    pushed = try_execute_sql_pushdown(physical.root, ctx)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/sunhaiwei/quant_projects/factor_engine/backend/sql_pushdown/executor.py", line 906, in try_execute_sql_pushdown
+    result = execute_compiled_sql(
+             ^^^^^^^^^^^^^^^^^^^^^
+  File "/home/sunhaiwei/quant_projects/factor_engine/backend/sql_pushdown/executor.py", line 272, in execute_compiled_sql
+    return _execute_duckdb(compiled, ctx, data_source, query_budget=query_budget)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/sunhaiwei/quant_projects/factor_engine/backend/sql_pushdown/executor.py", line 717, in _execute_duckdb
+    table = _execute_duckdb_table(
+            ^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/sunhaiwei/quant_projects/factor_engine/backend/sql_pushdown/executor.py", line 475, in _execute_duckdb_table
+    return store.sql(compiled.query, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/sunhaiwei/quant_projects/data_access/store.py", line 8525, in sql
+    table = sql_escape.run_sql(
+            ^^^^^^^^^^^^^^^^^^^
+  File "/home/sunhaiwei/quant_projects/data_access/read/sql_escape.py", line 299, in run_sql
+    _check_sql_function_allowlist(query, strict=strict)
+  File "/home/sunhaiwei/quant_projects/data_access/read/sql_escape.py", line 708, in _check_sql_function_allowlist
+    raise ValidationError(
+data_access.core.exceptions.ValidationError: sql() 拒绝执行：'list_count' 是 table function（['macro']）——文件/网络/外部源入口默认禁用。读外部文件请先在 datasets.yaml 登记数据集。

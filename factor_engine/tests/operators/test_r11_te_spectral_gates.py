@@ -89,9 +89,9 @@ def test_miller_madow_opt_out_through_operator():
     rng = np.random.default_rng(1)
     x = _frame(rng.normal(size=(120, 1)))
     y = _frame(rng.normal(size=(120, 1)))
-    op = _op("ts_mutual_information")
-    corrected = op.calculate(x, y, window=60, bins=5, normalized=False, bias_correction=True)
-    raw = op.calculate(x, y, window=60, bins=5, normalized=False, bias_correction=False)
+    op = _op("ts_mutual_information_nats")
+    corrected = op.calculate(x, y, window=60, bins=5, bias_correction=True)
+    raw = op.calculate(x, y, window=60, bins=5, bias_correction=False)
     c = corrected.to_numpy(dtype=float)
     r = raw.to_numpy(dtype=float)
     m = np.isfinite(c) & np.isfinite(r)
@@ -202,8 +202,10 @@ def test_conditional_te_operator_constant_condition_nan():
 def test_te_mi_unit_metadata_documented():
     op = _op("ts_transfer_entropy")
     assert "nats" in op.metadata.description
-    mi = _op("ts_mutual_information")
-    assert "nats" in mi.metadata.description
+    mi_nats = _op("ts_mutual_information_nats")
+    mi_normalized = _op("ts_normalized_mutual_information")
+    assert "nats" in mi_nats.metadata.description
+    assert "unit:ratio" in mi_normalized.metadata.tags
     cmi = _op("ts_conditional_mutual_information")
     assert any("ratio" in t or "无量纲" in t for t in cmi.metadata.tags)
 

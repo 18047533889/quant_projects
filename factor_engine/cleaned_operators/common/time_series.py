@@ -387,6 +387,11 @@ class WMA(SeriesOperator):
     """加权移动平均（线性衰减权重）。"""
 
     metadata = OperatorMetadata(
+        panel_params=("x",),
+        scalar_params=("window",),
+        param_specs={
+            "window": ParamSpec(dtype=int, min=1, default=10, param_role=ParamRole.HORIZON),
+        },
         name="WMA",
         category="time_series",
         description="计算n期加权移动平均",
@@ -523,6 +528,11 @@ class TSDecayLinear(SeriesOperator):
     """线性衰减加权滚动平均（``ts_decay_linear`` canonical）。"""
 
     metadata = OperatorMetadata(
+        panel_params=("x",),
+        scalar_params=("window",),
+        param_specs={
+            "window": ParamSpec(dtype=int, min=1, default=20, param_role=ParamRole.HORIZON),
+        },
         name="ts_decay_linear", category="time_series",
         description="线性加权滚动平均",
         examples=["ts_decay_linear(close, 20)"],
@@ -542,6 +552,11 @@ class EMA(SeriesOperator):
     """指数移动平均（EWM，``adjust=False``）。"""
 
     metadata = OperatorMetadata(
+        panel_params=("x",),
+        scalar_params=("span",),
+        param_specs={
+            "span": ParamSpec(dtype=float, min=0, default=12, param_role=ParamRole.HORIZON),
+        },
         name="EMA",
         category="time_series",
         description="计算n期指数移动平均",
@@ -591,17 +606,21 @@ class TSArgmax(SeriesOperator):
         category="time_series",
         description="窗口最大值距当前 bar 的 bar 数（0=当前，并列取最近）",
         examples=["ts_argmax(close, 20)"],
-        param_names=["x", "window"],
+        param_names=["x", "window", "min_periods"],
         return_type="series",
         tags=["time_series", "argmax"],
         param_aliases={"d": "window"},
         param_specs={
             "window": ParamSpec(dtype=int, min=1, default=20, searchable=True,
                                 param_role=ParamRole.HORIZON),
+            "min_periods": ParamSpec(dtype=int, min=1, default=1, searchable=False,
+                                     param_role=ParamRole.SUPPORT_POLICY),
         },
     )
 
-    def _calculate_series(self, x: pd.DataFrame, window: int = 20, **kwargs) -> pd.DataFrame:
+    def _calculate_series(
+        self, x: pd.DataFrame, window: int = 20, min_periods: int = 1, **kwargs
+    ) -> pd.DataFrame:
         from factor_engine.cleaned_operators._rolling_fast import rolling_days_since_extreme
         from factor_engine.cleaned_operators.common.strict_params import strict_int
 
@@ -609,7 +628,7 @@ class TSArgmax(SeriesOperator):
         # the central gate validates it against window's ParamSpec, so no local
         # ``int(...)`` cast is needed here.
         w = strict_int(kwargs.get("d", window), "window", minimum=1)
-        return rolling_days_since_extreme(x, w, maximum=True)
+        return rolling_days_since_extreme(x, w, maximum=True, min_periods=min_periods)
 
 
 
@@ -631,23 +650,27 @@ class TSArgmin(SeriesOperator):
         category="time_series",
         description="窗口最小值距当前 bar 的 bar 数（0=当前，并列取最近）",
         examples=["ts_argmin(close, 20)"],
-        param_names=["x", "window"],
+        param_names=["x", "window", "min_periods"],
         return_type="series",
         tags=["time_series", "argmin"],
         param_aliases={"d": "window"},
         param_specs={
             "window": ParamSpec(dtype=int, min=1, default=20, searchable=True,
                                 param_role=ParamRole.HORIZON),
+            "min_periods": ParamSpec(dtype=int, min=1, default=1, searchable=False,
+                                     param_role=ParamRole.SUPPORT_POLICY),
         },
     )
 
-    def _calculate_series(self, x: pd.DataFrame, window: int = 20, **kwargs) -> pd.DataFrame:
+    def _calculate_series(
+        self, x: pd.DataFrame, window: int = 20, min_periods: int = 1, **kwargs
+    ) -> pd.DataFrame:
         from factor_engine.cleaned_operators._rolling_fast import rolling_days_since_extreme
         from factor_engine.cleaned_operators.common.strict_params import strict_int
 
         # ``d`` is a declared parser-level alias for ``window`` (param_aliases).
         w = strict_int(kwargs.get("d", window), "window", minimum=1)
-        return rolling_days_since_extreme(x, w, maximum=False)
+        return rolling_days_since_extreme(x, w, maximum=False, min_periods=min_periods)
 
 
 
@@ -782,6 +805,11 @@ class MovingMedian(SeriesOperator):
     """滚动中位数。"""
 
     metadata = OperatorMetadata(
+        panel_params=("x",),
+        scalar_params=("window",),
+        param_specs={
+            "window": ParamSpec(dtype=int, min=1, default=20, param_role=ParamRole.HORIZON),
+        },
         name="m_median",
         category="time_series",
         description="计算n期移动中位数",
@@ -802,6 +830,11 @@ class TSPctChange(SeriesOperator):
     """d 期变化率：``x_t / x_{t-d} - 1``。"""
 
     metadata = OperatorMetadata(
+        panel_params=("x",),
+        scalar_params=("d",),
+        param_specs={
+            "d": ParamSpec(dtype=int, min=1, default=1, param_role=ParamRole.HORIZON),
+        },
         name="ts_pct",
         category="time_series",
         description="d 期变化率",
@@ -828,6 +861,11 @@ class TSLogReturn(SeriesOperator):
     """d 期对数收益率：``ln(x_t / x_{t-d})``。"""
 
     metadata = OperatorMetadata(
+        panel_params=("x",),
+        scalar_params=("d",),
+        param_specs={
+            "d": ParamSpec(dtype=int, min=1, default=1, param_role=ParamRole.HORIZON),
+        },
         name="ts_log_return",
         category="time_series",
         description="d 期对数收益率 ln(x_t / x_{t-d})",
@@ -1054,7 +1092,7 @@ class TSTopKSum(SeriesOperator):
         name="ts_topk_sum", category="time_series",
         description="滚动窗口内 Top-K 求和",
         examples=["ts_topk_sum(volume, 20, 5)"],
-        param_names=["x", "d", "k"], return_type="series",
+        param_names=["x", "d", "k", "min_periods"], return_type="series",
         tags=["time_series", "top_n", "sum"],
         # R19-050: hidden ``window``/``n`` aliases declared explicitly.
         param_aliases={"window": "d", "n": "k"},
@@ -1063,9 +1101,11 @@ class TSTopKSum(SeriesOperator):
                            param_role=ParamRole.HORIZON),
             "k": ParamSpec(dtype=int, min=1, default=None, searchable=True,
                            param_role=ParamRole.ECONOMIC),
+            "min_periods": ParamSpec(dtype=int, min=1, default=1, searchable=False,
+                                     param_role=ParamRole.SUPPORT_POLICY),
         },
     )
-    def _calculate_series(self, x: pd.DataFrame, d: int = 20, k: int | None = None, **kwargs) -> pd.DataFrame:
+    def _calculate_series(self, x: pd.DataFrame, d: int = 20, k: int | None = None, min_periods: int = 1, **kwargs) -> pd.DataFrame:
         from factor_engine.backend.operator_errors import OperatorParameterError
         from factor_engine.cleaned_operators._rolling_fast import rolling_top_n_sum_window
         from factor_engine.cleaned_operators.common.strict_params import strict_int
@@ -1077,7 +1117,7 @@ class TSTopKSum(SeriesOperator):
         top_k = strict_int(k_eff, "k", minimum=1)
         if top_k > w:
             raise OperatorParameterError("k must be <= window")
-        return rolling_top_n_sum_window(x, w, top_k)
+        return rolling_top_n_sum_window(x, w, top_k, min_periods=min_periods)
 
 
 
@@ -1093,6 +1133,13 @@ class MovingVariance(SeriesOperator):
     """
 
     metadata = OperatorMetadata(
+        panel_params=("x",),
+        scalar_params=("window", "ddof", "min_periods",),
+        param_specs={
+            "window": ParamSpec(dtype=int, min=1, default=20, param_role=ParamRole.HORIZON),
+            "ddof": ParamSpec(dtype=int, min=0, default=1, searchable=False, param_role=ParamRole.POLICY),
+            "min_periods": ParamSpec(dtype=int, min=1, default=1, searchable=False, param_role=ParamRole.SUPPORT_POLICY),
+        },
         name="m_var",
         category="time_series",
         description="计算n期移动方差",
@@ -1103,7 +1150,12 @@ class MovingVariance(SeriesOperator):
     )
 
     def _calculate_series(self, x: pd.DataFrame, window: int = 20, ddof: int = 1, min_periods: int = 1, **kwargs) -> pd.DataFrame:
-        return x.rolling(window=window, min_periods=min_periods).var(ddof=ddof)
+        return x.rolling(window=window, min_periods=min_periods).apply(
+            lambda values: _stable_variance_or_std(
+                values, ddof=ddof, min_periods=min_periods, take_sqrt=False
+            ),
+            raw=True,
+        )
 
 
 
@@ -1197,30 +1249,55 @@ class TSCorrelation(SeriesOperator):
         # forced current-row-missing -> NaN via ``.where(valid)``, contradicting
         # the Numba kernel.  ``.where(valid)`` is removed so both paths only NaN
         # when the window's valid pairs are insufficient.
-        use_numba = os.environ.get("FACTOR_ENGINE_USE_NUMBA", "").lower() in (
-            "1",
-            "true",
-            "yes",
-        )
-        if use_numba:
-            try:
-                from factor_engine.backend.numba_kernels import rolling_corr_panel
-
-                fast = rolling_corr_panel(
-                    x.to_numpy(dtype=float),
-                    y.to_numpy(dtype=float),
-                    w,
-                    min_count=mp,
+        # ``rolling_corr_panel`` uses raw sums and is therefore not an admitted
+        # fast path for this operator: large-offset windows can lose covariance
+        # or violate the exact two-point identity.  The environment flag must
+        # not silently select a different mathematical kernel.
+        # Compute every active window from pairwise-finite, window-local
+        # centered values.  This is independent of pandas' changing internal
+        # raw/centered moment implementation and avoids catastrophic
+        # cancellation for near-collinear inputs.
+        x_values = x.to_numpy(dtype=float)
+        y_values = y.to_numpy(dtype=float)
+        out = np.full(x_values.shape, np.nan, dtype=float)
+        for col_idx in range(x_values.shape[1]):
+            x_col = x_values[:, col_idx]
+            y_col = y_values[:, col_idx]
+            for row_idx in range(x_values.shape[0]):
+                start = max(0, row_idx - w + 1)
+                x_window = x_col[start : row_idx + 1]
+                y_window = y_col[start : row_idx + 1]
+                valid = np.isfinite(x_window) & np.isfinite(y_window)
+                valid_count = int(valid.sum())
+                if valid_count < mp:
+                    continue
+                x_valid = x_window[valid]
+                y_valid = y_window[valid]
+                # Pearson correlation of two non-constant points is exactly
+                # sign((x1-x0)*(y1-y0)).  Evaluate that identity directly so
+                # centered rounding cannot manufacture values outside [-1, 1].
+                # This is not result clipping: constant pairs remain undefined.
+                if valid_count == 2:
+                    if x_valid[1] != x_valid[0] and y_valid[1] != y_valid[0]:
+                        out[row_idx, col_idx] = (
+                            1.0
+                            if (x_valid[1] > x_valid[0]) == (y_valid[1] > y_valid[0])
+                            else -1.0
+                        )
+                    continue
+                x_centered, x_scale = _center_and_scale_finite(x_valid)
+                y_centered, y_scale = _center_and_scale_finite(y_valid)
+                if x_scale == 0.0 or y_scale == 0.0:
+                    continue
+                ss_x = float(np.dot(x_centered, x_centered))
+                ss_y = float(np.dot(y_centered, y_centered))
+                if ss_x <= 0.0 or ss_y <= 0.0:
+                    continue
+                cross = float(np.dot(x_centered, y_centered))
+                out[row_idx, col_idx] = float(
+                    (cross / np.sqrt(ss_x)) / np.sqrt(ss_y)
                 )
-                if fast is not None:
-                    return pd.DataFrame(fast, index=x.index, columns=x.columns)
-            except Exception:
-                pass
-        # Pairwise rolling semantics treat both NaN and +/-Inf as missing,
-        # matching the finite-pair contract used by the Polars implementation.
-        x_finite = x.where(np.isfinite(x))
-        y_finite = y.where(np.isfinite(y))
-        return x_finite.rolling(window=w, min_periods=mp).corr(y_finite)
+        return pd.DataFrame(out, index=x.index, columns=x.columns)
 
 @register_operator(name="ts_corr", category="time_series", business_category="time_series", canonical="ts_corr", source="factor_dsl_np")
 class TSCorr(TSCorrelation):
@@ -1258,7 +1335,10 @@ class TSCov(SeriesOperator):
         param_specs={
             "window": ParamSpec(dtype=int, min=2, default=20, searchable=True,
                                 param_role=ParamRole.HORIZON),
-            "ddof": ParamSpec(dtype=int, min=0, default=1),
+            "ddof": ParamSpec(
+                dtype=int, min=0, default=1, searchable=False,
+                param_role=ParamRole.ESTIMATOR_RESOLUTION,
+            ),
             "min_periods": ParamSpec(dtype=int, min=1, default=None),
         },
     )
@@ -1278,8 +1358,26 @@ class TSCov(SeriesOperator):
         # R19-030: same current-row policy as ts_corr — a window covariance may
         # exist at a row whose current pair is missing (>= min_periods finite
         # pairs required).  ``.where(valid)`` removed for cross-backend parity.
-        # Pandas rolling.cov supports ddof parameter directly
-        return x.rolling(window=w, min_periods=min_p).cov(y, ddof=ddof_val)
+        x_values = x.to_numpy(dtype=float)
+        y_values = y.to_numpy(dtype=float)
+        out = np.full(x_values.shape, np.nan, dtype=float)
+        for col_idx in range(x_values.shape[1]):
+            for row_idx in range(x_values.shape[0]):
+                start = max(0, row_idx - w + 1)
+                x_window = x_values[start : row_idx + 1, col_idx]
+                y_window = y_values[start : row_idx + 1, col_idx]
+                valid = np.isfinite(x_window) & np.isfinite(y_window)
+                count = int(valid.sum())
+                if count < min_p or count <= ddof_val:
+                    continue
+                x_centered, x_scale = _center_and_scale_finite(x_window[valid])
+                y_centered, y_scale = _center_and_scale_finite(y_window[valid])
+                normalized_cov = float(np.dot(x_centered, y_centered)) / (
+                    count - ddof_val
+                )
+                with np.errstate(over="ignore", under="ignore", invalid="ignore"):
+                    out[row_idx, col_idx] = (normalized_cov * x_scale) * y_scale
+        return pd.DataFrame(out, index=x.index, columns=x.columns)
 
 # aliases: TS_COV, m_cov, ts_covariance
 
@@ -1347,6 +1445,12 @@ class TSDelay(SeriesOperator):
     """n 期因果滞后（PIT-safe，负滞后返回 NaN）。"""
 
     metadata = OperatorMetadata(
+        panel_params=("x",),
+        scalar_params=("n",),
+        param_aliases={"d": "n", "window": "n", "lag": "n", "periods": "n"},
+        param_specs={
+            "n": ParamSpec(dtype=int, min=0, default=1, param_role=ParamRole.HORIZON),
+        },
         name="ts_delay", category="time_series",
         description="n期滞后 (与Ref相同)",
         examples=["ts_delay(close, 5)"],
@@ -1356,7 +1460,11 @@ class TSDelay(SeriesOperator):
     def _calculate_series(self, x: pd.DataFrame, n: int = 1, **kwargs) -> pd.DataFrame:
         from factor_engine.cleaned_operators.parameter_validation import strict_integer
 
-        return causal_lag(x, strict_integer(n, "n", minimum=0))
+        value = n
+        for alias in ("d", "window", "lag", "periods"):
+            if alias in kwargs:
+                value = kwargs[alias]
+        return causal_lag(x, strict_integer(value, "n", minimum=0))
 
 # aliases: DELAY, Delay, Ref, delay, m_delay, shift
 
@@ -1368,6 +1476,11 @@ class TSDelta(SeriesOperator):
     """n 期差分：``x - lag(x, n)``。"""
 
     metadata = OperatorMetadata(
+        panel_params=("x",),
+        scalar_params=("n",),
+        param_specs={
+            "n": ParamSpec(dtype=int, min=1, default=1, param_role=ParamRole.HORIZON),
+        },
         name="ts_delta", category="time_series",
         description="n期差分 (与Delta相同)",
         examples=["ts_delta(close, 1)"],
@@ -1411,6 +1524,11 @@ class TSMax(SeriesOperator):
     """滚动最大值。"""
 
     metadata = OperatorMetadata(
+        panel_params=("x",),
+        scalar_params=("window",),
+        param_specs={
+            "window": ParamSpec(dtype=int, min=1, default=20, param_role=ParamRole.HORIZON),
+        },
         name="ts_max", category="time_series",
         description="滚动最大值 (与m_max相同)",
         examples=["ts_max(high, 20)"],
@@ -1493,6 +1611,11 @@ class TSMin(SeriesOperator):
     """滚动最小值。"""
 
     metadata = OperatorMetadata(
+        panel_params=("x",),
+        scalar_params=("window",),
+        param_specs={
+            "window": ParamSpec(dtype=int, min=1, default=20, param_role=ParamRole.HORIZON),
+        },
         name="ts_min", category="time_series",
         description="滚动最小值 (与m_min相同)",
         examples=["ts_min(low, 20)"],
@@ -1605,11 +1728,68 @@ class TSRegression(SeriesOperator):
 
 
 # canonical=ts_skew backend=pandas_numpy selected=m_skew source=time_series/m_ops.py
+def _center_and_scale_finite(array: np.ndarray) -> tuple[np.ndarray, float]:
+    """Return centered values normalized within one finite window and its scale."""
+    values = np.asarray(array, dtype=float)
+    with np.errstate(over="ignore", invalid="ignore"):
+        offsets = values - values[0]
+    if not np.isfinite(offsets).all():
+        input_scale = float(np.max(np.abs(values)))
+        scaled = values / input_scale
+        offsets = scaled - scaled[0]
+        return offsets - float(np.mean(offsets)), input_scale
+    offset_scale = float(np.max(np.abs(offsets)))
+    if offset_scale == 0.0:
+        return np.zeros_like(values), 0.0
+    normalized_offsets = offsets / offset_scale
+    centered = normalized_offsets - float(np.mean(normalized_offsets))
+    return centered, offset_scale
+
+
+def _stable_variance_or_std(
+    values: np.ndarray, *, ddof: int, min_periods: int, take_sqrt: bool
+) -> float:
+    array = np.asarray(values, dtype=float)
+    array = array[np.isfinite(array)]
+    count = array.size
+    if count < min_periods or count <= ddof:
+        return np.nan
+    centered, scale = _center_and_scale_finite(array)
+    if scale == 0.0:
+        return 0.0
+    normalized_variance = float(np.dot(centered, centered)) / (count - ddof)
+    with np.errstate(over="ignore", under="ignore", invalid="ignore"):
+        std = scale * np.sqrt(normalized_variance)
+        return float(std if take_sqrt else std * std)
+
+
+def _stable_unbiased_skew(values: np.ndarray) -> float:
+    """Unbiased Fisher-Pearson skew from centered, scale-normalized moments."""
+    array = np.asarray(values, dtype=float)
+    array = array[np.isfinite(array)]
+    count = array.size
+    if count < 3:
+        return np.nan
+    normalized, scale = _center_and_scale_finite(array)
+    if scale == 0.0:
+        return 0.0
+    m2 = float(np.mean(normalized * normalized))
+    m3 = float(np.mean(normalized * normalized * normalized))
+    return float(
+        np.sqrt(count * (count - 1)) / (count - 2) * m3 / (m2 * np.sqrt(m2))
+    )
+
+
 @register_operator(name="m_skew", category="time_series", business_category="time_series", canonical="ts_skew", source="factor_dsl_np")
 class MovingSkew(SeriesOperator):
     """滚动偏度。"""
 
     metadata = OperatorMetadata(
+        panel_params=("x",),
+        scalar_params=("window",),
+        param_specs={
+            "window": ParamSpec(dtype=int, min=3, default=20, param_role=ParamRole.HORIZON),
+        },
         name="m_skew",
         category="time_series",
         description="计算n期移动偏度",
@@ -1620,7 +1800,9 @@ class MovingSkew(SeriesOperator):
     )
 
     def _calculate_series(self, x: pd.DataFrame, window: int = 20, **kwargs) -> pd.DataFrame:
-        return x.rolling(window=window, min_periods=1).skew()
+        return x.rolling(window=window, min_periods=1).apply(
+            _stable_unbiased_skew, raw=True
+        )
 
 # aliases: TS_SKEW
 
@@ -1633,25 +1815,30 @@ class _PandasTSStdDev(SeriesOperator):
     """Pandas-only base for the registered ts_std implementation."""
 
     metadata = OperatorMetadata(
+        panel_params=("x",), scalar_params=("window", "ddof"),
+        param_specs={
+            "window": ParamSpec(dtype=int, min=2, default=20, param_role=ParamRole.HORIZON),
+            "ddof": ParamSpec(dtype=int, min=0, max=1, default=1, searchable=False, param_role=ParamRole.NUMERICAL),
+        },
         name="ts_std_dev", category="time_series",
         description="滚动标准差 (与m_std相同)",
         examples=["ts_std_dev(returns, 20)"],
-        param_names=["x", "window"], return_type="series",
+        param_names=["x", "window", "ddof"], return_type="series",
         tags=["time_series", "ts_", "std"]
     )
-    def _calculate_series(self, x: pd.DataFrame, window: int = 20, **kwargs) -> pd.DataFrame:
-        from factor_engine.backend.routing import numba_enabled_for_op
-
-        if numba_enabled_for_op("ts_std", window=int(window)):
-            try:
-                from factor_engine.backend.numba_kernels import rolling_std_panel
-
-                fast = rolling_std_panel(x.to_numpy(dtype=float), int(window), min_count=1)
-                if fast is not None:
-                    return pd.DataFrame(fast, index=x.index, columns=x.columns)
-            except Exception:
-                pass
-        return x.rolling(window=window, min_periods=1).std()
+    def _calculate_series(self, x: pd.DataFrame, window: int = 20, ddof: int = 1, **kwargs) -> pd.DataFrame:
+        from factor_engine.cleaned_operators.parameter_validation import strict_integer
+        window = strict_integer(kwargs.get("d", window), "window", minimum=2)
+        ddof = strict_integer(ddof, "ddof", minimum=0, maximum=1)
+        # The optional moving-window kernel uses raw updates and collapses
+        # finite large-offset variance to zero. It is not an admitted path for
+        # this stable statistical contract, even when the global flag is set.
+        return x.rolling(window=window, min_periods=1).apply(
+            lambda values: _stable_variance_or_std(
+                values, ddof=ddof, min_periods=1, take_sqrt=True
+            ),
+            raw=True,
+        )
 
 @register_operator(name="ts_std", category="time_series", business_category="time_series", canonical="ts_std", source="factor_dsl_np")
 class TSStd(_PandasTSStdDev):
@@ -1673,10 +1860,17 @@ class TSStd(_PandasTSStdDev):
     )
 
     metadata = OperatorMetadata(
+        panel_params=("x",),
+        scalar_params=("window", "ddof"),
+        param_aliases={"d": "window"},
+        param_specs={
+            "window": ParamSpec(dtype=int, min=2, default=20, param_role=ParamRole.HORIZON),
+            "ddof": ParamSpec(dtype=int, min=0, max=1, default=1, searchable=False, param_role=ParamRole.NUMERICAL),
+        },
         name="ts_std", category="time_series",
         description="滚动标准差 (ts_std_dev的别名)",
         examples=["ts_std(returns, 20)"],
-        param_names=["x", "window"], return_type="series",
+        param_names=["x", "window", "ddof"], return_type="series",
         tags=["time_series", "ts_", "std"]
     )
 
@@ -1690,14 +1884,20 @@ class TSSum(SeriesOperator):
     """滚动求和。"""
 
     metadata = OperatorMetadata(
+        panel_params=("x",),
+        scalar_params=("window", "min_periods"),
+        param_specs={
+            "window": ParamSpec(dtype=int, min=1, default=20, param_role=ParamRole.HORIZON),
+            "min_periods": ParamSpec(dtype=int, min=1, default=1, searchable=False, param_role=ParamRole.SUPPORT_POLICY),
+        },
         name="ts_sum", category="time_series",
         description="滚动求和 (与m_sum相同)",
         examples=["ts_sum(volume, 20)"],
-        param_names=["x", "window"], return_type="series",
+        param_names=["x", "window", "min_periods"], return_type="series",
         tags=["time_series", "ts_", "sum"]
     )
-    def _calculate_series(self, x: pd.DataFrame, window: int = 20, **kwargs) -> pd.DataFrame:
-        return x.rolling(window=window, min_periods=1).sum()
+    def _calculate_series(self, x: pd.DataFrame, window: int = 20, min_periods: int = 1, **kwargs) -> pd.DataFrame:
+        return x.rolling(window=window, min_periods=min_periods).sum()
 
 # aliases: TS_SUM, m_sum
 
@@ -1740,6 +1940,17 @@ class TSZScore(SeriesOperator):
     """滚动 Z-Score 标准化。"""
 
     metadata = OperatorMetadata(
+        panel_params=("x",),
+        scalar_params=("window", "min_periods", "null_policy", "nan_policy", "includes_current_bar", "ddof", "zero_std_policy",),
+        param_specs={
+            "window": ParamSpec(dtype=int, min=1, default=20, param_role=ParamRole.HORIZON),
+            "min_periods": ParamSpec(dtype=int, min=1, default=1, searchable=False, param_role=ParamRole.SUPPORT_POLICY),
+            "null_policy": ParamSpec(dtype=str, choices=("ignore", "propagate"), default="ignore", searchable=False, param_role=ParamRole.POLICY),
+            "nan_policy": ParamSpec(dtype=str, choices=("ignore", "propagate"), default="propagate", searchable=False, param_role=ParamRole.POLICY),
+            "includes_current_bar": ParamSpec(dtype=bool, default=True, searchable=False, param_role=ParamRole.POLICY),
+            "ddof": ParamSpec(dtype=int, choices=(0, 1), default=1, searchable=False, param_role=ParamRole.POLICY),
+            "zero_std_policy": ParamSpec(dtype=str, choices=("zero", "nan"), default="zero", searchable=False, param_role=ParamRole.POLICY),
+        },
         name="ts_zscore", category="time_series",
         description="滚动Z-Score (与m_zscore相同)",
         examples=["ts_zscore(close, 20)"],
@@ -2112,6 +2323,11 @@ class TSDecayLinearPolars(SeriesOperator):
     """Polars 线性衰减加权滚动平均。"""
 
     metadata = OperatorMetadata(
+        panel_params=("x",),
+        scalar_params=("window",),
+        param_specs={
+            "window": ParamSpec(dtype=int, min=1, default=20, param_role=ParamRole.HORIZON),
+        },
         name="ts_decay_linear", category="time_series",
         description="线性加权滚动平均",
         examples=["ts_decay_linear(close, 20)"],
@@ -2222,6 +2438,12 @@ class TSDelayPolars(SeriesOperator):
     """Polars n 期滞后（负滞后返回 NaN）。"""
 
     metadata = OperatorMetadata(
+        panel_params=("x",),
+        scalar_params=("n",),
+        param_aliases={"d": "n", "window": "n", "lag": "n", "periods": "n"},
+        param_specs={
+            "n": ParamSpec(dtype=int, min=0, default=1, param_role=ParamRole.HORIZON),
+        },
         name="ts_delay", category="time_series",
         description="n期滞后 (与Ref相同)",
         examples=["ts_delay(close, 5)"],
@@ -2232,7 +2454,11 @@ class TSDelayPolars(SeriesOperator):
         from factor_engine.cleaned_operators.parameter_validation import strict_integer
 
         numeric_cols = [c for c in x.columns if c not in ['date', 'stock_code']]
-        lag = strict_integer(n, "n", minimum=0)
+        value = n
+        for alias in ("d", "window", "lag", "periods"):
+            if alias in kwargs:
+                value = kwargs[alias]
+        lag = strict_integer(value, "n", minimum=0)
         return x.with_columns([
             pl.col(c).shift(lag).alias(c) for c in numeric_cols
         ])
@@ -2247,6 +2473,11 @@ class TSDeltaPolars(SeriesOperator):
     """Polars n 期差分。"""
 
     metadata = OperatorMetadata(
+        panel_params=("x",),
+        scalar_params=("n",),
+        param_specs={
+            "n": ParamSpec(dtype=int, min=1, default=1, param_role=ParamRole.HORIZON),
+        },
         name="ts_delta", category="time_series",
         description="n期差分 (与Delta相同)",
         examples=["ts_delta(close, 1)"],
@@ -2269,67 +2500,18 @@ class TSDeltaPolars(SeriesOperator):
 # canonical=ts_kurt backend=polars selected=ts_kurtosis source=time_series/ts_ops_polars.py
 @register_operator(name="ts_kurtosis", category="time_series", business_category="time_series", canonical="ts_kurt", source="factor_dsl_np")
 class TSKurtosisPolars(SeriesOperator):
-    """Polars rolling kurtosis with pandas ``rolling.kurt`` semantics.
+    """Exact scale-stable canonical Fisher kurtosis on finite windows."""
+    from factor_engine.cleaned_operators.common.stable_high_moments_v2 import StableTsKurt as _reference
+    import copy as _copy
+    metadata = _copy.deepcopy(_reference.metadata)
 
-    Constant full windows return ``-3.0`` to preserve the canonical pandas
-    authority's established degenerate-window behavior.
-    """
+    def _calculate_series(self, x, window=20):
+        from factor_engine.cleaned_operators.common.stable_high_moments_v2 import kurt_polars
+        return kurt_polars(x, window)
 
-    metadata = OperatorMetadata(
-        name="ts_kurtosis", category="time_series",
-        description="滚动峰度 (与m_kurt相同)",
-        examples=["ts_kurtosis(returns, 20)"],
-        param_names=["x", "window"], return_type="series",
-        tags=["time_series", "ts_", "kurtosis"]
-    )
-    def _calculate_series(self, x: pl.DataFrame, window: int = 20, **kwargs) -> pl.DataFrame:
-        from factor_engine.cleaned_operators.base_polars import panel_pandas_bridge
-        from factor_engine.cleaned_operators.common.stable_high_moments_v2 import StableTsKurt
-
-        # WINDOW-SEMANTICS PARITY (pandas reference): the ACTIVE pandas_numpy
-        # ts_kurt is StableTsKurt — prefix-stable unbiased Fisher excess kurtosis
-        # on FULL finite windows (min_periods == window, dropna), NOT pandas
-        # rolling.kurt(min_periods=1).  Delegate to the same kernel so polars
-        # cannot diverge on warmup rows / partial windows / NaN / Inf.
-        #
-        # Constant full windows: the canonical pandas authority
-        # ``rolling.kurt`` defines a constant full window as -3.0 (NaN only
-        # for the warmup).  StableTsKurt keeps the second-moment guard and
-        # would emit NaN for a degenerate (zero-scale) full window, which
-        # breaks the compatibility authority — so we mask the warmup NaN and
-        # backfill the zero-scale full windows with the pandas -3.0 sentinel.
-        w = int(kwargs.get("d", window))
-        out = panel_pandas_bridge(x, lambda pdf: StableTsKurt()._calculate_series(pdf, w))
-        cols = [c for c in out.columns if c not in ("date", "stock_code", "timestamp", "trade_date", "datetime", "__fe_time__")]
-        # Constant full windows: pandas ``rolling.kurt`` authority emits -3.0
-        # (not NaN) for a full window of identical values.  StableTsKurt keeps
-        # a second-moment guard and emits NaN for that degenerate window, which
-        # breaks the compatibility authority — so we remap ONLY full windows
-        # of the ORIGINAL input whose finite values are all identical (zero
-        # scale) to -3.0.  Warmup rows and windows containing NaN/Inf keep
-        # StableTsKurt's NaN (pandas parity).
-        def _constant_full_window_mask(series: pl.Series) -> pl.Series:
-            raw = np.asarray(series.to_numpy(), dtype=float)
-            mask = np.zeros(len(raw), dtype=bool)
-            for end in range(len(raw)):
-                if end < w - 1:
-                    continue
-                start = max(0, end - w + 1)
-                win = raw[start : end + 1]
-                finite = win[np.isfinite(win)]
-                if finite.size < w:
-                    continue
-                if float(finite.max()) == float(finite.min()):
-                    mask[end] = True
-            return pl.Series(mask)
-
-        return out.with_columns([
-            pl.when(pl.col(c).is_nan() & pl.Series(_constant_full_window_mask(x[c])))
-            .then(pl.lit(-3.0))
-            .otherwise(pl.col(c))
-            .alias(c)
-            for c in cols
-        ])
+    def physical_spec(self):
+        from factor_engine.cleaned_operators.common.stable_high_moments_v2 import kurt_physical_spec
+        return kurt_physical_spec()
 
 # aliases: TS_KURT
 
@@ -2341,6 +2523,11 @@ class TSMaxPolars(SeriesOperator):
     """Polars 滚动最大值。"""
 
     metadata = OperatorMetadata(
+        panel_params=("x",),
+        scalar_params=("window",),
+        param_specs={
+            "window": ParamSpec(dtype=int, min=1, default=20, param_role=ParamRole.HORIZON),
+        },
         name="ts_max", category="time_series",
         description="滚动最大值 (与m_max相同)",
         examples=["ts_max(high, 20)"],
@@ -2424,6 +2611,11 @@ class TSMinPolars(SeriesOperator):
     """Polars 滚动最小值。"""
 
     metadata = OperatorMetadata(
+        panel_params=("x",),
+        scalar_params=("window",),
+        param_specs={
+            "window": ParamSpec(dtype=int, min=1, default=20, param_role=ParamRole.HORIZON),
+        },
         name="ts_min", category="time_series",
         description="滚动最小值 (与m_min相同)",
         examples=["ts_min(low, 20)"],
@@ -2519,6 +2711,11 @@ class TSSkewnessPolars(SeriesOperator):
     """Polars 滚动偏度。"""
 
     metadata = OperatorMetadata(
+        panel_params=("x",),
+        scalar_params=("window",),
+        param_specs={
+            "window": ParamSpec(dtype=int, min=3, default=20, param_role=ParamRole.HORIZON),
+        },
         name="ts_skewness", category="time_series",
         description="滚动偏度 (与m_skew相同)",
         examples=["ts_skewness(returns, 20)"],
@@ -2547,22 +2744,30 @@ class TSSkewnessPolars(SeriesOperator):
 class TSStdDev(SeriesOperator):
     """滚动标准差 (与m_std相同)"""
     metadata = OperatorMetadata(
+        panel_params=("x",), scalar_params=("window", "ddof"),
+        param_specs={
+            "window": ParamSpec(dtype=int, min=2, default=20, param_role=ParamRole.HORIZON),
+            "ddof": ParamSpec(dtype=int, min=0, max=1, default=1, searchable=False, param_role=ParamRole.NUMERICAL),
+        },
         name="ts_std_dev", category="time_series",
         description="滚动标准差 (与m_std相同)",
         examples=["ts_std_dev(returns, 20)"],
-        param_names=["x", "window"], return_type="series",
+        param_names=["x", "window", "ddof"], return_type="series",
         tags=["time_series", "ts_", "std"],
         # d is the legacy parser alias for the canonical window parameter.
         param_aliases={"d": "window"},
     )
-    def _calculate_series(self, x: pl.DataFrame, window: int = 20, **kwargs) -> pl.DataFrame:
+    def _calculate_series(self, x: pl.DataFrame, window: int = 20, ddof: int = 1, **kwargs) -> pl.DataFrame:
+        from factor_engine.cleaned_operators.parameter_validation import strict_integer
+        window = strict_integer(kwargs.get("d", window), "window", minimum=2)
+        ddof = strict_integer(ddof, "ddof", minimum=0, maximum=1)
         cols = [c for c in x.columns if c not in ['date', 'stock_code']]
         # WINDOW-SEMANTICS PARITY (pandas reference): pandas rolling.std treats
         # NaN AND ±Inf as missing (finite-only).  Polars rolling_std counts Inf
         # as a real number -> converts window to nan.  Convert both to null.
         return x.with_columns([
             pl.when(pl.col(c).is_nan() | pl.col(c).is_infinite()).then(None).otherwise(pl.col(c))
-            .rolling_std(window_size=window, min_samples=1).alias(c) for c in cols
+            .rolling_std(window_size=window, min_samples=1, ddof=ddof).alias(c) for c in cols
         ])
 
 @register_operator(name="ts_std", category="time_series", business_category="time_series", canonical="ts_std", source="factor_dsl_np")
@@ -2588,10 +2793,17 @@ class TSStdPolars(TSStdDev):
     )
 
     metadata = OperatorMetadata(
+        panel_params=("x",),
+        scalar_params=("window", "ddof"),
+        param_aliases={"d": "window"},
+        param_specs={
+            "window": ParamSpec(dtype=int, min=2, default=20, param_role=ParamRole.HORIZON),
+            "ddof": ParamSpec(dtype=int, min=0, max=1, default=1, searchable=False, param_role=ParamRole.NUMERICAL),
+        },
         name="ts_std", category="time_series",
         description="滚动标准差 (ts_std_dev的别名)",
         examples=["ts_std(returns, 20)"],
-        param_names=["x", "window"], return_type="series",
+        param_names=["x", "window", "ddof"], return_type="series",
         tags=["time_series", "ts_", "std"]
     )
 
@@ -2605,19 +2817,25 @@ class TSSumPolars(SeriesOperator):
     """Polars 滚动求和。"""
 
     metadata = OperatorMetadata(
+        panel_params=("x",),
+        scalar_params=("window", "min_periods"),
+        param_specs={
+            "window": ParamSpec(dtype=int, min=1, default=20, param_role=ParamRole.HORIZON),
+            "min_periods": ParamSpec(dtype=int, min=1, default=1, searchable=False, param_role=ParamRole.SUPPORT_POLICY),
+        },
         name="ts_sum", category="time_series",
         description="滚动求和 (与m_sum相同)",
         examples=["ts_sum(volume, 20)"],
-        param_names=["x", "window"], return_type="series",
+        param_names=["x", "window", "min_periods"], return_type="series",
         tags=["time_series", "ts_", "sum"]
     )
-    def _calculate_series(self, x: pl.DataFrame, window: int = 20, **kwargs) -> pl.DataFrame:
+    def _calculate_series(self, x: pl.DataFrame, window: int = 20, min_periods: int = 1, **kwargs) -> pl.DataFrame:
         cols = [c for c in x.columns if c not in ['date', 'stock_code']]
         # WINDOW-SEMANTICS PARITY (pandas reference): pandas rolling.sum drops
         # ±Inf inside the window; explicit finite mask.
         return x.with_columns([
             pl.when(pl.col(c).is_nan() | pl.col(c).is_infinite()).then(None).otherwise(pl.col(c))
-            .rolling_sum(window_size=window, min_samples=1).alias(c) for c in cols
+            .rolling_sum(window_size=window, min_samples=min_periods).alias(c) for c in cols
         ])
 
 # aliases: TS_SUM, m_sum
@@ -2667,6 +2885,17 @@ class TSZScorePolars(SeriesOperator):
     """Polars 滚动 Z-Score。"""
 
     metadata = OperatorMetadata(
+        panel_params=("x",),
+        scalar_params=("window", "min_periods", "null_policy", "nan_policy", "includes_current_bar", "ddof", "zero_std_policy",),
+        param_specs={
+            "window": ParamSpec(dtype=int, min=1, default=20, param_role=ParamRole.HORIZON),
+            "min_periods": ParamSpec(dtype=int, min=1, default=1, searchable=False, param_role=ParamRole.SUPPORT_POLICY),
+            "null_policy": ParamSpec(dtype=str, choices=("ignore", "propagate"), default="ignore", searchable=False, param_role=ParamRole.POLICY),
+            "nan_policy": ParamSpec(dtype=str, choices=("ignore", "propagate"), default="propagate", searchable=False, param_role=ParamRole.POLICY),
+            "includes_current_bar": ParamSpec(dtype=bool, default=True, searchable=False, param_role=ParamRole.POLICY),
+            "ddof": ParamSpec(dtype=int, choices=(0, 1), default=1, searchable=False, param_role=ParamRole.POLICY),
+            "zero_std_policy": ParamSpec(dtype=str, choices=("zero", "nan"), default="zero", searchable=False, param_role=ParamRole.POLICY),
+        },
         name="ts_zscore", category="time_series",
         description="滚动Z-Score (与m_zscore相同)",
         examples=["ts_zscore(close, 20)"],
@@ -2679,9 +2908,10 @@ class TSZScorePolars(SeriesOperator):
                           null_policy: str = "ignore", nan_policy: str = "propagate",
                           includes_current_bar: bool = True, ddof: int = 1,
                           zero_std_policy: str = "zero", **kwargs) -> pl.DataFrame:
-        from factor_engine.cleaned_operators.common.polars_ts_stats import TSZScoreNative
+        # Import the side-effect-free kernel, not a module of registration decorators.
+        from factor_engine.cleaned_operators.common.ts_zscore_spec import polars_zscore
 
-        return TSZScoreNative()._calculate_series(
+        return polars_zscore(
             x, window=window, min_periods=min_periods,
             null_policy=null_policy, nan_policy=nan_policy,
             includes_current_bar=includes_current_bar, ddof=ddof,

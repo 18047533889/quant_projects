@@ -1,0 +1,1 @@
+{"command": [".venv/bin/python", "/tmp/rolling_bench_r3.py"], "returncode": 0, "sampled_peak_family_rss_bytes": 275091456, "sampling_seconds": 0.1, "seconds": 2.1127455909736454, "test_guard_reason": null, "hard_memory_cap": false}

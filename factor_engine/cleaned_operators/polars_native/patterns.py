@@ -8,12 +8,18 @@ Implements chart pattern recognition using pure Polars/numpy.
 from __future__ import annotations
 import polars as pl
 import numpy as np
+from factor_engine.cleaned_operators.price_volume.structure_extra_contracts import extra_contract
 from factor_engine.cleaned_operators.base_polars import (
     SeriesOperator,
     OperatorMetadata,
     register_operator,
     PANEL_SKIP_COLUMNS,
 )
+
+
+def _resolved_pattern_kernel(operator):
+    from factor_engine.cleaned_operators.price_volume import polars_structure
+    return getattr(polars_structure, operator.metadata.name)
 
 
 def _result_df(data_dict: dict, template_df: pl.DataFrame) -> pl.DataFrame:
@@ -50,45 +56,19 @@ def _find_pivots(data: np.ndarray, left: int = 2, right: int = 2) -> tuple[np.nd
     canonical="pattern_123_bear",
     source="polars_native_patterns")
 class Pattern123Bear(SeriesOperator):
-    """Bearish 1-2-3 pattern: high, higher high, lower high."""
-
+    """Canonical continuous pattern score; sequential Polars/NumPy kernel."""
     metadata = OperatorMetadata(
-        name="pattern_123_bear",
-        category="chart_pattern",
-        description="Bearish 1-2-3 reversal pattern",
-        param_names=["high", "low", "left_window", "right_window", "history_window", "min_swing"],
-        param_types={"high": pl.DataFrame, "low": pl.DataFrame, "left_window": int,
-                     "right_window": int, "history_window": int, "min_swing": float},
+        name="pattern_123_bear", category="chart_pattern",
+        description="Canonical pattern_123_bear with matching confirmed-history semantics.",
+        param_names=["high","low","left_window","right_window","history_window","min_swing"],
+        **extra_contract("pattern_123_bear", ["high","low","left_window","right_window","history_window","min_swing"]),
     )
 
-    def _calculate_series(self, high: pl.DataFrame, low=None, left_window: int = 3,
-                          right_window: int = 3, history_window: int = 30,
-                          min_swing: float = 0.02, **kwargs) -> pl.DataFrame:
-        # R4-100 parity: the pandas reference (structural_levels) declares the
-        # 6-param contract ``(high, low, left_window, right_window,
-        # history_window, min_swing)``.  Keep the legacy body on high/window.
-        window = history_window
-        cols = [c for c in high.columns if c not in PANEL_SKIP_COLUMNS]
-        if not cols:
-            return high
+    _contract_callable = property(_resolved_pattern_kernel)
 
-        h_vals = high.select(cols).to_numpy()
-        result = np.zeros_like(h_vals)
-
-        for i in range(window, len(h_vals)):
-            window_data = h_vals[i-window:i+1]
-            pivots, _ = _find_pivots(window_data)
-            pivot_indices = np.where(pivots)[0]
-
-            # Need at least 3 pivot highs
-            if len(pivot_indices) >= 3:
-                p1, p2, p3 = pivot_indices[-3:]
-                h1, h2, h3 = window_data[p1], window_data[p2], window_data[p3]
-                # 1-2-3 bear: h2 > h1 and h3 < h2
-                if h2 > h1 and h3 < h2:
-                    result[i] = 1.0
-
-        return _result_df({col: result[:, idx] for idx, col in enumerate(cols)}, high)
+    def _calculate_series(self, high: pl.DataFrame, low: pl.DataFrame, left_window: int, right_window: int, history_window: int, min_swing: float, **kwargs) -> pl.DataFrame:
+        from factor_engine.cleaned_operators.price_volume.polars_structure import pattern_123_bear
+        return pattern_123_bear(high, low, left_window, right_window, history_window, min_swing)
 
 
 @register_operator(
@@ -97,43 +77,19 @@ class Pattern123Bear(SeriesOperator):
     canonical="pattern_123_bull",
     source="polars_native_patterns")
 class Pattern123Bull(SeriesOperator):
-    """Bullish 1-2-3 pattern: low, lower low, higher low."""
-
+    """Canonical continuous pattern score; sequential Polars/NumPy kernel."""
     metadata = OperatorMetadata(
-        name="pattern_123_bull",
-        category="chart_pattern",
-        description="Bullish 1-2-3 reversal pattern",
-        param_names=["high", "low", "left_window", "right_window", "history_window", "min_swing"],
-        param_types={"high": pl.DataFrame, "low": pl.DataFrame, "left_window": int, "right_window": int, "history_window": int, "min_swing": float},
+        name="pattern_123_bull", category="chart_pattern",
+        description="Canonical pattern_123_bull with matching confirmed-history semantics.",
+        param_names=["high","low","left_window","right_window","history_window","min_swing"],
+        **extra_contract("pattern_123_bull", ["high","low","left_window","right_window","history_window","min_swing"]),
     )
 
-    def _calculate_series(self, low: pl.DataFrame, high=None, left_window: int = 3,
-                          right_window: int = 3, history_window: int = 30,
-                          min_swing: float = 0.02, **kwargs) -> pl.DataFrame:
-        # R4-100 parity: the 6-param canonical contract (high, low,
-        # left_window, right_window, history_window, min_swing); ``window`` is
-        # the legacy alias of history_window.
-        window = int(kwargs.get("window", history_window))
-        cols = [c for c in low.columns if c not in PANEL_SKIP_COLUMNS]
-        if not cols:
-            return low
+    _contract_callable = property(_resolved_pattern_kernel)
 
-        l_vals = low.select(cols).to_numpy()
-        result = np.zeros_like(l_vals)
-
-        for i in range(window, len(l_vals)):
-            window_data = l_vals[i-window:i+1]
-            _, pivots = _find_pivots(window_data)
-            pivot_indices = np.where(pivots)[0]
-
-            if len(pivot_indices) >= 3:
-                p1, p2, p3 = pivot_indices[-3:]
-                l1, l2, l3 = window_data[p1], window_data[p2], window_data[p3]
-                # 1-2-3 bull: l2 < l1 and l3 > l2
-                if l2 < l1 and l3 > l2:
-                    result[i] = 1.0
-
-        return _result_df({col: result[:, idx] for idx, col in enumerate(cols)}, low)
+    def _calculate_series(self, high: pl.DataFrame, low: pl.DataFrame, left_window: int, right_window: int, history_window: int, min_swing: float, **kwargs) -> pl.DataFrame:
+        from factor_engine.cleaned_operators.price_volume.polars_structure import pattern_123_bull
+        return pattern_123_bull(high, low, left_window, right_window, history_window, min_swing)
 
 
 @register_operator(
@@ -141,42 +97,23 @@ class Pattern123Bull(SeriesOperator):
     category="chart_pattern",
     canonical="pattern_ascending_triangle",
     source="polars_native_patterns")
+@register_operator(
+    name="pattern_ascending_triangle", category="chart_pattern", canonical="pattern_ascending_triangle",
+    source="polars_native_patterns")
 class PatternAscendingTriangle(SeriesOperator):
-    """Ascending triangle: flat resistance, rising support."""
-
+    """Canonical conversion wrapper with the authoritative pattern contract."""
     metadata = OperatorMetadata(
-        name="pattern_ascending_triangle",
-        category="chart_pattern",
-        description="Ascending triangle consolidation pattern",
-        param_names=["high", "low", "left_window", "right_window", "history_window", "points", "slope_threshold"],
-        param_types={"high": pl.DataFrame, "low": pl.DataFrame, "left_window": int, "right_window": int, "history_window": int, "points": int, "slope_threshold": int},
+        name="pattern_ascending_triangle", category="chart_pattern",
+        description="Canonical pattern_ascending_triangle with matching confirmed-history semantics.",
+        param_names=['high', 'low', 'left_window', 'right_window', 'history_window', 'points', 'slope_threshold'],
+        **extra_contract("pattern_ascending_triangle", ['high', 'low', 'left_window', 'right_window', 'history_window', 'points', 'slope_threshold']),
     )
 
-    def _calculate_series(self, high: pl.DataFrame, low: pl.DataFrame, window: int = 20, **kwargs) -> pl.DataFrame:
-        cols = [c for c in high.columns if c not in PANEL_SKIP_COLUMNS]
-        if not cols:
-            return high
+    _contract_callable = property(_resolved_pattern_kernel)
 
-        h_vals = high.select(cols).to_numpy()
-        l_vals = low.select(cols).to_numpy()
-        result = np.zeros_like(h_vals)
-
-        for i in range(window, len(h_vals)):
-            h_window = h_vals[i-window:i+1]
-            l_window = l_vals[i-window:i+1]
-            
-            # Flat resistance: highs clustered around max
-            resistance = np.max(h_window)
-            h_std = np.std(h_window[-5:])  # Recent highs
-            
-            # Rising support: positive slope in lows
-            x = np.arange(len(l_window))
-            l_slope = np.polyfit(x, l_window, 1)[0] if len(x) > 1 else 0
-            
-            if h_std < 0.01 * resistance and l_slope > 0:
-                result[i] = 1.0
-
-        return _result_df({col: result[:, idx] for idx, col in enumerate(cols)}, high)
+    def _calculate_series(self, high: pl.DataFrame, low: pl.DataFrame, left_window: int, right_window: int, history_window: int, points: int, slope_threshold: float, **kwargs) -> pl.DataFrame:
+        from factor_engine.cleaned_operators.price_volume.polars_structure import pattern_ascending_triangle
+        return pattern_ascending_triangle(high, low, left_window, right_window, history_window, points, slope_threshold)
 
 
 @register_operator(
@@ -184,38 +121,23 @@ class PatternAscendingTriangle(SeriesOperator):
     category="chart_pattern",
     canonical="pattern_bear_flag",
     source="polars_native_patterns")
+@register_operator(
+    name="pattern_bear_flag", category="chart_pattern", canonical="pattern_bear_flag",
+    source="polars_native_patterns")
 class PatternBearFlag(SeriesOperator):
-    """Bear flag: downtrend with upward consolidation."""
-
+    """Canonical conversion wrapper with the authoritative pattern contract."""
     metadata = OperatorMetadata(
-        name="pattern_bear_flag",
-        category="chart_pattern",
-        description="Bearish flag continuation pattern",
-        param_names=["close", "high", "low", "volume", "impulse_window", "flag_window", "min_impulse", "max_retracement", "max_width", "volume_decay_threshold"],
-        param_types={"close": pl.DataFrame, "high": pl.DataFrame, "low": pl.DataFrame, "volume": pl.DataFrame, "impulse_window": int, "flag_window": int, "min_impulse": int, "max_retracement": int, "max_width": int, "volume_decay_threshold": int},
+        name="pattern_bear_flag", category="chart_pattern",
+        description="Canonical pattern_bear_flag with matching confirmed-history semantics.",
+        param_names=['close', 'high', 'low', 'volume', 'impulse_window', 'flag_window', 'min_impulse', 'max_retracement', 'max_width', 'volume_decay_threshold'],
+        **extra_contract("pattern_bear_flag", ['close', 'high', 'low', 'volume', 'impulse_window', 'flag_window', 'min_impulse', 'max_retracement', 'max_width', 'volume_decay_threshold']),
     )
 
-    def _calculate_series(self, close: pl.DataFrame, window: int = 20, **kwargs) -> pl.DataFrame:
-        cols = [c for c in close.columns if c not in PANEL_SKIP_COLUMNS]
-        if not cols:
-            return close
+    _contract_callable = property(_resolved_pattern_kernel)
 
-        c_vals = close.select(cols).to_numpy()
-        result = np.zeros_like(c_vals)
-
-        for i in range(window, len(c_vals)):
-            # Flagpole: sharp decline before flag
-            pole = c_vals[i-window:i-window//2]
-            pole_slope = np.polyfit(np.arange(len(pole)), pole, 1)[0] if len(pole) > 1 else 0
-            
-            # Flag: slight upward drift
-            flag = c_vals[i-window//2:i+1]
-            flag_slope = np.polyfit(np.arange(len(flag)), flag, 1)[0] if len(flag) > 1 else 0
-            
-            if pole_slope < -0.01 and 0 < flag_slope < 0.005:
-                result[i] = 1.0
-
-        return _result_df({col: result[:, idx] for idx, col in enumerate(cols)}, close)
+    def _calculate_series(self, close: pl.DataFrame, high: pl.DataFrame, low: pl.DataFrame, volume: pl.DataFrame, impulse_window: int, flag_window: int, min_impulse: float, max_retracement: float, max_width: float, volume_decay_threshold: float, **kwargs) -> pl.DataFrame:
+        from factor_engine.cleaned_operators.price_volume.polars_structure import pattern_bear_flag
+        return pattern_bear_flag(close, high, low, volume, impulse_window, flag_window, min_impulse, max_retracement, max_width, volume_decay_threshold)
 
 
 @register_operator(
@@ -224,32 +146,19 @@ class PatternBearFlag(SeriesOperator):
     canonical="pattern_bear_pennant",
     source="polars_native_patterns")
 class PatternBearPennant(SeriesOperator):
-    """Bear pennant: downtrend with converging consolidation."""
-
+    """Canonical continuous pattern score; sequential Polars/NumPy kernel."""
     metadata = OperatorMetadata(
-        name="pattern_bear_pennant",
-        category="chart_pattern",
-        description="Bearish pennant continuation pattern",
-        param_names=["close", "high", "low", "volume", "impulse_window", "pennant_window", "min_impulse", "max_width", "volume_decay_threshold"],
-        param_types={"close": pl.DataFrame, "high": pl.DataFrame, "low": pl.DataFrame, "volume": pl.DataFrame, "impulse_window": int, "pennant_window": int, "min_impulse": int, "max_width": int, "volume_decay_threshold": int},
+        name="pattern_bear_pennant", category="chart_pattern",
+        description="Canonical pattern_bear_pennant with matching confirmed-history semantics.",
+        param_names=["close","high","low","volume","impulse_window","pennant_window","min_impulse","max_width","volume_decay_threshold"],
+        **extra_contract("pattern_bear_pennant", ["close","high","low","volume","impulse_window","pennant_window","min_impulse","max_width","volume_decay_threshold"]),
     )
 
-    def _calculate_series(self, high: pl.DataFrame, low: pl.DataFrame, window: int = 20, **kwargs) -> pl.DataFrame:
-        cols = [c for c in high.columns if c not in PANEL_SKIP_COLUMNS]
-        if not cols:
-            return high
+    _contract_callable = property(_resolved_pattern_kernel)
 
-        h_vals = high.select(cols).to_numpy()
-        l_vals = low.select(cols).to_numpy()
-        result = np.zeros_like(h_vals)
-
-        for i in range(window, len(h_vals)):
-            # Pennant: converging range
-            ranges = h_vals[i-window//2:i+1] - l_vals[i-window//2:i+1]
-            if len(ranges) > 2 and ranges[-1] < ranges[0] * 0.5:
-                result[i] = 1.0
-
-        return _result_df({col: result[:, idx] for idx, col in enumerate(cols)}, high)
+    def _calculate_series(self, close: pl.DataFrame, high: pl.DataFrame, low: pl.DataFrame, volume: pl.DataFrame, impulse_window: int, pennant_window: int, min_impulse: float, max_width: float, volume_decay_threshold: float, **kwargs) -> pl.DataFrame:
+        from factor_engine.cleaned_operators.price_volume.polars_structure import pattern_bear_pennant
+        return pattern_bear_pennant(close, high, low, volume, impulse_window, pennant_window, min_impulse, max_width, volume_decay_threshold)
 
 
 @register_operator(
@@ -258,34 +167,19 @@ class PatternBearPennant(SeriesOperator):
     canonical="pattern_breakdown_retest",
     source="polars_native_patterns")
 class PatternBreakdownRetest(SeriesOperator):
-    """Price breaks support then retests it from below."""
-
+    """Canonical continuous pattern score; sequential Polars/NumPy kernel."""
     metadata = OperatorMetadata(
-        name="pattern_breakdown_retest",
-        category="chart_pattern",
-        description="Breakdown followed by retest of support",
-        param_names=["close", "window", "max_wait", "tolerance"],
-        param_types={"close": pl.DataFrame, "window": int, "max_wait": int, "tolerance": int},
+        name="pattern_breakdown_retest", category="chart_pattern",
+        description="Canonical pattern_breakdown_retest with matching confirmed-history semantics.",
+        param_names=["close","window","max_wait","tolerance"],
+        **extra_contract("pattern_breakdown_retest", ["close","window","max_wait","tolerance"]),
     )
 
-    def _calculate_series(self, close: pl.DataFrame, low: pl.DataFrame, window: int = 20, **kwargs) -> pl.DataFrame:
-        cols = [c for c in close.columns if c not in PANEL_SKIP_COLUMNS]
-        if not cols:
-            return close
+    _contract_callable = property(_resolved_pattern_kernel)
 
-        c_vals = close.select(cols).to_numpy()
-        l_vals = low.select(cols).to_numpy()
-        result = np.zeros_like(c_vals)
-
-        for i in range(window + 5, len(c_vals)):
-            # Support from earlier window
-            support = np.min(l_vals[i-window:i-5])
-            # Recent breakdown and retest
-            recent_low = np.min(l_vals[i-5:i])
-            if recent_low < support * 0.99 and c_vals[i] > support * 0.98:
-                result[i] = 1.0
-
-        return _result_df({col: result[:, idx] for idx, col in enumerate(cols)}, close)
+    def _calculate_series(self, close: pl.DataFrame, window: int, max_wait: int, tolerance: float, **kwargs) -> pl.DataFrame:
+        from factor_engine.cleaned_operators.price_volume.polars_structure import pattern_breakdown_retest
+        return pattern_breakdown_retest(close, window, max_wait, tolerance)
 
 
 @register_operator(
@@ -294,32 +188,19 @@ class PatternBreakdownRetest(SeriesOperator):
     canonical="pattern_breakout_retest",
     source="polars_native_patterns")
 class PatternBreakoutRetest(SeriesOperator):
-    """Price breaks resistance then retests it from above."""
-
+    """Canonical continuous pattern score; sequential Polars/NumPy kernel."""
     metadata = OperatorMetadata(
-        name="pattern_breakout_retest",
-        category="chart_pattern",
-        description="Breakout followed by retest of resistance",
-        param_names=["close", "window", "max_wait", "tolerance"],
-        param_types={"close": pl.DataFrame, "window": int, "max_wait": int, "tolerance": int},
+        name="pattern_breakout_retest", category="chart_pattern",
+        description="Canonical pattern_breakout_retest with matching confirmed-history semantics.",
+        param_names=["close","window","max_wait","tolerance"],
+        **extra_contract("pattern_breakout_retest", ["close","window","max_wait","tolerance"]),
     )
 
-    def _calculate_series(self, close: pl.DataFrame, high: pl.DataFrame, window: int = 20, **kwargs) -> pl.DataFrame:
-        cols = [c for c in close.columns if c not in PANEL_SKIP_COLUMNS]
-        if not cols:
-            return close
+    _contract_callable = property(_resolved_pattern_kernel)
 
-        c_vals = close.select(cols).to_numpy()
-        h_vals = high.select(cols).to_numpy()
-        result = np.zeros_like(c_vals)
-
-        for i in range(window + 5, len(c_vals)):
-            resistance = np.max(h_vals[i-window:i-5])
-            recent_high = np.max(h_vals[i-5:i])
-            if recent_high > resistance * 1.01 and c_vals[i] < resistance * 1.02:
-                result[i] = 1.0
-
-        return _result_df({col: result[:, idx] for idx, col in enumerate(cols)}, close)
+    def _calculate_series(self, close: pl.DataFrame, window: int, max_wait: int, tolerance: float, **kwargs) -> pl.DataFrame:
+        from factor_engine.cleaned_operators.price_volume.polars_structure import pattern_breakout_retest
+        return pattern_breakout_retest(close, window, max_wait, tolerance)
 
 
 @register_operator(
@@ -327,33 +208,23 @@ class PatternBreakoutRetest(SeriesOperator):
     category="chart_pattern",
     canonical="pattern_broadening",
     source="polars_native_patterns")
+@register_operator(
+    name="pattern_broadening", category="chart_pattern", canonical="pattern_broadening",
+    source="polars_native_patterns")
 class PatternBroadening(SeriesOperator):
-    """Broadening pattern: expanding volatility range."""
-
+    """Canonical conversion wrapper with the authoritative pattern contract."""
     metadata = OperatorMetadata(
-        name="pattern_broadening",
-        category="chart_pattern",
-        description="Broadening/megaphone pattern with expanding range",
-        param_names=["high", "low", "left_window", "right_window", "history_window", "points", "slope_threshold"],
-        param_types={"high": pl.DataFrame, "low": pl.DataFrame, "left_window": int, "right_window": int, "history_window": int, "points": int, "slope_threshold": int},
+        name="pattern_broadening", category="chart_pattern",
+        description="Canonical pattern_broadening with matching confirmed-history semantics.",
+        param_names=['high', 'low', 'left_window', 'right_window', 'history_window', 'points', 'slope_threshold'],
+        **extra_contract("pattern_broadening", ['high', 'low', 'left_window', 'right_window', 'history_window', 'points', 'slope_threshold']),
     )
 
-    def _calculate_series(self, high: pl.DataFrame, low: pl.DataFrame, window: int = 20, **kwargs) -> pl.DataFrame:
-        cols = [c for c in high.columns if c not in PANEL_SKIP_COLUMNS]
-        if not cols:
-            return high
+    _contract_callable = property(_resolved_pattern_kernel)
 
-        h_vals = high.select(cols).to_numpy()
-        l_vals = low.select(cols).to_numpy()
-        result = np.zeros_like(h_vals)
-
-        for i in range(window, len(h_vals)):
-            ranges = h_vals[i-window:i+1] - l_vals[i-window:i+1]
-            # Expanding range: recent > early
-            if len(ranges) > 2 and ranges[-1] > ranges[0] * 1.5:
-                result[i] = 1.0
-
-        return _result_df({col: result[:, idx] for idx, col in enumerate(cols)}, high)
+    def _calculate_series(self, high: pl.DataFrame, low: pl.DataFrame, left_window: int, right_window: int, history_window: int, points: int, slope_threshold: float, **kwargs) -> pl.DataFrame:
+        from factor_engine.cleaned_operators.price_volume.polars_structure import pattern_broadening
+        return pattern_broadening(high, low, left_window, right_window, history_window, points, slope_threshold)
 
 
 @register_operator(
@@ -361,36 +232,23 @@ class PatternBroadening(SeriesOperator):
     category="chart_pattern",
     canonical="pattern_bull_flag",
     source="polars_native_patterns")
+@register_operator(
+    name="pattern_bull_flag", category="chart_pattern", canonical="pattern_bull_flag",
+    source="polars_native_patterns")
 class PatternBullFlag(SeriesOperator):
-    """Bull flag: uptrend with downward consolidation."""
-
+    """Canonical conversion wrapper with the authoritative pattern contract."""
     metadata = OperatorMetadata(
-        name="pattern_bull_flag",
-        category="chart_pattern",
-        description="Bullish flag continuation pattern",
-        param_names=["close", "high", "low", "volume", "impulse_window", "flag_window", "min_impulse", "max_retracement", "max_width", "volume_decay_threshold"],
-        param_types={"close": pl.DataFrame, "high": pl.DataFrame, "low": pl.DataFrame, "volume": pl.DataFrame, "impulse_window": int, "flag_window": int, "min_impulse": int, "max_retracement": int, "max_width": int, "volume_decay_threshold": int},
+        name="pattern_bull_flag", category="chart_pattern",
+        description="Canonical pattern_bull_flag with matching confirmed-history semantics.",
+        param_names=['close', 'high', 'low', 'volume', 'impulse_window', 'flag_window', 'min_impulse', 'max_retracement', 'max_width', 'volume_decay_threshold'],
+        **extra_contract("pattern_bull_flag", ['close', 'high', 'low', 'volume', 'impulse_window', 'flag_window', 'min_impulse', 'max_retracement', 'max_width', 'volume_decay_threshold']),
     )
 
-    def _calculate_series(self, close: pl.DataFrame, window: int = 20, **kwargs) -> pl.DataFrame:
-        cols = [c for c in close.columns if c not in PANEL_SKIP_COLUMNS]
-        if not cols:
-            return close
+    _contract_callable = property(_resolved_pattern_kernel)
 
-        c_vals = close.select(cols).to_numpy()
-        result = np.zeros_like(c_vals)
-
-        for i in range(window, len(c_vals)):
-            pole = c_vals[i-window:i-window//2]
-            pole_slope = np.polyfit(np.arange(len(pole)), pole, 1)[0] if len(pole) > 1 else 0
-            
-            flag = c_vals[i-window//2:i+1]
-            flag_slope = np.polyfit(np.arange(len(flag)), flag, 1)[0] if len(flag) > 1 else 0
-            
-            if pole_slope > 0.01 and -0.005 < flag_slope < 0:
-                result[i] = 1.0
-
-        return _result_df({col: result[:, idx] for idx, col in enumerate(cols)}, close)
+    def _calculate_series(self, close: pl.DataFrame, high: pl.DataFrame, low: pl.DataFrame, volume: pl.DataFrame, impulse_window: int, flag_window: int, min_impulse: float, max_retracement: float, max_width: float, volume_decay_threshold: float, **kwargs) -> pl.DataFrame:
+        from factor_engine.cleaned_operators.price_volume.polars_structure import pattern_bull_flag
+        return pattern_bull_flag(close, high, low, volume, impulse_window, flag_window, min_impulse, max_retracement, max_width, volume_decay_threshold)
 
 
 @register_operator(
@@ -399,31 +257,19 @@ class PatternBullFlag(SeriesOperator):
     canonical="pattern_bull_pennant",
     source="polars_native_patterns")
 class PatternBullPennant(SeriesOperator):
-    """Bull pennant: uptrend with converging consolidation."""
-
+    """Canonical continuous pattern score; sequential Polars/NumPy kernel."""
     metadata = OperatorMetadata(
-        name="pattern_bull_pennant",
-        category="chart_pattern",
-        description="Bullish pennant continuation pattern",
-        param_names=["close", "high", "low", "volume", "impulse_window", "pennant_window", "min_impulse", "max_width", "volume_decay_threshold"],
-        param_types={"close": pl.DataFrame, "high": pl.DataFrame, "low": pl.DataFrame, "volume": pl.DataFrame, "impulse_window": int, "pennant_window": int, "min_impulse": int, "max_width": int, "volume_decay_threshold": int},
+        name="pattern_bull_pennant", category="chart_pattern",
+        description="Canonical pattern_bull_pennant with matching confirmed-history semantics.",
+        param_names=["close","high","low","volume","impulse_window","pennant_window","min_impulse","max_width","volume_decay_threshold"],
+        **extra_contract("pattern_bull_pennant", ["close","high","low","volume","impulse_window","pennant_window","min_impulse","max_width","volume_decay_threshold"]),
     )
 
-    def _calculate_series(self, high: pl.DataFrame, low: pl.DataFrame, window: int = 20, **kwargs) -> pl.DataFrame:
-        cols = [c for c in high.columns if c not in PANEL_SKIP_COLUMNS]
-        if not cols:
-            return high
+    _contract_callable = property(_resolved_pattern_kernel)
 
-        h_vals = high.select(cols).to_numpy()
-        l_vals = low.select(cols).to_numpy()
-        result = np.zeros_like(h_vals)
-
-        for i in range(window, len(h_vals)):
-            ranges = h_vals[i-window//2:i+1] - l_vals[i-window//2:i+1]
-            if len(ranges) > 2 and ranges[-1] < ranges[0] * 0.5:
-                result[i] = 1.0
-
-        return _result_df({col: result[:, idx] for idx, col in enumerate(cols)}, high)
+    def _calculate_series(self, close: pl.DataFrame, high: pl.DataFrame, low: pl.DataFrame, volume: pl.DataFrame, impulse_window: int, pennant_window: int, min_impulse: float, max_width: float, volume_decay_threshold: float, **kwargs) -> pl.DataFrame:
+        from factor_engine.cleaned_operators.price_volume.polars_structure import pattern_bull_pennant
+        return pattern_bull_pennant(close, high, low, volume, impulse_window, pennant_window, min_impulse, max_width, volume_decay_threshold)
 
 
 @register_operator(
@@ -432,36 +278,19 @@ class PatternBullPennant(SeriesOperator):
     canonical="pattern_cup",
     source="polars_native_patterns")
 class PatternCup(SeriesOperator):
-    """Cup pattern: U-shaped recovery."""
-
+    """Canonical continuous pattern score; sequential Polars/NumPy kernel."""
     metadata = OperatorMetadata(
-        name="pattern_cup",
-        category="chart_pattern",
-        description="Cup pattern (U-shaped bottom)",
-        param_names=["close", "window", "min_depth", "max_edge_diff", "min_fit"],
-        param_types={"close": pl.DataFrame, "window": int, "min_depth": int, "max_edge_diff": int, "min_fit": int},
+        name="pattern_cup", category="chart_pattern",
+        description="Canonical pattern_cup with matching confirmed-history semantics.",
+        param_names=["close","window","min_depth","max_edge_diff","min_fit"],
+        **extra_contract("pattern_cup", ["close","window","min_depth","max_edge_diff","min_fit"]),
     )
 
-    def _calculate_series(self, close: pl.DataFrame, window: int = 30, **kwargs) -> pl.DataFrame:
-        cols = [c for c in close.columns if c not in PANEL_SKIP_COLUMNS]
-        if not cols:
-            return close
+    _contract_callable = property(_resolved_pattern_kernel)
 
-        c_vals = close.select(cols).to_numpy()
-        result = np.zeros_like(c_vals)
-
-        for i in range(window, len(c_vals)):
-            window_data = c_vals[i-window:i+1]
-            mid = len(window_data) // 2
-            # U-shape: edges higher than middle
-            left_avg = np.mean(window_data[:window//4])
-            bottom_avg = np.mean(window_data[mid-2:mid+2])
-            right_avg = np.mean(window_data[-window//4:])
-            
-            if bottom_avg < left_avg * 0.95 and right_avg > bottom_avg * 1.05:
-                result[i] = 1.0
-
-        return _result_df({col: result[:, idx] for idx, col in enumerate(cols)}, close)
+    def _calculate_series(self, close: pl.DataFrame, window: int, min_depth: float, max_edge_diff: float, min_fit: float, **kwargs) -> pl.DataFrame:
+        from factor_engine.cleaned_operators.price_volume.polars_structure import pattern_cup
+        return pattern_cup(close, window, min_depth, max_edge_diff, min_fit)
 
 
 @register_operator(
@@ -470,35 +299,19 @@ class PatternCup(SeriesOperator):
     canonical="pattern_cup_handle",
     source="polars_native_patterns")
 class PatternCupHandle(SeriesOperator):
-    """Cup and handle: U-shaped recovery with small dip."""
-
+    """Canonical continuous pattern score; sequential Polars/NumPy kernel."""
     metadata = OperatorMetadata(
-        name="pattern_cup_handle",
-        category="chart_pattern",
-        description="Cup and handle bullish continuation",
-        param_names=["close", "high", "low", "cup_window", "handle_window", "min_depth", "max_edge_diff", "min_fit", "max_handle_retracement"],
-        param_types={"close": pl.DataFrame, "high": pl.DataFrame, "low": pl.DataFrame, "cup_window": int, "handle_window": int, "min_depth": int, "max_edge_diff": int, "min_fit": int, "max_handle_retracement": int},
+        name="pattern_cup_handle", category="chart_pattern",
+        description="Canonical pattern_cup_handle with matching confirmed-history semantics.",
+        param_names=["close","high","low","cup_window","handle_window","min_depth","max_edge_diff","min_fit","max_handle_retracement"],
+        **extra_contract("pattern_cup_handle", ["close","high","low","cup_window","handle_window","min_depth","max_edge_diff","min_fit","max_handle_retracement"]),
     )
 
-    def _calculate_series(self, close: pl.DataFrame, window: int = 40, **kwargs) -> pl.DataFrame:
-        cols = [c for c in close.columns if c not in PANEL_SKIP_COLUMNS]
-        if not cols:
-            return close
+    _contract_callable = property(_resolved_pattern_kernel)
 
-        c_vals = close.select(cols).to_numpy()
-        result = np.zeros_like(c_vals)
-
-        # TODO: Implement cup detection followed by handle (small pullback)
-        # For now, simplified version
-        for i in range(window, len(c_vals)):
-            window_data = c_vals[i-window:i+1]
-            # Detect cup in first 75%, handle in last 25%
-            cup_end = int(len(window_data) * 0.75)
-            handle = window_data[cup_end:]
-            if len(handle) > 2 and handle[-1] < handle[0] * 0.98:
-                result[i] = 0.5  # Partial confidence
-
-        return _result_df({col: result[:, idx] for idx, col in enumerate(cols)}, close)
+    def _calculate_series(self, close: pl.DataFrame, high: pl.DataFrame, low: pl.DataFrame, cup_window: int, handle_window: int, min_depth: float, max_edge_diff: float, min_fit: float, max_handle_retracement: float, **kwargs) -> pl.DataFrame:
+        from factor_engine.cleaned_operators.price_volume.polars_structure import pattern_cup_handle
+        return pattern_cup_handle(close, high, low, cup_window, handle_window, min_depth, max_edge_diff, min_fit, max_handle_retracement)
 
 
 @register_operator(
@@ -506,42 +319,23 @@ class PatternCupHandle(SeriesOperator):
     category="chart_pattern",
     canonical="pattern_descending_triangle",
     source="polars_native_patterns")
+@register_operator(
+    name="pattern_descending_triangle", category="chart_pattern", canonical="pattern_descending_triangle",
+    source="polars_native_patterns")
 class PatternDescendingTriangle(SeriesOperator):
-    """Descending triangle: flat support, falling resistance."""
-
+    """Canonical conversion wrapper with the authoritative pattern contract."""
     metadata = OperatorMetadata(
-        name="pattern_descending_triangle",
-        category="chart_pattern",
-        description="Descending triangle consolidation pattern",
-        param_names=["high", "low", "left_window", "right_window", "history_window", "points", "slope_threshold"],
-        param_types={"high": pl.DataFrame, "low": pl.DataFrame, "left_window": int, "right_window": int, "history_window": int, "points": int, "slope_threshold": int},
+        name="pattern_descending_triangle", category="chart_pattern",
+        description="Canonical pattern_descending_triangle with matching confirmed-history semantics.",
+        param_names=['high', 'low', 'left_window', 'right_window', 'history_window', 'points', 'slope_threshold'],
+        **extra_contract("pattern_descending_triangle", ['high', 'low', 'left_window', 'right_window', 'history_window', 'points', 'slope_threshold']),
     )
 
-    def _calculate_series(self, high: pl.DataFrame, low: pl.DataFrame, window: int = 20, **kwargs) -> pl.DataFrame:
-        cols = [c for c in high.columns if c not in PANEL_SKIP_COLUMNS]
-        if not cols:
-            return high
+    _contract_callable = property(_resolved_pattern_kernel)
 
-        h_vals = high.select(cols).to_numpy()
-        l_vals = low.select(cols).to_numpy()
-        result = np.zeros_like(h_vals)
-
-        for i in range(window, len(h_vals)):
-            h_window = h_vals[i-window:i+1]
-            l_window = l_vals[i-window:i+1]
-            
-            # Flat support
-            support = np.min(l_window)
-            l_std = np.std(l_window[-5:])
-            
-            # Falling resistance
-            x = np.arange(len(h_window))
-            h_slope = np.polyfit(x, h_window, 1)[0] if len(x) > 1 else 0
-            
-            if l_std < 0.01 * support and h_slope < 0:
-                result[i] = 1.0
-
-        return _result_df({col: result[:, idx] for idx, col in enumerate(cols)}, high)
+    def _calculate_series(self, high: pl.DataFrame, low: pl.DataFrame, left_window: int, right_window: int, history_window: int, points: int, slope_threshold: float, **kwargs) -> pl.DataFrame:
+        from factor_engine.cleaned_operators.price_volume.polars_structure import pattern_descending_triangle
+        return pattern_descending_triangle(high, low, left_window, right_window, history_window, points, slope_threshold)
 
 
 @register_operator(
@@ -549,37 +343,23 @@ class PatternDescendingTriangle(SeriesOperator):
     category="chart_pattern",
     canonical="pattern_double_bottom",
     source="polars_native_patterns")
+@register_operator(
+    name="pattern_double_bottom", category="chart_pattern", canonical="pattern_double_bottom",
+    source="polars_native_patterns")
 class PatternDoubleBottom(SeriesOperator):
-    """Double bottom: two similar lows (W pattern)."""
-
+    """Canonical conversion wrapper with the authoritative pattern contract."""
     metadata = OperatorMetadata(
-        name="pattern_double_bottom",
-        category="chart_pattern",
-        description="Double bottom bullish reversal",
-        param_names=["high", "low", "left_window", "right_window", "history_window", "tolerance", "min_depth", "min_spacing", "max_spacing"],
-        param_types={"high": pl.DataFrame, "low": pl.DataFrame, "left_window": int, "right_window": int, "history_window": int, "tolerance": int, "min_depth": int, "min_spacing": int, "max_spacing": int},
+        name="pattern_double_bottom", category="chart_pattern",
+        description="Canonical pattern_double_bottom with matching confirmed-history semantics.",
+        param_names=['high', 'low', 'left_window', 'right_window', 'history_window', 'tolerance', 'min_depth', 'min_spacing', 'max_spacing'],
+        **extra_contract("pattern_double_bottom", ['high', 'low', 'left_window', 'right_window', 'history_window', 'tolerance', 'min_depth', 'min_spacing', 'max_spacing']),
     )
 
-    def _calculate_series(self, low: pl.DataFrame, window: int = 20, **kwargs) -> pl.DataFrame:
-        cols = [c for c in low.columns if c not in PANEL_SKIP_COLUMNS]
-        if not cols:
-            return low
+    _contract_callable = property(_resolved_pattern_kernel)
 
-        l_vals = low.select(cols).to_numpy()
-        result = np.zeros_like(l_vals)
-
-        for i in range(window, len(l_vals)):
-            window_data = l_vals[i-window:i+1]
-            _, pivots = _find_pivots(window_data)
-            pivot_indices = np.where(pivots)[0]
-
-            if len(pivot_indices) >= 2:
-                l1, l2 = window_data[pivot_indices[-2]], window_data[pivot_indices[-1]]
-                # Similar lows
-                if abs(l1 - l2) < 0.02 * l1:
-                    result[i] = 1.0
-
-        return _result_df({col: result[:, idx] for idx, col in enumerate(cols)}, low)
+    def _calculate_series(self, high: pl.DataFrame, low: pl.DataFrame, left_window: int, right_window: int, history_window: int, tolerance: float, min_depth: float, min_spacing: int, max_spacing: int, **kwargs) -> pl.DataFrame:
+        from factor_engine.cleaned_operators.price_volume.polars_structure import pattern_double_bottom
+        return pattern_double_bottom(high, low, left_window, right_window, history_window, tolerance, min_depth, min_spacing, max_spacing)
 
 
 @register_operator(
@@ -587,36 +367,23 @@ class PatternDoubleBottom(SeriesOperator):
     category="chart_pattern",
     canonical="pattern_double_top",
     source="polars_native_patterns")
+@register_operator(
+    name="pattern_double_top", category="chart_pattern", canonical="pattern_double_top",
+    source="polars_native_patterns")
 class PatternDoubleTop(SeriesOperator):
-    """Double top: two similar highs (M pattern)."""
-
+    """Canonical conversion wrapper with the authoritative pattern contract."""
     metadata = OperatorMetadata(
-        name="pattern_double_top",
-        category="chart_pattern",
-        description="Double top bearish reversal",
-        param_names=["high", "low", "left_window", "right_window", "history_window", "tolerance", "min_depth", "min_spacing", "max_spacing"],
-        param_types={"high": pl.DataFrame, "low": pl.DataFrame, "left_window": int, "right_window": int, "history_window": int, "tolerance": int, "min_depth": int, "min_spacing": int, "max_spacing": int},
+        name="pattern_double_top", category="chart_pattern",
+        description="Canonical pattern_double_top with matching confirmed-history semantics.",
+        param_names=['high', 'low', 'left_window', 'right_window', 'history_window', 'tolerance', 'min_depth', 'min_spacing', 'max_spacing'],
+        **extra_contract("pattern_double_top", ['high', 'low', 'left_window', 'right_window', 'history_window', 'tolerance', 'min_depth', 'min_spacing', 'max_spacing']),
     )
 
-    def _calculate_series(self, high: pl.DataFrame, window: int = 20, **kwargs) -> pl.DataFrame:
-        cols = [c for c in high.columns if c not in PANEL_SKIP_COLUMNS]
-        if not cols:
-            return high
+    _contract_callable = property(_resolved_pattern_kernel)
 
-        h_vals = high.select(cols).to_numpy()
-        result = np.zeros_like(h_vals)
-
-        for i in range(window, len(h_vals)):
-            window_data = h_vals[i-window:i+1]
-            pivots, _ = _find_pivots(window_data)
-            pivot_indices = np.where(pivots)[0]
-
-            if len(pivot_indices) >= 2:
-                h1, h2 = window_data[pivot_indices[-2]], window_data[pivot_indices[-1]]
-                if abs(h1 - h2) < 0.02 * h1:
-                    result[i] = 1.0
-
-        return _result_df({col: result[:, idx] for idx, col in enumerate(cols)}, high)
+    def _calculate_series(self, high: pl.DataFrame, low: pl.DataFrame, left_window: int, right_window: int, history_window: int, tolerance: float, min_depth: float, min_spacing: int, max_spacing: int, **kwargs) -> pl.DataFrame:
+        from factor_engine.cleaned_operators.price_volume.polars_structure import pattern_double_top
+        return pattern_double_top(high, low, left_window, right_window, history_window, tolerance, min_depth, min_spacing, max_spacing)
 
 
 @register_operator(
@@ -624,39 +391,23 @@ class PatternDoubleTop(SeriesOperator):
     category="chart_pattern",
     canonical="pattern_falling_channel",
     source="polars_native_patterns")
+@register_operator(
+    name="pattern_falling_channel", category="chart_pattern", canonical="pattern_falling_channel",
+    source="polars_native_patterns")
 class PatternFallingChannel(SeriesOperator):
-    """Falling channel: parallel downtrend lines."""
-
+    """Canonical conversion wrapper with the authoritative pattern contract."""
     metadata = OperatorMetadata(
-        name="pattern_falling_channel",
-        category="chart_pattern",
-        description="Falling channel with parallel support/resistance",
-        param_names=["high", "low", "left_window", "right_window", "history_window", "points", "slope_threshold", "parallel_tolerance"],
-        param_types={"high": pl.DataFrame, "low": pl.DataFrame, "left_window": int, "right_window": int, "history_window": int, "points": int, "slope_threshold": int, "parallel_tolerance": int},
+        name="pattern_falling_channel", category="chart_pattern",
+        description="Canonical pattern_falling_channel with matching confirmed-history semantics.",
+        param_names=['high', 'low', 'left_window', 'right_window', 'history_window', 'points', 'slope_threshold', 'parallel_tolerance'],
+        **extra_contract("pattern_falling_channel", ['high', 'low', 'left_window', 'right_window', 'history_window', 'points', 'slope_threshold', 'parallel_tolerance']),
     )
 
-    def _calculate_series(self, high: pl.DataFrame, low: pl.DataFrame, window: int = 20, **kwargs) -> pl.DataFrame:
-        cols = [c for c in high.columns if c not in PANEL_SKIP_COLUMNS]
-        if not cols:
-            return high
+    _contract_callable = property(_resolved_pattern_kernel)
 
-        h_vals = high.select(cols).to_numpy()
-        l_vals = low.select(cols).to_numpy()
-        result = np.zeros_like(h_vals)
-
-        for i in range(window, len(h_vals)):
-            h_window = h_vals[i-window:i+1]
-            l_window = l_vals[i-window:i+1]
-            x = np.arange(len(h_window))
-            
-            h_slope = np.polyfit(x, h_window, 1)[0] if len(x) > 1 else 0
-            l_slope = np.polyfit(x, l_window, 1)[0] if len(x) > 1 else 0
-            
-            # Both slopes negative and similar
-            if h_slope < -0.001 and abs(h_slope - l_slope) < 0.001:
-                result[i] = 1.0
-
-        return _result_df({col: result[:, idx] for idx, col in enumerate(cols)}, high)
+    def _calculate_series(self, high: pl.DataFrame, low: pl.DataFrame, left_window: int, right_window: int, history_window: int, points: int, slope_threshold: float, parallel_tolerance: float, **kwargs) -> pl.DataFrame:
+        from factor_engine.cleaned_operators.price_volume.polars_structure import pattern_falling_channel
+        return pattern_falling_channel(high, low, left_window, right_window, history_window, points, slope_threshold, parallel_tolerance)
 
 
 @register_operator(
@@ -664,40 +415,23 @@ class PatternFallingChannel(SeriesOperator):
     category="chart_pattern",
     canonical="pattern_falling_wedge",
     source="polars_native_patterns")
+@register_operator(
+    name="pattern_falling_wedge", category="chart_pattern", canonical="pattern_falling_wedge",
+    source="polars_native_patterns")
 class PatternFallingWedge(SeriesOperator):
-    """Falling wedge: converging downtrend (bullish reversal)."""
-
+    """Canonical conversion wrapper with the authoritative pattern contract."""
     metadata = OperatorMetadata(
-        name="pattern_falling_wedge",
-        category="chart_pattern",
-        description="Falling wedge bullish reversal pattern",
-        param_names=["high", "low", "left_window", "right_window", "history_window", "points", "slope_threshold"],
-        param_types={"high": pl.DataFrame, "low": pl.DataFrame, "left_window": int, "right_window": int, "history_window": int, "points": int, "slope_threshold": int},
+        name="pattern_falling_wedge", category="chart_pattern",
+        description="Canonical pattern_falling_wedge with matching confirmed-history semantics.",
+        param_names=['high', 'low', 'left_window', 'right_window', 'history_window', 'points', 'slope_threshold'],
+        **extra_contract("pattern_falling_wedge", ['high', 'low', 'left_window', 'right_window', 'history_window', 'points', 'slope_threshold']),
     )
 
-    def _calculate_series(self, high: pl.DataFrame, low: pl.DataFrame, window: int = 20, **kwargs) -> pl.DataFrame:
-        cols = [c for c in high.columns if c not in PANEL_SKIP_COLUMNS]
-        if not cols:
-            return high
+    _contract_callable = property(_resolved_pattern_kernel)
 
-        h_vals = high.select(cols).to_numpy()
-        l_vals = low.select(cols).to_numpy()
-        result = np.zeros_like(h_vals)
-
-        for i in range(window, len(h_vals)):
-            h_window = h_vals[i-window:i+1]
-            l_window = l_vals[i-window:i+1]
-            x = np.arange(len(h_window))
-            
-            h_slope = np.polyfit(x, h_window, 1)[0] if len(x) > 1 else 0
-            l_slope = np.polyfit(x, l_window, 1)[0] if len(x) > 1 else 0
-            
-            # Both slopes negative, but converging (range shrinking)
-            ranges = h_window - l_window
-            if h_slope < 0 and l_slope < 0 and ranges[-1] < ranges[0] * 0.6:
-                result[i] = 1.0
-
-        return _result_df({col: result[:, idx] for idx, col in enumerate(cols)}, high)
+    def _calculate_series(self, high: pl.DataFrame, low: pl.DataFrame, left_window: int, right_window: int, history_window: int, points: int, slope_threshold: float, **kwargs) -> pl.DataFrame:
+        from factor_engine.cleaned_operators.price_volume.polars_structure import pattern_falling_wedge
+        return pattern_falling_wedge(high, low, left_window, right_window, history_window, points, slope_threshold)
 
 
 @register_operator(
@@ -705,41 +439,23 @@ class PatternFallingWedge(SeriesOperator):
     category="chart_pattern",
     canonical="pattern_head_shoulders",
     source="polars_native_patterns")
+@register_operator(
+    name="pattern_head_shoulders", category="chart_pattern", canonical="pattern_head_shoulders",
+    source="polars_native_patterns")
 class PatternHeadShoulders(SeriesOperator):
-    """Head and shoulders: bearish reversal with 3 peaks."""
-
+    """Canonical conversion wrapper with the authoritative pattern contract."""
     metadata = OperatorMetadata(
-        name="pattern_head_shoulders",
-        category="chart_pattern",
-        description="Head and shoulders bearish reversal",
-        param_names=["high", "low", "left_window", "right_window", "history_window", "shoulder_tolerance", "head_min_prominence", "max_neckline_slope"],
-        param_types={"high": pl.DataFrame, "low": pl.DataFrame, "left_window": int, "right_window": int, "history_window": int, "shoulder_tolerance": int, "head_min_prominence": int, "max_neckline_slope": int},
+        name="pattern_head_shoulders", category="chart_pattern",
+        description="Canonical pattern_head_shoulders with matching confirmed-history semantics.",
+        param_names=['high', 'low', 'left_window', 'right_window', 'history_window', 'shoulder_tolerance', 'head_min_prominence', 'max_neckline_slope'],
+        **extra_contract("pattern_head_shoulders", ['high', 'low', 'left_window', 'right_window', 'history_window', 'shoulder_tolerance', 'head_min_prominence', 'max_neckline_slope']),
     )
 
-    def _calculate_series(self, high: pl.DataFrame, window: int = 30, **kwargs) -> pl.DataFrame:
-        cols = [c for c in high.columns if c not in PANEL_SKIP_COLUMNS]
-        if not cols:
-            return high
+    _contract_callable = property(_resolved_pattern_kernel)
 
-        h_vals = high.select(cols).to_numpy()
-        result = np.zeros_like(h_vals)
-
-        for i in range(window, len(h_vals)):
-            window_data = h_vals[i-window:i+1]
-            pivots, _ = _find_pivots(window_data)
-            pivot_indices = np.where(pivots)[0]
-
-            if len(pivot_indices) >= 3:
-                left, head, right = pivot_indices[-3:]
-                h_left = window_data[left]
-                h_head = window_data[head]
-                h_right = window_data[right]
-                
-                # Head higher than shoulders, shoulders similar height
-                if h_head > h_left and h_head > h_right and abs(h_left - h_right) < 0.05 * h_head:
-                    result[i] = 1.0
-
-        return _result_df({col: result[:, idx] for idx, col in enumerate(cols)}, high)
+    def _calculate_series(self, high: pl.DataFrame, low: pl.DataFrame, left_window: int, right_window: int, history_window: int, shoulder_tolerance: float, head_min_prominence: float, max_neckline_slope: float, **kwargs) -> pl.DataFrame:
+        from factor_engine.cleaned_operators.price_volume.polars_structure import pattern_head_shoulders
+        return pattern_head_shoulders(high, low, left_window, right_window, history_window, shoulder_tolerance, head_min_prominence, max_neckline_slope)
 
 
 @register_operator(
@@ -747,41 +463,23 @@ class PatternHeadShoulders(SeriesOperator):
     category="chart_pattern",
     canonical="pattern_inverse_head_shoulders",
     source="polars_native_patterns")
+@register_operator(
+    name="pattern_inverse_head_shoulders", category="chart_pattern", canonical="pattern_inverse_head_shoulders",
+    source="polars_native_patterns")
 class PatternInverseHeadShoulders(SeriesOperator):
-    """Inverse head and shoulders: bullish reversal with 3 troughs."""
-
+    """Canonical conversion wrapper with the authoritative pattern contract."""
     metadata = OperatorMetadata(
-        name="pattern_inverse_head_shoulders",
-        category="chart_pattern",
-        description="Inverse head and shoulders bullish reversal",
-        param_names=["high", "low", "left_window", "right_window", "history_window", "shoulder_tolerance", "head_min_prominence", "max_neckline_slope"],
-        param_types={"high": pl.DataFrame, "low": pl.DataFrame, "left_window": int, "right_window": int, "history_window": int, "shoulder_tolerance": int, "head_min_prominence": int, "max_neckline_slope": int},
+        name="pattern_inverse_head_shoulders", category="chart_pattern",
+        description="Canonical pattern_inverse_head_shoulders with matching confirmed-history semantics.",
+        param_names=['high', 'low', 'left_window', 'right_window', 'history_window', 'shoulder_tolerance', 'head_min_prominence', 'max_neckline_slope'],
+        **extra_contract("pattern_inverse_head_shoulders", ['high', 'low', 'left_window', 'right_window', 'history_window', 'shoulder_tolerance', 'head_min_prominence', 'max_neckline_slope']),
     )
 
-    def _calculate_series(self, low: pl.DataFrame, window: int = 30, **kwargs) -> pl.DataFrame:
-        cols = [c for c in low.columns if c not in PANEL_SKIP_COLUMNS]
-        if not cols:
-            return low
+    _contract_callable = property(_resolved_pattern_kernel)
 
-        l_vals = low.select(cols).to_numpy()
-        result = np.zeros_like(l_vals)
-
-        for i in range(window, len(l_vals)):
-            window_data = l_vals[i-window:i+1]
-            _, pivots = _find_pivots(window_data)
-            pivot_indices = np.where(pivots)[0]
-
-            if len(pivot_indices) >= 3:
-                left, head, right = pivot_indices[-3:]
-                l_left = window_data[left]
-                l_head = window_data[head]
-                l_right = window_data[right]
-                
-                # Head lower than shoulders, shoulders similar depth
-                if l_head < l_left and l_head < l_right and abs(l_left - l_right) < 0.05 * l_head:
-                    result[i] = 1.0
-
-        return _result_df({col: result[:, idx] for idx, col in enumerate(cols)}, low)
+    def _calculate_series(self, high: pl.DataFrame, low: pl.DataFrame, left_window: int, right_window: int, history_window: int, shoulder_tolerance: float, head_min_prominence: float, max_neckline_slope: float, **kwargs) -> pl.DataFrame:
+        from factor_engine.cleaned_operators.price_volume.polars_structure import pattern_inverse_head_shoulders
+        return pattern_inverse_head_shoulders(high, low, left_window, right_window, history_window, shoulder_tolerance, head_min_prominence, max_neckline_slope)
 
 
 @register_operator(
@@ -789,38 +487,23 @@ class PatternInverseHeadShoulders(SeriesOperator):
     category="chart_pattern",
     canonical="pattern_rectangle",
     source="polars_native_patterns")
+@register_operator(
+    name="pattern_rectangle", category="chart_pattern", canonical="pattern_rectangle",
+    source="polars_native_patterns")
 class PatternRectangle(SeriesOperator):
-    """Rectangle: horizontal support and resistance."""
-
+    """Canonical conversion wrapper with the authoritative pattern contract."""
     metadata = OperatorMetadata(
-        name="pattern_rectangle",
-        category="chart_pattern",
-        description="Rectangle consolidation pattern",
-        param_names=["high", "low", "left_window", "right_window", "history_window", "points", "slope_threshold"],
-        param_types={"high": pl.DataFrame, "low": pl.DataFrame, "left_window": int, "right_window": int, "history_window": int, "points": int, "slope_threshold": int},
+        name="pattern_rectangle", category="chart_pattern",
+        description="Canonical pattern_rectangle with matching confirmed-history semantics.",
+        param_names=['high', 'low', 'left_window', 'right_window', 'history_window', 'points', 'slope_threshold'],
+        **extra_contract("pattern_rectangle", ['high', 'low', 'left_window', 'right_window', 'history_window', 'points', 'slope_threshold']),
     )
 
-    def _calculate_series(self, high: pl.DataFrame, low: pl.DataFrame, window: int = 20, **kwargs) -> pl.DataFrame:
-        cols = [c for c in high.columns if c not in PANEL_SKIP_COLUMNS]
-        if not cols:
-            return high
+    _contract_callable = property(_resolved_pattern_kernel)
 
-        h_vals = high.select(cols).to_numpy()
-        l_vals = low.select(cols).to_numpy()
-        result = np.zeros_like(h_vals)
-
-        for i in range(window, len(h_vals)):
-            h_window = h_vals[i-window:i+1]
-            l_window = l_vals[i-window:i+1]
-            
-            # Flat highs and lows
-            h_std = np.std(h_window[-10:]) / np.mean(h_window[-10:])
-            l_std = np.std(l_window[-10:]) / np.mean(l_window[-10:])
-            
-            if h_std < 0.02 and l_std < 0.02:
-                result[i] = 1.0
-
-        return _result_df({col: result[:, idx] for idx, col in enumerate(cols)}, high)
+    def _calculate_series(self, high: pl.DataFrame, low: pl.DataFrame, left_window: int, right_window: int, history_window: int, points: int, slope_threshold: float, **kwargs) -> pl.DataFrame:
+        from factor_engine.cleaned_operators.price_volume.polars_structure import pattern_rectangle
+        return pattern_rectangle(high, low, left_window, right_window, history_window, points, slope_threshold)
 
 
 @register_operator(
@@ -828,39 +511,23 @@ class PatternRectangle(SeriesOperator):
     category="chart_pattern",
     canonical="pattern_rising_channel",
     source="polars_native_patterns")
+@register_operator(
+    name="pattern_rising_channel", category="chart_pattern", canonical="pattern_rising_channel",
+    source="polars_native_patterns")
 class PatternRisingChannel(SeriesOperator):
-    """Rising channel: parallel uptrend lines."""
-
+    """Canonical conversion wrapper with the authoritative pattern contract."""
     metadata = OperatorMetadata(
-        name="pattern_rising_channel",
-        category="chart_pattern",
-        description="Rising channel with parallel support/resistance",
-        param_names=["high", "low", "left_window", "right_window", "history_window", "points", "slope_threshold", "parallel_tolerance"],
-        param_types={"high": pl.DataFrame, "low": pl.DataFrame, "left_window": int, "right_window": int, "history_window": int, "points": int, "slope_threshold": int, "parallel_tolerance": int},
+        name="pattern_rising_channel", category="chart_pattern",
+        description="Canonical pattern_rising_channel with matching confirmed-history semantics.",
+        param_names=['high', 'low', 'left_window', 'right_window', 'history_window', 'points', 'slope_threshold', 'parallel_tolerance'],
+        **extra_contract("pattern_rising_channel", ['high', 'low', 'left_window', 'right_window', 'history_window', 'points', 'slope_threshold', 'parallel_tolerance']),
     )
 
-    def _calculate_series(self, high: pl.DataFrame, low: pl.DataFrame, window: int = 20, **kwargs) -> pl.DataFrame:
-        cols = [c for c in high.columns if c not in PANEL_SKIP_COLUMNS]
-        if not cols:
-            return high
+    _contract_callable = property(_resolved_pattern_kernel)
 
-        h_vals = high.select(cols).to_numpy()
-        l_vals = low.select(cols).to_numpy()
-        result = np.zeros_like(h_vals)
-
-        for i in range(window, len(h_vals)):
-            h_window = h_vals[i-window:i+1]
-            l_window = l_vals[i-window:i+1]
-            x = np.arange(len(h_window))
-            
-            h_slope = np.polyfit(x, h_window, 1)[0] if len(x) > 1 else 0
-            l_slope = np.polyfit(x, l_window, 1)[0] if len(x) > 1 else 0
-            
-            # Both slopes positive and similar
-            if h_slope > 0.001 and abs(h_slope - l_slope) < 0.001:
-                result[i] = 1.0
-
-        return _result_df({col: result[:, idx] for idx, col in enumerate(cols)}, high)
+    def _calculate_series(self, high: pl.DataFrame, low: pl.DataFrame, left_window: int, right_window: int, history_window: int, points: int, slope_threshold: float, parallel_tolerance: float, **kwargs) -> pl.DataFrame:
+        from factor_engine.cleaned_operators.price_volume.polars_structure import pattern_rising_channel
+        return pattern_rising_channel(high, low, left_window, right_window, history_window, points, slope_threshold, parallel_tolerance)
 
 
 @register_operator(
@@ -868,40 +535,23 @@ class PatternRisingChannel(SeriesOperator):
     category="chart_pattern",
     canonical="pattern_rising_wedge",
     source="polars_native_patterns")
+@register_operator(
+    name="pattern_rising_wedge", category="chart_pattern", canonical="pattern_rising_wedge",
+    source="polars_native_patterns")
 class PatternRisingWedge(SeriesOperator):
-    """Rising wedge: converging uptrend (bearish reversal)."""
-
+    """Canonical conversion wrapper with the authoritative pattern contract."""
     metadata = OperatorMetadata(
-        name="pattern_rising_wedge",
-        category="chart_pattern",
-        description="Rising wedge bearish reversal pattern",
-        param_names=["high", "low", "left_window", "right_window", "history_window", "points", "slope_threshold"],
-        param_types={"high": pl.DataFrame, "low": pl.DataFrame, "left_window": int, "right_window": int, "history_window": int, "points": int, "slope_threshold": int},
+        name="pattern_rising_wedge", category="chart_pattern",
+        description="Canonical pattern_rising_wedge with matching confirmed-history semantics.",
+        param_names=['high', 'low', 'left_window', 'right_window', 'history_window', 'points', 'slope_threshold'],
+        **extra_contract("pattern_rising_wedge", ['high', 'low', 'left_window', 'right_window', 'history_window', 'points', 'slope_threshold']),
     )
 
-    def _calculate_series(self, high: pl.DataFrame, low: pl.DataFrame, window: int = 20, **kwargs) -> pl.DataFrame:
-        cols = [c for c in high.columns if c not in PANEL_SKIP_COLUMNS]
-        if not cols:
-            return high
+    _contract_callable = property(_resolved_pattern_kernel)
 
-        h_vals = high.select(cols).to_numpy()
-        l_vals = low.select(cols).to_numpy()
-        result = np.zeros_like(h_vals)
-
-        for i in range(window, len(h_vals)):
-            h_window = h_vals[i-window:i+1]
-            l_window = l_vals[i-window:i+1]
-            x = np.arange(len(h_window))
-            
-            h_slope = np.polyfit(x, h_window, 1)[0] if len(x) > 1 else 0
-            l_slope = np.polyfit(x, l_window, 1)[0] if len(x) > 1 else 0
-            
-            # Both slopes positive, but converging
-            ranges = h_window - l_window
-            if h_slope > 0 and l_slope > 0 and ranges[-1] < ranges[0] * 0.6:
-                result[i] = 1.0
-
-        return _result_df({col: result[:, idx] for idx, col in enumerate(cols)}, high)
+    def _calculate_series(self, high: pl.DataFrame, low: pl.DataFrame, left_window: int, right_window: int, history_window: int, points: int, slope_threshold: float, **kwargs) -> pl.DataFrame:
+        from factor_engine.cleaned_operators.price_volume.polars_structure import pattern_rising_wedge
+        return pattern_rising_wedge(high, low, left_window, right_window, history_window, points, slope_threshold)
 
 
 @register_operator(
@@ -910,37 +560,19 @@ class PatternRisingWedge(SeriesOperator):
     canonical="pattern_rounding_bottom",
     source="polars_native_patterns")
 class PatternRoundingBottom(SeriesOperator):
-    """Rounding bottom: gradual U-shaped recovery."""
-
+    """Canonical continuous pattern score; sequential Polars/NumPy kernel."""
     metadata = OperatorMetadata(
-        name="pattern_rounding_bottom",
-        category="chart_pattern",
-        description="Rounding bottom bullish reversal",
-        param_names=["close", "window", "min_fit"],
-        param_types={"close": pl.DataFrame, "window": int, "min_fit": int},
+        name="pattern_rounding_bottom", category="chart_pattern",
+        description="Canonical pattern_rounding_bottom with matching confirmed-history semantics.",
+        param_names=["close","window","min_fit"],
+        **extra_contract("pattern_rounding_bottom", ["close","window","min_fit"]),
     )
 
-    def _calculate_series(self, close: pl.DataFrame, window: int = 30, **kwargs) -> pl.DataFrame:
-        cols = [c for c in close.columns if c not in PANEL_SKIP_COLUMNS]
-        if not cols:
-            return close
+    _contract_callable = property(_resolved_pattern_kernel)
 
-        c_vals = close.select(cols).to_numpy()
-        result = np.zeros_like(c_vals)
-
-        for i in range(window, len(c_vals)):
-            window_data = c_vals[i-window:i+1]
-            x = np.arange(len(window_data))
-            
-            # Fit quadratic: positive coefficient = U-shape
-            try:
-                coeffs = np.polyfit(x, window_data, 2)
-                if coeffs[0] > 0:  # Upward opening parabola
-                    result[i] = 1.0
-            except:
-                pass
-
-        return _result_df({col: result[:, idx] for idx, col in enumerate(cols)}, close)
+    def _calculate_series(self, close: pl.DataFrame, window: int, min_fit: float, **kwargs) -> pl.DataFrame:
+        from factor_engine.cleaned_operators.price_volume.polars_structure import pattern_rounding_bottom
+        return pattern_rounding_bottom(close, window, min_fit)
 
 
 @register_operator(
@@ -949,36 +581,19 @@ class PatternRoundingBottom(SeriesOperator):
     canonical="pattern_rounding_top",
     source="polars_native_patterns")
 class PatternRoundingTop(SeriesOperator):
-    """Rounding top: gradual inverted U-shaped decline."""
-
+    """Canonical continuous pattern score; sequential Polars/NumPy kernel."""
     metadata = OperatorMetadata(
-        name="pattern_rounding_top",
-        category="chart_pattern",
-        description="Rounding top bearish reversal",
-        param_names=["close", "window", "min_fit"],
-        param_types={"close": pl.DataFrame, "window": int, "min_fit": int},
+        name="pattern_rounding_top", category="chart_pattern",
+        description="Canonical pattern_rounding_top with matching confirmed-history semantics.",
+        param_names=["close","window","min_fit"],
+        **extra_contract("pattern_rounding_top", ["close","window","min_fit"]),
     )
 
-    def _calculate_series(self, close: pl.DataFrame, window: int = 30, **kwargs) -> pl.DataFrame:
-        cols = [c for c in close.columns if c not in PANEL_SKIP_COLUMNS]
-        if not cols:
-            return close
+    _contract_callable = property(_resolved_pattern_kernel)
 
-        c_vals = close.select(cols).to_numpy()
-        result = np.zeros_like(c_vals)
-
-        for i in range(window, len(c_vals)):
-            window_data = c_vals[i-window:i+1]
-            x = np.arange(len(window_data))
-            
-            try:
-                coeffs = np.polyfit(x, window_data, 2)
-                if coeffs[0] < 0:  # Downward opening parabola
-                    result[i] = 1.0
-            except:
-                pass
-
-        return _result_df({col: result[:, idx] for idx, col in enumerate(cols)}, close)
+    def _calculate_series(self, close: pl.DataFrame, window: int, min_fit: float, **kwargs) -> pl.DataFrame:
+        from factor_engine.cleaned_operators.price_volume.polars_structure import pattern_rounding_top
+        return pattern_rounding_top(close, window, min_fit)
 
 
 @register_operator(
@@ -986,39 +601,23 @@ class PatternRoundingTop(SeriesOperator):
     category="chart_pattern",
     canonical="pattern_sym_triangle",
     source="polars_native_patterns")
+@register_operator(
+    name="pattern_sym_triangle", category="chart_pattern", canonical="pattern_sym_triangle",
+    source="polars_native_patterns")
 class PatternSymTriangle(SeriesOperator):
-    """Symmetric triangle: converging highs and lows."""
-
+    """Canonical conversion wrapper with the authoritative pattern contract."""
     metadata = OperatorMetadata(
-        name="pattern_sym_triangle",
-        category="chart_pattern",
-        description="Symmetric triangle consolidation pattern",
-        param_names=["high", "low", "left_window", "right_window", "history_window", "points", "slope_threshold"],
-        param_types={"high": pl.DataFrame, "low": pl.DataFrame, "left_window": int, "right_window": int, "history_window": int, "points": int, "slope_threshold": int},
+        name="pattern_sym_triangle", category="chart_pattern",
+        description="Canonical pattern_sym_triangle with matching confirmed-history semantics.",
+        param_names=['high', 'low', 'left_window', 'right_window', 'history_window', 'points', 'slope_threshold'],
+        **extra_contract("pattern_sym_triangle", ['high', 'low', 'left_window', 'right_window', 'history_window', 'points', 'slope_threshold']),
     )
 
-    def _calculate_series(self, high: pl.DataFrame, low: pl.DataFrame, window: int = 20, **kwargs) -> pl.DataFrame:
-        cols = [c for c in high.columns if c not in PANEL_SKIP_COLUMNS]
-        if not cols:
-            return high
+    _contract_callable = property(_resolved_pattern_kernel)
 
-        h_vals = high.select(cols).to_numpy()
-        l_vals = low.select(cols).to_numpy()
-        result = np.zeros_like(h_vals)
-
-        for i in range(window, len(h_vals)):
-            h_window = h_vals[i-window:i+1]
-            l_window = l_vals[i-window:i+1]
-            x = np.arange(len(h_window))
-            
-            h_slope = np.polyfit(x, h_window, 1)[0] if len(x) > 1 else 0
-            l_slope = np.polyfit(x, l_window, 1)[0] if len(x) > 1 else 0
-            
-            # Converging: highs falling, lows rising
-            if h_slope < 0 and l_slope > 0:
-                result[i] = 1.0
-
-        return _result_df({col: result[:, idx] for idx, col in enumerate(cols)}, high)
+    def _calculate_series(self, high: pl.DataFrame, low: pl.DataFrame, left_window: int, right_window: int, history_window: int, points: int, slope_threshold: float, **kwargs) -> pl.DataFrame:
+        from factor_engine.cleaned_operators.price_volume.polars_structure import pattern_sym_triangle
+        return pattern_sym_triangle(high, low, left_window, right_window, history_window, points, slope_threshold)
 
 
 @register_operator(
@@ -1027,37 +626,19 @@ class PatternSymTriangle(SeriesOperator):
     canonical="pattern_triple_bottom",
     source="polars_native_patterns")
 class PatternTripleBottom(SeriesOperator):
-    """Triple bottom: three similar lows."""
-
+    """Canonical continuous pattern score; sequential Polars/NumPy kernel."""
     metadata = OperatorMetadata(
-        name="pattern_triple_bottom",
-        category="chart_pattern",
-        description="Triple bottom bullish reversal",
-        param_names=["high", "low", "left_window", "right_window", "history_window", "tolerance", "min_depth", "min_spacing", "max_spacing"],
-        param_types={"high": pl.DataFrame, "low": pl.DataFrame, "left_window": int, "right_window": int, "history_window": int, "tolerance": int, "min_depth": int, "min_spacing": int, "max_spacing": int},
+        name="pattern_triple_bottom", category="chart_pattern",
+        description="Canonical pattern_triple_bottom with matching confirmed-history semantics.",
+        param_names=["high","low","left_window","right_window","history_window","tolerance","min_depth","min_spacing","max_spacing"],
+        **extra_contract("pattern_triple_bottom", ["high","low","left_window","right_window","history_window","tolerance","min_depth","min_spacing","max_spacing"]),
     )
 
-    def _calculate_series(self, low: pl.DataFrame, window: int = 30, **kwargs) -> pl.DataFrame:
-        cols = [c for c in low.columns if c not in PANEL_SKIP_COLUMNS]
-        if not cols:
-            return low
+    _contract_callable = property(_resolved_pattern_kernel)
 
-        l_vals = low.select(cols).to_numpy()
-        result = np.zeros_like(l_vals)
-
-        for i in range(window, len(l_vals)):
-            window_data = l_vals[i-window:i+1]
-            _, pivots = _find_pivots(window_data)
-            pivot_indices = np.where(pivots)[0]
-
-            if len(pivot_indices) >= 3:
-                l1, l2, l3 = window_data[pivot_indices[-3]], window_data[pivot_indices[-2]], window_data[pivot_indices[-1]]
-                # Three similar lows
-                avg_low = (l1 + l2 + l3) / 3
-                if abs(l1 - avg_low) < 0.02 * avg_low and abs(l2 - avg_low) < 0.02 * avg_low and abs(l3 - avg_low) < 0.02 * avg_low:
-                    result[i] = 1.0
-
-        return _result_df({col: result[:, idx] for idx, col in enumerate(cols)}, low)
+    def _calculate_series(self, high: pl.DataFrame, low: pl.DataFrame, left_window: int, right_window: int, history_window: int, tolerance: float, min_depth: float, min_spacing: int, max_spacing: int, **kwargs) -> pl.DataFrame:
+        from factor_engine.cleaned_operators.price_volume.polars_structure import pattern_triple_bottom
+        return pattern_triple_bottom(high, low, left_window, right_window, history_window, tolerance, min_depth, min_spacing, max_spacing)
 
 
 @register_operator(
@@ -1066,33 +647,16 @@ class PatternTripleBottom(SeriesOperator):
     canonical="pattern_triple_top",
     source="polars_native_patterns")
 class PatternTripleTop(SeriesOperator):
-    """Triple top: three similar highs."""
-
+    """Canonical continuous pattern score; sequential Polars/NumPy kernel."""
     metadata = OperatorMetadata(
-        name="pattern_triple_top",
-        category="chart_pattern",
-        description="Triple top bearish reversal",
-        param_names=["high", "low", "left_window", "right_window", "history_window", "tolerance", "min_depth", "min_spacing", "max_spacing"],
-        param_types={"high": pl.DataFrame, "low": pl.DataFrame, "left_window": int, "right_window": int, "history_window": int, "tolerance": int, "min_depth": int, "min_spacing": int, "max_spacing": int},
+        name="pattern_triple_top", category="chart_pattern",
+        description="Canonical pattern_triple_top with matching confirmed-history semantics.",
+        param_names=["high","low","left_window","right_window","history_window","tolerance","min_depth","min_spacing","max_spacing"],
+        **extra_contract("pattern_triple_top", ["high","low","left_window","right_window","history_window","tolerance","min_depth","min_spacing","max_spacing"]),
     )
 
-    def _calculate_series(self, high: pl.DataFrame, window: int = 30, **kwargs) -> pl.DataFrame:
-        cols = [c for c in high.columns if c not in PANEL_SKIP_COLUMNS]
-        if not cols:
-            return high
+    _contract_callable = property(_resolved_pattern_kernel)
 
-        h_vals = high.select(cols).to_numpy()
-        result = np.zeros_like(h_vals)
-
-        for i in range(window, len(h_vals)):
-            window_data = h_vals[i-window:i+1]
-            pivots, _ = _find_pivots(window_data)
-            pivot_indices = np.where(pivots)[0]
-
-            if len(pivot_indices) >= 3:
-                h1, h2, h3 = window_data[pivot_indices[-3]], window_data[pivot_indices[-2]], window_data[pivot_indices[-1]]
-                avg_high = (h1 + h2 + h3) / 3
-                if abs(h1 - avg_high) < 0.02 * avg_high and abs(h2 - avg_high) < 0.02 * avg_high and abs(h3 - avg_high) < 0.02 * avg_high:
-                    result[i] = 1.0
-
-        return _result_df({col: result[:, idx] for idx, col in enumerate(cols)}, high)
+    def _calculate_series(self, high: pl.DataFrame, low: pl.DataFrame, left_window: int, right_window: int, history_window: int, tolerance: float, min_depth: float, min_spacing: int, max_spacing: int, **kwargs) -> pl.DataFrame:
+        from factor_engine.cleaned_operators.price_volume.polars_structure import pattern_triple_top
+        return pattern_triple_top(high, low, left_window, right_window, history_window, tolerance, min_depth, min_spacing, max_spacing)

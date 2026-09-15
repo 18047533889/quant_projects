@@ -53,6 +53,7 @@ from factor_engine.cleaned_operators.base import (
     ScalarOperator,
     TwoVarOperator,
     register_operator,
+    validate_operator_call,
 )
 
 
@@ -268,6 +269,13 @@ class ATRWilder(SeriesOperator):
         description="Wilder 平均真实波幅",
         examples=["ATR_WILDER(high, low, close, 14)"],
         param_names=["high", "low", "close", "window"],
+        panel_params=("high", "low", "close"),
+        panel_arity=3,
+        scalar_params=("window",),
+        total_positional_arity=4,
+        param_specs={
+            "window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON)
+        },
         return_type="series",
         tags=["financial", "technical", "ATR", "pit_safe"],
     )
@@ -775,27 +783,41 @@ class HumpDecay(SeriesOperator):
         description="阈值衰减：仅当变化量绝对值超过hump时才更新值",
         examples=["hump_decay(close, 0.05)"],
         param_names=["x", "hump"],
+        panel_params=("x",), scalar_params=("hump",),
+        param_specs={"hump": ParamSpec(dtype=float, min=0.0, default=0.05, param_role=ParamRole.STATE_THRESHOLD)},
+        window_semantics="full_history",
         return_type="series",
         tags=["signal", "decay"]
     )
+    _HANDLES_CALL_CONTRACT = True
+
+    def calculate(self, *args, **kwargs):
+        supplied = kwargs.get("hump", args[1] if len(args) > 1 else 0.05)
+        if isinstance(supplied, str):
+            raise TypeError(f"hump must be numeric, not a string ({supplied!r})")
+        validate_operator_call(self, args, kwargs)
+        return super().calculate(*args, **kwargs)
 
     def _calculate_series(self, x: pd.DataFrame, hump: float = 0.05, **kwargs) -> pd.DataFrame:
-        result = x.copy()
-        cols = x.columns if isinstance(x, pd.DataFrame) else [x.name] if hasattr(x, 'name') else None
+        threshold = float(hump)
+        if not np.isfinite(threshold) or threshold < 0.0:
+            raise ValueError("hump must be finite and non-negative")
+        if x.empty:
+            return x.astype(float).copy()
+        result = pd.DataFrame(np.nan, index=x.index, columns=x.columns, dtype=float)
         for col in x.columns:
-            prev = x[col].iloc[0]
-            for i in range(1, len(x)):
-                curr = x[col].iloc[i]
-                if pd.isna(curr):
-                    result.iloc[i, result.columns.get_loc(col)] = prev
-                elif pd.isna(prev):
-                    prev = curr
+            state = float("nan")
+            values = x[col].to_numpy(dtype=float, copy=False)
+            out = np.full(len(values), np.nan, dtype=float)
+            for i, curr in enumerate(values):
+                if not np.isfinite(curr):
+                    out[i] = state
+                elif not np.isfinite(state) or abs(curr - state) > threshold:
+                    state = curr
+                    out[i] = curr
                 else:
-                    change = abs(curr - prev)
-                    if change > hump:
-                        prev = curr
-                    else:
-                        result.iloc[i, result.columns.get_loc(col)] = prev
+                    out[i] = state
+            result[col] = out
         return result
 
 
@@ -930,12 +952,31 @@ class SignedPower(SeriesOperator):
         description="符号保持幂：sign(x) * |x|^c",
         examples=["signed_power(zscore, 2)"],
         param_names=["x", "c"],
+        mixed_params=("x", "c"),
+        param_specs={"c": ParamSpec(dtype=float, default=2.0, param_role=ParamRole.NUMERICAL)},
         return_type="series",
         tags=["signal", "transform"]
     )
 
-    def _calculate_series(self, x: pd.DataFrame, c: float = 2, **kwargs) -> pd.DataFrame:
-        return np.sign(x) * (x.abs() ** c)
+    def _calculate_series(self, x, c: float = 2, **kwargs):
+        panels = [value for value in (x, c) if isinstance(value, pd.DataFrame)]
+        if not panels:
+            try:
+                base, exponent = float(x), float(c)
+                with np.errstate(invalid="ignore", divide="ignore", over="ignore"):
+                    out = float(np.sign(base) * np.power(abs(base), exponent))
+                return out if np.isfinite(out) else float("nan")
+            except (TypeError, ValueError, ZeroDivisionError, OverflowError):
+                return float("nan")
+        template = panels[0]
+        for panel in panels[1:]:
+            if not template.index.equals(panel.index) or not template.columns.equals(panel.columns):
+                raise ValueError("signed_power panel inputs must have identical axes")
+        base = x.astype(float) if isinstance(x, pd.DataFrame) else pd.DataFrame(float(x), index=template.index, columns=template.columns)
+        exponent = c.astype(float) if isinstance(c, pd.DataFrame) else pd.DataFrame(float(c), index=template.index, columns=template.columns)
+        with np.errstate(invalid="ignore", divide="ignore", over="ignore"):
+            out = np.sign(base) * np.power(base.abs(), exponent)
+        return out.replace([np.inf, -np.inf], np.nan)
 
 
 
@@ -946,24 +987,31 @@ class TradeWhen(SeriesOperator):
     metadata = OperatorMetadata(
         name="trade_when",
         category="signal",
-        description="条件信号：condition为真时返回signal，否则返回fallback",
+        description="条件选择：condition 非空且非零时返回 signal，否则返回 fallback；NaN/NULL 为 false，±Inf 为 true",
         examples=["trade_when(volume > 1000, close, open)"],
         param_names=["condition", "signal", "fallback"],
+        mixed_params=("condition", "signal", "fallback"),
+        param_specs={
+            "signal": ParamSpec(dtype=float, param_role=ParamRole.ECONOMIC),
+            "fallback": ParamSpec(dtype=float, default=0.0, param_role=ParamRole.POLICY),
+        },
         return_type="series",
         tags=["signal", "conditional"]
     )
 
     def _calculate_series(self, condition, signal, fallback=0, **kwargs) -> pd.DataFrame:
-        if isinstance(condition, pd.DataFrame):
-            cond_bool = condition.astype(bool)
-            if isinstance(signal, pd.DataFrame) and isinstance(fallback, pd.DataFrame):
-                return signal.where(cond_bool, fallback)
-            result = pd.DataFrame(
-                np.where(cond_bool, signal, fallback),
-                index=condition.index, columns=condition.columns
-            )
-            return result
-        return signal * condition + fallback * (1 - condition)
+        panels = [value for value in (condition, signal, fallback) if isinstance(value, pd.DataFrame)]
+        if not panels:
+            return signal if bool(pd.notna(condition) and condition != 0) else fallback
+        template = panels[0]
+        for panel in panels[1:]:
+            if not template.index.equals(panel.index) or not template.columns.equals(panel.columns):
+                raise ValueError("trade_when panel inputs must have identical axes")
+        cond_bool = _truthy_condition(condition) if isinstance(condition, pd.DataFrame) else bool(pd.notna(condition) and condition != 0)
+        signal_value = signal.to_numpy(copy=False) if isinstance(signal, pd.DataFrame) else signal
+        fallback_value = fallback.to_numpy(copy=False) if isinstance(fallback, pd.DataFrame) else fallback
+        values = np.where(cond_bool, signal_value, fallback_value)
+        return pd.DataFrame(values, index=template.index, columns=template.columns)
 
 
 

@@ -78,3 +78,17 @@ def test_parse_expr_keyword_not():
 def test_parse_expr_protected_div_maps_to_safe_div():
     """protected_div is FE-internal; safe_div is the daily/LQTP-aligned name."""
     parse_expr("safe_div(volume, ema(volume, 20))")
+
+
+def test_variadic_inputs_do_not_consume_keyword_parameters():
+    from factor_engine.api.dsl_parser import parse_recommended_expr
+    expr = parse_recommended_expr("row_sum_skipna(close, open, min_count=1)")
+    assert expr.op == "row_sum_skipna"
+    assert len(expr.args) == 2
+
+
+def test_non_variadic_duplicate_parameter_still_rejected():
+    from factor_engine.api.dsl_parser import DSLParseError, parse_recommended_expr
+    import pytest
+    with pytest.raises(DSLParseError, match="Duplicate parameter"):
+        parse_recommended_expr("ts_mean(close, 20, window=10)")

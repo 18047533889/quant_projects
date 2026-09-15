@@ -1,0 +1,53 @@
+{
+  "content_sha256_without_digest_field": "3032a07bff7288b9aea2e66dd5b474cb5227df8ba22ddf875c31377bd3b99d97",
+  "created_at": "2026-09-07T16:51:10.335002+00:00",
+  "environment": {
+    "hostname": "qs-compute-gpu-hk-01",
+    "platform": "Linux-6.8.0-124-generic-x86_64-with-glibc2.39",
+    "processor": "x86_64",
+    "python": "3.12.3"
+  },
+  "measurements": {
+    "single_bar_public_maturation_enqueue_and_drain": {
+      "max_ms": 10.876672,
+      "mean_ms": 7.6405682624999995,
+      "min_ms": 6.550911,
+      "p50_ms": 7.1559985,
+      "p95_ms": 9.7737657,
+      "p99_ms": 10.581315489999998,
+      "repetitions": 80
+    },
+    "single_factor_public_qe_evaluate": {
+      "max_ms": 6.668218,
+      "mean_ms": 3.9587813124999998,
+      "min_ms": 3.802125,
+      "p50_ms": 3.8879775,
+      "p95_ms": 3.9923334,
+      "p99_ms": 5.724434229999993,
+      "repetitions": 80
+    }
+  },
+  "profile": {
+    "assets": 40,
+    "factors": 1,
+    "maturation_store": "temporary SQLite",
+    "measured_runs": 80,
+    "metric_instance": "rank_ic_series@h10",
+    "seed": 812,
+    "single_bar_bars": 1,
+    "single_factor_bars": 12,
+    "threads": {
+      "OMP_NUM_THREADS": "1",
+      "OPENBLAS_NUM_THREADS": "1",
+      "POLARS_MAX_THREADS": "2"
+    },
+    "timer": "time.perf_counter_ns",
+    "warmup_runs": 8
+  },
+  "schema": "v5.n13.latency-evidence.v1",
+  "scope": "synthetic microbenchmark; not a production SLA or 100k throughput result",
+  "separation_from_scale_evidence": {
+    "100k_throughput_included": false,
+    "reason": "Latency microprofiles and 100k batch throughput answer different questions and are not extrapolated into each other."
+  }
+}

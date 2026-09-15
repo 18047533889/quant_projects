@@ -72,7 +72,27 @@ def derived_field_lineage(name: str) -> dict[str, Any]:
     }
 
 
-def evaluate_derived_field(name: str, data_source: Any):
+def evaluate_derived_field(
+    name: str, data_source: Any, *, execution_purpose=None, execution_scope=None
+):
+    from factor_engine.api.factor import FactorExecutionScopeHint
+    from factor_engine.runtime.default_execution_policy import ExecutionPurpose
+    if execution_purpose is not None and not isinstance(execution_purpose, ExecutionPurpose):
+        raise TypeError("validated ExecutionPurpose required")
+    if execution_scope is not None and not isinstance(execution_scope, FactorExecutionScopeHint):
+        raise TypeError("validated FactorExecutionScopeHint required")
+    if execution_purpose is not None and execution_scope is None:
+        raise ValueError("managed derived field requires a complete execution scope")
+    if execution_scope is not None:
+        missing = tuple(
+            field for field in ("market", "calendar_id", "frequency", "universe_id")
+            if not isinstance(getattr(execution_scope, field), str)
+            or not getattr(execution_scope, field).strip()
+        )
+        if missing:
+            raise ValueError(
+                "derived-field execution scope requires nonempty " + ", ".join(missing)
+            )
     definition = load_derived_field_definition(name)
     active = set(getattr(_ACTIVE, "names", set()))
     if name in active:
@@ -80,6 +100,7 @@ def evaluate_derived_field(name: str, data_source: Any):
         raise RuntimeError(f"cyclic derived-field dependency detected: {chain}")
     _ACTIVE.names = active | {name}
     try:
+        from dataclasses import replace
         from factor_engine.api.dsl_parser import parse_factor
         from factor_engine.backend.pandas_backend import PandasBackend
         from factor_engine.runtime.engine import FactorEngine
@@ -87,11 +108,22 @@ def evaluate_derived_field(name: str, data_source: Any):
         factor = parse_factor(
             definition.expression,
             name=f"derived::{name}@{definition.version}",
-            surface="compat",
+            surface="all" if execution_purpose is not None and execution_purpose.admission_mode == "research" else "compat",
             dialect="lqtp",
             dialect_version="2026-07-19",
         )
-        engine = FactorEngine(PandasBackend(), data_source, cache=None, run_mode="production")
+        if execution_scope is not None:
+            factor = replace(factor, semantic_identity=execution_scope)
+        engine = FactorEngine(
+            PandasBackend(), data_source, cache=None, run_mode="production",
+            execution_scope=execution_scope,
+        )
+        if execution_purpose is not None:
+            engine.execution_purpose = execution_purpose
+            broker = getattr(data_source, "_cache_broker", None)
+            if broker is None:
+                raise RuntimeError("managed derived field requires the existing source resource broker")
+            engine.resource_broker = broker
         output = engine.run(
             factor,
             input_dq_check=True,

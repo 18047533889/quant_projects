@@ -161,11 +161,24 @@ def evaluate_report_batch(
             gpu = evaluate(
                 fb,
                 lb,
-                metrics=("rank_ic_series", "quantile_returns_full"),
+                metrics=("rank_ic_series", "quantile_returns_daily"),
+                metric_parameters={
+                    "rank_ic_series": {"min_assets": min_assets},
+                    "quantile_returns_daily": {
+                        "n_quantiles": n_quantiles, "min_assets": min_assets,
+                    },
+                },
                 backend="cuda_strict" if backend == "cuda_strict" else "cuda",
             )
             raw_ic = np.asarray(gpu.series_metrics["rank_ic_series"], dtype=np.float64)
-            quantile = np.asarray(gpu.vector_metrics["quantile_returns"], dtype=np.float64)
+            daily = gpu.artifacts["quantile_returns_daily"]
+            if tuple(daily.factor_axis) != factor_ids:
+                raise ValueError("QE daily quantile factor axis differs from request")
+            quantile = np.asarray(daily.values, dtype=np.float64)
+            if quantile.shape != (fb.values.shape[0], n_quantiles, len(factor_ids)):
+                raise ValueError("QE daily quantile shape differs from requested T,Q,F")
+            if raw_ic.shape != (fb.values.shape[0], len(factor_ids)):
+                raise ValueError("QE RankIC shape differs from requested T,F")
             backend_used = "cuda"
         except Exception as exc:
             if backend == "cuda_strict":

@@ -39,6 +39,7 @@ alternating* confirmed-pivot chain through this single implementation.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from bisect import bisect_left, bisect_right
 from typing import Optional
 
 import numpy as np
@@ -91,6 +92,8 @@ class PivotLedgerResult:
     superseded: tuple[PivotSuperseded, ...]
     confirmation: int
     _superseder_at: dict = field(default_factory=dict, repr=False, compare=False, init=False)
+    _pivot_positions: tuple = field(default=(), repr=False, compare=False, init=False)
+    _confirmation_positions: tuple = field(default=(), repr=False, compare=False, init=False)
 
     def __post_init__(self) -> None:
         m: dict[int, int] = {}
@@ -98,6 +101,8 @@ class PivotLedgerResult:
             if ev.supersedes is not None:
                 m[id(ev.supersedes)] = ev.confirmed_at
         object.__setattr__(self, "_superseder_at", m)
+        object.__setattr__(self, "_pivot_positions", tuple(ev.pivot_at for ev in self.events))
+        object.__setattr__(self, "_confirmation_positions", tuple(ev.confirmed_at for ev in self.events))
 
     def active_at(self, t: int, window: Optional[int] = None) -> tuple[ConfirmedPivotEvent, ...]:
         """Confirmed pivots usable at row ``t``.
@@ -111,11 +116,11 @@ class PivotLedgerResult:
         i0 = t - window + 1 if window is not None else 0
         sup = self._superseder_at
         out: list[ConfirmedPivotEvent] = []
-        for ev in self.events:
-            if ev.confirmed_at > t:
-                break
-            if ev.pivot_at < i0:
-                continue
+        # Both coordinates increase in this append-only confirmed ledger.
+        # Search bounds first: do not rescan all old events for every new row.
+        start = bisect_left(self._pivot_positions, i0)
+        stop = bisect_right(self._confirmation_positions, t)
+        for ev in self.events[start:stop]:
             eff = sup.get(id(ev))
             if eff is not None and eff <= t:
                 continue

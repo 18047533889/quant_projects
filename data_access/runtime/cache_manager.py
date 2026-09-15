@@ -314,7 +314,7 @@ class CacheManager:
         if not entry.path:
             # 无物理路径（纯 logical 占位）→ 直接移除，无字节可释放。
             self._entries.pop(key, None)
-            return False
+            return True
         deleted = self._safe_delete(entry.path)
         if deleted:
             self._entries.pop(key, None)

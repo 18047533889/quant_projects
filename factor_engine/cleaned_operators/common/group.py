@@ -38,6 +38,10 @@ _FALLBACK_POLICY_SPEC = ParamSpec(
     default="nan",
     searchable=False,
 )
+_DEAD_WINDOW_SPEC = ParamSpec(dtype=int, min=1, default=5, searchable=False, param_role=ParamRole.POLICY)
+_TS_WINDOW_SPEC = ParamSpec(dtype=int, min=1, default=20, history_semantics="max_rows", param_role=ParamRole.HORIZON)
+_NORMALIZE_SPEC = ParamSpec(dtype=bool, default=False, searchable=False, param_role=ParamRole.POLICY)
+_WINSOR_TAIL_SPEC = ParamSpec(dtype=float, min=0.0, max=0.5, default=0.05)
 
 
 def validate_fallback_policy(policy: str, *, operator: str = "") -> None:
@@ -47,6 +51,30 @@ def validate_fallback_policy(policy: str, *, operator: str = "") -> None:
             f"{sorted(_GROUP_FALLBACK_POLICIES)!r}, got {policy!r} "
             "(R24-096 — unknown policy never falls to a default branch)"
         )
+
+
+def _strict_positive_int(value, name: str) -> int:
+    if isinstance(value, (bool, np.bool_)) or not isinstance(value, (int, np.integer)):
+        raise ValueError(f"{name} must be an integer >= 1")
+    result = int(value)
+    if result < 1:
+        raise ValueError(f"{name} must be an integer >= 1")
+    return result
+
+
+def _strict_bool(value, name: str) -> bool:
+    if not isinstance(value, (bool, np.bool_)):
+        raise ValueError(f"{name} must be boolean")
+    return bool(value)
+
+
+def _strict_tail_probability(value, name: str = "a") -> float:
+    if isinstance(value, (bool, np.bool_)) or not isinstance(value, (int, float, np.integer, np.floating)):
+        raise ValueError(f"{name} must be a finite number in [0, 0.5]")
+    result = float(value)
+    if not np.isfinite(result) or not 0.0 <= result <= 0.5:
+        raise ValueError(f"{name} must be a finite number in [0, 0.5]")
+    return result
 
 
 def strict_group_align(x: pd.DataFrame, group: pd.DataFrame | None):
@@ -120,6 +148,8 @@ def _group_rank_weighted_value_panel(
             if fallback_policy == "keep_original":
                 result.loc[date] = x_slice
                 continue
+            if fallback_policy == "error":
+                raise ValueError("group labels are missing and fallback_policy='error'")
             valid_mask = x_slice.notna()
             if valid_mask.sum() > 0:
                 data = x_slice[valid_mask]
@@ -190,12 +220,16 @@ class GroupDecayLinear(SeriesOperator):
         param_names=["x", "group", "window", "fallback_policy"],
         return_type="series",
         tags=["cross_sectional", "decay", "linear", "group", "rank_weighted", "compat_alias"],
-        param_specs={"window": ParamSpec(dtype=int, searchable=False, param_role=ParamRole.POLICY)},
+        param_specs={"window": _DEAD_WINDOW_SPEC, "fallback_policy": _FALLBACK_POLICY_SPEC},
+        panel_params=("x", "group"),
+        scalar_params=("window", "fallback_policy"),
     )
 
     def _calculate_series(self, x: pd.DataFrame, group: pd.DataFrame = None, window: int = 5, fallback_policy: str = "nan", **kwargs) -> pd.DataFrame:
         
+        _strict_positive_int(window, "window")
         validate_fallback_policy(fallback_policy, operator=type(self).__name__)
+        x, group = strict_group_align(x, group)
         return _group_rank_weighted_value_panel(x, group, fallback_policy=fallback_policy)
 
 
@@ -219,6 +253,9 @@ class GroupTSDecayLinear(SeriesOperator):
             "group_ts_decay_linear(returns, get('industry_sw'), 10, normalize=True)"
         ],
         param_names=["x", "group", "window", "normalize", "fallback_policy"],
+        param_specs={"window": _TS_WINDOW_SPEC, "normalize": _NORMALIZE_SPEC, "fallback_policy": _FALLBACK_POLICY_SPEC},
+        panel_params=("x", "group"),
+        scalar_params=("window", "normalize", "fallback_policy"),
         return_type="series",
         tags=["cross_sectional", "decay", "linear", "group", "time_decay"]
     )
@@ -234,7 +271,9 @@ class GroupTSDecayLinear(SeriesOperator):
     ) -> pd.DataFrame:
         from factor_engine.cleaned_operators._rolling_fast import rolling_linear_weighted
 
-        w = max(1, int(window))
+        w = _strict_positive_int(window, "window")
+        normalize = _strict_bool(normalize, "normalize")
+        validate_fallback_policy(fallback_policy, operator=type(self).__name__)
         decay = rolling_linear_weighted(x, w).reindex(index=x.index, columns=x.columns)
         if group is None:
             # 无分组输入：纯时间衰减，不做任何横截面 gate。
@@ -249,6 +288,8 @@ class GroupTSDecayLinear(SeriesOperator):
                     continue  # 保留纯时间衰减
                 if fallback_policy == "keep_original":
                     result.loc[date] = x.loc[date]
+                elif fallback_policy == "error":
+                    raise ValueError("group labels are missing and fallback_policy='error'")
                 else:  # "nan"（默认）
                     result.loc[date] = np.nan
                 continue
@@ -801,6 +842,9 @@ class GroupWinsorize(SeriesOperator):
             "group_winsorize(PE, get('industry_sw'), 0.01)"
         ],
         param_names=["x", "group", "a"],
+        param_specs={"a": _WINSOR_TAIL_SPEC},
+        panel_params=("x", "group"),
+        scalar_params=("a",),
         return_type="series",
         tags=["cross_sectional", "winsorize", "group", "outlier"]
     )
@@ -813,6 +857,9 @@ class GroupWinsorize(SeriesOperator):
         fallback_policy: str = "nan",
         **kwargs,
     ) -> pd.DataFrame:
+        alpha = _strict_tail_probability(a)
+        validate_fallback_policy(fallback_policy, operator=type(self).__name__)
+        x, group = strict_group_align(x, group)
         result = pd.DataFrame(index=x.index, columns=x.columns, dtype=float)
 
         for date in x.index:
@@ -829,12 +876,14 @@ class GroupWinsorize(SeriesOperator):
                 if fallback_policy == "keep_original":
                     result.loc[date] = x_slice
                     continue
+                if fallback_policy == "error":
+                    raise ValueError("group labels are missing and fallback_policy='error'")
 
                 valid_mask = x_slice.notna()
                 if valid_mask.sum() > 0:
                     data = x_slice[valid_mask]
-                    lower = data.quantile(a)
-                    upper = data.quantile(1 - a)
+                    lower = data.quantile(alpha)
+                    upper = data.quantile(1 - alpha)
                     result.loc[date, valid_mask] = data.clip(lower=lower, upper=upper)
                 continue
 
@@ -842,8 +891,8 @@ class GroupWinsorize(SeriesOperator):
                 mask = (group_slice == group_val) & x_slice.notna()
                 if mask.sum() > 0:
                     group_data = x_slice[mask]
-                    lower = group_data.quantile(a)
-                    upper = group_data.quantile(1 - a)
+                    lower = group_data.quantile(alpha)
+                    upper = group_data.quantile(1 - alpha)
                     result.loc[date, group_data.index] = group_data.clip(lower=lower, upper=upper)
 
         return result

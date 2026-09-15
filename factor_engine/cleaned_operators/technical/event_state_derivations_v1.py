@@ -1094,6 +1094,8 @@ STATE_FAMILY_NAMES = (
 
 
 def _register(name, params, fn, desc, *, param_specs=None, relational_specs=None):
+    specs = dict(param_specs or {})
+    panel_params = tuple(param for param in params if param not in specs)
     meta = OperatorMetadata(
         name=name,
         category="technical_signal",
@@ -1101,8 +1103,12 @@ def _register(name, params, fn, desc, *, param_specs=None, relational_specs=None
         param_names=list(params),
         return_type="series",
         tags=["pit_safe", "causal", "production_extension"],
-        param_specs=dict(param_specs or {}),
+        param_specs=specs,
         relational_specs=list(relational_specs or []),
+        panel_params=panel_params,
+        panel_arity=len(panel_params),
+        scalar_params=tuple(param for param in params if param in specs),
+        total_positional_arity=len(params),
         available_at="close_of_t",
         same_session_usable=False,
     )

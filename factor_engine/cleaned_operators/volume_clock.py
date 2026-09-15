@@ -42,6 +42,9 @@ def _metadata(name: str, description: str, params: list[str], *, unit: str, cost
         category="intraday_microstructure",
         description=description,
         param_names=params,
+        panel_params=("price", "activity", "open"),
+        panel_arity=3,
+        scalar_params=("buckets",),
         return_type="series",
         tags=[
             "intraday", "daily_agg", "minute", "pit_safe", "causal", "typed_v2",

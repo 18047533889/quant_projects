@@ -1,0 +1,1 @@
+{"command": [".venv/bin/python", "-m", "pytest", "--noconftest", "factor_engine/tests/runtime/test_r6_expectile_contracts.py", "-q", "--tb=short", "--show-capture=no"], "returncode": 2, "sampled_peak_family_rss_bytes": 306708480, "sampling_seconds": 0.1, "seconds": 3.009100610157475, "test_guard_reason": null, "hard_memory_cap": false}

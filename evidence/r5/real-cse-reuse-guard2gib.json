@@ -1,0 +1,1 @@
+{"command": [".venv/bin/python", "-m", "pytest", "-q", "--tb=short", "--show-capture=no", "factor_engine/tests/runtime/test_r5_real_cse_reuse.py", "-k", "not 513"], "returncode": 0, "sampled_peak_family_rss_bytes": 446894080, "sampling_seconds": 0.1, "seconds": 53.65889713796787, "test_guard_reason": null, "hard_memory_cap": false}

@@ -59,6 +59,29 @@ def test_real_public_batch_adapter_preserves_per_factor_typed_evidence():
     assert result["config_hash"] == stored["config_hash"]
 
 
+def test_evidence_lookup_rejects_tampered_content_and_cross_key_payloads():
+    from factor_optimizer.adapters.quant_evaluator import (
+        InMemoryEvidenceStore,
+        create_qe_adapter,
+    )
+
+    batch, labels = _fixtures(("a",))
+    store = InMemoryEvidenceStore()
+    adapter = create_qe_adapter(evidence_store=store)
+    result = adapter.evaluate(batch, labels, metrics=["coverage"])
+    evaluation_id = result["evaluation_id"]
+
+    store._values[evaluation_id]["grouped_metrics"]["a"]["coverage"]["value"] = 0.0
+    with pytest.raises(ValueError, match="content identity"):
+        adapter.get_evidence(evaluation_id)
+
+    fresh = adapter.evaluate(batch, labels, metrics=["coverage"])
+    fresh_id = fresh["evaluation_id"]
+    store._values[fresh_id]["evaluation_id"] = "another-evaluation"
+    with pytest.raises(ValueError, match="mismatched identity"):
+        adapter.get_evidence(fresh_id)
+
+
 def test_batch_and_single_factor_views_match_by_factor_id_not_position():
     from factor_optimizer.adapters.quant_evaluator import (
         InMemoryEvidenceStore,

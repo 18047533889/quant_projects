@@ -22,6 +22,9 @@ from factor_engine.expr.base import Expr
 
 class DSLParseError(ValueError): pass
 
+class DSLUnknownOperatorError(DSLParseError):
+    """A function call names an operator absent from the selected allowlist."""
+
 
 @dataclass(frozen=True)
 class ComplexityBudget:
@@ -72,34 +75,35 @@ class _ExprBuilder:
             )
     def _exit(self)->None:
         self._depth-=1
+    def _validate_text_budget(self, text: str, *, stage: str = "expression") -> None:
+        # UTF-8 has at least one byte per character. Check this lower bound
+        # before encoding so even a huge rejected string needs no huge copy.
+        if len(text) > self._budget.max_formula_bytes:
+            raise DSLParseError(
+                f"{stage} exceeds ComplexityBudget.max_formula_bytes={self._budget.max_formula_bytes}"
+            )
+        if len(text) > self._budget.max_formula_chars:
+            raise DSLParseError(
+                f"{stage} chars exceed ComplexityBudget.max_formula_chars={self._budget.max_formula_chars}"
+            )
+        try:
+            size = len(text.encode("utf-8"))
+        except UnicodeEncodeError as exc:
+            raise DSLParseError(f"{stage} contains invalid Unicode") from exc
+        if size > self._budget.max_formula_bytes:
+            raise DSLParseError(
+                f"{stage} bytes {size} exceed ComplexityBudget.max_formula_bytes={self._budget.max_formula_bytes}"
+            )
+
     def build(self,text:str)->Expr:
         normalized=str(text)
-        # R21-038/039: size budget BEFORE ast.parse allocates, and again after
-        # LQTP normalization so normalization cannot expand the payload.
-        if len(normalized.encode("utf-8")) >self._budget.max_formula_bytes:
-            raise DSLParseError(
-                f"expression bytes {len(normalized.encode('utf-8'))} exceed "
-                f"ComplexityBudget.max_formula_bytes={self._budget.max_formula_bytes}"
-            )
-        if len(normalized)>self._budget.max_formula_chars:
-            raise DSLParseError(
-                f"expression chars {len(normalized)} exceed "
-                f"ComplexityBudget.max_formula_chars={self._budget.max_formula_chars}"
-            )
+        # Bound raw and normalized text before ast.parse allocates.
+        self._validate_text_budget(normalized)
         if self._dialect=="lqtp" or self._surface=="lqtp":
             from factor_engine.api.lqtp_compat import normalize_lqtp_formula
             from factor_engine.api.derived_field_compat import normalize_lqtp_derived_fields
             normalized=normalize_lqtp_derived_fields(normalize_lqtp_formula(normalized))
-            if len(normalized.encode("utf-8")) >self._budget.max_formula_bytes:
-                raise DSLParseError(
-                    f"normalized expression bytes {len(normalized.encode('utf-8'))} exceed "
-                    f"ComplexityBudget.max_formula_bytes (LQTP expansion)"
-                )
-            if len(normalized)>self._budget.max_formula_chars:
-                raise DSLParseError(
-                    f"normalized expression chars {len(normalized)} exceed "
-                    f"ComplexityBudget.max_formula_chars (LQTP expansion)"
-                )
+            self._validate_text_budget(normalized, stage="normalized expression (LQTP expansion)")
         try:parsed=ast.parse(normalized,mode="eval")
         except SyntaxError as exc:raise DSLParseError(f"Invalid expression syntax: {text}") from exc
         expr=self._visit(parsed.body)
@@ -145,7 +149,7 @@ class _ExprBuilder:
                 # a factor expression).
                 if isinstance(node.value,float) and not math.isfinite(node.value):
                     raise DSLParseError(f"Non-finite numeric literal is not allowed: {node.value!r}")
-                if not isinstance(node.value,bool) and abs(float(node.value)) > self._budget.max_literal_magnitude:
+                if not isinstance(node.value,bool) and abs(node.value) > self._budget.max_literal_magnitude:
                     raise DSLParseError(
                         f"literal magnitude {node.value!r} exceeds ComplexityBudget."
                         f"max_literal_magnitude={self._budget.max_literal_magnitude}"
@@ -154,9 +158,13 @@ class _ExprBuilder:
             if isinstance(node.value,str):
                 # R21-040: a several-MB string is still one AST Constant — cap
                 # literal bytes so a huge string cannot bypass the node budget.
-                if len(node.value.encode("utf-8")) >self._budget.max_string_literal_bytes:
+                try:
+                    literal_bytes = len(node.value.encode("utf-8"))
+                except UnicodeEncodeError as exc:
+                    raise DSLParseError("string literal contains invalid Unicode") from exc
+                if literal_bytes >self._budget.max_string_literal_bytes:
                     raise DSLParseError(
-                        f"string literal bytes {len(node.value.encode('utf-8'))} exceed "
+                        f"string literal bytes {literal_bytes} exceed "
                         f"ComplexityBudget.max_string_literal_bytes="
                         f"{self._budget.max_string_literal_bytes}"
                     )
@@ -197,13 +205,17 @@ class _ExprBuilder:
                     f"keyword length {len(name)} exceeds "
                     f"ComplexityBudget.max_keyword_length={self._budget.max_keyword_length}"
                 )
-            if name not in self._allowed:raise DSLParseError(f"Unsupported function: {name}")
+            if name not in self._allowed:
+                raise DSLUnknownOperatorError(f"Unsupported function: {name}")
             func=self._allowed[name]
         else:func=self._visit(node.func)
         args=[self._visit(arg) for arg in node.args];kwargs={}
         seen_keywords:set[str]=set()
         aliases,param_names=_call_parameter_binding(name) if isinstance(node.func,ast.Name) and node.keywords else ({},())
-        bound_canonical=set(param_names[:len(node.args)])
+        # Parameters after a variadic input marker are keyword-only. Multiple
+        # series inputs do not positionally consume e.g. row_sum's min_count.
+        positional_names=param_names[:param_names.index("...")] if "..." in param_names else param_names
+        bound_canonical=set(positional_names[:len(node.args)])
         for kw in node.keywords:
             if kw.arg is None:raise DSLParseError("Keyword-only **kwargs are not supported.")
             canonical_kw=aliases.get(kw.arg,kw.arg)
@@ -231,6 +243,12 @@ class _ExprBuilder:
         raise DSLParseError(f"Unsupported comparison: {type(op).__name__}")
     def _visit_binop(self,node:ast.BinOp)->Any:
         left,right=self._visit(node.left),self._visit(node.right)
+        try:
+            return self._apply_binop(node, left, right)
+        except (TypeError, ArithmeticError) as exc:
+            raise DSLParseError("Invalid operands for binary operation") from exc
+
+    def _apply_binop(self,node:ast.BinOp,left:Any,right:Any)->Any:
         if isinstance(left,(str,int,float)) and not isinstance(left,bool) and isinstance(right,(str,int,float)) and not isinstance(right,bool):
             return self._bounded_constant_binop(node.op,left,right)
         if isinstance(node.op,ast.Add):return left+right
@@ -281,7 +299,7 @@ class _ExprBuilder:
             raise DSLParseError(f"Invalid constant arithmetic: {exc}") from exc
         if isinstance(result,float) and not math.isfinite(result):
             raise DSLParseError("constant arithmetic produced a non-finite value")
-        if abs(float(result))>self._budget.max_literal_magnitude:
+        if abs(result)>self._budget.max_literal_magnitude:
             raise DSLParseError("constant result exceeds ComplexityBudget.max_literal_magnitude")
         return result
 
@@ -357,4 +375,10 @@ def _call_parameter_binding(name:str)->tuple[dict[str,str],tuple[str,...]]:
 
 def _is_field_identifier(name:str)->bool:return bool(name) and not name[0].isdigit() and all(c.isalnum() or c=="_" for c in name)
 def parse_expr(text:str,*,surface:str="daily",dialect:str="native",dialect_version:str|None=None,budget:ComplexityBudget|None=None)->Expr:return _ExprBuilder(surface=surface,dialect=dialect,dialect_version=dialect_version,budget=budget).build(text)
+
+
+def parse_recommended_expr(text:str,*,dialect:str="native",dialect_version:str|None=None,budget:ComplexityBudget|None=None)->Expr:
+    """Parse an Agent/research formula against the complete public runtime surface."""
+    return parse_expr(text, surface="all", dialect=dialect,
+                      dialect_version=dialect_version, budget=budget)
 def parse_factor(text:str,*,name:str="factor",freq:str="1d",universe:str|None=None,description:str|None=None,surface:str="daily",dialect:str="native",dialect_version:str|None=None,budget:ComplexityBudget|None=None)->Factor:return Factor(name=name,expr=parse_expr(text,surface=surface,dialect=dialect,dialect_version=dialect_version,budget=budget),freq=freq,universe=universe,description=description,source_expr=text,surface=surface,dialect=dialect,dialect_version=dialect_version)

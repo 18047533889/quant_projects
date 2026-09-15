@@ -1,0 +1,1 @@
+{"command": [".venv/bin/python", "-m", "pytest", "factor_engine/tests/backend/test_polars_structure.py", "-q", "--tb=short", "--show-capture=no"], "returncode": 1, "sampled_peak_family_rss_bytes": 458428416, "sampling_seconds": 0.1, "seconds": 51.43475484591909, "test_guard_reason": null, "hard_memory_cap": false}

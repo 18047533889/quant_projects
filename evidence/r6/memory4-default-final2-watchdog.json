@@ -1,0 +1,1 @@
+{"command": [".venv/bin/python", "-m", "pytest", "--noconftest", "factor_engine/tests/runtime/test_r6_memory_contracts.py", "-q", "--tb=short", "--show-capture=no"], "returncode": 0, "sampled_peak_family_rss_bytes": 784605184, "sampling_seconds": 0.1, "seconds": 55.396997888805345, "test_guard_reason": null, "hard_memory_cap": false}

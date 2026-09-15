@@ -18,7 +18,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from factor_engine.cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
+from factor_engine.cleaned_operators.base import OperatorMetadata, ParamRole, ParamSpec, SeriesOperator, register_operator
 from factor_engine.cleaned_operators.common.daily_panel import _aligned, _check_int
 
 
@@ -26,11 +26,47 @@ def _metadata(
     name: str, description: str, params: list[str], *, domain: str, unit: str,
     cost: int = 1, category: str,
 ) -> OperatorMetadata:
+    defaults = {
+        "val1_earnings_yield_slope": {"window": 12, "min_periods": 5},
+        "val1_earnings_yield_ma_diff": {"baseline_window": 12, "min_periods": 4},
+        "val1_fcf_yield_growth": {"min_periods": 2},
+        "val1_earnings_yield_persistence": {"window": 12, "min_periods": 4},
+        "val1_valuation_z_own": {"history_window": 60, "min_periods": 10},
+        "val1_valuation_percentile_own": {"history_window": 60, "min_periods": 10},
+        "val1_valuation_stat_spread": {"min_breadth": 10},
+        "val1_discount_regime_share": {"history_window": 40, "min_periods": 10, "min_breadth": 10},
+        "val1_qmj_quality_rank": {"min_breadth": 10},
+        "val1_pe_beta_to_market": {"window": 30, "min_periods": 10},
+        "val1_valuations_lag_component": {"fast_window": 5, "slow_window": 20, "min_periods": 4},
+        "val1_equity_yield_dispersion": {"min_breadth": 10},
+    }.get(name, {})
+    minimums = {
+        "window": 3, "baseline_window": 2, "history_window": 3,
+        "fast_window": 2, "slow_window": 3, "min_periods": 2,
+        "min_breadth": 3,
+    }
+    if name in {"val1_earnings_yield_slope", "val1_valuation_z_own", "val1_valuation_percentile_own", "val1_discount_regime_share"}:
+        minimums["min_periods"] = 3
+    if name == "val1_pe_beta_to_market":
+        minimums["min_periods"] = 5
+    if name == "val1_equity_yield_dispersion":
+        minimums["min_breadth"] = 4
+    scalar_specs = {
+        param: ParamSpec(
+            dtype=int,
+            min=minimums[param],
+            default=default,
+            param_role=(ParamRole.HORIZON if param.endswith("window") else ParamRole.ESTIMATOR_RESOLUTION),
+        )
+        for param, default in defaults.items()
+    }
     return OperatorMetadata(
         name=name,
         category=category,
         description=description,
         param_names=params,
+        panel_params=tuple(param for param in params if param not in scalar_specs),
+        param_specs=scalar_specs,
         return_type="series",
         tags=[
             category, "wave1", "daily", "pit_safe", "causal", "typed_v2",

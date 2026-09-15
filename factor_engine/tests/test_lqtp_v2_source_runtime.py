@@ -8,6 +8,48 @@ import pandas as pd
 import pytest
 
 
+def test_logical_native_bridge_uses_certified_batch_reader_and_exact_keys():
+    from factor_engine.api.source_ref import source_col
+    from factor_engine.storage.sources.lqtp_logical_source_v2 import LQTPLogicalDataSource
+    name = source_col("StockIncome", "NetProfit").name
+    index = pd.MultiIndex.from_tuples([(pd.Timestamp("2024-08-02"), "B"),
+        (pd.Timestamp("2024-08-01"), "A")], names=["timestamp", "instrument"])
+    class Source(LQTPLogicalDataSource):
+        def load_columns(self, names):
+            self.requested = names
+            return {name: pd.Series([20., np.nan], index=index),
+                    "close": pd.Series([5., 7.], index=index[::-1])}
+    source = Source(type("Inner", (), {})())
+    frame = source.scan_polars_long([name, "close"]).collect().to_pandas()
+    assert source.requested == [name, "close"]
+    assert frame["inst"].tolist() == ["A", "B"]
+    assert np.isnan(frame[name].iloc[0]) and frame[name].iloc[1] == 20
+    assert frame["close"].tolist() == [5., 7.]
+    source.load_columns = lambda names: {name: pd.Series([1.,2.], index=index[[0,0]])}
+    with pytest.raises(ValueError, match="unique date/instrument"):
+        source.scan_polars_long([name])
+
+
+def test_rewrapped_logical_source_reuses_certified_native_wave():
+    import polars as pl
+    from factor_engine.api.source_ref import source_col
+    from factor_engine.storage.sources.lqtp_logical_source_v2 import LQTPLogicalDataSource
+    from factor_engine.storage.sources.wave_prefetched_source import WavePrefetchedSourceAdapter
+    name = source_col("StockIncome", "NetProfit").name
+    class NoReads:
+        def load_columns(self, names):
+            raise AssertionError("must not reopen or request pandas")
+    adapter = WavePrefetchedSourceAdapter(NoReads())
+    frame = pl.DataFrame({"ts":[1,2], "inst":["A","B"], name:[5.,None], "AdjClose":[3.,4.]})
+    adapter.publish_native(7,[name,"AdjClose"],frame)
+    source = LQTPLogicalDataSource(adapter)
+    assert source.scan_polars_long([name,"AdjClose"]).collect().equals(frame)
+    assert adapter.has_native_columns([name])
+    assert not adapter.has_native_columns(["absent"])
+    adapter.release_wave(7)
+    assert not adapter.has_native_columns([name])
+
+
 def test_yaml_dialect_version_is_validated_and_bridged(tmp_path: Path) -> None:
     from factor_engine.runtime.config import load_config
     path = tmp_path / "factor.yaml"

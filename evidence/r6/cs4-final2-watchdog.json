@@ -1,0 +1,1 @@
+{"command": [".venv/bin/python", "-m", "pytest", "factor_engine/tests/runtime/test_r6_cs_estimator_contracts.py", "factor_engine/tests/operators/test_cs_batch1.py", "-q", "--tb=short", "--show-capture=no"], "returncode": 2, "sampled_peak_family_rss_bytes": 691191808, "sampling_seconds": 0.1, "seconds": 6.821693851146847, "test_guard_reason": null, "hard_memory_cap": false}

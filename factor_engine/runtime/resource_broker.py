@@ -134,13 +134,11 @@ def require_broker(
     if not allowed:
         # fail-closed 但调用方选择不 raise：on-lead 观察由调用方显式标记，
         # 返回 None（调用方不应继续超预算分配）。
-        _degraded[0] = _degraded[0] + 1
-        _degraded[1].append("denied_no_raise")
+        _record_degradation("denied_no_raise")
         return None
     # 非生产或显式覆盖：降级（新建实例），并在 module 级 observable 标记。
-    _degraded[0] = _degraded[0] + 1
     verdict = "forced_mark" if must_mark else "degraded"
-    _degraded[1].append(verdict)
+    _record_degradation(verdict)
     if return_fallback:
         return ResourceBroker()
     return None
@@ -154,11 +152,31 @@ def _runtime_is_production(run_mode: str | None = None) -> bool:
 
 
 #: 进程级 observable 降级标记（audit / evidence 可读）：``[count, [verdict,...]]``。
-_degraded: list[Any] = [0, []]
+_degraded: list[Any] = [0, deque(maxlen=20)]
+_degraded_lock = threading.Lock()
+
+
+def _reset_degradation_lock_after_fork() -> None:
+    # A parent thread may hold the diagnostic lock when ingestion forks.
+    # The child must not inherit a permanently locked observer.
+    global _degraded_lock
+    _degraded_lock = threading.Lock()
+
+
+if hasattr(os, "register_at_fork"):
+    os.register_at_fork(after_in_child=_reset_degradation_lock_after_fork)
+
+
+def _record_degradation(verdict: str) -> None:
+    with _degraded_lock:
+        _degraded[0] += 1
+        _degraded[1].append(verdict)
+
 
 def broker_degraded_observable() -> dict[str, Any]:
     """进程级 broker 降级统计（evidence/观测）：已发生次数 + 最近判定。"""
-    return {"count": _degraded[0], "verdicts": list(_degraded[1])[-20:]}
+    with _degraded_lock:
+        return {"count": _degraded[0], "verdicts": list(_degraded[1])}
 
 
 def descriptor_from_broker(broker: Any) -> str:
@@ -807,8 +825,10 @@ class ResourceBroker:
         self._running: dict[str, TaskResourceContract] = {}
         # R31-P0-006: reserve() 兼容路径持有的租约（try_reserve 直接返回租约不登记）。
         self._leases: dict[str, ReservationLease] = {}
-        self._admission_events: list[str] = []
-        self._pressure_log: list[str] = []
+        # These are recent diagnostics, not the durable execution ledger.
+        # Bound retention itself, not only the slice returned by summary().
+        self._admission_events: deque[str] = deque(maxlen=50)
+        self._pressure_log: deque[str] = deque(maxlen=20)
         # 外部负载平滑（R27-130/131）
         self._external_cpu_ema: float = 0.0
         self._mem_available_ema: int | None = None
@@ -1604,8 +1624,11 @@ class ResourceBroker:
         """
         tid = str(task_id or id(task))
         with self._lock:
-            if self._running.get(tid) is not None:
-                return True
+            reserved = self._running.get(tid)
+            if reserved is not None:
+                # Idempotency requires the same immutable resource contract;
+                # a reused ID must not admit a larger task on an old lease.
+                return reserved == task
         lease = self.try_reserve(task, task_id=tid)
         if lease is None:
             return False
@@ -1617,6 +1640,11 @@ class ResourceBroker:
         """向后兼容：按 task_id 释放租约（幂等）。"""
         tid = str(task_id or id(task))
         with self._lock:
+            reserved = self._running.get(tid)
+            if reserved is not None and reserved != task:
+                # A failed/conflicting caller cannot free another live task's
+                # CPU and memory reservation merely by reusing its string ID.
+                return
             lease = self._leases.pop(tid, None)
         if lease is not None:
             lease.release()
@@ -1888,8 +1916,8 @@ class ResourceBroker:
             "io": self._io.summary(),
             "running_tasks": len(self._running),
             "running_peak_sum": sum(t.admissible_peak_bytes for t in self._running.values()),
-            "admission_events": self._admission_events[-50:],
-            "pressure_log": self._pressure_log[-20:],
+            "admission_events": list(self._admission_events),
+            "pressure_log": list(self._pressure_log),
             "base_uncertainty": round(self.base_uncertainty, 3),
             "external_cpu_ema": round(self._external_cpu_ema, 3),
             # P3/P4：AutoMemoryBudget + MemoryLease 账目。

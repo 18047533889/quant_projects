@@ -251,7 +251,7 @@ def _manifest(i: int, content: str | None = None, semantic: str | None = None):
 
 
 def _report() -> ReconcileReport:
-    # one NEW, one DUPLICATE_EXACT, one CONFLICT_SEMANTIC_TO_HASH
+    # one NEW, one DUPLICATE_EXACT, one CONFLICT_HASH_TO_SEMANTIC
     known = [
         {"content_hash": f"{2:064x}", "semantic_hash": "sem-2"},
         {"content_hash": f"{3:064x}", "semantic_hash": "sem-x"},  # different semantic, same content below
@@ -259,7 +259,7 @@ def _report() -> ReconcileReport:
     candidates = [
         _manifest(1),  # NEW
         _manifest(2),  # DUPLICATE_EXACT
-        _manifest(4, content=f"{2:064x}", semantic="sem-4"),  # same content as known, diff semantic
+        _manifest(4, content=f"{3:064x}", semantic="sem-4"),  # distinct known content, diff semantic
     ]
     return reconcile_candidates(candidates, known_registry=known)
 

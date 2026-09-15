@@ -147,7 +147,7 @@ def test_ts_expectile_beta_basic() -> None:
 
     # Call with default parameters
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, pd.DataFrame(np.arange(x.size,dtype=float).reshape(x.shape),index=x.index,columns=x.columns))
 
         # Basic shape check
         assert result.shape == x.shape, f"{result.shape} != {x.shape}"
@@ -172,7 +172,7 @@ def test_ts_expectile_beta_handles_nans() -> None:
     op = _op("ts_expectile_beta")
 
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, pd.DataFrame(np.arange(x.size,dtype=float).reshape(x.shape),index=x.index,columns=x.columns))
 
         # Should not raise, should return DataFrame
         assert isinstance(result, pd.DataFrame)
@@ -193,7 +193,7 @@ def test_ts_expectile_beta_handles_inf() -> None:
     op = _op("ts_expectile_beta")
 
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, pd.DataFrame(np.arange(x.size,dtype=float).reshape(x.shape),index=x.index,columns=x.columns))
 
         # Should handle inf gracefully (typically return NaN)
         assert isinstance(result, pd.DataFrame)
@@ -208,7 +208,7 @@ def test_ts_expectile_beta_empty_input() -> None:
     op = _op("ts_expectile_beta")
 
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, pd.DataFrame(np.arange(x.size,dtype=float).reshape(x.shape),index=x.index,columns=x.columns))
 
         # Should return empty DataFrame
         assert isinstance(result, pd.DataFrame)
@@ -226,7 +226,7 @@ def test_ts_expectile_beta_single_column() -> None:
     op = _op("ts_expectile_beta")
 
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, pd.DataFrame(np.arange(x.size,dtype=float).reshape(x.shape),index=x.index,columns=x.columns))
 
         assert isinstance(result, pd.DataFrame)
         assert result.shape[1] == 1

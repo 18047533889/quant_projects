@@ -5,10 +5,27 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from factor_engine.cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
+from factor_engine.cleaned_operators.base import (
+    OperatorMetadata,
+    ParamRole,
+    ParamSpec,
+    SeriesOperator,
+    register_operator,
+)
 
 
-def _meta(name: str, description: str, params: list[str], *, unit: str = "ratio") -> OperatorMetadata:
+def _meta(
+    name: str,
+    description: str,
+    params: list[str],
+    *,
+    unit: str = "ratio",
+    panel_params: tuple[str, ...] = (),
+    scalar_params: tuple[str, ...] = (),
+    param_specs: dict[str, ParamSpec] | None = None,
+    available_at: str | None = None,
+    same_session_usable: bool | None = None,
+) -> OperatorMetadata:
     return OperatorMetadata(
         name=name,
         category="shareholder",
@@ -20,6 +37,13 @@ def _meta(name: str, description: str, params: list[str], *, unit: str = "ratio"
             f"signature:{','.join(params)}->series", "domain:shareholder",
             f"unit:{unit}", "cost:1",
         ],
+        panel_params=panel_params,
+        scalar_params=scalar_params,
+        param_specs=dict(param_specs or {}),
+        # Shareholder disclosures are usable only once the report/publication
+        # date has entered the PIT source.  Never treat them as intraday-known.
+        available_at=available_at,
+        same_session_usable=same_session_usable,
     )
 
 
@@ -57,13 +81,35 @@ class HolderCompanyOwnershipHhi(SeriesOperator):
         "公司总股本口径 HHI：Σ ownership_ratio_i²（s_i 已是公司所有权比例）。",
         ["s1", "s2", "s3", "s4", "s5", "s6", "s7", "s8", "s9", "s10"],
         unit="ratio",
+        panel_params=("s1", "s2", "s3", "s4", "s5", "s6", "s7", "s8", "s9", "s10"),
+        available_at="report_date",
+        same_session_usable=False,
     )
 
-    def _calculate_series(self, *args, **kwargs):
-        if len(args) < 2:
-            raise ValueError("holder_company_ownership_hhi requires at least two ratio panels")
-        base = args[0]
-        stacked = np.stack([np.asarray(p.to_numpy(dtype=float)) for p in args], axis=0)
+    def _calculate_series(
+        self,
+        s1,
+        s2,
+        s3=None,
+        s4=None,
+        s5=None,
+        s6=None,
+        s7=None,
+        s8=None,
+        s9=None,
+        s10=None,
+        **kwargs,
+    ):
+        panels = tuple(panel for panel in (s1, s2, s3, s4, s5, s6, s7, s8, s9, s10) if panel is not None)
+        base = panels[0]
+        if not all(isinstance(panel, pd.DataFrame) for panel in panels):
+            raise TypeError("holder_company_ownership_hhi requires pandas DataFrame inputs")
+        if not base.index.is_unique or not base.columns.is_unique:
+            raise ValueError("holder_company_ownership_hhi input axes must be unique")
+        for panel in panels[1:]:
+            if not base.index.equals(panel.index) or not base.columns.equals(panel.columns):
+                raise ValueError("holder_company_ownership_hhi inputs must have identical axes")
+        stacked = np.stack([np.asarray(p.to_numpy(dtype=float)) for p in panels], axis=0)
         finite = np.isfinite(stacked)
         squares = np.where(finite, stacked * stacked, np.nan)
         hhi = np.nansum(squares, axis=0)
@@ -74,7 +120,17 @@ class HolderCompanyOwnershipHhi(SeriesOperator):
 
 @register_operator(name="holder_concentration_change", category="shareholder", business_category="shareholder", canonical="holder_concentration_change", source="shareholder.ops", status="deprecated")
 class HolderConcentrationChange(SeriesOperator):
-    metadata = _meta("holder_concentration_change", "Deprecated: use source-side relation_snapshot_change on distinct snapshots.", ["concentration", "lag"], unit="ratio_change")
+    metadata = _meta(
+        "holder_concentration_change",
+        "Deprecated: use source-side relation_snapshot_change on distinct snapshots.",
+        ["concentration", "lag"],
+        unit="ratio_change",
+        panel_params=("concentration",),
+        scalar_params=("lag",),
+        param_specs={"lag": ParamSpec(dtype=int, min=1, default=1, param_role=ParamRole.HORIZON)},
+        available_at="report_date",
+        same_session_usable=False,
+    )
 
     def _calculate_series(self, concentration, lag=1, **kwargs):
         raise ValueError(
@@ -85,7 +141,17 @@ class HolderConcentrationChange(SeriesOperator):
 
 @register_operator(name="holder_count_change_rate", category="shareholder", business_category="shareholder", canonical="holder_count_change_rate", source="shareholder.ops", status="deprecated")
 class HolderCountChangeRate(SeriesOperator):
-    metadata = _meta("holder_count_change_rate", "Deprecated: TopTen rows are not total shareholder count; use snapshot entity-count metrics.", ["holder_count", "lag"], unit="return")
+    metadata = _meta(
+        "holder_count_change_rate",
+        "Deprecated: TopTen rows are not total shareholder count; use snapshot entity-count metrics.",
+        ["holder_count", "lag"],
+        unit="return",
+        panel_params=("holder_count",),
+        scalar_params=("lag",),
+        param_specs={"lag": ParamSpec(dtype=int, min=1, default=1, param_role=ParamRole.HORIZON)},
+        available_at="report_date",
+        same_session_usable=False,
+    )
 
     def _calculate_series(self, holder_count, lag=1, **kwargs):
         raise ValueError(

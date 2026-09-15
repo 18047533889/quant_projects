@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from quant_evaluator.contracts.artifact_types import ProbePortfolioArtifact
+from quant_evaluator.contracts.artifact_types import ExecutablePortfolioArtifact, ProbePortfolioArtifact
 from vectorbt_qs.contracts.costs import CostScope
 from vectorbt_qs.contracts.trajectories import PortfolioTrajectory
 
@@ -101,7 +101,10 @@ def trajectory_to_probe_artifact(
             raise ValueError(f"trajectory does not contain requested leg: {contribution_key}")
         values = trajectory.contributions[contribution_key]
     matrix = np.asarray(values, dtype=np.float64)[:, None]
-    return ProbePortfolioArtifact(
+    artifact_type = (ExecutablePortfolioArtifact
+                     if expected_scope == CostScope.NET_EXECUTABLE
+                     else ProbePortfolioArtifact)
+    return artifact_type(
         matrix, time_index=trajectory.dates, factor_ids=requested_ids,
         metric_id=f"probe_portfolio.{expected_portfolio_profile.lower()}.{expected_cost_profile}",
         provenance={
@@ -117,6 +120,7 @@ def trajectory_to_probe_artifact(
             "benchmark_ref": trajectory.refs.benchmark_ref,
             "borrow_ref": trajectory.refs.borrow_ref,
             "statuses": trajectory.statuses,
+            "execution_certified": trajectory.executable_certified,
             "leg": expected_leg,
         },
     )
@@ -141,12 +145,23 @@ def trajectories_to_probe_artifact(trajectories, *, expected_portfolio_profile,
         artifacts.append(artifact); columns.append(artifact.values[:, 0])
     if any(a.time_index != artifacts[0].time_index for a in artifacts[1:]):
         raise ValueError("factor trajectories do not share time coordinates")
-    return ProbePortfolioArtifact(np.column_stack(columns), time_index=artifacts[0].time_index,
-                                  factor_ids=tuple(factor_ids), metric_id=artifacts[0].metric_id,
-                                  provenance={"per_factor_trajectory_refs": {
+    artifact_type = type(artifacts[0])
+    if any(type(item) is not artifact_type for item in artifacts):
+        raise ValueError("factor trajectories must share one evidence scope")
+    common_provenance = dict(artifacts[0].provenance)
+    execution_refs = {
+        fid: a.provenance["execution_ref"] for fid, a in zip(factor_ids, artifacts)
+    }
+    common_provenance.update({"per_factor_trajectory_refs": {
                                       fid: a.provenance["trajectory_artifact_id"] for fid, a in zip(factor_ids, artifacts)},
+                                              "per_factor_execution_refs": execution_refs,
                                               "leg": expected_leg, "cost_profile": expected_cost_profile,
                                               "portfolio_profile": expected_portfolio_profile})
+    if artifact_type is ExecutablePortfolioArtifact:
+        common_provenance["execution_ref"] = execution_refs
+    return artifact_type(np.column_stack(columns), time_index=artifacts[0].time_index,
+                         factor_ids=tuple(factor_ids), metric_id=artifacts[0].metric_id,
+                         provenance=common_provenance)
 
 
 __all__ = ["trajectory_to_probe_artifact", "trajectories_to_probe_artifact"]

@@ -12,8 +12,26 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from factor_engine.cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
+from factor_engine.cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator, ParamSpec, ParamRole
+
 from factor_engine.cleaned_operators.common.daily_panel import _aligned
+from factor_engine.cleaned_operators.common.static_adjacency import StaticAdjacency
+
+_CS4_SPECS={
+    "n_trees":ParamSpec(dtype=int,min=1,default=100,param_role=ParamRole.ESTIMATOR_RESOLUTION),
+    "contamination":ParamSpec(dtype=float,min=np.nextafter(0.,1.),max=.5,default=.1,param_role=ParamRole.POLICY,searchable=False),
+    "random_seed":ParamSpec(dtype=int,min=0,max=2**32-1,default=42,param_role=ParamRole.POLICY,searchable=False),
+    "n_buckets":ParamSpec(dtype=int,min=2,default=5,param_role=ParamRole.ESTIMATOR_RESOLUTION),
+    "ascending":ParamSpec(dtype=bool,default=True,param_role=ParamRole.POLICY,searchable=False),
+    "shrinkage_factor":ParamSpec(dtype=float,min=0.,default=1.,param_role=ParamRole.NUMERICAL,searchable=False),
+    "shrinkage_intensity":ParamSpec(dtype=float,min=0.,max=1.,default=.5,param_role=ParamRole.NUMERICAL,searchable=False),
+}
+_CS4_NAMES={"cs_isolation_forest_score","cs_factor_bucket_return",
+            "cs_empirical_bayes_shrinkage","cs_shrink_to_group_mean"}
+
+def _finite_mean(values):
+    scale=float(np.max(np.abs(values)))
+    return float(np.mean(values/scale))*scale if scale else 0.
 
 # R47 convention: minimum breadth for cross-sectional operations
 _MIN_BREADTH = 10
@@ -27,6 +45,9 @@ def _metadata(name: str, description: str, params: list[str], *, domain: str, un
         category="cross_sectional",
         description=description,
         param_names=params,
+        panel_params=tuple(p for p in params if p not in _CS4_SPECS) if name in _CS4_NAMES else (),
+        scalar_params=tuple(p for p in params if p in _CS4_SPECS) if name in _CS4_NAMES else (),
+        param_specs={p:_CS4_SPECS[p] for p in params if p in _CS4_SPECS} if name in _CS4_NAMES else {},
         return_type="series",
         tags=[
             "cross_sectional", "daily", "pit_safe", "causal", "typed_v2",
@@ -115,16 +136,17 @@ class CsIsolationForestScore(SeriesOperator):
         """Compute isolation forest anomaly scores for one cross-section."""
         try:
             from sklearn.ensemble import IsolationForest
-        except ImportError:
-            # sklearn unavailable -> fail-closed
-            return None
+        except ImportError as exc:
+            raise ImportError("cs_isolation_forest_score requires scikit-learn") from exc
 
         n = len(x_valid)
         if n < 2:
             return None
 
         # Isolation Forest expects 2D input (n_samples, n_features)
-        X = x_valid.reshape(-1, 1)
+        # sklearn converts to float32; normalize finite magnitudes before conversion.
+        scale=np.max(np.abs(x_valid))
+        X = (x_valid/scale if scale else x_valid).reshape(-1, 1)
 
         # Fit isolation forest
         iso = IsolationForest(
@@ -134,17 +156,11 @@ class CsIsolationForestScore(SeriesOperator):
             bootstrap=False,
         )
 
-        try:
-            iso.fit(X)
-            # decision_function returns negative anomaly scores (outliers have more negative)
-            # We transform to [0, 1] where 1 = most anomalous
-            raw_scores = iso.decision_function(X)
-            # Normalize to [0, 1]: flip sign and scale
-            scores = 0.5 - raw_scores / (2.0 * (np.max(np.abs(raw_scores)) + 1e-10))
-            scores = np.clip(scores, 0.0, 1.0)
-            return scores
-        except Exception:
-            return None
+        # Dependency/configuration/fit failures must reach the per-factor error state.
+        iso.fit(X)
+        raw_scores = iso.decision_function(X)
+        scores = 0.5 - raw_scores / (2.0 * (np.max(np.abs(raw_scores)) + 1e-10))
+        return np.clip(scores, 0.0, 1.0)
 
 
 # ---------------------------------------------------------------------------
@@ -240,7 +256,7 @@ class CsFactorBucketReturn(SeriesOperator):
         for b in range(n_buckets):
             mask = bucket_indices == b
             if mask.sum() > 0:
-                bucket_means_map[b] = float(np.mean(ret_valid[mask]))
+                bucket_means_map[b] = _finite_mean(ret_valid[mask])
 
         # Map each stock to its bucket's mean return
         result = np.full(n, np.nan, dtype=float)
@@ -310,7 +326,7 @@ class CsEmpiricalBayesShrinkage(SeriesOperator):
         for row in range(rows):
             e_row = ev[row]
             s_row = sv[row]
-            valid = np.isfinite(e_row) & np.isfinite(s_row) & (s_row > 0)
+            valid = np.isfinite(e_row) & np.isfinite(s_row) & (s_row >= 0)
             if valid.sum() < _MIN_BREADTH:
                 continue
 
@@ -333,24 +349,21 @@ class CsEmpiricalBayesShrinkage(SeriesOperator):
         if n < 2:
             return None
 
-        # Cross-sectional mean (shrinkage target)
-        cs_mean = float(np.mean(estimate_valid))
-
-        # Cross-sectional variance
-        cs_var = float(np.var(estimate_valid, ddof=1))
-        if cs_var <= 0 or not np.isfinite(cs_var):
-            # No variance -> shrink everything to mean
-            return np.full(n, cs_mean, dtype=float)
-
-        # Precision weighting: higher std_err -> lower weight -> more shrinkage
-        # weight = 1 / (1 + lambda * sigma^2 / var(estimate))
-        variance_ratio = (std_err_valid ** 2) / cs_var
-        weights = 1.0 / (1.0 + shrinkage_factor * variance_ratio)
-        weights = np.clip(weights, 0.0, 1.0)
-
-        # Shrink toward mean
-        shrunk = cs_mean + (estimate_valid - cs_mean) * weights
-        return shrunk
+        if shrinkage_factor==0:
+            return estimate_valid.copy()
+        scale=float(np.max(np.abs(estimate_valid)))
+        if scale==0:
+            return estimate_valid.copy()
+        e=estimate_valid/scale
+        mean=float(np.mean(e))
+        variance=float(np.var(e,ddof=1))
+        if variance<=0:
+            return np.full(n,mean*scale,dtype=float)
+        with np.errstate(over="ignore",under="ignore"):
+            ratio=(std_err_valid/scale)*(np.sqrt(shrinkage_factor)/np.sqrt(variance))
+            weights=(1./np.hypot(1.,ratio))**2
+        # Convex combination in scaled units avoids overflow in e - mean.
+        return (e*weights+mean*(1.-weights))*scale
 
 
 # ---------------------------------------------------------------------------
@@ -427,9 +440,9 @@ class CsShrinkToGroupMean(SeriesOperator):
 
         for label in labels:
             # Skip invalid membership labels (from group_ext.py logic)
-            if label is None:
+            if label is None or pd.isna(label):
                 continue
-            if isinstance(label, str) and label == "":
+            if isinstance(label, str) and not label.strip():
                 continue
             if not isinstance(label, (str, bool)):
                 try:
@@ -445,7 +458,7 @@ class CsShrinkToGroupMean(SeriesOperator):
             if valid.sum() == 0:
                 continue
 
-            group_mean = float(np.mean(x_group[valid]))
+            group_mean = _finite_mean(x_group[valid])
 
             # Apply shrinkage: shrunk = x * (1 - intensity) + group_mean * intensity
             for j in np.flatnonzero(idx):
@@ -473,13 +486,14 @@ class PanelPeerGraphAggregate(SeriesOperator):
 
     参数:
         x: 输入值
-        similarity: 相似度矩阵（或邻接矩阵），shape 应与 x 对齐
+        similarity: 静态有向邻接矩阵 StaticAdjacency（也接受同轴 N×N DataFrame）
         method: 聚合方法（"mean"/"weighted_mean"/"sum"，默认 "mean"）
         threshold: 相似度阈值（默认 0.0，仅聚合相似度 > threshold 的邻居）
 
     语义:
-        - 每行独立计算（横截面）
-        - similarity[i, j] 表示股票 i 和 j 的相似度
+        - 每个日期使用同一个静态图；不支持 date×N×N 动态图
+        - similarity[i, j] 表示源节点 i 指向邻居 j 的权重
+        - 始终排除对角线/自身，且仅选择 similarity > threshold
         - method="mean": 邻居均值
         - method="weighted_mean": 相似度加权均值
         - method="sum": 邻居总和
@@ -490,34 +504,32 @@ class PanelPeerGraphAggregate(SeriesOperator):
         - 对角线元素（自身相似度）被忽略
     """
 
-    metadata = _metadata(
-        "panel_peer_graph_aggregate",
-        "横截面图聚合（基于相似度矩阵聚合邻居值）",
-        ["x", "similarity", "method", "threshold"],
-        domain="price_volume",
-        unit="same_as:x",
-        cost=3,
+    metadata = OperatorMetadata(
+        name="panel_peer_graph_aggregate", category="cross_sectional",
+        description="静态有向邻接图聚合；不支持 date×N×N 动态图",
+        param_names=["x", "similarity", "method", "threshold"],
+        panel_params=("x",), scalar_params=("similarity", "method", "threshold"),
+        param_specs={
+            "similarity": ParamSpec(dtype=StaticAdjacency, searchable=False),
+            "method": ParamSpec(dtype=str, choices=("mean", "weighted_mean", "sum"), default="mean", searchable=False),
+            "threshold": ParamSpec(dtype=float, default=0.0, searchable=False),
+        },
+        return_type="series", output_unit="same_as:x",
+        tags=["cross_sectional", "daily", "pit_safe", "causal", "typed_v2",
+              "signature:x,similarity,method,threshold->series", "domain:price_volume",
+              "unit:same_as:x", "cost:3", "static_adjacency", "directed", "dynamic_graph:unsupported"],
     )
 
     def _calculate_series(
         self,
         x: pd.DataFrame,
-        similarity: pd.DataFrame,
+        similarity: StaticAdjacency,
         method: str = "mean",
         threshold: float = 0.0,
         **_: Any
     ) -> pd.DataFrame:
-        # Note: similarity is expected to be a panel (date × stock) where each cell
-        # encodes graph structure. For simplicity, we interpret similarity as a
-        # daily cross-sectional similarity measure where similarity[row, col_i]
-        # represents the similarity of stock col_i to a reference.
-        #
-        # In a true graph context, we'd need a 3D tensor (date × N × N).
-        # For this MVP, we simplify: similarity[row, j] is the weight for stock j.
-
-        x, similarity = _aligned(x, similarity)
         xv = x.to_numpy(dtype=float)
-        sv = similarity.to_numpy(dtype=float)
+        sv = similarity.values_for(x.columns)
         rows, cols = xv.shape
         out = np.full((rows, cols), np.nan, dtype=float)
 
@@ -529,51 +541,37 @@ class PanelPeerGraphAggregate(SeriesOperator):
         threshold = float(threshold)
 
         for row in range(rows):
-            out[row] = self._graph_aggregate_row(
-                xv[row], sv[row], method, threshold
-            )
+            out[row] = self._graph_aggregate_row(xv[row], sv, method, threshold)
 
         return _frame_like(x, out)
 
     @staticmethod
     def _graph_aggregate_row(
         x_row: np.ndarray,
-        sim_row: np.ndarray,
+        adjacency: np.ndarray,
         method: str,
         threshold: float,
     ) -> np.ndarray:
-        """Aggregate neighbors for one cross-section (simplified version)."""
+        """Aggregate each source node's eligible destination neighbors."""
         n = len(x_row)
         out = np.full(n, np.nan, dtype=float)
 
-        # Simplified interpretation: sim_row[j] is the weight/similarity for stock j
-        # For a true graph, we'd have a N×N matrix per row.
-        # Here we treat sim_row as a "global similarity profile" and aggregate
-        # all stocks weighted by similarity.
-
         valid_x = np.isfinite(x_row)
-        valid_sim = np.isfinite(sim_row) & (sim_row > threshold)
-        valid = valid_x & valid_sim
-
-        if valid.sum() < 2:
-            # Need at least 2 valid neighbors
-            return out
-
-        if method == "mean":
-            # Simple mean of neighbors
-            agg_val = float(np.mean(x_row[valid]))
-            out[valid] = agg_val
-        elif method == "weighted_mean":
-            # Weighted mean by similarity
-            weights = sim_row[valid]
-            total_w = float(np.sum(weights))
-            if total_w > 0:
-                agg_val = float(np.sum(x_row[valid] * weights) / total_w)
-                out[valid] = agg_val
-        elif method == "sum":
-            # Sum of neighbors
-            agg_val = float(np.sum(x_row[valid]))
-            out[valid] = agg_val
+        for source in range(n):
+            eligible = valid_x & (adjacency[source] > threshold)
+            eligible[source] = False
+            if not eligible.any():
+                continue
+            values = x_row[eligible]
+            if method == "mean":
+                out[source] = _finite_mean(values)
+            elif method == "sum":
+                out[source] = float(np.sum(values))
+            else:
+                weights = adjacency[source, eligible]
+                total_w = float(np.sum(weights))
+                if np.isfinite(total_w) and total_w != 0.0:
+                    out[source] = float(np.sum(values * weights) / total_w)
 
         return out
 

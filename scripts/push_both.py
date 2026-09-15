@@ -128,6 +128,63 @@ def authenticated_url(anchor: str, name: str) -> str:
     return f"{parsed.scheme}://{auth}github.com/{ORG}/{name}.git"
 
 
+def _origin_token() -> str:
+    """Extract the push credential from root origin (never logged)."""
+    url = git(ROOT, "remote", "get-url", "--push", "origin")
+    parsed = urlparse(url)
+    token = parsed.username or ""
+    if parsed.password:
+        token += ":" + parsed.password
+    if not token:
+        raise SyncError("root origin push URL carries no credential; cannot open PRs")
+    return token
+
+
+def _gh_api(method: str, path: str, token: str, body: dict | None = None) -> dict:
+    import json as _json
+    import urllib.error
+    import urllib.request
+    data = _json.dumps(body).encode() if body is not None else None
+    req = urllib.request.Request(
+        f"https://api.github.com{path}", data=data, method=method,
+        headers={"Authorization": f"token {token}",
+                 "Accept": "application/vnd.github+json",
+                 "Content-Type": "application/json"})
+    try:
+        with urllib.request.urlopen(req) as resp:
+            return json.loads(resp.read() or b"{}")
+    except urllib.error.HTTPError as exc:
+        detail = exc.read().decode(errors="replace")[:400]
+        raise SyncError(f"GitHub API {method} {path} -> HTTP {exc.code}: {sanitize(detail)}") from exc
+
+
+def publish_root_via_pr(root_sha: str, token: str) -> dict:
+    """Root goes to main ONLY through a PR branch: push branch -> open PR -> squash-merge."""
+    owner, name = ROOT_OWNER, "quant_projects"
+    branch = f"push/{root_sha[:10]}"
+    api = f"repos/{owner}/{name}"
+    # 1. push the branch carrying the local commit
+    git(ROOT, "push", "origin", f"{root_sha}:refs/heads/{branch}")
+    # 2. open PR branch -> main
+    pr = _gh_api("POST", f"{api}/pulls", token, {
+        "title": f"push {root_sha[:10]}",
+        "head": branch, "base": "main",
+        "body": f"Automated publication of commit {root_sha} by push_both.py"})
+    number = pr.get("number")
+    if not number:
+        raise SyncError(f"PR creation returned no number: {sanitize(str(pr))[:200]}")
+    # 3. squash-merge into main
+    merged = _gh_api("PUT", f"{api}/pulls/{number}/merge", token, {"merge_method": "squash"})
+    if not merged.get("merged"):
+        raise SyncError(f"PR #{number} not merged: {sanitize(str(merged))[:200]}")
+    # 4. delete the transient branch (PR itself left for the audit trail)
+    try:
+        _gh_api("DELETE", f"{api}/git/refs/heads/{branch}", token)
+    except SyncError:
+        pass
+    return {"pr": number, "branch": branch}
+
+
 def assert_root_state(expected_sha: str | None, *, allow_dirty: bool) -> tuple[str, bool]:
     branch = git(ROOT, "symbolic-ref", "--quiet", "--short", "HEAD")
     if branch != "main":
@@ -228,10 +285,22 @@ def _main(argv=None) -> int:
 
         # Fetching every mirror can take time. Refuse if another task changed root meanwhile.
         assert_root_state(root_sha, allow_dirty=False)
-        # Root is published first.
+        # Root is published via PR branch -> squash-merge into main (never direct push).
+        root_publication = None
         if not ns.only:
             verify_push_remote(ROOT, "origin", ROOT_OWNER, "quant_projects")
-            git(ROOT, "push", "origin", f"{root_sha}:refs/heads/main")
+            root_publication = publish_root_via_pr(root_sha, _origin_token())
+            result["rootPR"] = root_publication
+            # merge may change the remote tip; verify remote main carries our tree
+            git(ROOT, "fetch", "--quiet", "origin", "main")
+            remote_main = git(ROOT, "rev-parse", "FETCH_HEAD^{commit}")
+            remote_tree = git(ROOT, "rev-parse", "FETCH_HEAD^{tree}")
+            local_tree = git(ROOT, "rev-parse", "HEAD^{tree}")
+            if remote_tree != local_tree:
+                raise SyncError(
+                    f"post-PR verification failed: remote main tree {remote_tree[:10]} "
+                    f"!= local tree {local_tree[:10]}")
+            result["remoteMainAfterPR"] = remote_main
         # Only after root succeeds do mirrors publish immutable commit IDs.
         for cache, name, tree, parent, entry, auth_url in plans:
             if entry["status"] == "unchanged":

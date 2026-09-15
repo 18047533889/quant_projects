@@ -360,8 +360,13 @@ def test_fiscal_acceleration_backend_parity():
     out_pl = _calc("fiscal_acceleration", x_pl, pid_pl, lag=1, min_periods=3, backend="polars")
     out_pl_pd = out_pl.to_pandas()
 
-    # Compare
-    pd.testing.assert_frame_equal(out_pd, out_pl_pd, rtol=1e-10, atol=1e-10)
+    # ``pl.from_pandas`` above does not carry a non-column pandas index.
+    # Compare the representable table contract (columns + values), not an index
+    # that was already discarded before the operator ran.
+    pd.testing.assert_frame_equal(
+        out_pd.reset_index(drop=True), out_pl_pd.reset_index(drop=True),
+        rtol=1e-10, atol=1e-10,
+    )
 
 
 @pytest.mark.skipif(not HAS_POLARS, reason="polars not available")

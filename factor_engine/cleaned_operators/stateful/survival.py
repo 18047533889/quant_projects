@@ -28,11 +28,30 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from factor_engine.cleaned_operators.base import SeriesOperator, register_operator
+from factor_engine.cleaned_operators.base import OperatorMetadata, ParamRole, ParamSpec, SeriesOperator, register_operator, strict_int_param
 from factor_engine.cleaned_operators.rolling_pack import frame_like
 from factor_engine.cleaned_operators.stateful._common import metadata
 
 _EPS = 1e-12
+
+
+def _survival_metadata(name, description, params, *, unit, min_default, with_alpha=False):
+    result = metadata(name, description, params, domain="trading_state", unit=unit)
+    specs = {
+        "history_window": ParamSpec(dtype=int, min=1, default=60, history_semantics="event_count", param_role=ParamRole.HORIZON),
+        "min_completed_runs": ParamSpec(dtype=int, min=1, default=min_default, searchable=False, param_role=ParamRole.SUPPORT_POLICY),
+        "inactive_policy": ParamSpec(dtype=str, choices=("nan", "zero"), default="nan", searchable=False, param_role=ParamRole.POLICY),
+        "gap_policy": ParamSpec(dtype=str, choices=("nan", "lower_bound"), default="nan", searchable=False, param_role=ParamRole.MISSING_POLICY),
+    }
+    if with_alpha:
+        specs["alpha"] = ParamSpec(dtype=float, min=0.0, default=1.0, param_role=ParamRole.ESTIMATOR_RESOLUTION)
+    result.param_specs = specs
+    result.panel_params = ("state",)
+    result.panel_arity = 1
+    result.scalar_params = tuple(param for param in params if param != "state")
+    result.output_unit = "dimensionless" if unit == "ratio" else "count"
+    result.window_semantics = "completed_event_count"
+    return result
 
 
 def _survival_kernel(
@@ -185,12 +204,12 @@ class TsStateAgePercentile(SeriesOperator):
     when the completed-run sample is below ``min_completed_runs``.
     """
 
-    metadata = metadata(
+    metadata = _survival_metadata(
         "ts_state_age_percentile",
         "当前状态年龄在历史已结束 episode 中的经验分位。",
         ["state", "history_window", "min_completed_runs", "inactive_policy", "gap_policy"],
-        domain="trading_state",
         unit="ratio",
+        min_default=5,
     )
 
     def _calculate_series(
@@ -202,8 +221,8 @@ class TsStateAgePercentile(SeriesOperator):
         gap_policy: str = "nan",
         **_: Any,
     ) -> pd.DataFrame:
-        hw = max(2, int(history_window))
-        mc = max(2, int(min_completed_runs))
+        hw = strict_int_param(history_window, "history_window", lower=1)
+        mc = strict_int_param(min_completed_runs, "min_completed_runs", lower=1)
         sv = state.to_numpy(dtype=float)
         rows, cols = sv.shape
         out = np.full((rows, cols), np.nan, dtype=float)
@@ -232,12 +251,13 @@ class TsStateExitHazard(SeriesOperator):
     ``min_completed_runs``.
     """
 
-    metadata = metadata(
+    metadata = _survival_metadata(
         "ts_state_exit_hazard",
         "当前状态年龄的历史退出风险(平滑 hazard)。",
         ["state", "history_window", "min_completed_runs", "alpha", "inactive_policy", "gap_policy"],
-        domain="trading_state",
         unit="ratio",
+        min_default=5,
+        with_alpha=True,
     )
 
     def _calculate_series(
@@ -250,9 +270,11 @@ class TsStateExitHazard(SeriesOperator):
         gap_policy: str = "nan",
         **_: Any,
     ) -> pd.DataFrame:
-        hw = max(2, int(history_window))
-        mc = max(2, int(min_completed_runs))
-        al = max(0.0, float(alpha))
+        hw = strict_int_param(history_window, "history_window", lower=1)
+        mc = strict_int_param(min_completed_runs, "min_completed_runs", lower=1)
+        al = float(alpha)
+        if not np.isfinite(al) or al < 0.0:
+            raise ValueError("alpha must be finite and >= 0")
         sv = state.to_numpy(dtype=float)
         rows, cols = sv.shape
         out = np.full((rows, cols), np.nan, dtype=float)
@@ -279,12 +301,12 @@ class TsStateResidualLife(SeriesOperator):
     current age, else NaN.  Output 0 when not in an active state.
     """
 
-    metadata = metadata(
+    metadata = _survival_metadata(
         "ts_state_residual_life",
         "当前状态的期望剩余寿命(基于已完成 episode)。",
         ["state", "history_window", "min_completed_runs", "inactive_policy", "gap_policy"],
-        domain="trading_state",
         unit="count",
+        min_default=20,
     )
 
     def _calculate_series(
@@ -296,8 +318,8 @@ class TsStateResidualLife(SeriesOperator):
         gap_policy: str = "nan",
         **_: Any,
     ) -> pd.DataFrame:
-        hw = max(2, int(history_window))
-        mc = max(2, int(min_completed_runs))
+        hw = strict_int_param(history_window, "history_window", lower=1)
+        mc = strict_int_param(min_completed_runs, "min_completed_runs", lower=1)
         sv = state.to_numpy(dtype=float)
         rows, cols = sv.shape
         out = np.full((rows, cols), np.nan, dtype=float)
@@ -312,10 +334,12 @@ class TsStateResidualLife(SeriesOperator):
 
 def _register_surface() -> None:
     from factor_engine.cleaned_operators.stateful._common import register_stateful_surface
+    from factor_engine.cleaned_operators.rolling_pack import register_polars_udf
 
-    register_stateful_surface(
-        ["ts_state_age_percentile", "ts_state_exit_hazard", "ts_state_residual_life"]
-    )
+    canonicals = ["ts_state_age_percentile", "ts_state_exit_hazard", "ts_state_residual_life"]
+    register_stateful_surface(canonicals)
+    for canonical in canonicals:
+        register_polars_udf(canonical)
 
 
 _register_surface()
@@ -338,4 +362,5 @@ for _survival_canonical in (
         _survival_canonical,
         state_model="episode",
         chunking="required_full_history",
+        history_kind="full_history",
     )

@@ -1,0 +1,1 @@
+{"command": [".venv/bin/python", "-m", "pytest", "--noconftest", "-q", "factor_engine/tests/operators/test_r6_jump_robust_contract.py"], "returncode": 0, "sampled_peak_family_rss_bytes": 470720512, "sampling_seconds": 0.1, "seconds": 51.429661608999595, "test_guard_reason": null, "hard_memory_cap": false}

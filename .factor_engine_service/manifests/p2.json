@@ -10,11 +10,11 @@
   "endpoint_policy": "research",
   "idempotency_key": null,
   "request_metadata": {},
-  "status": "interrupted",
-  "submitted_at": "2026-09-06T20:34:00.653185+00:00",
+  "status": "submitted",
+  "submitted_at": "2026-09-11T19:28:42.031986+00:00",
   "queued_at": null,
   "started_at": null,
-  "finished_at": "2026-09-06T20:35:15.597205+00:00",
+  "finished_at": null,
   "deadline_at": null,
   "deadline_monotonic": null,
   "timeout_seconds": null,
@@ -23,8 +23,8 @@
   "attempt": 1,
   "worker_id": null,
   "phase": null,
-  "error_code": "JOB_INTERRUPTED",
-  "error": "job interrupted by service restart (non-terminal at startup)",
+  "error_code": null,
+  "error": null,
   "error_id": null,
   "request": {},
   "request_digest": null,
@@ -35,5 +35,5 @@
   "cost_estimate": {},
   "result_summary": {},
   "artifacts": {},
-  "_checksum": "def9ff9d9b7878e709948f4e8a5ea917cd5de7a33782880bc322c4699f2b7a27"
+  "_checksum": "8a1431a2f7c6204c233bad56d6c6a9b9f06eaa944e8d802d4df1221eb034c9ac"
 }

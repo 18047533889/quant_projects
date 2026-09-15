@@ -364,6 +364,9 @@ def test_feature_member_ref_factor_value_ref_shape():
     m2 = _member(0, metadata=src)
     src["k"].append(3)
     src["extra"] = "x"
-    assert m2.metadata == {"k": [1, 2]}
+    assert m2.metadata == {"k": (1, 2)}
     # and mutating the stored value is impossible (frozen deep copy).
-    assert m2.metadata["k"] == [1, 2]
+    assert m2.metadata["k"] == (1, 2)
+    exported = m2.to_dict()
+    exported["metadata"]["k"].append(9)
+    assert m2.metadata["k"] == (1, 2)

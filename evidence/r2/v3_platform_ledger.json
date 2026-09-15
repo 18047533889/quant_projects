@@ -1,0 +1,13 @@
+{
+  "owner": "quant_platform",
+  "items": [
+    {"issue_id":"PL-01","status":"FIXED_LOCAL","public_path":"Pipeline.run -> PipelineReport.with_normalization_failed","root_cause":"failure state required a success content hash","tests":["test_bad_and_good_ingestion_records_reconcile_without_fake_hash"],"migration":"recover missing ingestion audit records where source rows remain"},
+    {"issue_id":"PL-02","status":"FIXED_LOCAL_DURABLE_FAULT_INJECTION_PENDING","public_path":"Pipeline.run -> _record_terminal_consumption","root_cause":"candidate and batch were consumed before retryable work succeeded","tests":["test_retryable_failure_is_not_consumed_before_success"],"migration":"dry-run historical consumed rows lacking terminal outcomes"},
+    {"issue_id":"PL-03","status":"FIXED_LOCAL","public_path":"Pipeline._make_candidate_handler","root_cause":"all exceptions were rewritten as CAPABILITY","tests":["quant_platform/tests/test_orchestrator_pipeline.py"],"migration":"reclassify only old errors whose original cause is available"},
+    {"issue_id":"PL-04","status":"FIXED_LOCAL","public_path":"Pipeline.run -> AdmissionAuthority.decide","root_cause":"rank_ic None was treated as no evidence before domain policy","tests":["test_rank_ic_not_applicable_reaches_domain_admission_authority"],"migration":"allow purpose-specific re-review of early rejects"},
+    {"issue_id":"PL-05","status":"FIXED_LOCAL_CALLER_POPULATION_PENDING","public_path":"normalize_candidate -> FactorCandidateManifest -> AdmissionRequest","root_cause":"semantic family hint and source spec hash were reused as definition identity","tests":["test_admission_request_carries_domain_refs_only"],"migration":"unresolved legacy refs remain isolated"},
+    {"issue_id":"PL-06","status":"FIXED_LOCAL_PERSISTENCE_PENDING","public_path":"Pipeline._snapshot_feature_set","root_cause":"round-only approvals replaced prior members","tests":["test_pipeline_feature_snapshot_and_retrain_diff_across_rounds"],"migration":"old round snapshots cannot represent published complete sets"},
+    {"issue_id":"PL-07","status":"PARTIAL_FIXED_LOCAL","public_path":"Pipeline._build_candidate_artifact","root_cause":"content hash and size did not describe serialized bytes","tests":["test_pipeline_happy_path_register_one_and_publishes_four_events"],"migration":"legacy mem refs are unverified research artifacts","blocker":"configured DA publisher/resolver required for durable publication"},
+    {"issue_id":"PL-08","status":"INTEGRATION_PENDING","public_path":"Pipeline.run registry/outbox/snapshot sequence","root_cause":"separate commits lack one recovery protocol","tests":[],"migration":"audit half-published generations","blocker":"transactional outbox and generation-publisher composition remains"}
+  ]
+}

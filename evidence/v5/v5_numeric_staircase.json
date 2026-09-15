@@ -1,0 +1,139 @@
+{
+  "configuration": {
+    "N": 20,
+    "T": 4,
+    "batch_max": 256,
+    "instances": [
+      {
+        "cost_profile": "gross",
+        "horizon": 1,
+        "leg": "unspecified",
+        "metric_id": "rank_ic",
+        "metric_version": "3.0.0",
+        "output_mode": "FULL_DIAGNOSTIC",
+        "parameters": {
+          "min_assets": 10,
+          "min_periods": 1
+        },
+        "portfolio_profile": "default",
+        "price_convention": "vwap_to_vwap",
+        "quantile_builder_parameters": {},
+        "scenario_id": "scale",
+        "usage_profile": "research"
+      },
+      {
+        "cost_profile": "gross",
+        "horizon": 1,
+        "leg": "unspecified",
+        "metric_id": "coverage",
+        "metric_version": "0.1.0",
+        "output_mode": "FULL_DIAGNOSTIC",
+        "parameters": {
+          "min_assets": 10
+        },
+        "portfolio_profile": "default",
+        "price_convention": "vwap_to_vwap",
+        "quantile_builder_parameters": {},
+        "scenario_id": "scale",
+        "usage_profile": "research"
+      }
+    ],
+    "path": "public EvaluationRequest/evaluate via QEJobHandler atomic sink",
+    "production_throughput_claim": false,
+    "totals": [
+      1000,
+      10000,
+      100000
+    ]
+  },
+  "hardware": {
+    "hostname": "qs-compute-gpu-hk-01",
+    "logical_cpus": 32,
+    "memory": {
+      "MemTotal": "96796196 kB",
+      "SwapTotal": "2035708 kB"
+    },
+    "numpy": "2.2.6",
+    "platform": "Linux-6.8.0-124-generic-x86_64-with-glibc2.39",
+    "processor": "AMD EPYC 9K84 96-Core Processor",
+    "python": "3.12.3",
+    "thread_env": {
+      "OMP_NUM_THREADS": "1",
+      "OPENBLAS_NUM_THREADS": "1",
+      "POLARS_MAX_THREADS": "2"
+    }
+  },
+  "run_utc": "2026-09-07T16:03:27Z",
+  "post_safety_patch_validation": {
+    "note": "The original three-tier measurements predate the durable-job safety patch. They remain the measured staircase results. A separate F=1000 regression after the patch verified the same public QE path and new deterministic atomic sink behavior; the 10000/100000 tiers were not rerun.",
+    "factors_requested": 1000,
+    "factor_instance_completed": 2000,
+    "factor_instance_failed": 0,
+    "failure_rate": 0.0,
+    "shards": 4,
+    "elapsed_seconds": 1.7687512149568647,
+    "rss_peak_mib": 161.97265625,
+    "output_files": 8,
+    "output_bytes": 1064135,
+    "tests": "16 direct/reference tests passed; 10 job-focused tests passed"
+  },
+  "tiers": [
+    {
+      "batch_limit": 256,
+      "elapsed_seconds": 1.7293612260837108,
+      "factor_instance_attempted": 2000,
+      "factor_instance_completed": 2000,
+      "factor_instance_failed": 0,
+      "factor_instances_per_second": 1156.4963813425923,
+      "factors_per_second": 578.2481906712961,
+      "factors_requested": 1000,
+      "failed_shards": 0,
+      "failure_rate": 0.0,
+      "metric_instances": 2,
+      "output_bytes": 1156071,
+      "output_files": 8,
+      "rss_peak_delta_mib": 3.25,
+      "rss_peak_mib": 162.91015625,
+      "rss_start_mib": 159.66015625,
+      "shards": 4
+    },
+    {
+      "batch_limit": 256,
+      "elapsed_seconds": 17.739022696041502,
+      "factor_instance_attempted": 20000,
+      "factor_instance_completed": 20000,
+      "factor_instance_failed": 0,
+      "factor_instances_per_second": 1127.4578280156911,
+      "factors_per_second": 563.7289140078456,
+      "factors_requested": 10000,
+      "failed_shards": 0,
+      "failure_rate": 0.0,
+      "metric_instances": 2,
+      "output_bytes": 11720070,
+      "output_files": 80,
+      "rss_peak_delta_mib": 0.75,
+      "rss_peak_mib": 163.66015625,
+      "rss_start_mib": 162.91015625,
+      "shards": 40
+    },
+    {
+      "batch_limit": 256,
+      "elapsed_seconds": 170.21856031392235,
+      "factor_instance_attempted": 200000,
+      "factor_instance_completed": 200000,
+      "factor_instance_failed": 0,
+      "factor_instances_per_second": 1174.960002194554,
+      "factors_per_second": 587.480001097277,
+      "factors_requested": 100000,
+      "failed_shards": 0,
+      "failure_rate": 0.0,
+      "metric_instances": 2,
+      "output_bytes": 118731625,
+      "output_files": 782,
+      "rss_peak_delta_mib": 2.0,
+      "rss_peak_mib": 170.41015625,
+      "rss_start_mib": 168.41015625,
+      "shards": 391
+    }
+  ]
+}

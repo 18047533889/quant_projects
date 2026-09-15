@@ -21,10 +21,48 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from factor_engine.cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
+from factor_engine.cleaned_operators.base import OperatorMetadata, ParamSpec, ParamRole, RelationalParamSpec, SeriesOperator, register_operator
+from factor_engine.cleaned_operators.common.strict_params import strict_int
 from factor_engine.cleaned_operators.rolling_pack import frame_like, register_polars_udf
 
-_EPS = 1e-12
+def _corr_scaled(x, y):
+    """Real Pearson correlation without unit-dependent cutoffs or overflow."""
+    x = np.asarray(x, dtype=np.longdouble)
+    y = np.asarray(y, dtype=np.longdouble)
+    if not np.isfinite(x).all() or not np.isfinite(y).all():
+        return np.nan
+    x = x - np.mean(x)
+    y = y - np.mean(y)
+    sx, sy = np.max(np.abs(x)), np.max(np.abs(y))
+    if sx == 0 or sy == 0:
+        return np.nan
+    x, y = x / sx, y / sy
+    value = np.sum(x*y) / np.sqrt(np.sum(x*x)*np.sum(y*y))
+    return float(np.clip(value, -1, 1)) if np.isfinite(value) else np.nan
+
+
+def _aligned(event, mark):
+    if not isinstance(event, pd.DataFrame) or not isinstance(mark, pd.DataFrame):
+        raise TypeError("event and mark must be DataFrame panels")
+    if (not event.index.is_unique or not event.columns.is_unique or
+        not mark.index.is_unique or not mark.columns.is_unique or
+        not event.index.equals(mark.index) or not event.columns.equals(mark.columns)):
+        raise ValueError("event and mark axes must be unique and exactly aligned")
+
+
+def _specs(name):
+    fields = {"mark_missing_policy": ParamSpec(dtype=str, choices=("censor", "drop"),
+        default="censor", searchable=False, param_role=ParamRole.SUPPORT_POLICY)}
+    if name == "event_mark_autocorr":
+        fields.update(history_window=ParamSpec(dtype=int, min=6, default=252,
+            param_role=ParamRole.HORIZON, history_formula="history_window"),
+            event_lag=ParamSpec(dtype=int, min=1, default=1, param_role=ParamRole.HORIZON))
+    else:
+        fields.update(window=ParamSpec(dtype=int, min=6, default=252,
+            param_role=ParamRole.HORIZON, history_formula="window + max_boundary_extension"),
+            max_boundary_extension=ParamSpec(dtype=int, min=0, default=5,
+            searchable=False, param_role=ParamRole.SUPPORT_POLICY))
+    return fields
 
 
 def _metadata(
@@ -41,6 +79,12 @@ def _metadata(
         category="marked_event",
         description=description,
         param_names=params,
+        panel_params=("event", "mark"),
+        scalar_params=tuple(params[2:]),
+        param_specs=_specs(name),
+        relational_specs=[RelationalParamSpec("history_window >= event_lag + 5")]
+            if name == "event_mark_autocorr" else [],
+        window_semantics="exact_rows",
         return_type="series",
         tags=[
             "marked_event", "daily", "pit_safe", "causal", "typed_v2",
@@ -58,6 +102,8 @@ def _validate_event_bool(ev: np.ndarray, operator: str) -> None:
     silently thresholding at 0.5 would reinterpret a non-boolean input as an
     event.  Raise loudly instead.
     """
+    if np.isinf(ev).any():
+        raise ValueError(f"{operator} event indicators cannot contain infinity")
     finite = ev[np.isfinite(ev)]
     bad = finite[(finite != 0.0) & (finite != 1.0)]
     if bad.size:
@@ -94,14 +140,16 @@ def _mark_autocorr_1d(marks: np.ndarray, event_lag: int) -> float:
         return np.nan
     aa = a[ok]
     bb = b[ok]
-    va = float(np.var(aa))
-    vb = float(np.var(bb))
-    if va <= _EPS or vb <= _EPS:
-        return np.nan
-    return float(np.corrcoef(aa, bb)[0, 1])
+    return _corr_scaled(aa, bb)
 
 
 def _mark_autocorr_chunk(evc: np.ndarray, mkc: np.ndarray, event_lag: int, mark_missing_policy: str = "censor") -> float:
+    # Unknown event observations also break event-index adjacency: even with
+    # mark_missing_policy="drop", the number of intervening events is unknown.
+    unknown = np.flatnonzero(~np.isfinite(evc))
+    if unknown.size:
+        start = int(unknown[-1]) + 1
+        evc, mkc = evc[start:], mkc[start:]
     _, marks, has_mark = _event_states(evc, mkc)
     n = marks.shape[0]
     if n <= event_lag + 3:
@@ -160,8 +208,9 @@ class EventMarkAutocorr(SeriesOperator):
         mark_missing_policy: str = "censor",
         **_: Any,
     ) -> pd.DataFrame:
-        w = int(history_window)
-        el = int(event_lag)
+        _aligned(event, mark)
+        w = strict_int(history_window, "history_window", minimum=6)
+        el = strict_int(event_lag, "event_lag", minimum=1)
         if el < 1:
             raise ValueError("event_mark_autocorr requires event_lag >= 1")
         if w < el + 5:
@@ -203,14 +252,7 @@ def _corr_trailing_run(xv: np.ndarray, yv: np.ndarray, ok: np.ndarray, min_pairs
         return np.nan
     xs = xv[j:n]
     ys = yv[j:n]
-    vx = float(np.var(xs))
-    vy = float(np.var(ys))
-    if vx <= _EPS or vy <= _EPS:
-        return np.nan
-    c = float(np.corrcoef(xs, ys)[0, 1])
-    if not np.isfinite(c):
-        return np.nan
-    return c
+    return _corr_scaled(xs, ys)
 
 
 def _interval_mark_chunk(evc: np.ndarray, in_idx: np.ndarray, prev_idx: int | None, mkv: np.ndarray, mark_missing_policy: str = "censor") -> float:
@@ -254,11 +296,7 @@ def _interval_mark_chunk(evc: np.ndarray, in_idx: np.ndarray, prev_idx: int | No
         return _corr_trailing_run(intervals, marks_after, ok, min_pairs=4)
     ti = intervals[ok]
     mi = marks_after[ok]
-    vt = float(np.var(ti))
-    vm = float(np.var(mi))
-    if vt <= _EPS or vm <= _EPS:
-        return np.nan
-    return float(np.corrcoef(ti, mi)[0, 1])
+    return _corr_scaled(ti, mi)
 
 
 @register_operator(
@@ -300,8 +338,9 @@ class EventIntervalMarkCoupling(SeriesOperator):
         max_boundary_extension: int = 5,
         **_: Any,
     ) -> pd.DataFrame:
-        w = int(window)
-        mbe = int(max_boundary_extension)
+        _aligned(event, mark)
+        w = strict_int(window, "window", minimum=6)
+        mbe = strict_int(max_boundary_extension, "max_boundary_extension", minimum=0)
         if w < 6:
             raise ValueError("event_interval_mark_coupling requires window >= 6")
         if mbe < 0:

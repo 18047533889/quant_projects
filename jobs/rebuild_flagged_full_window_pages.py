@@ -19,7 +19,7 @@ sys.path.insert(0, str(ROOT / "jobs"))
 import incremental_factor_intake as intake
 from factor_report_sources import FULL_WINDOW_END, FULL_WINDOW_START, resolve_raw_matrix
 
-REPORTS = ROOT / "factor_engine/docs/reports/2026-08-23/factors"
+REPORTS = ROOT / "../quant_project_archives/factor_engine-docs/reports/2026-08-23/factors"
 STALE_MARKER = "尚未完成全窗回测"
 
 

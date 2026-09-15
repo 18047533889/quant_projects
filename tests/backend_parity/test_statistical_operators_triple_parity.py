@@ -96,6 +96,12 @@ def _create_statistical_panel():
     # Returns for correlation tests
     ret = close.groupby(level="instrument").pct_change()
     ret = ret.fillna(0.0)
+    offset_x = pd.Series(
+        np.repeat(np.resize(1e12 + np.asarray([1.0, 2.0, 4.0, 7.0, 11.0]), 50), 6), index=idx
+    )
+    offset_y = pd.Series(
+        np.repeat(np.resize(1e12 + np.asarray([3.0, 1.0, 5.0, 2.0, 9.0]), 50), 6), index=idx
+    )
 
     return InMemorySeriesSource(
         data={
@@ -105,6 +111,11 @@ def _create_statistical_panel():
             "high": high,
             "low": low,
             "ret": ret,
+            "offset_x": offset_x,
+            "offset_y": offset_y,
+            "constant_zero": pd.Series(0.0, index=idx),
+            "constant_one": pd.Series(1.0, index=idx),
+            "constant_large": pd.Series(1e308, index=idx),
         }
     )
 
@@ -135,6 +146,11 @@ test_stats:
     High: double
     Low: double
     Ret: double
+    OffsetX: double
+    OffsetY: double
+    ConstantZero: double
+    ConstantOne: double
+    ConstantLarge: double
 """
     path = tmp_path / "datasets.yaml"
     path.write_text(content.strip() + "\n", encoding="utf-8")
@@ -154,6 +170,11 @@ def _seed_duckdb_panel(root: Path, mem: InMemorySeriesSource) -> None:
             "High": float(mem.data["high"].loc[(ts, sym)]) if pd.notna(mem.data["high"].loc[(ts, sym)]) else None,
             "Low": float(mem.data["low"].loc[(ts, sym)]) if pd.notna(mem.data["low"].loc[(ts, sym)]) else None,
             "Ret": float(mem.data["ret"].loc[(ts, sym)]),
+            "OffsetX": float(mem.data["offset_x"].loc[(ts, sym)]),
+            "OffsetY": float(mem.data["offset_y"].loc[(ts, sym)]),
+            "ConstantZero": 0.0,
+            "ConstantOne": 1.0,
+            "ConstantLarge": 1e308,
         })
     pd.DataFrame(rows).to_parquet(root / "panel.parquet")
 
@@ -198,6 +219,11 @@ def _sql_col(name: str):
         "high": "High",
         "low": "Low",
         "ret": "Ret",
+        "offset_x": "OffsetX",
+        "offset_y": "OffsetY",
+        "constant_zero": "ConstantZero",
+        "constant_one": "ConstantOne",
+        "constant_large": "ConstantLarge",
     }
     return col(mapping.get(name, name))
 
@@ -219,9 +245,112 @@ def _assert_parity(
         )
 
 
+def _lossless_normalize_timestamp_index(series: pd.Series) -> pd.Series:
+    """Normalize timestamp storage units without changing axis semantics."""
+    assert isinstance(series.index, pd.MultiIndex)
+    assert series.index.names == ["timestamp", "instrument"]
+
+    timestamps = pd.DatetimeIndex(series.index.get_level_values("timestamp"))
+    instruments = series.index.get_level_values("instrument")
+    normalized_timestamps = timestamps.as_unit("ns")
+    assert len(normalized_timestamps) == len(timestamps)
+    assert normalized_timestamps.tolist() == timestamps.tolist()
+
+    normalized_index = pd.MultiIndex.from_arrays(
+        [normalized_timestamps, instruments], names=series.index.names
+    )
+    assert normalized_index.get_level_values("timestamp").tolist() == timestamps.tolist()
+    assert normalized_index.get_level_values("instrument").tolist() == instruments.tolist()
+    np.testing.assert_array_equal(normalized_index.duplicated(), series.index.duplicated())
+
+    normalized = series.copy()
+    normalized.index = normalized_index
+    return normalized
+
+
 # ============================================================================
 # Test: ts_corr (Time-series Correlation) - Pandas vs Polars
 # ============================================================================
+
+
+@pytest.mark.parametrize(
+    "canonical,args,expected",
+    [
+        ("ts_cov", ("offset_x", "offset_y"), 9.5),
+        ("ts_var", ("offset_x",), 16.5),
+        ("ts_std", ("offset_x",), np.sqrt(16.5)),
+    ],
+)
+def test_large_offset_centered_statistics_real_backends(
+    panel, duckdb_source, canonical, args, expected
+):
+    factory = make_cleaned_call_factory(canonical)
+    memory_expr = factory(*(col(name) for name in args), 5)
+    sql_expr = factory(*(_sql_col(name) for name in args), 5)
+
+    pandas_out = _result_series(_run(panel, memory_expr, "pandas"))
+    polars_run = _run(panel, memory_expr, "polars_long")
+    assert polars_run.get("used_polars_long_path") is True
+    polars_out = _result_series(polars_run)
+    sql_run = _run(duckdb_source, sql_expr, "duckdb_sql")
+    assert_duckdb_real_sql_execution(sql_run)
+    duckdb_out = _result_series(sql_run)
+
+    polars_error = float(np.nanmax(np.abs(pandas_out.to_numpy() - polars_out.to_numpy())))
+    duckdb_error = float(np.nanmax(np.abs(pandas_out.to_numpy() - duckdb_out.to_numpy())))
+    assert polars_error <= 1e-12, (canonical, "polars", polars_error)
+    assert duckdb_error <= 1e-12, (canonical, "duckdb", duckdb_error)
+    _assert_parity(
+        *(
+            _lossless_normalize_timestamp_index(out)
+            for out in (pandas_out, polars_out, duckdb_out)
+        ),
+        rtol=1e-12,
+        atol=1e-12,
+    )
+    for instrument in pandas_out.index.get_level_values("instrument").unique():
+        assert pandas_out.xs(instrument, level="instrument").iloc[-1] == pytest.approx(
+            expected, rel=1e-14, abs=1e-14
+        )
+
+
+def test_timestamp_unit_normalization_does_not_hide_axis_mismatch():
+    timestamps = pd.date_range("2024-01-02", periods=2, freq="D")
+    base_index = pd.MultiIndex.from_arrays(
+        [timestamps, ["A", "A"]], names=["timestamp", "instrument"]
+    )
+    shifted_index = pd.MultiIndex.from_arrays(
+        [timestamps + pd.Timedelta(seconds=1), ["A", "A"]],
+        names=["timestamp", "instrument"],
+    )
+    base = _lossless_normalize_timestamp_index(pd.Series([1.0, 2.0], index=base_index))
+    shifted = _lossless_normalize_timestamp_index(
+        pd.Series([1.0, 2.0], index=shifted_index)
+    )
+
+    assert not base.index.equals(shifted.index)
+    with pytest.raises(AssertionError):
+        pd.testing.assert_series_equal(base, shifted)
+
+
+@pytest.mark.parametrize(
+    "field", ["constant_zero", "constant_one", "constant_large"]
+)
+def test_constant_kurtosis_remains_undefined_real_backends(
+    panel, duckdb_source, field
+):
+    memory_expr = make_cleaned_call_factory("ts_kurt")(col(field), 5)
+    sql_expr = make_cleaned_call_factory("ts_kurt")(_sql_col(field), 5)
+    pandas_out = _result_series(_run(panel, memory_expr, "pandas"))
+    polars_run = _run(panel, memory_expr, "polars_long")
+    assert polars_run.get("used_polars_long_path") is True
+    polars_out = _result_series(polars_run)
+    sql_run = _run(duckdb_source, sql_expr, "duckdb_sql")
+    assert_duckdb_real_sql_execution(sql_run)
+    duckdb_out = _result_series(sql_run)
+    assert pandas_out.isna().all()
+    assert polars_out.isna().all()
+    assert duckdb_out.isna().all()
 
 
 @pytest.mark.parametrize("window", [5, 10, 20, 30])
@@ -643,6 +772,52 @@ def test_short_window_statistics(panel):
     cov_pd = _result_series(_run(panel, expr_cov, "pandas"))
     cov_polars = _result_series(_run(panel, expr_cov, "polars_long"))
     _assert_parity(cov_pd, cov_polars)
+
+
+def test_two_point_corr_is_exact_sign_oracle_across_pandas_and_polars():
+    """Two-point Pearson is an algebraic identity, including large offsets."""
+    load_all()
+    dates = pd.date_range("2024-01-02", periods=5, freq="B")
+    idx = pd.MultiIndex.from_product(
+        [dates, ["A"]], names=["timestamp", "instrument"]
+    )
+    source = InMemorySeriesSource(data={
+        "x": pd.Series([1e12, 1e12 + 1, np.nan, 1e12 + 4, 1e12 + 5], index=idx),
+        "y": pd.Series([1e12, 1e12 - 3, np.nan, 1e12 + 8, 1e12 + 9], index=idx),
+    })
+    expr = make_cleaned_call_factory("ts_corr")(col("x"), col("y"), 2)
+    expected = pd.Series(
+        [np.nan, -1.0, np.nan, np.nan, 1.0], index=idx, name="test"
+    )
+
+    pandas_out = _result_series(_run(source, expr, "pandas"))
+    polars_run = _run(source, expr, "polars_long")
+    assert polars_run.get("used_polars_long_path") is True
+    polars_out = _result_series(polars_run)
+    pd.testing.assert_series_equal(pandas_out, expected, check_names=False)
+    pd.testing.assert_series_equal(polars_out, expected, check_names=False)
+    assert pandas_out.dropna().isin((-1.0, 1.0)).all()
+    assert polars_out.dropna().isin((-1.0, 1.0)).all()
+
+
+@pytest.mark.parametrize("scale", [1e-100, 1e100])
+def test_corr_centered_normalization_scale_oracle_across_pandas_and_polars(scale):
+    dates = pd.date_range("2024-01-02", periods=5, freq="B")
+    idx = pd.MultiIndex.from_product(
+        [dates, ["A"]], names=["timestamp", "instrument"]
+    )
+    x_base = np.asarray([1.0, 2.0, 4.0, 7.0, 11.0])
+    y_base = np.asarray([3.0, 1.0, 5.0, 2.0, 9.0])
+    source = InMemorySeriesSource(data={
+        "x": pd.Series(x_base * scale, index=idx),
+        "y": pd.Series(y_base * scale, index=idx),
+    })
+    expr = make_cleaned_call_factory("ts_corr")(col("x"), col("y"), 5)
+    expected = float(np.corrcoef(x_base, y_base)[0, 1])
+    pandas_value = _result_series(_run(source, expr, "pandas")).iloc[-1]
+    polars_value = _result_series(_run(source, expr, "polars_long")).iloc[-1]
+    assert pandas_value == pytest.approx(expected, rel=1e-14, abs=1e-14)
+    assert polars_value == pytest.approx(expected, rel=1e-14, abs=1e-14)
 
 
 def test_all_nan_window(panel):

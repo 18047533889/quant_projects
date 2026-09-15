@@ -1,0 +1,32 @@
+......F                                                                  [100%]
+=================================== FAILURES ===================================
+______________ test_registry_outputs_match_across_final_backends _______________
+factor_engine/tests/operators/test_r6_wavelet_spectral_contract.py:78: in test_registry_outputs_match_across_final_backends
+    actual = polars.calculate(x=frame, window=128)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+factor_engine/cleaned_operators/base_polars.py:158: in calculate
+    return self._calculate_series(*processed_args, **processed_kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+factor_engine/cleaned_operators/rolling_pack.py:356: in _calculate_series
+    return _call_pandas_delegate(canonical, frames, params)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+factor_engine/cleaned_operators/rolling_pack.py:224: in _call_pandas_delegate
+    return _pl_rebuild(panels[0], result)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+factor_engine/cleaned_operators/rolling_pack.py:144: in _pl_rebuild
+    return base.with_columns(
+           ^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/pandas/core/generic.py:6321: in __getattr__
+    return object.__getattribute__(self, name)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   AttributeError: 'DataFrame' object has no attribute 'with_columns'
+=============================== warnings summary ===============================
+factor_engine/tests/operators/test_r6_wavelet_spectral_contract.py::test_complete_defaults_and_history_contracts
+factor_engine/tests/operators/test_r6_wavelet_spectral_contract.py::test_complete_defaults_and_history_contracts
+  /home/sunhaiwei/quant_projects/factor_engine/backend/polars_backend_kind.py:248: UserWarning: Production mode: Operator unknown (backend=polars) lacks explicit PhysicalImplementationSpec; classification=UNSUPPORTED. Add _physical_spec attribute or physical_spec() method for production eligibility.
+    return polars_backend_kind(op, source=source, production_mode=production_mode)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED factor_engine/tests/operators/test_r6_wavelet_spectral_contract.py::test_registry_outputs_match_across_final_backends
+1 failed, 6 passed, 2 warnings in 50.16s

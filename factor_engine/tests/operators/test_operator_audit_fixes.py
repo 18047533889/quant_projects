@@ -209,9 +209,16 @@ def test_relation_rank_weighted_sum_denominator_counts_valid_only() -> None:
     s1 = pd.DataFrame([[0.4]], index=idx, columns=["A"])
     s2 = pd.DataFrame([[0.3]], index=idx, columns=["A"])
     s3 = pd.DataFrame([[np.nan]], index=idx, columns=["A"])  # 无效名次
-    out = _op("relation_rank_weighted_sum").calculate(s1, s2, s3)
-    expected = (0.4 / 1.0 + 0.3 / 2.0) / (1.0 + 0.5)
-    assert out["A"].iloc[0] == pytest.approx(expected)
+    op = _op("relation_rank_weighted_sum")
+    valid_only = op.calculate(s1, s2, s3, missing_semantic="unknown")
+    expected_valid_only = (0.4 / 1.0 + 0.3 / 2.0) / (1.0 + 0.5)
+    assert valid_only["A"].iloc[0] == pytest.approx(expected_valid_only)
+
+    # The default is an honest outside-top-k slot: it contributes a structural
+    # zero at rank 3, whose rank weight remains in the denominator.
+    outside_top_k = op.calculate(s1, s2, s3)
+    expected_structural_zero = (0.4 / 1.0 + 0.3 / 2.0) / (1.0 + 0.5 + 1.0 / 3.0)
+    assert outside_top_k["A"].iloc[0] == pytest.approx(expected_structural_zero)
 
 
 def test_relation_peer_weighted_mean_ex_self_excludes_nan_value() -> None:

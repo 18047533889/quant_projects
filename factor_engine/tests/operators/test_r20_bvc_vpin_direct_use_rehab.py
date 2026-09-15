@@ -586,7 +586,10 @@ def test_legacy_micro_vpin_is_not_true_vpin():
         or OperatorRegistry.get("micro_vpin")
     )
     if op is None:
-        pytest.skip("micro_vpin not loadable in this session")
+        # The legacy proxy is deliberately excluded from the governed runtime
+        # surface, but its historical reference kernel remains executable.
+        from factor_engine.cleaned_operators.microstructure.ops import MicroVpinOp
+        op = MicroVpinOp()
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         legacy = op.calculate(

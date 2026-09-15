@@ -34,7 +34,13 @@ from typing import Any, Callable
 import numpy as np
 import pandas as pd
 
-from factor_engine.cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
+from factor_engine.cleaned_operators.base import (
+    OperatorMetadata,
+    ParamRole,
+    ParamSpec,
+    SeriesOperator,
+    register_operator,
+)
 from factor_engine.cleaned_operators.rolling_pack import check_window, frame_like, register_polars_bridge
 
 _EPS = 1e-12
@@ -48,6 +54,16 @@ def _metadata(name: str, description: str, params: list[str], *, unit: str, cost
         category="intraday_microstructure",
         description="跨交易日滚动分钟行（非当日会话聚合）：" + description,
         param_names=params,
+        panel_params=("returns",),
+        scalar_params=("window",),
+        param_specs={
+            "window": ParamSpec(
+                dtype=int,
+                min=2,
+                default=240,
+                param_role=ParamRole.HORIZON,
+            ),
+        },
         return_type="series",
         input_grain="minute",
         output_grain="minute",

@@ -86,7 +86,7 @@ def _write_duckdb_registry(path: Path, root: Path) -> None:
   time_column: TradeDate
   instrument_column: Symbol
   schema:
-    TradeDate: date
+    TradeDate: timestamp
     Symbol: string
     Close: double
     Volume: double
@@ -103,7 +103,7 @@ def _seed_duckdb(root: Path, source: InMemorySeriesSource) -> None:
         close_val = source.data["close"].loc[(timestamp, instrument)]
         rows.append(
             {
-                "TradeDate": timestamp.date(),
+                "TradeDate": timestamp,
                 "Symbol": instrument,
                 "Close": float(close_val) if pd.notna(close_val) else None,
                 "Volume": float(source.data["volume"].loc[(timestamp, instrument)]),

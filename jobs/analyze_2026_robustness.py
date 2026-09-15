@@ -6,7 +6,7 @@ RankIC/IR 变化、2026 多空净值(LG10-LG1, vwap-to-vwap 收益)，判定每�
 (稳定/轻度衰减/失效)，并按算子频次与语义逻辑分类做稳定性对比，产出:
 
   1. weekly_backtest_output/robustness_2026.json   (每因子明细 + 算子 + 逻辑分类 + 汇总)
-  2. factor_engine/docs/reports/2026-08-23/robustness_2026/robustness_2026.html (独立页)
+  2. ../quant_project_archives/factor_engine-docs/reports/2026-08-23/robustness_2026/robustness_2026.html (独立页)
   3. 首页 index.html 注入<section id="robustness-2026">「📉 2026 因子失效稳健性分析」
   4. 每个详情页 factors/factor_<page>.html 追加 2026 状态行
   5. 图表 PNG(base64 内嵌) 4 张 + 各归 PNG 导出到 robustness_2026/imgs/
@@ -36,7 +36,7 @@ MB = os.path.join(ROOT, "weekly_backtest_output")
 MAT = os.path.join(MB, "factor_matrices_all")
 FORMULA = "/home/sunhaiwei/factor_delivery_converted/formula_lqtp_all.json"
 VWAP_F = os.path.join(ROOT, "lightgbm_qs/data/build/ohlcv_adj_wide/Vwap_adj.parquet")
-REPORT_DIR = os.path.join(ROOT, "factor_engine/docs/reports/2026-08-23")
+REPORT_DIR = os.path.join(ROOT, "../quant_project_archives/factor_engine-docs/reports/2026-08-23")
 OUT_JSON = os.path.join(MB, "robustness_2026.json")
 OUT_PAGE_DIR = os.path.join(REPORT_DIR, "robustness_2026")
 INDEX = os.path.join(REPORT_DIR, "index.html")

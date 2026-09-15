@@ -2,6 +2,7 @@
 """Audited rolling and cross-sectional regression operators."""
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import Any, Sequence
 
 import numpy as np
@@ -44,6 +45,62 @@ _REG_PARAM_SPECS_Z: dict[str, ParamSpec] = {
     "add_intercept": ParamSpec(dtype=bool, searchable=False, param_role=ParamRole.POLICY),
 }
 
+_ROLLING_REG_PARAM_SPECS: dict[str, ParamSpec] = {
+    "window": ParamSpec(dtype=int, min=2, param_role=ParamRole.HORIZON),
+    "min_periods": ParamSpec(dtype=int, min=1, default=None, searchable=False,
+                             param_role=ParamRole.SUPPORT_POLICY),
+    "add_intercept": ParamSpec(dtype=bool, default=True, searchable=False,
+                               param_role=ParamRole.POLICY),
+}
+_ROLLING_REG_TSTAT_PARAM_SPECS = {
+    **_ROLLING_REG_PARAM_SPECS,
+    "window": ParamSpec(dtype=int, min=3, param_role=ParamRole.HORIZON),
+}
+_TIME_SLOPE_PARAM_SPECS = {
+    "window": ParamSpec(dtype=int, min=2, default=20, param_role=ParamRole.HORIZON),
+    "min_periods": ParamSpec(dtype=int, min=1, default=None, searchable=False,
+                             param_role=ParamRole.SUPPORT_POLICY),
+}
+_TREND_TSTAT_PARAM_SPECS = {
+    "window": ParamSpec(dtype=int, min=3, param_role=ParamRole.HORIZON),
+    "min_periods": ParamSpec(dtype=int, min=1, default=None, searchable=False,
+                             param_role=ParamRole.SUPPORT_POLICY),
+}
+_DRAWDOWN_PARAM_SPECS = {
+    "window": ParamSpec(dtype=int, min=2, param_role=ParamRole.HORIZON),
+    "min_periods": ParamSpec(dtype=int, min=2, default=2, searchable=False,
+                             param_role=ParamRole.SUPPORT_POLICY),
+}
+_PARTIAL_CORR_PARAM_SPECS = {
+    "window": ParamSpec(dtype=int, min=3, param_role=ParamRole.HORIZON),
+    "min_periods": ParamSpec(dtype=int, min=3, default=None, searchable=False,
+                             param_role=ParamRole.SUPPORT_POLICY),
+}
+_NTH_VALUE_PARAM_SPECS = {
+    "window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
+    "n": ParamSpec(dtype=int, min=1, default=1, param_role=ParamRole.MODEL_ORDER),
+    "order": ParamSpec(dtype=str, choices=("largest", "smallest"), default="largest",
+                       searchable=False, param_role=ParamRole.POLICY),
+    "min_periods": ParamSpec(dtype=int, min=1, default=None, searchable=False,
+                             param_role=ParamRole.SUPPORT_POLICY),
+}
+_CS_REG_PARAM_SPECS = {
+    "add_intercept": ParamSpec(dtype=bool, default=True, searchable=False,
+                               param_role=ParamRole.POLICY),
+    "min_obs": ParamSpec(dtype=int, min=1, default=None, searchable=False,
+                         param_role=ParamRole.SUPPORT_POLICY),
+}
+_CS_WLS_PARAM_SPECS = {
+    **_CS_REG_PARAM_SPECS,
+    "min_obs": ParamSpec(dtype=int, min=2, default=5, searchable=False,
+                         param_role=ParamRole.SUPPORT_POLICY),
+}
+_CS_NEUTRALIZE_PARAM_SPECS = {
+    **_CS_REG_PARAM_SPECS,
+    "group": ParamSpec(default=None, searchable=False, param_role=ParamRole.POLICY),
+    "weight": ParamSpec(default=None, searchable=False, param_role=ParamRole.POLICY),
+}
+
 
 def _fit_1d(
     y: np.ndarray,
@@ -60,6 +117,11 @@ def _fit_1d(
         design = np.column_stack((np.ones(xv.size), xv))
     if np.linalg.matrix_rank(design) < design.shape[1]:
         return None
+    if add_intercept and np.ptp(yv) == 0:
+        # Exact constant response: residual variance is zero, so the slope
+        # t-statistic is undefined, not an arbitrary lstsq roundoff ratio.
+        current_resid = 0.0 if np.isfinite(y[-1]) and np.isfinite(x[-1]) else np.nan
+        return 0.0, float(yv[0]), current_resid, np.nan, np.nan
     beta, *_ = np.linalg.lstsq(design, yv, rcond=None)
     fitted = design @ beta
     resid = yv - fitted
@@ -225,10 +287,31 @@ def pl_time_slope(x, window=20, min_periods=None, **_):
 def pd_trend_tstat(x, window, min_periods=None, **_):
     w, mp = window_params(window, min_periods, default_mp=3)
     arr, out = x.to_numpy(dtype=float), np.full(x.shape, np.nan)
+    # Full finite windows have the same time design. Reuse only its rank and
+    # covariance geometry; keep lstsq and residual arithmetic identical to
+    # _fit_1d, including near-perfect trends and zero residual variance.
+    design = None
+    if 3 <= w <= arr.shape[0]:
+        candidate = np.column_stack((np.ones(w), np.arange(w,dtype=float)))
+        if np.linalg.matrix_rank(candidate) == 2:
+            design = candidate
+            slope_geometry = np.linalg.pinv(design.T @ design)[-1,-1]
     for col in range(arr.shape[1]):
         for row in range(arr.shape[0]):
             values = arr[max(0, row - w + 1) : row + 1, col]
-            if np.isfinite(values).sum() < mp:
+            mask = np.isfinite(values)
+            count = mask.sum()
+            if count < mp:
+                continue
+            if count and np.ptp(values[mask]) == 0:
+                continue
+            if design is not None and values.size == w and count == w:
+                yv = values[mask]
+                beta, *_ = np.linalg.lstsq(design, yv, rcond=None)
+                resid = yv - design @ beta
+                slope_var = (float(resid @ resid) / (w-2)) * slope_geometry
+                if np.isfinite(slope_var) and slope_var > 0:
+                    out[row,col] = float(beta[-1] / np.sqrt(slope_var))
                 continue
             fit = _fit_1d(values, np.arange(values.size, dtype=float), True)
             if fit is not None:
@@ -349,9 +432,8 @@ def _ols_residual_1d(
     return out
 
 
-def pd_cs_multi_resid(y, *features, add_intercept=True, min_obs=None, **_):
-    if not features:
-        raise ValueError("cs_multi_resid requires at least one exposure")
+def pd_cs_multi_resid(y, x1, x2, add_intercept=True, min_obs=None, **_):
+    features = (x1, x2)
     aligned = aligned_pd(y, *features)
     target, xs = aligned[0], aligned[1:]
     out = np.full(target.shape, np.nan)
@@ -382,13 +464,19 @@ def pd_cs_wls_resid(y, x, weight, add_intercept=True, min_obs=5, **_):
 
 def pd_cs_neutralize(
     y,
-    *exposures,
+    exposures=None,
     group=None,
     weight=None,
     add_intercept=True,
     min_obs=None,
     **_,
 ):
+    if exposures is None:
+        exposures = ()
+    elif isinstance(exposures, (tuple, list)):
+        exposures = tuple(exposures)
+    else:
+        exposures = (exposures,)
     if not exposures and group is None:
         raise ValueError("cs_neutralize requires exposures and/or group")
     frames = [y, *exposures]
@@ -424,22 +512,36 @@ def pd_cs_neutralize(
 
 def register() -> None:
     regression_params = ["y", "x", "window", "min_periods", "add_intercept"]
-    register_specs({
+    specs = {
         "ts_regression_slope": Spec("time_series_regression", regression_params, "滚动 OLS 斜率", pd_reg_slope),
-        "ts_regression_intercept": Spec("time_series_regression", regression_params, "滚动 OLS 截距", pd_reg_intercept),
-        "ts_regression_resid": Spec("time_series_regression", regression_params, "滚动 OLS 当前残差", pd_reg_resid),
-        "ts_regression_in_sample_resid": Spec("time_series_regression", regression_params, "样本内 OLS 当前残差（fit 含当前行）", pd_reg_in_sample_resid),
+        "ts_regression_intercept": Spec("time_series_regression", regression_params, "滚动 OLS 截距", pd_reg_intercept, param_specs=_ROLLING_REG_PARAM_SPECS),
+        "ts_regression_resid": Spec("time_series_regression", regression_params, "滚动 OLS 当前残差", pd_reg_resid, param_specs=_ROLLING_REG_PARAM_SPECS),
+        "ts_regression_in_sample_resid": Spec("time_series_regression", regression_params, "样本内 OLS 当前残差（fit 含当前行）", pd_reg_in_sample_resid, param_specs=_ROLLING_REG_PARAM_SPECS),
         "ts_regression_forecast_error": Spec("time_series_regression", regression_params, "out-of-sample OLS 预测误差（fit 截止 t-1）", pd_reg_forecast_error, param_specs=_REG_PARAM_SPECS),
         "ts_regression_forecast_error_z": Spec("time_series_regression", regression_params, "OLS 预测误差 / 样本内残差 std", pd_reg_forecast_error_z, param_specs=_REG_PARAM_SPECS_Z),
-        "ts_regression_resid_mean": Spec("time_series_regression", regression_params, "滚动 OLS 当前残差的窗口均值", pd_reg_resid_mean),
-        "ts_regression_r2": Spec("time_series_regression", regression_params, "滚动 OLS 决定系数", pd_reg_r2),
-        "ts_regression_tstat": Spec("time_series_regression", regression_params, "滚动 OLS 斜率 t 值", pd_reg_tstat),
-        "ts_time_slope": Spec("time_series_regression", ["x", "window", "min_periods"], "缺失感知滚动时间斜率", pd_time_slope, pl_time_slope),
-        "ts_trend_tstat": Spec("time_series_regression", ["x", "window", "min_periods"], "滚动时间趋势 t 值", pd_trend_tstat),
-        "ts_max_drawdown": Spec("time_series_risk", ["x", "window", "min_periods"], "严格窗口最大回撤", pd_max_drawdown),
-        "ts_partial_corr": Spec("time_series_regression", ["x", "y", "z", "window", "min_periods"], "共同样本滚动偏相关", pd_partial_corr),
-        "ts_nth_value": Spec("time_series_order", ["x", "window", "n", "order", "min_periods"], "滚动第 N 大或第 N 小值", pd_nth_value),
-        "cs_multi_resid": Spec("cross_sectional_regression", ["y", "x1", "x2", "...", "add_intercept", "min_obs"], "多变量横截面 OLS 残差", pd_cs_multi_resid),
-        "cs_wls_resid": Spec("cross_sectional_regression", ["y", "x", "weight", "add_intercept", "min_obs"], "加权横截面回归残差", pd_cs_wls_resid),
-        "cs_neutralize": Spec("cross_sectional_regression", ["y", "exposures", "group", "weight", "add_intercept", "min_obs"], "连续和分类风险暴露联合中性化", pd_cs_neutralize),
-    })
+        "ts_regression_resid_mean": Spec("time_series_regression", regression_params, "滚动 OLS 当前残差的窗口均值", pd_reg_resid_mean, param_specs=_ROLLING_REG_PARAM_SPECS),
+        "ts_regression_r2": Spec("time_series_regression", regression_params, "滚动 OLS 决定系数", pd_reg_r2, param_specs=_ROLLING_REG_PARAM_SPECS),
+        "ts_regression_tstat": Spec("time_series_regression", regression_params, "滚动 OLS 斜率 t 值", pd_reg_tstat, param_specs=_ROLLING_REG_TSTAT_PARAM_SPECS),
+        "ts_time_slope": Spec("time_series_regression", ["x", "window", "min_periods"], "缺失感知滚动时间斜率", pd_time_slope, pl_time_slope, param_specs=_TIME_SLOPE_PARAM_SPECS),
+        "ts_trend_tstat": Spec("time_series_regression", ["x", "window", "min_periods"], "滚动时间趋势 t 值", pd_trend_tstat, param_specs=_TREND_TSTAT_PARAM_SPECS),
+        "ts_max_drawdown": Spec("time_series_risk", ["x", "window", "min_periods"], "严格窗口最大回撤", pd_max_drawdown, param_specs=_DRAWDOWN_PARAM_SPECS),
+        "ts_partial_corr": Spec("time_series_regression", ["x", "y", "z", "window", "min_periods"], "共同样本滚动偏相关", pd_partial_corr, param_specs=_PARTIAL_CORR_PARAM_SPECS),
+        "ts_nth_value": Spec("time_series_order", ["x", "window", "n", "order", "min_periods"], "滚动第 N 大或第 N 小值", pd_nth_value, param_specs=_NTH_VALUE_PARAM_SPECS),
+        "cs_multi_resid": Spec("cross_sectional_regression", ["y", "x1", "x2", "add_intercept", "min_obs"], "双暴露横截面 OLS 残差", pd_cs_multi_resid, param_specs=_CS_REG_PARAM_SPECS, panel_params=("y", "x1", "x2"), scalar_params=("add_intercept", "min_obs")),
+        "cs_wls_resid": Spec("cross_sectional_regression", ["y", "x", "weight", "add_intercept", "min_obs"], "加权横截面回归残差", pd_cs_wls_resid, param_specs=_CS_WLS_PARAM_SPECS, panel_params=("y", "x", "weight"), scalar_params=("add_intercept", "min_obs")),
+        "cs_neutralize": Spec("cross_sectional_regression", ["y", "exposures", "group", "weight", "add_intercept", "min_obs"], "连续和分类风险暴露联合中性化（exposures 可为单面板或面板序列）", pd_cs_neutralize, param_specs={**_CS_NEUTRALIZE_PARAM_SPECS, "exposures": ParamSpec(default=None, searchable=False, param_role=ParamRole.POLICY)}, panel_params=("y", "exposures", "group", "weight"), scalar_params=("add_intercept", "min_obs")),
+    }
+    # Every fixed-arity operator exposes an explicit panel/scalar topology.
+    # Cross-sectional entries with optional panel inputs provide their own
+    # topology above; all remaining entries derive the exact complement from
+    # their declared scalar ParamSpecs.
+    for name, spec in tuple(specs.items()):
+        if spec.panel_params or spec.scalar_params:
+            continue
+        scalars = tuple((spec.param_specs or {}).keys())
+        specs[name] = replace(
+            spec,
+            panel_params=tuple(param for param in spec.params if param not in scalars),
+            scalar_params=scalars,
+        )
+    register_specs(specs)

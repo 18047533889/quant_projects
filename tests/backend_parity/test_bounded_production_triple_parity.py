@@ -24,6 +24,8 @@ F = make_cleaned_call_factory
 
 @pytest.fixture(scope="module")
 def panel() -> InMemorySeriesSource:
+    # Both the in-memory and parquet DATE sources use the same explicit axis
+    # contract; backend parity must not depend on pandas-version defaults.
     dates = pd.date_range("2024-01-02", periods=8, freq="D")
     index = pd.MultiIndex.from_product([dates, ["A", "B", "C"]], names=["timestamp", "instrument"])
     close = pd.Series(
@@ -53,7 +55,7 @@ def _write_registry(path: Path, root: Path) -> None:
   time_column: TradeDate
   instrument_column: Symbol
   schema:
-    TradeDate: date
+    TradeDate: timestamp
     Symbol: string
     Close: double
     Open: double
@@ -74,7 +76,7 @@ def _seed(root: Path, source: InMemorySeriesSource) -> None:
 
         rows.append(
             {
-                "TradeDate": timestamp.date(),
+                "TradeDate": timestamp,
                 "Symbol": instrument,
                 "Close": value("close"),
                 "Open": value("open"),

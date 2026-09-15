@@ -118,8 +118,11 @@ class LongTableDataSource(DataSource):
 
         ts, inst = self.dataset_axis_columns()
         merged: Any = None
+        # Preserve the inner source's multi-column scan/snapshot boundary.
+        # Calling load_column repeatedly defeats Composite/DataAccess coalescing.
+        loaded = self.load_columns(list(dict.fromkeys(columns)))
         for name in sorted(columns):
-            series = self.load_column(name)
+            series = loaded[name]
             part = series_to_long_table(
                 series,
                 timestamp_col=ts,

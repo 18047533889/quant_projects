@@ -7,11 +7,14 @@ their input and output containers are Polars objects.
 """
 from __future__ import annotations
 
+import copy
 from typing import Any
 
 import numpy as np
 import polars as pl
 
+from factor_engine.backend.contracts import ExecutionKind, PhysicalImplementationSpec
+from factor_engine.cleaned_operators.rolling_pack import _call_pandas_delegate
 from factor_engine.cleaned_operators.base_polars import OperatorMetadata, SeriesOperator, register_operator
 from factor_engine.cleaned_operators.common._polars_bridge import align_cols
 
@@ -35,6 +38,7 @@ def _meta(name: str, description: str, params: list[str]) -> OperatorMetadata:
 
 
 def _register(name: str, description: str, params: list[str], fn):
+    exact_delegates = {"ts_mean_reversion_half_life", "ts_variance_ratio_slope"}
     @register_operator(
         name=name, category="time_series_regression", business_category="time_series_regression",
         canonical=name, source="ts_model.polars_regression",
@@ -64,9 +68,23 @@ def _register(name: str, description: str, params: list[str], fn):
                     parameter_domain_hash="window:int:min=3",
                     semantic_contract_hash="liquidity_beta:on_liquidity_change:pairwise_finite:v2",
                 )
-        metadata = _meta(name, description, params)
+        if name in exact_delegates:
+            from factor_engine.cleaned_operators.registry import OperatorRegistry
+            metadata = copy.deepcopy(OperatorRegistry.get(name, "pandas_numpy").metadata)
+            metadata.tags = list(metadata.tags or []) + ["polars", "delegate:pandas_numpy"]
+            _physical_spec = PhysicalImplementationSpec(
+                canonical=name, backend="polars",
+                execution_kind=ExecutionKind.POLARS_PANDAS_DELEGATE,
+                supports_lazy=False, supports_streaming=False,
+                materializes_full_panel=True, supports_nulls=True,
+                supports_nan=True, supports_inf=True,
+            )
+        else:
+            metadata = _meta(name, description, params)
 
         def _calculate_series(self, *args, **kwargs):
+            if name in exact_delegates:
+                return _call_pandas_delegate(name, args, kwargs)
             return fn(*args, **kwargs)
 
     return _TsPolars

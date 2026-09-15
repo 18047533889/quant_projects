@@ -16,6 +16,7 @@
 与 ``group_neutralization.neutralize`` 区别：本模块不做行业/市值分组回归，只做全截面或行内运算。
 """
 from __future__ import annotations
+from factor_engine.cleaned_operators.common.elementwise_scalar_contracts import scalar_contract, polars_winsorize
 
 from factor_engine.cleaned_operators.common.cs_broadcast import (
     broadcast_row_stat,
@@ -26,6 +27,8 @@ from factor_engine.cleaned_operators.common.cs_broadcast import (
 from factor_engine.cleaned_operators.base import (
     Operator,
     OperatorMetadata,
+    ParamRole,
+    ParamSpec,
     SeriesOperator,
     ScalarOperator,
     TwoVarOperator,
@@ -88,6 +91,45 @@ def _finite_stats_input(arr: np.ndarray) -> np.ndarray:
     """
     out = np.array(arr, dtype=np.float64, copy=True)
     out[~np.isfinite(out)] = np.nan
+    return out
+
+
+_QUANTILE_SPEC = ParamSpec(dtype=float, min=0.0, max=1.0, default=0.5,
+                           searchable=True, param_role=ParamRole.STATE_THRESHOLD)
+_SCALE_TO_SPEC = ParamSpec(dtype=float, min=0.0, default=1.0,
+                           searchable=True, param_role=ParamRole.ECONOMIC)
+_CS_REGRESSION_MODE_SPEC = ParamSpec(dtype=int, choices=(0, 1, 2), default=0,
+                                     searchable=False, param_role=ParamRole.POLICY)
+
+
+def _finite_scalar(value, name: str, *, minimum=None, maximum=None) -> float:
+    if isinstance(value, (bool, np.bool_)):
+        raise ValueError(f"{name} must be a finite real number")
+    try:
+        out = float(value)
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise ValueError(f"{name} must be a finite real number") from exc
+    if not np.isfinite(out) or (minimum is not None and out < minimum) or (maximum is not None and out > maximum):
+        raise ValueError(f"{name} is outside its supported range")
+    return out
+
+
+def _scale_rows(values: np.ndarray, target: float) -> np.ndarray:
+    """Finite-only L1 row scaling without overflowing ``sum(abs(x))``."""
+    out = np.full(values.shape, np.nan, dtype=float)
+    for i, row in enumerate(values):
+        valid = np.isfinite(row)
+        if not np.any(valid):
+            continue
+        v = row[valid]
+        scale = float(np.max(np.abs(v)))
+        if scale == 0.0:
+            out[i, valid] = 0.0
+            continue
+        normalized = v / scale
+        denom = float(np.sum(np.abs(normalized)))
+        if denom > 0.0 and np.isfinite(denom):
+            out[i, valid] = target * normalized / denom
     return out
 try:
     import polars as pl
@@ -417,7 +459,14 @@ class CsQuantile(CrossSectionalPercentile):
         param_names=["x", "p"],
         return_type="series",
         tags=["cross_sectional", "quantile", "pit_safe"],
+        param_specs={"p": _QUANTILE_SPEC},
+        panel_params=("x",),
+        scalar_params=("p",),
     )
+
+    def _calculate_series(self, x: pd.DataFrame, p: float = 0.5, **kwargs) -> pd.DataFrame:
+        quantile = _finite_scalar(p, "p", minimum=0.0, maximum=1.0)
+        return super()._calculate_series(x, p=quantile, **kwargs)
 
 
 @register_operator(
@@ -832,8 +881,9 @@ class _PandasCrossSectionalScale(SeriesOperator):
     )
 
     def _calculate_series(self, x: pd.DataFrame, to: float = 1, **kwargs) -> pd.DataFrame:
-        abs_sum = x.abs().sum(axis=1).replace(0, 1)
-        return x.mul(to / abs_sum, axis=0)
+        target = _finite_scalar(to, "to", minimum=0.0)
+        return pd.DataFrame(_scale_rows(x.to_numpy(dtype=float), target),
+                            index=x.index, columns=x.columns, dtype=float)
 
 @register_operator(name="scale", category="cross_sectional", business_category="cross_sectional", canonical="scale", source="factor_dsl_np")
 class Scale(_PandasCrossSectionalScale):
@@ -846,7 +896,10 @@ class Scale(_PandasCrossSectionalScale):
         examples=["scale(Return, 1)", "scale(factor, 100)"],
         param_names=["x", "to"],
         return_type="series",
-        tags=["cross_sectional", "scale"]
+        tags=["cross_sectional", "scale"],
+        param_specs={"to": _SCALE_TO_SPEC},
+        panel_params=("x",),
+        scalar_params=("to",),
     )
 
 # aliases: SCALE, c_scale
@@ -925,11 +978,16 @@ class CSRegression(SeriesOperator):
         param_names=["y", "x", "mode"],
         return_type="series",
         tags=["cross_sectional", "regression"],
+        param_specs={"mode": _CS_REGRESSION_MODE_SPEC},
+        panel_params=("y", "x"),
+        scalar_params=("mode",),
     )
 
     def _calculate_series(self, y: pd.DataFrame, x: pd.DataFrame, mode: int = 0, **kwargs) -> pd.DataFrame:
         from factor_engine.cleaned_operators._numpy_kernels import cs_regression_
 
+        if isinstance(mode, (bool, np.bool_)) or not isinstance(mode, (int, np.integer)) or int(mode) not in (0, 1, 2):
+            raise ValueError("mode must be one of {0, 1, 2}")
         result = pd.DataFrame(np.nan, index=y.index, columns=y.columns, dtype=float)
         for idx in y.index:
             result.loc[idx] = cs_regression_(y.loc[idx].values, x.loc[idx].values, mode=int(mode))
@@ -1405,12 +1463,16 @@ class CsQuantilePolars(SeriesOperator):
         param_names=["x", "p"],
         return_type="series",
         tags=["cross_sectional", "quantile", "pit_safe", "polars"],
+        param_specs={"p": _QUANTILE_SPEC},
+        panel_params=("x",),
+        scalar_params=("p",),
     )
 
     def _calculate_series(self, x: pl.DataFrame, p: float = 0.5, **kwargs) -> pl.DataFrame:
+        quantile = _finite_scalar(p, "p", minimum=0.0, maximum=1.0)
         numeric_cols = [c for c in x.columns if c not in {"date", "stock_code"}]
-        pdf = x.select(numeric_cols).to_pandas()
-        q = pdf.quantile(float(p), axis=1)
+        pdf = pd.DataFrame(_finite_stats_input(x.select(numeric_cols).to_numpy()), columns=numeric_cols)
+        q = pdf.quantile(quantile, axis=1)
         broadcast = broadcast_row_stat(pdf, q)
         return x.with_columns([
             pl.Series(name=c, values=broadcast[c].to_numpy()) for c in numeric_cols
@@ -1437,29 +1499,11 @@ class CrossSectionalScale(SeriesOperator):
     )
 
     def _calculate_series(self, x: pl.DataFrame, to: float = 1, **kwargs) -> pl.DataFrame:
-        # PARITY-A（pandas 为参考）：scale = 每行有限值 ÷ 该行 |sum|；NaN 单元格
-        # 保持 NaN，有限单元格保持有限（pandas x.abs().sum(axis=1).replace(0,1) 语义）。
-        # 此前 polars 做 ``to / pl.when(abs_sum == 0).then(1).otherwise(abs_sum)``，
-        # 行内含任意 NaN 时 abs_sum 整行变 NaN → 整行除成 NaN，全表塌成 NaN。
-        # 这里用 is_nan 精确筛选（pandas reset_index 读入的 float NaN 是 float NaN，
-        # 不是 null）；用整行有限值重算 abs_sum（与 pandas skipna 一致）。
+        target = _finite_scalar(to, "to", minimum=0.0)
         numeric_cols = [c for c in x.columns if c not in ['date', 'stock_code']]
-        exprs = []
-        for c in numeric_cols:
-            val = pl.col(c)
-            finite = val.is_finite() & val.is_not_null()
-            abs_abs = val.abs().cast(pl.Float64)
-            row_abs_exprs = [
-                pl.when(pl.col(f).is_nan()).then(None).otherwise(pl.col(f).abs().cast(pl.Float64))
-                for f in numeric_cols
-            ]
-            row_abs_sum = pl.sum_horizontal(row_abs_exprs)
-            divisor = pl.when((row_abs_sum == 0) | row_abs_sum.is_null()).then(1.0).otherwise(row_abs_sum)
-            out = pl.when(val.is_nan()).then(float("nan")).otherwise(
-                pl.when(finite).then(val.cast(pl.Float64) * (to / divisor)).otherwise(None)
-            ).cast(pl.Float64).alias(c)
-            exprs.append(out)
-        return x.with_columns(exprs)
+        values = _scale_rows(x.select(numeric_cols).to_numpy(), target)
+        return x.with_columns([pl.Series(name=c, values=values[:, i])
+                               for i, c in enumerate(numeric_cols)])
 
 @register_operator(name="scale", category="cross_sectional", business_category="cross_sectional", canonical="scale", source="factor_dsl_np")
 class ScalePolars(CrossSectionalScale):
@@ -1472,7 +1516,10 @@ class ScalePolars(CrossSectionalScale):
         examples=["scale(Return, 1)", "scale(factor, 100)"],
         param_names=["x", "to"],
         return_type="series",
-        tags=["cross_sectional", "scale"]
+        tags=["cross_sectional", "scale"],
+        param_specs={"to": _SCALE_TO_SPEC},
+        panel_params=("x",),
+        scalar_params=("to",),
     )
 
 # aliases: SCALE, c_scale
@@ -1484,7 +1531,7 @@ class ScalePolars(CrossSectionalScale):
 class CrossSectionalWinsorizePolars(SeriesOperator):
     """截面去极值"""
 
-    metadata = OperatorMetadata(
+    metadata = OperatorMetadata(**scalar_contract("winsorize"),
         name="c_winsorize",
         category="cross_sectional",
         description="对截面数据进行缩尾处理",
@@ -1495,26 +1542,7 @@ class CrossSectionalWinsorizePolars(SeriesOperator):
     )
 
     def _calculate_series(self, x: pl.DataFrame, lower: float = 0.05, upper: float = 0.95, **kwargs) -> pl.DataFrame:
-        min_pct, max_pct = lower, upper
-        numeric_cols = [c for c in x.columns if c not in {"date", "stock_code"}]
-
-        # 使用 Numba 计算分位数并裁剪
-        arr = _finite_stats_input(x.select(numeric_cols).to_numpy())
-
-        # 计算每行的分位数
-        lower = np.nanpercentile(arr, min_pct * 100, axis=1, keepdims=True)
-        upper = np.nanpercentile(arr, max_pct * 100, axis=1, keepdims=True)
-
-        # 裁剪
-        clipped = np.clip(arr, lower, upper)
-
-        # 转换回 Polars
-        result_df = pl.DataFrame(clipped, schema=numeric_cols)
-
-        if 'date' in x.columns:
-            result_df = result_df.with_columns([x['date']])
-
-        return result_df
+        return polars_winsorize(x, lower, upper)
 
 # aliases: WINSORIZE
 
@@ -1632,11 +1660,16 @@ class CSRegressionPolars(SeriesOperator):
         param_names=["y", "x", "mode"],
         return_type="series",
         tags=["cross_sectional", "regression"],
+        param_specs={"mode": _CS_REGRESSION_MODE_SPEC},
+        panel_params=("y", "x"),
+        scalar_params=("mode",),
     )
 
     def _calculate_series(
         self, y: pl.DataFrame, x: pl.DataFrame, mode: int = 0, **kwargs
     ) -> pl.DataFrame:
+        if isinstance(mode, (bool, np.bool_)) or not isinstance(mode, (int, np.integer)) or int(mode) not in (0, 1, 2):
+            raise ValueError("mode must be one of {0, 1, 2}")
         numeric_cols = [c for c in y.columns if c not in ("date", "stock_code")]
         y_arr = y.select(numeric_cols).to_numpy()
         x_arr = x.select(numeric_cols).to_numpy()

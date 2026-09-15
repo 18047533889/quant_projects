@@ -1,0 +1,311 @@
+{
+  "receipts": [
+    {
+      "receipt": {
+        "source_tree_hash": "5a805d267f3cadeaa79a4049c355f9e0bcaba87df8ab24e0f0457bd57b5479f9",
+        "implementation_hash": "be028e85e762c95b05772e55e930e3e8b108749995fe7e4cc1c560ce9e8b6431",
+        "route": "quant_evaluator.metrics.robustness.compute_hac_variance",
+        "backend": "CPU/FP64",
+        "parameter_domain_hash": "b6fc6450556c06d90f33be718619e90d239f0eb2ae20a9817ca2f5b343ecca6e",
+        "metric_instance_hash": "d048e633b22d39db388ae4a89c05d76c8cc11a97bf762aecc3feaede64f16952",
+        "test_run_ref": "sha256:3e73b3ea528f0fc265f6d450222d9256fdec2a0347294ddc66b1d0e8bdeda6ef",
+        "assertions": {
+          "tests.test_v8_numeric_goldens::test_t31_hac_bartlett_normalization": "PASS",
+          "tests.test_v8_numeric_goldens::test_t32_hac_matches_positive_semidefinite_quadratic_form[20-0]": "PASS",
+          "tests.test_v8_numeric_goldens::test_t32_hac_matches_positive_semidefinite_quadratic_form[20-1]": "PASS",
+          "tests.test_v8_numeric_goldens::test_t32_hac_matches_positive_semidefinite_quadratic_form[20-10]": "PASS",
+          "tests.test_v8_numeric_goldens::test_t32_hac_matches_positive_semidefinite_quadratic_form[60-5]": "PASS"
+        },
+        "evidence_level": "NUMERICAL_VALIDATED"
+      },
+      "receipt_hash": "446e8923055edf894193af97a7a6320e878190f86df2bf0c907b47f5d8062752",
+      "parameter_domain": {
+        "scope": "CPU_FP64 alternating length20 lag1 offset and independent Bartlett PSD quadratic n/lag grid (20/0,20/1,20/10,60/5)",
+        "test_source_sha256": "a72964f69495d122021f9fd4454f629708eae6f474120d12fa99b8ff7b6e6a01",
+        "scope_extent": "exact synthetic fixtures only",
+        "dependencies": {
+          "numpy": "2.2.6",
+          "scipy": "1.15.3",
+          "statsmodels": "0.14.6",
+          "cupy": "14.2.0"
+        }
+      }
+    },
+    {
+      "receipt": {
+        "source_tree_hash": "5a805d267f3cadeaa79a4049c355f9e0bcaba87df8ab24e0f0457bd57b5479f9",
+        "implementation_hash": "d4b3fe424aaa03601e0a547aa6bcd403f961412a177aa18ccbd3c3cfa885812f",
+        "route": "quant_evaluator.metrics.risk.var_cvar.compute_cvar",
+        "backend": "CPU/FP64",
+        "parameter_domain_hash": "a8a1151a82332273d78e62c2846cfaa0f7537aae806cdd6b9d65c05cc61e5f3f",
+        "metric_instance_hash": "50f31c5a89c43693003e6de239a7ceb32b07b3ad19b6879a6f5e585491e8ddf3",
+        "test_run_ref": "sha256:3e73b3ea528f0fc265f6d450222d9256fdec2a0347294ddc66b1d0e8bdeda6ef",
+        "assertions": {
+          "tests.test_v8_numeric_goldens::test_t77_fixed_tail_mass": "PASS",
+          "tests.test_v8_numeric_goldens::test_t78_fractional_tail_mass": "PASS"
+        },
+        "evidence_level": "NUMERICAL_VALIDATED"
+      },
+      "receipt_hash": "3f1fce995e8e0d3ff438ed1ef240a0c57dfd465c624288dd92ababff55f6f919",
+      "parameter_domain": {
+        "scope": "CPU_FP64 historical cvar .95 length100 and .8 length7/21 empirical mass witnesses",
+        "test_source_sha256": "a72964f69495d122021f9fd4454f629708eae6f474120d12fa99b8ff7b6e6a01",
+        "scope_extent": "exact synthetic fixtures only",
+        "dependencies": {
+          "numpy": "2.2.6",
+          "scipy": "1.15.3",
+          "statsmodels": "0.14.6",
+          "cupy": "14.2.0"
+        }
+      }
+    },
+    {
+      "receipt": {
+        "source_tree_hash": "5a805d267f3cadeaa79a4049c355f9e0bcaba87df8ab24e0f0457bd57b5479f9",
+        "implementation_hash": "f1806988f04827e83992855d1d18904bd6087739dd598b4b3d6bc7e8e521e8f9",
+        "route": "quant_evaluator.metrics.multiple_testing.sidak_correction",
+        "backend": "CPU/FP64",
+        "parameter_domain_hash": "30b8e3401364797c6eef23a60067aca3d3ff382d316188c7e9eeec95ac14e377",
+        "metric_instance_hash": "8f402f0c28570e97eb2a65f860e646c7f2c34a46368cd4e294ede2c386a34d69",
+        "test_run_ref": "sha256:3e73b3ea528f0fc265f6d450222d9256fdec2a0347294ddc66b1d0e8bdeda6ef",
+        "assertions": {
+          "tests.test_v8_numeric_goldens::test_t87_sidak_tiny_values": "PASS"
+        },
+        "evidence_level": "NUMERICAL_VALIDATED"
+      },
+      "receipt_hash": "bcf6f860337787a86f10295cdffffd466816cef84e4c45fa14b90f599b328325",
+      "parameter_domain": {
+        "scope": "CPU_FP64 Sidak p=1e-20 full m=100000 numerical small-p witness",
+        "test_source_sha256": "a72964f69495d122021f9fd4454f629708eae6f474120d12fa99b8ff7b6e6a01",
+        "scope_extent": "exact synthetic fixtures only",
+        "dependencies": {
+          "numpy": "2.2.6",
+          "scipy": "1.15.3",
+          "statsmodels": "0.14.6",
+          "cupy": "14.2.0"
+        }
+      }
+    },
+    {
+      "receipt": {
+        "source_tree_hash": "5a805d267f3cadeaa79a4049c355f9e0bcaba87df8ab24e0f0457bd57b5479f9",
+        "implementation_hash": "2839ed3d55f8862b7bcd1b14f3ede82fe300d147a17b5753c19f7f213bb0b974",
+        "route": "quant_evaluator.metrics.temporal.compute_autocorrelation",
+        "backend": "CPU/FP64",
+        "parameter_domain_hash": "e1c5ebb30dfbca58e7ecfcbe16e1cfcd8246ca7f81e1e2e4b787397c40624366",
+        "metric_instance_hash": "8a3996d54eee452207bc48571b95aded7bc3084ebe584bd829799cb4b920a3a1",
+        "test_run_ref": "sha256:3e73b3ea528f0fc265f6d450222d9256fdec2a0347294ddc66b1d0e8bdeda6ef",
+        "assertions": {
+          "tests.test_v8_numeric_goldens::test_t38_nonmonotone_lag_pair_counts": "PASS",
+          "tests.test_v8_numeric_goldens::test_t38_lag_counts_are_explicit": "PASS"
+        },
+        "evidence_level": "NUMERICAL_VALIDATED"
+      },
+      "receipt_hash": "6a3ec71ee936039eae6ceaaa6f462f36bb4023169bd26e2ac2a5a63f246614b1",
+      "parameter_domain": {
+        "scope": "CPU_FP64 gapped alternating observation clock, nonmonotone lag pair counts",
+        "test_source_sha256": "a72964f69495d122021f9fd4454f629708eae6f474120d12fa99b8ff7b6e6a01",
+        "scope_extent": "exact synthetic fixtures only",
+        "dependencies": {
+          "numpy": "2.2.6",
+          "scipy": "1.15.3",
+          "statsmodels": "0.14.6",
+          "cupy": "14.2.0"
+        }
+      }
+    },
+    {
+      "receipt": {
+        "source_tree_hash": "5a805d267f3cadeaa79a4049c355f9e0bcaba87df8ab24e0f0457bd57b5479f9",
+        "implementation_hash": "8b2dfc57dd6521cf5c2797320248d94d727b8d981dbde808dc11e77780a74f8a",
+        "route": "quant_evaluator.metrics.stats.cointegration.johansen_test",
+        "backend": "CPU/FP64",
+        "parameter_domain_hash": "fb783d76c5ec7d90a7405a84b5073f35fd972839c3e2d3d946211c954233d9ca",
+        "metric_instance_hash": "427d1c6a4ff5783bf3680f3d5ebab85d1e5a11ca6019c2f1be7058cacddc1da7",
+        "test_run_ref": "sha256:3e73b3ea528f0fc265f6d450222d9256fdec2a0347294ddc66b1d0e8bdeda6ef",
+        "assertions": {
+          "tests.test_v8_numeric_goldens::test_t55_johansen_reference[0.01-1--1-1]": "PASS",
+          "tests.test_v8_numeric_goldens::test_t55_johansen_reference[0.01-1--1-2]": "PASS",
+          "tests.test_v8_numeric_goldens::test_t55_johansen_reference[0.01-1--1-3]": "PASS",
+          "tests.test_v8_numeric_goldens::test_t55_johansen_reference[0.01-1--1-6]": "PASS",
+          "tests.test_v8_numeric_goldens::test_t55_johansen_reference[0.01-1--1-12]": "PASS",
+          "tests.test_v8_numeric_goldens::test_t55_johansen_reference[0.01-1-0-1]": "PASS",
+          "tests.test_v8_numeric_goldens::test_t55_johansen_reference[0.01-1-0-2]": "PASS",
+          "tests.test_v8_numeric_goldens::test_t55_johansen_reference[0.01-1-0-3]": "PASS",
+          "tests.test_v8_numeric_goldens::test_t55_johansen_reference[0.01-1-0-6]": "PASS",
+          "tests.test_v8_numeric_goldens::test_t55_johansen_reference[0.01-1-0-12]": "PASS",
+          "tests.test_v8_numeric_goldens::test_t55_johansen_reference[0.01-1-1-1]": "PASS",
+          "tests.test_v8_numeric_goldens::test_t55_johansen_reference[0.01-1-1-2]": "PASS",
+          "tests.test_v8_numeric_goldens::test_t55_johansen_reference[0.01-1-1-3]": "PASS",
+          "tests.test_v8_numeric_goldens::test_t55_johansen_reference[0.01-1-1-6]": "PASS",
+          "tests.test_v8_numeric_goldens::test_t55_johansen_reference[0.01-1-1-12]": "PASS",
+          "tests.test_v8_numeric_goldens::test_t55_johansen_reference[0.01-2--1-1]": "PASS",
+          "tests.test_v8_numeric_goldens::test_t55_johansen_reference[0.01-2--1-2]": "PASS",
+          "tests.test_v8_numeric_goldens::test_t55_johansen_reference[0.01-2--1-3]": "PASS",
+          "tests.test_v8_numeric_goldens::test_t55_johansen_reference[0.01-2--1-6]": "PASS",
+          "tests.test_v8_numeric_goldens::test_t55_johansen_reference[0.01-2--1-12]": "PASS",
+          "tests.test_v8_numeric_goldens::test_t55_johansen_reference[0.01-2-0-1]": "PASS",
+          "tests.test_v8_numeric_goldens::test_t55_johansen_reference[0.01-2-0-2]": "PASS",
+          "tests.test_v8_numeric_goldens::test_t55_johansen_reference[0.01-2-0-3]": "PASS",
+          "tests.test_v8_numeric_goldens::test_t55_johansen_reference[0.01-2-0-6]": "PASS",
+          "tests.test_v8_numeric_goldens::test_t55_johansen_reference[0.01-2-0-12]": "PASS",
+          "tests.test_v8_numeric_goldens::test_t55_johansen_reference[0.01-2-1-1]": "PASS",
+          "tests.test_v8_numeric_goldens::test_t55_johansen_reference[0.01-2-1-2]": "PASS",
+          "tests.test_v8_numeric_goldens::test_t55_johansen_reference[0.01-2-1-3]": "PASS",
+          "tests.test_v8_numeric_goldens::test_t55_johansen_reference[0.01-2-1-6]": "PASS",
+          "tests.test_v8_numeric_goldens::test_t55_johansen_reference[0.01-2-1-12]": "PASS",
+          "tests.test_v8_numeric_goldens::test_t55_johansen_reference[0.01-4--1-1]": "PASS",
+          "tests.test_v8_numeric_goldens::test_t55_johansen_reference[0.01-4--1-2]": "PASS",
+          "tests.test_v8_numeric_goldens::test_t55_johansen_reference[0.01-4--1-3]": "PASS",
+          "tests.test_v8_numeric_goldens::test_t55_johansen_reference[0.01-4--1-6]": "PASS",
+          "tests.test_v8_numeric_goldens::test_t55_johansen_reference[0.01-4--1-12]": "PASS",
+          "tests.test_v8_numeric_goldens::test_t55_johansen_reference[0.01-4-0-1]": "PASS",
+          "tests.test_v8_numeric_goldens::test_t55_johansen_reference[0.01-4-0-2]": "PASS",
+          "tests.test_v8_numeric_goldens::test_t55_johansen_reference[0.01-4-0-3]": "PASS",
+          "tests.test_v8_numeric_goldens::test_t55_johansen_reference[0.01-4-0-6]": "PASS",
+          "tests.test_v8_numeric_goldens::test_t55_johansen_reference[0.01-4-0-12]": "PASS",
+          "tests.test_v8_numeric_goldens::test_t55_johansen_reference[0.01-4-1-1]": "PASS",
+          "tests.test_v8_numeric_goldens::test_t55_johansen_reference[0.01-4-1-2]": "PASS",
+          "tests.test_v8_numeric_goldens::test_t55_johansen_reference[0.01-4-1-3]": "PASS",
+          "tests.test_v8_numeric_goldens::test_t55_johansen_reference[0.01-4-1-6]": "PASS",
+          "tests.test_v8_numeric_goldens::test_t55_johansen_reference[0.01-4-1-12]": "PASS",
+          "tests.test_v8_numeric_goldens::test_t55_johansen_reference[0.05-1--1-1]": "PASS",
+          "tests.test_v8_numeric_goldens::test_t55_johansen_reference[0.05-1--1-2]": "PASS",
+          "tests.test_v8_numeric_goldens::test_t55_johansen_reference[0.05-1--1-3]": "PASS",
+          "tests.test_v8_numeric_goldens::test_t55_johansen_reference[0.05-1--1-6]": "PASS",
+          "tests.test_v8_numeric_goldens::test_t55_johansen_reference[0.05-1--1-12]": "PASS",
+          "tests.test_v8_numeric_goldens::test_t55_johansen_reference[0.05-1-0-1]": "PASS",
+          "tests.test_v8_numeric_goldens::test_t55_johansen_reference[0.05-1-0-2]": "PASS",
+          "tests.test_v8_numeric_goldens::test_t55_johansen_reference[0.05-1-0-3]": "PASS",
+          "tests.test_v8_numeric_goldens::test_t55_johansen_reference[0.05-1-0-6]": "PASS",
+          "tests.test_v8_numeric_goldens::test_t55_johansen_reference[0.05-1-0-12]": "PASS",
+          "tests.test_v8_numeric_goldens::test_t55_johansen_reference[0.05-1-1-1]": "PASS",
+          "tests.test_v8_numeric_goldens::test_t55_johansen_reference[0.05-1-1-2]": "PASS",
+          "tests.test_v8_numeric_goldens::test_t55_johansen_reference[0.05-1-1-3]": "PASS",
+          "tests.test_v8_numeric_goldens::test_t55_johansen_reference[0.05-1-1-6]": "PASS",
+          "tests.test_v8_numeric_goldens::test_t55_johansen_reference[0.05-1-1-12]": "PASS",
+          "tests.test_v8_numeric_goldens::test_t55_johansen_reference[0.05-2--1-1]": "PASS",
+          "tests.test_v8_numeric_goldens::test_t55_johansen_reference[0.05-2--1-2]": "PASS",
+          "tests.test_v8_numeric_goldens::test_t55_johansen_reference[0.05-2--1-3]": "PASS",
+          "tests.test_v8_numeric_goldens::test_t55_johansen_reference[0.05-2--1-6]": "PASS",
+          "tests.test_v8_numeric_goldens::test_t55_johansen_reference[0.05-2--1-12]": "PASS",
+          "tests.test_v8_numeric_goldens::test_t55_johansen_reference[0.05-2-0-1]": "PASS",
+          "tests.test_v8_numeric_goldens::test_t55_johansen_reference[0.05-2-0-2]": "PASS",
+          "tests.test_v8_numeric_goldens::test_t55_johansen_reference[0.05-2-0-3]": "PASS",
+          "tests.test_v8_numeric_goldens::test_t55_johansen_reference[0.05-2-0-6]": "PASS",
+          "tests.test_v8_numeric_goldens::test_t55_johansen_reference[0.05-2-0-12]": "PASS",
+          "tests.test_v8_numeric_goldens::test_t55_johansen_reference[0.05-2-1-1]": "PASS",
+          "tests.test_v8_numeric_goldens::test_t55_johansen_reference[0.05-2-1-2]": "PASS",
+          "tests.test_v8_numeric_goldens::test_t55_johansen_reference[0.05-2-1-3]": "PASS",
+          "tests.test_v8_numeric_goldens::test_t55_johansen_reference[0.05-2-1-6]": "PASS",
+          "tests.test_v8_numeric_goldens::test_t55_johansen_reference[0.05-2-1-12]": "PASS",
+          "tests.test_v8_numeric_goldens::test_t55_johansen_reference[0.05-4--1-1]": "PASS",
+          "tests.test_v8_numeric_goldens::test_t55_johansen_reference[0.05-4--1-2]": "PASS",
+          "tests.test_v8_numeric_goldens::test_t55_johansen_reference[0.05-4--1-3]": "PASS",
+          "tests.test_v8_numeric_goldens::test_t55_johansen_reference[0.05-4--1-6]": "PASS",
+          "tests.test_v8_numeric_goldens::test_t55_johansen_reference[0.05-4--1-12]": "PASS",
+          "tests.test_v8_numeric_goldens::test_t55_johansen_reference[0.05-4-0-1]": "PASS",
+          "tests.test_v8_numeric_goldens::test_t55_johansen_reference[0.05-4-0-2]": "PASS",
+          "tests.test_v8_numeric_goldens::test_t55_johansen_reference[0.05-4-0-3]": "PASS",
+          "tests.test_v8_numeric_goldens::test_t55_johansen_reference[0.05-4-0-6]": "PASS",
+          "tests.test_v8_numeric_goldens::test_t55_johansen_reference[0.05-4-0-12]": "PASS",
+          "tests.test_v8_numeric_goldens::test_t55_johansen_reference[0.05-4-1-1]": "PASS",
+          "tests.test_v8_numeric_goldens::test_t55_johansen_reference[0.05-4-1-2]": "PASS",
+          "tests.test_v8_numeric_goldens::test_t55_johansen_reference[0.05-4-1-3]": "PASS",
+          "tests.test_v8_numeric_goldens::test_t55_johansen_reference[0.05-4-1-6]": "PASS",
+          "tests.test_v8_numeric_goldens::test_t55_johansen_reference[0.05-4-1-12]": "PASS",
+          "tests.test_v8_numeric_goldens::test_t55_johansen_reference[0.1-1--1-1]": "PASS",
+          "tests.test_v8_numeric_goldens::test_t55_johansen_reference[0.1-1--1-2]": "PASS",
+          "tests.test_v8_numeric_goldens::test_t55_johansen_reference[0.1-1--1-3]": "PASS",
+          "tests.test_v8_numeric_goldens::test_t55_johansen_reference[0.1-1--1-6]": "PASS",
+          "tests.test_v8_numeric_goldens::test_t55_johansen_reference[0.1-1--1-12]": "PASS",
+          "tests.test_v8_numeric_goldens::test_t55_johansen_reference[0.1-1-0-1]": "PASS",
+          "tests.test_v8_numeric_goldens::test_t55_johansen_reference[0.1-1-0-2]": "PASS",
+          "tests.test_v8_numeric_goldens::test_t55_johansen_reference[0.1-1-0-3]": "PASS",
+          "tests.test_v8_numeric_goldens::test_t55_johansen_reference[0.1-1-0-6]": "PASS",
+          "tests.test_v8_numeric_goldens::test_t55_johansen_reference[0.1-1-0-12]": "PASS",
+          "tests.test_v8_numeric_goldens::test_t55_johansen_reference[0.1-1-1-1]": "PASS",
+          "tests.test_v8_numeric_goldens::test_t55_johansen_reference[0.1-1-1-2]": "PASS",
+          "tests.test_v8_numeric_goldens::test_t55_johansen_reference[0.1-1-1-3]": "PASS",
+          "tests.test_v8_numeric_goldens::test_t55_johansen_reference[0.1-1-1-6]": "PASS",
+          "tests.test_v8_numeric_goldens::test_t55_johansen_reference[0.1-1-1-12]": "PASS",
+          "tests.test_v8_numeric_goldens::test_t55_johansen_reference[0.1-2--1-1]": "PASS",
+          "tests.test_v8_numeric_goldens::test_t55_johansen_reference[0.1-2--1-2]": "PASS",
+          "tests.test_v8_numeric_goldens::test_t55_johansen_reference[0.1-2--1-3]": "PASS",
+          "tests.test_v8_numeric_goldens::test_t55_johansen_reference[0.1-2--1-6]": "PASS",
+          "tests.test_v8_numeric_goldens::test_t55_johansen_reference[0.1-2--1-12]": "PASS",
+          "tests.test_v8_numeric_goldens::test_t55_johansen_reference[0.1-2-0-1]": "PASS",
+          "tests.test_v8_numeric_goldens::test_t55_johansen_reference[0.1-2-0-2]": "PASS",
+          "tests.test_v8_numeric_goldens::test_t55_johansen_reference[0.1-2-0-3]": "PASS",
+          "tests.test_v8_numeric_goldens::test_t55_johansen_reference[0.1-2-0-6]": "PASS",
+          "tests.test_v8_numeric_goldens::test_t55_johansen_reference[0.1-2-0-12]": "PASS",
+          "tests.test_v8_numeric_goldens::test_t55_johansen_reference[0.1-2-1-1]": "PASS",
+          "tests.test_v8_numeric_goldens::test_t55_johansen_reference[0.1-2-1-2]": "PASS",
+          "tests.test_v8_numeric_goldens::test_t55_johansen_reference[0.1-2-1-3]": "PASS",
+          "tests.test_v8_numeric_goldens::test_t55_johansen_reference[0.1-2-1-6]": "PASS",
+          "tests.test_v8_numeric_goldens::test_t55_johansen_reference[0.1-2-1-12]": "PASS",
+          "tests.test_v8_numeric_goldens::test_t55_johansen_reference[0.1-4--1-1]": "PASS",
+          "tests.test_v8_numeric_goldens::test_t55_johansen_reference[0.1-4--1-2]": "PASS",
+          "tests.test_v8_numeric_goldens::test_t55_johansen_reference[0.1-4--1-3]": "PASS",
+          "tests.test_v8_numeric_goldens::test_t55_johansen_reference[0.1-4--1-6]": "PASS",
+          "tests.test_v8_numeric_goldens::test_t55_johansen_reference[0.1-4--1-12]": "PASS",
+          "tests.test_v8_numeric_goldens::test_t55_johansen_reference[0.1-4-0-1]": "PASS",
+          "tests.test_v8_numeric_goldens::test_t55_johansen_reference[0.1-4-0-2]": "PASS",
+          "tests.test_v8_numeric_goldens::test_t55_johansen_reference[0.1-4-0-3]": "PASS",
+          "tests.test_v8_numeric_goldens::test_t55_johansen_reference[0.1-4-0-6]": "PASS",
+          "tests.test_v8_numeric_goldens::test_t55_johansen_reference[0.1-4-0-12]": "PASS",
+          "tests.test_v8_numeric_goldens::test_t55_johansen_reference[0.1-4-1-1]": "PASS",
+          "tests.test_v8_numeric_goldens::test_t55_johansen_reference[0.1-4-1-2]": "PASS",
+          "tests.test_v8_numeric_goldens::test_t55_johansen_reference[0.1-4-1-3]": "PASS",
+          "tests.test_v8_numeric_goldens::test_t55_johansen_reference[0.1-4-1-6]": "PASS",
+          "tests.test_v8_numeric_goldens::test_t55_johansen_reference[0.1-4-1-12]": "PASS"
+        },
+        "evidence_level": "NUMERICAL_VALIDATED"
+      },
+      "receipt_hash": "ade571683d3a05bf944207a2f6f56160eacb10684472b2ab10164b377889aa6c",
+      "parameter_domain": {
+        "scope": "CPU_FP64 K={1,2,3,6,12} det={-1,0,1} VAR-lag={1,2,4} alpha={.01,.05,.10} exact fixture grid; K1 det>=0 only rejection qualified",
+        "test_source_sha256": "a72964f69495d122021f9fd4454f629708eae6f474120d12fa99b8ff7b6e6a01",
+        "scope_extent": "exact synthetic fixtures only",
+        "dependencies": {
+          "numpy": "2.2.6",
+          "scipy": "1.15.3",
+          "statsmodels": "0.14.6",
+          "cupy": "14.2.0"
+        }
+      }
+    },
+    {
+      "receipt": {
+        "source_tree_hash": "5a805d267f3cadeaa79a4049c355f9e0bcaba87df8ab24e0f0457bd57b5479f9",
+        "implementation_hash": "2d286b6e579113a452e21041376cad1773ef07b1ce5313a2de31c93cd0ab6099",
+        "route": "quant_evaluator.kernels.gpu.quantile.batched_quantile_returns",
+        "backend": "CUDA/FP64",
+        "parameter_domain_hash": "4b70edc7a4bb4650755222a7a0d6007772ada8c084c09a01187439aab2a88b40",
+        "metric_instance_hash": "011c82f62b9538fe57d425e1fb3b454a0df7c38f9d45f6cb712e2e7f5f4bbf7c",
+        "test_run_ref": "sha256:3e73b3ea528f0fc265f6d450222d9256fdec2a0347294ddc66b1d0e8bdeda6ef",
+        "assertions": {
+          "tests.test_v8_numeric_goldens::test_quantile_returns_bounded_workspace_matches_full[10]": "PASS",
+          "tests.test_v8_numeric_goldens::test_quantile_returns_bounded_workspace_matches_full[20]": "PASS",
+          "tests.test_v8_numeric_goldens::test_quantile_returns_bounded_workspace_matches_full[40]": "PASS"
+        },
+        "evidence_level": "NUMERICAL_VALIDATED"
+      },
+      "receipt_hash": "69877f5edd11cb909b3d3044d04b470c593ccb5a5c7b17eedf7c4bd14b371ecb",
+      "parameter_domain": {
+        "scope": "CUDA_FP64 T3 F2 N200 Q10/20/40 min_assets1 max-tie, 65536-byte scratch, selected Inf/NaN positions",
+        "test_source_sha256": "a72964f69495d122021f9fd4454f629708eae6f474120d12fa99b8ff7b6e6a01",
+        "scope_extent": "exact synthetic fixtures only",
+        "dependencies": {
+          "numpy": "2.2.6",
+          "scipy": "1.15.3",
+          "statsmodels": "0.14.6",
+          "cupy": "14.2.0"
+        }
+      }
+    }
+  ],
+  "source_manifest_sha256": "5a805d267f3cadeaa79a4049c355f9e0bcaba87df8ab24e0f0457bd57b5479f9",
+  "installed_in_production_resolver": false,
+  "excluded": "No extension to untested parameters, registry routes, real-market calibration, production certification or deployment."
+}

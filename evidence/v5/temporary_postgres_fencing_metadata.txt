@@ -1,0 +1,6 @@
+temporary_pg_dir=/tmp/quant-v5-fencing-pg-T72ahJ
+port=37257
+dsn=dbname=postgres user=sunhaiwei host=/tmp/quant-v5-fencing-pg-T72ahJ/socket port=37257
+binary=/tmp/quant-v3-pg-8VsqEo/root/usr/lib/postgresql/16/bin/postgres
+production_database_touched=false
+stopped=true

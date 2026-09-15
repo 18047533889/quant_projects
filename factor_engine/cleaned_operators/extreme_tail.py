@@ -22,7 +22,8 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from factor_engine.cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
+from factor_engine.cleaned_operators.base import OperatorMetadata, ParamRole, ParamSpec, SeriesOperator, register_operator
+from factor_engine.cleaned_operators.parameter_validation import strict_finite_scalar, strict_integer
 from factor_engine.cleaned_operators.rolling_pack import frame_like
 from factor_engine.cleaned_operators.ts_model._rolling_core import pinball_quantile_fit
 
@@ -34,7 +35,10 @@ _EPS = 1e-12
 _WARNED_PRICE_LEVEL: set[Any] = set()
 
 
-def _metadata(name: str, description: str, params: list[str], *, unit: str, cost: int) -> OperatorMetadata:
+def _metadata(
+    name: str, description: str, params: list[str], *, unit: str, cost: int,
+    param_specs: dict[str, ParamSpec], panel_params: tuple[str, ...],
+) -> OperatorMetadata:
     # R4-87: the lower tail is defined against a low threshold (``threshold - x``)
     # so positive price/valuation series have a well-defined lower tail; the input
     # is nevertheless declared as a signed series (returns / centred residual /
@@ -52,6 +56,9 @@ def _metadata(name: str, description: str, params: list[str], *, unit: str, cost
             f"unit:{unit}", f"cost:{cost}",
         ],
         input_units={"x": "signed_return_or_centred_residual_or_signed_signal"},
+        param_specs=param_specs,
+        panel_params=panel_params,
+        scalar_params=tuple(p for p in params if p not in panel_params),
     )
 
 
@@ -150,14 +157,14 @@ def _hill_series(series: np.ndarray, window: int, side: str, tail_fraction: floa
     ``min_tail_count`` gates the minimum number of exceedances.
     """
     n = series.shape[0]
-    w = max(2, int(window))
+    w = strict_integer(window, "window", minimum=2)
     # Invalid tail_fraction must fail loudly, never silently clip to a legal
     # value — silent clipping turns different ASTs into the same parameter and
     # corrupts the search space (P1-16).
-    frac = float(tail_fraction)
+    frac = strict_finite_scalar(tail_fraction, "tail_fraction")
     if not (0.0 < frac <= 0.5):
         raise ValueError("tail_fraction must satisfy 0 < tail_fraction <= 0.5")
-    mtc = max(3, int(min_tail_count))
+    mtc = strict_integer(min_tail_count, "min_tail_count", minimum=3)
     _reject_price_level(series)
     out = np.full(n, np.nan)
     for t in range(n):
@@ -241,6 +248,13 @@ class TsHillTailIndex(SeriesOperator):
         ["x", "window", "side", "tail_fraction", "min_tail_count"],
         unit="ratio",
         cost=5,
+        param_specs={
+            "window": ParamSpec(dtype=int, min=2, default=120, param_role=ParamRole.HORIZON),
+            "side": ParamSpec(dtype=str, choices=("upper", "lower"), default="upper", searchable=False, param_role=ParamRole.POLICY),
+            "tail_fraction": ParamSpec(dtype=float, min=0.0, max=0.5, default=0.2, param_role=ParamRole.THRESHOLD),
+            "min_tail_count": ParamSpec(dtype=int, min=3, default=10, searchable=False, param_role=ParamRole.SUPPORT_POLICY),
+        },
+        panel_params=("x",),
     )
 
     def _calculate_series(
@@ -281,7 +295,7 @@ def _quantile_beta(x: np.ndarray, y: np.ndarray, q: float) -> float:
 
 def _quantile_beta_series(y: np.ndarray, x: np.ndarray, window: int, q: float) -> np.ndarray:
     rows, cols = y.shape
-    w = max(2, int(window))
+    w = strict_integer(window, "window", minimum=2)
     out = np.full((rows, cols), np.nan, dtype=float)
     for c in range(cols):
         for t in range(rows):
@@ -303,6 +317,7 @@ def _quantile_beta_series(y: np.ndarray, x: np.ndarray, window: int, q: float) -
     business_category="extreme_tail",
     canonical="ts_quantile_regression_beta",
     source="extreme_tail",
+    backend="pandas_numpy",
     status="experimental",
 )
 class TsQuantileRegressionBeta(SeriesOperator):
@@ -325,12 +340,17 @@ class TsQuantileRegressionBeta(SeriesOperator):
         # (review #40) — mirroring the ts_expectile_beta convention.
         unit="unit(y)/unit(x)",
         cost=8,
+        param_specs={
+            "window": ParamSpec(dtype=int, min=2, default=120, param_role=ParamRole.HORIZON),
+            "quantile": ParamSpec(dtype=float, min=0.0, max=1.0, default=0.5, param_role=ParamRole.THRESHOLD),
+        },
+        panel_params=("y", "x"),
     )
 
     def _calculate_series(
         self, y: pd.DataFrame, x: pd.DataFrame, window: int = 120, quantile: float = 0.5, **_: Any
     ) -> pd.DataFrame:
-        q = float(quantile)
+        q = strict_finite_scalar(quantile, "quantile")
         if not 0.0 < q < 1.0:
             raise ValueError("ts_quantile_regression_beta requires quantile in (0, 1)")
         return _frame_like_result(
@@ -362,14 +382,12 @@ def _extremal_index_series(
       regardless of ``run_length`` (no compression across unknown gaps).
     """
     n = series.shape[0]
-    w = max(2, int(window))
-    quant = float(q)
+    w = strict_integer(window, "window", minimum=2)
+    quant = strict_finite_scalar(q, "q")
     if not 0.0 < quant < 1.0:
         raise ValueError("q must be in (0, 1)")
-    rl = int(run_length)
-    if rl < 1:
-        raise ValueError("run_length must be >= 1")
-    mex = max(2, int(min_exceed))
+    rl = strict_integer(run_length, "run_length", minimum=1)
+    mex = strict_integer(min_exceed, "min_exceed", minimum=2)
     out = np.full(n, np.nan)
     for t in range(n):
         lo = max(0, t - w + 1)
@@ -437,6 +455,14 @@ class TsExtremalIndex(SeriesOperator):
         ["x", "window", "side", "q", "min_exceed", "run_length"],
         unit="ratio",
         cost=4,
+        param_specs={
+            "window": ParamSpec(dtype=int, min=2, default=120, param_role=ParamRole.HORIZON),
+            "side": ParamSpec(dtype=str, choices=("upper", "lower"), default="upper", searchable=False, param_role=ParamRole.POLICY),
+            "q": ParamSpec(dtype=float, min=0.0, max=1.0, default=0.9, param_role=ParamRole.THRESHOLD),
+            "min_exceed": ParamSpec(dtype=int, min=2, default=3, searchable=False, param_role=ParamRole.SUPPORT_POLICY),
+            "run_length": ParamSpec(dtype=int, min=1, default=1, searchable=False, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+        },
+        panel_params=("x",),
     )
 
     def _calculate_series(
@@ -479,8 +505,8 @@ def _mean_excess_slope_series(
     identically on both sides (positive = heavy tail).
     """
     n = series.shape[0]
-    w = max(2, int(window))
-    mtc = max(2, int(min_tail_count))
+    w = strict_integer(window, "window", minimum=2)
+    mtc = strict_integer(min_tail_count, "min_tail_count", minimum=2)
     out = np.full(n, np.nan)
     for t in range(n):
         lo = max(0, t - w + 1)
@@ -535,6 +561,12 @@ class TsMeanExcessSlope(SeriesOperator):
         ["x", "window", "side", "min_tail_count"],
         unit="ratio",
         cost=5,
+        param_specs={
+            "window": ParamSpec(dtype=int, min=2, default=120, param_role=ParamRole.HORIZON),
+            "side": ParamSpec(dtype=str, choices=("upper", "lower"), default="upper", searchable=False, param_role=ParamRole.POLICY),
+            "min_tail_count": ParamSpec(dtype=int, min=2, default=5, searchable=False, param_role=ParamRole.SUPPORT_POLICY),
+        },
+        panel_params=("x",),
     )
 
     def _calculate_series(
@@ -572,11 +604,11 @@ def _gpd_shape_pwm_series(
     no optimizer; fail-closed when the denominator degenerates.
     """
     n = series.shape[0]
-    w = max(2, int(window))
-    frac = float(tail_fraction)
+    w = strict_integer(window, "window", minimum=2)
+    frac = strict_finite_scalar(tail_fraction, "tail_fraction")
     if not (0.0 < frac <= 0.5):
         raise ValueError("tail_fraction must satisfy 0 < tail_fraction <= 0.5")
-    mtc = max(3, int(min_tail_count))
+    mtc = strict_integer(min_tail_count, "min_tail_count", minimum=3)
     out = np.full(n, np.nan)
     for t in range(n):
         lo = max(0, t - w + 1)
@@ -629,6 +661,13 @@ class TsGpdShapePwm(SeriesOperator):
         ["x", "window", "side", "tail_fraction", "min_tail_count"],
         unit="ratio",
         cost=5,
+        param_specs={
+            "window": ParamSpec(dtype=int, min=2, default=120, param_role=ParamRole.HORIZON),
+            "side": ParamSpec(dtype=str, choices=("upper", "lower"), default="upper", searchable=False, param_role=ParamRole.POLICY),
+            "tail_fraction": ParamSpec(dtype=float, min=0.0, max=0.5, default=0.2, param_role=ParamRole.THRESHOLD),
+            "min_tail_count": ParamSpec(dtype=int, min=3, default=10, searchable=False, param_role=ParamRole.SUPPORT_POLICY),
+        },
+        panel_params=("x",),
     )
 
     def _calculate_series(

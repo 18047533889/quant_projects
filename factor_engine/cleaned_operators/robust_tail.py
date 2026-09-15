@@ -20,7 +20,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from factor_engine.cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
+from factor_engine.cleaned_operators.base import OperatorMetadata, ParamRole, ParamSpec, RelationalParamSpec, SeriesOperator, register_operator
 from factor_engine.cleaned_operators.rolling_pack import (
     check_window,
     frame_like,
@@ -30,7 +30,10 @@ from factor_engine.cleaned_operators.rolling_pack import (
 )
 
 
-def _metadata(name: str, description: str, params: list[str], *, unit: str) -> OperatorMetadata:
+def _metadata(
+    name: str, description: str, params: list[str], *, unit: str,
+    param_specs: dict[str, ParamSpec], relational_specs: list[RelationalParamSpec],
+) -> OperatorMetadata:
     return OperatorMetadata(
         name=name,
         category="time_series_risk",
@@ -42,6 +45,8 @@ def _metadata(name: str, description: str, params: list[str], *, unit: str) -> O
             f"signature:{','.join(params)}->series", "domain:distribution",
             f"unit:{unit}", "cost:1",
         ],
+        param_specs=param_specs,
+        relational_specs=relational_specs,
     )
 
 
@@ -66,6 +71,12 @@ class TsLowerPartialMoment(SeriesOperator):
         "下偏矩 mean(max(threshold-x,0)^order)。",
         ["x", "window", "threshold", "order", "min_periods"],
         unit="level",
+        param_specs={
+            "window": ParamSpec(dtype=int, min=2, default=20, history_semantics="max_rows", param_role=ParamRole.HORIZON),
+            "threshold": ParamSpec(dtype=float, default=0.0, param_role=ParamRole.STATE_THRESHOLD),
+            "order": ParamSpec(dtype=float, min=1.0, default=1.0, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+            "min_periods": ParamSpec(dtype=int, min=2, default=2, searchable=False, param_role=ParamRole.SUPPORT_POLICY),
+        }, relational_specs=[RelationalParamSpec("min_periods <= window")],
     )
 
     def _calculate_series(self, x: pd.DataFrame, window: int = 20, threshold: float = 0.0, order: float = 1.0, min_periods: int = 2, **_: Any) -> pd.DataFrame:
@@ -103,6 +114,12 @@ class TsUpperPartialMoment(SeriesOperator):
         "上偏矩 mean(max(x-threshold,0)^order)。",
         ["x", "window", "threshold", "order", "min_periods"],
         unit="level",
+        param_specs={
+            "window": ParamSpec(dtype=int, min=2, default=20, history_semantics="max_rows", param_role=ParamRole.HORIZON),
+            "threshold": ParamSpec(dtype=float, default=0.0, param_role=ParamRole.STATE_THRESHOLD),
+            "order": ParamSpec(dtype=float, min=1.0, default=1.0, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+            "min_periods": ParamSpec(dtype=int, min=2, default=2, searchable=False, param_role=ParamRole.SUPPORT_POLICY),
+        }, relational_specs=[RelationalParamSpec("min_periods <= window")],
     )
 
     def _calculate_series(self, x: pd.DataFrame, window: int = 20, threshold: float = 0.0, order: float = 1.0, min_periods: int = 2, **_: Any) -> pd.DataFrame:
@@ -139,6 +156,12 @@ class TsExpectedShortfall(SeriesOperator):
         "历史期望损失 mean(tail) 基于窗口内分位数，尾部样本不足返回 NaN。",
         ["x", "window", "q", "side", "min_tail_count"],
         unit="level",
+        param_specs={
+            "window": ParamSpec(dtype=int, min=2, default=60, history_semantics="max_rows", param_role=ParamRole.HORIZON),
+            "q": ParamSpec(dtype=float, min=1e-12, max=0.5, default=0.05, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+            "side": ParamSpec(dtype=str, choices=("lower", "upper"), default="lower", searchable=False, param_role=ParamRole.POLICY),
+            "min_tail_count": ParamSpec(dtype=int, min=2, default=5, searchable=False, param_role=ParamRole.SUPPORT_POLICY),
+        }, relational_specs=[RelationalParamSpec("min_tail_count <= window")],
     )
 
     def _calculate_series(self, x: pd.DataFrame, window: int = 60, q: float = 0.05, side: str = "lower", min_tail_count: int = 5, **_: Any) -> pd.DataFrame:
@@ -186,6 +209,13 @@ class TsQuantileSkew(SeriesOperator):
         "Bowley 分位数偏度，退化区间返回 NaN。",
         ["x", "window", "q_low", "q_mid", "q_high", "min_periods"],
         unit="ratio",
+        param_specs={
+            "window": ParamSpec(dtype=int, min=5, default=20, history_semantics="max_rows", param_role=ParamRole.HORIZON),
+            "q_low": ParamSpec(dtype=float, min=1e-12, max=1.0 - 1e-12, default=0.1, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+            "q_mid": ParamSpec(dtype=float, min=1e-12, max=1.0 - 1e-12, default=0.5, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+            "q_high": ParamSpec(dtype=float, min=1e-12, max=1.0 - 1e-12, default=0.9, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+            "min_periods": ParamSpec(dtype=int, min=5, default=5, searchable=False, param_role=ParamRole.SUPPORT_POLICY),
+        }, relational_specs=[RelationalParamSpec("q_low < q_mid and q_mid < q_high"), RelationalParamSpec("min_periods <= window")],
     )
 
     def _calculate_series(self, x: pd.DataFrame, window: int = 20, q_low: float = 0.1, q_mid: float = 0.5, q_high: float = 0.9, min_periods: int = 5, **_: Any) -> pd.DataFrame:
@@ -224,6 +254,12 @@ class TsQuantileKurtosis(SeriesOperator):
         "分位数峰度（尾部宽度相对中部宽度比），退化中部区间返回 NaN。",
         ["x", "window", "outer", "inner", "min_periods"],
         unit="ratio",
+        param_specs={
+            "window": ParamSpec(dtype=int, min=8, default=60, history_semantics="max_rows", param_role=ParamRole.HORIZON),
+            "outer": ParamSpec(dtype=tuple, items=ParamSpec(dtype=float, min=1e-12, max=1.0 - 1e-12), min_items=2, max_items=2, default=(0.025, 0.975), param_role=ParamRole.ESTIMATOR_RESOLUTION),
+            "inner": ParamSpec(dtype=tuple, items=ParamSpec(dtype=float, min=1e-12, max=1.0 - 1e-12), min_items=2, max_items=2, default=(0.25, 0.75), param_role=ParamRole.ESTIMATOR_RESOLUTION),
+            "min_periods": ParamSpec(dtype=int, min=8, default=8, searchable=False, param_role=ParamRole.SUPPORT_POLICY),
+        }, relational_specs=[RelationalParamSpec("min_periods <= window")],
     )
 
     def _calculate_series(self, x: pd.DataFrame, window: int = 60, outer: Any = (0.025, 0.975), inner: Any = (0.25, 0.75), min_periods: int = 8, **_: Any) -> pd.DataFrame:
@@ -235,6 +271,8 @@ class TsQuantileKurtosis(SeriesOperator):
             raise ValueError("outer/inner must be 2-tuples of quantiles")
         if not (0.0 < o_lo < o_hi < 1.0 and 0.0 < i_lo < i_hi < 1.0):
             raise ValueError("outer/inner must be strictly ordered quantiles")
+        if not (o_lo < i_lo < i_hi < o_hi):
+            raise ValueError("outer quantiles must strictly enclose inner quantiles")
         mp = max(8, int(min_periods))
 
         def _fn(chunk: np.ndarray) -> float:
@@ -264,6 +302,12 @@ class TsTailRatio(SeriesOperator):
         "右尾/左尾分位数绝对值比，分母为零返回 NaN。",
         ["x", "window", "q_low", "q_high", "min_periods"],
         unit="ratio",
+        param_specs={
+            "window": ParamSpec(dtype=int, min=5, default=60, history_semantics="max_rows", param_role=ParamRole.HORIZON),
+            "q_low": ParamSpec(dtype=float, min=1e-12, max=1.0 - 1e-12, default=0.05, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+            "q_high": ParamSpec(dtype=float, min=1e-12, max=1.0 - 1e-12, default=0.95, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+            "min_periods": ParamSpec(dtype=int, min=5, default=5, searchable=False, param_role=ParamRole.SUPPORT_POLICY),
+        }, relational_specs=[RelationalParamSpec("q_low < q_high"), RelationalParamSpec("min_periods <= window")],
     )
 
     def _calculate_series(self, x: pd.DataFrame, window: int = 60, q_low: float = 0.05, q_high: float = 0.95, min_periods: int = 5, **_: Any) -> pd.DataFrame:
@@ -300,6 +344,13 @@ class TsExtremeClusterRatio(SeriesOperator):
         "窗口内相邻极端事件占比；极端样本不足返回 NaN。",
         ["x", "window", "threshold", "q", "side", "min_periods"],
         unit="ratio",
+        param_specs={
+            "window": ParamSpec(dtype=int, min=2, default=60, history_semantics="max_rows", param_role=ParamRole.HORIZON),
+            "threshold": ParamSpec(alternatives=(ParamSpec(dtype=str), ParamSpec(dtype=float)), default="quantile", param_role=ParamRole.STATE_THRESHOLD),
+            "q": ParamSpec(dtype=float, min=1e-12, max=1.0 - 1e-12, default=0.9, active_when=("threshold", ("quantile",)), param_role=ParamRole.ESTIMATOR_RESOLUTION),
+            "side": ParamSpec(dtype=str, choices=("absolute", "upper", "lower"), default="absolute", searchable=False, param_role=ParamRole.POLICY),
+            "min_periods": ParamSpec(dtype=int, min=2, default=2, searchable=False, param_role=ParamRole.SUPPORT_POLICY),
+        }, relational_specs=[RelationalParamSpec("min_periods <= window")],
     )
 
     def _calculate_series(self, x: pd.DataFrame, window: int = 60, threshold: Any = "quantile", q: float = 0.9, side: str = "absolute", min_periods: int = 2, **_: Any) -> pd.DataFrame:
@@ -313,6 +364,10 @@ class TsExtremeClusterRatio(SeriesOperator):
         mp = max(2, int(min_periods))
         use_quantile = str(threshold).lower() == "quantile"
         absolute_thr = None if use_quantile else float(threshold)
+        if absolute_thr is not None and not np.isfinite(absolute_thr):
+            raise ValueError("threshold must be finite or 'quantile'")
+        if side_kind == "absolute" and absolute_thr is not None and absolute_thr < 0.0:
+            raise ValueError("absolute threshold must be non-negative")
 
         def _extreme(chunk: np.ndarray) -> np.ndarray:
             valid = chunk[np.isfinite(chunk)]

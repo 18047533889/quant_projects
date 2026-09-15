@@ -90,6 +90,9 @@ def _metadata(
     cost: int,
     extra_tags: tuple[str, ...] = (),
     param_specs: dict | None = None,
+    panel_params: tuple[str, ...] = (),
+    scalar_params: tuple[str, ...] = (),
+    role: str | None = None,
 ) -> OperatorMetadata:
     # R11 §37-D unit-algebra honesty: algebraic units (``same_as:`` /
     # ``unit(...)`` / ``dimensionless``) propagate to ``output_unit`` so typed
@@ -110,6 +113,9 @@ def _metadata(
         ],
         output_unit=output_unit,
         param_specs=dict(param_specs) if param_specs else {},
+        panel_params=panel_params,
+        scalar_params=scalar_params,
+        role=role,
     )
 
 
@@ -548,7 +554,7 @@ def _copula_cross_series(a: np.ndarray, b: np.ndarray, grid: int, entropy: bool)
             ent = float(-np.sum(joint * np.log(joint)))
             # Normalize by log(grid²) so entropy is a resolution-independent
             # [0,1] concentration measure (P1-21).  No MM term (R26-011).
-            out[t, :] = ent / np.log(float(g * g))
+            out[t, :] = float(np.clip(ent / np.log(float(g * g)), 0.0, 1.0))
         else:
             pu = joint.sum(axis=1)
             pv = joint.sum(axis=0)
@@ -561,13 +567,17 @@ def _copula_cross_series(a: np.ndarray, b: np.ndarray, grid: int, entropy: bool)
                         continue
                     mi += p * np.log(p / denom)
             # KL(MI) of the smoothed joint — always >= 0.  No MM term (R26-011).
-            out[t, :] = float(mi)
+            out[t, :] = float(max(mi, 0.0))
     return out
 
 
 def _register_copula_op(canonical: str, description: str, entropy: bool) -> SeriesOperator:
     def _calculate_series(self, a: pd.DataFrame, b: pd.DataFrame, grid: int = 8, **_: Any) -> pd.DataFrame:
-        g = int(grid)
+        if not isinstance(a, pd.DataFrame) or not isinstance(b, pd.DataFrame):
+            raise TypeError(f"{canonical} requires pandas DataFrame inputs")
+        if not a.index.equals(b.index) or not a.columns.equals(b.columns):
+            raise ValueError(f"{canonical} inputs must have identical axes")
+        g = strict_int(grid, "grid", lower=1)
         # P1-21: ``grid`` is an *estimator resolution*, not a searchable alpha
         # parameter — vary it and you change plug-in bias / finite-sample noise
         # rather than market structure.  Only a small verified set is allowed.
@@ -590,6 +600,18 @@ def _register_copula_op(canonical: str, description: str, entropy: bool) -> Seri
         # ``trade_when`` / state conditioning, NOT a per-stock Numeric Alpha.  The
         # tag routes it out of the per-stock alpha pool.
         extra_tags=("global_state",),
+        param_specs={
+            "grid": ParamSpec(
+                dtype=int,
+                choices=(4, 8, 16),
+                default=8,
+                searchable=False,
+                param_role=ParamRole.ESTIMATOR_RESOLUTION,
+            ),
+        },
+        panel_params=("a", "b"),
+        scalar_params=("grid",),
+        role="global_state",
     )
     return register_operator(
         name=canonical,

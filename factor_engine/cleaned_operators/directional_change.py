@@ -69,10 +69,17 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from factor_engine.cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
+from factor_engine.cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator, ParamSpec, ParamRole
+from factor_engine.cleaned_operators.parameter_validation import strict_integer, strict_finite_scalar
 from factor_engine.cleaned_operators.rolling_pack import frame_like, register_polars_udf
 
 _EPS = 1e-12
+_DC_SPECS={
+    "threshold":ParamSpec(dtype=float,min=np.nextafter(0.,1.),default=1.,param_role=ParamRole.STATE_THRESHOLD),
+    "window":ParamSpec(dtype=int,min=3,default=120,param_role=ParamRole.HORIZON),
+    "threshold_mode":ParamSpec(dtype=str,choices=("adaptive","fixed_absolute"),default="adaptive",param_role=ParamRole.POLICY,searchable=False),
+    "scale_mode":ParamSpec(dtype=str,choices=("absolute","relative"),default="absolute",param_role=ParamRole.POLICY,searchable=False),
+}
 
 
 def _metadata(
@@ -90,6 +97,7 @@ def _metadata(
         category="directional_change",
         description=description,
         param_names=params,
+        panel_params=("x","scale"),scalar_params=tuple(_DC_SPECS),param_specs=dict(_DC_SPECS),
         return_type="series",
         tags=[
             "directional_change", "daily", "pit_safe", "causal", "typed_v2",
@@ -109,14 +117,18 @@ def _metadata(
 def _median_asym(up: list[float], dn: list[float]) -> float:
     if not up or not dn:
         return np.nan
-    mu = float(np.median(up))
-    md = float(np.median(dn))
-    return float((mu - md) / (mu + md + _EPS))
+    scale=max(max(up),max(dn))
+    if scale==0.:
+        return 0.
+    mu=float(np.median(np.asarray(up)/scale))
+    md=float(np.median(np.asarray(dn)/scale))
+    return float((mu-md)/(mu+md)) if mu+md>0. else 0.
 
 
 def _dc_column(
     x: np.ndarray, scale: np.ndarray, theta: float, w: int, threshold_mode: str,
     scale_mode: str = "absolute",
+    requested: str | None = None,
 ) -> dict[str, np.ndarray]:
     """Forward-walk (recursive) DC event process for one instrument column.
 
@@ -211,6 +223,11 @@ def _dc_column(
                 continue
             thr = theta * s
 
+        if not np.isfinite(thr) or thr<=0.:
+            # Overflow/underflow cannot form an observable, usable threshold.
+            _break()
+            continue
+
         # R26-116/117: the event-rate denominator is CLOCK-OBSERVABLE bars only
         # — a bar with a finite price but an invalid/unknown threshold (scale)
         # has no running clock and must NOT be counted as "observable but no
@@ -273,7 +290,7 @@ def _dc_column(
                     confirmed = "up"
             if confirmed is not None:
                 # complete the previous leg (if any) with its OWN start threshold.
-                if leg_kind is not None and leg_start >= 0:
+                if requested != "event_rate" and leg_kind is not None and leg_start >= 0:
                     if scale_mode == "relative":
                         # R26-115: overshoot in the SAME log space as the
                         # threshold, so the ratio ``os_m / leg_thr`` is a valid
@@ -307,14 +324,24 @@ def _dc_column(
         if n_fin >= 2:
             evr[i] = n_ev / n_fin
 
+    if requested == "event_rate":
+        return {"event_rate": evr}
+
     # Aggregate over the completed legs whose endpoints lie inside each row's
     # trailing window (legs are streamed once and are boundary-invariant).
+    left=right=0
     for i in range(n):
         lo = max(0, i - w + 1)
-        idxs = [j for j in range(len(legs_start)) if legs_start[j] >= lo and legs_end[j] <= i]
-        if not idxs:
+        # Completed legs are ordered by both endpoints. Advance monotone bounds
+        # instead of rescanning every historical/future leg at each row.
+        while left<len(legs_start) and legs_start[left]<lo:
+            left+=1
+        while right<len(legs_end) and legs_end[right]<=i:
+            right+=1
+        if left>=right:
             continue
-        last = idxs[-1]
+        idxs=range(left,right)
+        last=right-1
         osr[i] = legs_ratio[last]
         up_os = [legs_os[j] for j in idxs if legs_kind[j] == "up"]
         dn_os = [legs_os[j] for j in idxs if legs_kind[j] == "down"]
@@ -342,8 +369,8 @@ def _make_dc_op(canonical: str, description: str, unit: str, cost: int, out_key:
         scale_mode: str = "absolute",
         **_: Any,
     ) -> pd.DataFrame:
-        w = int(window)
-        thr = float(threshold)
+        w = strict_integer(window,"window",minimum=3)
+        thr = strict_finite_scalar(threshold,"threshold")
         if thr <= 0:
             raise ValueError(f"{canonical} requires threshold > 0")
         if w < 3:
@@ -381,7 +408,7 @@ def _make_dc_op(canonical: str, description: str, unit: str, cost: int, out_key:
         rows, cols = xv.shape
         cols_out = []
         for c in range(cols):
-            cols_out.append(_dc_column(xv[:, c], sv[:, c], thr, w, threshold_mode, scale_mode)[out_key])
+            cols_out.append(_dc_column(xv[:, c], sv[:, c], thr, w, threshold_mode, scale_mode,requested=out_key)[out_key])
         return frame_like(x, np.column_stack(cols_out) if cols else np.empty((rows, 0)))
 
     metadata = _metadata(

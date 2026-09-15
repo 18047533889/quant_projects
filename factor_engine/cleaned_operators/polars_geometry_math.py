@@ -1,12 +1,10 @@
 # -*- coding: utf-8 -*-
 """Polars backends for the 2026-08 geometry/math expansion.
 
-The pandas_numpy reference is the certified production backend for every op in
-this expansion.  These slots give the polars runtimes a surviving ``polars``
-backend (polars I/O around the same numpy kernels), matching the convention used
-by ``polars_dynamics`` for the state-dynamics pack: registered under
-``source="polars_geometry_math"`` (no "bridge" marker), so
-``_remove_declared_bridges`` keeps them after production hardening.
+The three envelope operators use native Polars expressions. Other slots
+delegate to the matching pandas reference and explicitly declare that conversion
+path; a Polars-facing API is not evidence of native acceleration or production
+certification. Parameter and time-axis contracts remain enforced.
 """
 from __future__ import annotations
 
@@ -26,6 +24,7 @@ _SKIP_PANEL = frozenset({"date", "stock_code"})
 # All canonicals of the 2026-08 geometry/math expansion that have a surviving
 # polars delegation backend here (delegates to the pandas_numpy reference).
 _GEOMETRY_MATH_CANONICALS: tuple[str, ...] = (
+    "ts_joint_energy_shift","ts_energy_break_score","ts_copula_central_asymmetry",
     # interval geometry
     "ts_interval_union_coverage", "ts_interval_occupancy_entropy",
     "ts_interval_occupancy_mode_distance", "ts_interval_nesting_depth",
@@ -116,6 +115,48 @@ def _register_polars_backends() -> None:
         pandas_op = OperatorRegistry.get(_canon, "pandas_numpy")
         if pandas_op is None:
             continue
+        if _canon in {"ts_crossing_speed","ts_crossing_acceleration"}:
+            from factor_engine.cleaned_operators.common.crossing_native import make
+            OperatorRegistry.register(make(_canon)(),canonical=_canon,backend="polars",
+                source="crossing_numpy",status="implemented",backend_explicit=True)
+            continue
+
+        if _canon in {"ts_joint_energy_shift","ts_energy_break_score","ts_copula_central_asymmetry"}:
+            from factor_engine.cleaned_operators.common.distribution_delegate import register
+            register(_canon)
+            continue
+
+        if _canon in {"ts_vector_path_efficiency", "ts_vector_turning_coherence",
+                      "ts_vector_path_curvature", "ts_vector_self_intersection_rate"}:
+            from factor_engine.cleaned_operators.common.vector_path_native import make
+            OperatorRegistry.register(
+                make(_canon)(), canonical=_canon, backend="polars",
+                source="polars_geometry_math", status="implemented",
+                backend_explicit=True,
+            )
+            continue
+
+        if _canon in {"ts_chatterjee_xi","ts_hsic","ts_conditional_mutual_information",
+                      "ts_distance_correlation_partial_proxy"}:
+            from factor_engine.cleaned_operators.common.dependence_delegate import register
+            register(_canon)
+            continue
+
+        if _canon in {"ts_structural_level_density","ts_structural_level_strength",
+                      "ts_nearest_structural_level_distance"}:
+            from factor_engine.cleaned_operators.common.structural_delegate import register
+            register(_canon)
+            continue
+
+        if _canon in {"intraday_medrv", "intraday_minrv", "intraday_jump_test_stat"}:
+            from factor_engine.cleaned_operators.common.jump_robust_delegate import register
+            register(_canon)
+            continue
+
+        if _canon in {"ts_l_skewness", "ts_l_kurtosis", "ts_hartigan_dip"}:
+            from factor_engine.cleaned_operators.common.moments_delegate import register
+            register(_canon)
+            continue
 
         # R6-196: carry the availability contract from the pandas reference so
         # the polars delegate slot reports the same session-close availability.
@@ -131,13 +172,124 @@ def _register_polars_backends() -> None:
                 param_names=list(getattr(_ref_meta, "param_names", None) or ()),
                 available_at=_ref_available_at,
                 same_session_usable=_ref_same_session,
+                **({
+                    "panel_params": tuple(_ref_meta.panel_params),
+                    "scalar_params": tuple(_ref_meta.scalar_params),
+                    "param_specs": dict(_ref_meta.param_specs),
+                    "param_aliases": dict(_ref_meta.param_aliases or {}),
+                } if _canon in {"ts_envelope_compression", "ts_envelope_pressure", "ts_envelope_boundary_dwell"} else {}),
+                **({
+                    "panel_params": tuple(getattr(_ref_meta, "panel_params", ()) or ()),
+                    "panel_arity": getattr(_ref_meta, "panel_arity", None),
+                    "scalar_params": tuple(getattr(_ref_meta, "scalar_params", ()) or ()),
+                    "param_specs": dict(getattr(_ref_meta, "param_specs", None) or {}),
+                    "param_aliases": dict(getattr(_ref_meta, "param_aliases", None) or {}),
+                    "input_units": dict(getattr(_ref_meta, "input_units", None) or {}),
+                    "output_unit": getattr(_ref_meta, "output_unit", None),
+                    "window_semantics": getattr(_ref_meta, "window_semantics", None),
+                    "relational_specs": list(getattr(_ref_meta, "relational_specs", None) or ()),
+                } if _canon in {
+                    "ts_vector_state_mahalanobis", "ts_vector_state_local_density",
+                    "ts_multiscale_trend_consensus", "ts_multiscale_trend_dispersion",
+                    "ts_multiscale_trend_curvature",
+                    "ts_vol_pvariation_roughness", "ts_vol_scaling_break",
+                    "ts_generalized_hurst_spread_q1_q4", "ts_multifractal_spectrum_width",
+                    "ts_multifractal_curvature",
+                    "ts_multifractal_asymmetry",
+                    "ts_threshold_cycle_period", "ts_threshold_cycle_asymmetry",
+                    "intraday_session_shape_novelty", "intraday_profile_pca_residual",
+                    "ts_extrema_divergence_strength", "ts_extrema_confirmation_rate",
+                } else {}),
             )
 
+            @property
+            def _contract_callable(self):
+                reference = OperatorRegistry.get(self.metadata.name, "pandas_numpy", mode="research")
+                return (getattr(reference, "_contract_callable", None)
+                        or getattr(reference, "_fn", None)
+                        or reference._calculate_series)
+
             def _calculate_series(self, *frames, _canon=_canon, **params):
-                op = OperatorRegistry.get(_canon, "pandas_numpy")
-                pdfs = [_pl_to_pd(f) for f in frames]
-                out = op.calculate(*pdfs, **params)
-                return _pl_rebuild(frames[0], out)
+                if _canon in {"ts_envelope_compression", "ts_envelope_pressure", "ts_envelope_boundary_dwell"}:
+                    from factor_engine.cleaned_operators.envelope import _polars_envelope
+                    bound = dict(zip(self.metadata.param_names, frames))
+                    bound.update(params)
+                    panel_names = self.metadata.panel_params
+                    kind = {"ts_envelope_compression": "compression",
+                            "ts_envelope_pressure": "pressure",
+                            "ts_envelope_boundary_dwell": "dwell"}[_canon]
+                    return _polars_envelope(
+                        kind, tuple(bound[p] for p in panel_names),
+                        bound.get("window", 20), bound.get("quantile", 0.8),
+                    )
+                from factor_engine.cleaned_operators.common._polars_bridge import (
+                    to_pandas_panel, from_pandas_panel,
+                )
+                op = OperatorRegistry.get(_canon, "pandas_numpy", mode="research")
+                panels = [f for f in (*frames, *params.values()) if isinstance(f, pl.DataFrame)]
+                if not panels:
+                    raise TypeError(f"{_canon}: at least one Polars panel is required")
+                convert = lambda value: to_pandas_panel(value) if isinstance(value, pl.DataFrame) else value
+                # Scalars stay scalars, and keyword panels are converted too.
+                out = op.calculate(*(convert(f) for f in frames),
+                                   **{k: convert(v) for k, v in params.items()})
+                return from_pandas_panel(panels[0], out)
+
+        if _canon in {"ts_vector_state_mahalanobis", "ts_vector_state_local_density"}:
+            import copy
+            # These four-panel operators require exact logical-contract parity;
+            # a partial reconstruction silently loses descriptions, tags and
+            # future metadata fields.
+            _PolarsGeometryMathBackend.metadata = copy.deepcopy(_ref_meta)
+
+        if _canon in {"ts_envelope_compression", "ts_envelope_pressure", "ts_envelope_boundary_dwell"}:
+            import hashlib
+            import inspect
+            from factor_engine.backend.contracts import ExecutionKind, PhysicalImplementationSpec
+            from factor_engine.cleaned_operators.envelope import _polars_envelope
+            _PolarsGeometryMathBackend._physical_spec = PhysicalImplementationSpec(
+                canonical=_canon, backend="polars",
+                execution_kind=ExecutionKind.POLARS_NATIVE_EXPR,
+                materializes_full_panel=True, requires_sorted=True,
+                supports_nulls=True, supports_nan=True, supports_inf=True,
+                implementation_source_hash=hashlib.sha256(inspect.getsource(_polars_envelope).encode()).hexdigest(),
+                emitter_identity="envelope._polars_envelope:polars-expressions:v2",
+                kernel_identity="envelope._polars_envelope",
+                parameter_domain_hash="envelope:window:int>=2;quantile:float(0,1):v2",
+                semantic_contract_hash=_canon + ":supplied-bands:finite-support:prefix-causal:v2",
+                notes="Native per-instrument Polars expressions; no pandas/numpy delegation.",
+            )
+
+        else:
+            import hashlib
+            import inspect
+            from factor_engine.backend.contracts import ExecutionKind, PhysicalImplementationSpec
+            if _canon in {"ts_vector_state_mahalanobis", "ts_vector_state_local_density"}:
+                from pathlib import Path
+                from factor_engine.cleaned_operators import candle_state_space
+                _source_hash = hashlib.sha256(
+                    Path(candle_state_space.__file__).read_bytes() + Path(__file__).read_bytes()
+                ).hexdigest()
+                _supports_nonfinite = True
+            else:
+                _source_hash = hashlib.sha256(
+                    inspect.getsource(_PolarsGeometryMathBackend._calculate_series).encode()
+                ).hexdigest()
+                _supports_nonfinite = False
+            _PolarsGeometryMathBackend._physical_spec = PhysicalImplementationSpec(
+                canonical=_canon, backend="polars",
+                execution_kind=ExecutionKind.POLARS_PANDAS_DELEGATE,
+                materializes_full_panel=True, requires_sorted=True,
+                supports_nulls=(_supports_nonfinite or bool(getattr(getattr(pandas_op, "_physical_spec", None), "supports_nulls", False))),
+                supports_nan=(_supports_nonfinite or bool(getattr(getattr(pandas_op, "_physical_spec", None), "supports_nan", False))),
+                supports_inf=(_supports_nonfinite or bool(getattr(getattr(pandas_op, "_physical_spec", None), "supports_inf", False))),
+                implementation_source_hash=_source_hash,
+                emitter_identity="polars_geometry_math:polars-pandas-polars:v2",
+                kernel_identity="pandas_reference:" + _canon,
+                parameter_domain_hash=_canon + ":reference-contract",
+                semantic_contract_hash=_canon + ":reference-delegation:preserve-axes",
+                notes="Pandas delegation with scalar-aware binding; not native Polars acceleration.",
+            )
 
         OperatorRegistry.register(
             _PolarsGeometryMathBackend(),

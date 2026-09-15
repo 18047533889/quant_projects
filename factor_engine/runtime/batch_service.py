@@ -230,14 +230,19 @@ def materialize_shared_nodes_parallel(
             _materialize_shared_subplan(backend, sub, ctx, sid)
 
 
+_PRECOMPUTED_SHARED_MISSING = object()
+
+
 def _materialize_shared_subplan(
     backend: Any,
     sub: Any,
     ctx: Any,
     sid: str,
+    *,
+    precomputed_value: Any = _PRECOMPUTED_SHARED_MISSING,
 ) -> bool:
     """Materialize shared CSE state and report whether eager execution occurred."""
-    if (
+    if precomputed_value is _PRECOMPUTED_SHARED_MISSING and (
         getattr(sub, "op", None) == "literal"
         and getattr(backend, "supports_lazy_shared", False)
     ):
@@ -245,12 +250,19 @@ def _materialize_shared_subplan(
     runtime = dict(getattr(ctx, "runtime_stats", None) or {})
     runtime["polars_long_shared_sid"] = sid
     ctx.runtime_stats = runtime  # type: ignore[attr-defined]
-    if getattr(backend, "supports_lazy_shared", False):
+    if (
+        precomputed_value is _PRECOMPUTED_SHARED_MISSING
+        and getattr(backend, "supports_lazy_shared", False)
+    ):
         compile_lazy = getattr(backend, "compile_lazy_shared", None)
         if callable(compile_lazy) and compile_lazy(sub, ctx, sid=str(sid)):
             return False
     if ctx.shared_result_cache is not None:
-        value = backend.execute(sub, ctx)
+        value = (
+            backend.execute(sub, ctx)
+            if precomputed_value is _PRECOMPUTED_SHARED_MISSING
+            else precomputed_value
+        )
         # R36 P0-021（§104/106）：经 GovernedBufferStore 写入（byte 预算 + 记账 +
         # 冷淘汰），不再 raw dict 写入绕过治理。store 拒绝时回退 ExpressionCache
         # governed 路径；两者都不可用才允许 raw（研究降级），production 直接拒绝。
@@ -292,6 +304,7 @@ def _materialize_shared_subplan(
                 future_consumers=future_cons,
             )
             if res.status in ("MEMORY", "SPILLED"):
+                _release_consumed_sids(ctx, sub)
                 return True
             # REFUSED / RECOMPUTE：shared buffer 缺失会让 downstream plan_ref
             # KeyError —— production 必须 fail-closed，不能 return 成功。
@@ -310,6 +323,7 @@ def _materialize_shared_subplan(
         cache = getattr(ctx, "expression_cache", None)
         if cache is not None and getattr(cache, "set", None) is not None:
             cache.set(sid, value)
+            _release_consumed_sids(ctx, sub)
             return True
         # R37-P0-035：raw dict 写入只在 research 降级路径允许；production 下
         # store/ExpressionCache 都不可用 = 治理缺失，必须 fail-closed（§31.3：
@@ -324,8 +338,29 @@ def _materialize_shared_subplan(
             )
         # research 降级：显式 warning 语义的 raw 写入（telemetry 已在上面累计）。
         ctx.shared_result_cache[sid] = value
+        _release_consumed_sids(ctx, sub)
         return True
     return False
+
+
+def _bind_cse_budget_authority(ctx: Any, broker: Any) -> dict[str, Any] | None:
+    """Bind the live CSE store capacity to the scheduler broker authority."""
+    store = getattr(ctx, "shared_buffers", None)
+    if store is None:
+        return None
+    bind = getattr(store, "bind_budget_authority", None)
+    if not callable(bind):
+        raise RuntimeError("governed CSE store lacks dynamic budget authority support")
+    budget = int(bind(broker))
+    observed = {
+        "authority": f"{type(broker).__name__}.current_cse_budget",
+        "budget_bytes": budget,
+        "accounted_bytes": int(store.summary().get("accounted_bytes", 0)),
+    }
+    runtime = dict(getattr(ctx, "runtime_stats", None) or {})
+    runtime["cse_cache_budget"] = observed
+    ctx.runtime_stats = runtime
+    return observed
 
 
 def _release_consumed_sids(ctx: Any, root: Any) -> None:
@@ -360,7 +395,61 @@ def _release_consumed_sids(ctx: Any, root: Any) -> None:
                 ctx.shared_result_cache.pop(sid, None)
 
 
-def _setup_cse_refcounts(ctx: Any, roots: list[Any]) -> None:
+
+def _cse_shared_reachability(
+    roots_plans: list[Any], shared_nodes: dict[str, Any],
+) -> tuple[set[str], set[str], set[str]]:
+    """Return root-reachable shared sids, dangling refs and dependency cycles."""
+    from factor_engine.planner.cse import collect_consumed_sids
+
+    graph = {
+        str(sid): set(collect_consumed_sids(node))
+        for sid, node in shared_nodes.items()
+    }
+    reachable: set[str] = set()
+    dangling: set[str] = set()
+    pending = [
+        sid for root in roots_plans for sid in collect_consumed_sids(root)
+    ]
+    while pending:
+        sid = str(pending.pop())
+        if sid in reachable:
+            continue
+        if sid not in shared_nodes:
+            dangling.add(sid)
+            continue
+        reachable.add(sid)
+        pending.extend(graph.get(sid, ()))
+
+    cycles: set[str] = set()
+    state: dict[str, int] = {}
+    for raw_sid in shared_nodes:
+        start = str(raw_sid)
+        if state.get(start, 0) != 0:
+            continue
+        state[start] = 1
+        stack: list[tuple[str, Any]] = [(start, iter(graph.get(start, ())))]
+        while stack:
+            sid, dependencies = stack[-1]
+            try:
+                dependency = str(next(dependencies))
+            except StopIteration:
+                state[sid] = 2
+                stack.pop()
+                continue
+            if dependency not in shared_nodes:
+                continue
+            if state.get(dependency, 0) == 1:
+                cycles.add(f"{sid}->{dependency}")
+            elif state.get(dependency, 0) == 0:
+                state[dependency] = 1
+                stack.append((dependency, iter(graph.get(dependency, ()))))
+    return reachable, dangling, cycles
+
+
+def _setup_cse_refcounts(
+    ctx: Any, roots: list[Any], *, shared_nodes: Any = None,
+) -> None:
     """初始化 CSE 引用计数表（挂在 ctx 上）。
 
     R13 NEW-P1-76: refcount-init failure is NEVER silent.  When a batch shares
@@ -372,7 +461,12 @@ def _setup_cse_refcounts(ctx: Any, roots: list[Any]) -> None:
     from factor_engine.planner.cse import cse_consumer_counts
 
     roots_plans = [getattr(fp, "root", fp) for fp in roots]
-    counts = cse_consumer_counts(roots_plans)
+    shared = shared_nodes or {}
+    if not isinstance(shared, dict):
+        shared = dict(shared)
+    reachable, _dangling, _cycles = _cse_shared_reachability(roots_plans, shared)
+    shared_plans = [shared[sid] for sid in reachable]
+    counts = cse_consumer_counts(roots_plans + shared_plans)
     if counts:
         try:
             ctx._cse_refcounts = counts  # type: ignore[attr-defined]
@@ -412,16 +506,18 @@ def validate_cse_refcount_integrity(dag: Any, ctx: Any) -> dict[str, Any]:
     shared_nodes = getattr(dag, "shared_nodes", None) or {}
     roots = getattr(dag, "roots", None) or []
     roots_plans = [getattr(fp, "root", fp) for fp in roots]
-    consumed: set[str] = set()
-    for root in roots_plans:
-        consumed |= set(collect_consumed_sids(root))
-    for sid in sorted(consumed):
-        if sid not in shared_nodes:
-            issues.append(f"plan_ref sid={sid!r} has no matching shared node (dangling)")
+    reachable, dangling, cycles = _cse_shared_reachability(
+        roots_plans, shared_nodes,
+    )
+    for sid in sorted(dangling):
+        issues.append(f"plan_ref sid={sid!r} has no matching shared node (dangling)")
     for sid in sorted(shared_nodes):
-        if sid not in consumed:
-            issues.append(f"shared sid={sid!r} is orphaned (no root consumes it)")
-    counts = cse_consumer_counts(roots_plans)
+        if sid not in reachable:
+            issues.append(f"shared sid={sid!r} is orphaned (not root-reachable)")
+    for edge in sorted(cycles):
+        issues.append(f"shared dependency cycle detected at {edge}")
+    reachable_plans = [shared_nodes[sid] for sid in reachable]
+    counts = cse_consumer_counts(roots_plans + reachable_plans)
     refcounts = getattr(ctx, "_cse_refcounts", None) or {}
     for sid, expected in counts.items():
         actual = refcounts.get(sid, 0)
@@ -429,7 +525,12 @@ def validate_cse_refcount_integrity(dag: Any, ctx: Any) -> dict[str, Any]:
             issues.append(
                 f"sid={sid!r} consumer count mismatch expected={expected} actual={actual}"
             )
-    report = {"ok": not issues, "issues": issues, "n_shared": len(shared_nodes), "n_consumed": len(consumed)}
+    report = {
+        "ok": not issues,
+        "issues": issues,
+        "n_shared": len(shared_nodes),
+        "n_consumed": len(reachable),
+    }
     if issues:
         try:
             from factor_engine.runtime.production_policy import is_production_mode
@@ -1101,6 +1202,83 @@ def choose_execution_mode(
     return "ADAPTIVE_DAG"
 
 
+def _bind_physical_task_budgets(scheduler_plan, optimization):
+    """Bind selected workspace/transfer estimates to real scheduler admission.
+
+    Logical planning precedes backend selection. A rolling SQL LIST workspace
+    must therefore replace the earlier panel-only estimate before dispatch.
+    Sum reachable regions conservatively: materialized inputs can remain alive
+    while downstream regions compute. Do not charge unrelated roots per task.
+    """
+    from dataclasses import replace
+    from factor_engine.planner.physical_factor_dag import TASK_CSE_SHARED, TASK_ROOT
+    from factor_engine.runtime.task_resource_contract import TaskResourceContract
+    physical = optimization.physical_plan
+    from factor_engine.planner.backend_region import PhysicalRegionPlan
+    from types import SimpleNamespace
+    cache = getattr(optimization, "execution_index_cache", None)
+    if isinstance(physical, PhysicalRegionPlan):
+        if cache is not None:
+            index = cache.get(physical)
+        else:
+            from factor_engine.runtime.physical_execution_index import build_physical_execution_index
+            index = build_physical_execution_index(physical)
+    else:
+        regions_compat = {region.region_id: region for region in physical.regions}
+        incoming_compat = {key: set() for key in regions_compat}
+        edges_compat = {}
+        for edge in physical.edges:
+            incoming_compat[edge.consumer_region].add(edge.producer_region)
+            edges_compat[(edge.producer_region, edge.consumer_region)] = edge
+        index = SimpleNamespace(
+            regions=regions_compat,
+            node_regions={node: region.region_id for region in physical.regions for node in region.node_ids},
+            incoming_regions=incoming_compat,
+            edges_by_pair=edges_compat,
+            topological_positions={region.region_id: i for i, region in enumerate(physical.regions)},
+        )
+    regions, node_regions = index.regions, index.node_regions
+    ancestry_cache = {}
+
+    def ancestry(start):
+        if start in ancestry_cache:
+            return ancestry_cache[start]
+        required, stack, transfer = set(), [start], 0
+        while stack:
+            region_id = stack.pop()
+            if region_id in required:
+                continue
+            required.add(region_id)
+            for producer in index.incoming_regions.get(region_id, ()):
+                edge = index.edges_by_pair[(producer, region_id)]
+                transfer += max(0, int(edge.estimated_bytes))
+                stack.append(producer)
+        ordered = tuple(sorted(required, key=index.topological_positions.__getitem__))
+        ancestry_cache[start] = (ordered, transfer)
+        return ancestry_cache[start]
+    ledger = {}
+    for task_id, task in list(scheduler_plan.physical_dag.tasks.items()):
+        if task.task_type not in {TASK_ROOT, TASK_CSE_SHARED}:
+            continue
+        logical_id = task.factor_name if task.task_type == TASK_ROOT else str(task_id).split(":", 1)[1]
+        if logical_id not in node_regions:
+            raise ValueError("scheduled task is missing its physical resource plan")
+        required, transfer = ancestry(node_regions[logical_id])
+        workspace = sum(int(regions[key].estimated_memory_bytes) for key in required)
+        if workspace <= 0 or any(int(regions[key].estimated_memory_bytes) <= 0 for key in required):
+            raise ValueError("physical workspace estimate must be positive")
+        contract = task.resource_contract or TaskResourceContract()
+        peak = max(contract.peak_memory_bytes, workspace + transfer + contract.output_bytes)
+        contract = replace(contract, peak_memory_bytes=peak,
+                           estimate_basis=contract.estimate_basis + "+selected-physical-workspace")
+        scheduler_plan.physical_dag.tasks[task_id] = replace(task, resource_contract=contract)
+        ledger[task_id] = {"region_ids": required, "workspace_bytes": workspace,
+                           "transfer_bytes": transfer, "admission_peak_bytes": contract.admissible_peak_bytes,
+                           "basis": "estimated-not-measured"}
+    scheduler_plan.meta["physical_resource_admission"] = ledger
+    return ledger
+
+
 def _execute_run_many_scheduler(
     engine: "FactorEngine",
     factors: Sequence[Factor],
@@ -1164,6 +1342,7 @@ def _execute_run_many_scheduler(
         max_concurrency=max_concurrency if max_concurrency is not None else perf.max_workers,
         job_lease=job_lease,
     )
+    _bind_cse_budget_authority(ctx, scheduler.broker)
     # Install the parent-owned DA envelope before physical preflight performs
     # any prepare_read reservation.
     try:
@@ -1312,10 +1491,13 @@ def _execute_run_many_scheduler(
                 ),
                 forced_backend=str(getattr(planner_policy, "backend", "auto")),
             )
+            from factor_engine.runtime.default_execution_policy import operator_admission_mode
             physical_optimization = _admit_ready_single_region_batch(
                 physical_optimization, tuple(root_plans),
+                admission_mode=operator_admission_mode(ctx),
             )
             _record_region_candidate_ledger(ctx, physical_optimization, planner_policy)
+            _bind_physical_task_budgets(plan, physical_optimization)
             physical_by_factor = {
                 name: physical_optimization for name in root_plans
             }
@@ -1396,9 +1578,24 @@ def _execute_run_many_scheduler(
     materialized_shared_lock = threading.Lock()
 
     def _materialize_shared(sid: str, node: Any) -> bool:
-        eagerly_materialized = _materialize_shared_subplan(
-            execution_backend, node, ctx, sid
-        )
+        if physical_optimization is not None:
+            from factor_engine.runtime.engine import _execute_ready_physical_shared_task
+
+            bound_node = physical_optimization.logical_shared_nodes[str(sid)]
+            value = _execute_ready_physical_shared_task(
+                physical_optimization, str(sid), execution_backend, ctx
+            )
+            eagerly_materialized = _materialize_shared_subplan(
+                execution_backend,
+                bound_node,
+                ctx,
+                sid,
+                precomputed_value=value,
+            )
+        else:
+            eagerly_materialized = _materialize_shared_subplan(
+                execution_backend, node, ctx, sid
+            )
         if eagerly_materialized:
             with materialized_shared_lock:
                 materialized_shared_sids.add(str(sid))
@@ -1414,7 +1611,7 @@ def _execute_run_many_scheduler(
     try:
         with routing_execution_scope(perf):
             if ctx.shared_result_cache is not None:
-                _setup_cse_refcounts(ctx, dag.roots)
+                _setup_cse_refcounts(ctx, dag.roots, shared_nodes=dag.shared_nodes)
                 validate_cse_refcount_integrity(dag, ctx)
             # R33 §39：Auto Execution Mode——小批量走 serial fused（DIRECT_VECTOR），
             # 不建 future / 不占 lease（scheduler overhead > compute savings）。
@@ -1536,6 +1733,19 @@ def _execute_run_many_scheduler(
     lazy_cache = summarize_lazy_caches(ctx)
     if lazy_cache:
         batch_out["lazy_cache_summary"] = lazy_cache
+    store = getattr(ctx, "shared_buffers", None)
+    if store is not None:
+        cse_summary = store.summary()
+        cse_observed = {
+            "authority": cse_summary.get("budget_authority"),
+            "budget_bytes": cse_summary.get("budget_bytes"),
+            "accounted_bytes": cse_summary.get("accounted_bytes"),
+            "budget_refreshes": cse_summary.get("budget_refreshes", 0),
+        }
+        runtime = dict(ctx.runtime_stats or {})
+        runtime["cse_cache_budget"] = cse_observed
+        ctx.runtime_stats = runtime
+        batch_out["cse_cache_budget"] = cse_observed
     ctx.runtime_stats = record_resource_telemetry(ctx.runtime_stats, finalize=True)
     batch_out["resource_telemetry"] = dict(ctx.runtime_stats.get("resource") or {})
     _attach_fit_failure_snapshot(batch_out, ctx, collect_fit_failure_snapshot)
@@ -1560,7 +1770,7 @@ def execute_run_many(
     sink: Any = None,
     warmup_clusters: bool = False,
 ) -> dict[str, Any]:
-    """``FactorEngine.run_many`` 实现体：多因子 DAG 串行求值。
+    """``FactorEngine.run_many`` 实现体：默认多因子 DAG 自适应求值。
 
     流程：编译多因子 DAG（可选 CSE）→ 批量 prefetch/input_dq →
     物化 ``shared_nodes`` → 按依赖图分层执行各因子根。
@@ -1607,7 +1817,9 @@ def execute_run_many(
         pit_enforce=pit_enforce,
         context="run_many",
     )
-    assert_production_factors(factors, mode=engine.run_mode, context="run_many")
+    assert_production_factors(
+        factors, mode=engine.run_mode, context="run_many",
+        execution_purpose=getattr(engine, "execution_purpose", None))
 
     # 编译一次（CSE DAG + analyses），聚类与主执行共享同一份编译结果；同时消除
     # 老代码在 warmup_clusters 分支里的重复 ``_dag_from_factors`` 二次编译。
@@ -1753,9 +1965,9 @@ def execute_run_many(
 
     with routing_execution_scope(perf):
         if ctx.shared_result_cache is not None:
+            _setup_cse_refcounts(ctx, dag.roots, shared_nodes=dag.shared_nodes)
             materialize_shared_nodes_parallel(dag, engine_to_use.backend, ctx)
             _clear_polars_long_shared_sid(ctx)
-            _setup_cse_refcounts(ctx, dag.roots)
             validate_cse_refcount_integrity(dag, ctx)
         out: dict[str, Any] = {}
         backend_paths: dict[str, dict[str, Any]] = {}
@@ -1940,9 +2152,9 @@ def execute_run_many_iter(
 
     with routing_execution_scope(perf):
         if ctx.shared_result_cache is not None:
+            _setup_cse_refcounts(ctx, dag.roots, shared_nodes=dag.shared_nodes)
             materialize_shared_nodes_parallel(dag, engine_to_use.backend, ctx)
             _clear_polars_long_shared_sid(ctx)
-            _setup_cse_refcounts(ctx, dag.roots)
             validate_cse_refcount_integrity(dag, ctx)
         seen: set[str] = set()
         for layer in batch_graph.parallel_layers:
@@ -2035,7 +2247,9 @@ def execute_run_many_parallel(
         pit_enforce=pit_enforce,
         context="run_many_parallel",
     )
-    assert_production_factors(factors, mode=engine.run_mode, context="run_many_parallel")
+    assert_production_factors(
+        factors, mode=engine.run_mode, context="run_many_parallel",
+        execution_purpose=getattr(engine, "execution_purpose", None))
 
     # R27-166：并行 root 路径改用 ``concurrent.futures`` 线程池 as_completed
     # 流式 sink（不再依赖 joblib，也避免整层 raw list burst memory）。
@@ -2218,9 +2432,9 @@ def execute_run_many_parallel(
     try:
         with routing_execution_scope(perf):
             if ctx.shared_result_cache is not None:
+                _setup_cse_refcounts(ctx, dag.roots, shared_nodes=dag.shared_nodes)
                 materialize_shared_nodes_parallel(dag, engine_to_use.backend, ctx)
                 _clear_polars_long_shared_sid(ctx)
-                _setup_cse_refcounts(ctx, dag.roots)
             validate_cse_refcount_integrity(dag, ctx)
 
             results: dict[str, Any] = {}

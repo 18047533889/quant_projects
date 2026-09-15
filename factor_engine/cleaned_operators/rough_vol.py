@@ -76,6 +76,11 @@ def _metadata(
         param_names=params,
         return_type="series",
         param_specs=param_specs or {},
+        input_units={"x": "level"},
+        output_unit="dimensionless",
+        panel_params=("x",),
+        panel_arity=1,
+        scalar_params=tuple(params[1:]),
         tags=[
             "time_series_volatility", "daily", "pit_safe", "causal", "typed_v2",
             "deterministic",
@@ -163,8 +168,8 @@ def _validate_scales(scales: Any) -> tuple[int, ...]:
     return cleaned
 
 
-def _structure_function(v: np.ndarray, delta: int, p: float) -> tuple[float, int, float] | None:
-    """Normalized structure function ``S_p(delta) = mean |x_{t+delta}-x_t|^p``.
+def _scaled_log_structure_function(v: np.ndarray, delta: int, p: float) -> tuple[float, int, float] | None:
+    """Stable ``log(S_p(delta)) / p`` on the original time axis.
 
     Computed on the ORIGINAL time axis (review R4-59): the lag-delta increment
     at position ``t`` is ``v[t+delta]-v[t]`` regardless of gaps elsewhere, and an
@@ -172,7 +177,9 @@ def _structure_function(v: np.ndarray, delta: int, p: float) -> tuple[float, int
     and re-connected.  Returns ``(S_p, n_pairs, coverage)`` where ``n_pairs`` is
     the number of finite endpoint pairs and ``coverage = n_pairs / (N - delta)``
     is the fraction of the delta-lag pairs that are finite.  ``None`` when there
-    are no finite pairs.
+    are no finite pairs.  Computing in the log domain avoids overflow and
+    underflow for high ``p`` while retaining zero increments in the mean's
+    denominator.
     """
     d = int(delta)
     n = int(v.size)
@@ -184,9 +191,17 @@ def _structure_function(v: np.ndarray, delta: int, p: float) -> tuple[float, int
     if n_pairs == 0:
         return None
     coverage = n_pairs / (n - d)
-    with np.errstate(over="ignore", invalid="ignore"):
-        sp = float(np.mean(np.abs(inc[finite]) ** p))
-    return sp, n_pairs, coverage
+    magnitudes = np.abs(inc[finite])
+    positive = magnitudes > 0.0
+    if not np.any(positive):
+        return None
+    logs = np.log(magnitudes[positive])
+    anchor = float(np.max(logs))
+    with np.errstate(over="ignore", under="ignore", invalid="ignore"):
+        weights = np.exp(float(p) * (logs - anchor))
+    correction = (float(np.log(np.sum(weights))) - float(np.log(n_pairs))) / float(p)
+    scaled_log_sp = anchor + correction
+    return scaled_log_sp, n_pairs, coverage
 
 
 def _scale_passes_gate(
@@ -200,12 +215,12 @@ def _scale_passes_gate(
     """
     if res is None:
         return False
-    sp, n_pairs, coverage = res
+    scaled_log_sp, n_pairs, coverage = res
     if n_pairs < min_pairs:
         return False
     if coverage < min_pair_fraction:
         return False
-    if not (np.isfinite(sp) and sp > 0.0):
+    if not np.isfinite(scaled_log_sp):
         return False
     return True
 
@@ -254,11 +269,11 @@ def _pv_roughness(
     pts: list[tuple[float, float]] = []
     covs: list[float] = []
     for d in scales:
-        res = _structure_function(v, d, p)
+        res = _scaled_log_structure_function(v, d, p)
         if not _scale_passes_gate(res, min_pairs, min_pair_fraction):
             continue
-        sp, n_pairs, coverage = res
-        pts.append((float(np.log(d)), float(np.log(sp))))
+        scaled_log_sp, n_pairs, coverage = res
+        pts.append((float(np.log(d)), scaled_log_sp))
         covs.append(coverage)
     if len(pts) < 2:
         return np.nan
@@ -267,7 +282,7 @@ def _pv_roughness(
     xs = np.asarray([a for a, _ in pts], dtype=float)
     ys = np.asarray([b for _, b in pts], dtype=float)
     slope = float(np.polyfit(xs, ys, 1)[0])
-    return float(slope / p)
+    return slope
 
 
 def _scaling_break(
@@ -287,19 +302,19 @@ def _scaling_break(
     sps: list[float] = []
     covs: list[float] = []
     for d in lags:
-        res = _structure_function(v, d, p)
+        res = _scaled_log_structure_function(v, d, p)
         if not _scale_passes_gate(res, min_pairs, min_pair_fraction):
             return np.nan
-        sp, n_pairs, coverage = res
-        sps.append(sp)
+        scaled_log_sp, n_pairs, coverage = res
+        sps.append(scaled_log_sp)
         covs.append(coverage)
     if not _coverages_balanced(covs, imbalance_bound, min_pair_fraction):
         return np.nan
-    v1, v2, v8, v16 = sps
+    log_v1_p, log_v2_p, log_v8_p, log_v16_p = sps
     # slope_short = (log S(2) - log S(1)) / (log 2 - log 1); log 1 = 0.
-    h_short = float((np.log(v2) - np.log(v1)) / np.log(2.0) / p)
+    h_short = float((log_v2_p - log_v1_p) / np.log(2.0))
     # slope_long = (log S(16) - log S(8)) / (log 16 - log 8) = ... / log 2.
-    h_long = float((np.log(v16) - np.log(v8)) / np.log(2.0) / p)
+    h_long = float((log_v16_p - log_v8_p) / np.log(2.0))
     return float(h_short - h_long)
 
 
@@ -333,8 +348,17 @@ class TsVolPvariationRoughness(SeriesOperator):
         unit="ratio",
         cost=6,
         param_specs={
-            "min_pairs": ParamSpec(dtype=int, min=1, default=5, param_role=ParamRole.ESTIMATOR_RESOLUTION),
-            "min_pair_fraction": ParamSpec(dtype=float, min=0.0, max=1.0, default=0.5, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+            "window": ParamSpec(dtype=int, min=2, default=120, history_semantics="max_rows", param_role=ParamRole.HORIZON),
+            "p": ParamSpec(dtype=float, min=0.0, default=2.0, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+            "scales": ParamSpec(
+                alternatives=(
+                    ParamSpec(dtype=tuple, items=ParamSpec(dtype=int, min=1), min_items=2),
+                    ParamSpec(dtype=list, items=ParamSpec(dtype=int, min=1), min_items=2),
+                ),
+                default=(1, 2, 4), searchable=False, param_role=ParamRole.ESTIMATOR_RESOLUTION,
+            ),
+            "min_pairs": ParamSpec(dtype=int, min=1, default=5, param_role=ParamRole.SUPPORT_POLICY),
+            "min_pair_fraction": ParamSpec(dtype=float, min=0.0, max=1.0, default=0.5, param_role=ParamRole.SUPPORT_POLICY),
         },
     )
 
@@ -381,8 +405,10 @@ class TsVolScalingBreak(SeriesOperator):
         unit="ratio",
         cost=6,
         param_specs={
-            "min_pairs": ParamSpec(dtype=int, min=1, default=5, param_role=ParamRole.ESTIMATOR_RESOLUTION),
-            "min_pair_fraction": ParamSpec(dtype=float, min=0.0, max=1.0, default=0.5, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+            "window": ParamSpec(dtype=int, min=2, default=120, history_semantics="max_rows", param_role=ParamRole.HORIZON),
+            "p": ParamSpec(dtype=float, min=0.0, default=2.0, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+            "min_pairs": ParamSpec(dtype=int, min=1, default=5, param_role=ParamRole.SUPPORT_POLICY),
+            "min_pair_fraction": ParamSpec(dtype=float, min=0.0, max=1.0, default=0.5, param_role=ParamRole.SUPPORT_POLICY),
         },
     )
 

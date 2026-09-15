@@ -21,7 +21,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from factor_engine.cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
+from factor_engine.cleaned_operators.base import OperatorMetadata, ParamRole, ParamSpec, SeriesOperator, register_operator
 from factor_engine.cleaned_operators.rolling_pack import (
     check_window,
     frame_like,
@@ -32,6 +32,24 @@ from factor_engine.cleaned_operators.rolling_pack import (
 
 _EPS = 1e-12
 _MAD_CONST = 1.4826
+
+_VOL_DEFAULTS = {
+    "ts_vol_of_vol": {"inner_window": 5, "outer_window": 40, "min_periods": 2},
+    "ts_vol_acceleration": {"inner_window": 5, "lag": 5, "min_periods": 2},
+    "ts_vol_term_structure": {"short_window": 5, "long_window": 40, "min_periods": 2},
+    "ts_semivariance_balance": {"window": 20, "min_periods": 2},
+    "ts_realized_quarticity": {"window": 20, "min_periods": 3},
+    "ts_vol_clustering": {"window": 20, "min_periods": 3},
+    "ts_leverage_effect": {"window": 60, "min_periods": 3},
+    "ts_jump_bipower_proxy": {"window": 20, "min_periods": 3},
+}
+
+def _vol_specs(name: str) -> dict[str, ParamSpec]:
+    out: dict[str, ParamSpec] = {}
+    for key, default in _VOL_DEFAULTS[name].items():
+        minimum = 0 if key == "lag" else 1
+        out[key] = ParamSpec(dtype=int, min=minimum, default=default, param_role=ParamRole.HORIZON)
+    return out
 
 
 def _trailing_contiguous(chunk: np.ndarray) -> np.ndarray:
@@ -68,6 +86,9 @@ def _metadata(name: str, description: str, params: list[str], *, unit: str) -> O
             f"signature:{','.join(params)}->series", "domain:volatility",
             f"unit:{unit}", "cost:1",
         ],
+        panel_params=tuple(p for p in params if p not in _VOL_DEFAULTS[name]),
+        scalar_params=tuple(_VOL_DEFAULTS[name]),
+        param_specs=_vol_specs(name),
     )
 
 

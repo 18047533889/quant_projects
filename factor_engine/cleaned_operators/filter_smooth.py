@@ -38,6 +38,20 @@ from factor_engine.cleaned_operators.base import OperatorMetadata, ParamRole, Pa
 from factor_engine.cleaned_operators.filter_contracts import FilterContract, FilterRole, JumpPreservationPolicy
 
 _CANONICALS: list[str] = []
+_SUPER_PERIOD_SPEC = ParamSpec(dtype=int, min=3, default=10, param_role=ParamRole.HORIZON)
+_KAMA_ER_SPEC = ParamSpec(dtype=int, min=2, default=10, param_role=ParamRole.HORIZON)
+_KAMA_FAST_SPEC = ParamSpec(dtype=int, min=1, default=2, param_role=ParamRole.HORIZON)
+_KAMA_SLOW_SPEC = ParamSpec(dtype=int, min=1, default=30, param_role=ParamRole.HORIZON)
+_KAMA_MIN_SPEC = ParamSpec(dtype=int, min=1, default=None, searchable=False, param_role=ParamRole.SUPPORT_POLICY)
+
+
+def _strict_int(value, name: str, minimum: int) -> int:
+    if isinstance(value, (bool, np.bool_)) or not isinstance(value, (int, np.integer)):
+        raise ValueError(f"{name} must be an integer >= {minimum}")
+    result = int(value)
+    if result < minimum:
+        raise ValueError(f"{name} must be an integer >= {minimum}")
+    return result
 
 
 @register_operator(
@@ -228,6 +242,9 @@ class TSSuperSmoother(SeriesOperator):
         category="signal_filter",
         description="Two-pole IIR low-pass filter with stronger attenuation than EMA",
         param_names=["x", "period"],
+        param_specs={"period": _SUPER_PERIOD_SPEC},
+        panel_params=("x",),
+        scalar_params=("period",),
         return_type="series",
         tags=["signal_filter", "causal", "stateful"],
     )
@@ -251,10 +268,7 @@ class TSSuperSmoother(SeriesOperator):
         period: int = 10,
         **_: Any,
     ) -> pd.DataFrame:
-        if period < 3:
-            raise ValueError(
-                f"ts_super_smoother requires period >= 3 for stable two-pole filter, got {period}"
-            )
+        period = _strict_int(period, "period", 3)
 
         xv = x.to_numpy(dtype=float)
         rows, cols = xv.shape
@@ -338,7 +352,7 @@ def ts_kama(
     slow_period : int, default=30
         Slow EMA period for sideways markets. Certified: [20, 30, 40, 60].
     min_periods : int, optional
-        Minimum observations required. Defaults to er_window.
+        Minimum contiguous observations required. Defaults to er_window + 1.
 
     Returns
     -------
@@ -366,48 +380,19 @@ def ts_kama(
     Missing data policy: A NaN input invalidates the recursive state. KAMA
     emits NaN until er_window + 1 consecutive finite prices re-accumulate.
     """
-    if isinstance(er_window, bool):
-        raise ValueError("er_window must be integer")
-    if isinstance(er_window, float):
-        raise ValueError("er_window must be integer")
-    er_window = int(er_window)
-    if er_window < 2:
-        raise ValueError("er_window must be >= 2")
-
-    if isinstance(fast_period, bool):
-        raise ValueError("fast_period must be integer")
-    if isinstance(fast_period, float):
-        raise ValueError("fast_period must be integer")
-    fast_period = int(fast_period)
-    if fast_period < 1:
-        raise ValueError("fast_period must be >= 1")
-
-    if isinstance(slow_period, bool):
-        raise ValueError("slow_period must be integer")
-    if isinstance(slow_period, float):
-        raise ValueError("slow_period must be integer")
-    slow_period = int(slow_period)
-    if slow_period < 1:
-        raise ValueError("slow_period must be >= 1")
-
+    er_window = _strict_int(er_window, "er_window", 2)
+    fast_period = _strict_int(fast_period, "fast_period", 1)
+    slow_period = _strict_int(slow_period, "slow_period", 1)
     if fast_period >= slow_period:
         raise ValueError("fast_period must be < slow_period")
 
-    # FL-P0-003: min_periods parameter now has real runtime semantics
-    # It controls the minimum contiguous observations required before KAMA starts emitting
+    required = er_window + 1
     if min_periods is None:
-        min_periods = er_window + 1  # Default: ER computation requirement
+        min_periods = required
     else:
-        if isinstance(min_periods, bool):
-            raise ValueError("min_periods must be integer")
-        if isinstance(min_periods, float):
-            raise ValueError("min_periods must be integer")
-        min_periods = int(min_periods)
-        if min_periods < 1:
-            raise ValueError("min_periods must be >= 1")
-        # FL-P0-003: Ensure min_periods is at least er_window+1 (ER computation floor)
-        if min_periods < er_window + 1:
-            min_periods = er_window + 1
+        min_periods = _strict_int(min_periods, "min_periods", 1)
+        if min_periods < required:
+            raise ValueError(f"min_periods must be at least er_window + 1 ({required})")
 
     # Efficiency Ratio: |change| / volatility
     change = (x - x.shift(er_window)).abs()
@@ -494,6 +479,14 @@ class TSKama(TsKamaOperator):
         category="signal_filter",
         description="Kaufman Adaptive Moving Average: adaptive smoothing driven by efficiency ratio",
         param_names=["x", "er_window", "fast_period", "slow_period", "min_periods"],
+        param_specs={
+            "er_window": _KAMA_ER_SPEC,
+            "fast_period": _KAMA_FAST_SPEC,
+            "slow_period": _KAMA_SLOW_SPEC,
+            "min_periods": _KAMA_MIN_SPEC,
+        },
+        panel_params=("x",),
+        scalar_params=("er_window", "fast_period", "slow_period", "min_periods"),
         return_type="series",
         tags=["signal_filter", "causal", "stateful", "adaptive"],
     )

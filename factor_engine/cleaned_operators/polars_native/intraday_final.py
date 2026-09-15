@@ -8,10 +8,29 @@ intra_* operators: session-aware statistics and event analysis (24 operators)
 All operators use real Polars API with backend="polars"
 """
 
+import copy
 import polars as pl
 import numpy as np
 from typing import Optional
+from factor_engine.backend.contracts import ExecutionKind, PhysicalImplementationSpec
+from factor_engine.cleaned_operators.rolling_pack import _call_pandas_delegate
 from factor_engine.cleaned_operators.base_polars import register_operator, SeriesOperator, OperatorMetadata
+
+
+def _flow_reference(reference_cls, *panels, **kwargs):
+    """Explicit correctness delegate for stateful/shape-changing flow kernels."""
+    from factor_engine.cleaned_operators.common._polars_bridge import to_pandas_panel
+    converted = [to_pandas_panel(panel) if panel is not None else None for panel in panels]
+    out = reference_cls()._calculate_series(*converted, **kwargs)
+    return pl.from_pandas(out.rename_axis("date").reset_index())
+
+
+def _flow_metadata(reference_cls):
+    metadata = copy.deepcopy(reference_cls.metadata)
+    metadata.tags = list(metadata.tags or []) + [
+        "polars", "delegate:pandas_numpy", "preserve_panel_time_coordinate"
+    ]
+    return metadata
 
 
 # ============================================================================
@@ -84,101 +103,39 @@ class IntradayBarrierApproachAccelerationPolarsNative(SeriesOperator):
 class IntradayBvcImbalancePolarsNative(SeriesOperator):
     """Buy-Volume-Concentration imbalance: asymmetry in volume distribution."""
 
-    metadata = OperatorMetadata(
-        name="intraday_bvc_imbalance",
-        category="intraday",
-        description="Buy-Volume-Concentration imbalance: asymmetry in volume distribution",
-        param_names=["close", "volume", "scale_window", "locked"],
-        param_types={"close": pl.Series, "volume": pl.Series, "scale_window": int, "locked": pl.Series},
-        tags=["intraday", "imbalance", "polars_native"],
-    )
+    from factor_engine.cleaned_operators.microstructure.flow_impact import IntradayBvcImbalance as _Reference
+    metadata = _flow_metadata(_Reference)
 
     def _calculate_series(self, close, volume, scale_window: int = 20, locked=None, **kwargs):
-        returns = close
-        return (
-            returns.to_frame("returns")
-            .with_columns([
-                pl.col("date"),
-                volume.alias("volume")
-            ])
-            .lazy()
-            .group_by("date")
-            .agg([
-                pl.when(pl.col("volume").sum() != 0)
-                .then((pl.col("returns") * pl.col("volume")).sum() / pl.col("volume").sum())
-                .otherwise(None)
-                .alias("returns")
-            ])
-            .collect()
-            .to_series()
+        from factor_engine.cleaned_operators.common._polars_bridge import to_pandas_panel
+        out = self._Reference()._calculate_series(
+            to_pandas_panel(close), to_pandas_panel(volume),
+            scale_window=scale_window,
+            locked=to_pandas_panel(locked) if locked is not None else None,
         )
+        return pl.from_pandas(out.rename_axis("date").reset_index())
 
 
 @register_operator(name="intraday_impact_asymmetry", backend="polars")
 class IntradayImpactAsymmetryPolarsNative(SeriesOperator):
     """Asymmetry between up-move and down-move price impact."""
 
-    metadata = OperatorMetadata(
-        name="intraday_impact_asymmetry",
-        category="intraday",
-        description="Asymmetry between up-move and down-move price impact",
-        param_names=["returns", "flow", "min_periods"],
-        param_types={"returns": pl.Series, "flow": pl.Series, "min_periods": int},
-        tags=["intraday", "impact", "asymmetry", "polars_native"],
-    )
+    from factor_engine.cleaned_operators.microstructure.flow_impact import IntradayImpactAsymmetry as _Reference
+    metadata = _flow_metadata(_Reference)
 
-    def _calculate_series(self, returns, flow=None, min_periods: int = 1, **kwargs):
-        volume = flow if flow is not None else returns
-        # TODO: Separate up/down returns, compute impact ratio
-        return (
-            returns.to_frame("returns")
-            .with_columns([
-                pl.col("date"),
-                volume.alias("volume")
-            ])
-            .lazy()
-            .group_by("date")
-            .agg([
-                pl.when(pl.col("volume") != 0)
-                .then(pl.col("returns").abs() / pl.col("volume"))
-                .otherwise(None)
-                .mean()
-                .alias("returns")
-            ])
-            .collect()
-            .to_series()
-        )
+    def _calculate_series(self, returns, flow, min_periods: int = 20, **kwargs):
+        return _flow_reference(self._Reference, returns, flow, min_periods=min_periods)
 
 
 @register_operator(name="intraday_impact_beta", backend="polars")
 class IntradayImpactBetaPolarsNative(SeriesOperator):
     """Power-law exponent of volume-price impact relationship."""
 
-    metadata = OperatorMetadata(
-        name="intraday_impact_beta",
-        category="intraday",
-        description="Power-law exponent of volume-price impact relationship",
-        param_names=["returns", "flow", "min_periods"],
-        param_types={"returns": pl.Series, "flow": pl.Series, "min_periods": int},
-        tags=["intraday", "impact", "beta", "polars_native"],
-    )
+    from factor_engine.cleaned_operators.microstructure.flow_impact import IntradayImpactBeta as _Reference
+    metadata = _flow_metadata(_Reference)
 
-    def _calculate_series(self, returns, volume, **kwargs):
-        # TODO: Log-log regression of |return| ~ volume
-        return (
-            returns.to_frame("returns")
-            .with_columns([
-                pl.col("date"),
-                volume.alias("volume")
-            ])
-            .lazy()
-            .group_by("date")
-            .agg([
-                pl.lit(0.5).alias("returns")  # Placeholder beta
-            ])
-            .collect()
-            .to_series()
-        )
+    def _calculate_series(self, returns, flow, min_periods: int = 20, **kwargs):
+        return _flow_reference(self._Reference, returns, flow, min_periods=min_periods)
 
 
 @register_operator(name="intraday_impact_decay_rate", backend="polars")
@@ -213,116 +170,53 @@ class IntradayImpactDecayRatePolarsNative(SeriesOperator):
 
 @register_operator(name="intraday_jump_test_stat", backend="polars")
 class IntradayJumpTestStatPolarsNative(SeriesOperator):
-    """Jump test statistic: (RV - BV) / sqrt(variance of BV)."""
-
-    metadata = OperatorMetadata(
-        name="intraday_jump_test_stat",
-        category="intraday",
-        description="Jump test statistic: (RV - BV) / sqrt(variance of BV)",
-        param_names=["returns", "window"],
-        param_types={"returns": pl.Series, "window": int},
-        tags=["intraday", "jump", "test", "polars_native"],
+    """Exact labelled-panel delegate to the authoritative BNS statistic."""
+    from factor_engine.cleaned_operators.jump_robust import IntradayJumpTestStat as _Reference
+    metadata = copy.deepcopy(_Reference.metadata)
+    metadata.tags = list(metadata.tags or []) + ["polars", "delegate:pandas_numpy"]
+    _physical_spec = PhysicalImplementationSpec(
+        canonical="intraday_jump_test_stat", backend="polars",
+        execution_kind=ExecutionKind.POLARS_PANDAS_DELEGATE,
+        supports_lazy=False, supports_streaming=False, materializes_full_panel=True,
+        supports_nulls=True, supports_nan=True, supports_inf=True,
     )
 
-    def _calculate_series(self, returns, window: int = 20, **kwargs):
-        # R4-100 parity: the pandas reference (intraday_session) declares the
-        # 2-param contract ``(returns, window)``.
-        # TODO: Implement Barndorff-Nielsen-Shephard jump test
-        mu1_sq = np.pi / 2
-
-        df = (
-            returns.to_frame("returns")
-            .with_columns(pl.col("date"))
-        )
-
-        rv = (
-            df.lazy()
-            .group_by("date")
-            .agg([
-                (pl.col("returns") ** 2).sum().alias("rv")
-            ])
-            .collect()
-        )
-
-        bv = (
-            df.lazy()
-            .group_by("date")
-            .agg([
-                (pl.col("returns").abs() * pl.col("returns").abs().shift(1)).sum().alias("bv")
-            ])
-            .collect()
-            .with_columns(
-                (pl.col("bv") * mu1_sq).alias("bv")
-            )
-        )
-
-        return (
-            rv.join(bv, on="date")
-            .with_columns(
-                ((pl.col("rv") - pl.col("bv")) / pl.col("bv").sqrt().fill_null(1)).alias("returns")
-            )
-            .select("returns")
-            .to_series()
-        )
+    def _calculate_series(self, returns, window: int = 240, **kwargs):
+        return _call_pandas_delegate("intraday_jump_test_stat", (returns,), {"window": window, **kwargs})
 
 
 @register_operator(name="intraday_medrv", backend="polars")
 class IntradayMedrvPolarsNative(SeriesOperator):
-    """MedRV: Median-based realized volatility estimator (robust to jumps)."""
-
-    metadata = OperatorMetadata(
-        name="intraday_medrv",
-        category="intraday",
-        description="MedRV: Median-based realized volatility estimator (robust to jumps)",
-        param_names=["returns", "window"],
-        param_types={"returns": pl.Series, "window": int},
-        tags=["intraday", "realized", "volatility", "median", "polars_native"],
+    """Exact labelled-panel delegate to the authoritative MedRV estimator."""
+    from factor_engine.cleaned_operators.jump_robust import IntradayMedRV as _Reference
+    metadata = copy.deepcopy(_Reference.metadata)
+    metadata.tags = list(metadata.tags or []) + ["polars", "delegate:pandas_numpy"]
+    _physical_spec = PhysicalImplementationSpec(
+        canonical="intraday_medrv", backend="polars",
+        execution_kind=ExecutionKind.POLARS_PANDAS_DELEGATE,
+        supports_lazy=False, supports_streaming=False, materializes_full_panel=True,
+        supports_nulls=True, supports_nan=True, supports_inf=True,
     )
 
-    def _calculate_series(self, returns, window: int = 20, **kwargs):
-        # R4-100 parity: the pandas reference (intraday_session) declares the
-        # 2-param contract ``(returns, window)``.
-        # TODO: Implement median-based RV: uses median(|r_i|, |r_{i+1}|, |r_{i+2}|)
-        return (
-            returns.to_frame("returns")
-            .with_columns(pl.col("date"))
-            .lazy()
-            .group_by("date")
-            .agg([
-                pl.col("returns").abs().median().alias("returns")  # Simplified placeholder
-            ])
-            .collect()
-            .to_series()
-        )
+    def _calculate_series(self, returns, window: int = 240, **kwargs):
+        return _call_pandas_delegate("intraday_medrv", (returns,), {"window": window, **kwargs})
 
 
 @register_operator(name="intraday_minrv", backend="polars")
 class IntradayMinrvPolarsNative(SeriesOperator):
-    """MinRV: Minimum-based realized volatility (robust to jumps)."""
-
-    metadata = OperatorMetadata(
-        name="intraday_minrv",
-        category="intraday",
-        description="MinRV: Minimum-based realized volatility (robust to jumps)",
-        param_names=["returns", "window"],
-        param_types={"returns": pl.Series, "window": int},
-        tags=["intraday", "realized", "volatility", "minimum", "polars_native"],
+    """Exact labelled-panel delegate to the authoritative MinRV estimator."""
+    from factor_engine.cleaned_operators.jump_robust import IntradayMinRV as _Reference
+    metadata = copy.deepcopy(_Reference.metadata)
+    metadata.tags = list(metadata.tags or []) + ["polars", "delegate:pandas_numpy"]
+    _physical_spec = PhysicalImplementationSpec(
+        canonical="intraday_minrv", backend="polars",
+        execution_kind=ExecutionKind.POLARS_PANDAS_DELEGATE,
+        supports_lazy=False, supports_streaming=False, materializes_full_panel=True,
+        supports_nulls=True, supports_nan=True, supports_inf=True,
     )
 
-    def _calculate_series(self, returns, window: int = 20, **kwargs):
-        # R4-100 parity: the pandas reference (intraday_session).
-        # TODO: Implement min-based RV: uses min(|r_i|, |r_{i+1}|)
-        return (
-            returns.to_frame("returns")
-            .with_columns(pl.col("date"))
-            .lazy()
-            .group_by("date")
-            .agg([
-                (pl.col("returns") ** 2).sum().sqrt().alias("returns")  # Placeholder
-            ])
-            .collect()
-            .to_series()
-        )
+    def _calculate_series(self, returns, window: int = 240, **kwargs):
+        return _call_pandas_delegate("intraday_minrv", (returns,), {"window": window, **kwargs})
 
 
 @register_operator(name="intraday_quantile_curve_pca_residual", backend="polars")
@@ -454,30 +348,11 @@ class IntradayRealizedSemivarianceBalancePolarsNative(SeriesOperator):
 class IntradayReturnWassersteinShiftPolarsNative(SeriesOperator):
     """Wasserstein distance between morning and afternoon return distributions."""
 
-    metadata = OperatorMetadata(
-        name="intraday_return_wasserstein_shift",
-        category="intraday",
-        description="Wasserstein distance between morning and afternoon return distributions",
-        param_names=["returns", "lookback_days"],
-        param_types={"returns": pl.Series, "lookback_days": int},
-        tags=["intraday", "wasserstein", "shift", "polars_native"],
-    )
+    from factor_engine.cleaned_operators.microstructure.flow_impact import IntradayReturnWassersteinShift as _Reference
+    metadata = _flow_metadata(_Reference)
 
-    def _calculate_series(self, returns, lookback_days: int = 20, **kwargs):
-        # R4-100 parity: the pandas reference (intraday_session) declares the
-        # 2-param contract ``(returns, lookback_days)``.
-        # TODO: Implement 1D Wasserstein distance (Earth Mover's Distance)
-        return (
-            returns.to_frame("returns")
-            .with_columns(pl.col("date"))
-            .lazy()
-            .group_by("date")
-            .agg([
-                pl.col("returns").std().alias("returns")  # Placeholder
-            ])
-            .collect()
-            .to_series()
-        )
+    def _calculate_series(self, returns, lookback_days: int = 10, **kwargs):
+        return _flow_reference(self._Reference, returns, lookback_days=lookback_days)
 
 
 @register_operator(name="intraday_rv_signature_curvature", backend="polars")
@@ -510,7 +385,6 @@ class IntradayRvSignatureCurvaturePolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="intraday_rv_signature_slope", backend="polars")
 class IntradayRvSignatureSlopePolarsNative(SeriesOperator):
     """Slope of realized variance signature plot."""
 
@@ -855,29 +729,12 @@ class IntraImpulseEventDetectorPolarsNative(SeriesOperator):
     def _calculate_series(self, price, volume=None, event="up", threshold="robust_z",
                           z: float = 3.0, min_bars: int = 1, merge_gap: int = 2,
                           output: str = "count", **kwargs):
-        # R4-100 parity: adopt the pandas reference arity (price, volume, event,
-        # threshold, z, min_bars, merge_gap, output).  Best-effort session
-        # impulse detection on the input panel.
-        cols = [c for c in price.columns if c not in PANEL_SKIP_COLUMNS]
-        pv = price[cols].to_numpy(dtype=float)
-        out = np.zeros_like(pv, dtype=float)
-        for idx, col in enumerate(cols):
-            colv = pv[:, idx]
-            count = 0
-            for i in range(len(colv)):
-                v = colv[i]
-                if not np.isfinite(v):
-                    count = 0
-                    continue
-                if abs(float(v)) > z:
-                    count += 1
-                else:
-                    count = 0
-                out[i, idx] = float(count)
-        data = {}
-        for idx, col in enumerate(cols):
-            data[col] = out[:, idx]
-        return _result_df(data, price)
+        return _call_pandas_delegate(
+            "intra_impulse_event_detector", (price, volume),
+            {"event": event, "threshold": threshold, "z": z,
+             "min_bars": min_bars, "merge_gap": merge_gap, "output": output,
+             **kwargs},
+        )
 
 
 @register_operator(name="intra_event_pre_post_contrast", backend="polars")
@@ -1173,7 +1030,6 @@ class IntraLiquidityResilienceCurveFitPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="intra_multiresolution_resample_reduce", backend="polars")
 class IntraMultiresolutionResampleReducePolarsNative(SeriesOperator):
     """Aggregate statistics at multiple time resolutions within session."""
 
@@ -1206,7 +1062,6 @@ class IntraMultiresolutionResampleReducePolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="intra_neighbor_event_class", backend="polars")
 class IntraNeighborEventClassPolarsNative(SeriesOperator):
     """Classification of events based on temporal neighborhood similarity."""
 
@@ -1300,9 +1155,8 @@ class IntraProbeOutcomeScorePolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="intra_profile_earth_mover_distance", backend="polars")
 class IntraProfileEarthMoverDistancePolarsNative(SeriesOperator):
-    """Earth Mover's Distance between today's profile and reference profile."""
+    """Retired placeholder; the registered implementation is intraday.polars_intraday_full."""
 
     metadata = OperatorMetadata(
         name="intra_profile_earth_mover_distance",
@@ -1360,7 +1214,6 @@ class IntraResponseCurveFeaturesPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="intra_slice_mask_pair_reduce", backend="polars")
 class IntraSliceMaskPairReducePolarsNative(SeriesOperator):
     """Pairwise reduction over two masked slices of the session."""
 
@@ -1393,7 +1246,6 @@ class IntraSliceMaskPairReducePolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="intra_slice_mask_reduce", backend="polars")
 class IntraSliceMaskReducePolarsNative(SeriesOperator):
     """Reduction over masked time slice within session."""
 
@@ -1427,7 +1279,6 @@ class IntraSliceMaskReducePolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="intra_state_dwell_stats", backend="polars")
 class IntraStateDwellStatsPolarsNative(SeriesOperator):
     """Statistics of dwell times in discrete states."""
 
@@ -1455,7 +1306,6 @@ class IntraStateDwellStatsPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="intra_state_interval_moment", backend="polars")
 class IntraStateIntervalMomentPolarsNative(SeriesOperator):
     """Moment (mean/std/skew) of intervals between state transitions."""
 
@@ -1484,7 +1334,6 @@ class IntraStateIntervalMomentPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="intra_state_pair_same_slot_corr", backend="polars")
 class IntraStatePairSameSlotCorrPolarsNative(SeriesOperator):
     """Correlation between two state series at same minute-of-day slots."""
 
@@ -1563,9 +1412,8 @@ class IntraSupplyAbsorptionScorePolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="intra_ute_high", backend="polars")
 class IntraUteHighPolarsNative(SeriesOperator):
-    """Upside Tail Event: fraction of bars in the upper tail."""
+    """Retired placeholder; the registered implementation is the generated bridge."""
 
     metadata = OperatorMetadata(
         name="intra_ute_high",
@@ -1600,9 +1448,8 @@ class IntraUteHighPolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="intra_ute_low", backend="polars")
 class IntraUteLowPolarsNative(SeriesOperator):
-    """Downside Tail Event: fraction of bars in the lower tail."""
+    """Retired placeholder; the registered implementation is the generated bridge."""
 
     metadata = OperatorMetadata(
         name="intra_ute_low",

@@ -78,8 +78,8 @@ def test_ts_skew_min_periods_enforcement(window: int, min_periods: int) -> None:
 
 
 @pytest.mark.parametrize("window,min_periods", [(6, 6), (6, 4), (5, 5), (5, 3)])
-def test_ts_kurt_min_periods_enforcement(window: int, min_periods: int) -> None:
-    """ts_kurt must enforce min_periods and minimum 4 data points."""
+def test_ts_kurt_requires_full_window(window: int, min_periods: int) -> None:
+    """Canonical ts_kurt has no public partial-window contract."""
     frame = pd.DataFrame(
         {
             "ts": pd.date_range("2024-01-01", periods=10),
@@ -100,13 +100,11 @@ def test_ts_kurt_min_periods_enforcement(window: int, min_periods: int) -> None:
     assert compiled is not None
 
     # Pandas reference
-    expected = frame["x"].rolling(window, min_periods=min_periods).kurt()
+    expected = frame["x"].rolling(window, min_periods=window).kurt()
     got = _execute(compiled, frame).reset_index(drop=True)
 
-    # Kurt requires minimum 4 points
-    effective_min = max(min_periods, 4)
     for i, (g, e) in enumerate(zip(got, expected)):
-        if i < effective_min - 1:
+        if i < window - 1:
             assert pd.isna(g), f"idx={i}: expected NaN, got {g}"
         else:
             np.testing.assert_allclose(g, e, equal_nan=True, atol=1e-10)
@@ -147,10 +145,7 @@ def test_ts_skew_inf_handling() -> None:
 
 
 def test_ts_kurt_inf_handling() -> None:
-    """ts_kurt: pandas rolling.kurt() skips Inf (not propagate to NaN).
-
-    Same behavior as skew - rolling uses optimized code that silently skips Inf.
-    """
+    """A non-finite member invalidates the whole canonical window."""
     frame = pd.DataFrame(
         {
             "ts": pd.date_range("2024-01-01", periods=10),
@@ -170,8 +165,8 @@ def test_ts_kurt_inf_handling() -> None:
     )
     assert compiled is not None
 
-    # Pandas rolling skips Inf values
-    expected = frame["x"].rolling(5, min_periods=4).kurt()
+    finite = frame["x"].where(np.isfinite(frame["x"]))
+    expected = finite.rolling(5, min_periods=5).kurt()
     got = _execute(compiled, frame).reset_index(drop=True)
 
     np.testing.assert_allclose(got, expected, equal_nan=True, atol=1e-10)
@@ -205,7 +200,7 @@ def test_ts_skew_nan_handling() -> None:
 
 
 def test_ts_kurt_nan_handling() -> None:
-    """ts_kurt with NaN: COUNT excludes NULL, min_periods enforced."""
+    """A missing member invalidates the whole canonical window."""
     frame = pd.DataFrame(
         {
             "ts": pd.date_range("2024-01-01", periods=10),
@@ -225,7 +220,44 @@ def test_ts_kurt_nan_handling() -> None:
     )
     assert compiled is not None
 
-    expected = frame["x"].rolling(5, min_periods=4).kurt()
+    expected = frame["x"].rolling(5, min_periods=5).kurt()
     got = _execute(compiled, frame).reset_index(drop=True)
 
     np.testing.assert_allclose(got, expected, equal_nan=True, atol=1e-10)
+
+
+@pytest.mark.parametrize(
+    "offset,scale",
+    [(0.0, 1e-6), (0.0, 1.0), (0.0, 1e6), (1e4, 1.0), (1e8, 1.0)],
+)
+def test_ts_kurt_is_stable_under_translation_and_scale(
+    offset: float, scale: float
+) -> None:
+    window = 20
+    values = offset + scale * np.arange(1.0, 26.0)
+    frame = pd.DataFrame(
+        {
+            "ts": pd.date_range("2024-01-01", periods=len(values)),
+            "inst": ["A"] * len(values),
+            "x": values,
+        }
+    )
+    reset_sql_template_cache()
+    plan = PlanNode(op="ts_kurt", inputs=[column("x"), literal(window)])
+    compiled = compile_plan_to_sql(
+        plan, dataset="panel", time_column="ts", instrument_column="inst"
+    )
+    assert compiled is not None
+
+    def centered_reference(sample: np.ndarray) -> float:
+        centered = sample - sample.mean()
+        m2 = np.sum(centered * centered)
+        biased = len(sample) * np.sum(centered**4) / (m2 * m2) - 3.0
+        n = len(sample)
+        return (n - 1) / ((n - 2) * (n - 3)) * ((n + 1) * biased + 6.0)
+
+    expected = frame["x"].rolling(window, min_periods=window).apply(
+        centered_reference, raw=True
+    )
+    got = _execute(compiled, frame).reset_index(drop=True)
+    np.testing.assert_allclose(got, expected, equal_nan=True, atol=2e-10, rtol=2e-10)

@@ -355,7 +355,7 @@ _EXPLICIT: dict[str, OpDoc] = {
     # --- 信号 ---
     "trade_when": OpDoc(
         "条件持仓信号。",
-        "trigger 为真时输出 alpha，否则输出 exit_（或 hold 逻辑以实现为准）。",
+        "本算子是逐元素选择：trigger 非空且非零时输出 alpha，否则输出 exit_；NaN/NULL 为 false，±Inf 为非零 true，不包含 WQ 式隐含持仓状态。",
         r"\alpha_t^{\mathrm{out}} = \begin{cases}\alpha_t & \mathrm{trigger}_t\\ \mathrm{exit}_t & \text{否则}\end{cases}",
     ),
     "if_else": OpDoc(
@@ -365,7 +365,7 @@ _EXPLICIT: dict[str, OpDoc] = {
     ),
     "hump_decay": OpDoc(
         "阈值衰减（抑制微小变化）。",
-        "变化幅度小于 hump 时不更新，否则按规则衰减（见实现）。",
+        "hump 必须为有限非负数；当前有限值与上次接受状态之差严格大于 hump 时更新，非有限输入保持上次有限状态。hump=0 合法，表示仅抑制完全相等的重复值。",
         r"\Delta x_t \leftarrow \begin{cases}0 & |\Delta|<h\\ \Delta & \text{否则}\end{cases}",
     ),
     # --- 技术指标（常用） ---

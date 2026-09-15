@@ -12,13 +12,26 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from factor_engine.cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
+from factor_engine.cleaned_operators.base import (
+    OperatorMetadata,
+    ParamRole,
+    ParamSpec,
+    SeriesOperator,
+    register_operator,
+)
 
 _EPS = 1e-12
 _CANONICALS: list[str] = []
 
 
-def _meta(name: str, description: str, params: list[str], *, unit: str = "level") -> OperatorMetadata:
+def _meta(
+    name: str,
+    description: str,
+    params: list[str],
+    *,
+    unit: str = "level",
+    scalar_specs: dict[str, ParamSpec] | None = None,
+) -> OperatorMetadata:
     return OperatorMetadata(
         name=name,
         category="return_decomposition",
@@ -30,6 +43,9 @@ def _meta(name: str, description: str, params: list[str], *, unit: str = "level"
             f"signature:{','.join(params)}->series", "domain:return_decomp",
             f"unit:{unit}", "cost:2",
         ],
+        panel_params=("close", "open", "pre_close"),
+        scalar_params=tuple((scalar_specs or {}).keys()),
+        param_specs=dict(scalar_specs or {}),
     )
 
 
@@ -37,10 +53,24 @@ def _frame_like(template: pd.DataFrame, values: np.ndarray) -> pd.DataFrame:
     return pd.DataFrame(values, index=template.index, columns=template.columns, dtype=float)
 
 
-def _mk(name: str, description: str, params: list[str], fn, *, unit: str = "level"):
-    metadata = _meta(name, description, params, unit=unit)
+def _mk(
+    name: str,
+    description: str,
+    params: list[str],
+    fn,
+    *,
+    unit: str = "level",
+    scalar_specs: dict[str, ParamSpec] | None = None,
+):
+    metadata = _meta(
+        name, description, params, unit=unit, scalar_specs=scalar_specs
+    )
 
     def _calculate_series(self, *args, **kwargs):
+        # Public/catalog spelling is ``open``; kernels avoid shadowing the
+        # builtin with ``open_px``.  Named calls must map the declared name.
+        if "open" in kwargs:
+            kwargs["open_px"] = kwargs.pop("open")
         return fn(*args, **kwargs)
 
     cls = type(
@@ -62,6 +92,29 @@ def _mk(name: str, description: str, params: list[str], fn, *, unit: str = "leve
 
     _surface.extend_extended_only({name})
     return cls
+
+
+_WINDOW_5 = {
+    "window": ParamSpec(
+        dtype=int, min=5, default=60, param_role=ParamRole.HORIZON
+    )
+}
+_WINDOW_1 = {
+    "window": ParamSpec(
+        dtype=int, min=1, default=60, param_role=ParamRole.HORIZON
+    )
+}
+_WINDOW_6 = {
+    "window": ParamSpec(
+        dtype=int, min=6, default=60, param_role=ParamRole.HORIZON
+    )
+}
+_THRESHOLD = {
+    "threshold": ParamSpec(
+        dtype=float, min=0.0, default=0.01,
+        param_role=ParamRole.STATE_THRESHOLD,
+    )
+}
 
 
 def _decomp(close: pd.DataFrame, open_px: pd.DataFrame, pre_close: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
@@ -88,6 +141,7 @@ _mk(
     "隔夜与日内收益滚动协方差。",
     ["close", "open", "pre_close", "window"],
     _ts_overnight_intraday_cov,
+    scalar_specs=_WINDOW_5,
 )
 
 
@@ -102,6 +156,7 @@ _mk(
     "隔夜收益滚动均值 - 日内收益滚动均值。",
     ["close", "open", "pre_close", "window"],
     _ts_overnight_intraday_spread,
+    scalar_specs=_WINDOW_1,
 )
 
 
@@ -116,6 +171,7 @@ _mk(
     "隔夜与日内收益同号比例（滚动）。",
     ["close", "open", "pre_close", "window"],
     _ts_overnight_intraday_sign_agreement,
+    scalar_specs=_WINDOW_1,
 )
 
 
@@ -130,6 +186,7 @@ _mk(
     "-日内收益/隔夜收益，仅隔夜跳空超过阈值时定义。",
     ["close", "open", "pre_close", "threshold"],
     _ts_gap_reversion_ratio,
+    scalar_specs=_THRESHOLD,
 )
 
 
@@ -147,6 +204,7 @@ _mk(
     "窗口内跳空缺口被当日完全回补的比例。",
     ["close", "open", "pre_close", "window"],
     _ts_gap_fill_ratio,
+    scalar_specs=_WINDOW_1,
 )
 
 
@@ -215,4 +273,5 @@ _mk(
     "隔夜收益 - 历史滚动回归的预期日内响应。",
     ["close", "open", "pre_close", "window"],
     _ts_opening_mispricing_score,
+    scalar_specs=_WINDOW_6,
 )

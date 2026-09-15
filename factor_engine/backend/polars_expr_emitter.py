@@ -137,6 +137,12 @@ def _sanitize_nan_for_compute(
     """
     if inner is None:
         return None
+    dtype = inner.collect_schema()[_VAL]
+    # Decimal/integer/boolean/null columns cannot contain IEEE NaN/Inf.
+    # Polars rejects is_nan on Decimal; casting it to Float64 would lose
+    # exact ordering of large or close financial values.
+    if dtype.is_integer() or isinstance(dtype, pl.Decimal) or dtype in (pl.Boolean, pl.Null):
+        return inner
     if drop_inf:
         return inner.with_columns(
             pl.when(pl.col(_VAL).is_nan() | pl.col(_VAL).is_infinite())
@@ -999,6 +1005,19 @@ def _rolling_corr_centered_expr(
     xs = [pair_l.shift(k) for k in range(w)]
     ys = [pair_r.shift(k) for k in range(w)]
     count = pl.sum_horizontal([v.is_not_null().cast(pl.Float64) for v in xs])
+    if w == 2:
+        # For two non-constant points Pearson is exactly sign(dx*dy).  Use the
+        # closed form rather than centered products so finite rounding cannot
+        # yield -1-epsilon / 1+epsilon.  Degenerate pairs stay undefined.
+        dx = xs[0] - xs[1]
+        dy = ys[0] - ys[1]
+        ready = (count >= mp) & dx.is_not_null() & dy.is_not_null()
+        same_direction = ((dx > 0.0) & (dy > 0.0)) | ((dx < 0.0) & (dy < 0.0))
+        return (
+            pl.when(~ready | (dx == 0.0) | (dy == 0.0))
+            .then(None)
+            .otherwise(pl.when(same_direction).then(1.0).otherwise(-1.0))
+        )
     x_anchor = pl.coalesce(xs)
     y_anchor = pl.coalesce(ys)
     xc = [v - x_anchor for v in xs]
@@ -1012,12 +1031,185 @@ def _rolling_corr_centered_expr(
     ss_x = pl.sum_horizontal([v * v for v in ccx])
     ss_y = pl.sum_horizontal([v * v for v in ccy])
     cross = pl.sum_horizontal([a * b for a, b in zip(ccx, ccy)])
-    denom = (ss_x * ss_y).sqrt()
     ready = (count >= mp) & count.is_not_null() & ss_x.is_not_null() & ss_y.is_not_null()
-    value = cross / denom
-    return pl.when(~ready | (ss_x <= 0) | (ss_y <= 0) | denom.is_null() | (denom <= 0)).then(
+    sqrt_x = ss_x.sqrt()
+    sqrt_y = ss_y.sqrt()
+    value = (cross / sqrt_x) / sqrt_y
+    return pl.when(~ready | (ss_x <= 0) | (ss_y <= 0) | sqrt_x.is_null() | sqrt_y.is_null()).then(
         None
     ).otherwise(value)
+
+
+def _rolling_corr_centered_list_frame(
+    inner: pl.LazyFrame,
+    x: pl.Expr,
+    y: pl.Expr,
+    window: int,
+    min_periods: int,
+) -> pl.LazyFrame:
+    """O(window)-size native plan for stable pairwise rolling correlation."""
+    w = max(int(window), 1)
+    mp = max(int(min_periods), 1)
+    finite = x.is_finite().fill_null(False) & y.is_finite().fill_null(False)
+    pair_l = pl.when(finite).then(x).otherwise(None)
+    pair_r = pl.when(finite).then(y).otherwise(None)
+    pairs = pl.concat_list([
+        pl.struct(
+            x=pair_l.shift(k).over(_INST, order_by=_TS),
+            y=pair_r.shift(k).over(_INST, order_by=_TS),
+        )
+        for k in range(w)
+    ])
+    staged = inner.with_columns(pairs.alias("__corr_pairs"))
+    staged = staged.with_columns(
+        pl.col("__corr_pairs").list.eval(
+            pl.element().struct.field("x")
+        ).alias("__corr_xs"),
+        pl.col("__corr_pairs").list.eval(
+            pl.element().struct.field("y")
+        ).alias("__corr_ys"),
+    )
+    staged = staged.with_columns(
+        pl.col("__corr_xs").list.drop_nulls().list.len().cast(pl.Float64).alias("__corr_n"),
+        pl.col("__corr_xs").list.drop_nulls().list.first().alias("__corr_x0"),
+        pl.col("__corr_ys").list.drop_nulls().list.first().alias("__corr_y0"),
+    )
+    staged = staged.with_columns(
+        (pl.col("__corr_xs") - pl.col("__corr_x0")).alias("__corr_xa"),
+        (pl.col("__corr_ys") - pl.col("__corr_y0")).alias("__corr_ya"),
+    )
+    staged = staged.with_columns(
+        (pl.col("__corr_xa").list.sum() / pl.col("__corr_n")).alias("__corr_xmean"),
+        (pl.col("__corr_ya").list.sum() / pl.col("__corr_n")).alias("__corr_ymean"),
+    )
+    staged = staged.with_columns(
+        (pl.col("__corr_xa") - pl.col("__corr_xmean")).alias("__corr_xc"),
+        (pl.col("__corr_ya") - pl.col("__corr_ymean")).alias("__corr_yc"),
+    )
+    staged = staged.with_columns(
+        (pl.col("__corr_xc") * pl.col("__corr_xc")).list.sum().alias("__corr_ssx"),
+        (pl.col("__corr_yc") * pl.col("__corr_yc")).list.sum().alias("__corr_ssy"),
+        (pl.col("__corr_xc") * pl.col("__corr_yc")).list.sum().alias("__corr_cross"),
+    )
+    sqrt_x = pl.col("__corr_ssx").sqrt()
+    sqrt_y = pl.col("__corr_ssy").sqrt()
+    ready = (
+        (pl.col("__corr_n") >= mp)
+        & (pl.col("__corr_ssx") > 0.0)
+        & (pl.col("__corr_ssy") > 0.0)
+    )
+    value = (pl.col("__corr_cross") / sqrt_x) / sqrt_y
+    return staged.select(
+        pl.col(_TS), pl.col(_INST),
+        pl.when(ready).then(value).otherwise(None).alias(_VAL),
+    )
+
+
+def _rolling_variance_centered_list_frame(
+    inner: pl.LazyFrame,
+    value: pl.Expr,
+    window: int,
+    min_periods: int,
+    ddof: int,
+    *,
+    take_sqrt: bool,
+) -> pl.LazyFrame:
+    """Stable native rolling variance/std with an O(window)-size plan."""
+    w, mp = max(int(window), 1), max(int(min_periods), 1)
+    finite = pl.when(value.is_finite().fill_null(False)).then(value).otherwise(None)
+    xs = pl.concat_list([
+        finite.shift(k).over(_INST, order_by=_TS) for k in range(w)
+    ])
+    staged = inner.with_columns(xs.alias("__var_xs"))
+    staged = staged.with_columns(
+        pl.col("__var_xs").list.drop_nulls().list.len().cast(pl.Float64).alias("__var_n"),
+        pl.col("__var_xs").list.drop_nulls().list.first().alias("__var_x0"),
+        pl.col("__var_xs").list.eval(pl.element().abs()).list.max().alias("__var_input_scale"),
+    )
+    staged = staged.with_columns(
+        (pl.col("__var_xs") - pl.col("__var_x0")).alias("__var_raw_offsets"),
+        (pl.col("__var_xs") / pl.col("__var_input_scale")).alias("__var_scaled_xs"),
+    )
+    raw_finite = pl.col("__var_raw_offsets").list.eval(
+        pl.element().is_finite().fill_null(True)
+    ).list.all()
+    staged = staged.with_columns(
+        pl.when(raw_finite)
+        .then(pl.col("__var_raw_offsets"))
+        .otherwise(
+            pl.col("__var_scaled_xs")
+            - pl.col("__var_scaled_xs").list.drop_nulls().list.first()
+        ).alias("__var_offsets"),
+        pl.when(raw_finite).then(1.0).otherwise(pl.col("__var_input_scale")).alias("__var_outer_scale"),
+    )
+    staged = staged.with_columns(
+        pl.col("__var_offsets").list.eval(pl.element().abs()).list.max().alias("__var_offset_scale")
+    )
+    staged = staged.with_columns(
+        (pl.col("__var_offsets") / pl.col("__var_offset_scale")).alias("__var_normalized")
+    )
+    staged = staged.with_columns(
+        (pl.col("__var_normalized").list.sum() / pl.col("__var_n")).alias("__var_mean")
+    )
+    staged = staged.with_columns(
+        (pl.col("__var_normalized") - pl.col("__var_mean")).alias("__var_centered")
+    )
+    staged = staged.with_columns(
+        (pl.col("__var_centered") * pl.col("__var_centered")).list.sum().alias("__var_ss")
+    )
+    ready = (pl.col("__var_n") >= mp) & (pl.col("__var_n") > ddof)
+    std = (
+        (pl.col("__var_ss") / (pl.col("__var_n") - ddof)).sqrt()
+        * pl.col("__var_offset_scale")
+    ) * pl.col("__var_outer_scale")
+    result = std if take_sqrt else std * std
+    result = pl.when(pl.col("__var_offset_scale") == 0.0).then(0.0).otherwise(result)
+    return staged.select(_TS, _INST, pl.when(ready).then(result).otherwise(None).alias(_VAL))
+
+
+def _rolling_cov_centered_list_frame(
+    inner: pl.LazyFrame, x: pl.Expr, y: pl.Expr,
+    window: int, min_periods: int, ddof: int,
+) -> pl.LazyFrame:
+    """Stable pairwise-finite rolling covariance using normalized lists."""
+    w, mp = max(int(window), 1), max(int(min_periods), 1)
+    pair = x.is_finite().fill_null(False) & y.is_finite().fill_null(False)
+    pairs = pl.concat_list([
+        pl.struct(
+            x=pl.when(pair).then(x).otherwise(None).shift(k).over(_INST, order_by=_TS),
+            y=pl.when(pair).then(y).otherwise(None).shift(k).over(_INST, order_by=_TS),
+        ) for k in range(w)
+    ])
+    staged = inner.with_columns(pairs.alias("__cov_pairs")).with_columns(
+        pl.col("__cov_pairs").list.eval(pl.element().struct.field("x")).alias("__cov_xs"),
+        pl.col("__cov_pairs").list.eval(pl.element().struct.field("y")).alias("__cov_ys"),
+    )
+    staged = staged.with_columns(
+        pl.col("__cov_xs").list.drop_nulls().list.len().cast(pl.Float64).alias("__cov_n"),
+        pl.col("__cov_xs").list.drop_nulls().list.first().alias("__cov_x0"),
+        pl.col("__cov_ys").list.drop_nulls().list.first().alias("__cov_y0"),
+    ).with_columns(
+        (pl.col("__cov_xs") - pl.col("__cov_x0")).alias("__cov_xo"),
+        (pl.col("__cov_ys") - pl.col("__cov_y0")).alias("__cov_yo"),
+    ).with_columns(
+        pl.col("__cov_xo").list.eval(pl.element().abs()).list.max().alias("__cov_xscale"),
+        pl.col("__cov_yo").list.eval(pl.element().abs()).list.max().alias("__cov_yscale"),
+    ).with_columns(
+        (pl.col("__cov_xo") / pl.col("__cov_xscale")).alias("__cov_xn"),
+        (pl.col("__cov_yo") / pl.col("__cov_yscale")).alias("__cov_yn"),
+    ).with_columns(
+        (pl.col("__cov_xn").list.sum() / pl.col("__cov_n")).alias("__cov_xmean"),
+        (pl.col("__cov_yn").list.sum() / pl.col("__cov_n")).alias("__cov_ymean"),
+    ).with_columns(
+        (pl.col("__cov_xn") - pl.col("__cov_xmean")).alias("__cov_xc"),
+        (pl.col("__cov_yn") - pl.col("__cov_ymean")).alias("__cov_yc"),
+    ).with_columns(
+        (pl.col("__cov_xc") * pl.col("__cov_yc")).list.sum().alias("__cov_cross")
+    )
+    ready = (pl.col("__cov_n") >= mp) & (pl.col("__cov_n") > ddof)
+    value = ((pl.col("__cov_cross") / (pl.col("__cov_n") - ddof)) * pl.col("__cov_xscale")) * pl.col("__cov_yscale")
+    value = pl.when((pl.col("__cov_xscale") == 0.0) | (pl.col("__cov_yscale") == 0.0)).then(0.0).otherwise(value)
+    return staged.select(_TS, _INST, pl.when(ready).then(value).otherwise(None).alias(_VAL))
 
 
 def _ewm_binary_map_groups(joined: pl.LazyFrame, span: int, *, corr: bool) -> pl.LazyFrame:
@@ -1616,8 +1808,6 @@ _FUSABLE_TS_ON_COLUMN: frozenset[str] = frozenset(
         "ts_sum",
         "ts_min",
         "ts_max",
-        "ts_std",
-        "ts_var",
         "ts_delay",
         "ts_delta",
         "ts_pct",
@@ -1980,13 +2170,12 @@ def _try_ts_pair_from_base_columns(
     if op == "ts_corr":
         # Use centered two-pass windows to avoid catastrophic cancellation in
         # Polars' E[xy] - E[x]E[y] implementation for large-offset series.
-        expr = _rolling_corr_centered_expr(lcol, rcol, w, mp).over(_INST, order_by=_TS)
+        if w == 2:
+            expr = _rolling_corr_centered_expr(lcol, rcol, w, mp).over(_INST, order_by=_TS)
+        else:
+            return _rolling_corr_centered_list_frame(base, lcol, rcol, w, mp)
     elif op == "ts_cov":
-        raw = pl.rolling_cov(lcol, rcol, window_size=w, min_samples=mp, ddof=ddof).over(
-            _INST, order_by=_TS
-        )
-        # R38-blocker fix (R19-030 current-row policy)：与 ts_corr 相同——去掉 guard。
-        expr = raw
+        return _rolling_cov_centered_list_frame(base, lcol, rcol, w, mp, ddof)
     elif op == "ts_beta":
         expr = polars_ts_beta_expr(
             lcol, rcol, window=w, min_periods=mp, ddof=ddof
@@ -2480,11 +2669,15 @@ def _compile_polars_impl(
         elif op == "ts_max":
             expr = pl.col(_VAL).rolling_max(window_size=w, min_samples=mp).over(_INST, order_by=_TS)
         elif op == "ts_var":
-            expr = pl.col(_VAL).rolling_var(window_size=w, min_samples=mp, ddof=ddof).over(_INST, order_by=_TS)
+            return _rolling_variance_centered_list_frame(
+                inner, pl.col(_VAL), w, mp, ddof, take_sqrt=False
+            )
         elif op == "ts_median":
             expr = pl.col(_VAL).rolling_median(window_size=w, min_samples=mp).over(_INST, order_by=_TS)
         else:
-            expr = pl.col(_VAL).rolling_std(window_size=w, min_samples=mp, ddof=ddof).over(_INST, order_by=_TS)
+            return _rolling_variance_centered_list_frame(
+                inner, pl.col(_VAL), w, mp, ddof, take_sqrt=True
+            )
         return inner.with_columns(expr.alias(_VAL))
 
     if op == "ts_zscore":
@@ -2547,13 +2740,14 @@ def _compile_polars_impl(
         # two-pass expression whose anchor/subtraction order diverged from
         # pandas by ~1e-10 on large-offset inputs (test_three_backend_parity
         # asserts rtol=atol=1e-10).
-        corr = pl.rolling_corr(
-            lcol,
-            rcol,
-            window_size=pspec.size,
-            min_samples=pspec.min_periods,
-        ).over(_INST, order_by=_TS)
-        return joined.with_columns(corr.alias(_VAL)).select(_TS, _INST, _VAL)
+        if pspec.size == 2:
+            corr = _rolling_corr_centered_expr(
+                lcol, rcol, pspec.size, pspec.min_periods
+            ).over(_INST, order_by=_TS)
+            return joined.with_columns(corr.alias(_VAL)).select(_TS, _INST, _VAL)
+        return _rolling_corr_centered_list_frame(
+            joined, lcol, rcol, pspec.size, pspec.min_periods
+        )
 
     if op == "ts_cov":
         if len(node.inputs) < 2:
@@ -2580,16 +2774,9 @@ def _compile_polars_impl(
             .then(None)
             .otherwise(pl.col("_y"))
         )
-        cov = pl.rolling_cov(
-            lcol,
-            rcol,
-            window_size=pspec.size,
-            min_samples=pspec.min_periods,
-            ddof=pspec.ddof,
-        ).over(_INST, order_by=_TS)
-        # R38-blocker fix (R19-030 current-row policy)：去掉 guard（见 ts_corr）。
-        out = cov
-        return joined.with_columns(out.alias(_VAL)).select(_TS, _INST, _VAL)
+        return _rolling_cov_centered_list_frame(
+            joined, lcol, rcol, pspec.size, pspec.min_periods, pspec.ddof
+        )
 
     if op == "ts_beta":
         if len(node.inputs) < 2:
@@ -2877,6 +3064,9 @@ def _compile_polars_impl(
         if inner is None:
             return None
         lo_p, hi_p = parse_winsorize_quantiles(node)
+        # Current canonical excludes non-finite observations BEFORE estimating
+        # quantiles, not merely after clipping the output.
+        inner = inner.with_columns(pl.when(pl.col(_VAL).is_finite()).then(pl.col(_VAL)).otherwise(None).alias(_VAL))
         lo = pl.col(_VAL).quantile(quantile=lo_p, interpolation="linear").over(_TS, order_by=_INST)
         hi = pl.col(_VAL).quantile(quantile=hi_p, interpolation="linear").over(_TS, order_by=_INST)
         # pandas winsorize ends with ``.replace([inf, -inf], nan)`` — an Inf
@@ -4542,9 +4732,23 @@ def _compile_polars_impl(
         w = _window_int(node, default=20)
         lo = float(_literal_value(node, 1) if _literal_value(node, 1) is not None else _float_attr(node, "lower", "q_low", default=0.25))
         hi = float(_literal_value(node, 2) if _literal_value(node, 2) is not None else _float_attr(node, "upper", "q_high", default=0.75))
-        qhi = pl.col(_VAL).rolling_quantile(quantile=hi, window_size=w, interpolation="linear").over(_INST, order_by=_TS)
-        qlo = pl.col(_VAL).rolling_quantile(quantile=lo, window_size=w, interpolation="linear").over(_INST, order_by=_TS)
-        return inner.with_columns((qhi - qlo).alias(_VAL))
+        from factor_engine.cleaned_operators.robust_stats import _auto_min_periods,_quantile_spread
+        from factor_engine.cleaned_operators.parameter_validation import strict_integer
+        w = strict_integer(w, "window", minimum=2)
+        if not 0.0 < lo < hi < 1.0:
+            raise ValueError("ts_quantile_range requires 0 < q_low < q_high < 1")
+        # Keep the original literal type: _literal_value coerces ints to float.
+        raw_mp = node.attrs.get("min_periods")
+        if "min_periods" not in node.attrs and len(node.inputs) > 4:
+            if node.inputs[4].op == "literal":
+                raw_mp = node.inputs[4].attrs.get("value")
+        mp=_auto_min_periods(w,None if raw_mp is None else strict_integer(raw_mp,"min_periods",minimum=1))
+        def spread(values):
+            arr=np.asarray(values,dtype=float)
+            finite=arr[np.isfinite(arr)]
+            return _quantile_spread(finite,lo,hi) if len(finite)>=mp else np.nan
+        expr=pl.col(_VAL).rolling_map(spread,window_size=w,min_samples=1).over(_INST,order_by=_TS)
+        return inner.with_columns(expr.alias(_VAL))
 
     if op == "ts_quantile_skew":
         inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)

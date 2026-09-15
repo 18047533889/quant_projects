@@ -1,0 +1,1 @@
+{"command": [".venv/bin/python", "-m", "pytest", "-q", "factor_engine/tests/operators/test_operator_audit_fixes.py", "-k", "ts_min_if or ts_regression_resid_if"], "returncode": 0, "sampled_peak_family_rss_bytes": 791777280, "sampling_seconds": 0.1, "seconds": 50.82535537192598, "test_guard_reason": null, "hard_memory_cap": false}

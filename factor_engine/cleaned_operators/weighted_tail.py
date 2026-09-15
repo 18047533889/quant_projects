@@ -36,10 +36,42 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from factor_engine.cleaned_operators.base import SeriesOperator, register_operator
+from factor_engine.cleaned_operators.base import SeriesOperator, register_operator, ParamSpec, ParamRole
+from factor_engine.cleaned_operators.parameter_validation import strict_integer
 from factor_engine.cleaned_operators.rolling_pack import aligned_pairs, frame_like, map_pair_rolling, valid_values
 
 _EPS = 1e-12
+
+def _tail_specs(name):
+    is_spread=name=="ts_stratified_mean_spread"
+    is_down=name in {"ts_weighted_semivariance","ts_weighted_downside_deviation"}
+    specs={"window":ParamSpec(dtype=int,min=2,default=20 if is_down else 60,param_role=ParamRole.HORIZON)}
+    if is_down:
+        specs.update(target=ParamSpec(dtype=float,default=0.,param_role=ParamRole.STATE_THRESHOLD),
+            min_periods=ParamSpec(dtype=int,min=2,default=None,param_role=ParamRole.SUPPORT_POLICY,searchable=False))
+    if is_spread or name=="ts_weighted_expected_shortfall":
+        specs["quantile"]=ParamSpec(dtype=float,min=np.nextafter(0.,1.),max=.5,default=.2 if is_spread else .05,param_role=ParamRole.ECONOMIC)
+    if is_spread:
+        specs["min_periods"]=ParamSpec(dtype=int,min=2,default=None,param_role=ParamRole.SUPPORT_POLICY,searchable=False)
+    if name=="ts_weighted_expected_shortfall":
+        specs.update(side=ParamSpec(dtype=str,choices=("lower","upper"),default="lower",param_role=ParamRole.POLICY,searchable=False),
+            min_tail_count=ParamSpec(dtype=int,min=2,default=None,param_role=ParamRole.SUPPORT_POLICY,searchable=False))
+    return specs
+
+def _support(value,window,default):
+    count=default if value is None else strict_integer(value,"minimum support",minimum=2)
+    if count>window:
+        raise ValueError("minimum support must fit within window")
+    return count
+
+def _downside_rms(values,weights,target):
+    scale=max(float(np.max(np.abs(values))),abs(target))
+    if scale==0.:
+        return 0.
+    below=np.maximum(target/scale-values/scale,0.)
+    with np.errstate(over="ignore",under="ignore"):
+        value=float(np.sqrt(np.dot(weights,below*below))*scale)
+    return value if np.isfinite(value) else np.nan
 
 
 def _normalize_nonnegative_weights(weights: np.ndarray) -> np.ndarray | None:
@@ -175,7 +207,10 @@ def _stratified_stratum_mean(xs: np.ndarray, ss: np.ndarray, n_take: int, *, top
     n_tie = int(tie.sum())
     n_take_tie = min(max(n_take - n_strict, 0), n_tie)
     frac = (n_take_tie / n_tie) if n_tie > 0 else 0.0
-    return float((np.sum(xs[strict]) + frac * np.sum(xs[tie])) / n_take)
+    scale=float(np.max(np.abs(xs)))
+    if scale==0.:
+        return 0.
+    return float((np.sum(xs[strict]/scale) + frac*np.sum(xs[tie]/scale))/n_take)*scale
 
 
 def _validate_nonneg_weight(weight: pd.DataFrame, name: str) -> None:
@@ -209,6 +244,9 @@ def _metadata(
         category="time_series_risk",
         description=description,
         param_names=params,
+        param_specs=_tail_specs(name),
+        panel_params=tuple(p for p in params if p not in _tail_specs(name)),
+        scalar_params=tuple(_tail_specs(name)),
         return_type="series",
         tags=[
             "time_series_risk", "daily", "pit_safe", "causal", "typed_v2",
@@ -257,14 +295,15 @@ class TsStratifiedMeanSpread(SeriesOperator):
         min_periods: Any = None,
         **_: Any,
     ) -> pd.DataFrame:
-        w = max(2, int(window))
+        w = strict_integer(window,"window",minimum=2)
         q = float(quantile)
         if not 0.0 < q <= 0.5:
             # P1-83: with q > 0.5 the top and bottom strata overlap and the
             # spread becomes degenerate, so reject it loudly.
             raise ValueError("quantile must be in (0, 0.5] so the top and bottom strata are disjoint")
-        mp = int(min_periods) if min_periods is not None else max(5, w // 4)
-        mp = max(2, mp)
+        mp = _support(min_periods,w,max(5,w//4))
+        if q*w<1:
+            raise ValueError("window must contain at least one observation in each quantile stratum")
 
         def _fn(a: np.ndarray, b: np.ndarray) -> float:
             x, s = aligned_pairs(a, b)
@@ -327,10 +366,9 @@ class TsWeightedSemivariance(SeriesOperator):
         min_periods: Any = None,
         **_: Any,
     ) -> pd.DataFrame:
-        w = max(2, int(window))
+        w = strict_integer(window,"window",minimum=2)
         tgt = float(target)
-        mp = int(min_periods) if min_periods is not None else 2
-        mp = max(2, mp)
+        mp = _support(min_periods,w,2)
 
         def _fn(a: np.ndarray, b: np.ndarray) -> float:
             xv, wv = aligned_pairs(a, b)
@@ -344,8 +382,10 @@ class TsWeightedSemivariance(SeriesOperator):
             wv = _normalize_nonnegative_weights(wv)
             if wv is None:
                 return np.nan
-            below = np.maximum(tgt - xv, 0.0)
-            return float(np.sum(wv * below * below))
+            rms = _downside_rms(xv,wv,tgt)
+            with np.errstate(over="ignore",under="ignore"):
+                variance=float(np.square(rms))
+            return variance if np.isfinite(variance) else np.nan
 
         return frame_like(
             x,
@@ -387,10 +427,9 @@ class TsWeightedDownsideDeviation(SeriesOperator):
         min_periods: Any = None,
         **_: Any,
     ) -> pd.DataFrame:
-        w = max(2, int(window))
+        w = strict_integer(window,"window",minimum=2)
         tgt = float(target)
-        mp = int(min_periods) if min_periods is not None else 2
-        mp = max(2, mp)
+        mp = _support(min_periods,w,2)
 
         def _fn(a: np.ndarray, b: np.ndarray) -> float:
             xv, wv = aligned_pairs(a, b)
@@ -402,8 +441,7 @@ class TsWeightedDownsideDeviation(SeriesOperator):
             wv = _normalize_nonnegative_weights(wv)
             if wv is None:
                 return np.nan
-            below = np.maximum(tgt - xv, 0.0)
-            return float(np.sqrt(np.sum(wv * below * below)))
+            return _downside_rms(xv,wv,tgt)
 
         return frame_like(
             x,
@@ -451,7 +489,7 @@ class TsWeightedExpectedShortfall(SeriesOperator):
         min_tail_count: Any = None,
         **_: Any,
     ) -> pd.DataFrame:
-        w = max(2, int(window))
+        w = strict_integer(window,"window",minimum=2)
         q = float(quantile)
         # Expected shortfall's ``quantile`` is a *tail fraction*: values above
         # 0.5 are not tail-risk semantics (a q=0.8 "lower tail" is the bottom
@@ -463,10 +501,7 @@ class TsWeightedExpectedShortfall(SeriesOperator):
         kind = str(side).lower()
         if kind not in {"lower", "upper"}:
             raise ValueError("side must be 'lower' or 'upper'")
-        if min_tail_count is not None:
-            min_tail = max(2, int(min_tail_count))
-        else:
-            min_tail = max(2, 3)
+        min_tail = _support(min_tail_count,w,3)
 
         def _fn(a: np.ndarray, b: np.ndarray) -> float:
             xv, wv = aligned_pairs(a, b)
@@ -515,7 +550,7 @@ class TsWeightedDrawdownArea(SeriesOperator):
         window: int = 60,
         **_: Any,
     ) -> pd.DataFrame:
-        w = max(2, int(window))
+        w = strict_integer(window,"window",minimum=2)
 
         def _fn(a: np.ndarray, b: np.ndarray) -> float:
             # P1-85: do NOT compress the time axis with aligned_pairs before
